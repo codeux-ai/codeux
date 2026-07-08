@@ -48,19 +48,19 @@ Stable layouts on narrow widths (especially mobile or multi-panel layouts) must 
 ### 5. Standardized Components
 The shell relies on reusable layout components from `dashboard/src/v2/components/layout/` (such as `Sidebar`, `NavItem`, and `KineticDock`) and top navigation components from `dashboard/src/v2/components/top-nav/` (such as `BrandSection`, `GlobalSearch`, and `TelemetryStats`).
 
-Primary navigation is filtered by the persisted **Experience Mode** from Settings -> Appearance. The stored values are `EASY`, `STANDARD`, and `EXPERT`; the dashboard labels them **Easy**, **Standard**, and **Expert**, and Expert is the default for new or legacy settings.
+Primary navigation is filtered by the persisted **Experience Mode** from Settings -> General. The stored values are `EASY`, `STANDARD`, and `EXPERT`; the dashboard labels them **Easy**, **Standard**, and **Expert**, and Expert is the default for new or legacy settings.
 
 Mode-specific navigation:
-- **Easy**: Chat, Browser, Stats, Settings/Config, and external Docs.
-- **Standard**: Chat, Overview, Sprints, Tasks, Agents, Stats, Browser, Docs, and Settings/Config.
-- **Expert**: the full set: Chat, Overview, Sprints, Tasks, Agents, Stats, Schedule, Memory, Knowledge, Browser, Files, Live, Docs, and Settings/Config.
+- **Easy**: Chat, Browser Preview, Stats, Live, Settings/Config, and external Docs.
+- **Standard**: Chat, Overview, Sprints, Tasks, Agents, Stats, Browser Preview, Docs, and Settings/Config.
+- **Expert**: the full set: Chat, Overview, Sprints, Tasks, Agents, Stats, Schedule, Memory, Knowledge, Browser Preview, Files, Live, Docs, and Settings/Config.
 
-The Settings route is labeled **Settings** in the sidebar and **Config** in the dock. Docs is an external navigation item. Browser still obeys the existing sprint-preview and in-app browser visibility checks; hidden mode-filtered routes remain registered routes rather than being removed from the app.
+The Settings route is labeled **Settings** in the sidebar and **Config** in the dock. Docs is an external navigation item. Browser Preview still obeys the existing sprint-preview and in-app browser visibility checks; hidden mode-filtered routes remain registered routes rather than being removed from the app.
 
 ### 6. Hover and Active Indicators
 - **Motion Tokens:** Shell navigation must use the interaction contracts in `dashboard/src/v2/lib/motion`. Use `controlFeedback` for hover, focus, icon color, and label feedback; `selectionMovement` for active route backgrounds, vertical markers, and minimized/expanded label reveal; and `enterExit` for mobile drawer and backdrop transitions.
 - **Interactions:** Hover backgrounds for triggers follow `hover:bg-black/[0.05] dark:hover:bg-white/[0.05]`. Active routes in the Sidebar use the primary `signal-500` marker tone and must remain visibly marked by semantic `aria-current="page"`, active label weight/color, and the persistent Signal Jade indicator.
-- **Minimized Tooltips:** Minimized primary sidebar navigation items expose semantic `aria-label`s on their links and keep visual tooltips explicitly mapped via `aria-hidden="true"` styled to mimic standard dropdown glass panels (`shadow-2xl rounded-2xl`). Tooltips must appear on both hover and `focus-visible`, so keyboard users receive the same label confirmation without pointer hover. Footer actions such as Settings and the sidebar collapse/expand control follow the same minimized tooltip pattern.
+- **Minimized Tooltips:** Every minimized desktop sidebar entry exposes a semantic `aria-label` on the link/control and a visual tooltip explicitly mapped via `aria-hidden="true"`. Tooltips use fixed positioning beside the 88px rail so workspace entries are not clipped by the scrollable nav container, and they must keep `w-max` plus `whitespace-nowrap` so labels such as `Expand` stay horizontal. Footer actions such as Docs, Settings, and the sidebar collapse/expand control follow the same minimized tooltip pattern and appear on both hover and `focus-visible`.
 - **Unavailable Routes:** Disabled or unavailable shell destinations remain keyboard reachable as disabled link semantics (`role="link"`, `aria-disabled="true"`) and expose a concise visible or screen-reader-accessible explanation through `aria-describedby`. Do not rely on hover-only text for unavailable reasons.
 
 ## Accessibility Contracts

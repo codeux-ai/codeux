@@ -155,6 +155,17 @@ describe("Settings Resolution Service", () => {
       expect(settings).toBeDefined();
       expect(settings.runtime).toBeDefined();
       expect(settings.integrations).toBeDefined();
+      expect(settings.runtime.lastActiveScope).toBe("system");
+    });
+
+    it("preserves valid persisted settings scope and normalizes invalid values", () => {
+      expect(sanitizeSystemSettings({
+        runtime: { lastActiveScope: "project" },
+      }).runtime.lastActiveScope).toBe("project");
+
+      expect(sanitizeSystemSettings({
+        runtime: { lastActiveScope: "workspace" },
+      }).runtime.lastActiveScope).toBe("system");
     });
   });
 

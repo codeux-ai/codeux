@@ -110,7 +110,7 @@ const knownSidebarLabels = new Set([
   "Schedule",
   "Memory",
   "Knowledge",
-  "Browser",
+  "Browser Preview",
   "Files",
   "Live",
   "Docs",
@@ -124,18 +124,18 @@ const modeExpectations: Array<{
 }> = [
   {
     mode: "EASY",
-    dock: ["Chat", "Browser", "Stats", "Config", "Docs"],
-    sidebar: ["Chat", "Browser", "Stats", "Settings", "Docs"],
+    dock: ["Chat", "Browser", "Stats", "Live", "Config", "Docs"],
+    sidebar: ["Chat", "Browser Preview", "Stats", "Live", "Settings", "Docs"],
   },
   {
     mode: "STANDARD",
     dock: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Nodes", "Stats", "Browser", "Docs", "Config"],
-    sidebar: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Nodes", "Stats", "Browser", "Docs", "Settings"],
+    sidebar: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Nodes", "Stats", "Browser Preview", "Docs", "Settings"],
   },
   {
     mode: "EXPERT",
     dock: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Nodes", "Stats", "Schedule", "Memory", "Knowledge", "Browser", "Files", "Live", "Docs", "Config"],
-    sidebar: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Nodes", "Stats", "Schedule", "Memory", "Knowledge", "Browser", "Files", "Live", "Docs", "Settings"],
+    sidebar: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Nodes", "Stats", "Schedule", "Memory", "Knowledge", "Browser Preview", "Files", "Live", "Docs", "Settings"],
   },
 ];
 
@@ -205,7 +205,7 @@ describe("primary navigation experience modes", () => {
 
     render(<KineticDock />);
 
-    expect(getDockNavigationLabels()).toEqual(["Chat", "Stats", "Config", "Docs"]);
+    expect(getDockNavigationLabels()).toEqual(["Chat", "Stats", "Live", "Config", "Docs"]);
     expect(screen.queryByRole("link", { name: "Browser" })).not.toBeInTheDocument();
   });
 });

@@ -18,7 +18,9 @@ Switch scope with the selector at the top:
 - **Project** — applies to the active project.
 - **Sprint** — applies to the selected sprint within the active project.
 
-The sticky command/status bar keeps the System/Project selector, project availability or inheritance context, active panel, and save state visible together while you scroll. Smart Find also shows compact context chips for the current scope, active category, and save state (`No edits`, `Unsaved edits`, `Saving`, or `Saved`) above the search input. It shows the visible-category count only while Smart Find is active; when search is inactive, the visible status stays to a quiet search prompt while the exact category total remains available to assistive technology. The bar uses compact controls and chips instead of one long background card, so focus rings, contrast, wrapping, and saved/dirty cues stay clear on narrow screens.
+The sticky command/status bar keeps the System/Project selector, project availability or inheritance context, active panel, and the Reset Project / Save Changes actions visible together while you scroll. Smart Find stays compact by showing only the search field until you type; active searches then show result status and match-preview chips while the exact category total remains available to assistive technology.
+
+The last selected **System** or **Project** scope is remembered in the local database as part of system runtime settings. Changing only that selector is saved immediately and does not save unrelated draft edits in the active settings form.
 
 ## Categories
 
@@ -26,8 +28,8 @@ The category rail on the left includes these Expert-mode categories:
 
 | Category | What it covers |
 | --- | --- |
-| **General** | Scope context, automation posture, runtime logging, Docker runtime, restart behavior, and onboarding. |
-| **Appearance** | Experience mode, theme, navigation mode, motion preference, background, and desktop zoom. |
+| **General** | Scope context, experience mode, automation posture, runtime logging, Docker runtime, restart behavior, and onboarding. |
+| **Appearance** | Theme, navigation mode, motion preference, background, and desktop zoom. |
 | **AI Models** | Default provider anchors, provider routing, model choices, thinking mode, weighting, pricing, and rate-limit controls. |
 | **Sprint & Git** | Git flow, PR behavior, merge gates, QA, guardrails, branch naming, and execution runtime controls. |
 | **Browser Preview** | Preview runtime, in-app browser visibility, container limits, port allocation, and startup scripts. |
@@ -43,10 +45,10 @@ Each category opens one or more **content panels** with grouped fields. Inputs a
 
 ## Experience modes
 
-Experience mode is an Appearance setting with three user-facing choices:
+Experience mode is controlled from **Settings -> General** with three user-facing choices:
 
-- **Easy** — shows the essentials: General, Appearance, Integrations, and Danger Zone. Primary navigation shows Chat, Browser, Stats, Settings/Config, and Docs.
-- **Standard** — the balanced project-operation surface: General, Appearance, AI Models, Sprint & Git, Browser Preview, Techstacks, Agents, Memory, Integrations, and Danger Zone. Primary navigation shows Chat, Overview, Sprints, Tasks, Agents, Stats, Browser, Docs, and Settings/Config.
+- **Easy** — shows the essentials: General, Appearance, Integrations, and Danger Zone. Primary navigation shows Chat, Browser Preview, Stats, Live, Settings/Config, and Docs.
+- **Standard** — the balanced project-operation surface: General, Appearance, AI Models, Sprint & Git, Browser Preview, Techstacks, Agents, Memory, Integrations, and Danger Zone. Primary navigation shows Chat, Overview, Sprints, Tasks, Agents, Stats, Browser Preview, Docs, and Settings/Config.
 - **Expert** — shows all settings categories and advanced cards, and is the default for new or legacy settings.
 
 Changing mode filters what is visible. It does not delete hidden values, mutate project overrides, or save anything until you use the normal Save action.
@@ -236,9 +238,9 @@ Related docs:
 
 Reopens the guided setup flow without changing saved settings by itself.
 
-**What it controls:** The action button launches onboarding so you can revisit Easy, Standard, or Expert setup, provider configuration, GitHub workflow choices, and Appearance prompts. Appearance choices preview immediately while onboarding is open, including Theme, Navigation Mode, Reduced Motion, Background Mode, Static Color, and supported Zoom Level.
+**What it controls:** The action button launches onboarding so you can revisit Easy, Standard, or Expert setup, provider configuration, GitHub workflow choices, and Appearance prompts. Easy keeps GitHub deselected until the operator opts in. Appearance choices preview immediately while onboarding is open, including Theme, Navigation Mode, Reduced Motion, Background Mode, Static Color, and supported Zoom Level.
 
-**Recommended defaults:** Use Easy for the shortest one-provider path, Standard for guided regular setup, and Expert when you need every runtime and routing control. Expert remains the default.
+**Recommended defaults:** Use Easy for the shortest single-provider path with Dashboard Login, Standard for guided regular setup, and Expert when you need every runtime and routing control. Expert remains the default.
 
 **Risks and gotchas:** Reopening onboarding does not change settings by itself. Finishing the flow saves the selected choices through the normal system settings path; Easy applies default settings only after explicit completion and redirects to Chat.
 
@@ -251,13 +253,13 @@ Related docs:
 
 <a id="display-settings"></a>
 
-Controls the dashboard shell layout, experience mode, theme, motion preference, and desktop zoom when available.
+Controls the dashboard shell layout, theme, motion preference, and desktop zoom when available.
 
-**What it controls:** Experience mode stores one persisted Easy, Standard, or Expert dashboard preference and filters primary dock/sidebar navigation. Easy shows Chat, Browser, Stats, Settings/Config, and external Docs; Standard hides the specialized Schedule, Memory, Knowledge, Files, and Live pages; Expert shows the full primary navigation. Navigation Mode switches dock/sidebar, Theme sets Light, Dark, or System color mode, Reduced Motion limits animation, and Zoom Level scales Electron windows.
+**What it controls:** Navigation Mode switches dock/sidebar, Theme sets Light, Dark, or System color mode, Reduced Motion limits animation, and Zoom Level scales Electron windows. Experience mode is controlled from Settings -> General and filters primary dock/sidebar navigation without changing these display preferences.
 
-**Recommended defaults:** New installs default to Expert experience mode. Use System theme and Auto reduced motion unless you need a fixed accessibility preference.
+**Recommended defaults:** Use System theme and Auto reduced motion unless you need a fixed accessibility preference.
 
-**Risks and gotchas:** Experience mode only hides primary navigation links; the underlying dashboard routes remain available. Browser navigation still depends on sprint preview and in-app browser visibility settings. High zoom or dense sidebars can reduce visible workspace on small screens.
+**Risks and gotchas:** Browser navigation still depends on sprint preview and in-app browser visibility settings. High zoom or dense sidebars can reduce visible workspace on small screens.
 
 Related docs:
 

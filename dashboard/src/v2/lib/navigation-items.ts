@@ -86,19 +86,19 @@ export const ALL_NAVIGATION_ITEMS: readonly NavigationItem[] = [
   { id: "tasks", icon: ListChecks, label: "Tasks", path: "/tasks", color: "text-signal-400", group: "workspace", dockSection: "right", tourId: "nav-tasks", kind: "route" },
   { id: "agents", icon: Cpu, label: "Agents", path: "/agents", color: "text-signal-400", group: "workspace", dockSection: "right", tourId: "nav-agents", kind: "route" },
   { id: "nodes", icon: Workflow, label: "Nodes", path: "/nodes", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-nodes", kind: "route", feature: "nodes" },
-  { id: "custom-dashboards", icon: LayoutDashboard, label: "Dashboards", dockLabel: "Dash", path: "/custom-dashboards", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-custom-dashboards", kind: "route" },
+  { id: "custom-dashboards", icon: LayoutDashboard, label: "Dashboards", dockLabel: "Dash", path: "/custom-dashboards", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-custom-dashboards", kind: "route", feature: "custom-dashboards" },
   { id: "stats", icon: BarChart3, label: "Stats", path: "/stats", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-stats", kind: "route" },
   { id: "scheduler", icon: CalendarDays, label: "Schedule", path: "/scheduler", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-schedule", kind: "route" },
   { id: "memory", icon: Inbox, label: "Memory", path: "/memory", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-memory", kind: "route" },
   { id: "knowledge", icon: Library, label: "Knowledge", path: "/knowledge", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-knowledge", kind: "route" },
-  { id: "browser", icon: Compass, label: "Browser", path: "/browser", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-browser", kind: "route" },
+  { id: "browser", icon: Compass, label: "Browser Preview", dockLabel: "Browser", path: "/browser", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-browser", kind: "route" },
   { id: "files", icon: FolderTree, label: "Files", path: "/files", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-files", kind: "route" },
   { id: "live", icon: Zap, label: "Live", path: "/live", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-live", kind: "route" },
   { id: "docs", icon: BookOpen, label: "Docs", href: EXTERNAL_DOCS_URL, color: "text-signal-500", group: "utility", dockSection: "right", tourId: "nav-docs", kind: "external" },
   { id: "config", icon: Settings, label: "Settings", dockLabel: "Config", path: "/config", color: "text-slate-400 dark:text-slate-400", group: "utility", dockSection: "right", tourId: "nav-config", kind: "route" },
 ] as const;
 
-const EASY_NAVIGATION_ITEM_IDS: readonly NavigationItemId[] = ["chat", "browser", "stats", "config", "docs"];
+const EASY_NAVIGATION_ITEM_IDS: readonly NavigationItemId[] = ["chat", "browser", "stats", "live", "config", "docs"];
 const STANDARD_NAVIGATION_ITEM_IDS: readonly NavigationItemId[] = [
   "chat",
   "overview",

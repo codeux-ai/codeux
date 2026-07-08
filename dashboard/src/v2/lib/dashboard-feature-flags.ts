@@ -1,4 +1,4 @@
-export const DASHBOARD_FEATURE_IDS = ["nodes"] as const;
+export const DASHBOARD_FEATURE_IDS = ["nodes", "custom-dashboards"] as const;
 
 export type DashboardFeatureId = typeof DASHBOARD_FEATURE_IDS[number];
 
@@ -13,6 +13,7 @@ export interface DashboardFeatureFlagSource {
 
 export const DASHBOARD_FEATURE_ENV_KEYS: Record<DashboardFeatureId, string> = {
   nodes: "VITE_CODEUX_FEATURE_NODES",
+  "custom-dashboards": "VITE_CODEUX_FEATURE_CUSTOM_DASHBOARDS",
 };
 
 const ENABLED_VALUES = new Set(["1", "true", "yes", "on", "enabled"]);
@@ -45,6 +46,7 @@ const readDashboardFeatureFlagSource = (): DashboardFeatureFlagSource => {
     devMode: Boolean(env.DEV),
     values: {
       nodes: env[DASHBOARD_FEATURE_ENV_KEYS.nodes],
+      "custom-dashboards": env[DASHBOARD_FEATURE_ENV_KEYS["custom-dashboards"]],
     },
   };
 };

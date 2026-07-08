@@ -78,6 +78,28 @@ describe("SprintControls pause and resume actions", () => {
 
     expect(screen.getByRole("button", { name: "Pause sprint is pending" }).getAttribute("disabled")).not.toBeNull();
   });
+
+  it("keeps inactive pause guidance out of the visible control row", () => {
+    render(
+      <SprintControls
+        isActive={false}
+        isPaused={false}
+        isStartStopPending={false}
+        isPauseResumePending={false}
+        onStartStop={vi.fn()}
+        onPauseResume={vi.fn()}
+      />
+    );
+
+    const pauseButton = screen.getByRole("button", { name: "Pause sprint" });
+    expect(pauseButton.getAttribute("disabled")).not.toBeNull();
+    expect(pauseButton.classList.contains("no-underline")).toBe(true);
+    const reasonId = pauseButton.getAttribute("aria-describedby");
+    expect(reasonId).toBeTruthy();
+    const reason = document.getElementById(reasonId ?? "");
+    expect(reason?.textContent).toBe("Pause is available after the sprint starts.");
+    expect(reason?.classList.contains("sr-only")).toBe(true);
+  });
 });
 
 describe("SprintActionMenu confirmation gates", () => {
@@ -117,6 +139,18 @@ describe("SprintActionMenu confirmation gates", () => {
     await waitFor(() => {
       expect(onPauseResume).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("removes link underlines from menu actions rendered as buttons", () => {
+    render(
+      <SprintActionMenu
+        sprint={sprint as any}
+        isRunning={true}
+        viewTasksHref="/tasks?sprintId=sprint-1"
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "View tasks for sprint Sprint Alpha" }).classList.contains("no-underline")).toBe(true);
   });
 
   it("does not stop a sprint on cancel and forwards delete to the page-level confirmation flow", async () => {

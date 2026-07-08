@@ -296,6 +296,9 @@ describe("onboarding-settings-draft", () => {
       expect(result.defaults.appearance.experienceMode).toBe("EASY");
       expect(result.defaults.appearance.navigationMode).toBe("SIDEBAR");
       expect(result.defaults.aiProvider.provider).toBe("codex");
+      expect(result.integrations.providers.codex?.authType).toBe("dashboardAuth");
+      expect(result.integrations.providers.codex?.mountAuth).toBe(true);
+      expect(result.integrations.providers.codex?.authPath).toBe("~/.code-ux/credentials/codex");
       expect(result.defaults.aiProvider.providers.codex.enabled).toBe(true);
       expect(result.defaults.aiProvider.providers.jules).toBeUndefined();
       expect(result.defaults.aiProvider.invocationRouting.task_coding.provider).toBe("codex");

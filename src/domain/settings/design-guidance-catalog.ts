@@ -135,7 +135,7 @@ const DEFAULT_TECH_STACKS: DesignGuidanceEntrySettings[] = [
   NONE_DESIGN_GUIDANCE_ENTRY,
   createEntry(
     CODE_UX_PRODUCT_TECH_STACK_ID,
-    "Code UX Product Stack",
+    "Code UX Stack",
     "Preact, TypeScript, Tailwind, lightweight state, and focused runtime APIs.",
     "Prefer typed Preact components, existing dashboard primitives, Tailwind utility composition, small testable modules, and lean client bundles. Reuse local API and settings contracts instead of introducing new client-side protocol shapes.",
   ),

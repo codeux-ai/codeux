@@ -8,7 +8,7 @@ The dashboard shows a first-run onboarding flow in the browser until the operato
 
 The browser-local key `codeux:onboarding-complete:v1` is still written for compatibility, but onboarding visibility is owned by the persisted user-preferences state so refreshes and sign-in sessions do not reopen onboarding after complete or cancel.
 
-The onboarding shell uses the same dashboard background and modal motion system as the Import and Add Project overlays. It follows the selected Light, Dark, or System theme instead of forcing dark mode, and it can switch between the animated background and the draft static color while onboarding remains open. Appearance choices publish the same unsaved appearance preview used by Settings, so the step is previewed in place before final save. The shell is viewport-bounded, with the step body owning its own scrollbar for long provider configuration forms. Step entry, shortcut movement, progress feedback, selected provider/default choices, validation reveal, action feedback, and guided-tour highlight movement use the shared `enterExit`, `selectionMovement`, `inlineValidation`, `controlFeedback`, and `asyncFeedback` interaction contracts. Reduced-motion users receive static state changes, progress labels, visible outlines, and focus/selection states instead of animation-dependent cues.
+The onboarding shell uses the same dashboard background and modal motion system as the Import and Add Project overlays. It follows the selected Light, Dark, or System theme instead of forcing dark mode, and it can switch between the animated background and the draft static color while onboarding remains open. Appearance choices publish the same unsaved appearance preview used by Settings, so the step is previewed in place before final save. The shell is viewport-bounded, with the step body owning its own scrollbar for long provider configuration forms. The sidebar stays compact and prioritizes the step menu; it does not show provider-count or cluster-summary cards. Step entry, shortcut movement, progress feedback, selected provider/default choices, validation reveal, action feedback, and guided-tour highlight movement use the shared `enterExit`, `selectionMovement`, `inlineValidation`, `controlFeedback`, and `asyncFeedback` interaction contracts. Reduced-motion users receive static state changes, progress labels, visible outlines, and focus/selection states instead of animation-dependent cues.
 
 ## Component Structure
 
@@ -56,7 +56,7 @@ Installer support matrix:
 
 Linux Engine installation handles privileges noninteractively. Root runs package and service commands directly. Non-root runs use `sudo -n`; when passwordless sudo is unavailable, commands are returned as skipped display commands with `requiresPrivilege` guidance instead of hanging on a password prompt. Installer results include per-command status, bounded stdout/stderr summaries, short command messages, skipped dependency groups, manual-download flags, privilege flags, and post-install guidance such as starting Docker, refreshing PATH, or installing through a package manager manually. Raw command output is not repeated through per-command messages.
 
-The reusable Installation step component stays presentational. It receives readiness metadata, selected/running installer mode, latest installer result or error, and callback props from its parent instead of calling installer APIs directly. When required Docker/Git checks are missing and the recommended installer is available, it shows the primary `Auto Install dependencies` action with copy that explains Code UX will run the detected OS package manager only after the operator clicks. The advanced area exposes both `Docker Desktop + Git` and `Docker Engine + Git`, including availability, recommended state, degraded/manual-download guidance, privilege guidance, per-mode actions, preserved manual Docker/Git links, live progress, structured command results, retry, and readiness recheck paths.
+The reusable Installation step component stays presentational. It receives readiness metadata, selected/running installer mode, latest installer result or error, and callback props from its parent instead of calling installer APIs directly. When required Docker/Git checks are missing and the recommended installer is available, it shows the primary `Auto Install dependencies` action with copy that explains Code UX will run the detected OS package manager only after the operator clicks. The advanced area exposes both `Docker Desktop + Git` and `Docker Engine + Git`, including availability, recommended state, degraded/manual-download guidance, privilege guidance, per-mode actions, preserved manual Docker/Git links, live progress, structured command results, retry, and readiness recheck paths. Onboarding presents local dependency setup only.
 
 Installer attempts never complete onboarding automatically. A resolved installer call, including `requiresPrivilege` or `requiresManualDownload` outcomes, is treated as a completed attempt: onboarding renders the structured result, keeps manual Docker/Git links available, and re-runs readiness checks so Docker CLI, Docker daemon, and Git status refresh. Operators may need to reopen the terminal so PATH changes are visible, start Docker Desktop or the Docker Engine daemon, add their user to the Docker group, or rerun the installer from an elevated shell. Permission failures are reported as installer results or safe route errors rather than exposing full command output.
 
@@ -72,7 +72,7 @@ Notification read and dismissed state is stored locally in the browser under `co
 Onboarding now starts with a setup-mode choice. New installs default to **Expert** so existing detailed behavior remains available unless the operator chooses a shorter path. **Standard** is the user-facing spelling for the persisted `STANDARD` value.
 
 Mode choices:
-- **Easy**: short first-run path for one recommended CLI provider plus GitHub workflow defaults. Easy hides Docker, concurrency, Jira, MCP, model pricing, and advanced routing controls while keeping Docker as the default execution runtime.
+- **Easy**: short first-run path for choosing one CLI provider login plus optional GitHub workflow defaults. Easy hides Docker, concurrency, Jira, MCP, model pricing, and advanced routing controls while keeping Docker as the default execution runtime.
 - **Standard**: balanced setup path that follows the detailed flow and uses the public `Standard` label in the dashboard.
 - **Expert**: full provider/setup/defaults/automation/appearance flow.
 
@@ -81,10 +81,12 @@ The Easy path contains three steps:
    - Selects Easy, Standard, or Expert.
    - Persists the selected mode to `defaults.appearance.experienceMode`.
 2. Provider
-   - Shows one recommended CLI provider configuration, preferring detected local CLI auth and falling back to the default provider recommendation when none is detected.
-   - Uses detected provider auth when available and stores API keys only through the existing provider settings path.
+   - Shows all local CLI providers: Gemini, Antigravity, Codex, Claude Code, Qwen Code, and OpenCode.
+   - Keeps routing to one provider; the provider whose auth mode or login action is used becomes the Easy provider for Chat and worker routing.
+   - Shows only the authentication mode selector, with Dashboard Login preselected, plus the Connect and Login action. Credential directories and local auth paths stay hidden in Easy mode. Multi-instance provider configuration stays in Standard, Expert, and Settings.
 3. GitHub
    - Shows exactly two checkboxes: whether to use GitHub and whether Code UX should create/manage GitHub PR workflow defaults.
+   - Leaves both GitHub checkboxes deselected by default; selecting GitHub opts into the remote PR/CI path.
    - Keeps Docker execution enabled and applies safe defaults for automation, routing, navigation, and appearance.
 
 The Standard and Expert flow contains the detailed setup sequence:
@@ -149,7 +151,7 @@ Provider choices update:
 
 Appearance choices update the onboarding draft under `defaults.appearance`, which is also used by the Settings page. While onboarding is open, the draft appearance is published through the shared `codeux:appearance-preview` event so the root dashboard shell reapplies Theme, Reduced Motion, Navigation Mode, Background Mode, Static Color, and Zoom Level without waiting for final save. The preview is cleared when onboarding closes, is canceled, completes, or unmounts. Final persistence still uses the same `PUT /api/system-settings` path as Settings. New installs start with sidebar navigation and the pattern overlay set to `None`.
 
-Easy onboarding applies a small settings recipe before save: one recommended CLI provider is enabled for default and worker routing, Docker execution stays enabled, automation remains semi-automatic with plan approval enabled, memory stays enabled, navigation stays in sidebar mode, and the two GitHub checkboxes map to existing Git/CI defaults. These defaults are saved only when the operator finishes the flow. No provider secrets are stored outside the existing system settings provider catalog.
+Easy onboarding applies a small settings recipe before save: one selected CLI provider is enabled for default and worker routing, Dashboard Login is the default auth mode for that provider when no API key is already configured, Docker execution stays enabled, automation remains semi-automatic with plan approval enabled, memory stays enabled, navigation stays in sidebar mode, and GitHub remains local/off unless the operator selects the GitHub checkbox. These defaults are saved only when the operator finishes the flow. No provider secrets are stored outside the existing system settings provider catalog.
 
 Operators can reopen onboarding from `Settings -> General -> Onboarding`. The action resets the persisted onboarding completion state and clears the browser-local marker; it does not reset saved system or project settings.
 

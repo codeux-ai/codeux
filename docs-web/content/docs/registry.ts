@@ -446,7 +446,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/settings-subcategories-display-settings',
     section: 'User Guide',
     title: "Display Settings",
-    description: "Controls the dashboard shell layout, experience mode, theme, motion preference, and desktop zoom when available.",
+    description: "Controls the dashboard shell layout, theme, motion preference, and desktop zoom when available.",
   },
   'settings-subcategories-guidance': {
     id: 'settings-subcategories-guidance',

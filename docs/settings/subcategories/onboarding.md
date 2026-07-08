@@ -8,7 +8,7 @@ The action button launches onboarding so you can revisit setup-mode, provider, G
 
 ## Recommended Defaults
 
-Use it when setting up a new machine or after adding provider credentials. First-run setup defaults to Expert mode; Easy mode provides a shorter provider-plus-GitHub path and sends the operator to Chat when finished.
+Use it when setting up a new machine or after adding provider credentials. First-run setup defaults to Expert mode; Easy mode provides a shorter single-provider Dashboard Login, keeps GitHub deselected until the operator opts in, and sends the operator to Chat when finished.
 
 ## Risks And Gotchas
 

@@ -37,6 +37,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
         }
         return false;
     });
+    const [sidebarToggleTooltipTop, setSidebarToggleTooltipTop] = useState(0);
 
     const trapRef = useFocusTrap(!!isMobile && !!isOpen, { onClose: isMobile ? onClose : undefined, restoreFocus: true, initialFocusRef: undefined });
 
@@ -142,6 +143,14 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
         });
     };
 
+    const updateSidebarToggleTooltipPosition = (element: HTMLElement | null): void => {
+        if (!element || !isMinimized || isMobile) {
+            return;
+        }
+        const rect = element.getBoundingClientRect();
+        setSidebarToggleTooltipTop(rect.top + (rect.height / 2));
+    };
+
     return (
         <>
         {isMobile && (
@@ -235,9 +244,11 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                 {!isMobile && (
                     <button
                         onClick={toggleMinimize}
+                        onMouseEnter={(event) => updateSidebarToggleTooltipPosition(event.currentTarget)}
+                        onFocus={(event) => updateSidebarToggleTooltipPosition(event.currentTarget)}
                         className={`mt-2 relative flex items-center ${isMinimized ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-2 min-h-[40px] rounded-2xl transition-[background-color,border-color,box-shadow,color,opacity,transform] motion-reduce:transition-none group focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-2xl focus-visible:z-10 bg-transparent border-0 cursor-pointer`}
                         style={controlTransitionStyle}
-                        aria-label={isMinimized ? "Expand sidebar" : "Collapse sidebar"}
+                        aria-label={isMinimized ? "Expand" : "Collapse sidebar"}
                         aria-describedby={isMinimized ? "nav-tooltip-sidebar-toggle" : undefined}
                         aria-expanded={!isMinimized}
                         aria-controls="primary-navigation"
@@ -254,9 +265,9 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                             </span>
                         </div>
                         {isMinimized && (
-                            <div id="nav-tooltip-sidebar-toggle" aria-hidden="true" className="absolute left-[calc(100%+16px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-white/95 dark:bg-void-800/95 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.08] text-slate-800 dark:text-slate-100 text-xs font-bold tracking-wide rounded-2xl opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0 transition-[opacity,transform] motion-reduce:transition-none pointer-events-none shadow-2xl z-[100] max-w-[calc(100vw-6rem)] text-wrap break-words whitespace-normal flex items-center gap-2" style={controlTransitionStyle}>
+                            <div id="nav-tooltip-sidebar-toggle" aria-hidden="true" className="fixed left-[104px] -translate-y-1/2 px-3 py-1.5 bg-white/95 dark:bg-void-800/95 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.08] text-slate-800 dark:text-slate-100 text-xs font-bold tracking-wide rounded-2xl opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0 transition-[opacity,transform] motion-reduce:transition-none pointer-events-none shadow-2xl z-[100] flex w-max max-w-[18rem] items-center gap-2 whitespace-nowrap" style={{ ...controlTransitionStyle, top: `${sidebarToggleTooltipTop}px` }}>
                                 <span className="w-1.5 h-1.5 rounded-full bg-signal-500/80 shadow-[0_0_6px_rgba(0,224,160,0.6)] shrink-0"></span>
-                                Expand sidebar
+                                Expand
                             </div>
                         )}
                     </button>

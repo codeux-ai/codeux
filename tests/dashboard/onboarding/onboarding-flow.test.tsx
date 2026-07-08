@@ -405,7 +405,7 @@ describe("GuidedDashboardTour integration", () => {
       "Schedule",
       "Memory",
       "Knowledge",
-      "Browser",
+      "Browser Preview",
       "Files",
       "Live",
       "Docs",
@@ -454,7 +454,7 @@ describe("OnboardingExperience integration", () => {
     cleanup();
   });
 
-  it("shows step navigation labels and readiness pending/error states accessibly", async () => {
+  it("shows step navigation labels without compact sidebar status cards", async () => {
     const defaultSettings = cloneDefaultSettings();
     const systemSettings = {
       runtime: { dashboardPort: defaultSettings.dashboardPort, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
@@ -482,11 +482,13 @@ describe("OnboardingExperience integration", () => {
 
     const activeStepBtn = await screen.findByRole("button", { name: /Setup mode/i, current: "step" });
     expect(activeStepBtn).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Go to Providers" })).not.toBeNull();
+    expect(screen.queryByText(/Configure containers, provider auth, automation, and the workspace shell/i)).toBeNull();
+    expect(screen.queryByText("Blocked")).toBeNull();
+
     await userEvent.click(screen.getByRole("button", { name: "Go to Installation" }));
 
-    const readinessRegion = await screen.findAllByText("Blocked");
-    expect(readinessRegion.length).toBeGreaterThan(0);
-    expect(readinessRegion[0]!.getAttribute("aria-live")).toBe("polite");
+    expect(await screen.findByRole("button", { name: /Installation/i, current: "step" })).not.toBeNull();
   });
 
   it("runs the recommended dependency installer and refreshes readiness after completion", async () => {
@@ -726,15 +728,23 @@ describe("OnboardingExperience integration", () => {
     await userEvent.click(await screen.findByRole("radio", { name: /Easy/i }));
     await userEvent.click(screen.getByRole("button", { name: "Next" }));
 
-    expect(await screen.findByText("Recommended provider: Codex")).not.toBeNull();
+    expect(await screen.findByText("Choose one provider login")).not.toBeNull();
+    for (const providerName of ["Gemini", "Antigravity", "Codex", "Claude Code", "Qwen Code", "OpenCode"]) {
+      expect(screen.getByText(providerName)).not.toBeNull();
+    }
+    expect(screen.getAllByRole("button", { name: /Connect and log in to/i })).toHaveLength(6);
     expect(screen.queryByText("Add instance")).toBeNull();
+    expect(screen.queryByText("API key")).toBeNull();
+    expect(screen.queryByText(/~\/\.code-ux\/credentials/)).toBeNull();
+    expect(screen.queryByText("Connect this provider through Code UX and save the login under the dashboard credentials directory.")).toBeNull();
+    expect(screen.queryByText("Local auth path")).toBeNull();
 
     await userEvent.click(screen.getByRole("button", { name: "Next" }));
 
     const githubCheckboxes = screen.getAllByRole("checkbox");
     expect(githubCheckboxes).toHaveLength(2);
-    expect((screen.getByRole("checkbox", { name: /Use GitHub for this workspace/i }) as HTMLInputElement).checked).toBe(true);
-    expect((screen.getByRole("checkbox", { name: /Let Code UX create and manage GitHub PR workflow defaults/i }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole("checkbox", { name: /Use GitHub for this workspace/i }) as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByRole("checkbox", { name: /Let Code UX create and manage GitHub PR workflow defaults/i }) as HTMLInputElement).checked).toBe(false);
 
     await userEvent.click(screen.getByRole("button", { name: "Finish" }));
 
@@ -744,6 +754,11 @@ describe("OnboardingExperience integration", () => {
     expect(savedSettings.defaults.appearance.experienceMode).toBe("EASY");
     expect(savedSettings.defaults.cliWorkflow.executionMode).toBe("DOCKER");
     expect(savedSettings.defaults.aiProvider.provider).toBe("codex");
+    expect(savedSettings.defaults.cliWorkflow.gitMode).toBe("local");
+    expect(savedSettings.defaults.git.githubMode).toBe("LOCAL");
+    expect(savedSettings.defaults.git.autoCreatePr).toBe(false);
+    expect(savedSettings.integrations.providers.codex?.authType).toBe("dashboardAuth");
+    expect(savedSettings.integrations.providers.codex?.authPath).toBe("~/.code-ux/credentials/codex");
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/user/onboarding/complete", expect.objectContaining({ method: "POST" })));
     await waitFor(() => expect(navigateMock).toHaveBeenCalledWith({ to: "/chat" }));
   });

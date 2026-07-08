@@ -464,7 +464,8 @@ const notFoundRoute = createRoute({
 });
 
 const nodesFeatureEnabled = isDashboardFeatureEnabled("nodes");
-const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, tasksRoute, projectsRoute, chatRoute, agentsRoute, ...(nodesFeatureEnabled ? [nodesRoute] : []), customDashboardsRoute, statsRoute, schedulerRoute, configRoute, memoryRoute, knowledgeRoute, browserRoute, fileBrowserRoute, docsRoute, docsDocumentRoute, liveRoute, notFoundRoute]);
+const customDashboardsFeatureEnabled = isDashboardFeatureEnabled("custom-dashboards");
+const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, tasksRoute, projectsRoute, chatRoute, agentsRoute, ...(nodesFeatureEnabled ? [nodesRoute] : []), ...(customDashboardsFeatureEnabled ? [customDashboardsRoute] : []), statsRoute, schedulerRoute, configRoute, memoryRoute, knowledgeRoute, browserRoute, fileBrowserRoute, docsRoute, docsDocumentRoute, liveRoute, notFoundRoute]);
 // `defaultPreload: "intent"` warms route matching on hover/focus; the page chunks themselves are
 // prefetched explicitly by the nav components via prefetchRoute() since they are Preact-lazy.
 const router = createRouter({ routeTree, defaultPreload: "intent", defaultPreloadDelay: 50 });

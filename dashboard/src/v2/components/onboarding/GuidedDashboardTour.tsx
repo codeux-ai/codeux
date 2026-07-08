@@ -106,6 +106,7 @@ const TOUR_STEPS: TourStep[] = [
     title: "Dashboards",
     body: "Dashboards lets you manage generated dashboard manifests, file bundles, validation previews, and validated publication state for the active project.",
     accent: "signal",
+    feature: "custom-dashboards",
   },
   {
     id: "stats",
@@ -143,8 +144,8 @@ const TOUR_STEPS: TourStep[] = [
     id: "browser",
     targetId: "nav-browser",
     eyebrow: "Preview lab",
-    title: "Browser",
-    body: "Browser is the in-app surface for preview containers. Use it to inspect running apps, navigate sessions, and validate work quickly.",
+    title: "Browser Preview",
+    body: "Browser Preview is the in-app surface for preview containers. Use it to inspect running apps, navigate sessions, and validate work quickly.",
     accent: "sky",
   },
   {

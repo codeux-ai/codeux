@@ -27,6 +27,7 @@ import {
   ShieldCheck,
   Sparkles,
   Star,
+  Terminal,
   X,
 } from "lucide-preact";
 import { fetchOnboardingReadiness, installOnboardingDependencies } from "../../../lib/api/dashboard-api.js";
@@ -40,6 +41,7 @@ import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { OnboardingIntro } from "./OnboardingIntro.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { ProviderInstanceCard } from "../settings/ProviderInstanceCard.js";
+import { TerminalLoginModal } from "../settings/TerminalLoginModal.js";
 import { sanitizeSystemProviderConfig } from "../../lib/provider-runtime-preview.js";
 import { PillChoiceGroup, Row, SecretInput, SelectInput, TextInput, Toggle } from "../settings/SettingsFormFields.js";
 import { applyAppearanceSettings } from "../../lib/apply-appearance.js";
@@ -73,6 +75,7 @@ import { dashboardExperienceModeOptions } from "../../lib/experience-mode.js";
 import {
   createProjectProviderDraft,
   createSystemProviderDraft,
+  getProviderDefaultAuthPath,
   getProviderInstanceLabel,
   getProviderTypeLabel,
   sortProviderConfigEntries,
@@ -154,6 +157,7 @@ const providerLabels: Record<ProviderId, string> = {
 };
 
 const PROVIDER_TYPES = onboardingProviderTypes;
+const EASY_PROVIDER_TYPES: ProviderId[] = ["gemini", "antigravity", "codex", "claude-code", "qwen-code", "opencode"];
 
 const providerDescriptions: Record<ProviderId, string> = {
   jules: "Google Jules API service for agent session and workspace orchestration.",
@@ -175,6 +179,122 @@ const getProviderWatermark = (providerId: ProviderId): string => (
             : providerId === "antigravity" ? "AGY"
               : "CLD"
 );
+
+const createEasyDashboardProviderDraft = (
+  providerId: ProviderId,
+  providerConfigId: ProviderConfigId,
+): SystemSettings["integrations"]["providers"][ProviderConfigId] => sanitizeSystemProviderConfig({
+  ...createSystemProviderDraft(providerId, providerLabels[providerId]),
+  authType: "dashboardAuth",
+  mountAuth: true,
+  authPath: `~/.code-ux/credentials/${providerConfigId}`,
+});
+
+const getEasyAuthMode = (
+  provider: SystemSettings["integrations"]["providers"][ProviderConfigId],
+): "dashboardAuth" | "localAuth" => (
+  provider.authType === "localAuth" ? "localAuth" : "dashboardAuth"
+);
+
+const getEasyAuthUpdates = (
+  providerConfigId: ProviderConfigId,
+  providerId: ProviderId,
+  authType: "dashboardAuth" | "localAuth",
+  currentAuthPath: string,
+): Partial<SystemSettings["integrations"]["providers"][ProviderConfigId]> => ({
+  authType,
+  mountAuth: true,
+  authPath: authType === "dashboardAuth"
+    ? `~/.code-ux/credentials/${providerConfigId}`
+    : (currentAuthPath && !currentAuthPath.includes(".code-ux/credentials/")
+      ? currentAuthPath
+      : getProviderDefaultAuthPath(providerId)),
+});
+
+const EasyProviderAuthCard: FunctionComponent<{
+  providerConfigId: ProviderConfigId;
+  provider: SystemSettings["integrations"]["providers"][ProviderConfigId];
+  selected: boolean;
+  readinessStatus?: OnboardingProviderCredentialStatus;
+  onUpdate: (updates: Partial<SystemSettings["integrations"]["providers"][ProviderConfigId]>) => void;
+}> = ({ providerConfigId, provider, selected, readinessStatus, onUpdate }) => {
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const authMode = getEasyAuthMode(provider);
+  const providerLabel = providerLabels[provider.provider];
+
+  const applyAuthMode = (value: string): void => {
+    const nextAuthMode = value === "localAuth" ? "localAuth" : "dashboardAuth";
+    onUpdate(getEasyAuthUpdates(providerConfigId, provider.provider, nextAuthMode, provider.authPath));
+  };
+
+  const openLogin = (): void => {
+    onUpdate(getEasyAuthUpdates(providerConfigId, provider.provider, "dashboardAuth", provider.authPath));
+    setShowLoginModal(true);
+  };
+
+  return (
+    <div data-onboarding-card className={`relative overflow-hidden rounded-[2rem] border p-5 shadow-[0_18px_50px_rgba(15,23,42,0.055)] transition-colors dark:bg-white/[0.04] ${selected ? "border-signal-500/30 bg-signal-500/10" : "border-black/[0.06] bg-white/78 dark:border-white/[0.06]"}`}>
+      <div aria-hidden className="pointer-events-none absolute -right-6 -top-8 font-display text-[7rem] font-black leading-none tracking-tight text-black/[0.025] dark:text-white/[0.025]">
+        {getProviderWatermark(provider.provider)}
+      </div>
+      <div className="relative z-10 flex flex-wrap items-start justify-between gap-3 border-b border-black/[0.06] pb-4 dark:border-white/[0.06]">
+        <div className="flex min-w-0 items-start gap-3">
+          <ProviderBrandIcon id={provider.provider} />
+          <div className="min-w-0">
+            <div className="text-base font-black text-slate-900 dark:text-white">{providerLabel}</div>
+            <div className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+              {readinessStatus?.detectedFiles.length ? "Credentials detected on this machine." : "Ready for dashboard login."}
+            </div>
+          </div>
+        </div>
+        <span className={`rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] ${selected ? "border border-signal-500/20 bg-signal-500/10 text-signal-700 dark:text-signal-200" : "border border-black/[0.06] bg-white/60 text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300"}`}>
+          {selected ? "Selected" : "Available"}
+        </span>
+      </div>
+
+      <div className="relative z-10 mt-4 space-y-3">
+        <Row label="Authentication mode">
+          <SelectInput
+            value={authMode}
+            onChange={applyAuthMode}
+            aria-label={`${providerLabel} authentication mode`}
+            options={[
+              { value: "dashboardAuth", label: "Dashboard Login" },
+              { value: "localAuth", label: "Local Copy" },
+            ]}
+          />
+        </Row>
+        {authMode === "dashboardAuth" ? (
+          <button
+            type="button"
+            onClick={openLogin}
+            aria-label={`Connect and log in to ${providerLabel}`}
+            aria-haspopup="dialog"
+            aria-expanded={showLoginModal}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-signal-500 px-4 py-3 text-sm font-black text-white shadow-lg transition-colors hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white active:scale-[0.98] dark:text-void-950 dark:focus-visible:ring-offset-void-900"
+          >
+            <Terminal className="h-4 w-4" />
+            Connect and Login
+          </button>
+        ) : (
+          <div className="rounded-2xl border border-black/[0.06] bg-white/60 px-4 py-3 text-sm font-semibold text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+            Local Copy will use this provider's default CLI login.
+          </div>
+        )}
+      </div>
+
+      {showLoginModal ? (
+        <TerminalLoginModal
+          providerConfigId={providerConfigId}
+          providerId={provider.provider}
+          providerName={providerLabel}
+          onClose={() => setShowLoginModal(false)}
+          onSuccess={() => onUpdate({ lastLoginAt: Date.now() })}
+        />
+      ) : null}
+    </div>
+  );
+};
 
 const platform = (typeof window !== "undefined" && window.codeUxDesktop?.platform) || "linux";
 
@@ -482,14 +602,15 @@ export const OnboardingExperience: FunctionComponent = () => {
     mode: DashboardExperienceMode,
     options: { useGithub?: boolean; manageGithubPrWorkflow?: boolean } = {},
   ): void => {
+    const easyUseGithubDefault = options.useGithub ?? false;
     dispatch({ type: "select-experience-mode", mode });
     if (mode === "EASY") {
       dispatch({ type: "set-selected-providers", providers: [easyRecommendedProvider] });
     }
     updateSettings((current) => applyOnboardingExperienceModeDefaults(current, mode, {
       recommendedProvider: easyRecommendedProvider,
-      useGithub: options.useGithub,
-      manageGithubPrWorkflow: options.manageGithubPrWorkflow,
+      useGithub: mode === "EASY" ? easyUseGithubDefault : options.useGithub,
+      manageGithubPrWorkflow: mode === "EASY" ? options.manageGithubPrWorkflow ?? false : options.manageGithubPrWorkflow,
     }));
   };
 
@@ -607,6 +728,34 @@ export const OnboardingExperience: FunctionComponent = () => {
     });
   };
 
+  const configureEasyProviderInstance = (
+    providerId: ProviderId,
+    providerConfigId: ProviderConfigId,
+    updates: Partial<SystemSettings["integrations"]["providers"][ProviderConfigId]>,
+  ): void => {
+    dispatch({ type: "set-selected-providers", providers: [providerId] });
+    updateSettings((current) => {
+      const provider = current.integrations.providers[providerConfigId]
+        ?? createEasyDashboardProviderDraft(providerId, providerConfigId);
+      const nextProviders = {
+        ...current.integrations.providers,
+        [providerConfigId]: sanitizeSystemProviderConfig({
+          ...provider,
+          ...updates,
+        }),
+      };
+      const syncedDefaults = syncProjectProvidersToIntegrationCatalog(current, nextProviders);
+      return {
+        ...current,
+        integrations: {
+          ...current.integrations,
+          providers: nextProviders,
+        },
+        defaults: syncedDefaults,
+      };
+    });
+  };
+
   const configureProjectProvider = (
     providerConfigId: ProviderConfigId,
     updates: Partial<ProjectSettings["aiProvider"]["providers"][ProviderConfigId]>,
@@ -663,6 +812,7 @@ export const OnboardingExperience: FunctionComponent = () => {
 
   const gitMode = settings?.defaults.cliWorkflow.gitMode === "local" ? "local" : "remote";
   const isEasyMode = experienceMode === "EASY";
+  const easySelectedProvider = selectedProviderTypes.find((provider) => EASY_PROVIDER_TYPES.includes(provider)) ?? easyRecommendedProvider;
   const easyUseGithub = settings ? settings.defaults.cliWorkflow.gitMode !== "local" : true;
   const easyManageGithubPrWorkflow = settings ? settings.defaults.git.autoCreatePr : true;
 
@@ -740,7 +890,7 @@ export const OnboardingExperience: FunctionComponent = () => {
     dispatch({ type: "set-saving", saving: true });
     try {
       let nextSettings = applyOnboardingExperienceModeDefaults(cloneSystemSettings(settings), experienceMode, {
-        recommendedProvider: easyRecommendedProvider,
+        recommendedProvider: easySelectedProvider,
         useGithub: settings.defaults.cliWorkflow.gitMode !== "local",
         manageGithubPrWorkflow: settings.defaults.git.autoCreatePr,
       });
@@ -923,21 +1073,6 @@ export const OnboardingExperience: FunctionComponent = () => {
             <h2 data-sidebar-copy id="onboarding-title" className="mt-3 font-display text-4xl font-semibold leading-[0.95] tracking-tight text-slate-950 dark:text-white">
               Make the runtime ready.
             </h2>
-            <div data-sidebar-copy className="mt-5 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-300">
-              Configure containers, provider auth, automation, and the workspace shell before the first sprint starts.
-            </div>
-            <div data-sidebar-copy className="mt-6 grid grid-cols-2 gap-2">
-              <div className="rounded-2xl border border-black/[0.07] bg-white/64 p-3 dark:border-white/10 dark:bg-white/[0.06]">
-                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Providers</div>
-                <div className="mt-1 text-xl font-semibold text-slate-950 dark:text-white">{selectedProviders.length}</div>
-              </div>
-              <div className="rounded-2xl border border-black/[0.07] bg-white/64 p-3 dark:border-white/10 dark:bg-white/[0.06]">
-                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Cluster</div>
-                <div aria-live="polite" className={`mt-2 inline-flex rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${clusterReady ? "bg-signal-500/12 text-signal-700 dark:bg-signal-400/15 dark:text-signal-200" : "bg-status-amber/15 text-amber-700 dark:text-status-amber"}`}>
-                  {clusterReady ? "Ready" : "Blocked"}
-                </div>
-              </div>
-            </div>
             <div className="mt-8 space-y-2">
               {steps.map((step, stepIndex) => {
                 const StepIcon = step.icon;
@@ -1031,7 +1166,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                       Start with the right amount of control.
                     </h4>
                     <p className="mt-3 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-300">
-                      Easy keeps setup to a recommended provider and GitHub defaults. Standard and Expert keep the detailed runtime, provider, automation, and appearance controls.
+                      Easy keeps setup to one provider login and GitHub defaults. Standard and Expert keep the detailed runtime, provider, automation, and appearance controls.
                     </p>
                   </div>
                 </div>
@@ -1225,77 +1360,34 @@ export const OnboardingExperience: FunctionComponent = () => {
                 <div className="space-y-4">
                   <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
                     <div className="flex items-start gap-3">
-                      <ProviderBrandIcon id={easyRecommendedProvider} />
-                      <div className="min-w-0">
-                        <div className="text-base font-black text-slate-900 dark:text-white">
-                          Recommended provider: {providerLabels[easyRecommendedProvider]}
-                        </div>
+                      <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-signal-600 dark:text-signal-300" />
+                      <div>
+                        <div className="text-base font-black text-slate-900 dark:text-white">Choose one provider login</div>
                         <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                          Code UX will use this provider for Chat and worker tasks. You can add more providers and advanced routing later in Settings.
+                          Easy setup keeps routing to one provider. Pick a provider below, use Dashboard Login by default, and add more provider instances later in Settings.
                         </div>
                       </div>
                     </div>
                   </div>
-                  {settings ? getSystemProvidersByType(settings, easyRecommendedProvider).slice(0, 1).map(([providerConfigId, integrationProvider]) => {
-                    const currentAuthType = integrationProvider.authType || (integrationProvider.mountAuth ? "localAuth" : "apiKey");
-                    return (
-                      <div data-onboarding-card key={providerConfigId} className="rounded-[2rem] border border-black/[0.06] bg-white/78 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.055)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/[0.06] pb-4 dark:border-white/[0.06]">
-                          <div className="flex min-w-0 items-center gap-3">
-                            <ProviderBrandIcon id={integrationProvider.provider} />
-                            <div className="min-w-0">
-                              <div className="text-sm font-semibold text-slate-900 dark:text-white">{integrationProvider.name}</div>
-                              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                {readinessByProvider[easyRecommendedProvider]?.available ? "Local login detected." : "Use a local login or provider API key."}
-                              </div>
-                            </div>
-                          </div>
-                          <span className="rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-signal-700 dark:text-signal-200">
-                            Included
-                          </span>
-                        </div>
-                        {integrationProvider.provider !== "jules" ? (
-                          <Row label="Authentication" description="Use your local provider login when available, or enter an API key for this provider instance.">
-                            <PillChoiceGroup
-                              aria-label={`${integrationProvider.name} authentication`}
-                              value={currentAuthType}
-                              onChange={(value) => {
-                                const authType = value as "apiKey" | "localAuth";
-                                configureProviderInstance(providerConfigId, {
-                                  authType,
-                                  mountAuth: authType === "localAuth",
-                                  authPath: authType === "localAuth" ? integrationProvider.authPath : integrationProvider.authPath,
-                                });
-                              }}
-                              options={[
-                                { value: "localAuth", label: "Local login", hint: "Use existing CLI auth" },
-                                { value: "apiKey", label: "API key", hint: "Store with this provider" },
-                              ]}
-                            />
-                          </Row>
-                        ) : null}
-                        {currentAuthType === "apiKey" ? (
-                          <Row label="API key" description="Stored through the existing provider settings path." last>
-                            <SecretInput
-                              value={integrationProvider.apiKey}
-                              onChange={(value) => configureProviderInstance(providerConfigId, { apiKey: value })}
-                              aria-label={`${integrationProvider.name} API key`}
-                              mono
-                            />
-                          </Row>
-                        ) : (
-                          <Row label="Local auth path" description="Host provider auth path used by the container runtime." last>
-                            <TextInput
-                              value={integrationProvider.authPath}
-                              onChange={(value) => configureProviderInstance(providerConfigId, { authPath: value, mountAuth: true })}
-                              aria-label={`${integrationProvider.name} local auth path`}
-                              mono
-                            />
-                          </Row>
-                        )}
-                      </div>
-                    );
-                  }) : (
+                  {settings ? (
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      {EASY_PROVIDER_TYPES.map((providerId) => {
+                        const existingEntry = getSystemProvidersByType(settings, providerId)[0];
+                        const providerConfigId = existingEntry?.[0] ?? providerId;
+                        const integrationProvider = existingEntry?.[1] ?? createEasyDashboardProviderDraft(providerId, providerConfigId);
+                        return (
+                          <EasyProviderAuthCard
+                            key={providerId}
+                            providerConfigId={providerConfigId}
+                            provider={integrationProvider}
+                            selected={easySelectedProvider === providerId}
+                            readinessStatus={readinessByProvider[providerId]}
+                            onUpdate={(updates) => configureEasyProviderInstance(providerId, providerConfigId, updates)}
+                          />
+                        );
+                      })}
+                    </div>
+                  ) : (
                     <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/75 p-6 text-sm text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04]">
                       Loading provider settings.
                     </div>

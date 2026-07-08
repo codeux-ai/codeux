@@ -65,7 +65,6 @@ const renderSettingsSmartFindSearch = (overrides: Partial<Parameters<typeof Sett
     settingsSearchMatches: {},
     activeCategory: "general",
     activeCategoryConfig: CATEGORIES[0],
-    onSwitchCategory: () => {},
     interactionStyle,
   };
 
@@ -292,33 +291,25 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
     expect(screen.getByText(/Keep the search field focused/)).toBeInTheDocument();
   });
 
-  it("SettingsSmartFindSearch keeps idle status quiet while preserving the category count for assistive technology", () => {
+  it("SettingsSmartFindSearch shows only the search field by default while preserving the category count for assistive technology", () => {
     renderSettingsSmartFindSearch();
 
-    expect(screen.getByText("Press slash to search settings.")).toBeInTheDocument();
-    expect(screen.getByText("11 settings categories available.")).toHaveClass("sr-only");
-    expect(screen.queryByText("11 settings categories available. Press slash to search.")).not.toBeInTheDocument();
+    expect(screen.getByText(`${CATEGORIES.length} settings categories available.`)).toHaveClass("sr-only");
+    expect(screen.queryByText("Press slash to search settings.")).not.toBeInTheDocument();
+    expect(screen.queryByText(`${CATEGORIES.length} settings categories available. Press slash to search.`)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Clear settings search" })).not.toBeInTheDocument();
     expect(screen.getByText("/")).toBeInTheDocument();
-    expect(screen.getByLabelText("Settings context")).toHaveTextContent("System scope");
-    expect(screen.getByLabelText("Settings context")).toHaveTextContent("General");
-    expect(screen.getByLabelText("Settings context")).toHaveTextContent("No edits");
-    expect(screen.getByText("Quick actions")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Appearance" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Settings context")).not.toBeInTheDocument();
+    expect(screen.queryByText("Quick actions")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Appearance" })).not.toBeInTheDocument();
   });
 
-  it("SettingsSmartFindSearch surfaces project scope and dirty feedback in the command card", () => {
-    renderSettingsSmartFindSearch({
-      activeScope: "project",
-      activeDirty: true,
-      activeCategory: "agents",
-      activeCategoryConfig: CATEGORIES.find((category) => category.id === "agents")!,
-    });
+  it("SettingsSmartFindSearch keeps scope and save feedback out of the compact idle state", () => {
+    renderSettingsSmartFindSearch();
 
-    const context = screen.getByLabelText("Settings context");
-    expect(context).toHaveTextContent("Project scope");
-    expect(context).toHaveTextContent("Agents");
-    expect(context).toHaveTextContent("Unsaved edits");
+    expect(screen.queryByLabelText("Settings context")).not.toBeInTheDocument();
+    expect(screen.queryByText("Project scope")).not.toBeInTheDocument();
+    expect(screen.queryByText("Unsaved edits")).not.toBeInTheDocument();
   });
 
   it("SettingsSmartFindSearch announces active matches with counts, active category, and previews", () => {
@@ -351,7 +342,7 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
       '3 results across 2 matching categories for "claude". Active category: AI Models. Active matches: Claude Code, routing. Match previews: Claude Code, routing, API keys.',
     );
     expect(screen.getByLabelText("Smart Find match previews")).toHaveTextContent("Claude Code");
-    expect(screen.getByRole("button", { name: "Integrations" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Integrations" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Appearance" })).not.toBeInTheDocument();
   });
 
@@ -396,7 +387,6 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
           settingsSearchMatches={searchActive ? settingsSearchMatches : {}}
           activeCategory="general"
           activeCategoryConfig={CATEGORIES[0]}
-          onSwitchCategory={() => {}}
           interactionStyle={interactionStyle}
         />
       );
@@ -412,8 +402,8 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
     expect(screen.queryByRole("button", { name: "Clear settings search" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Smart Find match previews")).not.toBeInTheDocument();
     expect(screen.queryByText("Claude Code")).not.toBeInTheDocument();
-    expect(screen.getByText("Press slash to search settings.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Appearance" })).toBeInTheDocument();
+    expect(screen.queryByText("Press slash to search settings.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Appearance" })).not.toBeInTheDocument();
   });
 
   it("SettingsCategoryRail exposes pending and disabled category states without selected or pending badges", () => {
@@ -1254,7 +1244,11 @@ describe("SettingsControls Accessibility", () => {
     expect(commandStatusBarSource).toContain("<SettingsScopeControls");
     expect(commandStatusBarSource).toContain("<SettingsActivePanelStatus");
     expect(commandStatusBarSource).toContain("sticky={false}");
-    expect(commandStatusBarSource).not.toContain("rounded-[");
+    expect(commandStatusBarSource).toContain("ml-auto");
+    expect(commandStatusBarSource).toContain("Save Changes");
+    expect(commandStatusBarSource).toContain("Reset Project");
+    expect(commandStatusBarSource).toContain("rounded-[1.75rem]");
+    expect(commandStatusBarSource).toContain("bg-void-950");
     expect(commandStatusBarSource).not.toContain("bg-[var(--surface-glass)]");
     expect(source.match(/<SettingsContentPanels/g) ?? []).toHaveLength(1);
     expect(source).toMatch(/<SettingsContentPanels\s+state=\{state\}\s+showActivePanelStatus=\{false\}\s+\/>/);

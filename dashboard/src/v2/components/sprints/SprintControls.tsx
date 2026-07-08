@@ -82,7 +82,7 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
                 ? "Resume sprint execution"
                 : "Pause sprint execution"
         }
-        className={`inline-flex min-h-8 min-w-[6.75rem] flex-1 flex-nowrap items-center justify-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-bold leading-tight transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 sm:flex-none ${
+        className={`inline-flex min-h-8 min-w-[6.75rem] flex-1 flex-nowrap items-center justify-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-bold leading-tight no-underline decoration-transparent transition-colors hover:no-underline focus:no-underline focus-visible:ring-2 focus-visible:ring-signal-500/30 sm:flex-none ${
           isPaused
             ? "border-signal-500/20 bg-signal-500/[0.08] text-signal-600 hover:bg-signal-500/[0.12] dark:text-signal-300"
             : "border-status-amber/25 bg-status-amber/10 text-status-amber hover:bg-status-amber/15"
@@ -121,7 +121,7 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
               ? "Stop sprint execution"
               : "Start sprint execution"
         }
-        className={`inline-flex min-h-8 min-w-[6.75rem] flex-1 flex-nowrap items-center justify-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-bold leading-tight transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 sm:flex-none ${
+        className={`inline-flex min-h-8 min-w-[6.75rem] flex-1 flex-nowrap items-center justify-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-bold leading-tight no-underline decoration-transparent transition-colors hover:no-underline focus:no-underline focus-visible:ring-2 focus-visible:ring-signal-500/30 sm:flex-none ${
           isActive
             ? "border-status-red/20 bg-status-red/[0.1] text-status-red hover:bg-status-red/[0.14]"
             : "border-signal-500/20 bg-signal-500/[0.08] text-signal-600 hover:bg-signal-500/[0.12] dark:text-signal-300"
@@ -143,9 +143,9 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
         id={reasonId}
         role={busyLabel ? "status" : undefined}
         aria-live="polite"
-        className={`basis-full text-left text-[11px] font-bold leading-4 ${busyLabel ? "text-signal-600 dark:text-signal-300" : "text-slate-500 dark:text-slate-400"}`}
+        className={busyLabel ? "basis-full text-left text-[11px] font-bold leading-4 text-signal-600 dark:text-signal-300" : "sr-only"}
       >
-        {busyLabel ? `${busyLabel}. Wait for the current sprint action to finish.` : disabledReason ?? "\u00a0"}
+        {busyLabel ? `${busyLabel}. Wait for the current sprint action to finish.` : disabledReason ?? ""}
       </span>
     </>
   );

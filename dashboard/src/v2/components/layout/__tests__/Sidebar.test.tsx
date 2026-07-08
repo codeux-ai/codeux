@@ -92,19 +92,51 @@ describe("Sidebar", () => {
     render(<Sidebar />);
 
     const chatLink = screen.getByRole("link", { name: "Chat" });
+    const overviewLink = screen.getByRole("link", { name: "Overview" });
+    const docsLink = screen.getByRole("link", { name: "Docs" });
     const settingsLink = screen.getByRole("link", { name: "Settings" });
-    const expandButton = screen.getByRole("button", { name: "Expand sidebar" });
+    const expandButton = screen.getByRole("button", { name: "Expand" });
 
     expect(chatLink).toHaveAccessibleName("Chat");
     expect(chatLink).toHaveAttribute("aria-describedby", "nav-tooltip-chat");
+    expect(overviewLink).toHaveAttribute("aria-describedby", "nav-tooltip-overview");
+    expect(docsLink).toHaveAttribute("aria-describedby", "nav-tooltip-docs");
     expect(settingsLink).toBeInTheDocument();
     expect(settingsLink).toHaveAttribute("aria-describedby", "nav-tooltip-settings");
     expect(expandButton).toBeInTheDocument();
     expect(expandButton).toHaveAttribute("aria-describedby", "nav-tooltip-sidebar-toggle");
+    expect(within(chatLink).getByText("Chat", { selector: "[aria-hidden='true']" })).toHaveClass("fixed", "whitespace-nowrap", "w-max");
+    expect(within(overviewLink).getByText("Overview", { selector: "[aria-hidden='true']" })).toHaveClass("fixed", "whitespace-nowrap", "w-max");
+    expect(within(docsLink).getByText("Docs", { selector: "[aria-hidden='true']" })).toHaveClass("fixed", "whitespace-nowrap", "w-max");
     expect(within(settingsLink).getByText("Settings", { selector: "[aria-hidden='true']" })).toBeInTheDocument();
-    expect(within(expandButton).getByText("Expand sidebar", { selector: "[aria-hidden='true']" })).toBeInTheDocument();
+    expect(within(settingsLink).getByText("Settings", { selector: "[aria-hidden='true']" })).toHaveClass("fixed", "whitespace-nowrap", "w-max");
+    expect(within(expandButton).getByText("Expand", { selector: "[aria-hidden='true']" })).toHaveClass("fixed", "whitespace-nowrap", "w-max");
     expect(expandButton).toHaveAttribute("aria-expanded", "false");
     expect(expandButton).toHaveAttribute("aria-controls", "primary-navigation");
+
+    const expectedTooltipIds = [
+      "nav-tooltip-chat",
+      "nav-tooltip-overview",
+      "nav-tooltip-sprints",
+      "nav-tooltip-tasks",
+      "nav-tooltip-agents",
+      "nav-tooltip-nodes",
+      "nav-tooltip-custom-dashboards",
+      "nav-tooltip-stats",
+      "nav-tooltip-scheduler",
+      "nav-tooltip-memory",
+      "nav-tooltip-knowledge",
+      "nav-tooltip-browser",
+      "nav-tooltip-files",
+      "nav-tooltip-live",
+      "nav-tooltip-docs",
+      "nav-tooltip-settings",
+    ];
+    for (const tooltipId of expectedTooltipIds) {
+      const tooltip = document.getElementById(tooltipId);
+      expect(tooltip).not.toBeNull();
+      expect(tooltip).toHaveClass("fixed", "whitespace-nowrap", "w-max");
+    }
   });
 
   it("names mobile sidebar landmarks distinctly", () => {
@@ -156,7 +188,7 @@ describe("Sidebar", () => {
 
     render(<Sidebar />);
 
-    const browserItem = screen.getByRole("link", { name: "Browser" });
+    const browserItem = screen.getByRole("link", { name: "Browser Preview" });
     expect(browserItem).toHaveAttribute("aria-disabled", "true");
     expect(browserItem).toHaveAttribute("aria-describedby", "nav-unavailable-browser");
     expect(screen.getByText("Enable sprint preview and the in-app browser for this project")).toBeInTheDocument();

@@ -128,6 +128,7 @@ const CREATE_APP_QUICKACTION_TEMPLATE_IDS: Record<DashboardCreateAppQuickactionK
 
 const NEW_THREAD_DRAFT_CONTEXT_KEY = "new-thread";
 const CHAT_DRAFT_WRITE_DEBOUNCE_MS = 500;
+const LOCAL_CHAT_DRAFT_STORAGE_PREFIX = "codeux.chat.localDraft";
 
 const CREATE_APP_QUICKACTION_BODIES: Record<DashboardCreateAppQuickactionKind, string> = {
   web_app: "Create a web app",
@@ -219,6 +220,50 @@ const buildCreateAppQuickactionMetadata = (
   };
 };
 
+const buildLocalDraftStorageKey = (input: {
+  projectId: string;
+  userId: string;
+  contextKey: string;
+}): string => `${LOCAL_CHAT_DRAFT_STORAGE_PREFIX}:${input.projectId}:${input.userId}:${input.contextKey}`;
+
+const readLocalChatDraft = (input: {
+  projectId: string;
+  userId: string;
+  contextKey: string;
+}): string | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    return window.localStorage.getItem(buildLocalDraftStorageKey(input));
+  } catch {
+    return null;
+  }
+};
+
+const writeLocalChatDraft = (input: {
+  projectId: string | null;
+  userId: string | null;
+  contextKey: string | null;
+  bodyMarkdown: string;
+}): void => {
+  if (typeof window === "undefined" || !input.projectId || !input.userId || !input.contextKey) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(
+      buildLocalDraftStorageKey({
+        projectId: input.projectId,
+        userId: input.userId,
+        contextKey: input.contextKey,
+      }),
+      input.bodyMarkdown,
+    );
+  } catch {
+    // Local draft persistence is a best-effort refresh fallback.
+  }
+};
+
 export const useChatThreadData = (options: {
   selectedProject: { id: string } | null;
   cache: ReturnType<typeof useMessageCache>;
@@ -301,6 +346,7 @@ export const useChatThreadData = (options: {
     contextKey: string | null;
     bodyMarkdown: string;
   }): void => {
+    writeLocalChatDraft(snapshot);
     if (!snapshot.projectId || !snapshot.userId || !snapshot.contextKey) {
       return;
     }
@@ -353,6 +399,12 @@ export const useChatThreadData = (options: {
       const nextValue = typeof nextInput === "function" ? nextInput(current) : nextInput;
       inputRef.current = nextValue;
       inputContextKeyRef.current = contextKey;
+      writeLocalChatDraft({
+        projectId: draftProjectIdRef.current,
+        userId: draftUserIdRef.current,
+        contextKey,
+        bodyMarkdown: nextValue,
+      });
       return nextValue;
     });
   }, [resetHistoryTraversal]);
@@ -398,6 +450,22 @@ export const useChatThreadData = (options: {
 
     const userId = getOrCreateDashboardDraftUserId();
     draftUserIdRef.current = userId;
+    const localDraft = readLocalChatDraft({
+      projectId: selectedProject.id,
+      userId,
+      contextKey: activeDraftContextKey,
+    });
+    const hasLocalDraft = localDraft !== null;
+    if (localDraft !== null) {
+      setInputState((current) => {
+        if (inputRef.current) {
+          return current;
+        }
+        inputRef.current = localDraft;
+        inputContextKeyRef.current = activeDraftContextKey;
+        return localDraft;
+      });
+    }
     const requestId = latestDraftRequestRef.current + 1;
     latestDraftRequestRef.current = requestId;
 
@@ -418,6 +486,10 @@ export const useChatThreadData = (options: {
           contextKey: activeDraftContextKey,
           bodyMarkdown: restored,
         };
+        if (hasLocalDraft) {
+          setHydratedDraftContextKey(activeDraftContextKey);
+          return;
+        }
         setInputState((current) => {
           if (inputRef.current) {
             return current;
@@ -514,6 +586,12 @@ export const useChatThreadData = (options: {
         return;
       }
       const bodyMarkdown = inputRef.current;
+      writeLocalChatDraft({
+        projectId: selectedProject.id,
+        userId,
+        contextKey: activeDraftContextKey,
+        bodyMarkdown,
+      });
       void upsertConversationDraft(selectedProject.id, {
         userId,
         contextKey: activeDraftContextKey,

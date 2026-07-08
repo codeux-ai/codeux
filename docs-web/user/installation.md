@@ -39,7 +39,7 @@ the recommended installer is available. Clicking it sends the recommended confir
 lets Code UX run the detected OS package manager for Docker and Git. The same step also keeps advanced
 **Docker Desktop + Git** and **Docker Engine + Git** choices visible with platform availability,
 degraded/manual-download guidance, privilege notes, live progress, command summaries, retry, recheck,
-and manual Docker/Git links for fallback.
+and manual Docker/Git links for fallback. Onboarding presents local dependency setup only.
 
 Installer attempts do not mark onboarding complete. After any completed installer response, including
 permission-limited or manual-download outcomes, onboarding shows the structured result and rechecks
