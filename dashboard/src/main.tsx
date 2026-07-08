@@ -25,6 +25,7 @@ import { TitleBar } from "./v2/components/TitleBar.js";
 import { DashboardAssistantWidget } from "./v2/components/chat/DashboardAssistantWidget.js";
 import { AddProjectModal, type AddProjectModalSubmission } from "./v2/components/ui/AddProjectModal.js";
 import { ASSISTANT_OPEN_ADD_PROJECT_EVENT } from "./v2/lib/no-project-chat-assistant.js";
+import { isDashboardFeatureEnabled } from "./v2/lib/dashboard-feature-flags.js";
 import { buildProjectCreationSettingsOverride } from "./lib/settings-updaters.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "./lib/settings.js";
 import "./styles.css";
@@ -455,7 +456,8 @@ const notFoundRoute = createRoute({
   component: ErrorPage,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, tasksRoute, projectsRoute, chatRoute, agentsRoute, nodesRoute, statsRoute, schedulerRoute, configRoute, memoryRoute, knowledgeRoute, browserRoute, fileBrowserRoute, docsRoute, docsDocumentRoute, liveRoute, notFoundRoute]);
+const nodesFeatureEnabled = isDashboardFeatureEnabled("nodes");
+const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, tasksRoute, projectsRoute, chatRoute, agentsRoute, ...(nodesFeatureEnabled ? [nodesRoute] : []), statsRoute, schedulerRoute, configRoute, memoryRoute, knowledgeRoute, browserRoute, fileBrowserRoute, docsRoute, docsDocumentRoute, liveRoute, notFoundRoute]);
 // `defaultPreload: "intent"` warms route matching on hover/focus; the page chunks themselves are
 // prefetched explicitly by the nav components via prefetchRoute() since they are Preact-lazy.
 const router = createRouter({ routeTree, defaultPreload: "intent", defaultPreloadDelay: 50 });

@@ -5,6 +5,8 @@ import { ArrowLeft, ArrowRight, BookOpen, Box, CalendarDays, Check, Compass, Eye
 import { DASHBOARD_TOUR_START_EVENT, DASHBOARD_TOUR_STORAGE_KEY } from "../../lib/onboarding-control.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import type { DashboardFeatureId } from "../../lib/dashboard-feature-flags.js";
+import { isDashboardFeatureEnabled } from "../../lib/dashboard-feature-flags.js";
 
 type TourStep = {
   id: string;
@@ -13,6 +15,7 @@ type TourStep = {
   title: string;
   body: string;
   accent: "signal" | "ember" | "sky";
+  feature?: DashboardFeatureId;
 };
 
 type RectState = {
@@ -94,6 +97,7 @@ const TOUR_STEPS: TourStep[] = [
     title: "Nodes",
     body: "Nodes lets you compose project workflow graphs, configure node widgets, attach flows to agents, and inspect persisted runs.",
     accent: "signal",
+    feature: "nodes",
   },
   {
     id: "stats",
@@ -247,6 +251,9 @@ export const GuidedDashboardTour: FunctionComponent = () => {
 
   const refreshSteps = useCallback(() => {
     const steps = TOUR_STEPS.filter((step) => {
+      if (step.feature && !isDashboardFeatureEnabled(step.feature)) {
+        return false;
+      }
       const element = getTourElement(step.targetId);
       return element ? isVisibleTarget(element) : false;
     });

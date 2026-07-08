@@ -1,23 +1,22 @@
-name: Mockup Sprint Pentest (temporary dev validation)
+name: Mockup Sprint Orchestration
 
 on:
   push:
-    branches:
-      - main
-      # Dev pushes run the full mockup pentest catalog before integration.
-      - dev
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
   workflow_dispatch:
 
 concurrency:
-  group: mockup-sprint-pentest-${{ github.workflow }}-${{ github.ref }}
+  group: mockup-sprint-orchestration-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  mockup-sprint-pentest:
-    name: Mockup sprint pentest
+  mockup-sprint-orchestration:
+    name: Mockup sprint orchestration
     runs-on: ubuntu-latest
 
     steps:
@@ -40,29 +39,21 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Build
-        run: pnpm run build
-
       - name: Verify Docker availability
         run: |
           if ! docker version; then
-            echo "::error::Docker is required for the mockup sprint pentest Docker lane."
+            echo "::error::Docker is required for the mockup sprint orchestration lane."
             exit 1
           fi
 
-      - name: Run mockup sprint pentest
-        run: |
-          if [ "${GITHUB_REF_NAME}" = "dev" ]; then
-            node scripts/e2e/run-mockup-sprint-pentest.mjs --scenario pentest --timeout-ms 3600000
-          else
-            pnpm run test:e2e:mockup-sprint-pentest
-          fi
+      - name: Run full mockup orchestration
+        run: pnpm run test:orchestration:full
 
-      - name: Upload mockup sprint pentest artifacts
+      - name: Upload mockup sprint orchestration artifacts
         if: ${{ failure() || hashFiles('.cache/e2e-mockup-sprint-pentest/**') != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: mockup-sprint-pentest-artifacts
+          name: mockup-sprint-orchestration-artifacts
           path: .cache/e2e-mockup-sprint-pentest/
           if-no-files-found: ignore
           include-hidden-files: true
