@@ -43,3 +43,7 @@ This document outlines the design system for the Projects page and related compo
 
 *   **Consistency:** Align forms, field styling, segmented options, directory browsers, and CTAs across the Add Project modal and any other setup overlays.
 *   **Hierarchy:** Keep form sections clearly separated.
+*   **Validation Timing:** Required-field validation should appear after blur or invalid submit, not while the user is still choosing a source. Invalid submit uses one announced summary, moves focus to the first invalid field, and scrolls within the modal body using reduced-motion-aware behavior. Inline errors stay visually adjacent and are wired through `aria-errormessage` without creating duplicate alert announcements.
+*   **Source & Setup Motion:** Source-type changes, init-mode changes, and setup-scope reveals use shared interaction motion tokens (`listReveal`/related tokenized transitions). Reduced-motion mode must snap instantly while keeping the same selected states and live status text.
+*   **Directory Picker Feedback:** The directory browser must show and politely announce loading, current path changes, empty child-directory lists, failed loads, and selected-path confirmation without stealing focus from Browse, navigation, refresh, or directory buttons.
+*   **Submit Outcomes:** While project creation is pending, close/cancel/submit controls expose a disabled or busy reason. Failed submissions keep the modal open and present retryable feedback; retries submit the same form contract without changing backend request shapes.
