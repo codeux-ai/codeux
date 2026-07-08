@@ -914,6 +914,7 @@ CREATE INDEX IF NOT EXISTS idx_provider_invocations_project_sprint_started ON pr
 CREATE INDEX IF NOT EXISTS idx_provider_invocations_project_sprint_run_started ON provider_invocations (project_id, sprint_run_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_provider_invocations_sprint_started ON provider_invocations (sprint_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_provider_invocations_sprint_run_started ON provider_invocations (sprint_run_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_provider_invocations_task_run ON provider_invocations (task_run_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_provider_invocations_session_owner ON provider_invocations (session_id, project_id, sprint_id, task_id);
 CREATE INDEX IF NOT EXISTS idx_task_dispatches_project_executor_status_priority ON task_dispatches (project_id, executor_type, status, priority);
 CREATE INDEX IF NOT EXISTS idx_sprint_runs_project_status_recency ON sprint_runs (project_id, status, last_heartbeat_at DESC, updated_at DESC, created_at DESC);

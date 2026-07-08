@@ -268,6 +268,189 @@ describe("ProjectRuntimeRepository", () => {
     expect(eventCount.count).toBe(1);
   });
 
+  it("closes a stale active task run when the linked provider invocation already failed", async () => {
+    const { storage, executionRepository, projectRepository, runtimeRepository } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Live Stale Failed Run Project",
+      sourceType: "local",
+      sourceRef: "/workspace/live-stale-failed-run",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Live Stale Failed Run Sprint",
+      number: 30,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Stale active task",
+      promptMarkdown: "The backing provider failed.",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "completed",
+      startedAt: "2026-07-08T13:26:23.000Z",
+      finishedAt: "2026-07-08T13:37:38.000Z",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "mockup-cli",
+      mode: "docker_cli",
+      sessionId: "cli-mockup-stale-failed",
+      state: "RUNNING",
+      startedAt: "2026-07-08T13:26:23.000Z",
+    });
+    const invocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      dispatchId: dispatch.id,
+      taskRunId: taskRun.id,
+      sessionId: "cli-mockup-stale-failed",
+      provider: "mockup-cli",
+      purpose: "task_coding",
+      status: "running",
+      startedAt: "2026-07-08T13:27:03.000Z",
+    });
+    executionRepository.updateProviderInvocationUsage(invocation.id, {
+      status: "failed",
+      finishedAt: "2026-07-08T13:35:12.000Z",
+      durationMs: 488_000,
+    });
+
+    runtimeRepository.syncDashboardStatus({
+      project_id: project.id,
+      sprint_id: sprint.id,
+      sprint_number: 30,
+      subtasks: [
+        {
+          id: "T01",
+          record_id: task.id,
+          title: task.title,
+          prompt: task.promptMarkdown,
+          depends_on: [],
+          is_independent: true,
+          status: "RUNNING",
+          session_id: "cli-mockup-stale-failed",
+          provider: "mockup-cli",
+          worker_branch: "task/stale-failed",
+        },
+      ],
+      reportText: "Older live snapshot still says the task is running.",
+    });
+
+    const runRow = storage.getDatabase().getRawDatabase().prepare(`
+      SELECT state, finished_at
+      FROM task_runs
+      WHERE id = ?
+    `).get(taskRun.id) as { state: string; finished_at: string | null };
+    expect(runRow.state).toBe("FAILED");
+    expect(runRow.finished_at).toEqual(expect.any(String));
+    expect(executionRepository.countGlobalRunningTaskRunsPerProvider(["mockup-cli"]).get("mockup-cli")).toBeUndefined();
+
+    const status = runtimeRepository.getProjectStatus(project.id, sprint.id);
+    expect(status.subtasks).toHaveLength(1);
+    expect(status.subtasks[0]).toMatchObject({
+      id: "T01",
+      status: "FAILED",
+    });
+  });
+
+  it("closes a stale active task run as code-complete when its dispatch completed without failed provider evidence", async () => {
+    const { storage, executionRepository, projectRepository, runtimeRepository } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Live Stale Completed Run Project",
+      sourceType: "local",
+      sourceRef: "/workspace/live-stale-completed-run",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Live Stale Completed Run Sprint",
+      number: 31,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Stale completed task",
+      promptMarkdown: "The dispatch completed.",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "completed",
+      startedAt: "2026-07-08T14:00:00.000Z",
+      finishedAt: "2026-07-08T14:01:00.000Z",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "mockup-cli",
+      mode: "docker_cli",
+      sessionId: "cli-mockup-stale-completed",
+      state: "RUNNING",
+      startedAt: "2026-07-08T14:00:00.000Z",
+    });
+
+    runtimeRepository.syncDashboardStatus({
+      project_id: project.id,
+      sprint_id: sprint.id,
+      sprint_number: 31,
+      subtasks: [
+        {
+          id: "T01",
+          record_id: task.id,
+          title: task.title,
+          prompt: task.promptMarkdown,
+          depends_on: [],
+          is_independent: true,
+          status: "RUNNING",
+          session_id: "cli-mockup-stale-completed",
+          provider: "mockup-cli",
+          worker_branch: "task/stale-completed",
+        },
+      ],
+      reportText: "Older live snapshot still says the task is running.",
+    });
+
+    const runRow = storage.getDatabase().getRawDatabase().prepare(`
+      SELECT state, finished_at
+      FROM task_runs
+      WHERE id = ?
+    `).get(taskRun.id) as { state: string; finished_at: string | null };
+    expect(runRow.state).toBe("COMPLETED");
+    expect(runRow.finished_at).toEqual(expect.any(String));
+    expect(projectRepository.getTask(task.id)?.status).toBe("coding_completed");
+  });
+
   it("deduplicates run events by source event key for the same task run", async () => {
     const { executionRepository, projectRepository, storage } = await createRepositories();
 

@@ -55,6 +55,13 @@ interface RuntimeArtifactProviderInvocationRow {
   session_id: string | null;
 }
 
+interface RuntimeCandidateTaskRunRow extends TaskRunRow {
+  dispatch_status: string | null;
+  dispatch_finished_at: string | null;
+  latest_provider_invocation_status: string | null;
+  latest_provider_invocation_finished_at: string | null;
+}
+
 function addStringMapValue<V>(map: Map<string, V[]>, key: string | null | undefined, value: V): void {
   const normalizedKey = nonEmptyString(key);
   if (!normalizedKey) {
@@ -75,6 +82,39 @@ function isSameProviderInvocationOwner(task: TaskRow, row: RuntimeArtifactProvid
   return row.project_id === task.project_id
     && (row.sprint_id === task.sprint_id || row.sprint_id === null)
     && (row.task_id === task.id || row.task_id === null);
+}
+
+function resolveTerminalEvidenceState(candidateRun: RuntimeCandidateTaskRunRow | null, reportedState: TaskRunState): TaskRunState {
+  if (
+    reportedState !== "RUNNING"
+    || !candidateRun
+    || candidateRun.state !== "RUNNING"
+    || candidateRun.finished_at !== null
+  ) {
+    return reportedState;
+  }
+
+  switch (candidateRun.latest_provider_invocation_status) {
+    case "failed":
+    case "cancelled":
+      return "FAILED";
+    case "completed":
+      return "CODING_COMPLETED";
+  }
+
+  switch (candidateRun.dispatch_status) {
+    case "completed":
+      return "CODING_COMPLETED";
+    case "failed":
+    case "cancelled":
+      return "FAILED";
+    case "blocked":
+      return "BLOCKED";
+    case "quota":
+      return "QUOTA";
+    default:
+      return reportedState;
+  }
 }
 
 function normalizePath(value: string | null | undefined): string | null {
@@ -202,9 +242,10 @@ export class ProjectRuntimeRepository {
         const candidateRun = artifactScope === "foreign"
           ? null
           : candidateRuns.get(index) ?? null;
-        const runtimeState = shouldPreserveCompletedSessionState(candidateRun, scopedSubtask)
+        const reportedRuntimeState = shouldPreserveCompletedSessionState(candidateRun, scopedSubtask)
           ? "CODING_COMPLETED"
           : (scopedSubtask.status || "PENDING");
+        const runtimeState = resolveTerminalEvidenceState(candidateRun, reportedRuntimeState);
         if (artifactScope !== "foreign") {
           if (runtimeState === "RUNNING") {
             hasRunning = true;
@@ -532,21 +573,40 @@ export class ProjectRuntimeRepository {
   private resolveCandidateTaskRuns(
     entries: RuntimeStatusSubtask[],
     artifactScopes: Map<number, "local" | "foreign">,
-  ): Map<number, TaskRunRow | null> {
+  ): Map<number, RuntimeCandidateTaskRunRow | null> {
     const localEntries = entries.filter((entry) => (artifactScopes.get(entry.index) || "local") === "local");
-    const rows = this.storage.executeChunkedInQuery<TaskRunRow>({
-      sqlPrefix: "SELECT * FROM task_runs WHERE task_id",
-      sqlSuffix: "ORDER BY task_id ASC, rowid DESC",
+    const rows = this.storage.executeChunkedInQuery<RuntimeCandidateTaskRunRow>({
+      sqlPrefix: `SELECT task_runs.*,
+        td.status AS dispatch_status,
+        td.finished_at AS dispatch_finished_at,
+        (
+          SELECT pi.status
+          FROM provider_invocations pi
+          WHERE pi.task_run_id = task_runs.id
+          ORDER BY COALESCE(pi.finished_at, pi.started_at, pi.created_at) DESC, pi.rowid DESC
+          LIMIT 1
+        ) AS latest_provider_invocation_status,
+        (
+          SELECT pi.finished_at
+          FROM provider_invocations pi
+          WHERE pi.task_run_id = task_runs.id
+          ORDER BY COALESCE(pi.finished_at, pi.started_at, pi.created_at) DESC, pi.rowid DESC
+          LIMIT 1
+        ) AS latest_provider_invocation_finished_at
+        FROM task_runs
+        LEFT JOIN task_dispatches td ON td.id = task_runs.dispatch_id
+        WHERE task_runs.task_id`,
+      sqlSuffix: "ORDER BY task_runs.task_id ASC, task_runs.rowid DESC",
       items: localEntries.map((entry) => entry.mappedTask.row.id),
     });
-    const rowsByTaskId = new Map<string, TaskRunRow[]>();
+    const rowsByTaskId = new Map<string, RuntimeCandidateTaskRunRow[]>();
     for (const row of rows) {
       const taskRows = rowsByTaskId.get(row.task_id) || [];
       taskRows.push(row);
       rowsByTaskId.set(row.task_id, taskRows);
     }
 
-    const candidateRuns = new Map<number, TaskRunRow | null>();
+    const candidateRuns = new Map<number, RuntimeCandidateTaskRunRow | null>();
     for (const { index, mappedTask, subtask } of localEntries) {
       const taskRows = rowsByTaskId.get(mappedTask.row.id) || [];
       const sessionId = nonEmptyString(subtask.session_id);

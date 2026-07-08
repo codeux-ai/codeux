@@ -109,7 +109,9 @@ describe("AppDbStorage", () => {
     const providerInvocationIndexes = db.prepare("PRAGMA index_list('provider_invocations')").all() as Array<{ name: string }>;
     expect(providerInvocationIndexes.some((idx) => idx.name === "idx_provider_invocations_sprint_started")).toBe(true);
     expect(providerInvocationIndexes.some((idx) => idx.name === "idx_provider_invocations_sprint_run_started")).toBe(true);
+    expect(providerInvocationIndexes.some((idx) => idx.name === "idx_provider_invocations_task_run")).toBe(true);
     expect(providerInvocationIndexes.some((idx) => idx.name === "idx_provider_invocations_session_owner")).toBe(true);
+    expect(getIndexColumns(db, "idx_provider_invocations_task_run")).toEqual(["task_run_id", "started_at"]);
     expect(getIndexColumns(db, "idx_provider_invocations_sprint_started")).toEqual(["sprint_id", "started_at"]);
     expect(getIndexColumns(db, "idx_provider_invocations_sprint_run_started")).toEqual(["sprint_run_id", "started_at"]);
     expect(getIndexColumns(db, "idx_provider_invocations_session_owner")).toEqual(["session_id", "project_id", "sprint_id", "task_id"]);
