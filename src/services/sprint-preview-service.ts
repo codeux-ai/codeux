@@ -8,6 +8,7 @@ import os from "os";
 import { fileURLToPath } from "url";
 import type {
   CliWorkflowSettings,
+  PreviewEnvironmentVariable,
   SprintPreviewScript,
   SprintPreviewPortMapping,
   SprintPreviewSession,
@@ -48,6 +49,7 @@ import { buildSprintPreviewDockerCreateArgs, CONTAINER_PREVIEW_PROXY_PORT, CONTA
 import { ensureDefaultCodeUxAssetsInstalled } from "./code-ux-default-assets-service.js";
 import { fetchOriginIfAvailable } from "./git-branch-sync-service.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "./git-http-auth.js";
+import { mergePreviewEnvironmentVariables, sanitizePreviewEnvironmentVariables } from "../shared/preview-environment.js";
 
 const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -287,7 +289,14 @@ export class SprintPreviewService {
           const envFileTempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-preview-env-"));
           try {
             const envFilePath = path.join(envFileTempRoot, "preview.env");
-            await writeDockerEnvFile(envFilePath, pickContainerEnv(process.env));
+            const previewEnvironment = mergePreviewEnvironmentVariables(
+              settings.environmentVariables ?? [],
+              session.environmentOverrides ?? [],
+            );
+            await writeDockerEnvFile(envFilePath, [
+              ...pickContainerEnv(process.env),
+              ...previewEnvironment,
+            ]);
             const dockerArgs = buildSprintPreviewDockerCreateArgs({
               projectId,
               sprintId,
@@ -579,6 +588,18 @@ export class SprintPreviewService {
       await fs.chmod(scriptPath, 0o755);
     }
     return await this.getScript(projectId, sprintId);
+  }
+
+  async updateEnvironmentOverridesForProjectSprint(
+    projectId: string,
+    sprintId: string,
+    sessionId: string,
+    environmentOverrides: PreviewEnvironmentVariable[],
+  ): Promise<SprintPreviewSession> {
+    const session = await this.requireScopedSession(projectId, sprintId, sessionId);
+    return this.deps.sprintPreviewRepository.updateSession(session.id, {
+      environmentOverrides: sanitizePreviewEnvironmentVariables(environmentOverrides),
+    });
   }
 
   async proxyRequest(args: {

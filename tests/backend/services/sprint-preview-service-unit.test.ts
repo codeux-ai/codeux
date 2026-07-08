@@ -95,6 +95,7 @@ import { SprintPreviewService } from "../../../src/services/sprint-preview-servi
 import { runCommandStrict } from "../../../src/services/cli-process-runner.js";
 import { fetchOriginIfAvailable } from "../../../src/services/git-branch-sync-service.js";
 import { resolveDockerRuntimeRoot } from "../../../src/infrastructure/providers/cli/docker-runtime-paths.js";
+import { writeDockerEnvFile } from "../../../src/services/cli-docker-utils.js";
 import { normalizePreviewPath, readOptionalSprintPreviewScript } from "../../../src/services/sprint-preview-utils.js";
 
 function makePreviewSettings(overrides: Record<string, unknown> = {}) {
@@ -111,6 +112,7 @@ function makePreviewSettings(overrides: Record<string, unknown> = {}) {
     containerAppPort: 3000,
     containerAppPorts: [3000],
     startupScriptPath: ".code-ux/browser/start-preview.sh",
+    environmentVariables: [],
     ...overrides,
   };
 }
@@ -136,6 +138,7 @@ function makeSession(overrides: Partial<SprintPreviewSession> = {}): SprintPrevi
     installCommand: "npm ci",
     buildCommand: "npm run build",
     runCommand: "npm start",
+    environmentOverrides: [],
     lastCompletedTaskCount: 0,
     lastSeenSprintStatus: "running",
     lastKnownPath: "/",
@@ -478,6 +481,49 @@ describe("SprintPreviewService unit tests", () => {
           { containerPort: 6006, hostPort: 5572 },
         ],
       }));
+      vi.unstubAllGlobals();
+    });
+
+    it("writes project defaults and session overrides to the preview env-file", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true })));
+      const existingSession = makeSession({
+        environmentOverrides: [
+          { key: "CODE_UX_ALLOW_PUBLIC_DASHBOARD", value: "1", enabled: true },
+          { key: "API_BASE_URL", value: "", enabled: false },
+        ],
+      });
+      deps.sprintPreviewRepository.getSessionByProjectSprint.mockReturnValue(existingSession);
+      deps.sprintPreviewRepository.getSession.mockReturnValue(existingSession);
+      deps.settingsRepository.resolveSprintDashboardSettings.mockReturnValue({
+        settings: { ...DEFAULT_DASHBOARD_SETTINGS,
+          sprintPreview: makePreviewSettings({
+            environmentVariables: [
+              { key: "API_BASE_URL", value: "http://api.local", enabled: true },
+              { key: "FEATURE_FLAG", value: "enabled", enabled: true },
+            ],
+          }),
+          git: { githubMode: "REMOTE", defaultBranch: "main", sprintBranchScheme: "feature/sprint-{number}" },
+          cliWorkflow: { containerImage: "", containerCacheSetupScriptImage: false, containerSetupScriptPath: "" },
+        },
+      });
+      vi.mocked(runCommandStrict).mockImplementation(async (cmd, args) => {
+        if (cmd === "docker" && args[0] === "create") {
+          return { exitCode: 0, stdout: "cid123\n", stderr: "", durationMs: 1 };
+        }
+        return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 };
+      });
+
+      const service = new SprintPreviewService(deps as any);
+      await service.startSession("proj-1", "sprint-1", { rebuild: true });
+
+      expect(writeDockerEnvFile).toHaveBeenCalledWith(
+        expect.stringContaining("preview.env"),
+        expect.arrayContaining([
+          { key: "FEATURE_FLAG", value: "enabled" },
+          { key: "CODE_UX_ALLOW_PUBLIC_DASHBOARD", value: "1" },
+        ]),
+      );
+      expect(vi.mocked(writeDockerEnvFile).mock.calls.at(-1)?.[1]).not.toContainEqual({ key: "API_BASE_URL", value: "http://api.local" });
       vi.unstubAllGlobals();
     });
 

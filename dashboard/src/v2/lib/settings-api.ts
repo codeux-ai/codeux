@@ -1,6 +1,7 @@
 import type {
   EffectiveSettingsResponse,
   DesignGuidanceSettings,
+  PreviewEnvironmentVariable,
   ProjectSettings,
   SystemSettings,
   TechstackSelectionSettings,
@@ -108,6 +109,21 @@ export const saveProjectSettings = async (projectId: string, settings: ProjectSe
       detail: { scope: "project", projectId },
     }));
   }
+};
+
+export const saveProjectPreviewEnvironmentVariables = async (
+  projectId: string,
+  environmentVariables: PreviewEnvironmentVariable[],
+): Promise<EffectiveSettingsResponse> => {
+  const effective = await fetchProjectEffectiveSettings(projectId, { cache: "reload" });
+  await saveProjectSettings(projectId, {
+    ...(effective.settings as ProjectSettings),
+    sprintPreview: {
+      ...effective.settings.sprintPreview,
+      environmentVariables,
+    },
+  });
+  return fetchProjectEffectiveSettings(projectId, { cache: "reload" });
 };
 
 export const saveProjectTechstackSettings = async (

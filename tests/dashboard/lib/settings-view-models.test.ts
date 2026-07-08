@@ -907,7 +907,7 @@ describe("settings guidance view models", () => {
     const visibleIds = getVisibleDesignGuidanceEntries(settings, "styleguide").map((entry) => entry.id);
 
     expect(visibleIds).toEqual([DESIGN_GUIDANCE_NONE_ID, "custom-style"]);
-    expect(getDesignGuidanceActiveLabel(settings, "styleguide")).toBe("Code UX Award-Winning Product UI");
+    expect(getDesignGuidanceActiveLabel(settings, "styleguide")).toBe("Code UX");
     expect(isSelectedDefaultStyleguideHidden(settings)).toBe(true);
   });
 

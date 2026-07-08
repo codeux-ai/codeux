@@ -29,6 +29,7 @@ import { sanitizeWorkers } from "../domain/settings/settings-sanitizers/worker-s
 import { sanitizeMemory } from "../domain/settings/settings-sanitizers/memory-sanitizer.js";
 import { sanitizeSpeech } from "../domain/settings/settings-sanitizers/speech-sanitizer.js";
 import { sanitizeModelPricing } from "../domain/settings/settings-sanitizers/model-pricing-sanitizer.js";
+import { sanitizePreviewEnvironmentVariables } from "../shared/preview-environment.js";
 import {
   buildDashboardProviderSettings,
   buildDefaultIntegrationProviders,
@@ -725,6 +726,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
       }
       return raw;
     })(),
+    environmentVariables: sanitizePreviewEnvironmentVariables(sprintPreviewInput.environmentVariables),
   };
   if (sprintPreview.hostPortRangeEnd < sprintPreview.hostPortRangeStart) {
     sprintPreview.hostPortRangeEnd = sprintPreview.hostPortRangeStart;

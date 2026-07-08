@@ -60,6 +60,7 @@ import {
   cloneDesignGuidanceSettings,
   sanitizeDesignGuidanceSettings,
 } from "../domain/settings/design-guidance-catalog.js";
+import { sanitizePreviewEnvironmentVariables } from "../shared/preview-environment.js";
 
 function cloneSkills(skills: SkillToggle[]): SkillToggle[] {
   return skills.map((skill) => ({ ...skill }));
@@ -734,6 +735,7 @@ function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintP
       }
       return raw;
     })(),
+    environmentVariables: sanitizePreviewEnvironmentVariables(input.environmentVariables),
   };
 }
 

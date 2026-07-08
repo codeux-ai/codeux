@@ -343,6 +343,26 @@ describe("settings-sanitizer", () => {
     expect(settings.sprintPreview.containerAppPorts).toEqual([5173, 6006, 7007, 9000]);
   });
 
+  it("sanitizes preview container environment variables", () => {
+    const settings = sanitizeSettings({
+      sprintPreview: {
+        environmentVariables: [
+          { key: " CODE_UX_ALLOW_PUBLIC_DASHBOARD ", value: "1", enabled: true },
+          { key: "SPRINT_PREVIEW_PORT", value: "9999", enabled: true },
+          { key: "BAD-NAME", value: "bad", enabled: true },
+          { key: "MULTILINE", value: "one\ntwo", enabled: true },
+          { key: "FEATURE_FLAG", value: "old", enabled: true },
+          { key: "FEATURE_FLAG", value: "new", enabled: false },
+        ],
+      },
+    });
+
+    expect(settings.sprintPreview.environmentVariables).toEqual([
+      { key: "CODE_UX_ALLOW_PUBLIC_DASHBOARD", value: "1", enabled: true },
+      { key: "FEATURE_FLAG", value: "new", enabled: false },
+    ]);
+  });
+
   it("preserves valid appearance background image and pattern settings", () => {
     const settings = sanitizeSettings({
       appearance: {

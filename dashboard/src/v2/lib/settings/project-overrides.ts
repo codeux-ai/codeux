@@ -93,6 +93,12 @@ const cloneDesignGuidance = (
   cloneDesignGuidanceSettings(designGuidance ?? DEFAULT_DASHBOARD_SETTINGS.designGuidance)
 );
 
+const cloneSprintPreviewSettings = (settings: ProjectSettings["sprintPreview"]): ProjectSettings["sprintPreview"] => ({
+  ...settings,
+  ...("containerAppPorts" in settings ? { containerAppPorts: [...(settings.containerAppPorts ?? [])] } : {}),
+  ...("environmentVariables" in settings ? { environmentVariables: (settings.environmentVariables ?? []).map((variable) => ({ ...variable })) } : {}),
+});
+
 export const cloneProjectProviders = (
   providers: ProjectSettings["aiProvider"]["providers"],
 ): ProjectSettings["aiProvider"]["providers"] => (
@@ -201,9 +207,7 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
   cliWorkflow: {
     ...settings.cliWorkflow,
   },
-  sprintPreview: {
-    ...settings.sprintPreview,
-  },
+  sprintPreview: cloneSprintPreviewSettings(settings.sprintPreview),
   workers: {
     ...settings.workers,
   },
@@ -251,9 +255,7 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
   cliWorkflow: {
     ...settings.cliWorkflow,
   },
-  sprintPreview: {
-    ...settings.sprintPreview,
-  },
+  sprintPreview: cloneSprintPreviewSettings(settings.sprintPreview),
   workers: {
     ...settings.workers,
   },

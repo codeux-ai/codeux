@@ -27,6 +27,15 @@ This is invaluable for visually verifying changes a sprint has made (UI work, AP
 
 Preview startup does not install Playwright browsers by default. Provider coding containers can get Chromium from setup-cache images at `/ms-playwright`, but preview scripts that use Playwright should install Chromium in the preview startup path or use a custom image/script that already provides it.
 
+Preview containers can also receive custom environment variables:
+- Set project-wide defaults from the Browser page right sidebar or **Settings → Browser Preview → Preview Environment**.
+- Set selected-container overrides from the preview container card's **Env** action, which opens an override modal.
+- Overrides apply after the next rebuild or start.
+- Runtime-owned names such as `PORT`, `HOST`, `HOME`, `DASHBOARD_PORT`, `SPRINT_PREVIEW_*`, and `CODE_UX_GIT_USER_*` are reserved for Code UX routing.
+- Disabled override rows suppress an inherited default with the same key.
+
+For example, a Code UX app running inside a preview container can set `CODE_UX_ALLOW_PUBLIC_DASHBOARD=1` as a container override while Code UX still binds the host-facing preview port to `127.0.0.1`.
+
 ## Using the browser pane
 
 The pane is an iframe-like container with toolbar buttons:

@@ -299,12 +299,12 @@ describe("TopNav guidance and sprint selectors", () => {
     });
 
     const styleguideTrigger = screen.getByRole("button", { name: /Styleguide selector/i });
-    expect(styleguideTrigger).toHaveTextContent("Code UX Award-Winning Product UI");
+    expect(styleguideTrigger).toHaveTextContent("Code UX");
 
     fireEvent.click(styleguideTrigger);
 
     const listbox = await screen.findByRole("listbox", { name: "Styleguide list" });
-    expect(screen.queryByRole("option", { name: /Code UX Award-Winning Product UI/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /^Code UX$/i })).not.toBeInTheDocument();
 
     const activeDescendantId = styleguideTrigger.getAttribute("aria-activedescendant");
     expect(activeDescendantId).toBe("styleguide-option-none");
