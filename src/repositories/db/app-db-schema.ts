@@ -425,6 +425,17 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
         FOREIGN KEY (author_connection_id) REFERENCES mcp_connections(id) ON DELETE SET NULL
       );
 
+CREATE TABLE IF NOT EXISTS conversation_drafts (
+        user_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        context_key TEXT NOT NULL,
+        body_markdown TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, project_id, context_key),
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
 CREATE TABLE IF NOT EXISTS agent_presets (
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,

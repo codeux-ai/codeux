@@ -49,6 +49,8 @@ The dashboard can also cancel the currently running turn for a specific thread t
 
 Thread and invocation controls expose their in-flight state locally. Sending a message, cancelling an active turn, compacting a thread, deleting a thread, cancelling an invocation, and restarting/continuing a failed invocation disable duplicate submissions, announce busy status through button labels/`aria-busy`, and keep retryable feedback in `ActionFeedbackRegion` when the server returns an error. Failed message sends keep the draft restored in the composer; failed invocation restarts preserve the failed invocation transcript and expose the existing sanitized error message with a retry action.
 
+The project-backed composer draft is durable but separate from conversation messages. The dashboard assigns each browser user a stable local draft user id and stores draft rows in SQLite by user id, project id, and chat context key (`new-thread` or `thread:<thread-id>`). The UI restores the matching row on remount or thread navigation, debounces writes, deletes rows for blank drafts, and clears the composer through the same path used before after a successful send.
+
 Virtual chat failures are terminal for that dashboard turn:
 - the dashboard message is moved from `pending`/`delivered` to `failed`
 - a visible system message is appended with the worker execution error

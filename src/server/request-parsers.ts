@@ -769,6 +769,7 @@ import type {
   CreateConversationThreadInput,
   UpdateConversationThreadInput,
   CreateDashboardConversationMessageInput,
+  UpsertConversationDraftInput,
   ConversationThreadScope,
 } from "../contracts/connection-chat-types.js";
 
@@ -985,6 +986,34 @@ export function parseCreateDashboardConversationMessageInput(body: unknown): Cre
     title: typeof typedBody.title === "string" ? typedBody.title.trim() : undefined,
     connectionId: typeof typedBody.connectionId === "string" ? typedBody.connectionId.trim() : (typedBody.connectionId === null ? null : undefined),
     metadata: typedBody.metadata as CreateDashboardConversationMessageInput["metadata"],
+  };
+}
+
+export function parseConversationDraftQuery(query: Record<string, unknown>): { contextKey: string } {
+  const contextKey = typeof query.contextKey === "string" ? query.contextKey.trim() : "";
+  if (!contextKey) {
+    throw new Error("Missing or empty required field: contextKey");
+  }
+  return { contextKey };
+}
+
+export function parseUpsertConversationDraftInput(body: unknown, userId: string): UpsertConversationDraftInput {
+  if (!body || typeof body !== "object") {
+    throw new Error("Invalid input: body must be an object");
+  }
+  const typedBody = body as Record<string, unknown>;
+  const contextKey = typeof typedBody.contextKey === "string" ? typedBody.contextKey.trim() : "";
+  if (!contextKey) {
+    throw new Error("Missing or empty required field: contextKey");
+  }
+  if (typeof typedBody.bodyMarkdown !== "string") {
+    throw new Error("Invalid input: bodyMarkdown must be a string");
+  }
+
+  return {
+    userId,
+    contextKey,
+    bodyMarkdown: typedBody.bodyMarkdown,
   };
 }
 

@@ -43,6 +43,8 @@ To start a new thread, click **+ New thread**. To change the responding agent, o
 
 Each post is a runtime operation that honors the explicit route chosen (worker route, virtual provider route, automatic live-worker pickup, or fallback). The dashboard exposes in-flight state locally, allowing you to cancel active thread turns or invocations. Failed invocation restarts preserve the failed invocation transcript and expose the existing sanitized error message with a retry action.
 
+The project chat composer saves your latest draft in SQLite per dashboard user, project, and active chat context. Leaving `/chat`, switching away and back, or reloading restores the matching draft for the current new-thread composer or selected thread without reusing drafts from another project or browser user. Blank drafts remove the saved row, and sending still clears the composer after the message is accepted.
+
 ## Create app quickactions
 
 Use **Create Web App** or **Create Desktop App** when you want Code UX to start an app-building sprint in the selected project from chat. In Threads mode, the buttons sit beside the composer and are also available in an empty thread. In 3D Chat, the idle Web App and Desktop App quickactions send the same kind of request through the active thread.
