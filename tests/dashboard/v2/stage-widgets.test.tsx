@@ -1,6 +1,7 @@
 /** @vitest-environment happy-dom */
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/preact";
+import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
 
 import { parseBubbleSegments, StageWidgetRenderer } from "../../../dashboard/src/v2/components/chat/cinematic/StageWidgets.js";
@@ -72,6 +73,61 @@ describe("StageWidgetRenderer", () => {
     );
     screen.getByRole("button", { name: /Start sprint/ }).click();
     expect(clicks).toEqual(["Start the sprint now"]);
+  });
+
+  it("dispatches action widget suggestions from pointer and keyboard activation", async () => {
+    const user = userEvent.setup();
+    const prompts: string[] = [];
+
+    render(
+      <StageWidgetRenderer
+        widget={{
+          type: "actions",
+          data: {
+            items: [
+              { label: "Summarize status", prompt: "Summarize project status now." },
+              { label: "Plan follow-up", prompt: "Plan the next follow-up task." },
+            ],
+          },
+        }}
+        onAction={(prompt) => prompts.push(prompt)}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Summarize status" }));
+    screen.getByRole("button", { name: "Plan follow-up" }).focus();
+    await user.keyboard("[Enter]");
+
+    expect(prompts).toEqual([
+      "Summarize project status now.",
+      "Plan the next follow-up task.",
+    ]);
+  });
+
+  it("does not expose action dispatch controls for non-action widgets", async () => {
+    const user = userEvent.setup();
+    const prompts: string[] = [];
+
+    render(
+      <StageWidgetRenderer
+        widget={{
+          type: "tasks",
+          data: {
+            title: "Sprint tasks",
+            items: [
+              { title: "Auth flow", status: "done" },
+              { title: "Checkout page", status: "active" },
+            ],
+          },
+        }}
+        onAction={(prompt) => prompts.push(prompt)}
+      />,
+    );
+
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    await user.click(screen.getByText("Checkout page"));
+
+    expect(prompts).toEqual([]);
   });
 
   it("renders status states with icon + label, never color alone", () => {
