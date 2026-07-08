@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import { h } from "preact";
+import { useState } from "preact/hooks";
 import { render, screen, fireEvent, waitFor } from "@testing-library/preact";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { ToastProvider, useToast } from "../ToastProvider.js";
+import { Toast } from "../Toast.js";
 import * as matchers from '@testing-library/jest-dom/matchers';
 expect.extend(matchers);
 
@@ -30,6 +32,27 @@ const TestComponent = () => {
     <div>
       <button onClick={() => addToast({ type: "error", message: "Error msg", action: { label: "Retry", onClick: () => {} } })}>Add Error</button>
       <button onClick={() => addToast({ type: "success", message: "Success msg" })}>Add Success</button>
+    </div>
+  );
+};
+
+const RetryRemovalToast = ({ onRetry }: { onRetry: () => void | Promise<void> }) => {
+  const [visible, setVisible] = useState(true);
+  return (
+    <div>
+      <main data-feedback-focus-fallback tabIndex={-1}>Toast fallback</main>
+      {visible && (
+        <Toast
+          id="retry-toast"
+          type="error"
+          message="Retryable toast"
+          retryAction={async () => {
+            await onRetry();
+            setVisible(false);
+          }}
+          onDismiss={() => setVisible(false)}
+        />
+      )}
     </div>
   );
 };
@@ -118,5 +141,20 @@ describe("Toast System", () => {
     fireEvent.click(dismissBtn);
 
     expect(document.activeElement).not.toBe(dismissBtn);
+  });
+
+  it("moves focus to fallback when retry removes the focused toast control", async () => {
+    const onRetry = vi.fn();
+    render(<RetryRemovalToast onRetry={onRetry} />);
+
+    const retry = screen.getByRole("button", { name: "Retry" });
+    retry.focus();
+    expect(document.activeElement).toBe(retry);
+
+    fireEvent.click(retry);
+
+    await waitFor(() => expect(onRetry).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByText("Toast fallback")));
   });
 });

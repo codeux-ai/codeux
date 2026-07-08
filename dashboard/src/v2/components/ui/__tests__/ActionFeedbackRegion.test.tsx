@@ -47,6 +47,12 @@ describe("ActionFeedbackRegion", () => {
     const err = screen.getByRole("alert");
     expect(err).toBeInTheDocument();
     expect(err).toHaveAttribute("aria-live", "assertive");
+    cleanup();
+
+    render(<ActionFeedbackRegion status="warning" message="Warning message" />);
+    const warning = screen.getByRole("status");
+    expect(warning).toBeInTheDocument();
+    expect(warning).toHaveAttribute("aria-live", "polite");
   });
 
   it("applies contextual accessible names to buttons and aria-hidden to progress and does not auto-dismiss error or pending", () => {
@@ -120,6 +126,36 @@ describe("ActionFeedbackRegion", () => {
     fireEvent.click(retry);
 
     await waitFor(() => expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByText("Workbench")));
+  });
+
+  it("moves focus to fallback when dismiss removes the focused feedback control", async () => {
+    function DismissHarness() {
+      const [visible, setVisible] = useState(true);
+      return (
+        <div>
+          <main data-feedback-focus-fallback tabIndex={-1}>Workbench</main>
+          {visible && (
+            <ActionFeedbackRegion
+              status="success"
+              message="Saved"
+              onDismiss={() => setVisible(false)}
+              autoDismiss={false}
+            />
+          )}
+        </div>
+      );
+    }
+
+    render(<DismissHarness />);
+
+    const dismiss = screen.getByRole("button", { name: "Dismiss" });
+    dismiss.focus();
+    expect(document.activeElement).toBe(dismiss);
+
+    fireEvent.click(dismiss);
+
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Dismiss" })).not.toBeInTheDocument());
     await waitFor(() => expect(document.activeElement).toBe(screen.getByText("Workbench")));
   });
 });
