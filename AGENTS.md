@@ -75,7 +75,7 @@ Package manager is **pnpm** (`pnpm@10.33.0`), Node **22+**. Use `pnpm`, not `npm
   - `dev` is the integration branch. Always create and work from a feature branch off `dev` (never commit directly to `dev` or `main`).
   - Use descriptive branch names such as `feat/<scope>`, `fix/<scope>`, or `chore/<scope>`.
   - Merge changes into `dev` only via pull requests after required CI checks pass (not into `main`).
-  - Push branches to `origin` (the `numnx/codeux` fork) and target it for PRs. `upstream` is `codeux-ai/codeux`.
+  - Open pull requests against `codeux-ai/codeux` with base `dev`.
   - Use GitHub CLI (`gh`) for PR workflow when available (for example `gh pr create --base dev`, `gh pr view`, `gh pr merge`).
 - PRs should include:
   - What changed and why.
@@ -165,7 +165,7 @@ Release note rules:
 - Default working flow for our collaboration:
   - Start every change on a new feature branch off `dev`.
   - Implement and validate locally (`pnpm run build` minimum; `pnpm run ci` preferred).
-  - Open a PR into `dev` against `origin` (the `numnx/codeux` fork) using GitHub CLI.
+  - Open a PR into `codeux-ai/codeux:dev` using GitHub CLI.
   - Monitor CI continuously after opening the PR.
   - Merge only through PR after all required CI checks pass without errors.
   - Delete merged feature branches to keep the branch list clean.

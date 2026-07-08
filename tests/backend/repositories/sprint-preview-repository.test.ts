@@ -106,6 +106,37 @@ describe("SprintPreviewRepository", () => {
     expect(withHostPort.portMappings).toEqual([{ containerPort: 3000, hostPort: 6100, isPrimary: true }]);
   });
 
+  it("persists sanitized environment overrides", async () => {
+    const { repository, projectId, sprintId } = await createFixture();
+    const session = repository.createSession({
+      projectId,
+      sprintId,
+      status: "starting",
+      containerAppPort: 3000,
+      startupScriptPath: ".code-ux/browser/start-preview.sh",
+      startupMode: "auto",
+      environmentOverrides: [
+        { key: "CODE_UX_ALLOW_PUBLIC_DASHBOARD", value: "1", enabled: true },
+        { key: "SPRINT_PREVIEW_PORT", value: "9999", enabled: true },
+      ],
+    });
+
+    expect(session.environmentOverrides).toEqual([
+      { key: "CODE_UX_ALLOW_PUBLIC_DASHBOARD", value: "1", enabled: true },
+    ]);
+
+    const updated = repository.updateSession(session.id, {
+      environmentOverrides: [
+        { key: "API_BASE_URL", value: "http://api.local", enabled: true },
+        { key: "API_BASE_URL", value: "", enabled: false },
+      ],
+    });
+
+    expect(repository.getSession(updated.id)?.environmentOverrides).toEqual([
+      { key: "API_BASE_URL", value: "", enabled: false },
+    ]);
+  });
+
   it("falls back to the first mapping as primary when none is marked", async () => {
     const { repository, projectId, sprintId } = await createFixture();
 

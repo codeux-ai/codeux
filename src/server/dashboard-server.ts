@@ -14,6 +14,7 @@ import type {
   OnboardingDependencyInstallMode,
   OnboardingRuntimeReadiness,
   OverviewTelemetrySnapshot,
+  PreviewEnvironmentVariable,
   ProjectExecutionStatsSnapshot,
   ProjectLiveDashboardSnapshot,
   ProjectStatsQuery,
@@ -320,6 +321,7 @@ export interface DashboardServerOptions {
   saveSprintPreviewScript?: (projectId: string, sprintId: string, content: string) => Promise<SprintPreviewScript> | SprintPreviewScript;
   getSprintPreviewLogs?: (sessionId: string, tail?: number) => Promise<{ logs: string }> | { logs: string };
   getSprintPreviewLogsForProjectSprint?: (projectId: string, sprintId: string, sessionId: string, tail?: number) => Promise<{ logs: string }> | { logs: string };
+  updateSprintPreviewEnvironmentOverrides?: (projectId: string, sprintId: string, sessionId: string, environmentOverrides: PreviewEnvironmentVariable[]) => Promise<SprintPreviewSession> | SprintPreviewSession;
   proxySprintPreviewRequest?: (args: {
     sessionId: string;
     method: string;

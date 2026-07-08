@@ -6,8 +6,10 @@ import {
   RefreshCw,
   RotateCcw,
   Save,
+  SlidersHorizontal,
   Square,
   FileCode2,
+  X,
 } from "lucide-preact";
 import { useProjectData } from "./context/project-data.js";
 import { useSprints } from "../hooks/useSprints.js";
@@ -17,6 +19,7 @@ import {
   fetchPreviewScript,
   removePreviewSession,
   rebuildPreviewSession,
+  savePreviewEnvironmentOverrides,
   savePreviewScript,
   startPreviewSession,
   stopPreviewSession,
@@ -32,9 +35,11 @@ import {
 } from "./lib/preview-origin.js";
 import { usePreviewSessions } from "./hooks/use-preview-sessions.js";
 import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
+import { saveProjectPreviewEnvironmentVariables } from "./lib/settings-api.js";
 import { PreviewSessionSlider } from "./components/browser/PreviewSessionSlider.js";
 import { PreviewWindowChrome } from "./components/browser/PreviewWindowChrome.js";
 import { LaunchContainerPanel } from "./components/browser/LaunchContainerPanel.js";
+import { PreviewEnvironmentEditor } from "./components/browser/PreviewEnvironmentEditor.js";
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
 import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
@@ -43,6 +48,7 @@ import { getSafeUrl } from "./lib/safe-url.js";
 
 const PREVIEW_MESSAGE_TYPE = "sprint-preview:state";
 const PREVIEW_NAVIGATION_TYPE = "sprint-preview:navigate";
+const EMPTY_PREVIEW_ENVIRONMENT: SprintPreviewSession["environmentOverrides"] = [];
 
 const getSessionPortPathKey = (sessionId: string, containerPort: number): string => `${sessionId}:${containerPort}`;
 
@@ -51,7 +57,7 @@ export const BrowserPage: FunctionComponent = () => {
   const currentPathRef = useRef("/");
   const { selectedProject } = useProjectData();
   const { data: sprints, selectedSprint, selectedSprintId } = useSprints(selectedProject?.id || null);
-  const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
+  const { data: effectiveSettings, refresh: refreshEffectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
 
   const [script, setScript] = useState<SprintPreviewScript | null>(null);
   const [scriptDraft, setScriptDraft] = useState("");
@@ -64,12 +70,17 @@ export const BrowserPage: FunctionComponent = () => {
   const [launching, setLaunching] = useState(false);
   const [pendingSessionAction, setPendingSessionAction] = useState<"rebuild" | "stop" | null>(null);
   const [savingScript, setSavingScript] = useState(false);
+  const [savingEnvironment, setSavingEnvironment] = useState(false);
+  const [savingDefaultEnvironment, setSavingDefaultEnvironment] = useState(false);
   const [navigationPending, setNavigationPending] = useState(false);
   const [removingSessionIds, setRemovingSessionIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [addressValue, setAddressValue] = useState("/");
   const [currentPath, setCurrentPath] = useState("/");
   const [showScriptEditor, setShowScriptEditor] = useState(false);
+  const [environmentDraft, setEnvironmentDraft] = useState<SprintPreviewSession["environmentOverrides"]>([]);
+  const [defaultEnvironmentDraft, setDefaultEnvironmentDraft] = useState<SprintPreviewSession["environmentOverrides"]>([]);
+  const [environmentModalSessionId, setEnvironmentModalSessionId] = useState<string | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [launchSprintId, setLaunchSprintId] = useState("");
   const [frameSrc, setFrameSrc] = useState("");
@@ -84,6 +95,8 @@ export const BrowserPage: FunctionComponent = () => {
   const launchingRef = useRef(false);
   const pendingSessionActionRef = useRef<"rebuild" | "stop" | null>(null);
   const savingScriptRef = useRef(false);
+  const savingEnvironmentRef = useRef(false);
+  const savingDefaultEnvironmentRef = useRef(false);
   const removingSessionIdsRef = useRef<Set<string>>(new Set());
   const logsCacheRef = useRef<Map<string, string>>(new Map());
   const logsRef = useRef("");
@@ -119,6 +132,7 @@ export const BrowserPage: FunctionComponent = () => {
   const previewEnabled = effectiveSettings?.settings.sprintPreview.enabled ?? true;
   const showInAppBrowser = effectiveSettings?.settings.sprintPreview.showInAppBrowser ?? true;
   const launchEnabled = previewEnabled && showInAppBrowser;
+  const defaultEnvironmentVariables = effectiveSettings?.settings.sprintPreview.environmentVariables ?? EMPTY_PREVIEW_ENVIRONMENT;
   const visibleSelectedSession = selectedSession && !removingSessionIdSet.has(selectedSession.id)
     ? selectedSession
     : null;
@@ -143,6 +157,9 @@ export const BrowserPage: FunctionComponent = () => {
   const sessionCards = sessions.filter((session) =>
     (!selectedProject || session.projectId === selectedProject.id) && !removingSessionIdSet.has(session.id)
   );
+  const environmentModalSession = environmentModalSessionId
+    ? sessionCards.find((session) => session.id === environmentModalSessionId) ?? null
+    : null;
   const navigationDisabledReason = navigationPending
     ? "Preview navigation is sending the previous command. Wait for the control to become available before submitting another navigation command."
     : !visibleSelectedSession
@@ -203,6 +220,7 @@ export const BrowserPage: FunctionComponent = () => {
 
   useEffect(() => {
     if (visibleSelectedSession) {
+      setEnvironmentDraft(visibleSelectedSession.environmentOverrides ?? []);
       const nextPrimary = getPrimaryPreviewPortMapping(visibleSelectedSession);
       if (nextPrimary) {
         setSelectedPortBySessionId((current) => (
@@ -211,6 +229,19 @@ export const BrowserPage: FunctionComponent = () => {
       }
     }
   }, [visibleSelectedSession?.id]);
+
+  useEffect(() => {
+    setDefaultEnvironmentDraft(defaultEnvironmentVariables);
+  }, [defaultEnvironmentVariables, selectedProject?.id]);
+
+  useEffect(() => {
+    if (!environmentModalSessionId) {
+      return;
+    }
+    if (!environmentModalSession) {
+      setEnvironmentModalSessionId(null);
+    }
+  }, [environmentModalSession?.id, environmentModalSessionId]);
 
   useEffect(() => {
     if (visibleSelectedSession && selectedPortMapping) {
@@ -627,6 +658,60 @@ export const BrowserPage: FunctionComponent = () => {
     }
   };
 
+  const handleOpenEnvironmentOverrides = (sessionId: string) => {
+    const nextSession = sessionCards.find((session) => session.id === sessionId);
+    if (!nextSession) {
+      return;
+    }
+    setActiveSessionId(sessionId);
+    setEnvironmentDraft(nextSession.environmentOverrides ?? []);
+    setEnvironmentModalSessionId(sessionId);
+  };
+
+  const handleSaveEnvironmentOverrides = async () => {
+    const targetSession = environmentModalSession ?? visibleSelectedSession;
+    if (!targetSession) return;
+    if (savingEnvironmentRef.current) return;
+    savingEnvironmentRef.current = true;
+    setSavingEnvironment(true);
+    browserFeedback.setPending("Saving preview environment overrides...");
+    try {
+      const updated = await savePreviewEnvironmentOverrides(
+        targetSession.projectId,
+        targetSession.sprintId,
+        targetSession.id,
+        environmentDraft,
+      );
+      setEnvironmentDraft(updated.environmentOverrides ?? []);
+      await refreshSessions(true);
+      browserFeedback.setSuccess("Preview environment saved. Rebuild the container to apply changes.");
+    } catch (actionError) {
+      browserFeedback.setError(`Failed to save preview environment: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
+    } finally {
+      savingEnvironmentRef.current = false;
+      setSavingEnvironment(false);
+    }
+  };
+
+  const handleSaveDefaultEnvironmentVariables = async () => {
+    if (!selectedProject) return;
+    if (savingDefaultEnvironmentRef.current) return;
+    savingDefaultEnvironmentRef.current = true;
+    setSavingDefaultEnvironment(true);
+    browserFeedback.setPending("Saving preview environment defaults...");
+    try {
+      const updated = await saveProjectPreviewEnvironmentVariables(selectedProject.id, defaultEnvironmentDraft);
+      setDefaultEnvironmentDraft(updated.settings.sprintPreview.environmentVariables ?? []);
+      await refreshEffectiveSettings();
+      browserFeedback.setSuccess("Preview environment defaults saved. Rebuild containers to apply changes.");
+    } catch (actionError) {
+      browserFeedback.setError(`Failed to save preview environment defaults: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
+    } finally {
+      savingDefaultEnvironmentRef.current = false;
+      setSavingDefaultEnvironment(false);
+    }
+  };
+
   const navigate = () => {
     if (!navigationEnabled || navigationPendingRef.current) {
       return;
@@ -736,6 +821,7 @@ export const BrowserPage: FunctionComponent = () => {
             }
           }}
           onRemoveSession={(sessionId) => void handleRemove(sessionId)}
+          onManageEnvironment={handleOpenEnvironmentOverrides}
           removingSessionIds={removingSessionIds}
         />
       </div>
@@ -788,6 +874,8 @@ export const BrowserPage: FunctionComponent = () => {
             {pendingSessionAction === "rebuild" ? " Rebuilding preview container." : ""}
             {pendingSessionAction === "stop" ? " Stopping preview container." : ""}
             {savingScript ? " Saving preview script." : ""}
+            {savingEnvironment ? " Saving preview environment overrides." : ""}
+            {savingDefaultEnvironment ? " Saving preview environment defaults." : ""}
             {launching ? " Launching preview container." : ""}
             {navigationPending ? " Preview navigation command is being sent." : ""}
             {!navigationEnabled && navigationDisabledReason ? ` ${navigationDisabledReason}` : ""}
@@ -911,6 +999,51 @@ export const BrowserPage: FunctionComponent = () => {
           </div>
 
           <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Environment</div>
+                <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                  {defaultEnvironmentDraft.length} default{defaultEnvironmentDraft.length === 1 ? "" : "s"} for all preview containers
+                </div>
+              </div>
+              <SlidersHorizontal className="mt-1 h-4 w-4 text-slate-400" strokeWidth={2} aria-hidden="true" />
+            </div>
+            <div className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+              These project-wide variables are injected into every preview container after its next rebuild. Use each container card's Env button for overrides.
+            </div>
+            <div id="preview-default-environment-editor" className="mt-4 space-y-3">
+              <PreviewEnvironmentEditor
+                variables={defaultEnvironmentDraft}
+                onChange={setDefaultEnvironmentDraft}
+                disabled={!selectedProject || savingDefaultEnvironment}
+                addLabel="Add default"
+                valueLabel="Preview environment default value"
+              />
+              <div className="flex items-center justify-between gap-3">
+                <div id="preview-default-environment-save-status" role="status" aria-live="polite" className="min-h-4 text-xs text-slate-500 dark:text-slate-400">
+                  {savingDefaultEnvironment
+                    ? "Saving preview environment defaults."
+                    : selectedProject
+                      ? "Save defaults, then rebuild containers to apply them."
+                      : "Select a project before editing preview defaults."}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveDefaultEnvironmentVariables}
+                  disabled={!selectedProject || savingDefaultEnvironment}
+                  aria-disabled={!selectedProject || savingDefaultEnvironment}
+                  aria-busy={savingDefaultEnvironment}
+                  aria-describedby="preview-default-environment-save-status"
+                  className="inline-flex h-10 shrink-0 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                >
+                  <Save className="h-4 w-4" strokeWidth={2} />
+                  {savingDefaultEnvironment ? "Saving..." : "Save defaults"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Runtime notes</div>
             <div className="mt-4 space-y-3 text-sm text-slate-600 dark:text-slate-300">
               <p>Ports are assigned from the sprint preview range and bound to `127.0.0.1` to avoid conflicts with the main dashboard.</p>
@@ -1010,6 +1143,73 @@ export const BrowserPage: FunctionComponent = () => {
           </div>
         </div>
       </div>
+      )}
+      {environmentModalSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-void-950/55 px-4 py-6 backdrop-blur-sm" role="presentation">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="preview-environment-override-title"
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[1.75rem] border border-white/12 bg-white p-5 shadow-[0_28px_90px_rgba(15,23,42,0.28)] dark:bg-void-950"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Container overrides</div>
+                <h2 id="preview-environment-override-title" className="mt-1 break-words text-lg font-semibold text-slate-900 dark:text-white">
+                  {environmentModalSession.sprintName}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEnvironmentModalSessionId(null)}
+                aria-label="Close environment overrides"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-500 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
+              >
+                <X className="h-4 w-4" strokeWidth={2} />
+              </button>
+            </div>
+            <p className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+              Overrides apply only to this preview container after its next rebuild. Disabled overrides suppress matching defaults.
+            </p>
+            <div className="mt-4">
+              <PreviewEnvironmentEditor
+                variables={environmentDraft}
+                onChange={setEnvironmentDraft}
+                disabled={savingEnvironment}
+                inheritedVariables={defaultEnvironmentDraft}
+                addLabel="Add override"
+                valueLabel="Preview environment override value"
+              />
+            </div>
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div id="preview-environment-save-status" role="status" aria-live="polite" className="min-h-4 text-xs text-slate-500 dark:text-slate-400">
+                {savingEnvironment ? "Saving environment overrides." : "Save overrides, then rebuild this container to apply them."}
+              </div>
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEnvironmentModalSessionId(null)}
+                  disabled={savingEnvironment}
+                  className="inline-flex h-10 items-center justify-center rounded-2xl border border-black/[0.08] px-4 text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEnvironmentOverrides}
+                  disabled={savingEnvironment}
+                  aria-disabled={savingEnvironment}
+                  aria-busy={savingEnvironment}
+                  aria-describedby="preview-environment-save-status"
+                  className="inline-flex h-10 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                >
+                  <Save className="h-4 w-4" strokeWidth={2} />
+                  {savingEnvironment ? "Saving..." : "Save overrides"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </PageContainer>
   );

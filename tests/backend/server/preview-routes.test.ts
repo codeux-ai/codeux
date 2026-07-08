@@ -79,6 +79,34 @@ describe("preview routes", () => {
     expect(rebuildSprintPreviewSessionForProjectSprint).toHaveBeenCalledWith("project-a", "sprint-a", "session-1");
   });
 
+  it("updates environment overrides through the scoped project route", async () => {
+    const updateSprintPreviewEnvironmentOverrides = vi.fn(async () => ({
+      id: "session-1",
+      projectId: "project-a",
+      sprintId: "sprint-a",
+      environmentOverrides: [{ key: "CODE_UX_ALLOW_PUBLIC_DASHBOARD", value: "1", enabled: true }],
+    }));
+    const app = express();
+    app.use(express.json());
+    registerPreviewRoutes(app, { updateSprintPreviewEnvironmentOverrides } as any);
+
+    const response = await request(app)
+      .put("/api/projects/project-a/sprints/sprint-a/preview/sessions/session-1/environment")
+      .send({
+        environmentOverrides: [
+          { key: "CODE_UX_ALLOW_PUBLIC_DASHBOARD", value: "1", enabled: true },
+        ],
+      });
+
+    expect(response.status).toBe(200);
+    expect(updateSprintPreviewEnvironmentOverrides).toHaveBeenCalledWith(
+      "project-a",
+      "sprint-a",
+      "session-1",
+      [{ key: "CODE_UX_ALLOW_PUBLIC_DASHBOARD", value: "1", enabled: true }],
+    );
+  });
+
   it("hides foreign preview sessions behind a generic not found response", async () => {
     const stopSprintPreviewSessionForProjectSprint = vi.fn(async () => {
       throw new EntityNotFoundError("Sprint preview session not found.");

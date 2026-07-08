@@ -1021,6 +1021,13 @@ export interface SprintPreviewSettings {
   containerAppPort: number;
   containerAppPorts: number[];
   startupScriptPath: string;
+  environmentVariables: PreviewEnvironmentVariable[];
+}
+
+export interface PreviewEnvironmentVariable {
+  key: string;
+  value: string;
+  enabled: boolean;
 }
 
 export interface WorkerSettings {
@@ -1591,6 +1598,7 @@ export interface SprintPreviewSession {
   installCommand: string | null;
   buildCommand: string | null;
   runCommand: string | null;
+  environmentOverrides: PreviewEnvironmentVariable[];
   lastCompletedTaskCount: number;
   lastSeenSprintStatus: string | null;
   lastKnownPath: string | null;

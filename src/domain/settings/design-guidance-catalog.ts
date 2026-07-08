@@ -29,7 +29,7 @@ const DEFAULT_STYLEGUIDES: DesignGuidanceEntrySettings[] = [
   NONE_DESIGN_GUIDANCE_ENTRY,
   createEntry(
     CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
-    "Code UX Award-Winning Product UI",
+    "Code UX",
     "A polished, product-grade interface direction for agentic developer tools.",
     [
       "Act as a senior product designer and frontend engineer for a professional developer workflow.",

@@ -115,6 +115,18 @@ export function registerPreviewRoutes(app: Express, deps: DashboardDependencies)
     ));
   }));
 
+  app.put("/api/projects/:projectId/sprints/:sprintId/preview/sessions/:sessionId/environment", asyncRoute(async (req, res) => {
+    if (!deps.updateSprintPreviewEnvironmentOverrides) {
+      throw new Error("Sprint preview runtime is unavailable.");
+    }
+    res.json(await deps.updateSprintPreviewEnvironmentOverrides(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      requireTrimmedString(req.params.sprintId, "sprintId"),
+      requireTrimmedString(req.params.sessionId, "sessionId"),
+      Array.isArray(req.body?.environmentOverrides) ? req.body.environmentOverrides : [],
+    ));
+  }));
+
   app.get("/api/projects/:projectId/sprints/:sprintId/preview/sessions/:sessionId/logs", asyncRoute(async (req, res) => {
     if (!deps.getSprintPreviewLogsForProjectSprint) {
       throw new Error("Sprint preview runtime is unavailable.");

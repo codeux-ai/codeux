@@ -36,6 +36,7 @@ Two listeners:
 - If exposing remotely, **front with a reverse proxy** that handles auth (basic auth, OAuth proxy, mTLS, …).
 - The WebSocket inherits the same security posture.
 - Interactive dashboard-login containers keep OAuth callback ports bound to host loopback, for example `127.0.0.1:<port>:<port>`, and do not switch to public callback ports when the dashboard listener is public.
+- Browser Preview user-defined environment variables are validated before they enter the Docker env-file. Runtime-owned names such as `HOST`, `PORT`, `HOME`, `DASHBOARD_PORT`, `SPRINT_PREVIEW_*`, and `CODE_UX_GIT_USER_*` are reserved for Code UX routing.
 
 ### MCP HTTP gateway
 

@@ -536,6 +536,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "sprints", "is_generated_name", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "tasks", "executor_type", "TEXT NOT NULL DEFAULT 'auto'");
   ensureColumn(db, "sprint_preview_sessions", "port_mappings_json", "TEXT");
+  ensureColumn(db, "sprint_preview_sessions", "environment_overrides_json", "TEXT");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS sprint_linked_issues (

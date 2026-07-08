@@ -1,6 +1,7 @@
 import type { FunctionComponent, ComponentChildren } from "preact";
 import { useId } from "preact/hooks";
 import type { ProjectSettings, SettingsValueSource, ThinkingMode } from "../../../types.js";
+import { PreviewEnvironmentEditor } from "../browser/PreviewEnvironmentEditor.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { TextInput, TextAreaInput, NumberInput, SelectInput, Toggle } from "./SettingsFormFields.js";
 import {
@@ -574,6 +575,19 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                 },
               })}
               mono
+            />
+          </Row>
+          <Row label="Default container variables" description="Environment variables injected into every preview container for this scope." badge={getBadge("sprintPreview.environmentVariables")}>
+            <PreviewEnvironmentEditor
+              variables={settings.sprintPreview.environmentVariables ?? []}
+              onChange={(environmentVariables) => update({
+                sprintPreview: {
+                  ...settings.sprintPreview,
+                  environmentVariables,
+                },
+              })}
+              addLabel="Add default"
+              valueLabel="Preview environment default value"
             />
           </Row>
         </div>

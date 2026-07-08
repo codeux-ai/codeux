@@ -17,6 +17,7 @@ import type {
   OnboardingDependencyInstallerResult,
   OnboardingDependencyInstallMode,
   OnboardingRuntimeReadiness,
+  PreviewEnvironmentVariable,
   ProjectLiveDashboardSnapshot,
   ProjectStatsQuery,
   ReadinessProbeStatus,
@@ -151,6 +152,7 @@ export interface BootDashboardDeps {
   removeSprintPreviewSessionForProjectSprint: (projectId: string, sprintId: string, sessionId: string) => Promise<void>;
   getSprintPreviewScript: (projectId: string, sprintId: string) => Promise<SprintPreviewScript>;
   saveSprintPreviewScript: (projectId: string, sprintId: string, content: string) => Promise<SprintPreviewScript>;
+  updateSprintPreviewEnvironmentOverrides: (projectId: string, sprintId: string, sessionId: string, environmentOverrides: PreviewEnvironmentVariable[]) => Promise<SprintPreviewSession>;
   getSprintPreviewLogs: (sessionId: string, tail?: number) => Promise<{ logs: string }>;
   getSprintPreviewLogsForProjectSprint: (projectId: string, sprintId: string, sessionId: string, tail?: number) => Promise<{ logs: string }>;
   proxySprintPreviewRequest: (args: {
@@ -824,6 +826,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     removeSprintPreviewSessionForProjectSprint: deps.removeSprintPreviewSessionForProjectSprint,
     getSprintPreviewScript: deps.getSprintPreviewScript,
     saveSprintPreviewScript: deps.saveSprintPreviewScript,
+    updateSprintPreviewEnvironmentOverrides: deps.updateSprintPreviewEnvironmentOverrides,
     getSprintPreviewLogs: deps.getSprintPreviewLogs,
     getSprintPreviewLogsForProjectSprint: deps.getSprintPreviewLogsForProjectSprint,
     proxySprintPreviewRequest: deps.proxySprintPreviewRequest,

@@ -1,4 +1,4 @@
-import type { SprintPreviewScript, SprintPreviewSession } from "../../types.js";
+import type { PreviewEnvironmentVariable, SprintPreviewScript, SprintPreviewSession } from "../../types.js";
 import { fetchJson } from "../../lib/api/fetch-json.js";
 
 export const fetchPreviewSessions = async (projectId: string): Promise<SprintPreviewSession[]> => {
@@ -51,6 +51,19 @@ export const savePreviewScript = async (
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ content }),
+  });
+};
+
+export const savePreviewEnvironmentOverrides = async (
+  projectId: string,
+  sprintId: string,
+  sessionId: string,
+  environmentOverrides: PreviewEnvironmentVariable[],
+): Promise<SprintPreviewSession> => {
+  return fetchJson(buildScopedPreviewSessionPath(projectId, sprintId, sessionId, "/environment"), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ environmentOverrides }),
   });
 };
 
