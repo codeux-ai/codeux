@@ -79,7 +79,7 @@ export class RunEventWrites {
     const existing = candidateRun === undefined ? this.findCandidateRun(task.id, subtask) : candidateRun;
     const signature = subtaskSignature({
       ...subtask,
-      status: runtimeState,
+      status: persistedRunState,
     });
 
     if (!existing) {

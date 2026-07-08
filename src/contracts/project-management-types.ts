@@ -206,6 +206,7 @@ export interface JiraIssueSearchInput {
   search?: string;
   issueKey?: string;
   status?: JiraIssueSearchStatus;
+  inProgressStatusName?: string;
   statusNames?: string[];
   assignee?: JiraIssueSearchAssignee;
   assigneeText?: string;
@@ -495,6 +496,8 @@ export interface UpdateTaskInput {
   isIndependent?: boolean;
   isMerged?: boolean;
   mergeIndicator?: string | null;
+  mergeConflictSourceBranch?: string | null;
+  mergeConflictTargetBranch?: string | null;
   sourceType?: string | null;
   sourcePath?: string | null;
 }

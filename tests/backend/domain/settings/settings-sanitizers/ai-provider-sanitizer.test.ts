@@ -209,6 +209,95 @@ describe("sanitizeAiProvider", () => {
     expect(result.invocationRouting.task_coding.providers.codex?.model).toBe("gpt-5.6-terra");
   });
 
+  it("normalizes legacy thinking modes to provider-specific persisted values", () => {
+    const result = sanitizeAiProvider({
+      aiProvider: {
+        provider: "codex",
+        providers: {
+          codex: {
+            provider: "codex",
+            enabled: true,
+            model: "gpt-5.6-sol",
+            weight: 20,
+            thinkingMode: "HIGH",
+          },
+          antigravity: {
+            provider: "antigravity",
+            enabled: true,
+            model: "default",
+            weight: 20,
+            thinkingMode: "MEDIUM",
+          },
+        },
+        invocationRouting: {
+          task_coding: {
+            profile: "GLOBAL",
+            strategy: "MANUAL",
+            provider: "codex",
+            allowedProviders: ["codex"],
+            providers: {
+              codex: {
+                thinkingMode: "SMALL",
+              },
+              antigravity: {
+                thinkingMode: "HIGH",
+              },
+            },
+          },
+        },
+      },
+    } as any);
+
+    expect(result.providers.codex.thinkingMode).toBe("high");
+    expect(result.providers.antigravity.thinkingMode).toBe("high");
+    expect(result.invocationRouting.task_coding.providers.codex?.thinkingMode).toBe("low");
+    expect(result.invocationRouting.task_coding.providers.antigravity?.thinkingMode).toBe("high");
+  });
+
+  it("falls back or drops invalid provider thinking modes during sanitization", () => {
+    const result = sanitizeAiProvider({
+      aiProvider: {
+        provider: "codex",
+        providers: {
+          codex: {
+            provider: "codex",
+            enabled: true,
+            model: "gpt-5.6-sol",
+            weight: 20,
+            thinkingMode: "max",
+          },
+          antigravity: {
+            provider: "antigravity",
+            enabled: true,
+            model: "default",
+            weight: 20,
+            thinkingMode: "medium",
+          },
+        },
+        invocationRouting: {
+          task_coding: {
+            profile: "GLOBAL",
+            strategy: "MANUAL",
+            provider: "codex",
+            allowedProviders: ["codex"],
+            providers: {
+              codex: {
+                model: "gpt-5.6-terra",
+                thinkingMode: "minimal",
+              },
+            },
+          },
+        },
+      },
+    } as any);
+
+    expect(result.providers.codex.thinkingMode).toBe("high");
+    expect(result.providers.antigravity.thinkingMode).toBe("high");
+    expect(result.invocationRouting.task_coding.providers.codex).toEqual({
+      model: "gpt-5.6-terra",
+    });
+  });
+
   describe("normalizeSystemIntegrationProviders", () => {
     it("should preserve explicitly defined mountAuth boolean values", () => {
       const input = {
@@ -328,6 +417,80 @@ describe("sanitizeAiProvider", () => {
       expect(result["codex-local"].apiKey).toBe("sk-local");
       expect(result["codex-local"].customBaseUrl).toBe("http://192.168.0.38:1234/v1");
       expect(result["codex-local"].customModel).toBe("local-model");
+    });
+
+    it("does not fan out provider-type settings into separate provider config ids", () => {
+      const integrationProviders = normalizeSystemIntegrationProviders({
+        providers: {
+          gemini: {
+            provider: "gemini",
+            name: "Gemini Primary",
+          },
+          "gemini-fast": {
+            provider: "gemini",
+            name: "Gemini Fast",
+          },
+        },
+      });
+
+      const projectProviders = buildProjectProviderSettings({
+        gemini: {
+          provider: "gemini",
+          enabled: true,
+          model: "gemini-2.5-flash",
+          weight: 77,
+          maxConcurrentTasks: 3,
+        },
+      }, integrationProviders);
+
+      expect(projectProviders.gemini.model).toBe("gemini-2.5-flash");
+      expect(projectProviders.gemini.weight).toBe(77);
+      expect(projectProviders.gemini.maxConcurrentTasks).toBe(3);
+      expect(projectProviders["gemini-fast"].model).not.toBe("gemini-2.5-flash");
+      expect(projectProviders["gemini-fast"].weight).not.toBe(77);
+      expect(projectProviders["gemini-fast"].maxConcurrentTasks).not.toBe(3);
+    });
+
+    it("does not resolve provider-type aliases to arbitrary custom provider config ids", () => {
+      const integrationProviders = normalizeSystemIntegrationProviders({
+        providers: {
+          "gemini-fast": {
+            provider: "gemini",
+            name: "Gemini Fast",
+          },
+        },
+      });
+
+      const result = sanitizeAiProvider({
+        aiProvider: {
+          provider: "gemini",
+          providers: {
+            "gemini-fast": {
+              provider: "gemini",
+              enabled: true,
+              model: "gemini-2.5-flash",
+            },
+          },
+          invocationRouting: {
+            task_coding: {
+              profile: "WORKER",
+              strategy: "MANUAL",
+              provider: "gemini",
+              allowedProviders: ["gemini"],
+              providers: {
+                gemini: {
+                  enabled: true,
+                },
+              },
+            },
+          },
+        },
+      } as any, { integrationProviders });
+
+      expect(result.provider).toBe("gemini-fast");
+      expect(result.invocationRouting.task_coding.provider).toBeNull();
+      expect(result.invocationRouting.task_coding.allowedProviders).toEqual([]);
+      expect(result.invocationRouting.task_coding.providers).toEqual({});
     });
 
     it("does not automatically readd default providers like gemini when they are omitted in a modern providers payload", () => {

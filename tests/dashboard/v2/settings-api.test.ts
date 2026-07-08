@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearSettingsApiCacheForTests,
   fetchProjectEffectiveSettings,
+  saveProjectDesignGuidanceSettings,
   saveProjectTechstackSettings,
 } from "../../../dashboard/src/v2/lib/settings-api.js";
 
@@ -109,6 +110,47 @@ describe("settings-api", () => {
         selectedTechstackId: "code-ux-internal",
         applicationKind: "web",
       },
+    });
+  });
+
+  it("preserves existing project override fields when saving only design guidance", async () => {
+    const existingOverride = {
+      jira: {
+        host: "https://jira.example.test",
+        email: "user@example.test",
+        apiToken: "secret-token",
+        defaultProject: "APP",
+      },
+      designGuidance: {
+        selectedTechStackId: "none",
+        selectedStyleguideId: "none",
+        hideDefaultStyleguides: false,
+        customTechStacks: [],
+        customStyleguides: [],
+      },
+    };
+    const nextGuidance = {
+      ...existingOverride.designGuidance,
+      selectedTechStackId: "internal-ui-stack",
+    };
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/projects/project-1/settings" && !init?.method) {
+        return Promise.resolve(jsonResponse(existingOverride));
+      }
+      if (url === "/api/projects/project-1/settings" && init?.method === "PUT") {
+        return Promise.resolve(jsonResponse({ ok: true }));
+      }
+      return Promise.reject(new Error(`Unexpected request: ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await saveProjectDesignGuidanceSettings("project-1", nextGuidance);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [, putInit] = fetchMock.mock.calls[1]!;
+    expect(JSON.parse(String(putInit?.body))).toEqual({
+      ...existingOverride,
+      designGuidance: nextGuidance,
     });
   });
 });

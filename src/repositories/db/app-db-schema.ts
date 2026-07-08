@@ -980,6 +980,8 @@ CREATE INDEX IF NOT EXISTS idx_provider_invocations_project_sprint_started ON pr
 CREATE INDEX IF NOT EXISTS idx_provider_invocations_project_sprint_run_started ON provider_invocations (project_id, sprint_run_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_provider_invocations_sprint_started ON provider_invocations (sprint_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_provider_invocations_sprint_run_started ON provider_invocations (sprint_run_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_provider_invocations_task_run ON provider_invocations (task_run_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_provider_invocations_session_owner ON provider_invocations (session_id, project_id, sprint_id, task_id);
 CREATE INDEX IF NOT EXISTS idx_task_dispatches_project_executor_status_priority ON task_dispatches (project_id, executor_type, status, priority);
 CREATE INDEX IF NOT EXISTS idx_sprint_runs_project_status_recency ON sprint_runs (project_id, status, last_heartbeat_at DESC, updated_at DESC, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sprint_runs_project_sprint ON sprint_runs (project_id, sprint_id, created_at DESC);
@@ -987,6 +989,9 @@ CREATE INDEX IF NOT EXISTS idx_task_dispatches_project_task_recency ON task_disp
 CREATE INDEX IF NOT EXISTS idx_task_dispatches_project_sprint_run_recency ON task_dispatches (project_id, sprint_run_id, last_heartbeat_at DESC, started_at DESC, claimed_at DESC, queued_at DESC);
 CREATE INDEX IF NOT EXISTS idx_task_runs_dispatch ON task_runs (dispatch_id);
 CREATE INDEX IF NOT EXISTS idx_task_runs_task_sprint_session ON task_runs (task_id, sprint_run_id, session_id);
+CREATE INDEX IF NOT EXISTS idx_task_runs_session_id_owner ON task_runs (session_id, project_id, sprint_id, task_id);
+CREATE INDEX IF NOT EXISTS idx_task_runs_session_name_owner ON task_runs (session_name, project_id, sprint_id, task_id);
+CREATE INDEX IF NOT EXISTS idx_task_runs_pr_url_owner ON task_runs (pr_url, project_id, sprint_id, task_id);
 CREATE INDEX IF NOT EXISTS idx_task_runs_project_sprint_lookup ON task_runs (project_id, sprint_id, sprint_run_id, id);
 CREATE INDEX IF NOT EXISTS idx_task_runs_project_sprint_run_lookup ON task_runs (project_id, sprint_run_id, id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_task_self_reflection_ratings_task_run ON task_self_reflection_ratings (source_task_run_id);

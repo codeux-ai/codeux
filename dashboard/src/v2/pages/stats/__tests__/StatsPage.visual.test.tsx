@@ -443,8 +443,8 @@ describe('StatsPage visual tests', () => {
     expect(heroControlsRule).toContain('background: var(--stats-surface-subpanel)');
     expect(heroPresetButtonActiveRule).toContain('background: var(--stats-surface-control-active-strong)');
     expect(stateMessageIconRule).toContain('background: var(--stats-surface-chip)');
-    expect(heroPanelRule).not.toContain('linear-gradient');
-    expect(heroControlsRule).not.toContain('linear-gradient');
+    expect(heroPanelRule).toContain('background: var(--stats-surface-panel)');
+    expect(heroControlsRule).toContain('background: var(--stats-surface-subpanel)');
     expect(heroControlSectionRule).not.toMatch(/border:\s*1px/);
     expect(heroControlSectionRule).not.toMatch(/background:/);
     expect(css).not.toContain('backdrop-blur');
@@ -463,7 +463,7 @@ describe('StatsPage visual tests', () => {
     const forbiddenPatterns = [
       /backdrop-blur/,
       /surface-glass/,
-      /linear-gradient/,
+      /backdrop-blur/,
       /drop-shadow/,
       /hover:-?translate/,
       /hover:scale/,

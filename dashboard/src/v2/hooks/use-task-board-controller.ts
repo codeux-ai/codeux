@@ -125,8 +125,22 @@ function useStableArrayValue<T>(value: T[]): T[] {
 }
 
 export function useTaskBoardController(): TaskBoardController {
-  const { projects, selectedProject, createProject } = useProjectData();
-  const projectId = selectedProject?.id || null;
+  const { projects, selectedProject, selectProject, createProject } = useProjectData();
+  const locationSearch = useRouterState({ select: (state) => state.location.searchStr });
+  const routeProjectId = useMemo(() => {
+    const params = new URLSearchParams(locationSearch);
+    return params.get("projectId")?.trim() || null;
+  }, [locationSearch]);
+
+  useEffect(() => {
+    if (!routeProjectId || selectedProject?.id === routeProjectId) {
+      return;
+    }
+    void selectProject(routeProjectId);
+  }, [routeProjectId, selectedProject?.id, selectProject]);
+
+  const routeProjectReady = !routeProjectId || selectedProject?.id === routeProjectId;
+  const projectId = routeProjectReady ? selectedProject?.id || null : null;
   const {
     data: sprints,
     loading: sprintsLoading,
@@ -134,7 +148,6 @@ export function useTaskBoardController(): TaskBoardController {
     selectSprint,
     refetch: refreshSprints,
   } = useSprints(projectId);
-  const locationSearch = useRouterState({ select: (state) => state.location.searchStr });
   const currentProjectSprints = useMemo(() => {
     if (!projectId) {
       return [];
@@ -160,7 +173,7 @@ export function useTaskBoardController(): TaskBoardController {
   const taskScopeSprintId = routeSprintId ?? validSelectedSprintId;
 
   useEffect(() => {
-    if (!initialSprint || routeSprintId || sprintsLoading) {
+    if (!routeProjectReady || !initialSprint || routeSprintId || sprintsLoading) {
       return;
     }
     const params = new URLSearchParams(locationSearch);
@@ -170,18 +183,18 @@ export function useTaskBoardController(): TaskBoardController {
     params.delete("sprintId");
     params.delete("sprint");
     replaceTaskBoardSearch(params);
-  }, [initialSprint, locationSearch, routeSprintId, sprintsLoading]);
+  }, [initialSprint, locationSearch, routeProjectReady, routeSprintId, sprintsLoading]);
 
   useEffect(() => {
-    if (!routeSprintId || routeSprintId === selectedSprintId) {
+    if (!routeProjectReady || !routeSprintId || routeSprintId === selectedSprintId) {
       return;
     }
     void selectSprint(routeSprintId);
-  }, [routeSprintId, selectedSprintId, selectSprint]);
+  }, [routeProjectReady, routeSprintId, selectedSprintId, selectSprint]);
 
   const { execution, status } = useDashboardRuntimeData(
     projectId,
-    !!selectedProject,
+    routeProjectReady && !!selectedProject,
     { selectedSprintId: taskScopeSprintId },
   );
   const taskDispatches = useStableArrayValue(execution.taskDispatches);

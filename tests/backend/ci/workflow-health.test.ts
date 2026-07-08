@@ -258,7 +258,7 @@ describe("GitHub workflow health", () => {
 
     expect(workflow).toContain("Mockup Sprint Pentest (temporary dev validation)");
     expectConcurrencyCancellation(workflow, "Mockup sprint pentest");
-    expect(workflow).toMatch(/push:\n    branches:\n      - main\n      # Temporary dev activation/);
+    expect(workflow).toMatch(/push:\n    branches:\n      - main\n      # Dev pushes run the full mockup pentest catalog/);
     expect(workflow).toContain("- dev");
     expect(workflow).toContain("workflow_dispatch:");
 
@@ -272,9 +272,11 @@ describe("GitHub workflow health", () => {
     expect(job).toContain("run: pnpm run build");
     expect(job).toContain("docker version");
     expect(job).toContain("Docker is required for the mockup sprint pentest Docker lane.");
-    expect(job).toContain("run: pnpm run test:e2e:mockup-sprint-pentest");
+    expect(job).toContain('if [ "${GITHUB_REF_NAME}" = "dev" ]; then');
+    expect(job).toContain("node scripts/e2e/run-mockup-sprint-pentest.mjs --scenario pentest --timeout-ms 3600000");
+    expect(job).toContain("pnpm run test:e2e:mockup-sprint-pentest");
     expectCommandBefore(job, "run: pnpm run build", "- name: Verify Docker availability");
-    expectCommandBefore(job, "docker version", "run: pnpm run test:e2e:mockup-sprint-pentest");
+    expectCommandBefore(job, "docker version", 'if [ "${GITHUB_REF_NAME}" = "dev" ]; then');
 
     expect(job).toMatch(/if: \$\{\{ failure\(\) \|\| hashFiles\('\.cache\/e2e-mockup-sprint-pentest\/\*\*'\) != '' \}\}/);
     expect(job).toContain("uses: actions/upload-artifact@v4");

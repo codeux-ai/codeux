@@ -164,7 +164,7 @@ export class RuntimeStatusProjection {
         session_name: run?.session_name || undefined,
         provider: run?.provider ? run.provider as Subtask["provider"] : undefined,
         agentPresetId: task.row.agent_preset_id || null,
-        worker_branch: run?.worker_branch || undefined,
+        worker_branch: merged ? undefined : run?.worker_branch || undefined,
         pr_url: run?.pr_url || undefined,
         activities: recentActivitiesByTaskId.get(task.row.id),
         is_independent: toBoolean(task.row.is_independent),

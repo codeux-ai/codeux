@@ -10,6 +10,8 @@ import type {
 import { sanitizeSystemProviderConfig } from "../provider-runtime-preview.js";
 import {
   DEFAULT_PROVIDER_CONFIG_FILE_PATHS,
+  getDefaultThinkingModeForProvider,
+  providerSupportsThinkingModeSelection,
   DEFAULT_PROVIDER_WEIGHT,
 } from "../../../../../src/repositories/settings-defaults.js";
 
@@ -70,7 +72,7 @@ export const createProjectProviderDraft = (
         ? "anthropic/claude-sonnet-4-5"
         : "default",
   weight: DEFAULT_PROVIDER_WEIGHT,
-  thinkingMode: providerId === "codex" || providerId === "claude-code" || providerId === "qwen-code" || providerId === "opencode" ? "HIGH" : "MEDIUM",
+  thinkingMode: getDefaultThinkingModeForProvider(providerId),
   maxConcurrentTasks: providerId === "jules" ? 15 : 0,
 });
 
@@ -277,7 +279,7 @@ const hasAnyProviderApiKey = (
 
 export const providerSupportsModelSelection = (providerId: ProviderId): boolean => providerId !== "jules";
 
-export const providerSupportsThinkingMode = (providerId: ProviderId): boolean => providerId !== "jules";
+export const providerSupportsThinkingMode = (providerId: ProviderId): boolean => providerSupportsThinkingModeSelection(providerId);
 
 export const isProviderAvailable = (
   providerId: ProviderId,

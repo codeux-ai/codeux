@@ -19,7 +19,8 @@ import {
   DEFAULT_PROVIDER_CONFIG_NAMES,
   DEFAULT_PROVIDER_SETTINGS,
   PROVIDER_IDS,
-  THINKING_MODES,
+  isProviderThinkingModeSupported,
+  normalizeProviderThinkingMode,
   VIRTUAL_WORKER_PROVIDERS,
 } from "../../repositories/settings-defaults.js";
 
@@ -383,10 +384,8 @@ const normalizeWeight = (value: unknown, fallback: number): number => {
   return Math.max(0, Math.round(value));
 };
 
-const normalizeThinkingMode = (value: unknown, fallback: ThinkingMode): ThinkingMode => (
-  typeof value === "string" && THINKING_MODES.includes(value as ThinkingMode)
-    ? value as ThinkingMode
-    : fallback
+const normalizeThinkingMode = (providerId: ProviderId, value: unknown, fallback: ThinkingMode): ThinkingMode => (
+  normalizeProviderThinkingMode(providerId, value, fallback)
 );
 
 const normalizeMaxConcurrentTasks = (value: unknown, fallback: number): number => (
@@ -395,12 +394,58 @@ const normalizeMaxConcurrentTasks = (value: unknown, fallback: number): number =
     : fallback
 );
 
-const readLegacyProviderConfig = (
-  providerId: ProviderId,
-  providersInput: Record<string, unknown>,
-): Record<string, unknown> => (
-  isRecord(providersInput[providerId]) ? providersInput[providerId] : {}
+const normalizeProviderAuthType = (value: unknown): SystemProviderCredentialSettings["authType"] => (
+  value === "apiKey" || value === "localAuth" || value === "dashboardAuth" ? value : undefined
 );
+
+const collectProjectProviderIntegrations = (
+  providersInput: Record<string, unknown>,
+  integrationProviders: Record<ProviderConfigId, SystemProviderCredentialSettings>,
+): Record<ProviderConfigId, SystemProviderCredentialSettings> => {
+  const result: Record<ProviderConfigId, SystemProviderCredentialSettings> = { ...integrationProviders };
+  const defaultIntegrations = buildDefaultIntegrationProviders();
+
+  for (const [providerConfigId, rawValue] of Object.entries(providersInput)) {
+    if (result[providerConfigId] || !isRecord(rawValue)) {
+      continue;
+    }
+
+    const providerId = normalizeProviderId(rawValue.provider) || inferProviderIdFromConfigId(providerConfigId);
+    if (!providerId) {
+      continue;
+    }
+
+    const defaultIntegration = defaultIntegrations[DEFAULT_PROVIDER_CONFIG_IDS[providerId]];
+    const requestedAuthType = normalizeProviderAuthType(rawValue.authType);
+    const authType = requestedAuthType || defaultIntegration.authType || "apiKey";
+    const normalizedProviderConfig = normalizeProviderConfig(
+      providerId,
+      rawValue.providerConfigMode ?? defaultIntegration.providerConfigMode,
+      rawValue.providerConfigPath ?? defaultIntegration.providerConfigPath,
+    );
+
+    result[providerConfigId] = {
+      ...defaultIntegration,
+      provider: providerId,
+      name: normalizeProviderName(providerId, rawValue.name ?? defaultIntegration.name),
+      apiKey: authType === "apiKey" && typeof rawValue.apiKey === "string"
+        ? rawValue.apiKey
+        : defaultIntegration.apiKey,
+      mountAuth: providerId === "jules"
+        ? false
+        : authType === "dashboardAuth"
+          ? true
+          : (typeof rawValue.mountAuth === "boolean" ? rawValue.mountAuth : defaultIntegration.mountAuth),
+      authPath: authType === "dashboardAuth"
+        ? `~/.code-ux/credentials/${providerConfigId}`
+        : normalizeProviderAuthPath(providerId, rawValue.authPath ?? defaultIntegration.authPath),
+      ...normalizedProviderConfig,
+      authType,
+    };
+  }
+
+  return result;
+};
 
 export const buildProjectProviderSettings = (
   providersInput: unknown,
@@ -408,10 +453,10 @@ export const buildProjectProviderSettings = (
 ): Record<ProviderConfigId, ProjectProviderSettings> => {
   const result: Record<ProviderConfigId, ProjectProviderSettings> = {};
   const input = isRecord(providersInput) ? providersInput : {};
+  const availableIntegrations = collectProjectProviderIntegrations(input, integrationProviders);
 
-  for (const [providerConfigId, integration] of Object.entries(integrationProviders)) {
-    const legacySource = readLegacyProviderConfig(integration.provider, input);
-    const directSource = isRecord(input[providerConfigId]) ? input[providerConfigId] : legacySource;
+  for (const [providerConfigId, integration] of Object.entries(availableIntegrations)) {
+    const directSource = isRecord(input[providerConfigId]) ? input[providerConfigId] : {};
     const defaults = DEFAULT_PROVIDER_SETTINGS[integration.provider];
     result[providerConfigId] = {
       provider: integration.provider,
@@ -423,7 +468,7 @@ export const buildProjectProviderSettings = (
         ? directSource.model.trim()
         : defaults.model,
       weight: normalizeWeight(directSource.weight, defaults.weight),
-      thinkingMode: normalizeThinkingMode(directSource.thinkingMode, defaults.thinkingMode),
+      thinkingMode: normalizeThinkingMode(integration.provider, directSource.thinkingMode, defaults.thinkingMode),
       maxConcurrentTasks: normalizeMaxConcurrentTasks(directSource.maxConcurrentTasks, defaults.maxConcurrentTasks),
     };
   }
@@ -449,7 +494,7 @@ export const buildDashboardProviderSettings = (
             ? projectProvider.model
             : defaults.model,
           weight: normalizeWeight(projectProvider.weight, defaults.weight),
-          thinkingMode: normalizeThinkingMode(projectProvider.thinkingMode, defaults.thinkingMode),
+          thinkingMode: normalizeThinkingMode(providerId, projectProvider.thinkingMode, defaults.thinkingMode),
           maxConcurrentTasks: normalizeMaxConcurrentTasks(projectProvider.maxConcurrentTasks, defaults.maxConcurrentTasks),
           apiKey: integrationProviders[providerConfigId]?.apiKey || "",
           mountAuth: integrationProviders[providerConfigId]?.mountAuth
@@ -496,14 +541,6 @@ export const resolveProviderConfigId = (
 ): ProviderConfigId | null => {
   if (typeof candidate === "string" && candidate in providers) {
     return candidate;
-  }
-
-  const legacyProviderId = normalizeProviderId(candidate);
-  if (legacyProviderId) {
-    const matchingConfigId = Object.entries(providers).find(([, provider]) => provider.provider === legacyProviderId)?.[0];
-    if (matchingConfigId) {
-      return matchingConfigId;
-    }
   }
 
   if (fallbackProviderId) {
@@ -556,8 +593,8 @@ export const resolveInvocationProviderOverrides = (
     if (typeof rawValue.weight === "number" && Number.isFinite(rawValue.weight)) {
       override.weight = Math.max(0, Math.round(rawValue.weight));
     }
-    if (typeof rawValue.thinkingMode === "string" && THINKING_MODES.includes(rawValue.thinkingMode as ThinkingMode)) {
-      override.thinkingMode = rawValue.thinkingMode as ThinkingMode;
+    if (typeof rawValue.thinkingMode === "string" && isProviderThinkingModeSupported(providers[providerConfigId].provider, rawValue.thinkingMode)) {
+      override.thinkingMode = normalizeProviderThinkingMode(providers[providerConfigId].provider, rawValue.thinkingMode);
     }
 
     if (Object.keys(override).length > 0) {

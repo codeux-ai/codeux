@@ -7,9 +7,11 @@ import { executePrFinalizeStage } from "../../../../../src/services/cli-workflow
 import { executeCleanupStage } from "../../../../../src/services/cli-workflow/pipeline/cleanup-stage.js";
 import * as providerRetryPolicy from "../../../../../src/shared/providers/provider-retry-policy.js";
 import { DEFAULT_TASK_SECTION_ORDER, DEFAULT_SPRINT_SECTION_ORDER } from "../../../../../src/domain/sprint/composer/pr-description-composer.js";
+import { beginRuntimeShutdown, resetRuntimeShutdownForTests } from "../../../../../src/services/shutdown-state.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
+  resetRuntimeShutdownForTests();
 });
 
 const createMockContext = (): PipelineContext => {
@@ -559,6 +561,19 @@ describe("executeGitFinalizeStage", () => {
       githubMode: "LOCAL",
     });
     expect(ctx.deps.sessionTracking.updateSession).toHaveBeenCalledWith(ctx.sessionId, { state: "COMPLETED" });
+  });
+
+  it("does not trust an empty patch as no-output while runtime shutdown is in progress", async () => {
+    const ctx = createMockContext();
+
+    vi.mocked(ctx.prService.hasUnpushedCommits).mockResolvedValue(false);
+    vi.mocked(ctx.prService.hasWorkerBranchCommitsAgainstFeature).mockResolvedValue(false);
+    beginRuntimeShutdown();
+
+    await expect(executeGitFinalizeStage(ctx)).rejects.toThrow("Runtime shutdown interrupted git finalization");
+
+    expect(ctx.workflowSucceeded).toBeFalsy();
+    expect(ctx.deps.sessionTracking.updateSession).not.toHaveBeenCalledWith(ctx.sessionId, { state: "COMPLETED" });
   });
 
   it("applies exported patch results when the isolated workspace has changes", async () => {

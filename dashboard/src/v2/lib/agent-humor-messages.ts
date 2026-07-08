@@ -10,7 +10,6 @@ export const AGENT_HUMOR_CATEGORIES = [
   "tool_search",
   "tool_web",
   "tool_generic",
-  "battery",
   "mood",
 ] as const;
 
@@ -215,26 +214,6 @@ export const AGENT_HUMOR_MESSAGES: Record<AgentHumorCategory, readonly string[]>
       "while the inputs stay neatly labeled.",
       "with the success criteria in view.",
       "so the workflow keeps its rhythm.",
-    ],
-  ),
-  battery: buildMessages(
-    [
-      "Charging the focus battery",
-      "Checking the runtime fuel gauge",
-      "Pouring a symbolic coffee into the progress meter",
-      "Watching the energy bar practice responsible optimism",
-      "Giving the agent battery a tidy pep talk",
-      "Keeping the motivation cells above meeting threshold",
-      "Topping off the concentration capacitor",
-      "Reading the charge level with project-manager eyebrows",
-      "Letting the battery sip from the productivity thermos",
-      "Balancing watts, tasks, and snack logistics",
-    ],
-    [
-      "before the next round of commits.",
-      "while the charger writes a brief status memo.",
-      "and saving a few percent for review comments.",
-      "so the sprint can keep its shoes tied.",
     ],
   ),
   mood: buildMessages(

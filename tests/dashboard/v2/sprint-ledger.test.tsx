@@ -4,7 +4,7 @@
  */
 import { h } from "preact";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor, act } from "@testing-library/preact";
+import { render, screen, cleanup, fireEvent, waitFor, act, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { SprintLedger } from "../../../dashboard/src/v2/components/sprints/SprintLedger.js";
 import type { Sprint } from "../../../dashboard/src/types.js";
@@ -146,6 +146,21 @@ describe("SprintLedger Component", () => {
       expect(screen.getByText("Alpha Design")).toBeInTheDocument();
       expect(screen.queryByText("Beta API")).not.toBeInTheDocument();
     });
+  });
+
+  it("renders project-aware Tasks and Live row links instead of the old Open CTA", async () => {
+    render(<SprintLedger {...defaultProps} listWindow="all" />);
+
+    const alphaRow = await screen.findByRole("row", { name: /Alpha Design/i });
+    const alphaScope = within(alphaRow);
+    const tasksLink = alphaScope.getByRole("link", { name: "Open tasks for sprint Alpha Design" });
+    const liveLink = alphaScope.getByRole("link", { name: "Open live session for sprint Alpha Design" });
+
+    expect(tasksLink).toHaveTextContent("Tasks");
+    expect(liveLink).toHaveTextContent("Live");
+    expect(tasksLink).toHaveAttribute("href", "/tasks?projectId=proj-1&sprintId=sprint-1");
+    expect(liveLink).toHaveAttribute("href", "/live?projectId=proj-1&sprintId=sprint-1");
+    expect(alphaScope.queryByRole("link", { name: "Open" })).not.toBeInTheDocument();
   });
 
   it("filters by status from the ledger controls", async () => {

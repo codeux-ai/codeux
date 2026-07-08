@@ -25,6 +25,7 @@ Every visible Settings subcategory card has card-level help and a documentation 
 - [Workspace Visibility](./workspace-visibility.md)
 - [Runtime Limits](./runtime-limits.md)
 - [Techstacks](./techstacks.md)
+- [Guidance](./guidance.md)
 - [Project Markdown Mirror](./project-markdown-mirror.md)
 - [Agent Routing](./agent-routing.md)
 - [Memory System](./memory-system.md)

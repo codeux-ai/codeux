@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { validateSafeClonePath, validateNonEmptyDir } from "../../utils/path-validator.js";
 import { runCommandStrict } from "../../services/cli-process-runner.js";
+import { ensureCodeUxGitignoreEntry } from "./code-ux-gitignore.js";
 
 /**
  * Builds the contents of the seed README committed into a freshly initialized
@@ -47,7 +48,8 @@ export async function initLocalRepo(dirPath: string, defaultBranch = "main", pro
 
     // 3. Seed a README so the initial commit has real tracked content.
     fs.writeFileSync(path.join(safeDir, "README.md"), buildSeedReadme(projectName ?? path.basename(safeDir)));
-    await runCommandStrict("git", ["add", "README.md"], safeDir);
+    await ensureCodeUxGitignoreEntry(safeDir);
+    await runCommandStrict("git", ["add", "README.md", ".gitignore"], safeDir);
     await runCommandStrict("git", ["commit", "-m", "Initial commit"], safeDir);
   } catch (cause: any) {
     throw new Error(`Failed to initialize local repo at ${safeDir}: ${cause.message}`);

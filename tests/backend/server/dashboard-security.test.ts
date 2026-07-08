@@ -250,7 +250,7 @@ describe("Dashboard Security Helper", () => {
       expect(setHeaderMock).toHaveBeenCalledWith("X-Content-Type-Options", "nosniff");
       expect(setHeaderMock).toHaveBeenCalledWith("Referrer-Policy", "no-referrer");
       expect(setHeaderMock).toHaveBeenCalledWith("X-Frame-Options", "SAMEORIGIN");
-      expect(setHeaderMock).toHaveBeenCalledWith("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+      expect(setHeaderMock).toHaveBeenCalledWith("Permissions-Policy", "camera=(), microphone=(self), geolocation=()");
     });
   });
 });

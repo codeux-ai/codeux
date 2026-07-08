@@ -1,6 +1,7 @@
 import type {
   DashboardSettings,
   DashboardExperienceMode,
+  DesignGuidanceEntrySettings,
   AutomationLevel,
   ProviderId,
   ThinkingMode,
@@ -20,9 +21,13 @@ import type {
 } from "../../contracts/app-types.js";
 import { EMBEDDING_MODEL_IDS } from "../../contracts/memory-types.js";
 import type { EmbeddingModelId } from "../../contracts/memory-types.js";
+import { SPEECH_PROVIDER_MODES } from "../../contracts/speech-types.js";
+import type { SpeechProviderMode } from "../../contracts/speech-types.js";
 import {
   PROVIDER_IDS,
   THINKING_MODES,
+  getProviderThinkingModeOptions,
+  isProviderThinkingModeSupported,
   PROVIDER_STRATEGIES,
   CLI_EXECUTION_MODES,
   FEATURE_PR_AUTOMERGE_MODES,
@@ -98,7 +103,10 @@ const validateProviderSettings = (
     issues.push({ path, message: "Expected an object" });
     return;
   }
-  if (typeof value.provider !== "string" || !PROVIDER_IDS.includes(value.provider as ProviderId)) {
+  const providerId = typeof value.provider === "string" && PROVIDER_IDS.includes(value.provider as ProviderId)
+    ? value.provider as ProviderId
+    : null;
+  if (!providerId) {
     issues.push({ path: `${path}.provider`, message: `Expected one of: ${PROVIDER_IDS.join(", ")}` });
   }
   if (typeof value.name !== "string") {
@@ -113,7 +121,13 @@ const validateProviderSettings = (
   if (typeof value.weight !== "number") {
     issues.push({ path: `${path}.weight`, message: "Expected a number" });
   }
-  if (typeof value.thinkingMode !== "string" || !THINKING_MODES.includes(value.thinkingMode as ThinkingMode)) {
+  if (typeof value.thinkingMode !== "string") {
+    issues.push({ path: `${path}.thinkingMode`, message: "Expected a string" });
+  } else if (providerId && !isProviderThinkingModeSupported(providerId, value.thinkingMode)) {
+    const options = getProviderThinkingModeOptions(providerId).map((option) => option.value);
+    const expected = options.length > 0 ? options.join(", ") : "no configurable thinking modes";
+    issues.push({ path: `${path}.thinkingMode`, message: `Expected one of for ${providerId}: ${expected}` });
+  } else if (!providerId && !THINKING_MODES.includes(value.thinkingMode as ThinkingMode)) {
     issues.push({ path: `${path}.thinkingMode`, message: `Expected one of: ${THINKING_MODES.join(", ")}` });
   }
   if (typeof value.apiKey !== "string") {
@@ -161,7 +175,8 @@ const validateAiProvider = (
   }
 
   const providers = value.providers;
-  const providerConfigIds = isRecord(providers) ? new Set(Object.keys(providers)) : new Set<string>();
+  const providersRecord = isRecord(providers) ? providers : {};
+  const providerConfigIds = new Set(Object.keys(providersRecord));
   if (value.provider !== null && typeof value.provider === "string" && providerConfigIds.size > 0 && !providerConfigIds.has(value.provider)) {
     issues.push({ path: `${path}.provider`, message: "Expected an existing provider config id" });
   }
@@ -227,8 +242,20 @@ const validateAiProvider = (
         if ("weight" in override && typeof override.weight !== "number") {
           issues.push({ path: `${routePath}.providers.${providerId}.weight`, message: "Expected a number" });
         }
-        if ("thinkingMode" in override && (typeof override.thinkingMode !== "string" || !THINKING_MODES.includes(override.thinkingMode as ThinkingMode))) {
-          issues.push({ path: `${routePath}.providers.${providerId}.thinkingMode`, message: `Expected one of: ${THINKING_MODES.join(", ")}` });
+        if ("thinkingMode" in override) {
+          const baseProviderSettings = providersRecord[providerId];
+          const baseProvider = isRecord(baseProviderSettings) && typeof baseProviderSettings.provider === "string" && PROVIDER_IDS.includes(baseProviderSettings.provider as ProviderId)
+            ? baseProviderSettings.provider as ProviderId
+            : null;
+          if (typeof override.thinkingMode !== "string") {
+            issues.push({ path: `${routePath}.providers.${providerId}.thinkingMode`, message: "Expected a string" });
+          } else if (baseProvider && !isProviderThinkingModeSupported(baseProvider, override.thinkingMode)) {
+            const options = getProviderThinkingModeOptions(baseProvider).map((option) => option.value);
+            const expected = options.length > 0 ? options.join(", ") : "no configurable thinking modes";
+            issues.push({ path: `${routePath}.providers.${providerId}.thinkingMode`, message: `Expected one of for ${baseProvider}: ${expected}` });
+          } else if (!baseProvider && !THINKING_MODES.includes(override.thinkingMode as ThinkingMode)) {
+            issues.push({ path: `${routePath}.providers.${providerId}.thinkingMode`, message: `Expected one of: ${THINKING_MODES.join(", ")}` });
+          }
         }
       }
     }
@@ -591,6 +618,58 @@ const validateSprintPreview = (
   }
 };
 
+const validateDesignGuidanceEntry = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+) => {
+  if (!isRecord(value)) {
+    issues.push({ path, message: "Expected an object" });
+    return;
+  }
+  for (const field of ["id", "name", "summary", "instructionMarkdown"] satisfies Array<keyof DesignGuidanceEntrySettings>) {
+    if (typeof value[field] !== "string" || value[field].trim().length === 0) {
+      issues.push({ path: `${path}.${field}`, message: "Expected a non-empty string" });
+    }
+  }
+};
+
+const validateDesignGuidanceEntries = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+) => {
+  if (!Array.isArray(value)) {
+    issues.push({ path, message: "Expected an array" });
+    return;
+  }
+  value.forEach((entry, index) => {
+    validateDesignGuidanceEntry(entry, `${path}[${index}]`, issues);
+  });
+};
+
+const validateDesignGuidance = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+) => {
+  if (!isRecord(value)) {
+    issues.push({ path, message: "Expected an object" });
+    return;
+  }
+  if (typeof value.selectedTechStackId !== "string") {
+    issues.push({ path: `${path}.selectedTechStackId`, message: "Expected a string" });
+  }
+  if (typeof value.selectedStyleguideId !== "string") {
+    issues.push({ path: `${path}.selectedStyleguideId`, message: "Expected a string" });
+  }
+  if (typeof value.hideDefaultStyleguides !== "boolean") {
+    issues.push({ path: `${path}.hideDefaultStyleguides`, message: "Expected a boolean" });
+  }
+  validateDesignGuidanceEntries(value.customTechStacks, `${path}.customTechStacks`, issues);
+  validateDesignGuidanceEntries(value.customStyleguides, `${path}.customStyleguides`, issues);
+};
+
 const validateWorkers = (
   value: unknown,
   path: string,
@@ -827,8 +906,45 @@ const validateMemory = (
   }
   if (value.embeddingModel !== null && typeof value.embeddingModel !== "string") {
     issues.push({ path: `${path}.embeddingModel`, message: "Expected null or a model id string" });
-  } else if (value.embeddingProvider !== "external_api" && value.embeddingModel !== null && !EMBEDDING_MODEL_IDS.includes(value.embeddingModel as EmbeddingModelId as any)) {
-    issues.push({ path: `${path}.embeddingModel`, message: `Expected null or one of: ${EMBEDDING_MODEL_IDS.join(", ")}` });
+  } else if (value.embeddingProvider !== "external_api" && value.embeddingModel !== null) {
+    const customModelIds = Array.isArray(value.customEmbeddingModels)
+      ? new Set(value.customEmbeddingModels
+        .filter((model): model is Record<string, unknown> => isRecord(model))
+        .map((model) => model.id)
+        .filter((id): id is string => typeof id === "string"))
+      : new Set<string>();
+    if (!EMBEDDING_MODEL_IDS.includes(value.embeddingModel as EmbeddingModelId as any) && !customModelIds.has(value.embeddingModel)) {
+      issues.push({ path: `${path}.embeddingModel`, message: `Expected null, one of: ${EMBEDDING_MODEL_IDS.join(", ")}, or a custom embedding model id` });
+    }
+  }
+  if (!Array.isArray(value.customEmbeddingModels)) {
+    issues.push({ path: `${path}.customEmbeddingModels`, message: "Expected an array" });
+  } else {
+    value.customEmbeddingModels.forEach((model, index) => {
+      const modelPath = `${path}.customEmbeddingModels[${index}]`;
+      if (!isRecord(model)) {
+        issues.push({ path: modelPath, message: "Expected an object" });
+        return;
+      }
+      if (typeof model.id !== "string" || !model.id.trim()) issues.push({ path: `${modelPath}.id`, message: "Expected a model id string" });
+      if (typeof model.displayName !== "string" || !model.displayName.trim()) issues.push({ path: `${modelPath}.displayName`, message: "Expected a display name string" });
+      if (typeof model.huggingFaceRepo !== "string" || !model.huggingFaceRepo.trim()) issues.push({ path: `${modelPath}.huggingFaceRepo`, message: "Expected a Hugging Face repo string" });
+      if (typeof model.huggingFaceUrl !== "string" || !model.huggingFaceUrl.trim()) issues.push({ path: `${modelPath}.huggingFaceUrl`, message: "Expected a Hugging Face URL string" });
+      if (typeof model.onnxModelFile !== "string" || !model.onnxModelFile.trim()) issues.push({ path: `${modelPath}.onnxModelFile`, message: "Expected an ONNX model file path string" });
+      if (!Array.isArray(model.tokenizerFiles) || model.tokenizerFiles.some((file) => typeof file !== "string" || !file.trim())) {
+        issues.push({ path: `${modelPath}.tokenizerFiles`, message: "Expected tokenizer file path strings" });
+      }
+      if (typeof model.dimension !== "number" || !Number.isInteger(model.dimension) || model.dimension <= 0) {
+        issues.push({ path: `${modelPath}.dimension`, message: "Expected a positive integer" });
+      }
+      if (typeof model.approximateSizeBytes !== "number" || !Number.isInteger(model.approximateSizeBytes) || model.approximateSizeBytes < 0) {
+        issues.push({ path: `${modelPath}.approximateSizeBytes`, message: "Expected a non-negative integer" });
+      }
+      if (typeof model.language !== "string" || !model.language.trim()) issues.push({ path: `${modelPath}.language`, message: "Expected a language string" });
+      if (model.validationStatus !== "valid" && model.validationStatus !== "invalid") {
+        issues.push({ path: `${modelPath}.validationStatus`, message: "Expected valid or invalid" });
+      }
+    });
   }
   if (!isRecord(value.externalEmbedding)) {
     issues.push({ path: `${path}.externalEmbedding`, message: "Expected an object" });
@@ -858,6 +974,54 @@ const validateMemory = (
   if (typeof value.promotionThreshold !== "number") issues.push({ path: `${path}.promotionThreshold`, message: "Expected a number" });
   if (typeof value.maxSprintMemories !== "number") issues.push({ path: `${path}.maxSprintMemories`, message: "Expected a number" });
   if (typeof value.maxProjectMemories !== "number") issues.push({ path: `${path}.maxProjectMemories`, message: "Expected a number" });
+};
+
+const validateSpeech = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+) => {
+  if (!isRecord(value)) {
+    issues.push({ path, message: "Expected an object" });
+    return;
+  }
+  if (typeof value.enabled !== "boolean") {
+    issues.push({ path: `${path}.enabled`, message: "Expected a boolean" });
+  }
+  if (typeof value.providerMode !== "string" || !SPEECH_PROVIDER_MODES.includes(value.providerMode as SpeechProviderMode)) {
+    issues.push({ path: `${path}.providerMode`, message: `Expected one of: ${SPEECH_PROVIDER_MODES.join(", ")}` });
+  }
+  if (typeof value.localModelId !== "string" || value.localModelId.trim().length === 0) {
+    issues.push({ path: `${path}.localModelId`, message: "Expected a non-empty string" });
+  }
+  if (
+    typeof value.maxAudioSeconds !== "number"
+    || !Number.isFinite(value.maxAudioSeconds)
+    || value.maxAudioSeconds < 1
+    || value.maxAudioSeconds > 600
+  ) {
+    issues.push({ path: `${path}.maxAudioSeconds`, message: "Expected a finite number between 1 and 600" });
+  }
+  if (!isRecord(value.externalTranscription)) {
+    issues.push({ path: `${path}.externalTranscription`, message: "Expected an object" });
+    return;
+  }
+  if (typeof value.externalTranscription.baseUrl !== "string" || value.externalTranscription.baseUrl.trim().length === 0) {
+    issues.push({ path: `${path}.externalTranscription.baseUrl`, message: "Expected a non-empty string" });
+  }
+  if (typeof value.externalTranscription.apiKey !== "string") {
+    issues.push({ path: `${path}.externalTranscription.apiKey`, message: "Expected a string" });
+  }
+  if (typeof value.externalTranscription.model !== "string" || value.externalTranscription.model.trim().length === 0) {
+    issues.push({ path: `${path}.externalTranscription.model`, message: "Expected a non-empty string" });
+  }
+  if (
+    value.externalTranscription.language !== undefined
+    && value.externalTranscription.language !== null
+    && typeof value.externalTranscription.language !== "string"
+  ) {
+    issues.push({ path: `${path}.externalTranscription.language`, message: "Expected null or a string" });
+  }
 };
 
 export const validateSettingsPayload = (payload: unknown): ValidationResult<DashboardSettings> => {
@@ -904,6 +1068,9 @@ export const validateSettingsPayload = (payload: unknown): ValidationResult<Dash
   validateAutomationInterventions(payload.automationInterventions, "automationInterventions", issues);
   validateAppearanceSettings(payload.appearance, "appearance", issues);
   validateAiProvider(payload.aiProvider, "aiProvider", issues);
+  if (payload.designGuidance !== undefined) {
+    validateDesignGuidance(payload.designGuidance, "designGuidance", issues);
+  }
   validateGitSettings(payload.git, "git", issues);
   validateJiraSettings(payload.jira, "jira", issues);
   for (const provider of EXTERNAL_IMPORTER_PROVIDERS as ExternalImporterProvider[]) {
@@ -922,6 +1089,7 @@ export const validateSettingsPayload = (payload: unknown): ValidationResult<Dash
     validateCustomMcpServers(payload.customMcpServers, "customMcpServers", issues);
   }
   validateMemory(payload.memory, "memory", issues);
+  validateSpeech(payload.speech, "speech", issues);
 
   if (issues.length > 0) {
     return { success: false, issues };

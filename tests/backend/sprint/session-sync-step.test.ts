@@ -16,6 +16,46 @@ afterEach(async () => {
 });
 
 describe("runSessionSyncStep", () => {
+  it("skips session polling for terminal local CLI tasks that already have merge evidence", async () => {
+    const listSessions = vi.fn().mockResolvedValue({ sessions: [] });
+    const subtasks: Subtask[] = [
+      {
+        id: "T01",
+        record_id: "task-1",
+        project_id: "project-1",
+        sprint_id: "sprint-1",
+        title: "CLI task",
+        prompt: "Do it",
+        depends_on: [],
+        is_independent: true,
+        status: "CODING_COMPLETED",
+        session_id: "cli-mockup-terminal",
+        session_name: "sessions/cli-mockup-terminal",
+        session_state: "COMPLETED",
+        provider: "mockup-cli",
+        worker_branch: "task/feature/t01",
+        is_merged: false,
+      },
+    ];
+
+    const result = await runSessionSyncStep(
+      subtasks,
+      {
+        listSessions,
+        resolveSessionName: (session: { name?: string }) => session.name,
+        extractSessionId: (session: { id?: string }) => session.id,
+        fetchRecentActivities: vi.fn().mockResolvedValue([]),
+        isActionRequiredState: vi.fn().mockReturnValue(false),
+        logger: { warn: vi.fn() },
+      },
+      true,
+      { repoPath: "/tmp/codeux", sprintNumber: 1 },
+    );
+
+    expect(listSessions).not.toHaveBeenCalled();
+    expect(result).toEqual({ subtasks, sessions: [] });
+  });
+
   it("does not query Jules for recorded local CLI sessions missing from the session snapshot", async () => {
     const getSession = vi.fn().mockRejectedValue({ status: 404, message: "not found" });
     const subtasks: Subtask[] = [
@@ -55,6 +95,322 @@ describe("runSessionSyncStep", () => {
       status: "RUNNING",
       session_id: "cli-codex-running",
     });
+  });
+
+  it("does not run Jules live usage sync for active mockup CLI sessions", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-mockup-"));
+    tempDirs.push(dir);
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "Session Sync Mockup",
+      sourceType: "local",
+      sourceRef: "/tmp/mockup-repo",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 3",
+      number: 3,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "mockup-task",
+      title: "Mockup task",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "running",
+      startedAt: "2026-03-09T10:00:00.000Z",
+    } as any);
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "mockup-cli",
+      mode: "docker_cli",
+      sessionId: "cli-mockup-cli-running",
+      sessionName: "sessions/cli-mockup-cli-running",
+      state: "RUNNING",
+      startedAt: "2026-03-09T10:00:00.000Z",
+    });
+
+    const subtasks: Subtask[] = [
+      {
+        id: task.taskKey,
+        record_id: task.id,
+        project_id: project.id,
+        sprint_id: sprint.id,
+        title: task.title,
+        prompt: task.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "RUNNING",
+      },
+    ];
+    const julesUsage = {
+      syncLiveInvocation: vi.fn(),
+      calculateAndSaveUsageForTask: vi.fn(),
+    };
+
+    await runSessionSyncStep(
+      subtasks,
+      {
+        listSessions: vi.fn().mockResolvedValue({
+          sessions: [
+            {
+              id: "cli-mockup-cli-running",
+              name: "sessions/cli-mockup-cli-running",
+              title: "Sprint 3: [run:mockup-repo/s3/mockup-task] [mockup-task] Mockup task",
+              state: "RUNNING",
+              provider: "mockup-cli",
+              prompt: "mockup prompt",
+            },
+          ],
+        }),
+        resolveSessionName: (session: { name?: string }) => session.name,
+        extractSessionId: (session: { id?: string }) => session.id,
+        fetchRecentActivities: vi.fn().mockResolvedValue([]),
+        isActionRequiredState: vi.fn().mockReturnValue(false),
+        executionRepository,
+        projectManagementRepository: projectRepository,
+        sprintRunId: sprintRun.id,
+        logger: { warn: vi.fn() },
+        julesUsage,
+      } as any,
+      false,
+      { repoPath: "/tmp/mockup-repo", sprintNumber: 3 },
+    );
+
+    expect(julesUsage.syncLiveInvocation).not.toHaveBeenCalled();
+    expect(julesUsage.calculateAndSaveUsageForTask).not.toHaveBeenCalled();
+  });
+
+  it("does not reactivate terminal local CLI task runs from stale running session snapshots", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-terminal-mockup-"));
+    tempDirs.push(dir);
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "Terminal Local Session Sync",
+      sourceType: "local",
+      sourceRef: "/tmp/mockup-repo",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 4",
+      number: 4,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "mockup-terminal-task",
+      title: "Mockup terminal task",
+      status: "pending",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "cancelled",
+    } as any);
+    executionRepository.updateTaskDispatch(dispatch.id, {
+      status: "cancelled",
+      startedAt: "2026-03-09T10:00:00.000Z",
+      finishedAt: "2026-03-09T10:01:00.000Z",
+      lastHeartbeatAt: "2026-03-09T10:01:00.000Z",
+      errorMessage: null,
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "mockup-cli",
+      mode: "docker_cli",
+      sessionId: "cli-mockup-cli-stale-running",
+      sessionName: "sessions/cli-mockup-cli-stale-running",
+      state: "FAILED",
+      startedAt: "2026-03-09T10:00:00.000Z",
+      finishedAt: "2026-03-09T10:01:00.000Z",
+    });
+
+    const subtasks: Subtask[] = [
+      {
+        id: task.taskKey,
+        record_id: task.id,
+        project_id: project.id,
+        sprint_id: sprint.id,
+        title: task.title,
+        prompt: task.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "pending",
+      },
+    ];
+
+    await runSessionSyncStep(
+      subtasks,
+      {
+        listSessions: vi.fn().mockResolvedValue({
+          sessions: [
+            {
+              id: "cli-mockup-cli-stale-running",
+              name: "sessions/cli-mockup-cli-stale-running",
+              title: "Sprint 4: [run:mockup-repo/s4/mockup-terminal-task] [mockup-terminal-task] Mockup terminal task",
+              state: "RUNNING",
+              provider: "mockup-cli",
+              prompt: "mockup prompt",
+            },
+          ],
+        }),
+        resolveSessionName: (session: { name?: string }) => session.name,
+        extractSessionId: (session: { id?: string }) => session.id,
+        fetchRecentActivities: vi.fn().mockResolvedValue([]),
+        isActionRequiredState: vi.fn().mockReturnValue(false),
+        executionRepository,
+        projectManagementRepository: projectRepository,
+        sprintRunId: sprintRun.id,
+        logger: { warn: vi.fn() },
+      } as any,
+      false,
+      { repoPath: "/tmp/mockup-repo", sprintNumber: 4 },
+    );
+
+    expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({
+      state: "FAILED",
+      finishedAt: "2026-03-09T10:01:00.000Z",
+    });
+    expect(executionRepository.getTaskDispatch(dispatch.id)?.status).not.toBe("running");
+    expect(projectRepository.getTask(task.id)?.status).toBe("pending");
+  });
+
+  it("does not reactivate force-cancelled local CLI task runs from stale running session snapshots", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-cancelled-qwen-"));
+    tempDirs.push(dir);
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "Cancelled Local Session Sync",
+      sourceType: "local",
+      sourceRef: "/tmp/qwen-repo",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 5",
+      number: 5,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "qwen-cancelled-task",
+      title: "Qwen cancelled task",
+      status: "pending",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "cancelled",
+      finishedAt: "2026-03-09T10:01:00.000Z",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "cancelled",
+      startedAt: "2026-03-09T10:00:00.000Z",
+      finishedAt: "2026-03-09T10:01:00.000Z",
+      lastHeartbeatAt: "2026-03-09T10:01:00.000Z",
+      errorMessage: "Sprint run was force-cancelled from the dashboard.",
+    } as any);
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "qwen-code",
+      mode: "docker_cli",
+      sessionId: "cli-qwen-code-stale-running",
+      sessionName: "sessions/cli-qwen-code-stale-running",
+      state: "BLOCKED",
+      startedAt: "2026-03-09T10:00:00.000Z",
+      finishedAt: "2026-03-09T10:01:00.000Z",
+    });
+
+    await runSessionSyncStep(
+      [
+        {
+          id: task.taskKey,
+          record_id: task.id,
+          project_id: project.id,
+          sprint_id: sprint.id,
+          title: task.title,
+          prompt: task.promptMarkdown,
+          depends_on: [],
+          is_independent: true,
+          status: "pending",
+        },
+      ],
+      {
+        listSessions: vi.fn().mockResolvedValue({
+          sessions: [
+            {
+              id: "cli-qwen-code-stale-running",
+              name: "sessions/cli-qwen-code-stale-running",
+              title: "Sprint 5: [run:qwen-repo/s5/qwen-cancelled-task] [qwen-cancelled-task] Qwen cancelled task",
+              state: "RUNNING",
+              provider: "qwen-code",
+              prompt: "qwen prompt",
+            },
+          ],
+        }),
+        resolveSessionName: (session: { name?: string }) => session.name,
+        extractSessionId: (session: { id?: string }) => session.id,
+        fetchRecentActivities: vi.fn().mockResolvedValue([]),
+        isActionRequiredState: vi.fn().mockReturnValue(false),
+        executionRepository,
+        projectManagementRepository: projectRepository,
+        sprintRunId: sprintRun.id,
+        logger: { warn: vi.fn() },
+      } as any,
+      false,
+      { repoPath: "/tmp/qwen-repo", sprintNumber: 5 },
+    );
+
+    expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({
+      state: "BLOCKED",
+      finishedAt: "2026-03-09T10:01:00.000Z",
+    });
+    expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({
+      status: "cancelled",
+      finishedAt: "2026-03-09T10:01:00.000Z",
+    });
+    expect(projectRepository.getTask(task.id)?.status).toBe("pending");
   });
 
   it("fetches full transcript and syncs usage and git metrics on terminal session state without duplication", async () => {
@@ -711,7 +1067,7 @@ describe("runSessionSyncStep", () => {
       { id: "task-2", title: "Task Two", prompt: "", depends_on: [], is_independent: true, status: "PENDING" },
     ];
 
-    const logger = { warn: vi.fn() };
+    const logger = { debug: vi.fn(), warn: vi.fn() };
     const healthyActivities = [
       {
         id: "activity-healthy",
@@ -781,7 +1137,7 @@ describe("runSessionSyncStep", () => {
       { id: "task-2", title: "Task Two", prompt: "", depends_on: [], is_independent: true, status: "PENDING" },
     ];
 
-    const logger = { warn: vi.fn() };
+    const logger = { debug: vi.fn(), warn: vi.fn() };
     const healthyActivities = [
       {
         id: "activity-2",
@@ -2409,7 +2765,7 @@ describe("runSessionSyncStep", () => {
 
     const fetchRecentActivities = vi.fn().mockResolvedValue([]);
     const getLatestTaskRun = vi.fn().mockReturnValue({ state: "COMPLETED" });
-    const logger = { warn: vi.fn() };
+    const logger = { debug: vi.fn(), warn: vi.fn() };
 
     const deps = {
       listSessions: vi.fn().mockResolvedValue({
@@ -2446,7 +2802,7 @@ describe("runSessionSyncStep", () => {
 
     expect(getLatestTaskRun).toHaveBeenCalledWith("task-terminal-record", "sprint-run-123");
     expect(fetchRecentActivities).not.toHaveBeenCalled();
-    expect(logger.warn).toHaveBeenCalledWith(
+    expect(logger.debug).toHaveBeenCalledWith(
       "Skipping activity fetch for fully synchronized terminal session",
       expect.objectContaining({
         taskId: "task-terminal-record",

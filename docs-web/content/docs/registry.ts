@@ -22,6 +22,7 @@ export type DocsSlug =
   | 'user-dashboard-chat'
   | 'user-dashboard-agents'
   | 'user-dashboard-nodes'
+  | 'user-dashboard-nodes-canvas'
   | 'user-dashboard-node-flows'
   | 'user-dashboard-scheduler'
   | 'user-dashboard-memory'
@@ -31,6 +32,7 @@ export type DocsSlug =
   | 'user-dashboard-stats'
   | 'user-dashboard-custom-dashboards'
   | 'user-dashboard-settings'
+  | 'user-dashboard-styleguides-and-tech-stacks'
   | 'developer-overview'
   | 'developer-mcp-tools'
   | 'developer-management-actions'
@@ -41,6 +43,7 @@ export type DocsSlug =
   | 'developer-sprint-format'
   | 'developer-building-from-source'
   | 'developer-testing'
+  | 'developer-orchestration-debugging'
   | 'architecture-overview'
   | 'architecture-system-overview'
   | 'architecture-mcp-server'
@@ -53,7 +56,9 @@ export type DocsSlug =
   | 'architecture-configuration-resolution'
   | 'architecture-security'
   | 'settings-subcategories-display-settings'
+  | 'settings-subcategories-guidance'
   | 'settings-subcategories-onboarding'
+  | 'architecture-speech-input'
 
 export interface DocsRegistryEntry extends Partial<Omit<PageMeta, 'title' | 'description'>> {
   id: DocsSlug
@@ -195,7 +200,14 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-nodes',
     section: 'User Guide',
     title: "Nodes",
-    description: "The Nodes page (/nodes) manages project-scoped workflow graphs for editing, widget configuration, agent attachments, validation, and persisted run inspection.",
+    description: "The Nodes page (/nodes) opens a browser-local canvas workspace for drafting workflow graphs with localStorage persistence, validation, JSON import/export, and agent command metadata.",
+  },
+  'user-dashboard-nodes-canvas': {
+    id: 'user-dashboard-nodes-canvas',
+    path: '/docs/user-dashboard-nodes-canvas',
+    section: 'User Guide',
+    title: "Nodes Canvas",
+    description: "The Nodes Canvas page is a local graph drafting surface with trigger, agent, task, condition, and output nodes, structural validation, deterministic JSON exchange, and agent command helpers.",
   },
   'user-dashboard-node-flows': {
     id: 'user-dashboard-node-flows',
@@ -209,7 +221,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-scheduler',
     section: 'User Guide',
     title: "Scheduler",
-    description: "The Scheduler page (dock label Schedule, /scheduler) runs Code UX work on a timetable. Schedule a sprint, a quicksprint template, a project message, or memory remediation to fire once or on a recurring cadence — usefu...",
+    description: "The Scheduler page (dock label Schedule, /scheduler) runs Code UX work on a timetable. Schedule a sprint, a quicksprint template, a node flow, a project message, or memory remediation to fire once or on a recurring ca...",
   },
   'user-dashboard-memory': {
     id: 'user-dashboard-memory',
@@ -244,7 +256,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-stats',
     section: 'User Guide',
     title: "Stats",
-    description: "The Stats page (/stats) is the analytics surface for the active project. It shows project execution, usage, cost, Git, and invocation telemetry in one workspace with visual-mode navigation, responsive layouts, and lig...",
+    description: "The Stats page (/stats) is the analytics surface for the active project. It shows project execution, usage, cost, Git, provider/model, ledger, and invocation telemetry in one flat Analysis Studio with responsive layou...",
   },
   'user-dashboard-custom-dashboards': {
     id: 'user-dashboard-custom-dashboards',
@@ -260,6 +272,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Settings",
     description: "The Settings page (/config) is the unified configuration surface. It exposes every tunable in the engine, organised into a category rail and content panels.",
   },
+  'user-dashboard-styleguides-and-tech-stacks': {
+    id: 'user-dashboard-styleguides-and-tech-stacks',
+    path: '/docs/user-dashboard-styleguides-and-tech-stacks',
+    section: 'User Guide',
+    title: "Styleguides and Tech Stacks",
+    description: "Code UX uses guidance selections to tell workers what implementation stack and product style they should respect.",
+  },
   'developer-overview': {
     id: 'developer-overview',
     path: '/docs/developer-overview',
@@ -272,14 +291,14 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/developer-mcp-tools',
     section: 'Developer Reference',
     title: "MCP tools",
-    description: "Code UX is also an MCP server. When connected, it advertises a set of management tools that an MCP client (or another agent) can call to drive projects, sprints, tasks, agents, node flows, memory, persistent skills...",
+    description: "Code UX is also an MCP server. When connected, it advertises a set of management tools that an MCP client (or another agent) can call to drive projects, sprints, tasks, agents, memory, persistent skills, node flows, s...",
   },
   'developer-management-actions': {
     id: 'developer-management-actions',
     path: '/docs/developer-management-actions',
     section: 'Developer Reference',
     title: "Management actions",
-    description: "Code UX exposes one MCP tool per management domain — manage_projects, manage_sprints, manage_tasks, manage_quicksprints, manage_scheduler, manage_agents, manage_node_flows, manage_memory, manage_settings, manage_preview...",
+    description: "Code UX exposes one MCP tool per management domain — manage_projects, manage_sprints, manage_tasks, manage_quicksprints, manage_scheduler, manage_agents, manage_node_flows, manage_memory, manage_settings, manage_previ...",
   },
   'developer-http-api': {
     id: 'developer-http-api',
@@ -329,6 +348,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     section: 'Developer Reference',
     title: "Testing & quality gates",
     description: "Code UX uses Vitest as its single test runner across server and dashboard. CI gates enforce coverage thresholds and a full clean build.",
+  },
+  'developer-orchestration-debugging': {
+    id: 'developer-orchestration-debugging',
+    path: '/docs/developer-orchestration-debugging',
+    section: 'Developer Reference',
+    title: "Rapid orchestration debugging suite",
+    description: "Use this suite when a sprint stalls, local merges fail, worker-owned attention items churn, or memory usage needs extended observation after a fix.",
   },
   'architecture-overview': {
     id: 'architecture-overview',
@@ -414,12 +440,26 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Display Settings",
     description: "Controls the dashboard shell layout, experience mode, theme, motion preference, and desktop zoom when available.",
   },
+  'settings-subcategories-guidance': {
+    id: 'settings-subcategories-guidance',
+    path: '/docs/settings-subcategories-guidance',
+    section: 'User Guide',
+    title: "Guidance",
+    description: "Manages active tech-stack guidance, active styleguide guidance, and custom instruction entries for the current settings scope.",
+  },
   'settings-subcategories-onboarding': {
     id: 'settings-subcategories-onboarding',
     path: '/docs/settings-subcategories-onboarding',
     section: 'User Guide',
     title: "Onboarding",
     description: "Reopens the guided setup flow without changing saved settings by itself.",
+  },
+  'architecture-speech-input': {
+    id: 'architecture-speech-input',
+    path: '/docs/architecture-speech-input',
+    section: 'Architecture',
+    title: "Speech Input Architecture",
+    description: "Speech input turns dashboard microphone or uploaded audio into prompt text through POST /api/speech/transcriptions. The current implementation includes persisted settings, the backend transcription route and service,...",
   },
 }
 
@@ -443,6 +483,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['user-dashboard-chat'],
   docsRegistry['user-dashboard-agents'],
   docsRegistry['user-dashboard-nodes'],
+  docsRegistry['user-dashboard-nodes-canvas'],
   docsRegistry['user-dashboard-node-flows'],
   docsRegistry['user-dashboard-scheduler'],
   docsRegistry['user-dashboard-memory'],
@@ -452,6 +493,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['user-dashboard-stats'],
   docsRegistry['user-dashboard-custom-dashboards'],
   docsRegistry['user-dashboard-settings'],
+  docsRegistry['user-dashboard-styleguides-and-tech-stacks'],
   docsRegistry['developer-overview'],
   docsRegistry['developer-mcp-tools'],
   docsRegistry['developer-management-actions'],
@@ -462,6 +504,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['developer-sprint-format'],
   docsRegistry['developer-building-from-source'],
   docsRegistry['developer-testing'],
+  docsRegistry['developer-orchestration-debugging'],
   docsRegistry['architecture-overview'],
   docsRegistry['architecture-system-overview'],
   docsRegistry['architecture-mcp-server'],
@@ -474,7 +517,9 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-configuration-resolution'],
   docsRegistry['architecture-security'],
   docsRegistry['settings-subcategories-display-settings'],
+  docsRegistry['settings-subcategories-guidance'],
   docsRegistry['settings-subcategories-onboarding'],
+  docsRegistry['architecture-speech-input'],
 ]
 
 export const groupedDocs = orderedDocs.reduce<Record<DocsSection, DocsRegistryEntry[]>>(

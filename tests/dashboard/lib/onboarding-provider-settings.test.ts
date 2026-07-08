@@ -7,6 +7,7 @@ import {
   syncProjectProvidersToIntegrationCatalog
 } from "../../../dashboard/src/v2/lib/onboarding-provider-settings.js";
 import type { OnboardingProviderCredentialStatus, SystemSettings, ProjectSettings } from "../../../dashboard/src/types.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
 const createImporterSettings = () => ({
   enabled: false,
@@ -22,6 +23,19 @@ const createImporterSettings = () => ({
   documentId: "",
   fileKey: "",
   defaultSearchLimit: 25,
+});
+
+const createSpeechSettings = () => ({
+  enabled: false,
+  providerMode: "auto" as const,
+  localModelId: "onnx-community/whisper-base.en",
+  maxAudioSeconds: 120,
+  externalTranscription: {
+    baseUrl: "https://api.openai.com/v1/audio/transcriptions",
+    apiKey: "",
+    model: "whisper-1",
+    language: null,
+  },
 });
 
 describe("onboarding-provider-settings", () => {
@@ -90,6 +104,7 @@ describe("onboarding-provider-settings", () => {
         appearance: { theme: "system" },
         automationLevel: "FULL",
         automationInterventions: {},
+        designGuidance: { ...DEFAULT_DASHBOARD_SETTINGS.designGuidance },
         git: { githubMode: "app", githubToken: "", defaultBranch: "main", autoCreatePr: false, autoCloseLinkedIssues: false, deleteMergedBranches: false, featureBranchPrefix: "", sprintBranchScheme: "FLAT", sprintKeyPrefix: "", taskPrTitleScheme: "" },
         jira: { host: "h", email: "e", apiToken: "t", autoTransitionLinkedIssuesOnImport: true, importTransitionName: "In Work", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
         ciIntelligence: {},
@@ -148,7 +163,8 @@ describe("onboarding-provider-settings", () => {
         skills: [],
         mcpTools: [],
         customMcpServers: [],
-        memory: { enabled: true, embeddingModel: null, externalEmbedding: { baseUrl: "", apiKey: "", model: "", dimensions: null }, autoCaptureSprint: true, autoCaptureAgent: true, autoPromote: false, promotionThreshold: 5, maxSprintMemories: 10, maxProjectMemories: 20, mapMaxEdgesPerNode: 5, workerLearningsInstruction: "" }
+        memory: { enabled: true, embeddingModel: null, externalEmbedding: { baseUrl: "", apiKey: "", model: "", dimensions: null }, autoCaptureSprint: true, autoCaptureAgent: true, autoPromote: false, promotionThreshold: 5, maxSprintMemories: 10, maxProjectMemories: 20, mapMaxEdgesPerNode: 5, workerLearningsInstruction: "" },
+        speech: createSpeechSettings(),
       },
       mcpTools: [],
       customMcpServers: [],

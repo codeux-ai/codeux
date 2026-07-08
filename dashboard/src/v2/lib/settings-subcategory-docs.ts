@@ -252,6 +252,17 @@ export const SETTINGS_SUBCATEGORY_DOCS = {
     risks: "Deleting custom stacks clears references to them, while the built-in Code UX Stack is protected and restored by settings normalization.",
     relatedDocs: ["Configuration and Storage", "Settings Reference"],
   },
+  guidance: {
+    id: "guidance",
+    title: "Guidance",
+    titleAliases: ["Tech Stack", "Styleguide", "Custom styleguides", "Custom tech stack guidance"],
+    docsHref: settingsDocsPath("guidance"),
+    summary: "Manages selected tech-stack and styleguide guidance plus custom instruction entries for the active settings scope.",
+    controls: "Each section has a selector with None support, custom entry add/edit/delete controls, and styleguide visibility controls for hiding built-in defaults from the UI.",
+    recommended: "Use None until a scope needs explicit design guidance; keep custom ids stable once projects or sprints reference them.",
+    risks: "Built-in guidance is protected. Deleting a selected custom entry clears that selection back to None for the edited scope.",
+    relatedDocs: ["Configuration and Storage", "Settings Reference"],
+  },
   "project-markdown-mirror": {
     id: "project-markdown-mirror",
     title: "Project Markdown Mirror",

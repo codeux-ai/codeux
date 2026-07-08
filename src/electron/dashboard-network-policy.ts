@@ -6,6 +6,16 @@ const PREVIEW_HOST_PATTERN = /^preview-([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)\.localh
 
 export type NavigationDecision = "allow-internal" | "open-external" | "deny";
 
+export interface PermissionRequestOptions {
+  mediaTypes?: readonly string[];
+}
+
+export interface PermissionCheckOptions {
+  mediaType?: string;
+  requestingUrl?: string;
+  securityOrigin?: string;
+}
+
 export function isDashboardRuntimeDataUrl(rawUrl: string, dashboardOrigin: string | null): boolean {
   if (!dashboardOrigin) {
     return false;
@@ -49,6 +59,24 @@ export function isSafeInternalUrl(rawUrl: string, dashboardOrigin: string | null
   }
 }
 
+function isTrustedDashboardOriginUrl(rawUrl: string, dashboardOrigin: string | null): boolean {
+  if (!dashboardOrigin) {
+    return false;
+  }
+
+  try {
+    const url = new URL(rawUrl);
+    const dashboardUrl = new URL(dashboardOrigin);
+    const isDashboardHost = url.hostname === dashboardUrl.hostname
+      || (dashboardUrl.hostname === "127.0.0.1" && url.hostname === "localhost");
+    return url.protocol === dashboardUrl.protocol
+      && url.port === dashboardUrl.port
+      && isDashboardHost;
+  } catch {
+    return false;
+  }
+}
+
 export function isSafeExternalUrl(rawUrl: string): boolean {
   try {
     return SAFE_EXTERNAL_PROTOCOLS.has(new URL(rawUrl).protocol);
@@ -67,13 +95,45 @@ export function classifyNavigationTarget(rawUrl: string, dashboardOrigin: string
 export function shouldAllowPermissionRequest(
   rawRequestingUrl: string,
   dashboardOrigin: string | null,
-  _permission: string,
+  permission: string,
+  options: PermissionRequestOptions = {},
 ): boolean {
-  if (!isSafeInternalUrl(rawRequestingUrl, dashboardOrigin)) {
+  if (!isTrustedDashboardOriginUrl(rawRequestingUrl, dashboardOrigin)) {
     return false;
   }
 
-  return false;
+  if (permission === "microphone") {
+    return true;
+  }
+
+  if (permission !== "media") {
+    return false;
+  }
+
+  const mediaTypes = options.mediaTypes ?? [];
+  return mediaTypes.includes("audio") && !mediaTypes.includes("video");
+}
+
+export function shouldAllowPermissionCheck(
+  rawRequestingOrigin: string,
+  dashboardOrigin: string | null,
+  permission: string,
+  options: PermissionCheckOptions = {},
+): boolean {
+  const requestingUrl = options.securityOrigin || options.requestingUrl || rawRequestingOrigin;
+  if (!isTrustedDashboardOriginUrl(requestingUrl, dashboardOrigin)) {
+    return false;
+  }
+
+  if (permission === "microphone") {
+    return true;
+  }
+
+  if (permission !== "media") {
+    return false;
+  }
+
+  return options.mediaType === "audio";
 }
 
 export function resolveDirectoryPickerDefaultPath(

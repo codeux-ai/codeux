@@ -11,6 +11,7 @@ interface ProtocolStepOptions {
   isActionRequiredState: (state?: string) => boolean;
   renderInstruction: (templateId: InstructionTemplateId, variables: Record<string, unknown>) => Promise<string>;
   isWorkerEscalatedMergeConflictTask?: (task: Subtask) => boolean;
+  shouldSuppressMergeRequiredTask?: (task: Subtask) => boolean;
   onTaskEvent?: (args: {
     task: Subtask;
     eventType: string;
@@ -45,8 +46,9 @@ const buildFeatureCommentsLine = (settings: CiIntelligenceSettings): string => {
 
 export const runProtocolStep = async (subtasks: Subtask[], options: ProtocolStepOptions): Promise<ProtocolStepResult> => {
   const awaitingMerge = subtasks.filter((task) => isCompletedTaskAwaitingMerge(task, { githubMode: options.githubMode }));
-  const workerEscalatedMergeConflictTasks = awaitingMerge.filter((task) => options.isWorkerEscalatedMergeConflictTask?.(task) === true);
-  const manualMergeTasks = awaitingMerge.filter((task) => !workerEscalatedMergeConflictTasks.includes(task));
+  const protocolMergeTasks = awaitingMerge.filter((task) => options.shouldSuppressMergeRequiredTask?.(task) !== true);
+  const workerEscalatedMergeConflictTasks = protocolMergeTasks.filter((task) => options.isWorkerEscalatedMergeConflictTask?.(task) === true);
+  const manualMergeTasks = protocolMergeTasks.filter((task) => !workerEscalatedMergeConflictTasks.includes(task));
   const actionRequiredTasks = subtasks.filter(
     (task) => task.status === "BLOCKED" && (options.isActionRequiredState(task.session_state) || !!task.intervention_owner)
   );

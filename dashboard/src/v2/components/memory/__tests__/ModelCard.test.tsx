@@ -30,6 +30,7 @@ const model = (overrides: Partial<EmbeddingModelWithStatus> = {}): EmbeddingMode
   localPath: null,
   error: null,
   active: false,
+  source: "built_in",
   ...overrides,
 });
 
@@ -76,15 +77,15 @@ describe("ModelCard", () => {
       staleCount={0} />);
 
     const card = screen.getByText("BGE Small EN").closest("article");
-    expect(card).toHaveClass("min-h-[17rem]");
-    expect(card).toHaveClass("rounded-[1.25rem]");
-    expect(card).toHaveClass("p-4");
-    expect(card?.className).not.toContain("min-h-[21rem]");
+    expect(card).toHaveClass("min-h-[8.75rem]");
+    expect(card).toHaveClass("rounded-lg");
+    expect(card).toHaveClass("p-3");
+    expect(card?.className).not.toContain("min-h-[17rem]");
 
     const button = screen.getByRole("button", { name: "Download" });
-    expect(button).toHaveClass("min-h-9");
-    expect(button).toHaveClass("rounded-lg");
-    expect(button).toHaveClass("px-3");
+    expect(button).toHaveClass("min-h-8");
+    expect(button).toHaveClass("rounded-md");
+    expect(button).toHaveClass("px-2.5");
     expect(button.querySelector("span")).toHaveClass("min-w-0", "text-center", "leading-4");
   });
 
@@ -94,9 +95,8 @@ describe("ModelCard", () => {
       reembedding={false}
       staleCount={0} />);
 
-    expect(screen.getAllByText("Downloading")).toHaveLength(2);
+    expect(screen.getAllByText("Downloading")).toHaveLength(1);
     expect(screen.getByText("42%")).toBeInTheDocument();
-    expect(screen.getByText("Download progress 42%.")).toBeInTheDocument();
     expect(screen.getByRole("progressbar", { name: "BGE Small EN download progress" })).toHaveAttribute("aria-valuenow", "42");
     expect(screen.queryByRole("button", { name: "Download" })).not.toBeInTheDocument();
   });
@@ -136,7 +136,7 @@ describe("ModelCard", () => {
       reembedding={false}
       staleCount={3} />);
 
-    expect(screen.getByText("3 stale memories")).toBeInTheDocument();
+    expect(screen.getByText("3 stale memories need re-embedding.")).toBeInTheDocument();
     const button = screen.getByRole("button", { name: "Re-embed 3" });
     expect(button.className).toContain("ember");
 
@@ -158,5 +158,22 @@ describe("ModelCard", () => {
     await userEvent.click(deleteButton);
 
     expect(props.onDelete).toHaveBeenCalledWith("bge-small-en-v1.5");
+  });
+
+  it("renders a safe Hugging Face source link for custom models", () => {
+    render(<ModelCard model={model({
+      id: "hf-custom",
+      displayName: "Custom MiniLM",
+      source: "custom",
+      huggingFaceRepo: "acme/custom-minilm",
+      onnxModelFile: "onnx/model.onnx",
+    })}
+      {...handlers()}
+      reembedding={false}
+      staleCount={0} />);
+
+    const link = screen.getByRole("link", { name: /acme\/custom-minilm/i });
+    expect(link).toHaveAttribute("href", "https://huggingface.co/acme/custom-minilm");
+    expect(link).toHaveAttribute("rel", "noreferrer");
   });
 });

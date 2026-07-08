@@ -6,6 +6,7 @@ import type {
   CiIntelligenceSettings,
   CliWorkflowSettings,
   CustomMcpServer,
+  DesignGuidanceSettings,
   GuardrailSettings,
   ProviderConfigId,
   ProviderConfigMode,
@@ -31,6 +32,7 @@ import type {
   TechstackSelectionSettings,
 } from "./app-types.js";
 import type { MemorySettings } from "./memory-types.js";
+import type { SpeechSettings } from "./speech-types.js";
 import type { WorkerRuntimeSettings } from "./worker-types.js";
 
 export type { WorkerRuntimeSettings };
@@ -81,6 +83,7 @@ export interface ProjectSettings {
   automationInterventions: AutomationInterventionsSettings;
   aiProvider: ProjectAiProviderSettings;
   techstack: TechstackSelectionSettings;
+  designGuidance: DesignGuidanceSettings;
   git: ProjectGitSettings;
   jira: JiraSettings;
   notion: ExternalImporterSettings;
@@ -101,6 +104,7 @@ export interface ProjectSettings {
   mcpTools?: McpToolToggle[];
   customMcpServers?: CustomMcpServer[];
   memory: MemorySettings;
+  speech: SpeechSettings;
 }
 
 export interface SystemRuntimeSettings {
@@ -186,7 +190,7 @@ export interface SystemSettings {
 export type SettingsOverride<T> = {
   [K in keyof T]?: T[K] extends Array<infer U>
     ? U[]
-    : T[K] extends Record<string, unknown>
+    : T[K] extends object
       ? SettingsOverride<T[K]>
       : T[K];
 };

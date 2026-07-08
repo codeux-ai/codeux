@@ -7,6 +7,7 @@ import {
   normalizeZoomFactor,
   resolveDirectoryPickerDefaultPath,
   shouldAddRuntimeNoCacheRequestHeaders,
+  shouldAllowPermissionCheck,
   shouldAllowPermissionRequest,
 } from "../../../src/electron/dashboard-network-policy.js";
 
@@ -77,14 +78,68 @@ describe("Electron dashboard network policy", () => {
     expect(isSafeExternalUrl("data:text/html,hello")).toBe(false);
   });
 
-  it("denies Electron permission requests by default for dashboard and preview pages", () => {
+  it("allows only microphone and audio-only media requests from the trusted dashboard origin", () => {
     const origin = "http://127.0.0.1:4444";
 
-    for (const permission of ["camera", "microphone", "geolocation", "notifications", "media"]) {
+    expect(shouldAllowPermissionRequest("http://127.0.0.1:4444/", origin, "microphone")).toBe(true);
+    expect(shouldAllowPermissionRequest("http://localhost:4444/", origin, "microphone")).toBe(true);
+    expect(shouldAllowPermissionRequest("http://127.0.0.1:4444/", origin, "media", {
+      mediaTypes: ["audio"],
+    })).toBe(true);
+
+    for (const permission of ["camera", "geolocation", "notifications", "fullscreen"]) {
       expect(shouldAllowPermissionRequest("http://127.0.0.1:4444/", origin, permission)).toBe(false);
-      expect(shouldAllowPermissionRequest("http://preview-session.localhost:4444/", origin, permission)).toBe(false);
     }
-    expect(shouldAllowPermissionRequest("https://example.test/", origin, "notifications")).toBe(false);
+    expect(shouldAllowPermissionRequest("http://127.0.0.1:4444/", origin, "media")).toBe(false);
+    expect(shouldAllowPermissionRequest("http://127.0.0.1:4444/", origin, "media", {
+      mediaTypes: ["video"],
+    })).toBe(false);
+    expect(shouldAllowPermissionRequest("http://127.0.0.1:4444/", origin, "media", {
+      mediaTypes: ["audio", "video"],
+    })).toBe(false);
+    expect(shouldAllowPermissionRequest("http://preview-session.localhost:4444/", origin, "microphone")).toBe(false);
+    expect(shouldAllowPermissionRequest("http://preview-session.localhost:4444/", origin, "media", {
+      mediaTypes: ["audio"],
+    })).toBe(false);
+    expect(shouldAllowPermissionRequest("https://example.test/", origin, "microphone")).toBe(false);
+    expect(shouldAllowPermissionRequest("https://example.test/", origin, "media", {
+      mediaTypes: ["audio"],
+    })).toBe(false);
+    expect(shouldAllowPermissionRequest("http://127.0.0.1:4445/", origin, "microphone")).toBe(false);
+    expect(shouldAllowPermissionRequest("not a url", origin, "microphone")).toBe(false);
+  });
+
+  it("allows only audio media permission checks from the trusted dashboard origin", () => {
+    const origin = "http://127.0.0.1:4444";
+
+    expect(shouldAllowPermissionCheck("http://127.0.0.1:4444", origin, "media", {
+      mediaType: "audio",
+    })).toBe(true);
+    expect(shouldAllowPermissionCheck("http://localhost:4444", origin, "media", {
+      mediaType: "audio",
+    })).toBe(true);
+    expect(shouldAllowPermissionCheck("http://127.0.0.1:4444", origin, "microphone")).toBe(true);
+
+    expect(shouldAllowPermissionCheck("http://127.0.0.1:4444", origin, "media")).toBe(false);
+    expect(shouldAllowPermissionCheck("http://127.0.0.1:4444", origin, "media", {
+      mediaType: "video",
+    })).toBe(false);
+    expect(shouldAllowPermissionCheck("http://127.0.0.1:4444", origin, "media", {
+      mediaType: "unknown",
+    })).toBe(false);
+    expect(shouldAllowPermissionCheck("http://127.0.0.1:4444", origin, "geolocation", {
+      mediaType: "audio",
+    })).toBe(false);
+    expect(shouldAllowPermissionCheck("http://preview-session.localhost:4444", origin, "media", {
+      mediaType: "audio",
+    })).toBe(false);
+    expect(shouldAllowPermissionCheck("https://example.test", origin, "media", {
+      mediaType: "audio",
+    })).toBe(false);
+    expect(shouldAllowPermissionCheck("http://127.0.0.1:4444", origin, "media", {
+      mediaType: "audio",
+      securityOrigin: "http://preview-session.localhost:4444",
+    })).toBe(false);
   });
 
   it("normalizes valid IPC zoom factors and rejects invalid zoom input", () => {

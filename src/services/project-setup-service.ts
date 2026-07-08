@@ -195,6 +195,7 @@ export class ProjectSetupService {
       baseAgentTemplates,
       baseQuicksprintTemplates,
       containerSetupScriptTemplate,
+      designGuidance: settings.designGuidance,
       options,
     });
     if (invocation) {

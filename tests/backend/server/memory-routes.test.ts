@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { registerMemoryRoutes, type MemoryRouteDependencies } from "../../../src/server/memory-routes.js";
+import { EMBEDDING_MODEL_CATALOG } from "../../../src/services/embedding-model-catalog.js";
 
 // Minimal Express-like mock
 function createMockApp() {
@@ -59,6 +60,9 @@ function createMockDeps(): MemoryRouteDependencies {
       selectModel: vi.fn().mockResolvedValue(undefined),
       deleteModel: vi.fn().mockResolvedValue(undefined),
       getStatuses: vi.fn().mockReturnValue([]),
+      getCatalog: vi.fn().mockReturnValue(EMBEDDING_MODEL_CATALOG),
+      hasModel: vi.fn((modelId: string) => Object.prototype.hasOwnProperty.call(EMBEDDING_MODEL_CATALOG, modelId)),
+      getModelInfo: vi.fn(),
     } as any,
     embeddingService: {
       getLoadedModelId: vi.fn().mockReturnValue(null),
@@ -70,6 +74,15 @@ function createMockDeps(): MemoryRouteDependencies {
       listMemoryClaimEvidence: vi.fn().mockReturnValue([]),
     } as any,
     settingsRepository: {
+      getSystemSettings: vi.fn().mockReturnValue({
+        defaults: {
+          memory: {
+            embeddingModel: null,
+            customEmbeddingModels: [],
+          },
+        },
+      }),
+      saveSystemSettings: vi.fn((settings) => settings),
       getProjectResolvedSettings: vi.fn().mockReturnValue({
         memory: { mapMaxEdgesPerNode: 3 },
       }),
@@ -93,7 +106,7 @@ describe("memory-routes", () => {
 
   it("registers all expected routes", () => {
     expect(app.get).toHaveBeenCalledTimes(8); // list, claims, evidence, embedding-models, model status, reembed progress, embedding-map, stats
-    expect(app.post).toHaveBeenCalledTimes(9); // create, memory search, claim search, promotion analyze/execute, download, cancel, select, reembed
+    expect(app.post).toHaveBeenCalledTimes(10); // create, memory search, claim search, promotion analyze/execute, custom model, download, cancel, select, reembed
     expect(app.patch).toHaveBeenCalledTimes(1); // update
     expect(app.delete).toHaveBeenCalledTimes(4); // delete memory, clear project memories, clear system memories, delete model
   });
@@ -337,6 +350,63 @@ describe("memory-routes", () => {
     });
   });
 
+  describe("POST /api/embedding-models/custom", () => {
+    it("creates a custom Hugging Face model and persists it in settings", () => {
+      const handler = routes["POST:/api/embedding-models/custom"].handler;
+      const res = createMockRes();
+
+      handler({
+        body: {
+          displayName: "Custom BGE",
+          repoOrUrl: "https://huggingface.co/owner/custom-bge/blob/main/onnx/model.onnx",
+          tokenizerFiles: ["tokenizer.json"],
+          dimension: 384,
+          approximateSizeBytes: 100,
+          language: "English",
+        },
+      }, res);
+
+      expect(deps.settingsRepository.saveSystemSettings).toHaveBeenCalledWith(expect.objectContaining({
+        defaults: expect.objectContaining({
+          memory: expect.objectContaining({
+            customEmbeddingModels: [expect.objectContaining({
+              displayName: "Custom BGE",
+              huggingFaceRepo: "owner/custom-bge",
+              onnxModelFile: "onnx/model.onnx",
+              validationStatus: "valid",
+            })],
+          }),
+        }),
+      }));
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        source: "custom",
+        huggingFaceRepo: "owner/custom-bge",
+        files: ["model.onnx", "tokenizer.json"],
+      }));
+    });
+
+    it("rejects non-Hugging Face custom model links", () => {
+      const handler = routes["POST:/api/embedding-models/custom"].handler;
+      const res = createMockRes();
+
+      handler({
+        body: {
+          displayName: "Bad Model",
+          repoOrUrl: "https://example.com/owner/repo",
+          onnxModelFile: "onnx/model.onnx",
+          tokenizerFiles: ["tokenizer.json"],
+          dimension: 384,
+          approximateSizeBytes: 100,
+          language: "English",
+        },
+      }, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(deps.settingsRepository.saveSystemSettings).not.toHaveBeenCalled();
+    });
+  });
+
   describe("POST /api/embedding-models/:modelId/download", () => {
     it("starts download for valid model", async () => {
       const handler = routes["POST:/api/embedding-models/:modelId/download"].handler;
@@ -350,6 +420,17 @@ describe("memory-routes", () => {
       const res = createMockRes();
       await handler({ params: { modelId: "unknown-model" } }, res);
       expect(res.status).toHaveBeenCalledWith(400);
+    });
+
+    it("starts download for a custom model id", async () => {
+      const handler = routes["POST:/api/embedding-models/:modelId/download"].handler;
+      const res = createMockRes();
+      (deps.embeddingModelManager.hasModel as any).mockImplementation((modelId: string) => modelId === "hf-custom");
+
+      await handler({ params: { modelId: "hf-custom" } }, res);
+
+      expect(deps.embeddingModelManager.downloadModel).toHaveBeenCalledWith("hf-custom");
+      expect(res.json).toHaveBeenCalledWith({ status: "downloading", modelId: "hf-custom" });
     });
   });
 
@@ -370,6 +451,14 @@ describe("memory-routes", () => {
       expect(deps.embeddingModelManager.selectModel).toHaveBeenCalledWith("bge-small-en-v1.5");
     });
 
+    it("selects a custom model id", async () => {
+      const handler = routes["POST:/api/embedding-models/:modelId/select"].handler;
+      const res = createMockRes();
+      (deps.embeddingModelManager.hasModel as any).mockImplementation((modelId: string) => modelId === "hf-custom");
+      await handler({ params: { modelId: "hf-custom" } }, res);
+      expect(deps.embeddingModelManager.selectModel).toHaveBeenCalledWith("hf-custom");
+    });
+
     it("rejects unknown model", async () => {
       const handler = routes["POST:/api/embedding-models/:modelId/select"].handler;
       const res = createMockRes();
@@ -384,6 +473,15 @@ describe("memory-routes", () => {
       const res = createMockRes();
       await handler({ params: { modelId: "bge-small-en-v1.5" } }, res);
       expect(deps.embeddingModelManager.deleteModel).toHaveBeenCalledWith("bge-small-en-v1.5");
+      expect(res.status).toHaveBeenCalledWith(204);
+    });
+
+    it("deletes a custom model id", async () => {
+      const handler = routes["DELETE:/api/embedding-models/:modelId"].handler;
+      const res = createMockRes();
+      (deps.embeddingModelManager.hasModel as any).mockImplementation((modelId: string) => modelId === "hf-custom");
+      await handler({ params: { modelId: "hf-custom" } }, res);
+      expect(deps.embeddingModelManager.deleteModel).toHaveBeenCalledWith("hf-custom");
       expect(res.status).toHaveBeenCalledWith(204);
     });
   });
@@ -409,6 +507,28 @@ describe("memory-routes", () => {
       const res = createMockRes();
       handler({ params: { modelId: "bge-small-en-v1.5" } }, res);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ downloaded: false, active: false }));
+    });
+
+    it("returns status for a custom model id", () => {
+      const handler = routes["GET:/api/embedding-models/:modelId/status"].handler;
+      const res = createMockRes();
+      (deps.embeddingModelManager.hasModel as any).mockImplementation((modelId: string) => modelId === "hf-custom");
+      (deps.memoryRepository as any).getModelStatus.mockReturnValue({
+        id: "hf-custom",
+        downloaded: true,
+        downloading: false,
+        downloadProgress: 1,
+        localPath: "/models/custom",
+        error: null,
+      });
+
+      handler({ params: { modelId: "hf-custom" } }, res);
+
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        id: "hf-custom",
+        downloaded: true,
+        active: false,
+      }));
     });
   });
 

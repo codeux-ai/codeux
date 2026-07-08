@@ -45,6 +45,8 @@ Techstack settings are split across scopes:
 
 The built-in catalog always includes the Code UX Stack (`code-ux-internal`) with Preact, TanStack Router, GSAP, Three.js, and Lucide Icons. Catalog sanitization trims ids and labels, drops malformed or duplicate ids, preserves the built-in entry, and falls back `defaultTechstackId` to `code-ux-internal` if the saved default is missing or invalid. Project defaults intentionally keep `techstack.selectedTechstackId = null` and `techstack.applicationKind = null`; existing and imported projects therefore do not inherit the built-in stack automatically. New-project flows must apply a catalog default explicitly when they need one.
 
+Design guidance is an inheritable scoped setting under `designGuidance`. System defaults, project overrides, and sprint overrides all participate in the normal effective settings resolution, and source metadata reports whether a guidance field came from `system`, `project`, or `sprint`. The block stores selected tech-stack guidance, selected styleguide guidance, `hideDefaultStyleguides`, and custom tech stack/styleguide entries with stable `id`, `name`, `summary`, and `instructionMarkdown` fields. System defaults resolve both selections to `none`, so existing and imported projects receive no design styleguide by inheritance. New local and new remote project initialization writes an explicit project override selecting the generic Code UX award-winning styleguide; imported local or Git projects remain at `none` until an operator or setup flow changes them. Planning prompts receive a compact `Project Guidance` section only for selected non-`none` entries, so generated tasks can reflect active guidance without duplicating inactive defaults. Project Setup prompts use the same selected-entry section and also include a setup-only styling investigation notice whenever the styleguide selection is `none`, including when tech-stack guidance is also `none`.
+
 For `.code-ux/settings.json` (used primarily for credential hints during initial onboarding), search roots include:
 - current working directory
 - project root
@@ -167,6 +169,12 @@ Runtime resolution:
   - `cliWorkflow`
   - `sprintPreview`
   - `techstack`
+  - `designGuidance`
+    - `selectedTechStackId` (`none` by default)
+    - `selectedStyleguideId` (`none` by default)
+    - `hideDefaultStyleguides` (`false` by default)
+    - `customTechStacks`
+    - `customStyleguides`
   - `agents`
   - `skills`
 
@@ -198,6 +206,7 @@ System-level integrations are injected into effective dashboard settings at reso
 - `agents.selfReflection` is default-off for both `planning` and `qualityAssurance`. Each loop stores an `enabled` flag, senior engineering criteria with per-criterion thresholds, and `maxImprovementAttempts`; sanitization dedupes criteria by id, clamps thresholds to `0..1`, clamps attempts to `0..10`, and falls back to default criteria for malformed legacy payloads. When enabled, structured planning and QA requests run the optional rate-and-improve loop through the same provider session while keeping the last valid parsed output if reflection fails. Planning reflection also gates `autoStart`: a non-passing final decision saves the plan without starting orchestration automatically.
 - `techstackCatalog` is system-owned. It stores the available techstack records and the catalog default id. The built-in `code-ux-internal` entry is restored on every load even when saved settings omit or override it.
 - `techstack` is project/sprint-owned. It stores `{ selectedTechstackId: string|null, applicationKind: "web"|"desktop"|null }`. The default project selection is null by design so imported projects remain unclassified until a later explicit project override selects a stack.
+- `designGuidance` is project/sprint-owned. It stores `{ selectedTechStackId, selectedStyleguideId, hideDefaultStyleguides, customTechStacks, customStyleguides }`; invalid selected ids fall back to `none`, custom entries are preserved when valid, and hiding default styleguides affects presentation only, not the backend default catalog. The dashboard Guidance panel manages this block for the active scope: selectors always support `None`, built-in entries are protected, custom entries can be added/edited/deleted, and deleting a selected custom entry clears that selection back to `none`. Planning and setup prompt builders resolve the selected entries from the effective project settings and omit `none` catalog entries from prompt guidance; setup prompts additionally include the styleguide investigation notice whenever the selected styleguide id is `none`.
 
 Backend contract:
 - `src/contracts/app-types.ts`
@@ -291,7 +300,7 @@ Dashboard behavior:
     - `provider` (`ProviderConfigId|null`)
       - `null` means "inherit the profile default provider"
     - `allowedProviders` (`ProviderConfigId[]`)
-      - empty means "all enabled provider instances remain eligible"
+      - constrains weighted or agent-provider route pools; empty pools fail closed to the selected or inherited provider instead of opening to every enabled provider
     - `providers` sparse override map keyed by provider config id
       - supports per-invocation overrides for `enabled`, `model`, `weight`, and `thinkingMode`
   - default profiles:
@@ -477,6 +486,7 @@ Container execution notes:
 - `cliWorkflow.executionMode` defaults to `DOCKER`, but Code UX still supports `HOST` worktrees for controlled fallback and legacy-safe paths
 - task, planning, chat, and normal CI-fix flows execute inside isolated Docker-volume workspaces when Docker execution is available
 - Git URL projects must have a local checkout. Dashboard project creation clones them into the selected clone directory, or `~/.code-ux/projects/<repo-name>` when no clone directory is provided.
+- Repositories Code UX creates from scratch include `.code-ux/` in `.gitignore`. Existing repositories are not silently edited, but LOCAL final-merge dirty detection, dirty-backup commits, and dirty restore exclude repo-local `.code-ux/` artifacts by default. User-created dirty files outside `.code-ux/` are preserved on a `dirty-ref-<uuid>` branch before the clean final merge; if they apply cleanly afterward, Code UX copies them back into the visible checkout as uncommitted changes. If they conflict, the dirty branch is kept and surfaced for manual recovery.
 - QA review execution uses a fresh snapshot workspace instead of the mutable task workspace
 - QA-requested follow-up coding and CI autofix continue in the existing task workspace when that workspace is still reusable
 - CI autofix falls back to a host-backed worktree only when Docker is unavailable for that follow-up repair attempt

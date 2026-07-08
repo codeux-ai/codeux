@@ -31,6 +31,7 @@ import {
   cloneProjectSettings,
   cloneSystemSettings,
   dashboardSettingsToProjectSettings,
+  thinkingModeOptions,
 } from "../lib/settings-view-models.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../lib/settings.js";
 import {
@@ -56,7 +57,6 @@ import type {
   ProjectSettings,
   SettingsValueSource,
   SystemSettings,
-  ThinkingMode,
   UpdateChatProviderChannelBindingInput,
   UpdateChatProviderConnectionInput,
 } from "../../types.js";
@@ -64,7 +64,7 @@ import type { AgentAvatarConfig, AgentPreset } from "../types.js";
 import { AlertTriangle, Bot, BrainCircuit, Cpu, Plug, Settings, SlidersHorizontal, Target } from "lucide-preact";
 
 type SettingsScope = "system" | "project";
-type CategoryId = "general" | "appearance" | "models" | "sprint" | "browser" | "techstacks" | "agents" | "memory" | "integrations" | "mcp" | "danger";
+type CategoryId = "general" | "appearance" | "models" | "sprint" | "browser" | "techstacks" | "guidance" | "agents" | "memory" | "integrations" | "mcp" | "danger";
 type AgentInstructionTemplateId = keyof ProjectSettings["agents"]["instructionTemplates"];
 
 interface Category {
@@ -84,12 +84,6 @@ const normalizeSystemSettingsPayload = (settings: SystemSettings): SystemSetting
   ...settings,
   techstackCatalog: settings.techstackCatalog ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog,
 });
-
-const thinkingModeOptions: Array<{ value: ThinkingMode; label: string }> = [
-  { value: "SMALL", label: "Small" },
-  { value: "MEDIUM", label: "Medium" },
-  { value: "HIGH", label: "High" },
-];
 
 const invocationRouteDefinitions: Array<{
   id: InvocationRoutingId;

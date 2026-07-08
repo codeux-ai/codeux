@@ -247,6 +247,10 @@ export interface EmbeddingModelInfo {
   sizeBytes: number;
   language: string;
   files: string[];
+  source: "built_in" | "custom";
+  huggingFaceRepo?: string;
+  onnxModelFile?: string;
+  validationStatus?: CustomEmbeddingModelValidationStatus;
 }
 
 export interface EmbeddingModelStatus {
@@ -256,6 +260,33 @@ export interface EmbeddingModelStatus {
   downloadProgress: number;
   localPath: string | null;
   error: string | null;
+}
+
+export type CustomEmbeddingModelValidationStatus = "valid" | "invalid";
+
+export interface CustomEmbeddingModelDefinition {
+  id: EmbeddingModelId;
+  displayName: string;
+  huggingFaceRepo: string;
+  huggingFaceUrl: string;
+  onnxModelFile: string;
+  tokenizerFiles: string[];
+  dimension: number;
+  approximateSizeBytes: number;
+  language: string;
+  validationStatus: CustomEmbeddingModelValidationStatus;
+}
+
+export interface CreateCustomEmbeddingModelInput {
+  displayName?: unknown;
+  huggingFaceRepoOrUrl?: unknown;
+  repoOrUrl?: unknown;
+  onnxModelFile?: unknown;
+  tokenizerFiles?: unknown;
+  dimension?: unknown;
+  approximateSizeBytes?: unknown;
+  sizeBytes?: unknown;
+  language?: unknown;
 }
 
 export type MemoryPromotionRiskFlag =
@@ -284,6 +315,7 @@ export interface MemorySettings {
   enabled: boolean;
   embeddingProvider: EmbeddingProviderMode;
   embeddingModel: EmbeddingModelId | null;
+  customEmbeddingModels: CustomEmbeddingModelDefinition[];
   externalEmbedding: ExternalEmbeddingSettings;
   autoCaptureSprint: boolean;
   autoCaptureAgent: boolean;

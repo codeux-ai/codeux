@@ -46,4 +46,22 @@ describe("electron-builder packaged defaults", () => {
       expect(fs.existsSync(path.join(process.cwd(), ".code-ux", assetPath))).toBe(true);
     }
   });
+
+  it("keeps the ONNX speech runtime loadable outside ASAR", () => {
+    const config = require("../../electron-builder.config.cjs") as {
+      asarUnpack?: string[];
+      extraResources?: Array<{ from?: string; to?: string; filter?: string[] }>;
+    };
+
+    expect(config.asarUnpack).toEqual(expect.arrayContaining([
+      "node_modules/**/*.node",
+      "node_modules/onnxruntime-node/**",
+    ]));
+    expect(config.extraResources).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        from: ".cache/electron-runtime/node_modules",
+        to: "node_modules",
+      }),
+    ]));
+  });
 });

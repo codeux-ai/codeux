@@ -10,8 +10,10 @@ import {
   normalizeZoomFactor,
   resolveDirectoryPickerDefaultPath,
   shouldAddRuntimeNoCacheRequestHeaders,
+  shouldAllowPermissionCheck,
   shouldAllowPermissionRequest,
 } from "./dashboard-network-policy.js";
+import { openCodeUxUpdatesPage, toggleWindowMaximized } from "./window-controls.js";
 import { createDebouncedSaver, loadWindowState, saveWindowState } from "./window-state.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -111,12 +113,18 @@ async function configureDashboardNetworkSession(): Promise<void> {
   });
 
   desktopSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
-    const requestingUrl = details.requestingUrl || webContents.getURL();
-    callback(shouldAllowPermissionRequest(requestingUrl, dashboardOrigin, permission));
+    const permissionDetails = details as { mediaTypes?: readonly string[]; securityOrigin?: string };
+    const requestingUrl = permissionDetails.securityOrigin || details.requestingUrl || webContents.getURL();
+    const mediaTypes = permissionDetails.mediaTypes;
+    callback(shouldAllowPermissionRequest(requestingUrl, dashboardOrigin, permission, { mediaTypes }));
   });
 
-  desktopSession.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => {
-    return shouldAllowPermissionRequest(requestingOrigin, dashboardOrigin, permission);
+  desktopSession.setPermissionCheckHandler((_webContents, permission, requestingOrigin, details) => {
+    return shouldAllowPermissionCheck(requestingOrigin, dashboardOrigin, permission, {
+      mediaType: details.mediaType,
+      requestingUrl: details.requestingUrl,
+      securityOrigin: details.securityOrigin,
+    });
   });
 }
 
@@ -327,12 +335,7 @@ ipcMain.handle("codeux:window-minimize", (event) => {
 ipcMain.handle("codeux:window-toggle-maximize", (event) => {
   const target = resolveWindow(event);
   if (!target) return false;
-  if (target.isMaximized()) {
-    target.unmaximize();
-    return false;
-  }
-  target.maximize();
-  return true;
+  return toggleWindowMaximized(target);
 });
 
 ipcMain.handle("codeux:window-close", (event) => {
@@ -355,6 +358,10 @@ ipcMain.handle("codeux:set-zoom", (event, factor: unknown) => {
   const clamped = normalizeZoomFactor(factor);
   event.sender.setZoomFactor(clamped);
   return clamped;
+});
+
+ipcMain.handle("codeux:open-updates", () => {
+  return openCodeUxUpdatesPage(shell);
 });
 
 ipcMain.handle("codeux:pick-directory", async (event, defaultPath: unknown) => {

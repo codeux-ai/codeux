@@ -224,6 +224,7 @@ export function createCoreDependencies(
   );
   const providerConcurrencyService = new ProviderConcurrencyService({
     executionRepository,
+    projectManagementRepository,
     logger: logger.child({ component: "provider-concurrency-service" }),
     dockerService: new DockerService(),
   });
@@ -291,6 +292,7 @@ export function createCoreDependencies(
     embeddingService,
     memoryRepository,
     logger.child({ component: "embedding-model-manager" }),
+    settingsRepository,
   );
 
   const memoryService = new MemoryService(

@@ -20,6 +20,15 @@ All live fields rendered in the dashboard originate from the SQLite database, ar
 
 The v2 Live Session route keeps runtime data wiring in `LiveSessionPage.tsx`, pure projection/filter derivation in `dashboard/src/v2/lib/live-session-view-model.ts`, and repeated panel markup under `dashboard/src/v2/components/live-session/`. Keep sprint-scoped arrays such as dispatches, events, invocations, and projected task card items memoized from stabilized runtime snapshots so reconnects, stale banners, filters, and pending runtime actions do not force avoidable recomputation or change accessibility semantics.
 
+## Sprint Navigation Scope
+
+Sprint ledger rows and showcase sprint cards expose separate **Tasks** and **Live** actions. Both actions include the owning `projectId` and target `sprintId` in the route query:
+
+- `/tasks?projectId=<projectId>&sprintId=<sprintId>`
+- `/live?projectId=<projectId>&sprintId=<sprintId>`
+
+Destination pages must switch the selected project first, then apply the sprint scope through the selected project's sprint API. The Tasks page still accepts legacy same-project links such as `/tasks?sprint=<sprintId>` and `/tasks?sprintId=<sprintId>`, but project-aware links are required when navigation originates from sprint rows or cards so a sprint is never applied to the previously selected project.
+
 ## API Endpoints
 
 Implemented in `src/server/dashboard-server.ts`.
@@ -289,6 +298,9 @@ Legacy runtime:
 ### Navigation
 - Sidebar and dock navigation expose the primary routes in guided-tour order: Chat, Overview, Sprints, Tasks, Agents, Stats, Dashboards (`/custom-dashboards`), Schedule (`/scheduler`), Memory, Knowledge (`/knowledge`), Browser, Files (`/files`, providing project and sprint File Browser capabilities), Live, and Settings/Config.
 - The primary navigation honors the persisted Settings -> Appearance experience mode. Easy shows Chat, Browser, Stats, Settings/Config, and external Docs. Standard shows Chat, Overview, Sprints, Tasks, Agents, Stats, Browser, Docs, and Settings/Config. Expert is the default and shows the full set. This only changes primary navigation visibility: routes remain registered, Docs opens the external project docs, and the Browser item still follows the project sprint-preview visibility settings.
+- The header places global search beside the tech-stack guidance and styleguide selectors. The guidance selectors mirror the active project's effective `designGuidance` values, support `None`, and save project-level overrides immediately when changed.
+- Guidance dropdown footer actions use the same settings destination: **Add Tech Stack**, **Add Styleguide**, and **Manage Guidance** open `/config?category=guidance#guidance` so custom guidance entries and visibility controls stay centralized in Settings -> Guidance.
+- The sprint selector remains enabled for projects with no sprints so its footer actions are always reachable. **Add Sprint** opens a compact header flow for creating an idle sprint from a name and goal, then selects it after the sprint collection refreshes. **Manage Sprints** opens the full Sprints page for planning, imports, bulk actions, and sprint detail editing.
 - The top-nav workspace search trigger uses a more opaque glass surface in light and dark mode so it stays readable against page content while preserving the existing blur treatment.
 - The notification panel announces refresh, mark-read, dismiss, and action outcomes through polite live regions. Refresh and mark-all-read controls expose pending state with `aria-busy`, disabled controls include visible reasons, and every repeated row action includes the notification title in its accessible name.
 - Notification rows include textual read/unread state in addition to the severity accent rail. Initial rows use the `listReveal` motion contract, read/dismiss compaction uses `listReorder`, and reduced-motion users receive immediate static state changes without transitional movement.
@@ -549,6 +561,7 @@ Legacy runtime:
 - Active chat titles wrap or truncate inside the bounded header area, while thread rail titles clamp to two stable lines with long-word wrapping so manual renames remain readable without causing rail layout churn.
 - Chat page now provides a `Threads / Invocations` toggle to switch between human conversation threads and read-only execution invocations.
 - Chat page UI is redesigned with animated identities, structured widgets for rich messages, and automatic worker pickup derived from active project routing.
+- Sprint and task references in chat messages and invocation transcripts resolve to live status widgets when they match real records in the selected project. Sprint widgets link to the matching Sprint page, task widgets link to the matching Tasks page, and ambiguous bare task keys are left as normal text instead of being guessed.
 - Chat Threads mode exposes **Create Desktop App** and **Create Web App** quickactions beside the composer, including empty threads. Clicking either control posts the short visible chat message immediately, creates a thread first when needed, and does not open a confirmation dialog or switch to Invocations. The dashboard includes the active project's effective techstack in the quickaction metadata, using the assigned catalog entry or the catalog default plus stack item labels as suggestion tags. The backend launches the matching detached quicksprint with `Plan & Start`, then the transcript shows an app progress widget with app kind, sprint name, stack fields, metadata-driven stages, and suggestion tags. Users can keep typing in the same thread while planning runs; follow-up messages are queued until tasks exist, then appended to the sprint-level goal under `Additional direction from chat`.
 - Agent replies can append optional prompt suggestion tags from `metadata.promptSuggestions` below the normal markdown message. Each tag can show one supported generic icon (`sparkles`, `search`, `edit`, `code`, `terminal`, `bug`, `check`, `play`, `refresh`, `settings`, `file`, `folder`, `git-branch`, `git-pull-request`, `database`, `shield`, `book-open`, `message-circle`, `list-checks`, `rocket`, `zap`, `lightbulb`, `clipboard`, `download`, `upload`, `eye`, `package`, `server`, `clock`, or `help-circle`) and fills the composer with the next-step prompt when clicked, without auto-sending or changing read-only invocation transcripts.
 - Chat page logs invocation activity explicitly in the background, providing observable execution artifacts directly in the chat view.
@@ -561,7 +574,7 @@ Legacy runtime:
 - Chat page now receives websocket updates for thread assignment changes and incoming thread messages in the active thread
 - Chat page now shows a live "working" bubble once a listener has picked up a dashboard message and is preparing a reply
 - Chat page message, invocation, and working bubbles now use light-mode slate surfaces and darker text to keep chat transcripts readable without altering the Warm Void dark theme
-- Chat and agent avatar scenes can render a lightweight pseudo-raytraced flashlight effect using ordinary WebGL presentation primitives: a translucent beam, target glow, accent-aware light, and small material glows. It tracks the pointer when motion is allowed, idly scans when appropriate, and may show a brief bounded low-battery humor overlay. Reduced-motion settings or WebGL fallback paths use the static SVG avatar and omit scanning/flicker behavior.
+- Chat and agent avatar scenes use ordinary WebGL presentation primitives with studio lighting, pointer-aware head movement, and runtime tool props. The former flashlight beam, target glow, low-battery flicker, and emissive shell boost are removed; reduced-motion settings or WebGL fallback paths use the static SVG avatar.
 - Chat page invocation navigation keeps the rail and transcript height-bounded, so clicking through long invocation records scrolls only the internal panes and does not add page-level blank space.
 - Chat page now force-refreshes the selected thread when realtime thread updates arrive, so virtual replies clear stale `pending` delivery badges and sidebar counts as soon as the reply lands
 - Chat message and thread timestamp chrome now suppresses malformed timestamps instead of rendering `Invalid Date`
@@ -777,22 +790,29 @@ Project management requests are centralized in:
 *(Note: `available` means detected credentials/auth presence, whereas `enabled` means user-approved routing participation.)*
 
 AI Provider settings now support:
-- Named provider instances grouped under `jules`, `gemini`, `codex`, and `claude-code`
+- Named provider instances grouped under `jules`, `gemini`, `codex`, `claude-code`, `qwen-code`, `opencode`, and `antigravity`
 - Routing strategy:
   - `MANUAL` (single default provider instance)
   - `WEIGHTED` (weight-based distribution across enabled instances)
   - `AGENT` (uses the selected agent preset's optional provider/model preference, then inherits route defaults)
 - Provider-instance toggles (`enabled`)
 - Model selection
-  - Gemini: curated model list in UI
-  - Codex/Jules: text model field
-- Thinking mode (`SMALL`, `MEDIUM`, `HIGH`)
+  - CLI providers expose curated model lists or configured custom endpoint models where supported
+  - Jules remains hosted/managed and does not expose local CLI model controls
+- Provider-specific thinking/reasoning selection
+  - Gemini: `minimal`, `low`, `medium`, `high`
+  - Codex: `low`, `medium`, `high`, `xhigh`
+  - Claude Code and Qwen Code: `low`, `medium`, `high`, `xhigh`, `max`
+  - OpenCode: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`
+  - Antigravity: `low`, `high`
+  - Jules does not render a thinking control
 - Invocation routing at the provider-instance level, including instance pools and sparse per-instance overrides
 
 Behavior:
 - Empty provider key fields are valid.
 - Runtime falls back to system auth/environment where supported.
 - Multiple instances of the same CLI type are routed independently, so operators can weight several Codex or Gemini credentials differently inside one route pool.
+- Legacy saved thinking values `SMALL`, `MEDIUM`, and `HIGH` continue to load and are normalized to the selected provider's supported value set before execution.
 
 ## CI Intelligence Settings
 

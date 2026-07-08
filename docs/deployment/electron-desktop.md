@@ -14,22 +14,31 @@ Code UX can run as an installable Electron desktop app while preserving the exis
 - Windows packaged builds keep the active WebGL context cap at 16 so the persistent shell canvas, avatar canvases, and route-scoped chart canvases have enough headroom during long navigation sessions while old Chromium contexts are waiting for garbage collection.
 - External links are opened through the host operating system. In-app dashboard and sprint-preview URLs remain inside the Electron app.
 - The desktop shell renders only the resolved dashboard origin and same-port sprint preview origins that match `preview-<session>.localhost:<dashboardPort>` internally. Other `http`, `https`, and `mailto` navigations are denied in the renderer and opened through the host operating system after scheme validation; all other schemes are blocked.
-- The compact title bar version label polls `/api/system/update-status` on startup and every 30 minutes. When the response reports a newer version without an error, the title bar shows a no-drag "Update available" download link with a download icon; activating it opens the official GitHub desktop release download page in the user's default browser through Electron's external navigation handler. No update action is shown for failed checks or current installations.
+
+## Desktop System Bar
+
+The desktop dashboard uses a frameless renderer-owned system bar instead of native window chrome. It renders only when the preload bridge exposes `window.codeUxDesktop.window`, and it keeps the Code UX logo, the update action, and a visible `v{version}` label compiled from `package.json` through Vite's `__APP_VERSION__` define.
+
+The update button is a no-drag control that calls the fixed `window.codeUxDesktop.openUpdates()` preload IPC method. That method opens `https://github.com/codeux-ai/codeux/releases/latest` in the host browser and deliberately does not expose a generic URL opener or perform an automatic in-app update.
+
+Double-clicking non-interactive system-bar chrome toggles maximize/restore through `window.codeUxDesktop.window.toggleMaximize()`. Interactive controls stop double-click propagation and stay inside `titlebar-no-drag` regions so buttons do not accidentally trigger window dragging or maximize behavior.
 
 ## Native Desktop Integration
 
 The Add Project dialog uses a native Electron directory picker when running in the desktop app. Browser-only dashboard sessions keep the existing HTTP directory browser fallback. When no current path is typed, the native picker opens at the user's home directory; relative defaults are resolved from the user's home directory before opening the dialog.
 
-The native picker is exposed through the isolated preload bridge:
+The native picker and desktop-only commands are exposed through the isolated preload bridge:
 
 - `window.codeUxDesktop.pickDirectory(defaultPath?)`
 - returns `{ canceled, filePath }`
+- `window.codeUxDesktop.openUpdates()`
+- returns `true` when Electron accepted the request to open the official latest releases page, otherwise `false`
 
 Renderer Node access remains disabled. The preload exposes only this narrow IPC surface.
 
 Renderer privileges are constrained with `contextIsolation: true`, `nodeIntegration: false`, and `sandbox: true`. The preload bridge keeps the supported desktop API limited to directory selection, zoom control, and window controls. IPC handlers validate renderer input before using it: directory picker defaults must be strings without control characters, and zoom factors must be finite numbers before being clamped to the supported range.
 
-Electron permission prompts are denied by default for dashboard and preview pages, including camera, microphone, geolocation, notifications, and media requests. Preview origins currently do not require a permission exception; add one only with a documented product need and a targeted test for that origin and permission.
+Electron permission prompts are denied by default for dashboard and preview pages except for microphone capture from the trusted dashboard origin. The desktop session grants `microphone` permission, or Electron `media` permission when the request or permission check is explicitly audio-only, only for the resolved dashboard origin such as `http://127.0.0.1:<runtimePort>` and its `localhost` loopback alias. Sprint preview origins, unrelated origins, camera/video capture, geolocation, notifications, and arbitrary Electron permissions remain denied. Preview origins require a separate documented product need and targeted tests before any permission exception is added.
 
 The desktop BrowserWindow is frameless and transparent on every supported platform so the renderer-level `.app-shell` clip can expose real rounded window corners. The shell uses a fixed corner radius and subtle gray border in normal windowed mode, then removes that treatment when Electron reports maximized or fullscreen state, matching the host operating system's square maximized-window behavior. Keep the native BrowserWindow `backgroundColor` transparent when changing package settings; an opaque native background will make the corners appear square even if the renderer content is clipped.
 
@@ -63,6 +72,10 @@ The release output is written to `release/electron/`.
 Electron package builds run `pnpm run electron:prepare-deps` before Electron Builder. That script creates a production-only, hoisted runtime dependency tree in `.cache/electron-runtime/node_modules`, prunes non-runtime package files, generates deterministic PNG/ICO/BMP desktop artwork, and Electron Builder copies it to `resources/node_modules` so ASAR-packaged builds can resolve pnpm transitive dependencies at runtime.
 
 Electron Builder also copies the bundled `.code-ux` runtime defaults to `resources/.code-ux-defaults`. Keep that resource filter aligned with the default asset seeding contract in `src/services/code-ux-default-assets-service.ts`; the packaged app depends on `planning_agent.md`, `project_manager.md`, `quality_assurance_agent.md`, `worker.md`, `container/setup.sh`, and `.code-ux/quicksprints/templates/*.md` being present because it cannot fall back to the workspace `.code-ux` directory after installation. Built-in agent preset sync reads those bundled defaults directly, so Project Setup Agent prompts can still use the base agent templates even if a user removes the seeded copies under `~/.code-ux/agents`.
+
+Speech transcription uses the same packaged backend route as the npm-served dashboard: `POST /api/speech/transcriptions`. Local transcription loads `onnxruntime-node` from `resources/node_modules`, so Electron Builder must keep `node_modules/**/*.node` and `node_modules/onnxruntime-node/**` unpacked from ASAR. The runtime dependency prep script prunes `onnxruntime-node` native binaries to the target platform and architecture unless `CODE_UX_ELECTRON_KEEP_ALL_NATIVE_BINARIES=1` is set for diagnostics.
+
+Local speech models are user-cache data, not application bundle data. The service resolves them under `~/.code-ux/models/speech/<sanitized-model-id>/`, where the default `onnx-community/whisper-base.en` becomes `onnx-community--whisper-base.en` and must contain `model.onnx` plus optional `labels.json`. Missing model files produce a structured `missing_local_model` or setup `client_error`; the desktop package should not bundle model weights by default because they are large and user-replaceable. In `auto` mode, an explicitly configured OpenAI-compatible external transcription endpoint can handle fallback requests when the local model is absent or fails. External fallback requires base URL, API key, and model settings; local ONNX transcription does not require external credentials.
 
 The runtime dependency tree is fingerprinted from production dependencies and the lockfile. If the fingerprint matches a previous run, `electron:prepare-deps` reuses the existing tree instead of deleting and reinstalling it.
 
@@ -131,10 +144,18 @@ Use `pnpm run electron:dist:linux -- --publish never`, `pnpm run electron:dist:m
 - Dashboard date, time, and token/count formatting that is rendered in English UI is pinned to explicit `en-US`/UTC formatting where deterministic display matters, preventing host locale differences from changing the desktop surface or CI snapshots.
 - Dashboard API calls: the frontend uses relative `/api/*` calls, so it follows the Electron-loaded loopback origin and does not hardcode `localhost`. Shared JSON fetches default to `cache: "no-store"` and the server sends no-store headers for runtime API responses.
 - Dashboard JSON mutations are parsed on runtime API routes even if a packaged Chromium request arrives with a missing or downgraded JSON `Content-Type` header. Multipart knowledge uploads and preview proxy bodies are excluded from that fallback so route-specific body handling remains intact.
+- Speech input: Electron grants microphone access only for the dashboard loopback origin, while the npm-served dashboard relies on browser secure-context treatment for `localhost` and `127.0.0.1`. If the browser or operating system blocks capture, the dashboard reports the unsupported or permission-denied state and does not mutate the composer draft.
 - Sprint previews: preview iframes use same-port `preview-<session>.localhost` origins and the backend routes those hosts to loopback preview containers. Electron keeps those preview URLs internal.
 - External links: `target="_blank"` and navigation to non-dashboard HTTP(S) or mailto URLs open in the user's default browser/mail client instead of replacing the desktop shell.
 - Native modules: Electron Builder is configured to unpack `.node` files and `onnxruntime-node` assets from ASAR so native bindings remain loadable after packaging.
 - WSL validation: packaged launches under WSL disable Electron hardware acceleration and GPU rasterization to avoid WSL GPU process crashes during local release checks.
+
+## Speech Platform Notes
+
+- macOS shows a system microphone consent prompt the first time the desktop app records audio. If access is denied, re-enable it in System Settings under Privacy & Security > Microphone.
+- Windows shows microphone consent through Windows privacy controls. If capture fails after an in-app allow decision, check Settings > Privacy & security > Microphone and confirm desktop apps can access the microphone.
+- Linux microphone access depends on the desktop audio stack and sandbox format. AppImage and tar.gz builds normally use the host PulseAudio/PipeWire session directly; distro package installs follow the user's desktop permission and audio-device configuration.
+- Browsers launched from the npm package can record from `http://localhost:<port>` or `http://127.0.0.1:<port>` because modern browsers treat loopback HTTP as a secure context for media capture. Non-loopback dashboard hosts may require HTTPS and explicit browser permission before microphone capture is available.
 
 ## Release Constraints
 

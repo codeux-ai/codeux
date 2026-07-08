@@ -14,6 +14,7 @@ import { toErrorResponse } from "../../../src/server/route-utils.js";
 import { registerSprintRoutes } from "../../../src/server/sprint-routes.js";
 import { registerTaskRoutes } from "../../../src/server/task-routes.js";
 import { EntityNotFoundError, ValidationError } from "../../../src/repositories/repository-utils.js";
+import { ProviderRoutingError } from "../../../src/services/provider-routing-error.js";
 
 const createApp = (...registrars: Array<(app: Express) => void>): Express => {
   const app = express();
@@ -122,6 +123,18 @@ describe("dashboard route handlers", () => {
       },
       status: 403,
       body: { error: "Forbidden request" },
+      expectedNextError: null,
+    },
+    {
+      label: "provider routing error",
+      route: "/api/status",
+      deps: {
+        getStatus: () => {
+          throw new ProviderRoutingError("Invocation planning selected Claude Local, but it is not eligible because that provider instance is disabled.");
+        },
+      },
+      status: 409,
+      body: { error: "Invocation planning selected Claude Local, but it is not eligible because that provider instance is disabled." },
       expectedNextError: null,
     },
     {

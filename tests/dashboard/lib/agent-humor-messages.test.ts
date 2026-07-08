@@ -25,7 +25,6 @@ describe("agent humor messages", () => {
       "tool_search",
       "tool_web",
       "tool_generic",
-      "battery",
       "mood",
     ]);
 

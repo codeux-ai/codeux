@@ -2,6 +2,7 @@ import type {
   BackgroundPattern,
   DashboardSettings,
   DashboardExperienceMode,
+  DesignGuidanceSettings,
   ExternalSettingsHints,
   McpToolToggle,
   RuntimeLogLevel,
@@ -26,6 +27,7 @@ import { sanitizeSprintLoopSteps } from "../domain/settings/settings-sanitizers/
 import { sanitizeCliWorkflow } from "../domain/settings/settings-sanitizers/cli-workflow-sanitizer.js";
 import { sanitizeWorkers } from "../domain/settings/settings-sanitizers/worker-sanitizer.js";
 import { sanitizeMemory } from "../domain/settings/settings-sanitizers/memory-sanitizer.js";
+import { sanitizeSpeech } from "../domain/settings/settings-sanitizers/speech-sanitizer.js";
 import { sanitizeModelPricing } from "../domain/settings/settings-sanitizers/model-pricing-sanitizer.js";
 import {
   buildDashboardProviderSettings,
@@ -45,6 +47,10 @@ import {
   INTERNAL_SKILL_SET,
   QA_EXHAUSTION_POLICIES,
 } from "./settings-defaults.js";
+import {
+  cloneDesignGuidanceSettings,
+  sanitizeDesignGuidanceSettings,
+} from "../domain/settings/design-guidance-catalog.js";
 
 const enforceGitManagerSkillset = (skills: SkillToggle[], githubMode: "REMOTE" | "LOCAL"): SkillToggle[] => {
   return skills.map((skill) => {
@@ -238,6 +244,10 @@ const sanitizeTechstackSelection = (value: unknown): TechstackSelectionSettings 
       : DEFAULT_PROJECT_TECHSTACK.applicationKind,
   };
 };
+
+const cloneDesignGuidance = (settings: DesignGuidanceSettings): DesignGuidanceSettings => (
+  cloneDesignGuidanceSettings(settings)
+);
 
 const BACKGROUND_PATTERNS = new Set<BackgroundPattern>([
   "NONE",
@@ -477,6 +487,7 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   },
   techstackCatalog: cloneTechstackCatalog(DEFAULT_DASHBOARD_SETTINGS.techstackCatalog),
   techstack: { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
+  designGuidance: cloneDesignGuidance(DEFAULT_DASHBOARD_SETTINGS.designGuidance),
   git: {
     ...DEFAULT_DASHBOARD_SETTINGS.git,
     githubToken: externalHints?.resolved.githubToken || DEFAULT_DASHBOARD_SETTINGS.git.githubToken,
@@ -548,7 +559,15 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   customMcpServers: DEFAULT_DASHBOARD_SETTINGS.customMcpServers.map((server) => ({ ...server })),
   memory: {
     ...DEFAULT_DASHBOARD_SETTINGS.memory,
+    customEmbeddingModels: DEFAULT_DASHBOARD_SETTINGS.memory.customEmbeddingModels.map((model) => ({
+      ...model,
+      tokenizerFiles: [...model.tokenizerFiles],
+    })),
     externalEmbedding: { ...DEFAULT_DASHBOARD_SETTINGS.memory.externalEmbedding },
+  },
+  speech: {
+    ...DEFAULT_DASHBOARD_SETTINGS.speech,
+    externalTranscription: { ...DEFAULT_DASHBOARD_SETTINGS.speech.externalTranscription },
   },
   modelPricing: { overrides: { ...DEFAULT_DASHBOARD_SETTINGS.modelPricing.overrides } },
 });
@@ -630,6 +649,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   const aiProvider = sanitizeAiProvider(input, { externalHints });
   const techstackCatalog = sanitizeTechstackCatalog(input.techstackCatalog ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog);
   const techstack = sanitizeTechstackSelection(input.techstack);
+  const designGuidance = sanitizeDesignGuidanceSettings(input.designGuidance);
   const git = sanitizeGit(input, externalHints);
   const jira = sanitizeJira(input.jira, DEFAULT_DASHBOARD_SETTINGS.jira);
   if (externalHints?.resolved?.jiraToken) {
@@ -740,6 +760,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     DEFAULT_DASHBOARD_SETTINGS.customMcpServers,
   );
   const memory = sanitizeMemory(input);
+  const speech = sanitizeSpeech(input);
   const modelPricing = sanitizeModelPricing(input.modelPricing);
 
   return {
@@ -766,6 +787,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     },
     techstackCatalog,
     techstack,
+    designGuidance,
     git,
     jira,
     notion,
@@ -786,6 +808,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     mcpTools,
     customMcpServers,
     memory,
+    speech,
     modelPricing,
   };
 };

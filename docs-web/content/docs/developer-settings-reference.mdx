@@ -121,6 +121,31 @@ Project and sprint settings own the selected techstack:
 
 Default project settings intentionally keep `selectedTechstackId` and `applicationKind` as `null`. Existing and imported projects therefore do not automatically inherit the built-in Code UX Stack; a project creation flow must set an explicit override when it wants to apply the catalog default.
 
+## `designGuidance`
+
+Project and sprint settings own design guidance:
+
+```jsonc
+{
+  "selectedTechStackId": "none",
+  "selectedStyleguideId": "none",
+  "hideDefaultStyleguides": false,
+  "customTechStacks": [
+    {
+      "id": "custom-stack",
+      "name": "Custom Stack",
+      "summary": "Concise summary",
+      "instructionMarkdown": "Project-specific stack guidance."
+    }
+  ],
+  "customStyleguides": []
+}
+```
+
+The backend catalog always includes `none`, the generic Code UX award-winning styleguide, additional default styleguides, and a small tech-stack guidance catalog. Saved selections resolve to a known default or custom id; invalid ids fall back to `none`. `hideDefaultStyleguides` only affects presentation and does not remove backend defaults. Existing and imported projects inherit `none`; new local and new remote project initialization writes an explicit project override for the Code UX styleguide. Planning and Project Setup prompts resolve selected entries from effective project settings and omit inactive `none` catalog entries. Project Setup prompts also include a setup-only styling investigation notice whenever the styleguide selection is `none`, including when tech-stack guidance is also `none`.
+
+The dashboard Guidance panel manages this block through the normal settings save flows. System scope edits `system.defaults.designGuidance`; project scope edits the active project override. Built-in catalog entries can be selected but cannot be edited or deleted. Custom entries can be added, edited, and deleted; deleting a selected custom entry clears that selector back to `none`.
+
 ## `cliWorkflow`
 
 ```jsonc

@@ -6,7 +6,6 @@ import {
   Compass,
   Cpu,
   FolderTree,
-  GitBranch,
   Hexagon,
   Inbox,
   Layers,
@@ -15,6 +14,7 @@ import {
   ListChecks,
   MessageCircle,
   Settings,
+  Workflow,
   Zap,
 } from "lucide-preact";
 import type { DashboardExperienceMode } from "../../types.js";
@@ -81,7 +81,7 @@ export const ALL_NAVIGATION_ITEMS: readonly NavigationItem[] = [
   { id: "sprints", icon: Layers, label: "Sprints", path: "/sprints", color: "text-ember-500", group: "workspace", dockSection: "right", tourId: "nav-sprints", kind: "route" },
   { id: "tasks", icon: ListChecks, label: "Tasks", path: "/tasks", color: "text-signal-400", group: "workspace", dockSection: "right", tourId: "nav-tasks", kind: "route" },
   { id: "agents", icon: Cpu, label: "Agents", path: "/agents", color: "text-signal-400", group: "workspace", dockSection: "right", tourId: "nav-agents", kind: "route" },
-  { id: "nodes", icon: GitBranch, label: "Nodes", path: "/nodes", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-nodes", kind: "route" },
+  { id: "nodes", icon: Workflow, label: "Nodes", path: "/nodes", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-nodes", kind: "route" },
   { id: "custom-dashboards", icon: LayoutDashboard, label: "Dashboards", dockLabel: "Dash", path: "/custom-dashboards", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-custom-dashboards", kind: "route" },
   { id: "stats", icon: BarChart3, label: "Stats", path: "/stats", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-stats", kind: "route" },
   { id: "scheduler", icon: CalendarDays, label: "Schedule", path: "/scheduler", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-schedule", kind: "route" },

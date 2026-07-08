@@ -105,6 +105,38 @@ describe("ProviderRunner", () => {
     await fs.rm(repoPath, { recursive: true, force: true });
   });
 
+  it("ignores generic validation language outside explicit mockup directives", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-explicit-only-"));
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: [
+        "## SYSTEM INSTRUCTIONS",
+        "2. **Unit & Integration**: `npm run test` and `npm run test:coverage` must pass.",
+        "",
+        "## SUBTASK TO EXECUTE",
+        "Use only the deterministic mockup-cli directives below.",
+        "mockup-cli:write src/generated.txt :: explicit directives only",
+        "",
+        "## MEMORY CONTEXT",
+        "- [patterns] Run validation commands: npm run missing-script",
+      ].join("\n"),
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-explicit-only",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.text).toBe("Mockup CLI completed deterministic workspace task.");
+    await expect(fs.readFile(path.join(repoPath, "src/generated.txt"), "utf8")).resolves.toBe("explicit directives only\n");
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
   it("returns a nonzero mockup-cli failure for explicit failure directives", async () => {
     const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-fail-"));
 
@@ -125,6 +157,186 @@ describe("ProviderRunner", () => {
     expect(result.stderr).toContain("mockup-cli intentional failure directive triggered");
     expect(result.text).toBe("Mockup CLI intentional failure directive triggered.");
     expect(result.nativeSessionId).toMatch(/^mockup-cli-[0-9a-f]{16}$/);
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
+  it("supports the full deterministic mockup directive surface in one sprint step", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-full-"));
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: [
+        "mockup-cli:write src/base.txt :: base",
+        "mockup-cli:append src/base.txt :: appended",
+        "mockup-cli:replace src/base.txt :: appended => replaced",
+        "mockup-cli:write src/delete-me.txt :: remove me",
+        "mockup-cli:delete src/delete-me.txt",
+        "mockup-cli:conflict src/conflict.txt :: incoming deterministic edit",
+        `mockup-cli:run node -e "const fs=require('fs'); const text=fs.readFileSync('src/base.txt','utf8'); if (!text.includes('replaced')) process.exit(1)"`,
+      ].join("\n"),
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-full",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.text).toBe("Mockup CLI completed deterministic workspace task.");
+    await expect(fs.readFile(path.join(repoPath, "src/base.txt"), "utf8")).resolves.toContain("replaced");
+    await expect(fs.access(path.join(repoPath, "src", "delete-me.txt"))).rejects.toThrow();
+    await expect(fs.readFile(path.join(repoPath, "src", "conflict.txt"), "utf8")).resolves.toContain("<<<<<<< mockup-cli-current");
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
+  it("resolves active merge conflict markers for mockup virtual conflict workers", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-conflict-resolve-"));
+    await fs.mkdir(path.join(repoPath, "src"), { recursive: true });
+    await fs.writeFile(path.join(repoPath, "README.md"), [
+      "# Fixture",
+      "<<<<<<< HEAD",
+      "Left sibling edited the conflict target.",
+      "=======",
+      "Right sibling edited the conflict target.",
+      ">>>>>>> task/right",
+      "",
+    ].join("\n"), "utf8");
+    await fs.writeFile(path.join(repoPath, "src", "conflict-target.js"), [
+      "export function conflictValue() {",
+      "<<<<<<< HEAD",
+      "  return 'left';",
+      "=======",
+      "  return 'right';",
+      ">>>>>>> task/right",
+      "}",
+      "",
+    ].join("\n"), "utf8");
+    await fs.mkdir(path.join(repoPath, ".code-ux"), { recursive: true });
+    await fs.writeFile(path.join(repoPath, ".code-ux", "mockup-pentest.log"), [
+      "<<<<<<< HEAD",
+      "left task completed",
+      "||||||| merged common ancestors",
+      "root task completed",
+      "=======",
+      "right task completed",
+      ">>>>>>> task/right",
+      "",
+    ].join("\n"), "utf8");
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: "Resolve the active Git merge conflict already present in this worktree.",
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-conflict-resolve",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    const readme = await fs.readFile(path.join(repoPath, "README.md"), "utf8");
+    expect(readme).toContain("Left sibling edited the conflict target.");
+    expect(readme).toContain("Right sibling edited the conflict target.");
+    expect(readme).not.toContain("<<<<<<<");
+    expect(readme).not.toContain(">>>>>>>");
+    await expect(fs.readFile(path.join(repoPath, "src", "conflict-target.js"), "utf8")).resolves.toContain("return 'left+right';");
+    const pentestLog = await fs.readFile(path.join(repoPath, ".code-ux", "mockup-pentest.log"), "utf8");
+    expect(pentestLog).toContain("left task completed");
+    expect(pentestLog).toContain("right task completed");
+    expect(pentestLog).not.toContain("|||||||");
+    expect(pentestLog).not.toContain("<<<<<<<");
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
+  it("resolves final local merge conflict markers for mockup virtual conflict workers", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-final-conflict-resolve-"));
+    await fs.mkdir(path.join(repoPath, "src"), { recursive: true });
+    await fs.writeFile(path.join(repoPath, "src", "final-merge-conflict.js"), [
+      "export function finalMergeValue() {",
+      "<<<<<<< HEAD",
+      "  return 'feature';",
+      "=======",
+      "  return 'default';",
+      ">>>>>>> main",
+      "}",
+      "",
+    ].join("\n"), "utf8");
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: "Resolve the active Git merge conflict already present in this worktree.",
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-final-conflict-resolve",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    const resolved = await fs.readFile(path.join(repoPath, "src", "final-merge-conflict.js"), "utf8");
+    expect(resolved).toContain("return 'feature+default';");
+    expect(resolved).not.toContain("<<<<<<<");
+    expect(resolved).not.toContain(">>>>>>>");
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
+  it("prioritizes active merge conflict repair over embedded mockup directives", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-conflict-directives-"));
+    await fs.mkdir(path.join(repoPath, "src"), { recursive: true });
+    await fs.writeFile(path.join(repoPath, "README.md"), [
+      "# Fixture",
+      "<<<<<<< HEAD",
+      "Left sibling edited the conflict target.",
+      "=======",
+      "Right sibling edited the conflict target.",
+      ">>>>>>> task/right",
+      "",
+    ].join("\n"), "utf8");
+    await fs.writeFile(path.join(repoPath, "src", "conflict-target.js"), [
+      "export function conflictValue() {",
+      "<<<<<<< HEAD",
+      "  return 'left';",
+      "=======",
+      "  return 'right';",
+      ">>>>>>> task/right",
+      "}",
+      "",
+    ].join("\n"), "utf8");
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: [
+        "Resolve the active Git merge conflict already present in this worktree.",
+        "",
+        "Original task prompt included for context:",
+        "mockup-cli:write src/conflict-target.js :: export function conflictValue() {\\n  return 'left+right';\\n}",
+      ].join("\n"),
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-conflict-directives",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    const readme = await fs.readFile(path.join(repoPath, "README.md"), "utf8");
+    expect(readme).toContain("Left sibling edited the conflict target.");
+    expect(readme).toContain("Right sibling edited the conflict target.");
+    expect(readme).not.toContain("<<<<<<<");
+    expect(readme).not.toContain(">>>>>>>");
+    await expect(fs.readFile(path.join(repoPath, "src", "conflict-target.js"), "utf8")).resolves.toContain("left+right");
 
     await fs.rm(repoPath, { recursive: true, force: true });
   });

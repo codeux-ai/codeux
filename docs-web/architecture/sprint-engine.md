@@ -106,6 +106,8 @@ Behaviour per state:
 - `CHECKPOINT` → Internal report boundary used for heartbeat and lease renewals. Keeps the same sprint run alive, emits the progress report, resets the checkpoint window, and sleeps one interval. Does not exit the run.
 - `RUNNING` → Sleep one interval, no output.
 
+During normal iterations the loop suppresses dashboard status writes when the sprint/task payload is semantically identical to the previous snapshot for that sprint run. Timestamp-only repeats are skipped, but finalisation blockers are force-published so merge or pause feedback appears immediately. The loop also reuses the active attention rows already loaded by the cycle runner instead of issuing a second attention query after every cycle.
+
 Default tunables (`sprintLoopSteps`):
 
 | Setting | Default | Min | Max |
@@ -182,6 +184,8 @@ Per provider, `maxConcurrentTasks` caps active sessions. The start-ready step ho
 - Emergency stop.
 
 Within a cycle, ready tasks are dispatched in dependency-order, then by priority, then by task ID.
+
+Provider load for start-ready admission combines running provider invocations with active task runs that have not yet produced terminal provider evidence. This prevents wide DAG cycles from creating a large queue of running Docker dispatches that all wait inside the provider-slot gate before their provider invocation rows exist. Provider-cap deferrals are logged once per provider per cycle, and provider-slot wait logs are throttled per provider across concurrent waiters.
 
 ## Cycle telemetry
 

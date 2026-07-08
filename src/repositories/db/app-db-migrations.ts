@@ -615,6 +615,9 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_task_runs_task_session_id", "task_runs", "task_id, session_id");
   ensureIndex(db, "idx_task_runs_task_session_name", "task_runs", "task_id, session_name");
   ensureIndex(db, "idx_task_runs_task_finished", "task_runs", "task_id, finished_at");
+  ensureIndex(db, "idx_task_runs_session_id_owner", "task_runs", "session_id, project_id, sprint_id, task_id");
+  ensureIndex(db, "idx_task_runs_session_name_owner", "task_runs", "session_name, project_id, sprint_id, task_id");
+  ensureIndex(db, "idx_task_runs_pr_url_owner", "task_runs", "pr_url, project_id, sprint_id, task_id");
   ensureIndex(db, "idx_task_runs_sprint_run_started", "task_runs", "sprint_run_id, started_at DESC");
   ensureIndex(db, "idx_task_runs_project_sprint_lookup", "task_runs", "project_id, sprint_id, sprint_run_id, id");
   ensureIndex(db, "idx_task_runs_project_sprint_run_lookup", "task_runs", "project_id, sprint_run_id, id");
@@ -633,6 +636,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_provider_invocations_task_run", "provider_invocations", "task_run_id, started_at DESC");
   ensureIndex(db, "idx_provider_invocations_attention", "provider_invocations", "attention_item_id, started_at DESC");
   ensureIndex(db, "idx_provider_invocations_session", "provider_invocations", "session_id, started_at DESC");
+  ensureIndex(db, "idx_provider_invocations_session_owner", "provider_invocations", "session_id, project_id, sprint_id, task_id");
   ensureIndex(db, "idx_qa_review_runs_task_started", "qa_review_runs", "task_id, started_at DESC");
   ensureIndex(db, "idx_qa_review_runs_sprint_started", "qa_review_runs", "sprint_id, started_at DESC");
   ensureIndex(db, "idx_qa_review_runs_run_status", "qa_review_runs", "status, started_at DESC");

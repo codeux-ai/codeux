@@ -18,6 +18,12 @@ describe("ProviderConcurrencyService", () => {
       updateExecutionInvocation: vi.fn(),
       appendExecutionInvocationMessage: vi.fn(),
       getLatestTaskRunBySessionId: vi.fn(),
+      getTaskRun: vi.fn(),
+      updateTaskRun: vi.fn(),
+      getTaskDispatch: vi.fn(),
+      updateTaskDispatch: vi.fn(),
+      releaseLease: vi.fn(),
+      appendTaskRunEvent: vi.fn(),
     };
     executionRepository.listRunningProviderInvocationUsages.mockReturnValue([]);
     logger = {
@@ -364,6 +370,198 @@ describe("ProviderConcurrencyService", () => {
         vi.useRealTimers();
       }
     });
+
+    it("keeps stale Docker provider slots when the linked dispatch is still heartbeating", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-06-14T18:00:00.000Z"));
+      try {
+        const activeInvocation = {
+          id: "provider-active-dispatch",
+          provider: "qwen-code",
+          purpose: "task_coding",
+          status: "running",
+          executionMode: "DOCKER",
+          sessionId: "cli-qwen-active",
+          dispatchId: "dispatch-active",
+          startedAt: "2026-06-14T17:58:00.000Z",
+          durationMs: null,
+        };
+        executionRepository.listRunningProviderInvocationUsages.mockReturnValue([activeInvocation]);
+        executionRepository.getTaskDispatch.mockReturnValue({
+          id: "dispatch-active",
+          status: "running",
+          lastHeartbeatAt: "2026-06-14T17:59:30.000Z",
+          startedAt: "2026-06-14T17:58:00.000Z",
+          claimedAt: "2026-06-14T17:58:00.000Z",
+          queuedAt: "2026-06-14T17:58:00.000Z",
+        });
+        executionRepository.tryCreateProviderInvocationUsage.mockReturnValue({ id: "provider-new" });
+        service = new ProviderConcurrencyService({
+          executionRepository,
+          logger,
+          dockerService: {
+            isAvailable: vi.fn().mockResolvedValue(true),
+            listContainers: vi.fn().mockResolvedValue([]),
+          },
+        });
+
+        const result = await service.waitForSlotAndClaim("qwen-code", 2, { provider: "qwen-code" } as any);
+
+        expect(result.id).toBe("provider-new");
+        expect(executionRepository.updateProviderInvocationUsage).not.toHaveBeenCalledWith(
+          "provider-active-dispatch",
+          expect.objectContaining({ status: "failed" }),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("completes stale Docker provider slots when the linked task run already completed", async () => {
+      const staleInvocation = {
+        id: "provider-completed",
+        provider: "qwen-code",
+        purpose: "task_coding",
+        status: "running",
+        executionMode: "DOCKER",
+        sessionId: "cli-qwen-completed",
+        dispatchId: "dispatch-running",
+        taskRunId: "task-run-completed",
+        startedAt: "2000-01-01T00:00:00.000Z",
+        finishedAt: null,
+        durationMs: null,
+      };
+      executionRepository.listRunningProviderInvocationUsages.mockReturnValue([staleInvocation]);
+      executionRepository.getTaskRun.mockReturnValue({
+        id: "task-run-completed",
+        state: "COMPLETED",
+        startedAt: "2000-01-01T00:00:00.000Z",
+        finishedAt: "2000-01-01T00:01:00.000Z",
+        durationMs: 60000,
+      });
+      executionRepository.getTaskDispatch.mockReturnValue({
+        id: "dispatch-running",
+        status: "running",
+        startedAt: "2000-01-01T00:00:00.000Z",
+        finishedAt: null,
+        lastHeartbeatAt: "2000-01-01T00:00:30.000Z",
+        queuedAt: "2000-01-01T00:00:00.000Z",
+      });
+      executionRepository.listExecutionInvocationsByProviderInvocationId.mockReturnValue([
+        { id: "exec-completed", status: "running", startedAt: "2000-01-01T00:00:00.000Z", lastMessageAt: null },
+      ]);
+      executionRepository.tryCreateProviderInvocationUsage.mockReturnValue({ id: "provider-new" });
+      service = new ProviderConcurrencyService({
+        executionRepository,
+        logger,
+        dockerService: {
+          isAvailable: vi.fn().mockResolvedValue(true),
+          listContainers: vi.fn().mockResolvedValue([]),
+        },
+      });
+
+      const result = await service.waitForSlotAndClaim("qwen-code", 2, { provider: "qwen-code" } as any);
+
+      expect(result.id).toBe("provider-new");
+      expect(executionRepository.updateProviderInvocationUsage).toHaveBeenCalledWith("provider-completed", expect.objectContaining({
+        status: "completed",
+      }));
+      expect(executionRepository.updateExecutionInvocation).toHaveBeenCalledWith("exec-completed", expect.objectContaining({
+        status: "completed",
+        errorMessage: null,
+      }));
+      expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith("exec-completed", expect.objectContaining({
+        metadata: expect.objectContaining({
+          recovery: "provider_concurrency_stale_docker_completed_reconcile",
+        }),
+      }));
+      expect(executionRepository.releaseLease).toHaveBeenCalledWith("task_dispatch", "dispatch-running");
+      expect(executionRepository.updateTaskDispatch).toHaveBeenCalledWith("dispatch-running", expect.objectContaining({
+        connectionId: null,
+        status: "completed",
+        errorMessage: null,
+      }));
+      expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
+        "task-run-completed",
+        "task_dispatch_reconciled",
+        "system",
+        expect.objectContaining({
+          reason: "provider_concurrency_stale_docker_completed_reconcile",
+          previousDispatchStatus: "running",
+          nextDispatchStatus: "completed",
+        }),
+        expect.any(Object),
+      );
+    });
+
+    it("settles a running task run when its linked Docker dispatch already completed", async () => {
+      const staleInvocation = {
+        id: "provider-dispatch-completed",
+        provider: "mockup-cli",
+        purpose: "task_coding",
+        status: "running",
+        executionMode: "DOCKER",
+        sessionId: "cli-mockup-completed",
+        taskId: "task-1",
+        taskRunId: "task-run-running",
+        dispatchId: "dispatch-completed",
+        startedAt: "2026-06-14T17:58:00.000Z",
+        durationMs: null,
+      };
+      executionRepository.listRunningProviderInvocationUsages.mockReturnValue([staleInvocation]);
+      executionRepository.getTaskRun.mockReturnValue({
+        id: "task-run-running",
+        taskId: "task-1",
+        state: "RUNNING",
+        startedAt: "2026-06-14T17:58:00.000Z",
+        finishedAt: null,
+        durationMs: null,
+      });
+      executionRepository.getTaskDispatch.mockReturnValue({
+        id: "dispatch-completed",
+        status: "completed",
+        startedAt: "2026-06-14T17:58:00.000Z",
+        finishedAt: "2026-06-14T17:59:00.000Z",
+        lastHeartbeatAt: "2026-06-14T17:59:00.000Z",
+        queuedAt: "2026-06-14T17:58:00.000Z",
+      });
+      const projectManagementRepository = {
+        getTask: vi.fn().mockReturnValue({
+          id: "task-1",
+          status: "in_progress",
+          is_merged: false,
+        }),
+        updateTask: vi.fn(),
+      };
+      executionRepository.tryCreateProviderInvocationUsage.mockReturnValue({ id: "provider-new" });
+      service = new ProviderConcurrencyService({
+        executionRepository,
+        projectManagementRepository: projectManagementRepository as any,
+        logger,
+        dockerService: {
+          isAvailable: vi.fn().mockResolvedValue(true),
+          listContainers: vi.fn().mockResolvedValue([]),
+        },
+      });
+
+      const result = await service.waitForSlotAndClaim("mockup-cli", 2, { provider: "mockup-cli" } as any);
+
+      expect(result.id).toBe("provider-new");
+      expect(executionRepository.updateProviderInvocationUsage).toHaveBeenCalledWith("provider-dispatch-completed", expect.objectContaining({
+        status: "completed",
+      }));
+      expect(executionRepository.updateTaskRun).toHaveBeenCalledWith("task-run-running", expect.objectContaining({
+        state: "COMPLETED",
+        finishedAt: expect.any(String),
+        durationMs: expect.any(Number),
+      }));
+      expect(projectManagementRepository.updateTask).toHaveBeenCalledWith("task-1", {
+        status: "coding_completed",
+      });
+      expect(executionRepository.updateProviderInvocationUsage).not.toHaveBeenCalledWith("provider-dispatch-completed", expect.objectContaining({
+        status: "failed",
+      }));
+    });
   });
 
   describe("tryClaimSlot", () => {
@@ -452,6 +650,28 @@ describe("ProviderConcurrencyService", () => {
         jules: 2,
         gemini: 1,
       });
+    });
+
+    it("counts active task runs that have not produced terminal provider invocation evidence", () => {
+      executionRepository.listRunningProviderInvocationUsages.mockReturnValue([
+        { provider: "mockup-cli" },
+        { provider: "jules" },
+        { provider: "jules" },
+      ]);
+      executionRepository.countGlobalRunningTaskRunsPerProvider = vi.fn().mockReturnValue(new Map([
+        ["mockup-cli", 5],
+        ["codex", 3],
+        ["jules", 1],
+      ]));
+
+      const counts = service.getGlobalRunningCounts(["mockup-cli", "codex", "jules"]);
+
+      expect(counts).toEqual({
+        "mockup-cli": 5,
+        codex: 3,
+        jules: 2,
+      });
+      expect(executionRepository.countGlobalRunningTaskRunsPerProvider).toHaveBeenCalledWith(["mockup-cli", "codex", "jules"]);
     });
   });
 

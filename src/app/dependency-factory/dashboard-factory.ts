@@ -20,6 +20,7 @@ import { ExecutionInvocationControlService } from "../../services/execution-invo
 import { createLateBoundDependency } from "../../shared/late-bound-dependency.js";
 import { ChatProviderIngressService } from "../../services/chat-provider-ingress-service.js";
 import { ChatProviderOutboundService } from "../../services/chat-provider-outbound-service.js";
+import { SpeechTranscriptionService } from "../../services/speech-transcription-service.js";
 import { NodeFlowRuntimeService } from "../../services/node-flow-runtime-service.js";
 import { NodeFlowService } from "../../services/node-flow-service.js";
 
@@ -28,6 +29,7 @@ export interface DashboardDependencies {
   chatProviderRepository: CoreDependencies["chatProviderRepository"];
   chatProviderIngressService: ChatProviderIngressService;
   chatProviderOutboundService: ChatProviderOutboundService;
+  speechTranscriptionService: SpeechTranscriptionService;
   nodeFlowService: CoreDependencies["nodeFlowService"];
   activityCacheService: ActivityCacheService;
   taskRerunService: TaskRerunService;
@@ -167,6 +169,10 @@ export function createDashboardDependencies(
     chatProviderRepository,
     chatThreadRuntimeService,
     logger: logger.child({ component: "chat-provider-ingress-service" }),
+  });
+  const speechTranscriptionService = new SpeechTranscriptionService({
+    settingsRepository,
+    logger: logger.child({ component: "speech-transcription-service" }),
   });
   const nodeFlowRuntimeService = new NodeFlowRuntimeService({
     nodeFlowRepository: coreDeps.nodeFlowRepository,
@@ -491,6 +497,7 @@ export function createDashboardDependencies(
     chatThreadRuntimeService,
     chatProviderIngressService,
     chatProviderOutboundService,
+    speechTranscriptionService,
     nodeFlowService,
     activityCacheService,
     taskRerunService,

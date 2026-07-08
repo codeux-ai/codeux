@@ -200,7 +200,10 @@ export function buildJiraSearchJql(input: JiraIssueSearchInput, defaultProjectKe
     if (status === 'open') {
       clauses.push('statusCategory != Done');
     } else if (status === 'in_progress') {
-      clauses.push('statusCategory = "In Progress"');
+      const inProgressStatusName = input.inProgressStatusName?.trim();
+      clauses.push(inProgressStatusName
+        ? `status = ${quoteJqlString(inProgressStatusName)}`
+        : 'statusCategory = "In Progress"');
     } else if (status === 'done') {
       clauses.push('statusCategory = Done');
     }

@@ -47,6 +47,130 @@ function addWrite(operations, mode, rawPath, rawContent) {
   operations.push({ type: mode, filePath: rawPath.trim(), content: normalizeContent(rawContent) });
 }
 
+function hasConflictMarkers(content) {
+  return content.includes("<<<<<<<") && content.includes("=======") && content.includes(">>>>>>>");
+}
+
+function uniqueNonEmptyLines(...blocks) {
+  const seen = new Set();
+  const lines = [];
+  for (const block of blocks) {
+    for (const rawLine of String(block || "").split(/\r?\n/)) {
+      const line = rawLine.trimEnd();
+      if (!line.trim()) continue;
+      if (seen.has(line)) continue;
+      seen.add(line);
+      lines.push(line);
+    }
+  }
+  return lines;
+}
+
+function resolveConflictBlock(filePath, ours, theirs) {
+  const combined = ours + "\n" + theirs;
+  if (
+    /(?:^|[/\\])conflict-target\.js$/i.test(filePath)
+    && /export\s+function\s+conflictValue/.test(combined)
+    && /return\s+['"]left['"]\s*;/.test(combined)
+    && /return\s+['"]right['"]\s*;/.test(combined)
+  ) {
+    return "export function conflictValue() {\n  return 'left+right';\n}";
+  }
+  if (
+    /(?:^|[/\\])final-merge-conflict\.js$/i.test(filePath)
+    && /export\s+function\s+finalMergeValue/.test(combined)
+    && /return\s+['"]feature['"]\s*;/.test(combined)
+    && /return\s+['"]default['"]\s*;/.test(combined)
+  ) {
+    return "export function finalMergeValue() {\n  return 'feature+default';\n}";
+  }
+  return uniqueNonEmptyLines(ours, theirs).join("\n");
+}
+
+function resolveConflictContent(filePath, content) {
+  const resolved = String(content).replace(
+    /^<<<<<<<[^\n]*\n([\s\S]*?)(?:\n\|\|\|\|\|\|\|[^\n]*\n[\s\S]*?)?\n=======\n([\s\S]*?)\n>>>>>>>[^\n]*(?:\n|$)/gm,
+    (_match, ours, theirs) => {
+      const resolved = resolveConflictBlock(filePath, ours, theirs);
+      return resolved.endsWith("\n") ? resolved : resolved + "\n";
+    },
+  );
+  if (
+    /(?:^|[/\\])conflict-target\.js$/i.test(filePath)
+    && /export\s+function\s+conflictValue/.test(resolved)
+    && /return\s+['"]left['"]\s*;/.test(resolved)
+    && /return\s+['"]right['"]\s*;/.test(resolved)
+  ) {
+    return "export function conflictValue() {\n  return 'left+right';\n}\n";
+  }
+  if (
+    /(?:^|[/\\])final-merge-conflict\.js$/i.test(filePath)
+    && /export\s+function\s+finalMergeValue/.test(resolved)
+    && /return\s+['"]feature['"]\s*;/.test(resolved)
+    && /return\s+['"]default['"]\s*;/.test(resolved)
+  ) {
+    return "export function finalMergeValue() {\n  return 'feature+default';\n}\n";
+  }
+  return resolved;
+}
+
+async function walkFiles(dir, files = []) {
+  const entries = await fsp.readdir(dir, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    if (entry.name === ".git" || entry.name === "node_modules") continue;
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await walkFiles(fullPath, files);
+    } else if (entry.isFile()) {
+      files.push(fullPath);
+    }
+  }
+  return files;
+}
+
+async function listConflictFiles() {
+  const gitResult = cp.spawnSync("git", ["diff", "--name-only", "--diff-filter=U", "-z"], {
+    cwd,
+    encoding: "utf8",
+    timeout: 10000,
+    maxBuffer: 1024 * 1024,
+  });
+  const gitFiles = gitResult.status === 0
+    ? String(gitResult.stdout || "")
+      .split("\0")
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .map(resolveWorkspacePath)
+    : [];
+  const candidates = gitFiles.length > 0 ? gitFiles : await walkFiles(cwd);
+  const conflicted = [];
+  for (const filePath of candidates) {
+    const content = await fsp.readFile(filePath, "utf8").catch(() => null);
+    if (content && hasConflictMarkers(content)) {
+      conflicted.push(filePath);
+    }
+  }
+  return conflicted;
+}
+
+async function resolveActiveConflicts() {
+  const files = await listConflictFiles();
+  const resolved = [];
+  for (const filePath of files) {
+    const content = await fsp.readFile(filePath, "utf8");
+    const next = resolveConflictContent(path.relative(cwd, filePath), content);
+    await fsp.writeFile(filePath, next.endsWith("\n") ? next : next + "\n", "utf8");
+    resolved.push(path.relative(cwd, filePath));
+  }
+  if (resolved.length === 0) {
+    const marker = resolveWorkspacePath(".code-ux/mockup-cli-conflict-resolution.txt");
+    await fsp.mkdir(path.dirname(marker), { recursive: true });
+    await fsp.writeFile(marker, "No active conflict markers were found by mockup-cli.\n", "utf8");
+    resolved.push(path.relative(cwd, marker));
+  }
+  return resolved;
+}
+
 function splitCommandLine(command) {
   const argv = [];
   let current = "";
@@ -99,36 +223,54 @@ function splitCommandLine(command) {
 }
 
 function parseOperations() {
+  const shouldResolveActiveConflicts = /\b(resolve(?:\s+the)?(?:\s+active)?\s+merge conflict|active Git merge conflict|unresolved merge conflicts|merge-conflict resolution)\b/i.test(prompt);
+  if (shouldResolveActiveConflicts) {
+    // Virtual conflict-worker prompts include original task prompts as context. Those
+    // prompts may contain mockup-cli directives, but replaying them after resolving the
+    // active conflict can overwrite the actual merge resolution.
+    return { operations: [{ type: "resolve-conflicts" }], validations: [] };
+  }
+
   const operations = [];
   const validations = [];
+  let hasExplicitMockupDirectives = /(^|\n)\s*mockup-cli:(?:file|write|append|conflict|replace|delete|run)\b/i.test(prompt);
   const fileFence = /mockup-cli:file\s+([^\n]+)\n\x60{3}[^\n]*\n([\s\S]*?)\n\x60{3}/gi;
   for (const match of prompt.matchAll(fileFence)) {
     addWrite(operations, "write", match[1], match[2]);
+    hasExplicitMockupDirectives = true;
   }
   const heredoc = /mockup-cli:file\s+(.+?)\s+<<([A-Za-z0-9_-]+)\n([\s\S]*?)\n\2/g;
   for (const match of prompt.matchAll(heredoc)) {
     addWrite(operations, "write", match[1], match[3]);
+    hasExplicitMockupDirectives = true;
   }
 
   for (const line of prompt.split(/\r?\n/)) {
     let match = line.match(/^mockup-cli:(write|append|conflict)\s+(.+?)\s*::\s*(.*)$/i);
     if (match) {
       addWrite(operations, match[1].toLowerCase(), match[2], match[3]);
+      hasExplicitMockupDirectives = true;
       continue;
     }
     match = line.match(/^mockup-cli:replace\s+(.+?)\s*::\s*(.*?)\s*=>\s*(.*)$/i);
     if (match) {
       operations.push({ type: "replace", filePath: match[1].trim(), from: normalizeContent(match[2]), to: normalizeContent(match[3]) });
+      hasExplicitMockupDirectives = true;
       continue;
     }
     match = line.match(/^mockup-cli:delete\s+(.+)$/i);
     if (match) {
       operations.push({ type: "delete", filePath: match[1].trim() });
+      hasExplicitMockupDirectives = true;
       continue;
     }
     match = line.match(/^mockup-cli:run\s+(.+)$/i);
     if (match) {
       validations.push(match[1].trim());
+      hasExplicitMockupDirectives = true;
+      continue;
+    }
+    if (hasExplicitMockupDirectives) {
       continue;
     }
     match = line.match(/(?:create|write)\s+(?:a\s+)?file\s+[\x60'"]?([^\x60'":\s]+)[\x60'"]?\s+(?:with|containing)\s+(?:content|text)?[:\s]+(.+)$/i);
@@ -168,6 +310,10 @@ function parseOperations() {
 }
 
 async function applyOperation(operation) {
+  if (operation.type === "resolve-conflicts") {
+    const resolved = await resolveActiveConflicts();
+    return { type: operation.type, path: resolved.join(",") };
+  }
   const target = resolveWorkspacePath(operation.filePath);
   await fsp.mkdir(path.dirname(target), { recursive: true });
   if (operation.type === "write") {

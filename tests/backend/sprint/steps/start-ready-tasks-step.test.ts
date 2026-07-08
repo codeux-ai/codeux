@@ -140,7 +140,7 @@ describe("start-ready-tasks-step", () => {
       getRunningCounts: () => ({ codex: 2 }),
     });
 
-    expect(startTask).toHaveBeenCalled();
+    expect(startTask).not.toHaveBeenCalled();
     expect(res.subtasks[0].status).toBe("PENDING");
     expect(fails).toBe(0);
     expect(setConsecutiveFailures).not.toHaveBeenCalled();
@@ -173,11 +173,19 @@ describe("start-ready-tasks-step", () => {
       getRunningCounts: () => ({ codex: 2 }),
     });
 
-    expect(startTask).toHaveBeenCalledTimes(3);
+    expect(startTask).not.toHaveBeenCalled();
     expect(res.subtasks.map(task => task.status)).toEqual(["PENDING", "PENDING", "PENDING"]);
     expect(fails).toBe(2);
     expect(setConsecutiveFailures).not.toHaveBeenCalled();
     expect(errorSpy).not.toHaveBeenCalled();
-    expect(infoSpy).toHaveBeenCalledTimes(3);
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+    expect(infoSpy).toHaveBeenCalledWith("Provider concurrency cap deferred ready tasks", expect.objectContaining({
+      provider: "codex",
+      limit: 2,
+      currentCount: 2,
+      blockedTaskCount: 3,
+      sampleTaskIds: ["1", "2", "3"],
+      source: "pre_dispatch",
+    }));
   });
 });

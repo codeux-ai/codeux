@@ -18,7 +18,8 @@ It is for contributors and integrators who need to reason about *how* Code UX ma
 | 8 | [Custom dashboard foundation](./custom-dashboard-foundation.md) | Persisted dashboard manifests, generated bundles, validation history, and publication state |
 | 9 | [External chat connectors](./external-chat-providers.md) | Provider setup, channel bindings, inbound dedupe, outbound delivery state |
 | 10 | [Configuration resolution](./configuration-resolution.md) | Cascade order, search paths, settings hierarchy |
-| 11 | [Security model](./security.md) | Authentication, authorisation, secrets, network surface |
+| 11 | [Speech input](./speech-input.md) | Persisted transcription settings, privacy boundary, provider fallback contract |
+| 12 | [Security model](./security.md) | Authentication, authorisation, secrets, network surface |
 
 ## Runtime Notes
 

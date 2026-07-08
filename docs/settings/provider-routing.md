@@ -54,7 +54,7 @@ Each `aiProvider.invocationRouting.<routeId>` entry contains:
 - `provider`
   - explicit manual provider config id, or `null` to inherit the profile default
 - `allowedProviders`
-  - optional provider config id subset for that invocation; empty means "all enabled providers"
+  - optional provider config id subset for weighted or agent-provider selection; empty weighted/agent pools fail closed to the route's selected or inherited provider rather than opening to every enabled provider
 - `providers`
   - sparse overrides for `enabled`, `model`, `weight`, and `thinkingMode`, keyed by provider config id
 
@@ -71,9 +71,27 @@ Provider instances are first-class routing targets:
 - `WEIGHTED` distributes across enabled instances, even when several share the same provider type
 - `AGENT` uses the selected agent preset's optional provider/model preference when present, then falls back to the route's inherited/manual provider
 
+## Thinking Mode Catalog
+
+Thinking/reasoning settings are provider-keyed rather than global. Base provider settings and route overrides accept only values supported by the selected provider type:
+
+| Provider | Settings values |
+| --- | --- |
+| Gemini | `minimal`, `low`, `medium`, `high` |
+| Codex | `low`, `medium`, `high`, `xhigh` |
+| Claude Code | `low`, `medium`, `high`, `xhigh`, `max` |
+| Qwen Code | `low`, `medium`, `high`, `xhigh`, `max` |
+| OpenCode | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` |
+| Antigravity | `low`, `high` |
+| Jules | Unsupported; no thinking control is rendered or forwarded |
+
+Legacy persisted values `SMALL`, `MEDIUM`, and `HIGH` are accepted during load and validation for CLI providers and are normalized to provider-appropriate values. For example, Codex `HIGH` becomes `high`, while Antigravity `MEDIUM` becomes `high` because Antigravity exposes only low/high reasoning selections.
+
+Runtime delivery matches each CLI's reliable headless surface. Codex receives `model_reasoning_effort` via CLI config overrides, Claude Code receives `--effort`, Qwen Code receives generated runtime config `model.reasoningEffort`, and OpenCode receives `--variant`. Gemini and Antigravity do not expose a reliable per-run headless flag in the supported CLI path, so Code UX adds provider-specific prompt guidance for those providers only.
+
 Legacy saved values of `ORCHESTRATOR` are normalized to `AGENT` when settings are loaded. The old rule-based provider picker is no longer exposed.
 
-Manual route selection is authoritative for that route. If a route sets `provider` to a concrete instance such as `opencode`, Code UX treats that instance as enabled for that route even if its base provider entry is disabled by default. An explicit route override of `providers.<id>.enabled = false` still disables it. This prevents disabled-by-default optional providers from losing to the first enabled default after the user pins a route to them.
+Manual route selection is authoritative for that route. Code UX never falls back from a manually selected provider instance to another enabled provider. If the selected or inherited instance is disabled, missing, unavailable for the invocation type, or blocked by LOCAL Git/Jules constraints, the invocation fails with a clear routing error so the operator can enable that exact instance or choose a different route provider. Dashboard/API routes return these provider-selection failures as visible `409` responses with the routing message; only unexpected internal failures are masked as `Internal Server Error`. A route can deliberately enable an otherwise disabled provider instance with `providers.<id>.enabled = true`; otherwise disabled instances remain unavailable.
 
 ## Supported Invocation Routes
 
@@ -90,11 +108,11 @@ Manual route selection is authoritative for that route. If a route sets `provide
 
 1. Start from the selected route.
 2. Build the baseline provider-instance catalog from the route profile.
-3. Apply worker-profile defaults when `profile = WORKER`. The inherited worker default instance is enabled for worker-profile routes, and incompatible worker model overrides are ignored instead of being forwarded to a different provider.
+3. Apply worker-profile defaults when `profile = WORKER`. Incompatible worker model overrides are ignored instead of being forwarded to a different provider, but the inherited worker provider instance must still be eligible; Code UX does not auto-enable disabled worker defaults.
 4. Apply invocation-specific per-provider overrides.
-5. Filter by `allowedProviders`, then by any runtime provider pool restriction. A manually pinned route provider remains eligible even if an older allowed-pool setting did not include it.
-6. Run the route's selected strategy. For `AGENT`, Code UX reads the selected agent preset's optional `providerConfigId` and `model`; blank agent fields inherit the route default. The top-level `aiProvider.strategy` remains only for legacy settings compatibility.
-7. If Jules is selected but unavailable, Code UX reroutes within the remaining eligible providers.
+5. Filter by `allowedProviders`, then by any runtime provider pool restriction. Under `MANUAL`, the weighted pool is ignored, but the selected provider still must be enabled and available for the invocation.
+6. Run the route's selected strategy. For `AGENT`, Code UX reads the selected agent preset's optional `providerConfigId` and `model`; blank agent fields inherit the route default. If that selected or inherited provider is unavailable, Code UX reports the routing error instead of trying another provider. The top-level `aiProvider.strategy` remains only for legacy settings compatibility.
+7. If Jules is selected but unavailable or the current context requires a CLI provider, Code UX reports the routing error instead of rerouting within the remaining providers.
 8. When a CLI instance is selected for Docker execution, Code UX forwards that instance's `mountAuth` and `authPath` into the runtime so the chosen route controls which local credential directory is copied.
 9. If a persisted task already has a concrete provider assignment, such as `gemini` on retry, Code UX resolves the matching provider instance settings for that provider instead of reusing settings from a newly resolved fallback route. This keeps model and auth-copy settings aligned with the actual CLI being launched.
 10. Legacy provider-id keyed payloads are normalized into the instance model so older settings rows and tests continue to resolve through the new routing engine.
@@ -181,6 +199,7 @@ The v2 settings page exposes:
 Dashboard route and model controls share provider display metadata from the settings view-model helpers:
 - provider routes use provider instance ids internally but display the settings page instance name, such as `Codex Primary`, instead of legacy virtual-worker labels
 - provider icons use the underlying provider type, so additional Codex, Qwen Code, OpenCode, and Antigravity instances keep the correct brand icon
+- base and route thinking selectors use the selected provider instance's option catalog, hide for unsupported providers such as Jules, and label legacy saved values through their normalized provider-specific value
 - default route/model options show the resolved inherited worker defaults when available, such as `Default Route (Codex Primary)` and `Default Model (gpt-5.5)`
 - Codex model selectors include `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna` as selectable catalog options while keeping `gpt-5.5` as the Codex default model
 - custom endpoint provider instances display their effective configured model in Settings defaults, route cards, and default model labels. Codex and Claude Code API-key custom endpoint instances use `customModel` and their custom base URL when local auth is not mounted; Qwen Code `MODEL_PROVIDER` and OpenCode `CUSTOM_PROVIDER` instances use their generated configured model ids and endpoint metadata. Mounted/local-auth and dashboard-auth instances ignore stale custom model or base URL fields and keep showing the saved provider default.

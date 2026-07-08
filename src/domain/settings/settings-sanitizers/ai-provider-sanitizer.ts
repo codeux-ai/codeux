@@ -103,13 +103,16 @@ export const sanitizeAiProvider = (
 
   const integrationProviders = options.integrationProviders || buildDefaultIntegrationProviders(options.externalHints);
   const providers = buildProjectProviderSettings(aiProviderInput.providers, integrationProviders);
-  const defaultProviderId = DEFAULT_DASHBOARD_SETTINGS.aiProvider.provider || Object.keys(providers)[0] || null;
+  const dashboardDefaultProviderId = DEFAULT_DASHBOARD_SETTINGS.aiProvider.provider;
+  const defaultProviderId = dashboardDefaultProviderId && dashboardDefaultProviderId in providers
+    ? dashboardDefaultProviderId
+    : Object.keys(providers)[0] || null;
 
   return {
     provider: resolveProviderConfigId(
       aiProviderInput.provider,
       providers,
-      defaultProviderId ? providers[defaultProviderId]?.provider || "jules" : "jules",
+      defaultProviderId ? providers[defaultProviderId]?.provider || null : null,
     ) || defaultProviderId,
     strategy: normalizeProviderStrategy(aiProviderInput.strategy, DEFAULT_DASHBOARD_SETTINGS.aiProvider.strategy),
     providers,

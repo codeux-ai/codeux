@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { runCommandStrict } from "../../../../src/services/cli-process-runner.js";
 import {
   getCheckedOutRef,
   restoreCheckedOutRef,
+  preserveDirtyCheckout,
+  restorePreservedDirtyCheckout,
   mergeBranchLocally,
   mergeBranchLocallyInTemporaryWorktree,
   findRecoverableWorkerBranch,
@@ -84,6 +86,26 @@ describe("local-merge helpers", () => {
     const files = (await git(repo, "ls-tree", "--name-only", "main")).stdout;
     expect(files).toContain("feature.txt");
     expect(await currentBranch()).toBe("feature");
+  });
+
+  it("updates a checked-out target branch through a temporary worktree merge", async () => {
+    await git(repo, "checkout", "main");
+    await git(repo, "checkout", "-b", "feature-work", "feature");
+    await commitFile(repo, "work.txt", "work\n", "feat: work");
+    await git(repo, "checkout", "main");
+
+    const result = await mergeBranchLocallyInTemporaryWorktree({
+      repoPath: repo,
+      targetBranch: "main",
+      sourceBranch: "feature-work",
+      commitMessage: "Merge branch 'feature-work' into main",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.conflict).toBe(false);
+    expect(await currentBranch()).toBe("main");
+    const files = (await git(repo, "ls-tree", "--name-only", "main")).stdout;
+    expect(files).toContain("work.txt");
   });
 
   it("creates a missing unborn local default branch from the source branch", async () => {
@@ -177,6 +199,71 @@ describe("local-merge helpers", () => {
     expect(status).toBe("");
   });
 
+  it("auto-resolves Code UX runtime-only conflicts to the target side while merging task code", async () => {
+    await mkdir(path.join(repo, ".code-ux"), { recursive: true });
+    await commitFile(repo, ".code-ux/runtime.log", "base\n", "chore: track runtime artifact");
+
+    await git(repo, "checkout", "feature");
+    await mkdir(path.join(repo, ".code-ux"), { recursive: true });
+    await commitFile(repo, ".code-ux/runtime.log", "feature runtime\n", "chore: feature runtime artifact");
+    const featureHeadBefore = (await git(repo, "rev-parse", "feature")).stdout.trim();
+
+    await git(repo, "checkout", "main");
+    await git(repo, "checkout", "-b", "worker");
+    await writeFile(path.join(repo, ".code-ux", "runtime.log"), "worker runtime\n", "utf8");
+    await writeFile(path.join(repo, "work.txt"), "work\n", "utf8");
+    await git(repo, "add", ".");
+    await git(repo, "commit", "-m", "feat: worker code and runtime artifact");
+    await git(repo, "checkout", "main");
+
+    const result = await mergeBranchLocally({
+      repoPath: repo,
+      targetBranch: "feature",
+      sourceBranch: "worker",
+      commitMessage: "Merge branch 'worker' into feature",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.conflict).toBe(false);
+    expect((await git(repo, "rev-parse", "feature")).stdout.trim()).not.toBe(featureHeadBefore);
+    expect((await git(repo, "show", "feature:work.txt")).stdout).toBe("work");
+    expect((await git(repo, "show", "feature:.code-ux/runtime.log")).stdout).toBe("feature runtime");
+    expect((await git(repo, "status", "--porcelain")).stdout.trim()).toBe("");
+  });
+
+  it("still reports real conflicts when Code UX runtime files are not the only conflict", async () => {
+    await mkdir(path.join(repo, ".code-ux"), { recursive: true });
+    await commitFile(repo, ".code-ux/runtime.log", "base\n", "chore: track runtime artifact");
+
+    await git(repo, "checkout", "feature");
+    await mkdir(path.join(repo, ".code-ux"), { recursive: true });
+    await writeFile(path.join(repo, ".code-ux", "runtime.log"), "feature runtime\n", "utf8");
+    await writeFile(path.join(repo, "base.txt"), "feature change\n", "utf8");
+    await git(repo, "add", ".");
+    await git(repo, "commit", "-m", "feat: feature changes");
+    const featureHeadBefore = (await git(repo, "rev-parse", "feature")).stdout.trim();
+
+    await git(repo, "checkout", "main");
+    await git(repo, "checkout", "-b", "worker");
+    await writeFile(path.join(repo, ".code-ux", "runtime.log"), "worker runtime\n", "utf8");
+    await writeFile(path.join(repo, "base.txt"), "worker change\n", "utf8");
+    await git(repo, "add", ".");
+    await git(repo, "commit", "-m", "feat: worker changes");
+    await git(repo, "checkout", "main");
+
+    const result = await mergeBranchLocally({
+      repoPath: repo,
+      targetBranch: "feature",
+      sourceBranch: "worker",
+      commitMessage: "Merge branch 'worker' into feature",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.conflict).toBe(true);
+    expect((await git(repo, "rev-parse", "feature")).stdout.trim()).toBe(featureHeadBefore);
+    expect((await git(repo, "status", "--porcelain")).stdout.trim()).toBe("");
+  });
+
   it("flags a non-conflict setup failure (missing source branch) without claiming a conflict", async () => {
     const result = await mergeBranchLocally({
       repoPath: repo,
@@ -241,6 +328,63 @@ describe("local-merge helpers", () => {
     expect(files).toContain("feature.txt");
   });
 
+  it("merges in a temporary worktree when untracked Code UX files would block checkout", async () => {
+    await git(repo, "checkout", "feature");
+    await mkdir(path.join(repo, ".code-ux", "agents"), { recursive: true });
+    await commitFile(repo, ".code-ux/agents/worker.md", "tracked runtime template\n", "chore: track runtime template");
+    await git(repo, "checkout", "-b", "worker", "feature");
+    await commitFile(repo, "work.txt", "work\n", "feat: worker change");
+
+    await git(repo, "checkout", "main");
+    await mkdir(path.join(repo, ".code-ux", "agents"), { recursive: true });
+    await writeFile(path.join(repo, ".code-ux", "agents", "worker.md"), "local runtime template\n", "utf8");
+
+    const result = await mergeBranchLocallyInTemporaryWorktree({
+      repoPath: repo,
+      targetBranch: "feature",
+      sourceBranch: "worker",
+      commitMessage: "Merge branch 'worker' into feature",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.conflict).toBe(false);
+    expect(await currentBranch()).toBe("main");
+    expect((await git(repo, "status", "--porcelain")).stdout).toContain("?? .code-ux/");
+    expect((await git(repo, "show", "feature:work.txt")).stdout).toBe("work");
+  });
+
+  it("auto-resolves Code UX runtime-only conflicts in temporary worktree merges", async () => {
+    await mkdir(path.join(repo, ".code-ux"), { recursive: true });
+    await commitFile(repo, ".code-ux/runtime.log", "base\n", "chore: track runtime artifact");
+
+    await git(repo, "checkout", "main");
+    await writeFile(path.join(repo, ".code-ux", "runtime.log"), "main runtime\n", "utf8");
+    await git(repo, "add", ".");
+    await git(repo, "commit", "-m", "chore: main runtime artifact");
+
+    await git(repo, "checkout", "feature");
+    await mkdir(path.join(repo, ".code-ux"), { recursive: true });
+    await writeFile(path.join(repo, ".code-ux", "runtime.log"), "feature runtime\n", "utf8");
+    await writeFile(path.join(repo, "feature.txt"), "feature\n", "utf8");
+    await git(repo, "add", ".");
+    await git(repo, "commit", "-m", "feat: feature work and runtime artifact");
+    await git(repo, "checkout", "main");
+
+    const result = await mergeBranchLocallyInTemporaryWorktree({
+      repoPath: repo,
+      targetBranch: "main",
+      sourceBranch: "feature",
+      commitMessage: "Merge branch 'feature' into main",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.conflict).toBe(false);
+    expect(await currentBranch()).toBe("main");
+    expect((await git(repo, "show", "main:feature.txt")).stdout).toBe("feature");
+    expect((await git(repo, "show", "main:.code-ux/runtime.log")).stdout).toBe("main runtime");
+    expect((await git(repo, "status", "--porcelain")).stdout.trim()).toBe("");
+  });
+
   it("reports temporary-worktree merge conflicts without dirtying the visible checkout", async () => {
     await git(repo, "checkout", "feature");
     await commitFile(repo, "base.txt", "feature change\n", "feat: feature edit");
@@ -265,6 +409,102 @@ describe("local-merge helpers", () => {
     expect((await git(repo, "rev-parse", "main")).stdout.trim()).toBe(mainAfterDivergence);
     expect(await currentBranch()).toBe("operator/topic");
     expect((await git(repo, "status", "--porcelain")).stdout).toContain("?? local-note.txt");
+  });
+
+  it("preserves a dirty checkout on a backup branch and restores it uncommitted after the clean sprint merge", async () => {
+    await git(repo, "checkout", "feature");
+    await commitFile(repo, "feature.txt", "feature\n", "feat: sprint work");
+    await git(repo, "checkout", "main");
+    await writeFile(path.join(repo, "dirty-note.txt"), "dirty work\n", "utf8");
+
+    const preserved = await preserveDirtyCheckout(repo);
+    expect(preserved).not.toBeNull();
+    expect(preserved?.dirtyRefBranch).toMatch(/^dirty-ref-[0-9a-f-]+$/);
+    expect(await currentBranch()).toBe("main");
+    expect((await git(repo, "status", "--porcelain")).stdout.trim()).toBe("");
+
+    const cleanMerge = await mergeBranchLocallyInTemporaryWorktree({
+      repoPath: repo,
+      targetBranch: "main",
+      sourceBranch: "feature",
+      commitMessage: "Merge branch 'feature' into main",
+    });
+    expect(cleanMerge.ok).toBe(true);
+    expect(cleanMerge.conflict).toBe(false);
+
+    const dirtyRestore = await restorePreservedDirtyCheckout(repo, preserved!.dirtyRefBranch);
+    expect(dirtyRestore.ok).toBe(true);
+    expect(dirtyRestore.conflict).toBe(false);
+
+    const files = (await git(repo, "ls-tree", "--name-only", "main")).stdout;
+    expect(files).toContain("feature.txt");
+    expect(files).not.toContain("dirty-note.txt");
+    expect((await git(repo, "status", "--porcelain")).stdout).toContain("?? dirty-note.txt");
+  });
+
+  it("keeps the dirty branch and cleans the checkout when restored dirty work conflicts", async () => {
+    await git(repo, "checkout", "feature");
+    await commitFile(repo, "shared.txt", "feature\n", "feat: sprint shared edit");
+    await git(repo, "checkout", "main");
+    await writeFile(path.join(repo, "shared.txt"), "dirty work\n", "utf8");
+
+    const preserved = await preserveDirtyCheckout(repo);
+    expect(preserved).not.toBeNull();
+    expect((await git(repo, "status", "--porcelain")).stdout.trim()).toBe("");
+
+    const cleanMerge = await mergeBranchLocallyInTemporaryWorktree({
+      repoPath: repo,
+      targetBranch: "main",
+      sourceBranch: "feature",
+      commitMessage: "Merge branch 'feature' into main",
+    });
+    expect(cleanMerge.ok).toBe(true);
+
+    const dirtyRestore = await restorePreservedDirtyCheckout(repo, preserved!.dirtyRefBranch);
+    expect(dirtyRestore.ok).toBe(false);
+    expect(dirtyRestore.conflict).toBe(true);
+    expect(dirtyRestore.dirtyRefBranch).toBe(preserved!.dirtyRefBranch);
+    expect(dirtyRestore.restoredPaths).toContain("shared.txt");
+    expect((await git(repo, "status", "--porcelain")).stdout.trim()).toBe("");
+    expect((await git(repo, "show", `${preserved!.dirtyRefBranch}:shared.txt`)).stdout.trim()).toBe("dirty work");
+    expect((await git(repo, "show", "main:shared.txt")).stdout.trim()).toBe("feature");
+  });
+
+  it("ignores dirty Code UX runtime files when deciding whether to preserve a checkout", async () => {
+    await mkdir(path.join(repo, ".code-ux"), { recursive: true });
+    await writeFile(path.join(repo, ".code-ux", "session.json"), "{}\n", "utf8");
+
+    const preserved = await preserveDirtyCheckout(repo);
+
+    expect(preserved).toBeNull();
+    expect(await currentBranch()).toBe("main");
+    expect((await git(repo, "status", "--porcelain")).stdout).toContain("?? .code-ux/");
+  });
+
+  it("preserves user dirty files without committing Code UX runtime files", async () => {
+    await mkdir(path.join(repo, ".code-ux"), { recursive: true });
+    await writeFile(path.join(repo, ".code-ux", "session.json"), "{}\n", "utf8");
+    await writeFile(path.join(repo, "dirty-note.txt"), "dirty work\n", "utf8");
+
+    const preserved = await preserveDirtyCheckout(repo);
+
+    expect(preserved).not.toBeNull();
+    const files = (await git(repo, "ls-tree", "--name-only", preserved!.dirtyRefBranch)).stdout;
+    expect(files).toContain("dirty-note.txt");
+    expect(files).not.toContain(".code-ux");
+    expect((await git(repo, "status", "--porcelain")).stdout).toContain("?? .code-ux/");
+  });
+
+  it("preserves dirty user work with a Code UX git identity when repo identity is unset", async () => {
+    await git(repo, "config", "--unset", "user.email");
+    await git(repo, "config", "--unset", "user.name");
+    await writeFile(path.join(repo, "dirty-note.txt"), "dirty work\n", "utf8");
+
+    const preserved = await preserveDirtyCheckout(repo);
+
+    expect(preserved).not.toBeNull();
+    const author = (await git(repo, "log", "-1", "--format=%an <%ae>", preserved!.dirtyRefBranch)).stdout.trim();
+    expect(author).toBe("Code UX <agents@codeux.ai>");
   });
 
   it("creates a missing temporary-worktree target from a fallback branch before merging", async () => {

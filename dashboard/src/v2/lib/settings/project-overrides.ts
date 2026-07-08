@@ -11,10 +11,16 @@ import type {
 } from "../../../types.js";
 import { cloneGuardrails, cloneTechstackCatalog, DEFAULT_DASHBOARD_SETTINGS } from "../../../lib/settings.js";
 import { getHintApiKey } from "./provider-instances.js";
+import { cloneDesignGuidanceSettings } from "../../../../../src/domain/settings/design-guidance-catalog.js";
 
 const cloneMemorySettings = (memory: ProjectSettings["memory"]): ProjectSettings["memory"] => ({
   ...memory,
   externalEmbedding: { ...memory.externalEmbedding },
+});
+
+const cloneSpeechSettings = (speech: ProjectSettings["speech"]): ProjectSettings["speech"] => ({
+  ...speech,
+  externalTranscription: { ...speech.externalTranscription },
 });
 
 const cloneJiraSettings = (jira: SystemSettings["integrations"]["jira"]): SystemSettings["integrations"]["jira"] => ({ ...jira });
@@ -79,6 +85,12 @@ const cloneTechstackSelection = (
   techstack: ProjectSettings["techstack"] | undefined,
 ): ProjectSettings["techstack"] | undefined => (
   techstack ? { ...techstack } : undefined
+);
+
+const cloneDesignGuidance = (
+  designGuidance: ProjectSettings["designGuidance"] | undefined,
+): ProjectSettings["designGuidance"] => (
+  cloneDesignGuidanceSettings(designGuidance ?? DEFAULT_DASHBOARD_SETTINGS.designGuidance)
 );
 
 export const cloneProjectProviders = (
@@ -156,6 +168,7 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
   },
   aiProvider: cloneProjectAiProviderSettings(settings.aiProvider),
   techstack: cloneTechstackSelection(settings.techstack) ?? { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
+  designGuidance: cloneDesignGuidance(settings.designGuidance),
   git: {
     githubMode: settings.git.githubMode,
     githubToken: settings.git.githubToken,
@@ -205,6 +218,7 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
   mcpTools: cloneMcpTools(settings.mcpTools),
   customMcpServers: cloneCustomMcpServers(settings.customMcpServers),
   memory: cloneMemorySettings(settings.memory),
+  speech: cloneSpeechSettings(settings.speech),
 });
 
 export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings => ({
@@ -215,6 +229,7 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
   },
   aiProvider: cloneProjectAiProviderSettings(settings.aiProvider),
   techstack: cloneTechstackSelection(settings.techstack) ?? { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
+  designGuidance: cloneDesignGuidance(settings.designGuidance),
   git: {
     ...settings.git,
   },
@@ -253,6 +268,7 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
   mcpTools: settings.mcpTools ? cloneMcpTools(settings.mcpTools) : undefined,
   customMcpServers: settings.customMcpServers ? cloneCustomMcpServers(settings.customMcpServers) : undefined,
   memory: cloneMemorySettings(settings.memory),
+  speech: cloneSpeechSettings(settings.speech),
 });
 
 export const cloneSystemSettings = (settings: SystemSettings): SystemSettings => ({

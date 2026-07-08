@@ -80,6 +80,7 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
     prompt: providerPrompt,
     cwd: ctx.worktreePath,
     model: effectiveModel,
+    thinkingMode: providerSettings.thinkingMode,
     apiKey: providerSettings.apiKey,
     qwenAuthMode: providerSettings.qwenAuthMode,
     qwenRegion: providerSettings.qwenRegion,

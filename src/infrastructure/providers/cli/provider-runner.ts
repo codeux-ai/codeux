@@ -1,7 +1,8 @@
 import { createLogger, type Logger } from "../../../shared/logging/logger.js";
 import { ProviderTelemetryWatcher } from "./provider-telemetry-watcher.js";
-import { CliWorkflowSettings, ProviderId, type ProviderConfigMode } from "../../../contracts/app-types.js";
+import { CliWorkflowSettings, ProviderId, ThinkingMode, type ProviderConfigMode } from "../../../contracts/app-types.js";
 import type { CustomMcpServer, QwenModelProviderSettings } from "../../../contracts/app-types.js";
+import { normalizeProviderThinkingMode } from "../../../repositories/settings-defaults.js";
 import { buildProviderMcpConfigArtifact, buildClaudeMcpServerEntry, buildCodexMcpServerTomlLines, buildGeminiMcpServerEntry, escapeTomlString } from "./mcp-config-format.js";
 import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
 import { CliProviderId, E2E_PROVIDER_CLI_SHIM_ENV, enabledCustomServersFor, getNativeSessionOperationPrompt, isOpenCodeNativeSessionId, type NativeSessionOperation, ProviderCommandSpec, providerSpecs } from "./provider-command-specs.js";
@@ -62,6 +63,7 @@ export interface ProviderRunInput {
   prompt: string;
   cwd: string;
   model: string;
+  thinkingMode?: ThinkingMode;
   apiKey: string;
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
   qwenRegion?: "china" | "international";
@@ -206,6 +208,7 @@ export class ProviderRunner implements IProviderRunner {
     prompt: string;
     cwd: string;
     model: string;
+    thinkingMode?: ThinkingMode;
     apiKey: string;
     qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
     qwenRegion?: "china" | "international";
@@ -291,6 +294,7 @@ export class ProviderRunner implements IProviderRunner {
       input.qwenProtocol,
       codexProviderArgs,
       antigravityLogPath,
+      input.thinkingMode,
     );
     let { command, args } = spec;
 
@@ -462,6 +466,7 @@ export class ProviderRunner implements IProviderRunner {
           input.qwenProtocol,
           codexProviderArgs,
           antigravityLogPath,
+          input.thinkingMode,
         );
       };
       const buildFreshOpenCodeSpec = () => {
@@ -478,6 +483,7 @@ export class ProviderRunner implements IProviderRunner {
           input.qwenProtocol,
           codexProviderArgs,
           antigravityLogPath,
+          input.thinkingMode,
         );
       };
       const readAntigravityDiagnostics = async () => {
@@ -1023,6 +1029,7 @@ export class ProviderRunner implements IProviderRunner {
     qwenProtocol?: "openai" | "anthropic" | "gemini",
     codexProviderArgs: string[] = [],
     antigravityLogPath?: string | null,
+    thinkingMode?: ThinkingMode,
   ): { command: string; args: string[] } {
     if (provider === "codex" && codexOutputPath) {
       const e2eShimPath = process.env[E2E_PROVIDER_CLI_SHIM_ENV]?.trim();
@@ -1047,6 +1054,9 @@ export class ProviderRunner implements IProviderRunner {
         ? ["exec", "resume", "--last", "--yolo", "--json", "--output-last-message", codexOutputPath]
         : ["exec", "--yolo", "--json", "--output-last-message", codexOutputPath];
       args.push(...codexProviderArgs);
+      if (thinkingMode) {
+        args.push("-c", `model_reasoning_effort="${normalizeProviderThinkingMode("codex", thinkingMode)}"`);
+      }
       if (model && model !== "default") {
         args.push("--model", model);
       }
@@ -1063,6 +1073,9 @@ export class ProviderRunner implements IProviderRunner {
       }
       if (model && model !== "default") {
         args.push("--model", model);
+      }
+      if (thinkingMode) {
+        args.push("--effort", normalizeProviderThinkingMode("claude-code", thinkingMode));
       }
       args.push("-p", prompt);
       return { command: "claude", args };
@@ -1107,6 +1120,9 @@ export class ProviderRunner implements IProviderRunner {
       if (model && model !== "default") {
         args.push("--model", model);
       }
+      if (thinkingMode) {
+        args.push("--variant", normalizeProviderThinkingMode("opencode", thinkingMode));
+      }
       args.push(prompt);
       return { command: "opencode", args };
     }
@@ -1130,7 +1146,7 @@ export class ProviderRunner implements IProviderRunner {
       throw new Error(`Unsupported CLI provider: ${provider}`);
     }
 
-    const spec = providerSpec(model, prompt);
+    const spec = providerSpec(model, prompt, thinkingMode);
     if (provider === "codex" && codexProviderArgs.length > 0) {
       // Inject the custom model-provider config flags right after the `exec` subcommand,
       // ahead of the trailing prompt argument.
@@ -1146,7 +1162,7 @@ export class ProviderRunner implements IProviderRunner {
     workflowSettings: CliWorkflowSettings,
     githubToken?: string,
     providerMountAuth?: boolean,
-    providerConfig?: Pick<ProviderRunInput, "qwenAuthMode" | "qwenRegion" | "qwenBaseUrl" | "qwenEnvKey" | "qwenModelId" | "qwenProtocol" | "qwenAdditionalModelProviders" | "openCodeAuthMode" | "openCodeProviderId" | "openCodeModelId" | "openCodeBaseUrl" | "openCodeEnvKey" | "openCodePackage" | "mcpConnection" | "customBaseUrl" | "customModel" | "customMcpServers">,
+    providerConfig?: Pick<ProviderRunInput, "qwenAuthMode" | "qwenRegion" | "qwenBaseUrl" | "qwenEnvKey" | "qwenModelId" | "qwenProtocol" | "qwenAdditionalModelProviders" | "thinkingMode" | "openCodeAuthMode" | "openCodeProviderId" | "openCodeModelId" | "openCodeBaseUrl" | "openCodeEnvKey" | "openCodePackage" | "mcpConnection" | "customBaseUrl" | "customModel" | "customMcpServers">,
     qwenProcessLogDir?: string,
     gitlabToken?: string,
   ): NodeJS.ProcessEnv {

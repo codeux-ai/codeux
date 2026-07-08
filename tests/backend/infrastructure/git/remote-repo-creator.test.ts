@@ -6,6 +6,7 @@ const validateNonEmptyDir = vi.fn((dir: string) => dir);
 const runCommandStrict = vi.fn(async () => ({ stdout: "", stderr: "", code: 0 }));
 const buildGitHttpAuthEnvWithFallbacks = vi.fn(async () => ({ GIT_TOKEN: "x" }));
 const mkdirSync = vi.fn();
+const ensureCodeUxGitignoreEntry = vi.fn(async () => true);
 
 vi.mock("../../../../src/utils/path-validator.js", () => ({
   validateSafeRepoName: (...a: unknown[]) => validateSafeRepoName(...a),
@@ -23,6 +24,10 @@ vi.mock("../../../../src/services/git-http-auth.js", () => ({
 
 vi.mock("fs", () => ({
   mkdirSync: (...a: unknown[]) => mkdirSync(...a),
+}));
+
+vi.mock("../../../../src/infrastructure/git/code-ux-gitignore.js", () => ({
+  ensureCodeUxGitignoreEntry: (...a: unknown[]) => ensureCodeUxGitignoreEntry(...a),
 }));
 
 import { createGitHubRepo, createGitLabRepo } from "../../../../src/infrastructure/git/remote-repo-creator.js";
@@ -67,6 +72,10 @@ describe("createGitHubRepo", () => {
       "/tmp/parent",
       { GIT_TOKEN: "x" },
     );
+    expect(ensureCodeUxGitignoreEntry).toHaveBeenCalledWith("/tmp/parent/my-repo");
+    expect(runCommandStrict).toHaveBeenCalledWith("git", ["add", ".gitignore"], "/tmp/parent/my-repo");
+    expect(runCommandStrict).toHaveBeenCalledWith("git", ["commit", "-m", "chore: ignore Code UX runtime files"], "/tmp/parent/my-repo");
+    expect(runCommandStrict).toHaveBeenCalledWith("git", ["push", "origin", "HEAD"], "/tmp/parent/my-repo", { GIT_TOKEN: "x" });
   });
 
   it("rejects when no host token is provided", async () => {

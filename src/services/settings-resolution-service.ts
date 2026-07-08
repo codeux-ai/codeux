@@ -4,6 +4,7 @@ import type {
   CustomMcpServer,
   DashboardSettings,
   DashboardExperienceMode,
+  DesignGuidanceSettings,
   ExternalSettingsHints,
   McpToolToggle,
   RestartInvocationPolicy,
@@ -32,6 +33,7 @@ import { sanitizeGit } from "../domain/settings/settings-sanitizers/git-sanitize
 import { sanitizeJira } from "../domain/settings/settings-sanitizers/jira-sanitizer.js";
 import { sanitizeSprintLoopSteps } from "../domain/settings/settings-sanitizers/sprint-loop-sanitizer.js";
 import { sanitizeMemory } from "../domain/settings/settings-sanitizers/memory-sanitizer.js";
+import { sanitizeSpeech } from "../domain/settings/settings-sanitizers/speech-sanitizer.js";
 import { sanitizeModelPricing } from "../domain/settings/settings-sanitizers/model-pricing-sanitizer.js";
 import { sanitizeWorkers } from "../domain/settings/settings-sanitizers/worker-sanitizer.js";
 import { sanitizeExternalImporterSettings } from "../repositories/settings-sanitizer.js";
@@ -54,6 +56,10 @@ import {
   INTERNAL_SKILL_NAMES,
   INTERNAL_SKILL_SET,
 } from "../repositories/settings-defaults.js";
+import {
+  cloneDesignGuidanceSettings,
+  sanitizeDesignGuidanceSettings,
+} from "../domain/settings/design-guidance-catalog.js";
 
 function cloneSkills(skills: SkillToggle[]): SkillToggle[] {
   return skills.map((skill) => ({ ...skill }));
@@ -161,6 +167,10 @@ function cloneTechstackCatalog(catalog: TechstackCatalogSettings): TechstackCata
 
 function cloneTechstackSelection(selection: TechstackSelectionSettings): TechstackSelectionSettings {
   return { ...selection };
+}
+
+function cloneDesignGuidance(settings: DesignGuidanceSettings): DesignGuidanceSettings {
+  return cloneDesignGuidanceSettings(settings);
 }
 
 function resolveEffectiveMcpTools(
@@ -303,6 +313,39 @@ function deepMerge<T>(base: T, patch: unknown): T {
   }
 
   return result as T;
+}
+
+function mergeSettingsPatch<T>(base: T, patch: unknown): T {
+  const merged = deepMerge(base, patch) as Record<string, unknown>;
+  const patchRecord = toRecord(patch);
+  const patchAiProvider = toRecord(patchRecord.aiProvider);
+  const patchInvocationRouting = toRecord(patchAiProvider.invocationRouting);
+  const mergedAiProvider = toRecord(merged.aiProvider);
+  const mergedInvocationRouting = toRecord(mergedAiProvider.invocationRouting);
+
+  if (Object.prototype.hasOwnProperty.call(patchAiProvider, "providers")) {
+    mergedAiProvider.providers = cloneUnknown(patchAiProvider.providers);
+    merged.aiProvider = mergedAiProvider;
+  }
+
+  for (const [routeId, rawRoutePatch] of Object.entries(patchInvocationRouting)) {
+    const routePatch = toRecord(rawRoutePatch);
+    if (!Object.prototype.hasOwnProperty.call(routePatch, "providers")) {
+      continue;
+    }
+    const mergedRoute = toRecord(mergedInvocationRouting[routeId]);
+    mergedInvocationRouting[routeId] = {
+      ...mergedRoute,
+      providers: cloneUnknown(routePatch.providers),
+    };
+  }
+
+  if (Object.keys(patchInvocationRouting).length > 0) {
+    mergedAiProvider.invocationRouting = mergedInvocationRouting;
+    merged.aiProvider = mergedAiProvider;
+  }
+
+  return merged as T;
 }
 
 function deepDiff(base: unknown, value: unknown): unknown {
@@ -734,6 +777,7 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
       invocationRouting: cloneInvocationRouting(aiProvider.invocationRouting),
     },
     techstack: cloneTechstackSelection(DEFAULT_PROJECT_TECHSTACK),
+    designGuidance: cloneDesignGuidance(DEFAULT_DASHBOARD_SETTINGS.designGuidance),
     git: {
       githubMode: git.githubMode,
       githubToken: git.githubToken,
@@ -775,7 +819,15 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
     skills: cloneSkills(DEFAULT_SKILLS),
     memory: {
       ...DEFAULT_DASHBOARD_SETTINGS.memory,
+      customEmbeddingModels: DEFAULT_DASHBOARD_SETTINGS.memory.customEmbeddingModels.map((model) => ({
+        ...model,
+        tokenizerFiles: [...model.tokenizerFiles],
+      })),
       externalEmbedding: { ...DEFAULT_DASHBOARD_SETTINGS.memory.externalEmbedding },
+    },
+    speech: {
+      ...DEFAULT_DASHBOARD_SETTINGS.speech,
+      externalTranscription: { ...DEFAULT_DASHBOARD_SETTINGS.speech.externalTranscription },
     },
   };
 }
@@ -902,6 +954,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       invocationRouting: cloneInvocationRouting(aiProvider.invocationRouting),
     },
     techstack: sanitizeTechstackSelection(input.techstack),
+    designGuidance: sanitizeDesignGuidanceSettings(input.designGuidance),
     git: {
       githubMode: git.githubMode,
       githubToken: git.githubToken,
@@ -961,6 +1014,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       ),
     } : {}),
     memory: sanitizeMemory(input as Partial<DashboardSettings>),
+    speech: sanitizeSpeech(input as Partial<DashboardSettings>),
   };
 }
 
@@ -1134,7 +1188,7 @@ export function resolveProjectSettings(
 ): ProjectSettings {
   return sanitizeProjectSettings(
     {
-      ...deepMerge(systemSettings.defaults, projectOverride || {}),
+      ...mergeSettingsPatch(systemSettings.defaults, projectOverride || {}),
       integrations: systemSettings.integrations,
     },
     undefined
@@ -1149,7 +1203,7 @@ export function resolveSprintProjectSettings(
   const projectSettings = resolveProjectSettings(systemSettings, projectOverride);
   return sanitizeProjectSettings(
     {
-      ...deepMerge(projectSettings, sprintOverride || {}),
+      ...mergeSettingsPatch(projectSettings, sprintOverride || {}),
       integrations: systemSettings.integrations,
     },
     undefined
@@ -1306,6 +1360,7 @@ export function resolveDashboardSettings(args: {
     aiProvider: resolvedAiProvider,
     techstackCatalog: cloneTechstackCatalog(techstackCatalog),
     techstack: cloneTechstackSelection(sprintSettings.techstack),
+    designGuidance: cloneDesignGuidance(sprintSettings.designGuidance),
     // GitHub/GitLab/Jira resolve through the scoped project/sprint settings, which
     // inherit the system integration values unless a project or sprint overrides
     // them. A blank scoped value falls back to the system integration value.
@@ -1357,7 +1412,15 @@ export function resolveDashboardSettings(args: {
     skills: cloneSkills(sprintSettings.skills),
     mcpTools: resolveEffectiveMcpTools(args.systemSettings.mcpTools, sprintSettings.mcpTools),
     customMcpServers: resolveEffectiveCustomMcpServers(args.systemSettings.customMcpServers, sprintSettings.customMcpServers),
-    memory: { ...sprintSettings.memory, externalEmbedding: { ...sprintSettings.memory.externalEmbedding } },
+    memory: {
+      ...sprintSettings.memory,
+      customEmbeddingModels: sprintSettings.memory.customEmbeddingModels.map((model) => ({
+        ...model,
+        tokenizerFiles: [...model.tokenizerFiles],
+      })),
+      externalEmbedding: { ...sprintSettings.memory.externalEmbedding },
+    },
+    speech: { ...sprintSettings.speech, externalTranscription: { ...sprintSettings.speech.externalTranscription } },
     modelPricing: { overrides: { ...args.systemSettings.modelPricing?.overrides } },
   };
 
@@ -1390,7 +1453,7 @@ export function toProjectSettingsOverride(
 ): ProjectSettingsOverride {
   const merged = sanitizeProjectSettings(
     {
-      ...deepMerge(base, patch),
+      ...mergeSettingsPatch(base, patch),
       integrations,
     },
     externalHints
@@ -1406,7 +1469,7 @@ export function toSprintSettingsOverride(
 ): SprintSettingsOverride {
   const merged = sanitizeProjectSettings(
     {
-      ...deepMerge(base, patch),
+      ...mergeSettingsPatch(base, patch),
       integrations,
     },
     externalHints

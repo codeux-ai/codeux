@@ -29,10 +29,16 @@ describe("SprintCell", () => {
     expect(screen.getByText("5")).toBeDefined();
   });
 
-  it("links to tasks with the canonical sprintId query parameter", () => {
+  it("links to project-aware tasks and live routes", () => {
     render(<SprintCell sprint={defaultSprint} isEven={true} accentColor="text-blue-500" />);
 
-    expect(screen.getByText("View Tasks").closest("a")?.getAttribute("href")).toBe("/tasks?sprintId=sprint-1");
+    const tasksLink = screen.getByRole("link", { name: "Open tasks for sprint Feature Alpha" });
+    const liveLink = screen.getByRole("link", { name: "Open live session for sprint Feature Alpha" });
+    expect(tasksLink.textContent).toContain("Tasks");
+    expect(liveLink.textContent).toContain("Live");
+    expect(tasksLink.getAttribute("href")).toBe("/tasks?projectId=proj-1&sprintId=sprint-1");
+    expect(liveLink.getAttribute("href")).toBe("/live?projectId=proj-1&sprintId=sprint-1");
+    expect(screen.queryByText("View Tasks")).toBeNull();
   });
 
   it("calls onMarkCompleted when menu action is clicked", async () => {

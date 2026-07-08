@@ -2,6 +2,7 @@ import type { InstructionTemplateId } from "../instructions/instruction-template
 import type { ProviderInvocationPurpose, TokenUsageSource } from "./execution-types.js";
 import type { ExecutionInvocationRecord } from "./invocation-types.js";
 import type { MemorySettings } from "./memory-types.js";
+import type { SpeechSettings } from "./speech-types.js";
 import type { TaskSelfReflectionRating } from "./task-self-reflection-types.js";
 
 export interface JulesSource {
@@ -82,7 +83,25 @@ export type SubtaskMergeIndicator = "CI" | "AUTOMERGE" | "MERGED" | "MERGE_BLOCK
 export type ProviderId = "jules" | "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity" | "mockup-cli";
 export type ProviderConfigId = string;
 export type ProviderStrategy = "MANUAL" | "WEIGHTED" | "AGENT";
-export type ThinkingMode = "SMALL" | "MEDIUM" | "HIGH";
+export type LegacyThinkingMode = "SMALL" | "MEDIUM" | "HIGH";
+export type GeminiThinkingMode = "minimal" | "low" | "medium" | "high";
+export type CodexThinkingMode = "low" | "medium" | "high" | "xhigh";
+export type ClaudeCodeThinkingMode = "low" | "medium" | "high" | "xhigh" | "max";
+export type QwenCodeThinkingMode = "low" | "medium" | "high" | "xhigh" | "max";
+export type OpenCodeThinkingMode = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+export type AntigravityThinkingMode = "low" | "high";
+export type ThinkingMode =
+  | LegacyThinkingMode
+  | GeminiThinkingMode
+  | CodexThinkingMode
+  | ClaudeCodeThinkingMode
+  | QwenCodeThinkingMode
+  | OpenCodeThinkingMode
+  | AntigravityThinkingMode;
+export interface ThinkingModeOption {
+  value: ThinkingMode;
+  label: string;
+}
 export type InvocationRoutingProfile = "GLOBAL" | "WORKER";
 export type InvocationRoutingId =
   | "task_coding"
@@ -777,6 +796,21 @@ export interface TechstackSelectionSettings {
   applicationKind: ApplicationKind | null;
 }
 
+export interface DesignGuidanceEntrySettings {
+  id: string;
+  name: string;
+  summary: string;
+  instructionMarkdown: string;
+}
+
+export interface DesignGuidanceSettings {
+  selectedTechStackId: string;
+  selectedStyleguideId: string;
+  hideDefaultStyleguides: boolean;
+  customTechStacks: DesignGuidanceEntrySettings[];
+  customStyleguides: DesignGuidanceEntrySettings[];
+}
+
 /** Toggles for what appears in an automated Task PR description. See src/domain/sprint/composer/pr-description-composer.ts. */
 export interface TaskPrTemplateSections {
   summary: boolean;
@@ -1221,6 +1255,7 @@ export interface DashboardSettings {
   aiProvider: AiProviderSettings;
   techstackCatalog: TechstackCatalogSettings;
   techstack: TechstackSelectionSettings;
+  designGuidance: DesignGuidanceSettings;
   git: GitSettings;
   jira: JiraSettings;
   notion: ExternalImporterSettings;
@@ -1241,6 +1276,7 @@ export interface DashboardSettings {
   mcpTools: McpToolToggle[];
   customMcpServers: CustomMcpServer[];
   memory: MemorySettings;
+  speech: SpeechSettings;
   modelPricing: ModelPricingSettings;
 }
 
