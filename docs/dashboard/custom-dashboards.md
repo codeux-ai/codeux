@@ -15,7 +15,7 @@ The source of truth is the Code UX database. Drafts stay mutable, revisions are 
 7. Publish the validated revision. The UI and repository gate publication to revisions with `validationStatus: "passed"` and a valid validation report. Publishing another passed revision is the rollback path.
 8. Archive dashboards you no longer want active. Archiving clears the active publication and marks the dashboard archived while preserving revision and validation history.
 
-If validation fails, use the report and logs to create a new revision. Do not publish around the failure; the repository rejects failed, queued, running, cancelled, missing, or mismatched validation sessions before publication state changes.
+If validation fails, use the report and logs to create a new revision. Do not publish around the failure; the repository rejects failed, queued, running, cancelled, missing, or mismatched validation sessions before publication state changes. When a dashboard is already published, validating later drafts keeps the active published dashboard open, and validation sessions for the active published revision do not replace its published validation snapshot.
 
 ## Agent Workflow
 
@@ -83,7 +83,7 @@ Custom dashboard routes are registered with the dashboard server:
 | `ALL` | `/api/custom-dashboard-validations/:sessionId/proxy{*rest}` | Same-origin proxy to the detached validation runtime. |
 | `ALL` | `/api/custom-dashboards/validation-sessions/:sessionId/proxy{*rest}` | Backward-compatible validation proxy route. |
 
-Publication is gated in `CustomDashboardRepository.publishRevision`. The requested revision must belong to the dashboard, must be marked `passed`, must have `validatedAt`, and must have `validationReport.valid === true`. If `validationSessionId` is supplied, that session must also belong to the same dashboard/revision/project and be passed with a valid report.
+Publication is gated in `CustomDashboardRepository.publishRevision`. The requested revision must belong to the dashboard, must be marked `passed`, must have `validatedAt`, and must have `validationReport.valid === true`. If `validationSessionId` is supplied, that session must also belong to the same dashboard/revision/project and be passed with a valid report. Active publications remain the opening source of truth while later validation sessions run.
 
 ## MCP Surface
 
