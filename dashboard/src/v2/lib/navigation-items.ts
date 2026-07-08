@@ -17,6 +17,8 @@ import {
   Zap,
 } from "lucide-preact";
 import type { DashboardExperienceMode } from "../../types.js";
+import type { DashboardFeatureFlagMap, DashboardFeatureId } from "./dashboard-feature-flags.js";
+import { isDashboardFeatureEnabled, resolveDashboardFeatureFlags } from "./dashboard-feature-flags.js";
 import { normalizeDashboardExperienceMode } from "./experience-mode.js";
 
 export const EXTERNAL_DOCS_URL = "https://github.com/codeux-ai/codeux#readme";
@@ -51,6 +53,7 @@ interface BaseNavigationItem {
   group: NavigationItemGroup;
   dockSection: NavigationDockSection;
   tourId: string;
+  feature?: DashboardFeatureId;
 }
 
 export interface RouteNavigationItem extends BaseNavigationItem {
@@ -71,6 +74,7 @@ export type PrimaryNavigationItem = NavigationItem & {
 interface GetPrimaryNavigationItemsOptions {
   browserVisible?: boolean;
   unavailableBrowserReason?: string;
+  featureFlags?: DashboardFeatureFlagMap;
 }
 
 export const ALL_NAVIGATION_ITEMS: readonly NavigationItem[] = [
@@ -79,7 +83,7 @@ export const ALL_NAVIGATION_ITEMS: readonly NavigationItem[] = [
   { id: "sprints", icon: Layers, label: "Sprints", path: "/sprints", color: "text-ember-500", group: "workspace", dockSection: "right", tourId: "nav-sprints", kind: "route" },
   { id: "tasks", icon: ListChecks, label: "Tasks", path: "/tasks", color: "text-signal-400", group: "workspace", dockSection: "right", tourId: "nav-tasks", kind: "route" },
   { id: "agents", icon: Cpu, label: "Agents", path: "/agents", color: "text-signal-400", group: "workspace", dockSection: "right", tourId: "nav-agents", kind: "route" },
-  { id: "nodes", icon: Workflow, label: "Nodes", path: "/nodes", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-nodes", kind: "route" },
+  { id: "nodes", icon: Workflow, label: "Nodes", path: "/nodes", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-nodes", kind: "route", feature: "nodes" },
   { id: "stats", icon: BarChart3, label: "Stats", path: "/stats", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-stats", kind: "route" },
   { id: "scheduler", icon: CalendarDays, label: "Schedule", path: "/scheduler", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-schedule", kind: "route" },
   { id: "memory", icon: Inbox, label: "Memory", path: "/memory", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-memory", kind: "route" },
@@ -130,11 +134,15 @@ export const getPrimaryNavigationItems = (
 ): PrimaryNavigationItem[] => {
   const normalizedMode = normalizeDashboardExperienceMode(mode);
   const browserVisible = options.browserVisible ?? true;
+  const featureFlags = options.featureFlags ?? resolveDashboardFeatureFlags();
 
   return NAVIGATION_ITEM_IDS_BY_MODE[normalizedMode]
     .map((id) => navigationItemById.get(id))
     .filter((item): item is NavigationItem => !!item)
     .flatMap((item): PrimaryNavigationItem[] => {
+      if (item.feature && !isDashboardFeatureEnabled(item.feature, featureFlags)) {
+        return [];
+      }
       if (item.id !== "browser" || browserVisible) {
         return [item];
       }

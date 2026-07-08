@@ -13,11 +13,12 @@ If you are looking for narrative explanations, the [User Guide](../user/index.md
 | 3 | [HTTP API reference](./http-api.md) | All REST endpoints exposed by the dashboard server |
 | 4 | [Realtime WebSocket protocol](./websocket-realtime.md) | The live update stream protocol |
 | 5 | [Configuration & CLI](./configuration.md) | Every CLI flag, env var, and config search rule |
-| 6 | [Settings schema reference](./settings-reference.md) | The full settings tree |
-| 7 | [Sprint and subtask file format](./sprint-format.md) | On-disk markdown format with YAML frontmatter |
-| 8 | [Building from source](./building-from-source.md) | Build, link, run from a clone |
-| 9 | [Testing & quality gates](./testing.md) | Vitest, coverage thresholds, CI gates |
-| 10 | [Rapid orchestration debugging suite](./orchestration-debugging.md) | Focused orchestration regressions, mockup sprint lanes, local merge triage, and profiling |
+| 6 | [Dashboard feature flags](./feature-flags.md) | Unfinished dashboard surface gating and Vite env overrides |
+| 7 | [Settings schema reference](./settings-reference.md) | The full settings tree |
+| 8 | [Sprint and subtask file format](./sprint-format.md) | On-disk markdown format with YAML frontmatter |
+| 9 | [Building from source](./building-from-source.md) | Build, link, run from a clone |
+| 10 | [Testing & quality gates](./testing.md) | Vitest, coverage thresholds, CI gates |
+| 11 | [Rapid orchestration debugging suite](./orchestration-debugging.md) | Focused orchestration regressions, mockup sprint lanes, local merge triage, and profiling |
 
 ## Versioning
 

@@ -1,23 +1,22 @@
-name: Mockup Sprint Pentest (temporary dev validation)
+name: Mockup Sprint Orchestration
 
 on:
   push:
-    branches:
-      - main
-      # Dev pushes run the rapid orchestration lane before integration.
-      - dev
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
   workflow_dispatch:
 
 concurrency:
-  group: mockup-sprint-pentest-${{ github.workflow }}-${{ github.ref }}
+  group: mockup-sprint-orchestration-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  mockup-sprint-pentest:
-    name: Mockup sprint pentest
+  mockup-sprint-orchestration:
+    name: Mockup sprint orchestration
     runs-on: ubuntu-latest
 
     steps:
