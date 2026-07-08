@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KineticDock } from "../../../dashboard/src/v2/components/KineticDock.js";
 import { Sidebar } from "../../../dashboard/src/v2/components/layout/Sidebar.js";
 import type { DashboardExperienceMode } from "../../../dashboard/src/types.js";
-import { EXTERNAL_DOCS_URL } from "../../../dashboard/src/v2/lib/navigation-items.js";
 
 const mocks = vi.hoisted(() => ({
   useProjectData: vi.fn(),
@@ -187,7 +186,7 @@ describe("primary navigation experience modes", () => {
       render(<KineticDock />);
 
       expect(getDockNavigationLabels()).toEqual(dock);
-      expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", EXTERNAL_DOCS_URL);
+      expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", "/docs");
     });
 
     it(`renders ${mode} mode items in the sidebar`, () => {
@@ -196,7 +195,7 @@ describe("primary navigation experience modes", () => {
       render(<Sidebar />);
 
       expect(getSidebarNavigationLabels()).toEqual(sidebar);
-      expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", EXTERNAL_DOCS_URL);
+      expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", "/docs");
     });
   });
 

@@ -10,7 +10,6 @@ import * as RouterHook from '@tanstack/react-router';
 import { prefetchRoute } from '../../../router/route-prefetch.js';
 import * as matchers from '@testing-library/jest-dom/matchers';
 import { forwardRef } from 'preact/compat';
-import { EXTERNAL_DOCS_URL } from '../../../lib/navigation-items.js';
 
 expect.extend(matchers);
 
@@ -110,18 +109,18 @@ describe('BottomNavigationDock (KineticDock)', () => {
         expect(nav.querySelector('.w-\\[1px\\].shrink-0')).toBeInTheDocument();
     });
 
-    it('renders Docs as an external link without route prefetch', () => {
+    it('renders Docs as an internal route with route prefetch', () => {
         render(<KineticDock />);
 
         const docsLink = screen.getByRole('link', { name: 'Docs' });
-        expect(docsLink).toHaveAttribute('href', EXTERNAL_DOCS_URL);
-        expect(docsLink).toHaveAttribute('target', '_blank');
+        expect(docsLink).toHaveAttribute('href', '/docs');
+        expect(docsLink).not.toHaveAttribute('target');
         expect(docsLink).toHaveAttribute('data-tour-id', 'nav-docs');
 
         fireEvent.mouseEnter(docsLink);
         fireEvent.pointerDown(docsLink);
         docsLink.focus();
 
-        expect(prefetchRoute).not.toHaveBeenCalledWith(EXTERNAL_DOCS_URL);
+        expect(prefetchRoute).toHaveBeenCalledWith('/docs');
     });
 });

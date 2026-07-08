@@ -22,8 +22,6 @@ import type { DashboardFeatureFlagMap, DashboardFeatureId } from "./dashboard-fe
 import { isDashboardFeatureEnabled, resolveDashboardFeatureFlags } from "./dashboard-feature-flags.js";
 import { normalizeDashboardExperienceMode } from "./experience-mode.js";
 
-export const EXTERNAL_DOCS_URL = "https://github.com/codeux-ai/codeux#readme";
-
 export type NavigationItemId =
   | "chat"
   | "overview"
@@ -94,7 +92,7 @@ export const ALL_NAVIGATION_ITEMS: readonly NavigationItem[] = [
   { id: "browser", icon: Compass, label: "Browser Preview", dockLabel: "Browser", path: "/browser", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-browser", kind: "route" },
   { id: "files", icon: FolderTree, label: "Files", path: "/files", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-files", kind: "route" },
   { id: "live", icon: Zap, label: "Live", path: "/live", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-live", kind: "route" },
-  { id: "docs", icon: BookOpen, label: "Docs", href: EXTERNAL_DOCS_URL, color: "text-signal-500", group: "utility", dockSection: "right", tourId: "nav-docs", kind: "external" },
+  { id: "docs", icon: BookOpen, label: "Docs", path: "/docs", color: "text-signal-500", group: "utility", dockSection: "right", tourId: "nav-docs", kind: "route" },
   { id: "config", icon: Settings, label: "Settings", dockLabel: "Config", path: "/config", color: "text-slate-400 dark:text-slate-400", group: "utility", dockSection: "right", tourId: "nav-config", kind: "route" },
 ] as const;
 

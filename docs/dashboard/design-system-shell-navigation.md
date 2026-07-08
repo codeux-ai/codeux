@@ -51,7 +51,7 @@ The shell relies on reusable layout components from `dashboard/src/v2/components
 Primary navigation is filtered by the persisted **Experience Mode** from Settings -> General. The stored values are `EASY`, `STANDARD`, and `EXPERT`; the dashboard labels them **Easy**, **Standard**, and **Expert**, and Expert is the default for new or legacy settings.
 
 Mode-specific navigation:
-- **Easy**: Chat, Browser Preview, Stats, Live, Settings/Config, and external Docs.
+- **Easy**: Chat, Browser Preview, Stats, Live, Settings/Config, and the internal Docs page.
 - **Standard**: Chat, Overview, Sprints, Tasks, Agents, Stats, Browser Preview, Docs, and Settings/Config.
 - **Expert**: the full set: Chat, Overview, Sprints, Tasks, Agents, Stats, Schedule, Memory, Knowledge, Browser Preview, Files, Live, Docs, and Settings/Config.
 
