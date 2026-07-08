@@ -279,6 +279,79 @@ describe("Settings Resolution Service", () => {
       expect(unlimited.settings.aiProvider.providers.jules.maxConcurrentTasks).toBe(15);
     });
 
+    it("preserves inherited provider instance fields for sparse project base-provider overrides", () => {
+      const baseProject = buildDefaultProjectSettings();
+      const localProviderId = "claude-code-local";
+      baseProject.aiProvider.providers[localProviderId] = {
+        provider: "claude-code",
+        name: "Claude Local",
+        enabled: true,
+        model: "default",
+        weight: 50,
+        thinkingMode: "high",
+        maxConcurrentTasks: 7,
+      };
+      const systemSettings: SystemSettings = {
+        runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
+        integrations: {
+          providers: {
+            [localProviderId]: {
+              provider: "claude-code",
+              name: "Claude Local",
+              apiKey: "",
+              mountAuth: false,
+              authPath: "~/.claude",
+              providerConfigMode: "copyHost",
+              providerConfigPath: "~/.claude.json",
+              authType: "apiKey",
+            },
+          },
+          githubToken: "",
+        } as unknown as SystemSettings["integrations"],
+        defaults: baseProject,
+        mcpTools: [],
+      };
+
+      const resolved = resolveDashboardSettings({
+        systemSettings,
+        projectOverride: {
+          aiProvider: {
+            providers: {
+              [localProviderId]: {
+                model: "opus",
+                thinkingMode: "xhigh",
+              },
+            },
+          },
+        } as unknown as ProjectSettingsOverride,
+      });
+
+      expect(resolved.settings.aiProvider.providers[localProviderId]).toMatchObject({
+        enabled: true,
+        model: "opus",
+        weight: 50,
+        thinkingMode: "xhigh",
+        maxConcurrentTasks: 7,
+      });
+      expect(resolved.sources[`aiProvider.providers.${localProviderId}.enabled`]).toBe("system");
+
+      const explicitDisabled = resolveDashboardSettings({
+        systemSettings,
+        projectOverride: {
+          aiProvider: {
+            providers: {
+              [localProviderId]: {
+                enabled: false,
+              },
+            },
+          },
+        } as unknown as ProjectSettingsOverride,
+      });
+
+      expect(explicitDisabled.settings.aiProvider.providers[localProviderId].enabled).toBe(false);
+      expect(explicitDisabled.sources[`aiProvider.providers.${localProviderId}.enabled`]).toBe("project");
+    });
+
     it("merges custom MCP servers and tool toggles across system and project scope", () => {
       const baseProject = buildDefaultProjectSettings();
       const systemSettings: SystemSettings = {

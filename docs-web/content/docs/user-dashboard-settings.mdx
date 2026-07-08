@@ -304,11 +304,15 @@ Related docs:
 
 Defines each named provider instance's default eligibility, model, thinking depth, weight, and concurrency.
 
+Project and sprint scopes store base provider cards as sparse field overrides. Editing a named instance's base model or thinking depth keeps inherited fields such as eligibility, weight, and max concurrency from the parent scope unless those fields are explicitly changed.
+
 **What it controls:** Provider cards set default route participation, model, thinking mode, weighted routing weight, and max concurrent tasks.
 
 **Recommended defaults:** Keep only healthy instances eligible and use weights to express preference rather than hard pinning every route.
 
 **Risks and gotchas:** Incompatible model choices or high concurrency can cause repeated provider failures or quota pressure.
+
+Base provider cards inherit field-by-field, but invocation route provider maps remain replace-on-write for that route's pool and overrides.
 
 Related docs:
 
@@ -322,11 +326,11 @@ Related docs:
 
 Routes each invocation type to inherited, manual, weighted, or agent-selected provider pools.
 
-**What it controls:** Each route chooses a profile, strategy, primary instance, allowed weighted pool, and per-provider overrides.
+**What it controls:** Each route chooses a profile, strategy, primary instance, allowed weighted pool, and per-provider overrides. Thinking overrides can be reset to inherit the provider instance's base thinking setting.
 
 **Recommended defaults:** Use inherited defaults first, then override high-risk routes such as planning, QA, CI repair, and remediation.
 
-**Risks and gotchas:** Weighted pools with unavailable providers can spread failures across multiple task types.
+**Risks and gotchas:** Weighted pools with unavailable providers can spread failures across multiple task types. Stale route thinking overrides can keep using an older thinking budget until reset to inherit.
 
 Related docs:
 

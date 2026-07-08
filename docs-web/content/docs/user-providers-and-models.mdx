@@ -132,6 +132,8 @@ CLI providers expose provider-specific **thinking** or **reasoning** selections.
 
 Older saved values `SMALL`, `MEDIUM`, and `HIGH` continue to load and are migrated to the closest supported value for the selected provider.
 
+Route-specific thinking overrides are optional. Selecting **Inherit base thinking** on a route removes that route's `thinkingMode` override, so later provider-level thinking budget changes apply to the route.
+
 ## Provider weights and strategies
 
 In **Settings → AI providers** each provider has a `weight` (0–100). Weights are used by the routing strategy:
