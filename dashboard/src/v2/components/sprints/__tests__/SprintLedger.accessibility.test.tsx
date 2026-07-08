@@ -143,10 +143,12 @@ describe("SprintLedger Accessibility", () => {
 
     const activeCell = createdBtn.closest("th");
     expect(activeCell).toHaveAttribute("aria-sort", "descending");
+    expect(createdBtn).toHaveAccessibleDescription(/Currently sorted descending\. Activate to sort Created ascending\./i);
 
     const nameBtns = screen.getAllByRole("button", { name: /Sort by Sprint/i });
     const inactiveCell = nameBtns[0].closest("th");
     expect(inactiveCell).toHaveAttribute("aria-sort", "none");
+    expect(nameBtns[0]).toHaveAccessibleDescription(/Not currently sorted\. Activate to sort Sprint ID ascending\./i);
 
     await user.click(nameBtns[0]);
     expect(inactiveCell).toHaveAttribute("aria-sort", "ascending");
@@ -177,7 +179,8 @@ describe("SprintLedger Accessibility", () => {
 
     expect(getAllByRole("button", { name: /Select sprint Frontend Onboarding/i })[0]).toBeInTheDocument();
     expect(getAllByRole("button", { name: /Pin sprint Frontend Onboarding to showcase/i })[0]).toBeInTheDocument();
-    expect(getAllByRole("link", { name: /Open sprint Frontend Onboarding/i })[0]).toBeInTheDocument();
+    expect(getAllByRole("link", { name: /Open tasks for sprint Frontend Onboarding/i })[0]).toBeInTheDocument();
+    expect(getAllByRole("link", { name: /Open live session for sprint Frontend Onboarding/i })[0]).toBeInTheDocument();
     expect(getAllByRole("button", { name: /Open actions menu for sprint Frontend Onboarding/i })[0]).toBeInTheDocument();
     expect(getAllByRole("button", { name: /Start Frontend Onboarding/i })[0]).toBeInTheDocument();
   });
@@ -210,7 +213,7 @@ describe("SprintLedger Accessibility", () => {
 
     await user.click(screen.getAllByRole("button", { name: /Select sprint Frontend Onboarding/i })[0]);
 
-    const liveRegion = screen.getByText(/Selected sprint Frontend Onboarding\. 1 sprint visible\. 1 selected\./i).closest("div[aria-live]");
+    const liveRegion = screen.getByText(/Selected sprint Frontend Onboarding\. Showing 1 of 1 sprint\. 1 selected\./i).closest("div[aria-live]");
     expect(liveRegion).toHaveAttribute("aria-live", "polite");
   });
 
@@ -302,6 +305,7 @@ describe("SprintLedger Accessibility", () => {
     // Check for confirmation dialog
     expect(await screen.findByText(/Delete 1 Selected Sprint\?/i)).toBeInTheDocument();
     expect(screen.getByText(/You are deleting 1 selected sprint/i)).toBeInTheDocument();
+    expect(screen.getByText(/Affected sprints: "Frontend Onboarding"\./i)).toBeInTheDocument();
     expect(screen.getByText(/This action is permanent and will cascade/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
@@ -461,6 +465,35 @@ describe("SprintLedger Accessibility", () => {
     expect(screen.getAllByRole("row")[0]).toHaveAttribute("aria-busy", "true");
   });
 
+  it("describes row controls disabled by pending delete", () => {
+    render(
+      <table>
+        <tbody>
+          <SprintLedgerRow
+            sprint={mockSprint}
+            isSelected={false}
+            isEven={false} activeRun={undefined} pauseResumeRun={undefined} humanIntervention={null} isAnyBulkPending={false}
+            pendingActionIds={new Set(["sprint-delete:sprint-1"])}
+            onToggleRow={vi.fn()}
+            onToggleShowcase={vi.fn()}
+            onSprintToggle={vi.fn()}
+            onSprintPauseResume={vi.fn()}
+            onEdit={vi.fn()}
+            onExport={vi.fn()}
+            onOverrides={vi.fn()}
+            onMarkCompleted={vi.fn()}
+            onDelete={vi.fn()}
+          />
+        </tbody>
+      </table>
+    );
+
+    const selectButton = screen.getByRole("button", { name: /Cannot select sprint Frontend Onboarding while deleting/i });
+    expect(selectButton).toBeDisabled();
+    expect(selectButton).toHaveAccessibleDescription(/Controls for sprint Frontend Onboarding are disabled while deletion is pending\./i);
+    expect(screen.getByText("Delete pending")).toBeInTheDocument();
+  });
+
   it("reveals and collapses bulk actions based on selection count", () => {
     const { rerender } = render(
       <SprintLedgerBulkActions
@@ -557,6 +590,6 @@ describe("SprintLedger Accessibility", () => {
         onBulkShowcaseDisable={vi.fn()}
       />
     );
-    const liveRegion = screen.getByText(/Sorted by Created descending\. Showing all sprints\. No sprints selected\./i).closest("div[aria-live]");
+    const liveRegion = screen.getByText(/Sorted by Created descending\. Showing 1 of 1 sprint\. No sprints selected\./i).closest("div[aria-live]");
     expect(liveRegion).toBeInTheDocument();
   });

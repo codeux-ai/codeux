@@ -88,7 +88,7 @@ export const Dialog: FunctionComponent<DialogProps> = ({
               return child;
             }
 
-            const delay = ['0ms', '40ms', '80ms'][index] || '0ms';
+            const delay = index === 1 ? cssTokens.controlFeedback.duration : index >= 2 ? cssTokens.enterExit.duration : '0ms';
             const childClassName = `${childProps.className || ''} motion-safe:animate-form-slide-down`.trim();
             const childStyle = {
               ...(childProps.style || {}),

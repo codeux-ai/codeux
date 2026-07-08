@@ -801,6 +801,7 @@ describe("AddTaskModal Lifecycle", () => {
 
     const errorRegion = getByText("Failed");
     expect(errorRegion).toBeInTheDocument();
+    expect(getByRole("button", { name: "Retry" })).toBeInTheDocument();
 
     const dismissBtn = getByRole("button", { name: "Clear error" });
 
@@ -814,6 +815,36 @@ describe("AddTaskModal Lifecycle", () => {
       expect(queryByText("API Error 500")).not.toBeInTheDocument();
       // focus placement after error recovery: activeElement should not be a dead reference
       expect(document.activeElement).not.toBe(dismissBtn);
+    });
+  });
+
+  it("keeps the modal open and retries task submission after a failure", async () => {
+    const mockOnClose = vi.fn();
+    const mockOnSubmit = vi.fn()
+      .mockRejectedValueOnce(new Error("Task API unavailable"))
+      .mockResolvedValueOnce(undefined);
+
+    const { getByLabelText, getByRole, getByText } = render(
+      <AddTaskModal {...defaultProps} onClose={mockOnClose} onSubmit={mockOnSubmit} />
+    );
+
+    fireEvent.input(getByLabelText(/Sprint/i), { target: { value: "SPR-1" } });
+    fireEvent.input(getByLabelText(/Title/i), { target: { value: "Retryable task" } });
+    fireEvent.click(getByRole("button", { name: "Create Task" }));
+
+    await waitFor(() => {
+      expect(getByText("Task API unavailable")).toBeInTheDocument();
+      expect(getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    });
+    expect(mockOnClose).not.toHaveBeenCalled();
+
+    fireEvent.click(getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => {
+      expect(mockOnSubmit).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(mockOnClose).toHaveBeenCalledTimes(1);
     });
   });
 });

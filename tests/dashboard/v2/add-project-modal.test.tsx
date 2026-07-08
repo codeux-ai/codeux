@@ -304,14 +304,17 @@ describe("AddProjectModal", () => {
     fireEvent.click(screen.getByRole("button", { name: /browse/i }));
 
     expect(await screen.findByText("/home/user")).toBeInTheDocument();
+    expect(screen.getByText(/1 child directory in \/home\/user\./i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /^project$/i }));
 
     expect(await screen.findByText("/home/user/project")).toBeInTheDocument();
+    expect(screen.getByText(/No child directories in \/home\/user\/project/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /^use$/i }));
 
     expect(screen.getByLabelText(/Directory Path/i)).toHaveValue("/home/user/project");
+    expect(screen.getByText("Selected directory: /home/user/project")).toBeInTheDocument();
   });
 
   it("applies the directory picker selection to the optional clone directory", async () => {
@@ -345,5 +348,55 @@ describe("AddProjectModal", () => {
     fireEvent.click(screen.getByRole("button", { name: /^use$/i }));
 
     expect(screen.getByLabelText(/Clone Into Directory/i)).toHaveValue("/home/user/repos");
+    expect(screen.getByText("Selected directory: /home/user/repos")).toBeInTheDocument();
+  });
+
+  it("shows directory picker loading and failure feedback without moving focus", async () => {
+    let rejectLoad: (error: Error) => void = () => {};
+    vi.mocked(fetchLocalDirectories).mockImplementationOnce(() => new Promise((_resolve, reject) => {
+      rejectLoad = reject;
+    }));
+
+    render(<AddProjectModal onClose={vi.fn()} onAdd={vi.fn()} />);
+
+    const browseButton = screen.getByRole("button", { name: /browse/i });
+    browseButton.focus();
+    fireEvent.click(browseButton);
+
+    expect(screen.getAllByText(/Loading directories/i).length).toBeGreaterThan(0);
+    expect(document.activeElement).toBe(browseButton);
+
+    rejectLoad(new Error("Permission denied"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("Permission denied");
+      expect(screen.getByText(/Directory load failed: Permission denied/i)).toBeInTheDocument();
+    });
+    expect(document.activeElement).toBe(browseButton);
+  });
+
+  it("keeps the modal open and exposes retry when project submission fails", async () => {
+    const onAdd = vi.fn()
+      .mockRejectedValueOnce(new Error("Create failed"))
+      .mockResolvedValueOnce(undefined);
+    const onClose = vi.fn();
+    render(<AddProjectModal onClose={onClose} onAdd={onAdd} />);
+
+    fireEvent.input(screen.getByLabelText(/Project Name/i), { target: { value: "Retry Project" } });
+    fireEvent.click(screen.getByText(/Initialize with Project Setup Agent/i).closest("label")!);
+    fireEvent.submit(screen.getByLabelText(/Project Name/i).closest("form")!);
+
+    await waitFor(() => {
+      expect(screen.getByText("Create failed")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    });
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => {
+      expect(onAdd).toHaveBeenCalledTimes(2);
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
   });
 });

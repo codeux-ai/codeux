@@ -27,6 +27,7 @@ const getInvocationAccent = (status: string): string => {
     case "running": return "#00E0A0";
     case "completed": return "#00AB84";
     case "failed": return "#E3000F";
+    case "queued": return "#F59E0B";
     case "paused": return "#F59E0B";
     default: return "#94a3b8";
   }
@@ -38,6 +39,7 @@ const STATUS_STYLES: Record<string, { dot: string; text: string }> = {
   failed: { dot: "bg-status-red shadow-[0_0_8px_rgba(227,0,15,0.5)]", text: "text-status-red" },
   cancelled: { dot: "bg-slate-400", text: "text-slate-400" },
   paused: { dot: "bg-status-amber shadow-[0_0_6px_rgba(245,158,11,0.4)]", text: "text-status-amber" },
+  queued: { dot: "bg-status-amber shadow-[0_0_6px_rgba(245,158,11,0.4)]", text: "text-status-amber" },
 };
 
 const DEFAULT_STATUS_STYLE = { dot: "bg-slate-400", text: "text-slate-500" };
@@ -112,10 +114,22 @@ export const InvocationListCard: FunctionComponent<{
       </button>
     </div>
     {invocations.map((invocation) => {
-      const accentHex = getInvocationAccent(invocation.status);
-      const ss = STATUS_STYLES[invocation.status] || DEFAULT_STATUS_STYLE;
+      const invocationStatus = invocation.status as string;
+      const accentHex = getInvocationAccent(invocationStatus);
+      const ss = STATUS_STYLES[invocationStatus] || DEFAULT_STATUS_STYLE;
       const isSelected = selectedInvocationId === invocation.id;
-      const isRunning = invocation.status === "running";
+      const isRunning = invocationStatus === "running";
+      const isFailed = invocationStatus === "failed";
+      const isPending = invocationStatus === "queued" || (isRunning && invocation.messageCount === 0);
+      const stateDescriptionId = `invocation-card-state-${invocation.id}`;
+      const selectionCopy = isSelected ? "Selected" : "Not selected";
+      const runtimeCopy = isPending
+        ? "Routing or queued"
+        : isRunning
+          ? "Running"
+          : isFailed
+            ? "Failed"
+            : invocation.status;
       const agentPreset = invocation.agentPresetId
         ? agentPresets?.find((p) => p.id === invocation.agentPresetId)
         : undefined;
@@ -169,6 +183,12 @@ export const InvocationListCard: FunctionComponent<{
             role="button"
             tabIndex={0}
             aria-selected={isSelected ? "true" : "false"}
+            aria-describedby={stateDescriptionId}
+            aria-label={`${formatInvocationPurpose(invocation.type)}. ${selectionCopy}. ${runtimeCopy}.`}
+            aria-current={isSelected ? "true" : undefined}
+            data-selected={isSelected ? "true" : "false"}
+            data-status={invocationStatus}
+            data-pending={isPending ? "true" : "false"}
             onClick={() => onSelect(invocation.id)}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
@@ -184,10 +204,16 @@ export const InvocationListCard: FunctionComponent<{
             className={`w-full cursor-pointer rounded-[1.5rem] p-4 text-left
               bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl
               shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]
-              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
               ${isSelected
-                ? "bg-signal-500/[0.05] border border-black/[0.06] dark:border-white/[0.06] border-l-[3px] border-l-signal-500"
-                : "bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] border-l-[3px] border-l-transparent hover:border-slate-300 dark:hover:border-white/[0.12]"
+                ? "bg-signal-500/[0.06] border border-black/[0.06] dark:border-white/[0.06] border-l-[3px] border-l-signal-500 ring-2 ring-signal-500/25"
+                : isFailed
+                  ? "bg-status-red/[0.045] border border-status-red/25 border-l-[3px] border-l-status-red"
+                  : isPending
+                    ? "bg-status-amber/[0.055] border border-status-amber/25 border-l-[3px] border-l-status-amber"
+                    : isRunning
+                      ? "bg-signal-500/[0.045] border border-signal-500/20 border-l-[3px] border-l-signal-500"
+                      : "bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] border-l-[3px] border-l-transparent hover:border-slate-300 dark:hover:border-white/[0.12]"
               }`}
           >
             <WaveFluid accentHex={accentHex} isActive={isRunning} />
@@ -208,6 +234,32 @@ export const InvocationListCard: FunctionComponent<{
                 </div>
 
                 <div className="min-w-0 flex-1">
+                  <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                    <span className={`inline-flex min-w-[4.75rem] justify-center rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${
+                      isSelected
+                        ? "border-signal-500/25 bg-signal-500/[0.10] text-signal-700 dark:text-signal-300"
+                        : "border-black/[0.06] bg-black/[0.025] text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.025]"
+                    }`}>
+                      {selectionCopy}
+                    </span>
+                    {isPending && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-status-amber/25 bg-status-amber/[0.10] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-status-amber">
+                        <span className="h-1.5 w-1.5 rounded-full bg-status-amber animate-pulse motion-reduce:animate-none" />
+                        Routing
+                      </span>
+                    )}
+                    {isFailed && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-status-red/25 bg-status-red/[0.10] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-status-red">
+                        Failed
+                      </span>
+                    )}
+                    {isRunning && !isPending && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/25 bg-signal-500/[0.10] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-300">
+                        <span className="h-1.5 w-1.5 rounded-full bg-signal-500 animate-pulse motion-reduce:animate-none" />
+                        Running
+                      </span>
+                    )}
+                  </div>
                   <h3 className="truncate font-display text-[15px] font-bold leading-tight tracking-tight text-slate-900 dark:text-white">
                     {formatInvocationPurpose(invocation.type)}
                   </h3>
@@ -274,6 +326,9 @@ export const InvocationListCard: FunctionComponent<{
               <div className="mt-2 text-right font-mono text-[10px] text-slate-300 dark:text-slate-600">
                 {invocation.id}
               </div>
+              <span id={stateDescriptionId} className="sr-only">
+                {selectionCopy}. {runtimeCopy}. Status {invocationStatus}.
+              </span>
             </div>
           </div>
         </div>

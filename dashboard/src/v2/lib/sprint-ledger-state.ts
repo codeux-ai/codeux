@@ -243,6 +243,7 @@ export function formatSprintCount(count: number): string {
 
 export interface LedgerOutcomeMessageOptions {
   totalCount?: number;
+  filteredCount?: number;
   selectedCount?: number;
   removedSelectedCount?: number;
 }
@@ -252,9 +253,11 @@ export function getLedgerOutcomeMessage(
   visibleCount: number,
   options: LedgerOutcomeMessageOptions = {},
 ): string {
-  const visibleCopy = typeof options.totalCount === "number"
-    ? `Showing ${visibleCount} of ${formatSprintCount(options.totalCount)}.`
-    : `${formatSprintCount(visibleCount)} visible.`;
+  const visibleCopy = typeof options.filteredCount === "number" && options.filteredCount !== visibleCount
+    ? `Showing ${visibleCount} of ${formatSprintCount(options.filteredCount)} in the current result.`
+    : typeof options.totalCount === "number"
+      ? `Showing ${visibleCount} of ${formatSprintCount(options.totalCount)}.`
+      : `${formatSprintCount(visibleCount)} visible.`;
   const selectedCopy = typeof options.selectedCount === "number"
     ? options.selectedCount === 0
       ? "No sprints selected."
@@ -265,6 +268,18 @@ export function getLedgerOutcomeMessage(
     : "";
 
   return [outcome, visibleCopy, selectedCopy, removedCopy].filter(Boolean).join(" ");
+}
+
+export function formatSelectedSprintNamesForConfirmation(sprints: Sprint[], maxNames: number = 3): string {
+  if (sprints.length === 0) {
+    return "No selected sprints.";
+  }
+  const visibleNames = sprints.slice(0, maxNames).map((sprint) => `"${sprint.name}"`);
+  const remainingCount = sprints.length - visibleNames.length;
+  if (remainingCount <= 0) {
+    return `Affected sprints: ${visibleNames.join(", ")}.`;
+  }
+  return `Affected sprints: ${visibleNames.join(", ")}, and ${remainingCount} more sprint${remainingCount === 1 ? "" : "s"}.`;
 }
 
 export function getBulkActionMessage(action: BulkLedgerAction, selectedCount: number, pending: boolean): string {
@@ -281,6 +296,19 @@ export function getBulkActionMessage(action: BulkLedgerAction, selectedCount: nu
   }
   const verb = action === "delete" ? "Delete" : action === "start" ? "Start" : action === "pin" ? "Pin" : "Unpin";
   return `${verb} will apply to ${suffix}.`;
+}
+
+export function getBulkActionButtonLabel(action: Exclude<BulkLedgerAction, null>, pending: boolean): string {
+  if (!pending) {
+    if (action === "start") return "Start";
+    if (action === "pin") return "Pin";
+    if (action === "unpin") return "Unpin";
+    return "Delete";
+  }
+  if (action === "start") return "Starting";
+  if (action === "pin") return "Pinning";
+  if (action === "unpin") return "Unpinning";
+  return "Deleting";
 }
 
 export function getBulkPendingReason(action: BulkLedgerAction, selectedCount: number): string {
@@ -310,6 +338,14 @@ export function getSortAriaSort(sort: LedgerSort, key: SprintTableSortKey): "non
 
 export function getSortButtonLabel(sort: LedgerSort, key: SprintTableSortKey): string {
   return `Sort by ${SPRINT_TABLE_SORT_LABELS[key]}`;
+}
+
+export function getSortButtonDescription(sort: LedgerSort, key: SprintTableSortKey): string {
+  const currentState = sort.key === key
+    ? `Currently sorted ${sort.direction === "asc" ? "ascending" : "descending"}`
+    : "Not currently sorted";
+  const next = nextSort(sort, key);
+  return `${currentState}. Activate to sort ${SPRINT_TABLE_SORT_LABELS[key]} ${next.direction === "asc" ? "ascending" : "descending"}.`;
 }
 
 /**

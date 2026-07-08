@@ -112,4 +112,6 @@ Effective settings are inspectable at `GET /api/projects/:projectId/sprints/:spr
 
 The Sprints ledger supports multi-select for bulk starting, pinning, or deleting sprints.
 
+Sorting, filtering, search, list-window changes, row selection, and bulk actions announce concise result-count updates without moving focus back through the table. Sortable headers expose their current direction, rows show selected/pending/deleting/bulk-disabled states directly, and pending bulk buttons switch to static progress labels such as **Starting** or **Deleting** for reduced-motion users.
+
 Deleting a sprint (single or bulk) requires explicit confirmation in a destructive dialog and removes its database state but leaves the on-disk markdown directory intact (so you can re-import later if you change your mind).

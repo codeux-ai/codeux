@@ -26,6 +26,16 @@ Imported-project setup lets the operator choose which generated artifacts to cre
 - `Techstack`
 - `Docs` (opt-in)
 
+## Add Project Form Contract
+
+The Add Project modal keeps source-type changes, new-project init-mode changes, and setup-scope reveal transitions tied to the shared interaction motion tokens. Reduced-motion mode resolves those transitions to instant state changes while preserving the same selected labels, focus rings, and setup-step status text.
+
+Validation is intentionally delayed until blur or submit. Invalid submit announces one summary alert, focuses the first invalid field, and scrolls the modal body with reduced-motion-aware behavior. Inline field errors remain connected through `aria-invalid` and `aria-errormessage`, but they do not duplicate the summary alert.
+
+Directory browsing must keep keyboard focus on the active control. Loading, current path, empty directory lists, failed loads, and selected-path confirmation are visible in the picker or directly below the associated field and are also exposed through polite live regions. Local project and new local project directory paths remain optional; git repository URL and new remote slug validation are unchanged.
+
+During async project creation, close/cancel/submit controls expose the busy reason and suppress duplicate activation. Submission failures keep the modal open, show retryable feedback, and resubmit the same form payload when the operator chooses Retry.
+
 ## Backend Flow
 
 The dashboard calls:

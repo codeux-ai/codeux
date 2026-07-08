@@ -682,8 +682,9 @@ describe("dashboard accessibility quality regressions", () => {
   it("guards async feedback surfaces with busy, live, and stale-data semantics", () => {
     const actionFeedback = readSource("dashboard/src/v2/components/ui/ActionFeedbackRegion.tsx");
     expect(actionFeedback).toMatch(/role=\{isError \? "alert" : "status"\}/);
-    expect(actionFeedback).toMatch(/aria-live=\{isError \? "assertive" : isPending \? "polite" : "off"\}/);
+    expect(actionFeedback).toMatch(/aria-live=\{isError \? "assertive" : isPending \|\| displayedStatus === "warning" \? "polite" : "off"\}/);
     expect(actionFeedback).toMatch(/aria-busy=\{isPending \? "true" : undefined\}/);
+    expect(actionFeedback).toMatch(/<span className="sr-only">\{statusLabel\}\. <\/span>/);
 
     const quicksprint = readSource("dashboard/src/v2/components/quicksprint/QuicksprintExecutionView.tsx");
     expect(quicksprint).toMatch(/aria-busy=\{isBusy \|\| pendingExecuteMode !== null \|\| isCancelPending \? "true" : "false"\}/);

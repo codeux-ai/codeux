@@ -5,9 +5,10 @@ export interface FormErrorProps {
   error?: string;
   helperId?: string;
   helperText?: string;
+  announce?: boolean;
 }
 
-export function FormError({ id, error, helperId, helperText }: FormErrorProps) {
+export function FormError({ id, error, helperId, helperText, announce = true }: FormErrorProps) {
   if (!error && !helperText) return null;
 
   return (
@@ -31,7 +32,8 @@ export function FormError({ id, error, helperId, helperText }: FormErrorProps) {
       {error && (
         <div
           id={id}
-          role="alert"
+          role={announce ? "alert" : undefined}
+          aria-live={announce ? undefined : "off"}
           class="col-start-1 row-start-1 text-xs font-medium text-status-red motion-safe:animate-form-slide-down opacity-100 visible"
         >
           {error}

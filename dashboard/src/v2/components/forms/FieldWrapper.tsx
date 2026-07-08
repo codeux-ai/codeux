@@ -14,6 +14,7 @@ export interface FieldWrapperProps {
   helperTextId?: string;
   label: string;
   error?: string;
+  announceError?: boolean;
   helperText?: ComponentChildren;
   children: ComponentChildren;
   htmlFor?: string;
@@ -22,7 +23,7 @@ export interface FieldWrapperProps {
   valid?: boolean;
 }
 
-export function FieldWrapper({ label, error, children, htmlFor, required, helperTextId, helperText, forceTouch, valid }: FieldWrapperProps) {
+export function FieldWrapper({ label, error, announceError = true, children, htmlFor, required, helperTextId, helperText, forceTouch, valid }: FieldWrapperProps) {
   const tokens = useInteractionTokens();
   const [shake, setShake] = useState(false);
   const [touched, setTouched] = useState(false);
@@ -213,7 +214,8 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
         )}
         <p
           id={errorId}
-          role="alert"
+          role={announceError ? "alert" : undefined}
+          aria-live={announceError ? undefined : "off"}
           aria-hidden={!isVisible}
           class={`col-start-1 row-start-1 text-xs font-medium text-status-red ${
             isAnimatingIn ? 'motion-safe:animate-form-slide-down' : ''

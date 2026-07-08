@@ -1191,7 +1191,7 @@ describe("SprintsPage", () => {
     fireEvent.click(sprintSort);
 
     expect(screen.getByRole("button", { name: "Sort by Sprint" }).closest("th")).toHaveAttribute("aria-sort", "ascending");
-    expect(screen.getByText(/Sorted by Sprint ascending\. 2 sprints visible\. No sprints selected\./)).toBeInTheDocument();
+    expect(screen.getByText(/Sorted by Sprint ascending\. Showing 2 of 2 sprints\. No sprints selected\./)).toBeInTheDocument();
   });
 
   it("keeps pending row actions stable with visible disabled reasons", () => {
@@ -1292,7 +1292,7 @@ describe("SprintsPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Select all filtered sprints" }));
     expect(screen.getByText("2 of 2 selected")).toBeInTheDocument();
-    expect(screen.getByText(/Selected all filtered sprints\. 2 sprints visible\. 2 selected\./)).toBeInTheDocument();
+    expect(screen.getByText(/Selected all filtered sprints\. Showing 2 of 2 sprints\. 2 selected\./)).toBeInTheDocument();
 
     const deleteButton = screen.getByRole("button", { name: "Delete 2 selected sprints. Permanent action." });
     fireEvent.click(deleteButton);
@@ -1304,7 +1304,7 @@ describe("SprintsPage", () => {
     fireEvent.click(cancelButtons[cancelButtons.length - 1]);
 
     await vi.waitFor(() => expect(deleteButton).toHaveFocus());
-    expect(screen.getByText(/Bulk delete canceled\. Selected sprints were not deleted\. 2 sprints visible\. 2 selected\./)).toBeInTheDocument();
+    expect(screen.getByText(/Bulk delete canceled\. Selected sprints were not deleted\. Showing 2 of 2 sprints\. 2 selected\./)).toBeInTheDocument();
   });
 
 
