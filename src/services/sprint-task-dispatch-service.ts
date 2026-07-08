@@ -86,8 +86,7 @@ export interface StartSprintDispatchResult {
   runtimeLabel?: string;
 }
 
-const ACTIVE_TASK_DISPATCH_STATUSES = new Set<TaskDispatchRecord["status"]>([
-  "queued",
+const DUPLICATE_BLOCKING_TASK_DISPATCH_STATUSES = new Set<TaskDispatchRecord["status"]>([
   "claimed",
   "running",
   "cancel_requested",
@@ -112,7 +111,7 @@ export class SprintTaskDispatchService {
       throw new Error(`Task record not found: ${taskRecordId}`);
     }
 
-    const activeDispatch = this.findActiveDispatchForTask(args.projectId, args.sprintRunId, taskRecordId);
+    const activeDispatch = this.findDuplicateBlockingDispatchForTask(args.projectId, args.sprintRunId, taskRecordId);
     if (activeDispatch) {
       const taskRun = this.executionRepository.getTaskRunByDispatchId(activeDispatch.id)
         || this.executionRepository.getLatestTaskRun(taskRecordId, args.sprintRunId);
@@ -177,7 +176,8 @@ export class SprintTaskDispatchService {
     }
 
     const queuedAt = new Date().toISOString();
-    const dispatch = this.executionRepository.createTaskDispatch({
+    const queuedDispatch = this.findQueuedDispatchForTask(args.projectId, args.sprintRunId, taskRecordId);
+    const dispatch = queuedDispatch || this.executionRepository.createTaskDispatch({
       projectId: args.projectId,
       sprintId: args.sprintId,
       taskId: taskRecordId,
@@ -186,17 +186,28 @@ export class SprintTaskDispatchService {
       queuedAt,
     });
 
-    const taskRun = this.executionRepository.createTaskRun({
-      projectId: args.projectId,
-      sprintId: args.sprintId,
-      taskId: taskRecordId,
-      sprintRunId: args.sprintRunId,
-      dispatchId: dispatch.id,
-      provider,
-      mode: executorType,
-      state: "RUNNING",
-      startedAt: queuedAt,
-    });
+    let taskRun = this.executionRepository.getTaskRunByDispatchId(dispatch.id);
+    if (taskRun) {
+      taskRun = this.executionRepository.updateTaskRun(taskRun.id, {
+        provider,
+        mode: executorType,
+        state: "RUNNING",
+        finishedAt: null,
+        durationMs: null,
+      });
+    } else {
+      taskRun = this.executionRepository.createTaskRun({
+        projectId: args.projectId,
+        sprintId: args.sprintId,
+        taskId: taskRecordId,
+        sprintRunId: args.sprintRunId,
+        dispatchId: dispatch.id,
+        provider,
+        mode: executorType,
+        state: "RUNNING",
+        startedAt: queuedAt,
+      });
+    }
 
     if (julesClaim) {
       this.executionRepository.associateProviderInvocationRuntime(julesClaim.id, {
@@ -244,8 +255,10 @@ export class SprintTaskDispatchService {
     this.executionRepository.updateTaskDispatch(dispatch.id, {
       status: "running",
       claimedAt: queuedAt,
-      startedAt: queuedAt,
+      startedAt: dispatch.startedAt || queuedAt,
+      finishedAt: null,
       lastHeartbeatAt: queuedAt,
+      errorMessage: null,
     });
 
     try {
@@ -435,12 +448,26 @@ export class SprintTaskDispatchService {
     throw new Error(`Task ${task.id} is missing its database record id.`);
   }
 
-  private findActiveDispatchForTask(projectId: string, sprintRunId: string, taskId: string): TaskDispatchRecord | null {
+  private findDuplicateBlockingDispatchForTask(projectId: string, sprintRunId: string, taskId: string): TaskDispatchRecord | null {
     const activeDispatches = this.executionRepository.listTaskDispatches({
       projectId,
       sprintRunId,
       taskId,
-    }).filter((dispatch) => ACTIVE_TASK_DISPATCH_STATUSES.has(dispatch.status));
+    }).filter((dispatch) => DUPLICATE_BLOCKING_TASK_DISPATCH_STATUSES.has(dispatch.status));
+    return this.getMostRecentDispatch(activeDispatches);
+  }
+
+  private findQueuedDispatchForTask(projectId: string, sprintRunId: string, taskId: string): TaskDispatchRecord | null {
+    const queuedDispatches = this.executionRepository.listTaskDispatches({
+      projectId,
+      sprintRunId,
+      taskId,
+    }).filter((dispatch) => dispatch.status === "queued");
+    return this.getMostRecentDispatch(queuedDispatches);
+  }
+
+  private getMostRecentDispatch(dispatches: TaskDispatchRecord[]): TaskDispatchRecord | null {
+    const activeDispatches = dispatches;
     if (activeDispatches.length === 0) {
       return null;
     }

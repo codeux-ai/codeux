@@ -1191,9 +1191,11 @@ export class ExecutionRepository {
       ? `state = 'RUNNING' AND provider IS NOT NULL AND provider IN (${providerFilter.map(() => "?").join(", ")})`
       : "state = 'RUNNING' AND provider IS NOT NULL";
     const rows = this.db.prepare(`
-      SELECT provider, COUNT(*) as count
+      SELECT task_runs.provider, COUNT(*) as count
       FROM task_runs
+      INNER JOIN task_dispatches td ON td.id = task_runs.dispatch_id
       WHERE ${where}
+        AND td.status IN ('claimed', 'running', 'cancel_requested', 'paused')
         AND NOT EXISTS (
           SELECT 1
           FROM provider_invocations pi

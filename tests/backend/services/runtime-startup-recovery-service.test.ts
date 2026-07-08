@@ -885,6 +885,142 @@ describe("RuntimeStartupRecoveryService", () => {
     );
   });
 
+  it("syncs task status when startup recovery completes an active task run from a completed dispatch", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Completed Dispatch Task Status Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/completed-dispatch-task-status-recovery-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Completed Dispatch Task Status Recovery Sprint",
+      number: 12,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Interrupted task with completed dispatch",
+      executorType: "docker_cli",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "docker_cli",
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "completed",
+      startedAt: "2026-07-07T10:00:00.000Z",
+      finishedAt: "2026-07-07T10:01:00.000Z",
+    } as any);
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "mockup-cli",
+      mode: "docker_cli",
+      state: "RUNNING",
+      startedAt: "2026-07-07T10:00:00.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledTaskRunIds).toEqual([taskRun.id]);
+    expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({
+      state: "COMPLETED",
+      finishedAt: expect.any(String),
+    });
+    expect(projectRepository.getTask(task.id)).toMatchObject({
+      status: "coding_completed",
+    });
+  });
+
+  it("does not let a no-dispatch pending task run mask a completed dispatch for the same task", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Synthetic Pending Task Run Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/synthetic-pending-task-run-recovery-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Synthetic Pending Task Run Recovery Sprint",
+      number: 13,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Task with completed dispatch and synthetic pending run",
+      executorType: "docker_cli",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "docker_cli",
+      status: "running",
+    });
+    const completedDispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "completed",
+      startedAt: "2026-07-07T10:00:00.000Z",
+      finishedAt: "2026-07-07T10:01:00.000Z",
+    } as any);
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: completedDispatch.id,
+      provider: "mockup-cli",
+      mode: "docker_cli",
+      state: "COMPLETED",
+      startedAt: "2026-07-07T10:00:00.000Z",
+      finishedAt: "2026-07-07T10:01:00.000Z",
+    });
+    const syntheticPendingRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      provider: "mockup-cli",
+      mode: "docker_cli",
+      state: "PENDING",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledTaskRunIds).toEqual([syntheticPendingRun.id]);
+    expect(executionRepository.getTaskRun(syntheticPendingRun.id)).toMatchObject({
+      state: "COMPLETED",
+      finishedAt: expect.any(String),
+    });
+    expect(projectRepository.getTask(task.id)).toMatchObject({
+      status: "coding_completed",
+    });
+  });
+
   it("reconciles orphaned running task coding provider invocations from terminal task state", async () => {
     const {
       projectRepository,

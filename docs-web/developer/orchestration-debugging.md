@@ -43,6 +43,14 @@ Run `pnpm run test:orchestration:large-dag` for a heavy 129-task DAG with 96 lea
 | Checked-out default branch | Visible checkout refreshes to the merged commit. |
 | Checked-out non-default branch | Default branch updates without switching the visible checkout. |
 
+## Provider concurrency checks
+
+When a Docker-backed sprint appears capped but no matching provider containers are running, inspect `provider_invocations`, `task_dispatches`, and linked `task_runs`.
+
+- Completed linked task runs or dispatches should release stale task-coding provider slots as `completed`.
+- Recently heartbeating linked dispatches should remain active even if the short-lived provider container has already exited.
+- Only idle/orphaned Docker provider rows should be failed for retry.
+
 ## Memory profile
 
 After deterministic lanes pass, run a long profile against compiled-runtime mockup scenarios:

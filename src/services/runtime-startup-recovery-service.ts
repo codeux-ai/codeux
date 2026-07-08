@@ -606,12 +606,24 @@ export class RuntimeStartupRecoveryService {
 
       if (resolution.resetTaskToPending) {
         this.resetTaskToPending(taskRun.taskId);
+      } else if (resolution.state === "COMPLETED") {
+        this.reconcileCompletedTaskStatus(taskRun.taskId);
       }
 
       reconciledTaskRunIds.push(taskRun.id);
     }
 
     return reconciledTaskRunIds;
+  }
+
+  private reconcileCompletedTaskStatus(taskId: string): void {
+    const task = this.deps.projectManagementRepository.getTask(taskId);
+    if (!task || task.status !== "in_progress") {
+      return;
+    }
+    this.deps.projectManagementRepository.updateTask(taskId, {
+      status: task.isMerged ? "completed" : "coding_completed",
+    });
   }
 
   private reconcileTerminalTaskRunDispatches(): string[] {
@@ -859,6 +871,14 @@ export class RuntimeStartupRecoveryService {
       return null;
     }
 
+    if (!dispatch && task?.status === "in_progress" && this.taskHasCompletedDispatch(taskRun)) {
+      return {
+        state: "COMPLETED",
+        message: "Recovered stale task run after the same task already had a completed dispatch.",
+        resetTaskToPending: false,
+      };
+    }
+
     if (dispatch && !ACTIVE_DISPATCH_STATUSES.includes(dispatch.status as (typeof ACTIVE_DISPATCH_STATUSES)[number])) {
       const dispatchCompleted = dispatch.status === "completed";
       return {
@@ -879,6 +899,13 @@ export class RuntimeStartupRecoveryService {
       message: "Recovered stale task run after it remained active without dispatch or provider runtime linkage.",
       resetTaskToPending: task?.status === "in_progress",
     };
+  }
+
+  private taskHasCompletedDispatch(taskRun: TaskRunRecord): boolean {
+    return this.deps.executionRepository.listTaskDispatches({
+      projectId: taskRun.projectId,
+      taskId: taskRun.taskId,
+    }).some((dispatch) => dispatch.status === "completed");
   }
 
   private async reconcileInterruptedCliInvocations(
