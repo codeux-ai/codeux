@@ -29,6 +29,7 @@ import type {
   Subtask,
   AutoMergeFeaturePrResult,
 } from "../../../contracts/app-types.js";
+import type { TaskRunRecord } from "../../../contracts/execution-types.js";
 import type { ExecutionRepository } from "../../../repositories/execution-repository.js";
 import type { WorkerCiFixPayload } from "./feature-pr/ci-autofix-policy.js";
 import { evaluatePreCiGateTransition, isCompletedTaskAwaitingMerge, isTaskCodeComplete, taskHasMergeEvidence } from "../task-merge-state.js";
@@ -36,6 +37,45 @@ import type { MergeConflictDebouncer } from "./merge-conflict-debouncer.js";
 import type { TaskQaMergeGateStatus } from "../../../services/quality-assurance-service.js";
 
 const EMPTY_FEATURE_PR_CHECK_GRACE_MS = 10 * 60 * 1000;
+
+function isCliTaskRun(taskRun: TaskRunRecord | null): boolean {
+  if (!taskRun || taskRun.provider === "jules") {
+    return false;
+  }
+  if (!taskRun.provider && !taskRun.mode && !taskRun.sessionId && !taskRun.sessionName) {
+    return false;
+  }
+  return Boolean(
+    taskRun.mode?.includes("cli")
+    || taskRun.sessionId?.startsWith("cli-")
+    || taskRun.sessionName?.includes("/cli-")
+  );
+}
+
+function hasCliGitFinalized(context: CiGateContext, taskRun: TaskRunRecord | null): boolean {
+  if (!isCliTaskRun(taskRun)) {
+    return false;
+  }
+  const listTaskRunEvents = context.executionRepository?.listTaskRunEvents?.bind(context.executionRepository);
+  if (!taskRun?.id || !listTaskRunEvents) {
+    return taskRun?.state === "COMPLETED";
+  }
+  const events = listTaskRunEvents(taskRun.id, 25);
+  return events.some((event) => (
+    event.eventType === "cli_git_pushed"
+    || event.eventType === "cli_git_no_changes"
+  ));
+}
+
+function isExecutionCompletedForCi(context: CiGateContext, task: Subtask, taskRun: TaskRunRecord | null): boolean {
+  // CLI workflows have two completion moments: provider/session completion and
+  // git finalization. Branch-only merge gates must wait for the task run itself,
+  // because worker branches can be created after the provider has already exited.
+  if (isCliTaskRun(taskRun)) {
+    return taskRun?.state === "COMPLETED" && hasCliGitFinalized(context, taskRun);
+  }
+  return task.session_state === "COMPLETED" || taskRun?.state === "COMPLETED";
+}
 
 export interface CiGateContext {
   automationLevel: AutomationLevel;
@@ -83,6 +123,7 @@ export class FeaturePrGateService {
       mergedPr: GitMergeStatus | undefined;
       hasPr: boolean;
       isExecutionCompleted: boolean;
+      cliRunAwaitingGitFinalization: boolean;
       error?: unknown;
     }
     const taskCiInfoMap = new Map<string, TaskCiInfo>();
@@ -112,9 +153,10 @@ export class FeaturePrGateService {
       ) {
         task.worker_branch = taskRun.workerBranch;
       }
-      const isExecutionCompleted = task.session_state === "COMPLETED" || taskRun?.state === "COMPLETED";
+      const isExecutionCompleted = isExecutionCompletedForCi(context, task, taskRun);
+      const cliRunAwaitingGitFinalization = isCliTaskRun(taskRun) && !hasCliGitFinalized(context, taskRun);
 
-      taskCiInfoMap.set(task.id, { pr, mergedPr, hasPr, isExecutionCompleted, error });
+      taskCiInfoMap.set(task.id, { pr, mergedPr, hasPr, isExecutionCompleted, cliRunAwaitingGitFinalization, error });
     }
 
     const transitionResults = updatedSubtasks.map((task) => {
@@ -199,6 +241,9 @@ export class FeaturePrGateService {
         return false;
       }
       if (context.githubMode === "REMOTE" && !info.isExecutionCompleted) {
+        return false;
+      }
+      if (context.githubMode === "LOCAL" && info.cliRunAwaitingGitFinalization) {
         return false;
       }
       return isCompletedTaskAwaitingMerge(task, {
@@ -469,7 +514,7 @@ export class FeaturePrGateService {
         const taskRun = context.executionRepository && context.sprintRunId && task.record_id
           ? context.executionRepository.getLatestTaskRun(task.record_id, context.sprintRunId)
           : null;
-        const isExecutionCompleted = task.session_state === "COMPLETED" || taskRun?.state === "COMPLETED";
+        const isExecutionCompleted = isExecutionCompletedForCi(context, task, taskRun);
 
         if (isExecutionCompleted) {
           const qaGate = context.evaluateTaskQaGate?.(task);

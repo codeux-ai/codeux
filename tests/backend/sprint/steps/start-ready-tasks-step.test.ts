@@ -178,6 +178,14 @@ describe("start-ready-tasks-step", () => {
     expect(fails).toBe(2);
     expect(setConsecutiveFailures).not.toHaveBeenCalled();
     expect(errorSpy).not.toHaveBeenCalled();
-    expect(infoSpy).toHaveBeenCalledTimes(3);
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+    expect(infoSpy).toHaveBeenCalledWith("Provider concurrency cap deferred ready tasks", expect.objectContaining({
+      provider: "codex",
+      limit: 2,
+      currentCount: 2,
+      blockedTaskCount: 3,
+      sampleTaskIds: ["1", "2", "3"],
+      source: "pre_dispatch",
+    }));
   });
 });

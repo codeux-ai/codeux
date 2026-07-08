@@ -38,8 +38,8 @@ Run `pnpm run test:orchestration:large-dag` for a heavy 129-task DAG with 96 lea
 | Case | Expected behavior |
 | --- | --- |
 | Clean checkout | Temporary worktree merges sprint feature branch into default branch. |
-| Dirty non-conflicting file | Dirty work is committed to `dirty-ref-<uuid>`, final sprint merge completes, dirty branch merges back if clean. |
-| Dirty conflicting file | Dirty work is preserved, sprint merge completes, dirty branch remains as backup if it cannot merge cleanly. |
+| Dirty non-conflicting file | Dirty work is committed to `dirty-ref-<uuid>`, final sprint merge completes, and the dirty work is copied back into the visible checkout as uncommitted changes. |
+| Dirty conflicting file | Dirty work is preserved, sprint merge completes, restore is aborted, and the dirty branch remains as backup with a dashboard attention item. |
 | Checked-out default branch | Visible checkout refreshes to the merged commit. |
 | Checked-out non-default branch | Default branch updates without switching the visible checkout. |
 
@@ -73,6 +73,24 @@ while sleep 30; do
   date -Is
   ps -o pid,ppid,rss,vsz,pcpu,pmem,etime,command -C node
 done
+```
+
+For compiled-runtime stress runs, pass Node profiling flags to the isolated server child:
+
+```bash
+PROFILE_DIR=.cache/e2e-profiles/large-dag
+mkdir -p "$PROFILE_DIR"
+CODE_UX_E2E_SERVER_NODE_OPTIONS="--cpu-prof --cpu-prof-dir=$PROFILE_DIR --cpu-prof-name=server.cpuprofile --heap-prof --heap-prof-dir=$PROFILE_DIR --heap-prof-name=server.heapprofile" \
+  node scripts/e2e/run-mockup-sprint-pentest.mjs --scenario large-dag-stress --timeout-ms 3600000 --keep-artifacts
+```
+
+For restart stress, let Node auto-name the profile files so each restarted server child writes a separate CPU and heap profile:
+
+```bash
+PROFILE_DIR=.cache/e2e-profiles/large-dag-restarts
+mkdir -p "$PROFILE_DIR"
+CODE_UX_E2E_SERVER_NODE_OPTIONS="--cpu-prof --cpu-prof-dir=$PROFILE_DIR --heap-prof --heap-prof-dir=$PROFILE_DIR" \
+  node scripts/e2e/run-mockup-sprint-pentest.mjs --scenario large-dag-stress --timeout-ms 3600000 --restart-every-ms 45000 --restart-count 3 --keep-artifacts
 ```
 
 Compare memory after startup, first task completion, final merge, and cleanup. A passing profile returns near its post-start steady state after Docker worktrees, provider watchers, preview sessions, and memory-promotion jobs settle.

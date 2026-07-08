@@ -7,6 +7,7 @@ import {
   getCheckedOutRef,
   restoreCheckedOutRef,
   preserveDirtyCheckout,
+  restorePreservedDirtyCheckout,
   mergeBranchLocally,
   mergeBranchLocallyInTemporaryWorktree,
   findRecoverableWorkerBranch,
@@ -410,7 +411,7 @@ describe("local-merge helpers", () => {
     expect((await git(repo, "status", "--porcelain")).stdout).toContain("?? local-note.txt");
   });
 
-  it("preserves a dirty checkout on a backup branch and can merge it after the clean sprint merge", async () => {
+  it("preserves a dirty checkout on a backup branch and restores it uncommitted after the clean sprint merge", async () => {
     await git(repo, "checkout", "feature");
     await commitFile(repo, "feature.txt", "feature\n", "feat: sprint work");
     await git(repo, "checkout", "main");
@@ -431,18 +432,42 @@ describe("local-merge helpers", () => {
     expect(cleanMerge.ok).toBe(true);
     expect(cleanMerge.conflict).toBe(false);
 
-    const dirtyMerge = await mergeBranchLocallyInTemporaryWorktree({
-      repoPath: repo,
-      targetBranch: "main",
-      sourceBranch: preserved!.dirtyRefBranch,
-      commitMessage: `Merge preserved dirty checkout '${preserved!.dirtyRefBranch}' into main`,
-    });
-    expect(dirtyMerge.ok).toBe(true);
-    expect(dirtyMerge.conflict).toBe(false);
+    const dirtyRestore = await restorePreservedDirtyCheckout(repo, preserved!.dirtyRefBranch);
+    expect(dirtyRestore.ok).toBe(true);
+    expect(dirtyRestore.conflict).toBe(false);
 
     const files = (await git(repo, "ls-tree", "--name-only", "main")).stdout;
     expect(files).toContain("feature.txt");
-    expect(files).toContain("dirty-note.txt");
+    expect(files).not.toContain("dirty-note.txt");
+    expect((await git(repo, "status", "--porcelain")).stdout).toContain("?? dirty-note.txt");
+  });
+
+  it("keeps the dirty branch and cleans the checkout when restored dirty work conflicts", async () => {
+    await git(repo, "checkout", "feature");
+    await commitFile(repo, "shared.txt", "feature\n", "feat: sprint shared edit");
+    await git(repo, "checkout", "main");
+    await writeFile(path.join(repo, "shared.txt"), "dirty work\n", "utf8");
+
+    const preserved = await preserveDirtyCheckout(repo);
+    expect(preserved).not.toBeNull();
+    expect((await git(repo, "status", "--porcelain")).stdout.trim()).toBe("");
+
+    const cleanMerge = await mergeBranchLocallyInTemporaryWorktree({
+      repoPath: repo,
+      targetBranch: "main",
+      sourceBranch: "feature",
+      commitMessage: "Merge branch 'feature' into main",
+    });
+    expect(cleanMerge.ok).toBe(true);
+
+    const dirtyRestore = await restorePreservedDirtyCheckout(repo, preserved!.dirtyRefBranch);
+    expect(dirtyRestore.ok).toBe(false);
+    expect(dirtyRestore.conflict).toBe(true);
+    expect(dirtyRestore.dirtyRefBranch).toBe(preserved!.dirtyRefBranch);
+    expect(dirtyRestore.restoredPaths).toContain("shared.txt");
+    expect((await git(repo, "status", "--porcelain")).stdout.trim()).toBe("");
+    expect((await git(repo, "show", `${preserved!.dirtyRefBranch}:shared.txt`)).stdout.trim()).toBe("dirty work");
+    expect((await git(repo, "show", "main:shared.txt")).stdout.trim()).toBe("feature");
   });
 
   it("ignores dirty Code UX runtime files when deciding whether to preserve a checkout", async () => {

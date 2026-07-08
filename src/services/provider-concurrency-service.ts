@@ -35,6 +35,7 @@ export class ProviderConcurrencyService {
   private readonly reconciliationLastRunMs = new Map<ProviderId, number>();
   private readonly RECONCILIATION_THROTTLE_MS = 10_000;
   private readonly activeReconciliations = new Map<ProviderId, Promise<void>>();
+  private readonly capWaitLogLastRunMs = new Map<ProviderId, number>();
 
   constructor(private readonly deps: ProviderConcurrencyServiceDeps) {}
 
@@ -75,15 +76,7 @@ export class ProviderConcurrencyService {
         return;
       }
 
-      const now = Date.now();
-      if (now - lastLogMs >= 10000) {
-        this.deps.logger.info("Provider concurrency cap reached, waiting for slot", {
-          provider,
-          limit,
-          currentCount,
-        });
-        lastLogMs = now;
-      }
+      lastLogMs = this.logProviderCapWait(provider, limit, currentCount, lastLogMs);
 
       let delayMs = 2000;
       if (maxWaitMs !== undefined) {
@@ -132,18 +125,9 @@ export class ProviderConcurrencyService {
         return invocation;
       }
 
-      const now = Date.now();
-      if (now - lastLogMs >= 10000) {
-        // Count for logging/tracking purposes
-        const runningCount = this.deps.executionRepository.listRunningProviderInvocationUsages([provider]).length;
-
-        this.deps.logger.info("Provider concurrency cap reached, waiting for slot", {
-          provider,
-          limit,
-          currentCount: runningCount,
-        });
-        lastLogMs = now;
-      }
+      // Count for logging/tracking purposes.
+      const runningCount = this.deps.executionRepository.listRunningProviderInvocationUsages([provider]).length;
+      lastLogMs = this.logProviderCapWait(provider, limit, runningCount, lastLogMs);
 
       let delayMs = 2000;
       if (maxWaitMs !== undefined) {
@@ -196,10 +180,11 @@ export class ProviderConcurrencyService {
   }
 
   /**
-   * Returns current provider load across all projects. This intentionally counts provider
-   * invocations only: task runs can remain active while Code UX performs local git/merge
-   * orchestration after the provider call has finished, and counting those rows would throttle
-   * new provider work even when no provider process is running.
+   * Returns current provider load across all projects. Running provider invocations are the
+   * primary capacity signal, while active task runs cover Docker/CLI dispatches that have been
+   * accepted by the sprint loop but have not created their provider invocation row yet. The task
+   * run query excludes rows whose linked provider invocation has already finished, so post-provider
+   * local git/merge work does not keep throttling new provider work.
    */
   getGlobalRunningCounts(providers?: string[]): Record<string, number> {
     const running = this.deps.executionRepository.listRunningProviderInvocationUsages(providers);
@@ -209,7 +194,34 @@ export class ProviderConcurrencyService {
         counts[inv.provider] = (counts[inv.provider] || 0) + 1;
       }
     }
+    const countTaskRuns = this.deps.executionRepository.countGlobalRunningTaskRunsPerProvider;
+    if (typeof countTaskRuns === "function") {
+      const taskRunCounts = countTaskRuns.call(this.deps.executionRepository, providers);
+      for (const [provider, count] of taskRunCounts) {
+        counts[provider] = Math.max(counts[provider] || 0, count);
+      }
+    }
     return counts;
+  }
+
+  private logProviderCapWait(provider: ProviderId, limit: number, currentCount: number, localLastLogMs: number): number {
+    const now = Date.now();
+    if (now - localLastLogMs < 10000) {
+      return localLastLogMs;
+    }
+
+    const globalLastLogMs = this.capWaitLogLastRunMs.get(provider) || 0;
+    if (now - globalLastLogMs < 10000) {
+      return now;
+    }
+
+    this.deps.logger.info("Provider concurrency cap reached, waiting for slot", {
+      provider,
+      limit,
+      currentCount,
+    });
+    this.capWaitLogLastRunMs.set(provider, now);
+    return now;
   }
 
   private async reconcileStaleProviderInvocations(provider: ProviderId, force = false): Promise<void> {

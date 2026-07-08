@@ -976,6 +976,52 @@ jobs:
     expect(result.subtasks[0].merge_indicator).toBe("MERGED");
     expect(result.reportText).toContain("Merged locally");
   });
+
+  it("waits for local CLI git finalization before settling branch-only work", async () => {
+    context.githubMode = "LOCAL";
+    context.gitStatus.openPullRequests = [];
+    context.gitStatus.mergedPullRequests = [];
+    subtasks[0].status = "COMPLETED";
+    subtasks[0].session_state = "COMPLETED";
+    subtasks[0].worker_branch = "task/feature-sprint1-t1-mockup";
+    subtasks[0].pr_url = undefined;
+    subtasks[0].is_merged = false;
+
+    context.executionRepository = {
+      getLatestTaskRun: vi.fn().mockReturnValue({
+        id: "run-1",
+        provider: "mockup-cli",
+        mode: "docker_cli",
+        sessionId: "cli-mockup-cli-1",
+        state: "RUNNING",
+        workerBranch: "task/feature-sprint1-t1-mockup",
+      }),
+      updateTaskRun: vi.fn(),
+      appendTaskRunEvent: vi.fn(),
+    } as any;
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].status).toBe("CODING_COMPLETED");
+    expect(result.subtasks[0].worker_branch).toBe("task/feature-sprint1-t1-mockup");
+    expect(result.subtasks[0].is_merged).toBe(false);
+    expect(context.persistMergedTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "T1",
+        status: "CODING_COMPLETED",
+        worker_branch: "task/feature-sprint1-t1-mockup",
+      })
+    );
+    expect(context.executionRepository.updateTaskRun).not.toHaveBeenCalledWith("run-1", { workerBranch: null });
+    expect(context.executionRepository.appendTaskRunEvent).not.toHaveBeenCalledWith(
+      "run-1",
+      "ci_gate_status",
+      "system",
+      expect.objectContaining({ state: "no_merge_work" }),
+      expect.anything()
+    );
+    expect(runCommandStrict).not.toHaveBeenCalled();
+  });
 });
 
 async function createTempRepoWithWorkflow(workflowContent: string): Promise<string> {

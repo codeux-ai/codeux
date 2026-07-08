@@ -652,7 +652,7 @@ describe("ProviderConcurrencyService", () => {
       });
     });
 
-    it("does not count active task runs as provider load after provider invocations finish", () => {
+    it("counts active task runs that have not produced terminal provider invocation evidence", () => {
       executionRepository.listRunningProviderInvocationUsages.mockReturnValue([
         { provider: "mockup-cli" },
         { provider: "jules" },
@@ -667,10 +667,11 @@ describe("ProviderConcurrencyService", () => {
       const counts = service.getGlobalRunningCounts(["mockup-cli", "codex", "jules"]);
 
       expect(counts).toEqual({
-        "mockup-cli": 1,
+        "mockup-cli": 5,
+        codex: 3,
         jules: 2,
       });
-      expect(executionRepository.countGlobalRunningTaskRunsPerProvider).not.toHaveBeenCalled();
+      expect(executionRepository.countGlobalRunningTaskRunsPerProvider).toHaveBeenCalledWith(["mockup-cli", "codex", "jules"]);
     });
   });
 

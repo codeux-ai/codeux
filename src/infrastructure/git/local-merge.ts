@@ -97,6 +97,14 @@ export interface DirtyCheckoutPreservationResult {
   originalRef: CheckedOutRef | null;
 }
 
+export interface DirtyCheckoutRestoreResult {
+  ok: boolean;
+  conflict: boolean;
+  restoredPaths: string[];
+  dirtyRefBranch: string;
+  error?: string;
+}
+
 async function unstageCodeUxRepoDir(repoPath: string, runner: LocalMergeRunner): Promise<void> {
   await runner("git", ["reset", "--", CODE_UX_REPO_DIR], repoPath).catch(() => undefined);
 }
@@ -145,6 +153,76 @@ export async function preserveDirtyCheckout(
       // Best-effort cleanup. The caller will surface the failure.
     }
     throw error;
+  }
+}
+
+/**
+ * Re-applies a preserved dirty-checkout commit onto the visible checkout without
+ * committing it. On conflict, the cherry-pick is aborted and the dirty branch is
+ * left intact for manual recovery.
+ */
+export async function restorePreservedDirtyCheckout(
+  repoPath: string,
+  dirtyRefBranch: string,
+  runner: LocalMergeRunner = defaultRunner,
+): Promise<DirtyCheckoutRestoreResult> {
+  const branch = dirtyRefBranch.trim();
+  if (!branch) {
+    return {
+      ok: false,
+      conflict: false,
+      restoredPaths: [],
+      dirtyRefBranch,
+      error: "Dirty checkout branch is required.",
+    };
+  }
+  if (!(await gitCommitExists(repoPath, branch, runner))) {
+    return {
+      ok: false,
+      conflict: false,
+      restoredPaths: [],
+      dirtyRefBranch: branch,
+      error: `Dirty checkout branch '${branch}' was not found or does not point to a commit.`,
+    };
+  }
+
+  let restoredPaths: string[] = [];
+  try {
+    const files = await runner("git", ["diff-tree", "--no-commit-id", "--name-only", "-r", branch], repoPath);
+    restoredPaths = files.stdout.split("\n").map((line) => line.trim()).filter(Boolean);
+  } catch {
+    restoredPaths = [];
+  }
+
+  try {
+    await runner("git", ["cherry-pick", "--no-commit", branch], repoPath);
+    if (restoredPaths.length > 0) {
+      await runner("git", ["reset", "--", ...restoredPaths], repoPath).catch(() => undefined);
+    }
+    return {
+      ok: true,
+      conflict: false,
+      restoredPaths,
+      dirtyRefBranch: branch,
+    };
+  } catch (err) {
+    const conflictPaths = await listUnmergedConflictPaths(repoPath, runner);
+    try {
+      await runner("git", ["cherry-pick", "--abort"], repoPath);
+    } catch {
+      try {
+        await runner("git", ["reset", "--merge"], repoPath);
+      } catch {
+        // Best-effort cleanup; the error below tells the caller what happened.
+      }
+    }
+    return {
+      ok: false,
+      conflict: conflictPaths.length > 0,
+      restoredPaths: conflictPaths.length > 0 ? conflictPaths : restoredPaths,
+      dirtyRefBranch: branch,
+      error: formatGitError(err),
+    };
   }
 }
 

@@ -80,6 +80,7 @@ export class CycleRunner {
     awaitingMerge: Subtask[];
     manualMergeTasks: Subtask[];
     workerEscalatedMergeConflictTasks: Subtask[];
+    activeProjectAttentionItems: ProjectAttentionItemRecord[];
   }> {
     const dashboardSettings = this.deps.getDashboardSettings({
       projectId: args.executionContext.project.id,
@@ -181,9 +182,10 @@ export class CycleRunner {
     }
 
     let reportText = "";
+    let qaFinishedTaskIds = new Set<string>();
     if (subtasks.length > 0) {
       if (args.loopSteps.statusDerivation) {
-        await this.reviewCompletedTasks(subtasks, cycleEntryStates, args, dashboardSettings);
+        qaFinishedTaskIds = await this.reviewCompletedTasks(subtasks, cycleEntryStates, args, dashboardSettings);
       }
       const taskStateBeforeFastBranchGate = snapshotTaskState(subtasks);
       const fastBranchOnlyResult = await this.runFastBranchOnlyMergeGate(
@@ -191,6 +193,7 @@ export class CycleRunner {
         args,
         dashboardSettings,
         activeProjectAttentionItems,
+        qaFinishedTaskIds,
       );
       subtasks = fastBranchOnlyResult.subtasks;
       reportText += fastBranchOnlyResult.reportText;
@@ -260,20 +263,10 @@ export class CycleRunner {
         this.backfillTaskPrMetadataFromGitStatus(subtasks, gitStatus, args.sprintRunId);
       }
 
-      const shouldRunCiGate = needsFeaturePrStatus || hasFastBranchOnlyMergeCandidates(subtasks);
+      const shouldRunCiGate = needsFeaturePrStatus || hasFastBranchOnlyMergeCandidates(subtasks, args.githubMode);
       const ciAutofixResult = shouldRunCiGate
         ? await this.featurePrGate.evaluateCiGate(subtasks, {
-        evaluateTaskQaGate: (() => {
-          const qaService = this.deps.qualityAssuranceService;
-          if (!qaService) {
-            return undefined;
-          }
-          return (task: Subtask) => qaService.getTaskMergeGateStatus({
-            projectId: args.executionContext.project.id,
-            sprintId: args.executionContext.sprint.id,
-            task,
-          });
-        })(),
+        evaluateTaskQaGate: this.buildTaskQaGateEvaluator(args, qaFinishedTaskIds),
         automationLevel: args.automationLevel,
         repoPath: args.repoPath,
         featureBranch: args.defaultFeatureBranch,
@@ -439,6 +432,7 @@ export class CycleRunner {
       awaitingMerge: transitionState.mergeRequiredTasks,
       manualMergeTasks: protocolResult.manualMergeTasks,
       workerEscalatedMergeConflictTasks: protocolResult.workerEscalatedMergeConflictTasks,
+      activeProjectAttentionItems,
     };
   }
 
@@ -501,24 +495,15 @@ export class CycleRunner {
     args: CycleRunnerArgs,
     dashboardSettings: ReturnType<SprintOrchestratorDependencies["getDashboardSettings"]>,
     activeProjectAttentionItems: ProjectAttentionItemRecord[],
+    qaFinishedTaskIds: Set<string>,
   ): Promise<{ subtasks: Subtask[]; reportText: string }> {
-    const branchOnlyCandidates = subtasks.filter(isFastBranchOnlyMergeCandidate);
+    const branchOnlyCandidates = subtasks.filter((task) => isFastBranchOnlyMergeCandidate(task, args.githubMode));
     if (branchOnlyCandidates.length === 0) {
       return { subtasks, reportText: "" };
     }
 
     const result = await this.featurePrGate.evaluateCiGate(branchOnlyCandidates, {
-      evaluateTaskQaGate: (() => {
-        const qaService = this.deps.qualityAssuranceService;
-        if (!qaService) {
-          return undefined;
-        }
-        return (task: Subtask) => qaService.getTaskMergeGateStatus({
-          projectId: args.executionContext.project.id,
-          sprintId: args.executionContext.sprint.id,
-          task,
-        });
-      })(),
+      evaluateTaskQaGate: this.buildTaskQaGateEvaluator(args, qaFinishedTaskIds),
       automationLevel: args.automationLevel,
       repoPath: args.repoPath,
       featureBranch: args.defaultFeatureBranch,
@@ -946,10 +931,21 @@ export class CycleRunner {
   ): void {
     const taskId = task.record_id?.trim();
     task.status = "COMPLETED";
+    task.merge_indicator = undefined;
     task.intervention_owner = undefined;
     task.intervention_hint = undefined;
     if (taskId) {
-      this.deps.projectManagementRepository.updateTask(taskId, { status: "completed" });
+      this.deps.projectManagementRepository.updateTask(taskId, {
+        status: "completed",
+        mergeIndicator: null,
+      });
+      const taskRun = this.deps.executionRepository.getLatestTaskRun(taskId, args.sprintRunId);
+      if (taskRun && taskRun.state !== "COMPLETED") {
+        this.deps.executionRepository.updateTaskRun(taskRun.id, {
+          state: "COMPLETED",
+          finishedAt: taskRun.finishedAt ?? new Date().toISOString(),
+        });
+      }
     }
     this.deps.logger.warn("QA exhausted without clearing task — finished anyway (FINISH_TASK policy)", {
       projectId: args.executionContext.project.id,
@@ -1074,9 +1070,10 @@ export class CycleRunner {
     previousStates: Map<string, Subtask["status"]>,
     args: CycleRunnerArgs,
     settings: ReturnType<SprintOrchestratorDependencies["getDashboardSettings"]>,
-  ): Promise<void> {
+  ): Promise<Set<string>> {
+    const qaFinishedTaskIds = new Set<string>();
     if (!this.deps.qualityAssuranceService || !settings.agents.qualityAssurance.enabled) {
-      return;
+      return qaFinishedTaskIds;
     }
 
     await this.deps.qualityAssuranceService.reconcileRunningTaskQaReviews?.({
@@ -1104,7 +1101,11 @@ export class CycleRunner {
       // infra reasons). Apply the configured exhaustion policy instead of letting
       // it quietly settle as completed or loop forever.
       if (taskIsCodeComplete && qaGate.reason === "retries_exhausted" && !hasSameSessionFollowUpAfterLatestQaRequest) {
-        if (this.applyQaExhaustionPolicy(task, qaGate, args, settings.agents.qualityAssurance.exhaustionPolicy)) {
+        const policy = settings.agents.qualityAssurance.exhaustionPolicy;
+        if (this.applyQaExhaustionPolicy(task, qaGate, args, policy)) {
+          if (policy === "FINISH_TASK") {
+            this.addTaskQaIdentity(qaFinishedTaskIds, task);
+          }
           continue;
         }
       }
@@ -1171,6 +1172,57 @@ export class CycleRunner {
     if (reviewPromises.length > 0) {
       await Promise.all(reviewPromises);
     }
+
+    return qaFinishedTaskIds;
+  }
+
+  private buildTaskQaGateEvaluator(
+    args: CycleRunnerArgs,
+    qaFinishedTaskIds: ReadonlySet<string>,
+  ): ((task: Subtask) => TaskQaMergeGateStatus) | undefined {
+    const qaService = this.deps.qualityAssuranceService;
+    if (!qaService) {
+      return undefined;
+    }
+
+    return (task: Subtask) => {
+      if (this.hasTaskQaIdentity(qaFinishedTaskIds, task)) {
+        return {
+          mergeAllowed: true,
+          reason: "passed",
+          summary: "QA exhaustion FINISH_TASK policy waived the remaining QA gate for this cycle.",
+          latestRun: null,
+          runsUsed: 0,
+          maxRuns: 0,
+        };
+      }
+
+      return qaService.getTaskMergeGateStatus({
+        projectId: args.executionContext.project.id,
+        sprintId: args.executionContext.sprint.id,
+        task,
+      });
+    };
+  }
+
+  private addTaskQaIdentity(target: Set<string>, task: Subtask): void {
+    const recordId = task.record_id?.trim();
+    if (recordId) {
+      target.add(recordId);
+    }
+    const taskKey = task.id?.trim();
+    if (taskKey) {
+      target.add(taskKey);
+    }
+  }
+
+  private hasTaskQaIdentity(source: ReadonlySet<string>, task: Subtask): boolean {
+    const recordId = task.record_id?.trim();
+    if (recordId && source.has(recordId)) {
+      return true;
+    }
+    const taskKey = task.id?.trim();
+    return Boolean(taskKey && source.has(taskKey));
   }
 
   private backfillTaskPrMetadataFromGitStatus(
@@ -1298,7 +1350,7 @@ function nonEmptyTaskString(value: string | null | undefined): boolean {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function isFastBranchOnlyMergeCandidate(task: Subtask): boolean {
+function isFastBranchOnlyMergeCandidate(task: Subtask, githubMode?: "REMOTE" | "LOCAL"): boolean {
   return isTaskCodeComplete(task)
     && !task.is_merged
     && task.merge_indicator !== "MERGED"
@@ -1307,11 +1359,11 @@ function isFastBranchOnlyMergeCandidate(task: Subtask): boolean {
     && task.session_state === "COMPLETED"
     && task.provider !== "jules"
     && !nonEmptyTaskString(task.pr_url)
-    && nonEmptyTaskString(task.worker_branch);
+    && (nonEmptyTaskString(task.worker_branch) || githubMode === "LOCAL");
 }
 
-function hasFastBranchOnlyMergeCandidates(subtasks: Subtask[]): boolean {
-  return subtasks.some(isFastBranchOnlyMergeCandidate);
+function hasFastBranchOnlyMergeCandidates(subtasks: Subtask[], githubMode?: "REMOTE" | "LOCAL"): boolean {
+  return subtasks.some((task) => isFastBranchOnlyMergeCandidate(task, githubMode));
 }
 
 function hasTaskStateChanges(previous: Map<string, TaskStateSnapshot>, subtasks: Subtask[]): boolean {

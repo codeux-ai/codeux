@@ -339,6 +339,97 @@ describe("CycleRunner attention sync", () => {
     expect(result.subtasks.find((task) => task.id === "T2")?.status).toBe("RUNNING");
   });
 
+  it("runs the LOCAL branch-only gate for completed tasks before worker branch metadata is recovered", async () => {
+    const deps = buildDeps();
+    deps.getCiStatusForScope = vi.fn().mockResolvedValue(null) as any;
+    deps.startTask = vi.fn().mockResolvedValue({
+      id: "session-2",
+      name: "sessions/session-2",
+      provider: "mockup-cli",
+      runtimeLabel: "MOCKUP",
+    }) as any;
+    const runner = new CycleRunner(deps);
+    const evaluateCiGate = vi.fn().mockImplementation(async (subtasks, context) => {
+      if (evaluateCiGate.mock.calls.length === 1) {
+        expect(subtasks.map((task: any) => task.id)).toEqual(["T1"]);
+        for (const task of subtasks) {
+          task.status = "COMPLETED";
+          task.is_merged = true;
+          task.merge_indicator = "MERGED";
+          task.worker_branch = "task/feature-parent";
+          await context.persistMergedTask(task);
+        }
+      }
+      return { subtasks, reportText: "local branch-only recovered and settled\n" };
+    });
+    (runner as any).featurePrGate = { evaluateCiGate };
+
+    vi.mocked(deps.sprintExecutionStateService.loadSubtasks).mockResolvedValue([
+      {
+        id: "T1",
+        record_id: "task-1",
+        title: "Finished parent",
+        prompt: "parent",
+        depends_on: [],
+        status: "CODING_COMPLETED",
+        session_state: "COMPLETED",
+        provider: "mockup-cli",
+        is_merged: false,
+      },
+      {
+        id: "T2",
+        record_id: "task-2",
+        title: "Dependent",
+        prompt: "dependent",
+        depends_on: ["T1"],
+        status: "PENDING",
+        is_merged: false,
+      },
+    ] as any);
+
+    const result = await runner.run({
+      action: "orchestrate",
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
+      executionContext: {
+        project: { id: "project-1", name: "Project 1" } as any,
+        sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+        sprintNumber: 1,
+        repoPath: "/repo/project-1",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/repo/project-1",
+      defaultFeatureBranch: "feature/sprint-1",
+      retryFailed: false,
+      loopSteps: {
+        loadSubtasks: true,
+        sessionSync: false,
+        statusDerivation: true,
+        startReadyTasks: true,
+        statusTable: false,
+        mergeProtocol: false,
+        actionRequiredProtocol: false,
+      } as any,
+      ciIntelligence: {
+        enabled: false,
+      } as any,
+      githubMode: "LOCAL",
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      sprintRunId: "run-1",
+    });
+
+    expect(evaluateCiGate).toHaveBeenCalled();
+    expect(deps.startTask).toHaveBeenCalledWith(expect.objectContaining({ id: "T2" }), expect.anything());
+    expect(result.subtasks.find((task) => task.id === "T1")).toMatchObject({
+      status: "COMPLETED",
+      is_merged: true,
+      merge_indicator: "MERGED",
+    });
+    expect(result.subtasks.find((task) => task.id === "T2")?.status).toBe("RUNNING");
+  });
+
   it("escalates a merge_conflict only after the PR stays DIRTY across cycles (debounced)", async () => {
     const deps = buildDeps();
     const runner = new CycleRunner(deps);
@@ -2304,28 +2395,30 @@ describe("CycleRunner attention sync", () => {
         depends_on: [],
         is_independent: true,
         status: "CODING_COMPLETED",
+        merge_indicator: "QA_PENDING",
         provider: "codex",
       };
 
-      await (runner as any).reviewCompletedTasks(
+      const args = {
+        executionContext: {
+          project: { id: "project-1", name: "Project 1" } as any,
+          sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+          sprintNumber: 1,
+          repoPath: "/repo/project-1",
+          featureBranch: "feature/sprint-1",
+          defaultBranch: "main",
+        },
+        repoPath: "/repo/project-1",
+        sprintRunId: "run-1",
+      } as any;
+      const qaFinishedTaskIds = await (runner as any).reviewCompletedTasks(
         [task],
         new Map([["T1", "CODING_COMPLETED"]]),
-        {
-          executionContext: {
-            project: { id: "project-1", name: "Project 1" } as any,
-            sprint: { id: "sprint-1", name: "Sprint 1" } as any,
-            sprintNumber: 1,
-            repoPath: "/repo/project-1",
-            featureBranch: "feature/sprint-1",
-            defaultBranch: "main",
-          },
-          repoPath: "/repo/project-1",
-          sprintRunId: "run-1",
-        } as any,
+        args,
         deps.getDashboardSettings(),
       );
 
-      return { deps, task };
+      return { args, deps, qaFinishedTaskIds, runner, task };
     };
 
     it("ESCALATE_TO_HUMAN parks the task in QA_REVIEW_FAILED and opens a human-attention item", async () => {
@@ -2425,11 +2518,22 @@ describe("CycleRunner attention sync", () => {
     });
 
     it("FINISH_TASK marks the task COMPLETED despite no QA pass", async () => {
-      const { deps, task } = await runExhaustedPolicy("FINISH_TASK");
+      const { args, deps, qaFinishedTaskIds, runner, task } = await runExhaustedPolicy("FINISH_TASK");
       expect(task.status).toBe("COMPLETED");
+      expect(task.merge_indicator).toBeUndefined();
+      expect(qaFinishedTaskIds).toEqual(new Set(["task-1", "T1"]));
+      const evaluateTaskQaGate = (runner as any).buildTaskQaGateEvaluator(args, qaFinishedTaskIds);
+      expect(evaluateTaskQaGate(task)).toMatchObject({
+        mergeAllowed: true,
+        reason: "passed",
+      });
       expect(deps.projectManagementRepository.updateTask).toHaveBeenCalledWith(
         "task-1",
-        expect.objectContaining({ status: "completed" }),
+        expect.objectContaining({ status: "completed", mergeIndicator: null }),
+      );
+      expect(deps.executionRepository.updateTaskRun).toHaveBeenCalledWith(
+        "task-run-1",
+        expect.objectContaining({ state: "COMPLETED" }),
       );
       expect(deps.projectAttentionService.openItems).not.toHaveBeenCalled();
       expect(deps.qualityAssuranceService.reviewCompletedTask).not.toHaveBeenCalled();
