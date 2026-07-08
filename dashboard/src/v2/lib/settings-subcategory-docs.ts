@@ -15,8 +15,8 @@ export interface SettingsSubcategoryDoc {
   titleAliases?: readonly string[];
 }
 
-const settingsDocsPath = (anchor: string): `/docs/user-dashboard-settings#${string}` => (
-  `/docs/user-dashboard-settings#${anchor}` as const
+const settingsDocsPath = (anchor: string): `/docs/settings-${string}` => (
+  `/docs/settings-${anchor}` as const
 );
 
 export const SETTINGS_SUBCATEGORY_DOCS = {

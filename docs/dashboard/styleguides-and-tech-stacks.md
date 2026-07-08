@@ -5,7 +5,7 @@ Code UX has two related dashboard concepts for project guidance:
 - **Techstacks** classify the project implementation stack and application kind. They are managed in Settings -> Techstacks.
 - **Guidance** selects reusable worker instructions for tech-stack expectations and visual styleguide direction. It is managed in Settings -> Guidance and mirrored in the top navigation.
 
-This page focuses on the Guidance workflow. See [Configuration and Storage](../settings/configuration-and-storage.md) for persistence details and [Techstacks](../settings/subcategories/techstacks.md) for the project classification catalog.
+This page focuses on the Guidance workflow. See [Configuration and Storage](../settings/configuration-and-storage.md) for persistence details and [Techstacks](../settings/techstacks.md) for the project classification catalog.
 
 ## Guidance Catalogs
 
@@ -60,6 +60,6 @@ When the styleguide remains `none`, Project Setup still asks the setup agent to 
 ## Related Docs
 
 - [Dashboard Guide](./dashboard-guide.md)
-- [Guidance Settings](../settings/subcategories/guidance.md)
+- [Guidance Settings](../settings/guidance.md)
 - [Configuration and Storage](../settings/configuration-and-storage.md)
 - [Project Initialization](./project-initialization.md)

@@ -19,7 +19,7 @@ import { createDebouncedSaver, loadWindowState, saveWindowState } from "./window
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "../..");
-const preloadPath = path.join(__dirname, "preload.js");
+const preloadPath = path.join(__dirname, "preload.cjs");
 
 let mainWindow: BrowserWindow | null = null;
 let server: { run(): Promise<void>; close(): Promise<void>; getDashboardRuntimePort(): number } | null = null;

@@ -75,9 +75,15 @@ Open a memory and click **Inspect** to see its **embedding map**: a 2D projectio
 
 You can rebuild the map after re-embedding or after promotion.
 
-## Embedding models
+## Model browser
 
-The right sidebar lists available embedding models. Each card shows:
+The **Model Catalog** action opens a compact model browser instead of a flat card list. It separates:
+
+- **Embedding Models** — memory search models that can be downloaded, activated, deleted, and used for re-embedding.
+- **Add Custom Hugging Face Embedding Model** — a form for compatible ONNX embedding models.
+- **TTS / Speech-Adjacent Hugging Face Models** — informational speech rows that are not memory embedding models and do not show embedding actions.
+
+Each embedding row shows:
 
 - Model ID and provenance (e.g. `bge-small-en-v1.5`).
 - Download status (not downloaded / downloading / ready).
@@ -86,12 +92,16 @@ The right sidebar lists available embedding models. Each card shows:
 
 The local embedding runtime supports both BGE-style WordPiece tokenizers and XLM-R/SentencePiece Unigram tokenizers such as `multilingual-e5-large`.
 
+Custom in-app models can be added from Hugging Face model links. The form accepts either `owner/repo` identifiers or `https://huggingface.co/...` model/file URLs plus display name, ONNX model file, tokenizer files, dimension, approximate size, and language. The backend rejects other hosts and stores the normalized repo, ONNX model file path, tokenizer files, dimension, approximate size, language, and validation status. Custom entries are durable settings, so they appear beside built-in models after restart.
+
 Actions per model:
 
 - **Download** — Pulls model weights to local cache.
 - **Cancel download** — Aborts an in-flight download.
 - **Select** — Activates the model. Subsequent embed operations use it.
 - **Delete** — Removes the local cache.
+
+Custom models use the same download, select, delete, source-link, and status actions as built-ins. A custom model cannot be selected until its ONNX file and required tokenizer files are downloaded. Speech-adjacent Hugging Face rows open safe source links only; they cannot be activated as memory embeddings.
 
 ### Re-embedding
 

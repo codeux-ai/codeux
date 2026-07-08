@@ -55,6 +55,8 @@ The stdio transport exists only when stdin is not a TTY. Since the MCP client la
 
 The desktop BrowserWindow keeps context isolation, renderer sandboxing, and Node integration disabled. Its preload bridge exposes only fixed dashboard capabilities such as directory selection, zoom, window controls, and the `openUpdates()` action. `openUpdates()` opens the official latest GitHub Releases page for Code UX and does not give renderer code a generic external URL opener.
 
+The sandboxed preload is CommonJS-emitted as `dist/electron/preload.cjs` from `src/electron/preload.cts`. Keep it CommonJS-compatible and load Electron APIs with `require("electron")`; an ESM preload will not initialize the desktop bridge in a sandboxed renderer.
+
 ## Authentication & authorisation
 
 There is no in-process user model. All authenticated callers (including `manage_code_ux`) have the same level of access — read, mutate, destroy.

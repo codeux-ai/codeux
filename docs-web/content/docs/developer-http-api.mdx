@@ -122,6 +122,8 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 | `POST` | `/api/projects/:projectId/conversations/threads` | Create thread. |
 | `GET` | `/api/conversations/threads/:threadId/messages` | List messages. |
 | `POST` | `/api/projects/:projectId/conversations/messages` | Post message. |
+| `GET` | `/api/projects/:projectId/conversations/message-history` | List recent submitted composer messages for the dashboard user header. |
+| `POST` | `/api/projects/:projectId/conversations/message-history` | Record a submitted composer message for the dashboard user header. |
 | `PATCH` | `/api/conversations/threads/:threadId` | Update thread (title, etc.). |
 | `PUT` | `/api/conversations/threads/:threadId/route` | Update routing config. |
 | `POST` | `/api/conversations/threads/:threadId/compact` | Compact thread. |

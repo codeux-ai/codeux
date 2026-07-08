@@ -45,9 +45,7 @@ Each post is a runtime operation that honors the explicit route chosen (worker r
 
 The project chat composer saves your latest draft in SQLite per dashboard user, project, and active chat context, and also mirrors the active typed text to browser-local storage immediately so a page refresh cannot lose recent keystrokes while the backend write is still pending. Leaving `/chat`, switching away and back, or reloading restores the matching draft for the current new-thread composer or selected thread without reusing drafts from another project or browser user. Blank drafts are recorded as empty locally and remove the saved row, and sending still clears the composer after the message is accepted.
 
-After you send a message, the thread transcript updates from the server's returned chat message. The **Invocations** rail updates separately from persisted server invocation records and realtime refreshes, so it shows only backend-confirmed invocation rows. The dashboard no longer inserts a frontend-only optimistic invocation placeholder while the backend is still creating the real row.
-
-While a reply or invocation container is active, the visible status line uses light deterministic humor instead of static `Initializing` or `Working` copy. These messages are keyed by the active agent, provider/model, and phase, and they remain stable for at least five seconds so live regions do not churn during rapid refreshes. The funny line is a UI adjunct only; it does not replace the actual agent reply, invocation status, or stored transcript.
+The composer also keeps a recent-message history for successful project chat sends. Press ArrowUp or ArrowDown while composing to preview messages submitted by the current dashboard user in the current project; a fresh dashboard user starts with no recalled messages. Single-line drafts can recall history directly, while multi-line drafts keep normal textarea cursor movement unless the caret is at the true start or end. Code UX preserves the current draft while you cycle through history and restores it when you move back past the newest recalled entry.
 
 ## Create app quickactions
 
@@ -66,6 +64,9 @@ The transcript then shows an app progress widget instead of raw status data. The
 - suggestion tags that can guide your next message
 
 You can keep sending messages in the same thread while planning runs. If the planner has not created tasks yet, Code UX queues those follow-ups and applies them to the sprint when planning finishes. Once tasks exist, follow-ups update the sprint direction immediately and the thread confirms the update. The added direction appears on the sprint goal under `Additional direction from chat`; generated task prompts are not rewritten by those follow-ups. Non-app quickactions still use the normal routed chat reply path.
+After you send a message, the thread transcript updates from the server's returned chat message. The **Invocations** rail updates separately from persisted server invocation records and realtime refreshes, so it shows only backend-confirmed invocation rows. The dashboard no longer inserts a frontend-only optimistic invocation placeholder while the backend is still creating the real row.
+
+While a reply or invocation container is active, the visible status line uses light deterministic humor instead of static `Initializing` or `Working` copy. These messages are keyed by the active agent, provider/model, and phase, and they remain stable for at least five seconds so live regions do not churn during rapid refreshes. The funny line is a UI adjunct only; it does not replace the actual agent reply, invocation status, or stored transcript.
 
 In 3D Chat, idle quick actions send project-scoped prompts directly through the active thread. **Web App** and **Desktop App** set up the currently selected project using its current techstack setting; an unassigned existing project stays `None`. They do not create or import a new Code UX project.
 
@@ -130,6 +131,7 @@ Planning and QA self-reflection messages appear as structured cards instead of r
 The composer at the bottom supports:
 
 - **Multi-line input** with Enter to send, Shift+Enter for newline.
+- **Recent message recall** with ArrowUp and ArrowDown when native textarea cursor movement is not taking precedence.
 - **Speech input** with the microphone control beside Send in project Threads mode.
 - **Slash commands** that invoke management actions inline.
 - **Attachments** *(planned)*.

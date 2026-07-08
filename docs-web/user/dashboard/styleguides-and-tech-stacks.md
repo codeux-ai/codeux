@@ -54,5 +54,5 @@ The header creation flow collects only the sprint name and goal, then selects th
 ## Related Docs
 
 - [Dashboard overview](./overview.md)
-- [Settings](./settings.md#guidance)
+- [Guidance Settings](../../settings/guidance.md)
 - [Sprints](./sprints.md)
