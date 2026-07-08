@@ -384,6 +384,11 @@ export class CustomDashboardRepository {
       throw new ValidationError("A validated custom dashboard revision requires a valid report.");
     }
     const now = new Date().toISOString();
+    const publishedRevisionId = this.getPublishedRevisionId(revision.dashboardId);
+    if (publishedRevisionId === revision.id) {
+      this.setDashboardStatus(revision.dashboardId, "published", now);
+      return this.requireRevision(revision.id);
+    }
     this.db.prepare(`
       UPDATE custom_dashboard_revisions
       SET validation_status = 'passed',
@@ -392,7 +397,7 @@ export class CustomDashboardRepository {
           updated_at = ?
       WHERE id = ?
     `).run(this.serializeJson(report), now, now, revision.id);
-    this.setDashboardStatus(revision.dashboardId, "validated", now);
+    this.setDashboardStatus(revision.dashboardId, publishedRevisionId ? "published" : "validated", now);
     return this.requireRevision(revision.id);
   }
 
@@ -476,6 +481,11 @@ export class CustomDashboardRepository {
     if (status === "passed" && validationReport?.valid !== true) {
       throw new ValidationError("Passed custom dashboard validation requires a valid report.");
     }
+    const publishedRevisionId = this.getPublishedRevisionId(revision.dashboardId);
+    if (publishedRevisionId === revision.id) {
+      this.setDashboardStatus(revision.dashboardId, "published", now);
+      return;
+    }
     const validatedAt = status === "passed" ? now : null;
     const nextRuntimeMetadata = status === "passed" && runtimeMetadataPatch
       ? this.normalizeJsonObject({ ...revision.runtimeMetadata, ...runtimeMetadataPatch })
@@ -514,6 +524,10 @@ export class CustomDashboardRepository {
       );
     }
 
+    if (publishedRevisionId) {
+      this.setDashboardStatus(revision.dashboardId, "published", now);
+      return;
+    }
     if (status === "passed") {
       this.setDashboardStatus(revision.dashboardId, "validated", now);
       return;
@@ -573,6 +587,15 @@ export class CustomDashboardRepository {
           updated_at = ?
       WHERE id = ?
     `).run(status, updatedAt, dashboardId);
+  }
+
+  private getPublishedRevisionId(dashboardId: string): string | null {
+    const row = this.db.prepare(`
+      SELECT revision_id
+      FROM custom_dashboard_publications
+      WHERE dashboard_id = ?
+    `).get(dashboardId) as { revision_id: string } | undefined;
+    return row?.revision_id ?? null;
   }
 
   private requireTitle(title: string | undefined): string {

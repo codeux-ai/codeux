@@ -212,6 +212,113 @@ describe("CustomDashboardRepository", () => {
     expect(dashboards.getDashboardById(firstDashboard.id)?.publishedRevisionId).toBe(replacementRevision.id);
   });
 
+  it("keeps a published dashboard open when later draft validation fails", async () => {
+    const { dashboards, projectId } = await createFixture();
+    const dashboard = dashboards.createDraft(projectId, {
+      title: "Delivery Pulse",
+      manifest: manifest(),
+      fileBundle: fileBundle("published"),
+    });
+    const publishedRevision = dashboards.markRevisionValidated(dashboards.createRevision(dashboard.id).id, {
+      ...passedReport(),
+      summary: "Published revision passed.",
+    });
+
+    dashboards.publishRevision(dashboard.id, publishedRevision.id);
+
+    const draftRevision = dashboards.createRevision(dashboard.id, {
+      fileBundle: fileBundle("draft"),
+    });
+    const runningSession = dashboards.createValidationSession(draftRevision.id, { status: "running" });
+
+    expect(dashboards.getDashboardById(dashboard.id)).toMatchObject({
+      status: "published",
+      publishedRevisionId: publishedRevision.id,
+    });
+
+    const failedSession = dashboards.updateValidationSession(runningSession.id, {
+      status: "failed",
+      validationReport: {
+        valid: false,
+        summary: "Draft validation failed.",
+        issues: [{ field: "files", code: "build_failed", message: "Draft bundle failed." }],
+      },
+      finishedAt: "2026-07-07T00:00:00.000Z",
+    });
+    const openedDashboard = dashboards.getDashboardById(dashboard.id);
+    const openedRevision = dashboards.getRevisionById(publishedRevision.id);
+
+    expect(failedSession).toMatchObject({
+      status: "failed",
+      validationReport: { valid: false, summary: "Draft validation failed." },
+    });
+    expect(dashboards.getRevisionById(draftRevision.id)).toMatchObject({
+      validationStatus: "failed",
+      validationReport: { valid: false, summary: "Draft validation failed." },
+    });
+    expect(openedDashboard).toMatchObject({
+      status: "published",
+      publishedRevisionId: publishedRevision.id,
+    });
+    expect(openedRevision).toMatchObject({
+      validationStatus: "passed",
+      validationReport: { valid: true, summary: "Published revision passed." },
+    });
+
+    const replacementDraftRevision = dashboards.createRevision(dashboard.id, {
+      fileBundle: fileBundle("replacement draft"),
+    });
+    dashboards.markRevisionValidated(replacementDraftRevision.id, {
+      ...passedReport(),
+      summary: "Replacement draft passed.",
+    });
+
+    expect(dashboards.getDashboardById(dashboard.id)).toMatchObject({
+      status: "published",
+      publishedRevisionId: publishedRevision.id,
+    });
+  });
+
+  it("keeps later validation session results off the active published revision", async () => {
+    const { dashboards, projectId } = await createFixture();
+    const dashboard = dashboards.createDraft(projectId, {
+      title: "Delivery Pulse",
+      manifest: manifest(),
+      fileBundle: fileBundle(),
+    });
+    const publishedRevision = dashboards.markRevisionValidated(dashboards.createRevision(dashboard.id).id, {
+      ...passedReport(),
+      summary: "Original published validation.",
+      metadata: { viewer: "published" },
+    });
+
+    dashboards.publishRevision(dashboard.id, publishedRevision.id);
+    const session = dashboards.createValidationSession(publishedRevision.id, { status: "running" });
+    const failedSession = dashboards.updateValidationSession(session.id, {
+      status: "failed",
+      validationReport: {
+        valid: false,
+        summary: "Later validation failed.",
+        issues: [{ field: "runtime", code: "regression", message: "Later validation should not invalidate publication." }],
+      },
+    });
+    const stillPublishedRevision = dashboards.markRevisionValidated(publishedRevision.id, {
+      ...passedReport(),
+      summary: "Later direct validation result.",
+      metadata: { viewer: "later" },
+    });
+
+    expect(failedSession).toMatchObject({
+      status: "failed",
+      validationReport: { valid: false, summary: "Later validation failed." },
+    });
+    expect(stillPublishedRevision).toMatchObject({
+      validationStatus: "passed",
+      validationReport: { valid: true, summary: "Original published validation.", metadata: { viewer: "published" } },
+    });
+    expect(dashboards.getDashboardById(dashboard.id)?.status).toBe("published");
+  });
+
   it("archives dashboards and cascades dashboard data when the project is deleted", async () => {
     const { storage, projects, dashboards, projectId } = await createFixture();
     const dashboard = dashboards.createDraft(projectId, {

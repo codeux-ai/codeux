@@ -13,7 +13,7 @@ Custom dashboards are project-scoped dashboard apps generated and revised by age
 7. Publish the validated revision. Publication is blocked unless the revision has a passed validation report.
 8. Roll back by publishing an earlier passed revision, or archive the dashboard to clear its active publication while preserving history.
 
-If validation fails, use the report and logs to create a new revision. Code UX rejects failed, queued, running, cancelled, missing, or mismatched validation sessions before publication state changes.
+If validation fails, use the report and logs to create a new revision. Code UX rejects failed, queued, running, cancelled, missing, or mismatched validation sessions before publication state changes. When a dashboard is already published, validating later drafts keeps the active published dashboard open, and validation sessions for the active published revision do not replace its published validation snapshot.
 
 ## Data Sources
 
