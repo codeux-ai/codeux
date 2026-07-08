@@ -14,7 +14,14 @@ Code UX can run as an installable Electron desktop app while preserving the exis
 - Windows packaged builds keep the active WebGL context cap at 16 so the persistent shell canvas, avatar canvases, and route-scoped chart canvases have enough headroom during long navigation sessions while old Chromium contexts are waiting for garbage collection.
 - External links are opened through the host operating system. In-app dashboard and sprint-preview URLs remain inside the Electron app.
 - The desktop shell renders only the resolved dashboard origin and same-port sprint preview origins that match `preview-<session>.localhost:<dashboardPort>` internally. Other `http`, `https`, and `mailto` navigations are denied in the renderer and opened through the host operating system after scheme validation; all other schemes are blocked.
-- The compact title bar renders only when the preload bridge exposes the desktop window API. It always shows the Code UX logo, the running `v{version}` label, and a no-drag "Update" button that calls `window.codeUxDesktop.openUpdates()`. That fixed IPC action opens `https://github.com/codeux-ai/codeux/releases/latest` without giving the renderer a generic external URL opener. Double-clicking non-interactive title-bar chrome toggles maximize/restore through `window.codeUxDesktop.window.toggleMaximize()`.
+
+## Desktop System Bar
+
+The desktop dashboard uses a frameless renderer-owned system bar instead of native window chrome. It renders only when the preload bridge exposes `window.codeUxDesktop.window`, and it keeps the Code UX logo, the update action, and a visible `v{version}` label compiled from `package.json` through Vite's `__APP_VERSION__` define.
+
+The update button is a no-drag control that calls the fixed `window.codeUxDesktop.openUpdates()` preload IPC method. That method opens `https://github.com/codeux-ai/codeux/releases/latest` in the host browser and deliberately does not expose a generic URL opener or perform an automatic in-app update.
+
+Double-clicking non-interactive system-bar chrome toggles maximize/restore through `window.codeUxDesktop.window.toggleMaximize()`. Interactive controls stop double-click propagation and stay inside `titlebar-no-drag` regions so buttons do not accidentally trigger window dragging or maximize behavior.
 
 ## Native Desktop Integration
 
