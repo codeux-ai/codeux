@@ -14,13 +14,13 @@ The dashboard uses a **dock-based navigation** by default:
 
 A choice of theme (Light / Dark / System) is in the top bar; navigation mode override is in **Settings → Appearance**. During onboarding, Appearance choices preview immediately and the setup shell follows the selected Light, Dark, or System theme instead of forcing dark mode. Background Mode, Static Color, and supported Zoom Level also preview before save, while advanced background controls such as Animation Style, Pattern Overlay, and custom background image remain in **Settings → Appearance**.
 
-Primary navigation also follows the persisted experience mode in **Settings → Appearance**:
+Primary navigation also follows the persisted experience mode in **Settings → General**:
 
-- **Easy** — Chat, Browser, Stats, Settings/Config, and external Docs.
-- **Standard** — Chat, Overview, Sprints, Tasks, Agents, Stats, Browser, Docs, and Settings/Config.
+- **Easy** — Chat, Browser Preview, Stats, Live, Settings/Config, and the internal Docs page.
+- **Standard** — Chat, Overview, Sprints, Tasks, Agents, Stats, Browser Preview, Docs, and Settings/Config.
 - **Expert** — the full navigation, and the default for new or legacy settings.
 
-Hidden pages remain registered routes, Docs opens the external project docs, and Browser still follows the project sprint-preview visibility settings.
+Hidden pages remain registered routes, Docs opens the external project docs, and Browser Preview still follows the project sprint-preview visibility settings.
 
 When a project is active, the top bar shows tech-stack guidance and styleguide selectors beside global search. Imported and existing projects can remain at **None** until guidance is explicitly selected. Choosing an entry saves the project guidance override immediately; use [Styleguides and Tech Stacks](./styleguides-and-tech-stacks.md) for the full workflow.
 
@@ -44,7 +44,7 @@ The background is an animated Three.js scene ("Deep Ocean") that lazy-loads afte
 | `/files` | [File Browser](./file-browser.md) | Browse project files and review sprint Git changes |
 | `/browser` | [Sprint Preview Browser](./browser-preview.md) | Docker-backed live previews per sprint |
 | `/stats` | [Stats](./stats.md) | Execution analytics, time-window filtering, trends |
-| `/custom-dashboards` | [Custom Dashboards](./custom-dashboards.md) | Agent-generated project dashboards with detached validation and gated publication |
+| `/custom-dashboards` | [Custom Dashboards](./custom-dashboards.md) | Agent-generated project dashboards with detached validation and gated publication; hidden when `VITE_CODEUX_FEATURE_CUSTOM_DASHBOARDS` is disabled |
 | `/config` | [Settings](./settings.md) | System / project / sprint settings hierarchy |
 | `/config?category=guidance#guidance` | [Styleguides and Tech Stacks](./styleguides-and-tech-stacks.md) | Tech-stack guidance, styleguide catalogs, and custom worker instructions |
 

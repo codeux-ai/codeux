@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KineticDock } from "../../../dashboard/src/v2/components/KineticDock.js";
 import { Sidebar } from "../../../dashboard/src/v2/components/layout/Sidebar.js";
 import type { DashboardExperienceMode } from "../../../dashboard/src/types.js";
-import { EXTERNAL_DOCS_URL } from "../../../dashboard/src/v2/lib/navigation-items.js";
 
 const mocks = vi.hoisted(() => ({
   useProjectData: vi.fn(),
@@ -110,7 +109,7 @@ const knownSidebarLabels = new Set([
   "Schedule",
   "Memory",
   "Knowledge",
-  "Browser",
+  "Browser Preview",
   "Files",
   "Live",
   "Docs",
@@ -124,18 +123,18 @@ const modeExpectations: Array<{
 }> = [
   {
     mode: "EASY",
-    dock: ["Chat", "Browser", "Stats", "Config", "Docs"],
-    sidebar: ["Chat", "Browser", "Stats", "Settings", "Docs"],
+    dock: ["Chat", "Browser", "Stats", "Live", "Config", "Docs"],
+    sidebar: ["Chat", "Browser Preview", "Stats", "Live", "Settings", "Docs"],
   },
   {
     mode: "STANDARD",
     dock: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Nodes", "Stats", "Browser", "Docs", "Config"],
-    sidebar: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Nodes", "Stats", "Browser", "Docs", "Settings"],
+    sidebar: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Nodes", "Stats", "Browser Preview", "Docs", "Settings"],
   },
   {
     mode: "EXPERT",
     dock: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Nodes", "Stats", "Schedule", "Memory", "Knowledge", "Browser", "Files", "Live", "Docs", "Config"],
-    sidebar: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Nodes", "Stats", "Schedule", "Memory", "Knowledge", "Browser", "Files", "Live", "Docs", "Settings"],
+    sidebar: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Nodes", "Stats", "Schedule", "Memory", "Knowledge", "Browser Preview", "Files", "Live", "Docs", "Settings"],
   },
 ];
 
@@ -187,7 +186,7 @@ describe("primary navigation experience modes", () => {
       render(<KineticDock />);
 
       expect(getDockNavigationLabels()).toEqual(dock);
-      expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", EXTERNAL_DOCS_URL);
+      expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", "/docs");
     });
 
     it(`renders ${mode} mode items in the sidebar`, () => {
@@ -196,7 +195,7 @@ describe("primary navigation experience modes", () => {
       render(<Sidebar />);
 
       expect(getSidebarNavigationLabels()).toEqual(sidebar);
-      expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", EXTERNAL_DOCS_URL);
+      expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", "/docs");
     });
   });
 
@@ -205,7 +204,7 @@ describe("primary navigation experience modes", () => {
 
     render(<KineticDock />);
 
-    expect(getDockNavigationLabels()).toEqual(["Chat", "Stats", "Config", "Docs"]);
+    expect(getDockNavigationLabels()).toEqual(["Chat", "Stats", "Live", "Config", "Docs"]);
     expect(screen.queryByRole("link", { name: "Browser" })).not.toBeInTheDocument();
   });
 });

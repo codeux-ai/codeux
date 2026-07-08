@@ -234,7 +234,7 @@ export const useSettingsPageState = (
 
 
   const [activeCategory, setActiveCategory] = useState<CategoryId>("general");
-  const [activeScope, setActiveScope] = useState<SettingsScope>("system");
+  const [activeScope, setActiveScopeState] = useState<SettingsScope>("system");
   const [selectedIntegration, setSelectedIntegration] = useState<IntegrationId | null>(null);
   const [selectedAgentTemplate, setSelectedAgentTemplate] = useState<AgentInstructionTemplateId>("planningMissing");
   const [activeInvocationRoute, setActiveInvocationRoute] = useState<InvocationRoutingId>("task_coding");
@@ -270,6 +270,7 @@ export const useSettingsPageState = (
   const [chatProvidersSavingId, setChatProvidersSavingId] = useState<string | null>(null);
   const [chatProvidersError, setChatProvidersError] = useState<string | null>(null);
   const previousCategoryRef = useRef<CategoryId>("general");
+  const scopePersistenceRequestRef = useRef(0);
 
   const loadSettings = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -282,7 +283,7 @@ export const useSettingsPageState = (
       // Restore last active scope on initial settings load
       if (!systemSettings) {
         const initialScope = nextSystem.runtime.lastActiveScope === "project" && selectedProjectId ? "project" : "system";
-        setActiveScope(initialScope);
+        setActiveScopeState(initialScope);
       }
 
       const normalizedSystem = normalizeSystemSettingsPayload(nextSystem);
@@ -393,12 +394,6 @@ export const useSettingsPageState = (
   }, [activeCategory, loadSettings]);
 
   useEffect(() => {
-    if (!selectedProject && activeScope === "project") {
-      setActiveScope("system");
-    }
-  }, [activeScope, selectedProject]);
-
-  useEffect(() => {
     if (!saveMessage) {
       return;
     }
@@ -424,6 +419,93 @@ export const useSettingsPageState = (
   // user's first keystroke would still read `false`, overwrite the edit with server state,
   // and leave the Save button greyed out. Assigning during render closes that gap.
   isDirtyRef.current = systemDirty || projectDirty;
+
+  const setPersistedActiveScope = useCallback(async (scope: SettingsScope): Promise<void> => {
+    setActiveScopeState(scope);
+
+    const persistenceBase = savedSystemSettings ?? systemSettings;
+    if (!persistenceBase) {
+      return;
+    }
+
+    const previousSavedSettings = cloneSystemSettings(normalizeSystemSettingsPayload(persistenceBase));
+    const previousLastActiveScope = previousSavedSettings.runtime.lastActiveScope ?? "system";
+    if (previousLastActiveScope === scope) {
+      return;
+    }
+
+    const requestId = scopePersistenceRequestRef.current + 1;
+    scopePersistenceRequestRef.current = requestId;
+    const hadSystemDraft = Boolean(systemSettings && savedSystemSettings && JSON.stringify(systemSettings) !== JSON.stringify(savedSystemSettings));
+    const nextSavedSettings = cloneSystemSettings({
+      ...previousSavedSettings,
+      runtime: {
+        ...previousSavedSettings.runtime,
+        lastActiveScope: scope,
+      },
+    });
+
+    setSavedSystemSettings(cloneSystemSettings(nextSavedSettings));
+    setSystemSettings((current) => current
+      ? {
+          ...current,
+          runtime: {
+            ...current.runtime,
+            lastActiveScope: scope,
+          },
+        }
+      : current);
+
+    try {
+      const saved = await saveSystemSettings(nextSavedSettings);
+      if (scopePersistenceRequestRef.current !== requestId) {
+        return;
+      }
+      const normalizedSaved = normalizeSystemSettingsPayload({
+        ...nextSavedSettings,
+        ...saved,
+        runtime: {
+          ...nextSavedSettings.runtime,
+          ...saved.runtime,
+        },
+      });
+      setSavedSystemSettings(cloneSystemSettings(normalizedSaved));
+      setSystemSettings((current) => {
+        if (hadSystemDraft && current) {
+          return {
+            ...current,
+            runtime: {
+              ...current.runtime,
+              lastActiveScope: normalizedSaved.runtime.lastActiveScope,
+            },
+          };
+        }
+        return cloneSystemSettings(normalizedSaved);
+      });
+      setError((current) => current === "Failed to persist Settings scope selection." ? null : current);
+    } catch {
+      if (scopePersistenceRequestRef.current !== requestId) {
+        return;
+      }
+      setSavedSystemSettings(previousSavedSettings);
+      setSystemSettings((current) => current
+        ? {
+            ...current,
+            runtime: {
+              ...current.runtime,
+              lastActiveScope: previousLastActiveScope,
+            },
+          }
+        : current);
+      setError("Failed to persist Settings scope selection.");
+    }
+  }, [savedSystemSettings, systemSettings]);
+
+  useEffect(() => {
+    if (!selectedProject && activeScope === "project") {
+      void setPersistedActiveScope("system");
+    }
+  }, [activeScope, selectedProject, setPersistedActiveScope]);
 
   const editableSettings = activeScope === "system" ? systemSettings?.defaults ?? null : projectSettings;
   const activeCategoryConfig = categories.find((category) => category.id === activeCategory) ?? categories[0]!;
@@ -595,7 +677,7 @@ export const useSettingsPageState = (
     setDeletingProject(true);
     try {
       await deleteProject(selectedProject.id);
-      setActiveScope("system");
+      await setPersistedActiveScope("system");
       setActiveCategory("general");
       setSaveMessage(`Project ${selectedProject.name} deleted.`);
       setError(null);
@@ -604,7 +686,7 @@ export const useSettingsPageState = (
     } finally {
       setDeletingProject(false);
     }
-  }, [selectedProject, deleteProject]);
+  }, [selectedProject, deleteProject, setPersistedActiveScope]);
 
   const handleResetDatabase = useCallback(async (): Promise<void> => {
 
@@ -612,7 +694,7 @@ export const useSettingsPageState = (
     setResettingDatabase(true);
     try {
       await resetSystemDatabase();
-      setActiveScope("system");
+      setActiveScopeState("system");
       setActiveCategory("general");
       await loadSettings();
       setSaveMessage("Database reset to a clean state.");
@@ -784,27 +866,6 @@ export const useSettingsPageState = (
     }
     return undefined;
   }, [activeScope, projectSources, resetFieldToDefault]);
-
-  const setPersistedActiveScope = useCallback(async (scope: SettingsScope) => {
-    setActiveScope(scope);
-    if (systemSettings) {
-      const normalizedSystemSettings = normalizeSystemSettingsPayload(systemSettings);
-      const updatedSystem = {
-        ...normalizedSystemSettings,
-        runtime: {
-          ...normalizedSystemSettings.runtime,
-          lastActiveScope: scope,
-        },
-      };
-      setSystemSettings(updatedSystem);
-      setSavedSystemSettings(cloneSystemSettings(updatedSystem));
-      try {
-        await saveSystemSettings(updatedSystem);
-      } catch (e) {
-        // Ignore background persistence errors
-      }
-    }
-  }, [systemSettings]);
 
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const pendingNavigationRef = useRef<(() => void) | null>(null);

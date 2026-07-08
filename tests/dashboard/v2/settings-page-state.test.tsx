@@ -46,12 +46,25 @@ let mockFetchSkillStorages;
 
 const cloneDashboardSettings = () => JSON.parse(JSON.stringify(DEFAULT_DASHBOARD_SETTINGS));
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  mockSaveSystem = vi.spyOn(settingsApi, 'saveSystemSettings').mockResolvedValue({ defaults: cloneDashboardSettings(), runtime: {} } as any);
-  mockSaveProject = vi.spyOn(settingsApi, 'saveProjectSettings').mockResolvedValue({ settings: {}, sources: {} } as any);
-  mockFetchSystem = vi.spyOn(settingsApi, 'fetchSystemSettings').mockResolvedValue({
-    runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
+const buildSystemRuntimeSettings = (overrides: Record<string, unknown> = {}) => ({
+  dashboardPort: 4444,
+  consoleLogLevel: "info",
+  debugLogFileLevel: "error",
+  consoleLogMode: "standard",
+  lastActiveScope: "system",
+  dbAutoVacuumOnStartup: false,
+  dbPruningEnabled: true,
+  dbRetentionDays: 30,
+  restartSprintPolicy: "restart",
+  restartInvocationPolicy: "restart",
+  ...overrides,
+});
+
+const buildSystemSettings = (overrides: Record<string, any> = {}) => {
+  const runtimeOverrides = overrides.runtime ?? {};
+  const integrationOverrides = overrides.integrations ?? {};
+  return {
+    runtime: buildSystemRuntimeSettings(runtimeOverrides),
     integrations: {
       providers: {
         jules: { provider: "jules", name: "Jules Primary", apiKey: "" },
@@ -60,10 +73,20 @@ beforeEach(() => {
         "claude-code": { provider: "claude-code", name: "Claude Primary", apiKey: "" },
       },
       githubToken: "",
+      ...integrationOverrides,
     },
     defaults: cloneDashboardSettings(),
     mcpTools: [],
-  } as any);
+    ...overrides,
+    runtime: buildSystemRuntimeSettings(runtimeOverrides),
+  };
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockSaveSystem = vi.spyOn(settingsApi, 'saveSystemSettings').mockImplementation(async (settings) => settings as any);
+  mockSaveProject = vi.spyOn(settingsApi, 'saveProjectSettings').mockResolvedValue({ settings: {}, sources: {} } as any);
+  mockFetchSystem = vi.spyOn(settingsApi, 'fetchSystemSettings').mockResolvedValue(buildSystemSettings() as any);
   mockFetchProject = vi.spyOn(settingsApi, 'fetchProjectEffectiveSettings').mockResolvedValue({ settings: cloneDashboardSettings(), sources: {} } as any);
   mockResetProject = vi.spyOn(settingsApi, 'resetProjectSettings').mockResolvedValue();
   mockResetDatabase = vi.spyOn(settingsApi, 'resetSystemDatabase').mockResolvedValue();
@@ -234,6 +257,49 @@ describe("useSettingsPageState", () => {
     expect(result.current.loading).toBe(true);
 
     await waitFor(() => expect(result.current.loading).toBe(false));
+  });
+
+  it("restores the last settings scope from persisted system settings", async () => {
+    mockFetchSystem.mockResolvedValueOnce(buildSystemSettings({
+      runtime: { lastActiveScope: "project" },
+    }) as any);
+
+    const { result } = renderHook(() => useSettingsPageState(CATEGORIES));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.activeScope).toBe("project");
+  });
+
+  it("persists scope changes through system settings without saving unrelated draft edits", async () => {
+    const { result } = renderHook(() => useSettingsPageState(CATEGORIES));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => {
+      result.current.updateSystem((current) => ({
+        ...current,
+        runtime: {
+          ...current.runtime,
+          consoleLogLevel: "debug",
+        },
+      }));
+    });
+    expect(result.current.activeDirty).toBe(true);
+
+    await act(async () => {
+      await result.current.setActiveScope("project");
+    });
+
+    expect(mockSaveSystem).toHaveBeenCalledWith(expect.objectContaining({
+      runtime: expect.objectContaining({
+        consoleLogLevel: "info",
+        lastActiveScope: "project",
+      }),
+    }));
+    expect(result.current.activeScope).toBe("project");
+    expect(result.current.systemSettings?.runtime.consoleLogLevel).toBe("debug");
+    expect(result.current.systemSettings?.runtime.lastActiveScope).toBe("project");
+    expect(result.current.activeDirty).toBe(true);
   });
 
   it("renders settings loading state as a busy category region", () => {

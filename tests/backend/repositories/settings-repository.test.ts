@@ -51,6 +51,7 @@ describe("SettingsRepository", () => {
     expect(system.runtime.consoleLogLevel).toBe("info");
     expect(system.runtime.debugLogFileLevel).toBe("error");
     expect(system.runtime.consoleLogMode).toBe("standard");
+    expect(system.runtime.lastActiveScope).toBe("system");
     expect(system.runtime.restartSprintPolicy).toBe("continue");
     expect(system.runtime.restartInvocationPolicy).toBe("continue");
     expect(system.defaults.automationLevel).toBe("SEMI_AUTO");
@@ -147,6 +148,7 @@ describe("SettingsRepository", () => {
         consoleLogLevel: "debug",
         debugLogFileLevel: "warn",
         consoleLogMode: "full",
+        lastActiveScope: "project",
         restartSprintPolicy: "pause",
         restartInvocationPolicy: "restart",
       },
@@ -286,6 +288,7 @@ describe("SettingsRepository", () => {
     expect(sprintOverride.sprintLoopSteps?.watchLoop).toBe(false);
 
     const reloaded = new SettingsRepository(dbPath);
+    expect(reloaded.getSystemSettings().runtime.lastActiveScope).toBe("project");
     const effectiveProject = reloaded.resolveProjectDashboardSettings("project-1");
     expect(effectiveProject.settings.dashboardPort).toBe(4450);
     expect(effectiveProject.settings.consoleLogLevel).toBe("debug");

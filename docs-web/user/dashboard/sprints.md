@@ -9,7 +9,7 @@ Sprints are viewed either in a visual organic cell gallery or a dense ledger for
 - **Status pill** — `idle`, `running`, `paused`, `completed`, `failed`, `cancelled`.
 - **Task counters** — completed / total, plus failures.
 - **Goal** — first line of the sprint goal.
-- **Action buttons** — Plan / Orchestrate / Pause / Cancel as appropriate.
+- **Action buttons** — Plan / Orchestrate / Pause / Cancel as appropriate, with inactive pause guidance kept out of the visible row to preserve ledger density.
 
 Sprints can be **showcase-pinned** to surface them on the Overview page; toggle this from the cell menu or bulk actions.
 

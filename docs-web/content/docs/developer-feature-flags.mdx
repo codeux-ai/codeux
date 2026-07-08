@@ -15,8 +15,9 @@ Supported values are `true`, `1`, `yes`, `on`, `enabled`, `false`, `0`, `no`, `o
 | Feature | Env variable | Development default | Production default | Scope |
 | --- | --- | --- | --- | --- |
 | `nodes` | `VITE_CODEUX_FEATURE_NODES` | enabled | disabled | Hides the unfinished `/nodes` surface from route registration, shared navigation, route prefetch, and the guided dashboard tour. |
+| `custom-dashboards` | `VITE_CODEUX_FEATURE_CUSTOM_DASHBOARDS` | enabled | disabled | Hides the unfinished `/custom-dashboards` surface from route registration, shared navigation, route prefetch, and the guided dashboard tour. |
 
-When `nodes` is disabled, the `NodesPage` module remains in source for local development and tests, but `/nodes` is not added to the TanStack route tree. Direct navigation to `/nodes` falls through to the dashboard not-found route.
+When a feature is disabled, its page module remains in source for local development and tests, but the route is not added to the TanStack route tree. Direct navigation falls through to the dashboard not-found route.
 
 ## Adding a Flag
 

@@ -6,10 +6,12 @@ import { ActionFeedbackRegion } from "../../ui/ActionFeedbackRegion.js";
 import { NumberInput, Row, Toggle, TextInput, PillChoiceGroup } from "../SettingsFormFields.js";
 import { LocalFilePickerField } from "../LocalFilePickerField.js";
 import type { ProjectSettings } from "../../../../../../src/contracts/settings-scope-types.js";
+import type { DashboardExperienceMode } from "../../../../types.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
-import { Bot, Cog, Database, FolderOpen, RotateCcw, Sparkles } from "lucide-preact";
+import { Bot, Cog, Database, FolderOpen, RotateCcw, SlidersHorizontal, Sparkles } from "lucide-preact";
 import { openOnboarding } from "../../../lib/onboarding-control.js";
 import { useProjectData } from "../../../context/project-data.js";
+import { dashboardExperienceModeOptions } from "../../../lib/experience-mode.js";
 
 const toRestartSprintPolicy = (value: string) => (
   value === "pause" || value === "cancel" ? value : "continue"
@@ -17,6 +19,38 @@ const toRestartSprintPolicy = (value: string) => (
 
 const toRestartInvocationPolicy = (value: string) => (
   value === "cancel" || value === "restart" ? value : "continue"
+);
+
+const ExperienceModeCard: FunctionComponent<{
+  settings: ProjectSettings;
+  update: (recipe: (current: ProjectSettings) => ProjectSettings) => void;
+  getFieldBadge: (path: string) => string | undefined;
+}> = ({ settings, update, getFieldBadge }) => (
+  <SectionCard title="Experience Mode" watermark="MODE" icon={<SlidersHorizontal strokeWidth={2.4} />}>
+    <Row
+      label="Dashboard mode"
+      description="Choose how much of the dashboard surface is shown. Hidden routes and settings are preserved."
+      badge={getFieldBadge("appearance.experienceMode")}
+      last
+    >
+      <PillChoiceGroup
+        aria-label="Dashboard experience mode"
+        value={settings.appearance.experienceMode}
+        onChange={(value) => update((current) => ({
+          ...current,
+          appearance: {
+            ...current.appearance,
+            experienceMode: value as DashboardExperienceMode,
+          },
+        }))}
+        options={dashboardExperienceModeOptions.map((option) => ({
+          value: option.value,
+          label: option.label,
+          hint: option.description,
+        }))}
+      />
+    </Row>
+  </SectionCard>
 );
 
 const ProjectContextCard: FunctionComponent<{
@@ -302,12 +336,19 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
       return (
         <div className="flex flex-col gap-5">
           {editableSettings ? (
-            <AutomationCard
-              settings={editableSettings}
-              update={updateEditableSettings}
-              getBadge={getBadge}
-              getFieldBadge={getFieldBadge}
-            />
+            <>
+              <ExperienceModeCard
+                settings={editableSettings}
+                update={updateEditableSettings}
+                getFieldBadge={getFieldBadge}
+              />
+              <AutomationCard
+                settings={editableSettings}
+                update={updateEditableSettings}
+                getBadge={getBadge}
+                getFieldBadge={getFieldBadge}
+              />
+            </>
           ) : null}
           <SectionCard title="System Runtime" watermark="SYS" icon={<Cog strokeWidth={2.4} />}>
             <Row label="Dashboard port" description="System-wide HTTP port for the dashboard server.">

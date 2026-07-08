@@ -14,6 +14,7 @@ This site is the public publication and reference mirror for installing, operati
 | If you are… | Start here |
 | --- | --- |
 | **A user** running sprints from the dashboard or an MCP client | [User Guide →](./user/index.md) |
+| **An operator** tuning runtime, provider, Git, memory, and dashboard behavior | [Settings →](./settings/index.md) |
 | **A developer** integrating with the MCP server, HTTP API, or realtime protocol | [Developer Reference →](./developer/index.md) |
 | **An architect or contributor** working on the engine itself | [Architecture →](./architecture/index.md) |
 

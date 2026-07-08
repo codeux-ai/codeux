@@ -30,9 +30,55 @@ export type DocsSlug =
   | 'user-dashboard-file-browser'
   | 'user-dashboard-browser-preview'
   | 'user-dashboard-stats'
-  | 'user-dashboard-custom-dashboards'
   | 'user-dashboard-settings'
   | 'user-dashboard-styleguides-and-tech-stacks'
+  | 'settings-overview'
+  | 'settings-project-context'
+  | 'settings-automation'
+  | 'settings-docker-runtime'
+  | 'settings-system-runtime'
+  | 'settings-restart-behavior'
+  | 'settings-database-settings'
+  | 'settings-onboarding'
+  | 'settings-display-settings'
+  | 'settings-background'
+  | 'settings-default-routing-anchors'
+  | 'settings-base-provider-configuration'
+  | 'settings-route-mapping'
+  | 'settings-model-pricing'
+  | 'settings-git-flow'
+  | 'settings-merge-gates-autofix'
+  | 'settings-quality-assurance'
+  | 'settings-guardrails'
+  | 'settings-rate-limit'
+  | 'settings-watch-loop'
+  | 'settings-workspace-hygiene'
+  | 'settings-workspace-visibility'
+  | 'settings-runtime-limits'
+  | 'settings-techstacks'
+  | 'settings-guidance'
+  | 'settings-project-markdown-mirror'
+  | 'settings-agent-routing'
+  | 'settings-memory-system'
+  | 'settings-long-term-remediation-schedule'
+  | 'settings-limits'
+  | 'settings-embedding-provider'
+  | 'settings-worker-learnings-instruction'
+  | 'settings-integrations'
+  | 'settings-jules-automation'
+  | 'settings-git-host-configuration'
+  | 'settings-jira-configuration'
+  | 'settings-importer-configuration'
+  | 'settings-provider-integration'
+  | 'settings-provider-credentials'
+  | 'settings-mcp-servers'
+  | 'settings-built-in-mcp'
+  | 'settings-mcp-tool-category'
+  | 'settings-custom-mcp-server'
+  | 'settings-danger-zone'
+  | 'settings-project-memory'
+  | 'settings-system-memory'
+  | 'settings-system-database'
   | 'developer-overview'
   | 'developer-mcp-tools'
   | 'developer-management-actions'
@@ -56,9 +102,8 @@ export type DocsSlug =
   | 'architecture-external-chat-providers'
   | 'architecture-configuration-resolution'
   | 'architecture-security'
-  | 'settings-subcategories-display-settings'
-  | 'settings-subcategories-guidance'
-  | 'settings-subcategories-onboarding'
+  | 'user-dashboard-custom-dashboards'
+  | 'architecture-custom-dashboard-foundation'
   | 'architecture-speech-input'
 
 export interface DocsRegistryEntry extends Partial<Omit<PageMeta, 'title' | 'description'>> {
@@ -259,13 +304,6 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Stats",
     description: "The Stats page (/stats) is the analytics surface for the active project. It shows project execution, usage, cost, Git, provider/model, ledger, and invocation telemetry in one flat Analysis Studio with responsive layou...",
   },
-  'user-dashboard-custom-dashboards': {
-    id: 'user-dashboard-custom-dashboards',
-    path: '/docs/user-dashboard-custom-dashboards',
-    section: 'User Guide',
-    title: "Custom Dashboards",
-    description: "Custom dashboards are project-scoped dashboard apps generated and revised by agents, then validated in a detached Docker runtime before publication.",
-  },
   'user-dashboard-settings': {
     id: 'user-dashboard-settings',
     path: '/docs/user-dashboard-settings',
@@ -279,6 +317,335 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     section: 'User Guide',
     title: "Styleguides and Tech Stacks",
     description: "Code UX uses guidance selections to tell workers what implementation stack and product style they should respect.",
+  },
+  'settings-overview': {
+    id: 'settings-overview',
+    path: '/docs/settings-overview',
+    section: 'User Guide',
+    title: "Settings",
+    description: "Settings is the configuration hub for Code UX. It covers local runtime behavior, provider routing, project overrides, Git and CI automation, dashboard appearance, memory, integrations, MCP tool access, and destructive...",
+  },
+  'settings-project-context': {
+    id: 'settings-project-context',
+    path: '/docs/settings-project-context',
+    section: 'User Guide',
+    title: "Project Context",
+    description: "Names and identifies the active project without changing the stored project id or execution history.",
+  },
+  'settings-automation': {
+    id: 'settings-automation',
+    path: '/docs/settings-automation',
+    section: 'User Guide',
+    title: "Automation",
+    description: "Controls how much Code UX may continue without pausing for operator decisions.",
+  },
+  'settings-docker-runtime': {
+    id: 'settings-docker-runtime',
+    path: '/docs/settings-docker-runtime',
+    section: 'User Guide',
+    title: "Docker Runtime",
+    description: "Defines the default container environment used by Docker-backed provider CLIs.",
+  },
+  'settings-system-runtime': {
+    id: 'settings-system-runtime',
+    path: '/docs/settings-system-runtime',
+    section: 'User Guide',
+    title: "System Runtime",
+    description: "Configures dashboard port and runtime logging behavior for the local Code UX process.",
+  },
+  'settings-restart-behavior': {
+    id: 'settings-restart-behavior',
+    path: '/docs/settings-restart-behavior',
+    section: 'User Guide',
+    title: "Restart Behavior",
+    description: "Chooses how active sprints and interrupted provider invocations are reconciled after the app restarts.",
+  },
+  'settings-database-settings': {
+    id: 'settings-database-settings',
+    path: '/docs/settings-database-settings',
+    section: 'User Guide',
+    title: "Database Settings",
+    description: "Manages local SQLite retention and maintenance for runtime activity data.",
+  },
+  'settings-onboarding': {
+    id: 'settings-onboarding',
+    path: '/docs/settings-onboarding',
+    section: 'User Guide',
+    title: "Onboarding",
+    description: "Reopens the guided setup flow without changing saved settings by itself.",
+  },
+  'settings-display-settings': {
+    id: 'settings-display-settings',
+    path: '/docs/settings-display-settings',
+    section: 'User Guide',
+    title: "Display Settings",
+    description: "Controls the dashboard shell layout, theme, motion preference, and desktop zoom when available.",
+  },
+  'settings-background': {
+    id: 'settings-background',
+    path: '/docs/settings-background',
+    section: 'User Guide',
+    title: "Background",
+    description: "Customizes the dashboard background image, animation mode, static color, and pattern overlay.",
+  },
+  'settings-default-routing-anchors': {
+    id: 'settings-default-routing-anchors',
+    path: '/docs/settings-default-routing-anchors',
+    section: 'User Guide',
+    title: "Default Routing Anchors",
+    description: "Sets the global and worker provider instances used when invocation routes inherit defaults.",
+  },
+  'settings-base-provider-configuration': {
+    id: 'settings-base-provider-configuration',
+    path: '/docs/settings-base-provider-configuration',
+    section: 'User Guide',
+    title: "Base Provider Configuration",
+    description: "Defines each named provider instance's default eligibility, model, thinking depth, weight, and concurrency.",
+  },
+  'settings-route-mapping': {
+    id: 'settings-route-mapping',
+    path: '/docs/settings-route-mapping',
+    section: 'User Guide',
+    title: "Route Mapping",
+    description: "Routes each invocation type to inherited, manual, weighted, or agent-selected provider pools.",
+  },
+  'settings-model-pricing': {
+    id: 'settings-model-pricing',
+    path: '/docs/settings-model-pricing',
+    section: 'User Guide',
+    title: "Model Pricing",
+    description: "Stores token pricing metadata used for model cost estimates in dashboard views.",
+  },
+  'settings-git-flow': {
+    id: 'settings-git-flow',
+    path: '/docs/settings-git-flow',
+    section: 'User Guide',
+    title: "Git Flow",
+    description: "Controls branch naming, PR creation, issue closure, and cleanup for sprint work.",
+  },
+  'settings-merge-gates-autofix': {
+    id: 'settings-merge-gates-autofix',
+    path: '/docs/settings-merge-gates-autofix',
+    section: 'User Guide',
+    title: "Merge Gates & Autofix",
+    description: "Configures review, conflict, CI, and auto-merge gates for feature and main-branch merges.",
+  },
+  'settings-quality-assurance': {
+    id: 'settings-quality-assurance',
+    path: '/docs/settings-quality-assurance',
+    section: 'User Guide',
+    title: "Quality Assurance",
+    description: "Controls completion-time QA review, QA routing, and trigger-specific agent assignment.",
+  },
+  'settings-guardrails': {
+    id: 'settings-guardrails',
+    path: '/docs/settings-guardrails',
+    section: 'User Guide',
+    title: "Guardrails",
+    description: "Caps repeated agent jobs so runaway planning, coding, CI, merge, clarification, or remediation loops stop predictably.",
+  },
+  'settings-rate-limit': {
+    id: 'settings-rate-limit',
+    path: '/docs/settings-rate-limit',
+    section: 'User Guide',
+    title: "Rate Limit",
+    description: "Controls retries after provider quota or rate-limit responses.",
+  },
+  'settings-watch-loop': {
+    id: 'settings-watch-loop',
+    path: '/docs/settings-watch-loop',
+    section: 'User Guide',
+    title: "Watch Loop",
+    description: "Controls whether live sprint orchestration keeps polling and how frequently it emits work.",
+  },
+  'settings-workspace-hygiene': {
+    id: 'settings-workspace-hygiene',
+    path: '/docs/settings-workspace-hygiene',
+    section: 'User Guide',
+    title: "Workspace Hygiene",
+    description: "Controls cleanup of temporary worktree state after provider CLI runs.",
+  },
+  'settings-workspace-visibility': {
+    id: 'settings-workspace-visibility',
+    path: '/docs/settings-workspace-visibility',
+    section: 'User Guide',
+    title: "Workspace Visibility",
+    description: "Controls automatic preview lifecycle and whether browser workspace entry points appear in the dashboard.",
+  },
+  'settings-runtime-limits': {
+    id: 'settings-runtime-limits',
+    path: '/docs/settings-runtime-limits',
+    section: 'User Guide',
+    title: "Runtime Limits",
+    description: "Sets preview container concurrency, host port range, app port, and startup script path.",
+  },
+  'settings-techstacks': {
+    id: 'settings-techstacks',
+    path: '/docs/settings-techstacks',
+    section: 'User Guide',
+    title: "Techstacks",
+    description: "Manages the system techstack catalog and per-project techstack/application-kind assignment.",
+  },
+  'settings-guidance': {
+    id: 'settings-guidance',
+    path: '/docs/settings-guidance',
+    section: 'User Guide',
+    title: "Guidance",
+    description: "Manages selected tech-stack and styleguide guidance plus custom instruction entries for the active settings scope.",
+  },
+  'settings-project-markdown-mirror': {
+    id: 'settings-project-markdown-mirror',
+    path: '/docs/settings-project-markdown-mirror',
+    section: 'User Guide',
+    title: "Project Markdown Mirror",
+    description: "Controls whether dashboard-authored agent presets are mirrored into project-local markdown files.",
+  },
+  'settings-agent-routing': {
+    id: 'settings-agent-routing',
+    path: '/docs/settings-agent-routing',
+    section: 'User Guide',
+    title: "Agent Routing",
+    description: "Assigns built-in or project agent presets to planning, coding, CI, merge, dashboard, and clarification work.",
+  },
+  'settings-memory-system': {
+    id: 'settings-memory-system',
+    path: '/docs/settings-memory-system',
+    section: 'User Guide',
+    title: "Memory System",
+    description: "Controls capture, promotion, and remediation of sprint and project memory.",
+  },
+  'settings-long-term-remediation-schedule': {
+    id: 'settings-long-term-remediation-schedule',
+    path: '/docs/settings-long-term-remediation-schedule',
+    section: 'User Guide',
+    title: "Long-Term Remediation Schedule",
+    description: "Schedules recurring project memory cleanup and claim maintenance.",
+  },
+  'settings-limits': {
+    id: 'settings-limits',
+    path: '/docs/settings-limits',
+    section: 'User Guide',
+    title: "Limits",
+    description: "Caps memory promotion thresholds, retained memories, graph density, and remediation promotions.",
+  },
+  'settings-embedding-provider': {
+    id: 'settings-embedding-provider',
+    path: '/docs/settings-embedding-provider',
+    section: 'User Guide',
+    title: "Embedding Provider",
+    description: "Chooses in-app embeddings or an external OpenAI-compatible embeddings API.",
+  },
+  'settings-worker-learnings-instruction': {
+    id: 'settings-worker-learnings-instruction',
+    path: '/docs/settings-worker-learnings-instruction',
+    section: 'User Guide',
+    title: "Worker Learnings Instruction",
+    description: "Defines the prompt appended to worker tasks so useful lessons are captured for memory processing.",
+  },
+  'settings-integrations': {
+    id: 'settings-integrations',
+    path: '/docs/settings-integrations',
+    section: 'User Guide',
+    title: "Integrations",
+    description: "Lists provider, git-host, issue-tracker, and read-only importer integrations and exposes manage/add actions.",
+  },
+  'settings-jules-automation': {
+    id: 'settings-jules-automation',
+    path: '/docs/settings-jules-automation',
+    section: 'User Guide',
+    title: "Jules Automation",
+    description: "Configures Jules clarification automation and CI autofix handoff behavior.",
+  },
+  'settings-git-host-configuration': {
+    id: 'settings-git-host-configuration',
+    path: '/docs/settings-git-host-configuration',
+    section: 'User Guide',
+    title: "Git Host Configuration",
+    description: "Stores GitHub or GitLab tokens and Docker git-auth behavior for repository automation.",
+  },
+  'settings-jira-configuration': {
+    id: 'settings-jira-configuration',
+    path: '/docs/settings-jira-configuration',
+    section: 'User Guide',
+    title: "Jira Configuration",
+    description: "Connects Jira issue search, import transitions, and completion transitions.",
+  },
+  'settings-importer-configuration': {
+    id: 'settings-importer-configuration',
+    path: '/docs/settings-importer-configuration',
+    section: 'User Guide',
+    title: "Importer Configuration",
+    description: "Configures read-only external work imports for project management, whiteboard, diagram, and design providers.",
+  },
+  'settings-provider-integration': {
+    id: 'settings-provider-integration',
+    path: '/docs/settings-provider-integration',
+    section: 'User Guide',
+    title: "Provider Integration",
+    description: "Explains that provider credentials are system-owned while project scopes still control routing and auth-copy behavior.",
+  },
+  'settings-provider-credentials': {
+    id: 'settings-provider-credentials',
+    path: '/docs/settings-provider-credentials',
+    section: 'User Guide',
+    title: "Provider Credentials",
+    description: "Manages named provider instances, authentication mode, local auth copy, dashboard login, provider config files, and base model defaults.",
+  },
+  'settings-mcp-servers': {
+    id: 'settings-mcp-servers',
+    path: '/docs/settings-mcp-servers',
+    section: 'User Guide',
+    title: "MCP Servers",
+    description: "Lists built-in and custom MCP servers injected into provider CLI runtimes.",
+  },
+  'settings-built-in-mcp': {
+    id: 'settings-built-in-mcp',
+    path: '/docs/settings-built-in-mcp',
+    section: 'User Guide',
+    title: "Built-in MCP (Code UX)",
+    description: "Controls which built-in Code UX MCP tool categories are available to containerized CLIs.",
+  },
+  'settings-mcp-tool-category': {
+    id: 'settings-mcp-tool-category',
+    path: '/docs/settings-mcp-tool-category',
+    section: 'User Guide',
+    title: "MCP Tool Category",
+    description: "Enables or disables one built-in MCP tool category and its individual tools.",
+  },
+  'settings-custom-mcp-server': {
+    id: 'settings-custom-mcp-server',
+    path: '/docs/settings-custom-mcp-server',
+    section: 'User Guide',
+    title: "Custom MCP Server",
+    description: "Configures one custom MCP server injected into compatible provider CLIs.",
+  },
+  'settings-danger-zone': {
+    id: 'settings-danger-zone',
+    path: '/docs/settings-danger-zone',
+    section: 'User Guide',
+    title: "Danger Zone",
+    description: "Groups irreversible project deletion and project override reset actions.",
+  },
+  'settings-project-memory': {
+    id: 'settings-project-memory',
+    path: '/docs/settings-project-memory',
+    section: 'User Guide',
+    title: "Project Memory",
+    description: "Clears selected memory tiers for the active project only.",
+  },
+  'settings-system-memory': {
+    id: 'settings-system-memory',
+    path: '/docs/settings-system-memory',
+    section: 'User Guide',
+    title: "System Memory",
+    description: "Clears memory tiers across every project in the local database.",
+  },
+  'settings-system-database': {
+    id: 'settings-system-database',
+    path: '/docs/settings-system-database',
+    section: 'User Guide',
+    title: "System Database",
+    description: "Wipes the local Code UX database so the app returns to a clean state on reload.",
   },
   'developer-overview': {
     id: 'developer-overview',
@@ -362,7 +729,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/developer-orchestration-debugging',
     section: 'Developer Reference',
     title: "Rapid orchestration debugging suite",
-    description: "Use this suite when a sprint stalls, local merges fail, worker-owned attention items churn, or memory usage needs extended observation after a fix.",
+    description: "Use this suite when a sprint stalls, local merges fail, worker-owned attention items churn, or memory usage needs extended observation after a fix. CI uses the rapid lane by default; full mockup pentest lanes are manu...",
   },
   'architecture-overview': {
     id: 'architecture-overview',
@@ -441,26 +808,19 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Security model",
     description: "Code UX is designed to run as a single-user trusted process on a developer's workstation or a dedicated server. This page documents what is and is not protected, the threat model, and the recommended deployment posture.",
   },
-  'settings-subcategories-display-settings': {
-    id: 'settings-subcategories-display-settings',
-    path: '/docs/settings-subcategories-display-settings',
+  'user-dashboard-custom-dashboards': {
+    id: 'user-dashboard-custom-dashboards',
+    path: '/docs/user-dashboard-custom-dashboards',
     section: 'User Guide',
-    title: "Display Settings",
-    description: "Controls the dashboard shell layout, experience mode, theme, motion preference, and desktop zoom when available.",
+    title: "Custom Dashboards",
+    description: "Custom dashboards are project-scoped dashboard apps generated and revised by agents, then validated in a detached Docker runtime before publication. Use them when the built-in dashboard pages do not match the operatio...",
   },
-  'settings-subcategories-guidance': {
-    id: 'settings-subcategories-guidance',
-    path: '/docs/settings-subcategories-guidance',
-    section: 'User Guide',
-    title: "Guidance",
-    description: "Manages active tech-stack guidance, active styleguide guidance, and custom instruction entries for the current settings scope.",
-  },
-  'settings-subcategories-onboarding': {
-    id: 'settings-subcategories-onboarding',
-    path: '/docs/settings-subcategories-onboarding',
-    section: 'User Guide',
-    title: "Onboarding",
-    description: "Reopens the guided setup flow without changing saved settings by itself.",
+  'architecture-custom-dashboard-foundation': {
+    id: 'architecture-custom-dashboard-foundation',
+    path: '/docs/architecture-custom-dashboard-foundation',
+    section: 'Architecture',
+    title: "Custom Dashboard Foundation",
+    description: "Custom dashboards are a persisted domain model for project-scoped dashboard generation. The foundation stores manifests, generated file bundles, data-source node graphs, validation history, and publication state, and...",
   },
   'architecture-speech-input': {
     id: 'architecture-speech-input',
@@ -499,9 +859,55 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['user-dashboard-file-browser'],
   docsRegistry['user-dashboard-browser-preview'],
   docsRegistry['user-dashboard-stats'],
-  docsRegistry['user-dashboard-custom-dashboards'],
   docsRegistry['user-dashboard-settings'],
   docsRegistry['user-dashboard-styleguides-and-tech-stacks'],
+  docsRegistry['settings-overview'],
+  docsRegistry['settings-project-context'],
+  docsRegistry['settings-automation'],
+  docsRegistry['settings-docker-runtime'],
+  docsRegistry['settings-system-runtime'],
+  docsRegistry['settings-restart-behavior'],
+  docsRegistry['settings-database-settings'],
+  docsRegistry['settings-onboarding'],
+  docsRegistry['settings-display-settings'],
+  docsRegistry['settings-background'],
+  docsRegistry['settings-default-routing-anchors'],
+  docsRegistry['settings-base-provider-configuration'],
+  docsRegistry['settings-route-mapping'],
+  docsRegistry['settings-model-pricing'],
+  docsRegistry['settings-git-flow'],
+  docsRegistry['settings-merge-gates-autofix'],
+  docsRegistry['settings-quality-assurance'],
+  docsRegistry['settings-guardrails'],
+  docsRegistry['settings-rate-limit'],
+  docsRegistry['settings-watch-loop'],
+  docsRegistry['settings-workspace-hygiene'],
+  docsRegistry['settings-workspace-visibility'],
+  docsRegistry['settings-runtime-limits'],
+  docsRegistry['settings-techstacks'],
+  docsRegistry['settings-guidance'],
+  docsRegistry['settings-project-markdown-mirror'],
+  docsRegistry['settings-agent-routing'],
+  docsRegistry['settings-memory-system'],
+  docsRegistry['settings-long-term-remediation-schedule'],
+  docsRegistry['settings-limits'],
+  docsRegistry['settings-embedding-provider'],
+  docsRegistry['settings-worker-learnings-instruction'],
+  docsRegistry['settings-integrations'],
+  docsRegistry['settings-jules-automation'],
+  docsRegistry['settings-git-host-configuration'],
+  docsRegistry['settings-jira-configuration'],
+  docsRegistry['settings-importer-configuration'],
+  docsRegistry['settings-provider-integration'],
+  docsRegistry['settings-provider-credentials'],
+  docsRegistry['settings-mcp-servers'],
+  docsRegistry['settings-built-in-mcp'],
+  docsRegistry['settings-mcp-tool-category'],
+  docsRegistry['settings-custom-mcp-server'],
+  docsRegistry['settings-danger-zone'],
+  docsRegistry['settings-project-memory'],
+  docsRegistry['settings-system-memory'],
+  docsRegistry['settings-system-database'],
   docsRegistry['developer-overview'],
   docsRegistry['developer-mcp-tools'],
   docsRegistry['developer-management-actions'],
@@ -525,9 +931,8 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-external-chat-providers'],
   docsRegistry['architecture-configuration-resolution'],
   docsRegistry['architecture-security'],
-  docsRegistry['settings-subcategories-display-settings'],
-  docsRegistry['settings-subcategories-guidance'],
-  docsRegistry['settings-subcategories-onboarding'],
+  docsRegistry['user-dashboard-custom-dashboards'],
+  docsRegistry['architecture-custom-dashboard-foundation'],
   docsRegistry['architecture-speech-input'],
 ]
 

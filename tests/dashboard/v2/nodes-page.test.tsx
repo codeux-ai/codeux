@@ -133,12 +133,16 @@ describe("NodesPage", () => {
     expect(screen.getByRole("button", { name: /Project Trigger trigger node/i })).toBeInTheDocument();
   });
 
-  it("feature-gates /nodes route registration and prefetch while keeping shared metadata", () => {
+  it("feature-gates unfinished route registration and prefetch while keeping shared metadata", () => {
     expect(mainSource).toContain('import("./v2/NodesPage.js")');
     expect(mainSource).toContain('path: "/nodes"');
     expect(mainSource).toContain('...(nodesFeatureEnabled ? [nodesRoute] : [])');
     expect(prefetchSource).toContain('"/nodes": { importer: () => import("../NodesPage.js"), feature: "nodes" }');
     expect(prefetchSource).toContain("canPrefetchRoute(path)");
+    expect(mainSource).toContain('import("./v2/CustomDashboardsPage.js")');
+    expect(mainSource).toContain('path: "/custom-dashboards"');
+    expect(mainSource).toContain('...(customDashboardsFeatureEnabled ? [customDashboardsRoute] : [])');
+    expect(prefetchSource).toContain('"/custom-dashboards": { importer: () => import("../CustomDashboardsPage.js"), feature: "custom-dashboards" }');
 
     const navItem = ALL_NAVIGATION_ITEMS.find((item) => item.id === "nodes");
     expect(navItem).toBeDefined();
@@ -147,6 +151,15 @@ describe("NodesPage", () => {
       expect(navItem.path).toBe("/nodes");
       expect(navItem.group).toBe("workspace");
       expect(navItem.dockSection).toBe("right");
+    }
+
+    const customDashboardsNavItem = ALL_NAVIGATION_ITEMS.find((item) => item.id === "custom-dashboards");
+    expect(customDashboardsNavItem).toBeDefined();
+    expect(customDashboardsNavItem && isRouteNavigationItem(customDashboardsNavItem)).toBe(true);
+    if (customDashboardsNavItem && isRouteNavigationItem(customDashboardsNavItem)) {
+      expect(customDashboardsNavItem.path).toBe("/custom-dashboards");
+      expect(customDashboardsNavItem.group).toBe("workspace");
+      expect(customDashboardsNavItem.dockSection).toBe("right");
     }
   });
 });

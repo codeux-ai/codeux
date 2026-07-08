@@ -6,7 +6,13 @@ import {
 import { getPrimaryNavigationItems } from "../../../dashboard/src/v2/lib/navigation-items.js";
 import { canPrefetchRoute } from "../../../dashboard/src/v2/router/route-prefetch.js";
 
-const navigationLabels = (featureFlags: { nodes: boolean }): string[] => (
+const buildFeatureFlags = (overrides: Partial<Record<"nodes" | "custom-dashboards", boolean>> = {}) => ({
+  nodes: true,
+  "custom-dashboards": true,
+  ...overrides,
+});
+
+const navigationLabels = (featureFlags: Record<"nodes" | "custom-dashboards", boolean>): string[] => (
   getPrimaryNavigationItems("EXPERT", { featureFlags }).map((item) => item.label)
 );
 
@@ -23,25 +29,35 @@ describe("dashboard feature flags", () => {
   });
 
   it("shows unfinished features by default in development mode", () => {
-    expect(resolveDashboardFeatureFlags({ devMode: true })).toEqual({ nodes: true });
+    expect(resolveDashboardFeatureFlags({ devMode: true })).toEqual({ nodes: true, "custom-dashboards": true });
   });
 
   it("hides unfinished features by default outside development mode", () => {
-    expect(resolveDashboardFeatureFlags({ devMode: false })).toEqual({ nodes: false });
+    expect(resolveDashboardFeatureFlags({ devMode: false })).toEqual({ nodes: false, "custom-dashboards": false });
   });
 
   it("lets explicit values override the mode default", () => {
-    expect(resolveDashboardFeatureFlags({ devMode: true, values: { nodes: "false" } })).toEqual({ nodes: false });
-    expect(resolveDashboardFeatureFlags({ devMode: false, values: { nodes: "true" } })).toEqual({ nodes: true });
+    expect(resolveDashboardFeatureFlags({ devMode: true, values: { nodes: "false", "custom-dashboards": "off" } })).toEqual({ nodes: false, "custom-dashboards": false });
+    expect(resolveDashboardFeatureFlags({ devMode: false, values: { nodes: "true", "custom-dashboards": "enabled" } })).toEqual({ nodes: true, "custom-dashboards": true });
   });
 
   it("filters Nodes from shared navigation and prefetch when disabled", () => {
-    expect(navigationLabels({ nodes: false })).not.toContain("Nodes");
-    expect(canPrefetchRoute("/nodes", { nodes: false })).toBe(false);
+    expect(navigationLabels(buildFeatureFlags({ nodes: false }))).not.toContain("Nodes");
+    expect(canPrefetchRoute("/nodes", buildFeatureFlags({ nodes: false }))).toBe(false);
   });
 
   it("keeps Nodes in shared navigation and prefetch when enabled", () => {
-    expect(navigationLabels({ nodes: true })).toContain("Nodes");
-    expect(canPrefetchRoute("/nodes", { nodes: true })).toBe(true);
+    expect(navigationLabels(buildFeatureFlags({ nodes: true }))).toContain("Nodes");
+    expect(canPrefetchRoute("/nodes", buildFeatureFlags({ nodes: true }))).toBe(true);
+  });
+
+  it("filters custom dashboards from shared navigation and prefetch when disabled", () => {
+    expect(navigationLabels(buildFeatureFlags({ "custom-dashboards": false }))).not.toContain("Dashboards");
+    expect(canPrefetchRoute("/custom-dashboards", buildFeatureFlags({ "custom-dashboards": false }))).toBe(false);
+  });
+
+  it("keeps custom dashboards in shared navigation and prefetch when enabled", () => {
+    expect(navigationLabels(buildFeatureFlags({ "custom-dashboards": true }))).toContain("Dashboards");
+    expect(canPrefetchRoute("/custom-dashboards", buildFeatureFlags({ "custom-dashboards": true }))).toBe(true);
   });
 });

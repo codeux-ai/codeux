@@ -148,6 +148,19 @@ export const applyOnboardingExperienceModeDefaults = (
       getProviderTypeLabel(recommendedProvider),
     );
   }
+  const recommendedIntegration = nextSettings.integrations.providers[providerConfigId];
+  if (
+    recommendedIntegration
+    && recommendedIntegration.provider !== "jules"
+    && (!recommendedIntegration.authType || (recommendedIntegration.authType === "apiKey" && !recommendedIntegration.apiKey.trim()))
+  ) {
+    nextSettings.integrations.providers[providerConfigId] = {
+      ...recommendedIntegration,
+      authType: "dashboardAuth",
+      mountAuth: true,
+      authPath: `~/.code-ux/credentials/${providerConfigId}`,
+    };
+  }
 
   nextSettings.defaults = syncProjectProvidersToIntegrationCatalog(nextSettings, nextSettings.integrations.providers);
 

@@ -73,6 +73,7 @@ describe("useChatPageResources integration", () => {
   beforeEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
+    window.localStorage.clear();
     mockRealtimeCallback = null;
     vi.mocked(fetchConversationDraft).mockResolvedValue(null);
     vi.mocked(fetchConversationMessageHistory).mockResolvedValue([]);
@@ -281,6 +282,94 @@ describe("useChatPageResources integration", () => {
     });
 
     await waitFor(() => expect(secondRender.result.current.input).toBe("Draft that survives remount"));
+    secondRender.unmount();
+  });
+
+  it("restores a typed draft from local storage when refresh happens before server draft sync completes", async () => {
+    vi.mocked(fetchConversationDraft).mockResolvedValue(null);
+    vi.mocked(upsertConversationDraft).mockImplementation(() => new Promise(() => {}));
+
+    const firstRender = renderHook(() => {
+      const cache = useMessageCache();
+      return useChatThreadData({
+        selectedProject: { id: "proj-1" },
+        cache,
+        execution: null,
+        workerRouting: null,
+      });
+    });
+
+    await waitFor(() => expect(fetchConversationDraft).toHaveBeenCalledWith("proj-1", {
+      userId: "dashboard-user-test",
+      contextKey: "new-thread",
+    }));
+
+    await act(async () => {
+      firstRender.result.current.setInput("Draft typed right before refresh");
+    });
+
+    firstRender.unmount();
+
+    vi.mocked(fetchConversationDraft).mockClear();
+    const secondRender = renderHook(() => {
+      const cache = useMessageCache();
+      return useChatThreadData({
+        selectedProject: { id: "proj-1" },
+        cache,
+        execution: null,
+        workerRouting: null,
+      });
+    });
+
+    await waitFor(() => expect(secondRender.result.current.input).toBe("Draft typed right before refresh"));
+    expect(fetchConversationDraft).toHaveBeenCalledWith("proj-1", {
+      userId: "dashboard-user-test",
+      contextKey: "new-thread",
+    });
+
+    secondRender.unmount();
+  });
+
+  it("does not let an older server draft override a locally cleared composer after refresh", async () => {
+    vi.mocked(fetchConversationDraft).mockResolvedValue({
+      userId: "dashboard-user-test",
+      projectId: "proj-1",
+      contextKey: "new-thread",
+      bodyMarkdown: "Older server draft",
+      createdAt: "2026-03-10T12:00:00.000Z",
+      updatedAt: "2026-03-10T12:00:00.000Z",
+    });
+
+    const firstRender = renderHook(() => {
+      const cache = useMessageCache();
+      return useChatThreadData({
+        selectedProject: { id: "proj-1" },
+        cache,
+        execution: null,
+        workerRouting: null,
+      });
+    });
+
+    await waitFor(() => expect(firstRender.result.current.input).toBe("Older server draft"));
+
+    await act(async () => {
+      firstRender.result.current.setInput("Message that was sent");
+      firstRender.result.current.setInput("");
+    });
+    firstRender.unmount();
+
+    const secondRender = renderHook(() => {
+      const cache = useMessageCache();
+      return useChatThreadData({
+        selectedProject: { id: "proj-1" },
+        cache,
+        execution: null,
+        workerRouting: null,
+      });
+    });
+
+    await waitFor(() => expect(fetchConversationDraft).toHaveBeenCalledTimes(2));
+    expect(secondRender.result.current.input).toBe("");
     secondRender.unmount();
   });
 

@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { AlertTriangle, Check, Download, Info, Loader2, RefreshCw, ShieldAlert, Terminal, X } from "lucide-preact";
+import { AlertTriangle, Check, Download, Loader2, RefreshCw, ShieldAlert, Terminal, X } from "lucide-preact";
 import type {
   OnboardingDependencyInstallMode,
   OnboardingDependencyInstallerOption,
@@ -485,15 +485,6 @@ export const OnboardingInstallationStep: FunctionComponent<OnboardingInstallatio
         </div>
       ) : null}
 
-      <div data-onboarding-card className="flex items-start gap-3 rounded-2xl bg-sky-500/10 p-4 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">
-        <Info className="mt-0.5 h-4 w-4 shrink-0" />
-        <div className="text-sm leading-relaxed">
-          Need a hosted solution without local dependencies?{" "}
-          <a href="https://codeux.ai/cloud" target="_blank" rel="noreferrer" className="font-bold underline decoration-sky-500/30 underline-offset-4 hover:decoration-sky-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500">
-            Learn more about Code UX Cloud
-          </a>
-        </div>
-      </div>
     </div>
   );
 };
