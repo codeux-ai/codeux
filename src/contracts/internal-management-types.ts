@@ -1,4 +1,3 @@
-import type { ProviderId } from "./app-types.js";
 import type { AgentMcpAccessConfig } from "./agent-preset-types.js";
 import type {
   ChatProviderBridgeMode,
@@ -132,6 +131,15 @@ export interface ManageSchedulerArgs {
   targetType?: "sprint" | "quicksprint" | "chat" | "node_flow";
   status?: "scheduled" | "paused" | "completed" | "failed" | "cancelled";
   scheduledFor?: string;
+  scheduleMode?: "absolute" | "after_sprint_end" | "after_task_end";
+  anchorMode?: "after_sprint_end" | "after_task_end";
+  scheduleAnchor?: Record<string, unknown>;
+  sourceSprintId?: string;
+  anchorSourceSprintId?: string;
+  sourceTaskId?: string;
+  anchorSourceTaskId?: string;
+  offsetMinutes?: number | string;
+  anchorOffsetMinutes?: number | string;
   timezone?: string;
   recurrence?: Record<string, unknown>;
   sprintTarget?: Record<string, unknown>;
@@ -156,7 +164,7 @@ export interface ManageSchedulerArgs {
 }
 
 export interface SchedulerArgs {
-  action: "list" | "schedule_wakeup" | "schedule_task" | "cancel";
+  action: "list" | "schedule_wakeup" | "cancel";
   projectId?: string;
   entryId?: string;
   from?: string;
@@ -164,13 +172,15 @@ export interface SchedulerArgs {
   scheduledFor?: string;
   delaySeconds?: number | string;
   delayMinutes?: number | string;
+  wakeAfterReply?: boolean;
+  afterSprintId?: string;
+  afterTaskId?: string;
+  offsetMinutes?: number | string;
   title?: string;
   timezone?: string;
   bodyMarkdown?: string;
   threadId?: string | null;
   connectionId?: string | null;
-  taskId?: string;
-  provider?: ProviderId;
 }
 
 export interface ManageAgentsArgs {

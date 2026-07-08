@@ -8,7 +8,7 @@ Tool-category and individual-tool toggles decide what trusted provider and proje
 
 ## Recommended Defaults
 
-Keep the global surface aligned with project-manager workflows. Dashboard chat receives Code UX MCP plus scheduler at runtime. For individual non-dashboard agents, start with Code UX disabled; if built-in tools are enabled, keep scheduler disabled unless the preset specifically needs agent-owned wakeups or task reruns.
+Keep the global surface aligned with project-manager workflows. Dashboard chat receives the full built-in Code UX MCP surface plus scheduler by default for the assigned reply agent. For individual non-dashboard agents, start with Code UX disabled; if built-in tools are enabled, keep scheduler disabled unless the preset specifically needs agent-owned wakeups.
 
 ## Risks And Gotchas
 

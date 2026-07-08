@@ -25,9 +25,8 @@ Tools are filtered before being advertised on `ListTools`:
 Agent-scoped provider runs are also default-deny for built-in Code UX tools. Newly synced Worker,
 Project manager, and generated coding agents may link the default `playwright` custom MCP server,
 but that custom-server link does not imply `code_ux` access. The dashboard chat reply route is the
-only default exception: when the reply agent has no explicit MCP access, Code UX enables only the
-restricted `scheduler_code_ux` tool and explicitly disables the broad management tools such as
-`manage_scheduler`, `manage_tasks`, `manage_sprints`, `manage_settings`, and `manage_code_ux`.
+only default exception: when the reply agent has no explicit MCP access, Code UX enables the full
+built-in management surface plus the restricted `scheduler_code_ux` tool for that dashboard chat turn.
 
 All inputs are validated against their declared JSON Schema (AJV) before dispatch; validation
 failures return `InvalidParams` with the failing JSON path.
@@ -45,7 +44,7 @@ action-specific fields, and an optional `approval` object for destructive action
 | `manage_tasks` | orchestration | Create, edit, start, stop, pause, and inspect tasks. |
 | `manage_quicksprints` | orchestration | Manage quicksprint templates and execute them. |
 | `manage_scheduler` | orchestration | Create and run scheduled sprints, quicksprints, messages, and node flows. |
-| `scheduler_code_ux` | orchestration | Agent-owned wakeups and task reruns with restricted list/schedule/cancel actions. |
+| `scheduler_code_ux` | orchestration | Agent-owned wakeups with restricted list/schedule/cancel actions. |
 | `manage_agents` | agents & memory | Manage agent presets and sync them to project markdown. |
 | `manage_node_flows` | agents & memory | Manage reusable node workflows, run them, and attach them as agent skills. |
 | `manage_memory` | agents & memory | Inspect, search, promote, and re-embed short/long-term memory. |
@@ -69,7 +68,7 @@ Every tool requires `runtimeRoles: ["project_manager"]` and is enabled by defaul
 | `manage_tasks` | `list`, `get`, `create`, `update`, `delete`, `start`, `stop`, `force_stop`, `pause`, `inspect_run` |
 | `manage_quicksprints` | `list_templates`, `get_template`, `create_template`, `update_template`, `delete_template`, `execute`, `start` |
 | `manage_scheduler` | `list`, `create`, `update`, `delete`, `run_due`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `schedule_node_flow` |
-| `scheduler_code_ux` | `list`, `schedule_wakeup`, `schedule_task`, `cancel` |
+| `scheduler_code_ux` | `list`, `schedule_wakeup`, `cancel` |
 | `manage_agents` | `list`, `get`, `create`, `update`, `delete`, `sync` |
 | `manage_node_flows` | `list`, `get`, `create`, `update`, `delete`, `validate`, `run`, `list_runs`, `get_run`, `attach_to_agent`, `detach_from_agent` |
 | `manage_memory` | `list`, `get`, `count`, `create`, `update`, `delete`, `search`, `promote`, `get_map`, `model_status`, `start_reembed` |
@@ -92,15 +91,19 @@ updates, deletion, and due-entry execution.
 
 Allowed actions:
 
-- `list` — requires `projectId`; returns only `agent_scheduler` wakeup/task entries created by the calling agent.
-- `schedule_wakeup` — requires `projectId`, `bodyMarkdown`, and either `scheduledFor`, `delaySeconds`, or `delayMinutes`; optional `title`, `timezone`, `threadId`, and `connectionId`.
-- `schedule_task` — requires `projectId`, `taskId`, and either `scheduledFor`, `delaySeconds`, or `delayMinutes`; optional `title`, `timezone`, and `provider`.
+- `list` — requires `projectId`; returns only `agent_scheduler` wakeup entries created by the calling agent.
+- `schedule_wakeup` — requires `projectId`, `bodyMarkdown`, and exactly one timing mode: `scheduledFor`, `delaySeconds`/`delayMinutes`, `wakeAfterReply: true`, `afterSprintId`, or `afterTaskId`; optional `offsetMinutes`, `title`, `timezone`, `threadId`, and `connectionId`.
 - `cancel` — requires `entryId`; changes the entry status to `cancelled` only when the entry was created by the calling agent through `scheduler_code_ux`.
+
+`wakeAfterReply: true` creates a due-now wakeup that the dashboard chat runtime drains immediately after
+the current reply is sent, allowing an agent to answer first and continue with MCP calls in the next
+turn. `afterSprintId` and `afterTaskId` create one-time completion anchors; `offsetMinutes` delays the
+wakeup after the source sprint or task finishes.
 
 Security model: Code UX stamps restricted scheduler entries with `origin: "agent_scheduler"`,
 `source: "agent_scheduler"`, and `createdByAgentId` from the current MCP agent context. The server
 enforces this metadata on list and cancel, so an agent cannot cancel dashboard-created entries,
-entries created through `manage_scheduler`, or entries created by another agent. The restricted tool
+task entries, entries created through `manage_scheduler`, or entries created by another agent. The restricted tool
 does not expose `run_due`, arbitrary updates, recurrence editing, sprint or quicksprint scheduling,
 memory remediation, or global scheduler destructive controls.
 

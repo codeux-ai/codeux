@@ -117,20 +117,37 @@ function readScheduleAnchor(payload: Record<string, unknown>): ScheduleAnchor | 
   const nested = readObject(payload, "scheduleAnchor");
   const source = nested ?? payload;
   const nestedMode = nested ? readString(nested, "mode") : undefined;
-  const effectiveMode = nestedMode ?? mode;
+  const effectiveMode = nestedMode
+    ?? mode
+    ?? (("sourceTaskId" in source || "anchorSourceTaskId" in source) ? "after_task_end" : undefined);
   const hasAnchorFields = Boolean(
     nested
     || effectiveMode === "after_sprint_end"
+    || effectiveMode === "after_task_end"
     || "sourceSprintId" in payload
     || "anchorSourceSprintId" in payload
+    || "sourceTaskId" in payload
+    || "anchorSourceTaskId" in payload
     || "offsetMinutes" in payload
     || "anchorOffsetMinutes" in payload
   );
   if (!hasAnchorFields) {
     return undefined;
   }
-  if (effectiveMode && effectiveMode !== "after_sprint_end") {
-    throw new Error("scheduleMode must be absolute or after_sprint_end");
+  if (effectiveMode && effectiveMode !== "after_sprint_end" && effectiveMode !== "after_task_end") {
+    throw new Error("scheduleMode must be absolute, after_sprint_end, or after_task_end");
+  }
+  if (effectiveMode === "after_task_end") {
+    const sourceTaskId = readString(source, "sourceTaskId") ?? readString(source, "anchorSourceTaskId");
+    if (!sourceTaskId) {
+      throw new Error("sourceTaskId or scheduleAnchor.sourceTaskId is required for after_task_end schedules");
+    }
+    const offsetMinutes = parseNonNegativeInteger(source.offsetMinutes ?? source.anchorOffsetMinutes);
+    return {
+      mode: "after_task_end",
+      sourceTaskId,
+      offsetMinutes: offsetMinutes ?? 0,
+    };
   }
   const sourceSprintId = readString(source, "sourceSprintId") ?? readString(source, "anchorSourceSprintId");
   if (!sourceSprintId) {

@@ -29,7 +29,8 @@ import type { AgentPresetRepository } from "../repositories/agent-preset-reposit
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import {
-  codeUxAgentMcpAccess,
+  dashboardReplyAgentMcpAccess,
+  isSchedulerOnlyAgentMcpAccess,
   resolveAgentMcpRuntime,
 } from "./agent-mcp-access.js";
 
@@ -124,7 +125,7 @@ export class WorkerInboxReplyService {
         dashboardReplyAgent.mcpAccess,
         dashboardReplyAgentPresetId,
       );
-      mcpAgentId = null;
+      mcpAgentId = dashboardReplyAgent.id;
       const workerInstructions = dashboardReplyAgent.instructionMarkdown.trim();
       const knowledgeManifest = this.deps.knowledgeService?.buildManifestMarkdownForAgent(dashboardReplyAgent.id) ?? null;
       const mcpAvailable = Boolean(agentMcpAccess.codeUxEnabled && this.deps.getMcpConnectionInfo?.());
@@ -139,6 +140,7 @@ export class WorkerInboxReplyService {
         workerInstructions,
         isDashboardReply: true,
         mcpAvailable,
+        mcpAccessMode: isSchedulerOnlyAgentMcpAccess(agentMcpAccess) ? "scheduler_only" : "management",
         knowledgeManifest,
       });
     }
@@ -689,7 +691,7 @@ export class WorkerInboxReplyService {
     access: AgentMcpAccessConfig | undefined,
     _dashboardReplyAgentPresetId: string | null,
   ): AgentMcpAccessConfig {
-    return codeUxAgentMcpAccess(access?.linkedServerIds ?? []);
+    return dashboardReplyAgentMcpAccess(access);
   }
 
   private async resolvePersistentSkillRuntime(

@@ -10,7 +10,7 @@ import type {
 import type { Logger } from "../shared/logging/logger.js";
 import { SchedulerRepository } from "../repositories/scheduler-repository.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
-import type { SprintRunRecord } from "../contracts/execution-types.js";
+import type { SprintRunRecord, TaskDispatchRecord, TaskRunRecord } from "../contracts/execution-types.js";
 import type { QuicksprintService } from "./quicksprint-service.js";
 import type { ChatThreadRuntimeService } from "./chat-thread-runtime-service.js";
 import type { ExecutionControlService } from "./execution-control-service.js";
@@ -27,6 +27,8 @@ export interface SchedulerServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
   executionRepository?: {
     listSprintRuns(projectId: string, sprintId?: string): SprintRunRecord[];
+    getLatestTaskRun?(taskId: string): TaskRunRecord | null;
+    listTaskDispatches?(args: { projectId: string; sprintId?: string; sprintRunId?: string; taskId?: string }): TaskDispatchRecord[];
   };
   quicksprintService: QuicksprintService;
   chatThreadRuntimeService: ChatThreadRuntimeService;
@@ -466,26 +468,37 @@ export class SchedulerService {
     if (!anchor) {
       return;
     }
-    if (anchor.mode !== "after_sprint_end") {
-      throw new Error("scheduleAnchor.mode must be after_sprint_end.");
-    }
-    const sourceSprintId = anchor.sourceSprintId?.trim();
-    if (!sourceSprintId) {
-      throw new Error("scheduleAnchor.sourceSprintId is required.");
+    if (anchor.mode !== "after_sprint_end" && anchor.mode !== "after_task_end") {
+      throw new Error("scheduleAnchor.mode must be after_sprint_end or after_task_end.");
     }
     const offsetMinutes = Number(anchor.offsetMinutes ?? 0);
     if (!Number.isFinite(offsetMinutes) || offsetMinutes < 0) {
       throw new Error("scheduleAnchor.offsetMinutes must be a non-negative number.");
     }
-    const sourceSprint = this.deps.projectManagementRepository.getSprint(sourceSprintId);
-    if (!sourceSprint || sourceSprint.projectId !== projectId) {
-      throw new Error("Schedule anchors must reference a sprint in the selected project.");
-    }
-    if (input.targetType === "sprint" && input.sprintTarget?.sprintId === sourceSprintId) {
-      throw new Error("A scheduled sprint cannot be anchored to its own completion.");
+    if (anchor.mode === "after_task_end") {
+      const sourceTaskId = anchor.sourceTaskId?.trim();
+      if (!sourceTaskId) {
+        throw new Error("scheduleAnchor.sourceTaskId is required.");
+      }
+      const sourceTask = this.deps.projectManagementRepository.getTask(sourceTaskId);
+      if (!sourceTask || sourceTask.projectId !== projectId) {
+        throw new Error("Schedule anchors must reference a task in the selected project.");
+      }
+    } else {
+      const sourceSprintId = anchor.sourceSprintId?.trim();
+      if (!sourceSprintId) {
+        throw new Error("scheduleAnchor.sourceSprintId is required.");
+      }
+      const sourceSprint = this.deps.projectManagementRepository.getSprint(sourceSprintId);
+      if (!sourceSprint || sourceSprint.projectId !== projectId) {
+        throw new Error("Schedule anchors must reference a sprint in the selected project.");
+      }
+      if (input.targetType === "sprint" && input.sprintTarget?.sprintId === sourceSprintId) {
+        throw new Error("A scheduled sprint cannot be anchored to its own completion.");
+      }
     }
     if (input.recurrence && input.recurrence.frequency && input.recurrence.frequency !== "none") {
-      throw new Error("after_sprint_end scheduler anchors do not support recurrence.");
+      throw new Error("Scheduler anchors do not support recurrence.");
     }
   }
 
@@ -508,7 +521,7 @@ export class SchedulerService {
       }
       return new Date(entry.nextRunAt).getTime() <= now.getTime() ? entry.nextRunAt : null;
     }
-    const anchorTime = this.resolveAnchorSprintEndTime(entry.projectId, entry.scheduleAnchor);
+    const anchorTime = this.resolveAnchorCompletionTime(entry.projectId, entry.scheduleAnchor);
     if (!anchorTime) {
       return null;
     }
@@ -524,14 +537,24 @@ export class SchedulerService {
     if (!entry.scheduleAnchor) {
       return entry.scheduledFor;
     }
-    const anchorTime = this.resolveAnchorSprintEndTime(entry.projectId, entry.scheduleAnchor);
+    const anchorTime = this.resolveAnchorCompletionTime(entry.projectId, entry.scheduleAnchor);
     if (!anchorTime) {
       return null;
     }
     return new Date(anchorTime.getTime() + ((entry.scheduleAnchor.offsetMinutes ?? 0) * 60_000)).toISOString();
   }
 
+  private resolveAnchorCompletionTime(projectId: string, anchor: ScheduleAnchor): Date | null {
+    if (anchor.mode === "after_task_end") {
+      return this.resolveAnchorTaskEndTime(projectId, anchor.sourceTaskId);
+    }
+    return this.resolveAnchorSprintEndTime(projectId, anchor);
+  }
+
   private resolveAnchorSprintEndTime(projectId: string, anchor: ScheduleAnchor): Date | null {
+    if (anchor.mode !== "after_sprint_end") {
+      return null;
+    }
     const sprint = this.deps.projectManagementRepository.getSprint(anchor.sourceSprintId);
     if (!sprint || sprint.projectId !== projectId || !isTerminalSprintStatus(sprint.status)) {
       return null;
@@ -551,6 +574,53 @@ export class SchedulerService {
     return Number.isFinite(parsed.getTime()) ? parsed : null;
   }
 
+  private resolveAnchorTaskEndTime(projectId: string, taskId: string): Date | null {
+    const task = this.deps.projectManagementRepository.getTask(taskId);
+    if (!task || task.projectId !== projectId || !isTerminalProjectTaskStatus(task.status)) {
+      return null;
+    }
+
+    const latestRunFinishedAt = this.latestTerminalTaskRunFinishedAt(taskId);
+    if (latestRunFinishedAt) {
+      return latestRunFinishedAt;
+    }
+
+    const latestDispatchFinishedAt = this.latestTerminalTaskDispatchFinishedAt(projectId, taskId);
+    if (latestDispatchFinishedAt) {
+      return latestDispatchFinishedAt;
+    }
+
+    const parsed = new Date(task.updatedAt);
+    return Number.isFinite(parsed.getTime()) ? parsed : null;
+  }
+
+  private latestTerminalTaskRunFinishedAt(taskId: string): Date | null {
+    const run = this.deps.executionRepository?.getLatestTaskRun?.(taskId) ?? null;
+    if (!run || !isTerminalTaskRunState(run.state) || !run.finishedAt) {
+      return null;
+    }
+    const parsed = new Date(run.finishedAt);
+    return Number.isFinite(parsed.getTime()) ? parsed : null;
+  }
+
+  private latestTerminalTaskDispatchFinishedAt(projectId: string, taskId: string): Date | null {
+    const dispatches = this.deps.executionRepository?.listTaskDispatches?.({ projectId, taskId }) ?? [];
+    let latest: Date | null = null;
+    for (const dispatch of dispatches) {
+      if (!isTerminalTaskDispatchStatus(dispatch.status) || !dispatch.finishedAt) {
+        continue;
+      }
+      const finishedAt = new Date(dispatch.finishedAt);
+      if (!Number.isFinite(finishedAt.getTime())) {
+        continue;
+      }
+      if (!latest || finishedAt.getTime() > latest.getTime()) {
+        latest = finishedAt;
+      }
+    }
+    return latest;
+  }
+
   private findSettingsManagedMemoryRemediationEntry(projectId: string): SchedulerEntryRecord | null {
     const entries = this.deps.schedulerRepository.listEntries(projectId);
     return entries.find((entry) => (
@@ -563,6 +633,10 @@ export class SchedulerService {
 
 function isTerminalSprintStatus(status: string): boolean {
   return status === "completed" || status === "failed" || status === "cancelled";
+}
+
+function isTerminalProjectTaskStatus(status: string): boolean {
+  return status === "completed" || status === "QA_REVIEW_FAILED";
 }
 
 function latestTerminalRunFinishedAt(runs: SprintRunRecord[]): Date | null {
@@ -580,6 +654,18 @@ function latestTerminalRunFinishedAt(runs: SprintRunRecord[]): Date | null {
     }
   }
   return latest;
+}
+
+function isTerminalTaskRunState(state: TaskRunRecord["state"]): boolean {
+  return state === "COMPLETED" || state === "FAILED" || state === "BLOCKED" || state === "QUOTA";
+}
+
+function isTerminalTaskDispatchStatus(status: TaskDispatchRecord["status"]): boolean {
+  return status === "completed"
+    || status === "failed"
+    || status === "cancelled"
+    || status === "blocked"
+    || status === "quota";
 }
 
 function normalizeScheduleStart(value?: string): string {

@@ -44,7 +44,7 @@ import { ActivityCacheService } from "./activity-cache-service.js";
 import { registerMcpRequestHandlers } from "./mcp-request-router.js";
 import { TaskRerunService } from "../services/task-rerun-service.js";
 import { ExecutionControlService } from "../services/execution-control-service.js";
-import { toAgentCodeUxToolAccess } from "../services/agent-mcp-access.js";
+import { dashboardReplyAgentMcpAccess, toAgentCodeUxToolAccess } from "../services/agent-mcp-access.js";
 import { JulesSourceResolver } from "../services/jules-source-resolver.js";
 import { RuntimeCleanupService } from "../services/runtime-cleanup-service.js";
 import { RuntimeStartupRecoveryService } from "../services/runtime-startup-recovery-service.js";
@@ -456,7 +456,9 @@ export class CodeUxServer {
       getRuntimeRole: () => runtimeRole,
       resolveAgentMcpToolAccess: (agentId) => {
         const agent = this.agentPresetRepository.getAgentPreset(agentId);
-        const access = agent?.mcpAccess;
+        const access = agent && this.isDashboardReplyRouteAgent(agent)
+          ? dashboardReplyAgentMcpAccess(agent.mcpAccess)
+          : agent?.mcpAccess;
         const persistentSkillRetrievalEnabled = Boolean(
           agent?.persistentSkillStorage?.enabled
           && agent.persistentSkillStorageIds
@@ -477,6 +479,25 @@ export class CodeUxServer {
     server.onerror = (error) => {
       this.logger.error("MCP server error", { error, runtimeRole });
     };
+  }
+
+  private isDashboardReplyRouteAgent(agent: { id: string; projectId: string; name: string }): boolean {
+    try {
+      const settings = this.settingsRepository.resolveProjectDashboardSettings(agent.projectId).settings;
+      const assignedAgentId = settings.agents?.routing?.dashboardReply?.agentPresetId ?? null;
+      if (assignedAgentId) {
+        return assignedAgentId === agent.id;
+      }
+      const normalizedName = agent.name.trim().toLowerCase();
+      return normalizedName === "project manager" || normalizedName === "iris";
+    } catch (error) {
+      this.logger.warn("Failed to resolve dashboard reply agent MCP defaults", {
+        projectId: agent.projectId,
+        agentId: agent.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    }
   }
 
   private createMcpServerInstance(runtimeRole: "project_manager"): Server {

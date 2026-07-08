@@ -4,6 +4,7 @@ import {
   defaultCodingAgentMcpAccess,
   codeUxAgentMcpAccess,
   codeUxAgentMcpAccessWithoutScheduler,
+  dashboardReplyAgentMcpAccess,
   schedulerOnlyAgentMcpAccess,
   sanitizeAgentMcpAccess,
   resolveAgentMcpRuntime,
@@ -81,6 +82,28 @@ describe("agent MCP defaults", () => {
     expect(access.codeUxToolToggles.find((toggle) => toggle.name === "scheduler_code_ux")?.enabled).toBe(true);
     expect(access.codeUxToolToggles.find((toggle) => toggle.name === "manage_code_ux")?.enabled).toBe(true);
     expect(access.linkedServerIds).toEqual(["playwright", "docs"]);
+  });
+
+  it("defaults dashboard reply agents to full Code UX access with scheduler enabled", () => {
+    const access = dashboardReplyAgentMcpAccess({
+      codeUxEnabled: false,
+      codeUxToolToggles: [{ name: "manage_tasks", enabled: true, isInternal: true }],
+      linkedServerIds: ["playwright", "docs"],
+    });
+
+    expect(access).toEqual(codeUxAgentMcpAccess(["playwright", "docs"]));
+  });
+
+  it("preserves explicit dashboard reply Code UX access while forcing scheduler on", () => {
+    const access = dashboardReplyAgentMcpAccess({
+      codeUxEnabled: true,
+      codeUxToolToggles: [{ name: "scheduler_code_ux", enabled: false, isInternal: true }],
+      linkedServerIds: ["docs"],
+    });
+
+    expect(access.codeUxEnabled).toBe(true);
+    expect(access.linkedServerIds).toEqual(["docs"]);
+    expect(access.codeUxToolToggles).toEqual([{ name: "scheduler_code_ux", enabled: true, isInternal: true }]);
   });
 
   it("builds non-dashboard Code UX defaults with scheduler disabled", () => {

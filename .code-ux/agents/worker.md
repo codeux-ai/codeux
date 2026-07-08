@@ -2,16 +2,14 @@
 {
   "description": "Default coding worker template for production-grade task execution.",
   "avatarConfig": {
-    "body": "female",
-    "hair": "style4",
-    "face": "style1",
-    "shirt": "style2",
-    "bottom": "style3",
-    "chassis": "egg",
-    "eyes": "cyclops",
-    "antenna": "single",
-    "wings": "tiny",
-    "accent": "pink"
+    "chassis": "classic",
+    "eyes": "smile",
+    "antenna": "jewel",
+    "wings": "dust",
+    "accent": "jade",
+    "baseColor": "pearl",
+    "visorColor": "noir",
+    "headphones": "bumper"
   },
   "memoryTemplateOverrideEnabled": false,
   "memoryConfig": {

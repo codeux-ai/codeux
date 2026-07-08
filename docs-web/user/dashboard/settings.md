@@ -789,9 +789,9 @@ Controls which built-in Code UX MCP tool categories are available to containeriz
 
 **What it controls:** Tool-category and individual-tool toggles decide what trusted provider and project-manager clients may call on their next run. Agent presets add their own access layer in the Agents editor.
 
-**Recommended defaults:** Keep the global surface aligned with project-manager workflows. Dashboard chat receives Code UX MCP plus scheduler at runtime. For individual non-dashboard agents, start with Code UX disabled; if built-in tools are enabled, keep scheduler disabled unless the preset specifically needs agent-owned wakeups or task reruns.
+**Recommended defaults:** Keep the global surface aligned with project-manager workflows. Dashboard chat receives the full built-in Code UX MCP surface plus scheduler by default for the assigned reply agent. For individual non-dashboard agents, start with Code UX disabled; if built-in tools are enabled, keep scheduler disabled unless the preset specifically needs agent-owned wakeups.
 
-**Risks and gotchas:** Disabling required tools can make provider workflows fail; enabling broad tools increases capability exposure. The restricted `scheduler_code_ux` tool lets an agent create its own wakeups or task reruns, while `manage_scheduler` and other management tools expose broader runtime control. Non-chat agents should not receive scheduler or management tools unless that capability is intentional.
+**Risks and gotchas:** Disabling required tools can make provider workflows fail; enabling broad tools increases capability exposure. The restricted `scheduler_code_ux` tool lets an agent create its own wakeups, while `manage_scheduler` and other management tools expose broader runtime control. Non-chat agents should not receive scheduler or management tools unless that capability is intentional.
 
 Related docs:
 

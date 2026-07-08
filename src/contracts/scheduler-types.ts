@@ -6,7 +6,7 @@ export type ScheduleTargetType = "sprint" | "quicksprint" | "chat" | "memory_rem
 export type ScheduleStatus = "scheduled" | "paused" | "completed" | "failed" | "cancelled";
 export type ScheduleRecurrenceFrequency = "none" | "minutely" | "hourly" | "daily" | "weekly" | "monthly";
 export type ScheduleRecurrenceEndMode = "never" | "after_count" | "on_date";
-export type ScheduleAnchorMode = "after_sprint_end";
+export type ScheduleAnchorMode = "after_sprint_end" | "after_task_end";
 export type ScheduleAgentSchedulerSource = "agent_scheduler";
 
 export interface ScheduleRecurrenceRule {
@@ -23,7 +23,13 @@ export interface ScheduleAfterSprintEndAnchor {
   offsetMinutes?: number;
 }
 
-export type ScheduleAnchor = ScheduleAfterSprintEndAnchor;
+export interface ScheduleAfterTaskEndAnchor {
+  mode: "after_task_end";
+  sourceTaskId: string;
+  offsetMinutes?: number;
+}
+
+export type ScheduleAnchor = ScheduleAfterSprintEndAnchor | ScheduleAfterTaskEndAnchor;
 
 export interface ScheduleSprintTarget {
   sprintId: string;
