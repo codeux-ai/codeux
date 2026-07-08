@@ -9,7 +9,7 @@ const WORKFLOWS = {
   playwright: ".github/workflows/playwright.yml",
   releaseChecks: ".github/workflows/release-checks.yml",
   openrouterSprintE2e: ".github/workflows/openrouter-sprint-e2e.yml",
-  mockupSprintPentest: ".github/workflows/mockup-sprint-pentest.yml",
+  mockupSprintOrchestration: ".github/workflows/mockup-sprint-orchestration.yml",
 } as const;
 
 const PLAYWRIGHT_CONFIG = "playwright.config.ts";
@@ -252,14 +252,14 @@ describe("GitHub workflow health", () => {
     expect(config).toContain("...devices['Pixel 5']");
   });
 
-  it("keeps mockup sprint pentest on a Docker-backed no-secret Linux CI lane", async () => {
-    const workflow = await readRepoFile(WORKFLOWS.mockupSprintPentest);
-    const job = getJobBlock(workflow, "mockup-sprint-pentest");
+  it("keeps mockup sprint orchestration on a no-secret rapid Linux CI lane", async () => {
+    const workflow = await readRepoFile(WORKFLOWS.mockupSprintOrchestration);
+    const job = getJobBlock(workflow, "mockup-sprint-orchestration");
 
-    expect(workflow).toContain("Mockup Sprint Pentest (temporary dev validation)");
-    expectConcurrencyCancellation(workflow, "Mockup sprint pentest");
-    expect(workflow).toMatch(/push:\n    branches:\n      - main\n      # Dev pushes run the full mockup pentest catalog/);
-    expect(workflow).toContain("- dev");
+    expect(workflow).toContain("Mockup Sprint Orchestration");
+    expectConcurrencyCancellation(workflow, "Mockup sprint orchestration");
+    expect(workflow).toMatch(/push:\n    branches: \[main, dev\]/);
+    expect(workflow).toMatch(/pull_request:\n    branches: \[main, dev\]/);
     expect(workflow).toContain("workflow_dispatch:");
 
     expect(job).toContain("runs-on: ubuntu-latest");
@@ -268,21 +268,14 @@ describe("GitHub workflow health", () => {
     expect(job).toContain("run_install: false");
     expect(job).toContain("uses: actions/setup-node@v5");
     expect(job).toContain("node-version: 22");
-    expect(job).toContain("run: pnpm install --frozen-lockfile");
-    expect(job).toContain("run: pnpm run build");
-    expect(job).toContain("docker version");
-    expect(job).toContain("Docker is required for the mockup sprint pentest Docker lane.");
-    expect(job).toContain('if [ "${GITHUB_REF_NAME}" = "dev" ]; then');
-    expect(job).toContain("node scripts/e2e/run-mockup-sprint-pentest.mjs --scenario pentest --timeout-ms 3600000");
-    expect(job).toContain("pnpm run test:e2e:mockup-sprint-pentest");
-    expectCommandBefore(job, "run: pnpm run build", "- name: Verify Docker availability");
-    expectCommandBefore(job, "docker version", 'if [ "${GITHUB_REF_NAME}" = "dev" ]; then');
-
-    expect(job).toMatch(/if: \$\{\{ failure\(\) \|\| hashFiles\('\.cache\/e2e-mockup-sprint-pentest\/\*\*'\) != '' \}\}/);
-    expect(job).toContain("uses: actions/upload-artifact@v4");
-    expect(job).toContain("path: .cache/e2e-mockup-sprint-pentest/");
-    expect(job).toContain("include-hidden-files: true");
-    expect(job).toContain("retention-days: 5");
+    expect(job).toContain("run: pnpm install --frozen-lockfile --ignore-scripts");
+    expect(job).toContain("run: pnpm run test:orchestration:rapid");
+    expect(job).not.toContain("run: pnpm run build");
+    expect(job).not.toContain("docker version");
+    expect(job).not.toContain("run: pnpm run test:orchestration:full");
+    expect(job).not.toContain("test:orchestration:pentest");
+    expect(job).not.toContain("run-mockup-sprint-pentest.mjs --scenario pentest");
+    expect(job).not.toContain("pnpm run test:e2e:mockup-sprint-pentest");
     expect(job).not.toContain("OPENROUTER_API_KEY");
     expect(job).not.toContain("GITHUB_TOKEN");
   });

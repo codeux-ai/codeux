@@ -274,6 +274,7 @@ Dashboard behavior:
 - `providers` map keyed by provider config id
   - each provider config stores `provider`, `name`, `enabled`, `model`, `weight`, `thinkingMode`, and `maxConcurrentTasks`
   - provider config entries are base defaults for route inheritance; manual, weighted, or agent-based selection is controlled by each invocation route rather than by the base provider configuration panel
+  - project and sprint provider config entries are sparse, field-level overrides for the same provider config id; changing `model` or `thinkingMode` does not reset inherited fields such as `enabled`, `weight`, or `maxConcurrentTasks`
   - multiple entries may share the same underlying provider type, so weighted/manual routing can target separate Codex, Gemini, Claude, or Jules instances independently
   - Jules remains routable with `enabled` and `weight`, but the current Jules REST API does not expose model-selection or thinking controls.
   - Dashboard settings editors therefore hide `model` and `thinkingMode` for Jules and show an informational note instead.

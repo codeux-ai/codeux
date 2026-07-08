@@ -39,6 +39,7 @@ export type DocsSlug =
   | 'developer-http-api'
   | 'developer-websocket-realtime'
   | 'developer-configuration'
+  | 'developer-feature-flags'
   | 'developer-settings-reference'
   | 'developer-sprint-format'
   | 'developer-building-from-source'
@@ -200,21 +201,21 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-nodes',
     section: 'User Guide',
     title: "Nodes",
-    description: "The Nodes page (/nodes) opens a browser-local canvas workspace for drafting workflow graphs with localStorage persistence, validation, JSON import/export, and agent command metadata.",
+    description: "The Nodes page (/nodes) opens the browser-local Nodes Canvas workspace for drafting Code UX workflow graphs. It does not require a selected project and does not call the node-flow backend APIs.",
   },
   'user-dashboard-nodes-canvas': {
     id: 'user-dashboard-nodes-canvas',
     path: '/docs/user-dashboard-nodes-canvas',
     section: 'User Guide',
     title: "Nodes Canvas",
-    description: "The Nodes Canvas page is a local graph drafting surface with trigger, agent, task, condition, and output nodes, structural validation, deterministic JSON exchange, and agent command helpers.",
+    description: "The Nodes Canvas page (/nodes) is a browser-local workspace for drafting Code UX workflow graphs. It combines the canvas, palette, inspector, validation panel, JSON exchange controls, and agent command summary without...",
   },
   'user-dashboard-node-flows': {
     id: 'user-dashboard-node-flows',
     path: '/docs/user-dashboard-node-flows',
     section: 'User Guide',
     title: "Node Flows",
-    description: "Create and operate saved node-flow workflows for the active project, including dynamic widgets, validation, manual runs, scheduling, run inspection, and agent skill attachments.",
+    description: "The Nodes page (/nodes) is where dashboard users create and operate saved node-flow workflows for the active project. A node flow is a repeatable graph that can be validated, run manually, scheduled, inspected through...",
   },
   'user-dashboard-scheduler': {
     id: 'user-dashboard-scheduler',
@@ -320,6 +321,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     section: 'Developer Reference',
     title: "Configuration & CLI",
     description: "This page is the precise reference for every CLI flag, environment variable, and configuration file Code UX consumes.",
+  },
+  'developer-feature-flags': {
+    id: 'developer-feature-flags',
+    path: '/docs/developer-feature-flags',
+    section: 'Developer Reference',
+    title: "Dashboard Feature Flags",
+    description: "Dashboard feature flags hide unfinished dashboard surfaces without deleting their implementation or tests.",
   },
   'developer-settings-reference': {
     id: 'developer-settings-reference',
@@ -500,6 +508,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['developer-http-api'],
   docsRegistry['developer-websocket-realtime'],
   docsRegistry['developer-configuration'],
+  docsRegistry['developer-feature-flags'],
   docsRegistry['developer-settings-reference'],
   docsRegistry['developer-sprint-format'],
   docsRegistry['developer-building-from-source'],

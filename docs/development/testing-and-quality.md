@@ -257,9 +257,9 @@ OPENROUTER_API_KEY=... CODEUX_E2E_OPENROUTER_MODEL=openai/gpt-5-mini node script
 
 Set `CODEUX_E2E_OPENROUTER_MODEL` only when validating a different OpenRouter model intentionally.
 
-### Mockup Sprint Pentest Policy
+### Mockup Sprint Orchestration Policy
 
-The credential-free mockup sprint pentest workflow is `.github/workflows/mockup-sprint-pentest.yml`. It validates sprint orchestration through the hidden internal `mockup-cli` provider, requires Docker, and runs `pnpm run test:e2e:mockup-sprint-pentest` after `pnpm run build`.
+The credential-free mockup sprint orchestration workflow is `.github/workflows/mockup-sprint-orchestration.yml`. It validates fast orchestration regressions without provider secrets by running `pnpm run test:orchestration:rapid` on pushes and pull requests targeting `dev` or `main`. The compiled `test:orchestration:full` catalog and heavy `test:orchestration:pentest` lane remain manual escalation tools and are not part of CI.
 
 Use [Mockup Sprint Pentest](./mockup-sprint-pentest.md) for local commands, CI trigger and artifact policy, covered scenarios, and the distinction between this no-secret lane and the credentialed OpenRouter validation lane.
 

@@ -229,4 +229,76 @@ describe("ProjectSettingsEditor", () => {
     expect(await screen.findByRole("option", { name: "Extra High" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Max" })).not.toBeInTheDocument();
   });
+
+  it("can clear stale route thinking overrides back to inherited provider thinking", async () => {
+    const settings = cloneProjectSettings(DEFAULT_DASHBOARD_SETTINGS) as ProjectSettings;
+    settings.aiProvider.provider = "codex";
+    settings.workers.virtualWorkerProvider = "codex";
+    settings.aiProvider.providers.codex.enabled = true;
+    settings.aiProvider.providers.codex.thinkingMode = "xhigh";
+    settings.aiProvider.invocationRouting.task_coding.provider = "codex";
+    settings.aiProvider.invocationRouting.task_coding.providers.codex = {
+      enabled: true,
+      model: "gpt-5.6-sol",
+      thinkingMode: "high",
+    };
+    const systemSettings = {
+      runtime: {} as SystemSettings["runtime"],
+      integrations: { providers: {}, githubToken: "" } as SystemSettings["integrations"],
+      defaults: settings,
+      mcpTools: [],
+      customMcpServers: [],
+      modelPricing: { overrides: {} },
+    } as SystemSettings;
+    const updateEditableSettings = vi.fn();
+    const state = {
+      activeScope: "system",
+      editableSettings: settings,
+      projectSources: {},
+      systemSettings,
+      externalHints: {
+        env: {},
+        settingsJson: {},
+        resolved: {
+          julesApiKey: "",
+          geminiApiKey: "",
+          codexApiKey: "",
+          claudeCodeApiKey: "",
+          qwenCodeApiKey: "",
+          openCodeApiKey: "",
+          antigravityApiKey: "",
+          githubToken: "",
+        },
+        providerAvailability: {},
+      },
+      activeInvocationRoute: "task_coding",
+      setActiveInvocationRoute: vi.fn(),
+      invocationRouteDefinitions: [
+        { id: "task_coding", label: "Task coding", description: "Task coding route." },
+      ],
+      routingProfileOptions: [
+        { value: "GLOBAL", label: "Global defaults" },
+        { value: "WORKER", label: "Worker defaults" },
+      ],
+      updateEditableSettings,
+      updateSystem: vi.fn(),
+    } as unknown as SettingsPageState;
+
+    render(<SettingsModelsPanel state={state} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand Codex Primary overrides" }));
+    const routeThinking = screen.getByRole("button", { name: "Codex Primary thinking override for Task coding" });
+    expect(routeThinking).toHaveTextContent("High");
+
+    fireEvent.click(routeThinking);
+    fireEvent.click(await screen.findByRole("option", { name: "Inherit base thinking (Extra High)" }));
+
+    expect(updateEditableSettings).toHaveBeenCalled();
+    const recipe = updateEditableSettings.mock.calls.at(-1)?.[0] as (current: ProjectSettings) => ProjectSettings;
+    const next = recipe(settings);
+    expect(next.aiProvider.invocationRouting.task_coding.providers.codex).toEqual({
+      enabled: true,
+      model: "gpt-5.6-sol",
+    });
+  });
 });

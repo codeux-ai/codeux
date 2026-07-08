@@ -68,6 +68,7 @@
 - [Stats & Analytics Design System](./dashboard/design-system-stats.md) - Warm Void analytics surfaces and System administration
 - [Dashboard Onboarding](./dashboard/onboarding.md)
 - [Project Initialization](./dashboard/project-initialization.md)
+- [Dashboard Feature Flags](./dashboard/feature-flags.md)
 - [Styleguides and Tech Stacks](./dashboard/styleguides-and-tech-stacks.md)
 - [Sprint Imports](./dashboard/sprint-imports.md)
 - [Quicksprint Templates](./dashboard/quicksprint-templates.md)

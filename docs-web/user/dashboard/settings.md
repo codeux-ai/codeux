@@ -322,11 +322,11 @@ Related docs:
 
 Routes each invocation type to inherited, manual, weighted, or agent-selected provider pools.
 
-**What it controls:** Each route chooses a profile, strategy, primary instance, allowed weighted pool, and per-provider overrides.
+**What it controls:** Each route chooses a profile, strategy, primary instance, allowed weighted pool, and per-provider overrides. Thinking overrides can be reset to inherit the provider instance's base thinking setting.
 
 **Recommended defaults:** Use inherited defaults first, then override high-risk routes such as planning, QA, CI repair, and remediation.
 
-**Risks and gotchas:** Weighted pools with unavailable providers can spread failures across multiple task types.
+**Risks and gotchas:** Weighted pools with unavailable providers can spread failures across multiple task types. Stale route thinking overrides can keep using an older thinking budget until reset to inherit.
 
 Related docs:
 

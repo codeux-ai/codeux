@@ -133,10 +133,12 @@ describe("NodesPage", () => {
     expect(screen.getByRole("button", { name: /Project Trigger trigger node/i })).toBeInTheDocument();
   });
 
-  it("registers /nodes in route prefetch and shared navigation", () => {
+  it("feature-gates /nodes route registration and prefetch while keeping shared metadata", () => {
     expect(mainSource).toContain('import("./v2/NodesPage.js")');
     expect(mainSource).toContain('path: "/nodes"');
-    expect(prefetchSource).toContain('"/nodes": () => import("../NodesPage.js")');
+    expect(mainSource).toContain('...(nodesFeatureEnabled ? [nodesRoute] : [])');
+    expect(prefetchSource).toContain('"/nodes": { importer: () => import("../NodesPage.js"), feature: "nodes" }');
+    expect(prefetchSource).toContain("canPrefetchRoute(path)");
 
     const navItem = ALL_NAVIGATION_ITEMS.find((item) => item.id === "nodes");
     expect(navItem).toBeDefined();

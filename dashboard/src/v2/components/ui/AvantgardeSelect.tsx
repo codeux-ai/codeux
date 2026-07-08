@@ -128,22 +128,32 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
       ? boundary.getBoundingClientRect()
       : { top: 0, left: 0, right: window.innerWidth, bottom: window.innerHeight };
 
+    const viewportBounds = {
+      top: Math.max(bounds.top, 0),
+      bottom: Math.min(bounds.bottom, window.innerHeight),
+      left: Math.max(bounds.left, 0),
+      right: Math.min(bounds.right, window.innerWidth),
+    };
+
     // --- Vertical direction ---
-    const spaceBelow = bounds.bottom - triggerRect.bottom - GAP - EDGE_MARGIN;
-    const spaceAbove = triggerRect.top - bounds.top - GAP - EDGE_MARGIN;
+    const spaceBelow = viewportBounds.bottom - triggerRect.bottom - GAP - EDGE_MARGIN;
+    const spaceAbove = triggerRect.top - viewportBounds.top - GAP - EDGE_MARGIN;
     const direction: "down" | "up" =
       spaceBelow >= PANEL_MAX_H || spaceBelow >= spaceAbove ? "down" : "up";
 
-    const top =
+    const rawTop =
       direction === "down"
         ? triggerRect.bottom + GAP
-        : triggerRect.top - GAP;
+        : triggerRect.top - GAP - PANEL_MAX_H;
+    const minTop = viewportBounds.top + EDGE_MARGIN;
+    const maxTop = Math.max(minTop, viewportBounds.bottom - PANEL_MAX_H - EDGE_MARGIN);
+    const top = Math.min(Math.max(rawTop, minTop), maxTop);
 
     // --- Horizontal: keep panel within bounds ---
     let left = triggerRect.left;
     const panelRight = left + panelWidth;
-    const boundsRight = bounds.right;
-    const boundsLeft = bounds.left;
+    const boundsRight = viewportBounds.right;
+    const boundsLeft = viewportBounds.left;
 
     if (panelRight > boundsRight - EDGE_MARGIN) {
       // Align right edge of panel with right edge of trigger (or boundary)
@@ -189,8 +199,8 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
     const panel = panelRef.current;
     let ctx = gsap.context(() => {
       const isUp = position.direction === "up";
-      const initialY = isUp ? "calc(-100% + 10px)" : "-10px";
-      const targetY = isUp ? "-100%" : "0px";
+      const initialY = isUp ? "10px" : "-10px";
+      const targetY = "0px";
 
       // Check if gsap is mocked or unavailable in test environment
       if (typeof gsap.fromTo !== 'function' || typeof gsap.to !== 'function') {
