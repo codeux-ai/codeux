@@ -78,6 +78,7 @@ Conventions:
 - One `describe` per public function or surface; one `it` per scenario.
 - Avoid snapshots for non-trivial outputs; prefer explicit assertions.
 - Use fixtures from `tests/fixtures/` rather than inline mega-objects.
+- Chat composer persistence regressions should cover backend user/project isolation plus dashboard remount restoration and ArrowUp/ArrowDown history traversal using deterministic fixtures instead of timing-dependent debounce waits.
 
 ## Linting
 

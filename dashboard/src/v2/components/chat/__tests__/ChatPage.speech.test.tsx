@@ -166,6 +166,24 @@ describe("ChatPage speech input", () => {
     expect(speechButtonMock.lastSprintId).toBeNull();
   });
 
+  it("routes ArrowUp and ArrowDown from the composer into message history navigation", () => {
+    mocks.data = {
+      ...mocks.data,
+      input: "Current draft",
+      navigateHistory: vi.fn(() => true),
+    };
+    renderChatPage();
+
+    const composer = screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement;
+    composer.setSelectionRange(0, 0);
+    fireEvent.keyDown(composer, { key: "ArrowUp" });
+    composer.setSelectionRange(composer.value.length, composer.value.length);
+    fireEvent.keyDown(composer, { key: "ArrowDown" });
+
+    expect(mocks.data.navigateHistory).toHaveBeenNthCalledWith(1, "up");
+    expect(mocks.data.navigateHistory).toHaveBeenNthCalledWith(2, "down");
+  });
+
   it("inserts a transcript at the current caret with sensible spacing", () => {
     speechButtonMock.transcript = "review";
     mocks.data = {
@@ -231,7 +249,9 @@ describe("ChatPage speech input", () => {
 
     renderChatPage();
 
-    expect(screen.getByText("Invocation execution logs are read-only. Switch to Threads to communicate.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Invocation transcript is read-only")).toHaveTextContent(
+      "Invocation execution logs are read-only. Switch to Threads to communicate.",
+    );
     expect(screen.queryByRole("button", { name: "Start speech recording" })).not.toBeInTheDocument();
   });
 });

@@ -38,6 +38,8 @@ pnpm run test:dashboard
 
 Use focused dashboard tests first when changing pure view-model helpers, resource hooks, page state, or components under `dashboard/src/`. Broaden to `pnpm run test:dashboard` for user-facing Live, Tasks, Stats, settings, accessibility, or realtime behavior.
 
+Chat composer persistence regressions should cover both sides of the contract: backend route/repository tests for dashboard-user and project isolation, and dashboard hook/component tests for remount restoration plus ArrowUp/ArrowDown message-history traversal. Prefer deterministic in-memory fixtures and direct key events over wall-clock waits for debounced draft writes.
+
 - Run coverage report (verifies the configured global and per-file thresholds)
 ```bash
 pnpm run test:coverage
