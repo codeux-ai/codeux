@@ -1,24 +1,16 @@
 import type { FunctionComponent } from "preact";
 import { useRef, useState, useMemo } from "preact/hooks";
 import gsap from "gsap";
-import { AlertCircle, Bot, Check, ChevronUp, Cloud, FolderOpen, GitBranch, FolderInput, Globe, Home, Info, Layers3, Link2, Loader2, Lock, PlaySquare, Plus, RefreshCw, ShieldCheck, Sparkles, Workflow, X } from "lucide-preact";
+import { AlertCircle, BookOpen, Bot, Check, ChevronUp, Cloud, FolderOpen, GitBranch, FolderInput, Globe, Home, Info, Layers3, Link2, Loader2, Lock, PlaySquare, Plus, RefreshCw, ShieldCheck, Sparkles, Workflow, X } from "lucide-preact";
 import { FormError } from "../forms/FormError.js";
 import { Modal } from "./Modal.js";
 import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
 import { fetchLocalDirectories } from "../../lib/project-api.js";
-import type { LocalDirectoryBrowserResponse } from "../../types.js";
+import type { LocalDirectoryBrowserResponse, ProjectSetupOptions } from "../../types.js";
 import type { ApplicationKind } from "../../../types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../lib/settings.js";
 
 export type SourceType = 'local' | 'git' | 'new_project';
-
-type ProjectSetupOptions = {
-    agents: boolean;
-    quicksprints: boolean;
-    previewScript: boolean;
-    ci: boolean;
-    techstack: boolean;
-};
 
 type ExistingProjectSubmission = {
     name: string;
@@ -102,12 +94,13 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const [newIsPrivate, setNewIsPrivate] = useState(true);
     const [initializeProject, setInitializeProject] = useState(true);
     const [showSetupOptions, setShowSetupOptions] = useState(false);
-    const [setupOptions, setSetupOptions] = useState({
+    const [setupOptions, setSetupOptions] = useState<ProjectSetupOptions>({
         agents: true,
         quicksprints: true,
         previewScript: false,
         ci: true,
         techstack: true,
+        docs: false,
     });
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [activeDirectoryPickerTarget, setActiveDirectoryPickerTarget] = useState<DirectoryPickerTarget | null>(null);
@@ -379,6 +372,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         { key: "previewScript", label: "Preview Script", description: "Container startup script for browser previews.", icon: PlaySquare },
         { key: "ci", label: "CI", description: "Basic GitHub/GitLab error-checking pipelines.", icon: ShieldCheck },
         { key: "techstack", label: "Techstack", description: "Detect and assign a project stack from manifests.", icon: Layers3 },
+        { key: "docs", label: "Docs", description: "Embed repository docs into Knowledge docs.", icon: BookOpen },
     ] as const;
 
     return (
@@ -659,7 +653,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                 </div>
                                                 <button
                                                     type="button"
-                                                    onClick={() => setSetupOptions({ agents: true, quicksprints: true, previewScript: true, ci: true, techstack: true })}
+                                                    onClick={() => setSetupOptions({ agents: true, quicksprints: true, previewScript: true, ci: true, techstack: true, docs: true })}
                                                     className="rounded-xl bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 shadow-sm transition-colors hover:text-slate-900 dark:bg-white/[0.08] dark:text-slate-300 dark:hover:text-white"
                                                 >
                                                     All

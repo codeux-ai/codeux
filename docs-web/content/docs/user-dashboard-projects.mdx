@@ -28,7 +28,7 @@ The form collects:
 | Repository URL | Yes for Git URL imports | Remote repository to clone and track. |
 | Git URL slug | Yes for new remote apps | Repository slug for backend remote initialization. It auto-fills from the project name until edited. |
 | Init mode | Yes for new projects | `Local Repo` creates a local repository; `Remote Repo` initializes a remote repository and clone. |
-| Setup scope | Optional for imports | Runs the Project Setup Agent for imported local or Git projects. Setup can generate agents, quicksprints, preview startup, CI, and a detected techstack from repository evidence. Backend and MCP setup requests can also explicitly enable docs embedding into Knowledge. New app initialization hides setup scope controls. |
+| Setup scope | Optional for imports | Runs the Project Setup Agent for imported local or Git projects. Setup can generate agents, quicksprints, preview startup, CI, a detected techstack, and opt-in docs embedding from repository evidence. New app initialization hides setup scope controls. |
 
 On save, Code UX:
 
@@ -39,7 +39,7 @@ On save, Code UX:
 
 For imported projects, setup techstack detection inspects dependency manifests, especially `package.json`, plus lockfiles and framework config files. When the detection is valid, Code UX adds the stack to the system catalog if needed and writes the project selection to `techstack.selectedTechstackId`. Invalid or empty detections are ignored without blocking other selected setup artifacts, so imported projects are not classified until evidence or an operator assigns them.
 
-Docs setup is opt-in through setup request payloads. When `docs` is true, Code UX discovers repository documentation and embeds it through the Knowledge docs library, returning embedded document IDs plus per-file errors without failing the rest of setup for a single document failure.
+Docs setup is opt-in from the dashboard setup scope or setup request payloads. When `docs` is true, Code UX discovers repository documentation and embeds it through the Knowledge docs library, returning embedded document IDs plus per-file errors without failing the rest of setup for a single document failure.
 
 ## Selecting the active project
 
