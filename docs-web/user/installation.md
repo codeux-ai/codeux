@@ -63,10 +63,8 @@ Download the latest installer for your platform from
 > code-signed. Choose **More info → Run anyway**. Only do this for builds downloaded from the official
 > releases page.
 
-The desktop app launches the runtime and opens the dashboard automatically. When a newer desktop
-release is available, the title bar shows an **Update available** download notice. Activating it
-opens the official GitHub release download page in your default browser; the app does not navigate
-away from the dashboard.
+The desktop app launches the runtime and opens the dashboard automatically. The title bar shows the
+running version so you can confirm which build is active.
 
 ### Speech input on desktop
 
@@ -231,8 +229,11 @@ pnpm install
 pnpm run build
 
 # desktop app
-# use the title-bar Update available notice, or download and run the latest installer from GitHub Releases
+# download and run the latest installer from GitHub Releases
 ```
+
+In the desktop app, the title-bar **Update** action opens the latest GitHub Releases page in your
+default browser. It is a download shortcut, not an automatic background or in-app update flow.
 
 ## Uninstall
 

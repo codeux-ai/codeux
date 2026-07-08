@@ -19,6 +19,16 @@ Header dropdowns, searches, and related shell controls are standardized to a sin
 - **Header Container Container:** The primary nav container uses `min-h-[60px]` instead of fixed `h-[60px]` to allow clustering elements to wrap on constrained viewports if needed.
 - **Global Search Trigger:** The top-nav search trigger belongs in the left header cluster beside the brand. It should use the same compact visual rhythm as project, sprint, and worker selectors, collapse toward an icon-led affordance on tight widths, and avoid forcing sibling controls to overflow.
 
+### 2a. Desktop System Bar
+The Electron system bar is compact application chrome, not a content header.
+
+- **Chrome Height:** Keep the Electron-only bar at `h-9` so it remains visually subordinate to the dashboard header and leaves route content stable.
+- **Brand And Version:** Preserve the compact Code UX mark and visible version label; do not hide the version behind hover, menus, or responsive-only states.
+- **Drag Regions:** The surrounding bar owns the draggable region, while every button, link, input, and custom control must be marked no-drag with the existing `titlebar-no-drag` contract.
+- **Interaction Safety:** Interactive controls must stop double-click propagation so only empty chrome toggles maximize/restore.
+- **Accessible Controls:** System buttons need stable accessible labels that describe the current action, including platform window controls whose label changes between maximize and restore.
+- **Platform Stability:** macOS keeps space for native traffic lights, while Windows and Linux render custom window controls; shared controls such as the update action must keep consistent placement and behavior across both layouts.
+
 ### 3. Unified Focus Rings
 All interactive components inside the shell layer must follow exactly the same focus rules.
 
