@@ -825,13 +825,16 @@ export const useChatThreadData = (options: {
   const handleSend = useCallback(async (overrideText?: string): Promise<void> => {
     // overrideText lets UI affordances (stage quick actions) send a prompt
     // directly without round-tripping it through the composer draft state.
+    const isComposerSend = overrideText === undefined;
     const bodyMarkdown = (overrideText ?? input).trim();
     if (!bodyMarkdown || !selectedProject) {
       return;
     }
 
-    setInput("");
-    if (composerRef?.current) {
+    if (isComposerSend) {
+      setInput("");
+    }
+    if (isComposerSend && composerRef?.current) {
       composerRef.current.style.height = "auto";
     }
 
@@ -855,7 +858,9 @@ export const useChatThreadData = (options: {
       setError(null);
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : String(sendError));
-      setInput((current) => current || bodyMarkdown);
+      if (isComposerSend) {
+        setInput((current) => current || bodyMarkdown);
+      }
       if (composerRef?.current) {
         composerRef.current.focus();
       }

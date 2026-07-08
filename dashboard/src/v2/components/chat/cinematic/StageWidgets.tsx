@@ -280,7 +280,7 @@ const MetricsWidget: FunctionComponent<{ data: Record<string, unknown> }> = ({ d
   );
 };
 
-/* ── codeux:actions — suggested next steps that prefill the composer ── */
+/* ── codeux:actions — suggested next steps that dispatch immediately ── */
 const ActionsWidget: FunctionComponent<{ data: Record<string, unknown>; onAction?: (prompt: string) => void }> = ({ data, onAction }) => {
   const items = arr(data.items);
   return (
