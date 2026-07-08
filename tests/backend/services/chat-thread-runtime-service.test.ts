@@ -3,7 +3,7 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { ChatThreadRuntimeService } from "../../../src/services/chat-thread-runtime-service.js";
-import { codeUxAgentMcpAccess } from "../../../src/services/agent-mcp-access.js";
+import { codeUxAgentMcpAccess, dashboardReplyAgentMcpAccess } from "../../../src/services/agent-mcp-access.js";
 
 describe("ChatThreadRuntimeService", () => {
   let deps: any;
@@ -844,6 +844,41 @@ describe("ChatThreadRuntimeService", () => {
     });
   });
 
+  it("runs due scheduler entries after a dashboard reply is persisted", async () => {
+    deps.runDueSchedulerEntriesAfterReply = vi.fn().mockResolvedValue(undefined);
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-scheduler", threadId: "t1", bodyMarkdown: "Plan the work" });
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t1",
+      projectId: "p1",
+      title: "Thread",
+      connectionId: null,
+      runtimeState: {},
+    });
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "codex",
+      providers: { codex: { model: "gpt-5.3-codex", apiKey: "codex-key" } },
+    });
+    deps.connectionChatRepository.listMessages.mockReturnValue([
+      { id: "msg-scheduler", authorType: "dashboard_user", bodyMarkdown: "Plan the work" },
+    ]);
+    deps.chatManagementActionService.processManagementAction.mockResolvedValue({
+      replyMarkdown: "I will retrieve the project data now.",
+      action: null,
+      approvalRequired: false,
+    });
+
+    await service.postMessage("p1", { bodyMarkdown: "Plan the work" });
+
+    expect(deps.connectionChatRepository.postSystemMessage).toHaveBeenCalledWith("p1", {
+      threadId: "t1",
+      bodyMarkdown: "I will retrieve the project data now.",
+    });
+    expect(deps.runDueSchedulerEntriesAfterReply).toHaveBeenCalledTimes(1);
+    expect(deps.connectionChatRepository.postSystemMessage.mock.invocationCallOrder[0])
+      .toBeLessThan(deps.runDueSchedulerEntriesAfterReply.mock.invocationCallOrder[0]);
+  });
+
   it("stores sanitized prompt suggestions on the visible virtual reply metadata", async () => {
     deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-suggestions", threadId: "t1", bodyMarkdown: "what next" });
     deps.connectionChatRepository.getThread.mockReturnValue({
@@ -976,7 +1011,7 @@ describe("ChatThreadRuntimeService", () => {
     });
   });
 
-  it("uses Code UX MCP with scheduler for the default dashboard reply agent", async () => {
+  it("uses full Code UX MCP with scheduler for the default dashboard reply agent", async () => {
     deps.getDashboardSettings.mockReturnValue({
       agents: { routing: { dashboardReply: { agentPresetId: null } } },
       cliWorkflow: {},
@@ -1008,7 +1043,7 @@ describe("ChatThreadRuntimeService", () => {
     expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledWith(
       expect.objectContaining({
         mcpConnection: { url: "http://127.0.0.1:3000/mcp", authToken: "token" },
-        mcpAgentId: null,
+        mcpAgentId: "reply-agent",
         agentMcpAccess: codeUxAgentMcpAccess(),
         prompt: expect.stringContaining("You have the `manage_code_ux` MCP tool available"),
       }),
@@ -1057,8 +1092,8 @@ describe("ChatThreadRuntimeService", () => {
 
     expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledWith(
       expect.objectContaining({
-        mcpAgentId: null,
-        agentMcpAccess: codeUxAgentMcpAccess(["custom-docs"]),
+        mcpAgentId: "custom-reply",
+        agentMcpAccess: dashboardReplyAgentMcpAccess(explicitAccess),
         prompt: expect.stringContaining("You have the `manage_code_ux` MCP tool available"),
       }),
     );

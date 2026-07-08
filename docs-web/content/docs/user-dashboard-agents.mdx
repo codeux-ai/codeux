@@ -118,6 +118,6 @@ Agent MCP access is default-deny. If a preset has no saved MCP access record, Co
 
 The **Connected MCPs** editor panel opens a risk-gated manager for Code UX tools. Turning on Code UX for the dashboard reply agent enables the built-in MCP surface plus the restricted `scheduler_code_ux` tool. Turning on Code UX for other agents keeps `scheduler_code_ux` explicitly disabled by default while broader tools remain visible for review.
 
-Scheduler access lets an agent create its own wakeups or task reruns through the secured agent scheduler surface. It does not grant full scheduler administration, due-entry execution, recurrence editing, sprint scheduling, or destructive scheduler actions.
+Scheduler access lets an agent create its own wakeups through the secured agent scheduler surface. It does not grant full scheduler administration, due-entry execution, recurrence editing, sprint scheduling, task reruns, or destructive scheduler actions.
 
-The dashboard reply route always receives Code UX MCP plus scheduler for dashboard chat turns. Enabling scheduler or any other Code UX tool for planning, coding, QA, CI repair, merge-conflict, or other non-chat agents is riskier because those agents run during operational workflows and can affect project state without being part of a direct dashboard chat exchange.
+The dashboard reply route always receives the full built-in Code UX MCP surface plus scheduler for dashboard chat turns. Enabling scheduler or any other Code UX tool for planning, coding, QA, CI repair, merge-conflict, or other non-chat agents is riskier because those agents run during operational workflows and can affect project state without being part of a direct dashboard chat exchange.

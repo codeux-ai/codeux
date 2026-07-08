@@ -273,6 +273,92 @@ describe("SchedulerService", () => {
     expect(repo.markRunSucceeded).toHaveBeenCalledWith("entry-1", "2026-05-18T09:50:00.000Z", null);
   });
 
+  it("runs task-anchored wakeups after the source task completion time plus offset", async () => {
+    const entry = createEntry({
+      targetType: "agent_wakeup",
+      sprintTarget: undefined,
+      scheduleAnchor: {
+        mode: "after_task_end",
+        sourceTaskId: "task-1",
+        offsetMinutes: 5,
+      },
+      recurrence: normalizeRecurrenceRule(),
+      nextRunAt: null,
+      agentWakeupTarget: {
+        bodyMarkdown: "Send the task report.",
+        origin: "agent_scheduler",
+        source: "agent_scheduler",
+        createdByAgentId: "agent-1",
+      },
+    });
+    const repo = {
+      listDueEntries: vi.fn(() => []),
+      listScheduledAnchoredEntries: vi.fn(() => [entry]),
+      getEntry: vi.fn(() => entry),
+      markRunSucceeded: vi.fn(),
+      markRunFailed: vi.fn(),
+    };
+    const projectManagementRepository = {
+      getTask: vi.fn(() => ({
+        id: "task-1",
+        projectId: "project-1",
+        status: "completed",
+        updatedAt: "2026-05-18T09:00:00.000Z",
+      })),
+    };
+    const executionRepository = {
+      getLatestTaskRun: vi.fn(() => ({
+        state: "COMPLETED",
+        finishedAt: "2026-05-18T09:10:00.000Z",
+      })),
+      listTaskDispatches: vi.fn(() => []),
+    };
+    const chatThreadRuntimeService = {
+      postMessage: vi.fn().mockResolvedValue({ id: "message-1" }),
+    };
+    const service = buildService(repo, { projectManagementRepository, executionRepository, chatThreadRuntimeService });
+
+    await service.runDueEntries(new Date("2026-05-18T09:14:59.000Z"));
+    expect(chatThreadRuntimeService.postMessage).not.toHaveBeenCalled();
+    expect(repo.markRunSucceeded).not.toHaveBeenCalled();
+
+    await service.runDueEntries(new Date("2026-05-18T09:15:00.000Z"));
+
+    expect(chatThreadRuntimeService.postMessage).toHaveBeenCalledWith("project-1", expect.objectContaining({
+      bodyMarkdown: "Send the task report.",
+    }));
+    expect(repo.markRunSucceeded).toHaveBeenCalledWith("entry-1", "2026-05-18T09:15:00.000Z", null);
+  });
+
+  it("rejects task anchors outside the selected project", () => {
+    const repo = { createEntry: vi.fn() };
+    const projectManagementRepository = {
+      getTask: vi.fn(() => ({
+        id: "task-1",
+        projectId: "other-project",
+        status: "completed",
+        updatedAt: "2026-05-18T09:00:00.000Z",
+      })),
+    };
+    const service = buildService(repo, { projectManagementRepository });
+
+    expect(() => service.createEntry("project-1", {
+      targetType: "agent_wakeup",
+      scheduledFor: "2026-05-18T09:00:00.000Z",
+      scheduleAnchor: {
+        mode: "after_task_end",
+        sourceTaskId: "task-1",
+      },
+      agentWakeupTarget: {
+        bodyMarkdown: "Wake up.",
+        origin: "agent_scheduler",
+        source: "agent_scheduler",
+        createdByAgentId: "agent-1",
+      },
+    })).toThrow("Schedule anchors must reference a task in the selected project.");
+    expect(repo.createEntry).not.toHaveBeenCalled();
+  });
+
   const buildService = (repo: Record<string, unknown>, extra: Partial<Record<string, unknown>> = {}) =>
     new SchedulerService({
       schedulerRepository: repo as any,

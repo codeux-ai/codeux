@@ -159,7 +159,7 @@ describe("WorkerInboxReplyService", () => {
     });
 
     expect(mockRunProviderForText).toHaveBeenCalledWith(expect.objectContaining({
-      mcpConnection: { url: "http://127.0.0.1:3000/mcp", authToken: "token" },
+      mcpConnection: expect.objectContaining({ url: "http://127.0.0.1:3000/mcp", authToken: "token", agentId: "reply-agent" }),
       customMcpServers: [],
       prompt: expect.stringContaining("You also have the `scheduler_code_ux` MCP tool available"),
     }));
@@ -228,7 +228,7 @@ describe("WorkerInboxReplyService", () => {
     });
 
     expect(mockRunProviderForText).toHaveBeenCalledWith(expect.objectContaining({
-      mcpConnection: { url: "http://127.0.0.1:3000/mcp", authToken: "token" },
+      mcpConnection: expect.objectContaining({ url: "http://127.0.0.1:3000/mcp", authToken: "token", agentId: "custom-reply" }),
       customMcpServers: [expect.objectContaining({ id: "docs" })],
       prompt: expect.stringContaining("You have the `manage_code_ux` MCP tool available"),
     }));

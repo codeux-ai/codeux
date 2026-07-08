@@ -57,6 +57,20 @@ export const schedulerOnlyAgentMcpAccess = (linkedServerIds: readonly string[] =
   linkedServerIds: normalizeLinkedServerIds(linkedServerIds),
 });
 
+export const dashboardReplyAgentMcpAccess = (access: AgentMcpAccessConfig | null | undefined): AgentMcpAccessConfig => {
+  if (!access?.codeUxEnabled) {
+    return codeUxAgentMcpAccess(access?.linkedServerIds ?? []);
+  }
+  const byName = new Map(access.codeUxToolToggles.map((toggle) => [toggle.name, toggle]));
+  byName.set("scheduler_code_ux", { name: "scheduler_code_ux", enabled: true, isInternal: true });
+  return {
+    ...access,
+    codeUxEnabled: true,
+    linkedServerIds: normalizeLinkedServerIds(access.linkedServerIds),
+    codeUxToolToggles: Array.from(byName.values()),
+  };
+};
+
 export const isSchedulerOnlyAgentMcpAccess = (
   access: Pick<AgentMcpAccessConfig, "codeUxEnabled" | "codeUxToolToggles">,
 ): boolean => {

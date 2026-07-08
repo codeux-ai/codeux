@@ -1,16 +1,14 @@
 ---json
 {
   "avatarConfig": {
-    "body": "male",
-    "hair": "style3",
-    "face": "style4",
-    "shirt": "style3",
-    "bottom": "style4",
-    "chassis": "capsule",
-    "eyes": "pixel",
-    "antenna": "dual",
-    "wings": "propeller",
-    "accent": "sky"
+    "chassis": "classic",
+    "eyes": "smile",
+    "antenna": "jewel",
+    "wings": "dust",
+    "accent": "jade",
+    "baseColor": "pearl",
+    "visorColor": "noir",
+    "headphones": "bumper"
   },
   "memoryTemplateOverrideEnabled": false
 }

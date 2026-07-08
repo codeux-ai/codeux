@@ -159,11 +159,18 @@ Tool arguments are validated against `src/contracts/mcp-tool-definitions.ts` bef
 Code UX exposes two scheduler MCP surfaces:
 
 - `manage_scheduler` is the project-manager management surface. It can list, create, schedule sprints, schedule quicksprints, schedule chat messages, update entries, delete entries with approval, and run due entries. It remains unchanged for project-manager clients.
-- `scheduler_code_ux` is the restricted agent-owned surface. It supports only `list`, `schedule_wakeup`, `schedule_task`, and `cancel`. The Code UX suffix intentionally avoids collisions with scheduler tools exposed by provider CLIs or other MCP servers.
+- `scheduler_code_ux` is the restricted agent-owned surface. It supports only `list`, `schedule_wakeup`, and `cancel`. The Code UX suffix intentionally avoids collisions with scheduler tools exposed by provider CLIs or other MCP servers.
 
-The restricted `scheduler_code_ux` tool accepts either an absolute `scheduledFor` ISO timestamp or one positive relative delay field, `delaySeconds` or `delayMinutes`. `schedule_wakeup` requires `projectId` and `bodyMarkdown`, and may include `title`, `timezone`, `threadId`, and `connectionId`. `schedule_task` requires `projectId` and `taskId`, and may include `title`, `timezone`, and a provider override.
+The restricted `scheduler_code_ux` tool accepts exactly one wakeup timing mode:
+- `scheduledFor`: absolute ISO timestamp.
+- `delaySeconds` or `delayMinutes`: positive relative delay.
+- `wakeAfterReply: true`: schedule the wakeup for the current time so the dashboard chat runtime drains it immediately after the current reply is sent.
+- `afterSprintId`: wake after the referenced sprint reaches a terminal state, with optional non-negative `offsetMinutes`.
+- `afterTaskId`: wake after the referenced task reaches a terminal project status, with optional non-negative `offsetMinutes`.
 
-Every `scheduler_code_ux` entry is persisted as an `agent_scheduler` target. The runtime stamps `origin: "agent_scheduler"`, `source: "agent_scheduler"`, and `createdByAgentId` from the current MCP agent context. `list` returns only entries created by the calling agent. `cancel` changes the matching entry status to `cancelled` only when the entry is an agent-scheduler wakeup or task entry created by that same agent. Dashboard-created entries, `manage_scheduler` entries, entries without agent-scheduler metadata, and entries created by another agent are rejected with the standard management validation envelope.
+`schedule_wakeup` requires `projectId` and `bodyMarkdown`, and may include `title`, `timezone`, `threadId`, and `connectionId`. Completion anchors are persisted as `scheduleAnchor` payloads: `afterSprintId` maps to `{ mode: "after_sprint_end", sourceSprintId, offsetMinutes? }`, and `afterTaskId` maps to `{ mode: "after_task_end", sourceTaskId, offsetMinutes? }`.
+
+Every `scheduler_code_ux` entry is persisted as an `agent_scheduler` wakeup target. The runtime stamps `origin: "agent_scheduler"`, `source: "agent_scheduler"`, and `createdByAgentId` from the current MCP agent context. `list` returns only wakeup entries created by the calling agent. `cancel` changes the matching entry status to `cancelled` only when the entry is an agent-scheduler wakeup created by that same agent. Dashboard-created entries, `manage_scheduler` entries, entries without agent-scheduler metadata, task entries, and entries created by another agent are rejected with the standard management validation envelope.
 
 The restricted tool intentionally does not expose due-entry execution, arbitrary update, recurrence editing, sprint scheduling, quicksprint scheduling, memory remediation scheduling, or global scheduler destructive controls.
 

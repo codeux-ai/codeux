@@ -163,6 +163,12 @@ export function createDashboardDependencies(
     knowledgeService: coreDeps.knowledgeService,
     getMcpConnectionInfo: context.getMcpConnectionInfo,
     getMcpApprovalTracker: context.getMcpApprovalTracker,
+    runDueSchedulerEntriesAfterReply: async () => {
+      if (!schedulerServiceRef.isLinked()) {
+        return;
+      }
+      await schedulerServiceRef.get().runDueEntries();
+    },
     logger: logger.child({ component: "chat-thread-runtime-service" }),
   });
 

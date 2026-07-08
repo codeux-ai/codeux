@@ -46,7 +46,7 @@ import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { McpApprovalTracker } from "./mcp-approval-tracker.js";
 import { getCorrelationId } from "../shared/logging/correlation-id.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
-import { codeUxAgentMcpAccess } from "./agent-mcp-access.js";
+import { dashboardReplyAgentMcpAccess, isSchedulerOnlyAgentMcpAccess } from "./agent-mcp-access.js";
 
 interface ChatThreadRuntimeServiceDependencies {
   connectionChatRepository: ConnectionChatRepository;
@@ -63,6 +63,7 @@ interface ChatThreadRuntimeServiceDependencies {
   knowledgeService: KnowledgeService;
   getMcpConnectionInfo?: () => McpConnectionInfo | null;
   getMcpApprovalTracker?: () => McpApprovalTracker;
+  runDueSchedulerEntriesAfterReply?: () => Promise<void>;
   logger?: Logger;
 }
 
@@ -639,8 +640,25 @@ export class ChatThreadRuntimeService {
       };
     } finally {
       this.inFlightTurns.delete(thread.id);
+      await this.runDueSchedulerEntriesAfterReply(projectId, thread.id);
     }
     return userMessage;
+  }
+
+  private async runDueSchedulerEntriesAfterReply(projectId: string, threadId: string): Promise<void> {
+    const runDueSchedulerEntriesAfterReply = this.deps.runDueSchedulerEntriesAfterReply;
+    if (!runDueSchedulerEntriesAfterReply) {
+      return;
+    }
+    try {
+      await runDueSchedulerEntriesAfterReply();
+    } catch (error: unknown) {
+      this.deps.logger?.warn("Failed to run due scheduler entries after dashboard reply", {
+        projectId,
+        threadId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private async handleCreateAppQuickaction(
@@ -1244,6 +1262,7 @@ export class ChatThreadRuntimeService {
         workerInstructions,
         isDashboardReply: false,
         mcpAvailable,
+        mcpAccessMode: isSchedulerOnlyAgentMcpAccess(agentMcpAccess) ? "scheduler_only" : "management",
         knowledgeManifest,
         suppressRichWidgets,
       });
@@ -1297,7 +1316,7 @@ export class ChatThreadRuntimeService {
       snapshotCheckout,
       mcpConnection,
       agentMcpAccess,
-      mcpAgentId: null,
+      mcpAgentId: respondingAgent.id,
       signal,
     });
 
@@ -1372,7 +1391,7 @@ export class ChatThreadRuntimeService {
     access: AgentMcpAccessConfig | undefined,
     _dashboardReplyAgentPresetId: string | null,
   ): AgentMcpAccessConfig {
-    return codeUxAgentMcpAccess(access?.linkedServerIds ?? []);
+    return dashboardReplyAgentMcpAccess(access);
   }
 
   private async deliverChatProviderReplyIfNeeded(

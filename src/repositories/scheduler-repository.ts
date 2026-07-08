@@ -519,17 +519,28 @@ export class SchedulerRepository {
     if (!value) {
       return undefined;
     }
-    if (value.mode !== "after_sprint_end") {
-      throw new ValidationError("scheduleAnchor.mode must be after_sprint_end.");
-    }
-    const sourceSprintId = value.sourceSprintId?.trim();
-    if (!sourceSprintId) {
-      throw new ValidationError("scheduleAnchor.sourceSprintId is required.");
+    if (value.mode !== "after_sprint_end" && value.mode !== "after_task_end") {
+      throw new ValidationError("scheduleAnchor.mode must be after_sprint_end or after_task_end.");
     }
     const rawOffset = value.offsetMinutes ?? 0;
     const offsetMinutes = Number(rawOffset);
     if (!Number.isFinite(offsetMinutes) || offsetMinutes < 0) {
       throw new ValidationError("scheduleAnchor.offsetMinutes must be a non-negative number.");
+    }
+    if (value.mode === "after_task_end") {
+      const sourceTaskId = value.sourceTaskId?.trim();
+      if (!sourceTaskId) {
+        throw new ValidationError("scheduleAnchor.sourceTaskId is required.");
+      }
+      return {
+        mode: "after_task_end",
+        sourceTaskId,
+        offsetMinutes: Math.floor(offsetMinutes),
+      };
+    }
+    const sourceSprintId = value.sourceSprintId?.trim();
+    if (!sourceSprintId) {
+      throw new ValidationError("scheduleAnchor.sourceSprintId is required.");
     }
     return {
       mode: "after_sprint_end",
@@ -540,7 +551,7 @@ export class SchedulerRepository {
 
   private validateAnchorRecurrence(scheduleAnchor: ScheduleAnchor | undefined, recurrence: ScheduleRecurrenceRule): void {
     if (scheduleAnchor && recurrence.frequency !== "none") {
-      throw new ValidationError("after_sprint_end scheduler anchors do not support recurrence.");
+      throw new ValidationError("Scheduler anchors do not support recurrence.");
     }
   }
 

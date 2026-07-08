@@ -54,7 +54,7 @@ describe("tool argument validators", () => {
     }
   });
 
-  it("accepts the restricted scheduler actions and relative delay fields", async () => {
+  it("accepts the restricted scheduler wakeup action and relative delay fields", async () => {
     const { validateToolArguments } = await import("../../../src/api/mcp/validators/tool-validators.js");
 
     expect(() => validateToolArguments("scheduler_code_ux", {
@@ -66,11 +66,18 @@ describe("tool argument validators", () => {
     })).not.toThrow();
 
     expect(() => validateToolArguments("scheduler_code_ux", {
-      action: "schedule_task",
+      action: "schedule_wakeup",
       projectId: "project-1",
-      delayMinutes: 5,
-      taskId: "task-1",
-      provider: "codex",
+      wakeAfterReply: true,
+      bodyMarkdown: "Resume immediately after this reply.",
+    })).not.toThrow();
+
+    expect(() => validateToolArguments("scheduler_code_ux", {
+      action: "schedule_wakeup",
+      projectId: "project-1",
+      afterTaskId: "task-1",
+      offsetMinutes: "5",
+      bodyMarkdown: "Send the task completion report.",
     })).not.toThrow();
   });
 
@@ -80,6 +87,14 @@ describe("tool argument validators", () => {
     expect(() => validateToolArguments("scheduler_code_ux", {
       action: "run_due",
       now: "2026-06-09T12:00:00.000Z",
+    })).toThrow("Invalid arguments for tool scheduler_code_ux");
+
+    expect(() => validateToolArguments("scheduler_code_ux", {
+      action: "schedule_task",
+      projectId: "project-1",
+      delayMinutes: 5,
+      taskId: "task-1",
+      provider: "codex",
     })).toThrow("Invalid arguments for tool scheduler_code_ux");
 
     expect(() => validateToolArguments("scheduler_code_ux", {

@@ -113,7 +113,7 @@ function buildMcpNativeOutputInstructions(): string {
   return [
     "You have the `manage_code_ux` MCP tool available. Use it directly to perform management actions.",
     "You also have dedicated Code UX management tools when listed by MCP, including `manage_custom_dashboards` for custom dashboard management.",
-    "You also have the `scheduler_code_ux` MCP tool available for agent-owned follow-ups, wakeups, and task reruns.",
+    "You also have the `scheduler_code_ux` MCP tool available for agent-owned follow-up wakeups.",
     "",
     "The tool accepts: `{ domain, action, payload }` where:",
     "- **projects**: `list` (projectId), `get` (projectId), `create` (projectId, name, baseDir), `update` (projectId, ...), `select` (projectId), `delete` (projectId)",
@@ -157,7 +157,7 @@ function buildSchedulerOnlyOutputInstructions(): string {
   return [
     "You have the `scheduler_code_ux` MCP tool available for agent-owned follow-ups only.",
     "",
-    "Use it only when you need to schedule your own future wakeup or task rerun. It supports `list`, `schedule_wakeup`, `schedule_task`, and `cancel`.",
+    "Use it only when you need to schedule your own future wakeup. It supports `list`, `schedule_wakeup`, and `cancel`.",
     "You do not have broad Code UX management tools in this route. Do not call `manage_code_ux`, `manage_scheduler`, `manage_tasks`, `manage_sprints`, or `manage_settings`.",
     "Respond with plain markdown text. Do NOT wrap your response in JSON.",
   ].join("\n");

@@ -27,17 +27,28 @@ target JSON payload, validate that the flow belongs to the selected project, and
 node-flow runtime with scheduler trigger metadata when due. Blank dashboard input is omitted, and
 supplied input must be a JSON object.
 
-The backend scheduler contract also supports agent-created wakeups and scheduled task reruns.
-Agent wakeups and task reruns are stored in the same target JSON payload with `origin` and `source` set to
+The backend scheduler contract also supports agent-created wakeups.
+Agent wakeups are stored in the target JSON payload with `origin` and `source` set to
 `agent_scheduler`, plus `createdByAgentId` when the creating agent provides it. Agent wakeups post
-through the chat runtime with scheduler metadata, and task reruns reuse the normal task rerun
-service so workspaces, telemetry, and cancellation behavior stay consistent.
+through the chat runtime with scheduler metadata.
 
-Agent wakeups and task reruns may appear in the Scheduler calendar, day view, stats, and scheduled
+Agent wakeups may appear in the Scheduler calendar, day view, stats, and scheduled
 entry list after they are created by the secured MCP scheduler tool. They use their own target
 labels and compact summaries instead of appearing as chat messages. The dashboard create/edit form
 supports Sprint, Quicksprint, Node flow, Message, and Memory remediation entries; MCP-created agent
-wakeups and task reruns can still be paused, resumed, or deleted from the list.
+wakeups can still be paused, resumed, or deleted from the list.
+
+Agent wakeups created through `scheduler_code_ux` can use one timing mode at a time:
+
+- an absolute `scheduledFor` timestamp
+- a positive `delaySeconds` or `delayMinutes` value
+- `wakeAfterReply: true`, which wakes the agent immediately after its current dashboard reply is sent
+- `afterSprintId`, with optional `offsetMinutes`, to wake after a sprint reaches a terminal state
+- `afterTaskId`, with optional `offsetMinutes`, to wake after a task reaches a terminal project status
+
+Completion-anchored wakeups are one-time entries. Sprint anchors use the terminal sprint run finish
+time when available, and task anchors use terminal task run or dispatch finish evidence before
+falling back to the task update time.
 
 ## Recurrence
 

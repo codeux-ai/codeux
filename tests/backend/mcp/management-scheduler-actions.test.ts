@@ -139,6 +139,30 @@ describe("SchedulerActions", () => {
     });
   });
 
+  it("schedules task-anchored chat entries from flattened MCP fields", async () => {
+    vi.mocked(schedulerService.createEntry).mockReturnValue({ id: "entry-1" } as any);
+
+    await actions.handleSchedulerAction(makeArgs("schedule_chat", {
+      projectId: "p1",
+      scheduleMode: "after_task_end",
+      sourceTaskId: "source-task",
+      offsetMinutes: "5",
+      bodyMarkdown: "Follow up on the completed task.",
+    }));
+
+    expect(schedulerService.createEntry).toHaveBeenCalledWith("p1", {
+      targetType: "chat",
+      scheduleAnchor: {
+        mode: "after_task_end",
+        sourceTaskId: "source-task",
+        offsetMinutes: 5,
+      },
+      chatTarget: {
+        bodyMarkdown: "Follow up on the completed task.",
+      },
+    });
+  });
+
   it("schedules quicksprints from flattened MCP fields", async () => {
     vi.mocked(schedulerService.createEntry).mockReturnValue({ id: "entry-1" } as any);
 
@@ -453,41 +477,88 @@ describe("AgentSchedulerActions", () => {
     expect(result.result).toEqual({ entry: makeEntry() });
   });
 
-  it("normalizes relative delay minutes for task creation", () => {
-    const taskEntry = makeEntry({
-      targetType: "task",
-      agentWakeupTarget: undefined,
-      taskTarget: {
-        taskId: "task-1",
-        provider: "codex",
+  it("schedules immediate wakeups after the current reply is sent", () => {
+    vi.mocked(schedulerService.createEntry).mockReturnValue(makeEntry({ scheduledFor: fixedNow.toISOString(), nextRunAt: fixedNow.toISOString() }));
+
+    actions.handleSchedulerAction({
+      action: "schedule_wakeup",
+      projectId: "p1",
+      wakeAfterReply: true,
+      bodyMarkdown: "Continue by calling the planning MCP route.",
+      threadId: "thread-1",
+    }, "agent-1");
+
+    expect(schedulerService.createEntry).toHaveBeenCalledWith("p1", {
+      targetType: "agent_wakeup",
+      scheduledFor: "2026-06-09T12:00:00.000Z",
+      agentWakeupTarget: {
+        bodyMarkdown: "Continue by calling the planning MCP route.",
+        threadId: "thread-1",
         origin: "agent_scheduler",
         source: "agent_scheduler",
         createdByAgentId: "agent-1",
       },
     });
-    vi.mocked(schedulerService.createEntry).mockReturnValue(taskEntry);
+  });
+
+  it("schedules wakeups anchored to sprint and task completion", () => {
+    vi.mocked(schedulerService.createEntry).mockReturnValue(makeEntry({ scheduledFor: fixedNow.toISOString(), nextRunAt: null }));
 
     actions.handleSchedulerAction({
+      action: "schedule_wakeup",
+      projectId: "p1",
+      afterSprintId: "sprint-1",
+      offsetMinutes: "5",
+      bodyMarkdown: "Send the sprint completion report.",
+    }, "agent-1");
+    actions.handleSchedulerAction({
+      action: "schedule_wakeup",
+      projectId: "p1",
+      afterTaskId: "task-1",
+      bodyMarkdown: "Inspect the finished task and summarize the result.",
+    }, "agent-1");
+
+    expect(schedulerService.createEntry).toHaveBeenNthCalledWith(1, "p1", expect.objectContaining({
+      targetType: "agent_wakeup",
+      scheduledFor: "2026-06-09T12:00:00.000Z",
+      scheduleAnchor: {
+        mode: "after_sprint_end",
+        sourceSprintId: "sprint-1",
+        offsetMinutes: 5,
+      },
+    }));
+    expect(schedulerService.createEntry).toHaveBeenNthCalledWith(2, "p1", expect.objectContaining({
+      targetType: "agent_wakeup",
+      scheduledFor: "2026-06-09T12:00:00.000Z",
+      scheduleAnchor: {
+        mode: "after_task_end",
+        sourceTaskId: "task-1",
+        offsetMinutes: undefined,
+      },
+    }));
+  });
+
+  it("rejects ambiguous wakeup timing modes", () => {
+    expect(() => actions.handleSchedulerAction({
+      action: "schedule_wakeup",
+      projectId: "p1",
+      wakeAfterReply: true,
+      delaySeconds: 5,
+      bodyMarkdown: "Continue.",
+    }, "agent-1")).toThrow("Provide exactly one wakeup timing mode");
+    expect(schedulerService.createEntry).not.toHaveBeenCalled();
+  });
+
+  it("rejects task creation through the restricted agent scheduler", () => {
+    expect(() => actions.handleSchedulerAction({
       action: "schedule_task",
       projectId: "p1",
       delayMinutes: "15",
       title: "Rerun task",
       taskId: "task-1",
       provider: "codex",
-    }, "agent-1");
-
-    expect(schedulerService.createEntry).toHaveBeenCalledWith("p1", {
-      targetType: "task",
-      scheduledFor: "2026-06-09T12:15:00.000Z",
-      title: "Rerun task",
-      taskTarget: {
-        taskId: "task-1",
-        provider: "codex",
-        origin: "agent_scheduler",
-        source: "agent_scheduler",
-        createdByAgentId: "agent-1",
-      },
-    });
+    } as any, "agent-1")).toThrow("Unknown scheduler action: schedule_task");
+    expect(schedulerService.createEntry).not.toHaveBeenCalled();
   });
 
   it("cancels only entries created by the calling agent", () => {
