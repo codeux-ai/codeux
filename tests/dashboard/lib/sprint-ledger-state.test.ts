@@ -12,10 +12,13 @@ import {
   getLedgerSelectionSummary,
   getLedgerViewStateKey,
   getLedgerOutcomeMessage,
+  formatSelectedSprintNamesForConfirmation,
+  getBulkActionButtonLabel,
   getBulkActionMessage,
   getBulkPendingReason,
   getSortAriaSort,
   getSortButtonLabel,
+  getSortButtonDescription,
   nextSort,
   formatSprintKey,
   STATUS_LABELS,
@@ -410,6 +413,7 @@ describe("sprint-ledger-state", () => {
   describe("ledger operation copy helpers", () => {
     it("composes concise outcome messages with visible and selected counts", () => {
       expect(getLedgerOutcomeMessage("Sorted by Sprint ascending.", 3, { selectedCount: 1 })).toBe("Sorted by Sprint ascending. 3 sprints visible. 1 selected.");
+      expect(getLedgerOutcomeMessage("Filter results updated.", 1, { totalCount: 7, filteredCount: 4, selectedCount: 0, removedSelectedCount: 2 })).toBe("Filter results updated. Showing 1 of 4 sprints in the current result. No sprints selected. 2 hidden selections removed.");
       expect(getLedgerOutcomeMessage("Filter results updated.", 1, { totalCount: 7, selectedCount: 0, removedSelectedCount: 2 })).toBe("Filter results updated. Showing 1 of 7 sprints. No sprints selected. 2 hidden selections removed.");
     });
 
@@ -417,6 +421,18 @@ describe("sprint-ledger-state", () => {
       expect(getBulkPendingReason("start", 2)).toBe("Bulk controls are disabled while starting 2 selected sprints.");
       expect(getBulkPendingReason("delete", 1)).toBe("Bulk controls are disabled while deleting 1 selected sprint.");
       expect(getBulkPendingReason(null, 3)).toBe("Bulk controls are disabled while an action runs for 3 selected sprints.");
+    });
+
+    it("formats affected sprint names for destructive bulk confirmation", () => {
+      expect(formatSelectedSprintNamesForConfirmation([sprints[0]])).toBe('Affected sprints: "Alpha Sprint".');
+      expect(formatSelectedSprintNamesForConfirmation(sprints.slice(0, 4), 2)).toBe('Affected sprints: "Alpha Sprint", "Beta Sprint", and 2 more sprints.');
+    });
+
+    it("keeps pending bulk button labels readable without motion", () => {
+      expect(getBulkActionButtonLabel("start", false)).toBe("Start");
+      expect(getBulkActionButtonLabel("start", true)).toBe("Starting");
+      expect(getBulkActionButtonLabel("pin", true)).toBe("Pinning");
+      expect(getBulkActionButtonLabel("delete", true)).toBe("Deleting");
     });
   });
 
@@ -428,6 +444,8 @@ describe("sprint-ledger-state", () => {
       expect(getSortAriaSort(sort, "name")).toBe("none");
       expect(getSortButtonLabel(sort, "createdAt")).toBe("Sort by Created");
       expect(getSortButtonLabel(sort, "name")).toBe("Sort by Sprint");
+      expect(getSortButtonDescription(sort, "createdAt")).toBe("Currently sorted descending. Activate to sort Created ascending.");
+      expect(getSortButtonDescription(sort, "name")).toBe("Not currently sorted. Activate to sort Sprint ascending.");
     });
   });
 

@@ -255,6 +255,21 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       : isSelected
         ? "Deselect sprint"
         : "Select sprint";
+  const rowDisabledReason = isDeletePending
+    ? `Controls for sprint ${sprint.name} are disabled while deletion is pending.`
+    : isAnyBulkPending
+      ? `Controls for sprint ${sprint.name} are disabled while a bulk action is in progress.`
+      : isPinPending
+        ? `Pin controls for sprint ${sprint.name} are disabled while the pin update is pending.`
+        : isMarkCompletedPending
+          ? `Completion controls for sprint ${sprint.name} are disabled while completion is pending.`
+          : isTogglePending
+            ? `Start and stop controls for sprint ${sprint.name} are busy.`
+            : isPauseResumePending
+              ? `Pause and resume controls for sprint ${sprint.name} are busy.`
+              : null;
+  const rowDisabledReasonId = `sprint-ledger-row-${sprint.id}-disabled-reason`;
+  const disabledDescriptionId = rowDisabledReason ? rowDisabledReasonId : undefined;
   const pinDisabledTitle = isDeletePending
     ? "Pinning is disabled while this sprint is deleting"
     : isAnyBulkPending
@@ -273,6 +288,9 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       style={transitionStyle}
     >
       <TableCell isFirst className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`} mobileLabel="Select">
+        {rowDisabledReason ? (
+          <span id={rowDisabledReasonId} className="sr-only">{rowDisabledReason}</span>
+        ) : null}
         <button
           type="button"
           onClick={() => onToggleRow(sprint.id)}
@@ -286,6 +304,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           aria-pressed={isSelected}
           aria-disabled={isDeletePending || isAnyBulkPending}
           aria-busy={isDeletePending || isAnyBulkPending ? "true" : undefined}
+          aria-describedby={isDeletePending || isAnyBulkPending ? disabledDescriptionId : undefined}
         >
           {isSelected
             ? <span ref={checkIconRef} className="flex"><CheckSquare className="h-4 w-4 text-signal-500" strokeWidth={2.2} /></span>
@@ -307,6 +326,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           aria-label={isAnyBulkPending ? `Cannot change showcase pin for sprint ${sprint.name} while a bulk action is in progress` : sprint.showcasePinned ? `Remove sprint ${sprint.name} from showcase` : `Pin sprint ${sprint.name} to showcase`}
           aria-busy={isPinPending}
           aria-disabled={isPinPending || isDeletePending || isAnyBulkPending}
+          aria-describedby={isPinPending || isDeletePending || isAnyBulkPending ? disabledDescriptionId : undefined}
         >
           {isPinPending ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" strokeWidth={2.1} />
@@ -448,6 +468,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
                 aria-label={`Cannot ${sprint.status === "paused" ? "resume" : "pause"} ${sprint.name} while a bulk action is in progress`}
                 aria-busy="true"
                 aria-disabled="true"
+                aria-describedby={disabledDescriptionId}
                 className="inline-flex min-h-8 min-w-[6.75rem] flex-1 flex-nowrap items-center justify-center gap-2 rounded-lg border border-slate-300/40 bg-slate-100/70 px-3 py-1.5 text-xs font-bold leading-tight text-slate-500 transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 sm:flex-none"
                 style={controlTransitionStyle}
               >
@@ -461,6 +482,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
                 aria-label={`Cannot ${activeRun ? "stop" : "start"} ${sprint.name} while a bulk action is in progress`}
                 aria-busy="true"
                 aria-disabled="true"
+                aria-describedby={disabledDescriptionId}
                 className="inline-flex min-h-8 min-w-[6.75rem] flex-1 flex-nowrap items-center justify-center gap-2 rounded-lg border border-slate-300/40 bg-slate-100/70 px-3 py-1.5 text-xs font-bold leading-tight text-slate-500 transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 sm:flex-none"
                 style={controlTransitionStyle}
               >
@@ -508,6 +530,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
               aria-label={isAnyBulkPending ? `Cannot open actions menu for sprint ${sprint.name} while a bulk action is in progress` : `Open actions menu for sprint ${sprint.name}`}
               aria-disabled={isDeletePending || isAnyBulkPending}
               aria-busy={isDeletePending ? "true" : undefined}
+              aria-describedby={isDeletePending || isAnyBulkPending ? disabledDescriptionId : undefined}
             >
               {isDeletePending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-signal-500 motion-reduce:animate-none" strokeWidth={2.2} />
@@ -558,6 +581,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
                 aria-label={isAnyBulkPending ? `Cannot open actions menu for sprint ${sprint.name} while a bulk action is in progress` : `Open actions menu for sprint ${sprint.name}`}
                 aria-disabled={isDeletePending || isAnyBulkPending}
                 aria-busy={isDeletePending ? "true" : undefined}
+                aria-describedby={isDeletePending || isAnyBulkPending ? disabledDescriptionId : undefined}
               >
                 {isDeletePending ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin text-signal-500 motion-reduce:animate-none" strokeWidth={2.2} />

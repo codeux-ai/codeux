@@ -28,7 +28,9 @@ import {
   getLedgerViewStateKey,
   getSortAriaSort,
   getSortButtonLabel,
+  getSortButtonDescription,
   getLedgerOutcomeMessage,
+  formatSelectedSprintNamesForConfirmation,
   type BulkLedgerAction,
   nextSort,
   DEFAULT_LEDGER_FILTERS,
@@ -98,6 +100,21 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
     ...DEFAULT_LEDGER_FILTERS,
     query: initialQuery || DEFAULT_LEDGER_FILTERS.query,
   };
+  const getInitialLedgerAnnouncement = () => {
+    const initialSort: LedgerSort = { key: "createdAt", direction: "desc" };
+    const initialFiltered = filterSprints(sprints, initialFilters, sprintKeyPrefix);
+    const initialSorted = sortSprints(initialFiltered, initialSort, sprintKeyPrefix);
+    const initialWindowed = sliceListWindow(initialSorted, listWindow);
+    return getLedgerOutcomeMessage(
+      "Sorted by Created descending.",
+      initialWindowed.length,
+      {
+        totalCount: sprints.length,
+        filteredCount: initialSorted.length,
+        selectedCount: 0,
+      },
+    );
+  };
   const [filters, setFilters] = useState<LedgerFilters>(initialFilters);
   const [sort, setSort] = useState<LedgerSort>({ key: "createdAt", direction: "desc" });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -107,7 +124,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
   const ledgerFocusRef = useRef<HTMLDivElement>(null);
   const previousBulkPendingRef = useRef(false);
   const bulkPendingSummaryRef = useRef<{ action: BulkLedgerAction; count: number } | null>(null);
-  const [ledgerAnnouncement, setLedgerAnnouncement] = useState("Sorted by Created descending. Showing all sprints. No sprints selected.");
+  const [ledgerAnnouncement, setLedgerAnnouncement] = useState(getInitialLedgerAnnouncement);
 
   useEffect(() => {
     if (initialQuery !== undefined) {
@@ -152,10 +169,11 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
     outcome: string,
     visibleCount: number,
     selectedCount: number,
-    options?: { totalCount?: number; removedSelectedCount?: number },
+    options?: { totalCount?: number; filteredCount?: number; removedSelectedCount?: number },
   ) => {
     setLedgerAnnouncement(getLedgerOutcomeMessage(outcome, visibleCount, {
       totalCount: options?.totalCount,
+      filteredCount: options?.filteredCount,
       selectedCount,
       removedSelectedCount: options?.removedSelectedCount,
     }));
@@ -164,6 +182,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
   const handleFiltersChange = useCallback((nextFilters: LedgerFilters) => {
     const nextFiltered = filterSprints(sprints, nextFilters, sprintKeyPrefix);
     const nextLedgerSprints = sortSprints(nextFiltered, sort, sprintKeyPrefix);
+    const nextWindowedCount = sliceListWindow(nextLedgerSprints, listWindow).length;
     const nextSelectedIds = pruneSelection(selectedIds, nextLedgerSprints);
     const removedCount = selectedIds.size - nextSelectedIds.size;
 
@@ -175,11 +194,11 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
       nextFilters.query.trim() || nextFilters.qa !== "all" || nextFilters.showcase !== "all" || nextFilters.status !== "all"
         ? "Filters updated."
         : "Filters cleared.",
-      nextLedgerSprints.length,
+      nextWindowedCount,
       nextSelectedIds.size,
-      { totalCount: sprints.length, removedSelectedCount: removedCount },
+      { totalCount: sprints.length, filteredCount: nextLedgerSprints.length, removedSelectedCount: removedCount },
     );
-  }, [announceLedgerOutcome, selectedIds, sort, sprintKeyPrefix, sprints]);
+  }, [announceLedgerOutcome, listWindow, selectedIds, sort, sprintKeyPrefix, sprints]);
 
   // Prune selection when the backing sprint list changes under the current filters.
   useEffect(() => {
@@ -188,16 +207,17 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
       const pruned = pruneSelection(current, filteredSprints);
       const removedCount = current.size - pruned.size;
       if (removedCount > 0) {
+        const nextWindowedCount = sliceListWindow(filteredSprints, listWindow).length;
         announceLedgerOutcome(
           "Selection updated after ledger data changed.",
-          filteredSprints.length,
+          nextWindowedCount,
           pruned.size,
-          { totalCount: sprints.length, removedSelectedCount: removedCount },
+          { totalCount: sprints.length, filteredCount: filteredSprints.length, removedSelectedCount: removedCount },
         );
       }
       return pruned.size === current.size ? current : pruned;
     });
-  }, [announceLedgerOutcome, filteredSprints, sprints.length]);
+  }, [announceLedgerOutcome, filteredSprints, listWindow, sprints.length]);
 
   const selectedFiltered = useMemo(
     () => getSelectedFilteredSprints(selectedIds, ledgerSprints),
@@ -280,12 +300,12 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
 
     announceLedgerOutcome(
       `${actionLabel} completed for ${completedCount} selected sprint${completedCount === 1 ? "" : "s"}.`,
-      ledgerSprints.length,
+      windowedSprints.length,
       selectedFiltered.length,
-      { totalCount: sprints.length },
+      { totalCount: sprints.length, filteredCount: ledgerSprints.length },
     );
     setLastBulkAction(null);
-  }, [announceLedgerOutcome, isBulkOperationPending, lastBulkAction, ledgerSprints.length, selectedFiltered.length, sprints.length]);
+  }, [announceLedgerOutcome, isBulkOperationPending, lastBulkAction, ledgerSprints.length, selectedFiltered.length, sprints.length, windowedSprints.length]);
 
   const viewStateKey = useMemo(
     () => getLedgerViewStateKey(filters, sort, listWindow),
@@ -312,10 +332,12 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
     setSort((current) => {
       const next = nextSort(current, key);
       const nextLedgerSprints = sortSprints(filteredSprints, next, sprintKeyPrefix);
+      const nextWindowedCount = sliceListWindow(nextLedgerSprints, listWindow).length;
       announceLedgerOutcome(
         `Sorted by ${SPRINT_TABLE_SORT_LABELS[next.key]} ${next.direction === "asc" ? "ascending" : "descending"}.`,
-        nextLedgerSprints.length,
+        nextWindowedCount,
         selectedFiltered.length,
+        { totalCount: sprints.length, filteredCount: nextLedgerSprints.length },
       );
       return next;
     });
@@ -328,21 +350,21 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
       `List window updated to show ${value === "All" || value === "all" ? "all filtered sprints" : `up to ${value} sprints`}.`,
       nextVisibleCount,
       selectedFiltered.length,
-      { totalCount: ledgerSprints.length },
+      { totalCount: sprints.length, filteredCount: ledgerSprints.length },
     );
-  }, [announceLedgerOutcome, ledgerSprints, onListWindowChange, selectedFiltered.length]);
+  }, [announceLedgerOutcome, ledgerSprints, onListWindowChange, selectedFiltered.length, sprints.length]);
 
   const handleToggleSelectAll = () => {
     if (selectionSummary.allSelected) {
       setSelectedIds(new Set());
-      announceLedgerOutcome("Deselected all filtered sprints.", ledgerSprints.length, 0);
+      announceLedgerOutcome("Deselected all filtered sprints.", windowedSprints.length, 0, { totalCount: sprints.length, filteredCount: ledgerSprints.length });
     } else {
       const next = new Set(selectedIds);
       for (const sprint of ledgerSprints) {
         next.add(sprint.id);
       }
       setSelectedIds(next);
-      announceLedgerOutcome("Selected all filtered sprints.", ledgerSprints.length, ledgerSprints.length);
+      announceLedgerOutcome("Selected all filtered sprints.", windowedSprints.length, ledgerSprints.length, { totalCount: sprints.length, filteredCount: ledgerSprints.length });
     }
   };
 
@@ -353,18 +375,19 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
       const selected = next.has(id);
       announceLedgerOutcome(
         `${selected ? "Selected" : "Deselected"} sprint ${sprint?.name ?? id}.`,
-        ledgerSprints.length,
+        windowedSprints.length,
         getLedgerSelectionSummary(next, ledgerSprints).selectedCount,
+        { totalCount: sprints.length, filteredCount: ledgerSprints.length },
       );
       return next;
     });
-  }, [announceLedgerOutcome, ledgerSprints]);
+  }, [announceLedgerOutcome, ledgerSprints, sprints.length, windowedSprints.length]);
 
   const handleClearSelection = useCallback(() => {
     setSelectedIds(deselectAll());
     setLastBulkAction(null);
-    announceLedgerOutcome("Sprint selection cleared.", ledgerSprints.length, 0);
-  }, [announceLedgerOutcome, ledgerSprints.length]);
+    announceLedgerOutcome("Sprint selection cleared.", windowedSprints.length, 0, { totalCount: sprints.length, filteredCount: ledgerSprints.length });
+  }, [announceLedgerOutcome, ledgerSprints.length, sprints.length, windowedSprints.length]);
 
   const restoreBulkDeleteFocus = useCallback(() => {
     const focusTarget = () => {
@@ -381,16 +404,16 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
   const handleBulkStart = useCallback(() => {
     if (isBulkPending || selectedFiltered.length === 0) return;
     setLastBulkAction("start");
-    announceLedgerOutcome("Starting selected sprints.", ledgerSprints.length, selectedFiltered.length);
+    announceLedgerOutcome("Starting selected sprints.", windowedSprints.length, selectedFiltered.length, { totalCount: sprints.length, filteredCount: ledgerSprints.length });
     onBulkStart(selectedFiltered.map((s) => s.id));
-  }, [announceLedgerOutcome, isBulkPending, ledgerSprints.length, onBulkStart, selectedFiltered]);
+  }, [announceLedgerOutcome, isBulkPending, ledgerSprints.length, onBulkStart, selectedFiltered, sprints.length, windowedSprints.length]);
 
   const handleBulkDelete = useCallback(async () => {
     if (isBulkPending || selectedFiltered.length === 0) return;
     const selectedCount = selectedFiltered.length;
     const confirmed = await requestConfirm({
       title: `Delete ${selectedCount} Selected Sprint${selectedCount === 1 ? "" : "s"}?`,
-      body: `You are deleting ${selectedCount} selected sprint${selectedCount === 1 ? "" : "s"} from the current filtered ledger result. This action is permanent and will cascade to all downstream tasks, logs, and associated git artifacts. Please ensure you have cleaned up your repository branches if needed before proceeding.`,
+      body: `You are deleting ${selectedCount} selected sprint${selectedCount === 1 ? "" : "s"} from the current filtered ledger result. ${formatSelectedSprintNamesForConfirmation(selectedFiltered)} This action is permanent and will cascade to all downstream tasks, logs, and associated git artifacts. Please ensure you have cleaned up your repository branches if needed before proceeding.`,
       confirmLabel: `Delete ${selectedCount} Sprint${selectedCount === 1 ? "" : "s"}`,
       cancelLabel: "Cancel",
       destructive: true,
@@ -398,29 +421,29 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
 
     if (confirmed) {
       setLastBulkAction("delete");
-      announceLedgerOutcome("Bulk delete confirmed. Deleting selected sprints.", ledgerSprints.length, selectedCount);
+      announceLedgerOutcome("Bulk delete confirmed. Deleting selected sprints.", windowedSprints.length, selectedCount, { totalCount: sprints.length, filteredCount: ledgerSprints.length });
       onBulkDelete(selectedFiltered.map((s) => s.id));
       restoreBulkDeleteFocus();
       // Selection clears naturally as items are removed, keeping the pending state visible
     } else {
-      announceLedgerOutcome("Bulk delete canceled. Selected sprints were not deleted.", ledgerSprints.length, selectedCount);
+      announceLedgerOutcome("Bulk delete canceled. Selected sprints were not deleted.", windowedSprints.length, selectedCount, { totalCount: sprints.length, filteredCount: ledgerSprints.length });
       restoreBulkDeleteFocus();
     }
-  }, [announceLedgerOutcome, isBulkPending, ledgerSprints.length, onBulkDelete, selectedFiltered, requestConfirm, restoreBulkDeleteFocus]);
+  }, [announceLedgerOutcome, isBulkPending, ledgerSprints.length, onBulkDelete, selectedFiltered, requestConfirm, restoreBulkDeleteFocus, sprints.length, windowedSprints.length]);
 
   const handleBulkShowcaseEnable = useCallback(() => {
     if (isBulkPending || selectedFiltered.length === 0) return;
     setLastBulkAction("pin");
-    announceLedgerOutcome("Pinning selected sprints.", ledgerSprints.length, selectedFiltered.length);
+    announceLedgerOutcome("Pinning selected sprints.", windowedSprints.length, selectedFiltered.length, { totalCount: sprints.length, filteredCount: ledgerSprints.length });
     onBulkShowcaseEnable(selectedFiltered.map((s) => s.id));
-  }, [announceLedgerOutcome, isBulkPending, ledgerSprints.length, onBulkShowcaseEnable, selectedFiltered]);
+  }, [announceLedgerOutcome, isBulkPending, ledgerSprints.length, onBulkShowcaseEnable, selectedFiltered, sprints.length, windowedSprints.length]);
 
   const handleBulkShowcaseDisable = useCallback(() => {
     if (isBulkPending || selectedFiltered.length === 0) return;
     setLastBulkAction("unpin");
-    announceLedgerOutcome("Unpinning selected sprints.", ledgerSprints.length, selectedFiltered.length);
+    announceLedgerOutcome("Unpinning selected sprints.", windowedSprints.length, selectedFiltered.length, { totalCount: sprints.length, filteredCount: ledgerSprints.length });
     onBulkShowcaseDisable(selectedFiltered.map((s) => s.id));
-  }, [announceLedgerOutcome, isBulkPending, ledgerSprints.length, onBulkShowcaseDisable, selectedFiltered]);
+  }, [announceLedgerOutcome, isBulkPending, ledgerSprints.length, onBulkShowcaseDisable, selectedFiltered, sprints.length, windowedSprints.length]);
 
   const restoreLedgerFallbackFocus = useCallback(() => {
     const focusTarget = () => ledgerFocusRef.current?.focus();
@@ -444,21 +467,21 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
     if (confirmed) {
       announceLedgerOutcome(
         `Delete confirmed for sprint ${sprint.name}. Deletion is in progress.`,
-        ledgerSprints.length,
+        windowedSprints.length,
         selectedFiltered.length,
-        { totalCount: sprints.length },
+        { totalCount: sprints.length, filteredCount: ledgerSprints.length },
       );
       onDeleteSprint(sprint.id);
     } else {
       announceLedgerOutcome(
         `Delete canceled for sprint ${sprint.name}. Sprint was not deleted.`,
-        ledgerSprints.length,
+        windowedSprints.length,
         selectedFiltered.length,
-        { totalCount: sprints.length },
+        { totalCount: sprints.length, filteredCount: ledgerSprints.length },
       );
     }
     restoreLedgerFallbackFocus();
-  }, [announceLedgerOutcome, ledgerSprints.length, onDeleteSprint, pendingActionIds, requestConfirm, restoreLedgerFallbackFocus, selectedFiltered.length, sprints.length]);
+  }, [announceLedgerOutcome, ledgerSprints.length, onDeleteSprint, pendingActionIds, requestConfirm, restoreLedgerFallbackFocus, selectedFiltered.length, sprints.length, windowedSprints.length]);
 
 
   // Memoize stable handlers to pass to memoized SprintLedgerRow
@@ -502,6 +525,8 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
   const renderSortHeader = (key: SprintTableSortKey, options?: { align?: "left" | "right"; className?: string; isLast?: boolean }) => {
     const label = SPRINT_TABLE_SORT_LABELS[key];
     const alignRight = options?.align === "right";
+    const descriptionId = `sprint-ledger-sort-${key}-description`;
+    const sortDescription = getSortButtonDescription(sort, key);
     return (
       <TableCell
         isHeader
@@ -516,6 +541,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
           className={`inline-flex w-full items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200 ${alignRight ? "justify-end" : "justify-start"}`}
           style={controlFeedbackStyle}
           aria-label={getSortButtonLabel(sort, key)}
+          aria-describedby={descriptionId}
         >
           {alignRight ? (
             <>
@@ -528,6 +554,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
               {renderSortIndicator(key)}
             </>
           )}
+          <span id={descriptionId} className="sr-only">{sortDescription}</span>
         </button>
       </TableCell>
     );
@@ -592,7 +619,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
                 className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-black/[0.04] hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
                 style={selectionMovementStyle}
                 title={isAnyBulkPending ? "Bulk action in progress for selected sprints" : selectionSummary.allSelected ? "Deselect all filtered sprints" : "Select all filtered sprints"}
-                aria-label={selectionSummary.allSelected ? "Deselect all filtered sprints" : "Select all filtered sprints"}
+                aria-label={isAnyBulkPending ? "Cannot change filtered sprint selection while a bulk action is in progress" : selectionSummary.allSelected ? "Deselect all filtered sprints" : "Select all filtered sprints"}
                 aria-pressed={selectionSummary.allSelected}
                 aria-disabled={windowedSprints.length === 0 || isAnyBulkPending}
                 aria-busy={isAnyBulkPending ? "true" : undefined}
@@ -674,7 +701,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
           </div>
         </div>
       </div>
-      <div className="sr-only" aria-live="polite" aria-atomic="true">
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {ledgerAnnouncement}
       </div>
     </div>
