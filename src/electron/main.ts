@@ -13,6 +13,7 @@ import {
   shouldAllowPermissionCheck,
   shouldAllowPermissionRequest,
 } from "./dashboard-network-policy.js";
+import { openCodeUxUpdatesPage, toggleWindowMaximized } from "./window-controls.js";
 import { createDebouncedSaver, loadWindowState, saveWindowState } from "./window-state.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -334,12 +335,7 @@ ipcMain.handle("codeux:window-minimize", (event) => {
 ipcMain.handle("codeux:window-toggle-maximize", (event) => {
   const target = resolveWindow(event);
   if (!target) return false;
-  if (target.isMaximized()) {
-    target.unmaximize();
-    return false;
-  }
-  target.maximize();
-  return true;
+  return toggleWindowMaximized(target);
 });
 
 ipcMain.handle("codeux:window-close", (event) => {
@@ -362,6 +358,10 @@ ipcMain.handle("codeux:set-zoom", (event, factor: unknown) => {
   const clamped = normalizeZoomFactor(factor);
   event.sender.setZoomFactor(clamped);
   return clamped;
+});
+
+ipcMain.handle("codeux:open-updates", () => {
+  return openCodeUxUpdatesPage(shell);
 });
 
 ipcMain.handle("codeux:pick-directory", async (event, defaultPath: unknown) => {

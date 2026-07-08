@@ -50,6 +50,10 @@ Two listeners:
 
 The stdio transport exists only when stdin is not a TTY. Since the MCP client launches the process, the trust boundary is the same as the launching client.
 
+## Electron desktop shell
+
+The desktop BrowserWindow keeps context isolation, renderer sandboxing, and Node integration disabled. Its preload bridge exposes only fixed dashboard capabilities such as directory selection, zoom, window controls, and the `openUpdates()` action. `openUpdates()` opens the official latest GitHub Releases page for Code UX and does not give renderer code a generic external URL opener.
+
 ## Authentication & authorisation
 
 There is no in-process user model. All authenticated callers (including `manage_code_ux`) have the same level of access — read, mutate, destroy.
