@@ -118,5 +118,7 @@ To optimize for the real query shapes used by the DB-native orchestrator and liv
 - **`idx_provider_invocations_provider_status`**: Optimizes looking up running provider invocations by provider and status.
 - **`idx_task_dispatches_project_executor_status_priority`**: Optimizes retrieving queued task dispatches by project, executor, status, and priority.
 - **`idx_task_runs_task_sprint_session`**: Speeds up finding task runs by task, sprint run, and session.
+- **`idx_task_runs_session_id_owner`**, **`idx_task_runs_session_name_owner`**, and **`idx_task_runs_pr_url_owner`**: Support batched runtime artifact ownership checks by session id, session name, and PR URL without scanning all task runs during large dashboard status syncs.
+- **`idx_provider_invocations_session_owner`**: Supports the matching provider-invocation ownership guard used when a dashboard status payload includes provider session evidence.
 - **`idx_project_attention_items_project_owner_status`**: Optimizes querying active attention items by project, owner type, and status.
 - **`idx_execution_invocations_provider_invocation`**: Speeds up looking up execution invocations by provider invocation id.

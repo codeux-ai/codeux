@@ -12,6 +12,15 @@ import { buildMockSettings } from "../../builders/settings-builder.js";
 import { buildMockSubtask } from "../../builders/subtask-builder.js";
 import * as localMerge from "../../../src/infrastructure/git/local-merge.js";
 
+const CODE_UX_GIT_IDENTITY_PREFIX = [
+  "-c", "user.name=Code UX",
+  "-c", "user.email=agents@codeux.ai",
+];
+
+function isGitMergeCommand(args: string[]): boolean {
+  return args.includes("merge") && !args.includes("--abort");
+}
+
 const buildDeps = () => ({
   heartbeatService: {
     startHeartbeat: vi.fn(),
@@ -1081,7 +1090,7 @@ describe("WatchLoopRunner", () => {
     // First local merge attempt conflicts (worker resolves it); the next succeeds.
     let mergeAttempts = 0;
     vi.mocked(runCommandStrict).mockImplementation(async (_cmd: string, args: string[]) => {
-      if (args[0] === "merge" && args[1] !== "--abort") {
+      if (isGitMergeCommand(args)) {
         mergeAttempts += 1;
         if (mergeAttempts === 1) {
           throw new Error("CONFLICT (add/add): Merge conflict in conflict.md");
@@ -1185,7 +1194,7 @@ describe("WatchLoopRunner", () => {
 
     let mergeAttempts = 0;
     vi.mocked(runCommandStrict).mockImplementation(async (_cmd: string, args: string[]) => {
-      if (args[0] === "merge" && args[1] !== "--abort") {
+      if (isGitMergeCommand(args)) {
         mergeAttempts += 1;
       }
       return { stdout: "", stderr: "" } as any;
@@ -1376,7 +1385,7 @@ describe("WatchLoopRunner", () => {
         currentBranch = args.at(-1) ?? currentBranch;
         return { stdout: "", stderr: "" } as any;
       }
-      if (args[0] === "merge") {
+      if (isGitMergeCommand(args)) {
         return { stdout: "Merge made by the 'ort' strategy.\n", stderr: "" } as any;
       }
       if (args[0] === "rev-parse" && args[1] === "--abbrev-ref") {
@@ -1426,7 +1435,7 @@ describe("WatchLoopRunner", () => {
 
     expect(runCommandStrict).toHaveBeenCalledWith(
       "git",
-      ["merge", "--no-ff", "-m", "Merge branch 'feature/sprint-1' into main", "feature/sprint-1"],
+      [...CODE_UX_GIT_IDENTITY_PREFIX, "merge", "--no-ff", "-m", "Merge branch 'feature/sprint-1' into main", "feature/sprint-1"],
       expect.stringContaining("code-ux-local-merge-"),
       expect.objectContaining({ CODE_UX_GIT_CONTAINER_MODE: "host" }),
     );

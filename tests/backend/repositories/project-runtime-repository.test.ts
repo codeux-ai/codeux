@@ -471,6 +471,103 @@ describe("ProjectRuntimeRepository", () => {
     });
   });
 
+  it("does not downgrade completed merged tasks from stale dashboard snapshots", async () => {
+    const { projectRepository, runtimeRepository } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Merged Runtime Project",
+      sourceType: "local",
+      sourceRef: "/workspace/merged-runtime",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Merged Runtime Sprint",
+      number: 28,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Already merged task",
+      promptMarkdown: "This task already merged.",
+      status: "completed",
+      isMerged: true,
+      mergeIndicator: "MERGED",
+    });
+
+    runtimeRepository.syncDashboardStatus({
+      project_id: project.id,
+      sprint_id: sprint.id,
+      sprint_number: 28,
+      feature_branch: "feature/merged-runtime",
+      subtasks: [
+        {
+          id: "T01",
+          record_id: task.id,
+          title: task.title,
+          prompt: task.promptMarkdown,
+          depends_on: [],
+          is_independent: true,
+          status: "CODING_COMPLETED",
+          is_merged: false,
+          merge_indicator: "CI",
+        },
+      ],
+      reportText: "Stale cycle still sees the task waiting on CI.",
+    });
+
+    const persistedTask = projectRepository.getTask(task.id);
+    expect(persistedTask?.status).toBe("completed");
+    expect(persistedTask?.isMerged).toBe(true);
+    expect(persistedTask?.mergeIndicator).toBe("MERGED");
+  });
+
+  it("does not downgrade coding-completed tasks from older pending or running snapshots", async () => {
+    const { projectRepository, runtimeRepository } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Code Complete Runtime Project",
+      sourceType: "local",
+      sourceRef: "/workspace/code-complete-runtime",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Code Complete Runtime Sprint",
+      number: 29,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Already code complete",
+      promptMarkdown: "This task already finished coding.",
+      status: "coding_completed",
+      mergeIndicator: "CI",
+    });
+
+    for (const status of ["RUNNING", "PENDING"] as const) {
+      runtimeRepository.syncDashboardStatus({
+        project_id: project.id,
+        sprint_id: sprint.id,
+        sprint_number: 29,
+        subtasks: [
+          {
+            id: "T01",
+            record_id: task.id,
+            title: task.title,
+            prompt: task.promptMarkdown,
+            depends_on: [],
+            is_independent: true,
+            status,
+            provider: status === "RUNNING" ? "mockup-cli" : undefined,
+            session_id: status === "RUNNING" ? "stale-running-session" : undefined,
+          },
+        ],
+        reportText: `Stale cycle reports ${status}.`,
+      });
+
+      expect(projectRepository.getTask(task.id)?.status).toBe("coding_completed");
+    }
+  });
+
   it("preserves active sprint-run status when dashboard snapshots have no running subtasks", async () => {
     const { executionRepository, projectRepository, runtimeRepository } = await createRepositories();
 

@@ -479,19 +479,19 @@ export class WatchLoopRunner {
     const {
       scopedExecutionContext, sprintRunId, repoPath, defaultFeatureBranch, defaultBranch,
       featureBranchPrefix, githubMode, ciIntelligence, subtasks, runningTasks, readyTasks,
-      manualMergeTasks, needsManualMerge, allTasksSettled, allTerminal, noMoreActionPossible
+      manualMergeTasks, needsManualMerge, allTasksSettled, allTerminal, noMoreActionPossible,
+      activeMainMergeAttentionItems,
     } = params;
 
     let report = "";
-    const mainMergeAttentionItems = collectActiveMainMergeAttentionItems(
-      this.deps.projectAttentionService,
-      scopedExecutionContext.project.id,
-      {
-        sprintId: scopedExecutionContext.sprint.id,
-        sprintRunId,
-        sourceBranch: defaultFeatureBranch,
-        targetBranch: defaultBranch,
-      },
+    const mainMergeScope = {
+      sprintId: scopedExecutionContext.sprint.id,
+      sprintRunId,
+      sourceBranch: defaultFeatureBranch,
+      targetBranch: defaultBranch,
+    };
+    const mainMergeAttentionItems = activeMainMergeAttentionItems.filter((item) =>
+      isMainMergeAttentionInScope(item, mainMergeScope)
     );
     const allTasksSettledForFinalization = allTasksSettled ?? (
       subtasks.length > 0
@@ -632,12 +632,7 @@ export class WatchLoopRunner {
           resolveMainMergeAttentionItems(
             this.deps.projectAttentionService,
             scopedExecutionContext.project.id,
-            {
-              sprintId: scopedExecutionContext.sprint.id,
-              sprintRunId,
-              sourceBranch: defaultFeatureBranch,
-              targetBranch: defaultBranch,
-            },
+            mainMergeScope,
             {
               kinds: ["merge_conflict"],
               reason: "main_merge_conflict_cleared",
@@ -697,12 +692,7 @@ export class WatchLoopRunner {
           resolveMainMergeAttentionItems(
             this.deps.projectAttentionService,
             scopedExecutionContext.project.id,
-            {
-              sprintId: scopedExecutionContext.sprint.id,
-              sprintRunId,
-              sourceBranch: defaultFeatureBranch,
-              targetBranch: defaultBranch,
-            },
+            mainMergeScope,
             {
               kinds: ["ci_fix_required"],
               reason: "main_merge_checks_passed",
@@ -713,12 +703,7 @@ export class WatchLoopRunner {
         const remainingMainMergeAttentionItems = collectActiveMainMergeAttentionItems(
           this.deps.projectAttentionService,
           scopedExecutionContext.project.id,
-          {
-            sprintId: scopedExecutionContext.sprint.id,
-            sprintRunId,
-            sourceBranch: defaultFeatureBranch,
-            targetBranch: defaultBranch,
-          },
+          mainMergeScope,
         );
         const mainMergeMode = ciIntelligence.mainBranchAutoMergeMode;
         const decision = decideMainMergeWaitOrPause({
@@ -855,12 +840,7 @@ export class WatchLoopRunner {
             resolveMainMergeAttentionItems(
               this.deps.projectAttentionService,
               scopedExecutionContext.project.id,
-              {
-                sprintId: scopedExecutionContext.sprint.id,
-                sprintRunId,
-                sourceBranch: defaultFeatureBranch,
-                targetBranch: defaultBranch,
-              },
+              mainMergeScope,
               {
                 kinds: ["merge_conflict", "ci_fix_required"],
                 reason: "main_merge_completed",

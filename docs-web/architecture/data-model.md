@@ -282,6 +282,8 @@ Primary indexes (besides PKs):
 - `subtasks.sprintId`
 - `subtasks.status` (for "currently RUNNING" queries)
 - `task_runs.taskId`
+- `task_runs.sessionId`, `task_runs.sessionName`, and `task_runs.prUrl` with owner columns for batched runtime artifact ownership checks
+- `provider_invocations.sessionId` with owner columns for provider-session ownership checks
 - `task_dispatches.taskRunId, startedAt`
 - `execution_invocations.projectId, sprintRunId, at`
 - `memories.projectId, embeddingModelId`
