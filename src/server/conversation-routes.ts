@@ -1,11 +1,54 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute, syncRoute } from "./route-utils.js";
-import { requireTrimmedString, parseThreadRouteInput, parseCreateConversationThreadInput, parseUpdateConversationThreadInput, parseCreateDashboardConversationMessageInput } from "./request-parsers.js";
+import {
+  requireTrimmedString,
+  parseThreadRouteInput,
+  parseCreateConversationThreadInput,
+  parseUpdateConversationThreadInput,
+  parseCreateDashboardConversationMessageInput,
+  parseConversationDraftQuery,
+  parseUpsertConversationDraftInput,
+} from "./request-parsers.js";
+
+const DASHBOARD_USER_HEADER = "x-codeux-dashboard-user-id";
+
+function requireDashboardUserId(value: unknown): string {
+  return requireTrimmedString(value, DASHBOARD_USER_HEADER);
+}
 
 export function registerConversationRoutes(app: Express, options: DashboardDependencies): void {
   app.get("/api/projects/:projectId/conversations/threads", syncRoute((req, res) => {
     res.json(options.listConversationThreads(requireTrimmedString(req.params.projectId, "projectId")));
+  }));
+
+  app.get("/api/projects/:projectId/conversations/draft", syncRoute((req, res) => {
+    if (!options.getConversationDraft) {
+      res.status(404).json({ error: "Conversation draft storage is not enabled." });
+      return;
+    }
+    const { contextKey } = parseConversationDraftQuery(req.query);
+    res.json(options.getConversationDraft(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      {
+        userId: requireDashboardUserId(req.header(DASHBOARD_USER_HEADER)),
+        contextKey,
+      }
+    ) ?? null);
+  }));
+
+  app.put("/api/projects/:projectId/conversations/draft", syncRoute((req, res) => {
+    if (!options.upsertConversationDraft) {
+      res.status(404).json({ error: "Conversation draft storage is not enabled." });
+      return;
+    }
+    res.json(options.upsertConversationDraft(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      parseUpsertConversationDraftInput(
+        req.body,
+        requireDashboardUserId(req.header(DASHBOARD_USER_HEADER))
+      )
+    ) ?? null);
   }));
 
   app.post("/api/projects/:projectId/conversations/threads", syncRoute((req, res) => {

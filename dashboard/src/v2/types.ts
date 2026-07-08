@@ -14,6 +14,7 @@ import type {
 } from "../../../src/contracts/invocation-types.js";
 import type {
   ConnectionInboxMessage,
+  ConversationDraftRecord,
   ConversationMessageRecord,
   ConversationThreadRecord,
   ConversationRuntimeState,
@@ -21,6 +22,7 @@ import type {
   DashboardCreateAppQuickactionMetadata,
   CreateConversationThreadInput,
   CreateDashboardConversationMessageInput,
+  UpsertConversationDraftInput,
   McpConnectionCapabilities,
   McpConnectionRecord,
   McpConnectionRole,
@@ -215,6 +217,7 @@ export type AgentConnection = McpConnectionRecord;
 export type AgentPreset = AgentPresetRecord;
 export type ChatThread = ConversationThreadRecord;
 export type ChatMessageRecord = ConversationMessageRecord;
+export type ChatDraftRecord = ConversationDraftRecord;
 export type {
   CreateCustomDashboardDraftInput,
   CreateCustomDashboardRevisionInput,
@@ -340,6 +343,7 @@ export type {
   PlanSprintOptions,
   PlanningOverrides,
   ConnectionInboxMessage,
+  ConversationDraftRecord,
   ConversationMessageRecord,
   ConversationThreadRecord,
   ConversationRuntimeState,
@@ -391,6 +395,7 @@ export type {
   ProjectExecutionStatsSnapshot,
   ProjectStatsQuery,
   ProjectStatsWindow,
+  UpsertConversationDraftInput,
   UpdateConversationThreadInput,
   UpdateConversationThreadRouteInput,
   TaskExecutorType,

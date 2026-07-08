@@ -213,6 +213,60 @@ describe("ConnectionChatRepository", () => {
     });
   });
 
+  it("stores chat drafts per user, project, and context without cross-contamination", async () => {
+    const { projectRepository, connectionRepository } = await createRepositories();
+    const projectOne = projectRepository.createProject({
+      name: "Draft Project One",
+      sourceType: "local",
+      sourceRef: "/tmp/draft-one",
+    });
+    const projectTwo = projectRepository.createProject({
+      name: "Draft Project Two",
+      sourceType: "local",
+      sourceRef: "/tmp/draft-two",
+    });
+    const threadOne = connectionRepository.createThread(projectOne.id, {
+      title: "Thread One",
+    });
+    const threadTwo = connectionRepository.createThread(projectTwo.id, {
+      title: "Thread Two",
+    });
+
+    const contextKey = `thread:${threadOne.id}`;
+    connectionRepository.upsertDraft(projectOne.id, {
+      userId: "user-a",
+      contextKey,
+      bodyMarkdown: "User A draft",
+    });
+    connectionRepository.upsertDraft(projectOne.id, {
+      userId: "user-b",
+      contextKey,
+      bodyMarkdown: "User B draft",
+    });
+    connectionRepository.upsertDraft(projectTwo.id, {
+      userId: "user-a",
+      contextKey: `thread:${threadTwo.id}`,
+      bodyMarkdown: "Project two draft",
+    });
+
+    expect(connectionRepository.getDraft(projectOne.id, { userId: "user-a", contextKey })?.bodyMarkdown).toBe("User A draft");
+    expect(connectionRepository.getDraft(projectOne.id, { userId: "user-b", contextKey })?.bodyMarkdown).toBe("User B draft");
+    expect(connectionRepository.getDraft(projectTwo.id, { userId: "user-a", contextKey: `thread:${threadTwo.id}` })?.bodyMarkdown).toBe("Project two draft");
+    expect(() => connectionRepository.upsertDraft(projectTwo.id, {
+      userId: "user-a",
+      contextKey,
+      bodyMarkdown: "Wrong project",
+    })).toThrow(`Thread ${threadOne.id} does not belong to project ${projectTwo.id}`);
+
+    expect(connectionRepository.upsertDraft(projectOne.id, {
+      userId: "user-a",
+      contextKey,
+      bodyMarkdown: "",
+    })).toBeNull();
+    expect(connectionRepository.getDraft(projectOne.id, { userId: "user-a", contextKey })).toBeNull();
+    expect(connectionRepository.getDraft(projectOne.id, { userId: "user-b", contextKey })?.bodyMarkdown).toBe("User B draft");
+  });
+
   it("stores system-authored project messages without creating worker inbox backlog", async () => {
     const { projectRepository, connectionRepository } = await createRepositories();
     const project = projectRepository.createProject({

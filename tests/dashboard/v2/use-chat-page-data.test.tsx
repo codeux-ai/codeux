@@ -6,13 +6,22 @@ import { useChatThreadData } from "../../../dashboard/src/v2/hooks/use-chat-thre
 import { useChatPageResources } from "../../../dashboard/src/v2/hooks/use-chat-page-resources.js";
 import { useInvocationPaneData, areInvocationMessagesEqual } from "../../../dashboard/src/v2/hooks/use-invocation-pane-data.js";
 import { renderHook, act, waitFor } from "@testing-library/preact";
-import { cancelThreadTurn, createConversationThread, postConversationMessage } from "../../../dashboard/src/v2/lib/connection-api.js";
+import {
+  cancelThreadTurn,
+  createConversationThread,
+  fetchConversationDraft,
+  postConversationMessage,
+  upsertConversationDraft,
+} from "../../../dashboard/src/v2/lib/connection-api.js";
 import { fetchInvocationMessages, fetchProjectInvocations } from "../../../dashboard/src/v2/lib/invocation-api.js";
 
 // Mock connection-api calls to prevent external requests
 vi.mock("../../../dashboard/src/v2/lib/connection-api.js", () => ({
   fetchConversationMessages: vi.fn(() => Promise.resolve([])),
   fetchConversationThreads: vi.fn(() => Promise.resolve([])),
+  fetchConversationDraft: vi.fn(() => Promise.resolve(null)),
+  getOrCreateDashboardDraftUserId: vi.fn(() => "dashboard-user-test"),
+  upsertConversationDraft: vi.fn(() => Promise.resolve(null)),
   postConversationMessage: vi.fn((projectId, data) => Promise.resolve({
     id: "msg-new",
     threadId: data.threadId,
@@ -50,6 +59,7 @@ vi.mock("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js", () =
 
 describe("useChatPageResources integration", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
     mockRealtimeCallback = null;
   });
@@ -128,6 +138,43 @@ describe("useChatPageResources integration", () => {
 
     expect(result.current.threadData.messages.length).toBe(1);
     expect(result.current.threadData.messages[0].id).toBe("msg-1");
+  });
+
+  it("restores and debounces the active project chat draft", async () => {
+    vi.mocked(fetchConversationDraft).mockResolvedValueOnce({
+      userId: "dashboard-user-test",
+      projectId: "proj-1",
+      contextKey: "new-thread",
+      bodyMarkdown: "Restored draft",
+      createdAt: "2026-03-10T12:00:00.000Z",
+      updatedAt: "2026-03-10T12:00:00.000Z",
+    });
+
+    const { result } = renderHook(() => {
+      const cache = useMessageCache();
+      return useChatThreadData({
+        selectedProject: { id: "proj-1" },
+        cache,
+        execution: null,
+        workerRouting: null,
+      });
+    });
+
+    await waitFor(() => expect(result.current.input).toBe("Restored draft"));
+    expect(fetchConversationDraft).toHaveBeenCalledWith("proj-1", {
+      userId: "dashboard-user-test",
+      contextKey: "new-thread",
+    });
+
+    await act(async () => {
+      result.current.setInput("Edited draft");
+    });
+
+    await waitFor(() => expect(upsertConversationDraft).toHaveBeenCalledWith("proj-1", {
+      userId: "dashboard-user-test",
+      contextKey: "new-thread",
+      bodyMarkdown: "Edited draft",
+    }));
   });
 
   it("updates cached dashboard messages in the same thread to processed when a later connection reply is upserted", async () => {
