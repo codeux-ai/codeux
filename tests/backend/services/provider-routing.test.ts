@@ -77,14 +77,13 @@ describe("Provider Routing Logic", () => {
       expect(result).toBe("gemini");
     });
 
-    it("falls back to first enabled provider if selected one is disabled", () => {
-      const result = strategy.choose({
+    it("throws if the selected manual provider is unavailable", () => {
+      expect(() => strategy.choose({
         strategy: "MANUAL",
         manualProvider: "claude-code",
         providers: buildProviders({ "claude-code": false }),
         enabledProviders: ["jules"],
-      }, mockTask());
-      expect(result).toBe("jules");
+      }, mockTask())).toThrow("Manual provider routing selected an unavailable provider instance.");
     });
   });
 
@@ -169,20 +168,16 @@ describe("Provider Routing Logic", () => {
   });
 
   describe("resolveProviderForInvocation", () => {
-  it("filters out jules when githubMode is LOCAL", () => {
+  it("throws when a manual route selects Jules in LOCAL git mode", () => {
     const settings = mockSettings("AGENT", "jules", { jules: true, gemini: true });
     settings.git.githubMode = "LOCAL";
-    const result = resolveProviderForInvocation(settings, {
+    expect(() => resolveProviderForInvocation(settings, {
       invocation: "task_coding",
       task: mockTask(),
-    });
-    // jules is explicitly disabled because LOCAL mode, so it should fallback to the next provider
-    expect(result.provider).not.toBe("jules");
-    expect(result.enabledProviders).not.toContain("jules");
-    expect(result.enabledProviders).toContain("gemini");
+    })).toThrow(/Jules is unavailable in LOCAL git mode/);
   });
     it("uses an agent provider and model when the route strategy is Agent", () => {
-      const settings = mockSettings("AGENT", "jules", { gemini: true, opencode: false });
+      const settings = mockSettings("AGENT", "jules", { gemini: true, opencode: true });
       settings.aiProvider.invocationRouting.dashboard_reply = {
         ...settings.aiProvider.invocationRouting.dashboard_reply,
         profile: "WORKER",
@@ -305,7 +300,7 @@ describe("Provider Routing Logic", () => {
       expect(result.enabledProviders).toContain("qwen-code");
     });
 
-    it("treats a manually selected route provider as eligible even when the base provider is disabled", () => {
+    it("requires an explicitly selected route provider to be eligible", () => {
       const settings = mockSettings("MANUAL", "jules", { gemini: true, opencode: false });
       settings.aiProvider.invocationRouting.dashboard_reply = {
         ...settings.aiProvider.invocationRouting.dashboard_reply,
@@ -315,6 +310,29 @@ describe("Provider Routing Logic", () => {
         allowedProviders: [],
         providers: {
           opencode: {
+            model: "openai/gpt-5",
+          },
+        },
+      };
+
+      expect(() => resolveProviderForInvocation(settings, {
+        invocation: "dashboard_reply",
+        task: mockTask({ prompt: "Reply to the dashboard thread" }),
+        providerPool: ["gemini", "codex", "claude-code", "qwen-code", "opencode"],
+      })).toThrow(/selected opencode, but it is not eligible/);
+    });
+
+    it("allows a route to explicitly enable a disabled provider instance", () => {
+      const settings = mockSettings("MANUAL", "jules", { gemini: true, opencode: false });
+      settings.aiProvider.invocationRouting.dashboard_reply = {
+        ...settings.aiProvider.invocationRouting.dashboard_reply,
+        profile: "WORKER",
+        strategy: "MANUAL",
+        provider: "opencode",
+        allowedProviders: [],
+        providers: {
+          opencode: {
+            enabled: true,
             model: "openai/gpt-5",
           },
         },
@@ -347,14 +365,41 @@ describe("Provider Routing Logic", () => {
         },
       };
 
-      const result = resolveProviderForInvocation(settings, {
+      expect(() => resolveProviderForInvocation(settings, {
         invocation: "dashboard_reply",
         task: mockTask({ prompt: "Reply to the dashboard thread" }),
         providerPool: ["gemini", "codex", "claude-code", "qwen-code", "opencode"],
-      });
+      })).toThrow(/selected opencode, but it is not eligible/);
+    });
 
-      expect(result.provider).toBe("gemini");
-      expect(result.enabledProviders).not.toContain("opencode");
+    it("throws instead of falling back when an inherited manual primary provider is disabled", () => {
+      const settings = mockSettings("MANUAL", "gemini", { gemini: true });
+      settings.aiProvider.providers["claude-code-local"] = {
+        provider: "claude-code",
+        name: "Claude Local",
+        enabled: false,
+        model: "default",
+        apiKey: "",
+        weight: 0,
+        thinkingMode: "HIGH",
+        customBaseUrl: "http://localhost:1234/v1",
+        customModel: "local-model",
+      } as ProviderSettings;
+      settings.aiProvider.provider = "claude-code-local";
+      settings.aiProvider.invocationRouting.planning = {
+        ...settings.aiProvider.invocationRouting.planning,
+        profile: "GLOBAL",
+        strategy: "MANUAL",
+        provider: null,
+        allowedProviders: ["gemini"],
+        providers: {},
+      };
+
+      expect(() => resolveProviderForInvocation(settings, {
+        invocation: "planning",
+        task: mockTask({ prompt: "Plan the next sprint" }),
+        providerPool: ["gemini", "codex", "claude-code"],
+      })).toThrow(/Invocation planning selected Claude Local \(claude-code-local\), but it is not eligible because that provider instance is disabled/);
     });
 
     it.each([
@@ -443,15 +488,14 @@ describe("Provider Routing Logic", () => {
   });
 
   describe("chooseProviderForTask", () => {
-    it("handles no enabled providers by returning jules", () => {
+    it("throws when no provider instances are eligible", () => {
       const settings = mockSettings("MANUAL", "gemini", {
         jules: false,
         gemini: false,
         codex: false,
         "claude-code": false,
       });
-      const result = chooseProviderForTask(settings, mockTask());
-      expect(result).toBe("jules");
+      expect(() => chooseProviderForTask(settings, mockTask())).toThrow(/selected gemini, but it is not eligible/);
     });
 
     it("ignores the legacy global strategy and uses the route strategy", () => {

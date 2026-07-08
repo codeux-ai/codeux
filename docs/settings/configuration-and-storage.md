@@ -300,7 +300,7 @@ Dashboard behavior:
     - `provider` (`ProviderConfigId|null`)
       - `null` means "inherit the profile default provider"
     - `allowedProviders` (`ProviderConfigId[]`)
-      - empty means "all enabled provider instances remain eligible"
+      - constrains weighted or agent-provider route pools; empty pools fail closed to the selected or inherited provider instead of opening to every enabled provider
     - `providers` sparse override map keyed by provider config id
       - supports per-invocation overrides for `enabled`, `model`, `weight`, and `thinkingMode`
   - default profiles:

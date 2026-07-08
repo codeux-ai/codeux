@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import { HttpRouteError } from "../../../src/server/http-errors.js";
 import { syncRoute, asyncRoute } from "../../../src/server/route-utils.js";
 import { EntityNotFoundError, ValidationError } from "../../../src/repositories/repository-utils.js";
+import { ProviderRoutingError } from "../../../src/services/provider-routing-error.js";
 
 function createMockResponse(): { res: Response; jsonSpy: any; statusSpy: any } {
   const jsonSpy = vi.fn();
@@ -75,6 +76,13 @@ describe("route-utils", () => {
         error: new HttpRouteError(403, "Forbidden path"),
         status: 403,
         body: { error: "Forbidden path" },
+        delegatesToNext: false,
+      },
+      {
+        label: "ProviderRoutingError",
+        error: new ProviderRoutingError("Invocation planning selected Claude Local, but it is not eligible because that provider instance is disabled."),
+        status: 409,
+        body: { error: "Invocation planning selected Claude Local, but it is not eligible because that provider instance is disabled." },
         delegatesToNext: false,
       },
       {

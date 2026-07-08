@@ -1,6 +1,7 @@
 import { buildProviderSettingsOverride } from "./provider-settings-override.js";
 import type { JulesApiClient, JulesCreateSessionRequest } from "../integrations/jules-api-client.js";
 import { resolveProviderForInvocation, type ResolvedProviderRoute } from "./provider-routing.js";
+import { ProviderRoutingError } from "./provider-routing-error.js";
 import type {
   DashboardSettings,
   DashboardSettingsScope,
@@ -113,33 +114,18 @@ export class TaskService {
       providerPool,
       agentProvider: options?.agentProvider,
     });
-    const getEnabledProviderTypes = (resolvedRoute: ResolvedProviderRoute): ProviderId[] => (
-      resolvedRoute.enabledProviders
-        .map((providerConfigId) => resolvedRoute.providers[providerConfigId]?.provider)
-        .filter((providerId): providerId is ProviderId => Boolean(providerId))
-    );
 
     const pooledProviders = options?.providerPool;
-    let resolved = buildRoute(pooledProviders);
+    const resolved = buildRoute(pooledProviders);
 
     if (resolved.provider === "jules" && !this.deps.isJulesApiConfigured()) {
-      const fallbackPool = getEnabledProviderTypes(resolved).filter((providerId) => providerId !== "jules");
-      if (fallbackPool.length > 0) {
-        resolved = buildRoute(fallbackPool);
-      }
+      throw new ProviderRoutingError(`Invocation ${invocation} selected Jules, but the Jules API is not configured. Enable Jules credentials or choose a different provider for this route.`);
     }
 
     const requiresCli = options?.cliOnly || settings.git.githubMode === "LOCAL";
 
     if (requiresCli && resolved.provider === "jules") {
-      const fallbackPool = getEnabledProviderTypes(resolved).filter((providerId) => providerId !== "jules");
-      if (fallbackPool.length > 0) {
-        resolved = buildRoute(fallbackPool);
-      }
-    }
-
-    if (requiresCli && resolved.provider === "jules") {
-      throw new Error(`Invocation ${invocation} requires a CLI provider, but no eligible CLI provider is enabled.`);
+      throw new ProviderRoutingError(`Invocation ${invocation} selected Jules, but this context requires a CLI provider. Choose an eligible CLI provider for this route.`);
     }
 
     return resolved;
@@ -289,7 +275,7 @@ export class TaskService {
       ? route.providers[rerunOptions.providerConfigId]
       : undefined;
     if (rerunOptions?.providerConfigId && !rerunProviderSettings) {
-      throw new Error(`Task requested provider instance ${rerunOptions.providerConfigId}, but no matching provider settings were available.`);
+      throw new ProviderRoutingError(`Task requested provider instance ${rerunOptions.providerConfigId}, but no matching provider settings were available.`);
     }
     const provider = rerunProviderSettings?.provider || task.provider || route.provider;
     const selectedProviderConfigId = rerunOptions?.providerConfigId
