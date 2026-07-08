@@ -55,7 +55,7 @@ Mode-specific navigation:
 - **Standard**: Chat, Overview, Sprints, Tasks, Agents, Stats, Browser, Docs, and Settings/Config.
 - **Expert**: the full set: Chat, Overview, Sprints, Tasks, Agents, Stats, Schedule, Memory, Knowledge, Browser, Files, Live, Docs, and Settings/Config.
 
-The Settings route is labeled **Settings** in the sidebar and **Config** in the dock. Docs is an external navigation item. Browser still obeys the existing sprint-preview and in-app browser visibility checks; hidden mode-filtered routes remain registered routes rather than being removed from the app.
+The Chat item is an internal operational route and must link directly to `/chat` in both sidebar and dock navigation modes. It must not link to `/docs`, `/docs/chat`, external documentation, or any placeholder page. The Settings route is labeled **Settings** in the sidebar and **Config** in the dock. Docs is an external navigation item. Browser still obeys the existing sprint-preview and in-app browser visibility checks; hidden mode-filtered routes remain registered routes rather than being removed from the app.
 
 ### 6. Hover and Active Indicators
 - **Motion Tokens:** Shell navigation must use the interaction contracts in `dashboard/src/v2/lib/motion`. Use `controlFeedback` for hover, focus, icon color, and label feedback; `selectionMovement` for active route backgrounds, vertical markers, and minimized/expanded label reveal; and `enterExit` for mobile drawer and backdrop transitions.
@@ -85,6 +85,7 @@ The Settings route is labeled **Settings** in the sidebar and **Config** in the 
 
 - Desktop and mobile sidebar landmarks must have distinct accessible names. Mobile sidebars use dialog semantics only while open, with the inner workspace navigation named separately from the outer dialog.
 - Every shell route link keeps a stable accessible name even when rendered icon-only or visually minimized. Active route links use `aria-current="page"`; hidden tooltip labels remain `aria-hidden`.
+- Chat remains available as `/chat` in both dock and sidebar navigation modes, including minimized/icon-only shell states. Treat this as a regression guard: navigation refactors must not replace it with a docs link or placeholder route.
 - Mobile sidebar drawers close through the backdrop, route selection, and Escape. Closing must restore focus to the opener when it is still connected and usable, otherwise to the route page fallback.
 - Page route containers that need route-change or overlay-close focus recovery must provide a specific accessible name through `aria-label` or `aria-labelledby`. `PageContainer` only applies the named `region`, `data-focus-fallback`, and fallback `tabIndex=-1` when that name is present; unlabeled layout wrappers must stay out of the landmark list instead of exposing a generic "Page content" region.
 - Fixed bottom dock containers must stay inside their own horizontal scroll boundary, account for `env(safe-area-inset-bottom)`, and preserve visible Signal Jade focus rings at the viewport edges.

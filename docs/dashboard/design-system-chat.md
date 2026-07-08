@@ -1,7 +1,7 @@
 # Chat Design System
 
 ## Overview
-The chat and invocation design system for the Code UX dashboard defines the layout, visual hierarchy, and interaction patterns for conversational components. It aims to create a highly readable, coherent, and professional interface for users to interact with AI agents and inspect runtime transcripts.
+The chat and invocation design system for the Code UX dashboard defines the layout, visual hierarchy, and interaction patterns for conversational components. The operational Chat page lives at `/chat`; it renders project conversation threads plus execution invocation transcripts in the dashboard rather than sending users to documentation or a placeholder page. It aims to create a highly readable, coherent, and professional interface for users to interact with AI agents and inspect runtime transcripts.
 
 ## Layout and Hierarchy
 - **Page Shell**: The `ChatPageShell` acts as the root container, orchestrating the global layout. On large screens (`lg`), it uses a CSS Grid structure with a fixed-width side rail (`360px`) and a fluid main conversation area. This prevents content shifting and maintains a stable rhythm. The shell, split pane, rail, and detail panel are height-bounded with internal scrolling so switching through invocation transcripts cannot grow the `/chat` page or create blank page-level overflow. Container panels use standard `rounded-3xl` for high-level structure and `rounded-2xl` for internal boundaries like the composer.
@@ -62,6 +62,7 @@ Agent replies are ordinary markdown; embedding a fenced block renders a designed
 
 ## Interaction
 - Seamless mode switching between the cinematic "3D Chat" stage, standard "Threads" (user-facing chat), and "Invocations" (runtime debugging transcript).
+- Shell Chat links must open `/chat` directly so users can reach the same Threads and Invocations surface from either sidebar or dock navigation mode.
 - Consistent padding and gap spacing to prevent layout jitter during these transitions.
 - Threads mode keeps **Create Desktop App** and **Create Web App** quickactions next to the composer, including the empty-thread state. These controls are plain keyboard-reachable buttons with visible labels and lucide icons (`Monitor`, `Globe2`), disable while a send is in flight or no project is selected, and post short visible messages with `create_app` metadata instead of opening confirmation dialogs or switching to Invocations. Each button uses its visible label as the accessible name, points `aria-describedby` to a hidden per-action description and a shared polite status region, and keeps stable dimensions so the composer area does not jump when disabled or when the thread is created on demand.
 - Threads mode includes the shared `SpeechInputButton` beside the send control in the composer action row. Successful transcripts insert into the current draft at the textarea caret when the selection is available, otherwise they append to the draft with a single whitespace boundary when needed, then focus and resize the textarea to its content height. Speech recording disables while sending or when no project-scoped composer is available. Invocation transcripts remain read-only and never show microphone controls.
