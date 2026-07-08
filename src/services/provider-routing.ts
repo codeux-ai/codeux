@@ -8,6 +8,7 @@ import type {
   Subtask,
 } from "../contracts/app-types.js";
 import { AI_MODEL_CATALOG, DEFAULT_INVOCATION_ROUTING } from "../repositories/settings-defaults.js";
+import { ProviderRoutingError } from "./provider-routing-error.js";
 
 interface RoutingDecisionContext {
   strategy: ProviderStrategy;
@@ -119,17 +120,6 @@ const chooseWeightedConfig = (
   return weighted[weighted.length - 1]!.providerConfigId;
 };
 
-const getEmergencyFallbackProvider = (
-  context: RoutingDecisionContext,
-): ProviderConfigId => (
-  context.enabledProviders.find((providerConfigId) => getProviderType(context.providers, providerConfigId) === "jules")
-  || Object.keys(context.providers).find((providerConfigId) => getProviderType(context.providers, providerConfigId) === "jules")
-  || context.manualProvider
-  || context.enabledProviders[0]
-  || Object.keys(context.providers)[0]
-  || "jules"
-);
-
 export const resolveWorkerModelForProvider = (
   provider: Exclude<ProviderId, "jules">,
   workerModel: string | null | undefined,
@@ -169,7 +159,6 @@ const buildRouteProviders = (
     const workerProviderType = providers[inheritedManualProvider].provider;
     providers[inheritedManualProvider] = {
       ...providers[inheritedManualProvider],
-      enabled: true,
       model: workerProviderType === "jules"
         ? providers[inheritedManualProvider].model
         : resolveWorkerModelForProvider(
@@ -193,13 +182,6 @@ const buildRouteProviders = (
     };
   }
 
-  if (route.provider && providers[route.provider] && route.providers[route.provider]?.enabled !== false) {
-    providers[route.provider] = {
-      ...providers[route.provider],
-      enabled: true,
-    };
-  }
-
   const agentProviderConfigId = route.strategy === "AGENT"
     ? agentProvider?.providerConfigId?.trim() || null
     : null;
@@ -210,7 +192,6 @@ const buildRouteProviders = (
   if (agentProviderConfigId && providers[agentProviderConfigId] && route.providers[agentProviderConfigId]?.enabled !== false) {
     providers[agentProviderConfigId] = {
       ...providers[agentProviderConfigId],
-      enabled: true,
       ...(agentModel && agentModel !== "default" ? { model: agentModel } : {}),
     };
   }
@@ -269,27 +250,69 @@ const getEnabledProviders = (
     [routePrimary.manualProvider, routePrimary.agentProviderConfigId]
       .filter((providerConfigId): providerConfigId is ProviderConfigId => Boolean(providerConfigId)),
   ));
-  // If none of the designated providers are eligible (e.g. the primary is the
-  // LOCAL-disabled jules), fall back to the full enabled set so routing still resolves a
-  // provider rather than dead-ending in the emergency fallback.
-  return failClosed.length > 0 ? failClosed : filterWith(null);
+  return failClosed;
+};
+
+const getProviderDisplayName = (
+  providers: Record<ProviderConfigId, ProviderSettings>,
+  providerConfigId: ProviderConfigId,
+): string => {
+  const name = providers[providerConfigId]?.name?.trim();
+  return name ? `${name} (${providerConfigId})` : providerConfigId;
+};
+
+const assertProviderIsEligible = (
+  settings: DashboardSettings,
+  input: ResolveProviderForInvocationInput,
+  providers: Record<ProviderConfigId, ProviderSettings>,
+  enabledProviders: ProviderConfigId[],
+  providerConfigId: ProviderConfigId | null | undefined,
+  source: "manual" | "agent",
+): void => {
+  if (!providerConfigId) {
+    throw new ProviderRoutingError(`Invocation ${input.invocation} uses ${source} provider routing, but no provider instance is selected.`);
+  }
+
+  const providerSettings = providers[providerConfigId];
+  if (!providerSettings) {
+    throw new ProviderRoutingError(`Invocation ${input.invocation} selected provider instance "${providerConfigId}", but it is not configured.`);
+  }
+
+  const providerType = providerSettings.provider || inferProviderTypeFromConfigId(providerConfigId) || "jules";
+  const providerLabel = getProviderDisplayName(providers, providerConfigId);
+
+  if (settings.git.githubMode === "LOCAL" && providerType === "jules") {
+    throw new ProviderRoutingError(`Invocation ${input.invocation} selected ${providerLabel}, but Jules is unavailable in LOCAL git mode. Select an eligible CLI provider for this route.`);
+  }
+
+  if (input.providerPool && !input.providerPool.includes(providerType)) {
+    throw new ProviderRoutingError(`Invocation ${input.invocation} selected ${providerLabel}, but provider type "${providerType}" is unavailable for this invocation.`);
+  }
+
+  if (!enabledProviders.includes(providerConfigId)) {
+    const disabledSuffix = providerSettings.enabled === false
+      ? " because that provider instance is disabled"
+      : "";
+    throw new ProviderRoutingError(`Invocation ${input.invocation} selected ${providerLabel}, but it is not eligible${disabledSuffix}. Enable it for this route or choose a different provider.`);
+  }
 };
 
 export class ManualRoutingStrategy implements ProviderRoutingStrategy {
   choose(context: RoutingDecisionContext, _task: Subtask): ProviderConfigId {
     if (context.enabledProviders.length === 0) {
-      return getEmergencyFallbackProvider(context);
+      throw new ProviderRoutingError("Manual provider routing has no eligible provider instances.");
     }
-    return context.manualProvider && context.enabledProviders.includes(context.manualProvider)
-      ? context.manualProvider
-      : context.enabledProviders[0]!;
+    if (!context.manualProvider || !context.enabledProviders.includes(context.manualProvider)) {
+      throw new ProviderRoutingError("Manual provider routing selected an unavailable provider instance.");
+    }
+    return context.manualProvider;
   }
 }
 
 export class WeightedRoutingStrategy implements ProviderRoutingStrategy {
   choose(context: RoutingDecisionContext, task: Subtask): ProviderConfigId {
     if (context.enabledProviders.length === 0) {
-      return getEmergencyFallbackProvider(context);
+      throw new ProviderRoutingError("Weighted provider routing has no eligible provider instances.");
     }
     return chooseWeightedConfig(context.providers, context.enabledProviders, task);
   }
@@ -300,7 +323,7 @@ export class AgentRoutingStrategy implements ProviderRoutingStrategy {
 
   choose(context: RoutingDecisionContext, task: Subtask): ProviderConfigId {
     if (context.enabledProviders.length === 0) {
-      return getEmergencyFallbackProvider(context);
+      throw new ProviderRoutingError("Agent provider routing has no eligible provider instances.");
     }
 
     if (context.agentProvider && context.enabledProviders.includes(context.agentProvider)) {
@@ -342,6 +365,21 @@ export const resolveProviderForInvocation = (
     providers: base.providers,
     enabledProviders,
   };
+
+  if (strategy === "MANUAL") {
+    assertProviderIsEligible(settings, input, base.providers, enabledProviders, manualProvider, "manual");
+  } else if (strategy === "AGENT") {
+    assertProviderIsEligible(
+      settings,
+      input,
+      base.providers,
+      enabledProviders,
+      base.agentProviderConfigId || manualProvider,
+      base.agentProviderConfigId ? "agent" : "manual",
+    );
+  } else if (enabledProviders.length === 0) {
+    throw new ProviderRoutingError(`Invocation ${input.invocation} has no eligible provider instances. Enable at least one provider for this route.`);
+  }
 
   const providerConfigId = resolveStrategy(strategy).choose(context, input.task);
   const provider = getProviderType(base.providers, providerConfigId) || "jules";

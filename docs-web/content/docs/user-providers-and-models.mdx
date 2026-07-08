@@ -164,6 +164,8 @@ For each ID, you can pick:
 
 Route provider values are exact provider-config IDs, not provider-type aliases. For example, `gemini` only selects the provider instance whose id is exactly `gemini`; it will not silently select another Gemini instance such as `gemini-fast`. If a sprint or project override adds a dedicated provider instance, that instance must be present in the effective provider list before routes, allowed-provider pools, worker defaults, and per-route overrides can reference it.
 
+Manual routing never falls back to another provider when the selected or inherited provider instance is unavailable. If that exact instance is disabled, missing, blocked by the invocation type, or incompatible with the current Git/Jules mode, Code UX stops with a visible routing error in the dashboard so you can enable that instance or choose a different route.
+
 Project and sprint route-provider overrides replace the inherited provider map for that specific invocation route. If an override declares `task_coding.providers`, `merge_conflict.providers`, or `qa_review.providers`, only those provider-config IDs are eligible for that route; parent providers are not merged back in.
 
 A common high-quality setup:

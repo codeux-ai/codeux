@@ -246,8 +246,9 @@ describe("TaskService", () => {
     }));
   });
 
-  it("falls back to cli provider when jules is unavailable", async () => {
-    const fallbackService = new TaskService({
+  it("throws instead of falling back when Jules is unavailable", async () => {
+    const fallbackStartCliTask = vi.fn().mockResolvedValue({ id: "cli-1", name: "sessions/cli-1", provider: "gemini", state: "RUNNING", prompt: "" });
+    const unavailableJulesService = new TaskService({
       julesApi: { createSession } as any,
       agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: getWorkerAgent } as any,
       resolveJulesSourceId,
@@ -266,12 +267,12 @@ describe("TaskService", () => {
       }) as any,
       isJulesApiConfigured: () => false,
       cliWorkflowService: {
-        startTask: vi.fn().mockResolvedValue({ id: "cli-1", name: "sessions/cli-1", provider: "gemini", state: "RUNNING", prompt: "" }),
+        startTask: fallbackStartCliTask,
       } as any,
     });
 
     getWorkerAgent.mockResolvedValue({ instructionMarkdown: "Rules" });
-    await fallbackService.startSprintTask(
+    await expect(unavailableJulesService.startSprintTask(
       {
         id: "01-task",
         title: "Do Thing",
@@ -283,12 +284,13 @@ describe("TaskService", () => {
       "feature/sprint1",
       "/tmp/repo",
       1
-    );
+    )).rejects.toThrow("Invocation task_coding selected Jules, but the Jules API is not configured.");
 
     expect(createSession).not.toHaveBeenCalled();
+    expect(fallbackStartCliTask).not.toHaveBeenCalled();
   });
 
-  it("falls back to cli provider when githubMode is LOCAL and throws if no CLI providers are enabled", () => {
+  it("throws instead of falling back when a manual route selects Jules in LOCAL git mode", () => {
     const localModeService = new TaskService({
       julesApi: { createSession } as any,
       agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: getWorkerAgent } as any,
@@ -320,57 +322,14 @@ describe("TaskService", () => {
       cliWorkflowService: { startTask: startCliTask } as any,
     });
 
-    const route = localModeService.resolveInvocationProvider("task_coding", {
+    expect(() => localModeService.resolveInvocationProvider("task_coding", {
       id: "chat",
       title: "Chat",
       prompt: "hello",
       depends_on: [],
       is_independent: true,
       status: "PENDING",
-    });
-
-    expect(route.provider).toBe("gemini");
-
-    // Test the throw when all CLI providers are disabled
-    const emptyLocalModeService = new TaskService({
-      julesApi: { createSession } as any,
-      agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: getWorkerAgent } as any,
-      resolveJulesSourceId,
-      getDashboardSettings: () => ({
-        aiProvider: {
-          provider: "jules",
-          strategy: "MANUAL",
-          julesApiKey: "",
-          providers: {
-            jules: { enabled: true, model: "default", weight: 60, thinkingMode: "MEDIUM", apiKey: "" },
-            gemini: { enabled: false, model: "default", weight: 20, thinkingMode: "MEDIUM", apiKey: "" },
-            codex: { enabled: false, model: "gpt-5.3-codex", weight: 20, thinkingMode: "HIGH", apiKey: "" },
-            "claude-code": { enabled: false, model: "default", weight: 0, thinkingMode: "HIGH", apiKey: "" },
-          },
-          invocationRouting: {
-            task_coding: {
-              profile: "GLOBAL",
-              strategy: "MANUAL",
-              provider: null,
-              allowedProviders: [],
-              providers: {},
-            },
-          },
-        },
-        git: { githubMode: "LOCAL", defaultBranch: "main" },
-      }) as any,
-      isJulesApiConfigured: () => true,
-      cliWorkflowService: { startTask: startCliTask } as any,
-    });
-
-    expect(() => emptyLocalModeService.resolveInvocationProvider("task_coding", {
-      id: "chat",
-      title: "Chat",
-      prompt: "hello",
-      depends_on: [],
-      is_independent: true,
-      status: "PENDING",
-    })).toThrow("requires a CLI provider");
+    })).toThrow("Jules is unavailable in LOCAL git mode");
   });
 
   it("does not fetch origin before starting sprint tasks in LOCAL git mode", async () => {
@@ -380,7 +339,7 @@ describe("TaskService", () => {
       resolveJulesSourceId,
       getDashboardSettings: () => ({
         aiProvider: {
-          provider: "jules",
+          provider: "gemini",
           strategy: "MANUAL",
           julesApiKey: "",
           providers: {
@@ -527,6 +486,6 @@ describe("TaskService", () => {
       status: "PENDING",
     }, {
       cliOnly: true,
-    })).toThrow("requires a CLI provider");
+    })).toThrow("Invocation dashboard_reply selected Jules, but this context requires a CLI provider.");
   });
 });

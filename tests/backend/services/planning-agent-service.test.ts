@@ -598,7 +598,10 @@ describe("PlanningAgentService", () => {
 
     const project = projectRepository.createProject({ name: "Session Restart Project", sourceType: "local", sourceRef: repoPath });
     const sprint = projectRepository.createSprint(project.id, { name: "Session Restart Sprint", goal: "Plan with context" });
-    settingsRepository.saveProjectSettings(project.id, { workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "claude-code" } });
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "claude-code" },
+      aiProvider: { providers: { "claude-code": { enabled: true } } },
+    });
     const providerUsage = executionRepository.createProviderInvocationUsage({
       projectId: project.id,
       sprintId: sprint.id,
@@ -682,7 +685,10 @@ describe("PlanningAgentService", () => {
 
     const project = projectRepository.createProject({ name: "Session Continue Project", sourceType: "local", sourceRef: repoPath });
     const sprint = projectRepository.createSprint(project.id, { name: "Session Continue Sprint", goal: "Plan with context" });
-    settingsRepository.saveProjectSettings(project.id, { workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "claude-code" } });
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "claude-code" },
+      aiProvider: { providers: { "claude-code": { enabled: true } } },
+    });
     const providerUsage = executionRepository.createProviderInvocationUsage({
       projectId: project.id,
       sprintId: sprint.id,
@@ -1060,6 +1066,7 @@ describe("PlanningAgentService", () => {
           "claude-live": {
             provider: "claude-code",
             name: "Claude Live",
+            enabled: true,
             apiKey: "claude-key",
             model: "claude-model",
             thinkingMode: "disabled",
@@ -1609,6 +1616,7 @@ describe("PlanningAgentService", () => {
 
     settingsRepository.saveProjectSettings(project.id, {
       workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "claude-code" },
+      aiProvider: { providers: { "claude-code": { enabled: true } } },
       cliWorkflow: { maxPlanningJsonRetries: 3 },
     });
 
@@ -1685,6 +1693,7 @@ describe("PlanningAgentService", () => {
 
     settingsRepository.saveProjectSettings(project.id, {
       workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "claude-code" },
+      aiProvider: { providers: { "claude-code": { enabled: true } } },
       cliWorkflow: { maxParsingRetries: 2, maxPlanningJsonRetries: 2 },
     });
 
@@ -1848,6 +1857,7 @@ describe("PlanningAgentService", () => {
 
     settingsRepository.saveProjectSettings(project.id, {
       workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "claude-code" },
+      aiProvider: { providers: { "claude-code": { enabled: true } } },
       cliWorkflow: { executionMode: "DOCKER" },
     });
 
@@ -1936,6 +1946,7 @@ describe("PlanningAgentService", () => {
     });
     settingsRepository.saveProjectSettings(project.id, {
       workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "claude-code" },
+      aiProvider: { providers: { "claude-code": { enabled: true } } },
       cliWorkflow: { executionMode: "DOCKER" },
     });
 
@@ -2016,6 +2027,7 @@ describe("PlanningAgentService", () => {
 
     settingsRepository.saveProjectSettings(project.id, {
       workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "claude-code" },
+      aiProvider: { providers: { "claude-code": { enabled: true } } },
       cliWorkflow: { executionMode: "DOCKER" },
     });
 
@@ -2085,6 +2097,7 @@ describe("PlanningAgentService", () => {
 
     settingsRepository.saveProjectSettings(project.id, {
       workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "claude-code" },
+      aiProvider: { providers: { "claude-code": { enabled: true } } },
       cliWorkflow: { executionMode: "DOCKER" },
     });
 
@@ -2168,6 +2181,7 @@ describe("PlanningAgentService", () => {
 
     settingsRepository.saveProjectSettings(project.id, {
       workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "claude-code" },
+      aiProvider: { providers: { "claude-code": { enabled: true } } },
       cliWorkflow: { executionMode: "DOCKER" },
     });
 

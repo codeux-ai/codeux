@@ -26,6 +26,11 @@ export function toHttpRouteError(error: unknown): HttpRouteError {
     return new HttpRouteError(404, msg);
   }
 
+  if (error && typeof error === "object" && "name" in error && error.name === "ProviderRoutingError") {
+    const msg = "message" in (error as any) ? (error as any).message : "Provider routing failed";
+    return new HttpRouteError(409, msg);
+  }
+
   if (error instanceof Error) {
     if (error.message.startsWith("Invalid ") || error.message.startsWith("Missing ")) {
       return new HttpRouteError(400, error.message);
