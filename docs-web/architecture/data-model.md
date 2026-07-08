@@ -184,6 +184,19 @@ Node flows are project-scoped repeatable workflow graphs managed from the Nodes 
 
 `node_flow_runs.execution_invocation_id` points at the parent `execution_invocations` row with `type = "node_flow"`. Provider and HTTP node rows may also set `node_flow_node_runs.execution_invocation_id` to invocation rows with `type = "node_flow_node"`. Deleting a node flow cascades its versions, attachments, run rows, and node-run rows.
 
+## Custom Dashboards
+
+Custom dashboards are project-scoped persisted manifests and generated file bundles for future dashboard-generation runtime work. They have no HTTP, MCP, or frontend surface yet.
+
+| Table | Purpose |
+| --- | --- |
+| `custom_dashboards` | Current mutable draft state with status, manifest JSON, file bundle JSON, source node graph JSON, styleguide JSON, runtime metadata JSON, and timestamps. |
+| `custom_dashboard_revisions` | Immutable revision snapshots with copied manifest, files, source graph, styleguide, runtime metadata, validation status/report, and validated timestamp. |
+| `custom_dashboard_validation_sessions` | Validation attempt history for a revision. |
+| `custom_dashboard_publications` | Active published revision pointer keyed by dashboard id, enforcing one published revision per dashboard. |
+
+`CustomDashboardRepository` validates required fields, JSON-safety, project ownership, revision ownership, and publish invariants. Publishing rejects unvalidated, failed, cancelled, or cross-dashboard revisions.
+
 ## Memory
 
 | Field | Type | Notes |

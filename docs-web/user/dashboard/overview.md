@@ -44,6 +44,7 @@ The background is an animated Three.js scene ("Deep Ocean") that lazy-loads afte
 | `/files` | [File Browser](./file-browser.md) | Browse project files and review sprint Git changes |
 | `/browser` | [Sprint Preview Browser](./browser-preview.md) | Docker-backed live previews per sprint |
 | `/stats` | [Stats](./stats.md) | Execution analytics, time-window filtering, trends |
+| `/custom-dashboards` | [Custom Dashboards](./custom-dashboards.md) | Agent-generated project dashboards with detached validation and gated publication |
 | `/config` | [Settings](./settings.md) | System / project / sprint settings hierarchy |
 | `/config?category=guidance#guidance` | [Styleguides and Tech Stacks](./styleguides-and-tech-stacks.md) | Tech-stack guidance, styleguide catalogs, and custom worker instructions |
 

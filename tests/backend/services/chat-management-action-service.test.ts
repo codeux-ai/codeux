@@ -155,6 +155,75 @@ describe("ChatManagementActionService", () => {
     });
   });
 
+  it("should dispatch custom dashboard management proposals through the management handler", async () => {
+    const action = {
+      domain: "custom_dashboards",
+      action: "create_revision",
+      payload: {
+        dashboardId: "dash-1",
+        manifest: {
+          schemaVersion: 1,
+          title: "Operations Dashboard",
+          entryFile: "src/dashboard.tsx",
+          filePaths: ["src/dashboard.tsx"],
+        },
+        fileBundle: {
+          files: [
+            {
+              path: "src/dashboard.tsx",
+              content: "export default function Dashboard() { return <main>Ops</main>; }",
+            },
+          ],
+        },
+        sourceNodeGraph: {
+          nodes: [{ id: "project-status", type: "codeux_project", title: "Project Status" }],
+          edges: [],
+        },
+        styleguide: {
+          tokens: { color: "system" },
+          accessibilityNotes: ["Use semantic landmarks and visible focus states."],
+        },
+        runtimeMetadata: {
+          validationExpectations: ["Build succeeds", "Root route responds"],
+        },
+      },
+    };
+
+    structuredProviderResponseService.executeAndParse.mockResolvedValue({
+      parsed: {
+        replyMarkdown: "I created a dashboard revision and will validate it next.",
+        action,
+      },
+      nativeSessionId: "sess1",
+      bodyMarkdown: "",
+    });
+
+    managementToolHandler.handleManageCodeUx.mockResolvedValue({
+      content: [{ type: "text", text: JSON.stringify({ result: { status: "success", domain: "custom_dashboards", action: "create_revision", revisionId: "rev-1" } }) }]
+    });
+
+    const result = await service.processManagementAction({
+      projectId: "proj1",
+      provider: "claude-code",
+      model: "claude-3",
+      apiKey: "test-key",
+      sessionId: "sess1",
+      settings: mockSettings,
+      prompt: "Create an operations dashboard",
+      repoPath: "/tmp/test-repo",
+    });
+
+    expect(managementToolHandler.handleManageCodeUx).toHaveBeenCalledWith(action);
+    expect(result).toEqual({
+      replyMarkdown: "I created a dashboard revision and will validate it next.",
+      action,
+      approvalRequired: false,
+      approvalMessage: undefined,
+      result: { status: "success", domain: "custom_dashboards", action: "create_revision", revisionId: "rev-1" },
+      nativeSessionId: "sess1",
+    });
+  });
+
   it("should handle reply only (no action)", async () => {
     structuredProviderResponseService.executeAndParse.mockResolvedValue({
       parsed: {

@@ -15,6 +15,7 @@ describe("tool availability", () => {
     expect(projectManagerTools.some((tool) => tool.name === "manage_scheduler")).toBe(true);
     expect(projectManagerTools.some((tool) => tool.name === "scheduler_code_ux")).toBe(true);
     expect(projectManagerTools.some((tool) => tool.name === "manage_node_flows")).toBe(true);
+    expect(projectManagerTools.some((tool) => tool.name === "manage_custom_dashboards")).toBe(true);
     expect(projectManagerTools.some((tool) => tool.name === "manage_skills")).toBe(true);
     expect(projectManagerTools.some((tool) => tool.name === "search_skills")).toBe(true);
     expect(projectManagerTools.some((tool) => tool.name === "register_worker_endpoint")).toBe(true);
@@ -27,6 +28,7 @@ describe("tool availability", () => {
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_scheduler", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "scheduler_code_ux", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_node_flows", "project_manager")).toBe(true);
+    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_custom_dashboards", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_skills", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "search_skills", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "register_worker_endpoint", "project_manager")).toBe(true);

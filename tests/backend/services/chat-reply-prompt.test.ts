@@ -165,6 +165,8 @@ describe("chat-reply-prompt", () => {
       });
       expect(prompt).toContain("You must return STRICT JSON format");
       expect(prompt).toContain("optional `suggestions`");
+      expect(prompt).toContain("`custom_dashboards`");
+      expect(prompt).toContain("maps to the `manage_custom_dashboards` MCP surface");
       expect(prompt).not.toContain("manage_code_ux");
     });
 
@@ -179,8 +181,32 @@ describe("chat-reply-prompt", () => {
         mcpAvailable: true,
       });
       expect(prompt).toContain("manage_code_ux");
+      expect(prompt).toContain("manage_custom_dashboards");
+      expect(prompt).toContain("publish_revision");
       expect(prompt).toContain("Do NOT wrap your response in JSON");
       expect(prompt).not.toContain("You must return STRICT JSON format");
+    });
+
+    it("instructs custom dashboard requests to create validated management revisions before publishing", () => {
+      const prompt = buildChatReplayPrompt({
+        projectId: "p1",
+        repoPath: "/repo",
+        projectName: "Proj",
+        thread,
+        messages: [{ authorType: "dashboard_user", bodyMarkdown: "Build me an ops dashboard and publish it" } as any],
+        workerInstructions: "",
+        mcpAvailable: true,
+      });
+
+      expect(prompt).toContain("Custom dashboard management");
+      expect(prompt).toContain("purpose, data sources, styleguide constraints, layout expectations, and publication intent");
+      expect(prompt).toContain("manifest metadata");
+      expect(prompt).toContain("source node graph definitions");
+      expect(prompt).toContain("dependency-free Preact/Tailwind-compatible");
+      expect(prompt).toContain("Do not instruct agents to write user-created dashboards into `dashboard/src`");
+      expect(prompt).toContain("start `validate_revision`");
+      expect(prompt).toContain("Never call `publish_revision` until validation status is `passed`");
+      expect(prompt).toContain("create a repair revision");
     });
 
     it("uses scheduler-only MCP instructions without advertising management tools", () => {

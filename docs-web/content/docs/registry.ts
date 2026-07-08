@@ -30,6 +30,7 @@ export type DocsSlug =
   | 'user-dashboard-file-browser'
   | 'user-dashboard-browser-preview'
   | 'user-dashboard-stats'
+  | 'user-dashboard-custom-dashboards'
   | 'user-dashboard-settings'
   | 'user-dashboard-styleguides-and-tech-stacks'
   | 'developer-overview'
@@ -257,6 +258,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     section: 'User Guide',
     title: "Stats",
     description: "The Stats page (/stats) is the analytics surface for the active project. It shows project execution, usage, cost, Git, provider/model, ledger, and invocation telemetry in one flat Analysis Studio with responsive layou...",
+  },
+  'user-dashboard-custom-dashboards': {
+    id: 'user-dashboard-custom-dashboards',
+    path: '/docs/user-dashboard-custom-dashboards',
+    section: 'User Guide',
+    title: "Custom Dashboards",
+    description: "Custom dashboards are project-scoped dashboard apps generated and revised by agents, then validated in a detached Docker runtime before publication.",
   },
   'user-dashboard-settings': {
     id: 'user-dashboard-settings',
@@ -491,6 +499,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['user-dashboard-file-browser'],
   docsRegistry['user-dashboard-browser-preview'],
   docsRegistry['user-dashboard-stats'],
+  docsRegistry['user-dashboard-custom-dashboards'],
   docsRegistry['user-dashboard-settings'],
   docsRegistry['user-dashboard-styleguides-and-tech-stacks'],
   docsRegistry['developer-overview'],

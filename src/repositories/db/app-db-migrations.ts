@@ -237,6 +237,86 @@ export function ensureNodeFlowTables(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_node_flow_node_runs_run_created", "node_flow_node_runs", "run_id, created_at ASC");
 }
 
+export function ensureCustomDashboardTables(db: DatabaseAdapter): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS custom_dashboards (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'draft',
+      manifest_json TEXT NOT NULL,
+      files_json TEXT NOT NULL,
+      source_node_graph_json TEXT NOT NULL,
+      styleguide_json TEXT NOT NULL DEFAULT '{}',
+      runtime_metadata_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS custom_dashboard_revisions (
+      id TEXT PRIMARY KEY,
+      dashboard_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      revision_number INTEGER NOT NULL,
+      manifest_json TEXT NOT NULL,
+      files_json TEXT NOT NULL,
+      source_node_graph_json TEXT NOT NULL,
+      styleguide_json TEXT NOT NULL DEFAULT '{}',
+      validation_status TEXT,
+      validation_report_json TEXT,
+      runtime_metadata_json TEXT NOT NULL DEFAULT '{}',
+      validated_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (dashboard_id) REFERENCES custom_dashboards(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      UNIQUE (dashboard_id, revision_number)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS custom_dashboard_validation_sessions (
+      id TEXT PRIMARY KEY,
+      dashboard_id TEXT NOT NULL,
+      revision_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      validation_report_json TEXT,
+      runtime_metadata_json TEXT NOT NULL DEFAULT '{}',
+      started_at TEXT,
+      finished_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (dashboard_id) REFERENCES custom_dashboards(id) ON DELETE CASCADE,
+      FOREIGN KEY (revision_id) REFERENCES custom_dashboard_revisions(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS custom_dashboard_publications (
+      dashboard_id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      revision_id TEXT NOT NULL,
+      published_at TEXT NOT NULL,
+      runtime_metadata_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (dashboard_id) REFERENCES custom_dashboards(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (revision_id) REFERENCES custom_dashboard_revisions(id) ON DELETE CASCADE
+    )
+  `);
+
+  ensureIndex(db, "idx_custom_dashboards_project_status", "custom_dashboards", "project_id, status, updated_at DESC");
+  ensureIndex(db, "idx_custom_dashboard_revisions_dashboard_revision", "custom_dashboard_revisions", "dashboard_id, revision_number DESC");
+  ensureIndex(db, "idx_custom_dashboard_revisions_project", "custom_dashboard_revisions", "project_id, created_at DESC");
+  ensureIndex(db, "idx_custom_dashboard_validation_sessions_revision", "custom_dashboard_validation_sessions", "revision_id, created_at DESC");
+  ensureIndex(db, "idx_custom_dashboard_validation_sessions_dashboard", "custom_dashboard_validation_sessions", "dashboard_id, created_at DESC");
+  ensureIndex(db, "idx_custom_dashboard_publications_project", "custom_dashboard_publications", "project_id, published_at DESC");
+}
+
 export function migrateSprintLinkedIssuesExternalSources(db: DatabaseAdapter): void {
   ensureColumn(db, "sprint_linked_issues", "project_key", "TEXT");
   ensureColumn(db, "sprint_linked_issues", "external_id", "TEXT");
@@ -446,6 +526,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureChatProviderTables(db);
   ensureTaskSelfReflectionRatingTables(db);
   ensureNodeFlowTables(db);
+  ensureCustomDashboardTables(db);
 
   ensureColumn(db, "provider_invocations", "tool_call_count", "INTEGER NOT NULL DEFAULT 0");
 

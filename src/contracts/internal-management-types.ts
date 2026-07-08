@@ -12,6 +12,11 @@ import type {
 } from "./chat-provider-types.js";
 import type { NodeFlowGraph, NodeFlowJsonObject, NodeWidgetSchema } from "./node-flow-types.js";
 import type { CreateProjectInput, ProjectSetupOptions, ProjectSetupRequestInput } from "./project-management-types.js";
+import type {
+  CreateCustomDashboardDraftInput,
+  CreateCustomDashboardRevisionInput,
+  UpdateCustomDashboardDraftInput,
+} from "./custom-dashboard-types.js";
 
 export interface ManagementApproval {
   confirmed: boolean;
@@ -294,6 +299,28 @@ export interface ManagePreviewArgs {
   sprintId?: string;
   sessionId?: string;
   path?: string;
+  approval?: ManagementApproval;
+}
+
+export interface ManageCustomDashboardsArgs extends Partial<CreateCustomDashboardDraftInput>, Partial<UpdateCustomDashboardDraftInput>, Partial<CreateCustomDashboardRevisionInput> {
+  action:
+    | "list"
+    | "get"
+    | "create"
+    | "update"
+    | "create_revision"
+    | "validate_revision"
+    | "validation_status"
+    | "validation_logs"
+    | "publish_revision"
+    | "archive"
+    | "data_catalog";
+  projectId?: string;
+  dashboardId?: string;
+  revisionId?: string;
+  validationSessionId?: string;
+  sessionId?: string;
+  tail?: number | string;
   approval?: ManagementApproval;
 }
 

@@ -23,6 +23,7 @@ These cover:
 - `search_skills`
 - `manage_settings`
 - `manage_preview`
+- `manage_custom_dashboards`
 - `manage_chat_providers`
 - `manage_telemetry`
 - `register_worker_endpoint`
@@ -61,6 +62,7 @@ These cover:
 - `search_skills`
 - `manage_settings`
 - `manage_preview`
+- `manage_custom_dashboards`
 - `manage_chat_providers`
 - `manage_telemetry`
 
@@ -164,6 +166,35 @@ The restricted `scheduler_code_ux` tool accepts either an absolute `scheduledFor
 Every `scheduler_code_ux` entry is persisted as an `agent_scheduler` target. The runtime stamps `origin: "agent_scheduler"`, `source: "agent_scheduler"`, and `createdByAgentId` from the current MCP agent context. `list` returns only entries created by the calling agent. `cancel` changes the matching entry status to `cancelled` only when the entry is an agent-scheduler wakeup or task entry created by that same agent. Dashboard-created entries, `manage_scheduler` entries, entries without agent-scheduler metadata, and entries created by another agent are rejected with the standard management validation envelope.
 
 The restricted tool intentionally does not expose due-entry execution, arbitrary update, recurrence editing, sprint scheduling, quicksprint scheduling, memory remediation scheduling, or global scheduler destructive controls.
+
+## Custom Dashboard Management
+
+`manage_custom_dashboards` exposes the custom dashboard repository and validation runtime to agents through stable management actions:
+
+- `list`, `get`, `create`, and `update` manage project-scoped dashboard drafts.
+- `create_revision` snapshots the current draft or provided bundle fields into an immutable revision.
+- `validate_revision`, `validation_status`, and `validation_logs` delegate to the validation runtime.
+- `publish_revision` publishes only a revision that is already marked passed with a valid report or a revision accompanied by a passed `validationSessionId`.
+- `archive` clears any active publication and marks the dashboard archived. It follows the normal destructive-action approval fingerprint flow.
+- `data_catalog` returns project dashboard summaries and declared source nodes for agents building or inspecting generated dashboards.
+
+Payload fields:
+
+- `projectId` is required for `list`, `create`, `validate_revision`, and `data_catalog`.
+- `dashboardId` is required for `get`, `update`, `create_revision`, `validate_revision`, `publish_revision`, and `archive`.
+- `revisionId` is required for `validate_revision` and `publish_revision`.
+- `sessionId` is required for `validation_status` and `validation_logs`.
+- `validationSessionId` is optional for `publish_revision` and, when supplied, must identify a passed session for the same dashboard, revision, and project.
+- `manifest`, `fileBundle`, `sourceNodeGraph`, `styleguide`, and `runtimeMetadata` are accepted by `create`, `update`, and `create_revision` according to each action's required fields.
+- `tail` limits validation log output.
+
+Validation sessions move through `queued`, `building`, `running`, `passed`, `failed`, or `cancelled`. `validate_revision` starts the detached Docker validation runtime; it does not publish the revision. A passed session means install, build, detached preview startup, and root health checks completed successfully.
+
+`publish_revision` is gated by repository state. The revision must belong to the dashboard, have `validationStatus: "passed"`, have `validatedAt`, and have `validationReport.valid === true`. Failed, queued, running, cancelled, missing, or cross-revision validation sessions are rejected before publication state changes, so the prior published revision remains active.
+
+The generated dashboard data-source graph is user-declared JSON with `nodes`, `edges`, and optional `metadata`. Runtime viewer source types currently map to Code UX project execution data, project stats, overview telemetry, non-secret integration metadata, and unavailable `external_api` placeholders. Do not claim arbitrary external API connectors are available through this surface until a dedicated sanitized proxy contract exists.
+
+For the user workflow, REST route list, detached runtime details, and rollback expectations, see [Custom Dashboards](../dashboard/custom-dashboards.md).
 
 ### Destructive Action Approvals
 

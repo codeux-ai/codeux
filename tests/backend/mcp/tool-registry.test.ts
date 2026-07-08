@@ -13,6 +13,7 @@ const createRouterHarness = (resolveAgentMcpToolAccess?: (agentId: string) => Ag
   const managementToolHandler = {
     handleManageProjects: vi.fn(async () => ({ content: [{ type: "text", text: "ok" }] })),
     handleManageChatProviders: vi.fn(async () => ({ content: [{ type: "text", text: "chat-providers" }] })),
+    handleManageCustomDashboards: vi.fn(async () => ({ content: [{ type: "text", text: "custom-dashboards" }] })),
     handleManageNodeFlows: vi.fn(async () => ({ content: [{ type: "text", text: "node-flows" }] })),
     handleScheduler: vi.fn(async () => ({ content: [{ type: "text", text: "scheduled" }] })),
   };
@@ -71,6 +72,14 @@ const callManageNodeFlows = async (handlers: RouterHandlers): Promise<unknown> =
   handlers.callTool({
     params: {
       name: "manage_node_flows",
+      arguments: { action: "list", projectId: "project-1" },
+    },
+  });
+
+const callManageCustomDashboards = async (handlers: RouterHandlers): Promise<unknown> =>
+  handlers.callTool({
+    params: {
+      name: "manage_custom_dashboards",
       arguments: { action: "list", projectId: "project-1" },
     },
   });
@@ -199,6 +208,25 @@ describe("ToolRegistry", () => {
       input: { prompt: "Ship" },
     });
   });
+
+  it("can register and dispatch manage_custom_dashboards", async () => {
+    const registry = new ToolRegistry<McpToolArgsByName, string>();
+    const handler = vi.fn(async (args: McpToolArgsByName["manage_custom_dashboards"]) => `manage_custom_dashboards:${args.action}`);
+
+    registry.register("manage_custom_dashboards", handler);
+
+    const result = await registry.dispatch("manage_custom_dashboards", {
+      action: "publish_revision",
+      dashboardId: "dashboard-1",
+      revisionId: "revision-1",
+    });
+    expect(result).toBe("manage_custom_dashboards:publish_revision");
+    expect(handler).toHaveBeenCalledWith({
+      action: "publish_revision",
+      dashboardId: "dashboard-1",
+      revisionId: "revision-1",
+    });
+  });
 });
 
 describe("MCP router per-agent Code UX access", () => {
@@ -271,6 +299,17 @@ describe("MCP router per-agent Code UX access", () => {
     expect(managementToolHandler.handleManageNodeFlows).toHaveBeenCalledTimes(1);
   });
 
+  it("lists and dispatches manage_custom_dashboards when enabled by tool availability", async () => {
+    const { handlers, managementToolHandler } = createRouterHarness(() => null);
+
+    await runWithMcpAgentContext(null, async () => {
+      await expect(listToolNames(handlers)).resolves.toContain("manage_custom_dashboards");
+      await expect(callManageCustomDashboards(handlers)).resolves.toEqual({ content: [{ type: "text", text: "custom-dashboards" }] });
+    });
+
+    expect(managementToolHandler.handleManageCustomDashboards).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects scheduler calls when the tool is disabled", async () => {
     const { handlers, managementToolHandler } = createRouterHarness((agentId) =>
       agentId === "agent-no-scheduler"
@@ -341,6 +380,9 @@ const compileTimeTypeChecks = (): void => {
 
   // @ts-expect-error manage_node_flows requires a valid action value
   registry.dispatch("manage_node_flows", { action: "execute" });
+
+  // @ts-expect-error manage_custom_dashboards requires a valid action value
+  registry.dispatch("manage_custom_dashboards", { action: "delete" });
 };
 
 void compileTimeTypeChecks;

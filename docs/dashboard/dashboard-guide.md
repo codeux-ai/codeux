@@ -227,6 +227,34 @@ Legacy runtime:
   - Returns recent preview container logs
 - `ALL /api/browser/sessions/:sessionId/proxy/*`
   - Same-origin proxy used by the in-app browser to render the sprint preview app
+- `GET /api/projects/:projectId/custom-dashboards`
+  - Lists project-scoped custom dashboard drafts and publication state
+- `POST /api/projects/:projectId/custom-dashboards`
+  - Creates a mutable custom dashboard draft with manifest, file bundle, source graph, styleguide, and runtime metadata
+- `GET /api/projects/:projectId/custom-dashboards/data-catalog`
+  - Lists custom dashboard summaries and declared source-node catalog entries for the selected project
+- `GET /api/custom-dashboards/:dashboardId`
+  - Loads a custom dashboard with immutable revisions
+- `PATCH /api/custom-dashboards/:dashboardId`
+  - Updates mutable draft fields; previous revisions and active publication are not mutated
+- `DELETE /api/custom-dashboards/:dashboardId`
+  - Archives a custom dashboard and clears the active publication
+- `POST /api/custom-dashboards/:dashboardId/revisions`
+  - Creates an immutable revision snapshot from the draft or supplied overrides
+- `POST /api/custom-dashboards/:dashboardId/revisions/:revisionId/validate`
+  - Starts detached Docker validation for one revision
+- `POST /api/custom-dashboards/:dashboardId/revisions/:revisionId/publish`
+  - Publishes only a revision with passed validation metadata; failed, running, cancelled, missing, or mismatched validation sessions are rejected
+- `GET /api/custom-dashboard-validations/:sessionId`
+  - Reads validation session status, report, timestamps, and runtime metadata
+- `GET /api/custom-dashboard-validations/:sessionId/logs?tail=200`
+  - Reads bounded validation logs plus detached container logs when a container is still available
+- `POST /api/custom-dashboard-validations/:sessionId/stop`
+  - Stops the detached validation container without invalidating a passed revision report
+- `DELETE /api/custom-dashboard-validations/:sessionId`
+  - Removes the validation session row after cleanup
+- `ALL /api/custom-dashboard-validations/:sessionId/proxy{*rest}`
+  - Same-origin proxy to the detached validation runtime; `/api/custom-dashboards/validation-sessions/:sessionId/proxy{*rest}` remains as a backward-compatible alias
 - `GET /api/settings/import-sources`
   - External key hints from env/json
 - `GET /api/onboarding/readiness`
@@ -269,7 +297,7 @@ Legacy runtime:
 - The Overview attention queue uses the same row labels, severity/status tones, markdown summary rendering, empty-state language, and bounded scrollbar treatment as the Live sidebar queue, but renders read-only so action handling stays centralized on the Live page.
 
 ### Navigation
-- Sidebar and dock navigation expose the primary routes in guided-tour order: Chat, Overview, Sprints, Tasks, Agents, Stats, Schedule (`/scheduler`), Memory, Knowledge (`/knowledge`), Browser, Files (`/files`, providing project and sprint File Browser capabilities), Live, and Settings/Config.
+- Sidebar and dock navigation expose the primary routes in guided-tour order: Chat, Overview, Sprints, Tasks, Agents, Stats, Dashboards (`/custom-dashboards`), Schedule (`/scheduler`), Memory, Knowledge (`/knowledge`), Browser, Files (`/files`, providing project and sprint File Browser capabilities), Live, and Settings/Config.
 - The primary navigation honors the persisted Settings -> Appearance experience mode. Easy shows Chat, Browser, Stats, Settings/Config, and external Docs. Standard shows Chat, Overview, Sprints, Tasks, Agents, Stats, Browser, Docs, and Settings/Config. Expert is the default and shows the full set. This only changes primary navigation visibility: routes remain registered, Docs opens the external project docs, and the Browser item still follows the project sprint-preview visibility settings.
 - The header places global search beside the tech-stack guidance and styleguide selectors. The guidance selectors mirror the active project's effective `designGuidance` values, support `None`, and save project-level overrides immediately when changed.
 - Guidance dropdown footer actions use the same settings destination: **Add Tech Stack**, **Add Styleguide**, and **Manage Guidance** open `/config?category=guidance#guidance` so custom guidance entries and visibility controls stay centralized in Settings -> Guidance.
@@ -299,6 +327,13 @@ Legacy runtime:
 - System filtering covers search, status, purpose, provider, error category, record mode (`All`, `Errors`, `System Msgs`), sort, page controls, clear-all, active-filter counts, and result counts. These controls wrap rather than clipping on narrow screens.
 - Loading, no-data, low-data, empty, and error states reuse the Stats shell. Loading panels use `role="status"` and error panels use `role="alert"` with retry where recovery is available.
 - For implementation details and page-level design rules, see [Stats & Analytics Design System](./design-system-stats.md). For telemetry collection semantics, see [Usage Telemetry And Stats](../architecture/usage-telemetry-and-stats.md).
+
+### Custom Dashboards
+- The Dashboards page is available at `/custom-dashboards` and is scoped to the selected project. It manages project-specific generated dashboard drafts, immutable revisions, detached validation sessions, and publication state.
+- Users can ask the Project Manager to create or revise a dashboard, review the generated manifest/files/source graph/styleguide in the editor, create a revision, run validation, inspect logs and the validation preview, and publish only a passed revision.
+- The data-source graph supports Code UX execution data, project stats, overview telemetry, non-secret integration metadata, and placeholder `external_api` nodes. External API nodes are declared but return unavailable-source errors in the in-app viewer until a dedicated sanitized proxy exists.
+- Published dashboards render from the active `publishedRevisionId` inside a sandboxed iframe. The frame can request only declared source nodes through the constrained Code UX bridge.
+- For the full workflow, contracts, validation lifecycle, and rollback expectations, see [Custom Dashboards](./custom-dashboards.md).
 
 ### Memory
 - Memory map ambient node labels are visible at the default camera zoom, while focused node cards still require the deeper selected-node zoom. This keeps the map readable immediately after load without forcing operators to zoom in.

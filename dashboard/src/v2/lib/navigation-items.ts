@@ -9,6 +9,7 @@ import {
   Hexagon,
   Inbox,
   Layers,
+  LayoutDashboard,
   Library,
   ListChecks,
   MessageCircle,
@@ -30,6 +31,7 @@ export type NavigationItemId =
   | "tasks"
   | "agents"
   | "nodes"
+  | "custom-dashboards"
   | "stats"
   | "scheduler"
   | "memory"
@@ -84,6 +86,7 @@ export const ALL_NAVIGATION_ITEMS: readonly NavigationItem[] = [
   { id: "tasks", icon: ListChecks, label: "Tasks", path: "/tasks", color: "text-signal-400", group: "workspace", dockSection: "right", tourId: "nav-tasks", kind: "route" },
   { id: "agents", icon: Cpu, label: "Agents", path: "/agents", color: "text-signal-400", group: "workspace", dockSection: "right", tourId: "nav-agents", kind: "route" },
   { id: "nodes", icon: Workflow, label: "Nodes", path: "/nodes", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-nodes", kind: "route", feature: "nodes" },
+  { id: "custom-dashboards", icon: LayoutDashboard, label: "Dashboards", dockLabel: "Dash", path: "/custom-dashboards", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-custom-dashboards", kind: "route" },
   { id: "stats", icon: BarChart3, label: "Stats", path: "/stats", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-stats", kind: "route" },
   { id: "scheduler", icon: CalendarDays, label: "Schedule", path: "/scheduler", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-schedule", kind: "route" },
   { id: "memory", icon: Inbox, label: "Memory", path: "/memory", color: "text-signal-500", group: "workspace", dockSection: "right", tourId: "nav-memory", kind: "route" },
@@ -103,6 +106,7 @@ const STANDARD_NAVIGATION_ITEM_IDS: readonly NavigationItemId[] = [
   "tasks",
   "agents",
   "nodes",
+  "custom-dashboards",
   "stats",
   "browser",
   "docs",

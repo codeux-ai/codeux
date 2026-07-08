@@ -61,7 +61,9 @@ export function isDashboardRuntimeDataPath(pathname: string): boolean {
 }
 
 export function isDashboardPreviewProxyPath(pathname: string): boolean {
-  return pathname.startsWith("/api/browser/sessions/") && pathname.includes("/proxy");
+  return (pathname.startsWith("/api/browser/sessions/") && pathname.includes("/proxy"))
+    || (pathname.startsWith("/api/custom-dashboard-validations/") && pathname.includes("/proxy"))
+    || (pathname.startsWith("/api/custom-dashboards/validation-sessions/") && pathname.includes("/proxy"));
 }
 
 export function isDashboardKnowledgeUploadPath(pathname: string): boolean {

@@ -167,6 +167,8 @@ export class CodeUxServer {
   private sprintPreviewRepository: SprintPreviewRepository;
   private sprintPreviewService: SprintPreviewService;
   private sprintFileBrowserService: SprintFileBrowserService;
+  private customDashboardRepository: import("../repositories/custom-dashboard-repository.js").CustomDashboardRepository;
+  private customDashboardValidationService: import("../services/custom-dashboard-validation-service.js").CustomDashboardValidationService;
   private agentPresetSyncService: AgentPresetSyncService;
   private executionRepository: ExecutionRepository;
   private guardrailService: GuardrailService;
@@ -248,6 +250,8 @@ export class CodeUxServer {
     this.sprintPreviewRepository = deps.sprintPreviewRepository;
     this.sprintPreviewService = deps.sprintPreviewService;
     this.sprintFileBrowserService = deps.sprintFileBrowserService;
+    this.customDashboardRepository = deps.customDashboardRepository;
+    this.customDashboardValidationService = deps.customDashboardValidationService;
     this.sprintMarkdownService = deps.sprintMarkdownService;
     this.sprintIssueService = deps.sprintIssueService;
     this.virtualWorkerService = deps.virtualWorkerService;
@@ -1337,6 +1341,8 @@ export class CodeUxServer {
         projectSetupService: this.projectSetupService,
         schedulerService: this.schedulerService,
         nodeFlowService: this.nodeFlowService,
+        customDashboardRepository: this.customDashboardRepository,
+        customDashboardValidationService: this.customDashboardValidationService,
         chatThreadRuntimeService: this.chatThreadRuntimeService,
         chatProviderIngressService: this.chatProviderIngressService,
         speechTranscriptionService: this.speechTranscriptionService,

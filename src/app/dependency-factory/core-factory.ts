@@ -64,6 +64,8 @@ import { SprintPreviewRepository } from "../../repositories/sprint-preview-repos
 import { SprintFileBrowserService } from "../../services/sprint-file-browser-service.js";
 import { SprintFileBrowserRepository } from "../../repositories/sprint-file-browser-repository.js";
 import { DockerService } from "../../services/docker-service.js";
+import { CustomDashboardRepository } from "../../repositories/custom-dashboard-repository.js";
+import { CustomDashboardValidationService } from "../../services/custom-dashboard-validation-service.js";
 
 export interface CoreDependencies {
   providerRunner: IProviderRunner;
@@ -121,6 +123,8 @@ export interface CoreDependencies {
   sprintPreviewRepository: SprintPreviewRepository;
   sprintFileBrowserService: SprintFileBrowserService;
   sprintFileBrowserRepository: SprintFileBrowserRepository;
+  customDashboardRepository: CustomDashboardRepository;
+  customDashboardValidationService: CustomDashboardValidationService;
 }
 
 export function createCoreDependencies(
@@ -238,6 +242,13 @@ export function createCoreDependencies(
     projectManagementRepository,
     settingsRepository,
     logger: logger.child({ component: "sprint-file-browser-service" }),
+  });
+  const customDashboardRepository = new CustomDashboardRepository(appDbStorage);
+  const customDashboardValidationService = new CustomDashboardValidationService({
+    customDashboardRepository,
+    projectManagementRepository,
+    settingsRepository,
+    logger: logger.child({ component: "custom-dashboard-validation-service" }),
   });
   const sprintMarkdownService = new SprintMarkdownService(projectManagementRepository);
   const sprintIssueService = new SprintIssueService({
@@ -377,5 +388,7 @@ export function createCoreDependencies(
     sprintPreviewRepository,
     sprintFileBrowserService,
     sprintFileBrowserRepository,
+    customDashboardRepository,
+    customDashboardValidationService,
   };
 }

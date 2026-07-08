@@ -1688,6 +1688,7 @@ describe("VirtualWorkerService", () => {
       payload: { repoPath: "/test", conflictingBranches: { source: "src", target: "tgt" } },
     });
 
+    vi.spyOn((virtualWorkerService as any).dockerService, "isAvailable").mockResolvedValue(true);
     vi.spyOn((virtualWorkerService as any), "isMergeConflictResolvedOnRemote").mockResolvedValue(false);
     const prepareWorktree = vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree")
       .mockRejectedValue(new Error("stop after non-redundant path"));
