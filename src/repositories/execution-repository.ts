@@ -1185,6 +1185,39 @@ export class ExecutionRepository {
     return map;
   }
 
+  countGlobalRunningTaskRunsPerProvider(providers?: string[]): Map<ProviderId, number> {
+    const providerFilter = providers?.filter((provider) => provider.trim().length > 0) ?? [];
+    const where = providerFilter.length > 0
+      ? `state = 'RUNNING' AND provider IS NOT NULL AND provider IN (${providerFilter.map(() => "?").join(", ")})`
+      : "state = 'RUNNING' AND provider IS NOT NULL";
+    const rows = this.db.prepare(`
+      SELECT task_runs.provider, COUNT(*) as count
+      FROM task_runs
+      INNER JOIN task_dispatches td ON td.id = task_runs.dispatch_id
+      WHERE ${where}
+        AND td.status IN ('claimed', 'running', 'cancel_requested', 'paused')
+        AND NOT EXISTS (
+          SELECT 1
+          FROM provider_invocations pi
+          WHERE pi.provider = task_runs.provider
+            AND (
+              pi.task_run_id = task_runs.id
+              OR (task_runs.dispatch_id IS NOT NULL AND pi.dispatch_id = task_runs.dispatch_id)
+            )
+            AND pi.status IN ('completed', 'failed', 'cancelled')
+        )
+      GROUP BY provider
+    `).all(...providerFilter) as Array<{ provider: string; count: number | string }>;
+
+    const map = new Map<ProviderId, number>();
+    for (const row of rows) {
+      if (row.provider) {
+        map.set(row.provider as ProviderId, toNumber(row.count));
+      }
+    }
+    return map;
+  }
+
   updateTaskRunsBatch(runs: Array<{id: string} & UpdateTaskRunInput>): void {
     if (runs.length === 0) return;
     this.db.transaction(() => {

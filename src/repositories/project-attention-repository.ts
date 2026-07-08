@@ -133,6 +133,52 @@ export class ProjectAttentionRepository {
     return rows.map(r => r.project_id);
   }
 
+  listResolvedWorkerMergeConflicts(projectId: string, sprintId?: string | null): Array<{
+    itemId: string;
+    taskId: string;
+    sourceBranch: string | null;
+    targetBranch: string | null;
+  }> {
+    const sprintClause = sprintId ? "AND sprint_id = ?" : "";
+    const rows = this.db.prepare(`
+      SELECT DISTINCT
+        id,
+        task_id,
+        json_extract(payload_json, '$.conflictingBranches.source') AS source_branch,
+        json_extract(payload_json, '$.conflictingBranches.target') AS target_branch
+      FROM project_attention_items
+      WHERE project_id = ?
+        ${sprintClause}
+        AND task_id IS NOT NULL
+        AND attention_type = 'merge_conflict'
+        AND owner_type = 'worker'
+        AND status = 'resolved'
+        AND json_extract(payload_json, '$.resolutionReason') IN (
+          'virtual_worker_merge_conflict_resolved',
+          'virtual_worker_merge_conflict_already_resolved'
+        )
+        AND COALESCE(json_extract(payload_json, '$.branchMergeRetryConsumed'), 0) != 1
+    `).all(...(sprintId ? [projectId, sprintId] : [projectId])) as Array<{
+      id: string;
+      task_id: string | null;
+      source_branch: string | null;
+      target_branch: string | null;
+    }>;
+
+    return rows
+      .filter((row): row is { id: string; task_id: string; source_branch: string | null; target_branch: string | null } => Boolean(row.task_id))
+      .map(row => ({
+        itemId: row.id,
+        taskId: row.task_id,
+        sourceBranch: row.source_branch,
+        targetBranch: row.target_branch,
+      }));
+  }
+
+  listResolvedWorkerMergeConflictTaskIds(projectId: string, sprintId?: string | null): string[] {
+    return this.listResolvedWorkerMergeConflicts(projectId, sprintId).map(row => row.taskId);
+  }
+
   listProjectAttentionItems(
     projectId: string,
     options?: ListProjectAttentionItemsOptions,

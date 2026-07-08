@@ -1,7 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { runCommandStrict, type CommandResult } from "../../services/cli-process-runner.js";
+import { CODE_UX_GIT_PATHSPEC_EXCLUDE, CODE_UX_REPO_DIR } from "./code-ux-gitignore.js";
 
 /**
  * Minimal command runner used by the local-merge helpers. Defaults to
@@ -16,6 +18,10 @@ const defaultHostGitRunner: LocalMergeRunner = (command, args, cwd) => runComman
   cwd,
   { ...process.env, CODE_UX_GIT_CONTAINER_MODE: "host" },
 );
+const CODE_UX_GIT_IDENTITY_ARGS = [
+  "-c", "user.name=Code UX",
+  "-c", "user.email=agents@codeux.ai",
+];
 
 export interface LocalMergeResult {
   ok: boolean;
@@ -74,6 +80,149 @@ export async function restoreCheckedOutRef(
   } catch {
     // Leave HEAD where the merge left it rather than throwing during cleanup.
     return false;
+  }
+}
+
+async function hasDirtyWorkingTree(repoPath: string, runner: LocalMergeRunner): Promise<boolean> {
+  try {
+    const status = await runner("git", ["status", "--porcelain", "--", ".", CODE_UX_GIT_PATHSPEC_EXCLUDE], repoPath);
+    return status.stdout.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+export interface DirtyCheckoutPreservationResult {
+  dirtyRefBranch: string;
+  originalRef: CheckedOutRef | null;
+}
+
+export interface DirtyCheckoutRestoreResult {
+  ok: boolean;
+  conflict: boolean;
+  restoredPaths: string[];
+  dirtyRefBranch: string;
+  error?: string;
+}
+
+async function unstageCodeUxRepoDir(repoPath: string, runner: LocalMergeRunner): Promise<void> {
+  await runner("git", ["reset", "--", CODE_UX_REPO_DIR], repoPath).catch(() => undefined);
+}
+
+async function runGitWithCodeUxIdentity(
+  repoPath: string,
+  args: string[],
+  runner: LocalMergeRunner,
+): Promise<CommandResult> {
+  return runner("git", [...CODE_UX_GIT_IDENTITY_ARGS, ...args], repoPath);
+}
+
+/**
+ * Captures the current dirty checkout on a dedicated `dirty-ref-<uuid>` branch,
+ * commits all tracked and untracked work onto that branch, and restores the
+ * original checked-out ref cleanly so the caller can continue with a separate
+ * merge flow.
+ */
+export async function preserveDirtyCheckout(
+  repoPath: string,
+  runner: LocalMergeRunner = defaultRunner,
+): Promise<DirtyCheckoutPreservationResult | null> {
+  const originalRef = await getCheckedOutRef(repoPath, runner);
+  if (!originalRef) {
+    return null;
+  }
+
+  if (!(await hasDirtyWorkingTree(repoPath, runner))) {
+    return null;
+  }
+
+  const dirtyRefBranch = `dirty-ref-${randomUUID()}`;
+  try {
+    await runner("git", ["checkout", "-b", dirtyRefBranch], repoPath);
+    await unstageCodeUxRepoDir(repoPath, runner);
+    await runner("git", ["add", "-A", "--", ".", CODE_UX_GIT_PATHSPEC_EXCLUDE], repoPath);
+    await runGitWithCodeUxIdentity(repoPath, ["commit", "-m", `Preserve dirty work before local merge into ${originalRef.ref}`], runner);
+    if (!(await restoreCheckedOutRef(repoPath, originalRef, runner))) {
+      throw new Error(`Failed to restore the original ref ${originalRef.ref} after preserving dirty work.`);
+    }
+    return { dirtyRefBranch, originalRef };
+  } catch (error) {
+    try {
+      await runner("git", ["merge", "--abort"], repoPath);
+    } catch {
+      // Best-effort cleanup. The caller will surface the failure.
+    }
+    throw error;
+  }
+}
+
+/**
+ * Re-applies a preserved dirty-checkout commit onto the visible checkout without
+ * committing it. On conflict, the cherry-pick is aborted and the dirty branch is
+ * left intact for manual recovery.
+ */
+export async function restorePreservedDirtyCheckout(
+  repoPath: string,
+  dirtyRefBranch: string,
+  runner: LocalMergeRunner = defaultRunner,
+): Promise<DirtyCheckoutRestoreResult> {
+  const branch = dirtyRefBranch.trim();
+  if (!branch) {
+    return {
+      ok: false,
+      conflict: false,
+      restoredPaths: [],
+      dirtyRefBranch,
+      error: "Dirty checkout branch is required.",
+    };
+  }
+  if (!(await gitCommitExists(repoPath, branch, runner))) {
+    return {
+      ok: false,
+      conflict: false,
+      restoredPaths: [],
+      dirtyRefBranch: branch,
+      error: `Dirty checkout branch '${branch}' was not found or does not point to a commit.`,
+    };
+  }
+
+  let restoredPaths: string[] = [];
+  try {
+    const files = await runner("git", ["diff-tree", "--no-commit-id", "--name-only", "-r", branch], repoPath);
+    restoredPaths = files.stdout.split("\n").map((line) => line.trim()).filter(Boolean);
+  } catch {
+    restoredPaths = [];
+  }
+
+  try {
+    await runner("git", ["cherry-pick", "--no-commit", branch], repoPath);
+    if (restoredPaths.length > 0) {
+      await runner("git", ["reset", "--", ...restoredPaths], repoPath).catch(() => undefined);
+    }
+    return {
+      ok: true,
+      conflict: false,
+      restoredPaths,
+      dirtyRefBranch: branch,
+    };
+  } catch (err) {
+    const conflictPaths = await listUnmergedConflictPaths(repoPath, runner);
+    try {
+      await runner("git", ["cherry-pick", "--abort"], repoPath);
+    } catch {
+      try {
+        await runner("git", ["reset", "--merge"], repoPath);
+      } catch {
+        // Best-effort cleanup; the error below tells the caller what happened.
+      }
+    }
+    return {
+      ok: false,
+      conflict: conflictPaths.length > 0,
+      restoredPaths: conflictPaths.length > 0 ? conflictPaths : restoredPaths,
+      dirtyRefBranch: branch,
+      error: formatGitError(err),
+    };
   }
 }
 
@@ -206,6 +355,68 @@ async function hasUnmergedConflictEntries(
     } catch {
       return false;
     }
+  }
+}
+
+async function listUnmergedConflictPaths(
+  repoPath: string,
+  runner: LocalMergeRunner,
+): Promise<string[]> {
+  try {
+    const res = await runner("git", ["diff", "--name-only", "--diff-filter=U"], repoPath);
+    return res.stdout.split("\n").map((line) => line.trim()).filter(Boolean);
+  } catch {
+    try {
+      const res = await runner("git", ["ls-files", "-u"], repoPath);
+      const paths = new Set<string>();
+      for (const line of res.stdout.split("\n")) {
+        const tabIndex = line.indexOf("\t");
+        if (tabIndex >= 0) {
+          const filePath = line.slice(tabIndex + 1).trim();
+          if (filePath) paths.add(filePath);
+        }
+      }
+      return [...paths];
+    } catch {
+      return [];
+    }
+  }
+}
+
+function isCodeUxRepoPath(filePath: string): boolean {
+  const normalized = filePath.replaceAll("\\", "/");
+  return normalized === CODE_UX_REPO_DIR || normalized.startsWith(`${CODE_UX_REPO_DIR}/`);
+}
+
+async function resolveCodeUxOnlyMergeConflicts(
+  repoPath: string,
+  commitMessage: string,
+  runner: LocalMergeRunner,
+): Promise<LocalMergeResult | null> {
+  const conflictPaths = await listUnmergedConflictPaths(repoPath, runner);
+  if (conflictPaths.length === 0 || !conflictPaths.every(isCodeUxRepoPath)) {
+    return null;
+  }
+
+  // `.code-ux/` is runtime metadata. During orchestration merges, keep the target
+  // side and never let generated metadata block or contaminate task/sprint code.
+  await runner("git", ["checkout", "--ours", "--", CODE_UX_REPO_DIR], repoPath).catch(() => undefined);
+  await runner("git", ["add", "-A", "--", CODE_UX_REPO_DIR], repoPath).catch(() => undefined);
+
+  const remainingConflicts = await listUnmergedConflictPaths(repoPath, runner);
+  if (remainingConflicts.length > 0) {
+    return {
+      ok: false,
+      conflict: true,
+      error: `Only ${CODE_UX_REPO_DIR} paths conflicted, but they could not be resolved automatically: ${remainingConflicts.join(", ")}`,
+    };
+  }
+
+  try {
+    await runGitWithCodeUxIdentity(repoPath, ["commit", "-m", commitMessage], runner);
+    return { ok: true, conflict: false };
+  } catch (err) {
+    return { ok: false, conflict: false, error: formatGitError(err) };
   }
 }
 
@@ -351,14 +562,14 @@ export async function mergeBranchLocally(args: {
     return { ok: false, conflict: false, error: formatGitError(err) };
   }
   try {
-    await runner(
-      "git",
-      ["merge", "--no-ff", "-m", args.commitMessage, sourceBranch],
-      args.repoPath,
-    );
+    await runGitWithCodeUxIdentity(args.repoPath, ["merge", "--no-ff", "-m", args.commitMessage, sourceBranch], runner);
     return { ok: true, conflict: false };
   } catch (err) {
-    const conflict = await hasUnmergedConflictEntries(args.repoPath, runner);
+    const resolvedCodeUxConflict = await resolveCodeUxOnlyMergeConflicts(args.repoPath, args.commitMessage, runner);
+    if (resolvedCodeUxConflict?.ok) {
+      return resolvedCodeUxConflict;
+    }
+    const conflict = resolvedCodeUxConflict ? true : await hasUnmergedConflictEntries(args.repoPath, runner);
     try {
       await runner("git", ["merge", "--abort"], args.repoPath);
     } catch {
@@ -398,6 +609,7 @@ export async function mergeBranchLocallyInTemporaryWorktree(args: {
     };
   }
 
+  const visibleCheckout = await getCheckedOutRef(args.repoPath, runner);
   const targetExists = await gitRefExists(args.repoPath, `refs/heads/${targetBranch}`, runner);
   if (!targetExists) {
     try {
@@ -421,15 +633,24 @@ export async function mergeBranchLocallyInTemporaryWorktree(args: {
   try {
     await runner("git", ["worktree", "add", "--detach", worktreePath, targetBranch], args.repoPath);
     worktreeCreated = true;
-    await runner(
-      "git",
-      ["merge", "--no-ff", "-m", args.commitMessage, sourceBranch],
-      worktreePath,
-    );
-    await runner("git", ["branch", "-f", targetBranch, "HEAD"], worktreePath);
+    await runGitWithCodeUxIdentity(worktreePath, ["merge", "--no-ff", "-m", args.commitMessage, sourceBranch], runner);
+    await runner("git", ["update-ref", `refs/heads/${targetBranch}`, "HEAD"], worktreePath);
+    if (visibleCheckout && !visibleCheckout.detached && visibleCheckout.ref === targetBranch) {
+      await runner("git", ["reset", "--hard", "HEAD"], args.repoPath);
+    }
     return { ok: true, conflict: false };
   } catch (err) {
-    const conflict = worktreeCreated ? await hasUnmergedConflictEntries(worktreePath, runner) : false;
+    const resolvedCodeUxConflict = worktreeCreated
+      ? await resolveCodeUxOnlyMergeConflicts(worktreePath, args.commitMessage, runner)
+      : null;
+    if (resolvedCodeUxConflict?.ok) {
+      await runner("git", ["update-ref", `refs/heads/${targetBranch}`, "HEAD"], worktreePath);
+      if (visibleCheckout && !visibleCheckout.detached && visibleCheckout.ref === targetBranch) {
+        await runner("git", ["reset", "--hard", "HEAD"], args.repoPath);
+      }
+      return resolvedCodeUxConflict;
+    }
+    const conflict = resolvedCodeUxConflict ? true : worktreeCreated ? await hasUnmergedConflictEntries(worktreePath, runner) : false;
     if (worktreeCreated) {
       try {
         await runner("git", ["merge", "--abort"], worktreePath);

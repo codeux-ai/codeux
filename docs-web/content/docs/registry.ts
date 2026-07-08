@@ -42,6 +42,7 @@ export type DocsSlug =
   | 'developer-sprint-format'
   | 'developer-building-from-source'
   | 'developer-testing'
+  | 'developer-orchestration-debugging'
   | 'architecture-overview'
   | 'architecture-system-overview'
   | 'architecture-mcp-server'
@@ -219,7 +220,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-scheduler',
     section: 'User Guide',
     title: "Scheduler",
-    description: "The Scheduler page (dock label Schedule, /scheduler) runs Code UX work on a timetable. Schedule a sprint, a quicksprint template, a project message, or memory remediation to fire once or on a recurring cadence — usefu...",
+    description: "The Scheduler page (dock label Schedule, /scheduler) runs Code UX work on a timetable. Schedule a sprint, a quicksprint template, a node flow, a project message, or memory remediation to fire once or on a recurring ca...",
   },
   'user-dashboard-memory': {
     id: 'user-dashboard-memory',
@@ -254,7 +255,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-stats',
     section: 'User Guide',
     title: "Stats",
-    description: "The Stats page (/stats) is the analytics surface for the active project. It shows project execution, usage, cost, Git, and invocation telemetry in one workspace with visual-mode navigation, responsive layouts, and lig...",
+    description: "The Stats page (/stats) is the analytics surface for the active project. It shows project execution, usage, cost, Git, provider/model, ledger, and invocation telemetry in one flat Analysis Studio with responsive layou...",
   },
   'user-dashboard-settings': {
     id: 'user-dashboard-settings',
@@ -282,14 +283,14 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/developer-mcp-tools',
     section: 'Developer Reference',
     title: "MCP tools",
-    description: "Code UX is also an MCP server. When connected, it advertises a set of management tools that an MCP client (or another agent) can call to drive projects, sprints, tasks, agents, node flows, memory, persistent skills...",
+    description: "Code UX is also an MCP server. When connected, it advertises a set of management tools that an MCP client (or another agent) can call to drive projects, sprints, tasks, agents, memory, persistent skills, node flows, s...",
   },
   'developer-management-actions': {
     id: 'developer-management-actions',
     path: '/docs/developer-management-actions',
     section: 'Developer Reference',
     title: "Management actions",
-    description: "Code UX exposes one MCP tool per management domain — manage_projects, manage_sprints, manage_tasks, manage_quicksprints, manage_scheduler, manage_agents, manage_node_flows, manage_memory, manage_settings, manage_preview...",
+    description: "Code UX exposes one MCP tool per management domain — manage_projects, manage_sprints, manage_tasks, manage_quicksprints, manage_scheduler, manage_agents, manage_node_flows, manage_memory, manage_settings, manage_previ...",
   },
   'developer-http-api': {
     id: 'developer-http-api',
@@ -339,6 +340,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     section: 'Developer Reference',
     title: "Testing & quality gates",
     description: "Code UX uses Vitest as its single test runner across server and dashboard. CI gates enforce coverage thresholds and a full clean build.",
+  },
+  'developer-orchestration-debugging': {
+    id: 'developer-orchestration-debugging',
+    path: '/docs/developer-orchestration-debugging',
+    section: 'Developer Reference',
+    title: "Rapid orchestration debugging suite",
+    description: "Use this suite when a sprint stalls, local merges fail, worker-owned attention items churn, or memory usage needs extended observation after a fix.",
   },
   'architecture-overview': {
     id: 'architecture-overview',
@@ -487,6 +495,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['developer-sprint-format'],
   docsRegistry['developer-building-from-source'],
   docsRegistry['developer-testing'],
+  docsRegistry['developer-orchestration-debugging'],
   docsRegistry['architecture-overview'],
   docsRegistry['architecture-system-overview'],
   docsRegistry['architecture-mcp-server'],

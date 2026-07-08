@@ -47,8 +47,7 @@ describe("StatsCard", () => {
     expect(screen.getByText("4.2k")).toBeDefined();
     const card = screen.getByRole("article", { name: "Daily Active: 4.2k" });
     expect(card).toBeDefined();
-    expect(card).toHaveClass("stats-card-flat");
-    expect(card).toHaveAttribute("data-accent", "default");
+    expect(card.className).not.toContain("stats-card-flat");
   });
 
   it("renders icon component when provided", () => {
@@ -76,8 +75,7 @@ describe("StatsCard", () => {
     render(<StatsCard title="Cost" value="$4.20" accent="amber" description="Projected usage" />);
     const card = screen.getByRole("article", { name: "Cost: $4.20: Projected usage" });
     expect(card).toBeDefined();
-    expect(card).toHaveClass("stats-card-flat");
-    expect(card).toHaveAttribute("data-accent", "amber");
+    expect(card.className).not.toContain("stats-card-flat");
     expect(screen.getByText("Projected usage")).toBeDefined();
   });
 
@@ -176,7 +174,7 @@ describe("StatsCard", () => {
     expect(onToggle).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps shared stats surfaces on flat neutral tokens instead of glass blur or hover lift", () => {
+  it("keeps shared stats surfaces on warm void tokens instead of blue flat cards", () => {
     const themeCss = readFileSync(resolve(statsRoot, "styles/stats-theme.css"), "utf8");
     const cardCss = readFileSync(resolve(statsRoot, "components/StatsCard.module.css"), "utf8");
     const primitiveClasses = [
@@ -188,13 +186,14 @@ describe("StatsCard", () => {
       LEDGER_ROW_MODERN_CLASS,
     ].join(" ");
 
-    expect(themeCss).toContain("--stats-surface-panel: rgba(255, 255, 255, 0.96)");
-    expect(themeCss).toContain("--stats-surface-chip: rgba(241, 245, 249, 0.92)");
-    expect(themeCss).toContain("--stats-card-shadow: none");
-    expect(themeCss).toContain("--stats-panel-shadow: none");
+    expect(themeCss).toContain("--stats-surface-panel: #fffdfa");
+    expect(themeCss).toContain("--stats-surface-chip: #f4ede4");
+    expect(themeCss).toContain("--stats-card-shadow: 0 1px 2px rgba(61, 49, 37, 0.05)");
+    expect(themeCss).toContain("--stats-panel-shadow: 0 1px 2px rgba(61, 49, 37, 0.05)");
     expect(themeCss).not.toContain("surface-glass");
-    expect(`${themeCss}\n${cardCss}\n${primitiveClasses}`).not.toMatch(/backdrop-filter|-webkit-backdrop-filter|backdrop-blur|translateY|hover:-translate|linear-gradient/);
-    expect(primitiveClasses).not.toContain("shadow-[var(--stats-card-shadow-hover)]");
+    expect(`${themeCss}\n${cardCss}\n${primitiveClasses}`).not.toMatch(/backdrop-filter|-webkit-backdrop-filter|backdrop-blur|stats-card-flat/);
+    expect(cardCss).toContain("translateY(-1px)");
+    expect(cardCss).toContain("linear-gradient");
     expect(primitiveClasses).not.toContain("shadow-[var(--stats-control-shadow");
 
     render(<SeriesLegendButton series={CHART_SERIES[0]} active={false} currentValue={0} onToggle={vi.fn()} />);

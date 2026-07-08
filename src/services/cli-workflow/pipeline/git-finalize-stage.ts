@@ -1,5 +1,6 @@
 import type { PipelineContext } from "./pipeline-context.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "../../git-http-auth.js";
+import { isRuntimeShutdownInProgress } from "../../shutdown-state.js";
 
 export async function executeGitFinalizeStage(ctx: PipelineContext): Promise<{
   hasChanges: boolean;
@@ -50,6 +51,9 @@ export async function executeGitFinalizeStage(ctx: PipelineContext): Promise<{
   const hasAhead = await ctx.prService.hasWorkerBranchCommitsAgainstFeature(ctx.repoPath, ctx.workerBranch, ctx.featureBranch);
 
   if (!applied.hasChanges && !hasUnpushed && !hasAhead) {
+    if (isRuntimeShutdownInProgress()) {
+      throw new Error("Runtime shutdown interrupted git finalization before no-change output could be trusted.");
+    }
     ctx.deps.sessionTracking.appendActivity(ctx.sessionId, { originator: "system", description: `No file changes produced.` });
     ctx.deps.sessionTracking.updateSession(ctx.sessionId, { state: "COMPLETED" });
     ctx.workflowSucceeded = true;

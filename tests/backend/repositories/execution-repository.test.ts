@@ -3024,6 +3024,18 @@ describe("ExecutionRepository", () => {
     });
     const sprint = projectRepository.createSprint(project.id, { name: "Sprint 1", number: 1 });
     const sprint2 = projectRepository.createSprint(project2.id, { name: "Sprint 2", number: 1 });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "docker_cli",
+      status: "running",
+    });
+    const sprintRun2 = executionRepository.createSprintRun({
+      projectId: project2.id,
+      sprintId: sprint2.id,
+      executorMode: "docker_cli",
+      status: "running",
+    });
     const task1 = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 1", promptMarkdown: "Prompt 1" });
     const task2 = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 2", promptMarkdown: "Prompt 2" });
     const task3 = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 3", promptMarkdown: "Prompt 3" });
@@ -3085,6 +3097,135 @@ describe("ExecutionRepository", () => {
     expect(counts.get("codex")).toBe(1);
     expect(counts.has(null as any)).toBe(false);
     expect(counts.size).toBe(2);
+  });
+
+  it("counts global running task runs per provider", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Global Concurrency Project",
+      sourceType: "local",
+      sourceRef: "/workspace/global-concurrency",
+    });
+    const project2 = projectRepository.createProject({
+      name: "Global Concurrency Project 2",
+      sourceType: "local",
+      sourceRef: "/workspace/global-concurrency-2",
+    });
+    const sprint = projectRepository.createSprint(project.id, { name: "Sprint 1", number: 1 });
+    const sprint2 = projectRepository.createSprint(project2.id, { name: "Sprint 2", number: 1 });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "docker_cli",
+      status: "running",
+    });
+    const sprintRun2 = executionRepository.createSprintRun({
+      projectId: project2.id,
+      sprintId: sprint2.id,
+      executorMode: "docker_cli",
+      status: "running",
+    });
+    const task1 = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 1", promptMarkdown: "Prompt 1" });
+    const task2 = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 2", promptMarkdown: "Prompt 2" });
+    const task3 = projectRepository.createTask(project2.id, { sprintId: sprint2.id, title: "Task 3", promptMarkdown: "Prompt 3" });
+    const task4 = projectRepository.createTask(project2.id, { sprintId: sprint2.id, title: "Task 4", promptMarkdown: "Prompt 4" });
+    const task5 = projectRepository.createTask(project2.id, { sprintId: sprint2.id, title: "Task 5", promptMarkdown: "Prompt 5" });
+
+    const dispatch1 = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task1.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "running",
+    } as any);
+    const terminalTaskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task1.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch1.id,
+      provider: "mockup-cli",
+      state: "RUNNING",
+    });
+    const dispatch2 = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task2.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "running",
+    } as any);
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task2.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch2.id,
+      provider: "codex",
+      state: "RUNNING",
+    });
+    const dispatch3 = executionRepository.createTaskDispatch({
+      projectId: project2.id,
+      sprintId: sprint2.id,
+      taskId: task3.id,
+      sprintRunId: sprintRun2.id,
+      executorType: "docker_cli",
+      status: "running",
+    } as any);
+    executionRepository.createTaskRun({
+      projectId: project2.id,
+      sprintId: sprint2.id,
+      taskId: task3.id,
+      sprintRunId: sprintRun2.id,
+      dispatchId: dispatch3.id,
+      provider: "mockup-cli",
+      state: "RUNNING",
+    });
+    executionRepository.createTaskRun({
+      projectId: project2.id,
+      sprintId: sprint2.id,
+      taskId: task4.id,
+      sprintRunId: sprintRun2.id,
+      provider: "mockup-cli",
+      state: "COMPLETED",
+    });
+    const staleCompletedDispatch = executionRepository.createTaskDispatch({
+      projectId: project2.id,
+      sprintId: sprint2.id,
+      taskId: task5.id,
+      sprintRunId: sprintRun2.id,
+      executorType: "docker_cli",
+      status: "completed",
+      finishedAt: "2026-07-07T10:01:00.000Z",
+    } as any);
+    executionRepository.createTaskRun({
+      projectId: project2.id,
+      sprintId: sprint2.id,
+      taskId: task5.id,
+      sprintRunId: sprintRun2.id,
+      dispatchId: staleCompletedDispatch.id,
+      provider: "mockup-cli",
+      state: "RUNNING",
+    });
+    executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task1.id,
+      taskRunId: terminalTaskRun.id,
+      provider: "mockup-cli",
+      purpose: "task_coding",
+      sessionId: terminalTaskRun.id,
+      status: "completed",
+    });
+
+    const allCounts = executionRepository.countGlobalRunningTaskRunsPerProvider();
+    expect(allCounts.get("mockup-cli")).toBe(1);
+    expect(allCounts.get("codex")).toBe(1);
+
+    const filteredCounts = executionRepository.countGlobalRunningTaskRunsPerProvider(["mockup-cli"]);
+    expect(filteredCounts.get("mockup-cli")).toBe(1);
+    expect(filteredCounts.has("codex")).toBe(false);
   });
 
   describe("ExecutionInvocationMessageRecord Metadata", () => {

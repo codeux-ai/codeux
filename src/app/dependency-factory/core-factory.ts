@@ -220,6 +220,7 @@ export function createCoreDependencies(
   );
   const providerConcurrencyService = new ProviderConcurrencyService({
     executionRepository,
+    projectManagementRepository,
     logger: logger.child({ component: "provider-concurrency-service" }),
     dockerService: new DockerService(),
   });

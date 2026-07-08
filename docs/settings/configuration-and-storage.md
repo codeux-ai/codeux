@@ -486,6 +486,7 @@ Container execution notes:
 - `cliWorkflow.executionMode` defaults to `DOCKER`, but Code UX still supports `HOST` worktrees for controlled fallback and legacy-safe paths
 - task, planning, chat, and normal CI-fix flows execute inside isolated Docker-volume workspaces when Docker execution is available
 - Git URL projects must have a local checkout. Dashboard project creation clones them into the selected clone directory, or `~/.code-ux/projects/<repo-name>` when no clone directory is provided.
+- Repositories Code UX creates from scratch include `.code-ux/` in `.gitignore`. Existing repositories are not silently edited, but LOCAL final-merge dirty detection, dirty-backup commits, and dirty restore exclude repo-local `.code-ux/` artifacts by default. User-created dirty files outside `.code-ux/` are preserved on a `dirty-ref-<uuid>` branch before the clean final merge; if they apply cleanly afterward, Code UX copies them back into the visible checkout as uncommitted changes. If they conflict, the dirty branch is kept and surfaced for manual recovery.
 - QA review execution uses a fresh snapshot workspace instead of the mutable task workspace
 - QA-requested follow-up coding and CI autofix continue in the existing task workspace when that workspace is still reusable
 - CI autofix falls back to a host-backed worktree only when Docker is unavailable for that follow-up repair attempt

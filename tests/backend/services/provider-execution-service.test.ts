@@ -1001,6 +1001,44 @@ describe("ProviderExecutionService", () => {
     expect(sleepWithSignal).not.toHaveBeenCalled();
   });
 
+  it("finalizes execution invocation before throwing terminal classified provider errors", async () => {
+    const failedResult = { ...mockResult, ok: false };
+    providerRunner.runProvider.mockResolvedValue(failedResult);
+
+    vi.mocked(classifyProviderError).mockReturnValue({
+      category: "PROVIDER_NOT_FOUND",
+      userMessage: "Mockup CLI not found",
+      resetAtIso: null,
+      provider: "mockup-cli",
+      resetAfter: null,
+    });
+    vi.mocked(resolveProviderRetryDecision).mockReturnValue(null);
+
+    await expect(service.executeProvider({
+      ...defaultArgs,
+      provider: "mockup-cli",
+      model: "default",
+    })).rejects.toThrow(ProviderQuotaError);
+
+    expect(executionRepository.updateExecutionInvocation).toHaveBeenCalledWith(
+      "exec-inv-1",
+      expect.objectContaining({
+        status: "failed",
+        provider: "mockup-cli",
+        model: "default",
+        errorMessage: "Mockup CLI not found",
+        lastErrorCategory: "PROVIDER_NOT_FOUND",
+        lastErrorMessage: "Mockup CLI not found",
+        lastRetryAfterIso: null,
+        finishedAt: expect.any(String),
+      }),
+    );
+    expect(executionInvocationState).toMatchObject({
+      status: "failed",
+      errorMessage: "Mockup CLI not found",
+    });
+  });
+
   it("Unknown failure passthrough: returns result without throwing on UNKNOWN classification", async () => {
     const failedResult = { ...mockResult, ok: false };
     providerRunner.runProvider.mockResolvedValue(failedResult);

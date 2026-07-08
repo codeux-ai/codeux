@@ -107,6 +107,18 @@ Per-provider concurrency is controlled by `provider.maxConcurrentTasks`:
 
 `0` means no cap. Set explicit caps when running on shared infrastructure to avoid resource contention.
 
+For CLI/Docker providers, Code UX counts both running provider invocations and running task runs when enforcing provider capacity. A task run can reserve orchestration capacity before its provider invocation row starts, so this prevents wide DAGs from creating hidden running backlogs while provider calls appear idle.
+
+Docker-backed task workspaces prepare independently. Code UX locks only the workspace being created or resumed, deduplicates exact remote-branch fetches, reuses short-lived targeted seed bundles for concurrent workspaces with identical ref tips, checks out the worker branch during the seed container, and caches the public helper image readiness check per process. Completed task patch export and host-side patch materialization are collapsed into single Git shell phases to avoid repeated helper-container startup and large argv transfers.
+
+On restart, interrupted local CLI task runs may be cancelled and redispatched, but their workspace volumes are preserved. Session sync treats finished local CLI task runs as terminal even if a stale cached session snapshot still reports the old session as running.
+
+When a worker resolves a merge conflict, Code UX clears the task's stale `MERGE_CONFLICT` marker while keeping the task unmerged. The next protocol cycle retries the normal merge path instead of reopening the same attention item. That clear history is separate from merge-required suppression: suppression applies only after Git confirms the source branch has no commits ahead of the target feature branch. If the branch still has merge work, the task remains merge-required. Task-level human conflict handoffs are dismissed automatically once the task marker is cleared, while main-merge and unrelated manual handoffs remain visible.
+
+CLI tasks that complete with a worker branch but no PR use a branch-only merge path in both LOCAL and REMOTE git modes; REMOTE mode then pushes the sprint feature branch. If the task snapshot lost the worker branch, Code UX recovers it from the completed task run before checking merge readiness. For CLI-backed runs, branch-only classification waits for the git-finalize event (`cli_git_pushed` or `cli_git_no_changes`) so provider/session completion cannot race ahead of branch materialization. That merge runs in a temporary worktree so the visible checkout and `.code-ux/` runtime files do not interfere with task settlement. Once the task is settled as merged, stale task-run worker branch evidence is suppressed from live status so old branches do not keep re-entering merge scans.
+
+Worker-owned merge-conflict repair and LOCAL task-branch merges resolve `.code-ux/**` conflicts to the target branch side before deciding whether a provider is needed. A conflict only in Code UX runtime artifacts does not dispatch a provider, and invalid Docker repair workspaces are reseeded before provider execution. Real source conflicts outside `.code-ux/` still fail closed and remain visible as merge-conflict work.
+
 ## Emergency stop
 
 To prevent runaway costs from a misconfiguration, Code UX tracks **consecutive task-start failures** per cycle. When this count reaches `maxFailures` (default `5`):
@@ -156,6 +168,8 @@ When every subtask reaches a terminal merged state, the watch loop runs the **fi
    - `ALWAYS` — merge directly.
 4. **Cleanup** — remove Docker worktrees from terminal CLI dispatches; trigger memory auto-promotion.
 5. **Status transition** — `completed`, `failed`, `paused` (if main merge needs human), or `cancelled`.
+
+In `LOCAL` mode, the final merge runs in a temporary worktree without waiting for remote PR-style main merge states such as `ready_for_merge`. Once tasks are settled, Code UX enters the host-side merge path even when individual tasks completed without PR merge markers. Remote PR feedback does not open or clear LOCAL final-merge attention; LOCAL conflict attention follows the actual host-side merge result and remains open while a worker-owned repair is active. If the visible checkout has user-created dirty work, Code UX preserves that work on a `dirty-ref-<uuid>` backup branch first, completes the clean sprint merge, and then copies non-conflicting dirty work back into the visible checkout as ordinary uncommitted changes. Dirty files under `.code-ux/` are ignored by this preservation and restore flow. If the dirty restore conflicts, Code UX aborts the restore, keeps the dirty branch, and opens a dashboard notification naming the branch and affected paths. When the target branch is the checked-out branch in the visible repo, the working tree is refreshed after the merge so the local project reflects the merged state before dirty work is restored.
 
 ## Cancellation & pause
 

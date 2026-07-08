@@ -15,6 +15,7 @@ import { buildProviderPrompt, DEFAULT_CLI_WORKFLOW_SETTINGS, sanitizeToken } fro
 import { isReadFileNotFoundToolError, buildReadFileRetryPrompt } from "./cli-workflow-text-utils.js";
 import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
 import { WorkspaceArtifactService } from "../infrastructure/providers/cli/workspace-artifact-service.js";
+import { CODE_UX_GIT_PATHSPEC_EXCLUDE, CODE_UX_REPO_DIR } from "../infrastructure/git/code-ux-gitignore.js";
 import { ProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
 import { PrService } from "../infrastructure/providers/cli/pr-service.js";
@@ -54,6 +55,15 @@ import { planVirtualWorkerCycle } from "../domain/workers/virtual-worker-cycle-p
 
 const VIRTUAL_WORKER_RECONCILE_MS = 3_000;
 const VIRTUAL_WORKER_SESSION_POLL_MS = 2_000;
+const VIRTUAL_WORKER_CLI_PROVIDER_POOL: ProviderId[] = [
+  "gemini",
+  "codex",
+  "claude-code",
+  "qwen-code",
+  "opencode",
+  "antigravity",
+  "mockup-cli",
+];
 
 function sleep(ms: number): Promise<void> {
   if (ms <= 0) {
@@ -639,15 +649,6 @@ export class VirtualWorkerService {
   private async resolveMergeConflictAttention(workerEndpointId: string, item: ProjectAttentionItemRecord): Promise<void> {
     const settings = this.resolveDashboardSettings(item.projectId, item.sprintId);
     const guardrailScope = { projectId: item.projectId, sprintId: item.sprintId };
-    const mergeConflictEval = this.evaluateMergeConflictGuardrail(settings, guardrailScope, item);
-    if (mergeConflictEval && !mergeConflictEval.allowed && mergeConflictEval.action !== "WARN_ONLY") {
-      this.escalateAttentionToHuman(
-        workerEndpointId,
-        item,
-        `Virtual worker reached the merge-conflict resolution guardrail (${mergeConflictEval.count}/${mergeConflictEval.cap > 0 ? mergeConflictEval.cap : "∞"}). Escalating to human.`,
-      );
-      return;
-    }
     const workerAgent = await this.deps.agentPresetSyncService?.resolveTargetedCodingAgent(
       item.projectId,
       settings.agents?.routing?.mergeConflict?.agentPresetId ?? null,
@@ -662,7 +663,7 @@ export class VirtualWorkerService {
         is_independent: true,
         status: "PENDING",
       },
-      providerPool: ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"],
+      providerPool: VIRTUAL_WORKER_CLI_PROVIDER_POOL,
       agentProvider: workerAgent
         ? {
           providerConfigId: workerAgent.providerConfigId,
@@ -708,12 +709,19 @@ export class VirtualWorkerService {
       gitlabToken: settings.git.gitlabToken,
     };
 
-    // A previous cycle may already have pushed the resolution; GitHub lags in recomputing PR
-    // mergeability, so the conflict keeps being re-detected. If the target is already merged
-    // into the source branch on the remote, skip the (expensive) container run and just clear
-    // the attention item — re-dispatching here would only spin up a no-op worker.
-    if (settings.git.githubMode !== "LOCAL"
-      && await this.isMergeConflictResolvedOnRemote(repoPath, sourceBranch, targetBranch, gitAuth)) {
+    // A previous cycle may already have merged the source branch into the target branch while
+    // GitHub/local mergeability state lagged. Only skip provider work when the source branch is
+    // already contained in the target branch. The reverse relationship (target contained in
+    // source) only means the worker branch has been updated with target changes; it may still
+    // contain unmerged task commits and must remain in the merge gate.
+    if (await this.isMergeConflictAlreadyResolved({
+      repoPath,
+      sourceBranch,
+      targetBranch,
+      targetRef,
+      gitAuth,
+      githubMode: settings.git.githubMode,
+    })) {
       // No provider runs here (the remote is already merged), so this must not consume
       // the retry budget — otherwise GitHub mergeability lag could falsely trip the cap.
       this.deps.projectAttentionService.resolveItem(item.id, {
@@ -722,7 +730,7 @@ export class VirtualWorkerService {
         resolutionSummaryMarkdown: [
           item.summaryMarkdown.trim(),
           "",
-          `The merge conflict was already resolved on the remote: \`origin/${targetBranch}\` is contained in \`origin/${sourceBranch}\`. Waiting for the upstream PR to refresh its mergeability.`,
+          `The merge conflict was already resolved: \`${sourceBranch}\` is contained in \`${targetBranch}\`. Waiting for mergeability state to refresh.`,
         ].join("\n"),
         workerEndpointId,
         payloadPatch: {
@@ -733,6 +741,17 @@ export class VirtualWorkerService {
           alreadyResolved: true,
         },
       });
+      this.clearResolvedMergeConflictTaskMarker(item);
+      return;
+    }
+
+    const mergeConflictEval = this.evaluateMergeConflictGuardrail(settings, guardrailScope, item);
+    if (mergeConflictEval && !mergeConflictEval.allowed && mergeConflictEval.action !== "WARN_ONLY") {
+      this.escalateAttentionToHuman(
+        workerEndpointId,
+        item,
+        `Virtual worker reached the merge-conflict resolution guardrail (${mergeConflictEval.count}/${mergeConflictEval.cap > 0 ? mergeConflictEval.cap : "∞"}). Escalating to human.`,
+      );
       return;
     }
 
@@ -928,6 +947,7 @@ export class VirtualWorkerService {
           headSha,
         },
       });
+      this.clearResolvedMergeConflictTaskMarker(item);
       succeeded = true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -1064,7 +1084,7 @@ export class VirtualWorkerService {
         is_independent: true,
         status: "PENDING",
       },
-      providerPool: ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"],
+      providerPool: VIRTUAL_WORKER_CLI_PROVIDER_POOL,
       agentProvider: workerAgent
         ? {
           providerConfigId: workerAgent.providerConfigId,
@@ -1330,6 +1350,48 @@ export class VirtualWorkerService {
     }
   }
 
+  private clearResolvedMergeConflictTaskMarker(item: ProjectAttentionItemRecord): void {
+    if (!item.taskId) {
+      return;
+    }
+    const task = this.deps.projectManagementRepository.getTask(item.taskId);
+    if (task?.mergeIndicator !== "MERGE_CONFLICT") {
+      return;
+    }
+    this.deps.projectManagementRepository.updateTask(item.taskId, {
+      mergeIndicator: null,
+      isMerged: false,
+    });
+  }
+
+  private async isMergeConflictAlreadyResolved(args: {
+    repoPath: string;
+    sourceBranch: string;
+    targetBranch: string;
+    targetRef: string;
+    gitAuth: GitHttpAuthOptions;
+    githubMode: string;
+  }): Promise<boolean> {
+    if (args.githubMode !== "LOCAL") {
+      return this.isMergeConflictResolvedOnRemote(
+        args.repoPath,
+        args.sourceBranch,
+        args.targetBranch,
+        args.gitAuth,
+      );
+    }
+    try {
+      await runCommandStrict(
+        "git",
+        ["merge-base", "--is-ancestor", args.sourceBranch, args.targetRef],
+        args.repoPath,
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private async resolveVirtualWorkerWorkflowSettings(args: {
     workflowSettings: CliWorkflowSettings;
     sessionId: string;
@@ -1434,9 +1496,18 @@ export class VirtualWorkerService {
       });
       return false;
     } catch (error) {
-      const unresolved = await this.listUnresolvedFiles(worktreePath);
+      const rawUnresolved = await this.listRawUnresolvedFiles(worktreePath);
+      const ignoredCodeUxConflicts = rawUnresolved.filter((entry) => this.isCodeUxRepoPath(entry));
+      if (ignoredCodeUxConflicts.length > 0) {
+        await this.resolveCodeUxMergeConflictsToTarget(worktreePath);
+        this.deps.sessionTracking.appendActivity(sessionId, {
+          originator: "system",
+          description: `Ignored Code UX runtime merge conflicts in: ${ignoredCodeUxConflicts.join(", ")}`,
+        });
+      }
+      const unresolved = rawUnresolved.filter((entry) => !this.isCodeUxRepoPath(entry));
       if (unresolved.length === 0) {
-        throw error;
+        return false;
       }
       this.deps.sessionTracking.appendActivity(sessionId, {
         originator: "system",
@@ -1553,7 +1624,7 @@ export class VirtualWorkerService {
       await runCommandStrict("git", ["fetch", "origin", sourceBranch, targetBranch], repoPath, env ?? process.env);
       await runCommandStrict(
         "git",
-        ["merge-base", "--is-ancestor", `origin/${targetBranch}`, `origin/${sourceBranch}`],
+        ["merge-base", "--is-ancestor", `origin/${sourceBranch}`, `origin/${targetBranch}`],
         repoPath,
       );
       return true;
@@ -1574,7 +1645,7 @@ export class VirtualWorkerService {
     // Antigravity — hits this: they remove the markers, run tests, then hand back without
     // staging, expecting the orchestrator to finalize the index.) Stage the agent's edits
     // first so resolved unmerged entries collapse, then verify no markers survived.
-    await this.runWorkspaceCommand(worktreePath, "git", ["add", "-A"]);
+    await this.runWorkspaceCommand(worktreePath, "git", ["add", "-A", "--", ".", CODE_UX_GIT_PATHSPEC_EXCLUDE]);
     const stillConflicted = await this.listFilesWithConflictMarkers(worktreePath, unresolved);
     if (stillConflicted.length > 0) {
       throw new Error(`Unresolved merge conflicts remain: ${stillConflicted.join(", ")}`);
@@ -1686,9 +1757,46 @@ export class VirtualWorkerService {
     ];
   }
 
+  private isCodeUxRepoPath(entry: string): boolean {
+    const normalized = entry.replace(/\\/g, "/").replace(/^"+|"+$/g, "");
+    return normalized === CODE_UX_REPO_DIR || normalized.startsWith(`${CODE_UX_REPO_DIR}/`);
+  }
+
+  private async resolveCodeUxMergeConflictsToTarget(worktreePath: string): Promise<void> {
+    try {
+      await this.runWorkspaceCommand(worktreePath, "git", ["checkout", "--theirs", "--", CODE_UX_REPO_DIR]);
+    } catch {
+      await this.runWorkspaceCommand(worktreePath, "git", ["rm", "-r", "--ignore-unmatch", "--", CODE_UX_REPO_DIR])
+        .catch(() => undefined);
+    }
+    await this.runWorkspaceCommand(worktreePath, "git", ["add", "-A", "--", CODE_UX_REPO_DIR]);
+  }
+
   private async listUnresolvedFiles(worktreePath: string): Promise<string[]> {
-    const result = await this.runWorkspaceCommand(worktreePath, "git", ["diff", "--name-only", "--diff-filter=U"]);
-    return result.stdout.split("\n").map((entry) => entry.trim()).filter(Boolean);
+    return (await this.listRawUnresolvedFiles(worktreePath)).filter((entry) => !this.isCodeUxRepoPath(entry));
+  }
+
+  private async listRawUnresolvedFiles(worktreePath: string): Promise<string[]> {
+    try {
+      const result = await this.runWorkspaceCommand(worktreePath, "git", ["diff", "--name-only", "--diff-filter=U"]);
+      return result.stdout.split("\n").map((entry) => entry.trim()).filter(Boolean);
+    } catch (error) {
+      this.deps.logger?.warn("Failed to list unresolved merge files via git diff; falling back to git status.", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    const status = await this.runWorkspaceCommand(worktreePath, "git", ["status", "--porcelain", "-z"]);
+    return status.stdout
+      .split("\0")
+      .map((entry) => {
+        const code = entry.slice(0, 2);
+        if (!/U|AA|DD/.test(code)) {
+          return null;
+        }
+        return entry.slice(3).trim();
+      })
+      .filter((entry): entry is string => Boolean(entry));
   }
 
   private async listFilesWithConflictMarkers(worktreePath: string, files: string[]): Promise<string[]> {
@@ -1718,12 +1826,12 @@ export class VirtualWorkerService {
 
   private async finalizeMergeCommit(worktreePath: string, sourceBranch: string, targetBranch: string): Promise<void> {
     const mergeHead = await this.hasMergeHead(worktreePath);
-    const status = (await this.runWorkspaceCommand(worktreePath, "git", ["status", "--porcelain"])).stdout.trim();
+    const status = (await this.runWorkspaceCommand(worktreePath, "git", ["status", "--porcelain", "--", ".", CODE_UX_GIT_PATHSPEC_EXCLUDE])).stdout.trim();
     if (!mergeHead && status.length === 0) {
       return;
     }
 
-    await this.runWorkspaceCommand(worktreePath, "git", ["add", "-A"]);
+    await this.runWorkspaceCommand(worktreePath, "git", ["add", "-A", "--", ".", CODE_UX_GIT_PATHSPEC_EXCLUDE]);
     try {
       await this.runWorkspaceCommand(
         worktreePath,
@@ -1731,7 +1839,7 @@ export class VirtualWorkerService {
         ["commit", "-m", `Resolve merge conflict: ${targetBranch} into ${sourceBranch}`],
       );
     } catch (error) {
-      const nextStatus = (await this.runWorkspaceCommand(worktreePath, "git", ["status", "--porcelain"])).stdout.trim();
+      const nextStatus = (await this.runWorkspaceCommand(worktreePath, "git", ["status", "--porcelain", "--", ".", CODE_UX_GIT_PATHSPEC_EXCLUDE])).stdout.trim();
       if (nextStatus.length > 0 || await this.hasMergeHead(worktreePath)) {
         throw error;
       }

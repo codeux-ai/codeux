@@ -44,6 +44,8 @@ The top-level fields within `ProjectLiveDashboardSnapshot` are explicitly owned 
 - **`status`**:
   - **Owned By:** `ProjectRuntimeRepository`
   - **Mutated:** When task states change, a sprint is run, or the orchestration loop updates progress markers.
+  - **Write Rules:** Dashboard status sync batches runtime artifact ownership checks and task-run candidate reads before writing task rows. Terminal planning state is monotonic: completed/merged tasks cannot be downgraded by stale snapshots, and `coding_completed` is preserved over older pending/running payloads. If an incoming snapshot still reports a task as running while the linked dispatch or latest provider invocation is already terminal, live sync closes the stale active `task_runs` row from that terminal evidence so provider concurrency and dependency projections do not wait for restart recovery.
+  - **Watch-Loop Publish Rules:** The watch loop suppresses status snapshot writes when the sprint/task payload is semantically identical to the previous snapshot for the same sprint run. Finalization and blocker feedback still force a write so the Live dashboard immediately reflects terminal merge, pause, or wait decisions.
 - **`execution`**:
   - **Owned By:** `ExecutionRepository` (assembled via `getProjectExecutionSnapshot`)
   - **Mutated:** When sprint runs are dispatched, worker states change, attention items are created/claimed, invocation records/messages are written, or chat threads progress.

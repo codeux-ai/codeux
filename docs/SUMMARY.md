@@ -86,6 +86,7 @@
 - [OpenCode Integration](./settings/opencode-integration.md)
 - Development and validation
   - [Testing and Quality](./development/testing-and-quality.md)
+  - [Rapid Orchestration Debugging Suite](./development/rapid-orchestration-debugging.md)
   - [OpenRouter Sprint Validation](./development/openrouter-sprint-validation.md)
   - [Mockup Sprint Pentest](./development/mockup-sprint-pentest.md)
   - [Mockup Sprint Pentest Scenarios](./development/mockup-sprint-pentest-scenarios.md)

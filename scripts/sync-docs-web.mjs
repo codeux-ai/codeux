@@ -45,6 +45,7 @@ const pinnedOrder = new Map([
   ["developer-sprint-format", 370],
   ["developer-building-from-source", 380],
   ["developer-testing", 390],
+  ["developer-orchestration-debugging", 400],
   ["architecture-overview", 500],
   ["architecture-system-overview", 510],
   ["architecture-mcp-server", 520],

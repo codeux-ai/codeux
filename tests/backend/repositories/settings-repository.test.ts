@@ -352,6 +352,256 @@ describe("SettingsRepository", () => {
     expect(effectiveProject.sources["git.defaultBranch"]).toBe("project");
   });
 
+  it("keeps explicit sprint provider routes when modern integrations omit that provider", async () => {
+    const { repo } = await createRepo();
+    const system = repo.getSystemSettings();
+
+    repo.saveSystemSettings({
+      ...system,
+      integrations: {
+        ...system.integrations,
+        providers: {
+          gemini: system.integrations.providers.gemini,
+          codex: system.integrations.providers.codex,
+        },
+      },
+      defaults: {
+        ...system.defaults,
+        aiProvider: {
+          ...system.defaults.aiProvider,
+          provider: "gemini",
+          strategy: "MANUAL",
+          providers: {
+            gemini: {
+              ...system.defaults.aiProvider.providers.gemini,
+              enabled: true,
+              weight: 100,
+            },
+            codex: {
+              ...system.defaults.aiProvider.providers.codex,
+              enabled: true,
+              weight: 0,
+            },
+          },
+          invocationRouting: {
+            ...system.defaults.aiProvider.invocationRouting,
+            task_coding: {
+              ...system.defaults.aiProvider.invocationRouting.task_coding,
+              profile: "WORKER",
+              strategy: "MANUAL",
+              provider: "gemini",
+              allowedProviders: ["gemini"],
+              providers: {},
+            },
+            merge_conflict: {
+              ...system.defaults.aiProvider.invocationRouting.merge_conflict,
+              profile: "WORKER",
+              strategy: "MANUAL",
+              provider: "gemini",
+              allowedProviders: ["gemini"],
+              providers: {},
+            },
+          },
+        },
+        workers: {
+          ...system.defaults.workers,
+          virtualWorkerProvider: "gemini",
+          model: "gemini-2.5-flash",
+        },
+      },
+    });
+
+    const baseProjectSettings = repo.getProjectResolvedSettings("project-1");
+    repo.saveSprintSettings("sprint-1", baseProjectSettings, {
+      aiProvider: {
+        provider: "mockup-cli",
+        strategy: "MANUAL",
+        providers: {
+          "mockup-cli": {
+            provider: "mockup-cli",
+            name: "Mockup CLI",
+            enabled: true,
+            model: "default",
+            weight: 100,
+            thinkingMode: "MEDIUM",
+            maxConcurrentTasks: 12,
+          },
+        },
+        invocationRouting: {
+          task_coding: {
+            profile: "WORKER",
+            strategy: "MANUAL",
+            provider: "mockup-cli",
+            allowedProviders: ["mockup-cli"],
+            providers: {
+              "mockup-cli": {
+                enabled: true,
+                model: "default",
+              },
+            },
+          },
+          merge_conflict: {
+            profile: "WORKER",
+            strategy: "MANUAL",
+            provider: "mockup-cli",
+            allowedProviders: ["mockup-cli"],
+            providers: {
+              "mockup-cli": {
+                enabled: true,
+                model: "default",
+              },
+            },
+          },
+        },
+      },
+      workers: {
+        virtualWorkerProvider: "mockup-cli",
+        model: "default",
+      },
+    });
+
+    const effective = repo.resolveSprintDashboardSettings("project-1", "sprint-1").settings;
+
+    expect(Object.keys(effective.aiProvider.providers)).toContain("mockup-cli");
+    expect(effective.aiProvider.provider).toBe("mockup-cli");
+    expect(effective.aiProvider.providers["mockup-cli"].enabled).toBe(true);
+    expect(effective.aiProvider.providers["mockup-cli"].model).toBe("default");
+    expect(effective.workers.virtualWorkerProvider).toBe("mockup-cli");
+    expect(effective.workers.model).toBe("default");
+    expect(effective.aiProvider.invocationRouting.task_coding.provider).toBe("mockup-cli");
+    expect(effective.aiProvider.invocationRouting.task_coding.allowedProviders).toEqual(["mockup-cli"]);
+    expect(effective.aiProvider.invocationRouting.task_coding.providers).toEqual({
+      "mockup-cli": {
+        enabled: true,
+        model: "default",
+      },
+    });
+    expect(effective.aiProvider.invocationRouting.merge_conflict.provider).toBe("mockup-cli");
+    expect(effective.aiProvider.invocationRouting.merge_conflict.allowedProviders).toEqual(["mockup-cli"]);
+  });
+
+  it("replaces scoped route provider pools instead of retaining inherited providers", async () => {
+    const { repo } = await createRepo();
+    const system = repo.getSystemSettings();
+
+    repo.saveSystemSettings({
+      ...system,
+      defaults: {
+        ...system.defaults,
+        aiProvider: {
+          ...system.defaults.aiProvider,
+          provider: "gemini",
+          strategy: "MANUAL",
+          providers: {
+            gemini: {
+              ...system.defaults.aiProvider.providers.gemini,
+              enabled: true,
+              weight: 100,
+            },
+            codex: {
+              ...system.defaults.aiProvider.providers.codex,
+              enabled: true,
+              weight: 0,
+            },
+          },
+          invocationRouting: {
+            ...system.defaults.aiProvider.invocationRouting,
+            task_coding: {
+              ...system.defaults.aiProvider.invocationRouting.task_coding,
+              profile: "WORKER",
+              strategy: "MANUAL",
+              provider: "gemini",
+              allowedProviders: ["gemini"],
+              providers: {
+                gemini: { enabled: true, model: "gemini-2.5-pro" },
+                codex: { enabled: true, model: "gpt-5.5" },
+              },
+            },
+            merge_conflict: {
+              ...system.defaults.aiProvider.invocationRouting.merge_conflict,
+              profile: "WORKER",
+              strategy: "MANUAL",
+              provider: "codex",
+              allowedProviders: ["codex"],
+              providers: {
+                gemini: { enabled: false, model: "gemini-2.5-pro" },
+                codex: { enabled: true, model: "gpt-5.5" },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    repo.saveProjectSettings("project-1", {
+      aiProvider: {
+        provider: "mockup-cli",
+        strategy: "MANUAL",
+        providers: {
+          "mockup-cli": {
+            provider: "mockup-cli",
+            name: "Mockup CLI",
+            enabled: true,
+            model: "default",
+            weight: 100,
+            thinkingMode: "MEDIUM",
+            maxConcurrentTasks: 12,
+          },
+        },
+        invocationRouting: {
+          task_coding: {
+            profile: "WORKER",
+            strategy: "MANUAL",
+            provider: "mockup-cli",
+            allowedProviders: ["mockup-cli"],
+            providers: {
+              "mockup-cli": {
+                enabled: true,
+                model: "default",
+              },
+            },
+          },
+          merge_conflict: {
+            profile: "WORKER",
+            strategy: "MANUAL",
+            provider: "mockup-cli",
+            allowedProviders: ["mockup-cli"],
+            providers: {
+              "mockup-cli": {
+                enabled: true,
+                model: "default",
+              },
+            },
+          },
+        },
+      },
+      workers: {
+        virtualWorkerProvider: "mockup-cli",
+        model: "default",
+      },
+    });
+
+    const effective = repo.resolveProjectDashboardSettings("project-1").settings;
+
+    expect(effective.aiProvider.provider).toBe("mockup-cli");
+    expect(effective.aiProvider.invocationRouting.task_coding.provider).toBe("mockup-cli");
+    expect(effective.aiProvider.invocationRouting.task_coding.allowedProviders).toEqual(["mockup-cli"]);
+    expect(effective.aiProvider.invocationRouting.task_coding.providers).toEqual({
+      "mockup-cli": {
+        enabled: true,
+        model: "default",
+      },
+    });
+    expect(effective.aiProvider.invocationRouting.merge_conflict.provider).toBe("mockup-cli");
+    expect(effective.aiProvider.invocationRouting.merge_conflict.allowedProviders).toEqual(["mockup-cli"]);
+    expect(effective.aiProvider.invocationRouting.merge_conflict.providers).toEqual({
+      "mockup-cli": {
+        enabled: true,
+        model: "default",
+      },
+    });
+  });
+
   it("resolves partial persisted scoped settings while preserving default fallbacks", async () => {
     const { repo } = await createRepo();
     const now = new Date().toISOString();

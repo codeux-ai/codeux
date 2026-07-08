@@ -60,7 +60,7 @@ export interface CinematicStageProps {
 }
 
 /** The bot cycles through its toolbox while the runtime is executing. */
-const WORK_TOOLS: AgentSceneTool[] = ["screwdriver", "jackhammer", "wrench", "torch"];
+const WORK_TOOLS: AgentSceneTool[] = ["screwdriver", "jackhammer", "wrench", "hammer", "torch"];
 const TOOL_SWAP_MS = 7_000;
 
 /** Idle quick actions floating in an arc on the bot's LEFT — the right side

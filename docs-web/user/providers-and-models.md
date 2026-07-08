@@ -162,6 +162,10 @@ For each ID, you can pick:
 - An **agent preset** (optional).
 - A **routing profile** (`GLOBAL` for system-wide, `WORKER` for per-worker overrides).
 
+Route provider values are exact provider-config IDs, not provider-type aliases. For example, `gemini` only selects the provider instance whose id is exactly `gemini`; it will not silently select another Gemini instance such as `gemini-fast`. If a sprint or project override adds a dedicated provider instance, that instance must be present in the effective provider list before routes, allowed-provider pools, worker defaults, and per-route overrides can reference it.
+
+Project and sprint route-provider overrides replace the inherited provider map for that specific invocation route. If an override declares `task_coding.providers`, `merge_conflict.providers`, or `qa_review.providers`, only those provider-config IDs are eligible for that route; parent providers are not merged back in.
+
 A common high-quality setup:
 
 | ID | Provider | Model | Why |

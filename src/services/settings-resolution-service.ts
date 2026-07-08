@@ -315,6 +315,39 @@ function deepMerge<T>(base: T, patch: unknown): T {
   return result as T;
 }
 
+function mergeSettingsPatch<T>(base: T, patch: unknown): T {
+  const merged = deepMerge(base, patch) as Record<string, unknown>;
+  const patchRecord = toRecord(patch);
+  const patchAiProvider = toRecord(patchRecord.aiProvider);
+  const patchInvocationRouting = toRecord(patchAiProvider.invocationRouting);
+  const mergedAiProvider = toRecord(merged.aiProvider);
+  const mergedInvocationRouting = toRecord(mergedAiProvider.invocationRouting);
+
+  if (Object.prototype.hasOwnProperty.call(patchAiProvider, "providers")) {
+    mergedAiProvider.providers = cloneUnknown(patchAiProvider.providers);
+    merged.aiProvider = mergedAiProvider;
+  }
+
+  for (const [routeId, rawRoutePatch] of Object.entries(patchInvocationRouting)) {
+    const routePatch = toRecord(rawRoutePatch);
+    if (!Object.prototype.hasOwnProperty.call(routePatch, "providers")) {
+      continue;
+    }
+    const mergedRoute = toRecord(mergedInvocationRouting[routeId]);
+    mergedInvocationRouting[routeId] = {
+      ...mergedRoute,
+      providers: cloneUnknown(routePatch.providers),
+    };
+  }
+
+  if (Object.keys(patchInvocationRouting).length > 0) {
+    mergedAiProvider.invocationRouting = mergedInvocationRouting;
+    merged.aiProvider = mergedAiProvider;
+  }
+
+  return merged as T;
+}
+
 function deepDiff(base: unknown, value: unknown): unknown {
   if (Array.isArray(base) || Array.isArray(value)) {
     return JSON.stringify(base) === JSON.stringify(value) ? undefined : value;
@@ -1155,7 +1188,7 @@ export function resolveProjectSettings(
 ): ProjectSettings {
   return sanitizeProjectSettings(
     {
-      ...deepMerge(systemSettings.defaults, projectOverride || {}),
+      ...mergeSettingsPatch(systemSettings.defaults, projectOverride || {}),
       integrations: systemSettings.integrations,
     },
     undefined
@@ -1170,7 +1203,7 @@ export function resolveSprintProjectSettings(
   const projectSettings = resolveProjectSettings(systemSettings, projectOverride);
   return sanitizeProjectSettings(
     {
-      ...deepMerge(projectSettings, sprintOverride || {}),
+      ...mergeSettingsPatch(projectSettings, sprintOverride || {}),
       integrations: systemSettings.integrations,
     },
     undefined
@@ -1420,7 +1453,7 @@ export function toProjectSettingsOverride(
 ): ProjectSettingsOverride {
   const merged = sanitizeProjectSettings(
     {
-      ...deepMerge(base, patch),
+      ...mergeSettingsPatch(base, patch),
       integrations,
     },
     externalHints
@@ -1436,7 +1469,7 @@ export function toSprintSettingsOverride(
 ): SprintSettingsOverride {
   const merged = sanitizeProjectSettings(
     {
-      ...deepMerge(base, patch),
+      ...mergeSettingsPatch(base, patch),
       integrations,
     },
     externalHints

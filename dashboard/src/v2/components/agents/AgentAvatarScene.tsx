@@ -53,13 +53,6 @@ import {
   getChassisScale,
 } from "../../lib/agent-avatar-logo.js";
 import { extrudeLogoPath, type LogoShapeFrame } from "../../lib/logo-shapes.js";
-import {
-  getAgentFlashlightFrame,
-  getLowBatteryFlickerFrame,
-  getNextLowBatteryFlickerAtMs,
-  LOW_BATTERY_FLICKER_DURATION_MS,
-} from "../../lib/agent-flashlight.js";
-import { selectAgentHumorMessage } from "../../lib/agent-humor-messages.js";
 import { AgentAvatarSvg } from "./AgentAvatarSvg.js";
 
 interface AgentAvatarSceneProps {
@@ -81,7 +74,7 @@ interface AgentAvatarSceneProps {
 const WINDOW_GAZE_HOLD_MS = 3000;
 
 /** Work tools the bot can "hold" beside itself while the runtime executes. */
-export type AgentSceneTool = "screwdriver" | "jackhammer" | "wrench" | "torch";
+export type AgentSceneTool = "screwdriver" | "jackhammer" | "wrench" | "hammer" | "torch";
 
 /** Resting scale of the tool group once its entrance pop finishes. */
 const TOOL_SCALE = 0.5;
@@ -445,7 +438,7 @@ function buildHeadphones(headphonesId: string, parent: THREE.Group, mats: Mats) 
  *  Work tools — primitive-built props that float beside the bot while the
  *  runtime is actually executing. Each returns refs the loop animates:
  *  spinning screwdriver bit, hammering chisel, ratcheting wrench swing,
- *  flickering torch tip.
+ *  hammer taps, and flickering torch tip.
  * ════════════════════════════════════════════════════════════════════════ */
 interface ToolRefs {
   group: THREE.Group;
@@ -453,55 +446,6 @@ interface ToolRefs {
   spin?: THREE.Object3D;
   piston?: THREE.Object3D;
   tipMat?: THREE.MeshStandardMaterial;
-}
-
-interface FlashlightRefs {
-  group: THREE.Group;
-  beam: THREE.Mesh;
-  beamMaterial: THREE.MeshBasicMaterial;
-  targetGlow: THREE.Mesh;
-  targetGlowMaterial: THREE.MeshBasicMaterial;
-  pointLight: THREE.PointLight;
-}
-
-function buildFlashlight(accent: number): FlashlightRefs {
-  const group = new THREE.Group();
-  const beamMaterial = new THREE.MeshBasicMaterial({
-    color: accent,
-    transparent: true,
-    opacity: 0.18,
-    depthWrite: false,
-  });
-  const beam = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.68, 0.055, 1, 48, 1, true),
-    beamMaterial,
-  );
-  beam.renderOrder = 2;
-  group.add(beam);
-
-  const targetGlowMaterial = new THREE.MeshBasicMaterial({
-    color: accent,
-    transparent: true,
-    opacity: 0.2,
-    depthWrite: false,
-  });
-  const targetGlow = new THREE.Mesh(new THREE.CircleGeometry(0.42, 40), targetGlowMaterial);
-  targetGlow.position.z = 0.7;
-  targetGlow.renderOrder = 1;
-  group.add(targetGlow);
-
-  const pointLight = new THREE.PointLight(accent, 0.75, 2.8);
-  pointLight.position.z = 0.95;
-  group.add(pointLight);
-
-  return {
-    group,
-    beam,
-    beamMaterial,
-    targetGlow,
-    targetGlowMaterial,
-    pointLight,
-  };
 }
 
 function buildTool(kind: AgentSceneTool, accent: number): ToolRefs {
@@ -583,6 +527,31 @@ function buildTool(kind: AgentSceneTool, accent: number): ToolRefs {
     const tag = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.055), jade);
     tag.position.x = 0.3;
     group.add(tag);
+    return { group, kind };
+  }
+
+  if (kind === "hammer") {
+    // Claw hammer — angled handle with a compact metal head and tapping swing
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.56, 18), grip);
+    handle.rotation.z = -0.58;
+    handle.position.set(0.08, -0.12, 0);
+    group.add(handle);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.13, 0.1), metal);
+    head.position.set(-0.08, 0.18, 0);
+    head.rotation.z = -0.58;
+    group.add(head);
+    const face = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.07, 18), metal);
+    face.rotation.y = Math.PI / 2;
+    face.position.set(-0.24, 0.28, 0);
+    group.add(face);
+    const claw = new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.026, 10, 24, Math.PI * 1.1), metal);
+    claw.position.set(0.08, 0.07, 0);
+    claw.rotation.z = Math.PI * 0.8;
+    group.add(claw);
+    const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.09, 0.11), jade);
+    band.position.set(0, 0.04, 0);
+    band.rotation.z = -0.58;
+    group.add(band);
     return { group, kind };
   }
 
@@ -1078,7 +1047,6 @@ export function AgentAvatarScene({
     ambient: THREE.AmbientLight;
     rim: THREE.PointLight;
     kicker: THREE.PointLight;
-    flashlight: FlashlightRefs;
     animationId: number;
   } | null>(null);
 
@@ -1091,14 +1059,6 @@ export function AgentAvatarScene({
 
   /** Normalized pointer position over the stage — drives head parallax. */
   const pointerRef = useRef({ x: 0, y: 0, active: false });
-  const flashlightToneRef = useRef({ accent: 0x00eaab, lightBase: false });
-  const flashlightSeedRef = useRef(configKey);
-  const lowBatteryRef = useRef<{
-    eventStartMs: number | null;
-    nextAtMs: number;
-    visible: boolean;
-  }>({ eventStartMs: null, nextAtMs: 0, visible: false });
-  const [batteryHumorMessage, setBatteryHumorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
@@ -1110,16 +1070,6 @@ export function AgentAvatarScene({
   }, []);
 
   const shouldUseFallback = fallbackMode || isReducedMotion;
-
-  useEffect(() => {
-    flashlightSeedRef.current = configKey;
-  }, [configKey]);
-
-  useEffect(() => {
-    if (!shouldUseFallback && !webglError) return;
-    lowBatteryRef.current = { eventStartMs: null, nextAtMs: 0, visible: false };
-    setBatteryHumorMessage(null);
-  }, [shouldUseFallback, webglError]);
 
   /* ── Effect 1: mount renderer + scene (runs once per mount) ── */
   useEffect(() => {
@@ -1170,10 +1120,8 @@ export function AgentAvatarScene({
 
     const avatarGroup = new THREE.Group();
     scene.add(avatarGroup);
-    const flashlight = buildFlashlight(0x00eaab);
-    avatarGroup.add(flashlight.group);
 
-    rendererRef.current = { renderer, scene, camera, avatarGroup, ambient, rim, kicker, flashlight, animationId: 0 };
+    rendererRef.current = { renderer, scene, camera, avatarGroup, ambient, rim, kicker, animationId: 0 };
 
     const onResize = () => {
       const r = rendererRef.current;
@@ -1269,10 +1217,6 @@ export function AgentAvatarScene({
     r.ambient.intensity = light ? 0.42 : 0.3;
     r.rim.color.setHex(accent);
     r.kicker.color.setHex(accent);
-    r.flashlight.pointLight.color.setHex(accent);
-    r.flashlight.beamMaterial.color.setHex(accent);
-    r.flashlight.targetGlowMaterial.color.setHex(accent);
-    flashlightToneRef.current = { accent, lightBase: light };
 
     // 2d. Build new avatar + particles
     const envMap = createEnvMap(accent);
@@ -1469,75 +1413,6 @@ export function AgentAvatarScene({
       const particles = a.particles;
       t += 0.016;
 
-      const nowMs = Date.now();
-      const lowBattery = lowBatteryRef.current;
-      if (lowBattery.nextAtMs === 0) {
-        lowBattery.nextAtMs = getNextLowBatteryFlickerAtMs({
-          afterMs: nowMs,
-          seed: flashlightSeedRef.current,
-        });
-      }
-      if (lowBattery.eventStartMs === null && nowMs >= lowBattery.nextAtMs) {
-        lowBattery.eventStartMs = nowMs;
-        lowBattery.nextAtMs = getNextLowBatteryFlickerAtMs({
-          afterMs: nowMs + LOW_BATTERY_FLICKER_DURATION_MS,
-          seed: flashlightSeedRef.current,
-        });
-        lowBattery.visible = true;
-        setBatteryHumorMessage(selectAgentHumorMessage({
-          category: "battery",
-          seed: `${flashlightSeedRef.current}:${lowBattery.eventStartMs}`,
-          nowMs,
-        }));
-      }
-      const lowBatteryFlicker = getLowBatteryFlickerFrame({
-        nowMs,
-        eventStartMs: lowBattery.eventStartMs,
-      });
-      if (!lowBatteryFlicker.active && lowBattery.eventStartMs !== null) {
-        lowBattery.eventStartMs = null;
-        if (lowBattery.visible) {
-          lowBattery.visible = false;
-          setBatteryHumorMessage(null);
-        }
-      }
-
-      const flashlightFrame = getAgentFlashlightFrame({
-        elapsedSeconds: t,
-        pointer: pointerRef.current,
-        reducedMotion: isReducedMotion,
-      });
-      const flashlight = r2.flashlight;
-      const tone = flashlightToneRef.current;
-      const targetX = flashlightFrame.targetX + lowBatteryFlicker.jitterX;
-      const targetY = flashlightFrame.targetY + lowBatteryFlicker.jitterY;
-      const beamDx = targetX - flashlightFrame.originX;
-      const beamDy = targetY - flashlightFrame.originY;
-      const beamDistance = Math.max(0.9, Math.hypot(beamDx, beamDy));
-      const beamIntensity = flashlightFrame.intensity
-        * (tone.lightBase ? 0.85 : 1.08)
-        * lowBatteryFlicker.intensityMultiplier;
-      flashlight.beam.position.set(
-        flashlightFrame.originX + beamDx / 2,
-        flashlightFrame.originY + beamDy / 2,
-        0.58,
-      );
-      flashlight.beam.rotation.z = Math.atan2(-beamDx, beamDy);
-      flashlight.beam.scale.set(1, beamDistance, 1);
-      flashlight.beamMaterial.opacity = flashlightFrame.beamOpacity * lowBatteryFlicker.beamOpacityMultiplier;
-      flashlight.targetGlow.position.set(targetX, targetY, 0.66);
-      flashlight.targetGlow.scale.setScalar(flashlightFrame.targetGlowScale * (0.9 + beamIntensity * 0.14));
-      flashlight.targetGlowMaterial.opacity = Math.min(0.32, flashlight.beamMaterial.opacity * 1.15);
-      flashlight.pointLight.position.set(targetX, targetY, 0.95);
-      flashlight.pointLight.intensity = 0.35 + beamIntensity * 0.9;
-
-      const shellMat = p.shell.material as THREE.MeshPhysicalMaterial;
-      shellMat.emissive.setHex(tone.accent);
-      shellMat.emissiveIntensity = THREE.MathUtils.lerp(shellMat.emissiveIntensity, 0.025 * beamIntensity, 0.12);
-      const insetMat = p.inset.material as THREE.MeshPhysicalMaterial;
-      insetMat.emissive.setHex(tone.accent);
-      insetMat.emissiveIntensity = THREE.MathUtils.lerp(insetMat.emissiveIntensity, 0.09 * beamIntensity, 0.12);
-
       // Idle float + breath
       const floatY = Math.sin(t * bounceSpeed) * bounceAmp + 0.02;
       r2.avatarGroup.position.y = floatY;
@@ -1654,6 +1529,8 @@ export function AgentAvatarScene({
           g.position.y += Math.sin(t * 32) * 0.007; // whole-body judder
         } else if (toolParts.kind === "wrench") {
           g.rotation.z = -0.12 + Math.sin(t * 2.4) * 0.24; // ratcheting swing
+        } else if (toolParts.kind === "hammer") {
+          g.rotation.z = -0.22 + Math.sin(t * 5.4) * 0.18; // tapping swing
         } else if (toolParts.kind === "torch" && toolParts.tipMat) {
           toolParts.tipMat.emissiveIntensity = 1.7 + Math.random() * 1.5; // flicker
         }
@@ -1705,18 +1582,6 @@ export function AgentAvatarScene({
       data-testid="agent-avatar-scene"
     >
       <div ref={mountRef} className="absolute inset-0" aria-hidden="true" />
-      {batteryHumorMessage ? (
-        <div
-          className="pointer-events-none absolute left-3 right-3 top-3 z-10 mx-auto max-w-[22rem] rounded-xl border border-amber-200/70 bg-void-950/82 px-3 py-2 text-center text-[0.72rem] font-medium leading-snug text-amber-100 shadow-[0_12px_32px_rgba(15,23,42,0.28)] backdrop-blur-md dark:border-amber-300/25"
-          style={{
-            opacity: lowBatteryRef.current.visible ? 1 : 0,
-          }}
-          role="status"
-          aria-live="polite"
-        >
-          {batteryHumorMessage}
-        </div>
-      ) : null}
     </div>
   );
 }

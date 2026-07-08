@@ -539,7 +539,7 @@ Legacy runtime:
 - Chat page now receives websocket updates for thread assignment changes and incoming thread messages in the active thread
 - Chat page now shows a live "working" bubble once a listener has picked up a dashboard message and is preparing a reply
 - Chat page message, invocation, and working bubbles now use light-mode slate surfaces and darker text to keep chat transcripts readable without altering the Warm Void dark theme
-- Chat and agent avatar scenes can render a lightweight pseudo-raytraced flashlight effect using ordinary WebGL presentation primitives: a translucent beam, target glow, accent-aware light, and small material glows. It tracks the pointer when motion is allowed, idly scans when appropriate, and may show a brief bounded low-battery humor overlay. Reduced-motion settings or WebGL fallback paths use the static SVG avatar and omit scanning/flicker behavior.
+- Chat and agent avatar scenes use ordinary WebGL presentation primitives with studio lighting, pointer-aware head movement, and runtime tool props. The former flashlight beam, target glow, low-battery flicker, and emissive shell boost are removed; reduced-motion settings or WebGL fallback paths use the static SVG avatar.
 - Chat page invocation navigation keeps the rail and transcript height-bounded, so clicking through long invocation records scrolls only the internal panes and does not add page-level blank space.
 - Chat page now force-refreshes the selected thread when realtime thread updates arrive, so virtual replies clear stale `pending` delivery badges and sidebar counts as soon as the reply lands
 - Chat message and thread timestamp chrome now suppresses malformed timestamps instead of rendering `Invalid Date`
