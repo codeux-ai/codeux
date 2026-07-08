@@ -1,0 +1,186 @@
+/** @vitest-environment happy-dom */
+import { h } from "preact";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/preact";
+import userEvent from "@testing-library/user-event";
+import * as matchers from "@testing-library/jest-dom/matchers";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ModelBrowser } from "../ModelBrowser.js";
+import type { EmbeddingModelWithStatus, MemoryStats, ReembedProgress } from "../../../lib/memory-api.js";
+
+const memoryApiMock = vi.hoisted(() => ({
+  createCustomEmbeddingModel: vi.fn(),
+  listEmbeddingModels: vi.fn(),
+}));
+
+vi.mock("../../../lib/memory-api.js", async () => {
+  const actual = await vi.importActual<typeof import("../../../lib/memory-api.js")>("../../../lib/memory-api.js");
+  return {
+    ...actual,
+    createCustomEmbeddingModel: memoryApiMock.createCustomEmbeddingModel,
+    listEmbeddingModels: memoryApiMock.listEmbeddingModels,
+  };
+});
+
+expect.extend(matchers);
+
+const stats: MemoryStats = {
+  sprint: 2,
+  agent: 0,
+  project: 4,
+  activeModel: "bge-small-en-v1.5",
+  staleEmbeddings: 3,
+};
+
+const reembed: ReembedProgress | null = null;
+
+const model = (overrides: Partial<EmbeddingModelWithStatus> = {}): EmbeddingModelWithStatus => ({
+  id: "bge-small-en-v1.5",
+  displayName: "BGE Small EN",
+  description: "Fast local English embeddings for responsive memory search.",
+  dimension: 384,
+  sizeBytes: 133_000_000,
+  language: "English",
+  files: ["model.onnx", "tokenizer.json"],
+  source: "built_in",
+  downloaded: false,
+  downloading: false,
+  downloadProgress: 0,
+  localPath: null,
+  error: null,
+  active: false,
+  ...overrides,
+});
+
+const renderBrowser = (overrides: Partial<Parameters<typeof ModelBrowser>[0]> = {}) => {
+  const props = {
+    models: [
+      model({ downloaded: false }),
+      model({
+        id: "hf-acme-custom-12345678",
+        displayName: "Acme Custom Embed",
+        description: "Custom Hugging Face embedding model from acme/custom-embed.",
+        source: "custom" as const,
+        huggingFaceRepo: "acme/custom-embed",
+        onnxModelFile: "onnx/model.onnx",
+        downloaded: true,
+      }),
+    ],
+    stats,
+    reembed,
+    onModelsChanged: vi.fn(),
+    onDownload: vi.fn(),
+    onSelect: vi.fn(),
+    onDelete: vi.fn(),
+    onReembed: vi.fn(),
+    ...overrides,
+  };
+
+  render(<ModelBrowser {...props} />);
+  return props;
+};
+
+beforeEach(() => {
+  memoryApiMock.createCustomEmbeddingModel.mockReset();
+  memoryApiMock.listEmbeddingModels.mockReset();
+});
+
+afterEach(() => {
+  cleanup();
+});
+
+describe("ModelBrowser", () => {
+  it("groups embedding models separately from speech-adjacent Hugging Face models", () => {
+    renderBrowser();
+
+    const embeddingSection = screen.getByRole("region", { name: "Embedding Models" });
+    expect(within(embeddingSection).getByText("BGE Small EN")).toBeInTheDocument();
+    expect(within(embeddingSection).getByText("Acme Custom Embed")).toBeInTheDocument();
+    expect(within(embeddingSection).getByRole("link", { name: /acme\/custom-embed/i })).toHaveAttribute("href", "https://huggingface.co/acme/custom-embed");
+
+    const speechSection = screen.getByRole("region", { name: "TTS / Speech-Adjacent Hugging Face Models" });
+    expect(within(speechSection).getByText("Whisper Base English ONNX")).toBeInTheDocument();
+    expect(within(speechSection).getByText("Whisper Tiny English ONNX")).toBeInTheDocument();
+    expect(within(speechSection).getAllByText("Speech only")).toHaveLength(2);
+    expect(within(speechSection).queryByRole("button", { name: /Download|Activate|Delete|Re-embed/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps embedding actions available from compact model rows", async () => {
+    const user = userEvent.setup();
+    const props = renderBrowser({
+      models: [
+        model({ downloaded: false }),
+        model({
+          id: "bge-base-en-v1.5",
+          displayName: "BGE Base EN",
+          downloaded: true,
+          localPath: "/models/bge-base",
+        }),
+      ],
+    });
+
+    await user.click(screen.getByRole("button", { name: "Download" }));
+    expect(props.onDownload).toHaveBeenCalledWith("bge-small-en-v1.5");
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Download" })).toBeEnabled();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Activate" }));
+    expect(props.onSelect).toHaveBeenCalledWith("bge-base-en-v1.5");
+  });
+
+  it("validates custom Hugging Face model source before submission", async () => {
+    const user = userEvent.setup();
+    renderBrowser();
+
+    await user.type(screen.getByLabelText("Display name"), "Custom Embed");
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Hugging Face repo or URL is required.");
+    expect(memoryApiMock.createCustomEmbeddingModel).not.toHaveBeenCalled();
+  });
+
+  it("submits a custom Hugging Face model and refreshes the model list", async () => {
+    const user = userEvent.setup();
+    const created = {
+      id: "hf-acme-custom-12345678",
+      displayName: "Acme Custom Embed",
+      description: "Custom Hugging Face embedding model from acme/custom-embed.",
+      dimension: 384,
+      sizeBytes: 120_000_000,
+      language: "English",
+      files: ["model.onnx", "tokenizer.json", "tokenizer_config.json"],
+      source: "custom" as const,
+      huggingFaceRepo: "acme/custom-embed",
+      onnxModelFile: "onnx/model.onnx",
+      validationStatus: "valid" as const,
+    };
+    const refreshed = [model(), model({ ...created, downloaded: false, downloading: false, downloadProgress: 0, localPath: null, error: null, active: false })];
+    memoryApiMock.createCustomEmbeddingModel.mockResolvedValue(created);
+    memoryApiMock.listEmbeddingModels.mockResolvedValue(refreshed);
+    const props = renderBrowser({ models: [model()] });
+
+    await user.type(screen.getByLabelText("Display name"), "Acme Custom Embed");
+    await user.type(screen.getByLabelText("Repo or URL"), "https://huggingface.co/acme/custom-embed/blob/main/onnx/model.onnx");
+    await user.clear(screen.getByLabelText("Dimension"));
+    await user.type(screen.getByLabelText("Dimension"), "384");
+    await user.clear(screen.getByLabelText("Size bytes"));
+    await user.type(screen.getByLabelText("Size bytes"), "120000000");
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() => {
+      expect(memoryApiMock.createCustomEmbeddingModel).toHaveBeenCalledWith({
+        displayName: "Acme Custom Embed",
+        huggingFaceRepoOrUrl: "https://huggingface.co/acme/custom-embed/blob/main/onnx/model.onnx",
+        onnxModelFile: "onnx/model.onnx",
+        tokenizerFiles: ["tokenizer.json", "tokenizer_config.json"],
+        dimension: 384,
+        approximateSizeBytes: 120_000_000,
+        language: "English",
+      });
+    });
+    expect(memoryApiMock.listEmbeddingModels).toHaveBeenCalledTimes(1);
+    expect(props.onModelsChanged).toHaveBeenCalledWith(refreshed);
+    expect(await screen.findByRole("status")).toHaveTextContent("Acme Custom Embed added to embedding models.");
+  });
+});

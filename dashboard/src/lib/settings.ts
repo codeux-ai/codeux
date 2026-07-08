@@ -124,6 +124,10 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
     ...DEFAULT_DASHBOARD_SETTINGS.memory,
     externalEmbedding: { ...DEFAULT_DASHBOARD_SETTINGS.memory.externalEmbedding },
   },
+  speech: {
+    ...DEFAULT_DASHBOARD_SETTINGS.speech,
+    externalTranscription: { ...DEFAULT_DASHBOARD_SETTINGS.speech.externalTranscription },
+  },
   modelPricing: { overrides: { ...DEFAULT_DASHBOARD_SETTINGS.modelPricing.overrides } },
 });
 

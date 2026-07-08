@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_TASK_PR_TITLE_SCHEME } from "../../../../src/domain/git/task-pr-title-template.js";
 import { validateSettingsPayload } from "../../../../src/domain/settings/settings-schema.js";
 import { sanitizeGit } from "../../../../src/domain/settings/settings-sanitizers/git-sanitizer.js";
+import { sanitizeSpeech } from "../../../../src/domain/settings/settings-sanitizers/speech-sanitizer.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../src/repositories/settings-defaults.js";
 import { cloneDefaults } from "../../../../src/repositories/settings-sanitizer.js";
 
 describe("validateSettingsPayload", () => {
@@ -496,6 +498,90 @@ describe("validateSettingsPayload", () => {
     expect(result.issues).toEqual(expect.arrayContaining([
       { path: "cliWorkflow.containerRunAsRoot", message: "Expected a boolean" },
     ]));
+  });
+
+  it("accepts valid speech settings payloads", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    payload.speech = {
+      enabled: true,
+      providerMode: "external_api",
+      localModelId: "onnx-community/whisper-small.en",
+      maxAudioSeconds: 300,
+      externalTranscription: {
+        baseUrl: "https://transcription.example/v1/audio/transcriptions",
+        apiKey: "",
+        model: "custom-transcribe",
+        language: "en",
+      },
+    };
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(true);
+    expect(result.issues).toEqual([]);
+    expect(result.data?.speech.providerMode).toBe("external_api");
+  });
+
+  it("rejects malformed speech settings payloads", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    payload.speech = {
+      enabled: "yes",
+      providerMode: "remote",
+      localModelId: "",
+      maxAudioSeconds: 0,
+      externalTranscription: {
+        baseUrl: "",
+        apiKey: 42,
+        model: "",
+        language: 7,
+      },
+    } as any;
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      { path: "speech.enabled", message: "Expected a boolean" },
+      { path: "speech.providerMode", message: "Expected one of: auto, local_onnx, external_api" },
+      { path: "speech.localModelId", message: "Expected a non-empty string" },
+      { path: "speech.maxAudioSeconds", message: "Expected a finite number between 1 and 600" },
+      { path: "speech.externalTranscription.baseUrl", message: "Expected a non-empty string" },
+      { path: "speech.externalTranscription.apiKey", message: "Expected a string" },
+      { path: "speech.externalTranscription.model", message: "Expected a non-empty string" },
+      { path: "speech.externalTranscription.language", message: "Expected null or a string" },
+    ]));
+  });
+
+  it("defaults and sanitizes speech settings safely", () => {
+    expect(sanitizeSpeech(undefined)).toEqual(DEFAULT_DASHBOARD_SETTINGS.speech);
+
+    const result = sanitizeSpeech({
+      speech: {
+        enabled: true,
+        providerMode: "bad",
+        localModelId: " onnx-community/whisper-tiny.en ",
+        maxAudioSeconds: 999,
+        externalTranscription: {
+          baseUrl: " https://api.example/v1/audio/transcriptions ",
+          apiKey: " test-key ",
+          model: " custom-transcribe ",
+          language: "  ",
+        },
+      },
+    } as any);
+
+    expect(result).toEqual({
+      enabled: true,
+      providerMode: "auto",
+      localModelId: "onnx-community/whisper-tiny.en",
+      maxAudioSeconds: 600,
+      externalTranscription: {
+        baseUrl: "https://api.example/v1/audio/transcriptions",
+        apiKey: "test-key",
+        model: "custom-transcribe",
+        language: null,
+      },
+    });
   });
 });
 

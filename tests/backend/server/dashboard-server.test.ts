@@ -896,7 +896,7 @@ describe("setupDashboardServer", () => {
     expect(response.headers["x-content-type-options"]).toBe("nosniff");
     expect(response.headers["referrer-policy"]).toBe("no-referrer");
     expect(response.headers["x-frame-options"]).toBe("SAMEORIGIN");
-    expect(response.headers["permissions-policy"]).toBe("camera=(), microphone=(), geolocation=()");
+    expect(response.headers["permissions-policy"]).toBe("camera=(), microphone=(self), geolocation=()");
   });
 
   it("applies security headers to responses", async () => {
@@ -937,7 +937,7 @@ describe("setupDashboardServer", () => {
     expect(response.headers["x-content-type-options"]).toBe("nosniff");
     expect(response.headers["referrer-policy"]).toBe("no-referrer");
     expect(response.headers["x-frame-options"]).toBe("SAMEORIGIN");
-    expect(response.headers["permissions-policy"]).toBe("camera=(), microphone=(), geolocation=()");
+    expect(response.headers["permissions-policy"]).toBe("camera=(), microphone=(self), geolocation=()");
   });
 
   it("exposes /health endpoint", async () => {

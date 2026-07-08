@@ -1010,6 +1010,19 @@ describe("settings cloning helpers", () => {
     defaultSearchLimit: 25,
   });
 
+  const createMockSpeechSettings = () => ({
+    enabled: false,
+    providerMode: "auto" as const,
+    localModelId: "onnx-community/whisper-base.en",
+    maxAudioSeconds: 120,
+    externalTranscription: {
+      baseUrl: "https://api.openai.com/v1/audio/transcriptions",
+      apiKey: "",
+      model: "whisper-1",
+      language: null,
+    },
+  });
+
   const createMockProjectSettings = (): ProjectSettings => ({
     appearance: { experienceMode: "STANDARD", theme: "system" },
     automationLevel: "FULL",
@@ -1070,6 +1083,7 @@ describe("settings cloning helpers", () => {
     mcpTools: [{ serverName: "s1", toolName: "t1", enabled: true }],
     customMcpServers: [{ serverName: "s1", command: "cmd", args: [], env: { "FOO": "bar" }, headers: { "X-Auth": "abc" }, providers: [] }],
     memory: { enabled: true, embeddingModel: null, externalEmbedding: { baseUrl: "", apiKey: "", model: "", dimensions: null }, autoCaptureSprint: true, autoCaptureAgent: true, autoPromote: false, promotionThreshold: 5, maxSprintMemories: 10, maxProjectMemories: 20, mapMaxEdgesPerNode: 5, workerLearningsInstruction: "" },
+    speech: createMockSpeechSettings(),
   } as ProjectSettings);
 
   const createMockDashboardSettings = (): DashboardSettings => {

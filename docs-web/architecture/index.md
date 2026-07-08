@@ -17,7 +17,8 @@ It is for contributors and integrators who need to reason about *how* Code UX ma
 | 7 | [Data model](./data-model.md) | Projects, sprints, tasks, runs, dispatches, memory, conversations |
 | 8 | [External chat connectors](./external-chat-providers.md) | Provider setup, channel bindings, inbound dedupe, outbound delivery state |
 | 9 | [Configuration resolution](./configuration-resolution.md) | Cascade order, search paths, settings hierarchy |
-| 10 | [Security model](./security.md) | Authentication, authorisation, secrets, network surface |
+| 10 | [Speech input](./speech-input.md) | Persisted transcription settings, privacy boundary, provider fallback contract |
+| 11 | [Security model](./security.md) | Authentication, authorisation, secrets, network surface |
 
 ## Runtime Notes
 

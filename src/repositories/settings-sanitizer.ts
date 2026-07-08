@@ -27,6 +27,7 @@ import { sanitizeSprintLoopSteps } from "../domain/settings/settings-sanitizers/
 import { sanitizeCliWorkflow } from "../domain/settings/settings-sanitizers/cli-workflow-sanitizer.js";
 import { sanitizeWorkers } from "../domain/settings/settings-sanitizers/worker-sanitizer.js";
 import { sanitizeMemory } from "../domain/settings/settings-sanitizers/memory-sanitizer.js";
+import { sanitizeSpeech } from "../domain/settings/settings-sanitizers/speech-sanitizer.js";
 import { sanitizeModelPricing } from "../domain/settings/settings-sanitizers/model-pricing-sanitizer.js";
 import {
   buildDashboardProviderSettings,
@@ -558,7 +559,15 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   customMcpServers: DEFAULT_DASHBOARD_SETTINGS.customMcpServers.map((server) => ({ ...server })),
   memory: {
     ...DEFAULT_DASHBOARD_SETTINGS.memory,
+    customEmbeddingModels: DEFAULT_DASHBOARD_SETTINGS.memory.customEmbeddingModels.map((model) => ({
+      ...model,
+      tokenizerFiles: [...model.tokenizerFiles],
+    })),
     externalEmbedding: { ...DEFAULT_DASHBOARD_SETTINGS.memory.externalEmbedding },
+  },
+  speech: {
+    ...DEFAULT_DASHBOARD_SETTINGS.speech,
+    externalTranscription: { ...DEFAULT_DASHBOARD_SETTINGS.speech.externalTranscription },
   },
   modelPricing: { overrides: { ...DEFAULT_DASHBOARD_SETTINGS.modelPricing.overrides } },
 });
@@ -751,6 +760,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     DEFAULT_DASHBOARD_SETTINGS.customMcpServers,
   );
   const memory = sanitizeMemory(input);
+  const speech = sanitizeSpeech(input);
   const modelPricing = sanitizeModelPricing(input.modelPricing);
 
   return {
@@ -798,6 +808,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     mcpTools,
     customMcpServers,
     memory,
+    speech,
     modelPricing,
   };
 };

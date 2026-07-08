@@ -1,20 +1,17 @@
 # Nodes
 
-The **Nodes** page (`/nodes`) manages project-scoped workflow graphs.
+The **Nodes** page (`/nodes`) opens the browser-local Nodes Canvas workspace for drafting Code UX workflow graphs. It does not require a selected project and does not call the node-flow backend APIs.
 
 Use it to:
 
-- list saved node flows for the active project
-- edit nodes and edges on a canvas
-- configure nodes through their dynamic widget fields
-- attach flows to project agents
-- validate a graph before saving
-- run a flow manually through the node-flow runtime
-- inspect the run summary, persisted history, per-node status records, and linked invocation ids
+- add trigger, agent, task, condition, and output nodes from the palette
+- select and move nodes on the canvas
+- edit selected node labels, descriptions, metadata intents, and config fields in the inspector
+- inspect selected edge source and target wiring
+- review local structural validation issues
+- import and export deterministic graph JSON
+- view command-friendly graph metadata for agent workflows
 
-Node widget fields support text, textarea, numbers, booleans, selects, JSON, secret references, and
-key-value entries. Secret fields store references rather than secret values, and rendered run output
-redacts secret-shaped keys before display.
+The graph is saved to browser `localStorage` under `codeux:nodes-canvas:v1`. There is no cloud sync, database persistence, or real workflow execution on this page.
 
-When no project is selected, Nodes shows a project-required placeholder because flows, runs, and agent
-attachments all belong to a project.
+For the full local canvas contract, see [Nodes Canvas](./nodes-canvas.md). For saved project-scoped node-flow runtime behavior, see [Node Flows](./node-flows.md).

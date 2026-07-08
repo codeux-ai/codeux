@@ -56,6 +56,7 @@ import type { QuicksprintService } from "../../services/quicksprint-service.js";
 import type { ProjectSetupService } from "../../services/project-setup-service.js";
 import type { SchedulerService } from "../../services/scheduler-service.js";
 import type { ChatProviderIngressService } from "../../services/chat-provider-ingress-service.js";
+import type { SpeechTranscriptionService } from "../../services/speech-transcription-service.js";
 import type { NodeFlowService } from "../../services/node-flow-service.js";
 import type { MemoryService } from "../../services/memory-service.js";
 import type { KnowledgeService } from "../../services/knowledge-service.js";
@@ -122,6 +123,7 @@ export interface BootDashboardDeps {
   sprintIssueService: SprintIssueService;
   chatThreadRuntimeService: ChatThreadRuntimeService;
   chatProviderIngressService: ChatProviderIngressService;
+  speechTranscriptionService: SpeechTranscriptionService;
   chatProviderOutboundService?: ChatProviderOutboundService;
   nodeFlowService?: NodeFlowService;
   dashboardRealtimeService: DashboardRealtimeService;
@@ -440,6 +442,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     agentPresetRepository: deps.agentPresetRepository,
     chatProviderRepository: deps.chatProviderRepository,
     chatProviderIngressService: deps.chatProviderIngressService,
+    speechTranscriptionService: deps.speechTranscriptionService,
     nodeFlowService: deps.nodeFlowService,
     projectManagementRepository: deps.projectManagementRepository,
     executionRepository: deps.executionRepository,

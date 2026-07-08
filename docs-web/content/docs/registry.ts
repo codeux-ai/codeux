@@ -21,6 +21,9 @@ export type DocsSlug =
   | 'user-dashboard-live-session'
   | 'user-dashboard-chat'
   | 'user-dashboard-agents'
+  | 'user-dashboard-nodes'
+  | 'user-dashboard-nodes-canvas'
+  | 'user-dashboard-node-flows'
   | 'user-dashboard-scheduler'
   | 'user-dashboard-memory'
   | 'user-dashboard-knowledge'
@@ -54,8 +57,7 @@ export type DocsSlug =
   | 'settings-subcategories-display-settings'
   | 'settings-subcategories-guidance'
   | 'settings-subcategories-onboarding'
-  | 'user-dashboard-node-flows'
-  | 'user-dashboard-nodes'
+  | 'architecture-speech-input'
 
 export interface DocsRegistryEntry extends Partial<Omit<PageMeta, 'title' | 'description'>> {
   id: DocsSlug
@@ -191,6 +193,27 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     section: 'User Guide',
     title: "Agents",
     description: "The Agents page (/agents) manages the agent presets available to the active project.",
+  },
+  'user-dashboard-nodes': {
+    id: 'user-dashboard-nodes',
+    path: '/docs/user-dashboard-nodes',
+    section: 'User Guide',
+    title: "Nodes",
+    description: "The Nodes page (/nodes) opens a browser-local canvas workspace for drafting workflow graphs with localStorage persistence, validation, JSON import/export, and agent command metadata.",
+  },
+  'user-dashboard-nodes-canvas': {
+    id: 'user-dashboard-nodes-canvas',
+    path: '/docs/user-dashboard-nodes-canvas',
+    section: 'User Guide',
+    title: "Nodes Canvas",
+    description: "The Nodes Canvas page is a local graph drafting surface with trigger, agent, task, condition, and output nodes, structural validation, deterministic JSON exchange, and agent command helpers.",
+  },
+  'user-dashboard-node-flows': {
+    id: 'user-dashboard-node-flows',
+    path: '/docs/user-dashboard-node-flows',
+    section: 'User Guide',
+    title: "Node Flows",
+    description: "Create and operate saved node-flow workflows for the active project, including dynamic widgets, validation, manual runs, scheduling, run inspection, and agent skill attachments.",
   },
   'user-dashboard-scheduler': {
     id: 'user-dashboard-scheduler',
@@ -423,19 +446,12 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Onboarding",
     description: "Reopens the guided setup flow without changing saved settings by itself.",
   },
-  'user-dashboard-node-flows': {
-    id: 'user-dashboard-node-flows',
-    path: '/docs/user-dashboard-node-flows',
-    section: 'User Guide',
-    title: "Node Flows",
-    description: "The Nodes page (/nodes) is where dashboard users create and operate saved node-flow workflows for the active project. A node flow is a repeatable graph that can be validated, run manually, scheduled, inspected through...",
-  },
-  'user-dashboard-nodes': {
-    id: 'user-dashboard-nodes',
-    path: '/docs/user-dashboard-nodes',
-    section: 'User Guide',
-    title: "Nodes",
-    description: "The Nodes page (/nodes) manages project-scoped workflow graphs.",
+  'architecture-speech-input': {
+    id: 'architecture-speech-input',
+    path: '/docs/architecture-speech-input',
+    section: 'Architecture',
+    title: "Speech Input Architecture",
+    description: "Speech input turns dashboard microphone or uploaded audio into prompt text through POST /api/speech/transcriptions. The current implementation includes persisted settings, the backend transcription route and service,...",
   },
 }
 
@@ -458,6 +474,9 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['user-dashboard-live-session'],
   docsRegistry['user-dashboard-chat'],
   docsRegistry['user-dashboard-agents'],
+  docsRegistry['user-dashboard-nodes'],
+  docsRegistry['user-dashboard-nodes-canvas'],
+  docsRegistry['user-dashboard-node-flows'],
   docsRegistry['user-dashboard-scheduler'],
   docsRegistry['user-dashboard-memory'],
   docsRegistry['user-dashboard-knowledge'],
@@ -491,8 +510,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['settings-subcategories-display-settings'],
   docsRegistry['settings-subcategories-guidance'],
   docsRegistry['settings-subcategories-onboarding'],
-  docsRegistry['user-dashboard-node-flows'],
-  docsRegistry['user-dashboard-nodes'],
+  docsRegistry['architecture-speech-input'],
 ]
 
 export const groupedDocs = orderedDocs.reduce<Record<DocsSection, DocsRegistryEntry[]>>(

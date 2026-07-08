@@ -150,10 +150,41 @@ export const executePromotion = async (projectId: string, memoryIds: string[], r
 
 // --- Embedding models ---
 
-export type EmbeddingModelWithStatus = EmbeddingModelInfo & EmbeddingModelStatus & { active: boolean };
+export interface CustomEmbeddingModelInput {
+  displayName: string;
+  huggingFaceRepoOrUrl: string;
+  onnxModelFile: string;
+  tokenizerFiles: string[];
+  dimension: number;
+  approximateSizeBytes: number;
+  language: string;
+}
+
+export type EmbeddingModelSource = "built_in" | "custom";
+
+export type EmbeddingModelWithStatus = EmbeddingModelInfo & EmbeddingModelStatus & {
+  active: boolean;
+  source?: EmbeddingModelSource;
+  huggingFaceRepo?: string;
+  onnxModelFile?: string;
+  validationStatus?: "valid" | "invalid";
+};
 
 export const listEmbeddingModels = async (): Promise<EmbeddingModelWithStatus[]> => {
   return fetchJson("/api/embedding-models");
+};
+
+export const createCustomEmbeddingModel = async (input: CustomEmbeddingModelInput): Promise<EmbeddingModelInfo & {
+  source: "custom";
+  huggingFaceRepo: string;
+  onnxModelFile: string;
+  validationStatus: "valid" | "invalid";
+}> => {
+  return fetchJson("/api/embedding-models/custom", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
 };
 
 export const downloadEmbeddingModel = async (modelId: string): Promise<{ status: string; modelId: string }> => {

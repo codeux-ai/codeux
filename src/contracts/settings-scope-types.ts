@@ -32,6 +32,7 @@ import type {
   TechstackSelectionSettings,
 } from "./app-types.js";
 import type { MemorySettings } from "./memory-types.js";
+import type { SpeechSettings } from "./speech-types.js";
 import type { WorkerRuntimeSettings } from "./worker-types.js";
 
 export type { WorkerRuntimeSettings };
@@ -103,6 +104,7 @@ export interface ProjectSettings {
   mcpTools?: McpToolToggle[];
   customMcpServers?: CustomMcpServer[];
   memory: MemorySettings;
+  speech: SpeechSettings;
 }
 
 export interface SystemRuntimeSettings {
