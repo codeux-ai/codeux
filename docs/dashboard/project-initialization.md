@@ -17,14 +17,14 @@ Project Initialization runs a repository-specific setup pass through the `Projec
 - New remote init clones into the selected clone directory, or `~/.code-ux/projects` when the field is blank, and stores the project base directory as the single checkout root `~/.code-ux/projects/<repo-name>`.
 - Existing projects expose a `Setup Project` action from the project card agent button.
 
-Imported-project setup lets the operator choose which generated artifacts to create. Backend and MCP setup requests can also explicitly enable docs embedding:
+Imported-project setup lets the operator choose which generated artifacts to create. The dashboard keeps Docs disabled by default; selecting it embeds discovered repository documentation into Knowledge docs. Backend and MCP setup requests can also explicitly enable docs embedding:
 
 - `Agents`
 - `Quicksprints`
 - `Preview Script`
 - `CI`
 - `Techstack`
-- `Docs` (opt-in via setup request payload)
+- `Docs` (opt-in)
 
 ## Backend Flow
 

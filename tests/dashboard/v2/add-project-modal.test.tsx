@@ -87,6 +87,7 @@ describe("AddProjectModal", () => {
     expect(screen.getByRole("button", { name: /local repo/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /remote repo/i })).toBeInTheDocument();
     expect(screen.queryByText(/Initialize with Project Setup Agent/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Docs/i })).not.toBeInTheDocument();
   });
 
   it("hides git inputs and allows a blank local directory path", async () => {
@@ -119,9 +120,81 @@ describe("AddProjectModal", () => {
           previewScript: false,
           ci: true,
           techstack: true,
+          docs: false,
         },
       },
     });
+  });
+
+  it("renders the Docs setup option and submits docs only when selected", async () => {
+    const onAdd = vi.fn().mockResolvedValue(undefined);
+    render(<AddProjectModal onClose={vi.fn()} onAdd={onAdd} />);
+
+    const nameInput = screen.getByLabelText(/Project Name/i);
+    fireEvent.input(nameInput, { target: { value: "Docs Project" } });
+    await waitFor(() => expect(nameInput).toHaveValue("Docs Project"));
+
+    const form = nameInput.closest("form");
+    fireEvent.submit(form!);
+
+    const docsOption = screen.getByRole("button", { name: /Docs/i });
+    expect(docsOption).toHaveAttribute("aria-pressed", "false");
+    expect(onAdd).not.toHaveBeenCalled();
+
+    fireEvent.click(docsOption);
+    expect(docsOption).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.submit(form!);
+
+    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
+    expect(onAdd).toHaveBeenCalledWith({
+      name: "Docs Project",
+      type: "local",
+      path: "",
+      setup: {
+        enabled: true,
+        options: {
+          agents: true,
+          quicksprints: true,
+          previewScript: false,
+          ci: true,
+          techstack: true,
+          docs: true,
+        },
+      },
+    });
+  });
+
+  it("includes Docs when selecting all setup options", async () => {
+    const onAdd = vi.fn().mockResolvedValue(undefined);
+    render(<AddProjectModal onClose={vi.fn()} onAdd={onAdd} />);
+
+    const nameInput = screen.getByLabelText(/Project Name/i);
+    fireEvent.input(nameInput, { target: { value: "All Setup Project" } });
+    await waitFor(() => expect(nameInput).toHaveValue("All Setup Project"));
+
+    const form = nameInput.closest("form");
+    fireEvent.submit(form!);
+
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    expect(screen.getByRole("button", { name: /Docs/i })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.submit(form!);
+
+    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
+    expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({
+      setup: {
+        enabled: true,
+        options: {
+          agents: true,
+          quicksprints: true,
+          previewScript: true,
+          ci: true,
+          techstack: true,
+          docs: true,
+        },
+      },
+    }));
   });
 
   it("submits the new project local payload without a slug", async () => {
