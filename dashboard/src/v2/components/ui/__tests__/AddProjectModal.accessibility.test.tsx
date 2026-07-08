@@ -58,6 +58,7 @@ describe("AddProjectModal Accessibility", () => {
     fireEvent.submit(form);
 
     await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent(/Review required fields/i);
       const nameInput = document.getElementById("add-project-name") as HTMLInputElement;
       const pathInput = document.getElementById("add-project-git-url") as HTMLInputElement;
       expect(nameInput).toHaveAttribute("aria-invalid", "true");
@@ -70,6 +71,7 @@ describe("AddProjectModal Accessibility", () => {
     const pathInput = document.getElementById("add-project-git-url") as HTMLInputElement;
     expect(nameInput).toHaveAttribute("aria-errormessage", "project-name-error");
     expect(pathInput).toHaveAttribute("aria-describedby", "project-git-error");
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
   });
 
   test("imported setup exposes a default-enabled keyboard-focusable techstack option", async () => {
