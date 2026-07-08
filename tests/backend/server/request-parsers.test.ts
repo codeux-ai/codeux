@@ -302,7 +302,7 @@ describe("Request Parsers", () => {
   });
 
   describe("parseProjectSetupRequestInput", () => {
-    it("parses setup option booleans including techstack", () => {
+    it("parses setup option booleans including techstack and docs", () => {
       expect(parseProjectSetupRequestInput({
         enabled: true,
         clientRequestId: " setup-1 ",
@@ -312,6 +312,7 @@ describe("Request Parsers", () => {
           previewScript: 1,
           ci: 0,
           techstack: true,
+          docs: true,
         },
       })).toEqual({
         enabled: true,
@@ -322,6 +323,7 @@ describe("Request Parsers", () => {
           previewScript: true,
           ci: false,
           techstack: true,
+          docs: true,
         },
       });
     });

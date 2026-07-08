@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/ho
 import gsap from "gsap";
 import { useNavigate } from "@tanstack/react-router";
 import {
+    BookOpen,
     Bot,
     Check,
     Circle,
@@ -18,7 +19,7 @@ import {
     Sparkles,
     Trash2,
 } from "lucide-preact";
-import type { Source, SourceStatus } from "./types.js";
+import type { ProjectSetupOptions, Source, SourceStatus } from "./types.js";
 import { AddProjectModal, type AddProjectModalSubmission, type SourceType as AddProjectModalSourceType } from "./components/ui/AddProjectModal.js";
 import { buildProjectCreationSettingsOverride } from "../lib/settings-updaters.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../lib/settings.js";
@@ -37,6 +38,14 @@ import { buildProjectCardViewModel } from "./lib/project-card-view-model.js";
 
 const EMBER_HEX = '#FFB800';
 
+const createDefaultSetupOptions = (): ProjectSetupOptions => ({
+    agents: true,
+    quicksprints: true,
+    previewScript: true,
+    ci: true,
+    techstack: true,
+    docs: false,
+});
 
 type Filter = 'All' | 'Running' | 'Idle' | 'Failed';
 
@@ -453,13 +462,7 @@ export const ProjectsPage: FunctionComponent = () => {
     const [runningSetupProjectIds, setRunningSetupProjectIds] = useState<Set<string>>(() => new Set());
     const [setupInvocationByProjectId, setSetupInvocationByProjectId] = useState<Record<string, string>>({});
     const [setupError, setSetupError] = useState<string | null>(null);
-    const [setupOptions, setSetupOptions] = useState({
-        agents: true,
-        quicksprints: true,
-        previewScript: true,
-        ci: true,
-        techstack: true,
-    });
+    const [setupOptions, setSetupOptions] = useState<ProjectSetupOptions>(() => createDefaultSetupOptions());
     const [activeFilter, setActiveFilter] = useState<Filter>('All');
     const {
         projects: sources,
@@ -542,13 +545,7 @@ export const ProjectsPage: FunctionComponent = () => {
     const launchProjectSetup = (
         projectId: string,
         projectName: string,
-        options: {
-            agents: boolean;
-            quicksprints: boolean;
-            previewScript: boolean;
-            ci: boolean;
-            techstack: boolean;
-        },
+        options: ProjectSetupOptions,
     ) => {
         setRunningSetupProjectIds(prev => new Set(prev).add(projectId));
         addToast({
@@ -810,7 +807,7 @@ export const ProjectsPage: FunctionComponent = () => {
                                         onDelete={() => { void deleteProject(source.id); }}
                                         onSetup={() => {
                                             setSetupProjectId(source.id);
-                                            setSetupOptions({ agents: true, quicksprints: true, previewScript: true, ci: true, techstack: true });
+                                            setSetupOptions(createDefaultSetupOptions());
                                             setSetupError(null);
                                         }}
                                         onOpenInvocation={() => {
@@ -872,21 +869,29 @@ export const ProjectsPage: FunctionComponent = () => {
                                     { key: "previewScript", label: "Preview Script", description: "Container startup." },
                                     { key: "ci", label: "CI", description: "Basic checks." },
                                     { key: "techstack", label: "Techstack", description: "Detect and assign from manifests." },
+                                    { key: "docs", label: "Docs", description: "Embed repository docs into Knowledge docs.", icon: BookOpen },
                                 ] as const).map((option) => (
                                     <button
                                         key={option.key}
                                         type="button"
                                         onClick={() => setSetupOptions(prev => ({ ...prev, [option.key]: !prev[option.key] }))}
                                         disabled={isActiveSetupRunning}
-                                        className={`rounded-2xl border p-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
+                                        className={`flex min-w-0 items-start gap-3 rounded-2xl border p-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
                                             setupOptions[option.key]
                                                 ? "border-ember-500/35 bg-ember-500/[0.08] text-slate-900 dark:text-white"
                                                 : "border-black/[0.06] bg-black/[0.025] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-400"
                                         }`}
                                         aria-pressed={setupOptions[option.key]}
                                     >
-                                        <span className="block text-xs font-black uppercase tracking-[0.14em]">{option.label}</span>
-                                        <span className="mt-1 block text-xs font-medium opacity-75">{option.description}</span>
+                                        {"icon" in option ? (
+                                            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${setupOptions[option.key] ? "bg-ember-500 text-void-900" : "bg-black/[0.04] text-slate-400 dark:bg-white/[0.06]"}`}>
+                                                <option.icon className="h-4 w-4" aria-hidden="true" />
+                                            </span>
+                                        ) : null}
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block text-xs font-black uppercase tracking-[0.14em]">{option.label}</span>
+                                            <span className="mt-1 block text-xs font-medium opacity-75">{option.description}</span>
+                                        </span>
                                     </button>
                                 ))}
                             </div>

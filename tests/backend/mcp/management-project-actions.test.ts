@@ -73,4 +73,56 @@ describe("handleProjectAction", () => {
     expect(repository.deleteProject).toHaveBeenCalledWith("p1");
     expect(result.result).toEqual({ status: "success", deletedProjectId: "p1" });
   });
+
+  it("passes top-level setup options through to project setup", async () => {
+    const projectSetupService = {
+      setupProject: vi.fn(async () => ({ ok: true, embeddedDocumentIds: ["doc-1"], embeddedDocumentErrors: [] })),
+    };
+
+    await handleProjectAction(
+      "setup",
+      {
+        projectId: "p1",
+        options: { docs: true },
+        clientRequestId: "setup-top-level",
+      },
+      repository,
+      "projects",
+      undefined,
+      projectSetupService as any,
+    );
+
+    expect(projectSetupService.setupProject).toHaveBeenCalledWith("p1", {
+      clientRequestId: "setup-top-level",
+      options: { docs: true },
+    });
+  });
+
+  it("passes nested setup options through to project setup", async () => {
+    const projectSetupService = {
+      setupProject: vi.fn(async () => ({ ok: true, embeddedDocumentIds: ["doc-1"], embeddedDocumentErrors: [] })),
+    };
+
+    await handleProjectAction(
+      "setup",
+      {
+        projectId: "p1",
+        setup: {
+          enabled: true,
+          clientRequestId: "setup-nested",
+          options: { docs: true },
+        },
+      },
+      repository,
+      "projects",
+      undefined,
+      projectSetupService as any,
+    );
+
+    expect(projectSetupService.setupProject).toHaveBeenCalledWith("p1", {
+      enabled: true,
+      clientRequestId: "setup-nested",
+      options: { docs: true },
+    });
+  });
 });

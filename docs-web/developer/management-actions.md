@@ -31,7 +31,7 @@ Domain for project CRUD and selection.
 | `create` | – | `CreateProjectInput` | Create a new project. |
 | `update` | – | `projectId`, `UpdateProjectInput` | Update a project. |
 | `select` | – | `projectId \| null` | Set the active project. |
-| `setup` | – | `projectId`, optional `setup` | Run the Project Setup Agent to generate agents, templates, and guidance. |
+| `setup` | – | `projectId`, optional `setup` or top-level `options` | Run the Project Setup Agent to generate agents, templates, guidance, and optional docs embedding (`options.docs`). |
 | `delete` | ✅ | `projectId` | Delete a project (+ approval). |
 
 `CreateProjectInput` includes: `name`, `repositoryPath`, optional `defaultBranch`, `featureBranchPrefix`, `description`, `githubMode`.

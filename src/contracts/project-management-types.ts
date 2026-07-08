@@ -394,6 +394,7 @@ export interface ProjectSetupOptions {
   previewScript: boolean;
   ci: boolean;
   techstack: boolean;
+  docs: boolean;
 }
 
 export interface ProjectSetupRequestInput {
@@ -453,6 +454,8 @@ export interface ProjectSetupResult {
   createdAgentIds: string[];
   createdQuicksprintTemplateIds: string[];
   writtenFiles: string[];
+  embeddedDocumentIds: string[];
+  embeddedDocumentErrors: Array<{ fileName: string; error: string }>;
 }
 
 export interface ProjectSetupStartResult {

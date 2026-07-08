@@ -483,6 +483,7 @@ export function parseProjectSetupRequestInput(body: unknown): ProjectSetupReques
         previewScript: parseOptionalBoolean(optionsInput.previewScript, "setup.options.previewScript"),
         ci: parseOptionalBoolean(optionsInput.ci, "setup.options.ci"),
         techstack: parseOptionalBoolean(optionsInput.techstack, "setup.options.techstack"),
+        docs: parseOptionalBoolean(optionsInput.docs, "setup.options.docs"),
       }
       : undefined,
   };

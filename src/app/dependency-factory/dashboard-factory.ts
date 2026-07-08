@@ -7,6 +7,7 @@ import { ExecutionControlService } from "../../services/execution-control-servic
 import { PlanningAgentService } from "../../services/planning-agent-service.js";
 import { QuicksprintService } from "../../services/quicksprint-service.js";
 import { ProjectSetupService } from "../../services/project-setup-service.js";
+import { ProjectDocsAutoEmbedService } from "../../services/project-docs-auto-embed-service.js";
 import { WorkspaceManager } from "../../infrastructure/providers/cli/workspace-manager.js";
 import { formatSprintBranch } from "../../domain/sprint/branch-name-generator.js";
 
@@ -471,6 +472,7 @@ export function createDashboardDependencies(
     quicksprintService,
     providerRunner,
     providerConcurrencyService: coreDeps.providerConcurrencyService,
+    projectDocsAutoEmbedService: new ProjectDocsAutoEmbedService(coreDeps.knowledgeService),
     projectRoot: typeof context.getProjectRoot === "function" ? context.getProjectRoot() : process.cwd(),
     getGithubToken: () => context.getEffectiveGithubToken(),
     logger: logger.child({ component: "project-setup-service" }),

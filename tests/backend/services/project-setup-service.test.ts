@@ -1,7 +1,7 @@
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { SettingsRepository } from "../../../src/repositories/settings-repository.js";
@@ -10,6 +10,7 @@ import { ExecutionRepository } from "../../../src/repositories/execution-reposit
 import { AgentPresetSyncService } from "../../../src/services/agent-preset-sync-service.js";
 import { QuicksprintService } from "../../../src/services/quicksprint-service.js";
 import { ProjectSetupService } from "../../../src/services/project-setup-service.js";
+import type { ProjectDocsAutoEmbedService } from "../../../src/services/project-docs-auto-embed-service.js";
 import type { IProviderRunner, ProviderRunResult } from "../../../src/infrastructure/providers/cli/provider-runner.js";
 import { DEFAULT_PLAYWRIGHT_MCP_SERVER_ID } from "../../../src/repositories/settings-defaults.js";
 
@@ -99,6 +100,7 @@ class DeferredProviderRunner implements IProviderRunner {
 async function createProjectSetupHarness(
   fixtureName: string,
   providerPayload: unknown,
+  projectDocsAutoEmbedService?: Pick<ProjectDocsAutoEmbedService, "embedProjectDocs">,
 ) {
   const repoDir = await fs.mkdtemp(path.join(os.tmpdir(), fixtureName));
   tempDirs.push(repoDir);
@@ -138,6 +140,7 @@ async function createProjectSetupHarness(
     executionRepository,
     agentPresetSyncService,
     providerRunner,
+    projectDocsAutoEmbedService,
     projectRoot: process.cwd(),
   });
 
@@ -621,5 +624,91 @@ describe("ProjectSetupService", () => {
       selectedTechstackId: "manual-stack",
       applicationKind: "web",
     });
+  });
+
+  it("does not embed project docs when docs setup is omitted", async () => {
+    const projectDocsAutoEmbedService = {
+      embedProjectDocs: vi.fn(async () => ({ documentIds: ["doc-1"], errors: [] })),
+    } satisfies Pick<ProjectDocsAutoEmbedService, "embedProjectDocs">;
+    const { project, service } = await createProjectSetupHarness(
+      "code-ux-project-setup-docs-omitted-",
+      {
+        summary: "No docs requested.",
+        agents: [],
+        quicksprints: [],
+        previewScript: null,
+        ci: [],
+        techstack: null,
+      },
+      projectDocsAutoEmbedService,
+    );
+
+    const result = await service.setupProject(project.id, {
+      options: { agents: false, quicksprints: false, previewScript: false, ci: false, techstack: false },
+    });
+
+    expect(projectDocsAutoEmbedService.embedProjectDocs).not.toHaveBeenCalled();
+    expect(result.embeddedDocumentIds).toEqual([]);
+    expect(result.embeddedDocumentErrors).toEqual([]);
+  });
+
+  it("embeds project docs only when requested and returns document metadata", async () => {
+    const projectDocsAutoEmbedService = {
+      embedProjectDocs: vi.fn(async () => ({
+        documentIds: ["doc-readme", "doc-guide"],
+        errors: [{ fileName: "docs/broken.md", error: "Failed to ingest file" }],
+      })),
+    } satisfies Pick<ProjectDocsAutoEmbedService, "embedProjectDocs">;
+    const { project, providerRunner, service } = await createProjectSetupHarness(
+      "code-ux-project-setup-docs-enabled-",
+      {
+        summary: "Docs requested.",
+        agents: [],
+        quicksprints: [],
+        previewScript: null,
+        ci: [],
+        techstack: null,
+      },
+      projectDocsAutoEmbedService,
+    );
+
+    const result = await service.setupProject(project.id, {
+      options: { agents: false, quicksprints: false, previewScript: false, ci: false, techstack: false, docs: true },
+    });
+
+    expect(projectDocsAutoEmbedService.embedProjectDocs).toHaveBeenCalledWith(project.id, project.baseDir);
+    expect(providerRunner.lastPrompt).toContain("Requested artifacts: Docs Embedding");
+    expect(result.embeddedDocumentIds).toEqual(["doc-readme", "doc-guide"]);
+    expect(result.embeddedDocumentErrors).toEqual([{ fileName: "docs/broken.md", error: "Failed to ingest file" }]);
+    expect(result.createdAgentIds).toEqual([]);
+    expect(result.createdQuicksprintTemplateIds).toEqual([]);
+    expect(result.writtenFiles).toEqual([]);
+  });
+
+  it("reports a docs setup error when docs are requested but the embed service is unavailable", async () => {
+    const { project, service } = await createProjectSetupHarness(
+      "code-ux-project-setup-docs-unavailable-",
+      {
+        summary: "Docs requested without service.",
+        agents: [],
+        quicksprints: [],
+        previewScript: null,
+        ci: [],
+        techstack: null,
+      },
+    );
+
+    const result = await service.setupProject(project.id, {
+      options: { agents: false, quicksprints: false, previewScript: false, ci: false, techstack: false, docs: true },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.embeddedDocumentIds).toEqual([]);
+    expect(result.embeddedDocumentErrors).toEqual([
+      {
+        fileName: "docs",
+        error: "Project docs auto-embed service is not available.",
+      },
+    ]);
   });
 });

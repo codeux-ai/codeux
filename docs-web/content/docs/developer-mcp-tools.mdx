@@ -80,6 +80,8 @@ Every tool requires `runtimeRoles: ["project_manager"]` and is enabled by defaul
 | `manage_chat_providers` | `list_provider_definitions`, `list_connections`, `get_connection`, `create_connection`, `update_connection`, `delete_connection`, `list_channel_bindings`, `create_channel_binding`, `update_channel_binding`, `delete_channel_binding`, `list_outbound_deliveries` |
 | `manage_telemetry` | `get_project_stats_snapshot`, `get_project_execution_snapshot`, `list_execution_invocations`, `list_execution_invocation_messages`, `list_sprint_runs`, `list_task_dispatches` |
 
+For `manage_projects` setup, clients may send setup options either as `setup.options` or as top-level `options`. `options.docs: true` is opt-in and embeds discovered repository documentation into the Knowledge docs library.
+
 For the full per-action payloads and return shapes, see [Management actions](/docs/developer-management-actions).
 
 ## `scheduler_code_ux`

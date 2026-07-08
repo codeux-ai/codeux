@@ -249,7 +249,7 @@ Apply accepts a `bundle` object and optional `scopes` for partial import. Projec
 
 ### Project Setup Action
 
-`manage_projects` supports project setup:
+`manage_projects` supports project setup with the nested setup request shape used by project creation and dashboard setup:
 
 ```json
 {
@@ -261,13 +261,72 @@ Apply accepts a `bundle` object and optional `scopes` for partial import. Projec
       "agents": true,
       "quicksprints": true,
       "previewScript": true,
-      "ci": true
+      "ci": true,
+      "techstack": true,
+      "docs": true
     }
   }
 }
 ```
 
-The action runs the Project Setup Agent and returns the applied artifact summary, including created agent IDs, created quicksprint template IDs, and written project-relative files.
+For the `setup` action, clients may also send the normalized setup request shape directly on the project payload. The same `options.docs` flag is accepted there:
+
+```json
+{
+  "action": "setup",
+  "projectId": "project-id",
+  "options": {
+    "agents": true,
+    "quicksprints": true,
+    "previewScript": true,
+    "ci": true,
+    "techstack": true,
+    "docs": true
+  }
+}
+```
+
+The deprecated `manage_code_ux` envelope delegates `domain: "projects"` setup calls to the same handler, so it accepts the same nested `setup.options` shape:
+
+```json
+{
+  "domain": "projects",
+  "action": "setup",
+  "payload": {
+    "projectId": "project-id",
+    "setup": {
+      "enabled": true,
+      "options": {
+        "agents": true,
+        "quicksprints": true,
+        "previewScript": true,
+        "ci": true,
+        "techstack": true,
+        "docs": true
+      }
+    }
+  }
+}
+```
+
+It also accepts the normalized setup request shape:
+
+```json
+{
+  "domain": "projects",
+  "action": "setup",
+  "payload": {
+    "projectId": "project-id",
+    "options": {
+      "docs": true
+    }
+  }
+}
+```
+
+The action runs the Project Setup Agent and returns the applied artifact summary, including created agent IDs, created quicksprint template IDs, written project-relative files, `embeddedDocumentIds`, and `embeddedDocumentErrors`. `docs` defaults to `false`; when explicitly enabled, Code UX discovers repository documentation and ingests it through the Knowledge docs library without requiring the setup agent to return document contents. The Knowledge pipeline keeps its existing dedupe, extraction, chunking, embedding, and status behavior, so setup does not imply every document is already `ready`.
+
+Docs embedding is best-effort. Individual file failures are reported as `{ "fileName": "...", "error": "..." }` entries in `embeddedDocumentErrors`; they do not fail the entire setup run or roll back provider-generated setup artifacts.
 
 Dashboard calls can add `background: true` to the HTTP setup request. In that mode Code UX returns the created `invocationId` immediately and the invocation rail becomes the live tracking surface while setup continues.
 

@@ -36,7 +36,40 @@ export const TOOL_DEFINITIONS = [
         projectId: { type: "string", description: "Required for get, update, select, setup, delete." },
         name: { type: "string", description: "Required for create. Optional for update." },
         description: { type: "string", description: "Optional for create and update." },
-        setup: { type: "object", additionalProperties: true, description: "Optional setup request with enabled and options flags." },
+        setup: {
+          type: "object",
+          additionalProperties: true,
+          description: "Optional setup request with enabled and options flags. For setup action, options.docs=true embeds discovered repository documentation into Knowledge docs.",
+          properties: {
+            enabled: { type: "boolean", description: "Set to true when requesting setup during project creation." },
+            options: {
+              type: "object",
+              additionalProperties: true,
+              description: "Project setup options. docs defaults to false unless explicitly requested.",
+              properties: {
+                agents: { type: "boolean", description: "Generate repository-specific coding agents." },
+                quicksprints: { type: "boolean", description: "Generate repository-specific quicksprint templates." },
+                previewScript: { type: "boolean", description: "Generate a preview container startup script." },
+                ci: { type: "boolean", description: "Generate basic CI workflow files." },
+                techstack: { type: "boolean", description: "Detect and select the project techstack." },
+                docs: { type: "boolean", description: "Embed discovered repository documentation into the Knowledge docs library. Defaults to false." },
+              },
+            },
+          },
+        },
+        options: {
+          type: "object",
+          additionalProperties: true,
+          description: "Top-level project setup options for action=setup. Supports docs=true to embed discovered repository documentation.",
+          properties: {
+            agents: { type: "boolean", description: "Generate repository-specific coding agents." },
+            quicksprints: { type: "boolean", description: "Generate repository-specific quicksprint templates." },
+            previewScript: { type: "boolean", description: "Generate a preview container startup script." },
+            ci: { type: "boolean", description: "Generate basic CI workflow files." },
+            techstack: { type: "boolean", description: "Detect and select the project techstack." },
+            docs: { type: "boolean", description: "Embed discovered repository documentation into the Knowledge docs library. Defaults to false." },
+          },
+        },
         approval: {
           type: "object",
           properties: {
