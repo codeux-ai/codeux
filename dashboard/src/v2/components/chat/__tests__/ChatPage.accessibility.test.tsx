@@ -717,6 +717,59 @@ describe('ChatPage Accessibility', () => {
     expect(screen.getByRole("textbox", { name: "Message the project manager" })).toHaveValue("Stage draft");
   });
 
+  it('sends cinematic stage action widgets from keyboard activation without changing the composer', async () => {
+    const user = userEvent.setup();
+    mocks.reducedMotion.value = true;
+    const handleSend = vi.fn(() => Promise.resolve());
+    const setInput = vi.fn();
+    const assistantMessage = {
+      id: "message-stage-keyboard-action",
+      threadId: "thread1",
+      projectId: "p1",
+      connectionId: null,
+      direction: "connection_to_dashboard",
+      authorType: "connection",
+      authorName: "Assistant",
+      bodyMarkdown: [
+        "Choose a keyboard next step.",
+        "```codeux:actions",
+        JSON.stringify({ items: [{ label: "Keyboard widget next step", prompt: "Inspect the test failures." }] }),
+        "```",
+      ].join("\n"),
+      metadata: {},
+      deliveryStatus: "delivered",
+      createdAt: "2026-03-10T12:05:00.000Z",
+      updatedAt: "2026-03-10T12:05:00.000Z",
+    };
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "stage",
+      sending: false,
+      input: "Keyboard stage draft",
+      setInput,
+      error: null,
+      hasWorkingReply: false,
+      runningInvocationCount: 0,
+      messages: [assistantMessage],
+      selectedThread: mocks.data.threads[0],
+      handleSend,
+    };
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+
+    const action = screen.getByRole("button", { name: "Keyboard widget next step" });
+    action.focus();
+    await user.keyboard("{Enter}");
+
+    expect(handleSend).toHaveBeenCalledWith("Inspect the test failures.");
+    expect(setInput).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "Message the project manager" })).toHaveValue("Keyboard stage draft");
+  });
+
   it('keeps the active header and thread rail synchronized after rename', async () => {
     const user = userEvent.setup();
     const initialThread = { ...mocks.data.threads[0], title: "Thread 1" };
