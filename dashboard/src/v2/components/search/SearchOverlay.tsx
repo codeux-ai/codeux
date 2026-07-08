@@ -54,9 +54,15 @@ type CategorizedSearchItem =
 
 const inactiveResultStatuses = new Set(["unavailable", "disabled"]);
 const searchResultViewportPadding = 8;
+const searchOverlayDialogId = "global-search-overlay";
+const searchResultsListId = "search-results-list";
 
 function isResultInactive(item: SearchItem): boolean {
     return Boolean(item.status && inactiveResultStatuses.has(item.status));
+}
+
+function getSearchResultOptionId(item: SearchItem): string {
+    return `search-result-${item.id.replace(/[^A-Za-z0-9_-]/g, "-")}`;
 }
 
 function findNextActiveIndex(items: CategorizedSearchItem[], startIndex: number, direction: 1 | -1): number {
@@ -158,8 +164,12 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
         () => CATEGORIES.flatMap(c => c.items?.map(item => ({ ...item, category: c.id } as CategorizedSearchItem))),
         [results?.sprints, results?.tasks, results?.agents, results?.containers]
     );
+    const resultOptionSignature = useMemo(
+        () => allItems.map(getSearchResultOptionId).join("\u001f"),
+        [allItems]
+    );
     const activeItem = focusedIndex >= 0 ? allItems[focusedIndex] : undefined;
-    const activeDescendantId = activeItem ? `search-result-${activeItem.id}` : undefined;
+    const activeDescendantId = activeItem ? getSearchResultOptionId(activeItem) : undefined;
     const hasResults = allItems.length > 0;
     const hasStaleResults = Boolean(isLoading && hasResults);
     const committedQuery = committedSearchQuery ?? searchQuery;
@@ -178,24 +188,30 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
 
     const [modalStyle, setModalStyle] = useState({});
     const [isMobileFallback, setIsMobileFallback] = useState(false);
+    const previousResultOptionSignatureRef = useRef("");
 
     const updatePosition = () => {
         if (anchorRef && anchorRef.current && isOpen) {
             const rect = anchorRef.current.getBoundingClientRect();
-            // Fallback to centered mobile mode if narrow screen or insufficient height
-            if (window.innerWidth < 768 || window.innerHeight - rect.bottom < 300) {
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            const modalWidth = Math.min(760, viewportWidth - 32);
+            const minAnchoredHeight = 320;
+            const anchoredTop = Math.max(16, rect.bottom + 10);
+            const anchoredMaxHeight = viewportHeight - anchoredTop - 16;
+
+            if (viewportWidth < 768 || anchoredMaxHeight < minAnchoredHeight || modalWidth < 320) {
                 setIsMobileFallback(true);
+                setModalStyle({});
                 return;
             }
 
             setIsMobileFallback(false);
-            const top = rect.bottom + 10;
+            const top = anchoredTop;
             let left = rect.left;
 
-            // max width is around 800px or full viewport
-            const modalWidth = Math.min(760, window.innerWidth - 32);
-            if (left + modalWidth > window.innerWidth - 16) {
-                left = window.innerWidth - modalWidth - 16;
+            if (left + modalWidth > viewportWidth - 16) {
+                left = viewportWidth - modalWidth - 16;
             }
             if (left < 16) left = 16;
 
@@ -204,7 +220,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                 top: `${top}px`,
                 left: `${left}px`,
                 width: `${modalWidth}px`,
-                maxHeight: `calc(100dvh - ${top + 16}px)`
+                maxHeight: `${anchoredMaxHeight}px`
             });
         } else if (!anchorRef && isOpen) {
             setIsMobileFallback(false);
@@ -282,13 +298,22 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
     }, [isOpen, enterExitDuration, enterExitEase, controlFeedbackDuration, controlFeedbackEase, listRevealDuration, listRevealEase]);
 
     useEffect(() => {
+        if (!isOpen) return;
+        setFocusedIndex(-1);
+    }, [isOpen, searchQuery]);
+
+    useEffect(() => {
+        const previousResultOptionSignature = previousResultOptionSignatureRef.current;
+        previousResultOptionSignatureRef.current = resultOptionSignature;
+
         setFocusedIndex(prev => {
             if (allItems.length === 0) return -1;
             if (prev >= allItems.length) return findNextActiveIndex(allItems, allItems.length - 1, -1);
             if (prev >= 0 && isResultInactive(allItems[prev])) return findNextActiveIndex(allItems, prev + 1, 1);
+            if (prev >= 0 && previousResultOptionSignature && previousResultOptionSignature !== resultOptionSignature) return -1;
             return prev;
         });
-    }, [allItems]);
+    }, [allItems, resultOptionSignature]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -347,6 +372,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
             />
 
             <div
+                id={searchOverlayDialogId}
                 role="dialog"
                 aria-label="Search"
                 aria-modal="true"
@@ -370,7 +396,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                             role="combobox"
                             aria-autocomplete="list"
                             aria-expanded={isOpen}
-                            aria-controls="search-results-list"
+                            aria-controls={searchResultsListId}
                             aria-activedescendant={activeDescendantId}
                             aria-busy={isLoading ? "true" : undefined}
                             aria-label="Global search"
@@ -463,7 +489,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                         )
                     ) : (
                         <div
-                            id="search-results-list"
+                            id={searchResultsListId}
                             role="listbox"
                             aria-busy={isLoading ? "true" : undefined}
                             aria-describedby={hasStaleResults ? "search-results-refreshing-note" : undefined}
@@ -472,7 +498,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                                 transitionDuration: hasStaleResults ? interactionTokens.controlFeedback.duration : interactionTokens.listReveal.duration,
                                 transitionTimingFunction: hasStaleResults ? interactionTokens.controlFeedback.ease : interactionTokens.listReveal.ease
                             }}
-                            className={`relative grid grid-cols-1 gap-3 transition-[filter,opacity] lg:grid-cols-2 ${hasStaleResults ? 'opacity-[0.78] saturate-[0.82]' : ''}`}
+                            className={`relative grid grid-cols-1 gap-3 transition-[filter,opacity,box-shadow] motion-reduce:transition-none lg:grid-cols-2 ${hasStaleResults ? 'rounded-[1.25rem] opacity-[0.82] saturate-[0.86] shadow-[inset_0_0_0_1px_rgba(0,224,160,0.12)]' : ''}`}
                         >
                             {hasStaleResults && (
                                 <div
@@ -515,6 +541,8 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                                                             if (!isResultInactive(item)) setFocusedIndex(currentIndex);
                                                         }}
                                                         activeItemRef={isFocused ? activeItemRef : null}
+                                                        optionId={getSearchResultOptionId(item)}
+                                                        isLoadingAdjacent={hasStaleResults}
                                                         onClick={() => handleSelect({ ...item, category: category.id } as CategorizedSearchItem)}
                                                     />
                                                 );

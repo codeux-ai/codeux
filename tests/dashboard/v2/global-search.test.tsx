@@ -222,13 +222,13 @@ describe("Global Search", () => {
 
             const listbox = screen.getByRole("listbox", { hidden: true });
             expect(listbox).toHaveAttribute("aria-busy", "true");
-            expect(listbox).toHaveClass("opacity-[0.78]");
+            expect(listbox).toHaveClass("opacity-[0.82]");
             expect(listbox).not.toHaveAttribute("aria-live");
             expect(listbox).toHaveAttribute("aria-describedby", "search-results-refreshing-note");
             expect(listbox).not.toHaveClass("pointer-events-none");
             expect(screen.getAllByRole("status", { hidden: true })).toHaveLength(1);
             expect(screen.getByRole("status", { hidden: true })).toHaveTextContent("Updating results for 'generic'. 1 current result remains available.");
-            expect(screen.getByRole("option", { name: /generic sprint/i, hidden: true })).toBeInTheDocument();
+            expect(screen.getByRole("option", { name: /generic sprint/i, hidden: true })).toHaveAttribute("data-loading-adjacent", "true");
             expect(screen.getByText("Updating visible results")).toBeInTheDocument();
         });
 
@@ -310,6 +310,99 @@ describe("Global Search", () => {
 
             expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-sprint-2");
             expect(screen.getByRole("listbox", { hidden: true })).toHaveAttribute("aria-busy", "true");
+        });
+
+        it("clamps active descendant when refreshed results remove the focused row", async () => {
+            const { rerender } = render(
+                <SearchOverlay
+                    isOpen={true}
+                    onClose={vi.fn()}
+                    searchQuery="generic"
+                    onSearchChange={vi.fn()}
+                    results={{
+                        sprints: [
+                            { id: "sprint-1", title: "Generic Sprint One", displayKey: "SPR-1", sprintKey: "SPR-1", routeSprintId: "sprint-1", status: "running" },
+                            { id: "sprint-2", title: "Generic Sprint Two", displayKey: "SPR-2", sprintKey: "SPR-2", routeSprintId: "sprint-2", status: "running" }
+                        ],
+                        tasks: [],
+                        agents: [],
+                        containers: []
+                    }}
+                    isLoading={false}
+                />
+            );
+
+            const combobox = screen.getByRole("combobox", { hidden: true });
+            fireEvent.keyDown(window, { key: "End" });
+            expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-sprint-2");
+
+            rerender(
+                <SearchOverlay
+                    isOpen={true}
+                    onClose={vi.fn()}
+                    searchQuery="generic"
+                    onSearchChange={vi.fn()}
+                    results={{
+                        sprints: [
+                            { id: "sprint-1", title: "Generic Sprint One", displayKey: "SPR-1", sprintKey: "SPR-1", routeSprintId: "sprint-1", status: "running" }
+                        ],
+                        tasks: [],
+                        agents: [],
+                        containers: []
+                    }}
+                    isLoading={false}
+                />
+            );
+
+            await waitFor(() => {
+                expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-sprint-1");
+            });
+        });
+
+        it("resets active descendant when refreshed results replace category contents at the same count", async () => {
+            const { rerender } = render(
+                <SearchOverlay
+                    isOpen={true}
+                    onClose={vi.fn()}
+                    searchQuery="generic"
+                    onSearchChange={vi.fn()}
+                    results={{
+                        sprints: [
+                            { id: "sprint-1", title: "Generic Sprint One", displayKey: "SPR-1", sprintKey: "SPR-1", routeSprintId: "sprint-1", status: "running" }
+                        ],
+                        tasks: [],
+                        agents: [],
+                        containers: []
+                    }}
+                    isLoading={false}
+                />
+            );
+
+            const combobox = screen.getByRole("combobox", { hidden: true });
+            fireEvent.keyDown(window, { key: "ArrowDown" });
+            expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-sprint-1");
+
+            rerender(
+                <SearchOverlay
+                    isOpen={true}
+                    onClose={vi.fn()}
+                    searchQuery="generic"
+                    onSearchChange={vi.fn()}
+                    results={{
+                        sprints: [
+                            { id: "sprint-2", title: "Generic Sprint Two", displayKey: "SPR-2", sprintKey: "SPR-2", routeSprintId: "sprint-2", status: "running" }
+                        ],
+                        tasks: [],
+                        agents: [],
+                        containers: []
+                    }}
+                    isLoading={false}
+                />
+            );
+
+            await waitFor(() => {
+                expect(combobox).not.toHaveAttribute("aria-activedescendant");
+            });
         });
 
         it("shows empty state when no results are found", () => {

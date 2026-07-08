@@ -13,6 +13,8 @@ interface SearchResultRowProps {
     isFocused: boolean;
     onFocus: () => void;
     activeItemRef: preact.Ref<HTMLAnchorElement> | null;
+    optionId?: string;
+    isLoadingAdjacent?: boolean;
     onClick?: () => void;
 }
 
@@ -38,6 +40,8 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
     isFocused,
     onFocus,
     activeItemRef,
+    optionId,
+    isLoadingAdjacent = false,
     onClick,
 }) => {
     const interactionTokens = useInteractionTokens();
@@ -47,7 +51,8 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
     const disabledReason = getDisabledReason(item);
     const disabledExplanation = getDisabledExplanation(item);
     const isDisabled = Boolean(disabledReason);
-    const disabledDescriptionId = isDisabled ? `search-result-${item.id}-disabled-reason` : undefined;
+    const resolvedOptionId = optionId ?? `search-result-${item.id.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+    const disabledDescriptionId = isDisabled ? `${resolvedOptionId}-disabled-reason` : undefined;
     let Icon = Target;
     let itemId = item.id;
     let title = 'title' in item ? item.title : item.name;
@@ -169,7 +174,7 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
                 }
                 onClick?.();
             }}
-            id={`search-result-${item.id}`}
+            id={resolvedOptionId}
             ref={activeItemRef as any}
             onMouseEnter={() => {
                 if (!isDisabled) onFocus();
@@ -177,6 +182,7 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
             tabIndex={-1}
             data-result-index={globalItemIndex}
             data-selected={isFocused ? "true" : undefined}
+            data-loading-adjacent={isLoadingAdjacent ? "true" : undefined}
             aria-disabled={isDisabled ? 'true' : undefined}
             aria-describedby={disabledDescriptionId}
             aria-label={`${categoryType} result: ${itemId} ${title}${badgeText ? `, ${badgeText}` : ''}${disabledReason ? `, ${disabledReason}` : ''}`}
@@ -184,15 +190,15 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
             role="option"
             aria-selected={isFocused}
             style={{ transitionDuration, transitionTimingFunction }}
-            className={`group relative flex w-full min-w-0 items-stretch overflow-hidden text-left rounded-[1.25rem] border px-3.5 py-3 transition-[background-color,border-color,box-shadow,color,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800 sm:px-4 ${
+            className={`group relative flex w-full min-w-0 items-stretch overflow-hidden text-left rounded-[1.25rem] border px-3.5 py-3 transition-[background-color,border-color,box-shadow,color,filter,transform] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800 sm:px-4 ${
                 isDisabled
                     ? isFocused
                         ? 'border-status-red/35 bg-status-red/[0.055] text-slate-600 shadow-[0_10px_26px_rgba(227,0,15,0.08),inset_0_0_0_1px_rgba(227,0,15,0.08)] dark:bg-status-red/[0.08] dark:text-slate-400'
-                        : 'border-black/[0.06] bg-black/[0.025] text-slate-500 shadow-none dark:border-white/[0.06] dark:bg-white/[0.025] dark:text-slate-500'
+                        : 'border-black/[0.06] bg-black/[0.025] text-slate-500 shadow-none hover:border-status-red/20 hover:bg-status-red/[0.035] dark:border-white/[0.06] dark:bg-white/[0.025] dark:text-slate-500 dark:hover:bg-status-red/[0.055]'
                     : isFocused
                     ? 'translate-y-[-1px] border-signal-500/55 bg-signal-500/[0.09] shadow-[0_12px_32px_rgba(0,224,160,0.13),inset_0_0_0_1px_rgba(0,224,160,0.14)] backdrop-blur-2xl motion-reduce:translate-y-0 dark:bg-signal-500/[0.11]'
-                    : 'border-black/[0.06] bg-white/58 backdrop-blur-xl hover:border-black/[0.1] hover:bg-white/86 dark:border-white/[0.06] dark:bg-white/[0.035] dark:hover:border-white/[0.11] dark:hover:bg-white/[0.06]'
-            } aria-disabled:cursor-not-allowed aria-disabled:opacity-75`}
+                    : 'border-black/[0.06] bg-white/58 backdrop-blur-xl hover:border-black/[0.1] hover:bg-white/86 hover:shadow-[0_10px_28px_rgba(15,23,42,0.08)] dark:border-white/[0.06] dark:bg-white/[0.035] dark:hover:border-white/[0.11] dark:hover:bg-white/[0.06]'
+            } ${isLoadingAdjacent ? 'after:pointer-events-none after:absolute after:inset-x-3 after:bottom-0 after:h-px after:bg-signal-500/20 after:content-[""]' : ''} aria-disabled:cursor-not-allowed aria-disabled:opacity-75`}
         >
             <span
                 aria-hidden="true"
