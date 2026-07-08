@@ -87,6 +87,8 @@ Thinking/reasoning settings are provider-keyed rather than global. Base provider
 
 Legacy persisted values `SMALL`, `MEDIUM`, and `HIGH` are accepted during load and validation for CLI providers and are normalized to provider-appropriate values. For example, Codex `HIGH` becomes `high`, while Antigravity `MEDIUM` becomes `high` because Antigravity exposes only low/high reasoning selections.
 
+Route-specific thinking overrides are optional. When the AI Models route card is set to **Inherit base thinking**, Code UX removes the route's `thinkingMode` override and the invocation uses the provider instance's current base thinking value. This keeps provider-level thinking budget changes from being shadowed by stale route overrides.
+
 Runtime delivery matches each CLI's reliable headless surface. Codex receives `model_reasoning_effort` via CLI config overrides, Claude Code receives `--effort`, Qwen Code receives generated runtime config `model.reasoningEffort`, and OpenCode receives `--variant`. Gemini and Antigravity do not expose a reliable per-run headless flag in the supported CLI path, so Code UX adds provider-specific prompt guidance for those providers only.
 
 Legacy saved values of `ORCHESTRATOR` are normalized to `AGENT` when settings are loaded. The old rule-based provider picker is no longer exposed.

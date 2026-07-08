@@ -6,6 +6,8 @@ Defines each named provider instance's default eligibility, model, thinking dept
 
 Provider cards set default route participation, model, thinking mode, weighted routing weight, and max concurrent tasks.
 
+Project and sprint scopes store these provider cards as sparse overrides. When a project changes only a named instance's base model or thinking depth, the other fields for that same provider-config ID, such as `enabled`, `weight`, and `maxConcurrentTasks`, continue to inherit from the parent scope.
+
 ## Recommended Defaults
 
 Keep only healthy instances eligible and use weights to express preference rather than hard pinning every route.
@@ -13,6 +15,8 @@ Keep only healthy instances eligible and use weights to express preference rathe
 ## Risks And Gotchas
 
 Incompatible model choices or high concurrency can cause repeated provider failures or quota pressure.
+
+Base provider inheritance is field-by-field, but invocation route provider maps are narrower: a route-level `providers` map replaces the inherited provider map for that route so explicit pools do not silently admit parent-scope providers.
 
 ## Dashboard Link
 

@@ -167,6 +167,45 @@ describe("AvantgardeSelect", () => {
     expect(screen.getByRole("listbox")).toBeDefined();
   });
 
+  it("clamps the portal panel inside the viewport when the trigger is near the bottom", () => {
+    const innerHeight = vi.spyOn(window, "innerHeight", "get").mockReturnValue(768);
+    const rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function () {
+      if (this instanceof HTMLButtonElement) {
+        return {
+          top: 900,
+          bottom: 930,
+          left: 50,
+          right: 250,
+          width: 200,
+          height: 30,
+          x: 50,
+          y: 900,
+          toJSON: () => ({}),
+        } as DOMRect;
+      }
+      return {
+        top: 0,
+        bottom: 768,
+        left: 0,
+        right: 1024,
+        width: 1024,
+        height: 768,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect;
+    });
+
+    render(<AvantgardeSelect value="1" onChange={() => {}} options={[{ value: "1", label: "Opt" }]} />);
+    fireEvent.click(screen.getByText("Opt"));
+
+    const panel = screen.getByRole("listbox").parentElement as HTMLElement;
+    expect(Number.parseFloat(panel.style.top)).toBeLessThanOrEqual(488);
+
+    rectSpy.mockRestore();
+    innerHeight.mockRestore();
+  });
+
   it("handles empty options", () => {
     render(<AvantgardeSelect value="" onChange={() => {}} options={[]} />);
     fireEvent.click(screen.getByText("Select\u2026"));
