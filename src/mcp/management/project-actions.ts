@@ -5,6 +5,29 @@ import type { ProjectSetupService } from "../../services/project-setup-service.j
 
 export type ProjectCreateHandler = (input: CreateProjectInput) => Promise<unknown> | unknown;
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function normalizeProjectSetupPayload(payload: Record<string, unknown>): ProjectSetupRequestInput {
+  const nestedSetup = asRecord(payload.setup);
+  const source = nestedSetup ?? payload;
+  const options = asRecord(source.options);
+  const normalized: ProjectSetupRequestInput = {};
+  if (typeof source.enabled === "boolean") {
+    normalized.enabled = source.enabled;
+  }
+  if (typeof source.clientRequestId === "string") {
+    normalized.clientRequestId = source.clientRequestId;
+  }
+  if (options) {
+    normalized.options = options as ProjectSetupRequestInput["options"];
+  }
+  return normalized;
+}
+
 export function handleProjectAction(
   action: string,
   payload: Record<string, unknown>,
@@ -45,7 +68,7 @@ export function handleProjectAction(
         throw new Error("Project setup service is not enabled.");
       }
       return projectSetupService
-        .setupProject(projectId, payload as ProjectSetupRequestInput)
+        .setupProject(projectId, normalizeProjectSetupPayload(payload))
         .then((result) => ({ result }));
     }
     case "update": {

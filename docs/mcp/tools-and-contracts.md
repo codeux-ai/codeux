@@ -230,13 +230,27 @@ Apply accepts a `bundle` object and optional `scopes` for partial import. Projec
       "agents": true,
       "quicksprints": true,
       "previewScript": true,
-      "ci": true
+      "ci": true,
+      "techstack": true,
+      "docs": true
     }
   }
 }
 ```
 
-The action runs the Project Setup Agent and returns the applied artifact summary, including created agent IDs, created quicksprint template IDs, and written project-relative files.
+For the `setup` action, clients may also send the same `options` object at the top level:
+
+```json
+{
+  "action": "setup",
+  "projectId": "project-id",
+  "options": {
+    "docs": true
+  }
+}
+```
+
+The action runs the Project Setup Agent and returns the applied artifact summary, including created agent IDs, created quicksprint template IDs, written project-relative files, embedded Knowledge document IDs, and per-file docs embedding errors. `docs` defaults to `false`; when explicitly enabled, Code UX discovers repository documentation and embeds it through the Knowledge docs library without requiring the setup agent to return document contents.
 
 Dashboard calls can add `background: true` to the HTTP setup request. In that mode Code UX returns the created `invocationId` immediately and the invocation rail becomes the live tracking surface while setup continues.
 

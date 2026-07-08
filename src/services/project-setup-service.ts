@@ -5,6 +5,7 @@ import type { DashboardSettings, ProviderId, TechstackCatalogEntrySettings, Tech
 import type {
   ProjectSetupArtifactPayload,
   ProjectSetupOptions,
+  ProjectSetupRequestInput,
   ProjectSetupResult,
   ProjectSetupStartResult,
   ProjectSummary,
@@ -33,6 +34,7 @@ import type { QuicksprintTemplateRecord } from "../contracts/quicksprint-types.j
 import type { DashboardRealtimeMutationNotifier } from "./dashboard-realtime-service.js";
 import { resolveAgentAvatarConfig } from "../contracts/agent-avatar-style.js";
 import { defaultCodingAgentMcpAccess } from "./agent-mcp-access.js";
+import type { ProjectDocsAutoEmbedService } from "./project-docs-auto-embed-service.js";
 
 export const PROJECT_SETUP_AGENT_NAME = "Project Setup Agent";
 
@@ -42,6 +44,7 @@ const DEFAULT_OPTIONS: ProjectSetupOptions = {
   previewScript: true,
   ci: true,
   techstack: true,
+  docs: false,
 };
 
 const TECHSTACK_ID_MAX_LENGTH = 80;
@@ -75,6 +78,7 @@ interface ProjectSetupServiceDeps {
   providerRunner?: IProviderRunner;
   providerConcurrencyService?: ProviderConcurrencyService;
   realtimeNotifier?: DashboardRealtimeMutationNotifier;
+  projectDocsAutoEmbedService?: Pick<ProjectDocsAutoEmbedService, "embedProjectDocs">;
   logger?: Logger;
   projectRoot?: string;
   getGithubToken?: () => string | undefined;
@@ -120,10 +124,7 @@ export class ProjectSetupService {
 
   async setupProject(
     projectId: string,
-    input?: {
-      options?: Partial<ProjectSetupOptions>;
-      clientRequestId?: string;
-    },
+    input?: ProjectSetupRequestInput,
     signal?: AbortSignal,
   ): Promise<ProjectSetupResult> {
     const prepared = await this.prepareSetupRun(projectId, input);
@@ -132,10 +133,7 @@ export class ProjectSetupService {
 
   async startProjectSetup(
     projectId: string,
-    input?: {
-      options?: Partial<ProjectSetupOptions>;
-      clientRequestId?: string;
-    },
+    input?: ProjectSetupRequestInput,
   ): Promise<ProjectSetupStartResult> {
     const prepared = await this.prepareSetupRun(projectId, input);
     void this.executePreparedSetupRun(prepared).catch((error) => {
@@ -155,10 +153,7 @@ export class ProjectSetupService {
 
   private async prepareSetupRun(
     projectId: string,
-    input?: {
-      options?: Partial<ProjectSetupOptions>;
-      clientRequestId?: string;
-    },
+    input?: ProjectSetupRequestInput,
   ): Promise<PreparedProjectSetupRun> {
     const project = this.deps.projectManagementRepository.getProject(projectId);
     if (!project) {
@@ -332,6 +327,7 @@ export class ProjectSetupService {
 
       const payload = this.parsePayload(result.text || result.stdout || result.usageTelemetry.transcriptText);
       const applied = await this.applyArtifacts(projectId, project.baseDir, options, payload);
+      const embeddedDocs = await this.embedRequestedDocs(projectId, project.baseDir, options);
 
       if (invocationId) {
         this.deps.executionRepository?.updateExecutionInvocation(invocationId, {
@@ -349,6 +345,7 @@ export class ProjectSetupService {
         agentId: setupAgent.id,
         summary: payload.summary || "Project setup completed.",
         ...applied,
+        ...embeddedDocs,
       };
     } catch (error) {
       if (invocationId) {
@@ -369,7 +366,48 @@ export class ProjectSetupService {
       previewScript: options?.previewScript ?? DEFAULT_OPTIONS.previewScript,
       ci: options?.ci ?? DEFAULT_OPTIONS.ci,
       techstack: options?.techstack ?? DEFAULT_OPTIONS.techstack,
+      docs: options?.docs ?? DEFAULT_OPTIONS.docs,
     };
+  }
+
+  private async embedRequestedDocs(
+    projectId: string,
+    projectBaseDir: string,
+    options: ProjectSetupOptions,
+  ): Promise<Pick<ProjectSetupResult, "embeddedDocumentIds" | "embeddedDocumentErrors">> {
+    if (!options.docs) {
+      return { embeddedDocumentIds: [], embeddedDocumentErrors: [] };
+    }
+
+    if (!this.deps.projectDocsAutoEmbedService) {
+      return {
+        embeddedDocumentIds: [],
+        embeddedDocumentErrors: [
+          {
+            fileName: "docs",
+            error: "Project docs auto-embed service is not available.",
+          },
+        ],
+      };
+    }
+
+    try {
+      const result = await this.deps.projectDocsAutoEmbedService.embedProjectDocs(projectId, projectBaseDir);
+      return {
+        embeddedDocumentIds: result.documentIds,
+        embeddedDocumentErrors: result.errors,
+      };
+    } catch (error) {
+      return {
+        embeddedDocumentIds: [],
+        embeddedDocumentErrors: [
+          {
+            fileName: "docs",
+            error: error instanceof Error ? error.message : String(error),
+          },
+        ],
+      };
+    }
   }
 
   private async ensureProjectSetupAgent(projectId: string): Promise<AgentPresetRecord> {
