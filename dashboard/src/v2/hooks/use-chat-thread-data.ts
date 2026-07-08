@@ -12,6 +12,8 @@ import {
   updateConversationThread,
   compactThreadSession,
   cancelThreadTurn,
+  fetchConversationMessageHistory,
+  recordConversationMessageHistory,
   upsertConversationDraft,
 } from "../lib/connection-api.js";
 import { resolveSelectedItemId } from "../lib/chat-page-state-utils.js";
@@ -256,6 +258,8 @@ export const useChatThreadData = (options: {
   const sentHistoryRef = useRef<string[]>([]);
   const historyIndexRef = useRef<number>(-1);
   const historyDraftRef = useRef<string>("");
+  const isHistoryPreviewRef = useRef(false);
+  const latestHistoryRequestRef = useRef(0);
   const [hydratedDraftContextKey, setHydratedDraftContextKey] = useState<string | null>(null);
 
   const { feedback, setSuccess, clearFeedback } = useActionFeedback();
@@ -318,26 +322,48 @@ export const useChatThreadData = (options: {
     });
   }, []);
 
+  const getPersistableInput = useCallback((): string => (
+    isHistoryPreviewRef.current ? historyDraftRef.current : inputRef.current
+  ), []);
+
+  const resetHistoryTraversal = useCallback((): void => {
+    historyIndexRef.current = -1;
+    historyDraftRef.current = "";
+    isHistoryPreviewRef.current = false;
+  }, []);
+
   const setSelectedThreadId = useCallback((threadId: string | null): void => {
     if (inputContextKeyRef.current === draftContextKeyRef.current) {
       flushDraftSnapshot({
         projectId: draftProjectIdRef.current,
         userId: draftUserIdRef.current,
         contextKey: draftContextKeyRef.current,
-        bodyMarkdown: inputRef.current,
+        bodyMarkdown: getPersistableInput(),
       });
     }
     draftContextKeyRef.current = resolveDraftContextKey(threadId);
+    resetHistoryTraversal();
     setSelectedThreadIdState(threadId);
-  }, [flushDraftSnapshot, resolveDraftContextKey]);
+  }, [flushDraftSnapshot, getPersistableInput, resetHistoryTraversal, resolveDraftContextKey]);
 
   const setInput = useCallback((nextInput: string | ((current: string) => string)): void => {
     const contextKey = draftContextKeyRef.current;
+    resetHistoryTraversal();
     setInputState((current) => {
       const nextValue = typeof nextInput === "function" ? nextInput(current) : nextInput;
       inputRef.current = nextValue;
       inputContextKeyRef.current = contextKey;
       return nextValue;
+    });
+  }, [resetHistoryTraversal]);
+
+  const setInputFromHistoryPreview = useCallback((nextInput: string): void => {
+    const contextKey = draftContextKeyRef.current;
+    isHistoryPreviewRef.current = true;
+    setInputState(() => {
+      inputRef.current = nextInput;
+      inputContextKeyRef.current = contextKey;
+      return nextInput;
     });
   }, []);
 
@@ -351,7 +377,7 @@ export const useChatThreadData = (options: {
         projectId: draftProjectIdRef.current,
         userId: draftUserIdRef.current,
         contextKey: draftContextKeyRef.current,
-        bodyMarkdown: inputRef.current,
+        bodyMarkdown: getPersistableInput(),
       });
     }
 
@@ -359,6 +385,7 @@ export const useChatThreadData = (options: {
     draftProjectIdRef.current = selectedProject?.id ?? null;
     lastSavedDraftRef.current = null;
     setHydratedDraftContextKey(null);
+    resetHistoryTraversal();
     if (inputContextKeyRef.current !== activeDraftContextKey) {
       inputContextKeyRef.current = activeDraftContextKey;
       inputRef.current = "";
@@ -413,7 +440,7 @@ export const useChatThreadData = (options: {
           setHydratedDraftContextKey(activeDraftContextKey);
         }
       });
-  }, [activeDraftContextKey, flushDraftSnapshot, selectedProject?.id]);
+  }, [activeDraftContextKey, flushDraftSnapshot, getPersistableInput, resetHistoryTraversal, selectedProject?.id]);
 
   useEffect(() => () => {
     if (inputContextKeyRef.current !== draftContextKeyRef.current) {
@@ -423,9 +450,42 @@ export const useChatThreadData = (options: {
       projectId: draftProjectIdRef.current,
       userId: draftUserIdRef.current,
       contextKey: draftContextKeyRef.current,
-      bodyMarkdown: inputRef.current,
+      bodyMarkdown: getPersistableInput(),
     });
-  }, [flushDraftSnapshot]);
+  }, [flushDraftSnapshot, getPersistableInput]);
+
+  useEffect(() => {
+    resetHistoryTraversal();
+    if (!selectedProject) {
+      sentHistoryRef.current = [];
+      return;
+    }
+
+    const userId = draftUserIdRef.current ?? getOrCreateDashboardDraftUserId();
+    draftUserIdRef.current = userId;
+    const requestId = latestHistoryRequestRef.current + 1;
+    latestHistoryRequestRef.current = requestId;
+
+    void fetchConversationMessageHistory(selectedProject.id, { userId })
+      .then((history) => {
+        if (
+          latestHistoryRequestRef.current !== requestId
+          || draftProjectIdRef.current !== selectedProject.id
+        ) {
+          return;
+        }
+        sentHistoryRef.current = history
+          .map((entry) => entry.bodyMarkdown.trim())
+          .filter((entry) => entry.length > 0);
+        resetHistoryTraversal();
+      })
+      .catch(() => {
+        if (latestHistoryRequestRef.current === requestId) {
+          sentHistoryRef.current = [];
+          resetHistoryTraversal();
+        }
+      });
+  }, [resetHistoryTraversal, selectedProject?.id]);
 
   useEffect(() => {
     if (
@@ -433,6 +493,7 @@ export const useChatThreadData = (options: {
       || !activeDraftContextKey
       || hydratedDraftContextKey !== activeDraftContextKey
       || inputContextKeyRef.current !== activeDraftContextKey
+      || isHistoryPreviewRef.current
     ) {
       return;
     }
@@ -695,10 +756,24 @@ export const useChatThreadData = (options: {
   }, [cache, selectedProject, selectedThread, setSuccess, setThreadsSnapshot]);
 
   const recordSentMessage = useCallback((message: string): void => {
-    sentHistoryRef.current = [...sentHistoryRef.current.filter((entry) => entry !== message), message].slice(-50);
-    historyIndexRef.current = -1;
-    historyDraftRef.current = "";
-  }, []);
+    const normalizedMessage = message.trim();
+    if (!normalizedMessage) {
+      return;
+    }
+    sentHistoryRef.current = [...sentHistoryRef.current.filter((entry) => entry !== normalizedMessage), normalizedMessage].slice(-50);
+    resetHistoryTraversal();
+    if (!selectedProject) {
+      return;
+    }
+    const userId = draftUserIdRef.current ?? getOrCreateDashboardDraftUserId();
+    draftUserIdRef.current = userId;
+    void recordConversationMessageHistory(selectedProject.id, {
+      userId,
+      bodyMarkdown: normalizedMessage,
+    }).catch(() => {
+      // Message history should not affect successful chat delivery.
+    });
+  }, [resetHistoryTraversal, selectedProject?.id]);
 
   const navigateHistory = useCallback((direction: "up" | "down"): boolean => {
     const history = sentHistoryRef.current;
@@ -709,13 +784,21 @@ export const useChatThreadData = (options: {
     if (direction === "up") {
       if (historyIndexRef.current === -1) {
         historyDraftRef.current = input;
+        if (inputContextKeyRef.current === draftContextKeyRef.current) {
+          flushDraftSnapshot({
+            projectId: draftProjectIdRef.current,
+            userId: draftUserIdRef.current,
+            contextKey: draftContextKeyRef.current,
+            bodyMarkdown: input,
+          });
+        }
         historyIndexRef.current = history.length - 1;
       } else if (historyIndexRef.current > 0) {
         historyIndexRef.current -= 1;
       } else {
         return true;
       }
-      setInput(history[historyIndexRef.current]);
+      setInputFromHistoryPreview(history[historyIndexRef.current]);
       return true;
     }
 
@@ -724,13 +807,20 @@ export const useChatThreadData = (options: {
     }
     if (historyIndexRef.current < history.length - 1) {
       historyIndexRef.current += 1;
-      setInput(history[historyIndexRef.current]);
+      setInputFromHistoryPreview(history[historyIndexRef.current]);
     } else {
       historyIndexRef.current = -1;
-      setInput(historyDraftRef.current);
+      const restoredDraft = historyDraftRef.current;
+      historyDraftRef.current = "";
+      isHistoryPreviewRef.current = false;
+      setInputState(() => {
+        inputRef.current = restoredDraft;
+        inputContextKeyRef.current = draftContextKeyRef.current;
+        return restoredDraft;
+      });
     }
     return true;
-  }, [input]);
+  }, [flushDraftSnapshot, input, setInputFromHistoryPreview]);
 
   const handleSend = useCallback(async (overrideText?: string): Promise<void> => {
     // overrideText lets UI affordances (stage quick actions) send a prompt
@@ -744,7 +834,6 @@ export const useChatThreadData = (options: {
     if (composerRef?.current) {
       composerRef.current.style.height = "auto";
     }
-    recordSentMessage(bodyMarkdown);
 
     setSending(true);
     try {
@@ -760,6 +849,7 @@ export const useChatThreadData = (options: {
         setMessagesSnapshot(nextMessages);
       }
 
+      recordSentMessage(bodyMarkdown);
       // Removed refreshThreads() call since cache is optimistically updated and realtime
       // will handle the rest without needing full fetch.
       setError(null);

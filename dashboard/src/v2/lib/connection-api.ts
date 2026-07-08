@@ -1,6 +1,7 @@
 import type {
   AgentConnection,
   ChatDraftRecord,
+  ConversationMessageHistoryRecord,
   ChatMessageRecord,
   ChatThread,
   CreateConversationThreadInput,
@@ -100,6 +101,32 @@ export const upsertConversationDraft = async (
     },
     body: JSON.stringify({
       contextKey: input.contextKey,
+      bodyMarkdown: input.bodyMarkdown,
+    }),
+  });
+};
+
+export const fetchConversationMessageHistory = async (
+  projectId: string,
+  input: { userId: string },
+): Promise<ConversationMessageHistoryRecord[]> => {
+  return fetchJson<ConversationMessageHistoryRecord[]>(
+    `/api/projects/${encodeURIComponent(projectId)}/conversations/message-history`,
+    { headers: chatDraftHeaders(input.userId) },
+  );
+};
+
+export const recordConversationMessageHistory = async (
+  projectId: string,
+  input: { userId: string; bodyMarkdown: string },
+): Promise<ConversationMessageHistoryRecord> => {
+  return fetchJson<ConversationMessageHistoryRecord>(`/api/projects/${encodeURIComponent(projectId)}/conversations/message-history`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...chatDraftHeaders(input.userId),
+    },
+    body: JSON.stringify({
       bodyMarkdown: input.bodyMarkdown,
     }),
   });

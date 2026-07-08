@@ -5,6 +5,7 @@ import { requireRecord, toNumber, toBoolean } from "./repository-utils.js";
 import type {
   ConnectionInboxMessage,
   ConversationDraftRecord,
+  ConversationMessageHistoryRecord,
   ConversationMessageMetadata,
   ConversationMessageRecord,
   ConversationThreadRecord,
@@ -14,6 +15,7 @@ import type {
   McpConnectionRecord,
   PostListenReplyInput,
   PullInboxInput,
+  RecordConversationMessageHistoryInput,
   StartListenInput,
   StartListenResponse,
   UpdateConversationThreadInput,
@@ -51,6 +53,7 @@ const HEARTBEAT_WRITE_INTERVAL_MS = 5 * 1000;
 const OFFLINE_CONNECTION_THRESHOLD_MS = 3 * 60 * 1000;
 const PRUNE_CONNECTION_THRESHOLD_MS = 3 * 60 * 1000;
 const STALE_CONNECTION_THRESHOLD_MS = 90 * 1000;
+const MESSAGE_HISTORY_LIMIT = 50;
 
 interface ConnectionRow {
   id: string;
@@ -83,6 +86,15 @@ interface ConversationDraftRow {
   user_id: string;
   project_id: string;
   context_key: string;
+  body_markdown: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ConversationMessageHistoryRow {
+  id: string;
+  user_id: string;
+  project_id: string;
   body_markdown: string;
   created_at: string;
   updated_at: string;
@@ -493,6 +505,71 @@ export class ConnectionChatRepository {
       userId: normalized.userId,
       contextKey: normalized.contextKey,
     });
+  }
+
+  listMessageHistory(projectId: string, input: { userId: string; limit?: number }): ConversationMessageHistoryRecord[] {
+    const normalized = this.normalizeMessageHistoryInput(projectId, { userId: input.userId });
+    const limit = Math.max(1, Math.min(input.limit ?? MESSAGE_HISTORY_LIMIT, MESSAGE_HISTORY_LIMIT));
+    const rows = this.db.prepare(`
+      SELECT id, user_id, project_id, body_markdown, created_at, updated_at
+      FROM (
+        SELECT id, user_id, project_id, body_markdown, created_at, updated_at
+        FROM conversation_message_history
+        WHERE user_id = ? AND project_id = ?
+        ORDER BY updated_at DESC, created_at DESC, id DESC
+        LIMIT ?
+      )
+      ORDER BY updated_at ASC, created_at ASC, id ASC
+    `).all(normalized.userId, normalized.projectId, limit) as ConversationMessageHistoryRow[];
+
+    return rows.map((row) => this.mapMessageHistory(row));
+  }
+
+  recordMessageHistory(projectId: string, input: RecordConversationMessageHistoryInput): ConversationMessageHistoryRecord {
+    const normalized = this.normalizeMessageHistoryInput(projectId, input);
+    const now = new Date().toISOString();
+    const id = randomUUID();
+
+    this.db.prepare(`
+      INSERT INTO conversation_message_history (
+        id, user_id, project_id, body_markdown, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id, project_id, body_markdown) DO UPDATE SET
+        updated_at = excluded.updated_at
+    `).run(
+      id,
+      normalized.userId,
+      normalized.projectId,
+      normalized.bodyMarkdown,
+      now,
+      now,
+    );
+
+    this.db.prepare(`
+      DELETE FROM conversation_message_history
+      WHERE user_id = ? AND project_id = ?
+        AND id NOT IN (
+          SELECT id
+          FROM conversation_message_history
+          WHERE user_id = ? AND project_id = ?
+          ORDER BY updated_at DESC, created_at DESC, id DESC
+          LIMIT ?
+        )
+    `).run(
+      normalized.userId,
+      normalized.projectId,
+      normalized.userId,
+      normalized.projectId,
+      MESSAGE_HISTORY_LIMIT,
+    );
+
+    const row = this.db.prepare(`
+      SELECT id, user_id, project_id, body_markdown, created_at, updated_at
+      FROM conversation_message_history
+      WHERE user_id = ? AND project_id = ? AND body_markdown = ?
+    `).get(normalized.userId, normalized.projectId, normalized.bodyMarkdown) as ConversationMessageHistoryRow | undefined;
+
+    return this.mapMessageHistory(requireRecord(row, "Conversation message history", normalized.bodyMarkdown));
   }
 
   updateThread(threadId: string, input: UpdateConversationThreadInput): ConversationThreadRecord {
@@ -1489,11 +1566,44 @@ export class ConnectionChatRepository {
     return { projectId: normalizedProjectId, userId, contextKey };
   }
 
+  private normalizeMessageHistoryInput(
+    projectId: string,
+    input: { userId: string; bodyMarkdown?: string },
+  ): { projectId: string; userId: string; bodyMarkdown: string } {
+    const normalizedProjectId = projectId.trim();
+    const userId = input.userId.trim();
+    const bodyMarkdown = input.bodyMarkdown?.trim() ?? "";
+    if (!normalizedProjectId) {
+      throw new Error("Missing or empty required field: projectId");
+    }
+    if (!userId) {
+      throw new Error("Missing or empty required field: userId");
+    }
+    if (input.bodyMarkdown !== undefined && !bodyMarkdown) {
+      throw new Error("Missing or empty required field: bodyMarkdown");
+    }
+
+    requireRecord(this.db.prepare("SELECT id FROM projects WHERE id = ?").get(normalizedProjectId), "Project", normalizedProjectId);
+
+    return { projectId: normalizedProjectId, userId, bodyMarkdown };
+  }
+
   private mapDraft(row: ConversationDraftRow): ConversationDraftRecord {
     return {
       userId: row.user_id,
       projectId: row.project_id,
       contextKey: row.context_key,
+      bodyMarkdown: row.body_markdown,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  private mapMessageHistory(row: ConversationMessageHistoryRow): ConversationMessageHistoryRecord {
+    return {
+      id: row.id,
+      userId: row.user_id,
+      projectId: row.project_id,
       bodyMarkdown: row.body_markdown,
       createdAt: row.created_at,
       updatedAt: row.updated_at,

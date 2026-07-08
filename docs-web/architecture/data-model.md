@@ -33,6 +33,7 @@ Project
 ├── ConversationThread
 │   └── ConversationMessage
 ├── ConversationDraft
+├── ConversationMessageHistory
 ├── QuicksprintTemplate
 ├── AttentionItem
 └── WorkerEndpoint / Connection
@@ -66,6 +67,18 @@ Has-many: sprints, agent presets, memories, conversation threads, attention item
 | `createdAt`, `updatedAt` | datetime | – |
 
 Primary key: `(userId, projectId, contextKey)`. Blank drafts delete the row, and thread-scoped context keys are validated against the owning project.
+
+## ConversationMessageHistory
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | string | Primary key. |
+| `userId` | string | Browser-scoped dashboard user key. |
+| `projectId` | string | FK. |
+| `bodyMarkdown` | text | Submitted composer text. |
+| `createdAt`, `updatedAt` | datetime | `updatedAt` moves duplicate text to the recent end. |
+
+Unique key: `(userId, projectId, bodyMarkdown)`. The dashboard keeps only the newest capped set per user/project for ArrowUp/ArrowDown composer recall.
 
 ## Sprint
 

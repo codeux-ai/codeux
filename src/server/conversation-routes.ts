@@ -8,6 +8,7 @@ import {
   parseUpdateConversationThreadInput,
   parseCreateDashboardConversationMessageInput,
   parseConversationDraftQuery,
+  parseRecordConversationMessageHistoryInput,
   parseUpsertConversationDraftInput,
 } from "./request-parsers.js";
 
@@ -49,6 +50,33 @@ export function registerConversationRoutes(app: Express, options: DashboardDepen
         requireDashboardUserId(req.header(DASHBOARD_USER_HEADER))
       )
     ) ?? null);
+  }));
+
+  app.get("/api/projects/:projectId/conversations/message-history", syncRoute((req, res) => {
+    if (!options.listConversationMessageHistory) {
+      res.status(404).json({ error: "Conversation message history is not enabled." });
+      return;
+    }
+    res.json(options.listConversationMessageHistory(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      {
+        userId: requireDashboardUserId(req.header(DASHBOARD_USER_HEADER)),
+      }
+    ));
+  }));
+
+  app.post("/api/projects/:projectId/conversations/message-history", syncRoute((req, res) => {
+    if (!options.recordConversationMessageHistory) {
+      res.status(404).json({ error: "Conversation message history is not enabled." });
+      return;
+    }
+    res.status(201).json(options.recordConversationMessageHistory(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      parseRecordConversationMessageHistoryInput(
+        req.body,
+        requireDashboardUserId(req.header(DASHBOARD_USER_HEADER))
+      )
+    ));
   }));
 
   app.post("/api/projects/:projectId/conversations/threads", syncRoute((req, res) => {

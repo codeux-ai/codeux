@@ -486,6 +486,8 @@ describe("dashboard route handlers", () => {
       deleteConversationThread: () => undefined,
       listConversationMessages: () => [],
       postConversationMessage: () => ({ id: "message-1" }),
+      listConversationMessageHistory: () => [],
+      recordConversationMessageHistory: () => ({ id: "history-1" }),
     } as unknown as DashboardDependencies;
 
     const app = createApp((router) => registerConversationRoutes(router, conversationDeps));
@@ -504,6 +506,10 @@ describe("dashboard route handlers", () => {
     expect((await request(app).get("/api/conversations/threads/thread-1/messages")).status).toBe(200);
     expect((await request(app).post("/api/projects/project-1/conversations/messages").send({ bodyMarkdown: "Hello" })).status).toBe(201);
     expect((await request(app).post("/api/projects/project-1/conversations/messages").send({ bodyMarkdown: "   " })).status).toBe(400);
+    expect((await request(app).get("/api/projects/project-1/conversations/message-history").set("X-CodeUX-Dashboard-User-Id", "user-1")).status).toBe(200);
+    expect((await request(app).get("/api/projects/project-1/conversations/message-history")).status).toBe(400);
+    expect((await request(app).post("/api/projects/project-1/conversations/message-history").set("X-CodeUX-Dashboard-User-Id", "user-1").send({ bodyMarkdown: "Hello" })).status).toBe(201);
+    expect((await request(app).post("/api/projects/project-1/conversations/message-history").set("X-CodeUX-Dashboard-User-Id", "user-1").send({ bodyMarkdown: "   " })).status).toBe(400);
 
     const failingMessageApp = createApp((router) => registerConversationRoutes(router, {
       ...conversationDeps,
@@ -521,6 +527,7 @@ describe("dashboard route handlers", () => {
     expect((await request(disabledApp).put("/api/conversations/threads/thread-1/route").send({ routeKind: "worker" })).status).toBe(404);
     expect((await request(disabledApp).post("/api/conversations/threads/thread-1/compact")).status).toBe(404);
     expect((await request(disabledApp).post("/api/conversations/threads/thread-1/cancel")).status).toBe(404);
+    expect((await request(disabledApp).get("/api/projects/project-1/conversations/message-history").set("X-CodeUX-Dashboard-User-Id", "user-1")).status).toBe(404);
   });
 
   it("covers planning routes, validation, and optional feature guards", async () => {

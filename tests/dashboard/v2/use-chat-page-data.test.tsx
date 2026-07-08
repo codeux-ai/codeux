@@ -10,7 +10,9 @@ import {
   cancelThreadTurn,
   createConversationThread,
   fetchConversationDraft,
+  fetchConversationMessageHistory,
   postConversationMessage,
+  recordConversationMessageHistory,
   upsertConversationDraft,
 } from "../../../dashboard/src/v2/lib/connection-api.js";
 import { fetchInvocationMessages, fetchProjectInvocations } from "../../../dashboard/src/v2/lib/invocation-api.js";
@@ -20,8 +22,17 @@ vi.mock("../../../dashboard/src/v2/lib/connection-api.js", () => ({
   fetchConversationMessages: vi.fn(() => Promise.resolve([])),
   fetchConversationThreads: vi.fn(() => Promise.resolve([])),
   fetchConversationDraft: vi.fn(() => Promise.resolve(null)),
+  fetchConversationMessageHistory: vi.fn(() => Promise.resolve([])),
   getOrCreateDashboardDraftUserId: vi.fn(() => "dashboard-user-test"),
   upsertConversationDraft: vi.fn(() => Promise.resolve(null)),
+  recordConversationMessageHistory: vi.fn(() => Promise.resolve({
+    id: "history-new",
+    userId: "dashboard-user-test",
+    projectId: "proj-1",
+    bodyMarkdown: "Hello",
+    createdAt: "2026-03-10T12:00:00.000Z",
+    updatedAt: "2026-03-10T12:00:00.000Z",
+  })),
   postConversationMessage: vi.fn((projectId, data) => Promise.resolve({
     id: "msg-new",
     threadId: data.threadId,
@@ -175,6 +186,73 @@ describe("useChatPageResources integration", () => {
       contextKey: "new-thread",
       bodyMarkdown: "Edited draft",
     }));
+  });
+
+  it("hydrates recent message history and preserves the current draft while previewing entries", async () => {
+    vi.mocked(fetchConversationMessageHistory).mockResolvedValueOnce([
+      {
+        id: "history-1",
+        userId: "dashboard-user-test",
+        projectId: "proj-1",
+        bodyMarkdown: "First submitted message",
+        createdAt: "2026-03-10T12:00:00.000Z",
+        updatedAt: "2026-03-10T12:00:00.000Z",
+      },
+      {
+        id: "history-2",
+        userId: "dashboard-user-test",
+        projectId: "proj-1",
+        bodyMarkdown: "Second submitted message",
+        createdAt: "2026-03-10T12:01:00.000Z",
+        updatedAt: "2026-03-10T12:01:00.000Z",
+      },
+    ]);
+
+    const { result } = renderHook(() => {
+      const cache = useMessageCache();
+      return useChatThreadData({
+        selectedProject: { id: "proj-1" },
+        cache,
+        execution: null,
+        workerRouting: null,
+      });
+    });
+
+    await waitFor(() => expect(fetchConversationMessageHistory).toHaveBeenCalledWith("proj-1", {
+      userId: "dashboard-user-test",
+    }));
+
+    await act(async () => {
+      result.current.setInput("Unsent working draft");
+    });
+
+    await act(async () => {
+      expect(result.current.navigateHistory("up")).toBe(true);
+    });
+    expect(result.current.input).toBe("Second submitted message");
+
+    await act(async () => {
+      expect(result.current.navigateHistory("up")).toBe(true);
+    });
+    expect(result.current.input).toBe("First submitted message");
+
+    await waitFor(() => expect(upsertConversationDraft).toHaveBeenCalledWith("proj-1", {
+      userId: "dashboard-user-test",
+      contextKey: "new-thread",
+      bodyMarkdown: "Unsent working draft",
+    }));
+    expect(upsertConversationDraft).not.toHaveBeenCalledWith("proj-1", expect.objectContaining({
+      bodyMarkdown: "Second submitted message",
+    }));
+    expect(upsertConversationDraft).not.toHaveBeenCalledWith("proj-1", expect.objectContaining({
+      bodyMarkdown: "First submitted message",
+    }));
+
+    await act(async () => {
+      expect(result.current.navigateHistory("down")).toBe(true);
+      expect(result.current.navigateHistory("down")).toBe(true);
+    });
+    expect(result.current.input).toBe("Unsent working draft");
   });
 
   it("updates cached dashboard messages in the same thread to processed when a later connection reply is upserted", async () => {
@@ -591,6 +669,10 @@ describe("useChatPageResources integration", () => {
     expect(result.current.threadData.input).toBe("");
     expect(result.current.threadData.messages.length).toBe(1);
     expect(result.current.threadData.messages[0].id).toBe("msg-new");
+    expect(recordConversationMessageHistory).toHaveBeenCalledWith("proj-1", {
+      userId: "dashboard-user-test",
+      bodyMarkdown: "Hello world",
+    });
   });
 
   it("posts create-app quickactions with metadata without composer content or sent history", async () => {
@@ -667,6 +749,7 @@ describe("useChatPageResources integration", () => {
     expect(onMessageSending).not.toHaveBeenCalled();
     expect(result.current.threadData.input).toBe("");
     expect(result.current.threadData.messages[0]?.metadata).toEqual(postedMetadata);
+    expect(recordConversationMessageHistory).not.toHaveBeenCalled();
 
     await act(async () => {
       expect(result.current.threadData.navigateHistory("up")).toBe(false);
