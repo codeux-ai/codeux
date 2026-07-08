@@ -17,13 +17,14 @@ Project Initialization runs a repository-specific setup pass through the `Projec
 - New remote init clones into the selected clone directory, or `~/.code-ux/projects` when the field is blank, and stores the project base directory as the single checkout root `~/.code-ux/projects/<repo-name>`.
 - Existing projects expose a `Setup Project` action from the project card agent button.
 
-Imported-project setup lets the operator choose which artifacts to create:
+Imported-project setup lets the operator choose which generated artifacts to create. Backend and MCP setup requests can also explicitly enable docs embedding:
 
 - `Agents`
 - `Quicksprints`
 - `Preview Script`
 - `CI`
 - `Techstack`
+- `Docs` (opt-in via setup request payload)
 
 ## Backend Flow
 
@@ -43,7 +44,8 @@ Project creation can also include:
       "quicksprints": true,
       "previewScript": true,
       "ci": true,
-      "techstack": true
+      "techstack": true,
+      "docs": true
     }
   }
 }
@@ -67,6 +69,7 @@ When selected, setup can create or update:
 - `.github/workflows/code-ux-basic-checks.yml`
 - `.gitlab-ci.yml`
 - a detected system techstack catalog entry selected through the project's `techstack.selectedTechstackId`
+- repository documentation embedded into the project's Knowledge docs library
 
 Agent setup also updates project agent routing:
 
@@ -75,6 +78,8 @@ Agent setup also updates project agent routing:
 - created worker specialists are added to the orchestrator roster
 
 Techstack setup is non-destructive and best-effort. Imported projects start with `techstack.selectedTechstackId: null`; when the operator enables `Techstack`, the Project Setup Agent inspects dependency evidence, especially `package.json`, lockfiles, workspace manifests, and framework config files. A valid result includes a stack name, description, and detected frameworks/libraries. Code UX adds the detected stack to the system catalog when no matching entry exists, then selects it for the project. Empty, invalid, or contradictory detections are ignored with a warning and do not block other selected setup artifacts.
+
+Docs setup is opt-in and best-effort. When `docs` is enabled, Code UX discovers root documentation and files under `docs/`, then sends each file through the shared Knowledge ingestion pipeline as repository-path docs. Successful setup results include embedded document IDs and per-file embedding errors; individual documentation failures do not fail the provider-generated setup artifacts.
 
 ## Prompt Requirements
 
