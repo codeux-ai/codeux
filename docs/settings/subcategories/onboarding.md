@@ -16,7 +16,7 @@ Saving new onboarding choices can overwrite the current system defaults, includi
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#onboarding`. The Settings card header links to the matching published docs anchor.
+Open this subcategory from the dashboard docs route at `/docs/user-dashboard-settings#onboarding`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

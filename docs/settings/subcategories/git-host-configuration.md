@@ -16,7 +16,7 @@ Tokens and copied auth directories can grant repository write access inside prov
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#git-host-configuration`. The Settings card header links to the matching published docs anchor.
+Open this subcategory from the dashboard docs route at `/docs/user-dashboard-settings#git-host-configuration`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

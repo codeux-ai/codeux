@@ -16,7 +16,7 @@ More automation can move faster but may continue through a bad plan or stale con
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#automation`. The Settings card header links to the matching published docs anchor.
+Open this subcategory from the dashboard docs route at `/docs/user-dashboard-settings#automation`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

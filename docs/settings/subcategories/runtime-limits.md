@@ -16,7 +16,7 @@ Port collisions or wrong startup scripts prevent previews from becoming reachabl
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#runtime-limits`. The Settings card header links to the matching published docs anchor.
+Open this subcategory from the dashboard docs route at `/docs/user-dashboard-settings#runtime-limits`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

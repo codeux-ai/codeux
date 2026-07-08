@@ -16,7 +16,7 @@ Automatic rebuilds can be noisy for slow projects or heavy Docker images.
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#workspace-visibility`. The Settings card header links to the matching published docs anchor.
+Open this subcategory from the dashboard docs route at `/docs/user-dashboard-settings#workspace-visibility`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

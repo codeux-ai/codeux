@@ -16,7 +16,7 @@ Mirrored files can make agent edits visible in repository diffs if `.code-ux/age
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#project-markdown-mirror`. The Settings card header links to the matching published docs anchor.
+Open this subcategory from the dashboard docs route at `/docs/user-dashboard-settings#project-markdown-mirror`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

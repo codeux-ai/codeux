@@ -20,7 +20,7 @@ Broken setup scripts, overly tight memory limits, or root-mode changes can fail 
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#docker-runtime`. The Settings card header links to the matching published docs anchor.
+Open this subcategory from the dashboard docs route at `/docs/user-dashboard-settings#docker-runtime`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

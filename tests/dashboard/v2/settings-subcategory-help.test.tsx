@@ -25,7 +25,7 @@ describe("settings subcategory help", () => {
     expect(screen.getByRole("button", { name: "Show help for Default Routing Anchors" })).toBeInTheDocument();
     const docsLink = screen.getByRole("link", { name: "Open documentation for Default Routing Anchors" });
 
-    expect(docsLink).toHaveAttribute("href", "/docs/user/dashboard/settings#default-routing-anchors");
+    expect(docsLink).toHaveAttribute("href", "/docs/user-dashboard-settings#default-routing-anchors");
   });
 
   it("supports explicit help metadata for dynamic subcategory titles", () => {
@@ -38,7 +38,7 @@ describe("settings subcategory help", () => {
     expect(screen.getByRole("button", { name: "Show help for Playwright" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open documentation for Playwright" })).toHaveAttribute(
       "href",
-      "/docs/user/dashboard/settings#custom-mcp-server",
+      "/docs/user-dashboard-settings#custom-mcp-server",
     );
   });
 
@@ -47,7 +47,7 @@ describe("settings subcategory help", () => {
 
     for (const doc of Object.values(SETTINGS_SUBCATEGORY_DOCS)) {
       expect(existsSync(path.join(docsRoot, `${doc.id}.md`)), `${doc.id} should have canonical docs`).toBe(true);
-      expect(doc.docsHref).toMatch(/^\/docs\/user\/dashboard\/settings#[a-z0-9-]+$/u);
+      expect(doc.docsHref).toMatch(/^\/docs\/user-dashboard-settings#[a-z0-9-]+$/u);
     }
   });
 });

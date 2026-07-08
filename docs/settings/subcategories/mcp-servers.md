@@ -16,7 +16,7 @@ Broad custom MCP access can expose external tools to more providers than intende
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#mcp-servers`. The Settings card header links to the matching published docs anchor.
+Open this subcategory from the dashboard docs route at `/docs/user-dashboard-settings#mcp-servers`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

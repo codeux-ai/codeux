@@ -18,7 +18,7 @@ Overbroad instructions can capture noisy or sensitive details.
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#worker-learnings-instruction`. The Settings card header links to the matching published docs anchor.
+Open this subcategory from the dashboard docs route at `/docs/user-dashboard-settings#worker-learnings-instruction`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

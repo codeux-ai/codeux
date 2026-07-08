@@ -16,7 +16,7 @@ Clearing long-term or all memory removes claims, evidence, and vectors permanent
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#project-memory`. The Settings card header links to the matching published docs anchor.
+Open this subcategory from the dashboard docs route at `/docs/user-dashboard-settings#project-memory`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

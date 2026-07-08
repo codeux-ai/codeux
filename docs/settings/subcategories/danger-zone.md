@@ -16,7 +16,7 @@ Delete actions are irreversible after confirmation.
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#danger-zone`. The Settings card header links to the matching published docs anchor.
+Open this subcategory from the dashboard docs route at `/docs/user-dashboard-settings#danger-zone`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

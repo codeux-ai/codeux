@@ -16,7 +16,7 @@ Short retention can remove useful troubleshooting detail; disabling pruning can 
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#database-settings`. The Settings card header links to the matching published docs anchor.
+Open this subcategory from the dashboard docs route at `/docs/user-dashboard-settings#database-settings`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

@@ -20,7 +20,7 @@ Base provider inheritance is field-by-field, but invocation route provider maps 
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#base-provider-configuration`. The Settings card header links to the matching published docs anchor.
+Open this subcategory from the dashboard docs route at `/docs/user-dashboard-settings#base-provider-configuration`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

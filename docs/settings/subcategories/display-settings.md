@@ -16,7 +16,7 @@ Browser navigation still depends on sprint preview and in-app browser visibility
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#display-settings`. The Settings card header links to the matching published docs anchor.
+Open this subcategory from the dashboard docs route at `/docs/user-dashboard-settings#display-settings`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 

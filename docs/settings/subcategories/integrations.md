@@ -16,7 +16,7 @@ Imported hints can reveal local auth paths; verify before saving shared configur
 
 ## Dashboard Link
 
-Open this subcategory from the dashboard docs route at `/docs/user/dashboard/settings#integrations`. The Settings card header links to the matching published docs anchor.
+Open this subcategory from the dashboard docs route at `/docs/user-dashboard-settings#integrations`. The Settings card header links to the matching published docs anchor.
 
 ## Related Docs
 
