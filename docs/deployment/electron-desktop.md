@@ -14,16 +14,18 @@ Code UX can run as an installable Electron desktop app while preserving the exis
 - Windows packaged builds keep the active WebGL context cap at 16 so the persistent shell canvas, avatar canvases, and route-scoped chart canvases have enough headroom during long navigation sessions while old Chromium contexts are waiting for garbage collection.
 - External links are opened through the host operating system. In-app dashboard and sprint-preview URLs remain inside the Electron app.
 - The desktop shell renders only the resolved dashboard origin and same-port sprint preview origins that match `preview-<session>.localhost:<dashboardPort>` internally. Other `http`, `https`, and `mailto` navigations are denied in the renderer and opened through the host operating system after scheme validation; all other schemes are blocked.
-- The compact title bar version label polls `/api/system/update-status` on startup and every 30 minutes. When the response reports a newer version without an error, the title bar shows a no-drag "Update available" download link with a download icon; activating it opens the official GitHub desktop release download page in the user's default browser through Electron's external navigation handler. No update action is shown for failed checks or current installations.
+- The compact title bar version label polls `/api/system/update-status` on startup and every 30 minutes. When the response reports a newer version without an error, the title bar shows a no-drag "Update available" download link with a download icon; activating it opens the official GitHub desktop release download page in the user's default browser. The preload bridge also exposes `window.codeUxDesktop.openUpdates()`, a fixed IPC action that opens `https://github.com/codeux-ai/codeux/releases/latest` without giving the renderer a generic external URL opener. No update action is shown for failed checks or current installations.
 
 ## Native Desktop Integration
 
 The Add Project dialog uses a native Electron directory picker when running in the desktop app. Browser-only dashboard sessions keep the existing HTTP directory browser fallback. When no current path is typed, the native picker opens at the user's home directory; relative defaults are resolved from the user's home directory before opening the dialog.
 
-The native picker is exposed through the isolated preload bridge:
+The native picker and desktop-only commands are exposed through the isolated preload bridge:
 
 - `window.codeUxDesktop.pickDirectory(defaultPath?)`
 - returns `{ canceled, filePath }`
+- `window.codeUxDesktop.openUpdates()`
+- returns `true` when Electron accepted the request to open the official latest releases page, otherwise `false`
 
 Renderer Node access remains disabled. The preload exposes only this narrow IPC surface.
 

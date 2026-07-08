@@ -29,6 +29,9 @@ contextBridge.exposeInMainWorld("codeUxDesktop", {
   setZoom: (factor: number): Promise<number> => {
     return ipcRenderer.invoke("codeux:set-zoom", factor);
   },
+  openUpdates: (): Promise<boolean> => {
+    return ipcRenderer.invoke("codeux:open-updates");
+  },
   window: {
     minimize: (): Promise<void> => ipcRenderer.invoke("codeux:window-minimize"),
     toggleMaximize: (): Promise<boolean> => ipcRenderer.invoke("codeux:window-toggle-maximize"),

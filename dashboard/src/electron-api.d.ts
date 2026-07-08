@@ -23,6 +23,7 @@ declare global {
         filePath: string | null;
       }>;
       setZoom?(factor: number): Promise<number>;
+      openUpdates?(): Promise<boolean>;
       window?: CodeUxWindowApi;
     };
   }
