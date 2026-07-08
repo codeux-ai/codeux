@@ -33,7 +33,7 @@ The dashboard calls:
 - `POST /api/projects/:projectId/setup`
 - `POST /api/projects/:projectId/setup` with `background: true`
 
-Project creation can also include:
+Project creation can also include the same setup request shape:
 
 ```json
 {
@@ -59,6 +59,27 @@ Project setup base-agent context is sourced from the bundled Code UX defaults in
 
 The dashboard uses background mode for user-triggered setup. The endpoint returns `202` with the created `invocationId` immediately, then the setup run continues server-side. The project card shows an `Initializing` state with the invocation short id, and toast notifications link directly to `/chat?mode=invocations&invocation=<id>` for live tracking and completion review.
 
+Foreground setup responses include the applied artifact summary:
+
+```json
+{
+  "ok": true,
+  "projectId": "project-id",
+  "invocationId": "invocation-id",
+  "agentId": "project-setup-agent-id",
+  "summary": "Setup summary",
+  "createdAgentIds": ["agent-id"],
+  "createdQuicksprintTemplateIds": ["template-id"],
+  "writtenFiles": [".code-ux/browser/start-preview.sh"],
+  "embeddedDocumentIds": ["knowledge-document-id"],
+  "embeddedDocumentErrors": [
+    { "fileName": "docs/broken.md", "error": "Failed to ingest file" }
+  ]
+}
+```
+
+`embeddedDocumentIds` lists Knowledge document records created from repository documentation during this setup run. `embeddedDocumentErrors` lists per-file discovery or ingestion failures. These errors are partial-failure diagnostics: provider-generated setup artifacts can still be applied and the setup response can still be successful when one documentation file cannot be embedded.
+
 ## Generated Artifacts
 
 When selected, setup can create or update:
@@ -69,7 +90,7 @@ When selected, setup can create or update:
 - `.github/workflows/code-ux-basic-checks.yml`
 - `.gitlab-ci.yml`
 - a detected system techstack catalog entry selected through the project's `techstack.selectedTechstackId`
-- repository documentation embedded into the project's Knowledge docs library
+- repository documentation discovered from the checkout and ingested into the project's Knowledge docs library
 
 Agent setup also updates project agent routing:
 
@@ -79,7 +100,7 @@ Agent setup also updates project agent routing:
 
 Techstack setup is non-destructive and best-effort. Imported projects start with `techstack.selectedTechstackId: null`; when the operator enables `Techstack`, the Project Setup Agent inspects dependency evidence, especially `package.json`, lockfiles, workspace manifests, and framework config files. A valid result includes a stack name, description, and detected frameworks/libraries. Code UX adds the detected stack to the system catalog when no matching entry exists, then selects it for the project. Empty, invalid, or contradictory detections are ignored with a warning and do not block other selected setup artifacts.
 
-Docs setup is opt-in and best-effort. When `docs` is enabled, Code UX discovers root documentation and files under `docs/`, then sends each file through the shared Knowledge ingestion pipeline as repository-path docs. Successful setup results include embedded document IDs and per-file embedding errors; individual documentation failures do not fail the provider-generated setup artifacts.
+Docs setup is opt-in and best-effort. When `docs` is enabled, Code UX discovers root documentation and files under `docs/`, then sends each file through the shared Knowledge ingestion pipeline as repository-path docs. The existing Knowledge ingestion path handles dedupe, text extraction, chunking, embedding, and document status updates. Setup reports the document IDs it receives from that path, but it does not guarantee every document has already reached `ready`; status continues to follow the KnowledgeService lifecycle shown on the Knowledge page. Individual documentation failures are reported in `embeddedDocumentErrors` and do not fail the provider-generated setup artifacts.
 
 ## Prompt Requirements
 
