@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { h } from "preact";
-import { describe, expect, it, vi, afterEach } from "vitest";
+import { describe, expect, it, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { Sidebar } from "../../../dashboard/src/v2/components/layout/Sidebar.js";
@@ -10,6 +10,7 @@ import { PageContainer } from "../../../dashboard/src/v2/components/layout/PageC
 import { KineticDock } from "../../../dashboard/src/v2/components/KineticDock.js";
 import { useRouterState } from "@tanstack/react-router";
 import { EXTERNAL_DOCS_URL } from "../../../dashboard/src/v2/lib/navigation-items.js";
+import { useProjectEffectiveSettings } from "../../../dashboard/src/v2/hooks/use-project-effective-settings.js";
 
 expect.extend(matchers);
 
@@ -72,10 +73,22 @@ global.ResizeObserver = class ResizeObserver {
     disconnect() {}
 };
 
+const defaultEffectiveSettings = {
+    data: {
+        settings: {
+            sprintPreview: { enabled: true, showInAppBrowser: true },
+        },
+    },
+};
+
 describe("Knowledge Base Navigation", () => {
+    beforeEach(() => {
+        vi.mocked(useRouterState).mockReturnValue([{ pathname: "/" }] as any);
+        vi.mocked(useProjectEffectiveSettings).mockReturnValue(defaultEffectiveSettings as any);
+    });
+
     afterEach(() => {
         cleanup();
-        vi.mocked(useRouterState).mockReturnValue([{ pathname: "/" }] as any);
     });
 
     it("renders Knowledge link in Sidebar", () => {
@@ -125,9 +138,28 @@ describe("Knowledge Base Navigation", () => {
             "Docs",
             "Settings",
         ]);
+        expect(screen.getByRole("link", { name: "Chat" })).toHaveAttribute("href", "/chat");
         expect(screen.getByRole("link", { name: "Schedule" })).toHaveAttribute("href", "/scheduler");
         expect(screen.getByRole("link", { name: "Knowledge" })).toHaveAttribute("href", "/knowledge");
         expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", EXTERNAL_DOCS_URL);
+    });
+
+    it("keeps Sidebar Chat linked and active when browser preview is hidden", () => {
+        vi.mocked(useRouterState).mockReturnValue([{ pathname: "/chat" }] as any);
+        vi.mocked(useProjectEffectiveSettings).mockReturnValue({
+            data: {
+                settings: {
+                    sprintPreview: { enabled: false, showInAppBrowser: false },
+                },
+            },
+        } as any);
+
+        render(<Sidebar />);
+
+        const chatLink = screen.getByRole("link", { name: "Chat" });
+        expect(chatLink).toHaveAttribute("href", "/chat");
+        expect(chatLink).toHaveAttribute("aria-current", "page");
+        expect(screen.getByRole("link", { name: "Browser" })).toHaveAttribute("aria-disabled", "true");
     });
 
     it("renders Knowledge link in KineticDock", () => {
@@ -162,6 +194,7 @@ describe("Knowledge Base Navigation", () => {
             "Docs",
             "Config",
         ]);
+        expect(screen.getByRole("link", { name: "Chat" })).toHaveAttribute("href", "/chat");
         expect(screen.getByRole("link", { name: "Schedule" })).toHaveAttribute("href", "/scheduler");
         expect(screen.getByRole("link", { name: "Knowledge" })).toHaveAttribute("href", "/knowledge");
         expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", EXTERNAL_DOCS_URL);

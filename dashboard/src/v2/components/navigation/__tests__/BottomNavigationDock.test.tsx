@@ -124,4 +124,28 @@ describe('BottomNavigationDock (KineticDock)', () => {
 
         expect(prefetchRoute).not.toHaveBeenCalledWith(EXTERNAL_DOCS_URL);
     });
+
+    it('renders Chat as the left dock route and prefetches it on intent', () => {
+        vi.spyOn(RouterHook, 'useRouterState').mockReturnValue([{ pathname: '/chat' }] as any);
+
+        render(<KineticDock />);
+
+        const links = screen.getAllByRole('link');
+        const chatLink = screen.getByRole('link', { name: 'Chat' });
+        expect(links[0]).toBe(chatLink);
+        expect(chatLink).toHaveAttribute('href', '/chat');
+        expect(chatLink).toHaveAttribute('aria-current', 'page');
+        expect(chatLink).toHaveAttribute('data-active', 'true');
+        expect(chatLink).toHaveAttribute('data-tour-id', 'nav-chat');
+        expect(screen.getByText('Active route: Chat')).toBeInTheDocument();
+
+        fireEvent.mouseEnter(chatLink);
+        fireEvent.pointerDown(chatLink);
+        chatLink.focus();
+
+        expect(prefetchRoute).toHaveBeenCalledTimes(3);
+        expect(prefetchRoute).toHaveBeenNthCalledWith(1, '/chat');
+        expect(prefetchRoute).toHaveBeenNthCalledWith(2, '/chat');
+        expect(prefetchRoute).toHaveBeenNthCalledWith(3, '/chat');
+    });
 });
