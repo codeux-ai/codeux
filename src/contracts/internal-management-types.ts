@@ -11,7 +11,7 @@ import type {
   ExternalChannelMetadata,
 } from "./chat-provider-types.js";
 import type { NodeFlowGraph, NodeFlowJsonObject, NodeWidgetSchema } from "./node-flow-types.js";
-import type { CreateProjectInput } from "./project-management-types.js";
+import type { CreateProjectInput, ProjectSetupOptions, ProjectSetupRequestInput } from "./project-management-types.js";
 
 export interface ManagementApproval {
   confirmed: boolean;
@@ -30,6 +30,9 @@ export interface ManageProjectsArgs extends Partial<CreateProjectInput> {
   action: "list" | "get" | "create" | "update" | "select" | "setup" | "delete";
   projectId?: string;
   description?: string;
+  setup?: ProjectSetupRequestInput;
+  options?: Partial<ProjectSetupOptions>;
+  clientRequestId?: string;
   approval?: ManagementApproval;
 }
 

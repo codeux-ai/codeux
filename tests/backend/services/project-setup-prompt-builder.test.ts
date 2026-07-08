@@ -52,6 +52,7 @@ const options = (techstack: boolean): ProjectSetupOptions => ({
   previewScript: false,
   ci: false,
   techstack,
+  docs: false,
 });
 
 const designGuidance: DesignGuidanceSettings = {
@@ -116,6 +117,19 @@ describe("buildProjectSetupPrompt", () => {
     expect(prompt).not.toContain('"detectedFrameworks": ["Vite", "React"]');
     expect(prompt).toContain('"techstack": null');
     expect(prompt).toContain("Set `techstack` to null.");
+  });
+
+  it("labels docs embedding as a Code UX-applied setup option", () => {
+    const prompt = buildProjectSetupPrompt({
+      project,
+      setupAgent,
+      options: { ...options(false), docs: true },
+    });
+
+    expect(prompt).toContain("Requested artifacts: Docs Embedding");
+    expect(prompt).toContain("Code UX will automatically discover repository documentation and embed it into the Knowledge docs library");
+    expect(prompt).toContain("### Docs Embedding Rules");
+    expect(prompt).toContain("Do not include embedded documents, document contents, or knowledge-library writes in the JSON output.");
   });
 
   it("includes selected project guidance before setup task instructions", () => {

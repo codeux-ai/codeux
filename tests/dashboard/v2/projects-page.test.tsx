@@ -2,11 +2,12 @@
 /** @jsx h */
 import { h } from "preact";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { ProjectsPage } from "../../../dashboard/src/v2/ProjectsPage.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
 import { useToast } from "../../../dashboard/src/v2/components/feedback/ToastProvider.js";
+import { startProjectSetup } from "../../../dashboard/src/v2/lib/project-api.js";
 
 expect.extend(matchers);
 
@@ -139,6 +140,12 @@ describe("ProjectsPage", () => {
     cleanup();
     vi.useRealTimers();
     vi.clearAllMocks();
+    vi.mocked(startProjectSetup).mockResolvedValue({
+      accepted: true,
+      projectId: "project-1",
+      invocationId: "invocation-1",
+      agentId: "agent-1",
+    });
     vi.mocked(useToast).mockReturnValue({ addToast: vi.fn() } as any);
     vi.mocked(useProjectData).mockReturnValue({
       projects: [createProject()],
@@ -396,5 +403,44 @@ describe("ProjectsPage", () => {
     expect(techstackOption).toHaveAttribute("aria-pressed", "true");
     techstackOption.focus();
     expect(document.activeElement).toBe(techstackOption);
+  });
+
+  it("renders Docs disabled by default and submits docs false when untouched", async () => {
+    render(<ProjectsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Setup project/i }));
+
+    const docsOption = screen.getByRole("button", { name: /Docs/i });
+    expect(docsOption).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(screen.getByRole("button", { name: "Setup Project" }));
+
+    await waitFor(() => expect(startProjectSetup).toHaveBeenCalledWith("project-1", {
+      enabled: true,
+      options: expect.objectContaining({
+        docs: false,
+      }),
+    }));
+  });
+
+  it("toggles Docs without starting setup and includes docs true in the setup payload", async () => {
+    render(<ProjectsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Setup project/i }));
+
+    const docsOption = screen.getByRole("button", { name: /Docs/i });
+    fireEvent.click(docsOption);
+
+    expect(startProjectSetup).not.toHaveBeenCalled();
+    expect(docsOption).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Setup Project" }));
+
+    await waitFor(() => expect(startProjectSetup).toHaveBeenCalledWith("project-1", {
+      enabled: true,
+      options: expect.objectContaining({
+        docs: true,
+      }),
+    }));
   });
 });

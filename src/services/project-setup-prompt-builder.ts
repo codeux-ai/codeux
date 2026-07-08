@@ -24,6 +24,7 @@ const requestedArtifacts = (options: ProjectSetupOptions): string[] => {
   if (options.previewScript) artifacts.push("Preview Container Script");
   if (options.ci) artifacts.push("GitHub/GitLab CI");
   if (options.techstack) artifacts.push("Techstack Detection");
+  if (options.docs) artifacts.push("Docs Embedding");
   return artifacts;
 };
 
@@ -264,6 +265,9 @@ export function buildProjectSetupPrompt(args: ProjectSetupPromptArgs): string {
     `Repository root: ${args.project.baseDir}`,
     `Source type: ${args.project.sourceType}`,
     `Requested artifacts: ${selected.length > 0 ? selected.join(", ") : "none"}`,
+    ...(args.options.docs ? [
+      "Docs embedding requested: Code UX will automatically discover repository documentation and embed it into the Knowledge docs library after generated setup artifacts are applied. You should still read repository docs as evidence, but you do not need to return document contents or knowledge rows in the JSON.",
+    ] : []),
     "",
     "## Mandatory Research Scope",
     "- Start by listing the repository root and identifying the package manager, primary language(s), framework(s), app entrypoints, scripts, and test commands.",
@@ -379,5 +383,13 @@ export function buildProjectSetupPrompt(args: ProjectSetupPromptArgs): string {
       "- For CI, produce basic GitHub Actions and/or GitLab CI files only when appropriate for the detected repository. Prefer install, lint if present, typecheck if present, test if present, and build if present.",
       "- CI must use the detected package manager and avoid secret-dependent deployment steps.",
     ] : ["- Set `ci` to an empty array."]),
+    ...(args.options.docs ? [
+      "",
+      "### Docs Embedding Rules",
+      "",
+      "- Do not include embedded documents, document contents, or knowledge-library writes in the JSON output.",
+      "- Code UX will discover root documentation files and files under `docs/`, then embed them into the project's Knowledge docs library after applying this setup response.",
+      "- Use discovered documentation only as evidence for generated agents, quicksprints, preview scripts, CI, and techstack detection.",
+    ] : []),
   ].join("\n");
 }
