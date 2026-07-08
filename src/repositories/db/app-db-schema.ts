@@ -436,6 +436,17 @@ CREATE TABLE IF NOT EXISTS conversation_drafts (
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
       );
 
+CREATE TABLE IF NOT EXISTS conversation_message_history (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        body_markdown TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(user_id, project_id, body_markdown),
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
 CREATE TABLE IF NOT EXISTS agent_presets (
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,

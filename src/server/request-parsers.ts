@@ -769,6 +769,7 @@ import type {
   CreateConversationThreadInput,
   UpdateConversationThreadInput,
   CreateDashboardConversationMessageInput,
+  RecordConversationMessageHistoryInput,
   UpsertConversationDraftInput,
   ConversationThreadScope,
 } from "../contracts/connection-chat-types.js";
@@ -1014,6 +1015,22 @@ export function parseUpsertConversationDraftInput(body: unknown, userId: string)
     userId,
     contextKey,
     bodyMarkdown: typedBody.bodyMarkdown,
+  };
+}
+
+export function parseRecordConversationMessageHistoryInput(body: unknown, userId: string): RecordConversationMessageHistoryInput {
+  if (!body || typeof body !== "object") {
+    throw new Error("Invalid input: body must be an object");
+  }
+  const typedBody = body as Record<string, unknown>;
+  const bodyMarkdown = typeof typedBody.bodyMarkdown === "string" ? typedBody.bodyMarkdown.trim() : "";
+  if (!bodyMarkdown) {
+    throw new Error("Missing or empty required field: bodyMarkdown");
+  }
+
+  return {
+    userId,
+    bodyMarkdown,
   };
 }
 

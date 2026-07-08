@@ -201,6 +201,15 @@ export interface ConversationDraftRecord {
   updatedAt: string;
 }
 
+export interface ConversationMessageHistoryRecord {
+  id: string;
+  userId: string;
+  projectId: string;
+  bodyMarkdown: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ConnectionInboxMessage {
   id: string;
   threadId: string;
@@ -275,6 +284,11 @@ export interface CreateDashboardConversationMessageInput {
 export interface UpsertConversationDraftInput {
   userId: string;
   contextKey: string;
+  bodyMarkdown: string;
+}
+
+export interface RecordConversationMessageHistoryInput {
+  userId: string;
   bodyMarkdown: string;
 }
 

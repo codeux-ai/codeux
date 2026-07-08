@@ -730,6 +730,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     postConversationMessage: (projectId, input) => deps.chatThreadRuntimeService.postMessage(projectId, input),
     getConversationDraft: (projectId, input) => deps.connectionChatRepository.getDraft(projectId, input),
     upsertConversationDraft: (projectId, input) => deps.connectionChatRepository.upsertDraft(projectId, input),
+    listConversationMessageHistory: (projectId, input) => deps.connectionChatRepository.listMessageHistory(projectId, input),
+    recordConversationMessageHistory: (projectId, input) => deps.connectionChatRepository.recordMessageHistory(projectId, input),
 
     listProjectInvocations: (projectId) => deps.executionRepository.listExecutionInvocations({ projectId }),
     listInvocationMessages: (invocationId) => deps.executionRepository.listExecutionInvocationMessages(invocationId),

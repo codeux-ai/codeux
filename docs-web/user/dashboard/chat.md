@@ -45,6 +45,8 @@ Each post is a runtime operation that honors the explicit route chosen (worker r
 
 The project chat composer saves your latest draft in SQLite per dashboard user, project, and active chat context. Leaving `/chat`, switching away and back, or reloading restores the matching draft for the current new-thread composer or selected thread without reusing drafts from another project or browser user. Blank drafts remove the saved row, and sending still clears the composer after the message is accepted.
 
+The composer also keeps a recent-message history for successful project chat sends. Press ArrowUp or ArrowDown while composing to preview messages submitted by the current dashboard user in the current project; a fresh dashboard user starts with no recalled messages. Single-line drafts can recall history directly, while multi-line drafts keep normal textarea cursor movement unless the caret is at the true start or end. Code UX preserves the current draft while you cycle through history and restores it when you move back past the newest recalled entry.
+
 ## Create app quickactions
 
 Use **Create Web App** or **Create Desktop App** when you want Code UX to start an app-building sprint in the selected project from chat. In Threads mode, the buttons sit beside the composer and are also available in an empty thread. In 3D Chat, the idle Web App and Desktop App quickactions send the same kind of request through the active thread.
@@ -129,6 +131,7 @@ Planning and QA self-reflection messages appear as structured cards instead of r
 The composer at the bottom supports:
 
 - **Multi-line input** with Enter to send, Shift+Enter for newline.
+- **Recent message recall** with ArrowUp and ArrowDown when native textarea cursor movement is not taking precedence.
 - **Speech input** with the microphone control beside Send in project Threads mode.
 - **Slash commands** that invoke management actions inline.
 - **Attachments** *(planned)*.
