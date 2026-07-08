@@ -266,6 +266,7 @@ describe("SprintLedger Component", () => {
     fireEvent.click(screen.getByRole("button", { name: /Select sprint Beta API/i }));
     await waitFor(() => expect(screen.getByRole("button", { name: /Starting \d+ selected sprints/ })).toBeInTheDocument());
     const pendingStartBtn = screen.getByRole("button", { name: /Starting \d+ selected sprints/ });
+    expect(pendingStartBtn).toHaveTextContent("Starting");
     expect(pendingStartBtn.getAttribute("title")).toBe("Bulk controls are disabled while starting 1 selected sprint.");
     expect(pendingStartBtn).toHaveAccessibleDescription(/Starting 1 selected sprint\. Bulk controls are disabled while starting 1 selected sprint\./);
     expect(pendingStartBtn).toBeDisabled();
@@ -283,10 +284,11 @@ describe("SprintLedger Component", () => {
     fireEvent.click(sprintHeader);
 
     expect(sprintColumn).toHaveAttribute("aria-sort", "ascending");
-    expect(screen.getByText(/Sorted by Sprint ascending\. 2 sprints visible\. No sprints selected\./i)).toBeInTheDocument();
+    expect(sprintHeader).toHaveAccessibleDescription(/Currently sorted ascending\. Activate to sort Sprint descending\./i);
+    expect(screen.getByText(/Sorted by Sprint ascending\. Showing 2 of 2 sprints\. No sprints selected\./i)).toBeInTheDocument();
     fireEvent.click(sprintHeader);
     expect(sprintColumn).toHaveAttribute("aria-sort", "descending");
-    expect(screen.getByText(/Sorted by Sprint descending\. 2 sprints visible\. No sprints selected\./i)).toBeInTheDocument();
+    expect(screen.getByText(/Sorted by Sprint descending\. Showing 2 of 2 sprints\. No sprints selected\./i)).toBeInTheDocument();
   });
 
   it("locks rows properly when specific pending actions occur", async () => {
@@ -467,7 +469,9 @@ describe("SprintLedger Component", () => {
     });
 
     expect(screen.getByRole("row", { name: /Alpha Design/i })).toHaveAttribute("aria-busy", "true");
-    expect(screen.getByRole("button", { name: /Cannot start Alpha Design while a bulk action is in progress/i })).toBeDisabled();
+    const disabledStart = screen.getByRole("button", { name: /Cannot start Alpha Design while a bulk action is in progress/i });
+    expect(disabledStart).toBeDisabled();
+    expect(disabledStart).toHaveAccessibleDescription(/Controls for sprint Alpha Design are disabled while a bulk action is in progress\./);
     expect(screen.getByRole("button", { name: /Cannot change showcase pin for sprint Alpha Design while a bulk action is in progress/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Cannot open actions menu for sprint Alpha Design while a bulk action is in progress/i })).toBeDisabled();
   });
