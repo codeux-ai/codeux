@@ -9,15 +9,15 @@ import { memorySidebarExpandedSignal, searchQuerySignal, activeMemoryIdSignal, h
 
 import { AddMemoryModal } from "./components/memory/AddMemoryModal.js";
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useRef, useState, useCallback, useEffect } from "preact/hooks";
+import { useLayoutEffect, useRef, useState, useCallback, useEffect, useMemo } from "preact/hooks";
 import gsap from "gsap";
-import { Brain, Search, X, AlertTriangle, ZoomIn, ZoomOut, Maximize2, Plus, Loader2 } from "lucide-preact";
-import { listMemories, createMemory, deleteMemory as apiDeleteMemory, searchMemories, listEmbeddingModels, downloadEmbeddingModel, selectEmbeddingModel, deleteEmbeddingModel, getMemoryStats, startReembed, getReembedProgress, getEmbeddingMap, type ReembedProgress, type EmbeddingMapResult } from "./lib/memory-api.js";
+import { Brain, AlertTriangle, ZoomIn, ZoomOut, Maximize2, Loader2 } from "lucide-preact";
+import { deleteMemory as apiDeleteMemory, listEmbeddingModels, downloadEmbeddingModel, selectEmbeddingModel, deleteEmbeddingModel, getMemoryStats, startReembed, getReembedProgress, type EmbeddingMapResult } from "./lib/memory-api.js";
 import type { MemoryRecord, MemoryScope, MemoryCategory } from "./memory-types.js";
 import { useProjectData } from "./context/project-data.js";
 import { useSprints } from "../hooks/useSprints.js";
 import { fetchAgentPresets } from "./lib/agent-preset-api.js";
-import { prepareMemoryGraph, type MemNode, type Edge, type GraphMetadata, CLUSTER } from "./lib/memory-graph.js";
+import type { MemNode, GraphMetadata } from "./lib/memory-graph.js";
 import type { SprintRecord, AgentPreset } from "./types.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
 import { PageHeader } from "./components/layout/PageHeader.js";
@@ -280,6 +280,14 @@ export const MemoryPage: FunctionComponent = () => {
         loadData
     } = useMemoryPageData(pid, activeScope, activeTier, effectiveSelectedSprintId, selectedAgentPresetId, memoryDataEnabled);
     const graphMatchesRequestedContext = graphDataContextKey === requestedContextKey;
+    const graphNodes = useMemo(
+        () => graphMatchesRequestedContext ? (graphData?.graph.nodes ?? []) : [],
+        [graphData, graphMatchesRequestedContext],
+    );
+    const graphEdges = useMemo(
+        () => graphMatchesRequestedContext ? (graphData?.graph.edges ?? []) : [],
+        [graphData, graphMatchesRequestedContext],
+    );
 
     const {
         models,
@@ -318,7 +326,7 @@ export const MemoryPage: FunctionComponent = () => {
     }, [lobotomize]);
     const inspectorOpen = activeMemoryIdSignal.value !== null;
     const activeMemory = activeMemoryIdSignal.value
-        ? S.current.graph.nodes.find((node) => node.id === activeMemoryIdSignal.value && node.alive)
+        ? graphNodes.find((node) => node.id === activeMemoryIdSignal.value && node.alive)
         : null;
     const activeMemoryCategory = activeMemory ? (CAT[activeMemory.category] || CAT.context).label : null;
     const selectionStatus = activeMemory
@@ -419,6 +427,8 @@ export const MemoryPage: FunctionComponent = () => {
         const canvas = canvasRef.current!;
         const ctx = canvas.getContext("2d")!;
         const s = S.current;
+        let disposed = false;
+        let rafScheduled = false;
 
         const resize = () => {
             const rect = canvas.parentElement!.getBoundingClientRect();
@@ -432,7 +442,65 @@ export const MemoryPage: FunctionComponent = () => {
         resize();
         window.addEventListener("resize", resize);
 
+        const scheduleDraw = () => {
+            if (disposed || document.hidden || rafScheduled) {
+                return;
+            }
+            rafScheduled = true;
+            s.rafId = requestAnimationFrame(draw);
+        };
+
+        const stopDraw = () => {
+            if (rafScheduled) {
+                cancelAnimationFrame(s.rafId);
+            }
+            rafScheduled = false;
+            s.rafId = 0;
+        };
+
+        const stopNeuralFire = () => {
+            if (s.neuronTimer) {
+                clearTimeout(s.neuronTimer);
+                s.neuronTimer = 0;
+            }
+        };
+
+        const scheduleNeuralFire = (delay: number) => {
+            if (disposed || document.hidden || s.neuronTimer) {
+                return;
+            }
+            s.neuronTimer = window.setTimeout(fire, delay);
+        };
+
+        const startNeuralFire = () => {
+            scheduleNeuralFire(800);
+        };
+
+        const pauseAnimation = () => {
+            stopDraw();
+            stopNeuralFire();
+        };
+
+        const resumeAnimation = () => {
+            scheduleDraw();
+            startNeuralFire();
+        };
+
+        const onVisibilityChange = () => {
+            if (document.hidden) {
+                pauseAnimation();
+                return;
+            }
+            resumeAnimation();
+        };
+
         function draw(time: number) {
+            rafScheduled = false;
+            s.rafId = 0;
+            if (disposed || document.hidden) {
+                return;
+            }
+
             const dpr = window.devicePixelRatio || 1;
             const w = canvas.width / dpr;
             const h = canvas.height / dpr;
@@ -442,6 +510,11 @@ export const MemoryPage: FunctionComponent = () => {
             const lob = lobRef.current;
 
             ctx.clearRect(0, 0, w, h);
+
+            if (!nodes.some((node) => node.alive)) {
+                scheduleDraw();
+                return;
+            }
 
             const scx = w / 2, scy = h / 2;
             const glowR = 380 * cam.zoom;
@@ -667,10 +740,10 @@ export const MemoryPage: FunctionComponent = () => {
             ctx.fillStyle = lob ? "rgba(227,0,15,0.5)" : "rgba(0,224,160,0.5)";
             ctx.fillText(lob ? "LOBOTOMIZE" : "NEURAL CORE", scx, scy + 32 * cam.zoom);
 
-            s.rafId = requestAnimationFrame(draw);
+            scheduleDraw();
         }
 
-        s.rafId = requestAnimationFrame(draw);
+        scheduleDraw();
 
         const getWorld = (e: MouseEvent) => {
             const rect = canvas.getBoundingClientRect();
@@ -749,25 +822,33 @@ export const MemoryPage: FunctionComponent = () => {
             gsap.to(s.cam, { ...target, ...CAMERA_ZOOM_TWEEN });
         };
 
+        const onLeave = () => {
+            s.mouseDown = false;
+            s.hoveredIdx = -1;
+        };
+
         canvas.addEventListener("mousemove", onMove);
         canvas.addEventListener("mousedown", onDown);
         canvas.addEventListener("mouseup", onUp);
-        canvas.addEventListener("mouseleave", () => { s.mouseDown = false; s.hoveredIdx = -1; });
+        canvas.addEventListener("mouseleave", onLeave);
         canvas.addEventListener("wheel", onWheel, { passive: false });
+        document.addEventListener("visibilitychange", onVisibilityChange);
 
         // Neural fire (random node pulses)
-        function startNeuralFire() {
-            const fire = () => {
-                const alive = s.graph.nodes.filter(n => n.alive);
-                if (alive.length === 0) return;
+        function fire() {
+            s.neuronTimer = 0;
+            if (disposed || document.hidden) {
+                return;
+            }
+            const alive = s.graph.nodes.filter(n => n.alive);
+            if (alive.length > 0) {
                 const node = alive[Math.floor(Math.random() * alive.length)];
                 const baseGlow = node.strength * 0.4;
                 gsap.timeline()
                     .to(node, { glow: 1, scale: 1.35, duration: 0.25, ease: "power2.out" })
                     .to(node, { glow: baseGlow, scale: 1, duration: 0.7, ease: "power2.inOut" });
-                s.neuronTimer = window.setTimeout(fire, 1800 + Math.random() * 2500);
-            };
-            s.neuronTimer = window.setTimeout(fire, 800);
+            }
+            scheduleNeuralFire(1800 + Math.random() * 2500);
         }
         startNeuralFire();
 
@@ -783,12 +864,14 @@ export const MemoryPage: FunctionComponent = () => {
         }
 
         return () => {
-            cancelAnimationFrame(s.rafId);
-            clearTimeout(s.neuronTimer);
+            disposed = true;
+            pauseAnimation();
             window.removeEventListener("resize", resize);
+            document.removeEventListener("visibilitychange", onVisibilityChange);
             canvas.removeEventListener("mousemove", onMove);
             canvas.removeEventListener("mousedown", onDown);
             canvas.removeEventListener("mouseup", onUp);
+            canvas.removeEventListener("mouseleave", onLeave);
             canvas.removeEventListener("wheel", onWheel);
             if (headerCtx) headerCtx.revert();
             gsap.killTweensOf(s.cam);
@@ -797,9 +880,7 @@ export const MemoryPage: FunctionComponent = () => {
     }, []);
 
     /* ── Search ────────────────────────────────────────────────────────── */
-    const handleSearch = useCallback(async (q: string) => {
-        searchQuerySignal.value = q;
-
+    const handleSearch = useCallback((q: string) => {
         const s = S.current;
         if (!q.trim()) {
             s.searchMatch = null;
@@ -822,6 +903,17 @@ export const MemoryPage: FunctionComponent = () => {
             gsap.to(s.cam, { x: cx, y: cy, zoom: SEARCH_FOCUS_ZOOM, duration: 0.8, ease: "power3.out", overwrite: true });
         }
     }, []);
+
+    useEffect(() => {
+        const dispose = effect(() => {
+            handleSearch(searchQuerySignal.value);
+        });
+        return dispose;
+    }, [handleSearch]);
+
+    useEffect(() => {
+        handleSearch(searchQuerySignal.value);
+    }, [graphData, handleSearch]);
 
     /* ── Lobotomize toggle ────────────────────────────────────────────── */
     const handleLobotomizeToggle = useCallback(() => {
@@ -1116,8 +1208,8 @@ export const MemoryPage: FunctionComponent = () => {
 
                 {/* Inspector panel */}
                 <MemoryDetails
-                    allNodes={S.current.graph.nodes}
-                    edges={S.current.graph.edges}
+                    allNodes={graphNodes}
+                    edges={graphEdges}
                     lobotomize={lobotomize}
                     onClose={() => { S.current.selectedIdx = -1; activeMemoryIdSignal.value = null; }}
                     onDelete={handleDelete}
@@ -1125,7 +1217,7 @@ export const MemoryPage: FunctionComponent = () => {
                 </div>
 
                 <MemorySidebar
-                    nodes={graphMatchesRequestedContext ? S.current.graph.nodes : []}
+                    nodes={graphNodes}
                     onSelectNode={onSelectNode}
                     refreshing={loading}
                     loadError={loadError}
@@ -1137,7 +1229,7 @@ export const MemoryPage: FunctionComponent = () => {
             {/* ── Category summary ────────────────────────────────────── */}
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
                 {Object.entries(CAT).map(([key, cfg]) => {
-                    const alive = S.current.graph.nodes.filter(n => n.category === key && n.alive).length;
+                    const alive = graphNodes.filter(n => n.category === key && n.alive).length;
                     const total = records.filter((r: MemoryRecord) => r.category === key).length;
                     return (
                         <div key={key}
