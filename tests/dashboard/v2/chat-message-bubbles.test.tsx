@@ -115,6 +115,62 @@ describe("Chat Message Bubbles", () => {
       expect(container.innerHTML).toContain("Hello world");
     });
 
+    it("renders reasoning metadata as a full-width reasoning widget without bubble chrome", () => {
+      const message = createChatMessage({
+        id: "msg_reasoning",
+        bodyMarkdown: "I am checking the repo shape before editing.",
+        metadata: {
+          kind: "reasoning",
+          provider: "codex",
+          model: "gpt-5",
+        },
+      });
+
+      const { container, unmount } = render(<ChatMessageBubble message={message} />);
+      const view = within(container);
+
+      expect(view.getByRole("region", { name: "Reasoning turn" })).toBeInTheDocument();
+      expect(view.getByText("I am checking the repo shape before editing.")).toBeInTheDocument();
+      expect(view.queryByRole("img", { name: "Assistant" })).not.toBeInTheDocument();
+      expect(container.textContent).not.toContain("From Assistant");
+      expect(container.textContent).not.toContain("Delivered");
+      unmount();
+    });
+
+    it("renders tool call metadata and nested toolCallsJson as a full-width tool card", () => {
+      const message = createChatMessage({
+        id: "msg_tool_call",
+        bodyMarkdown: "Running a command",
+        metadata: {
+          kind: "tool_call",
+          toolName: "exec_command",
+          toolStatus: "completed",
+          toolCallId: "call-chat-123456",
+          tokens: { input: 10, output: 5, total: 15 },
+          toolCallsJson: {
+            arguments: "{\"cmd\":\"pnpm test tests/dashboard/v2/chat-message-bubbles.test.tsx\"}",
+            output: "chat bubble tests passed",
+            resultStatus: "completed",
+          },
+        },
+      });
+
+      const { container } = render(<ChatMessageBubble message={message} />);
+      const view = within(container);
+
+      expect(view.getByText("exec_command")).toBeInTheDocument();
+      expect(view.getByText("done")).toBeInTheDocument();
+      expect(view.getByText("{\"cmd\":\"pnpm test tests/dashboard/v2/chat-message-bubbles.test.tsx\"}")).toBeInTheDocument();
+      expect(view.queryByText("Running a command")).not.toBeInTheDocument();
+      expect(view.queryByRole("img", { name: "Assistant" })).not.toBeInTheDocument();
+      expect(container.textContent).not.toContain("From Assistant");
+      expect(container.textContent).not.toContain("Delivered");
+
+      fireEvent.click(view.getByRole("button", { name: /exec_command/ }));
+
+      expect(view.getByText("chat bubble tests passed")).toBeInTheDocument();
+    });
+
     it.each([
       {
         provider: "jira",
