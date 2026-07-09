@@ -75,6 +75,8 @@ Open a memory and click **Inspect** to see its **embedding map**: a 2D projectio
 
 You can rebuild the map after re-embedding or after promotion.
 
+The graph pauses its canvas animation loop while the browser tab is hidden and resumes when the tab is visible again. Empty or loading maps clear the canvas without running the full edge, pulse, and node drawing passes, so the page stays responsive while data changes.
+
 ## Model browser
 
 The **Model Catalog** action opens a compact model browser instead of a flat card list. It separates:
