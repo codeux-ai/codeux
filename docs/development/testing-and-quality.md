@@ -182,7 +182,7 @@ OS-specific caveats:
 
 - Build paths with `path.join`, `path.resolve`, and URL encoding instead of hard-coded `/` separators; fixture helpers accept both POSIX and Windows separators when validating safe relative paths.
 - Browser file inputs need real temporary files created with Node `fs` APIs; do not depend on shell-specific paths, quoting, or glob expansion.
-- Spawn shell commands with explicit command/argument arrays and use `.cmd` wrappers on Windows when invoking package-manager binaries, as `scripts/e2e/run-playwright.mjs` does for pnpm.
+- Spawn shell commands with explicit command/argument arrays. On Windows, prefer resolving package-manager shims to their Node-run CLI entrypoints when a script spawns npm or pnpm directly, as `scripts/e2e/run-playwright.mjs` does for pnpm.
 - Linux CI installs Chromium system packages separately. Local Linux failures that mention missing shared libraries usually need `pnpm exec playwright install-deps chromium`; macOS and Windows normally only need `pnpm exec playwright install chromium`.
 
 ### E2E Troubleshooting
