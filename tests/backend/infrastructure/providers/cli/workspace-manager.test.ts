@@ -42,6 +42,29 @@ describe("WorkspaceManager", () => {
     expect(result).toBe(path.join(path.resolve("/repo/project"), ".worktrees", "session-1"));
   });
 
+  it("creates host QA snapshots under the short OS temp root", async () => {
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
+      if (args[0] === "rev-parse" && args.includes("--show-toplevel")) {
+        return { ok: true, stdout: "/repo/project\n", stderr: "", code: 0, signal: null } as any;
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0, signal: null } as any;
+    });
+
+    const workspace = await manager.createHostSnapshotWorkspace("/repo/project", "qa-review-long-session-id", {
+      branch: "task/feature-task-1",
+      fallbackBranch: "feature/sprint-1",
+    });
+
+    expect(workspace).toMatch(new RegExp(`^${os.tmpdir().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    expect(workspace).toMatch(/code-ux-qa-[a-f0-9]{16}$/);
+    expect(workspace).not.toContain(`${path.sep}repo${path.sep}project${path.sep}.worktrees`);
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "git",
+      ["worktree", "add", "--detach", workspace, "refs/heads/task/feature-task-1"],
+      "/repo/project",
+    );
+  });
+
   it("derives persistent skill storage roots outside project workspaces with safe path segments", () => {
     const hostPath = buildPersistentSkillStorageHostPath("Project One", "Agent/One", "../Storage One");
     const containerPath = buildPersistentSkillStorageContainerPath("../Storage One");

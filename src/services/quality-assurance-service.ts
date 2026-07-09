@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { buildProviderSettingsOverride } from "./provider-settings-override.js";
 import {
   buildProviderPrompt,
@@ -938,6 +939,7 @@ export class QualityAssuranceService {
         githubToken: settings.git.githubToken,
         gitlabToken: settings.git.gitlabToken,
       });
+      const snapshotSessionId = `qa-review-${provider}-${randomUUID()}`;
       let snapshotWorkspace = args.repoPath;
       let shouldCleanupSnapshot = false;
       if (workflowSettings.executionMode === "DOCKER") {
@@ -950,7 +952,7 @@ export class QualityAssuranceService {
         });
         snapshotWorkspace = await this.invocationWorkspacePreparer.createSnapshotWorkspace({
           repoPath: args.repoPath,
-          sessionId: `qa-review-${provider}-${Date.now().toString(36)}`,
+          sessionId: snapshotSessionId,
           checkout: invocationWorkspace.snapshotCheckout,
           gitPolicy: invocationWorkspace.gitPolicy,
         });
@@ -961,7 +963,7 @@ export class QualityAssuranceService {
         // otherwise turns every QA check into a false missing-file rejection.
         snapshotWorkspace = await this.invocationWorkspacePreparer.createHostSnapshotWorkspace({
           repoPath: args.repoPath,
-          sessionId: `qa-review-${provider}-${Date.now().toString(36)}`,
+          sessionId: snapshotSessionId,
           checkout: buildInvocationSnapshotCheckout(gitPolicy, {
             branch: args.reviewBranch,
             fallbackBranch: args.baseBranch,

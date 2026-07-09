@@ -245,7 +245,15 @@ export class WorkspaceManager implements IWorkspaceManager {
    */
   async createHostSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string> {
     await this.assertExactGitWorktreeRoot(repoPath);
-    const workspacePath = this.buildWorktreePath(repoPath, `${sessionId}-snapshot`, "HOST");
+    // QA snapshot paths are also used as the spawned CLI cwd. Keeping them under
+    // a deeply nested project `.worktrees` directory exceeds Windows' process
+    // path limit in CI, so place the detached read-only snapshot under the OS
+    // temp root with a short deterministic token instead.
+    const snapshotToken = createHash("sha256")
+      .update(`${path.resolve(repoPath)}:${sessionId}`)
+      .digest("hex")
+      .slice(0, 16);
+    const workspacePath = path.join(os.tmpdir(), `code-ux-qa-${snapshotToken}`);
     await this.withWorkspaceLock(workspacePath, async () => {
       await this.removeWorktree(repoPath, workspacePath).catch(() => undefined);
       await fs.mkdir(path.dirname(workspacePath), { recursive: true });
