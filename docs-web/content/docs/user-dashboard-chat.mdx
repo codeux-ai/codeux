@@ -80,6 +80,8 @@ Assistant prose bubbles can also show a short italic project-manager thought bel
 
 All playful chat-agent copy is curated to stay workplace-safe and non-offensive. Status jokes, tool-call quips, reasoning/thinking lines, and assistant mood asides are decorative context around the transcript. They never replace the provider response, tool name, arguments, output, reasoning text, debug metadata, or persisted conversation content.
 
+Reasoning, tool-call/tool-result, and planning cards share one frontend resolver contract across normal thread messages and invocation transcripts. Invocation records use their top-level tool payloads, while thread messages carry merged tool arguments and output inside `metadata.toolCallsJson`; no extra top-level field is added to stored conversation messages.
+
 For integrators, the stored metadata uses `metadata.promptSuggestions` with `label`, `prompt`, and optional `icon` fields:
 
 ```json
