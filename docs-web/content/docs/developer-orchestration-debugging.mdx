@@ -26,6 +26,8 @@ Run `pnpm run test:orchestration:ci-dag:electron` for the main-branch Electron l
 
 In GitHub Actions, the CI DAG and Electron DAG lanes expose build, Electron binary install, native dependency rebuild, and orchestration as separate steps. Each DAG job has a 25-minute workflow timeout, and the mockup runner bounds individual HTTP calls at 60 seconds plus the full project run at the configured `--timeout-ms`. During orchestration, it streams redacted runtime stdout/stderr, emits `mockup_pentest_progress` records on sprint/task changes plus 15-second heartbeats, fails after `--stall-timeout-ms 180000` when no progress is observed after polling starts, and writes a final Markdown table to `GITHUB_STEP_SUMMARY`.
 
+The compact DAG's final validation command runs as a scenario-level assertion after all task branches have merged, not inside the final worker worktree. This keeps native Electron runners from validating against a dependency branch before Windows has made the parent merge visible.
+
 In LOCAL git mode, recovered worker-branch evidence is dependency state: downstream DAG tasks stay blocked until the parent branch has merged into the sprint feature branch or the parent is proven to have no merge work.
 
 Local CLI git finalization is also branch-evidence state. If a `cli_git_pushed` task-run event records a `pushedBranch`, the merge gate backfills that worker branch before dependency derivation. If pushed git work is recorded but no worker branch can be recovered, the task fails closed in `MERGE_BLOCKED` instead of settling as no-output work, so downstream DAG tasks cannot start against an incomplete feature branch.

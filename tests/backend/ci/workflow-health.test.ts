@@ -339,10 +339,11 @@ describe("GitHub workflow health", () => {
   });
 
   it("keeps mockup sprint orchestration on normal CI DAG and main-PR-only Electron DAG lanes", async () => {
-    const [workflow, packageJson, runnerScript] = await Promise.all([
+    const [workflow, packageJson, runnerScript, scenarioScript] = await Promise.all([
       readRepoFile(WORKFLOWS.mockupSprintOrchestration),
       readRepoFile("package.json").then((content) => JSON.parse(content) as PackageJson),
       readRepoFile("scripts/e2e/run-mockup-sprint-pentest.mjs"),
+      readRepoFile("scripts/e2e/mockup-sprint-pentest-scenarios.mjs"),
     ]);
     const dagJob = getJobBlock(workflow, "ci-dag");
     const electronJob = getJobBlock(workflow, "electron-ci-dag");
@@ -429,6 +430,15 @@ describe("GitHub workflow health", () => {
     expect(runnerScript).toContain("mockup_pentest_stalled");
     expect(runnerScript).toContain("GITHUB_STEP_SUMMARY");
     expect(runnerScript).toContain("writeRuntimeLogToConsole");
+
+    const ciDagValidationTask = scenarioScript.slice(
+      scenarioScript.indexOf('key: "ci-dag-validation"'),
+      scenarioScript.indexOf("return tasks;", scenarioScript.indexOf('key: "ci-dag-validation"')),
+    );
+    expect(ciDagValidationTask).toContain('dependsOn: ["ci-dag-batch-01", "ci-dag-batch-02"]');
+    expect(ciDagValidationTask).toContain('"test/run-validation.mjs"');
+    expect(ciDagValidationTask).not.toContain('run("node test/run-validation.mjs")');
+    expect(scenarioScript).toContain('commands: [{ command: "node test/run-validation.mjs", exitCode: 0 }]');
   });
 
   it("keeps release checks separate from CI and Playwright validation lanes", async () => {
