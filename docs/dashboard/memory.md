@@ -61,6 +61,20 @@ The memory map uses a pointer-centered camera so users can inspect dense graphs 
 - Hovering a node highlights it and updates the cursor only. At higher zoom levels the canvas renders the focused label bubble for the selected memory instead of creating hover-only overlays.
 - Dense maps are expected to remain navigable at 200+ memories without forcing every memory label to render at once.
 
+## Memory Map Controls
+
+The Memory Map control surface is driven by the currently selected project and loaded memory context:
+- **Tier tabs**: Short Term and Long Term are tab-style controls with visible counts. Short Term reads sprint-scoped memory; Long Term reads project-scoped memory.
+- **Sprint and agent filters**: Short Term shows the sprint selector, and both tiers show the agent preset selector. Disabled filters remain visible with reason copy when no matching data exists.
+- **Actions**: Add Memory opens the manual memory dialog for the active tier scope. Model Catalog toggles the embedding model browser and shows active-model status. Danger Delete toggles the Lobotomize delete mode; when armed, graph-node and inspector deletes are immediate while sidebar cards still require their card-level arm step.
+- **Canvas navigation**: wheel zoom, drag pan, node click selection, Zoom in, Zoom out, and Reset view all operate on the graph camera. Reset returns to overview and clears the selected memory.
+- **Sidebar list**: the memory sidebar starts collapsed as a rail with an open/close toggle. Expanded state shows search above the current alive memory list for the selected tier, sprint, and agent filters. The list supports opening a memory in the inspector, selecting visible rows, clearing selection, and confirmed batch deletion.
+- **Inspector and summaries**: selecting a canvas node or sidebar row opens the inspector. The node graph, sidebar list, inspector, and category summary cards all reflect the currently loaded memories for the active tier, sprint, agent, and search context.
+
+## Performance
+
+The animated neural canvas pauses rendering while the browser tab or page is hidden and resumes when it becomes visible again. This keeps background tabs from spending work on canvas animation while preserving the loaded node graph, sidebar, inspector, and category summary state.
+
 ## Storage Requirements
 
 Memory records encapsulate the base `content` string alongside its vectorized byte representation (`embeddingBlob`). The byte buffer must correctly decode based on its stored `embeddingDimension`. The system expects IEEE 754 32-bit floats.
