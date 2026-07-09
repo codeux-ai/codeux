@@ -428,6 +428,8 @@ describe("GitHub workflow health", () => {
     expect(runnerScript).toContain("timed out after ${timeoutMs}ms before reaching a terminal summary");
     expect(runnerScript).toContain("mockup_pentest_progress");
     expect(runnerScript).toContain("mockup_pentest_stalled");
+    expect(runnerScript).toContain("mockup_pentest_waiting_for_expected_output");
+    expect(runnerScript).toContain("expectedOutputFilesPresent");
     expect(runnerScript).toContain("GITHUB_STEP_SUMMARY");
     expect(runnerScript).toContain("writeRuntimeLogToConsole");
 
