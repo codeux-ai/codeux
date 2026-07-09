@@ -28,10 +28,9 @@ const dependency = (id: string, status: OnboardingDependencyCheck["status"]): On
   resolution: `Resolve ${id}`,
 });
 
-const deps = (statuses: Partial<Record<"docker-cli" | "docker-daemon" | "git-cli", OnboardingDependencyCheck["status"]>> = {}): OnboardingDependencyCheck[] => [
+const deps = (statuses: Partial<Record<"docker-cli" | "docker-daemon", OnboardingDependencyCheck["status"]>> = {}): OnboardingDependencyCheck[] => [
   dependency("docker-cli", statuses["docker-cli"] ?? "missing"),
   dependency("docker-daemon", statuses["docker-daemon"] ?? "missing"),
-  dependency("git-cli", statuses["git-cli"] ?? "missing"),
 ];
 
 beforeEach(() => {
@@ -117,7 +116,7 @@ describe("detectOnboardingInstallerEnvironment", () => {
 });
 
 describe("executeOnboardingDependencyInstall", () => {
-  it("runs the macOS Docker Desktop and Git Homebrew commands", async () => {
+  it("runs the macOS Docker Desktop Homebrew command", async () => {
     const result = await executeOnboardingDependencyInstall({
       mode: "docker-desktop-git",
       dependencies: deps(),
@@ -127,12 +126,11 @@ describe("executeOnboardingDependencyInstall", () => {
     expect(result.status).toBe("success");
     expect(run.mock.calls.map(([cmd, args]) => [cmd, args])).toEqual([
       ["brew", ["install", "--cask", "docker"]],
-      ["brew", ["install", "git"]],
     ]);
     expect(result.postInstallGuidance.join(" ")).toMatch(/Open Docker Desktop/);
   });
 
-  it("runs exact Windows winget installs for Docker Desktop and Git", async () => {
+  it("runs exact Windows winget install for Docker Desktop", async () => {
     await executeOnboardingDependencyInstall({
       mode: "docker-desktop-git",
       dependencies: deps(),
@@ -141,30 +139,29 @@ describe("executeOnboardingDependencyInstall", () => {
 
     expect(run.mock.calls.map(([cmd, args]) => [cmd, args])).toEqual([
       ["winget", ["install", "--id", "Docker.DockerDesktop", "--exact", "--accept-package-agreements", "--accept-source-agreements"]],
-      ["winget", ["install", "--id", "Git.Git", "--exact", "--accept-package-agreements", "--accept-source-agreements"]],
     ]);
   });
 
   it.each([
     ["apt", [
       ["apt-get", ["update"]],
-      ["apt-get", ["install", "-y", "docker.io", "docker-compose-plugin", "git"]],
+      ["apt-get", ["install", "-y", "docker.io", "docker-compose-plugin"]],
       ["systemctl", ["enable", "--now", "docker"]],
     ]],
     ["dnf", [
-      ["dnf", ["install", "-y", "moby-engine", "docker-compose", "git"]],
+      ["dnf", ["install", "-y", "moby-engine", "docker-compose"]],
       ["systemctl", ["enable", "--now", "docker"]],
     ]],
     ["yum", [
-      ["yum", ["install", "-y", "docker", "git"]],
+      ["yum", ["install", "-y", "docker"]],
       ["systemctl", ["enable", "--now", "docker"]],
     ]],
     ["zypper", [
-      ["zypper", ["--non-interactive", "install", "docker", "git"]],
+      ["zypper", ["--non-interactive", "install", "docker"]],
       ["systemctl", ["enable", "--now", "docker"]],
     ]],
     ["pacman", [
-      ["pacman", ["-Sy", "--noconfirm", "docker", "git"]],
+      ["pacman", ["-Sy", "--noconfirm", "docker"]],
       ["systemctl", ["enable", "--now", "docker"]],
     ]],
   ] satisfies Array<[OnboardingLinuxPackageManager, Array<[string, string[]]>]>)("plans Linux Engine commands for %s", (packageManager, expected) => {
@@ -193,7 +190,7 @@ describe("executeOnboardingDependencyInstall", () => {
 
     expect(run.mock.calls.map(([cmd, args]) => [cmd, args])).toEqual([
       ["sudo", ["-n", "apt-get", "update"]],
-      ["sudo", ["-n", "apt-get", "install", "-y", "docker.io", "docker-compose-plugin", "git"]],
+      ["sudo", ["-n", "apt-get", "install", "-y", "docker.io", "docker-compose-plugin"]],
       ["sudo", ["-n", "systemctl", "enable", "--now", "docker"]],
     ]);
   });
@@ -222,7 +219,7 @@ describe("executeOnboardingDependencyInstall", () => {
   it("skips command groups whose dependencies are already ready", async () => {
     const result = await executeOnboardingDependencyInstall({
       mode: "docker-engine-git",
-      dependencies: deps({ "docker-cli": "ready", "docker-daemon": "ready", "git-cli": "ready" }),
+      dependencies: deps({ "docker-cli": "ready", "docker-daemon": "ready" }),
       environment: { platform: "linux", linuxPackageManager: "apt", isRoot: true, systemctlAvailable: true },
     });
 
@@ -264,7 +261,7 @@ describe("executeOnboardingDependencyInstall", () => {
 
     const result = await executeOnboardingDependencyInstall({
       mode: "docker-desktop-git",
-      dependencies: deps({ "docker-cli": "ready", "docker-daemon": "ready" }),
+      dependencies: deps(),
       environment: { platform: "darwin", homebrewAvailable: true },
     });
 
@@ -275,14 +272,14 @@ describe("executeOnboardingDependencyInstall", () => {
     expect(result.commands[0].stderrSummary.startsWith("...")).toBe(true);
     expect(result.commands[0].message).toBe("Command failed with exit code 1. Review bounded command summaries for details.");
     expect(result.commands[0].message).not.toContain(longOutput);
-    expect(run).toHaveBeenCalledWith("brew", ["install", "git"], expect.objectContaining({
+    expect(run).toHaveBeenCalledWith("brew", ["install", "--cask", "docker"], expect.objectContaining({
       timeout: 120_000,
       maxStdoutChars: 4_000,
       maxStderrChars: 4_000,
     }));
   });
 
-  it("returns degraded macOS Engine guidance and only automates Git", async () => {
+  it("returns degraded macOS Engine guidance without installing Git", async () => {
     const result = await executeOnboardingDependencyInstall({
       mode: "docker-engine-git",
       dependencies: deps(),
@@ -291,11 +288,11 @@ describe("executeOnboardingDependencyInstall", () => {
 
     expect(result.status).toBe("partial");
     expect(result.requiresManualDownload).toBe(true);
-    expect(run.mock.calls.map(([cmd, args]) => [cmd, args])).toEqual([["brew", ["install", "git"]]]);
+    expect(run).not.toHaveBeenCalled();
     expect(result.postInstallGuidance.join(" ")).toMatch(/Linux VM/);
   });
 
-  it("returns degraded Linux Desktop guidance and only automates Git", async () => {
+  it("returns degraded Linux Desktop guidance without installing Git", async () => {
     const result = await executeOnboardingDependencyInstall({
       mode: "docker-desktop-git",
       dependencies: deps(),
@@ -304,10 +301,7 @@ describe("executeOnboardingDependencyInstall", () => {
 
     expect(result.status).toBe("partial");
     expect(result.requiresManualDownload).toBe(true);
-    expect(run.mock.calls.map(([cmd, args]) => [cmd, args])).toEqual([
-      ["apt-get", ["update"]],
-      ["apt-get", ["install", "-y", "git"]],
-    ]);
+    expect(run).not.toHaveBeenCalled();
     expect(result.postInstallGuidance.join(" ")).toMatch(/Docker Desktop for Linux/);
   });
 
@@ -363,7 +357,7 @@ describe("executeOnboardingDependencyInstall", () => {
 
     await executeOnboardingDependencyInstall({
       mode: "docker-desktop-git",
-      dependencies: deps({ "docker-cli": "ready", "docker-daemon": "ready" }),
+      dependencies: deps(),
       environment: { platform: "darwin", homebrewAvailable: true },
       invalidateReadinessCache,
     });

@@ -47,9 +47,11 @@ The pane is an iframe-like container with toolbar buttons:
 
 The URL bar is read-only; it shows the host URL the container is exposing.
 
-## Preview session sider
+The right sidebar keeps **Launch Container** expanded so new previews are always immediately available. **Selected Sprint**, **Environment**, **Runtime notes**, and **Container logs** are collapsed by default; the Selected Sprint header still shows the active port mapping, or `port pending` until a running preview has a routed port.
 
-The **PreviewSessionSlider** at the top of the page shows all sessions currently running across this project — switch between them with one click.
+## Preview session cards
+
+The preview session cards sit below the browser pane, keeping the browser workspace as the primary surface while still showing every running session across the current project. Use the bottom rail to switch sessions, open environment overrides, or remove a stopped preview.
 
 ## Stopping & removing
 

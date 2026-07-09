@@ -90,6 +90,12 @@ function isBenignHttpFailure(status: number, url: string): boolean {
 function installErrorCapture(page: Page): string[] {
   const errors: string[] = [];
 
+  page.on('response', (response) => {
+    if (response.status() === 404) {
+      errors.push(`response 404: ${response.url()}`);
+    }
+  });
+
   page.on('console', (message: ConsoleMessage) => {
     if (message.type() === 'error' && genericResourceStatusConsolePattern.test(message.text())) {
       return;

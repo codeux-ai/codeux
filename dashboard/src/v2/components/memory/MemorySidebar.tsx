@@ -82,6 +82,7 @@ const MemorySidebar = ({ nodes, onSelectNode, refreshing = false, loadError = nu
             <div
                 id="memory-sidebar-content"
                 aria-hidden={!isExpanded}
+                inert={!isExpanded ? true : undefined}
                 className={`min-h-0 min-w-0 flex-1 flex-col overflow-hidden transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none ${
                     isExpanded
                         ? "flex opacity-100 translate-y-0 lg:translate-y-0"

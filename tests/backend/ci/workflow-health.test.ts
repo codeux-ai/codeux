@@ -13,6 +13,7 @@ const WORKFLOWS = {
 } as const;
 
 const PLAYWRIGHT_CONFIG = "playwright.config.ts";
+const RELEASE_INSTALL_VERIFIER = "scripts/verify-release-install.mjs";
 const REQUIRED_INSTALL = "pnpm install --frozen-lockfile --ignore-scripts";
 const PACKAGE_MANAGER_VERSION = "10.33.0";
 const NODE_VERSION = "22";
@@ -396,5 +397,15 @@ describe("GitHub workflow health", () => {
       "scripts/prepare-electron-runtime-deps.mjs",
       "scripts/verify-release-install.mjs",
     ]);
+  });
+
+  it("keeps the release install verifier pinned to the locally installed CLI bin", async () => {
+    const verifier = await readRepoFile(RELEASE_INSTALL_VERIFIER);
+
+    expect(verifier).toContain('path.join(installDir, "node_modules", ".bin", binName)');
+    expect(verifier).toContain('installedPackagePath("package.json")');
+    expect(verifier).toContain("process.execPath");
+    expect(verifier).not.toContain('"exec"');
+    expect(verifier).not.toContain("'exec'");
   });
 });

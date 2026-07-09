@@ -20,8 +20,8 @@ const osInfo = {
   osLabel: "Linux",
   dockerDesktopLink: "https://example.test/docker-desktop",
   dockerDownloadLink: "https://example.test/docker-engine",
-  gitLink: "https://example.test/git",
-  gitInstruction: "sudo apt install git",
+  gitLink: "",
+  gitInstruction: "",
 };
 
 const dependency = (
@@ -43,14 +43,14 @@ const installerOption = (
   overrides: Partial<OnboardingDependencyInstallerOption> = {},
 ): OnboardingDependencyInstallerOption => ({
   mode,
-  label: mode === "docker-desktop-git" ? "Docker Desktop and Git" : "Docker Engine and Git",
+  label: mode === "docker-desktop-git" ? "Docker Desktop" : "Docker Engine",
   platform: "linux",
   recommended: mode === "docker-engine-git",
   automation: mode === "docker-engine-git" ? "automated" : "partial",
   description: mode === "docker-engine-git"
-    ? "Installs Docker Engine packages and Git through the detected Linux package manager."
-    : "Installs Git automatically when possible and provides official Docker Desktop manual-download guidance.",
-  dependencyIds: ["docker-cli", "docker-daemon", "git-cli"],
+    ? "Installs Docker Engine packages through the detected Linux package manager."
+    : "Provides official Docker Desktop manual-download guidance.",
+  dependencyIds: ["docker-cli", "docker-daemon"],
   requiresPrivilege: true,
   requiresManualDownload: mode === "docker-desktop-git",
   available: true,
@@ -65,12 +65,11 @@ const readiness = (overrides: Partial<OnboardingRuntimeReadiness> = {}): Onboard
   cluster: {
     status: "not_ready",
     label: "Cluster not ready",
-    detail: "Docker and Git are required.",
+    detail: "Docker is required.",
   },
   dependencies: [
     dependency("docker-cli", "Docker CLI", "missing"),
     dependency("docker-daemon", "Docker daemon", "missing"),
-    dependency("git-cli", "Git CLI", "ready"),
   ],
   providers: [],
   installers: {
@@ -90,12 +89,12 @@ const installResult = (overrides: Partial<OnboardingDependencyInstallerResult> =
   status: "failed",
   commands: [
     {
-      id: "apt-install-docker-git",
+      id: "apt-install-docker",
       groupId: "docker-engine",
-      label: "Install Docker Engine and Git",
+      label: "Install Docker Engine",
       command: "sudo",
-      args: ["-n", "apt-get", "install", "-y", "docker.io", "git"],
-      displayCommand: "sudo -n apt-get install -y docker.io git",
+      args: ["-n", "apt-get", "install", "-y", "docker.io"],
+      displayCommand: "sudo -n apt-get install -y docker.io",
       status: "failed",
       timeoutMs: 120000,
       maxStdoutChars: 4000,
@@ -106,14 +105,7 @@ const installResult = (overrides: Partial<OnboardingDependencyInstallerResult> =
       message: "apt-get failed",
     },
   ],
-  skippedDependencyGroups: [
-    {
-      groupId: "git",
-      label: "Git CLI",
-      dependencyIds: ["git-cli"],
-      reason: "Git CLI is already ready.",
-    },
-  ],
+  skippedDependencyGroups: [],
   requiresPrivilege: true,
   requiresManualDownload: true,
   postInstallGuidance: [
@@ -134,11 +126,10 @@ describe("OnboardingInstallationStep", () => {
 
     expect(screen.getByRole("status", { name: "Docker CLI: missing" })).toBeInTheDocument();
     expect(screen.getByRole("status", { name: "Docker daemon: missing" })).toBeInTheDocument();
-    expect(screen.getByRole("status", { name: "Git CLI: ready" })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: `Install for ${osInfo.osLabel}` })).toHaveLength(2);
     expect(screen.getAllByRole("link", { name: "Engine alternative" })).toHaveLength(2);
     expect(screen.getByRole("button", { name: "Auto Install dependencies" })).toBeEnabled();
-    expect(screen.getByText(/run the detected OS package manager for Docker and Git/i)).toBeInTheDocument();
+    expect(screen.getByText(/run the detected OS package manager for Docker/i)).toBeInTheDocument();
   });
 
   it("fires the primary auto-install callback from explicit user action", async () => {
@@ -155,12 +146,12 @@ describe("OnboardingInstallationStep", () => {
     render(<OnboardingInstallationStep clusterReady={false} readiness={readiness()} osInfo={osInfo} onInstallMode={vi.fn()} />);
 
     expect(screen.getByRole("heading", { name: "Advanced installer choices" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Docker Desktop + Git" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Docker Engine + Git" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Docker Desktop" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Docker Engine" })).toBeInTheDocument();
     expect(screen.getByText("Guided")).toBeInTheDocument();
     expect(screen.getByText("Recommended")).toBeInTheDocument();
     expect(screen.getByText(/manual download guidance for platform-specific Docker packages/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Use Docker Desktop + Git" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Use Docker Desktop" })).toBeEnabled();
   });
 
   it("disables unavailable advanced modes and keeps manual guidance visible", () => {
@@ -176,7 +167,7 @@ describe("OnboardingInstallationStep", () => {
             available: false,
             requiresPrivilege: false,
             requiresManualDownload: true,
-            guidance: ["Install Docker and Git manually for this platform, then rerun readiness checks."],
+            guidance: ["Install Docker manually for this platform, then rerun readiness checks."],
           }),
           installerOption("docker-engine-git", {
             platform: "unsupported",
@@ -185,7 +176,7 @@ describe("OnboardingInstallationStep", () => {
             available: false,
             requiresPrivilege: false,
             requiresManualDownload: true,
-            guidance: ["Install Docker Engine and Git manually for this platform, then rerun readiness checks."],
+            guidance: ["Install Docker Engine manually for this platform, then rerun readiness checks."],
           }),
         ],
       },
@@ -198,7 +189,7 @@ describe("OnboardingInstallationStep", () => {
     for (const button of screen.getAllByRole("button", { name: "Manual setup required" })) {
       expect(button).toBeDisabled();
     }
-    expect(screen.getByText(/Install Docker and Git manually for this platform/i)).toBeInTheDocument();
+    expect(screen.getByText(/Install Docker manually for this platform/i)).toBeInTheDocument();
   });
 
   it("displays privilege, manual download, skipped groups, failed summaries, and retry paths from results", () => {
@@ -219,12 +210,11 @@ describe("OnboardingInstallationStep", () => {
     expect(screen.getByRole("heading", { name: "Latest install result" })).toBeInTheDocument();
     expect(screen.getByText(/Administrator privileges or passwordless sudo are required/i)).toBeInTheDocument();
     expect(screen.getByText(/Manual Docker download is still required/i)).toBeInTheDocument();
-    expect(screen.getByText("Skipped ready dependency groups")).toBeInTheDocument();
-    expect(screen.getByText(/Git CLI: Git CLI is already ready/i)).toBeInTheDocument();
+    expect(screen.queryByText("Skipped ready dependency groups")).not.toBeInTheDocument();
     expect(screen.getByText("Failed command summaries")).toBeInTheDocument();
-    expect(screen.getByText("sudo -n apt-get install -y docker.io git")).toBeInTheDocument();
+    expect(screen.getByText("sudo -n apt-get install -y docker.io")).toBeInTheDocument();
     expect(screen.getByText(/stderr: permission denied/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Retry Docker Engine + Git" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Retry Docker Engine" })).toBeEnabled();
     expect(screen.getAllByRole("button", { name: "Recheck readiness" }).length).toBeGreaterThan(0);
   });
 
@@ -267,7 +257,7 @@ describe("OnboardingInstallationStep", () => {
       />,
     );
 
-    const status = screen.getByText("Installing Docker Engine + Git").closest("[role='status']");
+    const status = screen.getByText("Installing Docker Engine").closest("[role='status']");
     expect(status).not.toBeNull();
     expect(status).toHaveAttribute("aria-live", "polite");
     expect(within(status as HTMLElement).getByText(/running package-manager commands now/i)).toBeInTheDocument();
@@ -296,7 +286,7 @@ describe("OnboardingInstallationStep", () => {
     expect(screen.getByText(/Restart the terminal after installation/i)).toBeInTheDocument();
     expect(screen.getByText(/Start Docker manually/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Recheck readiness" })).toBeEnabled();
-    expect(screen.queryByRole("button", { name: "Retry Docker Engine + Git" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry Docker Engine" })).not.toBeInTheDocument();
   });
 
   it("renders the all-ready state without an install prompt", () => {
@@ -307,12 +297,11 @@ describe("OnboardingInstallationStep", () => {
           cluster: {
             status: "ready",
             label: "Cluster ready",
-            detail: "Docker and Git are ready.",
+            detail: "Docker is ready.",
           },
           dependencies: [
             dependency("docker-cli", "Docker CLI", "ready"),
             dependency("docker-daemon", "Docker daemon", "ready"),
-            dependency("git-cli", "Git CLI", "ready"),
           ],
         })}
         osInfo={osInfo}

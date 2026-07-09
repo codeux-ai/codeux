@@ -210,6 +210,20 @@ export interface SelfReflectionWidgetState {
   ariaLabel: string;
 }
 
+export type RichWidgetDescriptor =
+  | { kind: "reasoning"; text: string }
+  | {
+      kind: "tool";
+      toolName: string | null;
+      status: string | null;
+      args: string;
+      output: string;
+      tokens: ParsedTurnTokens | null;
+      callId: string | null;
+    }
+  | { kind: "planning"; status: ExecutionStatus; planName: string; targetWorker?: string }
+  | { kind: "none" };
+
 const BOOTSTRAP_BRANCH_FATAL_LINE_PATTERN =
   /^fatal:\s+your current branch 'code-ux-bootstrap-[^']+' does not have any commits yet\s*$/i;
 const TOKEN_COUNT_FORMATTER = new Intl.NumberFormat("en-US");
@@ -230,6 +244,10 @@ const readString = (value: unknown): string | null => {
   const normalized = typeof value === "string" ? value.trim() : "";
   return normalized.length > 0 ? normalized : null;
 };
+
+const readRawString = (value: unknown): string => (
+  typeof value === "string" ? value : ""
+);
 
 const readNumber = (value: unknown): number | null => (
   typeof value === "number" && Number.isFinite(value) ? value : null
@@ -820,6 +838,10 @@ const normalizeExternalProviderValue = (value: unknown): ExternalReferenceProvid
   return null;
 };
 
+const isHostnameOrSubdomain = (host: string, domain: string): boolean => (
+  host === domain || host.endsWith(`.${domain}`)
+);
+
 const inferExternalProviderFromUrl = (value: unknown): ExternalReferenceProvider | null => {
   const url = readString(value);
   if (!url) {
@@ -827,7 +849,7 @@ const inferExternalProviderFromUrl = (value: unknown): ExternalReferenceProvider
   }
   try {
     const host = new URL(url).hostname.toLowerCase();
-    if (host.includes("atlassian.net") || host.includes("jira.")) {
+    if (isHostnameOrSubdomain(host, "atlassian.net")) {
       return "jira";
     }
     if (host === "github.com" || host.endsWith(".github.com")) {
@@ -1512,6 +1534,52 @@ const extractWidgetStateFromMetadata = (
   return { type: "none", status: "completed", planName: "" };
 };
 
+const readParsedTurnTokens = (value: unknown): ParsedTurnTokens | null => {
+  const record = readRecord(value);
+  return record ? record as ParsedTurnTokens : null;
+};
+
+export const resolveRichWidget = (input: {
+  metadata?: Record<string, unknown> | null;
+  content?: string;
+  toolCallsJson?: Record<string, unknown> | null;
+}): RichWidgetDescriptor => {
+  const metadata = input.metadata ?? null;
+  const kind = readString(metadata?.kind);
+
+  if (kind === "reasoning") {
+    return {
+      kind: "reasoning",
+      text: input.content ?? "",
+    };
+  }
+
+  if (kind === "tool_call" || kind === "tool_result") {
+    const toolCallsJson = input.toolCallsJson ?? null;
+    return {
+      kind: "tool",
+      toolName: readString(metadata?.toolName),
+      status: readString(metadata?.toolStatus) ?? readString(toolCallsJson?.resultStatus),
+      args: sanitizeInvocationOutputText(readRawString(toolCallsJson?.arguments)),
+      output: sanitizeInvocationOutputText(readRawString(toolCallsJson?.output)),
+      tokens: readParsedTurnTokens(metadata?.tokens),
+      callId: readString(metadata?.toolCallId),
+    };
+  }
+
+  const widgetState = extractWidgetStateFromMetadata(metadata, input.content);
+  if (widgetState.type === "planning") {
+    return {
+      kind: "planning",
+      status: widgetState.status,
+      planName: widgetState.planName,
+      ...(widgetState.targetWorker ? { targetWorker: widgetState.targetWorker } : {}),
+    };
+  }
+
+  return { kind: "none" };
+};
+
 export const getChatWidgetData = (message: ChatMessageRecord, liveData?: ChatWidgetLiveData): ChatWidgetState => {
   return extractWidgetStateFromMetadata(message.metadata, message.bodyMarkdown, liveData);
 };
@@ -1520,10 +1588,10 @@ export const getInvocationWidgetData = (message: ExecutionInvocationMessageRecor
   return extractWidgetStateFromMetadata(message.metadata, message.contentMarkdown, liveData);
 };
 
-const metaKind = (message: ExecutionInvocationMessageRecord): string | undefined =>
+const metaKind = (message: { metadata?: Record<string, unknown> | null }): string | undefined =>
   typeof message.metadata?.kind === "string" ? message.metadata.kind : undefined;
 
-const metaCallId = (message: ExecutionInvocationMessageRecord): string | undefined =>
+const metaCallId = (message: { metadata?: Record<string, unknown> | null }): string | undefined =>
   typeof message.metadata?.toolCallId === "string" ? message.metadata.toolCallId : undefined;
 
 const reasoningTokenCount = (tokens: ParsedTurnTokens | null): number | null => {
@@ -1644,6 +1712,51 @@ export const getSelfReflectionWidgetData = (
     errorMessage,
     ariaLabel: ariaParts.join(". "),
   };
+};
+
+/**
+ * Collapses chat-thread `tool_call` and matching later `tool_result` messages
+ * into one message. Chat messages do not have a top-level `toolCallsJson`
+ * column, so the merged tool payload is carried in `metadata.toolCallsJson`.
+ */
+export const mergeChatToolMessages = (
+  messages: ChatMessageRecord[],
+): ChatMessageRecord[] => {
+  const consumed = new Set<string>();
+  const merged: ChatMessageRecord[] = [];
+
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i];
+    if (consumed.has(message.id)) {
+      continue;
+    }
+    const callId = metaCallId(message);
+    if (metaKind(message) === "tool_call" && callId) {
+      const result = messages.slice(i + 1).find(
+        (candidate) => metaKind(candidate) === "tool_result" && metaCallId(candidate) === callId,
+      );
+      if (result) {
+        consumed.add(result.id);
+        const callTool = readRecord(message.metadata?.toolCallsJson) ?? {};
+        const resultTool = readRecord(result.metadata?.toolCallsJson) ?? {};
+        merged.push({
+          ...message,
+          metadata: {
+            ...(message.metadata ?? {}),
+            toolCallsJson: {
+              ...callTool,
+              output: resultTool.output ?? null,
+              resultStatus: typeof result.metadata?.toolStatus === "string" ? result.metadata.toolStatus : null,
+            },
+          } as NonNullable<ChatMessageRecord["metadata"]>,
+        });
+        continue;
+      }
+    }
+    merged.push(message);
+  }
+
+  return merged;
 };
 
 /**

@@ -45,11 +45,10 @@ afterEach(() => {
 });
 
 describe("getOnboardingRuntimeReadiness", () => {
-  it("reports a ready cluster and checks the daemon when docker + git are present", async () => {
+  it("reports a ready cluster and checks the daemon when Docker is present", async () => {
     run.mockImplementation(async (cmd: string, args: string[]) => {
       if (cmd === "docker" && args[0] === "--version") return ok("Docker 25");
       if (cmd === "docker" && args[0] === "info") return ok('"25.0"');
-      if (cmd === "git") return ok("git 2.43");
       return fail();
     });
     stat.mockRejectedValue(new Error("nope"));
@@ -59,8 +58,9 @@ describe("getOnboardingRuntimeReadiness", () => {
 
     expect(result.cluster.status).toBe("ready");
     const ids = result.dependencies.map((d) => d.id);
-    expect(ids).toEqual(["docker-cli", "docker-daemon", "git-cli"]);
+    expect(ids).toEqual(["docker-cli", "docker-daemon"]);
     expect(result.dependencies.every((d) => d.status === "ready")).toBe(true);
+    expect(run.mock.calls.some(([cmd]) => cmd === "git")).toBe(false);
     const expectedInstallerPlatform = process.platform === "linux" || process.platform === "darwin" || process.platform === "win32"
       ? process.platform
       : "unsupported";
@@ -79,7 +79,6 @@ describe("getOnboardingRuntimeReadiness", () => {
   it("marks the cluster not ready and skips the daemon probe when the docker CLI is missing", async () => {
     run.mockImplementation(async (cmd: string, args: string[]) => {
       if (cmd === "docker") return fail("docker not found");
-      if (cmd === "git") return ok("git 2.43");
       return fail();
     });
     stat.mockRejectedValue(new Error("nope"));

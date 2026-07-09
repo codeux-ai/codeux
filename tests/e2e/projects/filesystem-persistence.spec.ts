@@ -82,7 +82,7 @@ async function openAppearanceSettings(page: Page, request: APIRequestContext): P
   await hideOnboardingAndTours(page, request);
   await page.goto('/config');
   await expect(page.getByRole('heading', { name: 'Settings & Integration' })).toBeVisible();
-  await page.getByRole('button', { name: /Appearance Dashboard layout and theme preferences/i }).click();
+  await page.getByRole('button', { name: /Appearance(?: Dashboard layout and theme preferences)?/i }).click();
   await expect(page.getByText('Background Image', { exact: true })).toBeVisible();
 }
 
@@ -190,7 +190,7 @@ test.describe('filesystem persistence', () => {
 
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Settings & Integration' })).toBeVisible();
-    await page.getByRole('button', { name: /Appearance Dashboard layout and theme preferences/i }).click();
+    await page.getByRole('button', { name: /Appearance(?: Dashboard layout and theme preferences)?/i }).click();
     await expect(page.getByRole('img', { name: 'Background Thumbnail' })).toHaveAttribute('src', expectedDataUrl);
 
     const savedSettings = await fetchSystemSettings(request);

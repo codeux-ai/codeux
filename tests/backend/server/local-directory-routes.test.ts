@@ -33,17 +33,18 @@ describe("local directory routes", () => {
     await fs.writeFile(path.join(dir, "README.md"), "# test");
 
     const response = await request(createApp()).get("/api/local-directories").query({ path: dir });
+    const realDir = await fs.realpath(dir);
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
-      currentPath: dir,
-      parentPath: path.dirname(dir),
-      rootPath: path.parse(dir).root,
+      currentPath: realDir,
+      parentPath: path.dirname(realDir),
+      rootPath: path.parse(realDir).root,
       homePath: os.homedir(),
     });
     expect(response.body.directories).toEqual([
-      { name: "docs", path: path.join(dir, "docs") },
-      { name: "src", path: path.join(dir, "src") },
+      { name: "docs", path: path.join(realDir, "docs") },
+      { name: "src", path: path.join(realDir, "src") },
     ]);
     expect(response.body).not.toHaveProperty("files");
   });
@@ -51,14 +52,14 @@ describe("local directory routes", () => {
   it("allows access to home directory", async () => {
     const response = await request(createApp()).get("/api/local-directories").query({ path: os.homedir() });
     expect(response.status).toBe(200);
-    expect(response.body.currentPath).toBe(os.homedir());
+    expect(response.body.currentPath).toBe(await fs.realpath(os.homedir()));
   });
 
   it("allows access to current working directory", async () => {
     const cwd = process.cwd();
     const response = await request(createApp()).get("/api/local-directories").query({ path: cwd });
     expect(response.status).toBe(200);
-    expect(response.body.currentPath).toBe(cwd);
+    expect(response.body.currentPath).toBe(await fs.realpath(cwd));
   });
 
   it("resolves parent traversal (..) into allowed roots", async () => {
@@ -68,7 +69,35 @@ describe("local directory routes", () => {
     const response = await request(createApp()).get("/api/local-directories").query({ path: traversalPath });
     // Should be allowed and resolved correctly
     expect(response.status).toBe(200);
-    expect(response.body.currentPath).toBe(childDir);
+    expect(response.body.currentPath).toBe(await fs.realpath(childDir));
+  });
+
+  it("allows equivalent configured-root and requested-path spellings after realpath canonicalization", async () => {
+    const realRoot = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-real-local-root-"));
+    const aliasParent = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-alias-local-root-"));
+    tempDirs.push(aliasParent, realRoot);
+    await fs.mkdir(path.join(realRoot, "project"));
+    const aliasRoot = path.join(aliasParent, "alias-root");
+
+    try {
+      await fs.symlink(realRoot, aliasRoot, "dir");
+    } catch (error: any) {
+      if (error?.code === "EPERM" || error?.code === "EACCES" || error?.code === "ENOTSUP") {
+        return;
+      }
+      throw error;
+    }
+
+    process.env.CODE_UX_DIRECTORY_BROWSER_ROOTS = aliasRoot;
+
+    const response = await request(createApp()).get("/api/local-directories").query({ path: realRoot });
+    const realPath = await fs.realpath(realRoot);
+
+    expect(response.status).toBe(200);
+    expect(response.body.currentPath).toBe(realPath);
+    expect(response.body.directories).toEqual([
+      { name: "project", path: path.join(realPath, "project") },
+    ]);
   });
 
   it("rejects path traversal outside allowed roots", async () => {
@@ -191,21 +220,22 @@ describe("local directory routes", () => {
     await fs.writeFile(path.join(dir, "README.md"), "# test");
 
     const response = await request(createApp()).get("/api/local-files").query({ path: dir });
+    const realDir = await fs.realpath(dir);
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
-      currentPath: dir,
-      parentPath: path.dirname(dir),
-      rootPath: path.parse(dir).root,
+      currentPath: realDir,
+      parentPath: path.dirname(realDir),
+      rootPath: path.parse(realDir).root,
       homePath: os.homedir(),
     });
     expect(response.body.directories).toEqual([
-      { name: "docs", path: path.join(dir, "docs") },
-      { name: "src", path: path.join(dir, "src") },
+      { name: "docs", path: path.join(realDir, "docs") },
+      { name: "src", path: path.join(realDir, "src") },
     ]);
     expect(response.body.files).toEqual([
-      { name: "README.md", path: path.join(dir, "README.md") },
-      { name: "setup.sh", path: path.join(dir, "setup.sh") },
+      { name: "README.md", path: path.join(realDir, "README.md") },
+      { name: "setup.sh", path: path.join(realDir, "setup.sh") },
     ]);
     expect(JSON.stringify(response.body)).not.toContain("echo secret");
   });

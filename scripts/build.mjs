@@ -33,7 +33,10 @@ const viteBin = resolveBin("vite");
 const tasks = [
   {
     name: "server",
-    args: [tscBin, "--incremental", "--tsBuildInfoFile", ".cache/tsc/server-build.tsbuildinfo"],
+    // Server build must always emit every referenced runtime module. Release
+    // checks restore .cache/tsc without dist/, so incremental server emit can
+    // otherwise skip new files and produce incomplete npm tarballs.
+    args: [tscBin],
   },
   {
     name: "dashboard",

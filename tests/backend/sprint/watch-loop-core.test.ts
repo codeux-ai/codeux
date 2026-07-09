@@ -1498,19 +1498,16 @@ describe("WatchLoopRunner", () => {
       "git",
       [...CODE_UX_GIT_IDENTITY_PREFIX, "merge", "--no-ff", "-m", "Merge branch 'feature/sprint-1' into main", "feature/sprint-1"],
       expect.stringContaining("code-ux-local-merge-"),
-      expect.objectContaining({ CODE_UX_GIT_CONTAINER_MODE: "host" }),
     );
     expect(runCommandStrict).toHaveBeenCalledWith(
       "git",
       ["worktree", "add", "--detach", expect.stringContaining("code-ux-local-merge-"), "main"],
       "/tmp/local-only",
-      expect.objectContaining({ CODE_UX_GIT_CONTAINER_MODE: "host" }),
     );
     expect(runCommandStrict).toHaveBeenCalledWith(
       "git",
       ["update-ref", "refs/heads/main", "HEAD"],
       expect.stringContaining("code-ux-local-merge-"),
-      expect.objectContaining({ CODE_UX_GIT_CONTAINER_MODE: "host" }),
     );
     expect(runCommandStrict).not.toHaveBeenCalledWith("git", ["checkout", "main"], "/tmp/local-only");
     expect(runCommandStrict).not.toHaveBeenCalledWith("git", ["checkout", "user/topic"], "/tmp/local-only");

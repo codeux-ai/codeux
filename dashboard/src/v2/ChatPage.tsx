@@ -38,6 +38,7 @@ import { cancelExecutionInvocation, resetInvocationUsageLimitTimer, restartExecu
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
 import {
   formatTokenCount,
+  mergeChatToolMessages,
   mergeInvocationToolMessages
 } from "./lib/chat-widget-view-models.js";
 import { clearChatDraftFromUrl, readChatDraftFromLocation } from "./lib/no-project-chat-assistant.js";
@@ -347,6 +348,10 @@ export const ChatPage: FunctionComponent = () => {
   const visibleInvocationMessages = useMemo(
     () => mergeInvocationToolMessages(invocationMessages),
     [invocationMessages],
+  );
+  const renderedThreadMessages = useMemo(
+    () => mergeChatToolMessages(messages),
+    [messages],
   );
   const trimmedComposerInput = input.trim();
   const latestDashboardMessage = useMemo(() => getLatestDashboardMessage(messages), [messages]);
@@ -761,7 +766,7 @@ export const ChatPage: FunctionComponent = () => {
               />
             ) : (
               <>
-                {messages.map((message) => {
+                {renderedThreadMessages.map((message) => {
                   const preset = getLinkedAgentPreset(message);
                   return (
                     <ChatMessageBubble

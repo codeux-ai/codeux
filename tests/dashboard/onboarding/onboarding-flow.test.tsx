@@ -131,12 +131,11 @@ const createInstallerReadiness = (
   cluster: {
     status: "not_ready",
     label: "Cluster not ready",
-    detail: "Docker and Git are required before local container execution.",
+    detail: "Docker is required before local container execution.",
   },
   dependencies: [
     createDependencyCheck("docker-cli", "Docker CLI", "missing"),
     createDependencyCheck("docker-daemon", "Docker daemon", "missing"),
-    createDependencyCheck("git-cli", "Git CLI", "ready"),
   ],
   providers: [],
   installers: {
@@ -145,12 +144,12 @@ const createInstallerReadiness = (
     options: [
       {
         mode: "docker-desktop-git",
-        label: "Docker Desktop and Git",
+        label: "Docker Desktop",
         platform: "linux",
         recommended: recommendedMode === "docker-desktop-git",
         automation: "partial",
-        description: "Automates Git and provides official Docker Desktop download guidance.",
-        dependencyIds: ["docker-cli", "docker-daemon", "git-cli"],
+        description: "Provides official Docker Desktop download guidance.",
+        dependencyIds: ["docker-cli", "docker-daemon"],
         requiresPrivilege: true,
         requiresManualDownload: true,
         available: true,
@@ -158,12 +157,12 @@ const createInstallerReadiness = (
       },
       {
         mode: "docker-engine-git",
-        label: "Docker Engine and Git",
+        label: "Docker Engine",
         platform: "linux",
         recommended: recommendedMode === "docker-engine-git",
         automation: "automated",
-        description: "Installs Docker Engine packages and Git through the detected Linux package manager.",
-        dependencyIds: ["docker-cli", "docker-daemon", "git-cli"],
+        description: "Installs Docker Engine packages through the detected Linux package manager.",
+        dependencyIds: ["docker-cli", "docker-daemon"],
         requiresPrivilege: true,
         requiresManualDownload: false,
         available: true,
@@ -179,12 +178,12 @@ const createInstallerResult = (): OnboardingDependencyInstallerResult => ({
   status: "partial",
   commands: [
     {
-      id: "apt-install-docker-git",
+      id: "apt-install-docker",
       groupId: "docker-engine",
-      label: "Install Docker Engine and Git",
+      label: "Install Docker Engine",
       command: "sudo",
-      args: ["-n", "apt-get", "install", "-y", "docker.io", "git"],
-      displayCommand: "sudo -n apt-get install -y docker.io git",
+      args: ["-n", "apt-get", "install", "-y", "docker.io"],
+      displayCommand: "sudo -n apt-get install -y docker.io",
       status: "skipped",
       timeoutMs: 120000,
       maxStdoutChars: 4000,
@@ -195,14 +194,7 @@ const createInstallerResult = (): OnboardingDependencyInstallerResult => ({
       message: "Passwordless sudo is required to run package-manager commands noninteractively.",
     },
   ],
-  skippedDependencyGroups: [
-    {
-      groupId: "git",
-      label: "Git CLI",
-      dependencyIds: ["git-cli"],
-      reason: "Git CLI is already ready.",
-    },
-  ],
+  skippedDependencyGroups: [],
   requiresPrivilege: true,
   requiresManualDownload: true,
   postInstallGuidance: [
@@ -531,7 +523,7 @@ describe("OnboardingExperience integration", () => {
     const autoInstallButton = await screen.findByRole("button", { name: "Auto Install dependencies" });
     await user.click(autoInstallButton);
 
-    expect(await screen.findByText("Installing Docker Engine + Git")).not.toBeNull();
+    expect(await screen.findByText("Installing Docker Engine")).not.toBeNull();
     resolveInstall(new Response(JSON.stringify(installResult), {
       status: 200,
       headers: { "Content-Type": "application/json" },

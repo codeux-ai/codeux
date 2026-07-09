@@ -53,6 +53,15 @@ interface GitContainerPathMapping {
   containerPath: string;
 }
 
+interface GitPoolContext {
+  poolKey: string;
+  mountRoot: string;
+  requestedCwd: string;
+  containerCwd: string;
+  uid?: number;
+  gid?: number;
+}
+
 const GIT_HELPER_IMAGE = "alpine/git";
 const CONTAINER_REPO_ROOT = "/workspace";
 const CONTAINER_GIT_MOUNT_ROOT = "/mnt/code-ux/git-paths";
@@ -82,7 +91,7 @@ const GIT_PATH_ENV_KEYS = new Set([
 
 /**
  * Lazily-created, process-wide pool of persistent `alpine/git` helper containers — one per
- * (repo working directory, uid:gid). Read/write git commands that only need the working tree
+ * (project Git common directory, uid:gid). Read/write git commands that only need the project tree
  * mounted are run via `docker exec` into the warm container instead of a throwaway
  * `docker run --rm` per command, which previously produced constant container churn during
  * polling (status, fetch, branch sync, …). Created lazily so the module import cycle with
@@ -94,7 +103,7 @@ function getGitHelperPool(): DockerHelperContainerPool {
     gitHelperPool = new DockerHelperContainerPool({
       nameFor: (key) => `code-ux-git-helper-${createHash("sha1").update(key).digest("hex").slice(0, 24)}`,
       buildCreateArgs: (key, name) => {
-        const parsed = JSON.parse(key) as { cwd: string; uid?: number; gid?: number };
+        const parsed = JSON.parse(key) as { mountRoot: string; uid?: number; gid?: number };
         const userArgs = parsed.uid !== undefined && parsed.gid !== undefined && parsed.uid !== 0
           ? ["--user", `${parsed.uid}:${parsed.gid}`]
           : [];
@@ -108,7 +117,7 @@ function getGitHelperPool(): DockerHelperContainerPool {
           "--workdir",
           CONTAINER_REPO_ROOT,
           "--mount",
-          formatBindMountArg(parsed.cwd, CONTAINER_REPO_ROOT),
+          formatBindMountArg(parsed.mountRoot, CONTAINER_REPO_ROOT),
           "--mount",
           "type=tmpfs,target=/git",
           ...userArgs,
@@ -126,17 +135,16 @@ function getGitHelperPool(): DockerHelperContainerPool {
   return gitHelperPool;
 }
 
-/** Removes the persistent git helper container bound to a working directory (call before deleting it). */
+/** Removes the persistent git helper container bound to a project root. */
 export async function releaseGitHelperForCwd(cwd: string): Promise<void> {
   if (!gitHelperPool) {
     return;
   }
-  const resolved = path.resolve(cwd);
-  const getUid = (process as NodeJS.Process & { getuid?: () => number }).getuid;
-  const getGid = (process as NodeJS.Process & { getgid?: () => number }).getgid;
-  const uid = getUid ? getUid() : undefined;
-  const gid = getGid ? getGid() : undefined;
-  await gitHelperPool.release(JSON.stringify({ cwd: resolved, uid, gid })).catch(() => undefined);
+  const context = CommandRunner.resolveGitPoolContextForPath(cwd);
+  if (!context) {
+    return;
+  }
+  await gitHelperPool.release(context.poolKey).catch(() => undefined);
 }
 
 /** Drains the process-wide git helper pool during server shutdown. */
@@ -172,8 +180,9 @@ export class CommandRunner {
     if (command === "git" && this.shouldRunGitInContainer(options) && !options.stdinFile) {
       const cwd = this.resolveHostPath(options.cwd ?? process.cwd());
       const env = options.env ?? process.env;
-      if (this.buildGitContainerPathMappings(cwd, args, env).length === 0) {
-        return this.runPooledGitCommand(cwd, args, env, options);
+      const poolContext = this.resolveGitPoolContext(cwd);
+      if (poolContext && this.buildGitContainerPathMappings(poolContext.mountRoot, args, env).length === 0) {
+        return this.runPooledGitCommand(poolContext, args, env, options);
       }
     }
 
@@ -182,27 +191,20 @@ export class CommandRunner {
   }
 
   private async runPooledGitCommand(
-    cwd: string,
+    context: GitPoolContext,
     args: string[],
     env: NodeJS.ProcessEnv,
     options: CommandOptions,
   ): Promise<CommandResult> {
     const pool = getGitHelperPool();
-    const getUid = (process as NodeJS.Process & { getuid?: () => number }).getuid;
-    const getGid = (process as NodeJS.Process & { getgid?: () => number }).getgid;
-    const poolKey = JSON.stringify({
-      cwd,
-      uid: getUid ? getUid() : undefined,
-      gid: getGid ? getGid() : undefined,
-    });
-    const execPrefix = ["exec", ...this.buildGitContainerEnvArgs(env, cwd, [])];
-    const execCommand = ["git", ...this.rewriteGitArgsForContainer(cwd, args, [])];
+    const execPrefix = ["exec", "--workdir", context.containerCwd, ...this.buildGitContainerEnvArgs(env, context.mountRoot, [])];
+    const execCommand = ["git", ...this.rewriteGitArgsForContainer(context.mountRoot, args, [])];
 
     const runViaExec = async (): Promise<CommandResult> => {
-      const containerId = await pool.ensure(poolKey);
-      pool.touch(poolKey);
+      const containerId = await pool.ensure(context.poolKey);
+      pool.touch(context.poolKey);
       return this.spawnProcess(
-        { command: "docker", args: [...execPrefix, containerId, ...execCommand], containerHostCwd: cwd },
+        { command: "docker", args: [...execPrefix, containerId, ...execCommand], containerHostCwd: context.mountRoot },
         options,
       );
     };
@@ -216,7 +218,7 @@ export class CommandRunner {
     }
 
     if (!result.ok && pool.isContainerGone(result)) {
-      pool.invalidate(poolKey);
+      pool.invalidate(context.poolKey);
       try {
         result = await runViaExec();
       } catch {
@@ -620,22 +622,25 @@ export class CommandRunner {
 
     const cwd = options.cwd ? this.resolveHostPath(options.cwd) : process.cwd();
     const env = options.env ?? process.env;
-    const pathMappings = this.buildGitContainerPathMappings(cwd, args, env);
+    const poolContext = this.resolveGitPoolContext(cwd);
+    const mountRoot = poolContext?.mountRoot ?? cwd;
+    const containerCwd = poolContext?.containerCwd ?? CONTAINER_REPO_ROOT;
+    const pathMappings = this.buildGitContainerPathMappings(mountRoot, args, env);
     const mounts = this.buildGitContainerMountArgs(pathMappings);
-    const envArgs = this.buildGitContainerEnvArgs(env, cwd, pathMappings);
+    const envArgs = this.buildGitContainerEnvArgs(env, mountRoot, pathMappings);
     const userArgs = this.buildContainerUserArgs();
 
     return {
       command: "docker",
-      containerHostCwd: cwd,
+      containerHostCwd: mountRoot,
       args: [
         "run",
         "--rm",
         "-i",
         "--workdir",
-        CONTAINER_REPO_ROOT,
+        containerCwd,
         "--mount",
-        formatBindMountArg(cwd, CONTAINER_REPO_ROOT),
+        formatBindMountArg(mountRoot, CONTAINER_REPO_ROOT),
         "--mount",
         "type=tmpfs,target=/git",
         ...mounts,
@@ -646,21 +651,15 @@ export class CommandRunner {
         "--entrypoint",
         "git",
         GIT_HELPER_IMAGE,
-        ...this.rewriteGitArgsForContainer(cwd, args, pathMappings),
+        ...this.rewriteGitArgsForContainer(mountRoot, args, pathMappings),
       ],
     };
   }
 
   private shouldRunGitInContainer(options: CommandOptions): boolean {
     const env = options.env ?? process.env;
-    if (isRuntimeShutdownInProgress()) {
-      return false;
-    }
-    if (process.env.NODE_ENV === "test") {
+    if (process.env.NODE_ENV === "test" || env.CODEUX_E2E_PROVIDER_CLI_SHIM) {
       return env.CODE_UX_CONTAINERIZED_GIT === "1" && env.CODE_UX_GIT_CONTAINER_MODE !== "host";
-    }
-    if (env.CODE_UX_CONTAINERIZED_GIT === "0" || env.CODE_UX_GIT_CONTAINER_MODE === "host") {
-      return false;
     }
     return Boolean(options.cwd);
   }
@@ -851,6 +850,113 @@ export class CommandRunner {
   private getPathIdentity(candidate: string): string {
     const resolved = this.resolveHostPath(candidate);
     return this.isWindowsHostPath(resolved) ? resolved.toLowerCase() : resolved;
+  }
+
+  private resolveGitPoolContext(cwd: string): GitPoolContext | null {
+    return CommandRunner.resolveGitPoolContextForPath(cwd);
+  }
+
+  static resolveGitPoolContextForPath(cwd: string): GitPoolContext | null {
+    const resolvedCwd = path.resolve(cwd);
+    const metadata = CommandRunner.findGitMetadata(resolvedCwd);
+    const mountRoot = metadata?.projectRoot ?? resolvedCwd;
+    if (!CommandRunner.isPathWithinStatic(mountRoot, resolvedCwd)) {
+      return null;
+    }
+    const getUid = (process as NodeJS.Process & { getuid?: () => number }).getuid;
+    const getGid = (process as NodeJS.Process & { getgid?: () => number }).getgid;
+    const uid = getUid ? getUid() : undefined;
+    const gid = getGid ? getGid() : undefined;
+    const pathApi = CommandRunner.getHostPathApiStatic(mountRoot);
+    const relative = pathApi.relative(pathApi.resolve(mountRoot), pathApi.resolve(resolvedCwd));
+    const containerCwd = relative.length === 0
+      ? CONTAINER_REPO_ROOT
+      : path.posix.join(CONTAINER_REPO_ROOT, ...relative.split(/[\\/]+/));
+    const poolKey = JSON.stringify({
+      mountRoot: CommandRunner.pathIdentityStatic(mountRoot),
+      uid,
+      gid,
+    });
+    return {
+      poolKey,
+      mountRoot,
+      requestedCwd: resolvedCwd,
+      containerCwd,
+      uid,
+      gid,
+    };
+  }
+
+  private static findGitMetadata(startPath: string): { projectRoot: string } | null {
+    const start = path.resolve(startPath);
+    let current = start;
+    while (true) {
+      const dotGit = path.join(current, ".git");
+      if (fs.existsSync(dotGit)) {
+        const projectRoot = CommandRunner.resolveProjectRootFromDotGit(current, dotGit);
+        return { projectRoot };
+      }
+      const parent = path.dirname(current);
+      if (parent === current) {
+        return null;
+      }
+      current = parent;
+    }
+  }
+
+  private static resolveProjectRootFromDotGit(worktreeRoot: string, dotGit: string): string {
+    try {
+      const stat = fs.statSync(dotGit);
+      if (stat.isDirectory()) {
+        return path.resolve(worktreeRoot);
+      }
+      if (!stat.isFile()) {
+        return path.resolve(worktreeRoot);
+      }
+      const content = fs.readFileSync(dotGit, "utf8").trim();
+      const match = /^gitdir:\s*(.+)$/i.exec(content);
+      if (!match) {
+        return path.resolve(worktreeRoot);
+      }
+      const gitDir = path.resolve(worktreeRoot, match[1]);
+      const commonDirFile = path.join(gitDir, "commondir");
+      if (!fs.existsSync(commonDirFile)) {
+        return path.resolve(worktreeRoot);
+      }
+      const commonDir = fs.readFileSync(commonDirFile, "utf8").trim();
+      if (!commonDir) {
+        return path.resolve(worktreeRoot);
+      }
+      const resolvedCommonDir = path.resolve(gitDir, commonDir);
+      const parent = path.dirname(resolvedCommonDir);
+      return fs.existsSync(path.join(parent, ".git")) ? parent : path.resolve(worktreeRoot);
+    } catch {
+      return path.resolve(worktreeRoot);
+    }
+  }
+
+  private static isPathWithinStatic(basePath: string, targetPath: string): boolean {
+    const pathApi = CommandRunner.getHostPathApiStatic(basePath);
+    const normalizeCase = CommandRunner.isWindowsHostPathStatic(basePath)
+      ? (value: string) => value.toLowerCase()
+      : (value: string) => value;
+    const base = normalizeCase(pathApi.resolve(basePath));
+    const target = normalizeCase(pathApi.resolve(targetPath));
+    const relative = pathApi.relative(base, target);
+    return relative.length === 0 || (!relative.startsWith("..") && !pathApi.isAbsolute(relative));
+  }
+
+  private static pathIdentityStatic(candidate: string): string {
+    const resolved = CommandRunner.getHostPathApiStatic(candidate).resolve(candidate);
+    return CommandRunner.isWindowsHostPathStatic(resolved) ? resolved.toLowerCase() : resolved;
+  }
+
+  private static isWindowsHostPathStatic(candidate: string): boolean {
+    return /^[A-Za-z]:[\\/]/.test(candidate) || /^\\\\/.test(candidate);
+  }
+
+  private static getHostPathApiStatic(candidate: string): typeof path.win32 | typeof path.posix {
+    return CommandRunner.isWindowsHostPathStatic(candidate) ? path.win32 : path.posix;
   }
 }
 

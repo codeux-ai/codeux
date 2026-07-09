@@ -47,6 +47,7 @@ export function useMemoryPageData(
 
     const { feedback, setWarning, setSuccess, setError, clearFeedback, clearError, setPending } = useActionFeedback(5000);
     const removeTimers = useRef<Record<string, number>>({});
+    const latestLoadRequestId = useRef(0);
 
     const syncRecordsAndGraph = useCallback((next: MemoryRecord[]) => {
         setRecords(next);
@@ -234,6 +235,8 @@ export function useMemoryPageData(
 
     const loadData = useCallback(async () => {
         if (!pid || !enabled) return;
+        const requestId = latestLoadRequestId.current + 1;
+        latestLoadRequestId.current = requestId;
         setLoading(true);
         setLoadError(null);
         try {
@@ -259,6 +262,10 @@ export function useMemoryPageData(
                 ).catch(() => null),
             ]);
 
+            if (requestId !== latestLoadRequestId.current) {
+                return;
+            }
+
             setRecords(memoriesData);
             setInitialModels(modelsData);
             setInitialStats(statsData);
@@ -268,9 +275,15 @@ export function useMemoryPageData(
             setGraphData({ graph, map: mapData });
             setGraphDataContextKey(requestedContextKey);
         } catch (error) {
+            if (requestId !== latestLoadRequestId.current) {
+                return;
+            }
             setLoadError(error instanceof Error ? error.message : "Failed to load memories");
+        } finally {
+            if (requestId === latestLoadRequestId.current) {
+                setLoading(false);
+            }
         }
-        setLoading(false);
     }, [pid, activeScope, activeTier, selectedSprintId, selectedAgentPresetId, enabled, requestedContextKey]);
 
     useEffect(() => { loadData(); }, [loadData]);
