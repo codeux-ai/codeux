@@ -1,9 +1,8 @@
-import type { FunctionComponent } from "preact";
+import type { FunctionComponent, JSX } from "preact";
 import { memo } from "preact/compat";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { Radio, BarChart3, Ship, Workflow, AlertTriangle } from "lucide-preact";
-import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 import type {
   DashboardStats,
   ExecutionSprintRunSummary,
@@ -15,6 +14,7 @@ import { LivePreviewLink } from "./ui/LivePreviewLink.js";
 import { HumanInterventionBadge } from "./ui/HumanInterventionBadge.js";
 import { getSprintStatusPresentation } from "../lib/sprint-status-presentation.js";
 import { PageHeader } from "./layout/PageHeader.js";
+import { useAnimatedActiveIndicator } from "../lib/motion/index.js";
 
 type HeaderView = "stats" | "race" | "dag";
 
@@ -70,6 +70,32 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
     const btnStatsRef = useRef<HTMLButtonElement>(null);
     const btnRaceRef = useRef<HTMLButtonElement>(null);
     const btnDagRef = useRef<HTMLButtonElement>(null);
+    const viewToggleRef = useRef<HTMLDivElement>(null);
+    const activeIndex = headerView === "stats" ? 0 : headerView === "race" ? 1 : 2;
+    const indicator = useAnimatedActiveIndicator(viewToggleRef, activeIndex, '[role="tab"]', 'horizontal');
+    const viewTabRefs = [btnStatsRef, btnRaceRef, btnDagRef];
+
+    const handleViewToggleKeyDown = (event: JSX.TargetedKeyboardEvent<HTMLButtonElement>, currentIndex: number): void => {
+        let nextIndex = currentIndex;
+
+        if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+            event.preventDefault();
+            nextIndex = (currentIndex + 1) % viewTabRefs.length;
+        } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+            event.preventDefault();
+            nextIndex = (currentIndex - 1 + viewTabRefs.length) % viewTabRefs.length;
+        } else if (event.key === "Home") {
+            event.preventDefault();
+            nextIndex = 0;
+        } else if (event.key === "End") {
+            event.preventDefault();
+            nextIndex = viewTabRefs.length - 1;
+        }
+
+        if (nextIndex !== currentIndex) {
+            viewTabRefs[nextIndex]?.current?.focus();
+        }
+    };
 
     useLayoutEffect(() => {
         if (headerView === "stats") btnStatsRef.current?.focus();
@@ -112,7 +138,12 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
                     <div className="flex items-center gap-2.5 flex-wrap">
                         <LivePreviewLink session={selectedSession} />
                         {/* ── View Toggle ─────────────────────────────── */}
-                        <div className="flex gap-0.5 p-0.5 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl backdrop-blur-md" role="tablist" aria-label="View toggle">
+                        <div ref={viewToggleRef} className="relative flex gap-0.5 p-0.5 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl backdrop-blur-md" role="tablist" aria-label="View toggle">
+                            <div
+                                aria-hidden="true"
+                                className="absolute top-0.5 bottom-0.5 left-0 z-0 rounded-[10px] pointer-events-none bg-white dark:bg-void-700 shadow-[0_2px_10px_rgba(0,0,0,0.08)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.3)]"
+                                style={indicator.style as JSX.CSSProperties}
+                            />
                             <button
                                 type="button"
                                 ref={btnStatsRef}
@@ -120,11 +151,8 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
                                 role="tab"
                                 aria-selected={headerView === "stats"}
                                 tabIndex={headerView === "stats" ? 0 : -1}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); setHeaderView("race"); btnRaceRef.current?.focus(); }
-                                    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); setHeaderView("dag"); btnDagRef.current?.focus(); }
-                                }}
-                                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-[10px] font-bold uppercase tracking-[0.14em] transition-all duration-300 ${headerView === "stats" ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_2px_10px_rgba(0,0,0,0.08)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.3)]" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"}`}
+                                onKeyDown={(event) => handleViewToggleKeyDown(event, 0)}
+                                className={`relative z-10 flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-[10px] font-bold uppercase tracking-[0.14em] transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800 ${headerView === "stats" ? "text-slate-900 dark:text-white" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"}`}
                             >
                                 <BarChart3 className="w-3 h-3" strokeWidth={2} />
                                 Stats
@@ -136,11 +164,8 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
                                 role="tab"
                                 aria-selected={headerView === "race"}
                                 tabIndex={headerView === "race" ? 0 : -1}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); setHeaderView("dag"); btnDagRef.current?.focus(); }
-                                    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); setHeaderView("stats"); btnStatsRef.current?.focus(); }
-                                }}
-                                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-[10px] font-bold uppercase tracking-[0.14em] transition-all duration-300 ${headerView === "race" ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_2px_10px_rgba(0,0,0,0.08)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.3)]" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"}`}
+                                onKeyDown={(event) => handleViewToggleKeyDown(event, 1)}
+                                className={`relative z-10 flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-[10px] font-bold uppercase tracking-[0.14em] transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800 ${headerView === "race" ? "text-slate-900 dark:text-white" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"}`}
                             >
                                 <Ship className="w-3 h-3" strokeWidth={2} />
                                 Race
@@ -152,11 +177,8 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
                                 role="tab"
                                 aria-selected={headerView === "dag"}
                                 tabIndex={headerView === "dag" ? 0 : -1}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); setHeaderView("stats"); btnStatsRef.current?.focus(); }
-                                    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); setHeaderView("race"); btnRaceRef.current?.focus(); }
-                                }}
-                                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-[10px] font-bold uppercase tracking-[0.14em] transition-all duration-300 ${headerView === "dag" ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_2px_10px_rgba(0,0,0,0.08)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.3)]" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"}`}
+                                onKeyDown={(event) => handleViewToggleKeyDown(event, 2)}
+                                className={`relative z-10 flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-[10px] font-bold uppercase tracking-[0.14em] transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800 ${headerView === "dag" ? "text-slate-900 dark:text-white" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"}`}
                             >
                                 <Workflow className="w-3 h-3" strokeWidth={2} />
                                 DAG
