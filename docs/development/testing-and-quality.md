@@ -259,7 +259,11 @@ Set `CODEUX_E2E_OPENROUTER_MODEL` only when validating a different OpenRouter mo
 
 ### Mockup Sprint Orchestration Policy
 
-The credential-free mockup sprint orchestration workflow is `.github/workflows/mockup-sprint-orchestration.yml`. It validates fast orchestration regressions without provider secrets by running `pnpm run test:orchestration:rapid` on pushes and pull requests targeting `dev` or `main`. The compiled `test:orchestration:full` catalog and heavy `test:orchestration:pentest` lane remain manual escalation tools and are not part of CI.
+The credential-free mockup sprint orchestration workflow is `.github/workflows/mockup-sprint-orchestration.yml`. Its normal `ci-dag` job runs on `ubuntu-latest` for pushes and pull requests targeting `dev` or `main`, then runs `pnpm run test:orchestration:ci-dag`. That lane builds the runtime and runs the deterministic 10-task mockup DAG through Docker-backed provider workspaces without provider secrets.
+
+Pushes to `main`, pull requests targeting `main`, and manual workflow dispatches also run a native Windows and macOS Electron DAG lane. That lane rebuilds Electron native dependencies and runs `pnpm run test:orchestration:ci-dag:electron`, which launches `dist/electron/main.js`, waits for the embedded Code UX server, then runs the same 10-task DAG shape through a host-execution mockup fixture. GitHub-hosted Windows and macOS runners do not provide Docker job containers, so the Electron lane validates desktop orchestration on the native app runtime while the normal Ubuntu lane remains the Docker-backed orchestration gate.
+
+The fast `test:orchestration:rapid` lane remains available for local unit-level regression checks, while the compiled `test:orchestration:full` catalog and heavy `test:orchestration:pentest` lane remain manual escalation tools and are not part of CI.
 
 Use [Mockup Sprint Pentest](./mockup-sprint-pentest.md) for local commands, CI trigger and artifact policy, covered scenarios, and the distinction between this no-secret lane and the credentialed OpenRouter validation lane.
 

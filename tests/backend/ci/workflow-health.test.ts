@@ -338,9 +338,16 @@ describe("GitHub workflow health", () => {
     expect(config).not.toContain("Pixel 5");
   });
 
-  it("keeps mockup sprint orchestration on a no-secret rapid Linux CI lane", async () => {
-    const workflow = await readRepoFile(WORKFLOWS.mockupSprintOrchestration);
-    const job = getJobBlock(workflow, "mockup-sprint-orchestration");
+  it("keeps mockup sprint orchestration on normal CI DAG and main-PR-only Electron DAG lanes", async () => {
+    const [workflow, packageJson, runnerScript] = await Promise.all([
+      readRepoFile(WORKFLOWS.mockupSprintOrchestration),
+      readRepoFile("package.json").then((content) => JSON.parse(content) as PackageJson),
+      readRepoFile("scripts/e2e/run-mockup-sprint-pentest.mjs"),
+    ]);
+    const dagJob = getJobBlock(workflow, "ci-dag");
+    const electronJob = getJobBlock(workflow, "electron-ci-dag");
+    const ciDagScript = packageJson.scripts?.["test:orchestration:ci-dag"] ?? "";
+    const electronDagScript = packageJson.scripts?.["test:orchestration:ci-dag:electron"] ?? "";
 
     expect(workflow).toContain("Mockup Sprint Orchestration");
     expectConcurrencyCancellation(workflow, "Mockup sprint orchestration");
@@ -348,22 +355,52 @@ describe("GitHub workflow health", () => {
     expect(workflow).toMatch(/pull_request:\n    branches: \[main, dev\]/);
     expect(workflow).toContain("workflow_dispatch:");
 
-    expect(job).toContain("runs-on: ubuntu-latest");
-    expect(job).toContain("uses: pnpm/action-setup@v6");
-    expect(job).toContain("version: 10.33.0");
-    expect(job).toContain("run_install: false");
-    expect(job).toContain("uses: actions/setup-node@v5");
-    expect(job).toContain("node-version: 22");
-    expect(job).toContain("run: pnpm install --frozen-lockfile --ignore-scripts");
-    expect(job).toContain("run: pnpm run test:orchestration:rapid");
-    expect(job).not.toContain("run: pnpm run build");
-    expect(job).not.toContain("docker version");
-    expect(job).not.toContain("run: pnpm run test:orchestration:full");
-    expect(job).not.toContain("test:orchestration:pentest");
-    expect(job).not.toContain("run-mockup-sprint-pentest.mjs --scenario pentest");
-    expect(job).not.toContain("pnpm run test:e2e:mockup-sprint-pentest");
-    expect(job).not.toContain("OPENROUTER_API_KEY");
-    expect(job).not.toContain("GITHUB_TOKEN");
+    expect(dagJob).toContain("runs-on: ubuntu-latest");
+    expectJobToolchain(dagJob, "Mockup sprint CI DAG");
+    expect(dagJob).toContain("run: pnpm run test:orchestration:ci-dag");
+    expect(dagJob).not.toContain("container:");
+    expect(dagJob).not.toContain("run: pnpm run test:orchestration:rapid");
+    expect(dagJob).not.toContain("run: pnpm run test:orchestration:ci-dag:electron");
+    expect(dagJob).not.toContain("run: pnpm run test:orchestration:full");
+    expect(dagJob).not.toContain("test:orchestration:pentest");
+    expect(dagJob).not.toContain("run-mockup-sprint-pentest.mjs --scenario pentest");
+    expect(dagJob).not.toContain("pnpm run test:e2e:mockup-sprint-pentest");
+    expect(dagJob).not.toContain("OPENROUTER_API_KEY");
+    expect(dagJob).not.toContain("GITHUB_TOKEN");
+    expect(ciDagScript).toContain("run-mockup-sprint-pentest.mjs");
+    expect(ciDagScript).toContain("--execution-mode docker");
+    expect(ciDagScript).toContain("--scenario ci-small-dag");
+    expect(ciDagScript).not.toContain("--runtime electron");
+
+    expect(electronJob).toContain("if: github.event_name == 'pull_request' && github.base_ref == 'main'");
+    expect(electronJob).not.toContain("workflow_dispatch");
+    expect(electronJob).not.toContain("refs/heads/main");
+    expect(electronJob).toContain("runs-on: ${{ matrix.os }}");
+    expect(electronJob).toContain("name: macOS");
+    expect(electronJob).toContain("os: macos-latest");
+    expect(electronJob).toContain("name: Windows");
+    expect(electronJob).toContain("os: windows-latest");
+    expect(electronJob).toContain("CSC_IDENTITY_AUTO_DISCOVERY: \"false\"");
+    expect(electronJob).toContain("GH_TOKEN: \"\"");
+    expect(electronJob).toContain("uses: actions/cache@v5");
+    expectJobToolchain(electronJob, "Mockup sprint main Electron DAG");
+    expect(electronJob).toContain("run: pnpm run electron:install-deps");
+    expect(electronJob).toContain("run: pnpm run test:orchestration:ci-dag:electron");
+    expect(electronJob).not.toContain("container:");
+    expect(electronJob).not.toMatch(/^\s*run: pnpm run test:orchestration:ci-dag$/m);
+    expect(electronJob).not.toContain("run: pnpm run test:orchestration:rapid");
+    expect(electronJob).not.toContain("OPENROUTER_API_KEY");
+    expect(electronJob).not.toContain("GITHUB_TOKEN");
+    expect(electronDagScript).toContain("run-mockup-sprint-pentest.mjs");
+    expect(electronDagScript).toContain("--runtime electron");
+    expect(electronDagScript).toContain("--execution-mode fixture");
+    expect(electronDagScript).toContain("--scenario ci-small-dag-electron");
+
+    const runnerBeforeElectronStart = runnerScript.slice(0, runnerScript.indexOf("async function startElectronCodeUx"));
+    expect(runnerBeforeElectronStart).not.toContain('from "@playwright/test"');
+    expect(runnerBeforeElectronStart).not.toContain('from "electron"');
+    expect(runnerScript).toContain('import("@playwright/test")');
+    expect(runnerScript).toContain('import("electron")');
   });
 
   it("keeps release checks separate from CI and Playwright validation lanes", async () => {

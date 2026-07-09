@@ -1,12 +1,14 @@
 # Rapid orchestration debugging suite
 
-Use this suite when a sprint stalls, local merges fail, worker-owned attention items churn, or memory usage needs extended observation after a fix. CI uses the rapid lane by default; full mockup pentest lanes are manual escalation tools for targeted investigations.
+Use this suite when a sprint stalls, local merges fail, worker-owned attention items churn, or memory usage needs extended observation after a fix. CI uses the compiled 10-task DAG lane by default; full mockup pentest lanes are manual escalation tools for targeted investigations.
 
 ## Commands
 
 | Lane | Command | Purpose |
 | --- | --- | --- |
 | Fast regressions | `pnpm run test:orchestration:rapid` | Watch-loop, feature merge, and local final-merge regressions without Docker or provider CLIs. |
+| CI DAG E2E | `pnpm run test:orchestration:ci-dag` | Compiled runtime plus `mockup-cli` through a 10-task dependency graph with parallel leaves and layered joins. |
+| Electron CI DAG | `pnpm run test:orchestration:ci-dag:electron` | Electron runtime plus the same 10-task graph through the native desktop app on Windows and macOS `main` validation. |
 | Mockup merge E2E | `pnpm run test:orchestration:merge-e2e` | Compiled runtime plus `mockup-cli` through a deterministic local merge-conflict DAG. |
 | Full mockup pentest | `pnpm run test:orchestration:full` | Manual escalation for all deterministic mockup scenarios: smoke, CI repair, merge conflict, parallel DAG, dirty checkout, multi-project overrides. |
 | Large DAG stress | `pnpm run test:orchestration:large-dag` | Heavy 129-task mockup DAG with wide fan-out and layered joins. |
@@ -17,6 +19,10 @@ Use this suite when a sprint stalls, local merges fail, worker-owned attention i
 ## Escalation ladder
 
 Start with `pnpm run test:orchestration:rapid`. It covers provider routing, watch-loop finalization, feature branch merge gates, local final merges, dirty checkout preservation, and worker-owned merge attention regressions.
+
+Run `pnpm run test:orchestration:ci-dag` for the no-secret CI lane. It builds the compiled runtime and exercises the deterministic 10-task mockup DAG through Docker-backed provider workspaces.
+
+Run `pnpm run test:orchestration:ci-dag:electron` for the main-branch Electron lane. It launches `dist/electron/main.js`, waits for the embedded Code UX server, and runs the same 10-task DAG shape through a host-execution mockup fixture on native Windows and macOS runners.
 
 Run `pnpm run test:orchestration:merge-e2e` after a unit-level merge fix passes. It builds the compiled runtime and exercises the `merge-conflict-dag` mockup scenario through the local project runtime.
 
@@ -32,6 +38,12 @@ Run `pnpm run test:orchestration:large-dag` for a heavy 129-task DAG with 96 lea
 4. Keep a dirty visible checkout during one validation pass when debugging LOCAL finalization.
 5. Verify worker-owned main-merge attention remains open until an actual temporary-worktree merge succeeds.
 6. Verify the final local default branch contains the merge commit and the run is terminal `completed`.
+
+## Merge-Conflict Attention Churn
+
+If a task shows `MERGE_CONFLICT` while the matching attention item opens and immediately dismisses, inspect the resolved worker item payload. Rows with `branchMergeRetryConsumed: true` must not suppress a fresh conflict marker after the retry fails. Use `project_attention_items.payload_json`, the task `merge_indicator`, and runtime status sync logs to confirm the consumed retry is ignored by suppression.
+
+If a temporary-worktree merge fails with `fatal: not a git repository: /workspace/.git/worktrees/...`, inspect the temp worktree `.git` file. Containerized `git worktree add` must be followed by relative gitdir normalization so later helper-container Git calls resolve the same host repository instead of a stale container path.
 
 ## Dirty checkout cases
 

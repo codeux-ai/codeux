@@ -23,12 +23,12 @@ import type { SprintOrchestratorDependencies } from "../../../sprint/sprint-orch
 import type { SprintExecutionContext } from "../../../services/sprint-execution-state-service.js";
 import type { TaskQaMergeGateStatus } from "../../../services/quality-assurance-service.js";
 import { FeaturePrGateService } from "../ci/feature-pr-gate.js";
+import { isCliTaskRunAwaitingGitFinalization } from "../ci/cli-git-finalization.js";
 import { MergeConflictDebouncer } from "../ci/merge-conflict-debouncer.js";
 import { matchPrForTask } from "../ci/feature-pr/pr-matcher.js";
 import { resolveCiEscalationOwner } from "../ci/feature-pr/ci-autofix-policy.js";
 import type { MemoryCategory, CreateMemoryInput } from "../../../contracts/memory-types.js";
 import { isTaskCodeComplete } from "../task-merge-state.js";
-import { evaluateSprintTransitionState } from "../task-transition-state.js";
 import pLimit from "p-limit";
 import { workerBranchHasMergeWork } from "../../../infrastructure/git/local-merge.js";
 import { PROVIDER_IDS } from "../../../repositories/settings-defaults.js";
@@ -395,7 +395,7 @@ export class CycleRunner {
         args,
         resolvedWorkerMergeConflictSuppressionKeys,
         gitStatus,
-      ),
+      ) || this.isCliTaskAwaitingGitFinalization(task, args),
       renderInstruction: (templateId, variables) => this.deps.renderInstruction(templateId, variables, args.repoPath),
       onTaskEvent: ({ task, eventType, payload, sourceEventKey }) => {
         appendTaskEvent(task, eventType, payload, sourceEventKey);
@@ -413,15 +413,6 @@ export class CycleRunner {
       resolvedWorkerMergeConflictSuppressionKeys,
       activeProjectAttentionItems,
     );
-    const transitionState = evaluateSprintTransitionState({
-      subtasks,
-      manualMergeTasks: protocolResult.manualMergeTasks,
-      workerEscalatedMergeConflictTasks: protocolResult.workerEscalatedMergeConflictTasks,
-      activeProjectAttentionItems,
-      sprintRunId: args.sprintRunId ?? "",
-      githubMode: args.githubMode,
-    });
-
     const statusTable = args.loopSteps.statusTable ? runStatusTableStep(subtasks) : "";
 
     return {
@@ -429,7 +420,7 @@ export class CycleRunner {
       reportText,
       statusTable,
       instructions: protocolResult.instructions,
-      awaitingMerge: transitionState.mergeRequiredTasks,
+      awaitingMerge: protocolResult.awaitingMerge,
       manualMergeTasks: protocolResult.manualMergeTasks,
       workerEscalatedMergeConflictTasks: protocolResult.workerEscalatedMergeConflictTasks,
       activeProjectAttentionItems,
@@ -557,6 +548,16 @@ export class CycleRunner {
     });
 
     return { subtasks, reportText: result.reportText };
+  }
+
+  private isCliTaskAwaitingGitFinalization(task: Subtask, args: CycleRunnerArgs): boolean {
+    const taskId = task.record_id?.trim();
+    if (!taskId || !args.sprintRunId) {
+      return false;
+    }
+    const taskRun = this.deps.executionRepository.getLatestTaskRun(taskId, args.sprintRunId);
+    const listTaskRunEvents = this.deps.executionRepository.listTaskRunEvents?.bind(this.deps.executionRepository);
+    return isCliTaskRunAwaitingGitFinalization(taskRun, listTaskRunEvents);
   }
 
   /**

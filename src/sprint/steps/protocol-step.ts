@@ -45,8 +45,8 @@ const buildFeatureCommentsLine = (settings: CiIntelligenceSettings): string => {
 };
 
 export const runProtocolStep = async (subtasks: Subtask[], options: ProtocolStepOptions): Promise<ProtocolStepResult> => {
-  const awaitingMerge = subtasks.filter((task) => isCompletedTaskAwaitingMerge(task, { githubMode: options.githubMode }));
-  const protocolMergeTasks = awaitingMerge.filter((task) => options.shouldSuppressMergeRequiredTask?.(task) !== true);
+  const allAwaitingMerge = subtasks.filter((task) => isCompletedTaskAwaitingMerge(task, { githubMode: options.githubMode }));
+  const protocolMergeTasks = allAwaitingMerge.filter((task) => options.shouldSuppressMergeRequiredTask?.(task) !== true);
   const workerEscalatedMergeConflictTasks = protocolMergeTasks.filter((task) => options.isWorkerEscalatedMergeConflictTask?.(task) === true);
   const manualMergeTasks = protocolMergeTasks.filter((task) => !workerEscalatedMergeConflictTasks.includes(task));
   const actionRequiredTasks = subtasks.filter(
@@ -142,7 +142,7 @@ export const runProtocolStep = async (subtasks: Subtask[], options: ProtocolStep
 
   return {
     instructions,
-    awaitingMerge,
+    awaitingMerge: protocolMergeTasks,
     manualMergeTasks,
     workerEscalatedMergeConflictTasks,
     actionRequiredTasks,

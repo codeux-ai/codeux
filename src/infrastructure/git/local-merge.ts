@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { runCommandStrict, type CommandResult } from "../../services/cli-process-runner.js";
 import { CODE_UX_GIT_PATHSPEC_EXCLUDE, CODE_UX_REPO_DIR } from "./code-ux-gitignore.js";
@@ -414,6 +414,34 @@ async function resolveCodeUxOnlyMergeConflicts(
   }
 }
 
+async function normalizeTemporaryWorktreeGitMetadata(repoPath: string, worktreePath: string): Promise<void> {
+  const dotGitPath = path.join(worktreePath, ".git");
+  let content: string;
+  try {
+    content = (await readFile(dotGitPath, "utf8")).trim();
+  } catch {
+    return;
+  }
+
+  const match = /^gitdir:\s*(.+)$/i.exec(content);
+  if (!match) {
+    return;
+  }
+
+  const gitDirName = path.basename(match[1].trim());
+  if (!gitDirName || gitDirName === "." || gitDirName === path.sep) {
+    return;
+  }
+
+  const hostGitDir = path.join(repoPath, ".git", "worktrees", gitDirName);
+  const relativeGitDir = path.relative(worktreePath, hostGitDir).replaceAll(path.sep, "/");
+  if (!relativeGitDir || relativeGitDir.startsWith("/")) {
+    return;
+  }
+
+  await writeFile(dotGitPath, `gitdir: ${relativeGitDir}\n`, "utf8");
+}
+
 /**
  * Returns true only when the recorded worker branch still exists and carries
  * commits that are not already in the feature branch. This is used to clear stale
@@ -634,6 +662,7 @@ export async function mergeBranchLocallyInTemporaryWorktree(args: {
   try {
     await runner("git", ["worktree", "add", "--detach", worktreePath, targetBranch], args.repoPath);
     worktreeCreated = true;
+    await normalizeTemporaryWorktreeGitMetadata(args.repoPath, worktreePath);
     await runGitWithCodeUxIdentity(worktreePath, ["merge", "--no-ff", "-m", args.commitMessage, sourceBranch], runner);
     await runner("git", ["update-ref", `refs/heads/${targetBranch}`, "HEAD"], worktreePath);
     if (visibleCheckout && !visibleCheckout.detached && visibleCheckout.ref === targetBranch) {

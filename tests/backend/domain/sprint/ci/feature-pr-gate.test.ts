@@ -993,9 +993,12 @@ jobs:
         provider: "mockup-cli",
         mode: "docker_cli",
         sessionId: "cli-mockup-cli-1",
-        state: "RUNNING",
+        state: "COMPLETED",
         workerBranch: "task/feature-sprint1-t1-mockup",
       }),
+      listTaskRunEvents: vi.fn().mockReturnValue([
+        { eventType: "cli_provider_completed" },
+      ]),
       updateTaskRun: vi.fn(),
       appendTaskRunEvent: vi.fn(),
     } as any;
