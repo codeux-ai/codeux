@@ -547,7 +547,11 @@ export class CycleRunner {
       }),
     });
 
-    return { subtasks, reportText: result.reportText };
+    const updatedById = new Map(result.subtasks.map((task) => [task.id, task]));
+    return {
+      subtasks: subtasks.map((task) => updatedById.get(task.id) ?? task),
+      reportText: result.reportText,
+    };
   }
 
   private isCliTaskAwaitingGitFinalization(task: Subtask, args: CycleRunnerArgs): boolean {

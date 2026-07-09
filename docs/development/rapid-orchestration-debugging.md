@@ -81,6 +81,8 @@ In LOCAL git mode, recovered worker-branch evidence is treated as dependency sta
 
 Host-execution DAG tasks export their worker output through an isolated temporary Git index. The exporter discovers modified, deleted, and untracked paths with Git's ignore rules, stages that path list into the temporary index, and emits a cached binary diff against the task base. This prevents ignored runtime caches from entering worker branches while ensuring parent-created files are visible before dependent tasks unlock.
 
+The fast branch-only merge gate evaluates only completed candidate tasks, then reconciles the returned candidate projection back into the full DAG before dependency re-derivation. A gate result must never drop non-candidate tasks or discard recovered merge state.
+
 ## Mockup Merge E2E Lane
 
 Run:
@@ -277,6 +279,7 @@ Exercise these cases with an approved local test project or a temporary fixture:
 | Final merge fails only when visible checkout has edits. | `local-merge.test.ts`, dirty checkout branches. | Dirty preservation or refresh behavior regressed. |
 | Dependent tasks never start after a worker branch completes. | `feature-pr-gate.test.ts`, task merge indicators. | Worker branch merge evidence is missing or stale. |
 | Dependent tasks start before parent files are visible in their worktree. | `cycle-runner.test.ts`, fast branch-only gate logs, `mockup_pentest_progress`. | LOCAL worker-branch evidence was recovered after status derivation but did not trigger dependency re-derivation. |
+| Branch-only gate logs completed parent candidates but every task still shows `isMerged=false`. | `cycle-runner.test.ts`, fast branch-only gate result reconciliation, task state snapshots. | The gate's returned candidate projection was not merged back into the full in-memory DAG before start-ready evaluation. |
 | Parent DAG task completes but its generated files are missing from the worker branch. | `workspace-artifact-service.test.ts`, `cli_git_pushed` activity stats, final validation import errors. | Patch export skipped untracked files or treated ignored runtime caches as stageable paths; export must use an ignore-aware changed-path list and cached temporary-index diff. |
 | Code-complete LOCAL task branches repeatedly become `MERGE_CONFLICT` but raw Git merges cleanly. | Fast branch-only gate logs, `local-merge.test.ts`, visible checkout status. | The visible checkout is blocking host `git checkout`; task branch settlement must use the temporary-worktree path instead of the visible worktree. |
 | Temporary-worktree merges fail with `fatal: not a git repository: /workspace/.git/worktrees/...`. | `local-merge.test.ts`, helper-container Git logs, the temp worktree `.git` file. | Containerized `git worktree add` left an absolute container gitdir pointer behind. Code UX must normalize that pointer to a relative gitdir before the next helper-container Git command. |

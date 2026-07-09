@@ -533,9 +533,19 @@ describe("CycleRunner attention sync", () => {
     }) as any;
     const runner = new CycleRunner(deps);
     const evaluateCiGate = vi.fn().mockImplementation(async (subtasks, context) => {
+      let nextSubtasks = subtasks.map((task: any) => ({ ...task }));
       if (evaluateCiGate.mock.calls.length === 1) {
         expect(subtasks.map((task: any) => task.id)).toEqual(["T1"]);
-        for (const task of subtasks) {
+        nextSubtasks = subtasks.map((task: any) => task.id === "T1"
+          ? {
+            ...task,
+            status: "COMPLETED",
+            is_merged: true,
+            merge_indicator: "MERGED",
+            worker_branch: "task/feature-parent",
+          }
+          : { ...task });
+        for (const task of nextSubtasks) {
           task.status = "COMPLETED";
           task.is_merged = true;
           task.merge_indicator = "MERGED";
@@ -543,7 +553,7 @@ describe("CycleRunner attention sync", () => {
           await context.persistMergedTask(task);
         }
       }
-      return { subtasks, reportText: "local branch-only recovered and settled\n" };
+      return { subtasks: nextSubtasks, reportText: "local branch-only recovered and settled\n" };
     });
     (runner as any).featurePrGate = { evaluateCiGate };
 
@@ -626,12 +636,12 @@ describe("CycleRunner attention sync", () => {
       if (evaluateCiGate.mock.calls.length === 1) {
         expect(subtasks.map((task: any) => task.id)).toEqual(["T1"]);
       }
-      for (const task of subtasks) {
-        if (task.id === "T1") {
-          task.worker_branch = "task/feature-parent";
-        }
-      }
-      return { subtasks, reportText: "" };
+      return {
+        subtasks: subtasks.map((task: any) => task.id === "T1"
+          ? { ...task, worker_branch: "task/feature-parent" }
+          : { ...task }),
+        reportText: "",
+      };
     });
     (runner as any).featurePrGate = { evaluateCiGate };
 
