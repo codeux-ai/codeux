@@ -145,6 +145,7 @@ export interface ProcessManagementActionArgs {
   prompt: string;
   repoPath: string;
   snapshotCheckout?: SnapshotCheckout;
+  workspaceLifecycle?: "fresh" | "continue";
   mcpConnection?: McpConnectionInfo | null;
   /** Per-agent MCP access for the responding agent; undefined = not agent-scoped. */
   agentMcpAccess?: AgentMcpAccessConfig | null;
@@ -282,6 +283,7 @@ export class ChatManagementActionService {
         workflowSettings: args.settings.cliWorkflow,
         repoPath: args.repoPath,
         snapshotCheckout: args.snapshotCheckout,
+        workspaceLifecycle: args.workspaceLifecycle,
         invocationId: execInvocationId,
         trackPromptInInvocation: false,
         trackAssistantInInvocation: false,
@@ -394,6 +396,7 @@ export class ChatManagementActionService {
         workflowSettings: args.settings.cliWorkflow,
         repoPath: args.repoPath,
         snapshotCheckout: args.snapshotCheckout,
+        workspaceLifecycle: args.workspaceLifecycle,
         settings: args.settings,
         providerLabel: args.provider,
         invocationId: execInvocationId,

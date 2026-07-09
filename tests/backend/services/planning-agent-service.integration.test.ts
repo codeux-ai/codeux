@@ -314,7 +314,7 @@ describe("PlanningAgentService Integration", () => {
     expect(messages[0].contentMarkdown).toContain("Turn sprint goals into concrete executable tasks.");
   });
 
-  it("refreshes remote planning snapshots with the effective default branch fallback", async () => {
+  it("refreshes remote planning snapshots from the effective default branch instead of the current checkout", async () => {
     const {
       projectRepository,
       connectionRepository,
@@ -331,7 +331,7 @@ describe("PlanningAgentService Integration", () => {
         githubMode: "REMOTE",
       },
     });
-    vi.spyOn(WorkspaceManager.prototype, "resolveCurrentBranch").mockResolvedValue("keep-stuff");
+    const resolveCurrentBranchSpy = vi.spyOn(WorkspaceManager.prototype, "resolveCurrentBranch");
     const providerRunner = createPlanningProviderRunner(planningProviderPayload("Plan from remote dev"));
     const service = new PlanningAgentService({
       projectManagementRepository: projectRepository,
@@ -347,7 +347,7 @@ describe("PlanningAgentService Integration", () => {
 
     expect(gitBranchSyncService.syncRemoteBranchIfAvailable).toHaveBeenCalledWith(
       project.baseDir,
-      "keep-stuff",
+      "dev",
       expect.objectContaining({
         githubToken: expect.any(String),
       }),
@@ -356,12 +356,13 @@ describe("PlanningAgentService Integration", () => {
       project.baseDir,
       `planning-${project.id}-${sprint.id}`,
       {
-        branch: "keep-stuff",
-        fallbackBranch: "dev",
+        branch: "dev",
+        fallbackBranch: undefined,
         remoteOnly: true,
       },
       { singleBranch: true },
     );
+    expect(resolveCurrentBranchSpy).not.toHaveBeenCalled();
   });
 
   it("persists sprint-specific execution plan metadata for separate planning invocations", async () => {

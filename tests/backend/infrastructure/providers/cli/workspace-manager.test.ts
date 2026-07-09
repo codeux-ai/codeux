@@ -369,6 +369,11 @@ describe("WorkspaceManager", () => {
       ["bundle", "create", path.join("/tmp/code-ux-bundle-123", "repo.bundle"), "refs/heads/feature/task-1"],
       "/repo/project",
     );
+    expect(runCommandStrict).not.toHaveBeenCalledWith(
+      "git",
+      ["rev-parse", "--abbrev-ref", "HEAD"],
+      "/repo/project",
+    );
   });
 
   it("streams snapshot bundle files to Docker without shelling through Windows paths", async () => {
@@ -762,6 +767,89 @@ describe("WorkspaceManager", () => {
       && call[1].some((arg) => typeof arg === "string" && arg.includes("git -C /workspace checkout -B 'feature/task-1' 'origin/feature/task-1'"))
     );
     expect(seedCall).toBeDefined();
+  });
+
+  it("uses the remote feature ref instead of a local worker ref for remote-only worktrees", async () => {
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+      if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/repo/project\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "remote" && args[1] === "get-url") {
+        return { ok: true, stdout: "https://github.com/example/project.git\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "fetch") {
+        return { ok: true, stdout: "", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "show-ref") {
+        if (args.includes("refs/heads/feature/task-1")
+          || args.includes("refs/remotes/origin/feature/sprint-1")) {
+          return { ok: true, stdout: "", stderr: "" } as any;
+        }
+        throw new Error("missing ref");
+      }
+      if (command === "docker" && args[0] === "volume" && args[1] === "inspect") {
+        throw new Error("missing");
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0, signal: null } as any;
+    });
+
+    await manager.prepareWorktree(
+      "/repo/project",
+      "docker-volume://code-ux-project-abcd1234ef56-session-1",
+      "feature/task-1",
+      "feature/sprint-1",
+      undefined,
+      undefined,
+      { remoteOnly: true },
+    );
+
+    const seedCall = vi.mocked(runCommandStrict).mock.calls.find((call) =>
+      call[0] === "docker"
+      && call[1].includes("--entrypoint")
+      && call[1].includes("sh")
+      && call[1].some((arg) => typeof arg === "string" && arg.includes("git -C /workspace checkout -B 'feature/task-1' 'origin/feature/sprint-1'"))
+    );
+    expect(seedCall).toBeDefined();
+    expect(runCommandStrict).not.toHaveBeenCalledWith(
+      "git",
+      ["bundle", "create", path.join("/tmp/code-ux-bundle-123", "repo.bundle"), "refs/heads/feature/task-1"],
+      "/repo/project",
+    );
+  });
+
+  it("fails remote-only worktrees when only local worker and feature refs exist", async () => {
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+      if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/repo/project\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "remote" && args[1] === "get-url") {
+        return { ok: true, stdout: "https://github.com/example/project.git\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "fetch") {
+        return { ok: true, stdout: "", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "show-ref") {
+        if (args.includes("refs/heads/feature/task-1")
+          || args.includes("refs/heads/feature/sprint-1")) {
+          return { ok: true, stdout: "", stderr: "" } as any;
+        }
+        throw new Error("missing ref");
+      }
+      if (command === "docker" && args[0] === "volume" && args[1] === "inspect") {
+        throw new Error("missing");
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0, signal: null } as any;
+    });
+
+    await expect(manager.prepareWorktree(
+      "/repo/project",
+      "docker-volume://code-ux-project-abcd1234ef56-session-1",
+      "feature/task-1",
+      "feature/sprint-1",
+      undefined,
+      undefined,
+      { remoteOnly: true },
+    )).rejects.toThrow("remote-only isolated workspace");
   });
 
   it("falls back to local worker refs when the remote worker ref is missing", async () => {

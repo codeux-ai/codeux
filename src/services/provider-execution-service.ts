@@ -166,6 +166,7 @@ export interface ExecutionProviderRunArgs {
   workflowSettings: DashboardSettings["cliWorkflow"];
   repoPath: string;
   snapshotCheckout?: SnapshotCheckout;
+  workspaceLifecycle?: "fresh" | "continue";
   githubToken?: string;
   gitlabToken?: string;
 
@@ -381,6 +382,7 @@ export class ProviderExecutionService {
         workflowSettings: args.workflowSettings,
         repoPath: args.repoPath,
         snapshotCheckout: args.snapshotCheckout,
+        workspaceLifecycle: args.workspaceLifecycle,
         githubToken: args.githubToken ?? this.deps.getGithubToken?.(),
         gitlabToken: args.gitlabToken,
         signal: args.signal,

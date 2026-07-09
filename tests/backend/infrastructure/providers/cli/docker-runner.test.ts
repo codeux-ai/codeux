@@ -84,7 +84,7 @@ describe("DockerRunner", () => {
       sessionId: "session-1",
     });
 
-    expect(createSnapshotWorkspace).toHaveBeenCalledWith("/repo/project", "session-1", undefined);
+    expect(createSnapshotWorkspace).toHaveBeenCalledWith("/repo/project", "session-1", undefined, undefined);
     expect(result.cwd).toBe("docker-volume://snapshot-1");
     await result.cleanup();
     expect(removeWorktree).toHaveBeenCalledWith("/repo/project", "docker-volume://snapshot-1");

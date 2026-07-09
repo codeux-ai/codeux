@@ -47,6 +47,7 @@ import type { McpApprovalTracker } from "./mcp-approval-tracker.js";
 import { getCorrelationId } from "../shared/logging/correlation-id.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import { dashboardReplyAgentMcpAccess, isSchedulerOnlyAgentMcpAccess } from "./agent-mcp-access.js";
+import { buildDefaultBranchSnapshotCheckout } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 
 interface ChatThreadRuntimeServiceDependencies {
   connectionChatRepository: ConnectionChatRepository;
@@ -1160,7 +1161,12 @@ export class ChatThreadRuntimeService {
     const dashboardSettings = this.deps.getDashboardSettings({ projectId });
     const defaultBranch = resolveEffectiveDefaultBranch(project, dashboardSettings);
     const snapshotCheckout = dashboardSettings.cliWorkflow.executionMode === "DOCKER"
-      ? { branch: defaultBranch }
+      ? buildDefaultBranchSnapshotCheckout({
+        githubMode: dashboardSettings.git?.githubMode ?? "REMOTE",
+        defaultBranch,
+        githubToken: dashboardSettings.git?.githubToken,
+        gitlabToken: dashboardSettings.git?.gitlabToken,
+      })
       : undefined;
 
     const runtimeState = thread.runtimeState || {};
@@ -1314,6 +1320,7 @@ export class ChatThreadRuntimeService {
       prompt: finalPrompt,
       repoPath: project.baseDir,
       snapshotCheckout,
+      workspaceLifecycle: continueSessionId ? "continue" : "fresh",
       mcpConnection,
       agentMcpAccess,
       mcpAgentId: respondingAgent.id,
@@ -1507,9 +1514,16 @@ export class ChatThreadRuntimeService {
         workflowSettings,
         repoPath,
         snapshotCheckout: workflowSettings.executionMode === "DOCKER"
-          ? { branch: defaultBranch }
+          ? buildDefaultBranchSnapshotCheckout({
+            githubMode: dashboardSettings.git?.githubMode ?? "REMOTE",
+            defaultBranch,
+            githubToken,
+            gitlabToken: dashboardSettings.git?.gitlabToken,
+          })
           : undefined,
+        workspaceLifecycle: "continue",
         githubToken,
+        gitlabToken: dashboardSettings.git?.gitlabToken,
         continueSessionId,
         nativeSessionOperation: "compact",
         onActivity: (desc, originator) => {

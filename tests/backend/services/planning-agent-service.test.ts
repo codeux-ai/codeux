@@ -716,7 +716,10 @@ describe("PlanningAgentService", () => {
 
     expect(continued.createdTaskIds).toHaveLength(1);
     const workspaceReuse = vi.mocked(WorkspaceManager.prototype.createOrReuseSnapshotWorkspace);
-    expect(workspaceReuse).toHaveBeenCalledWith(repoPath, expect.stringContaining(project.id));
+    expect(workspaceReuse).toHaveBeenCalledWith(repoPath, expect.stringContaining(project.id), expect.objectContaining({
+      branch: "main",
+      remoteOnly: true,
+    }));
     expect(workspaceReuse.mock.calls[0]?.[1]).toContain(sprint.id);
     expect(WorkspaceManager.prototype.removeWorktree).toHaveBeenCalledWith(repoPath, "docker-volume://planning-test");
     const call = vi.mocked(providerRunner.runProviderForText).mock.calls[0]?.[0];
@@ -808,7 +811,10 @@ describe("PlanningAgentService", () => {
     const continued = await service.restartInvocation(cancelledInvocation.id, "continue_session");
 
     expect(continued.createdTaskIds).toHaveLength(1);
-    expect(WorkspaceManager.prototype.createOrReuseSnapshotWorkspace).toHaveBeenCalledWith(repoPath, expect.stringContaining(sprint.id));
+    expect(WorkspaceManager.prototype.createOrReuseSnapshotWorkspace).toHaveBeenCalledWith(repoPath, expect.stringContaining(sprint.id), expect.objectContaining({
+      branch: "main",
+      remoteOnly: true,
+    }));
     expect(WorkspaceManager.prototype.createSnapshotWorkspace).not.toHaveBeenCalled();
     const call = vi.mocked(providerRunner.runProviderForText).mock.calls[0]?.[0];
     expect(call?.continueSessionId).toBe("native-cancelled");

@@ -1137,7 +1137,8 @@ describe("ChatThreadRuntimeService", () => {
         settings: expect.objectContaining({
           cliWorkflow: expect.objectContaining({ executionMode: "DOCKER" }),
         }),
-        snapshotCheckout: { branch: "stable" },
+        snapshotCheckout: { branch: "stable", fallbackBranch: undefined, remoteOnly: true },
+        workspaceLifecycle: "fresh",
       }),
     );
   });
