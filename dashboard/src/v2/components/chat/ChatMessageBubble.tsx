@@ -4,19 +4,21 @@ import gsap from "gsap";
 import { Check, CheckCheck, XCircle, Loader2 } from "lucide-preact";
 import type { ChatMessageRecord, AgentAvatarConfig } from "../../types.js";
 import { renderMarkdown } from "../../../lib/markdown.js";
-import { getChatWidgetData } from "../../lib/chat-widget-view-models.js";
+import { getChatWidgetData, resolveRichWidget } from "../../lib/chat-widget-view-models.js";
 import { formatChatTime } from "../../lib/chat-time.js";
 import { PlanningRequestWidget } from "./widgets/PlanningRequestWidget.js";
 import { AppCreationProgressWidget } from "./widgets/AppCreationProgressWidget.js";
 import { ExternalReferenceWidget } from "./widgets/ExternalReferenceWidget.js";
 import { LiveEntityStatusWidget } from "./widgets/LiveEntityStatusWidget.js";
+import { ReasoningWidget } from "./widgets/ReasoningWidget.js";
+import { ToolCallWidget } from "./widgets/ToolCallWidget.js";
 import { AgentMoodAside, buildAgentMoodAsideSeed, resolveAgentMoodAsideText } from "./widgets/AgentMoodAside.js";
 import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
 import { PromptSuggestionTags } from "./PromptSuggestionTags.js";
 import { resolveDisplayDeliveryStatus } from "../../hooks/use-chat-thread-data.js";
 import { useGsapDurations } from "../../lib/motion/constants.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
-import type { ChatWidgetLiveData } from "../../lib/chat-widget-view-models.js";
+import type { ChatWidgetLiveData, ParsedTurnTokens, RichWidgetDescriptor } from "../../lib/chat-widget-view-models.js";
 import type { ChatLiveEntityWidget } from "../../lib/chat-live-entities.js";
 import { getPromptSuggestionViewModels } from "../../lib/chat-suggestion-view-models.js";
 
@@ -43,7 +45,14 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
 }) => {
   const fromDashboard = message.direction === "dashboard_to_connection";
   const widgetData = getChatWidgetData(message, widgetLiveData);
-  const hasPlanningWidget = widgetData.type === "planning";
+  const richWidget = resolveRichWidget({
+    metadata: message.metadata,
+    content: message.bodyMarkdown,
+    toolCallsJson: (message.metadata?.toolCallsJson as Record<string, unknown> | undefined) ?? null,
+  });
+  const planningWidget: Extract<RichWidgetDescriptor, { kind: "planning" }> | null =
+    richWidget.kind === "planning" ? richWidget : null;
+  const hasPlanningWidget = planningWidget !== null;
   const hasExternalReferenceWidget = widgetData.type === "external_reference" && Boolean(widgetData.externalReference);
   const hasPrimaryWidget = hasPlanningWidget || hasExternalReferenceWidget;
   const hasLiveEntityWidgets = liveEntities.length > 0;
@@ -68,6 +77,34 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
       );
     }
   }, []);
+
+  if (richWidget.kind === "reasoning") {
+    return (
+      <div className="flex justify-start">
+        <div className="w-full max-w-full lg:max-w-[760px] min-w-0 pl-11">
+          <ReasoningWidget text={richWidget.text} />
+        </div>
+      </div>
+    );
+  }
+
+  if (richWidget.kind === "tool") {
+    const tokens: ParsedTurnTokens | null = richWidget.tokens;
+    return (
+      <div className="flex justify-start">
+        <div className="w-full max-w-full lg:max-w-[760px] min-w-0 pl-11">
+          <ToolCallWidget
+            toolName={richWidget.toolName}
+            status={richWidget.status}
+            args={richWidget.args}
+            output={richWidget.output}
+            tokens={tokens}
+            callId={richWidget.callId}
+          />
+        </div>
+      </div>
+    );
+  }
 
   let role: AvatarRole = "agent";
   if (fromDashboard) {
@@ -148,7 +185,11 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
           {hasWidgetSlot && (
             <div className={widgetSlotClassName}>
               {hasPlanningWidget && (
-                <PlanningRequestWidget status={widgetData.status} planName={widgetData.planName} liveStatus={widgetData.liveStatus} />
+                <PlanningRequestWidget
+                  status={planningWidget.status}
+                  planName={planningWidget.planName}
+                  liveStatus={widgetData.liveStatus}
+                />
               )}
               {hasExternalReferenceWidget && widgetData.externalReference && (
                 <ExternalReferenceWidget status={widgetData.status} reference={widgetData.externalReference} />
