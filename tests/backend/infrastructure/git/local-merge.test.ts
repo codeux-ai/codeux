@@ -841,4 +841,39 @@ describe("workerBranchHasMergeWork", () => {
       workerBranch: "task/real-work",
     })).resolves.toBe(true);
   });
+
+  it("compares resolved commit SHAs instead of full refs so Windows does not parse the range as a path", async () => {
+    const revListRanges: string[] = [];
+    const runner = vi.fn(async (_command: string, args: string[]) => {
+      if (args[0] === "show-ref") {
+        return { code: 0, stdout: "", stderr: "" };
+      }
+      if (args[0] === "rev-parse") {
+        const ref = args[2] || "";
+        if (ref.includes("task/real-work")) {
+          return { code: 0, stdout: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n", stderr: "" };
+        }
+        if (ref.includes("feature")) {
+          return { code: 0, stdout: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n", stderr: "" };
+        }
+      }
+      if (args[0] === "rev-list") {
+        revListRanges.push(args[2] || "");
+        if ((args[2] || "").includes("refs/heads/")) {
+          throw new Error("fatal: failed to stat ref range as a Windows path");
+        }
+        return { code: 0, stdout: "1\n", stderr: "" };
+      }
+      throw new Error(`unexpected git args: ${args.join(" ")}`);
+    });
+
+    await expect(workerBranchHasMergeWork({
+      repoPath: repo,
+      featureBranch: "feature",
+      workerBranch: "task/real-work",
+      runner,
+    })).resolves.toBe(true);
+
+    expect(revListRanges).toEqual(["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa..bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]);
+  });
 });

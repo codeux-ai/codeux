@@ -337,6 +337,19 @@ async function gitRevListCount(
   }
 }
 
+async function gitResolveCommit(
+  repoPath: string,
+  ref: string,
+  runner: LocalMergeRunner,
+): Promise<string | null> {
+  try {
+    const res = await runner("git", ["rev-parse", "--verify", `${ref}^{commit}`], repoPath);
+    return res.stdout.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 function formatGitError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -500,8 +513,16 @@ export async function workerBranchHasMergeWork(args: {
   }
 
   for (const sourceRef of existingSourceRefs) {
+    const sourceCommit = await gitResolveCommit(args.repoPath, sourceRef, runner);
+    if (!sourceCommit) {
+      continue;
+    }
     for (const baseRef of existingBaseRefs) {
-      if ((await gitRevListCount(args.repoPath, `${baseRef}..${sourceRef}`, runner)) > 0) {
+      const baseCommit = await gitResolveCommit(args.repoPath, baseRef, runner);
+      if (!baseCommit) {
+        continue;
+      }
+      if ((await gitRevListCount(args.repoPath, `${baseCommit}..${sourceCommit}`, runner)) > 0) {
         return true;
       }
     }
