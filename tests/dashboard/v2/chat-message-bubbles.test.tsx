@@ -1245,6 +1245,37 @@ describe("Chat Message Bubbles", () => {
       expect(getByText("default")).toBeInTheDocument();
     });
 
+    it("renders invocation tool calls as the dedicated activity widget", () => {
+      const message = createInvocationMessage({
+        id: "msg_tool_call",
+        contentMarkdown: "Raw tool transcript body",
+        toolCallsJson: {
+          arguments: JSON.stringify({ cmd: "pnpm test tests/dashboard/v2/chat-message-bubbles.test.tsx" }),
+          output: "Focused test output",
+          resultStatus: "completed",
+        },
+        metadata: {
+          kind: "tool_call",
+          toolName: "exec_command",
+          toolStatus: "failed",
+          toolCallId: "call-tool-rendering-123",
+          tokens: { input: 2, output: 5, total: 7 },
+        },
+      });
+
+      const { container } = render(<InvocationMessageBubble message={message} />);
+      const view = within(container);
+
+      expect(view.getByText("exec_command")).toBeInTheDocument();
+      expect(view.getByText("failed")).toBeInTheDocument();
+      expect(view.getByText("pnpm test tests/dashboard/v2/chat-message-bubbles.test.tsx")).toBeInTheDocument();
+      expect(container.textContent).toContain("7");
+      expect(container.textContent).not.toContain("Raw tool transcript body");
+
+      fireEvent.click(view.getByRole("button"));
+      expect(view.getByText("Focused test output")).toBeInTheDocument();
+    });
+
     it("renders AgentAvatarSvg when a linked preset avatar config is supplied for assistant", () => {
       const message: ExecutionInvocationMessageRecord = {
         id: "msg_inv_preset",

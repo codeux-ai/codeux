@@ -6,6 +6,7 @@ import {
   getInvocationWidgetData,
   getReasoningWidgetData,
   getSelfReflectionWidgetData,
+  resolveRichWidget,
   sanitizeInvocationOutputText,
 } from "../../lib/chat-widget-view-models.js";
 import { formatChatTime } from "../../lib/chat-time.js";
@@ -17,7 +18,7 @@ import { SelfReflectionWidget } from "./widgets/SelfReflectionWidget.js";
 import { LiveEntityStatusWidget } from "./widgets/LiveEntityStatusWidget.js";
 import { AgentMoodAside, buildAgentMoodAsideSeed, resolveAgentMoodAsideText } from "./widgets/AgentMoodAside.js";
 import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
-import type { ChatWidgetLiveData, ParsedTurnTokens } from "../../lib/chat-widget-view-models.js";
+import type { ChatWidgetLiveData, RichWidgetDescriptor } from "../../lib/chat-widget-view-models.js";
 import type { ChatLiveEntityWidget } from "../../lib/chat-live-entities.js";
 import type { AgentAvatarConfig } from "../../types.js";
 
@@ -59,42 +60,47 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
   const fromTool = message.role === "tool";
   const fromSystem = message.role === "system";
   const widgetData = getInvocationWidgetData(message, widgetLiveData);
-  const kind = asString(message.metadata?.kind);
-  const reasoningWidgetData = getReasoningWidgetData(message);
+  const richWidget: RichWidgetDescriptor = resolveRichWidget({
+    metadata: message.metadata,
+    content: message.contentMarkdown,
+    toolCallsJson: message.toolCallsJson,
+  });
+  const metadataKind = asString(message.metadata?.kind);
   const reflectionWidgetData = getSelfReflectionWidgetData(message);
 
   // Reasoning and tool turns render as compact, full-width activity cards
   // rather than chat bubbles, so the transcript reads like the real session.
-  if (kind === "reasoning") {
-    return (
-      <div class="flex justify-start">
-        <div class="w-full max-w-full lg:max-w-[760px] min-w-0 pl-11">
-          <ReasoningWidget {...reasoningWidgetData} />
+  switch (richWidget.kind) {
+    case "reasoning": {
+      const reasoningWidgetData = getReasoningWidgetData(message);
+      return (
+        <div class="flex justify-start">
+          <div class="w-full max-w-full lg:max-w-[760px] min-w-0 pl-11">
+            <ReasoningWidget
+              {...reasoningWidgetData}
+              text={sanitizeInvocationOutputText(richWidget.text)}
+            />
+          </div>
         </div>
-      </div>
-    );
-  }
-
-  if (kind === "tool_call" || kind === "tool_result") {
-    const tool = (message.toolCallsJson ?? {}) as Record<string, unknown>;
-    const args = sanitizeInvocationOutputText(asString(tool.arguments) || "");
-    const output = sanitizeInvocationOutputText(asString(tool.output) || "");
-    const status = asString(message.metadata?.toolStatus) ?? asString(tool.resultStatus);
-    const tokens = (message.metadata?.tokens ?? null) as ParsedTurnTokens | null;
-    return (
-      <div class="flex justify-start">
-        <div class="w-full max-w-full lg:max-w-[760px] min-w-0 pl-11">
-          <ToolCallWidget
-            toolName={asString(message.metadata?.toolName)}
-            status={status}
-            args={args}
-            output={output}
-            tokens={tokens}
-            callId={asString(message.metadata?.toolCallId)}
-          />
+      );
+    }
+    case "tool":
+      return (
+        <div class="flex justify-start">
+          <div class="w-full max-w-full lg:max-w-[760px] min-w-0 pl-11">
+            <ToolCallWidget
+              toolName={richWidget.toolName}
+              status={richWidget.status}
+              args={richWidget.args}
+              output={richWidget.output}
+              tokens={richWidget.tokens}
+              callId={richWidget.callId}
+            />
+          </div>
         </div>
-      </div>
-    );
+      );
+    default:
+      break;
   }
 
   if (reflectionWidgetData) {
@@ -125,7 +131,7 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
   const errorLabel = formatErrorCategory(message.metadata?.errorCategory);
   const createdAtLabel = formatChatTime(message.createdAt);
   const isExternalApi = Boolean(message.metadata?.isExternalApi);
-  const hasPrimaryWidget = widgetData.type === "planning"
+  const hasPrimaryWidget = richWidget.kind === "planning"
     || (widgetData.type === "external_reference" && Boolean(widgetData.externalReference));
   const hasLiveEntities = !fromTool && liveEntities.length > 0;
   const liveEntitySlotClass = hasPrimaryWidget
@@ -198,7 +204,7 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
 
           <AgentMoodAside text={moodAsideText} />
 
-          {message.toolCallsJson && !kind && (
+          {message.toolCallsJson && !metadataKind && (
             <div className="mt-4 rounded border border-slate-200 bg-slate-200/30 p-3 text-xs dark:border-white/10 dark:bg-black/20">
               <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-slate-600 dark:text-slate-400">
                 {JSON.stringify(message.toolCallsJson, null, 2)}
@@ -207,11 +213,11 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
           )}
 
           {/* Widget Slot */}
-          {widgetData.type === "planning" && (
+          {richWidget.kind === "planning" && (
             <div className="mt-4 border-t border-white/5 pt-4">
               <PlanningRequestWidget
-                status={widgetData.status}
-                planName={widgetData.planName}
+                status={richWidget.status}
+                planName={richWidget.planName}
                 liveStatus={widgetData.liveStatus}
                 executionPlan={widgetData.executionPlan}
               />
