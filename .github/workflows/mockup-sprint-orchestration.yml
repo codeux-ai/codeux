@@ -42,6 +42,16 @@ jobs:
       - name: Run CI DAG orchestration validation
         run: pnpm run test:orchestration:ci-dag:run
 
+      - name: Upload CI DAG orchestration artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mockup-diagnostic-ubuntu-latest-docker
+          path: .cache/e2e-mockup-sprint-pentest/
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 7
+
   electron-ci-dag:
     name: Electron CI DAG (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
@@ -110,3 +120,13 @@ jobs:
 
       - name: Run Electron CI DAG orchestration validation
         run: pnpm run test:orchestration:ci-dag:electron:run
+
+      - name: Upload Electron CI DAG orchestration artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mockup-diagnostic-${{ matrix.os }}-electron
+          path: .cache/e2e-mockup-sprint-pentest/
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 7

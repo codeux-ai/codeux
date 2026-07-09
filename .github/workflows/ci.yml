@@ -288,10 +288,21 @@ jobs:
         run: pnpm run audit
 
   package-smoke:
-    name: 07 Package / npm install smoke
+    name: 07 Package / npm install smoke (${{ matrix.os.label }})
     needs: [static, build, backend-tests, dashboard-tests, security-audit]
-    runs-on: ubuntu-latest
-    timeout-minutes: 8
+    runs-on: ${{ matrix.os.runner }}
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        os:
+          - runner: ubuntu-latest
+            label: Linux
+          - runner: macos-latest
+            label: macOS
+          - runner: windows-latest
+            label: Windows
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -309,6 +320,7 @@ jobs:
           package-manager-cache: false
 
       - name: Restore node_modules cache
+        if: runner.os != 'Windows'
         uses: actions/cache@v5
         with:
           path: node_modules
@@ -324,9 +336,25 @@ jobs:
           path: .
 
       - name: Verify npm tarball install from artifact
-        run: node scripts/verify-release-install.mjs
+        run: pnpm run test:installed-package
         env:
           CODE_UX_SKIP_RELEASE_INSTALL_BUILD: "1"
+          CODE_UX_KEEP_RELEASE_INSTALL_TEMP: "1"
+          TMPDIR: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TEMP: ${{ runner.temp }}
+
+      - name: Upload installed-package failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-package-${{ matrix.os.runner }}
+          path: |
+            ${{ runner.temp }}/codeux-release-install-*/
+            ${{ runner.temp }}/codeux-installed-package-e2e-*/
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 7
 
   ci-dag:
     name: 08 Orchestration / ${{ matrix.name }} DAG

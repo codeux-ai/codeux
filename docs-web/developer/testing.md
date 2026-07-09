@@ -39,7 +39,7 @@ pnpm exec playwright test --project=navigation
 
 `playwright.config.ts` keeps `testDir: './tests/e2e'` and defines purpose projects selected by directory glob: `navigation`, `settings`, `projects`, `tasks`, `agents`, and `config`. Add new E2E specs under `tests/e2e/<purpose>/` so suites can grow without editing the config. Use `pnpm exec playwright test --list` to confirm discovery, or `pnpm exec playwright test --project=tasks` to run one group. The `navigation` project includes Docs page smoke coverage for `/docs`, the docs overview, dashboard overview, and representative sample pages.
 
-In GitHub Actions, `.github/workflows/playwright.yml` builds once per OS, uploads `dist/`, `dashboard/dist/`, and `.cache/tsc/` together as an OS-scoped artifact, then runs each purpose project in parallel against the restored build. A separate npm-package job packs the package, installs the tarball into a clean project, and runs the installed CLI help command independently of the source checkout.
+In GitHub Actions, the automatic `.github/workflows/ci.yml` lane downloads the shared `codeux-build-linux` artifact and runs every Playwright purpose project on Linux, macOS, and Windows. The manual `.github/workflows/playwright.yml` workflow is diagnostics-only and keeps the same purpose-project matrix for focused reruns. The installed-package lane also downloads the shared build artifact, packs the artifact-backed workspace, installs it into a clean npm project, checks the installed CLI help path, starts the installed runtime, verifies `/health` plus dashboard assets, and runs a credential-free `mockup-cli` sprint on Linux, macOS, and Windows.
 
 Use `tests/e2e/helpers/prepare-app.ts` and `tests/e2e/helpers/e2e-fixtures.ts` for deterministic browser tests that need onboarding completion, dashboard tour suppression, selected Code UX projects, public-API sprint/task seeding, temporary git repositories, local-git HOST execution, QA-disabled project settings, or API polling. The fake provider supports prompt markers such as `[mock-provider:sleep=250]`, `[mock-provider:fail]`, `[mock-provider:exit=2]`, `[mock-provider:no-op]`, and `[mock-provider:write=relative/path.txt]`.
 
@@ -114,7 +114,7 @@ It is staged as:
 
 1. `01 Preflight / release policy`: strict version bump gate for pull requests targeting `main`.
 2. `02` through `06`: type/guardrail validation, build, backend coverage, dashboard tests, and security audit.
-3. `07 Package`: npm tarball install smoke from the shared build artifact, including installed-bin startup, `/health`, dashboard static assets, and a credential-free `mockup-cli` runtime path.
+3. `07 Package`: npm tarball install smoke from the shared build artifact on Linux, macOS, and Windows, including installed-bin startup, `/health`, dashboard static assets, and a credential-free `mockup-cli` runtime path. Failed entries upload preserved verifier temp workspaces.
 4. `08 Orchestration`: one shared OS matrix from the build artifact, with Linux Docker DAG validation and macOS/Windows Electron DAG validation.
 5. `09`: full Playwright on Linux, macOS, and Windows from one shared matrix template.
 6. `10`: unsigned desktop release-candidate packages with `--publish never`, started after package smoke so packaging can run beside E2E and orchestration.
@@ -139,6 +139,8 @@ pnpm run test:installed-package
 ```
 
 This runs `node scripts/verify-release-install.mjs`, installs the local tarball into a temporary npm project, starts the installed `codeux` bin through Node with isolated home and ports, checks `/health` plus built dashboard assets, and runs a tiny local-git sprint through the packaged `mockup-cli` provider. The smoke uses host-git E2E guards without pointing the provider shim at a source-checkout script.
+
+CI runs the same script through `pnpm run test:installed-package` with `CODE_UX_SKIP_RELEASE_INSTALL_BUILD=1` after restoring the shared build artifact. It sets the verifier temp directory to the runner temp root and uploads the kept `codeux-release-install-*` and `codeux-installed-package-e2e-*` directories when a matrix entry fails.
 
 ## Performance & flakiness
 
