@@ -281,6 +281,7 @@ export class ProviderRunner implements IProviderRunner {
     const providerEnv = this.withProviderEnv(provider, runModel, apiKey, workflowSettings, githubToken, providerMountAuth, input, qwenProcessLogDir, gitlabToken);
     if (provider === "mockup-cli") {
       providerEnv.CODE_UX_MOCKUP_SESSION_ID = sessionId;
+      providerEnv.CODE_UX_MOCKUP_PURPOSE = input.purpose || "";
     }
     let nativeSessionId = provider === "opencode"
       ? isOpenCodeNativeSessionId(input.continueSessionId) ? input.continueSessionId! : null
@@ -392,6 +393,7 @@ export class ProviderRunner implements IProviderRunner {
           cwd,
           model: runModel,
           sessionId,
+          purpose: input.purpose,
           env: providerEnv,
           signal,
           onStdoutLine: (line) => trackingOnActivity(line, "agent"),

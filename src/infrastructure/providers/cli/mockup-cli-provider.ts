@@ -12,6 +12,7 @@ const prompt = process.argv[1] || "";
 const cwd = process.cwd();
 const sessionId = process.env.CODE_UX_MOCKUP_SESSION_ID || "mockup-session";
 const model = process.env.CODE_UX_MOCKUP_MODEL || "default";
+const purpose = process.env.CODE_UX_MOCKUP_PURPOSE || "";
 
 function stableId() {
   return "mockup-cli-" + crypto.createHash("sha256").update(sessionId).digest("hex").slice(0, 16);
@@ -45,6 +46,98 @@ function resolveWorkspacePath(rawPath) {
 
 function addWrite(operations, mode, rawPath, rawContent) {
   operations.push({ type: mode, filePath: rawPath.trim(), content: normalizeContent(rawContent) });
+}
+
+function isQaReviewInvocation() {
+  return purpose === "qa_review";
+}
+
+function currentTaskKeyFromPrompt() {
+  const match = prompt.match(/^Task key:\s*(\S+)/m);
+  return match ? match[1].trim() : null;
+}
+
+function qaReviewPayload(overrides) {
+  return {
+    verdict: overrides.verdict,
+    summary: overrides.summary,
+    findings: overrides.findings || [],
+    fixInstructions: overrides.fixInstructions || null,
+    targetTaskKey: overrides.targetTaskKey === undefined ? null : overrides.targetTaskKey,
+    shouldHavePr: overrides.shouldHavePr === undefined ? null : overrides.shouldHavePr,
+    followUpTasks: overrides.followUpTasks || [],
+  };
+}
+
+function parseQaReviewDirective() {
+  if (!isQaReviewInvocation()) {
+    return null;
+  }
+
+  for (const rawLine of prompt.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    if (/^mockup-cli:qa\s+fail\b/i.test(line)) {
+      return { failure: true };
+    }
+
+    let match = line.match(/^mockup-cli:qa\s+pass(?:\s*::\s*(.*))?$/i);
+    if (match) {
+      const summary = normalizeContent(match[1] || "Mockup QA passed deterministic review.");
+      return {
+        payload: qaReviewPayload({
+          verdict: "pass",
+          summary,
+          findings: ["Mockup QA completed deterministic pass review."],
+        }),
+      };
+    }
+
+    match = line.match(/^mockup-cli:qa\s+changes-requested\s+follow-up\s*::\s*(.+?)\s*=>\s*(.+)$/i);
+    if (match) {
+      const title = normalizeContent(match[1]);
+      const promptMarkdown = normalizeContent(match[2]);
+      return {
+        payload: qaReviewPayload({
+          verdict: "changes_requested",
+          summary: "Mockup QA requested deterministic follow-up work.",
+          findings: ["Mockup QA requested a deterministic follow-up task."],
+          fixInstructions: null,
+          targetTaskKey: currentTaskKeyFromPrompt(),
+          followUpTasks: [{
+            title,
+            promptMarkdown,
+            description: "Created by mockup-cli QA review directive.",
+            dependsOnTaskKeys: [],
+            priority: "medium",
+          }],
+        }),
+      };
+    }
+
+    match = line.match(/^mockup-cli:qa\s+changes-requested(?:\s+fix)?\s*::\s*(.+)$/i);
+    if (match) {
+      const fixInstructions = normalizeContent(match[1]);
+      return {
+        payload: qaReviewPayload({
+          verdict: "changes_requested",
+          summary: "Mockup QA requested deterministic changes.",
+          findings: ["Mockup QA requested deterministic fixes."],
+          fixInstructions,
+          targetTaskKey: currentTaskKeyFromPrompt(),
+        }),
+      };
+    }
+  }
+
+  return {
+    payload: qaReviewPayload({
+      verdict: "pass",
+      summary: "Mockup QA passed deterministic review.",
+      findings: ["Mockup QA completed deterministic pass review."],
+    }),
+  };
 }
 
 function hasConflictMarkers(content) {
@@ -357,6 +450,27 @@ function runValidation(command) {
 }
 
 async function main() {
+  const qaReviewDirective = parseQaReviewDirective();
+  if (qaReviewDirective?.failure) {
+    const failure = {
+      provider: "mockup-cli",
+      model,
+      ok: false,
+      nativeSessionId: stableId(),
+      response: "Mockup CLI intentional QA failure directive triggered.",
+      usage: { mock: true, inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      actions: [],
+      validation: [],
+    };
+    console.log(JSON.stringify(failure));
+    console.error("mockup-cli intentional QA failure directive triggered");
+    process.exit(1);
+  }
+  if (qaReviewDirective?.payload) {
+    console.log(JSON.stringify(qaReviewDirective.payload));
+    return;
+  }
+
   if (/\b(MOCKUP_CLI_FAIL|MOCKUP_FAIL|mockup-cli:\s*fail|explicit mock failure)\b/i.test(prompt)) {
     const failure = {
       provider: "mockup-cli",
@@ -421,6 +535,7 @@ export async function runMockupCliProvider(input: {
   cwd: string;
   model: string;
   sessionId: string;
+  purpose?: string | null;
   env: NodeJS.ProcessEnv;
   signal?: AbortSignal;
   onStdoutLine?: (line: string) => void;
@@ -433,6 +548,7 @@ export async function runMockupCliProvider(input: {
       env: {
         ...input.env,
         CODE_UX_MOCKUP_MODEL: input.model || "default",
+        CODE_UX_MOCKUP_PURPOSE: input.purpose || "",
         CODE_UX_MOCKUP_SESSION_ID: input.sessionId,
       },
       stdio: ["ignore", "pipe", "pipe"],

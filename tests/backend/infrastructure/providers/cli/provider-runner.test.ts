@@ -5,6 +5,7 @@ import * as path from "path";
 import { runStreamingCommand } from "../../../../../src/services/cli-process-runner.js";
 import { ProviderRunner } from "../../../../../src/infrastructure/providers/cli/provider-runner.js";
 import { resolveEffectiveModel } from "../../../../../src/services/provider-execution-service.js";
+import { normalizeQaReviewResult } from "../../../../../src/domain/qa-review/qa-review-result-normalizer.js";
 
 vi.mock("../../../../../src/services/cli-process-runner.js", () => ({
   runStreamingCommand: vi.fn(async () => ({
@@ -159,6 +160,138 @@ describe("ProviderRunner", () => {
     expect(result.stderr).toContain("mockup-cli intentional failure directive triggered");
     expect(result.text).toBe("Mockup CLI intentional failure directive triggered.");
     expect(result.nativeSessionId).toMatch(/^mockup-cli-[0-9a-f]{16}$/);
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
+  it("returns parseable deterministic QA pass results for qa_review invocations", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-qa-pass-"));
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: "mockup-cli:qa pass :: deterministic QA pass",
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-qa-pass",
+      purpose: "qa_review",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    const review = normalizeQaReviewResult(result.text);
+    expect(result.ok).toBe(true);
+    expect(review.verdict).toBe("pass");
+    expect(review.summary).toBe("deterministic QA pass");
+    expect(review.fixInstructions).toBeNull();
+    expect(review.followUpTasks).toEqual([]);
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
+  it("returns parseable deterministic QA changes-requested fix instructions", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-qa-fix-"));
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: [
+        "Task key: QA-FIX",
+        "mockup-cli:qa changes-requested fix :: Add the missing regression check.",
+      ].join("\n"),
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-qa-fix",
+      purpose: "qa_review",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    const review = normalizeQaReviewResult(result.text);
+    expect(result.ok).toBe(true);
+    expect(review.verdict).toBe("changes_requested");
+    expect(review.fixInstructions).toBe("Add the missing regression check.");
+    expect(review.targetTaskKey).toBe("QA-FIX");
+    expect(review.followUpTasks).toEqual([]);
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
+  it("returns parseable deterministic QA changes-requested follow-up tasks", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-qa-follow-up-"));
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: "mockup-cli:qa changes-requested follow-up :: Add QA regression task => mockup-cli:write test/qa-regression.txt :: covered",
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-qa-follow-up",
+      purpose: "qa_review",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    const review = normalizeQaReviewResult(result.text);
+    expect(result.ok).toBe(true);
+    expect(review.verdict).toBe("changes_requested");
+    expect(review.fixInstructions).toBeNull();
+    expect(review.followUpTasks).toEqual([expect.objectContaining({
+      title: "Add QA regression task",
+      promptMarkdown: "mockup-cli:write test/qa-regression.txt :: covered",
+      priority: "medium",
+    })]);
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
+  it("returns a nonzero mockup-cli failure for explicit QA failure directives", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-qa-fail-"));
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: "mockup-cli:qa fail",
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-qa-fail",
+      purpose: "qa_review",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("mockup-cli intentional QA failure directive triggered");
+    expect(result.text).toBe("Mockup CLI intentional QA failure directive triggered.");
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
+  it("keeps mockup-cli path traversal protection for explicit writes", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-path-safe-"));
+    const outsidePath = path.join(path.dirname(repoPath), "mockup-cli-path-traversal.txt");
+    await fs.rm(outsidePath, { force: true });
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: "mockup-cli:write ../mockup-cli-path-traversal.txt :: outside",
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-path-safe",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.text).toContain("mockup-cli refused to write outside the provider workspace");
+    await expect(fs.access(outsidePath)).rejects.toThrow();
 
     await fs.rm(repoPath, { recursive: true, force: true });
   });
