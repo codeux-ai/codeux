@@ -40,7 +40,7 @@ export const LaunchContainerPanel: FunctionComponent<LaunchContainerPanelProps> 
 
   return (
     <div
-      className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]"
+      className="rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-5 shadow-[var(--elevation-base)] backdrop-blur-xl"
       role="region"
       aria-labelledby="launch-container-title"
       aria-busy={launchBusy}
