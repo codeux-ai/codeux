@@ -843,7 +843,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     actionRequiredProtocol: true,
     statusTable: true,
     watchLoop: true,
-    watchLoopIntervalSeconds: 10,
+    watchLoopIntervalSeconds: 1,
     watchLoopOutputIntervalSeconds: 300,
   },
   cliWorkflow: {

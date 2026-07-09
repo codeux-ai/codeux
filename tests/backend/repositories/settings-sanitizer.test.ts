@@ -157,7 +157,7 @@ describe("settings-sanitizer", () => {
     expect(settings.ciIntelligence.mainBranchAutoMergeMode).toBe("ALWAYS");
     expect(settings.ciIntelligence.resolveMergeConflicts).toBe(true);
     expect(settings.ciIntelligence.resolveMainMergeConflicts).toBe(true);
-    expect(settings.sprintLoopSteps.watchLoopIntervalSeconds).toBe(10);
+    expect(settings.sprintLoopSteps.watchLoopIntervalSeconds).toBe(1);
     expect(settings.sprintLoopSteps.watchLoopOutputIntervalSeconds).toBe(300);
     expect(settings.cliWorkflow.executionMode).toBe("DOCKER");
     expect(settings.cliWorkflow.containerImage).toBe("node:24-bookworm");

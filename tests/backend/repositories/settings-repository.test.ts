@@ -208,7 +208,7 @@ describe("SettingsRepository", () => {
           actionRequiredProtocol: true,
           statusTable: true,
           watchLoop: true,
-          watchLoopIntervalSeconds: 10,
+          watchLoopIntervalSeconds: 1,
           watchLoopOutputIntervalSeconds: 300,
         },
         cliWorkflow: {
@@ -713,7 +713,7 @@ describe("SettingsRepository", () => {
 
     const effectiveSprint = repo.resolveSprintDashboardSettings("project-partial", "sprint-partial");
     expect(effectiveSprint.settings.sprintLoopSteps.watchLoop).toBe(false);
-    expect(effectiveSprint.settings.sprintLoopSteps.watchLoopIntervalSeconds).toBe(10);
+    expect(effectiveSprint.settings.sprintLoopSteps.watchLoopIntervalSeconds).toBe(1);
     expect(effectiveSprint.settings.git.defaultBranch).toBe("develop");
     expect(effectiveSprint.settings.git.featureBranchPrefix).toBe("work/");
     expect(effectiveSprint.sources["sprintLoopSteps.watchLoop"]).toBe("sprint");
@@ -1251,7 +1251,7 @@ describe("SettingsRepository", () => {
     const afterSystemReset = resolver.resolveSprintDashboardSettings("project-1", "sprint-1");
     expect(afterSystemReset).not.toBe(afterSprintMutation);
     expect(afterSystemReset.settings.git.defaultBranch).toBe("main");
-    expect(afterSystemReset.settings.sprintLoopSteps.watchLoopIntervalSeconds).toBe(10);
+    expect(afterSystemReset.settings.sprintLoopSteps.watchLoopIntervalSeconds).toBe(1);
   });
 
   it("resolves default autoApprovePlan as true, and preserves explicit false", async () => {

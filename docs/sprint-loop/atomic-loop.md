@@ -135,7 +135,7 @@ For `status` and `orchestrate`, each cycle follows the strict execution order de
 
 When `action=orchestrate`, `wait` is true, and `watchLoop` is enabled:
 - Orchestrator executes continuous cycles.
-- Wait interval is 10 seconds between cycles.
+- The default wait interval is 1 second between cycles and remains configurable per scope. Explicit existing project or sprint overrides are preserved.
 - Checkpoint reports (based on `watchLoopOutputIntervalSeconds`) are emitted without ending the run. The checkpoint boundary is used to renew heartbeats and leases inside the same sprint run, keeping it alive while resetting the checkpoint window.
 - The loop continuously observes pause and cancel interventions at the top of each cycle.
 - Finalisation only runs on terminal conditions.
