@@ -1704,4 +1704,62 @@ describe("ProjectManagementRepository", () => {
 
     expect(updated.mergeIndicator).toBeNull();
   });
+
+  it("keeps a fresh merge conflict marker after the resolved worker retry was consumed", async () => {
+    const { repository, storage } = await createRepository();
+    const project = repository.createProject({
+      name: "Consumed Resolved Conflict",
+      sourceType: "local",
+      sourceRef: "/workspace/consumed-resolved-conflict",
+    });
+    const sprint = repository.createSprint(project.id, {
+      name: "Sprint 1",
+    });
+    const task = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Retry conflict task",
+      promptMarkdown: "Resolve the branch conflict.",
+      status: "coding_completed",
+    });
+
+    const now = "2026-07-07T12:00:00.000Z";
+    storage.getDatabase().getRawDatabase().prepare(`
+      INSERT INTO project_attention_items (
+        id, project_id, sprint_id, task_id, sprint_run_id, dispatch_id,
+        attention_type, severity, owner_type, status, assigned_worker_endpoint_id,
+        title, summary_markdown, payload_json, opened_at, claimed_at, resolved_at, updated_at
+      ) VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL, ?, ?)
+    `).run(
+      "consumed-resolved-conflict-attention",
+      project.id,
+      sprint.id,
+      task.id,
+      "merge_conflict",
+      "high",
+      "worker",
+      "resolved",
+      "Merge conflict for T01",
+      "Virtual worker resolved this conflict.",
+      JSON.stringify({
+        resolutionReason: "virtual_worker_merge_conflict_already_resolved",
+        branchMergeRetryConsumed: true,
+        conflictingBranches: {
+          source: "task/consumed-resolved-conflict-t01",
+          target: "feature/consumed-resolved-conflict",
+        },
+      }),
+      now,
+      now,
+      now,
+    );
+
+    const updated = repository.updateTask(task.id, {
+      status: "coding_completed",
+      mergeIndicator: "MERGE_CONFLICT",
+      mergeConflictSourceBranch: "task/consumed-resolved-conflict-t01",
+      mergeConflictTargetBranch: "feature/consumed-resolved-conflict",
+    });
+
+    expect(updated.mergeIndicator).toBe("MERGE_CONFLICT");
+  });
 });

@@ -33,6 +33,10 @@ Run `pnpm run test:orchestration:large-dag` for a heavy 129-task DAG with 96 lea
 5. Verify worker-owned main-merge attention remains open until an actual temporary-worktree merge succeeds.
 6. Verify the final local default branch contains the merge commit and the run is terminal `completed`.
 
+## Merge-Conflict Attention Churn
+
+If a task shows `MERGE_CONFLICT` while the matching attention item opens and immediately dismisses, inspect the resolved worker item payload. Rows with `branchMergeRetryConsumed: true` must not suppress a fresh conflict marker after the retry fails. Use `project_attention_items.payload_json`, the task `merge_indicator`, and runtime status sync logs to confirm the consumed retry is ignored by suppression.
+
 ## Dirty checkout cases
 
 | Case | Expected behavior |

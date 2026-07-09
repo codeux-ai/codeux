@@ -875,6 +875,7 @@ export class ProjectManagementRepository {
           'virtual_worker_merge_conflict_resolved',
           'virtual_worker_merge_conflict_already_resolved'
         )
+        AND COALESCE(json_extract(payload_json, '$.branchMergeRetryConsumed'), 0) != 1
         AND json_extract(payload_json, '$.conflictingBranches.source') = ?
         AND json_extract(payload_json, '$.conflictingBranches.target') = ?
       LIMIT 1

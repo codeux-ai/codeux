@@ -1476,4 +1476,79 @@ describe("ProjectRuntimeRepository", () => {
 
     expect(projectRepository.getTask(task.id)?.mergeIndicator).toBeNull();
   });
+
+  it("keeps a runtime merge conflict after the resolved worker retry was consumed", async () => {
+    const { projectRepository, runtimeRepository, storage } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Consumed Resolved Conflict Project",
+      sourceType: "local",
+      sourceRef: "/workspace/consumed-resolved-conflict",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Consumed Resolved Conflict Sprint",
+      number: 32,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Merge retry",
+      promptMarkdown: "Resolve a conflict.",
+      status: "coding_completed",
+    });
+
+    const now = "2026-07-07T12:00:00.000Z";
+    storage.getDatabase().getRawDatabase().prepare(`
+      INSERT INTO project_attention_items (
+        id, project_id, sprint_id, task_id, sprint_run_id, dispatch_id,
+        attention_type, severity, owner_type, status, assigned_worker_endpoint_id,
+        title, summary_markdown, payload_json, opened_at, claimed_at, resolved_at, updated_at
+      ) VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL, ?, ?)
+    `).run(
+      "consumed-resolved-conflict-attention",
+      project.id,
+      sprint.id,
+      task.id,
+      "merge_conflict",
+      "high",
+      "worker",
+      "resolved",
+      "Merge conflict for T01",
+      "Virtual worker resolved this conflict.",
+      JSON.stringify({
+        resolutionReason: "virtual_worker_merge_conflict_already_resolved",
+        branchMergeRetryConsumed: true,
+        conflictingBranches: {
+          source: "task/consumed-resolved-conflict-t01",
+          target: "feature/consumed-resolved-conflict",
+        },
+      }),
+      now,
+      now,
+      now,
+    );
+
+    runtimeRepository.syncDashboardStatus({
+      project_id: project.id,
+      sprint_id: sprint.id,
+      sprint_number: 32,
+      feature_branch: "feature/consumed-resolved-conflict",
+      subtasks: [
+        {
+          id: "T01",
+          record_id: task.id,
+          title: "Merge retry",
+          prompt: "Resolve a conflict.",
+          depends_on: [],
+          status: "CODING_COMPLETED",
+          worker_branch: "task/consumed-resolved-conflict-t01",
+          merge_indicator: "MERGE_CONFLICT",
+        },
+      ],
+      reportText: "The merge retry still conflicts.",
+    });
+
+    expect(projectRepository.getTask(task.id)?.mergeIndicator).toBe("MERGE_CONFLICT");
+  });
 });

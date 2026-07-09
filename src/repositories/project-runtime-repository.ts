@@ -220,6 +220,7 @@ export class ProjectRuntimeRepository {
                       'virtual_worker_merge_conflict_resolved',
                       'virtual_worker_merge_conflict_already_resolved'
                     )
+                    AND COALESCE(json_extract(payload_json, '$.branchMergeRetryConsumed'), 0) != 1
                     AND (? IS NULL OR json_extract(payload_json, '$.conflictingBranches.source') = ?)
                     AND (? IS NULL OR json_extract(payload_json, '$.conflictingBranches.target') = ?)
                 )
