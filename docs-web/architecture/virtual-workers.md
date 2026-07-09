@@ -124,6 +124,8 @@ Each dispatch operates on its own Git worktree under `<repo>/.worktrees/<session
 
 Cleanup of terminal CLI worktrees also runs at sprint finalisation.
 
+Docker-backed planning uses a read-only snapshot workspace instead of a mutable task worktree. In `REMOTE` git mode, fresh planning invocations refresh `origin` and check out only `origin/<branch>` for the sprint feature branch or active branch, using the effective runtime git default branch as the fallback. If that remote tracking ref or fallback cannot be prepared, planning fails instead of falling back to a stale local branch. Restart and Continue reuse the preserved snapshot workspace so cancelled or interrupted provider sessions can still resume.
+
 ## Session lifecycle
 
 Within a dispatch, the session poll loop runs:

@@ -20,7 +20,7 @@ import { buildProviderPrompt, DEFAULT_CLI_WORKFLOW_SETTINGS } from "./cli-workfl
 import { buildReadFileRetryPrompt, isReadFileNotFoundToolError } from "./cli-workflow-text-utils.js";
 import { ProviderRunner, type IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
-import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
+import { WorkspaceManager, type SnapshotCheckout } from "../infrastructure/providers/cli/workspace-manager.js";
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import { resolveProviderForInvocation } from "./provider-routing.js";
 import { parsePlannedSprintReply, PlanningParseError } from "./planning-json-extractor.js";
@@ -34,6 +34,7 @@ import { ProviderInvocationCancelledError, StructuredProviderResponseService } f
 import { waitUntil } from "../shared/polling/wait-until.js";
 import { LEARNINGS_FILENAME } from "../contracts/memory-types.js";
 import * as PlanningPromptBuilder from "./planning-prompt-builder.js";
+import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
 
 interface PlanningAgentServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
@@ -218,6 +219,7 @@ export class PlanningAgentService {
         settings: runtime.settings,
         rawPrompt: prompt,
         overrides: input.overrides,
+        fallbackBranch: runtime.settings.git.defaultBranch || project.defaultBranch,
         signal,
         parseFn: (bodyMarkdown) => this.parseJsonReply<{ goal?: string }>(bodyMarkdown),
         buildRetryPrompt: (lastError) => [
@@ -278,8 +280,8 @@ export class PlanningAgentService {
     if (!invocation) {
       throw new Error(`Execution invocation not found: ${invocationId}`);
     }
-    if (invocation.status !== "failed") {
-      throw new Error("Only failed planning invocations can be restarted.");
+    if (invocation.status !== "failed" && invocation.status !== "cancelled") {
+      throw new Error("Only failed or cancelled planning invocations can be restarted.");
     }
     if (invocation.type !== "planning") {
       throw new Error(`Invocation type "${invocation.type}" does not support manual restart yet.`);
@@ -398,6 +400,8 @@ export class PlanningAgentService {
         settings: runtime.settings,
         rawPrompt: prompt,
         overrides: options.overrides,
+        preferredBranch: sprint.featureBranch || undefined,
+        fallbackBranch: runtime.settings.git.defaultBranch || project.defaultBranch,
         continuation,
         signal,
         parseFn: (bodyMarkdown) => parsePlannedSprintReply(bodyMarkdown, { allowedAgentPresetIds }),
@@ -611,6 +615,8 @@ export class PlanningAgentService {
     settings: DashboardSettings;
     rawPrompt: string;
     overrides?: PlanningOverrides;
+    preferredBranch?: string;
+    fallbackBranch?: string | null;
     signal?: AbortSignal;
     parseFn: (bodyMarkdown: string) => T;
     buildRetryPrompt: (lastError: Error) => string;
@@ -692,12 +698,19 @@ export class PlanningAgentService {
     let cleanupWorkspace: (() => Promise<void>) | undefined;
     if (workflowSettings.executionMode === "DOCKER") {
       const workspaceSessionId = this.buildPlanningWorkspaceSessionId(args.projectId, args.sprintId);
-      snapshotWorkspace = args.continuation
+      const snapshotCheckout = await this.resolvePlanningSnapshotCheckout({
+        repoPath: args.repoPath,
+        settings: args.settings,
+        preferredBranch: args.preferredBranch,
+        fallbackBranch: args.fallbackBranch,
+      });
+      const shouldReuseSnapshot = Boolean(args.continuation);
+      snapshotWorkspace = shouldReuseSnapshot
         ? await this.workspaceManager.createOrReuseSnapshotWorkspace(args.repoPath, workspaceSessionId)
         : await this.workspaceManager.createSnapshotWorkspace(
           args.repoPath,
           workspaceSessionId,
-          undefined,
+          snapshotCheckout,
           // Planning only reads the current tree to draft tasks; it never needs the repo's other
           // (often thousands of) accumulated branches, so seed just the checkout branch.
           { singleBranch: true },
@@ -840,6 +853,38 @@ export class PlanningAgentService {
 
   private buildPlanningWorkspaceSessionId(projectId: string, sprintId: string | null): string {
     return `planning-${projectId}-${sprintId || "project"}`;
+  }
+
+  private async resolvePlanningSnapshotCheckout(args: {
+    repoPath: string;
+    settings: DashboardSettings;
+    preferredBranch?: string;
+    fallbackBranch?: string | null;
+  }): Promise<SnapshotCheckout | undefined> {
+    if (args.settings.git.githubMode !== "REMOTE") {
+      return undefined;
+    }
+
+    const fallbackBranch = args.fallbackBranch?.trim() || args.settings.git.defaultBranch?.trim() || undefined;
+    const currentBranch = await this.workspaceManager.resolveCurrentBranch(args.repoPath).catch(() => null);
+    const branch = args.preferredBranch?.trim() || currentBranch?.trim() || fallbackBranch;
+
+    try {
+      await syncRemoteBranchIfAvailable(args.repoPath, branch, {
+        githubToken: args.settings.git.githubToken,
+        gitlabToken: args.settings.git.gitlabToken,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const branchLabel = branch || fallbackBranch || "the requested branch";
+      throw new Error(`Failed to refresh origin before planning from ${branchLabel}: ${message}`);
+    }
+
+    return {
+      branch,
+      fallbackBranch: fallbackBranch && fallbackBranch !== branch ? fallbackBranch : undefined,
+      remoteOnly: true,
+    };
   }
 
   private buildMemoryContext(projectId: string, sprintId: string | null, agentPresetId: string): string | undefined {

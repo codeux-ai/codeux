@@ -12,6 +12,7 @@ import { AgentPresetSyncService } from "../../../src/services/agent-preset-sync-
 import { PlanningAgentService } from "../../../src/services/planning-agent-service.js";
 import type { IProviderRunner } from "../../../src/infrastructure/providers/cli/provider-runner.js";
 import { WorkspaceManager } from "../../../src/infrastructure/providers/cli/workspace-manager.js";
+import * as gitBranchSyncService from "../../../src/services/git-branch-sync-service.js";
 
 const tempDirs: string[] = [];
 
@@ -23,6 +24,8 @@ afterEach(async () => {
 
 describe("PlanningAgentService Integration", () => {
   beforeEach(() => {
+    vi.spyOn(gitBranchSyncService, "syncRemoteBranchIfAvailable")
+      .mockResolvedValue(true);
     vi.spyOn(WorkspaceManager.prototype, "createSnapshotWorkspace")
       .mockResolvedValue("docker-volume://planning-test");
     vi.spyOn(WorkspaceManager.prototype, "createOrReuseSnapshotWorkspace")
@@ -309,6 +312,56 @@ describe("PlanningAgentService Integration", () => {
     expect(messages.length).toBeGreaterThan(0);
     expect(messages[0].role).toBe("user");
     expect(messages[0].contentMarkdown).toContain("Turn sprint goals into concrete executable tasks.");
+  });
+
+  it("refreshes remote planning snapshots with the effective default branch fallback", async () => {
+    const {
+      projectRepository,
+      connectionRepository,
+      executionRepository,
+      settingsRepository,
+      syncService,
+      executionControlService,
+      project,
+      sprint,
+    } = await setupTestHarness();
+    settingsRepository.saveProjectSettings(project.id, {
+      git: {
+        defaultBranch: "dev",
+        githubMode: "REMOTE",
+      },
+    });
+    vi.spyOn(WorkspaceManager.prototype, "resolveCurrentBranch").mockResolvedValue("keep-stuff");
+    const providerRunner = createPlanningProviderRunner(planningProviderPayload("Plan from remote dev"));
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      executionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: executionControlService as any,
+      providerRunner,
+    });
+
+    await service.planSprint(project.id, sprint.id, {});
+
+    expect(gitBranchSyncService.syncRemoteBranchIfAvailable).toHaveBeenCalledWith(
+      project.baseDir,
+      "keep-stuff",
+      expect.objectContaining({
+        githubToken: expect.any(String),
+      }),
+    );
+    expect(WorkspaceManager.prototype.createSnapshotWorkspace).toHaveBeenCalledWith(
+      project.baseDir,
+      `planning-${project.id}-${sprint.id}`,
+      {
+        branch: "keep-stuff",
+        fallbackBranch: "dev",
+        remoteOnly: true,
+      },
+      { singleBranch: true },
+    );
   });
 
   it("persists sprint-specific execution plan metadata for separate planning invocations", async () => {

@@ -54,6 +54,8 @@ export interface WorkspaceCommandOptions {
 export interface SnapshotCheckout {
   branch?: string;
   fallbackBranch?: string;
+  /** When true, checkout only origin-tracking refs and never fall back to local branch refs. */
+  remoteOnly?: boolean;
 }
 
 /**
@@ -225,6 +227,7 @@ export class WorkspaceManager implements IWorkspaceManager {
       await this.snapshotSeedBranches(repoPath, checkout),
       () => this.checkoutSnapshotBranch(repoPath, workspaceRef, checkout, refLookup),
       refLookup,
+      checkout?.remoteOnly === true,
     );
     return workspaceRef;
   }
@@ -243,6 +246,7 @@ export class WorkspaceManager implements IWorkspaceManager {
       await this.snapshotSeedBranches(repoPath, checkout),
       () => this.checkoutSnapshotBranch(repoPath, workspaceRef, checkout, refLookup),
       refLookup,
+      checkout?.remoteOnly === true,
     );
     return workspaceRef;
   }
@@ -283,7 +287,7 @@ export class WorkspaceManager implements IWorkspaceManager {
       // is pushed there), so prefer it over any local ref.
       const startRef = (await refLookup(`refs/remotes/origin/${branch}`))
         ? `origin/${branch}`
-        : (await refLookup(`refs/heads/${branch}`))
+        : (!checkout?.remoteOnly && await refLookup(`refs/heads/${branch}`))
           ? branch
           : null;
       if (startRef) {
@@ -291,21 +295,27 @@ export class WorkspaceManager implements IWorkspaceManager {
         return;
       }
     }
+    if (checkout?.remoteOnly && requested.length > 0) {
+      throw new Error(`Cannot prepare remote-only snapshot workspace: none of ${requested.map((branch) => `origin/${branch}`).join(", ")} exists.`);
+    }
 
     // No explicit branch resolved — mirror the repository's current checkout so
-    // the snapshot is never left on the empty bootstrap branch. Prefer the local
-    // ref here since it matches what the host has checked out.
+    // the snapshot is never left on the empty bootstrap branch. Remote-only snapshots
+    // still require an origin-tracking ref and never fall back to local-only state.
     const headBranch = await this.resolveRepoCurrentBranch(repoPath);
     if (headBranch) {
-      const startRef = (await refLookup(`refs/heads/${headBranch}`))
-        ? headBranch
-        : (await refLookup(`refs/remotes/origin/${headBranch}`))
+      const startRef = (await refLookup(`refs/remotes/origin/${headBranch}`))
           ? `origin/${headBranch}`
+        : (!checkout?.remoteOnly && await refLookup(`refs/heads/${headBranch}`))
+          ? headBranch
           : null;
       if (startRef) {
         await this.runWorkspaceCommand(workspaceRef, "git", ["checkout", "-B", headBranch, startRef]);
         return;
       }
+    }
+    if (checkout?.remoteOnly) {
+      throw new Error(`Cannot prepare remote-only snapshot workspace: origin/${headBranch || "HEAD"} does not exist.`);
     }
 
     const headSha = await this.resolveRepoHeadSha(repoPath);
@@ -788,6 +798,9 @@ export class WorkspaceManager implements IWorkspaceManager {
         resolvedStartRef = remoteRef;
         break;
       }
+      if (checkout?.remoteOnly) {
+        continue;
+      }
       if (await refLookup(localRef)) {
         resolvedBranch = candidate;
         resolvedStartRef = localRef;
@@ -861,7 +874,12 @@ export class WorkspaceManager implements IWorkspaceManager {
    * host for each candidate branch — the exact refs a targeted seed must carry so the volume can
    * later check out either the local or origin-tracking form of those branches.
    */
-  private async resolveExistingSeedRefs(repoPath: string, branches: Array<string | null | undefined>, refLookup: RefLookup): Promise<string[]> {
+  private async resolveExistingSeedRefs(
+    repoPath: string,
+    branches: Array<string | null | undefined>,
+    refLookup: RefLookup,
+    remoteOnly = false,
+  ): Promise<string[]> {
     const refs: string[] = [];
     const seen = new Set<string>();
     for (const branch of branches) {
@@ -869,7 +887,10 @@ export class WorkspaceManager implements IWorkspaceManager {
       if (!name) {
         continue;
       }
-      for (const ref of [`refs/remotes/origin/${name}`, `refs/heads/${name}`]) {
+      const candidates = remoteOnly
+        ? [`refs/remotes/origin/${name}`]
+        : [`refs/remotes/origin/${name}`, `refs/heads/${name}`];
+      for (const ref of candidates) {
         if (!seen.has(ref) && await refLookup(ref)) {
           seen.add(ref);
           refs.push(ref);
@@ -892,8 +913,9 @@ export class WorkspaceManager implements IWorkspaceManager {
     branches: Array<string | null | undefined>,
     checkout: () => Promise<void>,
     refLookup: RefLookup = this.createRefLookup(repoPath),
+    remoteOnly = false,
   ): Promise<void> {
-    const seedRefs = await this.resolveExistingSeedRefs(repoPath, branches, refLookup);
+    const seedRefs = await this.resolveExistingSeedRefs(repoPath, branches, refLookup, remoteOnly);
     if (seedRefs.length === 0) {
       await this.seedWorkspaceFromBundle(repoPath, worktreePath, undefined, branches);
       await checkout();

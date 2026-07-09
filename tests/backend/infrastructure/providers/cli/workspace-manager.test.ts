@@ -339,6 +339,38 @@ describe("WorkspaceManager", () => {
     expect(checkoutCall?.[1].slice(-4)).toEqual(["checkout", "-B", "main", "main"]);
   });
 
+  it("does not fall back to a local branch for remote-only snapshot checkouts", async () => {
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
+      if (args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/repo/project\n", stderr: "" } as any;
+      }
+      if (args[0] === "docker" && args[1] === "volume" && args[2] === "inspect") {
+        throw new Error("missing");
+      }
+      if (args[0] === "git" && args[1] === "remote") {
+        return { ok: true, stdout: "git@github.com:example/repo.git\n", stderr: "" } as any;
+      }
+      if (args[0] === "show-ref" && args.includes("refs/heads/feature/task-1")) {
+        return { ok: true, stdout: "", stderr: "" } as any;
+      }
+      if (args[0] === "show-ref") {
+        throw new Error("missing ref");
+      }
+      return { ok: true, stdout: "", stderr: "" } as any;
+    });
+
+    await expect(manager.createSnapshotWorkspace("/repo/project", "session-1", {
+      branch: "feature/task-1",
+      remoteOnly: true,
+    })).rejects.toThrow("remote-only snapshot workspace");
+
+    expect(runCommandStrict).not.toHaveBeenCalledWith(
+      "git",
+      ["bundle", "create", path.join("/tmp/code-ux-bundle-123", "repo.bundle"), "refs/heads/feature/task-1"],
+      "/repo/project",
+    );
+  });
+
   it("streams snapshot bundle files to Docker without shelling through Windows paths", async () => {
     vi.mocked(fs.mkdtemp).mockResolvedValue("C:\\Users\\pierr\\AppData\\Local\\Temp\\code-ux-bundle-k9Efgd");
     vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
