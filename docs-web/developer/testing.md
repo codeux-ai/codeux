@@ -114,7 +114,7 @@ It is staged as:
 
 1. `01 Preflight / release policy`: strict version bump gate for pull requests targeting `main`.
 2. `02` through `06`: type/guardrail validation, build, backend coverage, dashboard tests, and security audit.
-3. `07 Package`: npm tarball install smoke from the shared build artifact.
+3. `07 Package`: npm tarball install smoke from the shared build artifact, including installed-bin startup, `/health`, dashboard static assets, and a credential-free `mockup-cli` runtime path.
 4. `08 Orchestration`: one shared OS matrix from the build artifact, with Linux Docker DAG validation and macOS/Windows Electron DAG validation.
 5. `09`: full Playwright on Linux, macOS, and Windows from one shared matrix template.
 6. `10`: unsigned desktop release-candidate packages with `--publish never`, started after package smoke so packaging can run beside E2E and orchestration.
@@ -129,6 +129,16 @@ After build, sanity-check the binary:
 pnpm run smoke-test
 # = node dist/index.js --help
 ```
+
+## Installed Package Smoke
+
+Validate the locally packed npm package through an isolated install:
+
+```bash
+pnpm run test:installed-package
+```
+
+This runs `node scripts/verify-release-install.mjs`, installs the local tarball into a temporary npm project, starts the installed `codeux` bin through Node with isolated home and ports, checks `/health` plus built dashboard assets, and runs a tiny local-git sprint through the packaged `mockup-cli` provider. The smoke uses host-git E2E guards without pointing the provider shim at a source-checkout script.
 
 ## Performance & flakiness
 

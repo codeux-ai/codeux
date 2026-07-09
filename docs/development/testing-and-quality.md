@@ -195,7 +195,13 @@ OS-specific caveats:
 node scripts/verify-release-install.mjs
 ```
 
-The release install verifier builds the workspace, creates a local npm tarball with `npm pack --ignore-scripts`, installs that tarball into a temporary isolated npm project, verifies the local `node_modules/.bin/codeux` shim exists, and runs the installed package's `codeux --help` bin target directly through Node. That keeps the smoke check pinned to the tarball install and avoids npm registry package resolution. On Windows, the verifier invokes package-manager CLI JavaScript entrypoints through Node when available instead of spawning `.cmd` shims directly. Set `CODE_UX_KEEP_RELEASE_INSTALL_TEMP=1` when diagnosing a failed run and you need to inspect the temporary package or install directory.
+The release install verifier builds the workspace, creates a local npm tarball with `npm pack --ignore-scripts`, installs that tarball into a temporary isolated npm project, verifies the local `node_modules/.bin/codeux` shim exists, and runs the installed package's `codeux --help` bin target directly through Node. It then starts the installed runtime from that bin target with isolated `HOME`, `USERPROFILE`, dashboard port, and MCP port; verifies `/health`; fetches the built dashboard index plus one emitted `/assets/*` file; and runs a credential-free local-git sprint through the compiled `mockup-cli` provider. The runtime smoke sets host-git E2E guards (`CODE_UX_CONTAINERIZED_GIT=0`, `CODE_UX_GIT_CONTAINER_MODE=host`, and `CODEUX_E2E_PROVIDER_CLI_SHIM=1`) without pointing the shim at any source checkout script, so provider execution still comes from the installed package contents. That keeps the smoke check pinned to the tarball install and avoids npm registry package resolution for Code UX itself. On Windows, the verifier invokes package-manager CLI JavaScript entrypoints through Node when available instead of spawning `.cmd` shims directly. Set `CODE_UX_KEEP_RELEASE_INSTALL_TEMP=1` when diagnosing a failed run and you need to inspect the temporary package, install directory, runtime home, fixture repo, or runtime log.
+
+The same installed-package lane is available through the package script:
+
+```bash
+pnpm run test:installed-package
+```
 
 CI may set `CODE_UX_SKIP_RELEASE_INSTALL_BUILD=1` after downloading the compiled build artifact. In that mode the verifier refuses to continue unless `dist/index.js`, `dist/worker/index.js`, and `dashboard/dist/` are already present, then it packs and installs the artifact-backed workspace without rebuilding.
 
