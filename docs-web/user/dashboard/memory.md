@@ -75,6 +75,8 @@ Open a memory and click **Inspect** to see its **embedding map**: a 2D projectio
 
 You can rebuild the map after re-embedding or after promotion.
 
+Rapid tier, sprint, or agent filter changes are sequenced by the Memory page data hook. Older responses are discarded, so only the newest memory list and embedding map can update the graph or clear the loading state.
+
 ## Model browser
 
 The **Model Catalog** action opens a compact model browser instead of a flat card list. It separates:
