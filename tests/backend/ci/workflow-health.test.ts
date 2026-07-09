@@ -246,10 +246,21 @@ describe("GitHub workflow health", () => {
     expect(config).toContain("video: 'retain-on-failure'");
     expect(config).toContain("HOME: tempHome");
     expect(config).toContain("USERPROFILE: tempHome");
-    expect(config).toContain("name: 'chromium-desktop'");
-    expect(config).toContain("name: 'chromium-mobile'");
-    expect(config).toContain("testMatch: /sprint-ledger-responsive\\.spec\\.ts/");
-    expect(config).toContain("...devices['Pixel 5']");
+    expect(config).toContain("name: 'navigation'");
+    expect(config).toContain("name: 'settings'");
+    expect(config).toContain("name: 'projects'");
+    expect(config).toContain("name: 'tasks'");
+    expect(config).toContain("name: 'agents'");
+    expect(config).toContain("name: 'config'");
+    expect(config).toContain("testMatch: 'tests/e2e/navigation/**/*.spec.ts'");
+    expect(config).toContain("testMatch: 'tests/e2e/settings/**/*.spec.ts'");
+    expect(config).toContain("testMatch: 'tests/e2e/projects/**/*.spec.ts'");
+    expect(config).toContain("testMatch: 'tests/e2e/tasks/**/*.spec.ts'");
+    expect(config).toContain("testMatch: 'tests/e2e/agents/**/*.spec.ts'");
+    expect(config).toContain("testMatch: 'tests/e2e/config/**/*.spec.ts'");
+    expect(config).not.toContain("name: 'chromium-desktop'");
+    expect(config).not.toContain("name: 'chromium-mobile'");
+    expect(config).not.toContain("Pixel 5");
   });
 
   it("keeps mockup sprint orchestration on a no-secret rapid Linux CI lane", async () => {
