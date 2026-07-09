@@ -48,6 +48,8 @@ Run `pnpm run test:orchestration:merge-e2e` after a unit-level merge fix passes.
 
 Run `pnpm run test:orchestration:full` manually when a scheduler, provider, CI, QA, or multi-project orchestration issue needs broader compiled-runtime evidence. It executes every deterministic mockup scenario and writes artifacts under `.cache/e2e-mockup-sprint-pentest/<run-id>/`.
 
+Mockup scenarios can exercise QA review paths without live providers by embedding `mockup-cli:qa` directives in prompts. Supported outcomes include deterministic pass, changes-requested with `fixInstructions`, changes-requested with `followUpTasks`, and intentional QA provider failure. Negative scenarios must declare `expected.failure`; the runner only treats them as passing when the declared terminal status and failure reason are observed.
+
 Run `pnpm run test:orchestration:large-dag` for a heavy 129-task DAG with 96 leaf tasks, 24 batch joins, 6 group joins, one final manifest, and one validation task. Use `pnpm run test:orchestration:pentest` for the default catalog plus heavy stress scenarios.
 
 ## Local merge checklist
