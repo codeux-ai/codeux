@@ -204,7 +204,7 @@ The same installed-package lane is available through the package script:
 pnpm run test:installed-package
 ```
 
-CI may set `CODE_UX_SKIP_RELEASE_INSTALL_BUILD=1` after downloading the compiled build artifact. In that mode the verifier refuses to continue unless `dist/index.js`, `dist/worker/index.js`, and `dashboard/dist/` are already present, then it packs and installs the artifact-backed workspace without rebuilding.
+CI sets `CODE_UX_SKIP_RELEASE_INSTALL_BUILD=1` after downloading the compiled build artifact. In that mode the verifier refuses to continue unless `dist/index.js`, `dist/worker/index.js`, and `dashboard/dist/` are already present, then it packs and installs the artifact-backed workspace without rebuilding. The automatic `07 Package` lane runs this installed-package smoke on Linux, macOS, and Windows from the same `codeux-build-linux` artifact. Failed matrix entries preserve `CODE_UX_KEEP_RELEASE_INSTALL_TEMP=1` workspaces under the runner temp directory and upload `codeux-release-install-*` plus nested `codeux-installed-package-e2e-*` directories for seven days.
 
 ### CI Pipeline Policy
 
@@ -215,7 +215,7 @@ The lane is intentionally numbered and staged:
 - `01 Preflight / release policy` keeps the main-PR version bump gate strict. Pull requests targeting `main` must increase `package.json` above the base version; ordinary `dev` integration PRs are not blocked by the release version rule.
 - `02` through `06` run the fast core checks after preflight: quality guardrails plus backend/dashboard typecheck, server/dashboard build, backend coverage, dashboard Vitest, and security audit. These are the first runner burst and are designed around a six-runner budget.
 - `03 Build` uploads one `codeux-build-linux` artifact containing `dist/`, `dashboard/dist/`, and TypeScript cache output.
-- `07 Package` verifies the npm tarball install from that build artifact with `CODE_UX_SKIP_RELEASE_INSTALL_BUILD=1`.
+- `07 Package` verifies the npm tarball install from that build artifact with `CODE_UX_SKIP_RELEASE_INSTALL_BUILD=1` on Linux, macOS, and Windows. It runs `pnpm run test:installed-package`, keeps verifier temp workspaces on failure, and uploads installed-package artifacts for triage.
 - `08 Orchestration` runs one shared OS matrix from the build artifact: Linux validates the Docker-backed mockup DAG, while macOS and Windows validate the same DAG through the Electron app.
 - `09 E2E` runs Playwright from the build artifact with one shared matrix template across Linux, macOS, and Windows. Every OS runs all six project groups (`navigation`, `settings`, `projects`, `tasks`, `agents`, and `config`) with `max-parallel: 3`.
 - `10 Release Candidate` starts after `07 Package` verifies the artifact-backed npm install, then builds unsigned Linux, macOS, and Windows desktop packages with `--publish never` beside the active E2E and orchestration matrices.

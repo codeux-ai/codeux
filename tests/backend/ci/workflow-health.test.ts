@@ -165,9 +165,28 @@ describe("GitHub workflow health", () => {
     expect(securityJob).toContain("pnpm run audit");
 
     expect(packageJob).toContain("needs: [static, build, backend-tests, dashboard-tests, security-audit]");
+    expect(packageJob).toContain("name: 07 Package / npm install smoke (${{ matrix.os.label }})");
+    expect(packageJob).toContain("runs-on: ${{ matrix.os.runner }}");
+    expect(packageJob).toContain("max-parallel: 2");
+    expect(packageJob).toContain("runner: ubuntu-latest");
+    expect(packageJob).toContain("label: Linux");
+    expect(packageJob).toContain("runner: macos-latest");
+    expect(packageJob).toContain("label: macOS");
+    expect(packageJob).toContain("runner: windows-latest");
+    expect(packageJob).toContain("label: Windows");
+    expect(packageJob).toContain("if: runner.os != 'Windows'");
     expect(packageJob).toContain("name: codeux-build-linux");
-    expect(packageJob).toContain("node scripts/verify-release-install.mjs");
+    expect(packageJob).toContain("pnpm run test:installed-package");
     expect(packageJob).toContain('CODE_UX_SKIP_RELEASE_INSTALL_BUILD: "1"');
+    expect(packageJob).toContain('CODE_UX_KEEP_RELEASE_INSTALL_TEMP: "1"');
+    expect(packageJob).toContain("TMPDIR: ${{ runner.temp }}");
+    expect(packageJob).toContain("TMP: ${{ runner.temp }}");
+    expect(packageJob).toContain("TEMP: ${{ runner.temp }}");
+    expect(packageJob).toContain("name: installed-package-${{ matrix.os.runner }}");
+    expect(packageJob).toContain("${{ runner.temp }}/codeux-release-install-*/");
+    expect(packageJob).toContain("${{ runner.temp }}/codeux-installed-package-e2e-*/");
+    expect(packageJob).toContain("if: failure()");
+    expect(packageJob).toContain("include-hidden-files: true");
     expect(dagJob).toContain("needs: [static, build, backend-tests, dashboard-tests, security-audit]");
     expect(dagJob).toContain("runs-on: ${{ matrix.os }}");
     expect(dagJob).toContain("max-parallel: 2");
@@ -246,6 +265,10 @@ describe("GitHub workflow health", () => {
     expectManualOnly(mockup, "Mockup sprint diagnostics");
     expect(mockup).toContain("pnpm run test:orchestration:ci-dag:run");
     expect(mockup).toContain("pnpm run test:orchestration:ci-dag:electron:run");
+    expect(mockup).toContain("name: mockup-diagnostic-ubuntu-latest-docker");
+    expect(mockup).toContain("name: mockup-diagnostic-${{ matrix.os }}-electron");
+    expect(mockup).toContain(".cache/e2e-mockup-sprint-pentest/");
+    expect(mockup).toContain("include-hidden-files: true");
   });
 
   it("keeps published release publishing and desktop artifacts in one workflow", async () => {
@@ -303,11 +326,17 @@ describe("GitHub workflow health", () => {
     expect(config).toContain("HOME: tempHome");
     expect(config).toContain("USERPROFILE: tempHome");
     expect(config).toContain("name: 'navigation'");
+    expect(config).toContain("testMatch: 'tests/e2e/navigation/**/*.spec.ts'");
     expect(config).toContain("name: 'settings'");
+    expect(config).toContain("testMatch: 'tests/e2e/settings/**/*.spec.ts'");
     expect(config).toContain("name: 'projects'");
+    expect(config).toContain("testMatch: 'tests/e2e/projects/**/*.spec.ts'");
     expect(config).toContain("name: 'tasks'");
+    expect(config).toContain("testMatch: 'tests/e2e/tasks/**/*.spec.ts'");
     expect(config).toContain("name: 'agents'");
+    expect(config).toContain("testMatch: 'tests/e2e/agents/**/*.spec.ts'");
     expect(config).toContain("name: 'config'");
+    expect(config).toContain("testMatch: 'tests/e2e/config/**/*.spec.ts'");
   });
 
   it("keeps mockup DAG regression coverage strict", async () => {
@@ -327,6 +356,8 @@ describe("GitHub workflow health", () => {
     expect(electronDagRunScript).toContain("--execution-mode fixture");
     expect(electronDagRunScript).toContain("--scenario ci-small-dag-electron");
     expect(electronDagRunScript).toContain("--stall-timeout-ms 180000");
+    expect(scenarioScript).toContain('id: "ci-small-dag"');
+    expect(scenarioScript).toContain('id: "ci-small-dag-electron"');
 
     expect(runnerScript).toContain("const DEFAULT_STALL_TIMEOUT_MS = 3 * 60 * 1000");
     expect(runnerScript).toContain("mockup_pentest_progress");
