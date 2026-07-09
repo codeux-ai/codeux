@@ -157,7 +157,7 @@ export function classifyTaskTransition(
     if (dependency.status === "FAILED") {
       failedDependencyIds.push(depId);
     }
-    if (!isCompletedTaskSettled(dependency, options)) {
+    if (isLocalCliTaskAwaitingBranchEvidence(dependency, options) || !isCompletedTaskSettled(dependency, options)) {
       unmetDependencyIds.push(depId);
     }
   }
