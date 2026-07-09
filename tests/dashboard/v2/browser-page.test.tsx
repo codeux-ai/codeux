@@ -285,6 +285,22 @@ const getTokenizedCardForText = (text: string): HTMLElement => {
   throw new Error(`No tokenized card found for ${text}`);
 };
 
+const getCollapsibleRegion = (trigger: HTMLElement): HTMLElement => {
+  const controlsId = trigger.getAttribute("aria-controls");
+  expect(controlsId).toBeTruthy();
+  const region = document.getElementById(controlsId as string);
+  expect(region).toBeInTheDocument();
+  return region as HTMLElement;
+};
+
+const expandPanel = (name: RegExp | string): HTMLElement => {
+  const trigger = screen.getByRole("button", { name });
+  if (trigger.getAttribute("aria-expanded") === "false") {
+    fireEvent.click(trigger);
+  }
+  return trigger;
+};
+
 describe("BrowserPage", () => {
   afterEach(() => {
     vi.mocked(useProjectData).mockReturnValue({
@@ -470,12 +486,37 @@ describe("BrowserPage", () => {
     expect(iframe).toBeInTheDocument();
     const selectedSprintLabel = screen.getByText("Selected Sprint");
     expect((iframe?.compareDocumentPosition(selectedSprintLabel) || 0) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+
+    const selectedSprintPanel = screen.getByRole("button", { name: /Selected Sprint.*:3000 -> :8080/ });
+    const environmentPanel = screen.getByRole("button", { name: "Environment" });
+    const runtimeNotesPanel = screen.getByRole("button", { name: "Runtime notes" });
+    const containerLogsPanel = screen.getByRole("button", { name: "Container logs" });
+    expect(selectedSprintPanel).toHaveAttribute("aria-expanded", "false");
+    expect(environmentPanel).toHaveAttribute("aria-expanded", "false");
+    expect(runtimeNotesPanel).toHaveAttribute("aria-expanded", "false");
+    expect(containerLogsPanel).toHaveAttribute("aria-expanded", "false");
+    expect(getCollapsibleRegion(selectedSprintPanel)).toHaveAttribute("aria-hidden", "true");
+    expect(getCollapsibleRegion(environmentPanel)).toHaveAttribute("aria-hidden", "true");
+    expect(getCollapsibleRegion(runtimeNotesPanel)).toHaveAttribute("aria-hidden", "true");
+    expect(getCollapsibleRegion(containerLogsPanel)).toHaveAttribute("aria-hidden", "true");
+
     for (const heading of ["Selected Sprint", "Environment", "Runtime notes", "Container logs"]) {
       const card = getTokenizedCardForText(heading);
       expect(card.className).toContain("border-[color:var(--border-hairline)]");
       expect(card.className).toContain("bg-[var(--surface-glass)]");
       expect(card.className).toContain("shadow-[var(--elevation-base)]");
     }
+
+    fireEvent.click(selectedSprintPanel);
+    fireEvent.click(environmentPanel);
+    fireEvent.click(runtimeNotesPanel);
+    fireEvent.click(containerLogsPanel);
+    expect(selectedSprintPanel).toHaveAttribute("aria-expanded", "true");
+    expect(getCollapsibleRegion(selectedSprintPanel)).toHaveAttribute("aria-hidden", "false");
+    expect(screen.getByRole("button", { name: "Rebuild preview container" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add default" })).toBeInTheDocument();
+    expect(screen.getByText(/Ports are assigned from the sprint preview range/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Preview container logs")).toBeInTheDocument();
 
     expect(container.innerHTML).not.toContain("#f5f1e8");
     expect(container.innerHTML).not.toContain("#f7f3ea");
@@ -488,6 +529,7 @@ describe("BrowserPage", () => {
 
     expect(vi.mocked(fetchPreviewScript)).not.toHaveBeenCalled();
 
+    expandPanel(/Selected Sprint/);
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Show startup script editor" }));
     });
@@ -503,6 +545,7 @@ describe("BrowserPage", () => {
     vi.useFakeTimers();
     try {
       render(<BrowserPage />);
+      expandPanel(/Container logs/);
 
       expect(screen.getByText("Loading logs...")).toBeInTheDocument();
       expect(screen.getAllByText("Loading preview logs.").length).toBeGreaterThan(0);
@@ -530,6 +573,7 @@ describe("BrowserPage", () => {
 
     try {
       render(<BrowserPage />);
+      expandPanel(/Container logs/);
 
       await act(async () => {
         vi.advanceTimersByTime(250);
@@ -562,6 +606,7 @@ describe("BrowserPage", () => {
 
     try {
       render(<BrowserPage />);
+      expandPanel(/Container logs/);
 
       await act(async () => {
         vi.advanceTimersByTime(250);
@@ -665,6 +710,7 @@ describe("BrowserPage", () => {
 
     render(<BrowserPage />);
 
+    expandPanel(/Selected Sprint/);
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Show startup script editor" }));
     });
@@ -701,6 +747,7 @@ describe("BrowserPage", () => {
 
     render(<BrowserPage />);
 
+    expandPanel(/Selected Sprint/);
     const rebuildButton = screen.getByRole("button", { name: "Rebuild preview container" });
     await user.click(rebuildButton);
     await user.click(rebuildButton);
@@ -747,6 +794,7 @@ describe("BrowserPage", () => {
     const user = userEvent.setup();
     render(<BrowserPage />);
 
+    expandPanel("Environment");
     await user.click(screen.getByRole("button", { name: "Add default" }));
     const nameInputs = screen.getAllByLabelText("Environment variable name");
     const valueInputs = screen.getAllByLabelText("Preview environment default value");
@@ -770,6 +818,7 @@ describe("BrowserPage", () => {
 
     render(<BrowserPage />);
 
+    expandPanel(/Selected Sprint/);
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Show startup script editor" }));
     });
