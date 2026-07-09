@@ -69,6 +69,26 @@ function qaReviewPayload(overrides) {
   };
 }
 
+function qaSentinelExists(rawPath) {
+  const resolved = resolveWorkspacePath(rawPath);
+  if (fs.existsSync(resolved)) {
+    return true;
+  }
+
+  const relative = path.relative(cwd, resolved);
+  const worktreesDir = path.join(cwd, ".worktrees");
+  let entries = [];
+  try {
+    entries = fs.readdirSync(worktreesDir, { withFileTypes: true });
+  } catch {
+    entries = [];
+  }
+  return entries.some((entry) => (
+    entry.isDirectory()
+    && fs.existsSync(path.join(worktreesDir, entry.name, relative))
+  ));
+}
+
 function parseQaReviewDirective() {
   if (!isQaReviewInvocation()) {
     return null;
@@ -94,6 +114,37 @@ function parseQaReviewDirective() {
       };
     }
 
+    match = line.match(/^mockup-cli:qa\s+changes-requested\s+follow-up-until-file\s+(.+?)\s*::\s*(.+?)\s*=>\s*(.+)$/i);
+    if (match) {
+      if (qaSentinelExists(match[1])) {
+        return {
+          payload: qaReviewPayload({
+            verdict: "pass",
+            summary: "Mockup QA passed after deterministic follow-up work was present.",
+            findings: ["Mockup QA found the deterministic follow-up sentinel file."],
+          }),
+        };
+      }
+      const title = normalizeContent(match[2]);
+      const promptMarkdown = normalizeContent(match[3]);
+      return {
+        payload: qaReviewPayload({
+          verdict: "changes_requested",
+          summary: "Mockup QA requested deterministic follow-up work.",
+          findings: ["Mockup QA requested a deterministic follow-up task."],
+          fixInstructions: null,
+          targetTaskKey: currentTaskKeyFromPrompt(),
+          followUpTasks: [{
+            title,
+            promptMarkdown,
+            description: "Created by mockup-cli QA review directive.",
+            dependsOnTaskKeys: [],
+            priority: "medium",
+          }],
+        }),
+      };
+    }
+
     match = line.match(/^mockup-cli:qa\s+changes-requested\s+follow-up\s*::\s*(.+?)\s*=>\s*(.+)$/i);
     if (match) {
       const title = normalizeContent(match[1]);
@@ -112,6 +163,29 @@ function parseQaReviewDirective() {
             dependsOnTaskKeys: [],
             priority: "medium",
           }],
+        }),
+      };
+    }
+
+    match = line.match(/^mockup-cli:qa\s+changes-requested\s+until-file\s+(.+?)\s*::\s*(.+)$/i);
+    if (match) {
+      if (qaSentinelExists(match[1])) {
+        return {
+          payload: qaReviewPayload({
+            verdict: "pass",
+            summary: "Mockup QA passed after deterministic fixes were present.",
+            findings: ["Mockup QA found the deterministic task fix sentinel file."],
+          }),
+        };
+      }
+      const fixInstructions = normalizeContent(match[2]);
+      return {
+        payload: qaReviewPayload({
+          verdict: "changes_requested",
+          summary: "Mockup QA requested deterministic changes.",
+          findings: ["Mockup QA requested deterministic fixes."],
+          fixInstructions,
+          targetTaskKey: currentTaskKeyFromPrompt(),
         }),
       };
     }
