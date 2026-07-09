@@ -189975,7 +189975,7 @@
     ],
     "id": "zenifra",
     "models": {
-      "qwen3.6-35b-a3b": {
+      "alibaba/qwen3.6-35b-a3b": {
         "attachment": true,
         "cost": {
           "input": 0.19,
@@ -189983,7 +189983,7 @@
         },
         "description": "Open multimodal Qwen MoE for local agents that need vision, audio, and code",
         "family": "qwen",
-        "id": "qwen3.6-35b-a3b",
+        "id": "alibaba/qwen3.6-35b-a3b",
         "last_updated": "2026-04-17",
         "limit": {
           "context": 262144,
@@ -189991,10 +189991,7 @@
         },
         "modalities": {
           "input": [
-            "text",
-            "image",
-            "video",
-            "audio"
+            "text"
           ],
           "output": [
             "text"
