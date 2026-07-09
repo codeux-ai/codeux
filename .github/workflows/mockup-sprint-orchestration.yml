@@ -1,14 +1,10 @@
-name: Mockup Sprint Orchestration
+name: Mockup Sprint Diagnostics
 
 on:
-  push:
-    branches: [main, dev]
-  pull_request:
-    branches: [main, dev]
   workflow_dispatch:
 
 concurrency:
-  group: mockup-sprint-orchestration-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: mockup-sprint-diagnostics-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -48,7 +44,6 @@ jobs:
 
   electron-ci-dag:
     name: Electron CI DAG (${{ matrix.name }})
-    if: github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
 

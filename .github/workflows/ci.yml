@@ -1,43 +1,52 @@
-name: CI
+name: Code UX CI Pipeline
 
 on:
   push:
     branches: [main, dev]
   pull_request:
     branches: ["**"]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  PNPM_VERSION: "10.33.0"
+  PLAYWRIGHT_BROWSERS_PATH: .cache/ms-playwright
+
 jobs:
-  release-version-bump:
-    name: Release Version Bump
-    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+  preflight:
+    name: 01 Preflight / release policy
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 5
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - name: Verify package version was bumped
+      - name: Enforce main release version bump
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
+          if [ "${EVENT_NAME}" != "pull_request" ] || [ "${BASE_REF}" != "main" ]; then
+            echo "Version bump gate applies only to pull requests targeting main."
+            exit 0
+          fi
+
           base_version="$(git show "${BASE_SHA}:package.json" | node -e "const fs = require('node:fs'); console.log(JSON.parse(fs.readFileSync(0, 'utf8')).version)")"
           head_version="$(git show "${HEAD_SHA}:package.json" | node -e "const fs = require('node:fs'); console.log(JSON.parse(fs.readFileSync(0, 'utf8')).version)")"
 
           echo "Base package version: ${base_version}"
           echo "Head package version: ${head_version}"
-
-          if ! git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" -- package.json | grep -qx "package.json"; then
-            echo "package.json was not changed; skipping release version bump check."
-            exit 0
-          fi
 
           node - "${base_version}" "${head_version}" <<'NODE'
           const [, , baseVersion, headVersion] = process.argv;
@@ -62,11 +71,11 @@ jobs:
           }
           NODE
 
-  typecheck:
-    name: Typecheck & Lint
+  static:
+    name: 02 Static / typecheck and guardrails
+    needs: preflight
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -74,17 +83,16 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 10.33.0
+          version: ${{ env.PNPM_VERSION }}
           run_install: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
           package-manager-cache: false
 
       - name: Restore node_modules cache
-        id: nm-cache-typecheck
         uses: actions/cache@v5
         with:
           path: node_modules
@@ -93,26 +101,26 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Restore compiler caches
+      - name: Restore TypeScript caches
         uses: actions/cache@v5
         with:
           path: .cache/tsc
           key: ${{ runner.os }}-node22-pnpm10.33.0-tsc-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'tsconfig.json', 'dashboard/tsconfig.json') }}
 
-      - name: Run Quality Guardrails
+      - name: Run quality guardrails
         run: pnpm run quality:guardrails
 
-      - name: Typecheck Backend & CLI
+      - name: Typecheck backend and CLI
         run: pnpm run typecheck
 
-      - name: Typecheck Dashboard
+      - name: Typecheck dashboard
         run: pnpm run typecheck:dashboard
 
-  test-backend:
-    name: Backend Tests & Coverage
+  build:
+    name: 03 Build / server and dashboard artifact
+    needs: preflight
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 12
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -120,17 +128,76 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 10.33.0
+          version: ${{ env.PNPM_VERSION }}
           run_install: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
           package-manager-cache: false
 
       - name: Restore node_modules cache
-        id: nm-cache-backend
+        uses: actions/cache@v5
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Restore build caches
+        uses: actions/cache@v5
+        with:
+          path: |
+            .cache/tsc
+            .cache/vite
+          key: ${{ runner.os }}-node22-pnpm10.33.0-build-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'tsconfig.json', 'dashboard/tsconfig.json') }}
+
+      - name: Build server and dashboard
+        run: pnpm run build
+
+      - name: Verify build artifact contents
+        shell: bash
+        run: |
+          test -f dist/index.js
+          test -f dist/worker/index.js
+          test -d dashboard/dist
+
+      - name: Upload compiled app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeux-build-linux
+          path: |
+            dist/
+            dashboard/dist/
+            .cache/tsc/
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 1
+
+  backend-tests:
+    name: 04 Test / backend coverage
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Restore node_modules cache
         uses: actions/cache@v5
         with:
           path: node_modules
@@ -145,14 +212,14 @@ jobs:
           path: node_modules/.vitest
           key: ${{ runner.os }}-node22-pnpm10.33.0-vitest-backend-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vitest.config.ts') }}
 
-      - name: Run Backend Tests with Coverage
+      - name: Run backend tests with coverage
         run: pnpm run test:backend:coverage
 
-  test-dashboard:
-    name: Dashboard Tests
+  dashboard-tests:
+    name: 05 Test / dashboard suite
+    needs: preflight
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 12
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -160,17 +227,16 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 10.33.0
+          version: ${{ env.PNPM_VERSION }}
           run_install: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
           package-manager-cache: false
 
       - name: Restore node_modules cache
-        id: nm-cache-dashboard
         uses: actions/cache@v5
         with:
           path: node_modules
@@ -185,54 +251,14 @@ jobs:
           path: node_modules/.vitest
           key: ${{ runner.os }}-node22-pnpm10.33.0-vitest-dashboard-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vitest.config.ts') }}
 
-      - name: Run Dashboard Tests
+      - name: Run dashboard tests
         run: pnpm run test:dashboard
 
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: 10.33.0
-          run_install: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: 22
-          package-manager-cache: false
-
-      - name: Restore node_modules cache
-        id: nm-cache-build
-        uses: actions/cache@v5
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
-
-      - name: Restore Vite cache
-        uses: actions/cache@v5
-        with:
-          path: .cache/vite
-          key: ${{ runner.os }}-node22-pnpm10.33.0-vite-build-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'tsconfig.json', 'dashboard/tsconfig.json') }}
-
-      - name: Build Server & Dashboard
-        run: pnpm run build
-
   security-audit:
-    name: Security Audit
+    name: 06 Security / dependency audit
+    needs: preflight
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 8
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -240,17 +266,16 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 10.33.0
+          version: ${{ env.PNPM_VERSION }}
           run_install: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
           package-manager-cache: false
 
       - name: Restore node_modules cache
-        id: nm-cache-audit
         uses: actions/cache@v5
         with:
           path: node_modules
@@ -259,5 +284,409 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Run Security Audit
+      - name: Run security audit
         run: pnpm run audit
+
+  package-smoke:
+    name: 07 Package / npm install smoke
+    needs: [static, build, backend-tests, dashboard-tests, security-audit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Restore node_modules cache
+        uses: actions/cache@v5
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Download compiled app artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: codeux-build-linux
+          path: .
+
+      - name: Verify npm tarball install from artifact
+        run: node scripts/verify-release-install.mjs
+        env:
+          CODE_UX_SKIP_RELEASE_INSTALL_BUILD: "1"
+
+  ci-dag:
+    name: 08 Orchestration / Docker DAG
+    needs: [static, build, backend-tests, dashboard-tests, security-audit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Restore node_modules cache
+        uses: actions/cache@v5
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Download compiled app artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: codeux-build-linux
+          path: .
+
+      - name: Run Docker DAG orchestration validation
+        run: pnpm run test:orchestration:ci-dag:run
+
+      - name: Upload orchestration artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: orchestration-docker-dag
+          path: .cache/e2e-mockup-sprint-pentest/
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 7
+
+  e2e-linux:
+    name: 09 E2E / Linux full (${{ matrix.project }})
+    needs: [static, build, backend-tests, dashboard-tests, security-audit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        project: [navigation, settings, projects, tasks, agents, config]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Restore node_modules cache
+        uses: actions/cache@v5
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Download compiled app artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: codeux-build-linux
+          path: .
+
+      - name: Cache Playwright browser binaries
+        uses: actions/cache@v5
+        with:
+          path: .cache/ms-playwright
+          key: ${{ runner.os }}-node22-pnpm10.33.0-playwright-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-node22-pnpm10.33.0-playwright-
+
+      - name: Install Playwright OS dependencies
+        run: pnpm exec playwright install-deps chromium
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install chromium
+
+      - name: Run Playwright project
+        run: pnpm exec playwright test --project=${{ matrix.project }}
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-linux-${{ matrix.project }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  e2e-native-smoke:
+    name: 10 E2E / ${{ matrix.os.label }} smoke (${{ matrix.project }})
+    needs: [static, build, backend-tests, dashboard-tests, security-audit]
+    runs-on: ${{ matrix.os.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        os:
+          - runner: macos-latest
+            label: macOS
+          - runner: windows-latest
+            label: Windows
+        project: [navigation, tasks]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Download compiled app artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: codeux-build-linux
+          path: .
+
+      - name: Cache Playwright browser binaries
+        uses: actions/cache@v5
+        with:
+          path: .cache/ms-playwright
+          key: ${{ runner.os }}-node22-pnpm10.33.0-playwright-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-node22-pnpm10.33.0-playwright-
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install chromium
+
+      - name: Run Playwright smoke project
+        run: pnpm exec playwright test --project=${{ matrix.project }}
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-${{ matrix.os.runner }}-${{ matrix.project }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  electron-dag:
+    name: 11 Orchestration / ${{ matrix.name }} Electron DAG
+    needs: [package-smoke, ci-dag, e2e-linux, e2e-native-smoke]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+          - name: Windows
+            os: windows-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      GH_TOKEN: ""
+      electron_config_cache: ${{ github.workspace }}/.cache/electron-downloads
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Restore Electron caches
+        uses: actions/cache@v5
+        with:
+          path: |
+            .cache/electron-runtime
+            .cache/electron-downloads
+          key: ${{ runner.os }}-node22-pnpm10.33.0-electron-dag-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'electron-builder.config.cjs', 'scripts/e2e/run-mockup-sprint-pentest.mjs', 'scripts/e2e/mockup-sprint-pentest-scenarios.mjs', 'scripts/prepare-electron-runtime-deps.mjs') }}
+          restore-keys: |
+            ${{ runner.os }}-node22-pnpm10.33.0-electron-dag-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Download compiled app artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: codeux-build-linux
+          path: .
+
+      - name: Install Electron binary from cache
+        run: node node_modules/electron/install.js
+
+      - name: Rebuild Electron native dependencies
+        run: pnpm run electron:install-deps
+
+      - name: Run Electron DAG orchestration validation
+        run: pnpm run test:orchestration:ci-dag:electron:run
+
+      - name: Upload Electron DAG artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: orchestration-electron-dag-${{ matrix.os }}
+          path: .cache/e2e-mockup-sprint-pentest/
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 7
+
+  release-candidate:
+    name: 12 Release Candidate / desktop package (${{ matrix.name }})
+    needs: [package-smoke, ci-dag, e2e-linux, e2e-native-smoke]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            electron-target: --linux
+            artifact-name: release-candidate-linux
+          - name: macOS
+            os: macos-latest
+            electron-target: --mac
+            artifact-name: release-candidate-macos
+          - name: Windows
+            os: windows-latest
+            electron-target: --win
+            artifact-name: release-candidate-windows
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      GH_TOKEN: ""
+      electron_config_cache: ${{ github.workspace }}/.cache/electron-downloads
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Restore Electron package caches
+        uses: actions/cache@v5
+        with:
+          path: |
+            .cache/electron-runtime
+            .cache/electron-downloads
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: ${{ runner.os }}-node22-pnpm10.33.0-release-candidate-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'electron-builder.config.cjs', 'scripts/prepare-electron-runtime-deps.mjs') }}
+          restore-keys: |
+            ${{ runner.os }}-node22-pnpm10.33.0-release-candidate-
+
+      - name: Install Linux packaging dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libopenjp2-tools
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Download compiled app artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: codeux-build-linux
+          path: .
+
+      - name: Install Electron binary from cache
+        run: node node_modules/electron/install.js
+
+      - name: Rebuild Electron native dependencies
+        run: pnpm run electron:install-deps
+
+      - name: Prepare Electron runtime dependencies
+        run: pnpm run electron:prepare-deps
+
+      - name: Build unsigned desktop package
+        run: pnpm exec electron-builder --config electron-builder.config.cjs ${{ matrix.electron-target }} --publish never
+
+      - name: Upload release candidate artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: |
+            release/electron/*.dmg
+            release/electron/*.zip
+            release/electron/*.AppImage
+            release/electron/*.deb
+            release/electron/*.rpm
+            release/electron/*.exe
+            release/electron/*.msi
+            release/electron/*.pkg
+            release/electron/*.tar.gz
+            release/electron/*.tar.xz
+            release/electron/*.7z
+            !release/electron/*-unpacked/**
+            !release/electron/mac/**
+            !release/electron/builder-debug.yml
+            !release/electron/builder-effective-config.yaml
+          if-no-files-found: error
+          retention-days: 7

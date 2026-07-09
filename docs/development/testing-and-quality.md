@@ -197,23 +197,28 @@ node scripts/verify-release-install.mjs
 
 The release install verifier builds the workspace, creates a local npm tarball with `npm pack --ignore-scripts`, installs that tarball into a temporary isolated npm project, verifies the local `node_modules/.bin/codeux` shim exists, and runs the installed package's `codeux --help` bin target directly through Node. That keeps the smoke check pinned to the tarball install and avoids npm registry package resolution. On Windows, the verifier invokes package-manager CLI JavaScript entrypoints through Node when available instead of spawning `.cmd` shims directly. Set `CODE_UX_KEEP_RELEASE_INSTALL_TEMP=1` when diagnosing a failed run and you need to inspect the temporary package or install directory.
 
-### Release Checks Policy
+CI may set `CODE_UX_SKIP_RELEASE_INSTALL_BUILD=1` after downloading the compiled build artifact. In that mode the verifier refuses to continue unless `dist/index.js`, `dist/worker/index.js`, and `dashboard/dist/` are already present, then it packs and installs the artifact-backed workspace without rebuilding.
 
-The no-secret release validation workflow is `.github/workflows/release-checks.yml`. It runs on pull requests targeting `main` and on manual `workflow_dispatch`, and it uses a native Linux, macOS, and Windows matrix to prove a release candidate can install dependencies, build from source, install from its packed npm tarball, run the installed CLI help command, and build the platform desktop package without provider credentials or publishing credentials.
+### CI Pipeline Policy
 
-Each job uses pnpm 10.33.0 and Node 22, runs `pnpm install --frozen-lockfile --ignore-scripts`, `pnpm run build`, `node scripts/verify-release-install.mjs`, rebuilds Electron native dependencies with `pnpm run electron:install-deps`, and then runs the matching Electron distribution script for the runner platform:
+The automatic GitHub lane is `.github/workflows/ci.yml`, named `Code UX CI Pipeline`. During the CI refactor rollout it runs on pushes to `dev` and `main`, pull requests targeting any branch, and manual dispatches so the main-grade lane can stabilize on `dev` before the final trigger shape is tightened.
 
-- Linux: `pnpm run electron:dist:linux`
-- macOS: `pnpm run electron:dist:mac`
-- Windows: `pnpm run electron:dist:win`
+The lane is intentionally numbered and staged:
 
-`node scripts/verify-release-install.mjs` builds the workspace, creates a local npm tarball with `npm pack --ignore-scripts`, installs that tarball into a temporary npm project, verifies the local `node_modules/.bin/codeux` shim exists, and runs the installed package's `codeux --help` bin target directly through Node. This avoids `npm exec` package lookup and keeps the smoke command tied to the local tarball install. Its Windows path resolves npm and pnpm command shims to Node-run CLI entrypoints when possible so the check stays shell-free across runners. Electron packaging sets `CSC_IDENTITY_AUTO_DISCOVERY=false` so CI builds remain unsigned, and release-check Electron commands pass `--publish never` so generated installer/package files under `release/electron/` are uploaded as workflow artifacts only.
+- `01 Preflight / release policy` keeps the main-PR version bump gate strict. Pull requests targeting `main` must increase `package.json` above the base version; ordinary `dev` integration PRs are not blocked by the release version rule.
+- `02` through `06` run the fast core checks after preflight: quality guardrails plus backend/dashboard typecheck, server/dashboard build, backend coverage, dashboard Vitest, and security audit. These are the first runner burst and are designed around a six-runner budget.
+- `03 Build` uploads one `codeux-build-linux` artifact containing `dist/`, `dashboard/dist/`, and TypeScript cache output.
+- `07 Package` verifies the npm tarball install from that build artifact with `CODE_UX_SKIP_RELEASE_INSTALL_BUILD=1`.
+- `08 Orchestration` runs the Docker-backed mockup DAG from the build artifact.
+- `09` and `10` run Playwright from the build artifact: all six project groups on Linux with `max-parallel: 2`, plus macOS and Windows smoke coverage for `navigation` and `tasks` with `max-parallel: 2`.
+- `11` runs the macOS and Windows Electron DAG from the build artifact.
+- `12 Release Candidate` builds unsigned Linux, macOS, and Windows desktop packages with `--publish never` and uploads workflow artifacts.
 
-Together, `.github/workflows/release-checks.yml` and `.github/workflows/playwright.yml` are the pull-request-to-main credential-free release validation lanes. The former checks source build, package installability, CLI help, and desktop package creation; the latter checks the compiled app in Chromium across Linux, macOS, and Windows by purpose group and independently smoke-tests the packed npm CLI.
+The former standalone `Playwright Tests`, `Release Checks`, and `Mockup Sprint Orchestration` workflows are now manual diagnostics only: `Playwright Diagnostics`, `Release Candidate Diagnostics`, and `Mockup Sprint Diagnostics`. They remain useful for focused reruns, but the automatic PR signal comes from the numbered `Code UX CI Pipeline`.
 
 ### Main Release Version Gate
 
-The `CI` workflow includes a `Release Version Bump` job for pull requests targeting `main`. It compares `package.json` on the PR head with the target `main` commit and fails unless the head version is a valid semver patch/minor/major increase. This keeps release promotions from merging to `main` without a package version bump while leaving ordinary `dev` integration PRs unaffected.
+The `Code UX CI Pipeline` includes a strict preflight version gate for pull requests targeting `main`. It compares `package.json` on the PR head with the target `main` commit and fails unless the head version is a valid semver patch/minor/major increase. This keeps release promotions from merging to `main` without a package version bump while leaving ordinary `dev` integration PRs unaffected.
 
 Local reproduction commands:
 
@@ -259,11 +264,11 @@ Set `CODEUX_E2E_OPENROUTER_MODEL` only when validating a different OpenRouter mo
 
 ### Mockup Sprint Orchestration Policy
 
-The credential-free mockup sprint orchestration workflow is `.github/workflows/mockup-sprint-orchestration.yml`. Its normal `ci-dag` job runs on `ubuntu-latest` for pushes and pull requests targeting `dev` or `main`, then runs `pnpm run test:orchestration:ci-dag`. That lane builds the runtime and runs the deterministic 10-task mockup DAG through Docker-backed provider workspaces without provider secrets.
+The credential-free mockup sprint orchestration gate is part of `.github/workflows/ci.yml`. Its `08 Orchestration / Docker DAG` job runs `pnpm run test:orchestration:ci-dag:run` after the shared build artifact is available, so the deterministic 10-task DAG executes through Docker-backed provider workspaces without provider secrets and without rebuilding the app.
 
-Pushes to `main`, pull requests targeting `main`, and manual workflow dispatches also run a native Windows and macOS Electron DAG lane. That lane rebuilds Electron native dependencies and runs `pnpm run test:orchestration:ci-dag:electron`, which launches `dist/electron/main.js`, waits for the embedded Code UX server, then runs the same 10-task DAG shape through a host-execution mockup fixture. GitHub-hosted Windows and macOS runners do not provide Docker job containers, so the Electron lane validates desktop orchestration on the native app runtime while the normal Ubuntu lane remains the Docker-backed orchestration gate.
+The `11 Orchestration / Electron DAG` jobs run the same DAG shape on native Windows and macOS Electron runtimes after the package smoke and Docker DAG gates pass. These jobs install the cached Electron binary, rebuild native dependencies, launch `dist/electron/main.js`, wait for the embedded Code UX server, and run the host-execution mockup fixture. GitHub-hosted Windows and macOS runners do not provide Docker job containers, so the native Electron lane validates desktop orchestration while Ubuntu remains the Docker-backed orchestration gate.
 
-The fast `test:orchestration:rapid` lane remains available for local unit-level regression checks, while the compiled `test:orchestration:full` catalog and heavy `test:orchestration:pentest` lane remain manual escalation tools and are not part of CI.
+The manual `.github/workflows/mockup-sprint-orchestration.yml` workflow remains available as `Mockup Sprint Diagnostics` for focused orchestration reruns. The fast `test:orchestration:rapid` lane remains available for local unit-level regression checks, while the compiled `test:orchestration:full` catalog and heavy `test:orchestration:pentest` lane remain manual escalation tools.
 
 Use [Mockup Sprint Pentest](./mockup-sprint-pentest.md) for local commands, CI trigger and artifact policy, covered scenarios, and the distinction between this no-secret lane and the credentialed OpenRouter validation lane.
 

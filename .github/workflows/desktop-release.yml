@@ -1,8 +1,6 @@
-name: Desktop Release
+name: Desktop Release Diagnostics
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
@@ -11,11 +9,11 @@ on:
         type: string
 
 concurrency:
-  group: desktop-release-${{ github.event.release.tag_name || inputs.tag || github.ref }}
+  group: desktop-release-diagnostics-${{ inputs.tag || github.ref }}
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-desktop:
@@ -41,14 +39,14 @@ jobs:
 
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
+      GH_TOKEN: ""
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.release.tag_name || inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
@@ -117,24 +115,3 @@ jobs:
             !release/electron/builder-debug.yml
             !release/electron/builder-effective-config.yaml
           if-no-files-found: error
-
-      - name: Upload files to GitHub Release
-        if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: |
-            release/electron/*.dmg
-            release/electron/*.zip
-            release/electron/*.AppImage
-            release/electron/*.deb
-            release/electron/*.rpm
-            release/electron/*.exe
-            release/electron/*.msi
-            release/electron/*.pkg
-            release/electron/*.tar.gz
-            release/electron/*.tar.xz
-            release/electron/*.7z
-            !release/electron/*-unpacked/**
-            !release/electron/builder-debug.yml
-            !release/electron/builder-effective-config.yaml

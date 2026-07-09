@@ -1,27 +1,86 @@
 name: Release
 
-# Publishes codeux to npm when a GitHub Release is published.
-# Auth uses npm Trusted Publishing (OIDC) — no NPM_TOKEN secret required.
-# The npm package must have this repo/workflow registered as a trusted
-# publisher on npmjs.com (Settings → Trusted Publishers) before the first run.
+# Publishes Code UX to npm and attaches desktop packages when a GitHub Release
+# is published. npm auth uses Trusted Publishing (OIDC), so no NPM_TOKEN secret
+# is required.
 on:
   release:
     types: [published]
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event.release.tag_name || github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
-  publish:
-    name: Build & Publish to npm
+  release-preflight:
+    name: 01 Release / preflight
     runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Restore node_modules cache
+        uses: actions/cache@v5
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Run security audit
+        run: pnpm run audit
+
+      - name: Verify tag matches package.json version
+        run: |
+          PKG_VERSION="v$(node -p "require('./package.json').version")"
+          TAG="${GITHUB_REF_NAME}"
+          if [ "$PKG_VERSION" != "$TAG" ]; then
+            echo "::error::Release tag ($TAG) does not match package.json version ($PKG_VERSION)."
+            exit 1
+          fi
+          echo "Version check OK: $TAG"
+
+      - name: Verify release tag is on main
+        run: |
+          git fetch origin main --depth=1
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Release tag commit $GITHUB_SHA is not reachable from origin/main."
+            exit 1
+          fi
+
+  publish-npm:
+    name: 02 Release / npm publish
+    needs: release-preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
     permissions:
       contents: read
-      id-token: write # required for OIDC trusted publishing + provenance
+      id-token: write
     steps:
-      - name: Checkout
+      - name: Checkout release tag
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -45,32 +104,132 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Run Security Audit
-        run: pnpm run audit
-
-      - name: Verify tag matches package.json version
-        run: |
-          PKG_VERSION="v$(node -p "require('./package.json').version")"
-          TAG="${GITHUB_REF_NAME}"
-          if [ "$PKG_VERSION" != "$TAG" ]; then
-            echo "::error::Release tag ($TAG) does not match package.json version ($PKG_VERSION)."
-            exit 1
-          fi
-          echo "Version check OK: $TAG"
-
-      - name: Typecheck
-        run: |
-          pnpm run typecheck
-          pnpm run typecheck:dashboard
-
-      - name: Test (backend + dashboard)
-        run: |
-          pnpm run test:backend:coverage
-          pnpm run test:dashboard
-
-      # `npm publish` runs the `prepack` hook (pnpm run build) to produce a
-      # fresh dist/ + dashboard/dist before packing, and performs the OIDC
+      # npm publish runs the prepack hook (pnpm run build) and performs the OIDC
       # token exchange automatically when id-token:write is granted.
-      # `publishConfig` in package.json sets access=public and provenance=true.
       - name: Publish to npm
         run: npm publish
+
+  desktop-packages:
+    name: 03 Release / desktop package (${{ matrix.name }})
+    needs: release-preflight
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            electron-target: --linux
+            artifact-name: code-ux-linux
+          - name: macOS
+            os: macos-latest
+            electron-target: --mac
+            artifact-name: code-ux-macos
+          - name: Windows
+            os: windows-latest
+            electron-target: --win
+            artifact-name: code-ux-windows
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+      electron_config_cache: ${{ github.workspace }}/.cache/electron-downloads
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Restore desktop build caches
+        uses: actions/cache@v5
+        with:
+          path: |
+            .cache/vite
+            .cache/tsc
+            .cache/electron-runtime
+            .cache/electron-downloads
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: ${{ runner.os }}-node22-pnpm10.33.0-desktop-release-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'tsconfig.json', 'dashboard/tsconfig.json', 'electron-builder.config.cjs', 'scripts/prepare-electron-runtime-deps.mjs') }}
+          restore-keys: |
+            ${{ runner.os }}-node22-pnpm10.33.0-desktop-release-
+
+      - name: Install Linux packaging dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libopenjp2-tools
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Install Electron binary from cache
+        run: node node_modules/electron/install.js
+
+      - name: Rebuild Electron native dependencies
+        run: pnpm run electron:install-deps
+
+      - name: Build desktop package
+        run: pnpm run build && pnpm run electron:prepare-deps && pnpm exec electron-builder --config electron-builder.config.cjs ${{ matrix.electron-target }} --publish never
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: |
+            release/electron/*.dmg
+            release/electron/*.zip
+            release/electron/*.AppImage
+            release/electron/*.deb
+            release/electron/*.rpm
+            release/electron/*.exe
+            release/electron/*.msi
+            release/electron/*.pkg
+            release/electron/*.tar.gz
+            release/electron/*.tar.xz
+            release/electron/*.7z
+            !release/electron/*-unpacked/**
+            !release/electron/mac/**
+            !release/electron/builder-debug.yml
+            !release/electron/builder-effective-config.yaml
+          if-no-files-found: error
+
+      - name: Upload files to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: |
+            release/electron/*.dmg
+            release/electron/*.zip
+            release/electron/*.AppImage
+            release/electron/*.deb
+            release/electron/*.rpm
+            release/electron/*.exe
+            release/electron/*.msi
+            release/electron/*.pkg
+            release/electron/*.tar.gz
+            release/electron/*.tar.xz
+            release/electron/*.7z
+            !release/electron/*-unpacked/**
+            !release/electron/builder-debug.yml
+            !release/electron/builder-effective-config.yaml

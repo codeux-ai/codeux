@@ -365,9 +365,10 @@ curl http://localhost:4444/api/git-status
 ## CI And E2E Operations
 
 GitHub validation is split by signal:
-- `CI` runs `Typecheck & Lint`, `Backend Tests & Coverage`, `Dashboard Tests`, `Build`, and `Security Audit` on Node 22 with pnpm 10.33.0. It runs on pushes to `main` and `dev`, and on pull requests targeting any branch.
-- `Playwright Tests` runs browser E2E validation on pushes and pull requests targeting `main`. This keeps the heavyweight OS-matrix lane on the release path while `dev` remains gated by core CI. Release and publish workflows remain separate from CI/E2E validation.
-- `Release Checks` runs no-secret release validation on pull requests targeting `main` and manual dispatches. It remains separate from core CI and Playwright so desktop packaging or release-install failures do not hide test, audit, or browser failures.
+- `Code UX CI Pipeline` is the canonical automatic lane. During the dev-first rollout it runs on pushes to `dev` and `main`, pull requests targeting any branch, and manual dispatches.
+- The first runner burst is preflight, static type/guardrail validation, build, backend coverage, dashboard tests, and security audit. The build job uploads `codeux-build-linux` for all downstream jobs.
+- Downstream jobs reuse that build artifact for npm install smoke validation, Docker mockup DAG orchestration, Linux full Playwright, macOS/Windows Playwright smoke, macOS/Windows Electron DAG orchestration, and unsigned desktop release-candidate packages. The integration stage is capped at six concurrent jobs; native Electron DAG and release-candidate packaging wait for the Playwright stage instead of stacking extra runners on top.
+- `Playwright Diagnostics`, `Release Candidate Diagnostics`, and `Mockup Sprint Diagnostics` are manual-only workflows for focused reruns. They no longer run automatically on every PR.
 - Superseded runs for the same branch or pull request are cancelled by workflow concurrency groups.
 - Security validation is intentionally separated from build and Playwright lanes. The `Security Audit` job runs `pnpm run audit`, which is `pnpm audit --audit-level=high`; high-severity dependency findings fail that job without preventing typecheck, tests, build, or Playwright artifacts from reporting their own status.
 
@@ -378,14 +379,14 @@ Local equivalents:
 - `pnpm run audit` mirrors the independent security audit job.
 - `pnpm run build` validates the compiled server and dashboard bundle.
 - `pnpm run build` followed by `pnpm run test:e2e` runs the browser E2E suite locally against the compiled app after dependencies and Playwright browsers are installed. The wrapper delegates to `pnpm exec playwright test` after choosing isolated local ports.
-- `node scripts/verify-release-install.mjs` mirrors the release install smoke check before Electron packaging.
+- `node scripts/verify-release-install.mjs` mirrors the release install smoke check before Electron packaging. CI sets `CODE_UX_SKIP_RELEASE_INSTALL_BUILD=1` only after downloading `codeux-build-linux`, which makes the verifier reuse `dist/` and `dashboard/dist/` instead of rebuilding.
 
 Dependency and cache behavior:
 - CI restores `node_modules` only as a speed hint and still runs `pnpm install --frozen-lockfile --ignore-scripts` in every job.
-- Vitest, Vite, TypeScript, Playwright browser, and release-check caches are keyed to the runner OS, Node 22, pnpm 10.33.0, and dependency/config files that affect the cached output.
+- Vitest, Vite, TypeScript, Playwright browser, Electron binary, Electron Builder, and release-candidate caches are keyed to the runner OS, Node 22, pnpm 10.33.0, and dependency/config files that affect the cached output.
 - Playwright restores the browser cache before running `pnpm exec playwright install chromium`; Linux runners also run `pnpm exec playwright install-deps chromium` so cached browser binaries cannot hide missing OS dependencies.
-- The Build and Playwright jobs do not cache `.cache/tsc`; those jobs must emit a fresh `dist/` tree for package output and the E2E web server.
-- `tests/backend/ci/workflow-health.test.ts` audits these workflow invariants so accidental drift in package manager version, Node version, install mode, cache keys, audit separation, concurrency cancellation, Playwright artifacts, or release-lane separation fails a focused backend test.
+- The build artifact, not repeated source builds, feeds package smoke, orchestration, Playwright, and release-candidate jobs.
+- `tests/backend/ci/workflow-health.test.ts` audits these workflow invariants so accidental drift in package manager version, Node version, install mode, artifact reuse, audit separation, concurrency cancellation, Playwright artifacts, manual diagnostics, or release-lane separation fails a focused backend test.
 
 Artifacts:
 - On Playwright failure, download the `playwright-artifacts` artifact from the workflow run. It contains `test-results/` traces/screenshots/videos when produced and `playwright-report/` for the HTML report.
