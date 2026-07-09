@@ -164,6 +164,8 @@ pnpm run dev:server-only       # boot just the server from source
 # electron:generate-icons, electron:prepare-deps, electron:dev, electron:pack, electron:dist, electron:dist:linux, electron:dist:mac, electron:dist:win, electron:benchmark:runtime, electron:benchmark:win, electron:install-deps
 ```
 
+Electron and npm package builds include the `docs-web` runtime catalog. The backend serves `/api/docs-web` from that packaged directory so the `/docs` dashboard route continues to work after installation.
+
 ## Contributing workflow
 
 1. **Branch** — create `feat/<scope>`, `fix/<scope>` or `chore/<scope>`. Never commit directly to `main`.
