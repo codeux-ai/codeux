@@ -87,7 +87,10 @@ export class WorkspaceArtifactService {
       ":(exclude,glob)**/logs/openai/**",
       ":(exclude,glob)logs/openai/**",
     ];
-    const tempIndexPath = `.code-ux-export-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.index`;
+    const tempIndexFilename = `.code-ux-export-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.index`;
+    const tempIndexPath = workspaceRef.startsWith("docker-volume://") || !path.isAbsolute(workspaceRef)
+      ? tempIndexFilename
+      : path.join(workspaceRef, tempIndexFilename);
     const tempIndexEnv = {
       ...process.env,
       GIT_INDEX_FILE: tempIndexPath,
@@ -127,9 +130,12 @@ export class WorkspaceArtifactService {
     } finally {
       await fs.rm(tempPathListPath, { force: true }).catch(() => undefined);
       if (workspaceRef.startsWith("docker-volume://")) {
-        await this.workspaceManager.runWorkspaceCommand(workspaceRef, "rm", ["-f", tempIndexPath]).catch(() => undefined);
+        await this.workspaceManager.runWorkspaceCommand(workspaceRef, "rm", ["-f", tempIndexFilename]).catch(() => undefined);
       } else {
-        await fs.rm(path.join(workspaceRef, tempIndexPath), { force: true }).catch(() => undefined);
+        const hostTempIndexPath = path.isAbsolute(tempIndexPath)
+          ? tempIndexPath
+          : path.join(workspaceRef, tempIndexPath);
+        await fs.rm(hostTempIndexPath, { force: true }).catch(() => undefined);
       }
     }
   }

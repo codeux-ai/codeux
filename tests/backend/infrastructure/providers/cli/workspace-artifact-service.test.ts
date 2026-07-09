@@ -522,6 +522,51 @@ describe("WorkspaceArtifactService", () => {
     }
   });
 
+  it("uses an absolute temporary Git index for host worktree exports", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-artifact-service-"));
+    cleanupPaths.push(tempRoot);
+
+    const seenIndexFiles: string[] = [];
+    const workspaceManager = {
+      runWorkspaceCommand: async (
+        _worktreePath: string,
+        command: string,
+        args: string[],
+        options: WorkspaceCommandOptions = {},
+      ) => {
+        const indexFile = options.env?.GIT_INDEX_FILE;
+        if (typeof indexFile === "string") {
+          seenIndexFiles.push(indexFile);
+        }
+        if (command === "git" && args[0] === "diff") {
+          return {
+            ok: true,
+            code: 0,
+            stdout: "diff --git a/src/generated/file-0.ts b/src/generated/file-0.ts\n",
+            stderr: "",
+          };
+        }
+        return {
+          ok: true,
+          code: 0,
+          stdout: "",
+          stderr: "",
+        };
+      },
+    } as IWorkspaceManager;
+
+    const service = new WorkspaceArtifactService(workspaceManager);
+    const patchText = await service.exportBinaryPatch(tempRoot, "HEAD");
+
+    expect(patchText).toContain("diff --git");
+    expect(seenIndexFiles.length).toBeGreaterThan(0);
+    expect(new Set(seenIndexFiles).size).toBe(1);
+    const [indexFile] = seenIndexFiles;
+    expect(path.isAbsolute(indexFile)).toBe(true);
+    expect(indexFile.startsWith(`${tempRoot}${path.sep}`)).toBe(true);
+    expect(path.basename(indexFile)).toMatch(/^\.code-ux-export-.*\.index$/);
+  });
+
   it("excludes stale Code UX export index files from preserved workspaces", async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-artifact-service-"));
     cleanupPaths.push(tempRoot);
