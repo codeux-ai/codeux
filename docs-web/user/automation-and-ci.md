@@ -94,6 +94,10 @@ Per project (Settings → Git):
 
 `REMOTE` requires `gh auth status` to succeed (or `GITHUB_TOKEN` set).
 
+## CI smoke coverage
+
+The Playwright `navigation` project smoke-tests the dashboard Docs page. It covers `/docs`, the docs overview, dashboard overview, and representative sample pages so CI catches broken packaged docs routes before release.
+
 ## Merge indicators
 
 The `merge_indicator` field on a subtask documents the merge state:
