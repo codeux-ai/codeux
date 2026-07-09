@@ -2,7 +2,7 @@ import { evaluateMergeReadiness } from "./feature-pr/merge-readiness-policy.js";
 import { deriveChecksFromCiRuns } from "../../../sprint/ci-status-utils.js";
 import { runCommandStrict } from "../../../services/cli-process-runner.js";
 import type { GuardrailService } from "../../../services/guardrail-service.js";
-import { deleteBranchLocally, findRecoverableWorkerBranch, getCheckedOutRef, mergeBranchLocallyInTemporaryWorktree, restoreCheckedOutRef, workerBranchHasMergeWork } from "../../../infrastructure/git/local-merge.js";
+import { createTemporaryWorktreeBranchMerger, deleteBranchLocally, findRecoverableWorkerBranch, mergeBranchLocallyInTemporaryWorktree, workerBranchHasMergeWork } from "../../../infrastructure/git/local-merge.js";
 import { buildWorkerBranchPrefix } from "../../../services/cli-workflow-utils.js";
 import { matchMergedPrForTask, matchPrForTask } from "./feature-pr/pr-matcher.js";
 import { attemptAutoMerge } from "./feature-pr/automerge-policy.js";
@@ -300,11 +300,15 @@ export class FeaturePrGateService {
     }
     if (completedAwaitingBranchMerge.length > 0) {
       let reportText = "";
-      // The host repo is the user's own working directory — capture whatever ref is
-      // checked out so we can restore it once after merging every worker branch,
-      // rather than leaving the repo parked on the feature branch (and without
-      // churning the working tree by checking it out per task).
-      const originalRef = await getCheckedOutRef(context.repoPath);
+      // A LOCAL-mode DAG can finish many independent worker branches at once.
+      // Reuse one detached worktree for that cycle while publishing the target ref
+      // after each merge, rather than paying worktree setup and cleanup per task.
+      const localMerger = context.githubMode === "LOCAL"
+        ? createTemporaryWorktreeBranchMerger({
+            repoPath: context.repoPath,
+            targetBranch: context.featureBranch,
+          })
+        : null;
       try {
         for (const task of completedAwaitingBranchMerge) {
           const workerBranch = typeof task.worker_branch === "string" ? task.worker_branch : null;
@@ -376,7 +380,9 @@ export class FeaturePrGateService {
               sourceBranch: workerBranch,
               commitMessage: `Merge branch '${workerBranch}' into ${context.featureBranch}`,
             };
-            const merge = await mergeBranchLocallyInTemporaryWorktree(mergeArgs);
+            const merge = localMerger
+              ? await localMerger.merge(workerBranch, mergeArgs.commitMessage)
+              : await mergeBranchLocallyInTemporaryWorktree(mergeArgs);
 
             if (merge.ok) {
               if (context.githubMode === "REMOTE") {
@@ -451,7 +457,7 @@ export class FeaturePrGateService {
             }
         }
       } finally {
-        await restoreCheckedOutRef(context.repoPath, originalRef);
+        await localMerger?.close();
       }
       return { subtasks: updatedSubtasks, reportText };
     }

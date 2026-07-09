@@ -636,10 +636,142 @@ export async function mergeBranchLocally(args: {
   }
 }
 
+export interface TemporaryWorktreeBranchMerger {
+  merge(sourceBranch: string, commitMessage: string): Promise<LocalMergeResult>;
+  close(): Promise<void>;
+}
+
 /**
- * Merges `sourceBranch` into `targetBranch` from a detached temporary worktree.
- * This is intended for final LOCAL-mode feature -> default merges where the
- * user's visible checkout must not switch branches or receive conflict files.
+ * Creates a reusable detached-worktree merger. A batch keeps one worktree open
+ * while applying independent worker branches to the same target, but publishes
+ * the target ref after every successful merge. This avoids worktree setup and
+ * cleanup for every leaf in a wide LOCAL-mode DAG without making a later merge
+ * depend on uncommitted work from an earlier one.
+ */
+export function createTemporaryWorktreeBranchMerger(args: {
+  repoPath: string;
+  targetBranch: string;
+  fallbackTargetBranches?: string[];
+  runner?: LocalMergeRunner;
+}): TemporaryWorktreeBranchMerger {
+  const runner = args.runner ?? defaultHostGitRunner;
+  const targetBranch = args.targetBranch.trim();
+  let visibleCheckout: CheckedOutRef | null | undefined;
+  let worktreePath: string | null = null;
+  let worktreeCreated = false;
+  let mergedTarget = false;
+  let closed = false;
+
+  const openWorktree = async (sourceBranch: string): Promise<LocalMergeResult | null> => {
+    if (!targetBranch) {
+      return { ok: false, conflict: false, error: "Target branch is required for local merge." };
+    }
+    if (worktreeCreated) {
+      return null;
+    }
+    visibleCheckout ??= await getCheckedOutRef(args.repoPath, runner);
+    const targetExists = await gitRefExists(args.repoPath, `refs/heads/${targetBranch}`, runner);
+    if (!targetExists) {
+      try {
+        const startPoint = await resolveTargetBranchStartPoint(
+          args.repoPath,
+          targetBranch,
+          args.fallbackTargetBranches ?? [],
+          runner,
+        );
+        await runner("git", ["branch", targetBranch, startPoint ?? sourceBranch], args.repoPath);
+        if (!startPoint) {
+          mergedTarget = true;
+          return { ok: true, conflict: false };
+        }
+      } catch (err) {
+        return { ok: false, conflict: false, error: formatGitError(err) };
+      }
+    }
+
+    const worktreeRoot = path.join(args.repoPath, ".worktrees");
+    try {
+      if (existsSync(args.repoPath)) {
+        await mkdir(worktreeRoot, { recursive: true });
+        worktreePath = await mkdtemp(path.join(worktreeRoot, "code-ux-local-merge-"));
+      } else {
+        worktreePath = path.join(worktreeRoot, `code-ux-local-merge-${randomUUID()}`);
+      }
+      await runner("git", ["worktree", "add", "--detach", worktreePath, targetBranch], args.repoPath);
+      worktreeCreated = true;
+      await normalizeTemporaryWorktreeGitMetadata(args.repoPath, worktreePath);
+      return null;
+    } catch (err) {
+      return { ok: false, conflict: false, error: formatGitError(err) };
+    }
+  };
+
+  return {
+    async merge(sourceBranchInput: string, commitMessage: string): Promise<LocalMergeResult> {
+      if (closed) {
+        return { ok: false, conflict: false, error: "Temporary worktree merger is already closed." };
+      }
+      const sourceBranch = sourceBranchInput.trim();
+      if (!sourceBranch) {
+        return { ok: false, conflict: false, error: "Source branch is required for local merge." };
+      }
+      if (!(await gitCommitExists(args.repoPath, sourceBranch, runner))) {
+        return {
+          ok: false,
+          conflict: false,
+          error: `Source branch or ref '${sourceBranch}' was not found or does not point to a commit.`,
+        };
+      }
+
+      const opened = await openWorktree(sourceBranch);
+      if (opened) {
+        return opened;
+      }
+      if (!worktreePath) {
+        return { ok: false, conflict: false, error: "Temporary worktree was not created." };
+      }
+
+      try {
+        await runGitWithCodeUxIdentity(worktreePath, ["merge", "--no-ff", "-m", commitMessage, sourceBranch], runner);
+        await runner("git", ["update-ref", `refs/heads/${targetBranch}`, "HEAD"], worktreePath);
+        mergedTarget = true;
+        return { ok: true, conflict: false };
+      } catch (err) {
+        const resolvedCodeUxConflict = await resolveCodeUxOnlyMergeConflicts(worktreePath, commitMessage, runner);
+        if (resolvedCodeUxConflict?.ok) {
+          await runner("git", ["update-ref", `refs/heads/${targetBranch}`, "HEAD"], worktreePath);
+          mergedTarget = true;
+          return resolvedCodeUxConflict;
+        }
+        const conflict = resolvedCodeUxConflict ? true : await hasUnmergedConflictEntries(worktreePath, runner);
+        try {
+          await runner("git", ["merge", "--abort"], worktreePath);
+        } catch {
+          // Abort can itself fail if there was nothing to abort; ignore.
+        }
+        return { ok: false, conflict, error: formatGitError(err) };
+      }
+    },
+    async close(): Promise<void> {
+      if (closed) return;
+      closed = true;
+      if (mergedTarget && visibleCheckout && !visibleCheckout.detached && visibleCheckout.ref === targetBranch) {
+        await runner("git", ["reset", "--hard", "HEAD"], args.repoPath).catch(() => undefined);
+      }
+      if (worktreeCreated && worktreePath) {
+        await runner("git", ["worktree", "remove", "--force", worktreePath], args.repoPath).catch(() => undefined);
+        await runner("git", ["worktree", "prune"], args.repoPath).catch(() => undefined);
+      }
+      if (worktreePath) {
+        await rm(worktreePath, { recursive: true, force: true }).catch(() => undefined);
+      }
+    },
+  };
+}
+
+/**
+ * Merges one branch using a temporary worktree. Kept as the single-merge API
+ * for callers outside the sprint batch gate.
  */
 export async function mergeBranchLocallyInTemporaryWorktree(args: {
   repoPath: string;
@@ -649,86 +781,10 @@ export async function mergeBranchLocallyInTemporaryWorktree(args: {
   fallbackTargetBranches?: string[];
   runner?: LocalMergeRunner;
 }): Promise<LocalMergeResult> {
-  const runner = args.runner ?? defaultHostGitRunner;
-  const targetBranch = args.targetBranch.trim();
-  const sourceBranch = args.sourceBranch.trim();
-  if (!targetBranch) {
-    return { ok: false, conflict: false, error: "Target branch is required for local merge." };
-  }
-  if (!sourceBranch) {
-    return { ok: false, conflict: false, error: "Source branch is required for local merge." };
-  }
-  if (!(await gitCommitExists(args.repoPath, sourceBranch, runner))) {
-    return {
-      ok: false,
-      conflict: false,
-      error: `Source branch or ref '${sourceBranch}' was not found or does not point to a commit.`,
-    };
-  }
-
-  const visibleCheckout = await getCheckedOutRef(args.repoPath, runner);
-  const targetExists = await gitRefExists(args.repoPath, `refs/heads/${targetBranch}`, runner);
-  if (!targetExists) {
-    try {
-      const startPoint = await resolveTargetBranchStartPoint(
-        args.repoPath,
-        targetBranch,
-        args.fallbackTargetBranches ?? [],
-        runner,
-      );
-      await runner("git", ["branch", targetBranch, startPoint ?? sourceBranch], args.repoPath);
-      if (!startPoint) {
-        return { ok: true, conflict: false };
-      }
-    } catch (err) {
-      return { ok: false, conflict: false, error: formatGitError(err) };
-    }
-  }
-
-  const worktreeRoot = path.join(args.repoPath, ".worktrees");
-  let worktreePath: string;
-  if (existsSync(args.repoPath)) {
-    await mkdir(worktreeRoot, { recursive: true });
-    worktreePath = await mkdtemp(path.join(worktreeRoot, "code-ux-local-merge-"));
-  } else {
-    worktreePath = path.join(worktreeRoot, `code-ux-local-merge-${randomUUID()}`);
-  }
-  let worktreeCreated = false;
+  const merger = createTemporaryWorktreeBranchMerger(args);
   try {
-    await runner("git", ["worktree", "add", "--detach", worktreePath, targetBranch], args.repoPath);
-    worktreeCreated = true;
-    await normalizeTemporaryWorktreeGitMetadata(args.repoPath, worktreePath);
-    await runGitWithCodeUxIdentity(worktreePath, ["merge", "--no-ff", "-m", args.commitMessage, sourceBranch], runner);
-    await runner("git", ["update-ref", `refs/heads/${targetBranch}`, "HEAD"], worktreePath);
-    if (visibleCheckout && !visibleCheckout.detached && visibleCheckout.ref === targetBranch) {
-      await runner("git", ["reset", "--hard", "HEAD"], args.repoPath);
-    }
-    return { ok: true, conflict: false };
-  } catch (err) {
-    const resolvedCodeUxConflict = worktreeCreated
-      ? await resolveCodeUxOnlyMergeConflicts(worktreePath, args.commitMessage, runner)
-      : null;
-    if (resolvedCodeUxConflict?.ok) {
-      await runner("git", ["update-ref", `refs/heads/${targetBranch}`, "HEAD"], worktreePath);
-      if (visibleCheckout && !visibleCheckout.detached && visibleCheckout.ref === targetBranch) {
-        await runner("git", ["reset", "--hard", "HEAD"], args.repoPath);
-      }
-      return resolvedCodeUxConflict;
-    }
-    const conflict = resolvedCodeUxConflict ? true : worktreeCreated ? await hasUnmergedConflictEntries(worktreePath, runner) : false;
-    if (worktreeCreated) {
-      try {
-        await runner("git", ["merge", "--abort"], worktreePath);
-      } catch {
-        // Abort can itself fail if there was nothing to abort; ignore.
-      }
-    }
-    return { ok: false, conflict, error: formatGitError(err) };
+    return await merger.merge(args.sourceBranch, args.commitMessage);
   } finally {
-    if (worktreeCreated) {
-      await runner("git", ["worktree", "remove", "--force", worktreePath], args.repoPath).catch(() => undefined);
-      await runner("git", ["worktree", "prune"], args.repoPath).catch(() => undefined);
-    }
-    await rm(worktreePath, { recursive: true, force: true }).catch(() => undefined);
+    await merger.close();
   }
 }
