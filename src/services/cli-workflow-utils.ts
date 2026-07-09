@@ -56,7 +56,7 @@ const WORKER_BRANCH_PROVIDER_TOKEN_LENGTH = 10;
 const WORKER_BRANCH_HASH_LENGTH = 8;
 
 const shortHash = (value: string): string =>
-  createHash("sha1").update(value).digest("hex").slice(0, WORKER_BRANCH_HASH_LENGTH);
+  createHash("sha256").update(value).digest("hex").slice(0, WORKER_BRANCH_HASH_LENGTH);
 
 const trimBranchToken = (value: string, maxLength: number, fallback: string): string => {
   const trimmed = value.slice(0, maxLength).replace(/[._-]+$/g, "");
