@@ -1,6 +1,6 @@
 # Rapid orchestration debugging suite
 
-Use this suite when a sprint stalls, local merges fail, worker-owned attention items churn, or memory usage needs extended observation after a fix. CI uses the compiled QA DAG lane by default; full mockup pentest lanes are manual escalation tools for targeted investigations.
+Use this suite when a sprint stalls, local merges fail, worker-owned attention items churn, or memory usage needs extended observation after a fix. CI uses the compiled QA DAG lane by default; its Linux Docker run restarts the isolated runtime twice during active QA work, while macOS and Windows run the matching Electron QA DAG. Full mockup pentest lanes are manual escalation tools for targeted investigations.
 
 ## Commands
 

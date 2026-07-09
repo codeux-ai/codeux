@@ -79,6 +79,7 @@ export interface IWorkspaceManager {
   buildWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): string;
   buildWorkspaceRef(repoPath: string, workspaceKey: string, executionMode: CliWorkflowSettings["executionMode"]): string;
   createSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout, options?: SnapshotWorkspaceOptions): Promise<string>;
+  createHostSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string>;
   createOrReuseSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string>;
   resolveResumeWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): Promise<string | undefined>;
   resolveCurrentBranch(worktreePath: string): Promise<string | null>;
@@ -234,6 +235,41 @@ export class WorkspaceManager implements IWorkspaceManager {
       checkout?.remoteOnly === true,
     );
     return workspaceRef;
+  }
+
+  /**
+   * Creates a detached host worktree for read-only provider work such as QA.
+   * HOST-mode callers must never review from the visible repository checkout,
+   * because it may still be on the default branch while task work lives on a
+   * worker or sprint feature branch.
+   */
+  async createHostSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string> {
+    await this.assertExactGitWorktreeRoot(repoPath);
+    const workspacePath = this.buildWorktreePath(repoPath, `${sessionId}-snapshot`, "HOST");
+    await this.withWorkspaceLock(workspacePath, async () => {
+      await this.removeWorktree(repoPath, workspacePath).catch(() => undefined);
+      await fs.mkdir(path.dirname(workspacePath), { recursive: true });
+
+      const candidates = [checkout?.branch, checkout?.fallbackBranch]
+        .map((branch) => branch?.trim())
+        .filter((branch): branch is string => Boolean(branch));
+      for (const branch of candidates) {
+        const refs = checkout?.remoteOnly
+          ? [`refs/remotes/origin/${branch}`]
+          : [`refs/heads/${branch}`, `refs/remotes/origin/${branch}`];
+        for (const ref of refs) {
+          try {
+            await runCommandStrict("git", ["rev-parse", "--verify", "--quiet", ref], repoPath);
+            await runCommandStrict("git", ["worktree", "add", "--detach", workspacePath, ref], repoPath);
+            return;
+          } catch {
+            // Try the next local/remote ref before falling back to the current HEAD.
+          }
+        }
+      }
+      await runCommandStrict("git", ["worktree", "add", "--detach", workspacePath, "HEAD"], repoPath);
+    });
+    return workspacePath;
   }
 
   async createOrReuseSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string> {
