@@ -20,6 +20,7 @@ import { ProviderExecutionService } from "./provider-execution-service.js";
 import { ProviderConcurrencyService } from "./provider-concurrency-service.js";
 import { ProviderRunner, type IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
+import { buildProviderInvocationWorkspaceOptions } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import { resolveProviderForInvocation } from "./provider-routing.js";
 import { DEFAULT_CLI_WORKFLOW_SETTINGS } from "./cli-workflow-utils.js";
 import { extractJsonFromText } from "../domain/llm/json-extraction.js";
@@ -303,10 +304,15 @@ export class ProjectSetupService {
         sessionId,
         workspaceSessionId: `${projectId}-project-setup`,
         workflowSettings,
-        snapshotCheckout: workflowSettings.executionMode === "DOCKER"
-          ? { branch: defaultBranch }
-          : undefined,
-        githubToken: settings.git.githubToken,
+        ...buildProviderInvocationWorkspaceOptions({
+          workflowSettings,
+          gitPolicy: {
+            githubMode: settings.git.githubMode,
+            defaultBranch,
+            githubToken: settings.git.githubToken,
+            gitlabToken: settings.git.gitlabToken,
+          },
+        }),
         signal,
         expectTextOutput: true,
         invocationId,

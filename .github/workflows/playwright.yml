@@ -9,87 +9,272 @@ on:
 concurrency:
   group: playwright-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
+
 jobs:
-  test-e2e:
-    name: Playwright E2E Tests (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+  build:
+    name: Build compiled app (${{ matrix.os.label }})
+    runs-on: ${{ matrix.os.runner }}
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    env:
-      PLAYWRIGHT_BROWSERS_PATH: .cache/ms-playwright
+        os:
+          - runner: ubuntu-latest
+            label: Linux
+          - runner: macos-latest
+            label: macOS
+          - runner: windows-latest
+            label: Windows
     steps:
-      - name: Checkout
+      - name: Checkout repository for ${{ matrix.os.label }} build
         uses: actions/checkout@v6
 
-      - name: Setup pnpm
+      - name: Set up pnpm 10.33.0 for ${{ matrix.os.label }} build
         uses: pnpm/action-setup@v6
         with:
           version: 10.33.0
           run_install: false
 
-      - name: Setup Node.js
+      - name: Set up Node.js 22 for ${{ matrix.os.label }} build
         uses: actions/setup-node@v5
         with:
           node-version: 22
           package-manager-cache: false
 
-      - name: Restore node_modules cache
+      - name: Restore node_modules cache for ${{ matrix.os.label }} build
         if: runner.os != 'Windows'
-        id: nm-cache-e2e
+        id: node-modules-cache-build
         uses: actions/cache@v5
         with:
           path: node_modules
           key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
 
-      - name: Install dependencies
+      - name: Install dependencies for ${{ matrix.os.label }} build
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      # Cache only Vite's transform cache — NOT the server tsc incremental
-      # state (.cache/tsc). The server build runs `tsc --incremental` emitting
-      # to dist/, but dist/ is not cached here. Restoring the .tsbuildinfo
-      # without its matching dist/ makes incremental tsc consider the output
-      # up-to-date and emit nothing, leaving dist/index.js absent — which then
-      # crashes the Playwright webServer (`node dist/index.js`). Dropping the
-      # tsc cache forces a full server emit on every run.
-      - name: Restore Vite cache
+      - name: Restore Vite cache for ${{ matrix.os.label }} build
         uses: actions/cache@v5
         with:
           path: .cache/vite
           key: ${{ runner.os }}-node22-pnpm10.33.0-vite-e2e-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'tsconfig.json', 'dashboard/tsconfig.json') }}
 
-      - name: Build server & dashboard
+      - name: Build server & dashboard (${{ matrix.os.label }})
         run: pnpm run build
 
-      - name: Cache Playwright browser binaries
+      - name: Verify compiled CLI exists after ${{ matrix.os.label }} build
+        shell: bash
+        run: test -f dist/index.js
+
+      - name: Upload compiled app artifact for ${{ matrix.os.label }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeux-build-${{ matrix.os.runner }}
+          path: |
+            dist/
+            dashboard/dist/
+            .cache/tsc/
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 1
+
+  test:
+    name: Playwright E2E (${{ matrix.os.label }} / ${{ matrix.project.name }})
+    needs: build
+    runs-on: ${{ matrix.os.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - runner: ubuntu-latest
+            label: Linux
+          - runner: macos-latest
+            label: macOS
+          - runner: windows-latest
+            label: Windows
+        project:
+          - name: navigation
+            label: navigation
+          - name: settings
+            label: settings
+          - name: projects
+            label: projects
+          - name: tasks
+            label: tasks
+          - name: agents
+            label: agents
+          - name: config
+            label: config
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: .cache/ms-playwright
+    steps:
+      - name: Checkout repository for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm 10.33.0 for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.0
+          run_install: false
+
+      - name: Set up Node.js 22 for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Restore node_modules cache for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E
+        if: runner.os != 'Windows'
+        id: node-modules-cache-e2e
         uses: actions/cache@v5
-        id: playwright-cache
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+
+      - name: Install dependencies for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Download compiled app artifact for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E
+        uses: actions/download-artifact@v5
+        with:
+          name: codeux-build-${{ matrix.os.runner }}
+          path: .
+
+      - name: Verify restored compiled CLI for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E
+        shell: bash
+        run: test -f dist/index.js
+
+      - name: Cache Playwright browser binaries for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E
+        uses: actions/cache@v5
+        id: playwright-browser-cache
         with:
           path: .cache/ms-playwright
           key: ${{ runner.os }}-node22-pnpm10.33.0-playwright-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
           restore-keys: |
             ${{ runner.os }}-node22-pnpm10.33.0-playwright-
 
-      - name: Install Playwright OS dependencies
+      - name: Install Playwright OS dependencies for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E
         if: runner.os == 'Linux'
         run: pnpm exec playwright install-deps chromium
 
-      - name: Install Playwright browsers
+      - name: Install Playwright Chromium for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E
         run: pnpm exec playwright install chromium
 
-      - name: Run Playwright E2E Tests
-        run: pnpm run test:e2e
+      - name: Run E2E - ${{ matrix.project.label }} group on ${{ matrix.os.label }}
+        run: pnpm exec playwright test --project=${{ matrix.project.name }}
 
-      - name: Upload Playwright artifacts
+      - name: Upload Playwright artifacts for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-artifacts-${{ matrix.os }}
+          name: playwright-artifacts-${{ matrix.os.runner }}-${{ matrix.project.name }}
           path: |
             test-results/
             playwright-report/
           if-no-files-found: ignore
           retention-days: 7
+
+  playwright-legacy-ubuntu:
+    name: Playwright E2E Tests (ubuntu-latest)
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    if: always()
+    steps:
+      - name: Verify split Linux Playwright shards
+        shell: bash
+        run: |
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            echo "Split Playwright matrix did not pass: ${{ needs.test.result }}"
+            exit 1
+          fi
+
+  playwright-legacy-macos:
+    name: Playwright E2E Tests (macos-latest)
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    if: always()
+    steps:
+      - name: Verify split macOS Playwright shards
+        shell: bash
+        run: |
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            echo "Split Playwright matrix did not pass: ${{ needs.test.result }}"
+            exit 1
+          fi
+
+  playwright-legacy-windows:
+    name: Playwright E2E Tests (windows-latest)
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    if: always()
+    steps:
+      - name: Verify split Windows Playwright shards
+        shell: bash
+        run: |
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            echo "Split Playwright matrix did not pass: ${{ needs.test.result }}"
+            exit 1
+          fi
+
+  npm-package:
+    name: Verify packed npm package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository for npm package verification
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm 10.33.0 for npm package verification
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.0
+          run_install: false
+
+      - name: Set up Node.js 22 for npm package verification
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Restore node_modules cache for npm package verification
+        id: node-modules-cache-npm-package
+        uses: actions/cache@v5
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+
+      - name: Install dependencies for npm package verification
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Restore Vite cache for npm package verification
+        uses: actions/cache@v5
+        with:
+          path: .cache/vite
+          key: ${{ runner.os }}-node22-pnpm10.33.0-vite-e2e-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'tsconfig.json', 'dashboard/tsconfig.json') }}
+
+      - name: Pack npm tarball from source package
+        shell: bash
+        run: |
+          rm -rf .cache/npm-package .cache/npm-install-smoke
+          mkdir -p .cache/npm-package .cache/npm-install-smoke
+          pnpm pack --pack-destination .cache/npm-package
+
+      - name: Install packed tarball into clean smoke project
+        shell: bash
+        run: |
+          printf '{"private":true,"type":"module"}\n' > .cache/npm-install-smoke/package.json
+          cd .cache/npm-install-smoke
+          pnpm add ../npm-package/*.tgz
+
+      - name: Verify npm-installed CLI
+        shell: bash
+        run: node .cache/npm-install-smoke/node_modules/@codeuxai/codeux/dist/index.js --help

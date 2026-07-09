@@ -1,6 +1,6 @@
 {
   "name": "@codeuxai/codeux",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "description": "Containerized environment for running and managing AI sub-agents",
   "author": "Pierre Voss <p.voss@codeux.ai>",
   "license": "MIT",
@@ -59,6 +59,10 @@
     "test:e2e": "node scripts/e2e/run-playwright.mjs",
     "test:e2e:mockup-sprint-pentest": "node scripts/e2e/run-mockup-sprint-pentest.mjs",
     "test:orchestration:rapid": "vitest run tests/backend/services/virtual-worker-service.test.ts tests/backend/infrastructure/providers/cli/provider-runner.test.ts tests/backend/services/provider-routing.test.ts tests/backend/sprint/watch-loop-core.test.ts tests/backend/domain/sprint/ci/feature-pr-gate.test.ts tests/backend/infrastructure/git/local-merge.test.ts",
+    "test:orchestration:ci-dag": "pnpm run build && pnpm run test:orchestration:ci-dag:run",
+    "test:orchestration:ci-dag:run": "node scripts/e2e/run-mockup-sprint-pentest.mjs --execution-mode docker --scenario ci-small-dag --timeout-ms 1200000 --stall-timeout-ms 180000",
+    "test:orchestration:ci-dag:electron": "pnpm run build && pnpm run test:orchestration:ci-dag:electron:run",
+    "test:orchestration:ci-dag:electron:run": "node scripts/e2e/run-mockup-sprint-pentest.mjs --runtime electron --execution-mode fixture --scenario ci-small-dag-electron --timeout-ms 1200000 --stall-timeout-ms 180000",
     "test:orchestration:merge-e2e": "pnpm run build && node scripts/e2e/run-mockup-sprint-pentest.mjs --scenario merge-conflict-dag --timeout-ms 900000",
     "test:orchestration:completion-conflict": "pnpm run build && node scripts/e2e/run-mockup-sprint-pentest.mjs --scenario completion-merge-conflict --timeout-ms 1200000",
     "test:orchestration:full": "pnpm run build && pnpm run test:e2e:mockup-sprint-pentest",

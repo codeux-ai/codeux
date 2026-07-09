@@ -28,8 +28,8 @@ export interface OnboardingInstallationStepProps {
 }
 
 const INSTALLER_MODE_LABELS: Record<OnboardingDependencyInstallMode, string> = {
-  "docker-desktop-git": "Docker Desktop + Git",
-  "docker-engine-git": "Docker Engine + Git",
+  "docker-desktop-git": "Docker Desktop",
+  "docker-engine-git": "Docker Engine",
 };
 
 const COMMAND_MESSAGE_LIMIT = 500;
@@ -57,7 +57,6 @@ const boundCommandMessage = (message: string): string => (
 );
 
 const isDockerDependency = (dependencyId: string): boolean => dependencyId === "docker" || dependencyId.startsWith("docker-");
-const isGitDependency = (dependencyId: string): boolean => dependencyId === "git" || dependencyId.startsWith("git-");
 
 const hasMissingRequiredDependencies = (readiness: OnboardingRuntimeReadiness): boolean => (
   readiness.dependencies.some((dependency) => dependency.required && dependency.status !== "ready")
@@ -170,22 +169,7 @@ export const OnboardingInstallationStep: FunctionComponent<OnboardingInstallatio
                         </a>
                       </>
                     ) : null}
-                    {isGitDependency(dep.id) ? (
-                      <a
-                        href={osInfo.gitLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex h-8 items-center justify-center rounded-xl bg-slate-900 px-3 text-xs font-bold text-white transition-colors hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-                      >
-                        Install Git for {osInfo.osLabel}
-                      </a>
-                    ) : null}
                   </div>
-                  {isGitDependency(dep.id) ? (
-                    <div className="rounded-lg bg-black/[0.04] px-2.5 py-1.5 font-mono text-[10px] text-slate-500 dark:bg-white/[0.05] dark:text-slate-400">
-                      {osInfo.gitInstruction}
-                    </div>
-                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -201,7 +185,7 @@ export const OnboardingInstallationStep: FunctionComponent<OnboardingInstallatio
                 Let Code UX install the missing runtime tools
               </h4>
               <p className="mt-1.5 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-                Code UX will run the detected OS package manager for Docker and Git after you choose this action. You may still need to start Docker, refresh PATH, or approve elevated package-manager privileges.
+                Code UX will run the detected OS package manager for Docker after you choose this action. You may still need to start Docker, refresh PATH, or approve elevated package-manager privileges.
               </p>
             </div>
             <button
@@ -470,7 +454,7 @@ export const OnboardingInstallationStep: FunctionComponent<OnboardingInstallatio
 
       {!missingRequired ? (
         <div role="status" aria-live="polite" className="rounded-2xl border border-signal-500/20 bg-signal-500/8 p-4 text-sm leading-relaxed text-signal-700 dark:text-signal-200">
-          Docker and Git readiness checks are complete. No dependency install action is needed.
+          Docker readiness checks are complete. No dependency install action is needed.
           {onRecheck ? (
             <button
               type="button"

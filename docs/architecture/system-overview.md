@@ -68,7 +68,7 @@ Code UX is a container-first multi-provider runtime with an integrated dashboard
 - `src/services/cli-process-runner.ts`
 - `src/services/cli-docker-utils.ts`
 - `src/services/cli-workflow-text-utils.ts`
-- Docker-backed project setup and dashboard chat invocations seed their provider workspace from the effective default branch snapshot. The checkout contract asks `WorkspaceManager` for the configured branch, which prefers `origin/<defaultBranch>` and falls back to the local branch when the remote tracking ref is unavailable; HOST-mode invocations continue to use their existing cwd behavior.
+- `src/infrastructure/providers/cli/invocation-workspace-preparer.ts` owns Docker invocation workspace policy. Call sites use its shared provider-invocation option builder for snapshot checkout, git policy, and fresh/continue lifecycle values, and its continuation resolver for preserved workspace lookup. In `REMOTE` git mode, fresh Docker-backed invocations materialize from explicit `origin/<branch>` refs for the target or effective default branch and do not fall back to the host repo's current checkout; HOST-mode invocations continue to use their existing cwd behavior.
 
 ### 8. Shared logging and correlation
 - `src/shared/logging/logger.ts`

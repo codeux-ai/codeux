@@ -2,9 +2,9 @@ import { expect, type ConsoleMessage, type Page, test } from '@playwright/test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import type { ProjectSummary } from '../../src/contracts/project-management-types.js';
-import { completeOnboarding, createE2eFixturePrefix, fetchProjectsViaApi } from './helpers/prepare-app';
-import { deleteProjectViaApi } from './helpers/e2e-api';
+import type { ProjectSummary } from '../../../src/contracts/project-management-types.js';
+import { completeOnboarding, createE2eFixturePrefix, fetchProjectsViaApi } from '../helpers/prepare-app';
+import { deleteProjectViaApi } from '../helpers/e2e-api';
 
 const benignConsoleErrorPatterns = [
   /Failed to fetch/i,
@@ -37,6 +37,12 @@ function installErrorCapture(page: Page): string[] {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function hideDashboardAssistant(page: Page): Promise<void> {
+  await page.addStyleTag({
+    content: 'aside[aria-label="Dashboard assistant"]{display:none!important;pointer-events:none!important;}',
+  });
 }
 
 async function expectNoCapturedErrors(errors: string[]): Promise<void> {
@@ -125,6 +131,7 @@ test.describe('credential-free project setup release flow', () => {
 
     await page.setViewportSize({ width: 1366, height: 900 });
     await page.goto('/projects');
+    await hideDashboardAssistant(page);
     await expect(page.getByRole('heading', { name: 'Manage Projects' })).toBeVisible();
 
     await page.getByRole('button', { name: /Add Project/ }).last().click();

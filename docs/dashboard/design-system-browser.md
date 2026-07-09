@@ -8,8 +8,9 @@ The browser workbench is a premium, specialized surface inside the Code UX dashb
 - Titles and key states use robust weighting (e.g. `text-xl font-semibold`, `text-slate-800 dark:text-slate-100`).
 
 ## Panel Styling
-- Main workbench panels use glassmorphic styling: `rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]`.
+- Browser Preview structural cards use the shared warm-void glass surface tokens: `border-[color:var(--border-hairline)]`, `bg-[var(--surface-glass)]`, `shadow-[var(--elevation-base)]`, and `backdrop-blur-xl`, matching other dashboard pages.
 - Inner content areas (like logs and scripts) use `rounded-[1.5rem] bg-slate-100/80 p-4 dark:bg-void-950` to create visual depth and separation.
+- The empty `No preview active` state renders as centered icon, title, and helper text without a large inactive viewport or filler card behind it.
 
 ## Disabled States
 - Disabled buttons, inputs, and actions should primarily use `disabled:cursor-not-allowed disabled:opacity-50` rather than substituting entire background colors, keeping the design cleaner and indicating the action is structurally there but currently unavailable.

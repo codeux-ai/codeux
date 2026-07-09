@@ -84,17 +84,23 @@ describe("agent MCP defaults", () => {
     expect(access.linkedServerIds).toEqual(["playwright", "docs"]);
   });
 
-  it("defaults dashboard reply agents to full Code UX access with scheduler enabled", () => {
+  it("defaults dashboard reply agents to full Code UX access with scheduler and Playwright enabled", () => {
     const access = dashboardReplyAgentMcpAccess({
       codeUxEnabled: false,
       codeUxToolToggles: [{ name: "manage_tasks", enabled: true, isInternal: true }],
-      linkedServerIds: ["playwright", "docs"],
+      linkedServerIds: ["docs"],
     });
 
     expect(access).toEqual(codeUxAgentMcpAccess(["playwright", "docs"]));
   });
 
-  it("preserves explicit dashboard reply Code UX access while forcing scheduler on", () => {
+  it("gives assigned dashboard reply agents Code UX, scheduler, and Playwright when no access was saved", () => {
+    const access = dashboardReplyAgentMcpAccess(undefined);
+
+    expect(access).toEqual(codeUxAgentMcpAccess(["playwright"]));
+  });
+
+  it("preserves explicit dashboard reply Code UX access while forcing scheduler and Playwright on", () => {
     const access = dashboardReplyAgentMcpAccess({
       codeUxEnabled: true,
       codeUxToolToggles: [{ name: "scheduler_code_ux", enabled: false, isInternal: true }],
@@ -102,7 +108,7 @@ describe("agent MCP defaults", () => {
     });
 
     expect(access.codeUxEnabled).toBe(true);
-    expect(access.linkedServerIds).toEqual(["docs"]);
+    expect(access.linkedServerIds).toEqual(["playwright", "docs"]);
     expect(access.codeUxToolToggles).toEqual([{ name: "scheduler_code_ux", enabled: true, isInternal: true }]);
   });
 
@@ -140,6 +146,18 @@ describe("resolveAgentMcpRuntime", () => {
     });
     expect(result.customMcpServers.map((s) => s.id)).toEqual(["2"]);
     expect(result.mcpConnection).toEqual({ ...conn, agentId: "agent-7" });
+  });
+
+  it("includes Playwright custom MCP for dashboard reply access even without saved links", () => {
+    const result = resolveAgentMcpRuntime({
+      access: dashboardReplyAgentMcpAccess(undefined),
+      agentId: "dashboard-reply-agent",
+      customMcpServers: [server("playwright"), server("docs")],
+      mcpConnection: conn,
+    });
+
+    expect(result.customMcpServers.map((s) => s.id)).toEqual(["playwright"]);
+    expect(result.mcpConnection).toEqual({ ...conn, agentId: "dashboard-reply-agent" });
   });
 
   it("does not resurrect linked custom servers that fail sanitization", () => {

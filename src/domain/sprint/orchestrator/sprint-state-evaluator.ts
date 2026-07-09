@@ -13,6 +13,8 @@ export function evaluateSprintRunState(params: {
   activeProjectAttentionItems: ProjectAttentionItemRecord[];
   sprintRunId: string;
   githubMode?: "REMOTE" | "LOCAL";
+  localCliPushedTaskIds?: ReadonlySet<string>;
+  localCliSettledTaskIds?: ReadonlySet<string>;
 }) {
   return evaluateSprintTransitionState(params);
 }

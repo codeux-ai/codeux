@@ -9,6 +9,7 @@ import {
   SlidersHorizontal,
   Square,
   FileCode2,
+  Info,
   X,
 } from "lucide-preact";
 import { useProjectData } from "./context/project-data.js";
@@ -42,6 +43,7 @@ import { LaunchContainerPanel } from "./components/browser/LaunchContainerPanel.
 import { PreviewEnvironmentEditor } from "./components/browser/PreviewEnvironmentEditor.js";
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
 import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
+import { CollapsiblePanel } from "./components/ui/CollapsiblePanel.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
 import { PageHeader } from "./components/layout/PageHeader.js";
 import { getSafeUrl } from "./lib/safe-url.js";
@@ -49,6 +51,8 @@ import { getSafeUrl } from "./lib/safe-url.js";
 const PREVIEW_MESSAGE_TYPE = "sprint-preview:state";
 const PREVIEW_NAVIGATION_TYPE = "sprint-preview:navigate";
 const EMPTY_PREVIEW_ENVIRONMENT: SprintPreviewSession["environmentOverrides"] = [];
+const SIGNAL_ACCENT_HEX = "#00E0A0";
+const EMBER_ACCENT_HEX = "#FFB800";
 
 const getSessionPortPathKey = (sessionId: string, containerPort: number): string => `${sessionId}:${containerPort}`;
 
@@ -150,6 +154,9 @@ export const BrowserPage: FunctionComponent = () => {
   }, [portMappings, primaryPortMapping, selectedPortBySessionId, visibleSelectedSession]);
   const selectedHostPort = selectedPortMapping?.hostPort ?? null;
   const selectedContainerPort = selectedPortMapping?.containerPort ?? null;
+  const selectedSprintPortBadge = visibleSelectedSession?.status === "running"
+    ? formatPreviewPortMappingsSummary(visibleSelectedSession)
+    : "port pending";
   const selectedUrlContainerPort = portMappings.length > 1 && selectedContainerPort !== primaryPortMapping?.containerPort
     ? selectedContainerPort
     : null;
@@ -806,26 +813,6 @@ export const BrowserPage: FunctionComponent = () => {
         {loading ? "Refreshing preview sessions." : previewStatusMessage}
       </div>
 
-      <div className="mb-5">
-        <PreviewSessionSlider
-          sessions={sessionCards}
-          selectedSessionId={activeSessionId}
-          onSelectSession={(sessionId) => {
-            if (sessionId === activeSessionId) {
-              return;
-            }
-            const nextSession = sessionCards.find((session) => session.id === sessionId);
-            setActiveSessionId(sessionId);
-            if (nextSession) {
-              browserFeedback.setSuccess(`Selected preview session ${nextSession.sprintName}`);
-            }
-          }}
-          onRemoveSession={(sessionId) => void handleRemove(sessionId)}
-          onManageEnvironment={handleOpenEnvironmentOverrides}
-          removingSessionIds={removingSessionIds}
-        />
-      </div>
-
       {(!showInAppBrowser || !previewEnabled) && (
         <div role="status" aria-live="polite" className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-8 text-sm text-slate-500 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
           <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Browser Preview</div>
@@ -912,11 +899,16 @@ export const BrowserPage: FunctionComponent = () => {
             launchEnabled={launchEnabled}
             launchBusy={launching}
           />
-          <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+          <CollapsiblePanel
+            title="Selected Sprint"
+            icon={Compass}
+            accentHex={SIGNAL_ACCENT_HEX}
+            defaultOpen={false}
+            badge={selectedSprintPortBadge}
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Selected Sprint</div>
-                <div className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">
+                <div className="text-lg font-semibold text-slate-900 dark:text-white">
                   <span className="break-words">{scriptTargetSprint?.name || "All sprints"}</span>
                 </div>
               </div>
@@ -996,13 +988,17 @@ export const BrowserPage: FunctionComponent = () => {
                 {sessionActionDisabledReason}
               </div>
             </div>
-          </div>
+          </CollapsiblePanel>
 
-          <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+          <CollapsiblePanel
+            title="Environment"
+            icon={SlidersHorizontal}
+            accentHex={EMBER_ACCENT_HEX}
+            defaultOpen={false}
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Environment</div>
-                <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                <div className="text-sm font-semibold text-slate-900 dark:text-white">
                   {defaultEnvironmentDraft.length} default{defaultEnvironmentDraft.length === 1 ? "" : "s"} for all preview containers
                 </div>
               </div>
@@ -1041,18 +1037,22 @@ export const BrowserPage: FunctionComponent = () => {
                 </button>
               </div>
             </div>
-          </div>
+          </CollapsiblePanel>
 
-          <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Runtime notes</div>
-            <div className="mt-4 space-y-3 text-sm text-slate-600 dark:text-slate-300">
+          <CollapsiblePanel
+            title="Runtime notes"
+            icon={Info}
+            accentHex={EMBER_ACCENT_HEX}
+            defaultOpen={false}
+          >
+            <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
               <p>Ports are assigned from the sprint preview range and bound to `127.0.0.1` to avoid conflicts with the main dashboard.</p>
               <p>Each preview container runs from a dedicated sprint snapshot directory, so multiple active sprints from the same project stay isolated without registering git worktrees.</p>
             </div>
-          </div>
+          </CollapsiblePanel>
 
           {showScriptEditor && (
-            <div id="preview-script-editor" className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+            <div id="preview-script-editor" className="rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-5 shadow-[var(--elevation-base)] backdrop-blur-xl">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Startup script</div>
@@ -1093,9 +1093,13 @@ export const BrowserPage: FunctionComponent = () => {
             </div>
           )}
 
-          <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+          <CollapsiblePanel
+            title="Container logs"
+            icon={RefreshCw}
+            accentHex={SIGNAL_ACCENT_HEX}
+            defaultOpen={false}
+          >
             <div className="mb-3 flex items-center justify-between gap-3">
-              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Container logs</div>
               <div className="flex items-center gap-2">
                 <div className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
                   logsError
@@ -1140,10 +1144,29 @@ export const BrowserPage: FunctionComponent = () => {
             <div id="preview-logs-status" className="mt-3 min-h-4 text-xs text-slate-500 dark:text-slate-400">
               {logsStatusMessage}
             </div>
-          </div>
+          </CollapsiblePanel>
         </div>
       </div>
       )}
+      <div className="mt-5">
+        <PreviewSessionSlider
+          sessions={sessionCards}
+          selectedSessionId={activeSessionId}
+          onSelectSession={(sessionId) => {
+            if (sessionId === activeSessionId) {
+              return;
+            }
+            const nextSession = sessionCards.find((session) => session.id === sessionId);
+            setActiveSessionId(sessionId);
+            if (nextSession) {
+              browserFeedback.setSuccess(`Selected preview session ${nextSession.sprintName}`);
+            }
+          }}
+          onRemoveSession={(sessionId) => void handleRemove(sessionId)}
+          onManageEnvironment={handleOpenEnvironmentOverrides}
+          removingSessionIds={removingSessionIds}
+        />
+      </div>
       {environmentModalSession && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-void-950/55 px-4 py-6 backdrop-blur-sm" role="presentation">
           <div

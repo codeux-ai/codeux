@@ -1,15 +1,15 @@
 import { expect, test, type APIRequestContext, type Page, type TestInfo } from '@playwright/test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { AppearanceSettings, LocalDirectoryBrowserResponse } from '../../src/contracts/app-types.js';
-import type { InstructionFileContent } from '../../src/contracts/instruction-file-types.js';
-import type { SystemSettings } from '../../src/contracts/settings-scope-types.js';
+import type { AppearanceSettings, LocalDirectoryBrowserResponse } from '../../../src/contracts/app-types.js';
+import type { InstructionFileContent } from '../../../src/contracts/instruction-file-types.js';
+import type { SystemSettings } from '../../../src/contracts/settings-scope-types.js';
 import {
   createTemporaryGitRepository,
   hideOnboardingAndTours,
   seedSelectedCodeUxProject,
   type SeededCodeUxProject,
-} from './helpers/e2e-fixtures';
+} from '../helpers/e2e-fixtures';
 
 const TINY_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lz9rtwAAAABJRU5ErkJggg==',
@@ -82,7 +82,7 @@ async function openAppearanceSettings(page: Page, request: APIRequestContext): P
   await hideOnboardingAndTours(page, request);
   await page.goto('/config');
   await expect(page.getByRole('heading', { name: 'Settings & Integration' })).toBeVisible();
-  await page.getByRole('button', { name: /Appearance/ }).click();
+  await page.getByRole('button', { name: /Appearance(?: Dashboard layout and theme preferences)?/i }).click();
   await expect(page.getByText('Background Image', { exact: true })).toBeVisible();
 }
 
@@ -190,7 +190,7 @@ test.describe('filesystem persistence', () => {
 
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Settings & Integration' })).toBeVisible();
-    await page.getByRole('button', { name: /Appearance/ }).click();
+    await page.getByRole('button', { name: /Appearance(?: Dashboard layout and theme preferences)?/i }).click();
     await expect(page.getByRole('img', { name: 'Background Thumbnail' })).toHaveAttribute('src', expectedDataUrl);
 
     const savedSettings = await fetchSystemSettings(request);

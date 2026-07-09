@@ -9,6 +9,8 @@ import {
 
 export interface TaskTransitionOptions {
   githubMode?: "REMOTE" | "LOCAL";
+  localCliPushedTaskIds?: ReadonlySet<string>;
+  localCliSettledTaskIds?: ReadonlySet<string>;
 }
 
 export interface TaskTransitionClassification {
@@ -94,11 +96,17 @@ function collectHumanEscalatedMergeConflictTaskIds(items: ProjectAttentionItemRe
 
 function isLocalCliTaskAwaitingBranchEvidence(
   task: Subtask,
-  githubMode?: "REMOTE" | "LOCAL",
+  options?: TaskTransitionOptions,
 ): boolean {
+  const githubMode = options?.githubMode;
+  const taskIds = [task.record_id?.trim(), task.id?.trim()].filter((id): id is string => Boolean(id));
+  const hasUnsettledPushedGitWork = githubMode === "LOCAL"
+    && taskIds.some((taskId) => options?.localCliPushedTaskIds?.has(taskId))
+    && !taskIds.some((taskId) => options?.localCliSettledTaskIds?.has(taskId));
+
   return githubMode === "LOCAL"
-    && task.status === "CODING_COMPLETED"
-    && task.session_state === "COMPLETED"
+    && (task.status === "CODING_COMPLETED" || (task.status === "COMPLETED" && hasUnsettledPushedGitWork))
+    && (task.session_state === "COMPLETED" || hasUnsettledPushedGitWork)
     && task.provider !== "jules"
     && !task.is_merged
     && !task.merge_indicator
@@ -149,7 +157,7 @@ export function classifyTaskTransition(
     if (dependency.status === "FAILED") {
       failedDependencyIds.push(depId);
     }
-    if (!isCompletedTaskSettled(dependency, options)) {
+    if (isLocalCliTaskAwaitingBranchEvidence(dependency, options) || !isCompletedTaskSettled(dependency, options)) {
       unmetDependencyIds.push(depId);
     }
   }
@@ -235,7 +243,7 @@ export function evaluateSprintTransitionState(params: SprintTransitionStateParam
   const { tasksByStatus, statusCounts } = partitionSubtasksByStatus(subtasks);
   const classifications = subtasks.map((task) => ({
     task,
-    classification: classifyTaskTransition(task, subtasks, { githubMode }),
+    classification: classifyTaskTransition(task, subtasks, params),
   }));
 
   const runningTasks = tasksByStatus.get("RUNNING") || [];
@@ -254,7 +262,7 @@ export function evaluateSprintTransitionState(params: SprintTransitionStateParam
   const mergeRequiredTasks = classifications
     .filter(({ task, classification }) => (
       (classification.isMergeRequired && !humanEscalatedMergeConflictTaskIds.has(task.record_id?.trim() || task.id))
-      || isLocalCliTaskAwaitingBranchEvidence(task, githubMode)
+      || isLocalCliTaskAwaitingBranchEvidence(task, params)
     ))
     .map(({ task }) => task);
   const activeWorkerAttentionItems = activeProjectAttentionItems.filter((item) => item.ownerType === "worker");
@@ -267,7 +275,7 @@ export function evaluateSprintTransitionState(params: SprintTransitionStateParam
     item.sprintRunId === sprintRunId && isMainMergeAttentionItem(item)
   ));
 
-  const hasLocalTasksAwaitingBranchEvidence = classifications.some(({ task }) => isLocalCliTaskAwaitingBranchEvidence(task, githubMode));
+  const hasLocalTasksAwaitingBranchEvidence = classifications.some(({ task }) => isLocalCliTaskAwaitingBranchEvidence(task, params));
   const allTerminal = subtasks.length > 0
     && !hasLocalTasksAwaitingBranchEvidence
     && classifications.every(({ classification }) => classification.isTerminal);

@@ -455,6 +455,43 @@ describe("ProviderExecutionService", () => {
     );
   });
 
+  it("forwards LOCAL git policy to mockup-cli Docker text invocations", async () => {
+    providerRunner.runProviderForText.mockResolvedValue({
+      ...mockResult,
+      text: "mockup reply",
+    } as ProviderRunResult & { text: string });
+
+    await service.executeProvider({
+      ...defaultArgs,
+      provider: "mockup-cli",
+      model: "default",
+      apiKey: "",
+      workflowSettings: {
+        ...defaultArgs.workflowSettings,
+        executionMode: "DOCKER",
+      },
+      expectTextOutput: true,
+      snapshotCheckout: { branch: "main" },
+      gitPolicy: {
+        githubMode: "LOCAL",
+        defaultBranch: "main",
+        githubToken: undefined,
+        gitlabToken: undefined,
+      },
+    });
+
+    expect(providerRunner.runProviderForText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "mockup-cli",
+        snapshotCheckout: { branch: "main" },
+        gitPolicy: expect.objectContaining({
+          githubMode: "LOCAL",
+          defaultBranch: "main",
+        }),
+      }),
+    );
+  });
+
   it("final success replaces placeholder messages with a parsed planning transcript", async () => {
     const textMockResult = {
       ...mockResult,

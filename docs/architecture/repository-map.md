@@ -77,6 +77,8 @@ backup files appear there.
   - Shared file lookup implementation used by guide and instruction template repositories.
 - `infrastructure/providers/cli/`
   - Docker and host CLI provider implementations for task execution.
+  - `invocation-workspace-preparer.ts`
+  - Shared Docker invocation workspace boundary for snapshot checkout construction, git policy normalization, fresh/continue lifecycle options, remote-only materialization in `REMOTE` git mode, and continuation workspace resolution.
 - `mcp/`
   - `core-tool-handler.ts`
   - `agent-tool-handler.ts`

@@ -63,6 +63,10 @@ function resolveE2eProviderCliShim(): string | null {
   return shimPath ? shimPath : null;
 }
 
+function resolveNodeExecutable(): string {
+  return process.env.CODEUX_E2E_NODE_EXECUTABLE?.trim() || process.execPath;
+}
+
 function withE2eProviderCliShim(provider: CliProviderId, spec: ProviderCommandSpec): ProviderCommandSpec {
   if (provider === "mockup-cli") {
     return spec;
@@ -75,7 +79,7 @@ function withE2eProviderCliShim(provider: CliProviderId, spec: ProviderCommandSp
     }
 
     return {
-      command: process.execPath,
+      command: resolveNodeExecutable(),
       args: [
         shimPath,
         "--provider", provider,

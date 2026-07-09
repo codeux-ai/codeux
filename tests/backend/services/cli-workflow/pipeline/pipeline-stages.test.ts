@@ -163,6 +163,9 @@ const createMockContext = (): PipelineContext => {
       removeWorktree: vi.fn(),
       buildWorkspaceGuidance: vi.fn(),
     } as any,
+    invocationWorkspacePreparer: {
+      prepareWorktree: vi.fn(),
+    } as any,
     workspaceArtifactService: {
       exportBinaryPatch: vi.fn().mockResolvedValue(""),
       applyPatchToBranch: vi.fn().mockResolvedValue({
@@ -218,7 +221,7 @@ const createMockContext = (): PipelineContext => {
 describe("executePrepareStage", () => {
   it("prepares the worktree and resolves provider prompt", async () => {
     const ctx = createMockContext();
-    vi.mocked(ctx.workspaceManager.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: false });
+    vi.mocked(ctx.invocationWorkspacePreparer.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: false });
     vi.mocked(ctx.workspaceManager.buildWorkspaceGuidance).mockResolvedValue("guidance");
     vi.mocked(ctx.runCommand).mockResolvedValue({ ok: true, stdout: "head-sha\n", stderr: "" });
     vi.mocked(ctx.deps.getWorkerInstruction).mockResolvedValue("worker guide content");
@@ -230,14 +233,20 @@ describe("executePrepareStage", () => {
     expect(result.providerPrompt).toContain("worker guide content");
     expect(result.providerPrompt).toContain("test prompt");
     expect(result.providerPrompt).toContain("guidance");
-    expect(ctx.workspaceManager.prepareWorktree).toHaveBeenCalledWith(
-      "/repo",
-      "/repo/worktree",
-      "worker-branch",
-      "feature-branch",
-      undefined,
-      { githubToken: "token", gitlabToken: undefined },
-    );
+    expect(ctx.invocationWorkspacePreparer.prepareWorktree).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      worktreePath: "/repo/worktree",
+      workerBranch: "worker-branch",
+      featureBranch: "feature-branch",
+      resumeSessionId: undefined,
+      gitAuth: { githubToken: "token", gitlabToken: undefined },
+      gitPolicy: {
+        githubMode: "LOCAL",
+        defaultBranch: "main",
+        githubToken: "token",
+        gitlabToken: undefined,
+      },
+    });
   });
 
   it("includes default memory learnings instruction when memory capture is enabled without override", async () => {
@@ -250,7 +259,7 @@ describe("executePrepareStage", () => {
       minLongTermRelevance: 0.7,
       shortTermRetentionSprints: 3,
     };
-    vi.mocked(ctx.workspaceManager.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: false });
+    vi.mocked(ctx.invocationWorkspacePreparer.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: false });
     vi.mocked(ctx.workspaceManager.buildWorkspaceGuidance).mockResolvedValue("guidance");
     vi.mocked(ctx.runCommand).mockResolvedValue({ ok: true, stdout: "head-sha\n", stderr: "" });
     vi.mocked(ctx.deps.getWorkerInstruction).mockResolvedValue("");
@@ -290,7 +299,7 @@ describe("executePrepareStage", () => {
       { category: "codebase", content: "below category threshold", strength: 4 },
       { category: "codebase", content: "kept long-term memory", strength: 6 },
     ]);
-    vi.mocked(ctx.workspaceManager.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: false });
+    vi.mocked(ctx.invocationWorkspacePreparer.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: false });
     vi.mocked(ctx.workspaceManager.buildWorkspaceGuidance).mockResolvedValue("guidance");
     vi.mocked(ctx.runCommand).mockResolvedValue({ ok: true, stdout: "head-sha\n", stderr: "" });
     vi.mocked(ctx.deps.getWorkerInstruction).mockResolvedValue("");
@@ -328,7 +337,7 @@ describe("executePrepareStage", () => {
     memoryService.listLongTermByAgent.mockReturnValue([
       { category: "decision", content: "long-term memory", strength: 1 },
     ]);
-    vi.mocked(ctx.workspaceManager.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: false });
+    vi.mocked(ctx.invocationWorkspacePreparer.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: false });
     vi.mocked(ctx.workspaceManager.buildWorkspaceGuidance).mockResolvedValue("guidance");
     vi.mocked(ctx.runCommand).mockResolvedValue({ ok: true, stdout: "head-sha\n", stderr: "" });
     vi.mocked(ctx.deps.getWorkerInstruction).mockResolvedValue("");
@@ -354,7 +363,7 @@ describe("executePrepareStage", () => {
     };
     ctx.memoryTemplateOverrideEnabled = true;
     ctx.memoryTemplateMarkdown = "Preset Override Instruction";
-    vi.mocked(ctx.workspaceManager.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: false });
+    vi.mocked(ctx.invocationWorkspacePreparer.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: false });
     vi.mocked(ctx.workspaceManager.buildWorkspaceGuidance).mockResolvedValue("guidance");
     vi.mocked(ctx.runCommand).mockResolvedValue({ ok: true, stdout: "head-sha\n", stderr: "" });
     vi.mocked(ctx.deps.getWorkerInstruction).mockResolvedValue("");
@@ -378,7 +387,7 @@ describe("executePrepareStage", () => {
     };
     ctx.memoryTemplateOverrideEnabled = true;
     ctx.memoryTemplateMarkdown = "   \n"; // empty string behavior
-    vi.mocked(ctx.workspaceManager.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: false });
+    vi.mocked(ctx.invocationWorkspacePreparer.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: false });
     vi.mocked(ctx.workspaceManager.buildWorkspaceGuidance).mockResolvedValue("guidance");
     vi.mocked(ctx.runCommand).mockResolvedValue({ ok: true, stdout: "head-sha\n", stderr: "" });
     vi.mocked(ctx.deps.getWorkerInstruction).mockResolvedValue("");
@@ -391,7 +400,7 @@ describe("executePrepareStage", () => {
 
   it("handles FF-merge during resume properly", async () => {
     const ctx = createMockContext();
-    vi.mocked(ctx.workspaceManager.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: true });
+    vi.mocked(ctx.invocationWorkspacePreparer.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: true });
     vi.mocked(ctx.workspaceManager.buildWorkspaceGuidance).mockResolvedValue("guidance");
     vi.mocked(ctx.runCommand).mockResolvedValue({ ok: true, stdout: "head-sha\n", stderr: "" });
 
@@ -411,6 +420,14 @@ describe("executeProviderStage", () => {
     vi.mocked(ctx.providerRunner.runProvider).mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "fatal provider error", usageTelemetry: { transcriptText: "error transcript", inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, usageSource: "estimated", rawUsageJson: "{}" } as any });
 
     await expect(executeProviderStage(ctx, "prompt")).rejects.toThrow("fatal provider error");
+    expect(ctx.providerRunner.runProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gitPolicy: expect.objectContaining({
+          githubMode: "LOCAL",
+          defaultBranch: "main",
+        }),
+      }),
+    );
     expect(ctx.deps.executionRepository?.createExecutionInvocation).toHaveBeenCalled();
     expect(ctx.deps.executionRepository?.appendExecutionInvocationMessage).toHaveBeenCalledWith("exec-1", {
       role: "user",

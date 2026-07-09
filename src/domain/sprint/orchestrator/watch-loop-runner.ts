@@ -36,12 +36,13 @@ import { buildConflictSummaryMarkdown, selectMergedTaskContexts } from "./confli
 import { WorkspaceManager } from "../../../infrastructure/providers/cli/workspace-manager.js";
 import { evaluateSprintRunState, isMainMergeAttentionItem } from "./sprint-state-evaluator.js";
 import { evaluateSprintTransitionState } from "../task-transition-state.js";
+import { CLI_GIT_FINALIZATION_EVENT_SCAN_LIMIT, isCliTaskRun } from "../ci/cli-git-finalization.js";
 import type { HeartbeatService } from "../../../services/heartbeat-service.js";
 import type { SprintIssueService } from "../../../services/sprint-issue-service.js";
 import type { SprintRunLifecycleService } from "../../../services/sprint-run-lifecycle-service.js";
 
 
-export type WatchLoopExecutionDependencies = Pick<ExecutionRepository, "appendSprintRunEvent" | "getSprintRun" | "getTaskRunByDispatchId" | "listTaskDispatches" | "listTaskRunEvents">;
+export type WatchLoopExecutionDependencies = Pick<ExecutionRepository, "appendSprintRunEvent" | "getSprintRun" | "getLatestTaskRun" | "getTaskRunByDispatchId" | "listTaskDispatches" | "listTaskRunEvents">;
 export type WatchLoopAttentionDependencies = Pick<ProjectAttentionService, "listActiveProjectItems" | "openItems" | "resolveItemsForSprintRun" | "resolveItem">;
 
 export interface WatchLoopDependencies {
@@ -248,6 +249,11 @@ export class WatchLoopRunner {
           item.status === "open" || item.status === "claimed"
         ))
         : [];
+      const localCliGitEvidence = this.collectLocalCliGitEvidence({
+        githubMode,
+        sprintRunId,
+        subtasks,
+      });
 
       const {
         runningTasks,
@@ -265,6 +271,8 @@ export class WatchLoopRunner {
         activeProjectAttentionItems,
         sprintRunId,
         githubMode,
+        localCliPushedTaskIds: localCliGitEvidence.pushedTaskIds,
+        localCliSettledTaskIds: localCliGitEvidence.settledTaskIds,
       });
 
       allFinished = evaluatedAllFinished;
@@ -1208,6 +1216,61 @@ export class WatchLoopRunner {
       }
       await this.deps.workspaceManager.removeWorktree(args.repoPath, worktreePath).catch(() => undefined);
     }
+  }
+
+  private collectLocalCliGitEvidence(args: {
+    githubMode: "REMOTE" | "LOCAL";
+    sprintRunId: string;
+    subtasks: Subtask[];
+  }): { pushedTaskIds: Set<string>; settledTaskIds: Set<string> } {
+    const pushedTaskIds = new Set<string>();
+    const settledTaskIds = new Set<string>();
+    if (args.githubMode !== "LOCAL") {
+      return { pushedTaskIds, settledTaskIds };
+    }
+
+    for (const task of args.subtasks) {
+      const recordId = task.record_id?.trim();
+      if (!recordId) {
+        continue;
+      }
+      const taskRun = this.deps.executionRepository.getLatestTaskRun(recordId, args.sprintRunId);
+      if (!isCliTaskRun(taskRun) || !taskRun?.id) {
+        continue;
+      }
+
+      let events: ReturnType<ExecutionRepository["listTaskRunEvents"]>;
+      try {
+        events = this.deps.executionRepository.listTaskRunEvents(taskRun.id, CLI_GIT_FINALIZATION_EVENT_SCAN_LIMIT);
+      } catch {
+        continue;
+      }
+
+      const taskIds = [recordId, task.id?.trim()].filter((taskId): taskId is string => Boolean(taskId));
+      const addTaskIds = (target: Set<string>): void => {
+        for (const taskId of taskIds) {
+          target.add(taskId);
+        }
+      };
+
+      if (events.some((event) => event.eventType === "cli_git_pushed")) {
+        addTaskIds(pushedTaskIds);
+      }
+      if (events.some((event) => {
+        if (event.eventType === "cli_git_no_changes") {
+          return true;
+        }
+        if (event.eventType !== "ci_gate_status") {
+          return false;
+        }
+        const state = typeof event.payload?.state === "string" ? event.payload.state : "";
+        return state === "merged_branch" || state === "no_merge_work";
+      })) {
+        addTaskIds(settledTaskIds);
+      }
+    }
+
+    return { pushedTaskIds, settledTaskIds };
   }
 
   private resolveWorkspaceReferenceFromTaskRunEvents(taskRunId: string): string | undefined {

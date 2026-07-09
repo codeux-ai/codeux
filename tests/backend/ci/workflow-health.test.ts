@@ -198,7 +198,9 @@ describe("GitHub workflow health", () => {
 
   it("keeps Playwright as a release-path E2E lane with build, browser install, and artifacts", async () => {
     const playwright = await readRepoFile(WORKFLOWS.playwright);
-    const playwrightJob = getJobBlock(playwright, "test-e2e");
+    const buildJob = getJobBlock(playwright, "build");
+    const testJob = getJobBlock(playwright, "test");
+    const npmPackageJob = getJobBlock(playwright, "npm-package");
 
     expectWorkflowToolchain(playwright, "Playwright");
     expectConcurrencyCancellation(playwright, "Playwright");
@@ -206,16 +208,88 @@ describe("GitHub workflow health", () => {
     expect(playwright).toMatch(/pull_request:\n    branches: \[main\]/);
     expect(playwright).not.toContain("branches: [dev]");
 
-    expectCommandBefore(playwright, "run: pnpm run build", "run: pnpm run test:e2e");
-    expectWorkflowStepAfter(playwrightJob, "Build server & dashboard", "Run Playwright E2E Tests");
-    expectWorkflowStepAfter(playwrightJob, "Cache Playwright browser binaries", "Install Playwright browsers");
-    expectWorkflowStepAfter(playwrightJob, "Install Playwright browsers", "Run Playwright E2E Tests");
-    expect(playwrightJob).toContain("if: runner.os == 'Linux'");
-    expect(playwrightJob).toContain("run: pnpm exec playwright install-deps chromium");
-    expect(playwrightJob).toContain("run: pnpm exec playwright install chromium");
-    expect(playwrightJob).toMatch(/- name: Upload Playwright artifacts\n        if: always\(\)\n        uses: actions\/upload-artifact@v4/);
-    expect(playwrightJob).toContain("test-results/");
-    expect(playwrightJob).toContain("playwright-report/");
+    expect(buildJob).toContain("strategy:");
+    expect(buildJob).toContain("matrix:");
+    expect(buildJob).toContain("runner: ubuntu-latest");
+    expect(buildJob).toContain("runner: macos-latest");
+    expect(buildJob).toContain("runner: windows-latest");
+    expectWorkflowStepAfter(buildJob, "Checkout repository for ${{ matrix.os.label }} build", "Set up pnpm 10.33.0 for ${{ matrix.os.label }} build");
+    expectWorkflowStepAfter(buildJob, "Set up Node.js 22 for ${{ matrix.os.label }} build", "Restore node_modules cache for ${{ matrix.os.label }} build");
+    expectWorkflowStepAfter(buildJob, "Restore node_modules cache for ${{ matrix.os.label }} build", "Install dependencies for ${{ matrix.os.label }} build");
+    expectWorkflowStepAfter(buildJob, "Install dependencies for ${{ matrix.os.label }} build", "Restore Vite cache for ${{ matrix.os.label }} build");
+    expectWorkflowStepAfter(buildJob, "Build server & dashboard (${{ matrix.os.label }})", "Verify compiled CLI exists after ${{ matrix.os.label }} build");
+    expectWorkflowStepAfter(buildJob, "Verify compiled CLI exists after ${{ matrix.os.label }} build", "Upload compiled app artifact for ${{ matrix.os.label }}");
+    expect(buildJob).toContain("run: pnpm run build");
+    expect(buildJob).toContain("dist/");
+    expect(buildJob).toContain("dashboard/dist/");
+    expect(buildJob).toContain(".cache/tsc/");
+
+    expect(testJob).toContain("needs: build");
+    expect(testJob).toContain("fail-fast: false");
+    expect(testJob).toContain("matrix:");
+    expect(testJob).toContain("name: navigation");
+    expect(testJob).toContain("name: settings");
+    expect(testJob).toContain("name: projects");
+    expect(testJob).toContain("name: tasks");
+    expect(testJob).toContain("name: agents");
+    expect(testJob).toContain("name: config");
+    expectWorkflowStepAfter(
+      testJob,
+      "Checkout repository for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+      "Set up pnpm 10.33.0 for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+    );
+    expectWorkflowStepAfter(
+      testJob,
+      "Set up Node.js 22 for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+      "Restore node_modules cache for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+    );
+    expectWorkflowStepAfter(
+      testJob,
+      "Restore node_modules cache for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+      "Install dependencies for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+    );
+    expectWorkflowStepAfter(
+      testJob,
+      "Install dependencies for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+      "Download compiled app artifact for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+    );
+    expectWorkflowStepAfter(
+      testJob,
+      "Download compiled app artifact for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+      "Verify restored compiled CLI for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+    );
+    expectWorkflowStepAfter(
+      testJob,
+      "Verify restored compiled CLI for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+      "Cache Playwright browser binaries for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+    );
+    expectWorkflowStepAfter(
+      testJob,
+      "Cache Playwright browser binaries for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+      "Install Playwright OS dependencies for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+    );
+    expectWorkflowStepAfter(
+      testJob,
+      "Install Playwright OS dependencies for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+      "Install Playwright Chromium for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+    );
+    expectWorkflowStepAfter(
+      testJob,
+      "Install Playwright Chromium for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+      "Run E2E - ${{ matrix.project.label }} group on ${{ matrix.os.label }}",
+    );
+    expect(testJob).toContain("if: runner.os == 'Linux'");
+    expect(testJob).toContain("run: pnpm exec playwright install-deps chromium");
+    expect(testJob).toContain("run: pnpm exec playwright install chromium");
+    expect(testJob).toContain("run: pnpm exec playwright test --project=${{ matrix.project.name }}");
+    expect(testJob).toContain("Run E2E - ${{ matrix.project.label }} group on ${{ matrix.os.label }}");
+    expect(testJob).toMatch(/- name: Upload Playwright artifacts for .* E2E\n        if: always\(\)\n        uses: actions\/upload-artifact@v4/);
+    expect(testJob).toContain("test-results/");
+    expect(testJob).toContain("playwright-report/");
+
+    expect(npmPackageJob).toContain("pnpm pack --pack-destination .cache/npm-package");
+    expect(npmPackageJob).toContain("pnpm add ../npm-package/*.tgz");
+    expect(npmPackageJob).toContain("node .cache/npm-install-smoke/node_modules/@codeuxai/codeux/dist/index.js --help");
 
     expectCacheKey(playwright, "-nm-", ["package.json", "pnpm-lock.yaml"]);
     expectCacheKey(playwright, "-vite-e2e-", ["package.json", "pnpm-lock.yaml", "vite.config.ts", "tsconfig.json", "dashboard/tsconfig.json"]);
@@ -247,15 +321,36 @@ describe("GitHub workflow health", () => {
     expect(config).toContain("video: 'retain-on-failure'");
     expect(config).toContain("HOME: tempHome");
     expect(config).toContain("USERPROFILE: tempHome");
-    expect(config).toContain("name: 'chromium-desktop'");
-    expect(config).toContain("name: 'chromium-mobile'");
-    expect(config).toContain("testMatch: /sprint-ledger-responsive\\.spec\\.ts/");
-    expect(config).toContain("...devices['Pixel 5']");
+    expect(config).toContain("name: 'navigation'");
+    expect(config).toContain("name: 'settings'");
+    expect(config).toContain("name: 'projects'");
+    expect(config).toContain("name: 'tasks'");
+    expect(config).toContain("name: 'agents'");
+    expect(config).toContain("name: 'config'");
+    expect(config).toContain("testMatch: 'tests/e2e/navigation/**/*.spec.ts'");
+    expect(config).toContain("testMatch: 'tests/e2e/settings/**/*.spec.ts'");
+    expect(config).toContain("testMatch: 'tests/e2e/projects/**/*.spec.ts'");
+    expect(config).toContain("testMatch: 'tests/e2e/tasks/**/*.spec.ts'");
+    expect(config).toContain("testMatch: 'tests/e2e/agents/**/*.spec.ts'");
+    expect(config).toContain("testMatch: 'tests/e2e/config/**/*.spec.ts'");
+    expect(config).not.toContain("name: 'chromium-desktop'");
+    expect(config).not.toContain("name: 'chromium-mobile'");
+    expect(config).not.toContain("Pixel 5");
   });
 
-  it("keeps mockup sprint orchestration on a no-secret rapid Linux CI lane", async () => {
-    const workflow = await readRepoFile(WORKFLOWS.mockupSprintOrchestration);
-    const job = getJobBlock(workflow, "mockup-sprint-orchestration");
+  it("keeps mockup sprint orchestration on normal CI DAG and main-PR-only Electron DAG lanes", async () => {
+    const [workflow, packageJson, runnerScript, scenarioScript] = await Promise.all([
+      readRepoFile(WORKFLOWS.mockupSprintOrchestration),
+      readRepoFile("package.json").then((content) => JSON.parse(content) as PackageJson),
+      readRepoFile("scripts/e2e/run-mockup-sprint-pentest.mjs"),
+      readRepoFile("scripts/e2e/mockup-sprint-pentest-scenarios.mjs"),
+    ]);
+    const dagJob = getJobBlock(workflow, "ci-dag");
+    const electronJob = getJobBlock(workflow, "electron-ci-dag");
+    const ciDagScript = packageJson.scripts?.["test:orchestration:ci-dag"] ?? "";
+    const ciDagRunScript = packageJson.scripts?.["test:orchestration:ci-dag:run"] ?? "";
+    const electronDagScript = packageJson.scripts?.["test:orchestration:ci-dag:electron"] ?? "";
+    const electronDagRunScript = packageJson.scripts?.["test:orchestration:ci-dag:electron:run"] ?? "";
 
     expect(workflow).toContain("Mockup Sprint Orchestration");
     expectConcurrencyCancellation(workflow, "Mockup sprint orchestration");
@@ -263,22 +358,96 @@ describe("GitHub workflow health", () => {
     expect(workflow).toMatch(/pull_request:\n    branches: \[main, dev\]/);
     expect(workflow).toContain("workflow_dispatch:");
 
-    expect(job).toContain("runs-on: ubuntu-latest");
-    expect(job).toContain("uses: pnpm/action-setup@v6");
-    expect(job).toContain("version: 10.33.0");
-    expect(job).toContain("run_install: false");
-    expect(job).toContain("uses: actions/setup-node@v5");
-    expect(job).toContain("node-version: 22");
-    expect(job).toContain("run: pnpm install --frozen-lockfile --ignore-scripts");
-    expect(job).toContain("run: pnpm run test:orchestration:rapid");
-    expect(job).not.toContain("run: pnpm run build");
-    expect(job).not.toContain("docker version");
-    expect(job).not.toContain("run: pnpm run test:orchestration:full");
-    expect(job).not.toContain("test:orchestration:pentest");
-    expect(job).not.toContain("run-mockup-sprint-pentest.mjs --scenario pentest");
-    expect(job).not.toContain("pnpm run test:e2e:mockup-sprint-pentest");
-    expect(job).not.toContain("OPENROUTER_API_KEY");
-    expect(job).not.toContain("GITHUB_TOKEN");
+    expect(dagJob).toContain("runs-on: ubuntu-latest");
+    expect(dagJob).toContain("timeout-minutes: 25");
+    expectJobToolchain(dagJob, "Mockup sprint CI DAG");
+    expect(dagJob).toContain("run: pnpm run build");
+    expect(dagJob).toContain("run: pnpm run test:orchestration:ci-dag:run");
+    expectCommandBefore(dagJob, "run: pnpm run build", "run: pnpm run test:orchestration:ci-dag:run");
+    expect(dagJob).not.toContain("container:");
+    expect(dagJob).not.toContain("run: pnpm run test:orchestration:rapid");
+    expect(dagJob).not.toContain("run: pnpm run test:orchestration:ci-dag:electron");
+    expect(dagJob).not.toContain("run: pnpm run test:orchestration:full");
+    expect(dagJob).not.toContain("test:orchestration:pentest");
+    expect(dagJob).not.toContain("run-mockup-sprint-pentest.mjs --scenario pentest");
+    expect(dagJob).not.toContain("pnpm run test:e2e:mockup-sprint-pentest");
+    expect(dagJob).not.toContain("OPENROUTER_API_KEY");
+    expect(dagJob).not.toContain("GITHUB_TOKEN");
+    expect(ciDagScript).toContain("pnpm run build && pnpm run test:orchestration:ci-dag:run");
+    expect(ciDagRunScript).toContain("run-mockup-sprint-pentest.mjs");
+    expect(ciDagRunScript).toContain("--execution-mode docker");
+    expect(ciDagRunScript).toContain("--scenario ci-small-dag");
+    expect(ciDagRunScript).toContain("--stall-timeout-ms 180000");
+    expect(ciDagRunScript).not.toContain("--runtime electron");
+
+    expect(electronJob).toContain("if: github.event_name == 'pull_request' && github.base_ref == 'main'");
+    expect(electronJob).toContain("timeout-minutes: 25");
+    expect(electronJob).not.toContain("workflow_dispatch");
+    expect(electronJob).not.toContain("refs/heads/main");
+    expect(electronJob).toContain("runs-on: ${{ matrix.os }}");
+    expect(electronJob).toContain("name: macOS");
+    expect(electronJob).toContain("os: macos-latest");
+    expect(electronJob).toContain("name: Windows");
+    expect(electronJob).toContain("os: windows-latest");
+    expect(electronJob).toContain("CSC_IDENTITY_AUTO_DISCOVERY: \"false\"");
+    expect(electronJob).toContain("GH_TOKEN: \"\"");
+    expect(electronJob).toContain("electron_config_cache: ${{ github.workspace }}/.cache/electron-downloads");
+    expect(electronJob).toContain("uses: actions/cache@v5");
+    expectJobToolchain(electronJob, "Mockup sprint main Electron DAG");
+    expect(electronJob).toContain("- name: Restore Electron binary cache");
+    expectCacheKey(electronJob, "-electron-binary-", ["pnpm-lock.yaml"]);
+    expect(electronJob).toContain("${{ runner.os }}-node22-pnpm10.33.0-electron-binary-");
+    expect(electronJob).toContain("run: node node_modules/electron/install.js");
+    expect(electronJob).toContain("run: pnpm run electron:install-deps");
+    expect(electronJob).toContain("run: pnpm run build");
+    expectCommandBefore(electronJob, "run: pnpm install --frozen-lockfile --ignore-scripts", "run: node node_modules/electron/install.js");
+    expectCommandBefore(electronJob, "run: node node_modules/electron/install.js", "run: pnpm run electron:install-deps");
+    expectCommandBefore(electronJob, "run: pnpm run electron:install-deps", "run: pnpm run build");
+    expectCommandBefore(electronJob, "run: pnpm run build", "run: pnpm run test:orchestration:ci-dag:electron:run");
+    expect(electronJob).toContain("run: pnpm run test:orchestration:ci-dag:electron:run");
+    expect(electronJob).not.toContain("container:");
+    expect(electronJob).not.toMatch(/^\s*run: pnpm run test:orchestration:ci-dag$/m);
+    expect(electronJob).not.toContain("run: pnpm run test:orchestration:rapid");
+    expect(electronJob).not.toContain("OPENROUTER_API_KEY");
+    expect(electronJob).not.toContain("GITHUB_TOKEN");
+    expect(electronDagScript).toContain("pnpm run build && pnpm run test:orchestration:ci-dag:electron:run");
+    expect(electronDagRunScript).toContain("run-mockup-sprint-pentest.mjs");
+    expect(electronDagRunScript).toContain("--runtime electron");
+    expect(electronDagRunScript).toContain("--execution-mode fixture");
+    expect(electronDagRunScript).toContain("--scenario ci-small-dag-electron");
+    expect(electronDagRunScript).toContain("--stall-timeout-ms 180000");
+
+    const runnerBeforeElectronStart = runnerScript.slice(0, runnerScript.indexOf("async function startElectronCodeUx"));
+    expect(runnerBeforeElectronStart).not.toContain('from "@playwright/test"');
+    expect(runnerBeforeElectronStart).not.toContain('from "electron"');
+    expect(runnerScript).toContain('import("@playwright/test")');
+    expect(runnerScript).toContain('import("electron")');
+    expect(runnerScript).toContain("const DEFAULT_STALL_TIMEOUT_MS = 3 * 60 * 1000");
+    expect(runnerScript).toContain("const HTTP_REQUEST_TIMEOUT_MS = 60_000");
+    expect(runnerScript).toContain("--stall-timeout-ms");
+    expect(runnerScript).toContain("timed out after ${timeoutMs}ms before reaching a terminal summary");
+    expect(runnerScript).toContain("mockup_pentest_progress");
+    expect(runnerScript).toContain("mockup_pentest_stalled");
+    expect(runnerScript).toContain("mockup_pentest_waiting_for_expected_output");
+    expect(runnerScript).toContain("mockup_pentest_dependency_merge_violation");
+    expect(runnerScript).toContain("findMockupDagDependencyMergeViolations(expectedProjectRun, latestTasks)");
+    expect(runnerScript).toContain("DAG dependency merge invariant failed");
+    expect(runnerScript).toContain("lastStateChangeAt = now;");
+    expect(runnerScript).toContain("expectedOutputReadinessChanged");
+    expect(runnerScript).toContain("isMockupPollStateProgress({ progressChanged, expectedOutputReadinessChanged })");
+    expect(runnerScript).not.toContain("if (tasksTerminal && sprintTerminal && sprint.status === \"completed\" && !expectedOutputReady) {\n        lastStateChangeAt = now;");
+    expect(runnerScript).toContain("expectedOutputFilesPresent");
+    expect(runnerScript).toContain("GITHUB_STEP_SUMMARY");
+    expect(runnerScript).toContain("writeRuntimeLogToConsole");
+
+    const ciDagValidationTask = scenarioScript.slice(
+      scenarioScript.indexOf('key: "ci-dag-validation"'),
+      scenarioScript.indexOf("return tasks;", scenarioScript.indexOf('key: "ci-dag-validation"')),
+    );
+    expect(ciDagValidationTask).toContain('dependsOn: ["ci-dag-batch-01", "ci-dag-batch-02"]');
+    expect(ciDagValidationTask).toContain('"test/run-validation.mjs"');
+    expect(ciDagValidationTask).not.toContain('run("node test/run-validation.mjs")');
+    expect(scenarioScript).toContain('commands: [{ command: "node test/run-validation.mjs", exitCode: 0 }]');
   });
 
   it("keeps release checks separate from CI and Playwright validation lanes", async () => {

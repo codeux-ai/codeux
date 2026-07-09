@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { runCommandStrict } from "../../../../src/services/cli-process-runner.js";
@@ -106,6 +106,147 @@ describe("local-merge helpers", () => {
     expect(await currentBranch()).toBe("main");
     const files = (await git(repo, "ls-tree", "--name-only", "main")).stdout;
     expect(files).toContain("work.txt");
+  });
+
+  it("keeps temporary local merges on host git when containerized git is globally enabled", async () => {
+    const previousContainerizedGit = process.env.CODE_UX_CONTAINERIZED_GIT;
+    const previousGitContainerMode = process.env.CODE_UX_GIT_CONTAINER_MODE;
+    process.env.CODE_UX_CONTAINERIZED_GIT = "1";
+    delete process.env.CODE_UX_GIT_CONTAINER_MODE;
+
+    try {
+      await git(repo, "checkout", "feature");
+      await git(repo, "checkout", "-b", "worker");
+      await commitFile(repo, "host-worktree.txt", "work\n", "feat: host worktree merge");
+      await git(repo, "checkout", "feature");
+
+      const result = await mergeBranchLocallyInTemporaryWorktree({
+        repoPath: repo,
+        targetBranch: "feature",
+        sourceBranch: "worker",
+        commitMessage: "Merge branch 'worker' into feature",
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.conflict).toBe(false);
+      const files = (await git(repo, "ls-tree", "--name-only", "feature")).stdout;
+      expect(files).toContain("host-worktree.txt");
+    } finally {
+      if (previousContainerizedGit === undefined) {
+        delete process.env.CODE_UX_CONTAINERIZED_GIT;
+      } else {
+        process.env.CODE_UX_CONTAINERIZED_GIT = previousContainerizedGit;
+      }
+      if (previousGitContainerMode === undefined) {
+        delete process.env.CODE_UX_GIT_CONTAINER_MODE;
+      } else {
+        process.env.CODE_UX_GIT_CONTAINER_MODE = previousGitContainerMode;
+      }
+    }
+  });
+
+  it("normalizes containerized temporary worktree gitdir metadata before follow-up git commands", async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), "local-merge-containerized-metadata-"));
+    try {
+      await mkdir(path.join(repoRoot, ".git", "worktrees"), { recursive: true });
+      let worktreePath = "";
+
+      const runner = vi.fn(async (_command: string, args: string[], cwd: string) => {
+        if (args[0] === "rev-parse" && args[1] === "--verify") {
+          return { ok: true, code: 0, stdout: "source-sha\n", stderr: "", durationMs: 1 };
+        }
+        if (args[0] === "symbolic-ref") {
+          return { ok: true, code: 0, stdout: "main\n", stderr: "", durationMs: 1 };
+        }
+        if (args[0] === "show-ref") {
+          return { ok: true, code: 0, stdout: "", stderr: "", durationMs: 1 };
+        }
+        if (args[0] === "worktree" && args[1] === "add") {
+          worktreePath = args[3];
+          const gitDirName = path.basename(worktreePath);
+          await mkdir(worktreePath, { recursive: true });
+          await mkdir(path.join(repoRoot, ".git", "worktrees", gitDirName), { recursive: true });
+          await writeFile(path.join(worktreePath, ".git"), `gitdir: /workspace/.git/worktrees/${gitDirName}\n`, "utf8");
+          return { ok: true, code: 0, stdout: "", stderr: "", durationMs: 1 };
+        }
+        if (args.includes("merge")) {
+          const dotGit = await readFile(path.join(cwd, ".git"), "utf8");
+          expect(dotGit).not.toContain("/workspace/");
+          expect(dotGit).toContain("../../.git/worktrees/");
+          return { ok: true, code: 0, stdout: "", stderr: "", durationMs: 1 };
+        }
+        if (args[0] === "update-ref" || args[0] === "reset" || (args[0] === "worktree" && ["remove", "prune"].includes(args[1]))) {
+          return { ok: true, code: 0, stdout: "", stderr: "", durationMs: 1 };
+        }
+        throw new Error(`Unexpected git command in ${cwd}: ${args.join(" ")}`);
+      });
+
+      const result = await mergeBranchLocallyInTemporaryWorktree({
+        repoPath: repoRoot,
+        targetBranch: "main",
+        sourceBranch: "worker",
+        commitMessage: "Merge branch 'worker' into main",
+        runner,
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(result.ok).toBe(true);
+      expect(worktreePath).toContain("code-ux-local-merge-");
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves usable host worktree gitdir metadata unchanged", async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), "local-merge-host-metadata-"));
+    try {
+      await mkdir(path.join(repoRoot, ".git", "worktrees"), { recursive: true });
+      let worktreePath = "";
+      let hostGitDir = "";
+
+      const runner = vi.fn(async (_command: string, args: string[], cwd: string) => {
+        if (args[0] === "rev-parse" && args[1] === "--verify") {
+          return { ok: true, code: 0, stdout: "source-sha\n", stderr: "", durationMs: 1 };
+        }
+        if (args[0] === "symbolic-ref") {
+          return { ok: true, code: 0, stdout: "main\n", stderr: "", durationMs: 1 };
+        }
+        if (args[0] === "show-ref") {
+          return { ok: true, code: 0, stdout: "", stderr: "", durationMs: 1 };
+        }
+        if (args[0] === "worktree" && args[1] === "add") {
+          worktreePath = args[3];
+          const gitDirName = path.basename(worktreePath);
+          hostGitDir = path.join(repoRoot, ".git", "worktrees", gitDirName);
+          await mkdir(worktreePath, { recursive: true });
+          await mkdir(hostGitDir, { recursive: true });
+          await writeFile(path.join(worktreePath, ".git"), `gitdir: ${hostGitDir}\n`, "utf8");
+          return { ok: true, code: 0, stdout: "", stderr: "", durationMs: 1 };
+        }
+        if (args.includes("merge")) {
+          const dotGit = await readFile(path.join(cwd, ".git"), "utf8");
+          expect(dotGit).toBe(`gitdir: ${hostGitDir}\n`);
+          return { ok: true, code: 0, stdout: "", stderr: "", durationMs: 1 };
+        }
+        if (args[0] === "update-ref" || args[0] === "reset" || (args[0] === "worktree" && ["remove", "prune"].includes(args[1]))) {
+          return { ok: true, code: 0, stdout: "", stderr: "", durationMs: 1 };
+        }
+        throw new Error(`Unexpected git command in ${cwd}: ${args.join(" ")}`);
+      });
+
+      const result = await mergeBranchLocallyInTemporaryWorktree({
+        repoPath: repoRoot,
+        targetBranch: "main",
+        sourceBranch: "worker",
+        commitMessage: "Merge branch 'worker' into main",
+        runner,
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(result.ok).toBe(true);
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
   });
 
   it("creates a missing unborn local default branch from the source branch", async () => {
@@ -699,5 +840,40 @@ describe("workerBranchHasMergeWork", () => {
       featureBranch: "feature",
       workerBranch: "task/real-work",
     })).resolves.toBe(true);
+  });
+
+  it("compares resolved commit SHAs instead of full refs so Windows does not parse the range as a path", async () => {
+    const revListRanges: string[] = [];
+    const runner = vi.fn(async (_command: string, args: string[]) => {
+      if (args[0] === "show-ref") {
+        return { code: 0, stdout: "", stderr: "" };
+      }
+      if (args[0] === "rev-parse") {
+        const ref = args[2] || "";
+        if (ref.includes("task/real-work")) {
+          return { code: 0, stdout: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n", stderr: "" };
+        }
+        if (ref.includes("feature")) {
+          return { code: 0, stdout: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n", stderr: "" };
+        }
+      }
+      if (args[0] === "rev-list") {
+        revListRanges.push(args[2] || "");
+        if ((args[2] || "").includes("refs/heads/")) {
+          throw new Error("fatal: failed to stat ref range as a Windows path");
+        }
+        return { code: 0, stdout: "1\n", stderr: "" };
+      }
+      throw new Error(`unexpected git args: ${args.join(" ")}`);
+    });
+
+    await expect(workerBranchHasMergeWork({
+      repoPath: repo,
+      featureBranch: "feature",
+      workerBranch: "task/real-work",
+      runner,
+    })).resolves.toBe(true);
+
+    expect(revListRanges).toEqual(["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa..bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]);
   });
 });

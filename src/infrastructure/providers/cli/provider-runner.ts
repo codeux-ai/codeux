@@ -9,6 +9,7 @@ import { CliProviderId, E2E_PROVIDER_CLI_SHIM_ENV, enabledCustomServersFor, getN
 import { CommandResult, runStreamingCommand } from "../../../services/cli-process-runner.js";
 import type { IDockerRunner } from "./docker-runner.js";
 import type { SnapshotCheckout } from "./workspace-manager.js";
+import { buildInvocationGitPolicy, type InvocationWorkspaceGitPolicy } from "./invocation-workspace-preparer.js";
 import { isDockerWorkspaceMountError } from "../../../services/cli-docker-utils.js";
 import { sanitizeInvocationOutputText } from "../../../services/invocation-output-sanitizer.js";
 import { redactMetadata } from "../../../shared/security/redaction.js";
@@ -94,6 +95,8 @@ export interface ProviderRunInput {
   workflowSettings: CliWorkflowSettings;
   repoPath: string;
   snapshotCheckout?: SnapshotCheckout;
+  gitPolicy?: InvocationWorkspaceGitPolicy;
+  workspaceLifecycle?: "fresh" | "continue";
   githubToken?: string;
   gitlabToken?: string;
   signal?: AbortSignal;
@@ -144,14 +147,22 @@ export class ProviderRunner implements IProviderRunner {
     callback: (prepared: { cwd: string; cleanup: () => Promise<void> }, outputPath: string | null) => Promise<T>
   ): Promise<T> {
     const preserveSessionWorkspace = this.shouldPreserveSessionWorkspace(input);
+    const reuseExistingWorkspace = input.workspaceLifecycle === "continue" || Boolean(input.continueSessionId);
     const prepared = input.workflowSettings.executionMode === "DOCKER"
       ? await this.dockerRunner.ensureWorkspace({
         cwd: input.cwd,
         repoPath: input.repoPath,
         sessionId: input.workspaceSessionId || input.sessionId,
         snapshotCheckout: input.snapshotCheckout,
+        gitPolicy: input.gitPolicy || (input.snapshotCheckout?.remoteOnly
+          ? buildInvocationGitPolicy({
+            githubMode: "REMOTE",
+            githubToken: input.githubToken,
+            gitlabToken: input.gitlabToken,
+          })
+          : undefined),
         preserve: preserveSessionWorkspace,
-        reuseExisting: preserveSessionWorkspace,
+        reuseExisting: reuseExistingWorkspace,
       })
       : { cwd: input.cwd, cleanup: async () => undefined };
 

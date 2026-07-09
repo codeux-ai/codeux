@@ -20,7 +20,12 @@ import { buildProviderPrompt, DEFAULT_CLI_WORKFLOW_SETTINGS } from "./cli-workfl
 import { buildReadFileRetryPrompt, isReadFileNotFoundToolError } from "./cli-workflow-text-utils.js";
 import { ProviderRunner, type IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
-import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
+import { WorkspaceManager, type SnapshotCheckout } from "../infrastructure/providers/cli/workspace-manager.js";
+import {
+  buildInvocationGitPolicy,
+  buildInvocationSnapshotCheckout,
+  InvocationWorkspacePreparer,
+} from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import { resolveProviderForInvocation } from "./provider-routing.js";
 import { parsePlannedSprintReply, PlanningParseError } from "./planning-json-extractor.js";
@@ -135,6 +140,7 @@ export class PlanningAgentService {
   private readonly providerExecutionService: ProviderExecutionService;
   private readonly structuredAgentRequestService: StructuredAgentRequestService;
   private readonly workspaceManager = new WorkspaceManager();
+  private readonly invocationWorkspacePreparer = new InvocationWorkspacePreparer(this.workspaceManager);
 
   constructor(private readonly deps: PlanningAgentServiceDeps) {
     this.providerRunner = deps.providerRunner || new ProviderRunner(new DockerRunner());
@@ -218,6 +224,7 @@ export class PlanningAgentService {
         settings: runtime.settings,
         rawPrompt: prompt,
         overrides: input.overrides,
+        fallbackBranch: runtime.settings.git.defaultBranch || project.defaultBranch,
         signal,
         parseFn: (bodyMarkdown) => this.parseJsonReply<{ goal?: string }>(bodyMarkdown),
         buildRetryPrompt: (lastError) => [
@@ -278,8 +285,8 @@ export class PlanningAgentService {
     if (!invocation) {
       throw new Error(`Execution invocation not found: ${invocationId}`);
     }
-    if (invocation.status !== "failed") {
-      throw new Error("Only failed planning invocations can be restarted.");
+    if (invocation.status !== "failed" && invocation.status !== "cancelled") {
+      throw new Error("Only failed or cancelled planning invocations can be restarted.");
     }
     if (invocation.type !== "planning") {
       throw new Error(`Invocation type "${invocation.type}" does not support manual restart yet.`);
@@ -398,6 +405,8 @@ export class PlanningAgentService {
         settings: runtime.settings,
         rawPrompt: prompt,
         overrides: options.overrides,
+        preferredBranch: sprint.featureBranch || undefined,
+        fallbackBranch: runtime.settings.git.defaultBranch || project.defaultBranch,
         continuation,
         signal,
         parseFn: (bodyMarkdown) => parsePlannedSprintReply(bodyMarkdown, { allowedAgentPresetIds }),
@@ -611,6 +620,8 @@ export class PlanningAgentService {
     settings: DashboardSettings;
     rawPrompt: string;
     overrides?: PlanningOverrides;
+    preferredBranch?: string;
+    fallbackBranch?: string | null;
     signal?: AbortSignal;
     parseFn: (bodyMarkdown: string) => T;
     buildRetryPrompt: (lastError: Error) => string;
@@ -692,16 +703,36 @@ export class PlanningAgentService {
     let cleanupWorkspace: (() => Promise<void>) | undefined;
     if (workflowSettings.executionMode === "DOCKER") {
       const workspaceSessionId = this.buildPlanningWorkspaceSessionId(args.projectId, args.sprintId);
-      snapshotWorkspace = args.continuation
-        ? await this.workspaceManager.createOrReuseSnapshotWorkspace(args.repoPath, workspaceSessionId)
-        : await this.workspaceManager.createSnapshotWorkspace(
-          args.repoPath,
-          workspaceSessionId,
-          undefined,
+      const snapshotCheckout = await this.resolvePlanningSnapshotCheckout({
+        repoPath: args.repoPath,
+        settings: args.settings,
+        preferredBranch: args.preferredBranch,
+        fallbackBranch: args.fallbackBranch,
+      });
+      const shouldReuseSnapshot = Boolean(args.continuation);
+      const gitPolicy = buildInvocationGitPolicy({
+        githubMode: args.settings.git.githubMode,
+        defaultBranch: args.settings.git.defaultBranch,
+        githubToken: args.settings.git.githubToken,
+        gitlabToken: args.settings.git.gitlabToken,
+      });
+      snapshotWorkspace = shouldReuseSnapshot
+        ? await this.invocationWorkspacePreparer.createSnapshotWorkspace({
+          repoPath: args.repoPath,
+          sessionId: workspaceSessionId,
+          checkout: snapshotCheckout,
+          reuseExisting: true,
+          gitPolicy,
+        })
+        : await this.invocationWorkspacePreparer.createSnapshotWorkspace({
+          repoPath: args.repoPath,
+          sessionId: workspaceSessionId,
+          checkout: snapshotCheckout,
           // Planning only reads the current tree to draft tasks; it never needs the repo's other
           // (often thousands of) accumulated branches, so seed just the checkout branch.
-          { singleBranch: true },
-        );
+          workspaceOptions: { singleBranch: true },
+          gitPolicy,
+        });
       cleanupWorkspace = async () => {
         await this.workspaceManager.removeWorktree(args.repoPath, snapshotWorkspace).catch(() => undefined);
       };
@@ -840,6 +871,26 @@ export class PlanningAgentService {
 
   private buildPlanningWorkspaceSessionId(projectId: string, sprintId: string | null): string {
     return `planning-${projectId}-${sprintId || "project"}`;
+  }
+
+  private async resolvePlanningSnapshotCheckout(args: {
+    repoPath: string;
+    settings: DashboardSettings;
+    preferredBranch?: string;
+    fallbackBranch?: string | null;
+  }): Promise<SnapshotCheckout | undefined> {
+    if (args.settings.git.githubMode !== "REMOTE") {
+      return undefined;
+    }
+
+    return buildInvocationSnapshotCheckout(buildInvocationGitPolicy({
+      githubMode: args.settings.git.githubMode,
+      defaultBranch: args.fallbackBranch?.trim() || args.settings.git.defaultBranch,
+      githubToken: args.settings.git.githubToken,
+      gitlabToken: args.settings.git.gitlabToken,
+    }), {
+      branch: args.preferredBranch,
+    });
   }
 
   private buildMemoryContext(projectId: string, sprintId: string | null, agentPresetId: string): string | undefined {

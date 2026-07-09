@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { runCommandStrict, type CommandResult } from "../../services/cli-process-runner.js";
 import { CODE_UX_GIT_PATHSPEC_EXCLUDE, CODE_UX_REPO_DIR } from "./code-ux-gitignore.js";
@@ -337,6 +337,19 @@ async function gitRevListCount(
   }
 }
 
+async function gitResolveCommit(
+  repoPath: string,
+  ref: string,
+  runner: LocalMergeRunner,
+): Promise<string | null> {
+  try {
+    const res = await runner("git", ["rev-parse", "--verify", `${ref}^{commit}`], repoPath);
+    return res.stdout.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 function formatGitError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -420,6 +433,42 @@ async function resolveCodeUxOnlyMergeConflicts(
   }
 }
 
+async function normalizeTemporaryWorktreeGitMetadata(repoPath: string, worktreePath: string): Promise<void> {
+  const dotGitPath = path.join(worktreePath, ".git");
+  let content: string;
+  try {
+    content = (await readFile(dotGitPath, "utf8")).trim();
+  } catch {
+    return;
+  }
+
+  const match = /^gitdir:\s*(.+)$/i.exec(content);
+  if (!match) {
+    return;
+  }
+
+  const rawGitDir = match[1].trim();
+  const currentGitDir = path.isAbsolute(rawGitDir)
+    ? rawGitDir
+    : path.resolve(worktreePath, rawGitDir);
+  if (existsSync(currentGitDir)) {
+    return;
+  }
+
+  const gitDirName = path.basename(rawGitDir);
+  if (!gitDirName || gitDirName === "." || gitDirName === path.sep) {
+    return;
+  }
+
+  const hostGitDir = path.join(repoPath, ".git", "worktrees", gitDirName);
+  const relativeGitDir = path.relative(worktreePath, hostGitDir).replaceAll(path.sep, "/");
+  if (!relativeGitDir || relativeGitDir.startsWith("/")) {
+    return;
+  }
+
+  await writeFile(dotGitPath, `gitdir: ${relativeGitDir}\n`, "utf8");
+}
+
 /**
  * Returns true only when the recorded worker branch still exists and carries
  * commits that are not already in the feature branch. This is used to clear stale
@@ -464,8 +513,16 @@ export async function workerBranchHasMergeWork(args: {
   }
 
   for (const sourceRef of existingSourceRefs) {
+    const sourceCommit = await gitResolveCommit(args.repoPath, sourceRef, runner);
+    if (!sourceCommit) {
+      continue;
+    }
     for (const baseRef of existingBaseRefs) {
-      if ((await gitRevListCount(args.repoPath, `${baseRef}..${sourceRef}`, runner)) > 0) {
+      const baseCommit = await gitResolveCommit(args.repoPath, baseRef, runner);
+      if (!baseCommit) {
+        continue;
+      }
+      if ((await gitRevListCount(args.repoPath, `${baseCommit}..${sourceCommit}`, runner)) > 0) {
         return true;
       }
     }
@@ -628,11 +685,19 @@ export async function mergeBranchLocallyInTemporaryWorktree(args: {
     }
   }
 
-  const worktreePath = await mkdtemp(path.join(tmpdir(), "code-ux-local-merge-"));
+  const worktreeRoot = path.join(args.repoPath, ".worktrees");
+  let worktreePath: string;
+  if (existsSync(args.repoPath)) {
+    await mkdir(worktreeRoot, { recursive: true });
+    worktreePath = await mkdtemp(path.join(worktreeRoot, "code-ux-local-merge-"));
+  } else {
+    worktreePath = path.join(worktreeRoot, `code-ux-local-merge-${randomUUID()}`);
+  }
   let worktreeCreated = false;
   try {
     await runner("git", ["worktree", "add", "--detach", worktreePath, targetBranch], args.repoPath);
     worktreeCreated = true;
+    await normalizeTemporaryWorktreeGitMetadata(args.repoPath, worktreePath);
     await runGitWithCodeUxIdentity(worktreePath, ["merge", "--no-ff", "-m", args.commitMessage, sourceBranch], runner);
     await runner("git", ["update-ref", `refs/heads/${targetBranch}`, "HEAD"], worktreePath);
     if (visibleCheckout && !visibleCheckout.detached && visibleCheckout.ref === targetBranch) {

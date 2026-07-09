@@ -5,9 +5,15 @@ import { act } from "preact/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
+import { useUpdateStatus } from "../../../dashboard/src/v2/hooks/use-update-status.js";
 import { TitleBar } from "../../../dashboard/src/v2/components/TitleBar.js";
 
+vi.mock("../../../dashboard/src/v2/hooks/use-update-status.js", () => ({
+  useUpdateStatus: vi.fn(),
+}));
+
 type WindowStateListener = (state: CodeUxWindowState) => void;
+const mockUseUpdateStatus = vi.mocked(useUpdateStatus);
 
 const createDesktopBridge = () => {
   let stateListener: WindowStateListener | null = null;
@@ -41,6 +47,11 @@ const createDesktopBridge = () => {
 describe("TitleBar", () => {
   beforeEach(() => {
     vi.stubGlobal("__APP_VERSION__", "2.3.4");
+    mockUseUpdateStatus.mockReturnValue({
+      status: null,
+      updateAvailable: false,
+      latestVersion: null,
+    });
   });
 
   afterEach(() => {
@@ -57,7 +68,7 @@ describe("TitleBar", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders Code UX, the version, and an update action when the desktop window API exists", () => {
+  it("renders Code UX, the version, and the window controls when the desktop window API exists", () => {
     const { bridge } = createDesktopBridge();
     window.codeUxDesktop = bridge;
 
@@ -65,14 +76,10 @@ describe("TitleBar", () => {
 
     expect(screen.getByRole("img", { name: "Code UX" })).toBeInTheDocument();
     expect(screen.getByText("v2.3.4")).toBeInTheDocument();
-
-    const updateButton = screen.getByRole("button", { name: "Open updates" });
-    expect(updateButton).toHaveTextContent("Update");
-    expect(updateButton).toHaveClass("titlebar-no-drag");
-
-    fireEvent.click(updateButton);
-
-    expect(bridge.openUpdates).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: /update/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Minimize window" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Maximize window" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close window" })).toBeInTheDocument();
   });
 
   it("double-clicks the non-interactive title-bar area to toggle maximize", async () => {
@@ -102,7 +109,6 @@ describe("TitleBar", () => {
     render(<TitleBar />);
 
     const controls = [
-      screen.getByRole("button", { name: "Open updates" }),
       screen.getByRole("button", { name: "Minimize window" }),
       screen.getByRole("button", { name: "Maximize window" }),
       screen.getByRole("button", { name: "Close window" }),
@@ -114,6 +120,27 @@ describe("TitleBar", () => {
     }
 
     expect(bridge.window.toggleMaximize).not.toHaveBeenCalled();
+  });
+
+  it("renders the update affordance with the available version and opens updates when clicked", () => {
+    mockUseUpdateStatus.mockReturnValue({
+      status: null,
+      updateAvailable: true,
+      latestVersion: "2.4.0",
+    });
+    const { bridge } = createDesktopBridge();
+    window.codeUxDesktop = bridge;
+
+    render(<TitleBar />);
+
+    const updateButton = screen.getByRole("button", { name: "Update available: v2.4.0" });
+
+    expect(updateButton).toHaveTextContent("Update");
+    expect(updateButton).toHaveClass("titlebar-no-drag");
+
+    fireEvent.click(updateButton);
+
+    expect(bridge.openUpdates).toHaveBeenCalledTimes(1);
   });
 
   it("updates the maximize button label and icon from state-change events", async () => {

@@ -47,6 +47,7 @@ import type { McpApprovalTracker } from "./mcp-approval-tracker.js";
 import { getCorrelationId } from "../shared/logging/correlation-id.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import { dashboardReplyAgentMcpAccess, isSchedulerOnlyAgentMcpAccess } from "./agent-mcp-access.js";
+import { buildProviderInvocationWorkspaceOptions } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 
 interface ChatThreadRuntimeServiceDependencies {
   connectionChatRepository: ConnectionChatRepository;
@@ -119,6 +120,14 @@ const resolveEffectiveDefaultBranch = (
   project.defaultBranch?.trim()
   || settings.git?.defaultBranch?.trim()
   || "main"
+);
+
+const resolveEffectiveGithubMode = (
+  project: { sourceType?: string | null },
+  settings: DashboardSettings,
+): "REMOTE" | "LOCAL" => (
+  settings.git?.githubMode
+  || (project.sourceType === "local" ? "LOCAL" : "REMOTE")
 );
 
 const resolveLogicalCompactionContinuationId = (
@@ -1159,9 +1168,15 @@ export class ChatThreadRuntimeService {
     const thinkingMode = route.thinkingMode;
     const dashboardSettings = this.deps.getDashboardSettings({ projectId });
     const defaultBranch = resolveEffectiveDefaultBranch(project, dashboardSettings);
-    const snapshotCheckout = dashboardSettings.cliWorkflow.executionMode === "DOCKER"
-      ? { branch: defaultBranch }
-      : undefined;
+    const invocationWorkspace = buildProviderInvocationWorkspaceOptions({
+      workflowSettings: dashboardSettings.cliWorkflow,
+      gitPolicy: {
+        githubMode: resolveEffectiveGithubMode(project, dashboardSettings),
+        defaultBranch,
+        githubToken: dashboardSettings.git?.githubToken,
+        gitlabToken: dashboardSettings.git?.gitlabToken,
+      },
+    });
 
     const runtimeState = thread.runtimeState || {};
     const pendingAction = runtimeState.pendingManagementAction;
@@ -1313,7 +1328,9 @@ export class ChatThreadRuntimeService {
       settings: dashboardSettings,
       prompt: finalPrompt,
       repoPath: project.baseDir,
-      snapshotCheckout,
+      snapshotCheckout: invocationWorkspace.snapshotCheckout,
+      gitPolicy: invocationWorkspace.gitPolicy,
+      workspaceLifecycle: continueSessionId ? "continue" : invocationWorkspace.workspaceLifecycle,
       mcpConnection,
       agentMcpAccess,
       mcpAgentId: respondingAgent.id,
@@ -1506,10 +1523,16 @@ export class ChatThreadRuntimeService {
         workspaceSessionId: thread.id,
         workflowSettings,
         repoPath,
-        snapshotCheckout: workflowSettings.executionMode === "DOCKER"
-          ? { branch: defaultBranch }
-          : undefined,
-        githubToken,
+        ...buildProviderInvocationWorkspaceOptions({
+          workflowSettings,
+          gitPolicy: {
+            githubMode: resolveEffectiveGithubMode(project ?? {}, dashboardSettings),
+            defaultBranch,
+            githubToken,
+            gitlabToken: dashboardSettings.git?.gitlabToken,
+          },
+          lifecycle: "continue",
+        }),
         continueSessionId,
         nativeSessionOperation: "compact",
         onActivity: (desc, originator) => {

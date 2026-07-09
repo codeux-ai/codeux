@@ -54,8 +54,10 @@ describe("ProviderRunner", () => {
       cwd: "/repo",
       repoPath: "/repo",
       sessionId: "workspace-1",
+      snapshotCheckout: undefined,
+      gitPolicy: undefined,
       preserve: true,
-      reuseExisting: true,
+      reuseExisting: false,
     });
     expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
       cwd: "docker-volume://workspace-1",
@@ -967,8 +969,10 @@ describe("ProviderRunner", () => {
       cwd: "/repo",
       repoPath: "/repo",
       sessionId: "chat-thread-1",
+      snapshotCheckout: undefined,
+      gitPolicy: undefined,
       preserve: true,
-      reuseExisting: true,
+      reuseExisting: false,
     });
   });
 
@@ -989,8 +993,10 @@ describe("ProviderRunner", () => {
       cwd: "/repo",
       repoPath: "/repo",
       sessionId: "chat-thread-2",
+      snapshotCheckout: undefined,
+      gitPolicy: undefined,
       preserve: true,
-      reuseExisting: true,
+      reuseExisting: false,
     });
   });
 

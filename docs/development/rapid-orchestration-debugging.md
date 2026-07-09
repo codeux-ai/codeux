@@ -2,13 +2,14 @@
 
 This suite is the escalation ladder for sprint orchestration failures. Use it when a sprint stalls, local merges fail, worker-owned attention items churn, or memory usage needs extended observation after a fix.
 
-The suite is intentionally split into fast deterministic lanes and slower compiled-runtime lanes. CI uses the rapid lane by default; full mockup pentest lanes are manual escalation tools for targeted investigations. Start with the smallest lane that can reproduce the issue, then broaden only after it passes.
+The suite is intentionally split into fast deterministic lanes and slower compiled-runtime lanes. CI uses the compiled 10-task DAG lane by default so pull requests exercise Docker-backed orchestration without running the full catalog. Start with the smallest lane that can reproduce the issue, then broaden only after it passes.
 
 ## Lane Summary
 
 | Lane | Command | Purpose | Expected runtime |
 | --- | --- | --- | --- |
 | Fast regressions | `pnpm run test:orchestration:rapid` | Watch-loop, feature merge, and local final-merge regressions without Docker or provider CLIs. | Seconds to a few minutes |
+| CI DAG E2E | `pnpm run test:orchestration:ci-dag` | Compiled runtime plus `mockup-cli` through a 10-task dependency graph with parallel leaves and layered joins. | Up to 20 minutes |
 | Mockup merge E2E | `pnpm run test:orchestration:merge-e2e` | Compiled runtime plus `mockup-cli` through a deterministic local merge-conflict DAG. | Up to 15 minutes |
 | Completion conflict E2E | `pnpm run test:orchestration:completion-conflict` | Compiled runtime final LOCAL merge conflict repair after default-branch mutation during orchestration. | Up to 20 minutes |
 | Full mockup pentest | `pnpm run test:orchestration:full` | Manual escalation for all deterministic mockup scenarios: smoke, CI repair, merge conflict, parallel DAG, multi-project overrides. | Longer-running |
@@ -48,6 +49,47 @@ Use this lane first for:
 - Task dependency unlocks after worker branch merges into the sprint feature branch.
 
 The lane must stay credential-free and isolated. It should mock provider, GitHub, Docker, and external network boundaries unless a test specifically targets host Git behavior.
+
+## CI DAG E2E Lane
+
+Run:
+
+```bash
+pnpm run test:orchestration:ci-dag
+```
+
+This builds the compiled runtime and executes `ci-small-dag`, a deterministic 10-task sprint:
+
+- 1 root setup task.
+- 6 parallel leaf tasks.
+- 2 batch aggregation tasks.
+- 1 final validation task.
+
+This is the default no-secret GitHub Actions orchestration lane for pushes and pull requests targeting `dev` or `main`. It is intentionally smaller than the heavy DAG stress lane but still validates Docker-backed task dispatch, dependency unlocks, provider concurrency, feature-branch merging, final repository assertions, and compiled-runtime startup.
+
+Pushes to `main`, pull requests targeting `main`, and manual workflow dispatches add native Windows and macOS Electron DAG coverage:
+
+```bash
+pnpm run test:orchestration:ci-dag:electron
+```
+
+That lane launches the Electron app, waits for the embedded Code UX server, and runs the same 10-task DAG shape through a host-execution mockup fixture. It runs directly on the hosted OS because GitHub-hosted Windows and macOS runners do not provide Docker job containers.
+
+In GitHub Actions, the CI DAG and Electron DAG lanes run build, Electron binary install, native dependency rebuild, and orchestration as separate steps so a stall is visible at the step boundary. Each DAG job has a 25-minute workflow timeout, and the mockup runner bounds individual HTTP calls at 60 seconds plus the full project run at the configured `--timeout-ms`. The runner streams redacted runtime stdout/stderr and emits `mockup_pentest_progress` records whenever sprint or task state changes, plus heartbeat progress every 15 seconds. CI passes `--stall-timeout-ms 180000`; if no sprint, task status, merge, or expected-output progress is observed for three minutes after polling starts, the runner fails early with the last sprint/task snapshot and writes the final table to `GITHUB_STEP_SUMMARY`.
+
+The compact DAG's final validation command runs as a scenario-level assertion after all task branches have merged, not inside the final worker worktree. During polling, the runner also enforces the declared DAG: a task with dependencies may not leave `pending` until each dependency is marked merged. If a future task starts early, the runner emits `mockup_pentest_dependency_merge_violation` and fails the test run immediately. The runner does not treat a completed sprint as terminal for these scenarios until expected repository files are visible in the project checkout; while it waits, it emits `mockup_pentest_waiting_for_expected_output`, but only an actual expected-output readiness change refreshes the stall watchdog. This keeps native Electron runners from validating against a dependency branch before Windows has made the parent merge visible, while still failing within the configured stall timeout if a completed sprint never exposes the merged files.
+
+The Playwright workflow keeps lightweight legacy aggregate jobs named `Playwright E2E Tests (ubuntu-latest)`, `Playwright E2E Tests (macos-latest)`, and `Playwright E2E Tests (windows-latest)`. They depend on the split Playwright shard matrix so protected-branch required contexts stay compatible while the real coverage remains purpose-grouped.
+
+In LOCAL git mode, recovered worker-branch evidence is treated as dependency state: downstream DAG tasks stay blocked until the parent branch has merged into the sprint feature branch or the parent is proven to have no merge work.
+
+Local CLI git finalization is also branch-evidence state. If a `cli_git_pushed` task-run event records a `pushedBranch`, the merge gate backfills that worker branch before dependency derivation. If pushed git work is recorded but no worker branch can be recovered, the task fails closed in `MERGE_BLOCKED` instead of settling as no-output work, so downstream DAG tasks cannot start against an incomplete feature branch. Sprint finalization also reads that task-run evidence; a flattened `COMPLETED` task row cannot close the sprint while pushed local CLI work is still missing a `merged_branch` or `no_merge_work` gate event.
+
+Host-execution DAG tasks export their worker output through an isolated temporary Git index. The exporter discovers modified, deleted, and untracked paths with Git's ignore rules, stages that path list into the temporary index, and emits a cached binary diff against the task base. Host worktrees use an absolute temporary index path, while Docker workspaces keep a container-relative path, so Git for Windows and container Git both write the export index in the intended workspace. This prevents ignored runtime caches from entering worker branches while ensuring parent-created files are visible before dependent tasks unlock.
+
+Generated local task branches use short, hash-stable `task/...` refs. This keeps native Windows worktree setup inside Git's ref path limits while preserving a deterministic prefix for task-specific branch recovery.
+
+The fast branch-only merge gate evaluates only completed candidate tasks, then reconciles the returned candidate projection back into the full DAG before dependency re-derivation. A gate result must never drop non-candidate tasks or discard recovered merge state.
 
 ## Mockup Merge E2E Lane
 
@@ -111,6 +153,7 @@ This builds the runtime and runs every `mockup-cli` scenario through `scripts/e2
 Run this lane manually when a merge/orchestration incident needs broader compiled-runtime evidence beyond the rapid lane or a targeted E2E lane. It covers:
 
 - `smoke-completion`: dependency-chain completion and final local repository assertions.
+- `ci-small-dag`: the CI-sized 10-task DAG used by the default no-secret workflow.
 - `ci-repair`: deterministic failing validation repaired by a worker.
 - `merge-conflict-dag`: sibling edit conflict plus resolved join output.
 - `parallel-independent`: fan-out/fan-in scheduling.
@@ -139,7 +182,7 @@ Use this lane for scheduler pressure, dependency unlocks, provider concurrency, 
 
 During a healthy run, the active task-run count should stay near the fixture provider cap. The mockup E2E runner raises the system mockup-provider ceiling to `32`, then each fixture applies its own lower cap. Regular wide Docker scenarios use `mockup-cli` with `maxConcurrentTasks: 5`; the 129-task stress fixture uses a dedicated Docker fixture with `maxConcurrentTasks: 12` so the lane completes in a practical time. The live database should show roughly that many `task_runs.state = 'RUNNING'` while the remaining unlocked work stays `pending`.
 
-The provider call is not the only timing that matters. For Docker-backed CLI tasks, compare `cli_prepare_started -> cli_prepare_completed`, provider invocation duration, and `provider_completed -> git_pushed`. Wide DAGs should not show a staircase where each task's prepare phase starts only after another workspace seed finishes. Docker workspaces are independent volumes, so only same-workspace preparation and host `git worktree` metadata operations should serialize; repo-wide locks must not wrap Docker volume creation, bundle seeding, or checkout. Patch export should run as one workspace shell command that lets Git stream untracked paths internally instead of starting several helper containers for `read-tree`, `ls-files`, `add`, `diff`, and cleanup. Patch materialization on the host should also stay collapsed into one shell command for local mode and the non-network part of remote mode; remote fetch/push retry remains separate because it is network-sensitive.
+The provider call is not the only timing that matters. For Docker-backed CLI tasks, compare `cli_prepare_started -> cli_prepare_completed`, provider invocation duration, and `provider_completed -> git_pushed`. Wide DAGs should not show a staircase where each task's prepare phase starts only after another workspace seed finishes. Docker workspaces are independent volumes, so only same-workspace preparation and host `git worktree` metadata operations should serialize; repo-wide locks must not wrap Docker volume creation, bundle seeding, or checkout. Patch export should use Git's ignore-aware changed-path discovery and a temporary cached index so generated files, edits, and deletions export consistently without staging ignored runtime caches. Patch materialization on the host should also stay collapsed into one shell command for local mode and the non-network part of remote mode; remote fetch/push retry remains separate because it is network-sensitive.
 
 Restart testing must preserve local CLI workspaces. Startup recovery may cancel and redispatch interrupted local CLI task runs, but it removes surviving task containers without deleting their workspace volumes and session sync treats any finished local CLI task run as terminal even when a stale cached session snapshot still says `RUNNING`.
 
@@ -243,7 +286,11 @@ Exercise these cases with an approved local test project or a temporary fixture:
 | Main-merge attention opens and closes repeatedly. | `project_attention_items`, worker-owned conflict tests. | Remote feedback reconciliation is clearing LOCAL worker-owned attention. |
 | Final merge fails only when visible checkout has edits. | `local-merge.test.ts`, dirty checkout branches. | Dirty preservation or refresh behavior regressed. |
 | Dependent tasks never start after a worker branch completes. | `feature-pr-gate.test.ts`, task merge indicators. | Worker branch merge evidence is missing or stale. |
+| Dependent tasks start before parent files are visible in their worktree. | `cycle-runner.test.ts`, fast branch-only gate logs, `mockup_pentest_progress`. | LOCAL worker-branch evidence was recovered after status derivation but did not trigger dependency re-derivation. |
+| Branch-only gate logs completed parent candidates but every task still shows `isMerged=false`. | `cycle-runner.test.ts`, fast branch-only gate result reconciliation, task state snapshots. | The gate's returned candidate projection was not merged back into the full in-memory DAG before start-ready evaluation. |
+| Parent DAG task completes but its generated files are missing from the worker branch. | `workspace-artifact-service.test.ts`, `cli_git_pushed` activity stats, final validation import errors. | Patch export skipped untracked files or treated ignored runtime caches as stageable paths; export must use an ignore-aware changed-path list and cached temporary-index diff. |
 | Code-complete LOCAL task branches repeatedly become `MERGE_CONFLICT` but raw Git merges cleanly. | Fast branch-only gate logs, `local-merge.test.ts`, visible checkout status. | The visible checkout is blocking host `git checkout`; task branch settlement must use the temporary-worktree path instead of the visible worktree. |
+| Temporary-worktree merges fail with `fatal: not a git repository: /workspace/.git/worktrees/...`. | `local-merge.test.ts`, helper-container Git logs, the temp worktree `.git` file. | Containerized `git worktree add` left an absolute container gitdir pointer behind. Code UX must normalize that pointer to a relative gitdir before the next helper-container Git command. |
 | Mockup merge E2E passes but live provider fails. | Provider invocation row, Docker logs, provider transcript metadata. | Provider-specific output, workspace, or session-sync issue rather than orchestration policy. |
 | Mockup merge E2E selects a credentialed provider. | `provider_invocations`, mockup runner `server.log`, virtual-worker provider pool. | The credential-free mockup route is being filtered before virtual-worker conflict or CI repair. |
 | Merge-conflict attention resolves but reopens until the guardrail escalates. | Task `merge_indicator`, project attention payload, virtual-worker resolution logs. | The worker resolved the branch but did not clear the stale task `MERGE_CONFLICT` marker, so the next protocol pass recreated the same conflict. |
@@ -302,6 +349,7 @@ For leak-focused diagnostics, collect heap snapshots around stable checkpoints w
 Treat an orchestration fix as ready only when:
 
 - `pnpm run test:orchestration:rapid` passes.
+- `pnpm run test:orchestration:ci-dag` passes for scheduler, Docker workspace, or workflow changes that affect the CI lane.
 - `pnpm run test:orchestration:merge-e2e` passes for merge-related fixes.
 - `pnpm run test:orchestration:full` is run only when the change specifically needs full mockup catalog coverage.
 - The approved local test project reaches terminal `completed` after the relevant dirty-checkout or conflict scenario.

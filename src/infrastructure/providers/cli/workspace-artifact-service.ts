@@ -26,8 +26,6 @@ export interface GitCommitIdentity {
   email: string;
 }
 
-const shellQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
-
 const parseGitNumstat = (diffOutput: string): NonNullable<AppliedWorkspacePatchResult["stats"]> => {
   let filesChanged = 0;
   let insertions = 0;
@@ -75,10 +73,10 @@ export class WorkspaceArtifactService {
   constructor(private readonly workspaceManager: IWorkspaceManager) {}
 
   async exportBinaryPatch(workspaceRef: string, baseRef: string): Promise<string> {
-    // Pathspecs shared by intent-to-add staging and the final diff. Keeping them
-    // in sync matters: the temporary index asks Git to discover untracked files
-    // internally, so Code UX never has to pass a large untracked path list
-    // through Docker argv.
+    // Stage the workspace tree into an isolated index and diff that index
+    // against the base. Git still owns discovery of new, modified, and deleted
+    // files, including ignore handling, while Code UX avoids passing a large
+    // changed-path list through Docker argv.
     const excludePathspecs = [
       `:(exclude)${LEARNINGS_FILENAME}`,
       TEMP_EXPORT_PATHSPEC,
@@ -89,31 +87,57 @@ export class WorkspaceArtifactService {
       ":(exclude,glob)**/logs/openai/**",
       ":(exclude,glob)logs/openai/**",
     ];
-    const tempIndexPath = `.code-ux-export-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.index`;
-    const tempPathListPath = `${tempIndexPath}.paths`;
+    const tempIndexFilename = `.code-ux-export-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.index`;
+    const tempIndexPath = workspaceRef.startsWith("docker-volume://") || !path.isAbsolute(workspaceRef)
+      ? tempIndexFilename
+      : path.join(workspaceRef, tempIndexFilename);
     const tempIndexEnv = {
       ...process.env,
       GIT_INDEX_FILE: tempIndexPath,
     };
+    const pathspecs = [".", ...excludePathspecs];
+    const tempPathListPath = path.join(os.tmpdir(), `code-ux-export-paths-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.paths`);
 
-    const exportScript = [
-      "set -e",
-      `paths=${shellQuote(tempPathListPath)}`,
-      "cleanup() { rm -f \"$GIT_INDEX_FILE\" \"$paths\"; }",
-      "trap cleanup EXIT",
-      "git read-tree HEAD",
-      `git ls-files --others --exclude-standard -z -- ${[".", ...excludePathspecs].map(shellQuote).join(" ")} > "$paths"`,
-      "if [ -s \"$paths\" ]; then xargs -0 git add --intent-to-add -- < \"$paths\"; fi",
-      `git diff --binary ${shellQuote(baseRef)} -- ${[".", ...excludePathspecs].map(shellQuote).join(" ")}`,
-    ].join("\n");
-
-    const result = await this.workspaceManager.runWorkspaceCommand(
-      workspaceRef,
-      "sh",
-      ["-lc", exportScript],
-      { env: tempIndexEnv, trimOutput: false },
-    );
-    return result.stdout;
+    try {
+      await this.workspaceManager.runWorkspaceCommand(
+        workspaceRef,
+        "git",
+        ["read-tree", "HEAD"],
+        { env: tempIndexEnv },
+      );
+      const changedPaths = await this.workspaceManager.runWorkspaceCommand(
+        workspaceRef,
+        "git",
+        ["ls-files", "--modified", "--deleted", "--others", "--exclude-standard", "-z", "--", ...pathspecs],
+        { env: tempIndexEnv, trimOutput: false },
+      );
+      if (changedPaths.stdout.length > 0) {
+        await fs.writeFile(tempPathListPath, changedPaths.stdout, "utf8");
+        await this.workspaceManager.runWorkspaceCommand(
+          workspaceRef,
+          "git",
+          ["add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul"],
+          { env: tempIndexEnv, stdinFile: tempPathListPath },
+        );
+      }
+      const result = await this.workspaceManager.runWorkspaceCommand(
+        workspaceRef,
+        "git",
+        ["diff", "--binary", "--cached", baseRef, "--", ...pathspecs],
+        { env: tempIndexEnv, trimOutput: false },
+      );
+      return result.stdout;
+    } finally {
+      await fs.rm(tempPathListPath, { force: true }).catch(() => undefined);
+      if (workspaceRef.startsWith("docker-volume://")) {
+        await this.workspaceManager.runWorkspaceCommand(workspaceRef, "rm", ["-f", tempIndexFilename]).catch(() => undefined);
+      } else {
+        const hostTempIndexPath = path.isAbsolute(tempIndexPath)
+          ? tempIndexPath
+          : path.join(workspaceRef, tempIndexPath);
+        await fs.rm(hostTempIndexPath, { force: true }).catch(() => undefined);
+      }
+    }
   }
 
   async applyPatchToBranch(args: {
@@ -211,64 +235,67 @@ export class WorkspaceArtifactService {
     hasPatch: boolean;
     forceCommitForMergeParent: boolean;
   }): Promise<{ commitSha?: string; stats?: AppliedWorkspacePatchResult["stats"] }> {
-    const parentArgs = [
-      "-p",
-      args.baseRef,
-      ...args.parentRefs.flatMap((parentRef) => ["-p", parentRef]),
-    ].map(shellQuote).join(" ");
-    const script = [
-      "set -e",
-      "cleanup() { rm -f \"$GIT_INDEX_FILE\"; }",
-      "trap cleanup EXIT",
-      `git read-tree ${shellQuote(args.baseRef)}`,
-      args.hasPatch ? `git apply --cached --binary ${shellQuote(args.patchPath)}` : null,
-      "tree=$(git write-tree)",
-      `base_tree=$(git rev-parse ${shellQuote(`${args.baseRef}^{tree}`)})`,
-      [
-        "if [ -z \"$tree\" ] ||",
-        `{ [ "$tree" = "$base_tree" ] && [ ${shellQuote(args.forceCommitForMergeParent ? "1" : "0")} != "1" ]; }; then`,
-        "  printf 'CODEUX_RESULT\\tNO_CHANGES\\n'",
-        "  exit 0",
-        "fi",
-      ].join("\n"),
-      `commit=$(git commit-tree "$tree" ${parentArgs} -m ${shellQuote(args.commitMessage)})`,
-      "sync_checked_out=0",
-      "current_branch=$(env -u GIT_INDEX_FILE git rev-parse --abbrev-ref HEAD 2>/dev/null || true)",
-      [
-        `if [ "$current_branch" = ${shellQuote(args.workerBranch)} ] && [ -z "$(env -u GIT_INDEX_FILE git status --porcelain --untracked-files=no)" ]; then`,
-        "  sync_checked_out=1",
-        "fi",
-      ].join("\n"),
-      `git update-ref ${shellQuote(`refs/heads/${args.workerBranch}`)} "$commit"`,
-      "if [ \"$sync_checked_out\" = \"1\" ]; then env -u GIT_INDEX_FILE git reset --hard \"$commit\" >/dev/null; fi",
-      `env -u GIT_INDEX_FILE git diff --numstat ${shellQuote(args.baseRef)} "$commit"`,
-      "printf 'CODEUX_COMMIT\\t%s\\n' \"$commit\"",
-    ].filter((step): step is string => Boolean(step)).join("\n");
-
-    const result = await runCommandStrict(
-      "sh",
-      ["-lc", script],
-      args.repoPath,
-      {
-        ...buildCommitIdentityEnv(args.gitIdentity),
-        GIT_INDEX_FILE: args.indexEnv.GIT_INDEX_FILE,
-      },
-      { trimOutput: false },
-    );
-
-    const commitLine = result.stdout.split("\n").find((line) => line.startsWith("CODEUX_COMMIT\t"));
-    if (!commitLine) {
-      return {};
+    const indexPath = args.indexEnv.GIT_INDEX_FILE;
+    if (!indexPath) {
+      throw new Error("GIT_INDEX_FILE is required for workspace patch materialization.");
     }
-    const numstatOutput = result.stdout
-      .split("\n")
-      .filter((line) => line && !line.startsWith("CODEUX_"))
-      .join("\n");
-
-    return {
-      commitSha: commitLine.slice("CODEUX_COMMIT\t".length).trim(),
-      stats: parseGitNumstat(numstatOutput),
+    const indexEnv = {
+      ...buildCommitIdentityEnv(args.gitIdentity),
+      GIT_INDEX_FILE: indexPath,
     };
+    const git = async (
+      gitArgs: string[],
+      env: NodeJS.ProcessEnv = indexEnv,
+      options: { trimOutput?: boolean } = {},
+    ): Promise<string> => {
+      const result = await runCommandStrict("git", gitArgs, args.repoPath, env, {
+        trimOutput: options.trimOutput,
+      });
+      return result.stdout;
+    };
+
+    try {
+      await git(["read-tree", args.baseRef]);
+      if (args.hasPatch) {
+        await git(["apply", "--cached", "--binary", args.patchPath]);
+      }
+
+      const tree = (await git(["write-tree"])).trim();
+      const baseTree = (await git(["rev-parse", `${args.baseRef}^{tree}`])).trim();
+      if (!tree || (tree === baseTree && !args.forceCommitForMergeParent)) {
+        return {};
+      }
+
+      const commit = (await git([
+        "commit-tree",
+        tree,
+        "-p",
+        args.baseRef,
+        ...args.parentRefs.flatMap((parentRef) => ["-p", parentRef]),
+        "-m",
+        args.commitMessage,
+      ])).trim();
+
+      const normalEnv = buildCommitIdentityEnv(args.gitIdentity);
+      const currentBranch = (await git(["rev-parse", "--abbrev-ref", "HEAD"], normalEnv).catch(() => "")).trim();
+      const status = currentBranch === args.workerBranch
+        ? (await git(["status", "--porcelain", "--untracked-files=no"], normalEnv, { trimOutput: false }).catch(() => "")).trim()
+        : "not-current";
+      const syncCheckedOut = currentBranch === args.workerBranch && status.length === 0;
+
+      await git(["update-ref", `refs/heads/${args.workerBranch}`, commit], normalEnv);
+      if (syncCheckedOut) {
+        await git(["reset", "--hard", commit], normalEnv);
+      }
+      const numstatOutput = await git(["diff", "--numstat", args.baseRef, commit], normalEnv, { trimOutput: false });
+
+      return {
+        commitSha: commit,
+        stats: parseGitNumstat(numstatOutput),
+      };
+    } finally {
+      await fs.rm(indexPath, { force: true }).catch(() => undefined);
+    }
   }
 
   private async resolveMaterializationBaseRef(args: {

@@ -444,7 +444,8 @@ describe("ProjectSetupService", () => {
       repoPath: repoDir,
       workspaceSessionId: `${project.id}-project-setup`,
       workflowSettings: expect.objectContaining({ executionMode: "DOCKER" }),
-      snapshotCheckout: { branch: "stable" },
+      snapshotCheckout: { branch: "stable", fallbackBranch: undefined, remoteOnly: true },
+      workspaceLifecycle: "fresh",
     }));
   });
 

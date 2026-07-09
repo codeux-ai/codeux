@@ -9,6 +9,7 @@ import type { SettingsRepository } from "../repositories/settings-repository.js"
 import type { ProviderExecutionService } from "./provider-execution-service.js";
 import type { CliProviderId } from "../infrastructure/providers/cli/provider-command-specs.js";
 import type { ProviderRunResult } from "../infrastructure/providers/cli/provider-runner.js";
+import { buildProviderInvocationWorkspaceOptions } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import type {
   DashboardSettings,
   ProviderId,
@@ -342,6 +343,7 @@ export class NodeFlowRuntimeService {
     const settings = this.deps.getDashboardSettings?.(context.projectId)
       ?? this.deps.settingsRepository.resolveProjectDashboardSettings(context.projectId).settings
       ?? DEFAULT_DASHBOARD_SETTINGS;
+    const defaultBranch = settings.git.defaultBranch?.trim() || project.defaultBranch?.trim() || "main";
     const result = await this.deps.providerExecutionService.executeProvider({
       projectId: context.projectId,
       purpose: "dashboard_reply",
@@ -374,6 +376,15 @@ export class NodeFlowRuntimeService {
       workflowSettings: settings.cliWorkflow,
       repoPath: project.baseDir,
       cwd: readString(config.cwd) ?? project.baseDir,
+      ...buildProviderInvocationWorkspaceOptions({
+        workflowSettings: settings.cliWorkflow,
+        gitPolicy: {
+          githubMode: settings.git.githubMode,
+          defaultBranch,
+          githubToken: settings.git.githubToken,
+          gitlabToken: settings.git.gitlabToken,
+        },
+      }),
       signal: context.options.signal,
       invocationId,
       expectTextOutput: true,

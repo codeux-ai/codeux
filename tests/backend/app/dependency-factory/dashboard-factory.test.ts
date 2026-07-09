@@ -272,6 +272,42 @@ describe("Dashboard Factory", () => {
     ]);
   });
 
+  it("wires dashboard chat runtime to project-scoped local Git settings", () => {
+    const localGitSettings = {
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      git: {
+        ...DEFAULT_DASHBOARD_SETTINGS.git,
+        githubMode: "LOCAL" as const,
+        defaultBranch: "main",
+      },
+      cliWorkflow: {
+        ...DEFAULT_DASHBOARD_SETTINGS.cliWorkflow,
+        executionMode: "DOCKER" as const,
+      },
+    };
+    mockCoreDeps.settingsRepository.resolveProjectDashboardSettings.mockReturnValue({
+      settings: localGitSettings,
+      sources: {},
+    });
+
+    const result = createDashboardDependencies(
+      mockContext as unknown as ServerContext,
+      mockCoreDeps as unknown as CoreDependencies,
+      mockSprintDeps as unknown as SprintDependencies
+    );
+
+    const chatRuntimeDeps = (result.chatThreadRuntimeService as unknown as {
+      deps: {
+        getDashboardSettings: (scope?: { projectId?: string; sprintId?: string | null }) => typeof DEFAULT_DASHBOARD_SETTINGS;
+      };
+    }).deps;
+    const scopedSettings = chatRuntimeDeps.getDashboardSettings({ projectId: "project-1" });
+
+    expect(scopedSettings.git.githubMode).toBe("LOCAL");
+    expect(scopedSettings.cliWorkflow.executionMode).toBe("DOCKER");
+    expect(mockCoreDeps.settingsRepository.resolveProjectDashboardSettings).toHaveBeenCalledWith("project-1");
+  });
+
   it("links late-bound services so execution control can call task reruns after factory construction", async () => {
     const result = createDashboardDependencies(
       mockContext as unknown as ServerContext,

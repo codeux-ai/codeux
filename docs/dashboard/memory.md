@@ -50,6 +50,7 @@ To preserve memory efficiency, the core scoring and sorting operate strictly on 
 When the UI generates visual graphs of memory items:
 - If a valid memory embedding map is present, the layout and edges match the exact vectors provided by the embedding model.
 - If no embedding map is present (or embeddings are still generating), a local fallback algorithm creates a deterministic layout. To preserve front-end performance on dense graphs, fallback category edges are bounded using a deterministic ring topology. Rather than computing $O(N^2)$ all-pairs edges within a category, it calculates exactly $N$ sequential edges per category, limiting memory and rendering bottlenecks.
+- The Memory page data hook sequences graph refresh requests so rapid tier, sprint, or agent filter changes cannot let an older response replace the newest memory list or embedding map. Superseded responses are discarded and only the current request may clear the loading state.
 
 ## Map Camera Behavior
 
@@ -59,7 +60,22 @@ The memory map uses a pointer-centered camera so users can inspect dense graphs 
 - Selecting a node from the canvas or list recenters the camera on that memory at a readable zoom level, and Reset returns to the default overview without leaving a stale selection behind.
 - Node points, category labels, and memory labels are drawn in clamped screen space so the graph positions zoom while dots and text remain readable instead of growing with the map or disappearing during deep inspection.
 - Hovering a node highlights it and updates the cursor only. At higher zoom levels the canvas renders the focused label bubble for the selected memory instead of creating hover-only overlays.
+- The canvas render loop pauses its requestAnimationFrame and random neural-fire timer while the browser document is hidden, then resumes a single loop when the tab becomes visible again. Empty/loading maps still clear the canvas but skip the expensive edge, pulse, and node drawing passes.
 - Dense maps are expected to remain navigable at 200+ memories without forcing every memory label to render at once.
+
+## Memory Map Controls
+
+The Memory Map control surface is driven by the currently selected project and loaded memory context:
+- **Tier tabs**: Short Term and Long Term are tab-style controls with visible counts. Short Term reads sprint-scoped memory; Long Term reads project-scoped memory.
+- **Sprint and agent filters**: Short Term shows the sprint selector, and both tiers show the agent preset selector. When a source list is empty, the filter row shows reason copy instead of rendering a focusable empty selector.
+- **Actions**: Add Memory opens the manual memory dialog for the active tier scope. Model Catalog toggles the embedding model browser and shows active-model status. Danger Delete toggles the Lobotomize delete mode; when armed, graph-node and inspector deletes are immediate while sidebar cards still require their card-level arm step.
+- **Canvas navigation**: wheel zoom, drag pan, node click selection, Zoom in, Zoom out, and Reset view all operate on the graph camera. Reset returns to overview and clears the selected memory.
+- **Sidebar list**: the memory sidebar starts collapsed as a rail with an open/close toggle. Expanded state shows search above the current alive memory list for the selected tier, sprint, and agent filters. The list supports opening a memory in the inspector, selecting visible rows, clearing selection, and confirmed batch deletion.
+- **Inspector and summaries**: selecting a canvas node or sidebar row opens the inspector. The node graph, sidebar list, inspector, and category summary cards all reflect the currently loaded memories for the active tier, sprint, agent, and search context.
+
+## Performance
+
+The animated neural canvas pauses rendering while the browser tab or page is hidden and resumes when it becomes visible again. This keeps background tabs from spending work on canvas animation while preserving the loaded node graph, sidebar, inspector, and category summary state.
 
 ## Storage Requirements
 
@@ -171,7 +187,7 @@ The Memory settings panel also manages one project-scoped scheduler entry for lo
 - Improved memory list accessibility and reduced motion fallbacks in `MemoryList.tsx`, utilizing `useInteractionTokens` to respect OS-level reduced motion preferences.
 - Updated the memory map camera so wheel, button, and click focus interactions preserve readable navigation on dense graphs. Wheel zoom uses smoother proportional movement, and graph labels keep stable on-screen sizing during zoom so text remains readable while node positions scale.
 - `MemoryFilters.tsx` implements proper tab semantics, count text, roving keyboard focus, selected sprint/agent feedback, and model-catalog pressed-state copy. The header now presents Short Term and Long Term as count summary cards, follows with a compact current-scope line such as `Short Term: showing 7 memories of 17 memories · Sprint 2 · All Agents`, and separates selectors from Add Memory, Model Catalog, and Danger Delete actions.
-- Tier, sprint, agent, model catalog, and danger delete controls now expose the current selected or pressed state with visible status text and polite announcements. Disabled sprint and agent filters stay visible with reason copy instead of disappearing when no options are available, Model Catalog shows the active-model status, and the grouped header layout uses `min-w-0`, wrapping, and stable flex bases to avoid horizontal overflow.
+- Tier, sprint, agent, model catalog, and danger delete controls now expose the current selected or pressed state with visible status text and polite announcements. Sprint and agent selectors render only when their source lists are available; otherwise the filter row shows reason copy without leaving empty controls in the tab order. Model Catalog shows the active-model status, and the grouped header layout uses `min-w-0`, wrapping, and stable flex bases to avoid horizontal overflow.
 - The memory list uses the shared `listReveal`, `listReorder`, and `expansionCollapse` motion tokens for search/filter transitions. Reduced-motion users receive immediate list updates while visible result counts and live regions continue to communicate what changed.
 - Graph and list selection state is mirrored in text: selected cards show an `Open` badge, the graph area includes a visible selection status, and the inspector announces when a selected memory is open. This keeps critical selection feedback available without depending on canvas animation alone.
 - During background refresh or failed refreshes, the sidebar keeps the last useful memory result list visible when available, marks the region busy or stale with visible copy, and exposes retry or next-action controls instead of replacing the list with a blank panel. Stale content is only reused for the same committed search query, so a new no-match search shows the no-match recovery state rather than old matches.

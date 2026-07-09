@@ -23,12 +23,16 @@ import type { SprintOrchestratorDependencies } from "../../../sprint/sprint-orch
 import type { SprintExecutionContext } from "../../../services/sprint-execution-state-service.js";
 import type { TaskQaMergeGateStatus } from "../../../services/quality-assurance-service.js";
 import { FeaturePrGateService } from "../ci/feature-pr-gate.js";
+import {
+  CLI_GIT_FINALIZATION_EVENT_SCAN_LIMIT,
+  isCliTaskRun,
+  isCliTaskRunAwaitingGitFinalization,
+} from "../ci/cli-git-finalization.js";
 import { MergeConflictDebouncer } from "../ci/merge-conflict-debouncer.js";
 import { matchPrForTask } from "../ci/feature-pr/pr-matcher.js";
 import { resolveCiEscalationOwner } from "../ci/feature-pr/ci-autofix-policy.js";
 import type { MemoryCategory, CreateMemoryInput } from "../../../contracts/memory-types.js";
 import { isTaskCodeComplete } from "../task-merge-state.js";
-import { evaluateSprintTransitionState } from "../task-transition-state.js";
 import pLimit from "p-limit";
 import { workerBranchHasMergeWork } from "../../../infrastructure/git/local-merge.js";
 import { PROVIDER_IDS } from "../../../repositories/settings-defaults.js";
@@ -62,6 +66,11 @@ export interface CycleRunnerArgs {
   sprintRunId?: string;
   /** Planning agent preset ID for per-agent memory tagging. */
   planningAgentPresetId?: string;
+}
+
+interface LocalCliGitEvidence {
+  pushedTaskIds: Set<string>;
+  settledTaskIds: Set<string>;
 }
 
 export class CycleRunner {
@@ -172,11 +181,14 @@ export class CycleRunner {
       subtasks = syncResult.subtasks;
     }
 
+    let localCliGitEvidence = this.collectLocalCliGitEvidence(subtasks, args);
     if (args.loopSteps.statusDerivation && subtasks.length > 0) {
       subtasks = runStatusDerivationStep(subtasks, {
         retryFailed: args.retryFailed,
         isActionRequiredState: this.deps.isActionRequiredState,
         githubMode: args.githubMode,
+        localCliPushedTaskIds: localCliGitEvidence.pushedTaskIds,
+        localCliSettledTaskIds: localCliGitEvidence.settledTaskIds,
       });
       await this.captureTaskCompletionMemories(subtasks, cycleEntryStates, args, dashboardSettings);
     }
@@ -200,10 +212,13 @@ export class CycleRunner {
       this.stateCoordinator.persistCiGateTaskStateChanges(taskStateBeforeFastBranchGate, subtasks);
 
       if (hasTaskStateChanges(taskStateBeforeFastBranchGate, subtasks) && args.loopSteps.statusDerivation) {
+        localCliGitEvidence = this.collectLocalCliGitEvidence(subtasks, args);
         subtasks = runStatusDerivationStep(subtasks, {
           retryFailed: args.retryFailed,
           isActionRequiredState: this.deps.isActionRequiredState,
           githubMode: args.githubMode,
+          localCliPushedTaskIds: localCliGitEvidence.pushedTaskIds,
+          localCliSettledTaskIds: localCliGitEvidence.settledTaskIds,
         });
       }
     }
@@ -353,10 +368,13 @@ export class CycleRunner {
 
       const ciGateRefreshNeeded = hasTaskStateChanges(taskStateBeforeCiGate, subtasks);
       if (ciGateRefreshNeeded && args.loopSteps.statusDerivation) {
+        localCliGitEvidence = this.collectLocalCliGitEvidence(subtasks, args);
         subtasks = runStatusDerivationStep(subtasks, {
           retryFailed: args.retryFailed,
           isActionRequiredState: this.deps.isActionRequiredState,
           githubMode: args.githubMode,
+          localCliPushedTaskIds: localCliGitEvidence.pushedTaskIds,
+          localCliSettledTaskIds: localCliGitEvidence.settledTaskIds,
         });
       }
 
@@ -395,7 +413,7 @@ export class CycleRunner {
         args,
         resolvedWorkerMergeConflictSuppressionKeys,
         gitStatus,
-      ),
+      ) || this.isCliTaskAwaitingGitFinalization(task, args),
       renderInstruction: (templateId, variables) => this.deps.renderInstruction(templateId, variables, args.repoPath),
       onTaskEvent: ({ task, eventType, payload, sourceEventKey }) => {
         appendTaskEvent(task, eventType, payload, sourceEventKey);
@@ -413,15 +431,6 @@ export class CycleRunner {
       resolvedWorkerMergeConflictSuppressionKeys,
       activeProjectAttentionItems,
     );
-    const transitionState = evaluateSprintTransitionState({
-      subtasks,
-      manualMergeTasks: protocolResult.manualMergeTasks,
-      workerEscalatedMergeConflictTasks: protocolResult.workerEscalatedMergeConflictTasks,
-      activeProjectAttentionItems,
-      sprintRunId: args.sprintRunId ?? "",
-      githubMode: args.githubMode,
-    });
-
     const statusTable = args.loopSteps.statusTable ? runStatusTableStep(subtasks) : "";
 
     return {
@@ -429,7 +438,7 @@ export class CycleRunner {
       reportText,
       statusTable,
       instructions: protocolResult.instructions,
-      awaitingMerge: transitionState.mergeRequiredTasks,
+      awaitingMerge: protocolResult.awaitingMerge,
       manualMergeTasks: protocolResult.manualMergeTasks,
       workerEscalatedMergeConflictTasks: protocolResult.workerEscalatedMergeConflictTasks,
       activeProjectAttentionItems,
@@ -556,7 +565,72 @@ export class CycleRunner {
       }),
     });
 
-    return { subtasks, reportText: result.reportText };
+    const updatedById = new Map(result.subtasks.map((task) => [task.id, task]));
+    return {
+      subtasks: subtasks.map((task) => updatedById.get(task.id) ?? task),
+      reportText: result.reportText,
+    };
+  }
+
+  private isCliTaskAwaitingGitFinalization(task: Subtask, args: CycleRunnerArgs): boolean {
+    const taskId = task.record_id?.trim();
+    if (!taskId || !args.sprintRunId) {
+      return false;
+    }
+    const taskRun = this.deps.executionRepository.getLatestTaskRun(taskId, args.sprintRunId);
+    const listTaskRunEvents = this.deps.executionRepository.listTaskRunEvents?.bind(this.deps.executionRepository);
+    return isCliTaskRunAwaitingGitFinalization(taskRun, listTaskRunEvents);
+  }
+
+  private collectLocalCliGitEvidence(subtasks: Subtask[], args: CycleRunnerArgs): LocalCliGitEvidence {
+    const pushedTaskIds = new Set<string>();
+    const settledTaskIds = new Set<string>();
+    if (args.githubMode !== "LOCAL" || !args.sprintRunId) {
+      return { pushedTaskIds, settledTaskIds };
+    }
+
+    for (const task of subtasks) {
+      const recordId = task.record_id?.trim();
+      if (!recordId) {
+        continue;
+      }
+      const taskRun = this.deps.executionRepository.getLatestTaskRun(recordId, args.sprintRunId);
+      if (!isCliTaskRun(taskRun) || !taskRun?.id) {
+        continue;
+      }
+
+      let events: ReturnType<SprintOrchestratorDependencies["executionRepository"]["listTaskRunEvents"]>;
+      try {
+        events = this.deps.executionRepository.listTaskRunEvents(taskRun.id, CLI_GIT_FINALIZATION_EVENT_SCAN_LIMIT);
+      } catch {
+        continue;
+      }
+
+      const taskIds = [recordId, task.id?.trim()].filter((taskId): taskId is string => Boolean(taskId));
+      const addTaskIds = (target: Set<string>): void => {
+        for (const taskId of taskIds) {
+          target.add(taskId);
+        }
+      };
+
+      if (events.some((event) => event.eventType === "cli_git_pushed")) {
+        addTaskIds(pushedTaskIds);
+      }
+      if (events.some((event) => {
+        if (event.eventType === "cli_git_no_changes") {
+          return true;
+        }
+        if (event.eventType !== "ci_gate_status") {
+          return false;
+        }
+        const state = typeof event.payload?.state === "string" ? event.payload.state : "";
+        return state === "merged_branch" || state === "no_merge_work";
+      })) {
+        addTaskIds(settledTaskIds);
+      }
+    }
+
+    return { pushedTaskIds, settledTaskIds };
   }
 
   /**
@@ -1374,7 +1448,8 @@ function hasTaskStateChanges(previous: Map<string, TaskStateSnapshot>, subtasks:
     }
     return earlier.status !== task.status
       || earlier.isMerged !== Boolean(task.is_merged)
-      || earlier.mergeIndicator !== task.merge_indicator;
+      || earlier.mergeIndicator !== task.merge_indicator
+      || earlier.workerBranch !== (task.worker_branch || null);
   });
 }
 

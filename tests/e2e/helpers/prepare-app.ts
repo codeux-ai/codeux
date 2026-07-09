@@ -1,4 +1,4 @@
-import type { APIRequestContext, TestInfo } from '@playwright/test';
+import type { APIRequestContext, Page, TestInfo } from '@playwright/test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -16,6 +16,7 @@ import {
   createProjectViaApi,
   createSprintViaApi,
   createTaskViaApi,
+  deleteProjectViaApi,
   deleteSprintViaApi,
   deleteTaskViaApi,
   fetchProjectsViaApi,
@@ -32,6 +33,7 @@ export {
   createProjectViaApi,
   createSprintViaApi,
   createTaskViaApi,
+  deleteProjectViaApi,
   deleteSprintViaApi,
   deleteTaskViaApi,
   fetchProjectsViaApi,
@@ -69,6 +71,7 @@ const RUN_SUFFIX = (process.env.CODEUX_E2E_RUN_ID || new Date().toISOString())
   .replace(/[^a-zA-Z0-9]+/g, '')
   .slice(0, 20)
   .toLowerCase();
+const DASHBOARD_TOUR_STORAGE_KEY = 'codeux:dashboard-tour-hidden:v1';
 
 function sanitizeFixtureKey(value: string): string {
   const sanitized = value.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
@@ -100,6 +103,16 @@ async function ensureFixtureDirectory(prefix: string): Promise<string> {
 // overlay intercepting pointer events.
 export async function completeOnboarding(request: APIRequestContext): Promise<void> {
   await completeOnboardingViaApi(request);
+}
+
+export async function suppressDashboardTour(page: Page): Promise<void> {
+  await page.addInitScript((tourStorageKey) => {
+    localStorage.setItem(tourStorageKey, 'true');
+  }, DASHBOARD_TOUR_STORAGE_KEY);
+
+  await page.evaluate((tourStorageKey) => {
+    localStorage.setItem(tourStorageKey, 'true');
+  }, DASHBOARD_TOUR_STORAGE_KEY).catch(() => undefined);
 }
 
 export async function createOrFindIsolatedLocalProject(

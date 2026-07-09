@@ -1,4 +1,4 @@
-import type { FunctionComponent } from "preact";
+import type { ComponentChildren, FunctionComponent } from "preact";
 import { useState, useId } from "preact/hooks";
 import { ChevronDown } from "lucide-preact";
 import { WaveFluid } from "./WaveFluid.js";
@@ -11,14 +11,14 @@ export const CollapsiblePanel: FunctionComponent<{
     accentHex: string;
     defaultOpen?: boolean;
     badge?: string | number;
-    children: any;
+    children: ComponentChildren;
 }> = ({ title, icon: Icon, accentHex, defaultOpen = false, badge, children }) => {
     const [open, setOpen] = useState(defaultOpen);
     const contentId = useId();
     const tokens = useInteractionTokens();
 
     return (
-        <div className="group/collapse relative overflow-hidden bg-white/80 dark:bg-void-800/75 backdrop-blur-sm border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+        <div className="group/collapse relative overflow-hidden rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] shadow-[var(--elevation-base)] backdrop-blur-xl">
             <WaveFluid accentHex={accentHex} />
             <BorderTrace accentHex={accentHex} />
 

@@ -39,5 +39,5 @@ For every PR in Sprint 2, the following rules are mandatory:
 
 ## Decision Drivers
 - **Reliability**: Reducing "hidden" failures by enforcing strict types and centralized error handling.
-- **Scalability**: Enabling independent testing of domain logic without requiring a full Docker/Git environment.
+- **Scalability**: Enabling independent testing of domain logic without requiring a full Docker/helper-Git runtime environment.
 - **Maintainability**: Ensuring the codebase follows a predictable, layered pattern that is easy for new agents to navigate.

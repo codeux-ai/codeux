@@ -5,6 +5,8 @@ import {
   getReasoningWidgetData,
   getSelfReflectionWidgetData,
   getWorkingBubbleData,
+  mergeChatToolMessages,
+  resolveRichWidget,
   sanitizeInvocationOutputText,
 } from "../../../dashboard/src/v2/lib/chat-widget-view-models.js";
 import type { ExecutionDashboardSnapshot, ExecutionTaskDispatchSummary } from "../../../dashboard/src/types.js";
@@ -98,6 +100,19 @@ const createExecution = (overrides: Partial<ExecutionDashboardSnapshot> = {}): E
   ...overrides,
 });
 
+const createChatMessage = (overrides: Partial<ChatMessageRecord> = {}): ChatMessageRecord => ({
+  id: "msg-1",
+  threadId: "thread-1",
+  direction: "connection_to_dashboard",
+  authorType: "connection",
+  authorConnectionId: "connection-1",
+  bodyMarkdown: "",
+  deliveryStatus: "processed",
+  metadata: null,
+  createdAt: "2026-03-10T12:00:00.000Z",
+  ...overrides,
+});
+
 describe("Chat Widget View Models", () => {
   describe("sanitizeInvocationOutputText", () => {
     it("removes only code-ux bootstrap unborn branch fatal lines", () => {
@@ -113,6 +128,139 @@ describe("Chat Widget View Models", () => {
         "fatal: your current branch 'feature/main' does not have any commits yet",
         "after",
       ].join("\n"));
+    });
+  });
+
+  describe("resolveRichWidget", () => {
+    it("returns reasoning descriptors from reasoning metadata", () => {
+      const result = resolveRichWidget({
+        metadata: { kind: "reasoning" },
+        content: "Thinking through the next step.",
+      });
+
+      expect(result).toEqual({
+        kind: "reasoning",
+        text: "Thinking through the next step.",
+      });
+    });
+
+    it("returns tool descriptors with sanitized args and output from toolCallsJson", () => {
+      const result = resolveRichWidget({
+        metadata: {
+          kind: "tool_call",
+          toolName: "exec_command",
+          toolCallId: "call-1",
+          tokens: { input: 12, output: 7, total: 19 },
+        },
+        toolCallsJson: {
+          arguments: [
+            "{\"cmd\":\"git status\"}",
+            "fatal: your current branch 'code-ux-bootstrap-1' does not have any commits yet",
+          ].join("\n"),
+          output: [
+            "clean",
+            "fatal: your current branch 'code-ux-bootstrap-2' does not have any commits yet",
+          ].join("\n"),
+          resultStatus: "completed",
+        },
+      });
+
+      expect(result).toEqual({
+        kind: "tool",
+        toolName: "exec_command",
+        status: "completed",
+        args: "{\"cmd\":\"git status\"}",
+        output: "clean",
+        tokens: { input: 12, output: 7, total: 19 },
+        callId: "call-1",
+      });
+    });
+
+    it("returns planning descriptors through the existing planning extraction path", () => {
+      const result = resolveRichWidget({
+        metadata: {
+          widget_metadata: {
+            type: "planning_request",
+            status: "running",
+            route_path: "Route Plan",
+            target_worker: "worker-alpha",
+          },
+        },
+      });
+
+      expect(result).toEqual({
+        kind: "planning",
+        status: "running",
+        planName: "Route Plan",
+        targetWorker: "worker-alpha",
+      });
+    });
+
+    it("returns none when metadata does not map to a rich widget", () => {
+      expect(resolveRichWidget({ metadata: null, content: "plain message" })).toEqual({ kind: "none" });
+    });
+  });
+
+  describe("mergeChatToolMessages", () => {
+    it("collapses matching tool calls and results by toolCallId while leaving unmatched messages intact", () => {
+      const toolCall = createChatMessage({
+        id: "call-message",
+        metadata: {
+          kind: "tool_call",
+          toolCallId: "call-1",
+          toolName: "exec_command",
+          toolCallsJson: {
+            arguments: "{\"cmd\":\"pnpm test\"}",
+          },
+        },
+      });
+      const unrelated = createChatMessage({
+        id: "unmatched-call",
+        metadata: {
+          kind: "tool_call",
+          toolCallId: "call-unmatched",
+          toolName: "read_file",
+          toolCallsJson: {
+            arguments: "{\"path\":\"README.md\"}",
+          },
+        },
+      });
+      const toolResult = createChatMessage({
+        id: "result-message",
+        metadata: {
+          kind: "tool_result",
+          toolCallId: "call-1",
+          toolStatus: "completed",
+          toolCallsJson: {
+            output: "tests passed",
+          },
+        },
+      });
+      const unrelatedResult = createChatMessage({
+        id: "unmatched-result",
+        metadata: {
+          kind: "tool_result",
+          toolCallId: "call-missing",
+          toolStatus: "failed",
+          toolCallsJson: {
+            output: "no matching call",
+          },
+        },
+      });
+
+      const result = mergeChatToolMessages([toolCall, unrelated, toolResult, unrelatedResult]);
+
+      expect(result.map((message) => message.id)).toEqual(["call-message", "unmatched-call", "unmatched-result"]);
+      expect(result[0]?.metadata?.toolCallsJson).toEqual({
+        arguments: "{\"cmd\":\"pnpm test\"}",
+        output: "tests passed",
+        resultStatus: "completed",
+      });
+      expect(result[1]).toBe(unrelated);
+      expect(result[2]).toBe(unrelatedResult);
+      expect(toolCall.metadata?.toolCallsJson).toEqual({
+        arguments: "{\"cmd\":\"pnpm test\"}",
+      });
     });
   });
 

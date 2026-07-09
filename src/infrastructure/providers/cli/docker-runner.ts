@@ -26,6 +26,7 @@ import { DockerCredentialMountBuilder } from "./docker-credential-mount-builder.
 import { DockerSetupImageCache, type DockerSetupImageCacheProgress } from "./docker-setup-image-cache.js";
 import { resolveDockerRuntimeRoot } from "./docker-runtime-paths.js";
 import { buildRuntimeVolumeName, WorkspaceManager, type SnapshotCheckout } from "./workspace-manager.js";
+import { InvocationWorkspacePreparer, type InvocationWorkspaceGitPolicy } from "./invocation-workspace-preparer.js";
 import { workspaceVolumeHelperPool, type WorkspaceVolumeHelperPool } from "./workspace-volume-helper.js";
 import { CONTAINER_RUNTIME_HOME, CONTAINER_WORKSPACE_ROOT } from "./provider-runtime-artifacts.js";
 import type { CliProviderId } from "./provider-command-specs.js";
@@ -48,6 +49,7 @@ export interface IDockerRunner {
     repoPath: string;
     sessionId: string;
     snapshotCheckout?: SnapshotCheckout;
+    gitPolicy?: InvocationWorkspaceGitPolicy;
     preserve?: boolean;
     reuseExisting?: boolean;
   }): Promise<{ cwd: string; cleanup: () => Promise<void> }>;
@@ -81,6 +83,7 @@ export interface IDockerRunner {
 export class DockerRunner implements IDockerRunner {
   private readonly dockerHintLoggedSessions = new Set<string>();
   private readonly workspaceManager = new WorkspaceManager();
+  private readonly invocationWorkspacePreparer = new InvocationWorkspacePreparer(this.workspaceManager);
   private readonly volumeHelperPool: WorkspaceVolumeHelperPool = workspaceVolumeHelperPool;
 
   async ensureWorkspace(args: {
@@ -88,6 +91,7 @@ export class DockerRunner implements IDockerRunner {
     repoPath: string;
     sessionId: string;
     snapshotCheckout?: SnapshotCheckout;
+    gitPolicy?: InvocationWorkspaceGitPolicy;
     preserve?: boolean;
     reuseExisting?: boolean;
   }): Promise<{ cwd: string; cleanup: () => Promise<void> }> {
@@ -98,9 +102,13 @@ export class DockerRunner implements IDockerRunner {
       };
     }
 
-    const workspaceRef = args.reuseExisting
-      ? await this.workspaceManager.createOrReuseSnapshotWorkspace(args.repoPath, args.sessionId, args.snapshotCheckout)
-      : await this.workspaceManager.createSnapshotWorkspace(args.repoPath, args.sessionId, args.snapshotCheckout);
+    const workspaceRef = await this.invocationWorkspacePreparer.createSnapshotWorkspace({
+      repoPath: args.repoPath,
+      sessionId: args.sessionId,
+      checkout: args.snapshotCheckout,
+      reuseExisting: args.reuseExisting,
+      gitPolicy: args.gitPolicy,
+    });
     return {
       cwd: workspaceRef,
       cleanup: async () => {

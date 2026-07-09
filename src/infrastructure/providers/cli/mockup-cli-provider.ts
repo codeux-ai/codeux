@@ -6,7 +6,7 @@ const fs = require("fs");
 const fsp = fs.promises;
 const path = require("path");
 const crypto = require("crypto");
-const cp = require("child_process");
+const { spawnSync } = require("child_process");
 
 const prompt = process.argv[1] || "";
 const cwd = process.cwd();
@@ -129,20 +129,7 @@ async function walkFiles(dir, files = []) {
 }
 
 async function listConflictFiles() {
-  const gitResult = cp.spawnSync("git", ["diff", "--name-only", "--diff-filter=U", "-z"], {
-    cwd,
-    encoding: "utf8",
-    timeout: 10000,
-    maxBuffer: 1024 * 1024,
-  });
-  const gitFiles = gitResult.status === 0
-    ? String(gitResult.stdout || "")
-      .split("\0")
-      .map((entry) => entry.trim())
-      .filter(Boolean)
-      .map(resolveWorkspacePath)
-    : [];
-  const candidates = gitFiles.length > 0 ? gitFiles : await walkFiles(cwd);
+  const candidates = await walkFiles(cwd);
   const conflicted = [];
   for (const filePath of candidates) {
     const content = await fsp.readFile(filePath, "utf8").catch(() => null);
@@ -353,7 +340,7 @@ function runValidation(command) {
       stderr: "mockup-cli validation command was empty",
     };
   }
-  const result = cp.spawnSync(resolvedCommand, resolvedArgs, {
+  const result = spawnSync(resolvedCommand, resolvedArgs, {
     cwd,
     env: process.env,
     encoding: "utf8",
@@ -440,7 +427,8 @@ export async function runMockupCliProvider(input: {
   onStderrLine?: (line: string) => void;
 }): Promise<CommandResult> {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, ["-e", MOCKUP_CLI_NODE_SCRIPT, input.prompt], {
+    const nodeExecutable = input.env.CODEUX_E2E_NODE_EXECUTABLE?.trim() || process.execPath;
+    const child = spawn(nodeExecutable, ["-e", MOCKUP_CLI_NODE_SCRIPT, input.prompt], {
       cwd: input.cwd,
       env: {
         ...input.env,

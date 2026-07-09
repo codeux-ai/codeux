@@ -7,6 +7,7 @@ import type { ManagementToolHandler } from "../mcp/management-tool-handler.js";
 import type { StructuredProviderResponseService } from "./structured-provider-response-service.js";
 import type { ProviderExecutionService } from "./provider-execution-service.js";
 import type { SnapshotCheckout } from "../infrastructure/providers/cli/workspace-manager.js";
+import type { InvocationWorkspaceGitPolicy } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import type { PromptSuggestion } from "../contracts/connection-chat-types.js";
 import { findAllJsonCandidates } from "../domain/llm/json-extraction.js";
 
@@ -145,6 +146,8 @@ export interface ProcessManagementActionArgs {
   prompt: string;
   repoPath: string;
   snapshotCheckout?: SnapshotCheckout;
+  gitPolicy?: InvocationWorkspaceGitPolicy;
+  workspaceLifecycle?: "fresh" | "continue";
   mcpConnection?: McpConnectionInfo | null;
   /** Per-agent MCP access for the responding agent; undefined = not agent-scoped. */
   agentMcpAccess?: AgentMcpAccessConfig | null;
@@ -282,6 +285,8 @@ export class ChatManagementActionService {
         workflowSettings: args.settings.cliWorkflow,
         repoPath: args.repoPath,
         snapshotCheckout: args.snapshotCheckout,
+        gitPolicy: args.gitPolicy,
+        workspaceLifecycle: args.workspaceLifecycle,
         invocationId: execInvocationId,
         trackPromptInInvocation: false,
         trackAssistantInInvocation: false,
@@ -394,6 +399,8 @@ export class ChatManagementActionService {
         workflowSettings: args.settings.cliWorkflow,
         repoPath: args.repoPath,
         snapshotCheckout: args.snapshotCheckout,
+        gitPolicy: args.gitPolicy,
+        workspaceLifecycle: args.workspaceLifecycle,
         settings: args.settings,
         providerLabel: args.provider,
         invocationId: execInvocationId,
