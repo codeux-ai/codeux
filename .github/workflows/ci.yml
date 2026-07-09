@@ -34,6 +34,11 @@ jobs:
           echo "Base package version: ${base_version}"
           echo "Head package version: ${head_version}"
 
+          if ! git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" -- package.json | grep -qx "package.json"; then
+            echo "package.json was not changed; skipping release version bump check."
+            exit 0
+          fi
+
           node - "${base_version}" "${head_version}" <<'NODE'
           const [, , baseVersion, headVersion] = process.argv;
           const semverPattern = /^(\d+)\.(\d+)\.(\d+)(?:[-+][0-9A-Za-z.-]+)?$/;

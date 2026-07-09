@@ -146,6 +146,11 @@ describe("GitHub workflow health", () => {
     expect(getJobBlock(ci, "test-backend")).toContain("pnpm run test:backend:coverage");
     expect(getJobBlock(ci, "test-dashboard")).toContain("pnpm run test:dashboard");
     expect(getJobBlock(ci, "build")).toContain("pnpm run build");
+
+    const releaseVersionJob = getJobBlock(ci, "release-version-bump");
+    expect(releaseVersionJob).toContain('git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" -- package.json');
+    expect(releaseVersionJob).toContain("package.json was not changed; skipping release version bump check.");
+    expect(releaseVersionJob).toContain("Main release PRs must bump package.json version");
   });
 
   it("keeps security-relevant workflows on least-privilege permissions and pinned major actions", async () => {
@@ -162,6 +167,8 @@ describe("GitHub workflow health", () => {
     }
 
     expect(await readRepoFile(WORKFLOWS.release)).toMatch(/permissions:\n      contents: read\n      id-token: write/);
+    expect(await readRepoFile(WORKFLOWS.release)).toContain("npm install -g npm@11.5.1");
+    expect(await readRepoFile(WORKFLOWS.release)).toContain("npm provenance dependency OK");
     expect(await readRepoFile(WORKFLOWS.desktopRelease)).toMatch(/permissions:\n  contents: write/);
   });
 
