@@ -6,6 +6,19 @@ import { describe, expect, it } from "vitest";
 const require = createRequire(import.meta.url);
 
 describe("electron-builder packaged defaults", () => {
+  it("packages runtime docs-web assets for installed and desktop docs routes", () => {
+    const config = require("../../electron-builder.config.cjs") as {
+      files?: string[];
+    };
+    const packageJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8")) as {
+      files?: string[];
+    };
+
+    expect(packageJson.files).toEqual(expect.arrayContaining(["docs-web"]));
+    expect(config.files).toEqual(expect.arrayContaining(["docs-web/**"]));
+    expect(fs.existsSync(path.join(process.cwd(), "docs-web", "index.md"))).toBe(true);
+  });
+
   it("keeps renderer privileges constrained in the desktop BrowserWindow", () => {
     const mainProcessSource = fs.readFileSync(path.join(process.cwd(), "src/electron/main.ts"), "utf8");
 

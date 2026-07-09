@@ -24,6 +24,7 @@
     "dashboard/dist",
     ".code-ux",
     "docs",
+    "docs-web",
     "assets",
     "LICENSE",
     "README.md"

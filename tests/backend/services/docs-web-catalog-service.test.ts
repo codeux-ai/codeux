@@ -89,6 +89,15 @@ describe("DocsWebCatalogService", () => {
 
     expect(service.getDocument("missing")).toBeNull();
   });
+
+  it("resolves the repository docs-web root by default", () => {
+    const service = new DocsWebCatalogService();
+    const collection = service.getCollection();
+
+    expect(collection.defaultDocId).toBe("docs-overview");
+    expect(collection.docs.some((doc) => doc.id === "docs-overview")).toBe(true);
+    expect(collection.groupedDocs["Getting Started"].some((doc) => doc.id === "docs-overview")).toBe(true);
+  });
 });
 
 describe("registerDocsWebRoutes", () => {
