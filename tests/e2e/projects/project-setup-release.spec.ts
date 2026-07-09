@@ -39,6 +39,12 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+async function hideDashboardAssistant(page: Page): Promise<void> {
+  await page.addStyleTag({
+    content: 'aside[aria-label="Dashboard assistant"]{display:none!important;pointer-events:none!important;}',
+  });
+}
+
 async function expectNoCapturedErrors(errors: string[]): Promise<void> {
   expect(errors, errors.join('\n')).toEqual([]);
 }
@@ -125,6 +131,7 @@ test.describe('credential-free project setup release flow', () => {
 
     await page.setViewportSize({ width: 1366, height: 900 });
     await page.goto('/projects');
+    await hideDashboardAssistant(page);
     await expect(page.getByRole('heading', { name: 'Manage Projects' })).toBeVisible();
 
     await page.getByRole('button', { name: /Add Project/ }).last().click();
