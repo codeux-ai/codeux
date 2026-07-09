@@ -1,6 +1,7 @@
 import { ServerContext } from "../dependency-factory.js";
 import { CoreDependencies } from "./core-factory.js";
 import { SprintDependencies } from "./sprint-factory.js";
+import type { DashboardSettings, DashboardSettingsScope } from "../../contracts/app-types.js";
 import { ActivityCacheService } from "../../server/activity-cache-service.js";
 import { TaskRerunService } from "../../services/task-rerun-service.js";
 import { ExecutionControlService } from "../../services/execution-control-service.js";
@@ -24,6 +25,7 @@ import { ChatProviderOutboundService } from "../../services/chat-provider-outbou
 import { SpeechTranscriptionService } from "../../services/speech-transcription-service.js";
 import { NodeFlowRuntimeService } from "../../services/node-flow-runtime-service.js";
 import { NodeFlowService } from "../../services/node-flow-service.js";
+import { resolveEffectiveDashboardSettings } from "../../services/settings-resolution-service.js";
 
 export interface DashboardDependencies {
   chatThreadRuntimeService: ChatThreadRuntimeService;
@@ -74,6 +76,14 @@ export function createDashboardDependencies(
   const quicksprintServiceRef = createLateBoundDependency<QuicksprintService>("dashboard quicksprint service");
   const projectSetupServiceRef = createLateBoundDependency<ProjectSetupService>("dashboard project setup service");
   const schedulerServiceRef = createLateBoundDependency<SchedulerService>("dashboard scheduler service");
+  const resolveDashboardSettings = (scope?: DashboardSettingsScope): DashboardSettings => {
+    const projectId = scope?.projectId?.trim();
+    const sprintId = scope?.sprintId?.trim();
+
+    return projectId
+      ? resolveEffectiveDashboardSettings(settingsRepository, projectId, sprintId).settings
+      : settingsRepository.getDefaultDashboardSettings();
+  };
 
   const executionControlService = new ExecutionControlService({
     projectManagementRepository,
@@ -99,7 +109,7 @@ export function createDashboardDependencies(
     customDashboardRepository: coreDeps.customDashboardRepository,
     customDashboardValidationService: coreDeps.customDashboardValidationService,
     executionRepository: coreDeps.executionRepository,
-    getDashboardSettings: () => settingsRepository.getDefaultDashboardSettings(),
+    getDashboardSettings: () => resolveDashboardSettings(),
     projectManagementRepository: coreDeps.projectManagementRepository,
     executionControlService,
     taskRerunService: taskRerunServiceRef,
@@ -153,7 +163,7 @@ export function createDashboardDependencies(
     projectWorkerAssignmentRepository,
     executionRepository,
     taskService,
-    getDashboardSettings: () => settingsRepository.getDefaultDashboardSettings(),
+    getDashboardSettings: resolveDashboardSettings,
     getGithubToken: () => context.getEffectiveGithubToken(),
     agentPresetSyncService,
     projectManagementRepository,
@@ -187,7 +197,7 @@ export function createDashboardDependencies(
     projectManagementRepository,
     settingsRepository,
     providerExecutionService,
-    getDashboardSettings: (projectId) => settingsRepository.resolveProjectDashboardSettings(projectId).settings,
+    getDashboardSettings: (projectId) => resolveDashboardSettings({ projectId }),
   });
   const nodeFlowService = new NodeFlowService(coreDeps.nodeFlowRepository, nodeFlowRuntimeService);
 

@@ -382,9 +382,16 @@ describe("GitHub workflow health", () => {
     expect(electronJob).toContain("os: windows-latest");
     expect(electronJob).toContain("CSC_IDENTITY_AUTO_DISCOVERY: \"false\"");
     expect(electronJob).toContain("GH_TOKEN: \"\"");
+    expect(electronJob).toContain("electron_config_cache: ${{ github.workspace }}/.cache/electron-downloads");
     expect(electronJob).toContain("uses: actions/cache@v5");
     expectJobToolchain(electronJob, "Mockup sprint main Electron DAG");
+    expect(electronJob).toContain("- name: Restore Electron binary cache");
+    expectCacheKey(electronJob, "-electron-binary-", ["pnpm-lock.yaml"]);
+    expect(electronJob).toContain("${{ runner.os }}-node22-pnpm10.33.0-electron-binary-");
+    expect(electronJob).toContain("run: node node_modules/electron/install.js");
     expect(electronJob).toContain("run: pnpm run electron:install-deps");
+    expectCommandBefore(electronJob, "run: pnpm install --frozen-lockfile --ignore-scripts", "run: node node_modules/electron/install.js");
+    expectCommandBefore(electronJob, "run: node node_modules/electron/install.js", "run: pnpm run electron:install-deps");
     expect(electronJob).toContain("run: pnpm run test:orchestration:ci-dag:electron");
     expect(electronJob).not.toContain("container:");
     expect(electronJob).not.toMatch(/^\s*run: pnpm run test:orchestration:ci-dag$/m);

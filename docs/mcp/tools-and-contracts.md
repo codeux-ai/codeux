@@ -104,6 +104,8 @@ For a resolved agent policy:
 - Runtime-role filtering still applies after system and agent policy checks.
 - Custom external MCP servers remain limited to the agent's linked server ids and are not broadened by Code UX tool availability.
 
+The dashboard chat reply route is the only route-local default exception. The agent assigned to that route receives full built-in Code UX MCP access, `scheduler_code_ux`, and the default Playwright MCP server for dashboard reply turns even when its saved preset has Code UX disabled or no MCP policy. This default is keyed to the dashboard reply route assignment, not to the generic `project_manager` runtime role.
+
 ## Common Response Shape
 
 Successful responses return:
