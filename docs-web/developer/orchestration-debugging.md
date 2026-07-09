@@ -24,6 +24,8 @@ Run `pnpm run test:orchestration:ci-dag` for the no-secret CI lane. It builds th
 
 Run `pnpm run test:orchestration:ci-dag:electron` for the main-branch Electron lane. It launches `dist/electron/main.js`, waits for the embedded Code UX server, and runs the same 10-task DAG shape through a host-execution mockup fixture on native Windows and macOS runners.
 
+In GitHub Actions, the CI DAG and Electron DAG lanes expose build, Electron binary install, native dependency rebuild, and orchestration as separate steps. During orchestration, the mockup runner streams redacted runtime stdout/stderr, emits `mockup_pentest_progress` records on sprint/task changes plus 15-second heartbeats, fails after `--stall-timeout-ms 180000` when no progress is observed, and writes a final Markdown table to `GITHUB_STEP_SUMMARY`.
+
 Run `pnpm run test:orchestration:merge-e2e` after a unit-level merge fix passes. It builds the compiled runtime and exercises the `merge-conflict-dag` mockup scenario through the local project runtime.
 
 Run `pnpm run test:orchestration:full` manually when a scheduler, provider, CI, QA, or multi-project orchestration issue needs broader compiled-runtime evidence. It executes every deterministic mockup scenario and writes artifacts under `.cache/e2e-mockup-sprint-pentest/<run-id>/`.

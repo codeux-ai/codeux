@@ -75,6 +75,8 @@ pnpm run test:orchestration:ci-dag:electron
 
 That lane launches the Electron app, waits for the embedded Code UX server, and runs the same 10-task DAG shape through a host-execution mockup fixture. It runs directly on the hosted OS because GitHub-hosted Windows and macOS runners do not provide Docker job containers.
 
+In GitHub Actions, the CI DAG and Electron DAG lanes run build, Electron binary install, native dependency rebuild, and orchestration as separate steps so a stall is visible at the step boundary. The mockup runner streams redacted runtime stdout/stderr and emits `mockup_pentest_progress` records whenever sprint or task state changes, plus heartbeat progress every 15 seconds. CI passes `--stall-timeout-ms 180000`; if no sprint or task status/merge progress is observed for three minutes, the runner fails early with the last sprint/task snapshot and writes the final table to `GITHUB_STEP_SUMMARY`.
+
 ## Mockup Merge E2E Lane
 
 Run:

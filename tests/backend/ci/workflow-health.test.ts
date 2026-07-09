@@ -347,7 +347,9 @@ describe("GitHub workflow health", () => {
     const dagJob = getJobBlock(workflow, "ci-dag");
     const electronJob = getJobBlock(workflow, "electron-ci-dag");
     const ciDagScript = packageJson.scripts?.["test:orchestration:ci-dag"] ?? "";
+    const ciDagRunScript = packageJson.scripts?.["test:orchestration:ci-dag:run"] ?? "";
     const electronDagScript = packageJson.scripts?.["test:orchestration:ci-dag:electron"] ?? "";
+    const electronDagRunScript = packageJson.scripts?.["test:orchestration:ci-dag:electron:run"] ?? "";
 
     expect(workflow).toContain("Mockup Sprint Orchestration");
     expectConcurrencyCancellation(workflow, "Mockup sprint orchestration");
@@ -357,7 +359,9 @@ describe("GitHub workflow health", () => {
 
     expect(dagJob).toContain("runs-on: ubuntu-latest");
     expectJobToolchain(dagJob, "Mockup sprint CI DAG");
-    expect(dagJob).toContain("run: pnpm run test:orchestration:ci-dag");
+    expect(dagJob).toContain("run: pnpm run build");
+    expect(dagJob).toContain("run: pnpm run test:orchestration:ci-dag:run");
+    expectCommandBefore(dagJob, "run: pnpm run build", "run: pnpm run test:orchestration:ci-dag:run");
     expect(dagJob).not.toContain("container:");
     expect(dagJob).not.toContain("run: pnpm run test:orchestration:rapid");
     expect(dagJob).not.toContain("run: pnpm run test:orchestration:ci-dag:electron");
@@ -367,10 +371,12 @@ describe("GitHub workflow health", () => {
     expect(dagJob).not.toContain("pnpm run test:e2e:mockup-sprint-pentest");
     expect(dagJob).not.toContain("OPENROUTER_API_KEY");
     expect(dagJob).not.toContain("GITHUB_TOKEN");
-    expect(ciDagScript).toContain("run-mockup-sprint-pentest.mjs");
-    expect(ciDagScript).toContain("--execution-mode docker");
-    expect(ciDagScript).toContain("--scenario ci-small-dag");
-    expect(ciDagScript).not.toContain("--runtime electron");
+    expect(ciDagScript).toContain("pnpm run build && pnpm run test:orchestration:ci-dag:run");
+    expect(ciDagRunScript).toContain("run-mockup-sprint-pentest.mjs");
+    expect(ciDagRunScript).toContain("--execution-mode docker");
+    expect(ciDagRunScript).toContain("--scenario ci-small-dag");
+    expect(ciDagRunScript).toContain("--stall-timeout-ms 180000");
+    expect(ciDagRunScript).not.toContain("--runtime electron");
 
     expect(electronJob).toContain("if: github.event_name == 'pull_request' && github.base_ref == 'main'");
     expect(electronJob).not.toContain("workflow_dispatch");
@@ -390,24 +396,35 @@ describe("GitHub workflow health", () => {
     expect(electronJob).toContain("${{ runner.os }}-node22-pnpm10.33.0-electron-binary-");
     expect(electronJob).toContain("run: node node_modules/electron/install.js");
     expect(electronJob).toContain("run: pnpm run electron:install-deps");
+    expect(electronJob).toContain("run: pnpm run build");
     expectCommandBefore(electronJob, "run: pnpm install --frozen-lockfile --ignore-scripts", "run: node node_modules/electron/install.js");
     expectCommandBefore(electronJob, "run: node node_modules/electron/install.js", "run: pnpm run electron:install-deps");
-    expect(electronJob).toContain("run: pnpm run test:orchestration:ci-dag:electron");
+    expectCommandBefore(electronJob, "run: pnpm run electron:install-deps", "run: pnpm run build");
+    expectCommandBefore(electronJob, "run: pnpm run build", "run: pnpm run test:orchestration:ci-dag:electron:run");
+    expect(electronJob).toContain("run: pnpm run test:orchestration:ci-dag:electron:run");
     expect(electronJob).not.toContain("container:");
     expect(electronJob).not.toMatch(/^\s*run: pnpm run test:orchestration:ci-dag$/m);
     expect(electronJob).not.toContain("run: pnpm run test:orchestration:rapid");
     expect(electronJob).not.toContain("OPENROUTER_API_KEY");
     expect(electronJob).not.toContain("GITHUB_TOKEN");
-    expect(electronDagScript).toContain("run-mockup-sprint-pentest.mjs");
-    expect(electronDagScript).toContain("--runtime electron");
-    expect(electronDagScript).toContain("--execution-mode fixture");
-    expect(electronDagScript).toContain("--scenario ci-small-dag-electron");
+    expect(electronDagScript).toContain("pnpm run build && pnpm run test:orchestration:ci-dag:electron:run");
+    expect(electronDagRunScript).toContain("run-mockup-sprint-pentest.mjs");
+    expect(electronDagRunScript).toContain("--runtime electron");
+    expect(electronDagRunScript).toContain("--execution-mode fixture");
+    expect(electronDagRunScript).toContain("--scenario ci-small-dag-electron");
+    expect(electronDagRunScript).toContain("--stall-timeout-ms 180000");
 
     const runnerBeforeElectronStart = runnerScript.slice(0, runnerScript.indexOf("async function startElectronCodeUx"));
     expect(runnerBeforeElectronStart).not.toContain('from "@playwright/test"');
     expect(runnerBeforeElectronStart).not.toContain('from "electron"');
     expect(runnerScript).toContain('import("@playwright/test")');
     expect(runnerScript).toContain('import("electron")');
+    expect(runnerScript).toContain("const DEFAULT_STALL_TIMEOUT_MS = 3 * 60 * 1000");
+    expect(runnerScript).toContain("--stall-timeout-ms");
+    expect(runnerScript).toContain("mockup_pentest_progress");
+    expect(runnerScript).toContain("mockup_pentest_stalled");
+    expect(runnerScript).toContain("GITHUB_STEP_SUMMARY");
+    expect(runnerScript).toContain("writeRuntimeLogToConsole");
   });
 
   it("keeps release checks separate from CI and Playwright validation lanes", async () => {

@@ -39,8 +39,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      - name: Build runtime for CI DAG
+        run: pnpm run build
+
       - name: Run CI DAG orchestration validation
-        run: pnpm run test:orchestration:ci-dag
+        run: pnpm run test:orchestration:ci-dag:run
 
   electron-ci-dag:
     name: Electron CI DAG (${{ matrix.name }})
@@ -105,5 +108,8 @@ jobs:
       - name: Rebuild Electron native dependencies
         run: pnpm run electron:install-deps
 
+      - name: Build runtime for Electron CI DAG
+        run: pnpm run build
+
       - name: Run Electron CI DAG orchestration validation
-        run: pnpm run test:orchestration:ci-dag:electron
+        run: pnpm run test:orchestration:ci-dag:electron:run
