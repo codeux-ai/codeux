@@ -185,8 +185,8 @@ test.describe('sprint and task lifecycle', () => {
     await expect(composer).toBeVisible();
     await composer.getByPlaceholder('Runtime hardening').fill(sprintName);
     await composer.getByPlaceholder('Describe the outcome, affected systems, and what done looks like when this sprint lands.').fill(sprintGoal);
-    await composer.getByRole('button', { name: /^Save Draft\b/ }).first().click();
-    await activateButtonWithKeyboard(page, composer.getByRole('button', { name: 'Save Draft', exact: true }));
+    await composer.getByRole('button', { name: /^Save Draft\s+Store the sprint only/ }).click();
+    await composer.getByRole('button', { name: 'Save Draft', exact: true }).click();
 
     const createdSprint = await getSprintByName(page, project.id, sprintName);
     sprintIdsForCleanup.push(createdSprint.id);
@@ -198,8 +198,8 @@ test.describe('sprint and task lifecycle', () => {
     await clickSprintMenuAction(page, sprintName, 'Edit');
     await expect(composer).toBeVisible();
     await composer.getByPlaceholder('Runtime hardening').fill(editedSprintName);
-    await composer.getByRole('button', { name: /^Save Changes\b/ }).first().click();
-    await activateButtonWithKeyboard(page, composer.getByRole('button', { name: 'Save Changes', exact: true }));
+    await composer.getByRole('button', { name: /^Save Changes\s+Update the sprint definition/ }).click();
+    await composer.getByRole('button', { name: 'Save Changes', exact: true }).click();
 
     await expect.poll(async () => {
       const { sprints } = await fetchSprintsViaApi(request, project.id);
@@ -243,7 +243,7 @@ test.describe('sprint and task lifecycle', () => {
     await expect(page.getByText('Task Composer')).toBeVisible();
     await page.getByPlaceholder('Fix navigation layout shift').fill(taskTitle);
     await page.getByPlaceholder('Summarize the intent and outcome.').fill(description);
-    await page.getByPlaceholder('Detailed markdown instructions for the agent.').fill(promptMarkdown);
+    await page.getByLabel(/^Markdown Prompt/).fill(promptMarkdown);
     await page.getByRole('button', { name: 'Create Task' }).click();
 
     const createdTask = await getTaskByTitle(page, project.id, taskTitle, sprint.id);
@@ -253,7 +253,7 @@ test.describe('sprint and task lifecycle', () => {
     expect(createdTask.priority).toBe('medium');
 
     await activateButtonWithKeyboard(page, page.getByRole('button', { name: `Edit task ${createdTask.taskKey}: ${taskTitle}` }));
-    await expect(page.getByText('Edit Task')).toBeVisible();
+    await expect(page.getByText('Edit Task', { exact: true })).toBeVisible();
     await page.getByPlaceholder('Fix navigation layout shift').fill(editedTaskTitle);
     await page.getByRole('button', { name: 'high' }).click();
     await page.getByRole('button', { name: 'Save Task' }).click();

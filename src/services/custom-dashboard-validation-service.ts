@@ -365,7 +365,10 @@ export class CustomDashboardValidationService {
     rewritePrefix?: string;
   }): Promise<CustomDashboardValidationProxyResponse> {
     const requestBody = args.bodyBytes;
-    if (requestBody && requestBody.length > 5 * 1024 * 1024) {
+    if (requestBody !== undefined && !Buffer.isBuffer(requestBody)) {
+      throw new Error("Request body must be a Buffer for proxied custom dashboard validation");
+    }
+    if (requestBody && requestBody.byteLength > 5 * 1024 * 1024) {
       throw new Error("Request body exceeds maximum allowed size for proxied custom dashboard validation");
     }
     const sessionId = this.parseHttpStringParam(args.sessionId, "sessionId");
@@ -383,7 +386,7 @@ export class CustomDashboardValidationService {
     const response = await this.fetchImpl(upstreamUrl, {
       method: requestMethod,
       headers: this.buildProxyHeaders(args.headers, upstreamUrl.origin),
-      body: requestBody && requestBody.length > 0 ? new Uint8Array(requestBody) : undefined,
+      body: requestBody && requestBody.byteLength > 0 ? new Uint8Array(requestBody) : undefined,
       redirect: "manual",
     });
     const rewritePrefix = args.rewritePrefix

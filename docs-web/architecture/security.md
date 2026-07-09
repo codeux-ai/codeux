@@ -57,6 +57,12 @@ The desktop BrowserWindow keeps context isolation, renderer sandboxing, and Node
 
 The sandboxed preload is CommonJS-emitted as `dist/electron/preload.cjs` from `src/electron/preload.cts`. Keep it CommonJS-compatible and load Electron APIs with `require("electron")`; an ESM preload will not initialize the desktop bridge in a sandboxed renderer.
 
+## Filesystem and proxy hardening
+
+- Directory browsing canonicalizes allowed roots and rejects symlink segments under those roots.
+- Code UX-created repository `.gitignore` seeding opens the file through a validated file URL with no-follow flags so a symlinked `.gitignore` cannot redirect reads or writes outside the repository.
+- Preview and custom-dashboard validation proxies enforce local upstream boundaries, strip dashboard-sensitive headers, and require proxied custom-dashboard request bodies to be Buffers with size limits before forwarding.
+
 ## Authentication & authorisation
 
 There is no in-process user model. All authenticated callers (including `manage_code_ux`) have the same level of access — read, mutate, destroy.
