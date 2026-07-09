@@ -232,8 +232,10 @@ pnpm run build
 # download and run the latest installer from GitHub Releases
 ```
 
-In the desktop app, the title-bar **Update** action opens the latest GitHub Releases page in your
-default browser. It is a download shortcut, not an automatic background or in-app update flow.
+In the desktop app, the title-bar **Update** action appears only when the dashboard detects an
+available update. When a latest version is known, the button remains version-aware, and it opens the
+latest GitHub Releases page in your default browser. It is a download shortcut, not an automatic
+background or in-app update flow.
 
 ## Uninstall
 

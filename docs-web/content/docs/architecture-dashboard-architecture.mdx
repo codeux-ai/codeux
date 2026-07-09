@@ -103,6 +103,7 @@ State is managed with a mix of:
   - `useDashboardRuntimeData()` — live execution data.
   - `useRealtimeResource()` — generic WebSocket subscription wrapper.
   - `useProjectData()` — active project / sprint.
+  - `useUpdateStatus()` — one-shot system update availability from `/api/system/update-status`.
   - `useSprints()`, `usePreviewSessions()`, `useChatPageData()`, `useSettingsPageState()`, `useMemoryPageData()`, `useOverviewPageData()`, `useExecutionTimeline()`, `useProgressiveList()`.
 
 Hooks own their own subscription lifecycle — they subscribe on mount, unsubscribe on unmount.

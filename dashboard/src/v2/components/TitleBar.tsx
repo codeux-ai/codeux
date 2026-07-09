@@ -2,6 +2,7 @@ import type { FunctionComponent, JSX } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { Copy, Download, Minus, Square, X } from "lucide-preact";
 import { RobotLogo } from "./brand/RobotLogo.js";
+import { useUpdateStatus } from "../hooks/use-update-status.js";
 
 declare const __APP_VERSION__: string;
 
@@ -21,6 +22,7 @@ export const TitleBar: FunctionComponent<TitleBarProps> = ({ appearanceVariant =
   const windowApi = desktop?.window;
   const [platform, setPlatform] = useState<Platform>(() => resolvePlatform(desktop?.platform));
   const [isMaximized, setIsMaximized] = useState(false);
+  const { updateAvailable, latestVersion } = useUpdateStatus();
 
   useEffect(() => {
     if (!windowApi) return;
@@ -55,6 +57,7 @@ export const TitleBar: FunctionComponent<TitleBarProps> = ({ appearanceVariant =
     event.stopPropagation();
     void desktop?.openUpdates?.();
   };
+  const updateLabel = latestVersion ? `Update available: v${latestVersion}` : "Open updates";
 
   const controls = isMac ? null : (
     <div className="flex items-stretch h-full titlebar-no-drag">
@@ -129,16 +132,19 @@ export const TitleBar: FunctionComponent<TitleBarProps> = ({ appearanceVariant =
             v{__APP_VERSION__}
           </span>
         </span>
-        <button
-          type="button"
-          onClick={handleUpdateClick}
-          onDblClick={stopTitleBarDoubleClick}
-          aria-label="Open updates"
-          className="titlebar-no-drag inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-600 transition-colors hover:border-amber-500/35 hover:bg-amber-500/15 hover:text-amber-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/45 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-400 dark:hover:border-amber-300/35 dark:hover:bg-amber-400/15 dark:hover:text-amber-300"
-        >
-          <Download aria-hidden="true" className="h-3 w-3" strokeWidth={2} />
-          Update
-        </button>
+        {updateAvailable ? (
+          <button
+            type="button"
+            onClick={handleUpdateClick}
+            onDblClick={stopTitleBarDoubleClick}
+            aria-label={updateLabel}
+            title={updateLabel}
+            className="titlebar-no-drag inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-600 transition-colors hover:border-amber-500/35 hover:bg-amber-500/15 hover:text-amber-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/45 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-400 dark:hover:border-amber-300/35 dark:hover:bg-amber-400/15 dark:hover:text-amber-300"
+          >
+            <Download aria-hidden="true" className="h-3 w-3" strokeWidth={2} />
+            Update
+          </button>
+        ) : null}
       </div>
       {controls}
     </div>
