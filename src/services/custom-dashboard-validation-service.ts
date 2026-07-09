@@ -32,10 +32,13 @@ import {
   CUSTOM_DASHBOARD_VALIDATION_LOG_TAIL_LINES,
   materializeCustomDashboardWorkspace,
   readValidationLog,
+  resolveContainedCustomDashboardPath,
   tailLogLines,
+  type ValidatedCustomDashboardPath,
 } from "./custom-dashboard-validation-utils.js";
 import { DockerSessionLifecycle, sanitizeContainerNameComponent } from "./docker-session-lifecycle.js";
 import { DockerBootstrapBuilder } from "../infrastructure/providers/cli/docker-bootstrap-builder.js";
+import { assertSafePathSegment, isPathInside } from "../utils/path-validator.js";
 
 const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -75,6 +78,13 @@ interface ViewerArtifactFile {
   contentType: string;
 }
 
+interface ValidationRuntimePaths {
+  runtimeRoot: ValidatedCustomDashboardPath;
+  workspacePath: ValidatedCustomDashboardPath;
+  runtimeHomePath: ValidatedCustomDashboardPath;
+  logPath: ValidatedCustomDashboardPath;
+}
+
 export interface CustomDashboardValidationProxyResponse {
   status: number;
   headers: Record<string, string>;
@@ -106,13 +116,15 @@ export class CustomDashboardValidationService {
         throw new EntityNotFoundError(`Custom dashboard not found: ${dashboardId}`);
       }
       const revision = this.requireRevision(projectId, dashboardId, revisionId);
-      const runtimeRoot = path.join(project.baseDir, ".code-ux", "runtime", "custom-dashboards", dashboardId, revisionId);
-      const workspacePath = path.join(runtimeRoot, "workspace");
-      const runtimeHomePath = path.join(runtimeRoot, "home-validation");
-      const logPath = path.join(runtimeRoot, "validation.log");
+      const { runtimeRoot, workspacePath, runtimeHomePath, logPath } = await this.resolveValidationRuntimePaths(
+        project.baseDir,
+        dashboardId,
+        revisionId,
+      );
       const session = this.deps.customDashboardRepository.createValidationSession(revision.id, {
         status: "queued",
         runtimeMetadata: this.buildRuntimeMetadata({
+          runtimeRoot,
           workspacePath,
           runtimeHomePath,
           logPath,
@@ -122,6 +134,9 @@ export class CustomDashboardValidationService {
       });
       const containerName = this.buildContainerName(projectId, dashboardId, revisionId, session.id);
 
+      // logPath is a project-contained validation runtime path produced by
+      // resolveValidationRuntimePaths immediately above.
+      // codeql[js/path-injection]
       await fs.rm(logPath, { force: true }).catch(() => undefined);
       await appendValidationLog(logPath, "validation", `Created validation session ${session.id}.`);
 
@@ -135,6 +150,7 @@ export class CustomDashboardValidationService {
           status: "building",
           startedAt: new Date().toISOString(),
           runtimeMetadata: this.buildRuntimeMetadata({
+            runtimeRoot,
             workspacePath,
             runtimeHomePath,
             logPath,
@@ -145,6 +161,9 @@ export class CustomDashboardValidationService {
           }),
         });
 
+        // runtimeHomePath is a project-contained validation runtime path
+        // produced by resolveValidationRuntimePaths.
+        // codeql[js/path-injection]
         await fs.mkdir(runtimeHomePath, { recursive: true });
         await materializeCustomDashboardWorkspace({
           revision,
@@ -226,6 +245,7 @@ export class CustomDashboardValidationService {
         const runningSession = this.deps.customDashboardRepository.updateValidationSession(session.id, {
           status: "running",
           runtimeMetadata: this.buildRuntimeMetadata({
+            runtimeRoot,
             workspacePath,
             runtimeHomePath,
             logPath,
@@ -248,6 +268,7 @@ export class CustomDashboardValidationService {
           validationReport: report,
           finishedAt: new Date().toISOString(),
           runtimeMetadata: this.buildRuntimeMetadata({
+            runtimeRoot,
             workspacePath,
             runtimeHomePath,
             logPath,
@@ -268,6 +289,7 @@ export class CustomDashboardValidationService {
         await appendValidationLog(logPath, "validation-error", message).catch(() => undefined);
         const current = this.deps.customDashboardRepository.getValidationSessionById(session.id);
         const runtimeMetadata = this.mergeRuntimeMetadata(current?.runtimeMetadata, {
+          runtimeRoot,
           workspacePath,
           runtimeHomePath,
           logPath,
@@ -314,12 +336,15 @@ export class CustomDashboardValidationService {
       throw new EntityNotFoundError("Custom dashboard validation session not found.");
     }
     const validationMetadata = this.getValidationMetadata(session);
-    const fileLogs = await readValidationLog(this.getMetadataString(validationMetadata, "logPath"), tail);
+    const project = this.deps.projectManagementRepository.getProject(session.projectId);
+    const safeLogPath = project
+      ? await this.resolveValidationLogPath(project.baseDir, validationMetadata).catch(() => null)
+      : null;
+    const fileLogs = await readValidationLog(safeLogPath, tail);
     const containerRef = this.getContainerRef(session);
     if (!containerRef) {
       return { logs: fileLogs };
     }
-    const project = this.deps.projectManagementRepository.getProject(session.projectId);
     const cwd = project?.baseDir ?? process.cwd();
     try {
       const result = await runCommandStrict("docker", ["logs", "--tail", String(Math.max(1, Math.round(tail))), containerRef], cwd);
@@ -342,7 +367,10 @@ export class CustomDashboardValidationService {
     if (args.body && args.body.length > 5 * 1024 * 1024) {
       throw new Error("Request body exceeds maximum allowed size for proxied custom dashboard validation");
     }
-    const session = await this.requireValidationSession(args.sessionId);
+    const sessionId = this.parseHttpStringParam(args.sessionId, "sessionId");
+    const requestPath = this.parseHttpStringParam(args.path, "path");
+    const requestMethod = this.parseHttpStringParam(args.method, "method").toUpperCase();
+    const session = await this.requireValidationSession(sessionId);
     const refreshed = await this.refreshRuntimeState(session);
     const metadata = this.getValidationMetadata(refreshed);
     const hostPort = typeof metadata.hostPort === "number" ? metadata.hostPort : null;
@@ -350,14 +378,16 @@ export class CustomDashboardValidationService {
       throw new Error("Custom dashboard validation session does not have an active host port.");
     }
 
-    const upstreamUrl = new URL(normalizePreviewPath(args.path), `http://127.0.0.1:${hostPort}`);
+    const upstreamUrl = new URL(normalizePreviewPath(requestPath), `http://127.0.0.1:${hostPort}`);
     const response = await this.fetchImpl(upstreamUrl, {
-      method: args.method,
+      method: requestMethod,
       headers: this.buildProxyHeaders(args.headers, upstreamUrl.origin),
       body: args.body && args.body.length > 0 ? new Uint8Array(args.body) : undefined,
       redirect: "manual",
     });
-    const rewritePrefix = args.rewritePrefix || `${VALIDATION_URL_PREFIX}/${refreshed.id}/proxy`;
+    const rewritePrefix = args.rewritePrefix
+      ? this.parseHttpStringParam(args.rewritePrefix, "rewritePrefix")
+      : `${VALIDATION_URL_PREFIX}/${refreshed.id}/proxy`;
     const contentType = response.headers.get("content-type") || "";
     const responseHeaders: Record<string, string> = {};
     response.headers.forEach((value, key) => {
@@ -456,6 +486,68 @@ export class CustomDashboardValidationService {
         this.deps.customDashboardRepository.deleteValidationSession(session.id);
       },
     );
+  }
+
+  private parseHttpStringParam(value: unknown, fieldName: string): string {
+    if (typeof value !== "string") {
+      throw new Error(`Invalid ${fieldName}. Expected a string.`);
+    }
+    return value;
+  }
+
+  private async resolveValidationRuntimePaths(
+    projectBaseDir: string,
+    dashboardId: string,
+    revisionId: string,
+  ): Promise<ValidationRuntimePaths> {
+    const safeDashboardId = assertSafePathSegment(dashboardId, "dashboardId");
+    const safeRevisionId = assertSafePathSegment(revisionId, "revisionId");
+    // projectBaseDir comes from the project repository and becomes the trusted
+    // base for all validation runtime paths after canonicalization.
+    // codeql[js/path-injection]
+    const projectRoot = await fs.realpath(path.resolve(projectBaseDir));
+    const runtimeRoot = await resolveContainedCustomDashboardPath(
+      projectRoot,
+      path.join(projectRoot, ".code-ux", "runtime", "custom-dashboards", safeDashboardId, safeRevisionId),
+      "custom dashboard validation runtime root",
+    );
+    const workspacePath = path.join(runtimeRoot, "workspace");
+    const runtimeHomePath = path.join(runtimeRoot, "home-validation");
+    const logPath = path.join(runtimeRoot, "validation.log");
+    for (const [label, candidate] of [
+      ["custom dashboard validation workspace", workspacePath],
+      ["custom dashboard validation home", runtimeHomePath],
+      ["custom dashboard validation log", logPath],
+    ] as const) {
+      if (!isPathInside(runtimeRoot, candidate)) {
+        throw new Error(`${label} must stay inside the custom dashboard validation runtime root.`);
+      }
+    }
+    return {
+      runtimeRoot,
+      workspacePath: await resolveContainedCustomDashboardPath(projectRoot, workspacePath, "custom dashboard validation workspace"),
+      runtimeHomePath: await resolveContainedCustomDashboardPath(projectRoot, runtimeHomePath, "custom dashboard validation home"),
+      logPath: await resolveContainedCustomDashboardPath(projectRoot, logPath, "custom dashboard validation log"),
+    };
+  }
+
+  private async resolveValidationLogPath(
+    projectBaseDir: string,
+    metadata: Record<string, CustomDashboardJsonObject[keyof CustomDashboardJsonObject]>,
+  ): Promise<ValidatedCustomDashboardPath | null> {
+    const logPath = this.getMetadataString(metadata, "logPath");
+    if (!logPath) {
+      return null;
+    }
+    // projectBaseDir is canonicalized before stored log metadata is resolved
+    // against it.
+    // codeql[js/path-injection]
+    const projectRoot = await fs.realpath(path.resolve(projectBaseDir));
+    const runtimeRoot = this.getMetadataString(metadata, "runtimeRoot");
+    if (runtimeRoot && (!isPathInside(projectRoot, runtimeRoot) || !isPathInside(runtimeRoot, logPath))) {
+      throw new Error("Custom dashboard validation log path is outside the recorded runtime root.");
+    }
+    return await resolveContainedCustomDashboardPath(projectRoot, logPath, "custom dashboard validation log");
   }
 
   private async waitForReadiness(session: CustomDashboardValidationSessionRecord, cwd: string): Promise<void> {
@@ -655,10 +747,14 @@ export class CustomDashboardValidationService {
   }
 
   private async readViewerArtifact(
-    workspacePath: string,
+    workspacePath: ValidatedCustomDashboardPath,
     revision: CustomDashboardRevisionRecord,
   ): Promise<CustomDashboardJsonObject> {
-    const distPath = path.join(workspacePath, "dist");
+    const distPath = await resolveContainedCustomDashboardPath(
+      workspacePath,
+      path.join(workspacePath, "dist"),
+      "custom dashboard viewer artifact directory",
+    );
     const files = await this.collectViewerArtifactFiles(distPath);
     if (!files.some((file) => file.path === "index.html")) {
       throw new Error("Custom dashboard build did not produce dist/index.html for the published viewer.");
@@ -672,13 +768,20 @@ export class CustomDashboardValidationService {
     };
   }
 
-  private async collectViewerArtifactFiles(rootPath: string): Promise<ViewerArtifactFile[]> {
+  private async collectViewerArtifactFiles(rootPath: ValidatedCustomDashboardPath): Promise<ViewerArtifactFile[]> {
     let totalBytes = 0;
     const files: ViewerArtifactFile[] = [];
-    const visit = async (currentPath: string): Promise<void> => {
+    const visit = async (currentPath: ValidatedCustomDashboardPath): Promise<void> => {
+      // currentPath is the root or a child directory that passed realpath
+      // containment against the viewer artifact root before traversal.
+      // codeql[js/path-injection]
       const entries = await fs.readdir(currentPath, { withFileTypes: true });
       for (const entry of entries) {
-        const absolutePath = path.join(currentPath, entry.name);
+        const absolutePath = await resolveContainedCustomDashboardPath(
+          rootPath,
+          path.join(currentPath, entry.name),
+          "custom dashboard viewer artifact file",
+        );
         if (entry.isDirectory()) {
           await visit(absolutePath);
           continue;
@@ -686,6 +789,9 @@ export class CustomDashboardValidationService {
         if (!entry.isFile()) {
           continue;
         }
+        // absolutePath is a viewer artifact path that passed root containment
+        // before this metadata read.
+        // codeql[js/path-injection]
         const stat = await fs.stat(absolutePath);
         if (stat.size > VIEWER_ARTIFACT_MAX_FILE_BYTES) {
           throw new Error(`Custom dashboard viewer artifact file is too large: ${path.relative(rootPath, absolutePath)}`);
@@ -697,6 +803,7 @@ export class CustomDashboardValidationService {
         const relativePath = path.relative(rootPath, absolutePath).split(path.sep).join("/");
         files.push({
           path: relativePath,
+          // codeql[js/path-injection]
           content: await fs.readFile(absolutePath, "utf8"),
           contentType: this.inferViewerArtifactContentType(relativePath),
         });
@@ -946,8 +1053,10 @@ export class CustomDashboardValidationService {
     return mapped;
   }
 
-  private async resolveDockerUserSpec(workspacePath: string): Promise<string> {
+  private async resolveDockerUserSpec(workspacePath: ValidatedCustomDashboardPath): Promise<string> {
     try {
+      // workspacePath is a validated project-contained runtime path.
+      // codeql[js/path-injection]
       const stats = await fs.stat(workspacePath);
       if (typeof stats.uid === "number" && typeof stats.gid === "number" && stats.uid !== 0) {
         return `${stats.uid}:${stats.gid}`;

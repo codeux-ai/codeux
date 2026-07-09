@@ -2,7 +2,7 @@
 
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,11 +42,47 @@ function resolveWindowsPackageManager(command, args) {
   return { command, args };
 }
 
+function installedPackagePath(...parts) {
+  return path.join(installDir, "node_modules", "@codeuxai", "codeux", ...parts);
+}
+
+async function resolveInstalledBin(binName) {
+  const binShimCandidates = process.platform === "win32"
+    ? [
+        path.join(installDir, "node_modules", ".bin", `${binName}.cmd`),
+        path.join(installDir, "node_modules", ".bin", binName),
+      ]
+    : [
+        path.join(installDir, "node_modules", ".bin", binName),
+      ];
+  const binShim = binShimCandidates.find((candidate) => existsSync(candidate));
+  if (!binShim) {
+    throw new Error(`Installed package did not create a local ${binName} bin shim in node_modules/.bin.`);
+  }
+
+  const packageJsonPath = installedPackagePath("package.json");
+  const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"));
+  const bin = packageJson?.bin;
+  const relativeBinPath = typeof bin === "string" ? bin : bin?.[binName];
+  if (typeof relativeBinPath !== "string" || relativeBinPath.length === 0) {
+    throw new Error(`Installed package does not declare a ${binName} bin entry.`);
+  }
+
+  const binPath = installedPackagePath(relativeBinPath);
+  if (!existsSync(binPath)) {
+    throw new Error(`Installed ${binName} bin target is missing: ${binPath}`);
+  }
+
+  return { command: process.execPath, args: [binPath], displayCommand: binShim };
+}
+
 async function runStep(label, command, args, options = {}) {
   const invocation = resolveWindowsPackageManager(command, args);
+  const displayCommand = options.displayCommand ?? invocation.command;
+  const displayArgs = options.displayArgs ?? invocation.args;
 
   console.log(`\n==> ${label}`);
-  console.log(`$ ${[invocation.command, ...invocation.args].join(" ")}`);
+  console.log(`$ ${[displayCommand, ...displayArgs].join(" ")}`);
 
   const child = spawn(invocation.command, invocation.args, {
     cwd: options.cwd ?? projectRoot,
@@ -81,7 +117,7 @@ async function runStep(label, command, args, options = {}) {
   if (exitCode !== 0) {
     const detail = [
       `${label} failed with exit code ${exitCode}.`,
-      `Command: ${[invocation.command, ...invocation.args].join(" ")}`,
+      `Command: ${[displayCommand, ...displayArgs].join(" ")}`,
       `Working directory: ${options.cwd ?? projectRoot}`,
       stdout.trim().length > 0 ? `stdout:\n${stdout.trim()}` : undefined,
       stderr.trim().length > 0 ? `stderr:\n${stderr.trim()}` : undefined,
@@ -90,6 +126,16 @@ async function runStep(label, command, args, options = {}) {
   }
 
   return { stdout, stderr };
+}
+
+async function runInstalledBinStep(label, binName, args, options = {}) {
+  const invocation = await resolveInstalledBin(binName);
+
+  return runStep(label, invocation.command, [...invocation.args, ...args], {
+    ...options,
+    displayCommand: invocation.displayCommand,
+    displayArgs: args,
+  });
 }
 
 async function npmPack() {
@@ -139,12 +185,7 @@ try {
     tarballPath,
   ], { cwd: installDir });
 
-  await runStep("Run installed codeux --help", npmCommand, [
-    "exec",
-    "--",
-    "codeux",
-    "--help",
-  ], { cwd: installDir });
+  await runInstalledBinStep("Run installed codeux --help", "codeux", ["--help"], { cwd: installDir });
 
   console.log("\nRelease install verification passed.");
 } catch (error) {

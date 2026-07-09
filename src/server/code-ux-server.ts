@@ -202,6 +202,7 @@ export class CodeUxServer {
   private embeddingService: import("../services/embedding-service.js").EmbeddingService;
   private memoryRepository: import("../repositories/memory-repository.js").MemoryRepository;
   private knowledgeService: import("../services/knowledge-service.js").KnowledgeService;
+  private skillService: import("../services/skill-service.js").SkillService;
   private runtimeCleanupInterval: ReturnType<typeof setInterval> | null = null;
   private sprintPreviewInterval: ReturnType<typeof setInterval> | null = null;
   private liveSnapshotInterval: ReturnType<typeof setInterval> | null = null;
@@ -308,6 +309,7 @@ export class CodeUxServer {
     this.embeddingService = deps.embeddingService;
     this.memoryRepository = deps.memoryRepository;
     this.knowledgeService = deps.knowledgeService;
+    this.skillService = deps.skillService;
 
     this.configureMcpServer(this.server, this.appConfig.runtimeRole);
 
@@ -1364,6 +1366,7 @@ export class CodeUxServer {
         nodeFlowService: this.nodeFlowService,
         customDashboardRepository: this.customDashboardRepository,
         customDashboardValidationService: this.customDashboardValidationService,
+        skillService: this.skillService,
         chatThreadRuntimeService: this.chatThreadRuntimeService,
         chatProviderIngressService: this.chatProviderIngressService,
         speechTranscriptionService: this.speechTranscriptionService,

@@ -189,13 +189,16 @@ function sectionFromSourcePath(sourcePath) {
 }
 
 function stripMarkdownInline(markdown) {
-  return markdown
+  const withoutHtml = markdown
+    .replace(/<script\b[^>]*>[\s\S]*?(?:<\/script\s*>|$)/gi, "")
+    .replace(/<style\b[^>]*>[\s\S]*?(?:<\/style\s*>|$)/gi, "")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/\*([^*]+)\*/g, "$1")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/<[^>]+>/g, "")
     .trim();
+  return withoutHtml.replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function descriptionFromMarkdown(markdown) {

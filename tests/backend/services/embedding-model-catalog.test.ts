@@ -85,6 +85,21 @@ describe("embedding-model-catalog", () => {
     }));
   });
 
+  it("normalizes slash-heavy custom repo ids with linear trimming", () => {
+    const model = createCustomEmbeddingModelDefinition({
+      displayName: "Slash Heavy",
+      repoOrUrl: `${"/".repeat(10_000)}owner/repo${"/".repeat(10_000)}`,
+      onnxModelFile: "onnx/model.onnx",
+      tokenizerFiles: ["tokenizer.json"],
+      dimension: 384,
+      approximateSizeBytes: 1,
+      language: "English",
+    });
+
+    expect(model.huggingFaceRepo).toBe("owner/repo");
+    expect(model.huggingFaceUrl).toBe("https://huggingface.co/owner/repo");
+  });
+
   it("normalizes a Hugging Face file URL into repo and ONNX path data", () => {
     const model = createCustomEmbeddingModelDefinition({
       displayName: "URL Model",
@@ -97,6 +112,20 @@ describe("embedding-model-catalog", () => {
 
     expect(model.huggingFaceRepo).toBe("sentence-transformers/all-MiniLM-L6-v2");
     expect(model.onnxModelFile).toBe("onnx/model.onnx");
+  });
+
+  it("builds custom model ids from hyphen-heavy model paths with linear trimming", () => {
+    const model = createCustomEmbeddingModelDefinition({
+      displayName: "Hyphen Heavy",
+      repoOrUrl: "owner/repo",
+      onnxModelFile: `onnx/model${"-".repeat(10_000)}.onnx`,
+      tokenizerFiles: ["tokenizer.json"],
+      dimension: 384,
+      approximateSizeBytes: 1,
+      language: "English",
+    });
+
+    expect(model.id).toMatch(/^hf-owner-repo-onnx-model-[a-f0-9]{8}$/);
   });
 
   it("rejects non-Hugging Face and malformed custom links", () => {

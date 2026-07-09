@@ -184,7 +184,14 @@ function readText(data: Record<string, unknown> | undefined, keys: string[]): st
 }
 
 function stripHtml(value: string): string {
-  return value.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").replace(/\r\n/g, "\n").trim();
+  const withoutHtml = value
+    .replace(/<script\b[^>]*>[\s\S]*?(?:<\/script\s*>|$)/gi, "")
+    .replace(/<style\b[^>]*>[\s\S]*?(?:<\/style\s*>|$)/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\r\n/g, "\n")
+    .trim();
+  return withoutHtml.replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function normalizeBaseUrl(baseUrl?: string): string {

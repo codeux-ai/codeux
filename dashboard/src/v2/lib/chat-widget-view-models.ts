@@ -820,6 +820,10 @@ const normalizeExternalProviderValue = (value: unknown): ExternalReferenceProvid
   return null;
 };
 
+const isHostnameOrSubdomain = (host: string, domain: string): boolean => (
+  host === domain || host.endsWith(`.${domain}`)
+);
+
 const inferExternalProviderFromUrl = (value: unknown): ExternalReferenceProvider | null => {
   const url = readString(value);
   if (!url) {
@@ -827,7 +831,7 @@ const inferExternalProviderFromUrl = (value: unknown): ExternalReferenceProvider
   }
   try {
     const host = new URL(url).hostname.toLowerCase();
-    if (host.includes("atlassian.net") || host.includes("jira.")) {
+    if (isHostnameOrSubdomain(host, "atlassian.net")) {
       return "jira";
     }
     if (host === "github.com" || host.endsWith(".github.com")) {

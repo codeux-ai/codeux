@@ -966,7 +966,7 @@ describe("SprintIssueService", () => {
         data: [{
           id: "item-1",
           type: "sticky_note",
-          data: { title: "Note title", content: "<p>Build this flow</p>" },
+          data: { title: "Note title", content: "<p>Build this flow</p><script>alert(1)</script><script" },
           links: { self: "https://miro.com/app/board/board-1/?moveToWidget=item-1" },
           modifiedAt: "2026-05-02T00:00:00.000Z",
         }],
@@ -1008,10 +1008,11 @@ describe("SprintIssueService", () => {
         externalId: "item-1",
         issueKey: "item:item-1",
         title: "Note title",
-        issueBodyMarkdown: "Note title\n\nBuild this flow",
+        issueBodyMarkdown: "Note title\n\nBuild this flow&lt;script",
         updatedAt: "2026-05-02T00:00:00.000Z",
       }),
     ]);
+    expect(issues[1]?.issueBodyMarkdown).not.toContain("<script");
   });
 
   it("requires Miro token and board/search configuration before searching", async () => {

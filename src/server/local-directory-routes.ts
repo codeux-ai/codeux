@@ -24,19 +24,37 @@ function isWithinAnyRoot(candidate: string, roots: string[]): boolean {
   });
 }
 
+async function canonicalizeExistingPath(candidate: string): Promise<string> {
+  const resolved = path.resolve(candidate);
+  try {
+    const realPath = await fs.realpath(resolved);
+    return typeof realPath === "string" && realPath.length > 0 ? realPath : resolved;
+  } catch {
+    return resolved;
+  }
+}
+
 async function resolveAllowedRoots(): Promise<string[]> {
   const configuredRoots = [
     os.homedir(),
     process.cwd(),
     ...(process.env.CODE_UX_DIRECTORY_BROWSER_ROOTS || "").split(",").filter(Boolean),
   ];
-  return configuredRoots.map((root) => path.resolve(expandHomePath(root)));
+  const roots = await Promise.all(configuredRoots.map(async (root) => {
+    const resolvedRoot = path.resolve(expandHomePath(root));
+    const realRoot = await canonicalizeExistingPath(resolvedRoot);
+    return [resolvedRoot, realRoot];
+  }));
+  return [...new Set(roots.flat())];
 }
 
 /**
  * Resolves `targetPath` to its canonical real path and confirms it lives inside
- * one of the allowed roots (home, cwd, or configured browser roots). Returns the
- * vetted real path on success, or null if it falls outside every allowed root.
+ * one of the allowed roots (home, cwd, or configured browser roots). The roots
+ * include both configured spellings and canonical realpaths so platform aliases
+ * such as macOS `/var` and `/private/var` are treated as the same location.
+ * Returns the vetted real path on success, or null if it falls outside every
+ * allowed root.
  *
  * Returning the resolved path (rather than a boolean) lets callers run all
  * subsequent filesystem operations against the value that was actually checked,
@@ -49,16 +67,10 @@ async function resolveAllowedPath(targetPath: string): Promise<ValidatedPath | n
     return null;
   }
 
-  let realTargetPath: string;
-  try {
-    // resolvedTargetPath already passed lexical containment against the allowed
-    // directory roots; this canonicalizes the same candidate for a second check.
-    // codeql[js/path-injection]
-    realTargetPath = await fs.realpath(resolvedTargetPath);
-  } catch (err) {
-    // If the path doesn't exist, we fall back to the resolved absolute path.
-    realTargetPath = resolvedTargetPath;
-  }
+  // resolvedTargetPath already passed lexical containment against the allowed
+  // directory roots; this canonicalizes the same candidate for a second check.
+  // codeql[js/path-injection]
+  const realTargetPath = await canonicalizeExistingPath(resolvedTargetPath);
 
   return isWithinAnyRoot(realTargetPath, resolvedAllowedRoots) ? asValidatedPath(realTargetPath) : null;
 }

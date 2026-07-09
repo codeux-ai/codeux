@@ -27,6 +27,7 @@ describe("WorkspaceManager", () => {
     vi.clearAllMocks();
     vi.mocked(fs.mkdtemp).mockResolvedValue("/tmp/code-ux-bundle-123");
     vi.mocked(fs.rm).mockResolvedValue(undefined);
+    vi.mocked(fs.realpath).mockImplementation(async (candidate) => String(candidate));
     vi.mocked(fs.writeFile).mockResolvedValue(undefined);
   });
 
@@ -960,6 +961,29 @@ describe("WorkspaceManager", () => {
       expect.arrayContaining(["volume", "create"]),
       expect.any(String),
     );
+  });
+
+  it("accepts exact Git roots when configured and reported paths canonicalize to the same checkout", async () => {
+    vi.mocked(fs.realpath).mockImplementation(async (candidate) => {
+      const value = String(candidate);
+      return value.replace(/^\/var\//, "/private/var/");
+    });
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
+      if (args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/private/var/folders/code-ux-project\n", stderr: "" } as any;
+      }
+      if (args[0] === "docker" && args[1] === "volume" && args[2] === "inspect") {
+        throw new Error("missing");
+      }
+      if (args[0] === "git" && args[1] === "remote") {
+        return { ok: true, stdout: "git@github.com:example/repo.git\n", stderr: "" } as any;
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0 } as any;
+    });
+
+    await expect(manager.createSnapshotWorkspace("/var/folders/code-ux-project", "session-1"))
+      .resolves
+      .toMatch(/^docker-volume:\/\/code-ux-code-ux-project-[a-f0-9]{12}-session-1-snapshot$/);
   });
 
   it("does not remove Docker volumes that are not Code UX-managed", async () => {

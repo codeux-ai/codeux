@@ -197,7 +197,7 @@ OS-specific caveats:
 node scripts/verify-release-install.mjs
 ```
 
-The release install verifier builds the workspace, creates a local npm tarball with `npm pack --ignore-scripts`, installs that tarball into a temporary isolated npm project, and runs the installed `codeux --help`. On Windows, the verifier invokes package-manager CLI JavaScript entrypoints through Node when available instead of spawning `.cmd` shims directly. Set `CODE_UX_KEEP_RELEASE_INSTALL_TEMP=1` when diagnosing a failed run and you need to inspect the temporary package or install directory.
+The release install verifier builds the workspace, creates a local npm tarball with `npm pack --ignore-scripts`, installs that tarball into a temporary isolated npm project, verifies the local `node_modules/.bin/codeux` shim exists, and runs the installed package's `codeux --help` bin target directly through Node. That keeps the smoke check pinned to the tarball install and avoids npm registry package resolution. On Windows, the verifier invokes package-manager CLI JavaScript entrypoints through Node when available instead of spawning `.cmd` shims directly. Set `CODE_UX_KEEP_RELEASE_INSTALL_TEMP=1` when diagnosing a failed run and you need to inspect the temporary package or install directory.
 
 ### Release Checks Policy
 
@@ -209,7 +209,7 @@ Each job uses pnpm 10.33.0 and Node 22, runs `pnpm install --frozen-lockfile --i
 - macOS: `pnpm run electron:dist:mac`
 - Windows: `pnpm run electron:dist:win`
 
-`node scripts/verify-release-install.mjs` builds the workspace, creates a local npm tarball with `npm pack --ignore-scripts`, installs that tarball into a temporary npm project, and runs the installed `codeux --help` CLI smoke command. Its Windows path resolves npm and pnpm command shims to Node-run CLI entrypoints when possible so the check stays shell-free across runners. Electron packaging sets `CSC_IDENTITY_AUTO_DISCOVERY=false` so CI builds remain unsigned, and release-check Electron commands pass `--publish never` so generated installer/package files under `release/electron/` are uploaded as workflow artifacts only.
+`node scripts/verify-release-install.mjs` builds the workspace, creates a local npm tarball with `npm pack --ignore-scripts`, installs that tarball into a temporary npm project, verifies the local `node_modules/.bin/codeux` shim exists, and runs the installed package's `codeux --help` bin target directly through Node. This avoids `npm exec` package lookup and keeps the smoke command tied to the local tarball install. Its Windows path resolves npm and pnpm command shims to Node-run CLI entrypoints when possible so the check stays shell-free across runners. Electron packaging sets `CSC_IDENTITY_AUTO_DISCOVERY=false` so CI builds remain unsigned, and release-check Electron commands pass `--publish never` so generated installer/package files under `release/electron/` are uploaded as workflow artifacts only.
 
 Together, `.github/workflows/release-checks.yml` and `.github/workflows/playwright.yml` are the pull-request-to-main credential-free release validation lanes. The former checks source build, package installability, CLI help, and desktop package creation; the latter checks the compiled app in Chromium across Linux, macOS, and Windows, including project setup coverage.
 

@@ -7,7 +7,6 @@ import {
   deleteConversationThread,
   fetchConversationDraft,
   fetchConversationMessages,
-  getOrCreateDashboardDraftUserId,
   postConversationMessage,
   updateConversationThread,
   compactThreadSession,
@@ -129,17 +128,51 @@ const CREATE_APP_QUICKACTION_TEMPLATE_IDS: Record<DashboardCreateAppQuickactionK
 const NEW_THREAD_DRAFT_CONTEXT_KEY = "new-thread";
 const CHAT_DRAFT_WRITE_DEBOUNCE_MS = 500;
 const LOCAL_CHAT_DRAFT_STORAGE_PREFIX = "codeux.chat.localDraft";
+const CHAT_DRAFT_USER_STORAGE_KEY = "codeux.chat.draftUserId";
+let draftUserIdMemoryFallback: string | null = null;
 
 const CREATE_APP_QUICKACTION_BODIES: Record<DashboardCreateAppQuickactionKind, string> = {
   web_app: "Create a web app",
   desktop_app: "Create a desktop app",
 };
 
+const createCryptoRandomId = (): string => {
+  const cryptoApi = globalThis.crypto;
+  if (typeof cryptoApi?.randomUUID === "function") {
+    return cryptoApi.randomUUID();
+  }
+  if (typeof cryptoApi?.getRandomValues === "function") {
+    const bytes = new Uint8Array(16);
+    cryptoApi.getRandomValues(bytes);
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+  throw new Error("Secure random generation is unavailable.");
+};
+
 const createQuickactionRequestId = (kind: DashboardCreateAppQuickactionKind): string => {
-  const randomId = typeof globalThis.crypto?.randomUUID === "function"
-    ? globalThis.crypto.randomUUID()
-    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-  return `dashboard-create-app-${kind}-${randomId}`;
+  return `dashboard-create-app-${kind}-${createCryptoRandomId()}`;
+};
+
+const createDraftUserId = (): string => `dashboard-user-${createCryptoRandomId()}`;
+
+const getOrCreateLocalDashboardDraftUserId = (): string => {
+  if (typeof window === "undefined") {
+    return "dashboard-user-server";
+  }
+  try {
+    const stored = window.localStorage.getItem(CHAT_DRAFT_USER_STORAGE_KEY)?.trim();
+    if (stored) {
+      draftUserIdMemoryFallback = stored;
+      return stored;
+    }
+    const next = createDraftUserId();
+    window.localStorage.setItem(CHAT_DRAFT_USER_STORAGE_KEY, next);
+    draftUserIdMemoryFallback = next;
+    return next;
+  } catch {
+    draftUserIdMemoryFallback ??= createDraftUserId();
+    return draftUserIdMemoryFallback;
+  }
 };
 
 const normalizeStackToken = (value: string): string => value.toLowerCase().replace(/[^a-z0-9+#.]+/g, "");
@@ -448,7 +481,7 @@ export const useChatThreadData = (options: {
       return;
     }
 
-    const userId = getOrCreateDashboardDraftUserId();
+    const userId = getOrCreateLocalDashboardDraftUserId();
     draftUserIdRef.current = userId;
     const localDraft = readLocalChatDraft({
       projectId: selectedProject.id,
@@ -533,7 +566,7 @@ export const useChatThreadData = (options: {
       return;
     }
 
-    const userId = draftUserIdRef.current ?? getOrCreateDashboardDraftUserId();
+    const userId = draftUserIdRef.current ?? getOrCreateLocalDashboardDraftUserId();
     draftUserIdRef.current = userId;
     const requestId = latestHistoryRequestRef.current + 1;
     latestHistoryRequestRef.current = requestId;
@@ -570,7 +603,7 @@ export const useChatThreadData = (options: {
       return;
     }
 
-    const userId = draftUserIdRef.current ?? getOrCreateDashboardDraftUserId();
+    const userId = draftUserIdRef.current ?? getOrCreateLocalDashboardDraftUserId();
     draftUserIdRef.current = userId;
     const currentInput = input;
     const lastSaved = lastSavedDraftRef.current;
@@ -843,7 +876,7 @@ export const useChatThreadData = (options: {
     if (!selectedProject) {
       return;
     }
-    const userId = draftUserIdRef.current ?? getOrCreateDashboardDraftUserId();
+    const userId = draftUserIdRef.current ?? getOrCreateLocalDashboardDraftUserId();
     draftUserIdRef.current = userId;
     void recordConversationMessageHistory(selectedProject.id, {
       userId,
