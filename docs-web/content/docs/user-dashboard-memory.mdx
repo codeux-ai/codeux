@@ -32,12 +32,29 @@ The Memory header is the main place to choose what the graph, sidebar, and inspe
 
 - **Tier summary tabs** — **Short Term** and **Long Term** show their memory counts directly in the tab cards.
 - **Current scope line** — shows copy such as `Short Term: showing 7 memories of 17 memories · Sprint 2 · All Agents` or `Long Term: showing 1 memory of 1 memory · Project-wide · All Agents`.
-- **Scope filters** — Short-term memory shows the sprint selector when sprint scope data is available, and both tiers show the agent preset selector when agent presets are available. If a source list is empty, the filter row shows reason copy instead of a focusable empty selector.
-- **Actions** — **Add Memory**, **Model Catalog**, and **Danger Delete** are separated from the selectors. Model Catalog shows whether it is shown or hidden plus active-model status. Danger Delete always shows Off/Armed state plus persistent explanatory copy.
+- **Scope filters** — Short-term memory shows the sprint selector when sprint scope data is available, and both tiers show the agent preset selector when agent presets are available. When a source list is empty, the filter row shows reason copy instead of rendering a focusable empty selector.
+- **Actions** — **Add Memory**, **Model Catalog**, and **Danger Delete** are separated from the selectors. Add Memory opens the manual memory dialog for the current tier scope. Model Catalog shows whether it is shown or hidden plus active-model status. Danger Delete always shows Off/Armed state plus persistent explanatory copy; when armed, the page warning refers to this as Lobotomize mode because graph-node and inspector deletes become immediate.
 
 The sidebar search field filters the current visible tier, sprint, and agent slice by memory text/category. Programmatic semantic search still uses vector similarity across requested scopes (cosine similarity, configurable `minSimilarity`).
 
 Danger Delete semantics are unchanged: graph and inspector single-memory deletes are immediate only while Danger Delete is armed, while sidebar card deletion uses its separate arm/cancel guard.
+
+## Memory Map controls
+
+The graph canvas supports direct map navigation:
+
+- Scroll the canvas to zoom around the pointer and drag to pan.
+- Click a memory node to select it, focus the camera on that memory, and open the inspector.
+- Use the **Zoom in**, **Zoom out**, and **Reset view** icon controls in the canvas. Reset returns to the overview and clears the current memory selection.
+- The canvas also shows the category legend, visible node count, and a selection status chip for the currently loaded memories.
+
+The sidebar starts collapsed so the graph remains visible. Use the sidebar toggle to open or close the memory list. When expanded, it shows search above the current alive memory list for the selected tier, sprint, and agent filter. Selecting a row opens that memory in the inspector; list controls can select all currently visible rows, clear selection, or delete selected memories after confirmation. Closing the sidebar clears the transient search and selected list rows.
+
+Below the graph, category summary cards show alive and loaded totals for each memory category in the current result set.
+
+### Performance
+
+The animated neural canvas pauses rendering while the browser tab or page is hidden and resumes when it becomes visible again. The node graph, sidebar list, inspector, and category summary reflect the currently loaded memories for the active tier, sprint, agent, and search context.
 
 ## Creating a memory
 
@@ -71,9 +88,13 @@ Auto-promotion also runs as the final step of a sprint when the sprint settles s
 
 ## The graph view
 
-Open a memory and click **Inspect** to see its **embedding map**: a 2D projection of nearby memories with edges to top-K neighbours. Useful for spotting clusters and duplicates.
+Select a memory from the canvas or sidebar to inspect its **embedding map** context: a 2D projection of nearby memories with edges to top-K neighbours. Useful for spotting clusters and duplicates.
 
-You can rebuild the map after re-embedding or after promotion.
+The map updates after memory reloads, re-embedding, or promotion.
+
+Rapid tier, sprint, or agent filter changes are sequenced by the Memory page data hook. Older responses are discarded, so only the newest memory list and embedding map can update the graph or clear the loading state.
+
+The graph pauses its canvas animation loop while the browser tab is hidden and resumes when the tab is visible again. Empty or loading maps clear the canvas without running the full edge, pulse, and node drawing passes, so the page stays responsive while data changes.
 
 ## Model browser
 

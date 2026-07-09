@@ -26,6 +26,7 @@ function buildDeps(): SprintOrchestratorDependencies {
     executionRepository: {
       getLatestTaskRun: vi.fn().mockReturnValue({ id: "task-run-1", dispatchId: "dispatch-1" }),
       getLatestTaskRunBySessionId: vi.fn().mockReturnValue(null),
+      listTaskRunEvents: vi.fn().mockReturnValue([]),
       listExecutionInvocations: vi.fn().mockReturnValue([]),
       getTaskDispatch: vi.fn().mockReturnValue({
         id: "dispatch-1",
@@ -337,6 +338,188 @@ describe("CycleRunner attention sync", () => {
     }));
     expect(result.subtasks.find((task) => task.id === "T1")?.status).toBe("COMPLETED");
     expect(result.subtasks.find((task) => task.id === "T2")?.status).toBe("RUNNING");
+  });
+
+  it("does not open merge-required protocol while a CLI branch is still finalizing", async () => {
+    const deps = buildDeps();
+    deps.getCiStatusForScope = vi.fn().mockResolvedValue(null) as any;
+    vi.mocked(deps.executionRepository.getLatestTaskRun).mockReturnValue({
+      id: "task-run-1",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      taskId: "task-1",
+      sprintRunId: "run-1",
+      dispatchId: "dispatch-1",
+      connectionId: null,
+      provider: "mockup-cli",
+      mode: "docker_cli",
+      sessionId: "cli-mockup-cli-1",
+      sessionName: "sessions/cli-mockup-cli-1",
+      state: "COMPLETED",
+      workerBranch: "task/feature-parent",
+      prUrl: null,
+      startedAt: null,
+      finishedAt: null,
+      durationMs: null,
+    });
+    vi.mocked(deps.executionRepository.listTaskRunEvents).mockReturnValue([
+      { eventType: "cli_provider_completed" },
+    ] as any);
+    const runner = new CycleRunner(deps);
+    (runner as any).featurePrGate = {
+      evaluateCiGate: vi.fn().mockImplementation(async (subtasks) => ({ subtasks, reportText: "" })),
+    };
+
+    vi.mocked(deps.sprintExecutionStateService.loadSubtasks).mockResolvedValue([
+      {
+        id: "T1",
+        record_id: "task-1",
+        title: "Finished parent",
+        prompt: "parent",
+        depends_on: [],
+        status: "CODING_COMPLETED",
+        session_state: "COMPLETED",
+        provider: "mockup-cli",
+        worker_branch: "task/feature-parent",
+        is_merged: false,
+      },
+    ] as any);
+
+    const result = await runner.run({
+      action: "orchestrate",
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
+      executionContext: {
+        project: { id: "project-1", name: "Project 1" } as any,
+        sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+        sprintNumber: 1,
+        repoPath: "/repo/project-1",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/repo/project-1",
+      defaultFeatureBranch: "feature/sprint-1",
+      retryFailed: false,
+      loopSteps: {
+        loadSubtasks: true,
+        sessionSync: false,
+        statusDerivation: false,
+        startReadyTasks: false,
+        statusTable: false,
+        mergeProtocol: true,
+        actionRequiredProtocol: false,
+      } as any,
+      ciIntelligence: {
+        enabled: false,
+      } as any,
+      githubMode: "LOCAL",
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      sprintRunId: "run-1",
+    });
+
+    expect(result.manualMergeTasks).toEqual([]);
+    expect(result.awaitingMerge).toEqual([]);
+    expect(result.instructions).not.toContain("MERGE HEADER");
+    expect(deps.executionRepository.appendTaskRunEvent).not.toHaveBeenCalledWith(
+      "task-run-1",
+      "protocol_merge_required",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(deps.projectAttentionService.openItems).not.toHaveBeenCalled();
+  });
+
+  it("opens merge-required protocol after CLI git finalization completes", async () => {
+    const deps = buildDeps();
+    deps.getCiStatusForScope = vi.fn().mockResolvedValue(null) as any;
+    vi.mocked(deps.executionRepository.getLatestTaskRun).mockReturnValue({
+      id: "task-run-1",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      taskId: "task-1",
+      sprintRunId: "run-1",
+      dispatchId: "dispatch-1",
+      connectionId: null,
+      provider: "mockup-cli",
+      mode: "docker_cli",
+      sessionId: "cli-mockup-cli-1",
+      sessionName: "sessions/cli-mockup-cli-1",
+      state: "COMPLETED",
+      workerBranch: "task/feature-parent",
+      prUrl: null,
+      startedAt: null,
+      finishedAt: null,
+      durationMs: null,
+    });
+    vi.mocked(deps.executionRepository.listTaskRunEvents).mockReturnValue([
+      { eventType: "cli_provider_completed" },
+      { eventType: "cli_git_pushed" },
+    ] as any);
+    const runner = new CycleRunner(deps);
+    (runner as any).featurePrGate = {
+      evaluateCiGate: vi.fn().mockImplementation(async (subtasks) => ({ subtasks, reportText: "" })),
+    };
+
+    vi.mocked(deps.sprintExecutionStateService.loadSubtasks).mockResolvedValue([
+      {
+        id: "T1",
+        record_id: "task-1",
+        title: "Finished parent",
+        prompt: "parent",
+        depends_on: [],
+        status: "CODING_COMPLETED",
+        session_state: "COMPLETED",
+        provider: "mockup-cli",
+        worker_branch: "task/feature-parent",
+        is_merged: false,
+      },
+    ] as any);
+
+    const result = await runner.run({
+      action: "orchestrate",
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
+      executionContext: {
+        project: { id: "project-1", name: "Project 1" } as any,
+        sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+        sprintNumber: 1,
+        repoPath: "/repo/project-1",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/repo/project-1",
+      defaultFeatureBranch: "feature/sprint-1",
+      retryFailed: false,
+      loopSteps: {
+        loadSubtasks: true,
+        sessionSync: false,
+        statusDerivation: false,
+        startReadyTasks: false,
+        statusTable: false,
+        mergeProtocol: true,
+        actionRequiredProtocol: false,
+      } as any,
+      ciIntelligence: {
+        enabled: false,
+      } as any,
+      githubMode: "LOCAL",
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      sprintRunId: "run-1",
+    });
+
+    expect(result.manualMergeTasks.map((task) => task.id)).toEqual(["T1"]);
+    expect(result.awaitingMerge.map((task) => task.id)).toEqual(["T1"]);
+    expect(result.instructions).toContain("MERGE HEADER");
+    expect(deps.executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
+      "task-run-1",
+      "protocol_merge_required",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it("runs the LOCAL branch-only gate for completed tasks before worker branch metadata is recovered", async () => {

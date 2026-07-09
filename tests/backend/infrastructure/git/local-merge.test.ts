@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { runCommandStrict } from "../../../../src/services/cli-process-runner.js";
@@ -106,6 +106,58 @@ describe("local-merge helpers", () => {
     expect(await currentBranch()).toBe("main");
     const files = (await git(repo, "ls-tree", "--name-only", "main")).stdout;
     expect(files).toContain("work.txt");
+  });
+
+  it("normalizes containerized temporary worktree gitdir metadata before follow-up git commands", async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), "local-merge-containerized-metadata-"));
+    try {
+      await mkdir(path.join(repoRoot, ".git", "worktrees"), { recursive: true });
+      let worktreePath = "";
+
+      const runner = vi.fn(async (_command: string, args: string[], cwd: string) => {
+        if (args[0] === "rev-parse" && args[1] === "--verify") {
+          return { ok: true, code: 0, stdout: "source-sha\n", stderr: "", durationMs: 1 };
+        }
+        if (args[0] === "symbolic-ref") {
+          return { ok: true, code: 0, stdout: "main\n", stderr: "", durationMs: 1 };
+        }
+        if (args[0] === "show-ref") {
+          return { ok: true, code: 0, stdout: "", stderr: "", durationMs: 1 };
+        }
+        if (args[0] === "worktree" && args[1] === "add") {
+          worktreePath = args[3];
+          const gitDirName = path.basename(worktreePath);
+          await mkdir(worktreePath, { recursive: true });
+          await mkdir(path.join(repoRoot, ".git", "worktrees", gitDirName), { recursive: true });
+          await writeFile(path.join(worktreePath, ".git"), `gitdir: /workspace/.git/worktrees/${gitDirName}\n`, "utf8");
+          return { ok: true, code: 0, stdout: "", stderr: "", durationMs: 1 };
+        }
+        if (args.includes("merge")) {
+          const dotGit = await readFile(path.join(cwd, ".git"), "utf8");
+          expect(dotGit).not.toContain("/workspace/");
+          expect(dotGit).toContain("../../.git/worktrees/");
+          return { ok: true, code: 0, stdout: "", stderr: "", durationMs: 1 };
+        }
+        if (args[0] === "update-ref" || args[0] === "reset" || (args[0] === "worktree" && ["remove", "prune"].includes(args[1]))) {
+          return { ok: true, code: 0, stdout: "", stderr: "", durationMs: 1 };
+        }
+        throw new Error(`Unexpected git command in ${cwd}: ${args.join(" ")}`);
+      });
+
+      const result = await mergeBranchLocallyInTemporaryWorktree({
+        repoPath: repoRoot,
+        targetBranch: "main",
+        sourceBranch: "worker",
+        commitMessage: "Merge branch 'worker' into main",
+        runner,
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(result.ok).toBe(true);
+      expect(worktreePath).toContain("code-ux-local-merge-");
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
   });
 
   it("creates a missing unborn local default branch from the source branch", async () => {

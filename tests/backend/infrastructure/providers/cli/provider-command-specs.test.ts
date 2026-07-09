@@ -11,6 +11,7 @@ import type { CustomMcpServer } from "../../../../../src/contracts/app-types.js"
 describe("Provider Command Specs", () => {
   afterEach(() => {
     delete process.env[E2E_PROVIDER_CLI_SHIM_ENV];
+    delete process.env.CODEUX_E2E_NODE_EXECUTABLE;
   });
 
   describe("providerSpecs", () => {
@@ -156,9 +157,10 @@ describe("Provider Command Specs", () => {
 
     it("uses the guarded E2E provider shim for external CLI providers only when explicitly configured", () => {
       process.env[E2E_PROVIDER_CLI_SHIM_ENV] = "/tmp/codeux/mock-provider-cli.mjs";
+      process.env.CODEUX_E2E_NODE_EXECUTABLE = "/usr/local/bin/node";
 
       expect(providerSpecs["codex"]("gpt-4o", "hello")).toEqual({
-        command: process.execPath,
+        command: "/usr/local/bin/node",
         args: [
           "/tmp/codeux/mock-provider-cli.mjs",
           "--provider", "codex",
@@ -167,7 +169,7 @@ describe("Provider Command Specs", () => {
         ],
       });
       expect(providerSpecs["gemini"]("default", "hello")).toEqual({
-        command: process.execPath,
+        command: "/usr/local/bin/node",
         args: [
           "/tmp/codeux/mock-provider-cli.mjs",
           "--provider", "gemini",
@@ -177,7 +179,7 @@ describe("Provider Command Specs", () => {
       });
 
       expect(providerSpecs["claude-code"]("default", "hello", "xhigh")).toEqual({
-        command: process.execPath,
+        command: "/usr/local/bin/node",
         args: [
           "/tmp/codeux/mock-provider-cli.mjs",
           "--provider", "claude-code",

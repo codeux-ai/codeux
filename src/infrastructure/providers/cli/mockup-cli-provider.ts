@@ -427,7 +427,8 @@ export async function runMockupCliProvider(input: {
   onStderrLine?: (line: string) => void;
 }): Promise<CommandResult> {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, ["-e", MOCKUP_CLI_NODE_SCRIPT, input.prompt], {
+    const nodeExecutable = input.env.CODEUX_E2E_NODE_EXECUTABLE?.trim() || process.execPath;
+    const child = spawn(nodeExecutable, ["-e", MOCKUP_CLI_NODE_SCRIPT, input.prompt], {
       cwd: input.cwd,
       env: {
         ...input.env,
