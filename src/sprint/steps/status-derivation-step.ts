@@ -6,6 +6,8 @@ interface DeriveStatusOptions {
   retryFailed: boolean;
   isActionRequiredState: (state?: string) => boolean;
   githubMode?: "REMOTE" | "LOCAL";
+  localCliPushedTaskIds?: ReadonlySet<string>;
+  localCliSettledTaskIds?: ReadonlySet<string>;
 }
 
 export const runStatusDerivationStep = (subtasks: Subtask[], options: DeriveStatusOptions): Subtask[] => {

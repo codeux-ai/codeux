@@ -196,6 +196,63 @@ describe("evaluateSprintRunState", () => {
     expect(result.waitingOnWorkerAttention).toBe(true);
     expect(result.allFinished).toBe(false);
   });
+
+  it("keeps completed local CLI tasks with unresolved pushed git work from finalizing", () => {
+    const task = createDummySubtask({
+      id: "T1",
+      record_id: "task-record-1",
+      status: "COMPLETED",
+      session_state: "COMPLETED",
+      provider: "mockup-cli",
+      is_merged: false,
+      merge_indicator: undefined,
+      worker_branch: undefined,
+      pr_url: undefined,
+    });
+    const result = evaluateSprintRunState({
+      subtasks: [task],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+      activeProjectAttentionItems: [],
+      sprintRunId: "run-1",
+      githubMode: "LOCAL",
+      localCliPushedTaskIds: new Set(["task-record-1"]),
+      localCliSettledTaskIds: new Set(),
+    });
+
+    expect(result.mergeRequiredTasks.map((mergeTask) => mergeTask.id)).toEqual(["T1"]);
+    expect(result.noMoreActionPossible).toBe(false);
+    expect(result.allTerminal).toBe(false);
+    expect(result.allFinished).toBe(false);
+  });
+
+  it("allows completed local CLI tasks to finalize after pushed git work is settled", () => {
+    const task = createDummySubtask({
+      id: "T1",
+      record_id: "task-record-1",
+      status: "COMPLETED",
+      session_state: "COMPLETED",
+      provider: "mockup-cli",
+      is_merged: false,
+      merge_indicator: undefined,
+      worker_branch: undefined,
+      pr_url: undefined,
+    });
+    const result = evaluateSprintRunState({
+      subtasks: [task],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+      activeProjectAttentionItems: [],
+      sprintRunId: "run-1",
+      githubMode: "LOCAL",
+      localCliPushedTaskIds: new Set(["task-record-1"]),
+      localCliSettledTaskIds: new Set(["task-record-1"]),
+    });
+
+    expect(result.mergeRequiredTasks).toEqual([]);
+    expect(result.allTerminal).toBe(true);
+    expect(result.allFinished).toBe(true);
+  });
 });
 
 describe("isMainMergeAttentionItem", () => {

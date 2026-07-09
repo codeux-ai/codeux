@@ -107,6 +107,12 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
     openCodeBaselineRawUsageJson,
     workflowSettings: ctx.workflowSettings,
     repoPath: ctx.repoPath,
+    gitPolicy: {
+      githubMode: ctx.settings.git.githubMode,
+      defaultBranch: ctx.settings.git.defaultBranch,
+      githubToken: ctx.settings.git.githubToken,
+      gitlabToken: ctx.settings.git.gitlabToken,
+    },
     githubToken: ctx.deps.getGithubToken(),
     gitlabToken: ctx.settings.git.gitlabToken,
     signal: ctx.abortSignal,

@@ -108,16 +108,19 @@ If `pnpm run ci` is green, GitHub CI will be too (modulo platform-specific diffe
 
 ## CI pipeline (GitHub Actions)
 
-CI runs on Node 22 in `.github/workflows/`:
+The canonical automatic lane is `.github/workflows/ci.yml`, named `Code UX CI Pipeline`. During the CI refactor rollout it runs against `dev` and `main` so the main-grade lane can stabilize before the final trigger shape is tightened.
 
-1. Release Version Bump
-2. Typecheck & Lint
-3. Backend Tests & Coverage
-4. Dashboard Tests
-5. Build
-6. Security Audit
+It is staged as:
 
-A PR cannot be merged with red CI.
+1. `01 Preflight / release policy`: strict version bump gate for pull requests targeting `main`.
+2. `02` through `06`: type/guardrail validation, build, backend coverage, dashboard tests, and security audit.
+3. `07 Package`: npm tarball install smoke from the shared build artifact.
+4. `08 Orchestration`: Docker-backed mockup DAG validation from the shared build artifact.
+5. `09` and `10`: Linux full Playwright plus macOS/Windows smoke Playwright with bounded matrix parallelism.
+6. `11`: macOS/Windows Electron DAG orchestration.
+7. `12`: unsigned desktop release-candidate packages with `--publish never`.
+
+`Playwright Diagnostics`, `Release Candidate Diagnostics`, and `Mockup Sprint Diagnostics` are manual-only rerun workflows. A PR cannot be merged with red CI.
 
 ## Smoke test
 

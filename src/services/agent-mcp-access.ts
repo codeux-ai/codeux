@@ -27,6 +27,11 @@ const normalizeLinkedServerIds = (linkedServerIds: readonly string[] = []): stri
   new Set(linkedServerIds.filter((id) => typeof id === "string" && id.trim().length > 0).map((id) => id.trim())),
 );
 
+const dashboardReplyLinkedServerIds = (linkedServerIds: readonly string[] = []): string[] => normalizeLinkedServerIds([
+  DEFAULT_PLAYWRIGHT_MCP_SERVER_ID,
+  ...linkedServerIds,
+]);
+
 export const codeUxAgentMcpAccess = (linkedServerIds: readonly string[] = []): AgentMcpAccessConfig => ({
   codeUxEnabled: true,
   codeUxToolToggles: TOOL_DEFINITIONS.map((tool) => ({
@@ -59,14 +64,14 @@ export const schedulerOnlyAgentMcpAccess = (linkedServerIds: readonly string[] =
 
 export const dashboardReplyAgentMcpAccess = (access: AgentMcpAccessConfig | null | undefined): AgentMcpAccessConfig => {
   if (!access?.codeUxEnabled) {
-    return codeUxAgentMcpAccess(access?.linkedServerIds ?? []);
+    return codeUxAgentMcpAccess(dashboardReplyLinkedServerIds(access?.linkedServerIds));
   }
   const byName = new Map(access.codeUxToolToggles.map((toggle) => [toggle.name, toggle]));
   byName.set("scheduler_code_ux", { name: "scheduler_code_ux", enabled: true, isInternal: true });
   return {
     ...access,
     codeUxEnabled: true,
-    linkedServerIds: normalizeLinkedServerIds(access.linkedServerIds),
+    linkedServerIds: dashboardReplyLinkedServerIds(access.linkedServerIds),
     codeUxToolToggles: Array.from(byName.values()),
   };
 };

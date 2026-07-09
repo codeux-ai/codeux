@@ -12,6 +12,12 @@ import { CODE_UX_GIT_PATHSPEC_EXCLUDE, CODE_UX_REPO_DIR } from "./code-ux-gitign
 export type LocalMergeRunner = (command: string, args: string[], cwd: string) => Promise<CommandResult>;
 
 const defaultRunner: LocalMergeRunner = (command, args, cwd) => runCommandStrict(command, args, cwd);
+const defaultHostGitRunner: LocalMergeRunner = (command, args, cwd) => runCommandStrict(
+  command,
+  args,
+  cwd,
+  { ...process.env, CODE_UX_GIT_CONTAINER_MODE: "host" },
+);
 const CODE_UX_GIT_IDENTITY_ARGS = [
   "-c", "user.name=Code UX",
   "-c", "user.email=agents@codeux.ai",
@@ -331,6 +337,19 @@ async function gitRevListCount(
   }
 }
 
+async function gitResolveCommit(
+  repoPath: string,
+  ref: string,
+  runner: LocalMergeRunner,
+): Promise<string | null> {
+  try {
+    const res = await runner("git", ["rev-parse", "--verify", `${ref}^{commit}`], repoPath);
+    return res.stdout.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 function formatGitError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -428,7 +447,15 @@ async function normalizeTemporaryWorktreeGitMetadata(repoPath: string, worktreeP
     return;
   }
 
-  const gitDirName = path.basename(match[1].trim());
+  const rawGitDir = match[1].trim();
+  const currentGitDir = path.isAbsolute(rawGitDir)
+    ? rawGitDir
+    : path.resolve(worktreePath, rawGitDir);
+  if (existsSync(currentGitDir)) {
+    return;
+  }
+
+  const gitDirName = path.basename(rawGitDir);
   if (!gitDirName || gitDirName === "." || gitDirName === path.sep) {
     return;
   }
@@ -486,8 +513,16 @@ export async function workerBranchHasMergeWork(args: {
   }
 
   for (const sourceRef of existingSourceRefs) {
+    const sourceCommit = await gitResolveCommit(args.repoPath, sourceRef, runner);
+    if (!sourceCommit) {
+      continue;
+    }
     for (const baseRef of existingBaseRefs) {
-      if ((await gitRevListCount(args.repoPath, `${baseRef}..${sourceRef}`, runner)) > 0) {
+      const baseCommit = await gitResolveCommit(args.repoPath, baseRef, runner);
+      if (!baseCommit) {
+        continue;
+      }
+      if ((await gitRevListCount(args.repoPath, `${baseCommit}..${sourceCommit}`, runner)) > 0) {
         return true;
       }
     }
@@ -614,7 +649,7 @@ export async function mergeBranchLocallyInTemporaryWorktree(args: {
   fallbackTargetBranches?: string[];
   runner?: LocalMergeRunner;
 }): Promise<LocalMergeResult> {
-  const runner = args.runner ?? defaultRunner;
+  const runner = args.runner ?? defaultHostGitRunner;
   const targetBranch = args.targetBranch.trim();
   const sourceBranch = args.sourceBranch.trim();
   if (!targetBranch) {

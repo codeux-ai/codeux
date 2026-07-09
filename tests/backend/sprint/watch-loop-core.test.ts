@@ -42,6 +42,7 @@ const buildDeps = () => ({
     appendSprintRunEvent: vi.fn(),
     finalizeSprintRunCancellationIfIdle: vi.fn().mockReturnValue(null),
     getSprintRun: vi.fn().mockReturnValue({ status: "running" }),
+    getLatestTaskRun: vi.fn().mockReturnValue(null),
     listTaskDispatches: vi.fn().mockReturnValue([]),
     getTaskRunByDispatchId: vi.fn().mockReturnValue(null),
     listTaskRunEvents: vi.fn().mockReturnValue([]),
@@ -320,6 +321,111 @@ describe("WatchLoopRunner", () => {
       sprintRunId: "run-1",
     });
 
+    expect(result).toContain("Sprint Execution Finished");
+    nowSpy.mockRestore();
+  });
+
+  it("keeps LOCAL CLI runs alive for another cycle when completed rows still have unresolved pushed git work", async () => {
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    const nowSpy = vi.spyOn(Date, "now");
+    nowSpy.mockReturnValueOnce(0).mockReturnValue(1000);
+
+    deps.renderInstruction.mockImplementation(async (id) => {
+      if (id === "watchHeader") return "HEADER";
+      if (id === "cleanupAllMerged") return "CLEANUP_MERGED";
+      return "";
+    });
+    deps.executionRepository.getLatestTaskRun.mockReturnValue({
+      id: "task-run-1",
+      provider: "mockup-cli",
+      mode: "docker_cli",
+      sessionId: "cli-task-run-1",
+      state: "COMPLETED",
+      workerBranch: null,
+    });
+    deps.executionRepository.listTaskRunEvents.mockReturnValue([
+      { eventType: "cli_git_pushed", payload: { pushedBranch: "task/feature-t1-mockup" } },
+    ]);
+
+    cycleRunner.run
+      .mockResolvedValueOnce({
+        subtasks: [buildMockSubtask({
+          id: "T1",
+          record_id: "task-record-1",
+          status: "COMPLETED",
+          session_state: "COMPLETED",
+          provider: "mockup-cli",
+          is_merged: false,
+          merge_indicator: undefined,
+          worker_branch: undefined,
+          pr_url: undefined,
+        })],
+        reportText: "REPORT_UNSETTLED",
+        statusTable: "TABLE_UNSETTLED",
+        instructions: "INST_UNSETTLED",
+        awaitingMerge: [],
+        manualMergeTasks: [],
+        workerEscalatedMergeConflictTasks: [],
+      })
+      .mockResolvedValueOnce({
+        subtasks: [buildMockSubtask({
+          id: "T1",
+          record_id: "task-record-1",
+          status: "COMPLETED",
+          session_state: "COMPLETED",
+          provider: "mockup-cli",
+          is_merged: true,
+          merge_indicator: "MERGED",
+          worker_branch: undefined,
+          pr_url: undefined,
+        })],
+        reportText: "REPORT_SETTLED",
+        statusTable: "TABLE_SETTLED",
+        instructions: "INST_SETTLED",
+        awaitingMerge: [],
+        manualMergeTasks: [],
+        workerEscalatedMergeConflictTasks: [],
+      });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn().mockResolvedValue({
+      text: "",
+      state: "ready_for_merge",
+      prNumber: null,
+      prUrl: null,
+      hasMergeConflict: false,
+      mergeStateStatus: null,
+      hasFailedChecks: false,
+      hasPendingChecks: false,
+      hasReviewBlockers: false,
+      failedChecks: [],
+    }));
+
+    const result = await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 0.01 } as any,
+      ciIntelligence: {} as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+    });
+
+    expect(cycleRunner.run).toHaveBeenCalledTimes(2);
     expect(result).toContain("Sprint Execution Finished");
     nowSpy.mockRestore();
   });
@@ -1494,20 +1600,25 @@ describe("WatchLoopRunner", () => {
       sprintRunId: "run-1",
     });
 
+    const hostGitEnv = expect.objectContaining({ CODE_UX_GIT_CONTAINER_MODE: "host" });
+
     expect(runCommandStrict).toHaveBeenCalledWith(
       "git",
       [...CODE_UX_GIT_IDENTITY_PREFIX, "merge", "--no-ff", "-m", "Merge branch 'feature/sprint-1' into main", "feature/sprint-1"],
       expect.stringContaining("code-ux-local-merge-"),
+      hostGitEnv,
     );
     expect(runCommandStrict).toHaveBeenCalledWith(
       "git",
       ["worktree", "add", "--detach", expect.stringContaining("code-ux-local-merge-"), "main"],
       "/tmp/local-only",
+      hostGitEnv,
     );
     expect(runCommandStrict).toHaveBeenCalledWith(
       "git",
       ["update-ref", "refs/heads/main", "HEAD"],
       expect.stringContaining("code-ux-local-merge-"),
+      hostGitEnv,
     );
     expect(runCommandStrict).not.toHaveBeenCalledWith("git", ["checkout", "main"], "/tmp/local-only");
     expect(runCommandStrict).not.toHaveBeenCalledWith("git", ["checkout", "user/topic"], "/tmp/local-only");

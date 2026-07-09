@@ -73,10 +73,10 @@ export class WorkspaceArtifactService {
   constructor(private readonly workspaceManager: IWorkspaceManager) {}
 
   async exportBinaryPatch(workspaceRef: string, baseRef: string): Promise<string> {
-    // Pathspecs shared by intent-to-add staging and the final diff. Keeping them
-    // in sync matters: the temporary index asks Git to discover untracked files
-    // internally, so Code UX never has to pass a large untracked path list
-    // through Docker argv.
+    // Stage the workspace tree into an isolated index and diff that index
+    // against the base. Git still owns discovery of new, modified, and deleted
+    // files, including ignore handling, while Code UX avoids passing a large
+    // changed-path list through Docker argv.
     const excludePathspecs = [
       `:(exclude)${LEARNINGS_FILENAME}`,
       TEMP_EXPORT_PATHSPEC,
@@ -87,7 +87,10 @@ export class WorkspaceArtifactService {
       ":(exclude,glob)**/logs/openai/**",
       ":(exclude,glob)logs/openai/**",
     ];
-    const tempIndexPath = `.code-ux-export-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.index`;
+    const tempIndexFilename = `.code-ux-export-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.index`;
+    const tempIndexPath = workspaceRef.startsWith("docker-volume://") || !path.isAbsolute(workspaceRef)
+      ? tempIndexFilename
+      : path.join(workspaceRef, tempIndexFilename);
     const tempIndexEnv = {
       ...process.env,
       GIT_INDEX_FILE: tempIndexPath,
@@ -102,34 +105,37 @@ export class WorkspaceArtifactService {
         ["read-tree", "HEAD"],
         { env: tempIndexEnv },
       );
-      const untracked = await this.workspaceManager.runWorkspaceCommand(
+      const changedPaths = await this.workspaceManager.runWorkspaceCommand(
         workspaceRef,
         "git",
-        ["ls-files", "--others", "--exclude-standard", "-z", "--", ...pathspecs],
+        ["ls-files", "--modified", "--deleted", "--others", "--exclude-standard", "-z", "--", ...pathspecs],
         { env: tempIndexEnv, trimOutput: false },
       );
-      if (untracked.stdout.length > 0) {
-        await fs.writeFile(tempPathListPath, untracked.stdout, "utf8");
+      if (changedPaths.stdout.length > 0) {
+        await fs.writeFile(tempPathListPath, changedPaths.stdout, "utf8");
         await this.workspaceManager.runWorkspaceCommand(
           workspaceRef,
           "git",
-          ["add", "--intent-to-add", "--pathspec-from-file=-", "--pathspec-file-nul"],
+          ["add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul"],
           { env: tempIndexEnv, stdinFile: tempPathListPath },
         );
       }
       const result = await this.workspaceManager.runWorkspaceCommand(
         workspaceRef,
         "git",
-        ["diff", "--binary", baseRef, "--", ...pathspecs],
+        ["diff", "--binary", "--cached", baseRef, "--", ...pathspecs],
         { env: tempIndexEnv, trimOutput: false },
       );
       return result.stdout;
     } finally {
       await fs.rm(tempPathListPath, { force: true }).catch(() => undefined);
       if (workspaceRef.startsWith("docker-volume://")) {
-        await this.workspaceManager.runWorkspaceCommand(workspaceRef, "rm", ["-f", tempIndexPath]).catch(() => undefined);
+        await this.workspaceManager.runWorkspaceCommand(workspaceRef, "rm", ["-f", tempIndexFilename]).catch(() => undefined);
       } else {
-        await fs.rm(path.join(workspaceRef, tempIndexPath), { force: true }).catch(() => undefined);
+        const hostTempIndexPath = path.isAbsolute(tempIndexPath)
+          ? tempIndexPath
+          : path.join(workspaceRef, tempIndexPath);
+        await fs.rm(hostTempIndexPath, { force: true }).catch(() => undefined);
       }
     }
   }

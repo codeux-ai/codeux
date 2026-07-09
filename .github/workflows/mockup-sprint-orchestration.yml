@@ -1,14 +1,10 @@
-name: Mockup Sprint Orchestration
+name: Mockup Sprint Diagnostics
 
 on:
-  push:
-    branches: [main, dev]
-  pull_request:
-    branches: [main, dev]
   workflow_dispatch:
 
 concurrency:
-  group: mockup-sprint-orchestration-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: mockup-sprint-diagnostics-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -18,6 +14,7 @@ jobs:
   ci-dag:
     name: CI DAG
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -39,13 +36,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      - name: Build runtime for CI DAG
+        run: pnpm run build
+
       - name: Run CI DAG orchestration validation
-        run: pnpm run test:orchestration:ci-dag
+        run: pnpm run test:orchestration:ci-dag:run
 
   electron-ci-dag:
     name: Electron CI DAG (${{ matrix.name }})
-    if: github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
 
     strategy:
       fail-fast: false
@@ -59,6 +59,7 @@ jobs:
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
       GH_TOKEN: ""
+      electron_config_cache: ${{ github.workspace }}/.cache/electron-downloads
 
     steps:
       - name: Checkout
@@ -77,7 +78,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
-      - name: Restore Electron DAG caches
+      - name: Restore Electron DAG build caches
         uses: actions/cache@v5
         with:
           path: |
@@ -85,19 +86,27 @@ jobs:
             .cache/vitest
             .cache/tsc
             .cache/electron-runtime
-            ~/.cache/electron
-            ~/.cache/electron-builder
-            ~/AppData/Local/electron/Cache
-            ~/AppData/Local/electron-builder/Cache
-            ~/Library/Caches/electron
-            ~/Library/Caches/electron-builder
           key: ${{ runner.os }}-node22-pnpm10.33.0-electron-ci-dag-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'tsconfig.json', 'dashboard/tsconfig.json', 'electron-builder.config.cjs', 'scripts/e2e/run-mockup-sprint-pentest.mjs', 'scripts/e2e/mockup-sprint-pentest-scenarios.mjs', 'scripts/prepare-electron-runtime-deps.mjs') }}
+
+      - name: Restore Electron binary cache
+        uses: actions/cache@v5
+        with:
+          path: .cache/electron-downloads
+          key: ${{ runner.os }}-node22-pnpm10.33.0-electron-binary-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-node22-pnpm10.33.0-electron-binary-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      - name: Install Electron binary from cache
+        run: node node_modules/electron/install.js
+
       - name: Rebuild Electron native dependencies
         run: pnpm run electron:install-deps
 
+      - name: Build runtime for Electron CI DAG
+        run: pnpm run build
+
       - name: Run Electron CI DAG orchestration validation
-        run: pnpm run test:orchestration:ci-dag:electron
+        run: pnpm run test:orchestration:ci-dag:electron:run

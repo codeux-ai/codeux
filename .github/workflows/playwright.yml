@@ -1,21 +1,23 @@
-name: Playwright Tests
+name: Playwright Diagnostics
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 concurrency:
-  group: playwright-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: playwright-diagnostics-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PLAYWRIGHT_BROWSERS_PATH: .cache/ms-playwright
 
 jobs:
   build:
-    name: Build compiled app (${{ matrix.os.label }})
+    name: Diagnostic build (${{ matrix.os.label }})
     runs-on: ${{ matrix.os.runner }}
-    permissions:
-      contents: read
+    timeout-minutes: 12
     strategy:
       fail-fast: false
       matrix:
@@ -27,65 +29,52 @@ jobs:
           - runner: windows-latest
             label: Windows
     steps:
-      - name: Checkout repository for ${{ matrix.os.label }} build
+      - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up pnpm 10.33.0 for ${{ matrix.os.label }} build
+      - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
           version: 10.33.0
           run_install: false
 
-      - name: Set up Node.js 22 for ${{ matrix.os.label }} build
+      - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
           node-version: 22
           package-manager-cache: false
 
-      - name: Restore node_modules cache for ${{ matrix.os.label }} build
+      - name: Restore node_modules cache
         if: runner.os != 'Windows'
-        id: node-modules-cache-build
         uses: actions/cache@v5
         with:
           path: node_modules
           key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
 
-      - name: Install dependencies for ${{ matrix.os.label }} build
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Restore Vite cache for ${{ matrix.os.label }} build
-        uses: actions/cache@v5
-        with:
-          path: .cache/vite
-          key: ${{ runner.os }}-node22-pnpm10.33.0-vite-e2e-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'tsconfig.json', 'dashboard/tsconfig.json') }}
-
-      - name: Build server & dashboard (${{ matrix.os.label }})
+      - name: Build server and dashboard
         run: pnpm run build
 
-      - name: Verify compiled CLI exists after ${{ matrix.os.label }} build
-        shell: bash
-        run: test -f dist/index.js
-
-      - name: Upload compiled app artifact for ${{ matrix.os.label }}
+      - name: Upload compiled app artifact
         uses: actions/upload-artifact@v4
         with:
-          name: codeux-build-${{ matrix.os.runner }}
+          name: playwright-diagnostic-build-${{ matrix.os.runner }}
           path: |
             dist/
             dashboard/dist/
-            .cache/tsc/
           if-no-files-found: error
-          include-hidden-files: true
           retention-days: 1
 
   test:
-    name: Playwright E2E (${{ matrix.os.label }} / ${{ matrix.project.name }})
+    name: Diagnostic E2E (${{ matrix.os.label }} / ${{ matrix.project }})
     needs: build
     runs-on: ${{ matrix.os.runner }}
-    permissions:
-      contents: read
+    timeout-minutes: 15
     strategy:
       fail-fast: false
+      max-parallel: 6
       matrix:
         os:
           - runner: ubuntu-latest
@@ -94,139 +83,64 @@ jobs:
             label: macOS
           - runner: windows-latest
             label: Windows
-        project:
-          - name: navigation
-            label: navigation
-          - name: settings
-            label: settings
-          - name: projects
-            label: projects
-          - name: tasks
-            label: tasks
-          - name: agents
-            label: agents
-          - name: config
-            label: config
-    env:
-      PLAYWRIGHT_BROWSERS_PATH: .cache/ms-playwright
+        project: [navigation, settings, projects, tasks, agents, config]
     steps:
-      - name: Checkout repository for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E
+      - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up pnpm 10.33.0 for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E
+      - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
           version: 10.33.0
           run_install: false
 
-      - name: Set up Node.js 22 for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E
+      - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
           node-version: 22
           package-manager-cache: false
 
-      - name: Restore node_modules cache for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E
+      - name: Restore node_modules cache
         if: runner.os != 'Windows'
-        id: node-modules-cache-e2e
         uses: actions/cache@v5
         with:
           path: node_modules
           key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
 
-      - name: Install dependencies for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Download compiled app artifact for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E
+      - name: Download compiled app artifact
         uses: actions/download-artifact@v5
         with:
-          name: codeux-build-${{ matrix.os.runner }}
+          name: playwright-diagnostic-build-${{ matrix.os.runner }}
           path: .
 
-      - name: Verify restored compiled CLI for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E
-        shell: bash
-        run: test -f dist/index.js
-
-      - name: Cache Playwright browser binaries for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E
+      - name: Cache Playwright browser binaries
         uses: actions/cache@v5
-        id: playwright-browser-cache
         with:
           path: .cache/ms-playwright
           key: ${{ runner.os }}-node22-pnpm10.33.0-playwright-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
           restore-keys: |
             ${{ runner.os }}-node22-pnpm10.33.0-playwright-
 
-      - name: Install Playwright OS dependencies for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E
+      - name: Install Playwright OS dependencies
         if: runner.os == 'Linux'
         run: pnpm exec playwright install-deps chromium
 
-      - name: Install Playwright Chromium for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E
+      - name: Install Playwright Chromium
         run: pnpm exec playwright install chromium
 
-      - name: Run E2E - ${{ matrix.project.label }} group on ${{ matrix.os.label }}
-        run: pnpm exec playwright test --project=${{ matrix.project.name }}
+      - name: Run Playwright project
+        run: pnpm exec playwright test --project=${{ matrix.project }}
 
-      - name: Upload Playwright artifacts for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E
+      - name: Upload Playwright artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-artifacts-${{ matrix.os.runner }}-${{ matrix.project.name }}
+          name: playwright-diagnostic-${{ matrix.os.runner }}-${{ matrix.project }}
           path: |
             test-results/
             playwright-report/
           if-no-files-found: ignore
           retention-days: 7
-
-  npm-package:
-    name: Verify packed npm package
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository for npm package verification
-        uses: actions/checkout@v6
-
-      - name: Set up pnpm 10.33.0 for npm package verification
-        uses: pnpm/action-setup@v6
-        with:
-          version: 10.33.0
-          run_install: false
-
-      - name: Set up Node.js 22 for npm package verification
-        uses: actions/setup-node@v5
-        with:
-          node-version: 22
-          package-manager-cache: false
-
-      - name: Restore node_modules cache for npm package verification
-        id: node-modules-cache-npm-package
-        uses: actions/cache@v5
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
-
-      - name: Install dependencies for npm package verification
-        run: pnpm install --frozen-lockfile --ignore-scripts
-
-      - name: Restore Vite cache for npm package verification
-        uses: actions/cache@v5
-        with:
-          path: .cache/vite
-          key: ${{ runner.os }}-node22-pnpm10.33.0-vite-e2e-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'tsconfig.json', 'dashboard/tsconfig.json') }}
-
-      - name: Pack npm tarball from source package
-        shell: bash
-        run: |
-          rm -rf .cache/npm-package .cache/npm-install-smoke
-          mkdir -p .cache/npm-package .cache/npm-install-smoke
-          pnpm pack --pack-destination .cache/npm-package
-
-      - name: Install packed tarball into clean smoke project
-        shell: bash
-        run: |
-          printf '{"private":true,"type":"module"}\n' > .cache/npm-install-smoke/package.json
-          cd .cache/npm-install-smoke
-          pnpm add ../npm-package/*.tgz
-
-      - name: Verify npm-installed CLI
-        shell: bash
-        run: node .cache/npm-install-smoke/node_modules/@codeuxai/codeux/dist/index.js --help

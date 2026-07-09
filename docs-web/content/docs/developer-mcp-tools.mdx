@@ -26,7 +26,8 @@ Agent-scoped provider runs are also default-deny for built-in Code UX tools. New
 Project manager, and generated coding agents may link the default `playwright` custom MCP server,
 but that custom-server link does not imply `code_ux` access. The dashboard chat reply route is the
 only default exception: when the reply agent has no explicit MCP access, Code UX enables the full
-built-in management surface plus the restricted `scheduler_code_ux` tool for that dashboard chat turn.
+built-in management surface, the restricted `scheduler_code_ux` tool, and the default Playwright MCP
+server for that dashboard chat turn.
 
 All inputs are validated against their declared JSON Schema (AJV) before dispatch; validation
 failures return `InvalidParams` with the failing JSON path.

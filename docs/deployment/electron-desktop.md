@@ -116,15 +116,15 @@ The release workflow caches pnpm downloads, TypeScript/Vite caches, Electron dow
 
 Use this workflow for published desktop releases. It is the lane that attaches generated installers/packages to a GitHub Release when the release event is published.
 
-## Main PR Release Checks
+## CI Release Candidate Packages
 
-The no-secret release validation lane is `.github/workflows/release-checks.yml`. It runs on pull requests targeting `main` and manual `workflow_dispatch` starts, using native `ubuntu-latest`, `macos-latest`, and `windows-latest` runners.
+The no-secret release-candidate package lane is part of `.github/workflows/ci.yml`, named `Code UX CI Pipeline`. During the dev-first rollout it runs on `dev` and `main` validation so the full desktop package proof can stabilize before the final trigger shape is tightened.
 
-Each matrix job installs with pnpm 10.33.0 on Node 22, runs `pnpm run build`, runs `node scripts/verify-release-install.mjs`, rebuilds Electron native dependencies, then builds the current platform desktop package with the matching `electron:dist:*` script. The verifier builds the workspace, creates a local npm tarball with `npm pack --ignore-scripts`, installs that tarball into an isolated temporary npm project, verifies the local `node_modules/.bin/codeux` shim exists, and runs the installed package's `codeux --help` bin target directly through Node so npm never resolves an unscoped registry package. On Windows runners, it resolves npm and pnpm shims to Node-run CLI entrypoints when possible to avoid shell-specific command shim failures.
+The `12 Release Candidate / desktop package` matrix downloads the shared `codeux-build-linux` artifact, installs the cached Electron binary, rebuilds Electron native dependencies, prepares runtime assets, and runs Electron Builder directly with `--linux`, `--mac`, or `--win` plus `--publish never`. The package smoke job that precedes it runs `node scripts/verify-release-install.mjs` with `CODE_UX_SKIP_RELEASE_INSTALL_BUILD=1`, so the npm tarball install check uses the same compiled artifact instead of rebuilding.
 
-Release checks set `CSC_IDENTITY_AUTO_DISCOVERY=false` for unsigned Electron packaging and pass `--publish never` to Electron Builder. They do not require provider API keys, npm publishing credentials, Docker credentials, GitHub Release events, or real project state. When Electron output exists, the workflow uploads files from `release/electron/` as workflow artifacts only; it does not publish to npm or attach files to a GitHub Release.
+Release-candidate packaging sets `CSC_IDENTITY_AUTO_DISCOVERY=false` for unsigned Electron packaging and passes `--publish never` to Electron Builder. It does not require provider API keys, npm publishing credentials, Docker credentials, GitHub Release events, or real project state. When Electron output exists, the workflow uploads files from `release/electron/` as workflow artifacts only; it does not publish to npm or attach files to a GitHub Release.
 
-This lane validates desktop package creation before code reaches `main`; it is not the publishing lane. Treat its artifacts as CI evidence for installability and package generation, while `.github/workflows/desktop-release.yml` remains the source for release-attached desktop builds.
+This lane validates desktop package creation before code reaches `main`; it is not the publishing lane. Treat its artifacts as CI evidence for installability and package generation. `.github/workflows/release.yml` is the source for npm publishing and release-attached desktop builds after a GitHub Release is published. `.github/workflows/desktop-release.yml` remains as `Desktop Release Diagnostics`, an artifact-only manual rebuild path that cannot mutate a GitHub Release.
 
 Developers can reproduce the main-PR desktop package portion locally with:
 

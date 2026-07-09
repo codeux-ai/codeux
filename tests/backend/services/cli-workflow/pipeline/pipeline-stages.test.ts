@@ -420,6 +420,14 @@ describe("executeProviderStage", () => {
     vi.mocked(ctx.providerRunner.runProvider).mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "fatal provider error", usageTelemetry: { transcriptText: "error transcript", inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, usageSource: "estimated", rawUsageJson: "{}" } as any });
 
     await expect(executeProviderStage(ctx, "prompt")).rejects.toThrow("fatal provider error");
+    expect(ctx.providerRunner.runProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gitPolicy: expect.objectContaining({
+          githubMode: "LOCAL",
+          defaultBranch: "main",
+        }),
+      }),
+    );
     expect(ctx.deps.executionRepository?.createExecutionInvocation).toHaveBeenCalled();
     expect(ctx.deps.executionRepository?.appendExecutionInvocationMessage).toHaveBeenCalledWith("exec-1", {
       role: "user",
