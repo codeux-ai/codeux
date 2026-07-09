@@ -344,6 +344,10 @@ done
 
 For leak-focused diagnostics, collect heap snapshots around stable checkpoints with Node inspector or `SIGUSR2` if the active runtime was started with heap-snapshot support. Compare memory after startup, after first task completion, after final merge, and after cleanup. A passing profile returns near its post-start steady state after Docker worktrees, provider watchers, preview sessions, and memory-promotion jobs settle.
 
+## Local Branch Merge Drain
+
+The orchestrator performs a final branch-only merge drain immediately before rendering merge protocol instructions during an `orchestrate` cycle. This handles fast local CLI tasks that finish and push a worker branch after the earlier merge-gate snapshot but before protocol handling. If the CI DAG artifact shows a task stuck at `coding_completed` with `mergeIndicator: null`, a `cli_git_pushed` event, and a later `protocol_merge_required` event, inspect this final drain before increasing stall timeouts or rerunning blindly.
+
 ## Exit Criteria
 
 Treat an orchestration fix as ready only when:
