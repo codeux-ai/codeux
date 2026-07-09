@@ -274,6 +274,17 @@ afterEach(() => {
   } as any);
 });
 
+const getTokenizedCardForText = (text: string): HTMLElement => {
+  let current = screen.getByText(text).parentElement;
+  while (current) {
+    if (current.className.includes("bg-[var(--surface-glass)]")) {
+      return current;
+    }
+    current = current.parentElement;
+  }
+  throw new Error(`No tokenized card found for ${text}`);
+};
+
 describe("BrowserPage", () => {
   afterEach(() => {
     vi.mocked(useProjectData).mockReturnValue({
@@ -405,7 +416,11 @@ describe("BrowserPage", () => {
     render(<BrowserPage />);
 
     const disabledMessage = screen.getByText("Preview runtime is disabled.");
-    expect(disabledMessage.closest('[role="status"]')).toBeInTheDocument();
+    const disabledStatus = disabledMessage.closest('[role="status"]');
+    expect(disabledStatus).toBeInTheDocument();
+    expect(screen.queryByTestId("browser-main-tool-panel")).not.toBeInTheDocument();
+    const firstSliderLink = screen.getAllByText("Open Link")[0];
+    expect(((disabledStatus as HTMLElement).compareDocumentPosition(firstSliderLink) & Node.DOCUMENT_POSITION_FOLLOWING)).not.toBe(0);
   });
 
   afterEach(() => {
@@ -448,11 +463,19 @@ describe("BrowserPage", () => {
     expect(screen.getByText("Selected Sprint")).toBeInTheDocument();
     expect(screen.getAllByText("Launch Container").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Open Link").length).toBeGreaterThan(0);
+    const firstSliderLink = screen.getAllByText("Open Link")[0];
+    expect((mainPanel.compareDocumentPosition(firstSliderLink) & Node.DOCUMENT_POSITION_FOLLOWING)).not.toBe(0);
 
     const iframe = container.querySelector("iframe");
     expect(iframe).toBeInTheDocument();
     const selectedSprintLabel = screen.getByText("Selected Sprint");
     expect((iframe?.compareDocumentPosition(selectedSprintLabel) || 0) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    for (const heading of ["Selected Sprint", "Environment", "Runtime notes", "Container logs"]) {
+      const card = getTokenizedCardForText(heading);
+      expect(card.className).toContain("border-[color:var(--border-hairline)]");
+      expect(card.className).toContain("bg-[var(--surface-glass)]");
+      expect(card.className).toContain("shadow-[var(--elevation-base)]");
+    }
 
     expect(container.innerHTML).not.toContain("#f5f1e8");
     expect(container.innerHTML).not.toContain("#f7f3ea");
@@ -470,6 +493,10 @@ describe("BrowserPage", () => {
     });
 
     expect(vi.mocked(fetchPreviewScript)).toHaveBeenCalledWith("p1", "s1");
+    const editorCard = getTokenizedCardForText("Startup script");
+    expect(editorCard.className).toContain("border-[color:var(--border-hairline)]");
+    expect(editorCard.className).toContain("bg-[var(--surface-glass)]");
+    expect(editorCard.className).toContain("shadow-[var(--elevation-base)]");
   });
 
   it("shows log loading feedback without hiding stale preview content", async () => {
