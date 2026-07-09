@@ -236,6 +236,8 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 
 | Method | Path | Description |
 | --- | --- | --- |
+| `GET` | `/api/local-directories?path=` | List child directories for the local Add Project picker. Allowed roots are canonicalized, requested paths are validated inside those roots, and symlink segments are rejected, so equivalent host spellings such as macOS `/var` and `/private/var` map to the same allowed directory. |
+| `GET` | `/api/local-files?path=` | List child directories and file names for trusted local file picking; file contents are not returned. Uses the same allowed-root and symlink-segment access check as `/api/local-directories`. |
 | `GET` | `/api/projects/:projectId/file-browser/sessions` | List file-browser sessions. |
 | `POST` | `/api/projects/:projectId/sprints/:sprintId/file-browser/start` | Start a session for a sprint. |
 | `POST` | `/api/file-browser/sessions/:sessionId/rebuild` | Rebuild a session. |

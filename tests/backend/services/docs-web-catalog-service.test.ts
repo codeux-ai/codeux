@@ -49,6 +49,18 @@ describe("DocsWebCatalogService", () => {
     expect(doc?.contentMarkdown).toContain("[Dashboard](./dashboard/overview.md)");
   });
 
+  it("removes complete script elements and escapes malformed tags from descriptions", () => {
+    fs.writeFileSync(
+      path.join(tempDir, "user", "unsafe.md"),
+      "# Unsafe\n\nKeep <strong>text</strong> <script>alert(1)</script> and <script",
+    );
+    const service = new DocsWebCatalogService(tempDir);
+    const doc = service.getDocument("user-unsafe");
+
+    expect(doc?.description).toBe("Keep text  and ");
+    expect(doc?.description).not.toContain("<script");
+  });
+
   it("returns null for unknown documents", () => {
     const service = new DocsWebCatalogService(tempDir);
 

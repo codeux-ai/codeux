@@ -3,6 +3,7 @@ import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute } from "./route-utils.js";
 import { requireTrimmedString } from "./request-parsers.js";
 import type { CreateAgentPresetInput, PushAgentPresetsToMarkdownOptions, UpdateAgentPresetInput } from "../contracts/agent-preset-types.js";
+import type { CreateSkillStorageInput } from "../contracts/skill-types.js";
 
 export function registerAgentPresetRoutes(router: Express, deps: DashboardDependencies): void {
   router.get("/api/projects/:projectId/agent-presets", asyncRoute(async (req, res) => {
@@ -81,4 +82,32 @@ export function registerAgentPresetRoutes(router: Express, deps: DashboardDepend
       branchName: body.branchName,
     }));
   }));
+
+  router.get("/api/projects/:projectId/skill-storages", asyncRoute(async (req, res) => {
+    const skillService = requireSkillService(deps);
+    res.json(skillService.listStorages(requireTrimmedString(req.params.projectId, "projectId")));
+  }));
+
+  router.post("/api/projects/:projectId/skill-storages", asyncRoute(async (req, res) => {
+    const skillService = requireSkillService(deps);
+    const projectId = requireTrimmedString(req.params.projectId, "projectId");
+    const body = req.body as CreateSkillStorageInput;
+    res.status(201).json(skillService.createStorage(projectId, body));
+  }));
+
+  router.delete("/api/projects/:projectId/skill-storages/:storageId", asyncRoute(async (req, res) => {
+    const skillService = requireSkillService(deps);
+    skillService.deleteStorage(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      requireTrimmedString(req.params.storageId, "storageId"),
+    );
+    res.json({ ok: true });
+  }));
+}
+
+function requireSkillService(deps: DashboardDependencies): NonNullable<DashboardDependencies["skillService"]> {
+  if (!deps.skillService) {
+    throw new Error("Persistent skill storage is unavailable.");
+  }
+  return deps.skillService;
 }

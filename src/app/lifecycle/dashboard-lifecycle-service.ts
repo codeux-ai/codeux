@@ -67,6 +67,7 @@ import type { EmbeddingService } from "../../services/embedding-service.js";
 import type { MemoryRepository } from "../../repositories/memory-repository.js";
 import type { CustomDashboardRepository } from "../../repositories/custom-dashboard-repository.js";
 import type { CustomDashboardValidationService } from "../../services/custom-dashboard-validation-service.js";
+import type { SkillService } from "../../services/skill-service.js";
 import type { GuardrailService } from "../../services/guardrail-service.js";
 import type { ProjectSettings } from "../../contracts/settings-scope-types.js";
 import { UpdateCheckerService } from "../../services/update-checker-service.js";
@@ -131,6 +132,7 @@ export interface BootDashboardDeps {
   nodeFlowService?: NodeFlowService;
   customDashboardRepository?: CustomDashboardRepository;
   customDashboardValidationService?: CustomDashboardValidationService;
+  skillService: SkillService;
   dashboardRealtimeService: DashboardRealtimeService;
   logger: Logger;
   getLiveActivitiesForActiveTasks: () => Promise<Record<string, JulesActivity[]>>;
@@ -452,6 +454,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     nodeFlowService: deps.nodeFlowService,
     customDashboardRepository: deps.customDashboardRepository,
     customDashboardValidationService: deps.customDashboardValidationService,
+    skillService: deps.skillService,
     projectManagementRepository: deps.projectManagementRepository,
     executionRepository: deps.executionRepository,
     getLiveSnapshot: (projectIdHint) => getProjectLiveSnapshot({

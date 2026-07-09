@@ -231,6 +231,24 @@ describe("CustomDashboardValidationService", () => {
     expect(logs.logs).toContain("vite preview ready");
   });
 
+  it("rejects malformed or oversized proxy request bodies before forwarding", async () => {
+    const { service } = await createFixture();
+
+    await expect(service.proxyValidationRequest({
+      sessionId: "validation-session",
+      method: "POST",
+      path: "/api/test",
+      bodyBytes: "not-a-buffer" as unknown as Buffer,
+    })).rejects.toThrow("Request body must be a Buffer");
+
+    await expect(service.proxyValidationRequest({
+      sessionId: "validation-session",
+      method: "POST",
+      path: "/api/test",
+      bodyBytes: Buffer.alloc((5 * 1024 * 1024) + 1),
+    })).rejects.toThrow("Request body exceeds maximum allowed size");
+  });
+
   it("stops and removes validation sessions without invalidating passed revisions", async () => {
     const { dashboards, service, projectId, dashboardId, revisionId } = await createFixture();
     const session = await service.startValidation(projectId, dashboardId, revisionId);

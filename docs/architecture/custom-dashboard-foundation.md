@@ -48,6 +48,7 @@ Publishing rejects unvalidated, failed, cancelled, or cross-dashboard revisions.
 Validation flow:
 
 - `startValidation(projectId, dashboardId, revisionId)` creates a validation session, materializes the immutable revision bundle under `.code-ux/runtime/custom-dashboards/<dashboardId>/<revisionId>/workspace`, and writes a generated Vite/Preact harness.
+- Validation runtime paths are canonicalized under the selected project before filesystem reads or writes, including bundle materialization, logs, and persisted viewer artifacts.
 - The harness injects a read-only Code UX data bridge containing the revision manifest, source node graph, styleguide, runtime metadata, integrations, and declared `external_api` nodes.
 - The service runs install/build inside Docker using the resolved `cliWorkflow.containerImage`, then creates and starts a detached serving container on an allocated localhost port.
 - A validation session is marked `passed` only after install, build, start, and root URL health checks succeed. Build/start/health failures are recorded as failed validation reports with bounded log excerpts.

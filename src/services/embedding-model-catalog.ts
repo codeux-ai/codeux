@@ -112,7 +112,7 @@ const EMBEDDING_MODEL_SOURCES: Record<InAppEmbeddingModelId, EmbeddingModelSourc
 
 const HUGGING_FACE_BASE_URL = "https://huggingface.co";
 const DEFAULT_CUSTOM_MODEL_FILE = "onnx/model.onnx";
-const HUGGING_FACE_REPO_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const CUSTOM_MODEL_ID_SLUG_LENGTH = 56;
 
 export function getEmbeddingModelCatalog(
   customModels: readonly CustomEmbeddingModelDefinition[] = [],
@@ -312,12 +312,39 @@ function parseHuggingFaceUrl(raw: string): { repo: string; filePath: string | nu
 }
 
 function normalizeHuggingFaceRepo(value: string): string {
-  const repo = value.trim().replace(/^\/+|\/+$/g, "");
+  const repo = trimBoundarySlashes(value.trim());
   const segments = repo.split("/");
-  if (segments.length !== 2 || !segments.every((segment) => HUGGING_FACE_REPO_SEGMENT.test(segment))) {
+  if (segments.length !== 2 || !segments.every(isHuggingFaceRepoSegment)) {
     throw new Error("Hugging Face repo must use the form owner/repo");
   }
   return segments.join("/");
+}
+
+function trimBoundarySlashes(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && value.charCodeAt(start) === 47) {
+    start += 1;
+  }
+  while (end > start && value.charCodeAt(end - 1) === 47) {
+    end -= 1;
+  }
+  return value.slice(start, end);
+}
+
+function isHuggingFaceRepoSegment(segment: string): boolean {
+  if (segment.length === 0 || !isAsciiAlphanumeric(segment.charCodeAt(0))) {
+    return false;
+  }
+
+  for (let index = 1; index < segment.length; index += 1) {
+    const code = segment.charCodeAt(index);
+    if (!isAsciiAlphanumeric(code) && code !== 45 && code !== 46 && code !== 95) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function normalizeTokenizerFiles(value: unknown): string[] {
@@ -379,13 +406,56 @@ function readNonNegativeInteger(value: unknown, field: string): number {
 }
 
 function buildCustomModelId(repo: string, onnxModelFile: string): EmbeddingModelId {
-  const slug = `${repo}-${onnxModelFile}`
-    .replace(/\.onnx$/i, "")
-    .replace(/[^A-Za-z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 56);
+  const slug = sanitizeCustomModelIdSlug(stripOnnxExtension(`${repo}-${onnxModelFile}`));
   const digest = createHash("sha256").update(`${repo}:${onnxModelFile}`).digest("hex").slice(0, 8);
   return `hf-${slug}-${digest}` as EmbeddingModelId;
+}
+
+function stripOnnxExtension(value: string): string {
+  return value.length >= 5 && value.slice(-5).toLowerCase() === ".onnx"
+    ? value.slice(0, -5)
+    : value;
+}
+
+function sanitizeCustomModelIdSlug(value: string): string {
+  let output = "";
+  let previousCharacterWasReplacement = false;
+
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (isCustomModelIdSlugCharacter(code)) {
+      output += character;
+      previousCharacterWasReplacement = false;
+      continue;
+    }
+
+    if (!previousCharacterWasReplacement) {
+      output += "-";
+      previousCharacterWasReplacement = true;
+    }
+  }
+
+  return trimBoundaryHyphens(output).slice(0, CUSTOM_MODEL_ID_SLUG_LENGTH);
+}
+
+function trimBoundaryHyphens(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && value.charCodeAt(start) === 45) {
+    start += 1;
+  }
+  while (end > start && value.charCodeAt(end - 1) === 45) {
+    end -= 1;
+  }
+  return value.slice(start, end);
+}
+
+function isCustomModelIdSlugCharacter(code: number): boolean {
+  return isAsciiAlphanumeric(code) || code === 45 || code === 46 || code === 95;
+}
+
+function isAsciiAlphanumeric(code: number): boolean {
+  return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
 }
 
 function customModelLocalFiles(model: CustomEmbeddingModelDefinition): string[] {
