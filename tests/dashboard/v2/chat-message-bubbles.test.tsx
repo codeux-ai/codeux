@@ -115,6 +115,62 @@ describe("Chat Message Bubbles", () => {
       expect(container.innerHTML).toContain("Hello world");
     });
 
+    it("renders reasoning metadata as a full-width reasoning widget without bubble chrome", () => {
+      const message = createChatMessage({
+        id: "msg_reasoning",
+        bodyMarkdown: "I am checking the repo shape before editing.",
+        metadata: {
+          kind: "reasoning",
+          provider: "codex",
+          model: "gpt-5",
+        },
+      });
+
+      const { container, unmount } = render(<ChatMessageBubble message={message} />);
+      const view = within(container);
+
+      expect(view.getByRole("region", { name: "Reasoning turn" })).toBeInTheDocument();
+      expect(view.getByText("I am checking the repo shape before editing.")).toBeInTheDocument();
+      expect(view.queryByRole("img", { name: "Assistant" })).not.toBeInTheDocument();
+      expect(container.textContent).not.toContain("From Assistant");
+      expect(container.textContent).not.toContain("Delivered");
+      unmount();
+    });
+
+    it("renders tool call metadata and nested toolCallsJson as a full-width tool card", () => {
+      const message = createChatMessage({
+        id: "msg_tool_call",
+        bodyMarkdown: "Running a command",
+        metadata: {
+          kind: "tool_call",
+          toolName: "exec_command",
+          toolStatus: "completed",
+          toolCallId: "call-chat-123456",
+          tokens: { input: 10, output: 5, total: 15 },
+          toolCallsJson: {
+            arguments: "{\"cmd\":\"pnpm test tests/dashboard/v2/chat-message-bubbles.test.tsx\"}",
+            output: "chat bubble tests passed",
+            resultStatus: "completed",
+          },
+        },
+      });
+
+      const { container } = render(<ChatMessageBubble message={message} />);
+      const view = within(container);
+
+      expect(view.getByText("exec_command")).toBeInTheDocument();
+      expect(view.getByText("done")).toBeInTheDocument();
+      expect(view.getByText("{\"cmd\":\"pnpm test tests/dashboard/v2/chat-message-bubbles.test.tsx\"}")).toBeInTheDocument();
+      expect(view.queryByText("Running a command")).not.toBeInTheDocument();
+      expect(view.queryByRole("img", { name: "Assistant" })).not.toBeInTheDocument();
+      expect(container.textContent).not.toContain("From Assistant");
+      expect(container.textContent).not.toContain("Delivered");
+
+      fireEvent.click(view.getByRole("button", { name: /exec_command/ }));
+
+      expect(view.getByText("chat bubble tests passed")).toBeInTheDocument();
+    });
+
     it.each([
       {
         provider: "jira",
@@ -1243,6 +1299,37 @@ describe("Chat Message Bubbles", () => {
       const { getByText } = render(<InvocationMessageBubble message={message} />);
       expect(getByText("Rate limit")).toBeInTheDocument();
       expect(getByText("default")).toBeInTheDocument();
+    });
+
+    it("renders invocation tool calls as the dedicated activity widget", () => {
+      const message = createInvocationMessage({
+        id: "msg_tool_call",
+        contentMarkdown: "Raw tool transcript body",
+        toolCallsJson: {
+          arguments: JSON.stringify({ cmd: "pnpm test tests/dashboard/v2/chat-message-bubbles.test.tsx" }),
+          output: "Focused test output",
+          resultStatus: "completed",
+        },
+        metadata: {
+          kind: "tool_call",
+          toolName: "exec_command",
+          toolStatus: "failed",
+          toolCallId: "call-tool-rendering-123",
+          tokens: { input: 2, output: 5, total: 7 },
+        },
+      });
+
+      const { container } = render(<InvocationMessageBubble message={message} />);
+      const view = within(container);
+
+      expect(view.getByText("exec_command")).toBeInTheDocument();
+      expect(view.getByText("failed")).toBeInTheDocument();
+      expect(view.getByText("pnpm test tests/dashboard/v2/chat-message-bubbles.test.tsx")).toBeInTheDocument();
+      expect(container.textContent).toContain("7");
+      expect(container.textContent).not.toContain("Raw tool transcript body");
+
+      fireEvent.click(view.getByRole("button"));
+      expect(view.getByText("Focused test output")).toBeInTheDocument();
     });
 
     it("renders AgentAvatarSvg when a linked preset avatar config is supplied for assistant", () => {
