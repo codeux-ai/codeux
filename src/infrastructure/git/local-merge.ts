@@ -12,6 +12,12 @@ import { CODE_UX_GIT_PATHSPEC_EXCLUDE, CODE_UX_REPO_DIR } from "./code-ux-gitign
 export type LocalMergeRunner = (command: string, args: string[], cwd: string) => Promise<CommandResult>;
 
 const defaultRunner: LocalMergeRunner = (command, args, cwd) => runCommandStrict(command, args, cwd);
+const defaultHostGitRunner: LocalMergeRunner = (command, args, cwd) => runCommandStrict(
+  command,
+  args,
+  cwd,
+  { ...process.env, CODE_UX_GIT_CONTAINER_MODE: "host" },
+);
 const CODE_UX_GIT_IDENTITY_ARGS = [
   "-c", "user.name=Code UX",
   "-c", "user.email=agents@codeux.ai",
@@ -614,7 +620,7 @@ export async function mergeBranchLocallyInTemporaryWorktree(args: {
   fallbackTargetBranches?: string[];
   runner?: LocalMergeRunner;
 }): Promise<LocalMergeResult> {
-  const runner = args.runner ?? defaultRunner;
+  const runner = args.runner ?? defaultHostGitRunner;
   const targetBranch = args.targetBranch.trim();
   const sourceBranch = args.sourceBranch.trim();
   if (!targetBranch) {

@@ -412,6 +412,7 @@ export class WorkerInboxReplyService {
         customModel: providerSettings.customModel,
         githubToken: this.deps.getGithubToken(),
         projectId: args.projectId,
+        sprintId: invocationSprintId,
         agentMcpAccess: clarificationAgent.mcpAccess ?? null,
         mcpAgentId: clarificationAgent.id,
       });
@@ -619,10 +620,13 @@ export class WorkerInboxReplyService {
     customModel?: string;
     githubToken?: string;
     projectId?: string;
+    sprintId?: string | null;
     agentMcpAccess?: AgentMcpAccessConfig | null;
     mcpAgentId?: string | null;
   }): Promise<ProviderRunResult & { text: string }> {
-    const dashboardSettings = this.deps.getDashboardSettings();
+    const dashboardSettings = this.deps.getDashboardSettings(input.projectId
+      ? { projectId: input.projectId, sprintId: input.sprintId ?? undefined }
+      : undefined);
     const workflowSettings = {
       ...DEFAULT_CLI_WORKFLOW_SETTINGS,
       ...dashboardSettings.cliWorkflow,

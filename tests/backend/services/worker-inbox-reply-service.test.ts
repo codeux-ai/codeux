@@ -109,6 +109,72 @@ describe("WorkerInboxReplyService", () => {
     );
   });
 
+  it("uses project-scoped LOCAL git settings for dashboard reply snapshot workspaces", async () => {
+    mockRunProviderForText.mockResolvedValue({ text: "Local workspace reply." });
+    const localSettings = {
+      ...settings,
+      git: {
+        githubMode: "LOCAL",
+        defaultBranch: "dev",
+      },
+    } as any;
+    const getDashboardSettings = vi.fn((scope?: { projectId?: string }) => (
+      scope?.projectId === "project-1" ? localSettings : settings
+    ));
+
+    const service = new WorkerInboxReplyService({
+      projectManagementRepository: {
+        getProject: vi.fn().mockReturnValue({
+          id: "project-1",
+          name: "Code UX",
+          baseDir: "/repo",
+        }),
+      } as any,
+      connectionChatRepository: {
+        getThread: vi.fn().mockReturnValue({ id: "thread-1", title: "Status", runtimeState: null }),
+        listMessages: vi.fn().mockReturnValue([
+          { id: "m1", authorType: "dashboard_user", bodyMarkdown: "What changed?" },
+        ]),
+      } as any,
+      taskService: {
+        resolveInvocationProvider: vi.fn().mockReturnValue(geminiRoute),
+      } as any,
+      agentPresetSyncService: {
+        getWorkerAgent: vi.fn().mockResolvedValue({
+          instructionMarkdown: "Always answer with operational clarity.",
+        }),
+      } as any,
+      executionRepository: {
+        createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-local" }),
+        appendExecutionInvocationMessage: vi.fn(),
+        updateExecutionInvocation: vi.fn(),
+      } as any,
+      getDashboardSettings,
+      getGithubToken: () => undefined,
+      providerRunner: { runProviderForText: mockRunProviderForText } as any,
+      providerConcurrencyService: {
+        waitForSlotAndClaim: vi.fn().mockImplementation((p, l, input) => ({ ...input, id: "inv-1" })),
+      } as any,
+    });
+
+    await service.generateReply({
+      projectId: "project-1",
+      threadId: "thread-1",
+      bodyMarkdown: "What changed?",
+    });
+
+    const providerInput = mockRunProviderForText.mock.calls[0]?.[0];
+    expect(providerInput.gitPolicy).toEqual(expect.objectContaining({
+      githubMode: "LOCAL",
+      defaultBranch: "dev",
+    }));
+    expect(providerInput.snapshotCheckout).toEqual(expect.objectContaining({
+      branch: "dev",
+    }));
+    expect(providerInput.snapshotCheckout?.remoteOnly).toBeUndefined();
+    expect(getDashboardSettings).toHaveBeenCalledWith(expect.objectContaining({ projectId: "project-1" }));
+  });
+
   it("passes Code UX MCP with scheduler for dashboard replies without explicit MCP access", async () => {
     mockRunProviderForText.mockResolvedValue({ text: "I can schedule a follow-up." });
 
@@ -1015,6 +1081,16 @@ describe("WorkerInboxReplyService", () => {
 
   it("does not refresh origin before clarification replies in LOCAL git mode", async () => {
     mockRunProviderForText.mockResolvedValue({ text: "Only the clarification answer." });
+    const localSettings = {
+      ...settings,
+      git: {
+        githubMode: "LOCAL",
+        defaultBranch: "dev",
+      },
+    } as any;
+    const getDashboardSettings = vi.fn((scope?: { projectId?: string }) => (
+      scope?.projectId === "project-1" ? localSettings : settings
+    ));
 
     const service = new WorkerInboxReplyService({
       projectManagementRepository: {
@@ -1043,13 +1119,7 @@ describe("WorkerInboxReplyService", () => {
         appendExecutionInvocationMessage: vi.fn(),
         updateExecutionInvocation: vi.fn(),
       } as any,
-      getDashboardSettings: () => ({
-        ...settings,
-        git: {
-          githubMode: "LOCAL",
-          defaultBranch: "dev",
-        },
-      }),
+      getDashboardSettings,
       getGithubToken: () => undefined,
       providerRunner: { runProviderForText: mockRunProviderForText } as any,
       providerConcurrencyService: {
@@ -1083,5 +1153,14 @@ describe("WorkerInboxReplyService", () => {
     });
 
     expect(syncRemoteBranchIfAvailable).not.toHaveBeenCalled();
+    const providerInput = mockRunProviderForText.mock.calls[0]?.[0];
+    expect(providerInput.gitPolicy).toEqual(expect.objectContaining({
+      githubMode: "LOCAL",
+      defaultBranch: "dev",
+    }));
+    expect(providerInput.snapshotCheckout).toEqual(expect.objectContaining({
+      branch: "dev",
+    }));
+    expect(providerInput.snapshotCheckout?.remoteOnly).toBeUndefined();
   });
 });

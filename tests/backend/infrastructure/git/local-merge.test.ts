@@ -108,6 +108,43 @@ describe("local-merge helpers", () => {
     expect(files).toContain("work.txt");
   });
 
+  it("keeps temporary local merges on host git when containerized git is globally enabled", async () => {
+    const previousContainerizedGit = process.env.CODE_UX_CONTAINERIZED_GIT;
+    const previousGitContainerMode = process.env.CODE_UX_GIT_CONTAINER_MODE;
+    process.env.CODE_UX_CONTAINERIZED_GIT = "1";
+    delete process.env.CODE_UX_GIT_CONTAINER_MODE;
+
+    try {
+      await git(repo, "checkout", "feature");
+      await git(repo, "checkout", "-b", "worker");
+      await commitFile(repo, "host-worktree.txt", "work\n", "feat: host worktree merge");
+      await git(repo, "checkout", "feature");
+
+      const result = await mergeBranchLocallyInTemporaryWorktree({
+        repoPath: repo,
+        targetBranch: "feature",
+        sourceBranch: "worker",
+        commitMessage: "Merge branch 'worker' into feature",
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.conflict).toBe(false);
+      const files = (await git(repo, "ls-tree", "--name-only", "feature")).stdout;
+      expect(files).toContain("host-worktree.txt");
+    } finally {
+      if (previousContainerizedGit === undefined) {
+        delete process.env.CODE_UX_CONTAINERIZED_GIT;
+      } else {
+        process.env.CODE_UX_CONTAINERIZED_GIT = previousContainerizedGit;
+      }
+      if (previousGitContainerMode === undefined) {
+        delete process.env.CODE_UX_GIT_CONTAINER_MODE;
+      } else {
+        process.env.CODE_UX_GIT_CONTAINER_MODE = previousGitContainerMode;
+      }
+    }
+  });
+
   it("normalizes containerized temporary worktree gitdir metadata before follow-up git commands", async () => {
     const repoRoot = await mkdtemp(path.join(tmpdir(), "local-merge-containerized-metadata-"));
     try {
