@@ -1375,7 +1375,8 @@ function hasTaskStateChanges(previous: Map<string, TaskStateSnapshot>, subtasks:
     }
     return earlier.status !== task.status
       || earlier.isMerged !== Boolean(task.is_merged)
-      || earlier.mergeIndicator !== task.merge_indicator;
+      || earlier.mergeIndicator !== task.merge_indicator
+      || earlier.workerBranch !== (task.worker_branch || null);
   });
 }
 

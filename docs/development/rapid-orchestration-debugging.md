@@ -77,6 +77,8 @@ That lane launches the Electron app, waits for the embedded Code UX server, and 
 
 In GitHub Actions, the CI DAG and Electron DAG lanes run build, Electron binary install, native dependency rebuild, and orchestration as separate steps so a stall is visible at the step boundary. The mockup runner streams redacted runtime stdout/stderr and emits `mockup_pentest_progress` records whenever sprint or task state changes, plus heartbeat progress every 15 seconds. CI passes `--stall-timeout-ms 180000`; if no sprint or task status/merge progress is observed for three minutes, the runner fails early with the last sprint/task snapshot and writes the final table to `GITHUB_STEP_SUMMARY`.
 
+In LOCAL git mode, recovered worker-branch evidence is treated as dependency state: downstream DAG tasks stay blocked until the parent branch has merged into the sprint feature branch or the parent is proven to have no merge work.
+
 ## Mockup Merge E2E Lane
 
 Run:
@@ -272,6 +274,7 @@ Exercise these cases with an approved local test project or a temporary fixture:
 | Main-merge attention opens and closes repeatedly. | `project_attention_items`, worker-owned conflict tests. | Remote feedback reconciliation is clearing LOCAL worker-owned attention. |
 | Final merge fails only when visible checkout has edits. | `local-merge.test.ts`, dirty checkout branches. | Dirty preservation or refresh behavior regressed. |
 | Dependent tasks never start after a worker branch completes. | `feature-pr-gate.test.ts`, task merge indicators. | Worker branch merge evidence is missing or stale. |
+| Dependent tasks start before parent files are visible in their worktree. | `cycle-runner.test.ts`, fast branch-only gate logs, `mockup_pentest_progress`. | LOCAL worker-branch evidence was recovered after status derivation but did not trigger dependency re-derivation. |
 | Code-complete LOCAL task branches repeatedly become `MERGE_CONFLICT` but raw Git merges cleanly. | Fast branch-only gate logs, `local-merge.test.ts`, visible checkout status. | The visible checkout is blocking host `git checkout`; task branch settlement must use the temporary-worktree path instead of the visible worktree. |
 | Temporary-worktree merges fail with `fatal: not a git repository: /workspace/.git/worktrees/...`. | `local-merge.test.ts`, helper-container Git logs, the temp worktree `.git` file. | Containerized `git worktree add` left an absolute container gitdir pointer behind. Code UX must normalize that pointer to a relative gitdir before the next helper-container Git command. |
 | Mockup merge E2E passes but live provider fails. | Provider invocation row, Docker logs, provider transcript metadata. | Provider-specific output, workspace, or session-sync issue rather than orchestration policy. |

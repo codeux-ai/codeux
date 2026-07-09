@@ -14,6 +14,7 @@ export interface TaskStateSnapshot {
   status: Subtask["status"];
   isMerged: boolean;
   mergeIndicator: Subtask["merge_indicator"];
+  workerBranch: string | null;
 }
 
 export interface TaskActionRequiredSnapshot {
@@ -531,6 +532,7 @@ export function snapshotTaskState(subtasks: Subtask[]): Map<string, TaskStateSna
     status: task.status,
     isMerged: Boolean(task.is_merged),
     mergeIndicator: task.merge_indicator,
+    workerBranch: task.worker_branch || null,
   }]));
 }
 
