@@ -24,7 +24,7 @@ function isWithinAnyRoot(candidate: string, roots: string[]): boolean {
   });
 }
 
-async function canonicalizeExistingPath(candidate: string): Promise<string> {
+async function canonicalizeTrustedRoot(candidate: string): Promise<string> {
   const resolved = path.resolve(candidate);
   try {
     const realPath = await fs.realpath(resolved);
@@ -42,10 +42,25 @@ async function resolveAllowedRoots(): Promise<string[]> {
   ];
   const roots = await Promise.all(configuredRoots.map(async (root) => {
     const resolvedRoot = path.resolve(expandHomePath(root));
-    const realRoot = await canonicalizeExistingPath(resolvedRoot);
+    const realRoot = await canonicalizeTrustedRoot(resolvedRoot);
     return [resolvedRoot, realRoot];
   }));
   return [...new Set(roots.flat())];
+}
+
+async function canonicalizeAllowedPath(resolvedTargetPath: string, resolvedAllowedRoots: string[]): Promise<ValidatedPath | null> {
+  if (!isWithinAnyRoot(resolvedTargetPath, resolvedAllowedRoots)) {
+    return null;
+  }
+
+  let realTargetPath = resolvedTargetPath;
+  try {
+    realTargetPath = await fs.realpath(resolvedTargetPath);
+  } catch {
+    realTargetPath = resolvedTargetPath;
+  }
+
+  return isWithinAnyRoot(realTargetPath, resolvedAllowedRoots) ? asValidatedPath(realTargetPath) : null;
 }
 
 /**
@@ -63,16 +78,7 @@ async function resolveAllowedRoots(): Promise<string[]> {
 async function resolveAllowedPath(targetPath: string): Promise<ValidatedPath | null> {
   const resolvedTargetPath = path.resolve(targetPath);
   const resolvedAllowedRoots = await resolveAllowedRoots();
-  if (!isWithinAnyRoot(resolvedTargetPath, resolvedAllowedRoots)) {
-    return null;
-  }
-
-  // resolvedTargetPath already passed lexical containment against the allowed
-  // directory roots; this canonicalizes the same candidate for a second check.
-  // codeql[js/path-injection]
-  const realTargetPath = await canonicalizeExistingPath(resolvedTargetPath);
-
-  return isWithinAnyRoot(realTargetPath, resolvedAllowedRoots) ? asValidatedPath(realTargetPath) : null;
+  return canonicalizeAllowedPath(resolvedTargetPath, resolvedAllowedRoots);
 }
 
 interface LocalBrowserDirectoryListing {

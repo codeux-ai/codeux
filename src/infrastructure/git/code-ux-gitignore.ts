@@ -1,14 +1,13 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { isPathInside } from "../../utils/path-validator.js";
+import { isPathInside, type ValidatedPath } from "../../utils/path-validator.js";
 
 export const CODE_UX_REPO_DIR = ".code-ux";
 export const CODE_UX_GITIGNORE_ENTRY = `${CODE_UX_REPO_DIR}/`;
 export const CODE_UX_GIT_PATHSPEC_EXCLUDE = `:(exclude)${CODE_UX_REPO_DIR}`;
 
-async function resolveRepoGitignorePath(repoPath: string): Promise<string> {
+async function resolveRepoGitignorePath(repoPath: ValidatedPath): Promise<string> {
   // repoPath is canonicalized before deriving the fixed .gitignore child path.
-  // codeql[js/path-injection]
   const repoRoot = await fs.realpath(path.resolve(repoPath));
   const gitignorePath = path.resolve(repoRoot, ".gitignore");
   if (!isPathInside(repoRoot, gitignorePath)) {
@@ -35,7 +34,7 @@ async function resolveRepoGitignorePath(repoPath: string): Promise<string> {
   return canonicalGitignorePath;
 }
 
-export async function ensureCodeUxGitignoreEntry(repoPath: string): Promise<boolean> {
+export async function ensureCodeUxGitignoreEntry(repoPath: ValidatedPath): Promise<boolean> {
   const gitignorePath = await resolveRepoGitignorePath(repoPath);
   let current = "";
   try {

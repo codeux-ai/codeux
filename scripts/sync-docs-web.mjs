@@ -190,15 +190,54 @@ function sectionFromSourcePath(sourcePath) {
 
 function stripMarkdownInline(markdown) {
   const withoutHtml = markdown
-    .replace(/<script\b[^>]*>[\s\S]*?(?:<\/script\s*>|$)/gi, "")
-    .replace(/<style\b[^>]*>[\s\S]*?(?:<\/style\s*>|$)/gi, "")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/\*([^*]+)\*/g, "$1")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/<[^>]+>/g, "")
     .trim();
-  return withoutHtml.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return stripHtmlTags(stripHtmlBlockElements(withoutHtml)).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function stripHtmlBlockElements(value) {
+  let output = "";
+  let index = 0;
+  while (index < value.length) {
+    const lowerRemainder = value.slice(index).toLowerCase();
+    const tag = lowerRemainder.startsWith("<script") ? "script" : lowerRemainder.startsWith("<style") ? "style" : null;
+    if (!tag) {
+      output += value[index];
+      index += 1;
+      continue;
+    }
+
+    const closeMarker = `</${tag}`;
+    const closeStart = value.toLowerCase().indexOf(closeMarker, index + tag.length + 1);
+    if (closeStart === -1) {
+      break;
+    }
+    const closeEnd = value.indexOf(">", closeStart + closeMarker.length);
+    index = closeEnd === -1 ? value.length : closeEnd + 1;
+  }
+  return output;
+}
+
+function stripHtmlTags(value) {
+  let output = "";
+  let insideTag = false;
+  for (const character of value) {
+    if (character === "<") {
+      insideTag = true;
+      continue;
+    }
+    if (insideTag) {
+      if (character === ">") {
+        insideTag = false;
+      }
+      continue;
+    }
+    output += character;
+  }
+  return output;
 }
 
 function descriptionFromMarkdown(markdown) {

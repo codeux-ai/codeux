@@ -1008,7 +1008,7 @@ describe("SprintIssueService", () => {
         externalId: "item-1",
         issueKey: "item:item-1",
         title: "Note title",
-        issueBodyMarkdown: "Note title\n\nBuild this flow&lt;script",
+        issueBodyMarkdown: "Note title\n\nBuild this flow",
         updatedAt: "2026-05-02T00:00:00.000Z",
       }),
     ]);

@@ -57,7 +57,7 @@ describe("DocsWebCatalogService", () => {
     const service = new DocsWebCatalogService(tempDir);
     const doc = service.getDocument("user-unsafe");
 
-    expect(doc?.description).toBe("Keep text  and &lt;script");
+    expect(doc?.description).toBe("Keep text  and ");
     expect(doc?.description).not.toContain("<script");
   });
 
