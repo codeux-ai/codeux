@@ -15,13 +15,22 @@ import { fetchJson } from "../../lib/api/fetch-json.js";
 
 const CHAT_DRAFT_USER_STORAGE_KEY = "codeux.chat.draftUserId";
 const CHAT_DRAFT_USER_HEADER = "X-CodeUX-Dashboard-User-Id";
+let draftUserIdMemoryFallback: string | null = null;
 
-const createDraftUserId = (): string => {
-  const randomId = typeof globalThis.crypto?.randomUUID === "function"
-    ? globalThis.crypto.randomUUID()
-    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-  return `dashboard-user-${randomId}`;
+const createCryptoRandomId = (): string => {
+  const cryptoApi = globalThis.crypto;
+  if (typeof cryptoApi?.randomUUID === "function") {
+    return cryptoApi.randomUUID();
+  }
+  if (typeof cryptoApi?.getRandomValues === "function") {
+    const bytes = new Uint8Array(16);
+    cryptoApi.getRandomValues(bytes);
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+  throw new Error("Secure random generation is unavailable.");
 };
+
+const createDraftUserId = (): string => `dashboard-user-${createCryptoRandomId()}`;
 
 export const getOrCreateDashboardDraftUserId = (): string => {
   if (typeof window === "undefined") {
@@ -30,13 +39,16 @@ export const getOrCreateDashboardDraftUserId = (): string => {
   try {
     const stored = window.localStorage.getItem(CHAT_DRAFT_USER_STORAGE_KEY)?.trim();
     if (stored) {
+      draftUserIdMemoryFallback = stored;
       return stored;
     }
     const next = createDraftUserId();
     window.localStorage.setItem(CHAT_DRAFT_USER_STORAGE_KEY, next);
+    draftUserIdMemoryFallback = next;
     return next;
   } catch {
-    return createDraftUserId();
+    draftUserIdMemoryFallback ??= createDraftUserId();
+    return draftUserIdMemoryFallback;
   }
 };
 

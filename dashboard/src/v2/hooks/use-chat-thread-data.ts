@@ -7,6 +7,7 @@ import {
   deleteConversationThread,
   fetchConversationDraft,
   fetchConversationMessages,
+  getOrCreateDashboardDraftUserId,
   postConversationMessage,
   updateConversationThread,
   compactThreadSession,
@@ -128,8 +129,6 @@ const CREATE_APP_QUICKACTION_TEMPLATE_IDS: Record<DashboardCreateAppQuickactionK
 const NEW_THREAD_DRAFT_CONTEXT_KEY = "new-thread";
 const CHAT_DRAFT_WRITE_DEBOUNCE_MS = 500;
 const LOCAL_CHAT_DRAFT_STORAGE_PREFIX = "codeux.chat.localDraft";
-const CHAT_DRAFT_USER_STORAGE_KEY = "codeux.chat.draftUserId";
-let draftUserIdMemoryFallback: string | null = null;
 
 const CREATE_APP_QUICKACTION_BODIES: Record<DashboardCreateAppQuickactionKind, string> = {
   web_app: "Create a web app",
@@ -151,28 +150,6 @@ const createCryptoRandomId = (): string => {
 
 const createQuickactionRequestId = (kind: DashboardCreateAppQuickactionKind): string => {
   return `dashboard-create-app-${kind}-${createCryptoRandomId()}`;
-};
-
-const createDraftUserId = (): string => `dashboard-user-${createCryptoRandomId()}`;
-
-const getOrCreateLocalDashboardDraftUserId = (): string => {
-  if (typeof window === "undefined") {
-    return "dashboard-user-server";
-  }
-  try {
-    const stored = window.localStorage.getItem(CHAT_DRAFT_USER_STORAGE_KEY)?.trim();
-    if (stored) {
-      draftUserIdMemoryFallback = stored;
-      return stored;
-    }
-    const next = createDraftUserId();
-    window.localStorage.setItem(CHAT_DRAFT_USER_STORAGE_KEY, next);
-    draftUserIdMemoryFallback = next;
-    return next;
-  } catch {
-    draftUserIdMemoryFallback ??= createDraftUserId();
-    return draftUserIdMemoryFallback;
-  }
 };
 
 const normalizeStackToken = (value: string): string => value.toLowerCase().replace(/[^a-z0-9+#.]+/g, "");
@@ -481,7 +458,7 @@ export const useChatThreadData = (options: {
       return;
     }
 
-    const userId = getOrCreateLocalDashboardDraftUserId();
+    const userId = getOrCreateDashboardDraftUserId();
     draftUserIdRef.current = userId;
     const localDraft = readLocalChatDraft({
       projectId: selectedProject.id,
@@ -566,7 +543,7 @@ export const useChatThreadData = (options: {
       return;
     }
 
-    const userId = draftUserIdRef.current ?? getOrCreateLocalDashboardDraftUserId();
+    const userId = draftUserIdRef.current ?? getOrCreateDashboardDraftUserId();
     draftUserIdRef.current = userId;
     const requestId = latestHistoryRequestRef.current + 1;
     latestHistoryRequestRef.current = requestId;
@@ -603,7 +580,7 @@ export const useChatThreadData = (options: {
       return;
     }
 
-    const userId = draftUserIdRef.current ?? getOrCreateLocalDashboardDraftUserId();
+    const userId = draftUserIdRef.current ?? getOrCreateDashboardDraftUserId();
     draftUserIdRef.current = userId;
     const currentInput = input;
     const lastSaved = lastSavedDraftRef.current;
@@ -876,7 +853,7 @@ export const useChatThreadData = (options: {
     if (!selectedProject) {
       return;
     }
-    const userId = draftUserIdRef.current ?? getOrCreateLocalDashboardDraftUserId();
+    const userId = draftUserIdRef.current ?? getOrCreateDashboardDraftUserId();
     draftUserIdRef.current = userId;
     void recordConversationMessageHistory(selectedProject.id, {
       userId,
