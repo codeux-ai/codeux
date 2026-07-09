@@ -7,8 +7,8 @@ Use this suite when a sprint stalls, local merges fail, worker-owned attention i
 | Lane | Command | Purpose |
 | --- | --- | --- |
 | Fast regressions | `pnpm run test:orchestration:rapid` | Watch-loop, feature merge, and local final-merge regressions without Docker or provider CLIs. |
-| CI DAG E2E | `pnpm run test:orchestration:ci-dag` | Compiled runtime plus `mockup-cli` through a 10-task dependency graph with parallel leaves and layered joins. |
-| Electron CI DAG | `pnpm run test:orchestration:ci-dag:electron` | Electron runtime plus the same 10-task graph through the native desktop app on Windows and macOS `main` validation. |
+| CI DAG E2E | `pnpm run test:orchestration:ci-dag` | Linux CI lane coverage for the compiled runtime plus `mockup-cli` through a 10-task dependency graph with parallel leaves and layered joins. |
+| Electron CI DAG | `pnpm run test:orchestration:ci-dag:electron` | macOS and Windows CI lane coverage for the same 10-task graph through the native Electron desktop app. |
 | Mockup merge E2E | `pnpm run test:orchestration:merge-e2e` | Compiled runtime plus `mockup-cli` through a deterministic local merge-conflict DAG. |
 | Full mockup pentest | `pnpm run test:orchestration:full` | Manual escalation for all deterministic mockup scenarios: smoke, CI repair, merge conflict, parallel DAG, dirty checkout, multi-project overrides. |
 | Large DAG stress | `pnpm run test:orchestration:large-dag` | Heavy 129-task mockup DAG with wide fan-out and layered joins. |
@@ -20,11 +20,11 @@ Use this suite when a sprint stalls, local merges fail, worker-owned attention i
 
 Start with `pnpm run test:orchestration:rapid`. It covers provider routing, watch-loop finalization, feature branch merge gates, local final merges, dirty checkout preservation, and worker-owned merge attention regressions.
 
-Run `pnpm run test:orchestration:ci-dag` for the no-secret CI lane. It builds the compiled runtime and exercises the deterministic 10-task mockup DAG through Docker-backed provider workspaces.
+Run `pnpm run test:orchestration:ci-dag` for the Linux no-secret CI lane. It builds the compiled runtime and exercises the deterministic 10-task mockup DAG through Docker-backed provider workspaces.
 
-Run `pnpm run test:orchestration:ci-dag:electron` for the main-branch Electron lane. It launches `dist/electron/main.js`, waits for the embedded Code UX server, and runs the same 10-task DAG shape through a host-execution mockup fixture on native Windows and macOS runners.
+Run `pnpm run test:orchestration:ci-dag:electron` for the native macOS and Windows Electron lane. It launches `dist/electron/main.js`, waits for the embedded Code UX server, and runs the same 10-task DAG shape through a host-execution mockup fixture.
 
-In GitHub Actions, the CI DAG and Electron DAG lanes expose build, Electron binary install, native dependency rebuild, and orchestration as separate steps. Each DAG job has a 25-minute workflow timeout, and the mockup runner bounds individual HTTP calls at 60 seconds plus the full project run at the configured `--timeout-ms`. During orchestration, it streams redacted runtime stdout/stderr, emits `mockup_pentest_progress` records on sprint/task changes plus 15-second heartbeats, fails after `--stall-timeout-ms 180000` when no sprint, task status, merge, or expected-output progress is observed after polling starts, and writes a final Markdown table to `GITHUB_STEP_SUMMARY`.
+In GitHub Actions, `08 Orchestration` is one OS matrix: Linux runs the Docker-backed compiled-runtime DAG, and macOS/Windows run the Electron DAG with Electron binary install and native dependency rebuild exposed as separate steps. Each DAG job has a 25-minute workflow timeout, and the mockup runner bounds individual HTTP calls at 60 seconds plus the full project run at the configured `--timeout-ms`. During orchestration, it streams redacted runtime stdout/stderr, emits `mockup_pentest_progress` records on sprint/task changes plus 15-second heartbeats, fails after `--stall-timeout-ms 180000` when no sprint, task status, merge, or expected-output progress is observed after polling starts, and writes a final Markdown table to `GITHUB_STEP_SUMMARY`.
 
 The compact DAG's final validation command runs as a scenario-level assertion after all task branches have merged, not inside the final worker worktree. During polling, the runner also enforces the declared DAG: a task with dependencies may not leave `pending` until each dependency is marked merged. If a future task starts early, the runner emits `mockup_pentest_dependency_merge_violation` and fails the test run immediately. The runner does not treat a completed sprint as terminal for these scenarios until expected repository files are visible in the project checkout; while it waits, it emits `mockup_pentest_waiting_for_expected_output`, but only an actual expected-output readiness change refreshes the stall watchdog. This keeps native Electron runners from validating against a dependency branch before Windows has made the parent merge visible, while still failing within the configured stall timeout if a completed sprint never exposes the merged files.
 

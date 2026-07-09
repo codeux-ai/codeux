@@ -120,11 +120,9 @@ describe("GitHub workflow health", () => {
       ["dashboard-tests", "05 Test / dashboard suite"],
       ["security-audit", "06 Security / dependency audit"],
       ["package-smoke", "07 Package / npm install smoke"],
-      ["ci-dag", "08 Orchestration / Docker DAG"],
-      ["e2e-linux", "09 E2E / Linux full"],
-      ["e2e-native-smoke", "10 E2E /"],
-      ["electron-dag", "11 Orchestration /"],
-      ["release-candidate", "12 Release Candidate / desktop package"],
+      ["ci-dag", "08 Orchestration / ${{ matrix.name }} DAG"],
+      ["e2e", "09 E2E /"],
+      ["release-candidate", "10 Release Candidate / desktop package"],
     ] as const) {
       expect(getJobBlock(ci, jobName)).toContain(`name: ${displayName}`);
     }
@@ -169,36 +167,51 @@ describe("GitHub workflow health", () => {
     expect(packageJob).toContain("node scripts/verify-release-install.mjs");
     expect(packageJob).toContain('CODE_UX_SKIP_RELEASE_INSTALL_BUILD: "1"');
     expect(dagJob).toContain("needs: [static, build, backend-tests, dashboard-tests, security-audit]");
+    expect(dagJob).toContain("runs-on: ${{ matrix.os }}");
+    expect(dagJob).toContain("max-parallel: 2");
+    expect(dagJob).toContain("name: Linux Docker");
+    expect(dagJob).toContain("os: ubuntu-latest");
+    expect(dagJob).toContain("runtime: docker");
     expect(dagJob).toContain("pnpm run test:orchestration:ci-dag:run");
+    expect(dagJob).toContain("name: macOS Electron");
+    expect(dagJob).toContain("os: macos-latest");
+    expect(dagJob).toContain("runtime: electron");
+    expect(dagJob).toContain("name: Windows Electron");
+    expect(dagJob).toContain("os: windows-latest");
+    expect(dagJob).toContain("pnpm run test:orchestration:ci-dag:electron:run");
+    expect(dagJob).toContain("node node_modules/electron/install.js");
+    expect(dagJob).toContain("pnpm run electron:install-deps");
+    expect(dagJob).toContain("name: ${{ matrix.artifact }}");
     expect(dagJob).toContain(".cache/e2e-mockup-sprint-pentest/");
   });
 
   it("keeps E2E and release-candidate jobs bounded for a six-runner lane", async () => {
     const ci = await readRepoFile(WORKFLOWS.ci);
-    const linuxE2e = getJobBlock(ci, "e2e-linux");
-    const nativeSmoke = getJobBlock(ci, "e2e-native-smoke");
-    const electronDag = getJobBlock(ci, "electron-dag");
+    const e2e = getJobBlock(ci, "e2e");
     const releaseCandidate = getJobBlock(ci, "release-candidate");
 
-    expect(linuxE2e).toContain("max-parallel: 2");
-    expect(linuxE2e).toContain("project: [navigation, settings, projects, tasks, agents, config]");
-    expect(linuxE2e).toContain("pnpm exec playwright install-deps chromium");
-    expect(linuxE2e).toContain("pnpm exec playwright test --project=${{ matrix.project }}");
-    expect(linuxE2e).toContain("playwright-report/");
+    expect(e2e).toContain("name: 09 E2E / ${{ matrix.os.label }} full (${{ matrix.project }})");
+    expect(e2e).toContain("runs-on: ${{ matrix.os.runner }}");
+    expect(e2e).toContain("max-parallel: 3");
+    expect(e2e).toContain("runner: ubuntu-latest");
+    expect(e2e).toContain("label: Linux");
+    expect(e2e).toContain("runner: macos-latest");
+    expect(e2e).toContain("label: macOS");
+    expect(e2e).toContain("runner: windows-latest");
+    expect(e2e).toContain("label: Windows");
+    expect(e2e).toContain("project: [navigation, settings, projects, tasks, agents, config]");
+    expect(e2e).toContain("if: runner.os != 'Windows'");
+    expect(e2e).toContain("if: runner.os == 'Linux'");
+    expect(e2e).toContain("pnpm exec playwright install-deps chromium");
+    expect(e2e).toContain("pnpm exec playwright test --project=${{ matrix.project }}");
+    expect(e2e).toContain("name: playwright-${{ matrix.os.runner }}-${{ matrix.project }}");
+    expect(e2e).toContain("playwright-report/");
+    expect(ci).not.toContain("e2e-native-smoke:");
+    expect(ci).not.toContain("E2E / Linux full");
+    expect(ci).not.toContain("E2E / ${{ matrix.os.label }} smoke");
+    expect(ci).not.toContain("electron-dag:");
 
-    expect(nativeSmoke).toContain("max-parallel: 2");
-    expect(nativeSmoke).toContain("runner: macos-latest");
-    expect(nativeSmoke).toContain("runner: windows-latest");
-    expect(nativeSmoke).toContain("project: [navigation, tasks]");
-    expect(nativeSmoke).not.toContain("playwright install-deps chromium");
-
-    expect(electronDag).toContain("needs: [package-smoke, ci-dag, e2e-linux, e2e-native-smoke]");
-    expect(electronDag).toContain("max-parallel: 2");
-    expect(electronDag).toContain("node node_modules/electron/install.js");
-    expect(electronDag).toContain("pnpm run electron:install-deps");
-    expect(electronDag).toContain("pnpm run test:orchestration:ci-dag:electron:run");
-
-    expect(releaseCandidate).toContain("needs: [package-smoke, ci-dag, e2e-linux, e2e-native-smoke]");
+    expect(releaseCandidate).toContain("needs: [package-smoke, ci-dag, e2e]");
     expect(releaseCandidate).toContain("max-parallel: 2");
     expect(releaseCandidate).toContain("node node_modules/electron/install.js");
     expect(releaseCandidate).toContain("pnpm run electron:prepare-deps");

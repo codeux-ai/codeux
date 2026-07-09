@@ -329,10 +329,34 @@ jobs:
           CODE_UX_SKIP_RELEASE_INSTALL_BUILD: "1"
 
   ci-dag:
-    name: 08 Orchestration / Docker DAG
+    name: 08 Orchestration / ${{ matrix.name }} DAG
     needs: [static, build, backend-tests, dashboard-tests, security-audit]
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - name: Linux Docker
+            os: ubuntu-latest
+            runtime: docker
+            command: pnpm run test:orchestration:ci-dag:run
+            artifact: orchestration-dag-ubuntu-latest-docker
+          - name: macOS Electron
+            os: macos-latest
+            runtime: electron
+            command: pnpm run test:orchestration:ci-dag:electron:run
+            artifact: orchestration-dag-macos-latest-electron
+          - name: Windows Electron
+            os: windows-latest
+            runtime: electron
+            command: pnpm run test:orchestration:ci-dag:electron:run
+            artifact: orchestration-dag-windows-latest-electron
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      GH_TOKEN: ""
+      electron_config_cache: ${{ github.workspace }}/.cache/electron-downloads
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -350,10 +374,22 @@ jobs:
           package-manager-cache: false
 
       - name: Restore node_modules cache
+        if: runner.os != 'Windows'
         uses: actions/cache@v5
         with:
           path: node_modules
           key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+
+      - name: Restore Electron caches
+        if: matrix.runtime == 'electron'
+        uses: actions/cache@v5
+        with:
+          path: |
+            .cache/electron-runtime
+            .cache/electron-downloads
+          key: ${{ runner.os }}-node22-pnpm10.33.0-electron-dag-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'electron-builder.config.cjs', 'scripts/e2e/run-mockup-sprint-pentest.mjs', 'scripts/e2e/mockup-sprint-pentest-scenarios.mjs', 'scripts/prepare-electron-runtime-deps.mjs') }}
+          restore-keys: |
+            ${{ runner.os }}-node22-pnpm10.33.0-electron-dag-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -364,28 +400,43 @@ jobs:
           name: codeux-build-linux
           path: .
 
-      - name: Run Docker DAG orchestration validation
-        run: pnpm run test:orchestration:ci-dag:run
+      - name: Install Electron binary from cache
+        if: matrix.runtime == 'electron'
+        run: node node_modules/electron/install.js
+
+      - name: Rebuild Electron native dependencies
+        if: matrix.runtime == 'electron'
+        run: pnpm run electron:install-deps
+
+      - name: Run orchestration validation
+        run: ${{ matrix.command }}
 
       - name: Upload orchestration artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: orchestration-docker-dag
+          name: ${{ matrix.artifact }}
           path: .cache/e2e-mockup-sprint-pentest/
           if-no-files-found: ignore
           include-hidden-files: true
           retention-days: 7
 
-  e2e-linux:
-    name: 09 E2E / Linux full (${{ matrix.project }})
+  e2e:
+    name: 09 E2E / ${{ matrix.os.label }} full (${{ matrix.project }})
     needs: [static, build, backend-tests, dashboard-tests, security-audit]
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os.runner }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 3
       matrix:
+        os:
+          - runner: ubuntu-latest
+            label: Linux
+          - runner: macos-latest
+            label: macOS
+          - runner: windows-latest
+            label: Windows
         project: [navigation, settings, projects, tasks, agents, config]
     steps:
       - name: Checkout
@@ -404,6 +455,7 @@ jobs:
           package-manager-cache: false
 
       - name: Restore node_modules cache
+        if: runner.os != 'Windows'
         uses: actions/cache@v5
         with:
           path: node_modules
@@ -427,77 +479,13 @@ jobs:
             ${{ runner.os }}-node22-pnpm10.33.0-playwright-
 
       - name: Install Playwright OS dependencies
+        if: runner.os == 'Linux'
         run: pnpm exec playwright install-deps chromium
 
       - name: Install Playwright Chromium
         run: pnpm exec playwright install chromium
 
       - name: Run Playwright project
-        run: pnpm exec playwright test --project=${{ matrix.project }}
-
-      - name: Upload Playwright artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-linux-${{ matrix.project }}
-          path: |
-            test-results/
-            playwright-report/
-          if-no-files-found: ignore
-          retention-days: 7
-
-  e2e-native-smoke:
-    name: 10 E2E / ${{ matrix.os.label }} smoke (${{ matrix.project }})
-    needs: [static, build, backend-tests, dashboard-tests, security-audit]
-    runs-on: ${{ matrix.os.runner }}
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      max-parallel: 2
-      matrix:
-        os:
-          - runner: macos-latest
-            label: macOS
-          - runner: windows-latest
-            label: Windows
-        project: [navigation, tasks]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: ${{ env.PNPM_VERSION }}
-          run_install: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          package-manager-cache: false
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
-
-      - name: Download compiled app artifact
-        uses: actions/download-artifact@v5
-        with:
-          name: codeux-build-linux
-          path: .
-
-      - name: Cache Playwright browser binaries
-        uses: actions/cache@v5
-        with:
-          path: .cache/ms-playwright
-          key: ${{ runner.os }}-node22-pnpm10.33.0-playwright-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-node22-pnpm10.33.0-playwright-
-
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install chromium
-
-      - name: Run Playwright smoke project
         run: pnpm exec playwright test --project=${{ matrix.project }}
 
       - name: Upload Playwright artifacts
@@ -511,81 +499,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  electron-dag:
-    name: 11 Orchestration / ${{ matrix.name }} Electron DAG
-    needs: [package-smoke, ci-dag, e2e-linux, e2e-native-smoke]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      max-parallel: 2
-      matrix:
-        include:
-          - name: macOS
-            os: macos-latest
-          - name: Windows
-            os: windows-latest
-    env:
-      CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      GH_TOKEN: ""
-      electron_config_cache: ${{ github.workspace }}/.cache/electron-downloads
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: ${{ env.PNPM_VERSION }}
-          run_install: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          package-manager-cache: false
-
-      - name: Restore Electron caches
-        uses: actions/cache@v5
-        with:
-          path: |
-            .cache/electron-runtime
-            .cache/electron-downloads
-          key: ${{ runner.os }}-node22-pnpm10.33.0-electron-dag-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'electron-builder.config.cjs', 'scripts/e2e/run-mockup-sprint-pentest.mjs', 'scripts/e2e/mockup-sprint-pentest-scenarios.mjs', 'scripts/prepare-electron-runtime-deps.mjs') }}
-          restore-keys: |
-            ${{ runner.os }}-node22-pnpm10.33.0-electron-dag-
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
-
-      - name: Download compiled app artifact
-        uses: actions/download-artifact@v5
-        with:
-          name: codeux-build-linux
-          path: .
-
-      - name: Install Electron binary from cache
-        run: node node_modules/electron/install.js
-
-      - name: Rebuild Electron native dependencies
-        run: pnpm run electron:install-deps
-
-      - name: Run Electron DAG orchestration validation
-        run: pnpm run test:orchestration:ci-dag:electron:run
-
-      - name: Upload Electron DAG artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: orchestration-electron-dag-${{ matrix.os }}
-          path: .cache/e2e-mockup-sprint-pentest/
-          if-no-files-found: ignore
-          include-hidden-files: true
-          retention-days: 7
-
   release-candidate:
-    name: 12 Release Candidate / desktop package (${{ matrix.name }})
-    needs: [package-smoke, ci-dag, e2e-linux, e2e-native-smoke]
+    name: 10 Release Candidate / desktop package (${{ matrix.name }})
+    needs: [package-smoke, ci-dag, e2e]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:

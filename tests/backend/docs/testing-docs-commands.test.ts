@@ -151,13 +151,13 @@ describe("testing and operations documentation", () => {
 
     expect(playwrightConfig).toContain("outputDir: 'test-results'");
     expect(playwrightConfig).toContain("outputFolder: 'playwright-report'");
-    expect(ciWorkflow).toContain("name: playwright-linux-${{ matrix.project }}");
+    expect(ciWorkflow).toContain("name: playwright-${{ matrix.os.runner }}-${{ matrix.project }}");
     expect(playwrightWorkflow).toContain("name: playwright-diagnostic-${{ matrix.os.runner }}-${{ matrix.project }}");
     expect(playwrightWorkflow).toContain("test-results/");
     expect(playwrightWorkflow).toContain("playwright-report/");
     expect(testingGuide).toContain("test-results/");
     expect(testingGuide).toContain("playwright-report/");
-    expect(testingGuide).toContain("playwright-linux-<purpose>");
+    expect(testingGuide).toContain("playwright-<runner>-<purpose>");
     expect(testingGuide).toContain("playwright-diagnostic-<runner>-<purpose>");
 
     expect(packageJson.devDependencies).toHaveProperty("@playwright/test");
@@ -236,7 +236,7 @@ describe("testing and operations documentation", () => {
       "pnpm run audit",
       "pnpm audit --audit-level=high",
       "pnpm exec playwright test",
-      "playwright-linux-<purpose>",
+      "playwright-<runner>-<purpose>",
       "playwright-diagnostic-<runner>-<purpose>",
       "test-results/",
       "playwright-report/",

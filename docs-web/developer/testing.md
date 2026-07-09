@@ -115,10 +115,9 @@ It is staged as:
 1. `01 Preflight / release policy`: strict version bump gate for pull requests targeting `main`.
 2. `02` through `06`: type/guardrail validation, build, backend coverage, dashboard tests, and security audit.
 3. `07 Package`: npm tarball install smoke from the shared build artifact.
-4. `08 Orchestration`: Docker-backed mockup DAG validation from the shared build artifact.
-5. `09` and `10`: Linux full Playwright plus macOS/Windows smoke Playwright with bounded matrix parallelism.
-6. `11`: macOS/Windows Electron DAG orchestration.
-7. `12`: unsigned desktop release-candidate packages with `--publish never`.
+4. `08 Orchestration`: one shared OS matrix from the build artifact, with Linux Docker DAG validation and macOS/Windows Electron DAG validation.
+5. `09`: full Playwright on Linux, macOS, and Windows from one shared matrix template.
+6. `10`: unsigned desktop release-candidate packages with `--publish never`.
 
 `Playwright Diagnostics`, `Release Candidate Diagnostics`, and `Mockup Sprint Diagnostics` are manual-only rerun workflows. A PR cannot be merged with red CI.
 

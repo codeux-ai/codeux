@@ -170,7 +170,7 @@ Purpose-grouped E2E specs should prepare normal app state through `tests/e2e/hel
 
 The automatic Playwright gate is part of `.github/workflows/ci.yml`, named `Code UX CI Pipeline`. During the dev-first rollout it runs from the shared build artifact so E2E coverage validates the same compiled app used by package smoke, orchestration, and release-candidate packaging.
 
-The automatic E2E stage has two lanes. `09 E2E / Linux full` fans out across all purpose projects (`navigation`, `settings`, `projects`, `tasks`, `agents`, and `config`) with `max-parallel: 2`. `10 E2E / <os> smoke` runs native macOS and Windows smoke coverage for `navigation` and `tasks` with `max-parallel: 2`. Both lanes download `codeux-build-linux`, install Chromium with browser binaries cached under `.cache/ms-playwright`, install Linux Chromium system dependencies only on Linux runners with `pnpm exec playwright install-deps chromium`, run `pnpm exec playwright test --project=<purpose>` directly, and upload `test-results/` plus `playwright-report/` for seven days. Artifact names use `playwright-linux-<purpose>` for Linux and `playwright-<runner>-<purpose>` for native smoke jobs.
+The automatic E2E stage has one shared job template. `09 E2E / <os> full` fans out across Linux, macOS, and Windows, and each OS runs all purpose projects (`navigation`, `settings`, `projects`, `tasks`, `agents`, and `config`) with `max-parallel: 3`. Every shard downloads `codeux-build-linux`, installs Chromium with browser binaries cached under `.cache/ms-playwright`, installs Linux Chromium system dependencies only on Linux runners with `pnpm exec playwright install-deps chromium`, runs `pnpm exec playwright test --project=<purpose>` directly, and uploads `test-results/` plus `playwright-report/` for seven days. Artifact names use `playwright-<runner>-<purpose>` for every OS.
 
 The manual `.github/workflows/playwright.yml` workflow is now `Playwright Diagnostics`. It remains available for full OS/project reruns and uploads `playwright-diagnostic-<runner>-<purpose>` artifacts, but it does not run automatically on pull requests.
 
@@ -209,10 +209,9 @@ The lane is intentionally numbered and staged:
 - `02` through `06` run the fast core checks after preflight: quality guardrails plus backend/dashboard typecheck, server/dashboard build, backend coverage, dashboard Vitest, and security audit. These are the first runner burst and are designed around a six-runner budget.
 - `03 Build` uploads one `codeux-build-linux` artifact containing `dist/`, `dashboard/dist/`, and TypeScript cache output.
 - `07 Package` verifies the npm tarball install from that build artifact with `CODE_UX_SKIP_RELEASE_INSTALL_BUILD=1`.
-- `08 Orchestration` runs the Docker-backed mockup DAG from the build artifact.
-- `09` and `10` run Playwright from the build artifact: all six project groups on Linux with `max-parallel: 2`, plus macOS and Windows smoke coverage for `navigation` and `tasks` with `max-parallel: 2`.
-- `11` runs the macOS and Windows Electron DAG from the build artifact.
-- `12 Release Candidate` builds unsigned Linux, macOS, and Windows desktop packages with `--publish never` and uploads workflow artifacts.
+- `08 Orchestration` runs one shared OS matrix from the build artifact: Linux validates the Docker-backed mockup DAG, while macOS and Windows validate the same DAG through the Electron app.
+- `09 E2E` runs Playwright from the build artifact with one shared matrix template across Linux, macOS, and Windows. Every OS runs all six project groups (`navigation`, `settings`, `projects`, `tasks`, `agents`, and `config`) with `max-parallel: 3`.
+- `10 Release Candidate` builds unsigned Linux, macOS, and Windows desktop packages with `--publish never` and uploads workflow artifacts.
 
 The former standalone `Playwright Tests`, `Release Checks`, and `Mockup Sprint Orchestration` workflows are now manual diagnostics only: `Playwright Diagnostics`, `Release Candidate Diagnostics`, and `Mockup Sprint Diagnostics`. They remain useful for focused reruns, but the automatic PR signal comes from the numbered `Code UX CI Pipeline`.
 
@@ -264,9 +263,9 @@ Set `CODEUX_E2E_OPENROUTER_MODEL` only when validating a different OpenRouter mo
 
 ### Mockup Sprint Orchestration Policy
 
-The credential-free mockup sprint orchestration gate is part of `.github/workflows/ci.yml`. Its `08 Orchestration / Docker DAG` job runs `pnpm run test:orchestration:ci-dag:run` after the shared build artifact is available, so the deterministic 10-task DAG executes through Docker-backed provider workspaces without provider secrets and without rebuilding the app.
+The credential-free mockup sprint orchestration gate is part of `.github/workflows/ci.yml`. Its `08 Orchestration / <runtime> DAG` job is a shared OS matrix that runs after the shared build artifact is available. Linux runs `pnpm run test:orchestration:ci-dag:run`, so the deterministic 10-task DAG executes through Docker-backed provider workspaces without provider secrets and without rebuilding the app.
 
-The `11 Orchestration / Electron DAG` jobs run the same DAG shape on native Windows and macOS Electron runtimes after the package smoke and Docker DAG gates pass. These jobs install the cached Electron binary, rebuild native dependencies, launch `dist/electron/main.js`, wait for the embedded Code UX server, and run the host-execution mockup fixture. GitHub-hosted Windows and macOS runners do not provide Docker job containers, so the native Electron lane validates desktop orchestration while Ubuntu remains the Docker-backed orchestration gate.
+The macOS and Windows entries in the same `08 Orchestration` matrix run `pnpm run test:orchestration:ci-dag:electron:run`. Those jobs install the cached Electron binary, rebuild native dependencies, launch `dist/electron/main.js`, wait for the embedded Code UX server, and run the host-execution mockup fixture. GitHub-hosted Windows and macOS runners do not provide Docker job containers, so the native Electron entries validate desktop orchestration while Ubuntu remains the Docker-backed orchestration gate.
 
 The manual `.github/workflows/mockup-sprint-orchestration.yml` workflow remains available as `Mockup Sprint Diagnostics` for focused orchestration reruns. The fast `test:orchestration:rapid` lane remains available for local unit-level regression checks, while the compiled `test:orchestration:full` catalog and heavy `test:orchestration:pentest` lane remain manual escalation tools.
 

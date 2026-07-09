@@ -65,9 +65,9 @@ This builds the compiled runtime and executes `ci-small-dag`, a deterministic 10
 - 2 batch aggregation tasks.
 - 1 final validation task.
 
-This is the default no-secret GitHub Actions orchestration lane for pushes and pull requests targeting `dev` or `main`. It is intentionally smaller than the heavy DAG stress lane but still validates Docker-backed task dispatch, dependency unlocks, provider concurrency, feature-branch merging, final repository assertions, and compiled-runtime startup.
+This is the Linux entry of the default no-secret GitHub Actions orchestration matrix for pushes and pull requests targeting `dev` or `main`. It is intentionally smaller than the heavy DAG stress lane but still validates Docker-backed task dispatch, dependency unlocks, provider concurrency, feature-branch merging, final repository assertions, and compiled-runtime startup.
 
-Pushes to `main`, pull requests targeting `main`, and manual workflow dispatches add native Windows and macOS Electron DAG coverage:
+The same `08 Orchestration` matrix adds native Windows and macOS Electron DAG coverage:
 
 ```bash
 pnpm run test:orchestration:ci-dag:electron
@@ -75,7 +75,7 @@ pnpm run test:orchestration:ci-dag:electron
 
 That lane launches the Electron app, waits for the embedded Code UX server, and runs the same 10-task DAG shape through a host-execution mockup fixture. It runs directly on the hosted OS because GitHub-hosted Windows and macOS runners do not provide Docker job containers.
 
-In GitHub Actions, the CI DAG and Electron DAG lanes run build, Electron binary install, native dependency rebuild, and orchestration as separate steps so a stall is visible at the step boundary. Each DAG job has a 25-minute workflow timeout, and the mockup runner bounds individual HTTP calls at 60 seconds plus the full project run at the configured `--timeout-ms`. The runner streams redacted runtime stdout/stderr and emits `mockup_pentest_progress` records whenever sprint or task state changes, plus heartbeat progress every 15 seconds. CI passes `--stall-timeout-ms 180000`; if no sprint, task status, merge, or expected-output progress is observed for three minutes after polling starts, the runner fails early with the last sprint/task snapshot and writes the final table to `GITHUB_STEP_SUMMARY`.
+In GitHub Actions, `08 Orchestration` runs build-artifact download, Electron binary install, native dependency rebuild, and orchestration as separate steps where applicable so a stall is visible at the step boundary. Each DAG job has a 25-minute workflow timeout, and the mockup runner bounds individual HTTP calls at 60 seconds plus the full project run at the configured `--timeout-ms`. The runner streams redacted runtime stdout/stderr and emits `mockup_pentest_progress` records whenever sprint or task state changes, plus heartbeat progress every 15 seconds. CI passes `--stall-timeout-ms 180000`; if no sprint, task status, merge, or expected-output progress is observed for three minutes after polling starts, the runner fails early with the last sprint/task snapshot and writes the final table to `GITHUB_STEP_SUMMARY`.
 
 The compact DAG's final validation command runs as a scenario-level assertion after all task branches have merged, not inside the final worker worktree. During polling, the runner also enforces the declared DAG: a task with dependencies may not leave `pending` until each dependency is marked merged. If a future task starts early, the runner emits `mockup_pentest_dependency_merge_violation` and fails the test run immediately. The runner does not treat a completed sprint as terminal for these scenarios until expected repository files are visible in the project checkout; while it waits, it emits `mockup_pentest_waiting_for_expected_output`, but only an actual expected-output readiness change refreshes the stall watchdog. This keeps native Electron runners from validating against a dependency branch before Windows has made the parent merge visible, while still failing within the configured stall timeout if a completed sprint never exposes the merged files.
 
