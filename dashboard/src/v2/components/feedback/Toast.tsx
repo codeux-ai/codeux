@@ -1,8 +1,8 @@
-import { h, type FunctionComponent } from "preact";
-import { useEffect, useRef, useLayoutEffect, useState } from "preact/hooks";
+import { h, type FunctionComponent, type JSX } from "preact";
+import { useCallback, useEffect, useRef, useLayoutEffect, useState } from "preact/hooks";
 import { AlertTriangle, CheckCircle, Info, XCircle, X } from "lucide-preact";
 import gsap from "gsap";
-import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { GSAP_DURATIONS, useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
@@ -61,16 +61,24 @@ export const Toast: FunctionComponent<ToastProps> = ({
   const dismissingRef = useRef(false);
   const retryPendingRef = useRef(false);
   const retryStatusIdRef = useRef<string | null>(null);
+  const autoDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countdownFrameRef = useRef<number | null>(null);
+  const activeStartedAtRef = useRef(0);
+  const elapsedBeforePauseRef = useRef(0);
+  const pauseReasonsRef = useRef({ pointer: false, focus: false });
   if (retryStatusIdRef.current === null) {
     retryStatusIdRef.current = `toast-retry-status-${Math.random().toString(36).slice(2)}`;
   }
   const [retryPending, setRetryPending] = useState(false);
+  const [countdownRatio, setCountdownRatio] = useState(1);
+  const [isCountdownPaused, setIsCountdownPaused] = useState(false);
   const reducedMotion = useReducedMotion();
   const motionTokens = useGsapInteractionTokens();
   const cssTokens = useInteractionTokens();
   const Icon = icons[type];
   const colorClass = colors[type];
   const retryText = retryLabel || "Retry";
+  const shouldAutoDismiss = autoDismissMs > 0 && type !== "error";
 
   useLayoutEffect(() => {
     if (!containerRef.current) return;
@@ -93,16 +101,6 @@ export const Toast: FunctionComponent<ToastProps> = ({
 
     return () => ctx.revert();
   }, [motionTokens.asyncFeedback.duration, motionTokens.asyncFeedback.ease, reducedMotion, type]);
-
-  useEffect(() => {
-    if (autoDismissMs === 0 || type === "error") return; // errors may require manual dismissal or action
-
-    const timer = setTimeout(() => {
-      handleDismiss();
-    }, autoDismissMs);
-
-    return () => clearTimeout(timer);
-  }, [autoDismissMs, type]);
 
   const focusWithoutScroll = (element: HTMLElement) => {
     try {
@@ -142,9 +140,49 @@ export const Toast: FunctionComponent<ToastProps> = ({
     });
   };
 
-  const handleDismiss = () => {
+  const clearAutoDismissWork = useCallback(() => {
+    if (autoDismissTimerRef.current !== null) {
+      clearTimeout(autoDismissTimerRef.current);
+      autoDismissTimerRef.current = null;
+    }
+    if (countdownFrameRef.current !== null) {
+      if (typeof cancelAnimationFrame === "function") {
+        cancelAnimationFrame(countdownFrameRef.current);
+      }
+      countdownFrameRef.current = null;
+    }
+  }, []);
+
+  const getElapsedMs = useCallback(() => {
+    const activeElapsed = autoDismissTimerRef.current === null
+      ? 0
+      : Math.max(0, Date.now() - activeStartedAtRef.current);
+    return Math.min(autoDismissMs, elapsedBeforePauseRef.current + activeElapsed);
+  }, [autoDismissMs]);
+
+  const updateCountdownRatio = useCallback(() => {
+    if (!shouldAutoDismiss || autoDismissMs <= 0) return;
+    const remainingMs = Math.max(0, autoDismissMs - getElapsedMs());
+    setCountdownRatio(remainingMs / autoDismissMs);
+  }, [autoDismissMs, getElapsedMs, shouldAutoDismiss]);
+
+  const startCountdownFrame = useCallback(() => {
+    if (reducedMotion || !shouldAutoDismiss || typeof requestAnimationFrame !== "function") return;
+
+    const tick = () => {
+      updateCountdownRatio();
+      if (autoDismissTimerRef.current !== null) {
+        countdownFrameRef.current = requestAnimationFrame(tick);
+      }
+    };
+
+    countdownFrameRef.current = requestAnimationFrame(tick);
+  }, [reducedMotion, shouldAutoDismiss, updateCountdownRatio]);
+
+  const handleDismiss = useCallback(() => {
     if (dismissingRef.current) return;
     dismissingRef.current = true;
+    clearAutoDismissWork();
     const previousActive = document.activeElement;
     if (!containerRef.current) return;
 
@@ -155,10 +193,61 @@ export const Toast: FunctionComponent<ToastProps> = ({
       ease: motionTokens.enterExit.ease,
       onComplete: () => {
         onDismiss(id);
-        moveFocusToFallbackIfRemoved(previousActive);
+        if (previousActive instanceof HTMLElement && containerRef.current?.contains(previousActive)) {
+          moveFocusToFallback();
+        } else {
+          moveFocusToFallbackIfRemoved(previousActive);
+        }
       },
     });
-  };
+  }, [clearAutoDismissWork, id, motionTokens.enterExit.duration, motionTokens.enterExit.ease, onDismiss, reducedMotion]);
+
+  const resumeAutoDismiss = useCallback(() => {
+    if (!shouldAutoDismiss || dismissingRef.current) return;
+    clearAutoDismissWork();
+
+    const remainingMs = Math.max(0, autoDismissMs - elapsedBeforePauseRef.current);
+    setIsCountdownPaused(false);
+    setCountdownRatio(autoDismissMs > 0 ? remainingMs / autoDismissMs : 0);
+
+    if (remainingMs <= 0) {
+      handleDismiss();
+      return;
+    }
+
+    activeStartedAtRef.current = Date.now();
+    autoDismissTimerRef.current = setTimeout(() => {
+      handleDismiss();
+    }, remainingMs);
+    startCountdownFrame();
+  }, [autoDismissMs, clearAutoDismissWork, handleDismiss, shouldAutoDismiss, startCountdownFrame]);
+
+  const pauseAutoDismiss = useCallback((reason: "pointer" | "focus") => {
+    pauseReasonsRef.current[reason] = true;
+    if (!shouldAutoDismiss || autoDismissTimerRef.current === null) {
+      setIsCountdownPaused(shouldAutoDismiss);
+      return;
+    }
+
+    elapsedBeforePauseRef.current = getElapsedMs();
+    clearAutoDismissWork();
+    updateCountdownRatio();
+    setIsCountdownPaused(true);
+  }, [clearAutoDismissWork, getElapsedMs, shouldAutoDismiss, updateCountdownRatio]);
+
+  const releaseAutoDismissPause = useCallback((reason: "pointer" | "focus") => {
+    pauseReasonsRef.current[reason] = false;
+    if (pauseReasonsRef.current.pointer || pauseReasonsRef.current.focus) return;
+    resumeAutoDismiss();
+  }, [resumeAutoDismiss]);
+
+  const handleFocusOut = useCallback((event: JSX.TargetedFocusEvent<HTMLDivElement>) => {
+    const nextFocusedElement = event.relatedTarget;
+    if (nextFocusedElement instanceof Node && event.currentTarget.contains(nextFocusedElement)) {
+      return;
+    }
+    releaseAutoDismissPause("focus");
+  }, [releaseAutoDismissPause]);
 
   const handleRetry = async () => {
     if (!retryAction || retryPending || retryPendingRef.current) {
@@ -183,6 +272,22 @@ export const Toast: FunctionComponent<ToastProps> = ({
     }
   }, [isDismissing]);
 
+  useEffect(() => {
+    clearAutoDismissWork();
+    elapsedBeforePauseRef.current = 0;
+    activeStartedAtRef.current = 0;
+    pauseReasonsRef.current = { pointer: false, focus: false };
+    setIsCountdownPaused(false);
+    setCountdownRatio(1);
+
+    if (!shouldAutoDismiss) {
+      return clearAutoDismissWork;
+    }
+
+    resumeAutoDismiss();
+    return clearAutoDismissWork;
+  }, [autoDismissMs, clearAutoDismissWork, resumeAutoDismiss, shouldAutoDismiss, type]);
+
   return (
     <div
       ref={(el) => {
@@ -191,7 +296,13 @@ export const Toast: FunctionComponent<ToastProps> = ({
       }}
       data-toast-type={type}
       data-motion-contract="asyncFeedback"
-      className={`pointer-events-auto flex items-start gap-3 w-full max-w-sm p-4 rounded-2xl shadow-2xl border border-black/[0.08] dark:border-white/[0.08] backdrop-blur-md bg-white/95 dark:bg-void-900/95 ${colorClass} ${className}`}
+      onPointerEnter={() => pauseAutoDismiss("pointer")}
+      onPointerLeave={() => releaseAutoDismissPause("pointer")}
+      onFocusCapture={() => pauseAutoDismiss("focus")}
+      onBlurCapture={handleFocusOut}
+      onFocusIn={() => pauseAutoDismiss("focus")}
+      onFocusOut={handleFocusOut}
+      className={`pointer-events-auto relative overflow-hidden flex items-start gap-3 w-full max-w-sm p-4 rounded-2xl shadow-2xl border border-black/[0.08] dark:border-white/[0.08] backdrop-blur-md bg-white/95 dark:bg-void-900/95 ${colorClass} ${className}`}
     >
       <Icon aria-hidden="true" className="w-5 h-5 shrink-0 mt-0.5" />
       <span className="sr-only">{type}</span>
@@ -254,6 +365,20 @@ export const Toast: FunctionComponent<ToastProps> = ({
       >
         <X className="w-4 h-4" />
       </button>
+      {shouldAutoDismiss && !reducedMotion && (
+        <div
+          aria-hidden="true"
+          data-toast-countdown
+          data-paused={isCountdownPaused ? "true" : undefined}
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-current/10"
+          style={{ transitionDuration: `${GSAP_DURATIONS.fast * 1000}ms`, transitionTimingFunction: motionTokens.controlFeedback.ease }}
+        >
+          <div
+            className="h-full w-full origin-left bg-current/30"
+            style={{ transform: `scaleX(${countdownRatio})` }}
+          />
+        </div>
+      )}
     </div>
   );
 };

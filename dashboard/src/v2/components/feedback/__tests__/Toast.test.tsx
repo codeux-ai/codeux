@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { h } from "preact";
 import { useState } from "preact/hooks";
-import { render, screen, fireEvent, waitFor } from "@testing-library/preact";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/preact";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { ToastProvider, useToast } from "../ToastProvider.js";
 import { Toast } from "../Toast.js";
@@ -59,6 +59,7 @@ const RetryRemovalToast = ({ onRetry }: { onRetry: () => void | Promise<void> })
 
 describe("Toast System", () => {
   afterEach(() => {
+    vi.useRealTimers();
     document.body.innerHTML = '';
   });
 
@@ -156,5 +157,99 @@ describe("Toast System", () => {
     await waitFor(() => expect(onRetry).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument());
     await waitFor(() => expect(document.activeElement).toBe(screen.getByText("Toast fallback")));
+  });
+
+  it("pauses auto-dismiss while pointer-hovered and resumes with remaining time", () => {
+    vi.useFakeTimers();
+    const onDismiss = vi.fn();
+
+    render(
+      <Toast
+        id="hover-toast"
+        type="success"
+        message="Hover saved"
+        onDismiss={onDismiss}
+        autoDismissMs={100}
+      />
+    );
+
+    const toast = screen.getByText("Hover saved").closest("[data-toast-type='success']") as HTMLElement;
+    const countdown = toast.querySelector("[data-toast-countdown]");
+    expect(countdown).toBeInTheDocument();
+    expect(countdown).toHaveAttribute("aria-hidden", "true");
+
+    fireEvent.pointerEnter(toast);
+    act(() => {
+      vi.advanceTimersByTime(150);
+    });
+
+    expect(onDismiss).not.toHaveBeenCalled();
+    expect(countdown).toHaveAttribute("data-paused", "true");
+
+    fireEvent.pointerLeave(toast);
+    act(() => {
+      vi.advanceTimersByTime(99);
+    });
+    expect(onDismiss).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(onDismiss).toHaveBeenCalledWith("hover-toast");
+  });
+
+  it("pauses auto-dismiss while focus is inside an action and resumes on focus-out", () => {
+    vi.useFakeTimers();
+    const onDismiss = vi.fn();
+
+    render(
+      <Toast
+        id="focus-toast"
+        type="info"
+        message="Focusable info"
+        action={{ label: "View details", onClick: () => {} }}
+        onDismiss={onDismiss}
+        autoDismissMs={100}
+      />
+    );
+
+    const action = screen.getByRole("button", { name: "View details" });
+    fireEvent.focus(action);
+    act(() => {
+      vi.advanceTimersByTime(150);
+    });
+
+    expect(onDismiss).not.toHaveBeenCalled();
+
+    fireEvent.blur(action, { relatedTarget: document.body });
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(onDismiss).toHaveBeenCalledWith("focus-toast");
+  });
+
+  it("keeps error toasts manual-dismiss with no countdown", () => {
+    vi.useFakeTimers();
+    const onDismiss = vi.fn();
+
+    render(
+      <Toast
+        id="error-toast"
+        type="error"
+        message="Blocking error"
+        onDismiss={onDismiss}
+        autoDismissMs={50}
+      />
+    );
+
+    const toast = screen.getByText("Blocking error").closest("[data-toast-type='error']") as HTMLElement;
+    expect(toast.querySelector("[data-toast-countdown]")).not.toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(onDismiss).not.toHaveBeenCalled();
   });
 });

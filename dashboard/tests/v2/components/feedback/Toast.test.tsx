@@ -224,8 +224,9 @@ describe("Toast", () => {
 
     expect(retryAction).toHaveBeenCalledTimes(1);
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Retry save in progress" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Retry save" })).toBeDisabled();
     });
+    expect(screen.getByRole("button", { name: "Retry save" })).toHaveAccessibleDescription("Retry save in progress.");
 
     resolveRetry();
     await waitFor(() => {
