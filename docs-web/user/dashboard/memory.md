@@ -94,6 +94,8 @@ The map updates after memory reloads, re-embedding, or promotion.
 
 Rapid tier, sprint, or agent filter changes are sequenced by the Memory page data hook. Older responses are discarded, so only the newest memory list and embedding map can update the graph or clear the loading state.
 
+The graph pauses its canvas animation loop while the browser tab is hidden and resumes when the tab is visible again. Empty or loading maps clear the canvas without running the full edge, pulse, and node drawing passes, so the page stays responsive while data changes.
+
 ## Model browser
 
 The **Model Catalog** action opens a compact model browser instead of a flat card list. It separates:

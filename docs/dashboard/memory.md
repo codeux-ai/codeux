@@ -60,6 +60,7 @@ The memory map uses a pointer-centered camera so users can inspect dense graphs 
 - Selecting a node from the canvas or list recenters the camera on that memory at a readable zoom level, and Reset returns to the default overview without leaving a stale selection behind.
 - Node points, category labels, and memory labels are drawn in clamped screen space so the graph positions zoom while dots and text remain readable instead of growing with the map or disappearing during deep inspection.
 - Hovering a node highlights it and updates the cursor only. At higher zoom levels the canvas renders the focused label bubble for the selected memory instead of creating hover-only overlays.
+- The canvas render loop pauses its requestAnimationFrame and random neural-fire timer while the browser document is hidden, then resumes a single loop when the tab becomes visible again. Empty/loading maps still clear the canvas but skip the expensive edge, pulse, and node drawing passes.
 - Dense maps are expected to remain navigable at 200+ memories without forcing every memory label to render at once.
 
 ## Memory Map Controls
