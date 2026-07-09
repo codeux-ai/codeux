@@ -1034,6 +1034,7 @@ jobs:
 
     expect(updateTaskRun).toHaveBeenCalledWith("run-1", { workerBranch: recovered });
     expect(updateTaskRun).toHaveBeenCalledWith("run-1", { workerBranch: null });
+    expect(context.executionRepository?.listTaskRunEvents).toHaveBeenCalledTimes(1);
     expect(result.subtasks[0].status).toBe("COMPLETED");
     expect(result.subtasks[0].is_merged).toBe(true);
     expect(result.subtasks[0].merge_indicator).toBe("MERGED");

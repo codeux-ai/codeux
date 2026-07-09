@@ -68,7 +68,7 @@ export interface CycleRunnerArgs {
   planningAgentPresetId?: string;
 }
 
-interface LocalCliGitEvidence {
+export interface LocalCliGitEvidence {
   pushedTaskIds: Set<string>;
   settledTaskIds: Set<string>;
 }
@@ -90,6 +90,7 @@ export class CycleRunner {
     manualMergeTasks: Subtask[];
     workerEscalatedMergeConflictTasks: Subtask[];
     activeProjectAttentionItems: ProjectAttentionItemRecord[];
+    localCliGitEvidence: LocalCliGitEvidence;
   }> {
     const dashboardSettings = this.deps.getDashboardSettings({
       projectId: args.executionContext.project.id,
@@ -486,6 +487,7 @@ export class CycleRunner {
       manualMergeTasks: protocolResult.manualMergeTasks,
       workerEscalatedMergeConflictTasks: protocolResult.workerEscalatedMergeConflictTasks,
       activeProjectAttentionItems: reconciledActiveProjectAttentionItems,
+      localCliGitEvidence,
     };
   }
 

@@ -42,15 +42,20 @@ import {
   isCliTaskRun,
   isCliTaskRunAwaitingGitFinalization,
   resolveCliGitPushedWorkerBranch,
+  type TaskRunEventLike,
 } from "./cli-git-finalization.js";
 
 const EMPTY_FEATURE_PR_CHECK_GRACE_MS = 10 * 60 * 1000;
 
-function isExecutionCompletedForCi(context: CiGateContext, task: Subtask, taskRun: TaskRunRecord | null): boolean {
+function isExecutionCompletedForCi(
+  context: CiGateContext,
+  task: Subtask,
+  taskRun: TaskRunRecord | null,
+  listTaskRunEvents?: (taskRunId: string, limit?: number) => TaskRunEventLike[],
+): boolean {
   // CLI workflows have two completion moments: provider/session completion and
   // git finalization. Branch-only merge gates must wait for the task run itself,
   // because worker branches can be created after the provider has already exited.
-  const listTaskRunEvents = context.executionRepository?.listTaskRunEvents?.bind(context.executionRepository);
   if (isCliTaskRun(taskRun)) {
     return taskRun?.state === "COMPLETED" && hasCliGitFinalized(taskRun, listTaskRunEvents);
   }
@@ -130,7 +135,19 @@ export class FeaturePrGateService {
       const taskRun = context.executionRepository && context.sprintRunId && task.record_id
         ? context.executionRepository.getLatestTaskRun(task.record_id, context.sprintRunId)
         : null;
-      const listTaskRunEvents = context.executionRepository?.listTaskRunEvents?.bind(context.executionRepository);
+      // All CLI git decisions below use the same immutable event snapshot. A
+      // gate evaluation never appends git-finalization events, so rereading the
+      // same 500-row window four times only adds database work on wide DAGs.
+      let taskRunEvents: TaskRunEventLike[] | undefined;
+      const listTaskRunEvents = taskRun?.id && context.executionRepository
+        ? (taskRunId: string, limit?: number): TaskRunEventLike[] => {
+            if (taskRunId !== taskRun.id) {
+              return context.executionRepository!.listTaskRunEvents(taskRunId, limit);
+            }
+            taskRunEvents ??= context.executionRepository!.listTaskRunEvents(taskRun.id, limit);
+            return taskRunEvents;
+          }
+        : undefined;
       const recoveredPushedBranch = resolveCliGitPushedWorkerBranch(taskRun, listTaskRunEvents);
       const taskRunWorkerBranch = taskRun?.workerBranch || recoveredPushedBranch;
       if (
@@ -142,7 +159,7 @@ export class FeaturePrGateService {
           context.executionRepository.updateTaskRun(taskRun.id, { workerBranch: recoveredPushedBranch });
         }
       }
-      const isExecutionCompleted = isExecutionCompletedForCi(context, task, taskRun);
+      const isExecutionCompleted = isExecutionCompletedForCi(context, task, taskRun, listTaskRunEvents);
       const cliRunAwaitingGitFinalization = isCliTaskRunAwaitingGitFinalization(taskRun, listTaskRunEvents);
       const cliGitNoChanges = hasCliGitNoChanges(taskRun, listTaskRunEvents);
       const cliGitPushed = hasCliGitPushed(taskRun, listTaskRunEvents);
