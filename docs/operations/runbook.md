@@ -226,12 +226,12 @@ Checks:
   - Check if the provider CLI is still available and functioning on the host machine.
 - Verify provider API keys or auth mounts are correct and the provider service is not experiencing downtime.
 
-### 6. Restart a failed planning invocation
+### 6. Restart or continue a failed/cancelled planning invocation
 Checks:
-- Open Chat -> Invocations, select the failed planning invocation, then choose one of the header actions.
-- **Restart** marks the original failed transcript as preserved, creates a replacement invocation row, resumes the failed provider session, and sends the full planning prompt again.
-- **Continue** marks the original failed transcript as preserved, creates a replacement invocation row, resumes the failed provider session, and sends a continuation prompt that also embeds the original planning instructions so the run can still complete if the provider has lost the native conversation.
-- Docker-backed planning runs use a stable project/sprint planning workspace and preserve the paired runtime volume while the run is failed/incomplete. Restart and Continue reuse that workspace so provider-local session files, caches, and runtime state remain available across quota/auth failures. Successful planning cleans up the workspace and paired runtime volume.
+- Open Chat -> Invocations, select the failed or cancelled planning invocation, then choose one of the header actions.
+- **Restart** marks the original terminal transcript as preserved, creates a replacement invocation row, resumes the terminal provider session, and sends the full planning prompt again.
+- **Continue** marks the original terminal transcript as preserved, creates a replacement invocation row, resumes the terminal provider session, and sends a continuation prompt that also embeds the original planning instructions so the run can still complete if the provider has lost the native conversation.
+- Docker-backed planning runs use a stable project/sprint planning workspace and preserve the paired runtime volume while the run is failed, cancelled, or incomplete. Restart and Continue reuse that workspace so provider-local session files, caches, and runtime state remain available across quota/auth failures and operator cancellations. Fresh planning invocations in `REMOTE` git mode still refresh `origin` and build a new snapshot from `origin/<branch>`, using the effective runtime git default branch as the fallback, so new planner runs do not start from a stale local branch. Successful planning cleans up the workspace and paired runtime volume.
 - Preserved sprint-scoped invocation rows block sprint deletion so the quota/error transcript is not removed by a cascade.
 - If the restart or continuation fails, retry from the original failed row or inspect the new failed row depending on which invocation produced the latest error.
 

@@ -111,7 +111,7 @@ For planning flows, Code UX (`src/services/planning-agent-service.ts`):
 - retries failed planning provider invocations such as `Command aborted` or empty output before failing the request; these provider attempts are bounded by `guardrails.jobs.planning.cap` when planning guardrails are enabled
 - maintains same-session continuation semantics during retries (`src/infrastructure/providers/cli/provider-runner.ts` and `src/infrastructure/providers/cli/provider-runtime-artifacts.ts`); subsequent JSON retry requests continue the same underlying provider session using `continueSessionId` (falling back from `nativeSessionId` to the logical `sessionId`)
 - records execution and provider invocation trails during retries, so operators will see an initial system message indicating the retry followed by a new provider invocation recording the follow-up prompt and reply
-- when Docker execution mode is active, planning runs inside a snapshot workspace volume and captures `.task-learnings.md` back out of that snapshot instead of trying to read host files directly
+- when Docker execution mode is active, planning runs inside a snapshot workspace volume and captures `.task-learnings.md` back out of that snapshot instead of trying to read host files directly; in `REMOTE` git mode, fresh planning invocations refresh `origin` and check out only `origin/<branch>` for the sprint feature branch or active branch, using the effective runtime git default branch as the fallback, so new planning does not start from a stale local branch, while restart/continue actions reuse the preserved snapshot for session continuity
 - allows sprint compose, improve, and `Plan & Start` to work even when no live MCP listener is attached
 
 For merge conflicts, Code UX:
