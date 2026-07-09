@@ -8,8 +8,8 @@ This page covers cloning, building, running, and contributing.
 
 - **Node.js >=22** — The project targets Node 22 in CI and uses ES2022 / NodeNext modules.
 - **pnpm 10.33.0** — The package manager declared in `packageManager`.
-- **Git ≥ 2.30**.
-- **(Optional) Docker** — for testing virtual workers in DOCKER mode and sprint preview browsers.
+- **Git** — only needed for the manual `git clone` step or contributor workflows.
+- **Docker** — required for normal runtime operation, including containerized helper Git, virtual workers in DOCKER mode, and sprint preview browsers.
 
 ## Clone & install
 

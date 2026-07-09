@@ -1,5 +1,4 @@
 import * as path from "path";
-import { execSync } from "child_process";
 
 const sanitizeSegment = (value: string): string =>
   value
@@ -13,21 +12,7 @@ export const buildTaskRunKey = (repoPath: string, sprintNumber: number, taskName
   let repoName = "";
   try {
     const resolvedPath = path.resolve(repoPath);
-    const baseName = path.basename(resolvedPath);
-    if (!process.env.VITEST && (repoPath === "/workspace" || repoPath === "/workspace/")) {
-      const gitUrl = execSync("git config --get remote.origin.url", {
-        cwd: resolvedPath,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      }).trim();
-      if (gitUrl) {
-        const parts = gitUrl.replace(/\.git$/, "").split(/[\\/:]/);
-        repoName = parts[parts.length - 1] || "";
-      }
-    }
-    if (!repoName) {
-      repoName = baseName;
-    }
+    repoName = path.basename(resolvedPath);
   } catch {
     repoName = path.basename(path.resolve(repoPath));
   }

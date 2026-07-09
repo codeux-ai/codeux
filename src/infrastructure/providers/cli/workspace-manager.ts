@@ -8,7 +8,6 @@ import { CliWorkflowSettings } from "../../../contracts/app-types.js";
 import { CommandResult, runCommandStrict } from "../../../services/cli-process-runner.js";
 import { extractPathHints } from "../../../services/cli-workflow-text-utils.js";
 import { workspaceVolumeHelperPool } from "./workspace-volume-helper.js";
-import { releaseGitHelperForCwd } from "../../../shared/subprocess/command-runner.js";
 import { CONTAINER_RUNTIME_HOME } from "./provider-runtime-artifacts.js";
 import { getHomeCodeUxPath } from "../../../shared/config/code-ux-paths.js";
 import {
@@ -30,6 +29,7 @@ export const CONTAINER_PERSISTENT_SKILL_STORAGE_ROOT = "/code-ux/persistent-skil
 export interface WorkspaceCommandOptions {
   env?: NodeJS.ProcessEnv;
   signal?: AbortSignal;
+  stdinFile?: string;
   trimOutput?: boolean;
 }
 
@@ -515,9 +515,6 @@ export class WorkspaceManager implements IWorkspaceManager {
       return;
     }
 
-    // Release the persistent git helper bound to the worktree before deleting it, so its bind
-    // mount does not keep the directory busy.
-    await releaseGitHelperForCwd(worktreePath).catch(() => undefined);
     await runCommandStrict("git", ["worktree", "remove", "--force", worktreePath], repoPath).catch(() => undefined);
     await fs.rm(worktreePath, { recursive: true, force: true }).catch(() => undefined);
     await runCommandStrict("git", ["worktree", "prune"], repoPath).catch(() => undefined);
@@ -584,6 +581,7 @@ export class WorkspaceManager implements IWorkspaceManager {
     if (!isWorkspaceHandle(worktreePath)) {
       return await runCommandStrict(command, args, worktreePath, options.env ?? process.env, {
         signal: options.signal,
+        stdinFile: options.stdinFile,
         trimOutput: options.trimOutput,
       });
     }
@@ -611,6 +609,7 @@ export class WorkspaceManager implements IWorkspaceManager {
     }
     return await runCommandStrict("docker", dockerArgs, process.cwd(), options.env ?? process.env, {
       signal: options.signal,
+      stdinFile: options.stdinFile,
       trimOutput: options.trimOutput,
     });
   }

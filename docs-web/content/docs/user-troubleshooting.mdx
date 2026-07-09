@@ -154,7 +154,7 @@ The Docker daemon is unreachable, or the worker image cannot be pulled.
 
 **Fix:** verify `docker ps` works. Pre-pull the image: `docker pull node:24-bookworm`. For preview/file-browser issues specifically, triage routes through preview host middleware (`src/server/preview-host-middleware.ts`) and cleanup/rebuild/restart steps. Ensure any commands used are safe and avoid exposing local DB contents, tokens, hostnames, or private paths.
 
-If the header Docker status control shows the red `Runtime not ready` warning, open the Docker status menu for the dependency list. The warning is tied to `GET /api/onboarding/readiness` and reflects required Docker CLI, Docker daemon, and Git CLI checks; it clears only after the runtime reports those required checks as ready.
+If the header Docker status control shows the red `Runtime not ready` warning, open the Docker status menu for the dependency list. The warning is tied to `GET /api/onboarding/readiness` and reflects required Docker CLI and Docker daemon checks; it clears only after the runtime reports those required checks as ready. Backend Git work runs through containerized helpers, so host Git is not part of readiness.
 
 For packaged Windows builds, Docker errors that show `C:\...` as a container `--workdir`, `HOME`, or mount target indicate an outdated build. Current preview containers mount Windows/macOS/Linux host runtime storage at Linux container paths under `/code-ux-preview-runtime`.
 

@@ -167,7 +167,7 @@ export const getOnboardingRuntimeReadiness = async (
     return cachedReadiness;
   }
 
-  const [dockerCli, gitCli, providerStatuses] = await Promise.all([
+  const [dockerCli, providerStatuses] = await Promise.all([
     runCheck(
       "docker-cli",
       "Docker CLI",
@@ -175,14 +175,6 @@ export const getOnboardingRuntimeReadiness = async (
       ["--version"],
       true,
       "Install Docker Desktop or Docker Engine, then make sure the `docker` command is available on PATH.",
-    ),
-    runCheck(
-      "git-cli",
-      "Git CLI",
-      "git",
-      ["--version"],
-      true,
-      "Install Git and make sure the `git` command is available on PATH.",
     ),
     getProviderCredentialStatuses(settings),
   ]);
@@ -209,7 +201,7 @@ export const getOnboardingRuntimeReadiness = async (
     };
   }
 
-  const dependencies = [dockerCli, dockerDaemon, gitCli];
+  const dependencies = [dockerCli, dockerDaemon];
   const requiredMissing = dependencies.some((dependency) => dependency.required && dependency.status === "missing");
 
   cachedReadiness = {
@@ -219,7 +211,7 @@ export const getOnboardingRuntimeReadiness = async (
       label: requiredMissing ? "Cluster not ready" : "Cluster ready",
       detail: requiredMissing
         ? "Docker must be installed and running before containerized provider CLIs can execute tasks."
-        : "Required local runtime dependencies are available.",
+        : "Required local runtime dependencies are available. Git is provided by the containerized helper image.",
     },
     dependencies,
     providers: providerStatuses,

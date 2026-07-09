@@ -536,7 +536,6 @@ describe("dashboard-lifecycle-service", () => {
         if (command === "apt-get" && args[0] === "--version") return { ok: true, code: 0, stdout: "apt 2", stderr: "" };
         if (command === "systemctl" && args[0] === "--version") return { ok: true, code: 0, stdout: "systemd 255", stderr: "" };
         if (command === "docker") return { ok: false, code: 127, stdout: "", stderr: "docker missing" };
-        if (command === "git") return { ok: false, code: 127, stdout: "", stderr: "git missing" };
         if (command === "apt-get" && args[0] === "update") return { ok: true, code: 0, stdout: "updated", stderr: "" };
         if (command === "apt-get" && args[0] === "install") return { ok: true, code: 0, stdout: "installed", stderr: "" };
         if (command === "systemctl" && args[0] === "enable") return { ok: true, code: 0, stdout: "started", stderr: "" };
@@ -565,10 +564,10 @@ describe("dashboard-lifecycle-service", () => {
         expect(result.status).toBe("success");
         expect(result.commands.map((command) => command.id)).toEqual([
           "apt-update",
-          "apt-install-docker-git",
+          "apt-install-docker",
           "systemctl-enable-now-docker",
         ]);
-        expect(commandRun).toHaveBeenCalledWith("apt-get", ["install", "-y", "docker.io", "docker-compose-plugin", "git"], expect.anything());
+        expect(commandRun).toHaveBeenCalledWith("apt-get", ["install", "-y", "docker.io", "docker-compose-plugin"], expect.anything());
       } finally {
         getuidSpy?.mockRestore();
       }
