@@ -28,6 +28,8 @@ In GitHub Actions, the CI DAG and Electron DAG lanes expose build, Electron bina
 
 In LOCAL git mode, recovered worker-branch evidence is dependency state: downstream DAG tasks stay blocked until the parent branch has merged into the sprint feature branch or the parent is proven to have no merge work.
 
+Host-execution DAG tasks export worker output through an isolated temporary Git index. The exporter uses Git's ignore-aware changed-path discovery, stages modified/deleted/untracked paths into that index, and emits a cached binary diff so parent-created files are present before dependent tasks unlock without committing runtime caches.
+
 Run `pnpm run test:orchestration:merge-e2e` after a unit-level merge fix passes. It builds the compiled runtime and exercises the `merge-conflict-dag` mockup scenario through the local project runtime.
 
 Run `pnpm run test:orchestration:full` manually when a scheduler, provider, CI, QA, or multi-project orchestration issue needs broader compiled-runtime evidence. It executes every deterministic mockup scenario and writes artifacts under `.cache/e2e-mockup-sprint-pentest/<run-id>/`.
