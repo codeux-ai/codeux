@@ -1091,6 +1091,17 @@ export class WatchLoopRunner {
           break;
         }
         case "paused_awaiting_merge": {
+          const retryableLocalWorkerMerge = githubMode === "LOCAL"
+            && manualMergeTasks.length > 0
+            && manualMergeTasks.every((task) => Boolean(task.worker_branch)
+              && task.merge_indicator !== "MERGE_BLOCKED"
+              && task.merge_indicator !== "MERGE_CONFLICT");
+          if (retryableLocalWorkerMerge) {
+            // A branch-only merge drain can miss a worker that completes while the
+            // drain is running. Keep LOCAL runs alive for the next drain instead
+            // of pausing a clean, retryable worker branch indefinitely.
+            break;
+          }
           this.deps.sprintRunLifecycleService.transition({
             sprintRunId,
             status: "paused",

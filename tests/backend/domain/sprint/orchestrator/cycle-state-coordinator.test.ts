@@ -706,6 +706,37 @@ describe("CycleStateCoordinator", () => {
       ]));
     });
 
+    it("does not issue no-op attention resolutions when the active snapshot is empty", async () => {
+      const deps = {
+        projectAttentionService: {
+          openItems: vi.fn(),
+          resolveItems: vi.fn(),
+        },
+      } as any;
+      const coordinator = new CycleStateCoordinator(deps);
+
+      coordinator.syncProtocolAttentionItems(
+        [{ id: "T01", record_id: "rec-1", title: "Task 1", status: "COMPLETED", merge_indicator: null }] as any,
+        { awaitingMerge: [], actionRequiredTasks: [] },
+        {
+          executionContext: { project: { id: "proj-1" }, sprint: { id: "sprint-1" } },
+          sprintRunId: "run-1",
+          defaultFeatureBranch: "feature/sprint-1",
+          defaultBranch: "main",
+          repoPath: "/repo",
+        } as any,
+        null,
+        new Set(),
+        new Set(),
+        undefined,
+        new Set(),
+        new Set(),
+        [],
+      );
+
+      expect(deps.projectAttentionService.resolveItems).not.toHaveBeenCalled();
+    });
+
     it("resolves stale merge attention for worker-resolved branch pairs", async () => {
       const deps = {
         projectAttentionService: {

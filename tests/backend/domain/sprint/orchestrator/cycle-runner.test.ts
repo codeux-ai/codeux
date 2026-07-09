@@ -237,12 +237,7 @@ describe("CycleRunner attention sync", () => {
       ownerType: "worker",
       summaryMarkdown: "No session id available for automatic intervention.",
     })]));
-    expect(deps.projectAttentionService.resolveItems).toHaveBeenCalledWith(expect.arrayContaining([
-      { filter: { projectId: "project-1", taskId: "task-3", attentionTypes: ["merge_required", "merge_conflict"] }, resolution: { status: "resolved", reason: "merge_attention_cleared" } }
-    ]));
-    expect(deps.projectAttentionService.resolveItems).toHaveBeenCalledWith(expect.arrayContaining([
-      { filter: { projectId: "project-1", taskId: "task-3", attentionTypes: ["action_required"] }, resolution: { status: "resolved", reason: "action_required_cleared" } }
-    ]));
+    expect(deps.projectAttentionService.resolveItems).not.toHaveBeenCalled();
   });
 
   it("settles branch-only completed tasks before feature PR polling and starts newly unblocked dependents", async () => {
@@ -974,9 +969,7 @@ describe("CycleRunner attention sync", () => {
       }),
       summaryMarkdown: expect.stringContaining("Merged task prompts already on the feature branch"),
     })]));
-    expect(deps.projectAttentionService.resolveItems).toHaveBeenCalledWith(expect.arrayContaining([
-      { filter: { projectId: "project-1", taskId: "task-1", attentionTypes: ["merge_required"] }, resolution: { status: "resolved", reason: "merge_conflict_attention_replaced" } }
-    ]));
+    expect(deps.projectAttentionService.resolveItems).not.toHaveBeenCalled();
   });
 
   it("keeps an existing worker-owned merge_conflict sticky when a later PR snapshot is incomplete", async () => {
@@ -1082,9 +1075,7 @@ describe("CycleRunner attention sync", () => {
       attentionType: "merge_conflict",
       taskId: "task-1",
     })]));
-    expect(deps.projectAttentionService.resolveItems).toHaveBeenCalledWith(expect.arrayContaining([
-      { filter: { projectId: "project-1", taskId: "task-1", attentionTypes: ["merge_required"] }, resolution: { status: "resolved", reason: "merge_conflict_attention_replaced" } }
-    ]));
+    expect(deps.projectAttentionService.resolveItems).not.toHaveBeenCalled();
   });
 
   it("does not reopen worker merge_conflict attention while a human escalation is active", async () => {
@@ -1177,12 +1168,7 @@ describe("CycleRunner attention sync", () => {
     expect(deps.projectAttentionService.openItems).not.toHaveBeenCalledWith(
       expect.arrayContaining([expect.objectContaining({ attentionType: "merge_conflict" })]),
     );
-    expect(deps.projectAttentionService.resolveItems).toHaveBeenCalledWith(expect.arrayContaining([
-      {
-        filter: { projectId: "project-1", taskId: "task-1", attentionTypes: ["merge_required", "merge_conflict"] },
-        resolution: { status: "resolved", reason: "merge_conflict_human_escalation_active" },
-      },
-    ]));
+    expect(deps.projectAttentionService.resolveItems).not.toHaveBeenCalled();
   });
 
   it("dismisses stale worker merge_conflict attention once the task conflict marker is cleared", async () => {

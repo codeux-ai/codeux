@@ -12,6 +12,7 @@ import {
 vi.mock("fs/promises");
 vi.mock("../../../../../src/services/cli-workflow-text-utils.js", () => ({
   extractPathHints: vi.fn(() => ["src/index.ts", "../outside"]),
+  normalizePathHint: vi.fn((value: string) => value.replace(/\\/g, "/")),
 }));
 vi.mock("../../../../../src/services/cli-process-runner.js", () => ({
   runCommandStrict: vi.fn(),
@@ -927,6 +928,22 @@ describe("WorkspaceManager", () => {
     expect(guidance).toContain("Repository root: /workspace");
     expect(guidance).toContain("- src/index.ts: exists");
     expect(guidance).toContain("- ../outside: outside-workspace");
+  });
+
+  it("normalizes Windows-relative paths before reading from a host workspace", async () => {
+    vi.mocked(fs.readFile).mockResolvedValue("workspace content");
+
+    const result = await manager.readWorkspaceFile("/repo/project", "src\\nested\\file.ts");
+
+    expect(result).toBe("workspace content");
+    expect(fs.readFile).toHaveBeenCalledWith("/repo/project/src/nested/file.ts", "utf8");
+  });
+
+  it("rejects absolute Windows paths when reading workspace files", async () => {
+    const result = await manager.readWorkspaceFile("/repo/project", "C:\\outside\\file.ts");
+
+    expect(result).toBeNull();
+    expect(fs.readFile).not.toHaveBeenCalled();
   });
 
   it("runs workspace commands with an explicit container entrypoint", async () => {

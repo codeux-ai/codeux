@@ -1,6 +1,6 @@
 import type { Subtask, GitTrackingStatus, GitPullRequestStatus } from "../../../contracts/app-types.js";
 import type { TaskStatus as PlanningTaskStatus } from "../../../contracts/project-management-types.js";
-import type { ProjectAttentionItemRecord, ProjectAttentionOwnerType } from "../../../contracts/project-attention-types.js";
+import type { ProjectAttentionItemRecord, ProjectAttentionOwnerType, ProjectAttentionType } from "../../../contracts/project-attention-types.js";
 import type { SprintOrchestratorDependencies } from "../../../sprint/sprint-orchestrator.js";
 import { matchPrForTask } from "../ci/feature-pr/pr-matcher.js";
 import type { MergeConflictDebouncer } from "../ci/merge-conflict-debouncer.js";
@@ -127,7 +127,7 @@ export class CycleStateCoordinator {
     mergeConflictDebouncer?: MergeConflictDebouncer,
     activeWorkerCiFixTaskIds: Set<string> = new Set(),
     resolvedWorkerMergeConflictKeys: Set<string> = new Set(),
-    activeProjectAttentionItems: ProjectAttentionItemRecord[] = [],
+    activeProjectAttentionItems?: ProjectAttentionItemRecord[],
   ): void {
     const projectId = args.executionContext.project.id;
     const sprintId = args.executionContext.sprint.id;
@@ -138,6 +138,23 @@ export class CycleStateCoordinator {
 
     const itemsToOpen: any[] = [];
     const itemsToResolve: any[] = [];
+    const activeAttentionTypesByTask = new Map<string, Set<ProjectAttentionType>>();
+    for (const item of activeProjectAttentionItems || []) {
+      if (!item.taskId || (item.status !== "open" && item.status !== "claimed")) {
+        continue;
+      }
+      const types = activeAttentionTypesByTask.get(item.taskId) || new Set<ProjectAttentionType>();
+      types.add(item.attentionType);
+      activeAttentionTypesByTask.set(item.taskId, types);
+    }
+    const hasResolvableAttention = (taskId: string, attentionTypes: ProjectAttentionType[]): boolean => {
+      // Older callers without a snapshot retain the existing cleanup behavior.
+      if (activeProjectAttentionItems === undefined) {
+        return true;
+      }
+      const activeTypes = activeAttentionTypesByTask.get(taskId);
+      return Boolean(activeTypes && attentionTypes.some((type) => activeTypes.has(type)));
+    };
 
     const mergeTaskIds = new Set<string>();
     for (const task of protocolResult.awaitingMerge) {
@@ -213,31 +230,25 @@ export class CycleStateCoordinator {
             featureBranchTaskContexts: mergedFeatureTasks,
           },
         }));
-        itemsToResolve.push({
-          filter: {
-            projectId,
-            taskId,
-            attentionTypes: [mergeConflictDetected ? "merge_required" : "merge_conflict"],
-          },
-          resolution: {
-            status: "resolved",
-            reason: mergeConflictDetected
-              ? "merge_conflict_attention_replaced"
-              : "merge_required_attention_replaced",
-          },
-        });
+        const replacedAttentionType = mergeConflictDetected ? "merge_required" : "merge_conflict";
+        if (hasResolvableAttention(taskId, [replacedAttentionType])) {
+          itemsToResolve.push({
+            filter: { projectId, taskId, attentionTypes: [replacedAttentionType] },
+            resolution: {
+              status: "resolved",
+              reason: mergeConflictDetected
+                ? "merge_conflict_attention_replaced"
+                : "merge_required_attention_replaced",
+            },
+          });
+        }
       } else {
-        itemsToResolve.push({
-          filter: {
-            projectId,
-            taskId,
-            attentionTypes: ["merge_required", "merge_conflict"],
-          },
-          resolution: {
-            status: "resolved",
-            reason: "merge_conflict_human_escalation_active",
-          },
-        });
+        if (hasResolvableAttention(taskId, ["merge_required", "merge_conflict"])) {
+          itemsToResolve.push({
+            filter: { projectId, taskId, attentionTypes: ["merge_required", "merge_conflict"] },
+            resolution: { status: "resolved", reason: "merge_conflict_human_escalation_active" },
+          });
+        }
       }
     }
 
@@ -288,7 +299,7 @@ export class CycleStateCoordinator {
     }
 
     for (const taskId of knownTaskIds) {
-      if (!mergeTaskIds.has(taskId) && !ciFixTaskIds.has(taskId)) {
+      if (!mergeTaskIds.has(taskId) && !ciFixTaskIds.has(taskId) && hasResolvableAttention(taskId, ["merge_required", "merge_conflict"])) {
         itemsToResolve.push({
           filter: {
             projectId,
@@ -301,7 +312,7 @@ export class CycleStateCoordinator {
           },
         });
       }
-      if (!actionTaskIds.has(taskId)) {
+      if (!actionTaskIds.has(taskId) && hasResolvableAttention(taskId, ["action_required"])) {
         itemsToResolve.push({
           filter: {
             projectId,
@@ -314,7 +325,7 @@ export class CycleStateCoordinator {
           },
         });
       }
-      if (!ciFixTaskIds.has(taskId) && !activeWorkerCiFixTaskIds.has(taskId)) {
+      if (!ciFixTaskIds.has(taskId) && !activeWorkerCiFixTaskIds.has(taskId) && hasResolvableAttention(taskId, ["ci_fix_required"])) {
         itemsToResolve.push({
           filter: {
             projectId,
@@ -338,7 +349,7 @@ export class CycleStateCoordinator {
     this.resolveStaleHumanMergeConflictEscalations(
       subtasks,
       args,
-      activeProjectAttentionItems,
+      activeProjectAttentionItems || [],
     );
   }
 

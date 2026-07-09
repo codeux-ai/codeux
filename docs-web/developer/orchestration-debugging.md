@@ -1,14 +1,14 @@
 # Rapid orchestration debugging suite
 
-Use this suite when a sprint stalls, local merges fail, worker-owned attention items churn, or memory usage needs extended observation after a fix. CI uses the compiled 10-task DAG lane by default; full mockup pentest lanes are manual escalation tools for targeted investigations.
+Use this suite when a sprint stalls, local merges fail, worker-owned attention items churn, or memory usage needs extended observation after a fix. CI uses the compiled QA DAG lane by default; full mockup pentest lanes are manual escalation tools for targeted investigations.
 
 ## Commands
 
 | Lane | Command | Purpose |
 | --- | --- | --- |
 | Fast regressions | `pnpm run test:orchestration:rapid` | Watch-loop, feature merge, and local final-merge regressions without Docker or provider CLIs. |
-| CI DAG E2E | `pnpm run test:orchestration:ci-dag` | Linux CI lane coverage for the compiled runtime plus `mockup-cli` through a 10-task dependency graph with parallel leaves and layered joins. |
-| Electron CI DAG | `pnpm run test:orchestration:ci-dag:electron` | macOS and Windows CI lane coverage for the same 10-task graph through the native Electron desktop app. |
+| CI DAG E2E | `pnpm run test:orchestration:ci-dag` | Linux CI lane coverage for task QA pass, QA decline/follow-up on the worker branch, sprint QA, and final integration. |
+| Electron CI DAG | `pnpm run test:orchestration:ci-dag:electron` | macOS and Windows CI lane coverage for the same QA graph through the native Electron desktop app. |
 | Mockup merge E2E | `pnpm run test:orchestration:merge-e2e` | Compiled runtime plus `mockup-cli` through a deterministic local merge-conflict DAG. |
 | Full mockup pentest | `pnpm run test:orchestration:full` | Manual escalation for all deterministic mockup scenarios: smoke, CI repair, merge conflict, parallel DAG, dirty checkout, multi-project overrides. |
 | Large DAG stress | `pnpm run test:orchestration:large-dag` | Heavy 129-task mockup DAG with wide fan-out and layered joins. |
@@ -20,9 +20,9 @@ Use this suite when a sprint stalls, local merges fail, worker-owned attention i
 
 Start with `pnpm run test:orchestration:rapid`. It covers provider routing, watch-loop finalization, feature branch merge gates, local final merges, dirty checkout preservation, and worker-owned merge attention regressions.
 
-Run `pnpm run test:orchestration:ci-dag` for the Linux no-secret CI lane. It builds the compiled runtime and exercises the deterministic 10-task mockup DAG through Docker-backed provider workspaces.
+Run `pnpm run test:orchestration:ci-dag` for the Linux no-secret CI lane. It builds the compiled runtime and exercises the deterministic QA mockup DAG through Docker-backed provider workspaces.
 
-Run `pnpm run test:orchestration:ci-dag:electron` for the native macOS and Windows Electron lane. It launches `dist/electron/main.js`, waits for the embedded Code UX server, and runs the same 10-task DAG shape through a host-execution mockup fixture.
+Run `pnpm run test:orchestration:ci-dag:electron` for the native macOS and Windows Electron lane. It launches `dist/electron/main.js`, waits for the embedded Code UX server, and runs the same QA DAG shape through a host-execution mockup fixture.
 
 In GitHub Actions, `08 Orchestration` is one OS matrix: Linux runs the Docker-backed compiled-runtime DAG, and macOS/Windows run the Electron DAG with Electron binary install and native dependency rebuild exposed as separate steps. Each DAG job has a 25-minute workflow timeout, and the mockup runner bounds individual HTTP calls at 60 seconds plus the full project run at the configured `--timeout-ms`. During orchestration, it streams redacted runtime stdout/stderr, emits `mockup_pentest_progress` records on sprint/task changes plus 15-second heartbeats, fails after `--stall-timeout-ms 180000` when no sprint, task status, merge, or expected-output progress is observed after polling starts, and writes a final Markdown table to `GITHUB_STEP_SUMMARY`.
 

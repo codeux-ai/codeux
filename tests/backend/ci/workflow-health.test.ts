@@ -319,11 +319,11 @@ describe("GitHub workflow health", () => {
     const electronDagRunScript = packageJson.scripts?.["test:orchestration:ci-dag:electron:run"] ?? "";
 
     expect(ciDagRunScript).toContain("--execution-mode docker");
-    expect(ciDagRunScript).toContain("--scenario ci-small-dag");
+    expect(ciDagRunScript).toContain("--scenario ci-qa-dag");
     expect(ciDagRunScript).toContain("--stall-timeout-ms 180000");
     expect(electronDagRunScript).toContain("--runtime electron");
     expect(electronDagRunScript).toContain("--execution-mode fixture");
-    expect(electronDagRunScript).toContain("--scenario ci-small-dag-electron");
+    expect(electronDagRunScript).toContain("--scenario ci-qa-dag-electron");
     expect(electronDagRunScript).toContain("--stall-timeout-ms 180000");
 
     expect(runnerScript).toContain("const DEFAULT_STALL_TIMEOUT_MS = 3 * 60 * 1000");
@@ -333,13 +333,21 @@ describe("GitHub workflow health", () => {
     expect(runnerScript).toContain("findMockupDagDependencyMergeViolations(expectedProjectRun, latestTasks)");
     expect(runnerScript).toContain("DAG dependency merge invariant failed");
     expect(runnerScript).toContain("writeRuntimeLogToConsole");
+    expect(runnerScript).toContain("function assertQaHistory(homeDir, records, projectRun)");
+    expect(runnerScript).toContain("expected QA follow-up for");
+    expect(runnerScript).toContain("expected sprint QA outcomes");
+    expect(runnerScript).toContain("expected command ${commandExpectation.command} to exit");
 
-    const ciDagValidationTask = scenarioScript.slice(
-      scenarioScript.indexOf('key: "ci-dag-validation"'),
-      scenarioScript.indexOf("return tasks;", scenarioScript.indexOf('key: "ci-dag-validation"')),
+    const qaDagValidationTask = scenarioScript.slice(
+      scenarioScript.indexOf('key: "qa-dag-validation"'),
+      scenarioScript.indexOf("return tasks;", scenarioScript.indexOf('key: "qa-dag-validation"')),
     );
-    expect(ciDagValidationTask).toContain('dependsOn: ["ci-dag-batch-01", "ci-dag-batch-02"]');
-    expect(ciDagValidationTask).toContain('"test/run-validation.mjs"');
+    expect(qaDagValidationTask).toContain('dependsOn: ["qa-dag-pass", "qa-dag-follow-up"]');
+    expect(qaDagValidationTask).toContain('"test/run-validation.mjs"');
+    expect(scenarioScript).toContain('"mockup-qa:fix-write src/qa-dag/follow-up-final.js');
+    expect(scenarioScript).toContain('"mockup-sprint-qa:require-file src/qa-dag/final.js');
+    expect(scenarioScript).toContain('outcomes: ["changes_requested", "pass"]');
+    expect(scenarioScript).toContain("requireSameWorkerBranch: true");
     expect(scenarioScript).toContain('commands: [{ command: "node test/run-validation.mjs", exitCode: 0 }]');
   });
 

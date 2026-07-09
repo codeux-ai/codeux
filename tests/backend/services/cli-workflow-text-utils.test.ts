@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractPathHints, isReadFileNotFoundToolError, buildReadFileRetryPrompt } from "../../../src/services/cli-workflow-text-utils.js";
+import { extractPathHints, isReadFileNotFoundToolError, buildReadFileRetryPrompt, normalizePathHint } from "../../../src/services/cli-workflow-text-utils.js";
 
 describe("cli-workflow-text-utils", () => {
     describe("extractPathHints", () => {
@@ -20,9 +20,23 @@ describe("cli-workflow-text-utils", () => {
         });
 
         it("cleans trailing punctuation", () => {
-            const res = extractPathHints("See `src/index.ts`");
+            const res = extractPathHints("See `src/index.ts`,");
             expect(res).toEqual(["src/index.ts"]);
         });
+
+        it("normalizes Windows-relative path separators", () => {
+            const res = extractPathHints("Check `src\\qa\\review.ts`\n - test\\qa-review.test.ts");
+            expect(res).toEqual(expect.arrayContaining(["src/qa/review.ts", "test/qa-review.test.ts"]));
+        });
+
+        it("rejects Windows absolute and UNC paths", () => {
+            const res = extractPathHints("- C:\\workspace\\file.ts\n- \\\\server\\share\\file.ts");
+            expect(res).toEqual([]);
+        });
+    });
+
+    it("normalizes path hints consistently", () => {
+        expect(normalizePathHint(" src\\qa\\review.ts, ")).toBe("src/qa/review.ts");
     });
 
     it("isReadFileNotFoundToolError", () => {

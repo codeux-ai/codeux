@@ -2,14 +2,14 @@
 
 This suite is the escalation ladder for sprint orchestration failures. Use it when a sprint stalls, local merges fail, worker-owned attention items churn, or memory usage needs extended observation after a fix.
 
-The suite is intentionally split into fast deterministic lanes and slower compiled-runtime lanes. CI uses the compiled 10-task DAG lane by default so pull requests exercise Docker-backed orchestration without running the full catalog. Start with the smallest lane that can reproduce the issue, then broaden only after it passes.
+The suite is intentionally split into fast deterministic lanes and slower compiled-runtime lanes. CI uses a compiled QA DAG by default so pull requests exercise task QA, follow-up branch recovery, sprint QA, and Docker-backed orchestration without running the full catalog. Start with the smallest lane that can reproduce the issue, then broaden only after it passes.
 
 ## Lane Summary
 
 | Lane | Command | Purpose | Expected runtime |
 | --- | --- | --- | --- |
 | Fast regressions | `pnpm run test:orchestration:rapid` | Watch-loop, feature merge, and local final-merge regressions without Docker or provider CLIs. | Seconds to a few minutes |
-| CI DAG E2E | `pnpm run test:orchestration:ci-dag` | Compiled runtime plus `mockup-cli` through a 10-task dependency graph with parallel leaves and layered joins. | Up to 20 minutes |
+| CI DAG E2E | `pnpm run test:orchestration:ci-dag` | Compiled runtime plus `mockup-cli` through task QA pass, QA decline/follow-up on the worker branch, sprint QA, and a final DAG join. | Up to 20 minutes |
 | Mockup merge E2E | `pnpm run test:orchestration:merge-e2e` | Compiled runtime plus `mockup-cli` through a deterministic local merge-conflict DAG. | Up to 15 minutes |
 | Completion conflict E2E | `pnpm run test:orchestration:completion-conflict` | Compiled runtime final LOCAL merge conflict repair after default-branch mutation during orchestration. | Up to 20 minutes |
 | Full mockup pentest | `pnpm run test:orchestration:full` | Manual escalation for all deterministic mockup scenarios: smoke, CI repair, merge conflict, parallel DAG, multi-project overrides. | Longer-running |
@@ -58,14 +58,14 @@ Run:
 pnpm run test:orchestration:ci-dag
 ```
 
-This builds the compiled runtime and executes `ci-small-dag`, a deterministic 10-task sprint:
+This builds the compiled runtime and executes `ci-qa-dag`, a deterministic four-task QA sprint:
 
-- 1 root setup task.
-- 6 parallel leaf tasks.
-- 2 batch aggregation tasks.
-- 1 final validation task.
+- 1 root task that passes task-level QA.
+- 1 dependent task that passes task-level QA.
+- 1 dependent task that intentionally fails QA, receives a follow-up, and must pass QA on the same worker branch.
+- 1 final join task plus a sprint-level QA gate and repository validation.
 
-This is the Linux entry of the default no-secret GitHub Actions orchestration matrix for pushes and pull requests targeting `dev` or `main`. It is intentionally smaller than the heavy DAG stress lane but still validates Docker-backed task dispatch, dependency unlocks, provider concurrency, feature-branch merging, final repository assertions, and compiled-runtime startup.
+This is the Linux entry of the default no-secret GitHub Actions orchestration matrix for pushes and pull requests targeting `dev` or `main`. It is intentionally smaller than the heavy DAG stress lane but validates Docker-backed task dispatch, dependency unlocks, provider concurrency, task and sprint QA, worker-branch follow-up visibility, feature-branch merging, final repository assertions, and compiled-runtime startup.
 
 The same `08 Orchestration` matrix adds native Windows and macOS Electron DAG coverage:
 
@@ -73,7 +73,7 @@ The same `08 Orchestration` matrix adds native Windows and macOS Electron DAG co
 pnpm run test:orchestration:ci-dag:electron
 ```
 
-That lane launches the Electron app, waits for the embedded Code UX server, and runs the same 10-task DAG shape through a host-execution mockup fixture. It runs directly on the hosted OS because GitHub-hosted Windows and macOS runners do not provide Docker job containers.
+That lane launches the Electron app, waits for the embedded Code UX server, and runs the same QA DAG shape through a host-execution mockup fixture. It runs directly on the hosted OS because GitHub-hosted Windows and macOS runners do not provide Docker job containers.
 
 In GitHub Actions, `08 Orchestration` runs build-artifact download, Electron binary install, native dependency rebuild, and orchestration as separate steps where applicable so a stall is visible at the step boundary. Each DAG job has a 25-minute workflow timeout, and the mockup runner bounds individual HTTP calls at 60 seconds plus the full project run at the configured `--timeout-ms`. The runner streams redacted runtime stdout/stderr and emits `mockup_pentest_progress` records whenever sprint or task state changes, plus heartbeat progress every 15 seconds. CI passes `--stall-timeout-ms 180000`; if no sprint, task status, merge, or expected-output progress is observed for three minutes after polling starts, the runner fails early with the last sprint/task snapshot and writes the final table to `GITHUB_STEP_SUMMARY`.
 
@@ -153,7 +153,7 @@ This builds the runtime and runs every `mockup-cli` scenario through `scripts/e2
 Run this lane manually when a merge/orchestration incident needs broader compiled-runtime evidence beyond the rapid lane or a targeted E2E lane. It covers:
 
 - `smoke-completion`: dependency-chain completion and final local repository assertions.
-- `ci-small-dag`: the CI-sized 10-task DAG used by the default no-secret workflow.
+- `ci-qa-dag`: the CI-sized QA DAG used by the default no-secret workflow.
 - `ci-repair`: deterministic failing validation repaired by a worker.
 - `merge-conflict-dag`: sibling edit conflict plus resolved join output.
 - `parallel-independent`: fan-out/fan-in scheduling.
