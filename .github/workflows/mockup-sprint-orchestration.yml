@@ -18,6 +18,7 @@ jobs:
   ci-dag:
     name: CI DAG
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -49,6 +50,7 @@ jobs:
     name: Electron CI DAG (${{ matrix.name }})
     if: github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
 
     strategy:
       fail-fast: false

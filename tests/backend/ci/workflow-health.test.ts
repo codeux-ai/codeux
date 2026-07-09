@@ -358,6 +358,7 @@ describe("GitHub workflow health", () => {
     expect(workflow).toContain("workflow_dispatch:");
 
     expect(dagJob).toContain("runs-on: ubuntu-latest");
+    expect(dagJob).toContain("timeout-minutes: 25");
     expectJobToolchain(dagJob, "Mockup sprint CI DAG");
     expect(dagJob).toContain("run: pnpm run build");
     expect(dagJob).toContain("run: pnpm run test:orchestration:ci-dag:run");
@@ -379,6 +380,7 @@ describe("GitHub workflow health", () => {
     expect(ciDagRunScript).not.toContain("--runtime electron");
 
     expect(electronJob).toContain("if: github.event_name == 'pull_request' && github.base_ref == 'main'");
+    expect(electronJob).toContain("timeout-minutes: 25");
     expect(electronJob).not.toContain("workflow_dispatch");
     expect(electronJob).not.toContain("refs/heads/main");
     expect(electronJob).toContain("runs-on: ${{ matrix.os }}");
@@ -420,7 +422,9 @@ describe("GitHub workflow health", () => {
     expect(runnerScript).toContain('import("@playwright/test")');
     expect(runnerScript).toContain('import("electron")');
     expect(runnerScript).toContain("const DEFAULT_STALL_TIMEOUT_MS = 3 * 60 * 1000");
+    expect(runnerScript).toContain("const HTTP_REQUEST_TIMEOUT_MS = 60_000");
     expect(runnerScript).toContain("--stall-timeout-ms");
+    expect(runnerScript).toContain("timed out after ${timeoutMs}ms before reaching a terminal summary");
     expect(runnerScript).toContain("mockup_pentest_progress");
     expect(runnerScript).toContain("mockup_pentest_stalled");
     expect(runnerScript).toContain("GITHUB_STEP_SUMMARY");

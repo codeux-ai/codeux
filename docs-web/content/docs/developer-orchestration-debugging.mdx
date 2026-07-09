@@ -24,7 +24,7 @@ Run `pnpm run test:orchestration:ci-dag` for the no-secret CI lane. It builds th
 
 Run `pnpm run test:orchestration:ci-dag:electron` for the main-branch Electron lane. It launches `dist/electron/main.js`, waits for the embedded Code UX server, and runs the same 10-task DAG shape through a host-execution mockup fixture on native Windows and macOS runners.
 
-In GitHub Actions, the CI DAG and Electron DAG lanes expose build, Electron binary install, native dependency rebuild, and orchestration as separate steps. During orchestration, the mockup runner streams redacted runtime stdout/stderr, emits `mockup_pentest_progress` records on sprint/task changes plus 15-second heartbeats, fails after `--stall-timeout-ms 180000` when no progress is observed, and writes a final Markdown table to `GITHUB_STEP_SUMMARY`.
+In GitHub Actions, the CI DAG and Electron DAG lanes expose build, Electron binary install, native dependency rebuild, and orchestration as separate steps. Each DAG job has a 25-minute workflow timeout, and the mockup runner bounds individual HTTP calls at 60 seconds plus the full project run at the configured `--timeout-ms`. During orchestration, it streams redacted runtime stdout/stderr, emits `mockup_pentest_progress` records on sprint/task changes plus 15-second heartbeats, fails after `--stall-timeout-ms 180000` when no progress is observed after polling starts, and writes a final Markdown table to `GITHUB_STEP_SUMMARY`.
 
 In LOCAL git mode, recovered worker-branch evidence is dependency state: downstream DAG tasks stay blocked until the parent branch has merged into the sprint feature branch or the parent is proven to have no merge work.
 
