@@ -9,7 +9,7 @@ import { CliProviderId, E2E_PROVIDER_CLI_SHIM_ENV, enabledCustomServersFor, getN
 import { CommandResult, runStreamingCommand } from "../../../services/cli-process-runner.js";
 import type { IDockerRunner } from "./docker-runner.js";
 import type { SnapshotCheckout } from "./workspace-manager.js";
-import type { InvocationWorkspaceGitPolicy } from "./invocation-workspace-preparer.js";
+import { buildInvocationGitPolicy, type InvocationWorkspaceGitPolicy } from "./invocation-workspace-preparer.js";
 import { isDockerWorkspaceMountError } from "../../../services/cli-docker-utils.js";
 import { sanitizeInvocationOutputText } from "../../../services/invocation-output-sanitizer.js";
 import { redactMetadata } from "../../../shared/security/redaction.js";
@@ -155,11 +155,11 @@ export class ProviderRunner implements IProviderRunner {
         sessionId: input.workspaceSessionId || input.sessionId,
         snapshotCheckout: input.snapshotCheckout,
         gitPolicy: input.gitPolicy || (input.snapshotCheckout?.remoteOnly
-          ? {
+          ? buildInvocationGitPolicy({
             githubMode: "REMOTE",
             githubToken: input.githubToken,
             gitlabToken: input.gitlabToken,
-          }
+          })
           : undefined),
         preserve: preserveSessionWorkspace,
         reuseExisting: reuseExistingWorkspace,

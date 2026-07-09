@@ -92,25 +92,7 @@ export async function executePrepareStage(
     }
   }
 
-  const prepareWorktree = ctx.invocationWorkspacePreparer
-    ? ctx.invocationWorkspacePreparer.prepareWorktree.bind(ctx.invocationWorkspacePreparer)
-    : async (args: {
-      repoPath: string;
-      worktreePath: string;
-      workerBranch: string;
-      featureBranch: string;
-      resumeSessionId?: string;
-      gitAuth?: { githubToken?: string; gitlabToken?: string };
-    }) => ctx.workspaceManager.prepareWorktree(
-      args.repoPath,
-      args.worktreePath,
-      args.workerBranch,
-      args.featureBranch,
-      args.resumeSessionId,
-      args.gitAuth,
-    );
-
-  const { worktreePath: finalPath, resumed } = await prepareWorktree({
+  const { worktreePath: finalPath, resumed } = await ctx.invocationWorkspacePreparer.prepareWorktree({
     repoPath: ctx.repoPath,
     worktreePath: ctx.worktreePath,
     workerBranch: ctx.workerBranch,

@@ -14,7 +14,8 @@ import { StructuredAgentRequestService } from "./structured-agent-request-servic
 import { StructuredProviderResponseService } from "./structured-provider-response-service.js";
 import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
 import {
-  buildExplicitBranchSnapshotCheckout,
+  buildInvocationGitPolicy,
+  buildProviderInvocationWorkspaceOptions,
   InvocationWorkspacePreparer,
 } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import { WorkspaceArtifactService } from "../infrastructure/providers/cli/workspace-artifact-service.js";
@@ -933,21 +934,23 @@ export class QualityAssuranceService {
       let snapshotWorkspace = args.repoPath;
       let shouldCleanupSnapshot = false;
       if (workflowSettings.executionMode === "DOCKER") {
-        snapshotWorkspace = await this.invocationWorkspacePreparer.createSnapshotWorkspace({
-          repoPath: args.repoPath,
-          sessionId: `qa-review-${provider}-${Date.now().toString(36)}`,
-          checkout: buildExplicitBranchSnapshotCheckout({
-            githubMode: settings.git.githubMode,
-            defaultBranch: settings.git.defaultBranch,
-            githubToken: settings.git.githubToken,
-            gitlabToken: settings.git.gitlabToken,
-          }, args.reviewBranch, args.baseBranch),
+        const invocationWorkspace = buildProviderInvocationWorkspaceOptions({
+          workflowSettings,
           gitPolicy: {
             githubMode: settings.git.githubMode,
             defaultBranch: settings.git.defaultBranch,
             githubToken: settings.git.githubToken,
             gitlabToken: settings.git.gitlabToken,
           },
+          branch: args.reviewBranch,
+          fallbackBranch: args.baseBranch,
+          useDefaultBranch: false,
+        });
+        snapshotWorkspace = await this.invocationWorkspacePreparer.createSnapshotWorkspace({
+          repoPath: args.repoPath,
+          sessionId: `qa-review-${provider}-${Date.now().toString(36)}`,
+          checkout: invocationWorkspace.snapshotCheckout,
+          gitPolicy: invocationWorkspace.gitPolicy,
         });
         shouldCleanupSnapshot = true;
       }
@@ -1398,17 +1401,21 @@ export class QualityAssuranceService {
       githubToken: settings.git.githubToken,
       gitlabToken: settings.git.gitlabToken,
     };
-    const resumeWorkspacePath = await this.workspaceManager.resolveResumeWorktreePath(
-      args.repoPath,
-      args.sessionId,
-      workflowSettings.executionMode,
-    );
-    const hasPreservedWorkspace = Boolean(resumeWorkspacePath);
-    const worktreePath = resumeWorkspacePath
-      || this.workspaceManager.buildWorktreePath(args.repoPath, args.sessionId, workflowSettings.executionMode);
-    const resolvedWorkspaceBranch = hasPreservedWorkspace
-      ? await this.workspaceManager.resolveCurrentBranch(worktreePath)
-      : null;
+    const gitPolicy = buildInvocationGitPolicy({
+      githubMode: settings.git.githubMode,
+      defaultBranch: settings.git.defaultBranch,
+      githubToken: settings.git.githubToken,
+      gitlabToken: settings.git.gitlabToken,
+    });
+    const {
+      worktreePath,
+      hasPreservedWorkspace,
+      currentBranch: resolvedWorkspaceBranch,
+    } = await this.invocationWorkspacePreparer.resolveContinuationWorkspace({
+      repoPath: args.repoPath,
+      sessionId: args.sessionId,
+      executionMode: workflowSettings.executionMode,
+    });
     let workerBranch = args.task.worker_branch?.trim()
       || args.taskRun?.workerBranch?.trim()
       || resolvedWorkspaceBranch
@@ -1535,12 +1542,7 @@ export class QualityAssuranceService {
           workerBranch,
           featureBranch: args.featureBranch,
           gitAuth,
-          gitPolicy: {
-            githubMode: settings.git.githubMode,
-            defaultBranch: settings.git.defaultBranch,
-            githubToken: settings.git.githubToken,
-            gitlabToken: settings.git.gitlabToken,
-          },
+          gitPolicy,
         });
       } else {
         await this.syncExistingCliFollowUpWorkspace(worktreePath, workerBranch, args.repoPath, gitAuth);

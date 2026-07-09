@@ -22,6 +22,7 @@ import { ProviderRunner, type IProviderRunner } from "../infrastructure/provider
 import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
 import { WorkspaceManager, type SnapshotCheckout } from "../infrastructure/providers/cli/workspace-manager.js";
 import {
+  buildInvocationGitPolicy,
   buildInvocationSnapshotCheckout,
   InvocationWorkspacePreparer,
 } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
@@ -709,12 +710,12 @@ export class PlanningAgentService {
         fallbackBranch: args.fallbackBranch,
       });
       const shouldReuseSnapshot = Boolean(args.continuation);
-      const gitPolicy = {
+      const gitPolicy = buildInvocationGitPolicy({
         githubMode: args.settings.git.githubMode,
         defaultBranch: args.settings.git.defaultBranch,
         githubToken: args.settings.git.githubToken,
         gitlabToken: args.settings.git.gitlabToken,
-      } as const;
+      });
       snapshotWorkspace = shouldReuseSnapshot
         ? await this.invocationWorkspacePreparer.createSnapshotWorkspace({
           repoPath: args.repoPath,
@@ -882,12 +883,12 @@ export class PlanningAgentService {
       return undefined;
     }
 
-    return buildInvocationSnapshotCheckout({
+    return buildInvocationSnapshotCheckout(buildInvocationGitPolicy({
       githubMode: args.settings.git.githubMode,
       defaultBranch: args.fallbackBranch?.trim() || args.settings.git.defaultBranch,
       githubToken: args.settings.git.githubToken,
       gitlabToken: args.settings.git.gitlabToken,
-    }, {
+    }), {
       branch: args.preferredBranch,
     });
   }

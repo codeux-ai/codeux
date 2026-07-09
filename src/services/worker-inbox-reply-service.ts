@@ -12,7 +12,7 @@ import type { ProjectManagementRepository } from "../repositories/project-manage
 import type { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
 import { buildProviderPrompt, DEFAULT_CLI_WORKFLOW_SETTINGS } from "./cli-workflow-utils.js";
 import type { IProviderRunner, ProviderRunResult } from "../infrastructure/providers/cli/provider-runner.js";
-import { buildDefaultBranchSnapshotCheckout } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
+import { buildProviderInvocationWorkspaceOptions } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import { buildChatReplayPrompt, normalizeProviderReply } from "./chat-reply-prompt.js";
 
 import { getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
@@ -685,17 +685,15 @@ export class WorkerInboxReplyService {
       sessionId: "worker-reply-" + randomUUID(),
       workflowSettings,
       repoPath: input.repoPath,
-      snapshotCheckout: workflowSettings.executionMode === "DOCKER"
-          ? buildDefaultBranchSnapshotCheckout({
+      ...buildProviderInvocationWorkspaceOptions({
+        workflowSettings,
+        gitPolicy: {
           githubMode: gitSettings.githubMode,
           defaultBranch,
           githubToken: input.githubToken || gitSettings.githubToken,
           gitlabToken: gitSettings.gitlabToken,
-        })
-        : undefined,
-      workspaceLifecycle: "fresh",
-      githubToken: input.githubToken,
-      gitlabToken: gitSettings.gitlabToken,
+        },
+      }),
       mcpConnection: resolvedMcp.mcpConnection,
       customMcpServers: resolvedMcp.customMcpServers,
       persistentSkillStorageMounts: persistentSkillRuntime?.mounts,

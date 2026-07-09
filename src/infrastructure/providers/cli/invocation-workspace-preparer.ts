@@ -39,10 +39,48 @@ export interface PrepareInvocationWorktreeRequest {
   gitPolicy?: InvocationWorkspaceGitPolicy;
 }
 
+export interface ProviderInvocationWorkspaceOptions {
+  snapshotCheckout?: SnapshotCheckout;
+  gitPolicy?: InvocationWorkspaceGitPolicy;
+  workspaceLifecycle: "fresh" | "continue";
+  githubToken?: string;
+  gitlabToken?: string;
+}
+
+export interface BuildProviderInvocationWorkspaceOptionsRequest {
+  workflowSettings: Pick<CliWorkflowSettings, "executionMode">;
+  gitPolicy: InvocationWorkspaceGitPolicy;
+  branch?: string | null;
+  fallbackBranch?: string | null;
+  useDefaultBranch?: boolean;
+  lifecycle?: "fresh" | "continue";
+}
+
+export interface ContinuationWorkspaceRequest {
+  repoPath: string;
+  sessionId: string;
+  executionMode: CliWorkflowSettings["executionMode"];
+}
+
+export interface ContinuationWorkspaceTarget {
+  worktreePath: string;
+  hasPreservedWorkspace: boolean;
+  currentBranch: string | null;
+}
+
 const cleanBranch = (branch: string | null | undefined): string | undefined => {
   const trimmed = branch?.trim();
   return trimmed || undefined;
 };
+
+export function buildInvocationGitPolicy(args: InvocationWorkspaceGitPolicy): InvocationWorkspaceGitPolicy {
+  return {
+    githubMode: args.githubMode,
+    defaultBranch: cleanBranch(args.defaultBranch) || args.defaultBranch,
+    githubToken: args.githubToken,
+    gitlabToken: args.gitlabToken,
+  };
+}
 
 export function resolveDefaultBranch(
   gitPolicy: Pick<InvocationWorkspaceGitPolicy, "defaultBranch"> | undefined,
@@ -72,32 +110,31 @@ export function buildInvocationSnapshotCheckout(
   };
 }
 
-export function buildDefaultBranchSnapshotCheckout(
-  gitPolicy: InvocationWorkspaceGitPolicy,
-  fallbackBranch?: string | null,
-): SnapshotCheckout | undefined {
-  return buildInvocationSnapshotCheckout(gitPolicy, {
-    fallbackBranch,
-  });
-}
-
-export function buildExplicitBranchSnapshotCheckout(
-  gitPolicy: InvocationWorkspaceGitPolicy,
-  branch?: string | null,
-  fallbackBranch?: string | null,
-): SnapshotCheckout | undefined {
-  return buildInvocationSnapshotCheckout(gitPolicy, {
-    branch,
-    fallbackBranch,
-    useDefaultBranch: false,
-  });
-}
-
 export function resolvePrepareWorktreeOptions(
   gitPolicy: Pick<InvocationWorkspaceGitPolicy, "githubMode"> | undefined,
 ): PrepareWorktreeOptions {
   return {
     remoteOnly: gitPolicy?.githubMode === "REMOTE",
+  };
+}
+
+export function buildProviderInvocationWorkspaceOptions(
+  request: BuildProviderInvocationWorkspaceOptionsRequest,
+): ProviderInvocationWorkspaceOptions {
+  const gitPolicy = buildInvocationGitPolicy(request.gitPolicy);
+
+  return {
+    snapshotCheckout: workflowUsesDocker(request.workflowSettings)
+      ? buildInvocationSnapshotCheckout(gitPolicy, {
+        branch: request.branch,
+        fallbackBranch: request.fallbackBranch,
+        useDefaultBranch: request.useDefaultBranch,
+      })
+      : undefined,
+    gitPolicy: workflowUsesDocker(request.workflowSettings) ? gitPolicy : undefined,
+    workspaceLifecycle: request.lifecycle ?? "fresh",
+    githubToken: gitPolicy.githubToken || undefined,
+    gitlabToken: gitPolicy.gitlabToken || undefined,
   };
 }
 
@@ -131,6 +168,26 @@ export class InvocationWorkspacePreparer {
       args.gitAuth,
       resolvePrepareWorktreeOptions(args.gitPolicy),
     );
+  }
+
+  async resolveContinuationWorkspace(args: ContinuationWorkspaceRequest): Promise<ContinuationWorkspaceTarget> {
+    const resumeWorkspacePath = await this.workspaceManager.resolveResumeWorktreePath(
+      args.repoPath,
+      args.sessionId,
+      args.executionMode,
+    );
+    const hasPreservedWorkspace = Boolean(resumeWorkspacePath);
+    const worktreePath = resumeWorkspacePath
+      || this.workspaceManager.buildWorktreePath(args.repoPath, args.sessionId, args.executionMode);
+    const currentBranch = hasPreservedWorkspace
+      ? await this.workspaceManager.resolveCurrentBranch(worktreePath)
+      : null;
+
+    return {
+      worktreePath,
+      hasPreservedWorkspace,
+      currentBranch,
+    };
   }
 
   async refreshSnapshotRefs(

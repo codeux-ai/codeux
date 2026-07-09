@@ -14,7 +14,7 @@ import { buildTaskRunKey } from "./task-run-key.js";
 import { buildProviderPrompt, DEFAULT_CLI_WORKFLOW_SETTINGS, sanitizeToken } from "./cli-workflow-utils.js";
 import { isReadFileNotFoundToolError, buildReadFileRetryPrompt } from "./cli-workflow-text-utils.js";
 import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
-import { InvocationWorkspacePreparer } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
+import { buildInvocationGitPolicy, InvocationWorkspacePreparer } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import { WorkspaceArtifactService } from "../infrastructure/providers/cli/workspace-artifact-service.js";
 import { CODE_UX_GIT_PATHSPEC_EXCLUDE, CODE_UX_REPO_DIR } from "../infrastructure/git/code-ux-gitignore.js";
 import { ProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
@@ -805,12 +805,12 @@ export class VirtualWorkerService {
         workerBranch: sourceBranch,
         featureBranch: targetBranch,
         gitAuth,
-        gitPolicy: {
+        gitPolicy: buildInvocationGitPolicy({
           githubMode: settings.git.githubMode,
           defaultBranch: settings.git.defaultBranch,
           githubToken: settings.git.githubToken,
           gitlabToken: settings.git.gitlabToken,
-        },
+        }),
       });
       const finalWorktreePath = prepared.worktreePath;
       worktreePath = finalWorktreePath;
@@ -1191,12 +1191,12 @@ export class VirtualWorkerService {
         featureBranch: branchName,
         resumeSessionId: resumeTarget?.sessionId,
         gitAuth,
-        gitPolicy: {
+        gitPolicy: buildInvocationGitPolicy({
           githubMode: settings.git.githubMode,
           defaultBranch: settings.git.defaultBranch,
           githubToken: settings.git.githubToken,
           gitlabToken: settings.git.gitlabToken,
-        },
+        }),
       });
       const finalWorktreePath = prepared.worktreePath;
       worktreePath = finalWorktreePath;
