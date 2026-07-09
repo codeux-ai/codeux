@@ -370,7 +370,7 @@ GitHub validation is split by signal:
 - Downstream jobs reuse that build artifact for npm install smoke validation, Docker mockup DAG orchestration, Linux full Playwright, macOS/Windows Playwright smoke, macOS/Windows Electron DAG orchestration, and unsigned desktop release-candidate packages. The integration stage is capped at six concurrent jobs; native Electron DAG and release-candidate packaging wait for the Playwright stage instead of stacking extra runners on top.
 - `Playwright Diagnostics`, `Release Candidate Diagnostics`, and `Mockup Sprint Diagnostics` are manual-only workflows for focused reruns. They no longer run automatically on every PR.
 - Superseded runs for the same branch or pull request are cancelled by workflow concurrency groups.
-- Security validation is intentionally separated from build and Playwright lanes. The `Security Audit` job runs `pnpm run audit`, which is `pnpm audit --audit-level=high`; high-severity dependency findings fail that job without preventing typecheck, tests, build, or Playwright artifacts from reporting their own status.
+- Security validation is intentionally separated from build and Playwright lanes. The `06 Security / dependency audit` job runs `pnpm run audit`, which is `pnpm audit --audit-level=high`; high-severity dependency findings fail that job without preventing typecheck, tests, build, or Playwright artifacts from reporting their own status.
 
 Local equivalents:
 - `pnpm run lint` mirrors the TypeScript validation portion of `Typecheck & Lint`.
@@ -389,7 +389,7 @@ Dependency and cache behavior:
 - `tests/backend/ci/workflow-health.test.ts` audits these workflow invariants so accidental drift in package manager version, Node version, install mode, artifact reuse, audit separation, concurrency cancellation, Playwright artifacts, manual diagnostics, or release-lane separation fails a focused backend test.
 
 Artifacts:
-- On Playwright failure, download the `playwright-artifacts` artifact from the workflow run. It contains `test-results/` traces/screenshots/videos when produced and `playwright-report/` for the HTML report.
+- On Playwright failure, download the matching `playwright-linux-<purpose>` or `playwright-<runner>-<purpose>` artifact from the workflow run. Manual diagnostics use `playwright-diagnostic-<runner>-<purpose>`. These artifacts contain `test-results/` traces/screenshots/videos when produced and `playwright-report/` for the HTML report.
 - The artifact retention window is seven days. If no files were produced, artifact upload is allowed to continue without masking the original test failure.
 
 ## Escalation Notes
