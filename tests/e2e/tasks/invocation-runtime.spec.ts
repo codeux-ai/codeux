@@ -1,20 +1,20 @@
 import { expect, type APIRequestContext, type APIResponse, test } from '@playwright/test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { ExecutionDashboardSnapshot } from '../../src/contracts/app-types.js';
-import type { ProjectSummary } from '../../src/contracts/project-management-types.js';
+import type { ExecutionDashboardSnapshot } from '../../../src/contracts/app-types.js';
+import type { ProjectSummary } from '../../../src/contracts/project-management-types.js';
 import type {
   ExecutionInvocationMessageRecord,
   ExecutionInvocationRecord,
   ProjectInvocationsQueryResult,
-} from '../../src/contracts/invocation-types.js';
-import type { ProjectSettingsOverride } from '../../src/contracts/settings-scope-types.js';
+} from '../../../src/contracts/invocation-types.js';
+import type { ProjectSettingsOverride } from '../../../src/contracts/settings-scope-types.js';
 import {
   completeOnboardingViaApi,
   createProjectViaApi,
   deleteProjectViaApi,
   selectProjectViaApi,
-} from './helpers/e2e-api';
+} from '../helpers/e2e-api';
 import {
   buildLocalHostExecutionSettingsOverride,
   configureProjectForLocalHostExecution,
@@ -23,7 +23,7 @@ import {
   createTemporaryGitRepository,
   pollApiCondition,
   type TemporaryGitRepository,
-} from './helpers/e2e-fixtures';
+} from '../helpers/e2e-fixtures';
 
 type LiveSnapshot = {
   projectId: string | null;

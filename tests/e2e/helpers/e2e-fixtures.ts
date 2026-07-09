@@ -28,6 +28,7 @@ import {
   createE2eFixturePrefix,
   createTaskInSprint,
   ensureSelectedProject,
+  suppressDashboardTour,
 } from './prepare-app';
 
 export {
@@ -45,12 +46,12 @@ export {
   fetchSprintsViaApi,
   fetchTasksViaApi,
   selectProject,
+  suppressDashboardTour,
   updateSprintFields,
   updateTaskFields,
 } from './prepare-app';
 
 const execFileAsync = promisify(execFile);
-const DASHBOARD_TOUR_STORAGE_KEY = 'codeux:dashboard-tour-hidden:v1';
 
 export interface TemporaryGitRepository {
   root: string;
@@ -369,15 +370,14 @@ export async function hideOnboardingAndTours(
     await completeOnboarding(request);
   }
 
-  await page.addInitScript((tourStorageKey) => {
-    localStorage.setItem(tourStorageKey, 'true');
+  await suppressDashboardTour(page);
+  await page.addInitScript(() => {
     localStorage.setItem('codeux:sidebar:minimized', 'false');
-  }, DASHBOARD_TOUR_STORAGE_KEY);
+  });
 
-  await page.evaluate((tourStorageKey) => {
-    localStorage.setItem(tourStorageKey, 'true');
+  await page.evaluate(() => {
     localStorage.setItem('codeux:sidebar:minimized', 'false');
-  }, DASHBOARD_TOUR_STORAGE_KEY).catch(() => undefined);
+  }).catch(() => undefined);
 }
 
 export async function prepareSelectedLocalProject(

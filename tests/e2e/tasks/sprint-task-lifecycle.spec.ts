@@ -1,5 +1,5 @@
 import { expect, type APIRequestContext, type Locator, type Page, test, type TestInfo } from '@playwright/test';
-import type { ProjectSummary, SprintRecord, TaskRecord } from '../../src/contracts/project-management-types.js';
+import type { ProjectSummary, SprintRecord, TaskRecord } from '../../../src/contracts/project-management-types.js';
 import {
   cleanupSprintFixture,
   completeOnboarding,
@@ -11,18 +11,11 @@ import {
   fetchSprintsViaApi,
   fetchTasksViaApi,
   selectSprintViaApi,
-} from './helpers/prepare-app';
-
-const DASHBOARD_TOUR_STORAGE_KEY = 'codeux:dashboard-tour-hidden:v1';
+  suppressDashboardTour,
+} from '../helpers/prepare-app';
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-async function hideDashboardTour(page: Page): Promise<void> {
-  await page.addInitScript((storageKey) => {
-    localStorage.setItem(storageKey, 'true');
-  }, DASHBOARD_TOUR_STORAGE_KEY);
 }
 
 async function prepareApp(
@@ -32,7 +25,7 @@ async function prepareApp(
   fixtureKey: string,
 ): Promise<ProjectSummary> {
   await completeOnboarding(request);
-  await hideDashboardTour(page);
+  await suppressDashboardTour(page);
   return ensureSelectedProject(request, { testInfo, fixtureKey });
 }
 
@@ -48,6 +41,12 @@ async function expectProjectSelected(page: Page, projectName: string): Promise<v
   await projectButton.click();
   await page.getByRole('option', { name: new RegExp(escapeRegExp(projectName)) }).first().click();
   await expect(projectButton).toContainText(projectName);
+}
+
+async function expectSprintSelected(page: Page, sprintName: string): Promise<void> {
+  const sprintButton = page.getByRole('button', { name: /Sprint selector, selected sprint:/ });
+  await expect(sprintButton).toBeVisible();
+  await expect(sprintButton).toContainText(sprintName);
 }
 
 async function getSprintByName(page: Page, projectId: string, name: string): Promise<SprintRecord> {
@@ -235,15 +234,18 @@ test.describe('sprint and task lifecycle', () => {
     const description = 'Exercise task metadata through the normal dashboard composer.';
     const promptMarkdown = 'Implement a deterministic UI-only task lifecycle path for E2E coverage.';
 
-    await page.goto(`/tasks?sprintId=${encodeURIComponent(sprint.id)}`);
+    await page.goto(`/tasks?projectId=${encodeURIComponent(project.id)}&sprintId=${encodeURIComponent(sprint.id)}`);
     await expectProjectSelected(page, project.name);
+    await expectSprintSelected(page, sprint.name);
     await expect(page.getByRole('heading', { level: 1, name: 'Task Board' })).toBeVisible();
 
-    await page.getByRole('button', { name: 'New Task' }).click();
+    const newTaskButton = page.getByRole('button', { name: 'New Task' });
+    await expect(newTaskButton).toBeEnabled();
+    await newTaskButton.click();
     await expect(page.getByText('Task Composer')).toBeVisible();
     await page.getByPlaceholder('Fix navigation layout shift').fill(taskTitle);
     await page.getByPlaceholder('Summarize the intent and outcome.').fill(description);
-    await page.getByPlaceholder('Detailed markdown instructions for the agent.').fill(promptMarkdown);
+    await page.getByPlaceholder('Detailed markdown instructions for the worker agent.').fill(promptMarkdown);
     await page.getByRole('button', { name: 'Create Task' }).click();
 
     const createdTask = await getTaskByTitle(page, project.id, taskTitle, sprint.id);
@@ -253,7 +255,7 @@ test.describe('sprint and task lifecycle', () => {
     expect(createdTask.priority).toBe('medium');
 
     await activateButtonWithKeyboard(page, page.getByRole('button', { name: `Edit task ${createdTask.taskKey}: ${taskTitle}` }));
-    await expect(page.getByText('Edit Task')).toBeVisible();
+    await expect(page.getByText('Edit Task', { exact: true })).toBeVisible();
     await page.getByPlaceholder('Fix navigation layout shift').fill(editedTaskTitle);
     await page.getByRole('button', { name: 'high' }).click();
     await page.getByRole('button', { name: 'Save Task' }).click();

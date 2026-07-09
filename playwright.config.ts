@@ -52,7 +52,7 @@ export default defineConfig({
   timeout: 60000,
   outputDir: 'test-results',
   /* Run tests in files in parallel */
-  fullyParallel: false,
+  fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
@@ -78,13 +78,34 @@ export default defineConfig({
   /* Configure projects for major browsers */
   projects: [
     {
-      name: 'chromium-desktop',
+      name: 'navigation',
+      testMatch: 'tests/e2e/navigation/**/*.spec.ts',
       use: { ...devices['Desktop Chrome'] },
     },
     {
-      name: 'chromium-mobile',
-      testMatch: /sprint-ledger-responsive\.spec\.ts/,
-      use: { ...devices['Pixel 5'] },
+      name: 'settings',
+      testMatch: 'tests/e2e/settings/**/*.spec.ts',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'projects',
+      testMatch: 'tests/e2e/projects/**/*.spec.ts',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'tasks',
+      testMatch: 'tests/e2e/tasks/**/*.spec.ts',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'agents',
+      testMatch: 'tests/e2e/agents/**/*.spec.ts',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'config',
+      testMatch: 'tests/e2e/config/**/*.spec.ts',
+      use: { ...devices['Desktop Chrome'] },
     },
   ],
 

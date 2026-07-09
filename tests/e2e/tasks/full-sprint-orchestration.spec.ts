@@ -1,9 +1,9 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
-import type { ExecutionDashboardSnapshot, ExecutionTaskDispatchSummary } from '../../src/contracts/app-types.js';
-import type { ExecutionInvocationRecord, ProjectInvocationsQueryResult } from '../../src/contracts/invocation-types.js';
-import type { ProjectSummary, SprintRecord, TaskRecord } from '../../src/contracts/project-management-types.js';
-import type { ProjectSettingsOverride } from '../../src/contracts/settings-scope-types.js';
-import { DEFAULT_DASHBOARD_SETTINGS } from '../../src/repositories/settings-defaults.js';
+import type { ExecutionDashboardSnapshot, ExecutionTaskDispatchSummary } from '../../../src/contracts/app-types.js';
+import type { ExecutionInvocationRecord, ProjectInvocationsQueryResult } from '../../../src/contracts/invocation-types.js';
+import type { ProjectSummary, SprintRecord, TaskRecord } from '../../../src/contracts/project-management-types.js';
+import type { ProjectSettingsOverride } from '../../../src/contracts/settings-scope-types.js';
+import { DEFAULT_DASHBOARD_SETTINGS } from '../../../src/repositories/settings-defaults.js';
 import {
   completeOnboardingViaApi,
   createProjectViaApi,
@@ -14,7 +14,7 @@ import {
   fetchTasksViaApi,
   selectProjectViaApi,
   selectSprintViaApi,
-} from './helpers/e2e-api';
+} from '../helpers/e2e-api';
 import {
   buildLocalHostExecutionSettingsOverride,
   configureProjectForLocalHostExecution,
@@ -22,7 +22,7 @@ import {
   createTemporaryGitRepository,
   pollApiCondition,
   type TemporaryGitRepository,
-} from './helpers/e2e-fixtures';
+} from '../helpers/e2e-fixtures';
 
 const ACTIVE_DISPATCH_STATUSES = new Set(['queued', 'claimed', 'running', 'cancel_requested', 'paused']);
 const ACTIVE_SPRINT_RUN_STATUSES = new Set(['queued', 'running', 'paused', 'cancel_requested']);

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { completeOnboarding, ensureSelectedProject } from './helpers/prepare-app';
+import { completeOnboarding, ensureSelectedProject } from '../helpers/prepare-app';
 
 test.beforeEach(async ({ request }, testInfo) => {
   await completeOnboarding(request);
