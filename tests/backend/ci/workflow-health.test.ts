@@ -197,7 +197,9 @@ describe("GitHub workflow health", () => {
 
   it("keeps Playwright as a release-path E2E lane with build, browser install, and artifacts", async () => {
     const playwright = await readRepoFile(WORKFLOWS.playwright);
-    const playwrightJob = getJobBlock(playwright, "test-e2e");
+    const buildJob = getJobBlock(playwright, "build");
+    const testJob = getJobBlock(playwright, "test");
+    const npmPackageJob = getJobBlock(playwright, "npm-package");
 
     expectWorkflowToolchain(playwright, "Playwright");
     expectConcurrencyCancellation(playwright, "Playwright");
@@ -205,16 +207,88 @@ describe("GitHub workflow health", () => {
     expect(playwright).toMatch(/pull_request:\n    branches: \[main\]/);
     expect(playwright).not.toContain("branches: [dev]");
 
-    expectCommandBefore(playwright, "run: pnpm run build", "run: pnpm run test:e2e");
-    expectWorkflowStepAfter(playwrightJob, "Build server & dashboard", "Run Playwright E2E Tests");
-    expectWorkflowStepAfter(playwrightJob, "Cache Playwright browser binaries", "Install Playwright browsers");
-    expectWorkflowStepAfter(playwrightJob, "Install Playwright browsers", "Run Playwright E2E Tests");
-    expect(playwrightJob).toContain("if: runner.os == 'Linux'");
-    expect(playwrightJob).toContain("run: pnpm exec playwright install-deps chromium");
-    expect(playwrightJob).toContain("run: pnpm exec playwright install chromium");
-    expect(playwrightJob).toMatch(/- name: Upload Playwright artifacts\n        if: always\(\)\n        uses: actions\/upload-artifact@v4/);
-    expect(playwrightJob).toContain("test-results/");
-    expect(playwrightJob).toContain("playwright-report/");
+    expect(buildJob).toContain("strategy:");
+    expect(buildJob).toContain("matrix:");
+    expect(buildJob).toContain("runner: ubuntu-latest");
+    expect(buildJob).toContain("runner: macos-latest");
+    expect(buildJob).toContain("runner: windows-latest");
+    expectWorkflowStepAfter(buildJob, "Checkout repository for ${{ matrix.os.label }} build", "Set up pnpm 10.33.0 for ${{ matrix.os.label }} build");
+    expectWorkflowStepAfter(buildJob, "Set up Node.js 22 for ${{ matrix.os.label }} build", "Restore node_modules cache for ${{ matrix.os.label }} build");
+    expectWorkflowStepAfter(buildJob, "Restore node_modules cache for ${{ matrix.os.label }} build", "Install dependencies for ${{ matrix.os.label }} build");
+    expectWorkflowStepAfter(buildJob, "Install dependencies for ${{ matrix.os.label }} build", "Restore Vite cache for ${{ matrix.os.label }} build");
+    expectWorkflowStepAfter(buildJob, "Build server & dashboard (${{ matrix.os.label }})", "Verify compiled CLI exists after ${{ matrix.os.label }} build");
+    expectWorkflowStepAfter(buildJob, "Verify compiled CLI exists after ${{ matrix.os.label }} build", "Upload compiled app artifact for ${{ matrix.os.label }}");
+    expect(buildJob).toContain("run: pnpm run build");
+    expect(buildJob).toContain("dist/");
+    expect(buildJob).toContain("dashboard/dist/");
+    expect(buildJob).toContain(".cache/tsc/");
+
+    expect(testJob).toContain("needs: build");
+    expect(testJob).toContain("fail-fast: false");
+    expect(testJob).toContain("matrix:");
+    expect(testJob).toContain("name: navigation");
+    expect(testJob).toContain("name: settings");
+    expect(testJob).toContain("name: projects");
+    expect(testJob).toContain("name: tasks");
+    expect(testJob).toContain("name: agents");
+    expect(testJob).toContain("name: config");
+    expectWorkflowStepAfter(
+      testJob,
+      "Checkout repository for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+      "Set up pnpm 10.33.0 for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+    );
+    expectWorkflowStepAfter(
+      testJob,
+      "Set up Node.js 22 for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+      "Restore node_modules cache for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+    );
+    expectWorkflowStepAfter(
+      testJob,
+      "Restore node_modules cache for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+      "Install dependencies for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+    );
+    expectWorkflowStepAfter(
+      testJob,
+      "Install dependencies for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+      "Download compiled app artifact for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+    );
+    expectWorkflowStepAfter(
+      testJob,
+      "Download compiled app artifact for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+      "Verify restored compiled CLI for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+    );
+    expectWorkflowStepAfter(
+      testJob,
+      "Verify restored compiled CLI for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+      "Cache Playwright browser binaries for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+    );
+    expectWorkflowStepAfter(
+      testJob,
+      "Cache Playwright browser binaries for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+      "Install Playwright OS dependencies for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+    );
+    expectWorkflowStepAfter(
+      testJob,
+      "Install Playwright OS dependencies for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+      "Install Playwright Chromium for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+    );
+    expectWorkflowStepAfter(
+      testJob,
+      "Install Playwright Chromium for ${{ matrix.os.label }} ${{ matrix.project.label }} E2E",
+      "Run E2E - ${{ matrix.project.label }} group on ${{ matrix.os.label }}",
+    );
+    expect(testJob).toContain("if: runner.os == 'Linux'");
+    expect(testJob).toContain("run: pnpm exec playwright install-deps chromium");
+    expect(testJob).toContain("run: pnpm exec playwright install chromium");
+    expect(testJob).toContain("run: pnpm exec playwright test --project=${{ matrix.project.name }}");
+    expect(testJob).toContain("Run E2E - ${{ matrix.project.label }} group on ${{ matrix.os.label }}");
+    expect(testJob).toMatch(/- name: Upload Playwright artifacts for .* E2E\n        if: always\(\)\n        uses: actions\/upload-artifact@v4/);
+    expect(testJob).toContain("test-results/");
+    expect(testJob).toContain("playwright-report/");
+
+    expect(npmPackageJob).toContain("pnpm pack --pack-destination .cache/npm-package");
+    expect(npmPackageJob).toContain("pnpm add ../npm-package/*.tgz");
+    expect(npmPackageJob).toContain("node .cache/npm-install-smoke/node_modules/@codeuxai/codeux/dist/index.js --help");
 
     expectCacheKey(playwright, "-nm-", ["package.json", "pnpm-lock.yaml"]);
     expectCacheKey(playwright, "-vite-e2e-", ["package.json", "pnpm-lock.yaml", "vite.config.ts", "tsconfig.json", "dashboard/tsconfig.json"]);
