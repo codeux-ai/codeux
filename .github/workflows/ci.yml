@@ -501,7 +501,7 @@ jobs:
 
   release-candidate:
     name: 10 Release Candidate / desktop package (${{ matrix.name }})
-    needs: [package-smoke, ci-dag, e2e]
+    needs: package-smoke
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:

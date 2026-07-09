@@ -117,7 +117,7 @@ It is staged as:
 3. `07 Package`: npm tarball install smoke from the shared build artifact.
 4. `08 Orchestration`: one shared OS matrix from the build artifact, with Linux Docker DAG validation and macOS/Windows Electron DAG validation.
 5. `09`: full Playwright on Linux, macOS, and Windows from one shared matrix template.
-6. `10`: unsigned desktop release-candidate packages with `--publish never`.
+6. `10`: unsigned desktop release-candidate packages with `--publish never`, started after package smoke so packaging can run beside E2E and orchestration.
 
 `Playwright Diagnostics`, `Release Candidate Diagnostics`, and `Mockup Sprint Diagnostics` are manual-only rerun workflows. A PR cannot be merged with red CI.
 
