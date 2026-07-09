@@ -144253,36 +144253,6 @@
         "temperature": true,
         "tool_call": true
       },
-      "switchpoint/router": {
-        "attachment": false,
-        "cost": {
-          "input": 0.85,
-          "output": 3.4
-        },
-        "description": "Automatic model router for matching prompts to suitable backends and budgets",
-        "id": "switchpoint/router",
-        "last_updated": "2025-07-11",
-        "limit": {
-          "context": 131072,
-          "output": 131072
-        },
-        "modalities": {
-          "input": [
-            "text"
-          ],
-          "output": [
-            "text"
-          ]
-        },
-        "name": "Switchpoint Router",
-        "open_weights": false,
-        "reasoning": true,
-        "reasoning_options": [],
-        "release_date": "2025-07-11",
-        "structured_output": false,
-        "temperature": true,
-        "tool_call": false
-      },
       "tencent/hunyuan-a13b-instruct": {
         "attachment": false,
         "cost": {
@@ -145325,9 +145295,9 @@
       "z-ai/glm-5.2": {
         "attachment": false,
         "cost": {
-          "cache_read": 0.078,
-          "input": 0.42,
-          "output": 1.32
+          "cache_read": 0.18,
+          "input": 0.9,
+          "output": 3.08
         },
         "description": "Open flagship GLM for long-horizon coding agents and million-token context work",
         "family": "glm",
@@ -145337,8 +145307,8 @@
         },
         "last_updated": "2026-06-13",
         "limit": {
-          "context": 1024000,
-          "output": 128000
+          "context": 1048576,
+          "output": 1048576
         },
         "modalities": {
           "input": [
@@ -189975,7 +189945,7 @@
     ],
     "id": "zenifra",
     "models": {
-      "qwen3.6-35b-a3b": {
+      "alibaba/qwen3.6-35b-a3b": {
         "attachment": true,
         "cost": {
           "input": 0.19,
@@ -189983,7 +189953,7 @@
         },
         "description": "Open multimodal Qwen MoE for local agents that need vision, audio, and code",
         "family": "qwen",
-        "id": "qwen3.6-35b-a3b",
+        "id": "alibaba/qwen3.6-35b-a3b",
         "last_updated": "2026-04-17",
         "limit": {
           "context": 262144,
@@ -189991,10 +189961,7 @@
         },
         "modalities": {
           "input": [
-            "text",
-            "image",
-            "video",
-            "audio"
+            "text"
           ],
           "output": [
             "text"
