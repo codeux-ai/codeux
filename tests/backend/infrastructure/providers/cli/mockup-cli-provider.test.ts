@@ -74,4 +74,21 @@ describe("mockup-cli QA reviews", () => {
       fixInstructions: "mockup-cli:write src/qa/final.js :: export const final = 'follow-up-visible';",
     });
   });
+
+  it("accepts QA prompts larger than the Windows command-line limit", async () => {
+    const workspace = await createWorkspace();
+    await fs.mkdir(path.join(workspace, "src", "qa"), { recursive: true });
+    await fs.writeFile(path.join(workspace, "src", "qa", "large-prompt.js"), "export const visible = 'yes';\n");
+
+    const result = await runMockupCliProvider({
+      prompt: `${qaPrompt("qa-large-prompt", ["mockup-qa:require-file src/qa/large-prompt.js :: visible"])}\n${"context ".repeat(10_000)}`,
+      cwd: workspace,
+      model: "default",
+      sessionId: "qa-large-prompt",
+      env: process.env,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(JSON.parse(result.stdout)).toMatchObject({ verdict: "pass" });
+  });
 });

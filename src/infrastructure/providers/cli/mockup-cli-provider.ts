@@ -8,7 +8,9 @@ const path = require("path");
 const crypto = require("crypto");
 const { spawnSync } = require("child_process");
 
-const prompt = process.argv[1] || "";
+// Read the prompt from stdin when invoked by the host runner. Passing a full
+// QA prompt as argv exceeds the Windows CreateProcess command-line limit.
+const prompt = process.argv[1] || fs.readFileSync(0, "utf8");
 const cwd = process.cwd();
 const sessionId = process.env.CODE_UX_MOCKUP_SESSION_ID || "mockup-session";
 const model = process.env.CODE_UX_MOCKUP_MODEL || "default";
@@ -526,14 +528,14 @@ export async function runMockupCliProvider(input: {
 }): Promise<CommandResult> {
   return new Promise((resolve) => {
     const nodeExecutable = input.env.CODEUX_E2E_NODE_EXECUTABLE?.trim() || process.execPath;
-    const child = spawn(nodeExecutable, ["-e", MOCKUP_CLI_NODE_SCRIPT, input.prompt], {
+    const child = spawn(nodeExecutable, ["-e", MOCKUP_CLI_NODE_SCRIPT], {
       cwd: input.cwd,
       env: {
         ...input.env,
         CODE_UX_MOCKUP_MODEL: input.model || "default",
         CODE_UX_MOCKUP_SESSION_ID: input.sessionId,
       },
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
 
     let stdout = "";
@@ -568,6 +570,11 @@ export async function runMockupCliProvider(input: {
 
     child.stdout.on("data", (chunk: Buffer) => emitLines(chunk, "stdout"));
     child.stderr.on("data", (chunk: Buffer) => emitLines(chunk, "stderr"));
+    child.stdin.on("error", () => {
+      // A failed spawn closes stdin before the prompt can be written. The
+      // child `error` handler below returns that failure to the caller.
+    });
+    child.stdin.end(input.prompt, "utf8");
     child.on("close", (code) => {
       if (input.signal) {
         input.signal.removeEventListener("abort", killOnAbort);
