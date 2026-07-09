@@ -32,7 +32,7 @@ The Memory header is the main place to choose what the graph, sidebar, and inspe
 
 - **Tier summary tabs** — **Short Term** and **Long Term** show their memory counts directly in the tab cards.
 - **Current scope line** — shows copy such as `Short Term: showing 7 memories of 17 memories · Sprint 2 · All Agents` or `Long Term: showing 1 memory of 1 memory · Project-wide · All Agents`.
-- **Scope filters** — Short-term memory shows the sprint selector and both tiers show the agent preset selector. Disabled selectors remain visible with reason copy when there are no matching sprints or agent presets.
+- **Scope filters** — Short-term memory shows the sprint selector when sprint scope data is available, and both tiers show the agent preset selector when agent presets are available. When a source list is empty, the filter row shows reason copy instead of rendering a focusable empty selector.
 - **Actions** — **Add Memory**, **Model Catalog**, and **Danger Delete** are separated from the selectors. Add Memory opens the manual memory dialog for the current tier scope. Model Catalog shows whether it is shown or hidden plus active-model status. Danger Delete always shows Off/Armed state plus persistent explanatory copy; when armed, the page warning refers to this as Lobotomize mode because graph-node and inspector deletes become immediate.
 
 The sidebar search field filters the current visible tier, sprint, and agent slice by memory text/category. Programmatic semantic search still uses vector similarity across requested scopes (cosine similarity, configurable `minSimilarity`).

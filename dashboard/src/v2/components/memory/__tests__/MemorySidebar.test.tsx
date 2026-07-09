@@ -48,7 +48,10 @@ describe("MemorySidebar", () => {
         );
 
         const toggle = getByRole("button", { name: "Open memory sidebar" });
+        const content = container.querySelector("#memory-sidebar-content");
         expect(toggle).toHaveAttribute("aria-expanded", "false");
+        expect(content).toHaveAttribute("aria-hidden", "true");
+        expect(content).toHaveAttribute("inert");
         expect(queryByRole("textbox", { name: "Search memories" })).toBeNull();
         expect(container.querySelector("[data-sidebar-toggle-icon]")).toHaveClass("rotate-180");
     });
@@ -72,6 +75,7 @@ describe("MemorySidebar", () => {
         expect(searchQuerySignal.value).toBe("");
         expect(selectedMemoryIdsSignal.value).toEqual([]);
         expect(getByRole("button", { name: "Open memory sidebar" })).toHaveAttribute("aria-expanded", "false");
+        expect(container.querySelector("#memory-sidebar-content")).toHaveAttribute("inert");
         expect(queryByRole("textbox", { name: "Search memories" })).toBeNull();
         expect(container.querySelector("[data-sidebar-toggle-icon]")).toHaveClass("rotate-180");
     });

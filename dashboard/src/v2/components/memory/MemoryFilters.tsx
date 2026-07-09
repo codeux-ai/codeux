@@ -33,16 +33,24 @@ export const MemoryFilters: FunctionComponent<{
     const selectedAgentPresetId = selectedAgentPresetIdSignal.value;
     const interactionTokens = useInteractionTokens();
     const [announcement, setAnnouncement] = useState("");
-    const selectedSprint = sprints.find((sprint) => sprint.id === selectedSprintId);
-    const selectedAgent = agentPresets.find((agent) => agent.id === selectedAgentPresetId);
     const activeTierLabel = activeTier === "short_term" ? "Short Term" : "Long Term";
     const shortTermCount = stats.sprint + stats.agent;
     const longTermCount = stats.project;
     const activeTierCount = activeTier === "short_term" ? shortTermCount : longTermCount;
     const totalCount = shortTermCount + longTermCount;
+    const selectedSprint = sprints.find((sprint) => sprint.id === selectedSprintId);
+    const selectedAgent = agentPresets.find((agent) => agent.id === selectedAgentPresetId);
+    const hasSprintFilters = sprints.length > 0;
+    const hasAgentFilters = agentPresets.length > 0;
+    const hasShortTermFilterData = activeTier !== "short_term" || shortTermCount > 0;
+    const showSprintFilter = activeTier === "short_term" && hasSprintFilters && hasShortTermFilterData;
+    const showAgentFilter = hasAgentFilters && hasShortTermFilterData;
+    const hasScopeFilters = showSprintFilter || showAgentFilter;
     const sprintLabel = selectedSprint
         ? `Sprint ${selectedSprint.number ?? "?"}`
-        : "No sprint selected";
+        : activeTier === "short_term" && shortTermCount === 0
+            ? "No short-term memories"
+            : hasSprintFilters ? "All Sprints" : "No sprints available";
     const agentLabel = selectedAgent?.name ?? "All Agents";
     const activeTierCountLabel = `${activeTierCount} ${activeTierCount === 1 ? "memory" : "memories"}`;
     const totalCountLabel = `${totalCount} ${totalCount === 1 ? "memory" : "memories"}`;
@@ -52,12 +60,18 @@ export const MemoryFilters: FunctionComponent<{
     ];
     const currentScopeCopy = `${activeTierLabel}: showing ${activeTierCountLabel} of ${totalCountLabel} · ${currentScopeParts.join(" · ")}`;
     const activeModelCopy = stats.activeModel ? `Active: ${stats.activeModel}` : "No active model";
-    const sprintDisabledReason = activeTier === "short_term" && sprints.length === 0
-        ? "Sprint filter disabled because this project has no sprints with memory."
-        : "";
-    const agentDisabledReason = agentPresets.length === 0
-        ? "Agent filter disabled because no agent presets are available."
-        : "";
+    const unavailableScopeCopy = activeTier === "short_term"
+        ? shortTermCount === 0
+            ? "No short-term memory filters are available for this tier."
+            : hasAgentFilters
+                ? "No sprint filters are available for this tier."
+                : "No sprint or agent filters are available for this tier."
+        : "No agent filters are available for this tier.";
+    const unavailablePartialScopeCopy = activeTier === "short_term" && !showSprintFilter && shortTermCount > 0
+        ? "No sprint filters are available for this tier."
+        : !showAgentFilter && hasScopeFilters
+            ? "No agent filters are available for this tier."
+            : "";
     const controlTransitionStyle = {
         transitionDuration: interactionTokens.controlFeedback.duration,
         transitionTimingFunction: interactionTokens.controlFeedback.ease,
@@ -74,6 +88,18 @@ export const MemoryFilters: FunctionComponent<{
     useEffect(() => {
         setAnnouncement(`${activeTierLabel} tier selected. ${activeTierCount} ${activeTierCount === 1 ? "memory" : "memories"}.`);
     }, [activeTierCount, activeTierLabel]);
+
+    useEffect(() => {
+        if (selectedSprintId && ((activeTier === "short_term" && shortTermCount === 0) || !sprints.some((sprint) => sprint.id === selectedSprintId))) {
+            selectedSprintIdSignal.value = undefined;
+        }
+    }, [activeTier, selectedSprintId, shortTermCount, sprints]);
+
+    useEffect(() => {
+        if (selectedAgentPresetId && ((activeTier === "short_term" && shortTermCount === 0) || !agentPresets.some((agent) => agent.id === selectedAgentPresetId))) {
+            selectedAgentPresetIdSignal.value = undefined;
+        }
+    }, [activeTier, agentPresets, selectedAgentPresetId, shortTermCount]);
 
     const handleTierChange = (tier: MemTier) => {
         activeTierSignal.value = tier;
@@ -169,7 +195,7 @@ export const MemoryFilters: FunctionComponent<{
             <div className="sr-only" aria-live="polite" aria-atomic="true">{announcement}</div>
             <div className="flex w-full min-w-0 flex-wrap items-start gap-2.5 rounded-xl border border-black/[0.05] bg-black/[0.025] p-2 dark:border-white/[0.06] dark:bg-black/[0.12]" role="group" aria-label="Memory scope filters">
                 {/* Sprint selector — only for Short Term */}
-                {activeTier === "short_term" && (
+                {showSprintFilter && (
                     <div className="flex min-w-0 flex-[1_1_12rem] flex-col gap-1 sm:max-w-[18rem]">
                         <label htmlFor="sprint-selector" className="sr-only">Filter by Sprint</label>
                         <select
@@ -179,11 +205,10 @@ export const MemoryFilters: FunctionComponent<{
                             title="Filter memory by Sprint"
                             value={selectedSprintId ?? ""}
                             onChange={(e) => handleSprintChange((e.target as HTMLSelectElement).value)}
-                            disabled={sprints.length === 0}
                             style={controlTransitionStyle}
                             className="h-9 w-full min-w-0 max-w-full truncate rounded-lg border border-black/[0.08] bg-white/70 px-3 text-[11px] font-mono font-bold text-slate-600 transition-[background-color,border-color,box-shadow,color] motion-reduce:duration-0 cursor-pointer hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08]
                                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-void-900">
-                            {sprints.length === 0 && <option value="">No sprints available</option>}
+                            <option value="">All Sprints</option>
                             {sprints.map(s => (
                                 <option key={s.id} value={s.id}>
                                     Sprint {s.number ?? "?"} — {s.name || s.goal?.slice(0, 40) || s.id.slice(0, 8)}
@@ -191,33 +216,44 @@ export const MemoryFilters: FunctionComponent<{
                             ))}
                         </select>
                         <span id="sprint-selector-status" className="min-w-0 text-[10px] font-semibold leading-snug text-slate-400">
-                            {sprintDisabledReason || sprintLabel}
+                            {sprintLabel}
                         </span>
                     </div>
                 )}
                 {/* Agent selector — both tiers */}
-                <div className="flex min-w-0 flex-[1_1_12rem] flex-col gap-1 sm:max-w-[18rem]">
-                    <label htmlFor="agent-selector" className="sr-only">Filter by Agent Preset</label>
-                    <select
-                        id="agent-selector"
-                        aria-label="Filter memory by Agent Preset"
-                        aria-describedby="agent-selector-status"
-                        title="Filter memory by Agent Preset"
-                        value={selectedAgentPresetId ?? ""}
-                        onChange={(e) => handleAgentChange((e.target as HTMLSelectElement).value)}
-                        disabled={agentPresets.length === 0}
-                        style={controlTransitionStyle}
-                        className="h-9 w-full min-w-0 max-w-full truncate rounded-lg border border-black/[0.08] bg-white/70 px-3 text-[11px] font-mono font-bold text-slate-600 transition-[background-color,border-color,box-shadow,color] motion-reduce:duration-0 cursor-pointer hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08]
-                                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-void-900">
-                        <option value="">All Agents</option>
-                        {agentPresets.map(a => (
-                            <option key={a.id} value={a.id}>{a.name}</option>
-                        ))}
-                    </select>
-                    <span id="agent-selector-status" className="min-w-0 text-[10px] font-semibold leading-snug text-slate-400">
-                        {agentDisabledReason || agentLabel}
-                    </span>
-                </div>
+                {showAgentFilter && (
+                    <div className="flex min-w-0 flex-[1_1_12rem] flex-col gap-1 sm:max-w-[18rem]">
+                        <label htmlFor="agent-selector" className="sr-only">Filter by Agent Preset</label>
+                        <select
+                            id="agent-selector"
+                            aria-label="Filter memory by Agent Preset"
+                            aria-describedby="agent-selector-status"
+                            title="Filter memory by Agent Preset"
+                            value={selectedAgentPresetId ?? ""}
+                            onChange={(e) => handleAgentChange((e.target as HTMLSelectElement).value)}
+                            style={controlTransitionStyle}
+                            className="h-9 w-full min-w-0 max-w-full truncate rounded-lg border border-black/[0.08] bg-white/70 px-3 text-[11px] font-mono font-bold text-slate-600 transition-[background-color,border-color,box-shadow,color] motion-reduce:duration-0 cursor-pointer hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08]
+                                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-void-900">
+                            <option value="">All Agents</option>
+                            {agentPresets.map(a => (
+                                <option key={a.id} value={a.id}>{a.name}</option>
+                            ))}
+                        </select>
+                        <span id="agent-selector-status" className="min-w-0 text-[10px] font-semibold leading-snug text-slate-400">
+                            {agentLabel}
+                        </span>
+                    </div>
+                )}
+                {!hasScopeFilters && (
+                    <p className="flex min-h-9 min-w-0 flex-1 items-center px-1 text-[11px] font-semibold leading-snug text-slate-400">
+                        {unavailableScopeCopy}
+                    </p>
+                )}
+                {unavailablePartialScopeCopy && (
+                    <p className="flex min-h-9 min-w-0 flex-[1_1_12rem] items-center px-1 text-[11px] font-semibold leading-snug text-slate-400 sm:max-w-[18rem]">
+                        {unavailablePartialScopeCopy}
+                    </p>
+                )}
             </div>
             <div className="flex w-full min-w-0 flex-wrap items-start justify-between gap-2.5" role="group" aria-label="Memory actions">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
