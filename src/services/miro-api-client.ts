@@ -184,7 +184,53 @@ function readText(data: Record<string, unknown> | undefined, keys: string[]): st
 }
 
 function stripHtml(value: string): string {
-  return value.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").replace(/\r\n/g, "\n").trim();
+  const withoutHtml = value
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/\r\n/g, "\n")
+    .trim();
+  return stripHtmlTags(stripHtmlBlockElements(withoutHtml)).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function stripHtmlBlockElements(value: string): string {
+  let output = "";
+  let index = 0;
+  while (index < value.length) {
+    const lowerRemainder = value.slice(index).toLowerCase();
+    const tag = lowerRemainder.startsWith("<script") ? "script" : lowerRemainder.startsWith("<style") ? "style" : null;
+    if (!tag) {
+      output += value[index];
+      index += 1;
+      continue;
+    }
+
+    const closeMarker = `</${tag}`;
+    const closeStart = value.toLowerCase().indexOf(closeMarker, index + tag.length + 1);
+    if (closeStart === -1) {
+      break;
+    }
+    const closeEnd = value.indexOf(">", closeStart + closeMarker.length);
+    index = closeEnd === -1 ? value.length : closeEnd + 1;
+  }
+  return output;
+}
+
+function stripHtmlTags(value: string): string {
+  let output = "";
+  let insideTag = false;
+  for (const character of value) {
+    if (character === "<") {
+      insideTag = true;
+      continue;
+    }
+    if (insideTag) {
+      if (character === ">") {
+        insideTag = false;
+      }
+      continue;
+    }
+    output += character;
+  }
+  return output;
 }
 
 function normalizeBaseUrl(baseUrl?: string): string {

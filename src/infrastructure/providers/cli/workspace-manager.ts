@@ -26,6 +26,16 @@ const WORKSPACE_SESSION_LABEL_PREFIX = "code-ux.workspace-session=";
 const GIT_BUNDLE_REUSE_GRACE_MS = 2_000;
 export const CONTAINER_PERSISTENT_SKILL_STORAGE_ROOT = "/code-ux/persistent-skills";
 
+async function canonicalizeExistingPath(candidate: string): Promise<string> {
+  const resolved = path.resolve(candidate);
+  try {
+    const realPath = await fs.realpath(resolved);
+    return typeof realPath === "string" && realPath.length > 0 ? realPath : resolved;
+  } catch {
+    return resolved;
+  }
+}
+
 export interface WorkspaceCommandOptions {
   env?: NodeJS.ProcessEnv;
   signal?: AbortSignal;
@@ -1243,7 +1253,9 @@ export class WorkspaceManager implements IWorkspaceManager {
 
     const actualRoot = path.resolve(result.stdout.trim());
     const expectedRoot = path.resolve(repoPath);
-    if (actualRoot !== expectedRoot) {
+    const canonicalActualRoot = await canonicalizeExistingPath(actualRoot);
+    const canonicalExpectedRoot = await canonicalizeExistingPath(expectedRoot);
+    if (canonicalActualRoot !== canonicalExpectedRoot) {
       throw new Error(`Project repository path must be a Git checkout root. Configured path ${expectedRoot} resolves to parent Git root ${actualRoot}. Re-add the Git project so Code UX clones it into a local checkout directory.`);
     }
   }

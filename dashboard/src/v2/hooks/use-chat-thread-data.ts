@@ -135,11 +135,21 @@ const CREATE_APP_QUICKACTION_BODIES: Record<DashboardCreateAppQuickactionKind, s
   desktop_app: "Create a desktop app",
 };
 
+const createCryptoRandomId = (): string => {
+  const cryptoApi = globalThis.crypto;
+  if (typeof cryptoApi?.randomUUID === "function") {
+    return cryptoApi.randomUUID();
+  }
+  if (typeof cryptoApi?.getRandomValues === "function") {
+    const bytes = new Uint8Array(16);
+    cryptoApi.getRandomValues(bytes);
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+  throw new Error("Secure random generation is unavailable.");
+};
+
 const createQuickactionRequestId = (kind: DashboardCreateAppQuickactionKind): string => {
-  const randomId = typeof globalThis.crypto?.randomUUID === "function"
-    ? globalThis.crypto.randomUUID()
-    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-  return `dashboard-create-app-${kind}-${randomId}`;
+  return `dashboard-create-app-${kind}-${createCryptoRandomId()}`;
 };
 
 const normalizeStackToken = (value: string): string => value.toLowerCase().replace(/[^a-z0-9+#.]+/g, "");

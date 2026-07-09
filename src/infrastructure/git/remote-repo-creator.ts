@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { runCommandStrict } from "../../services/cli-process-runner.js";
 import { validateSafeRepoName, validateSafeClonePath, validateNonEmptyDir } from "../../utils/path-validator.js";
+import type { ValidatedPath } from "../../utils/path-validator.js";
 import { buildGitHttpAuthEnvWithFallbacks } from "../../services/git-http-auth.js";
 import { ensureCodeUxGitignoreEntry } from "./code-ux-gitignore.js";
 
@@ -39,7 +40,7 @@ const cloneRepository = async (remoteUrl: string, cloneParentDir: string, repoNa
   );
 };
 
-async function seedCodeUxGitignore(remoteUrl: string, localPath: string, hostToken?: string): Promise<void> {
+async function seedCodeUxGitignore(remoteUrl: string, localPath: ValidatedPath, hostToken?: string): Promise<void> {
   const changed = await ensureCodeUxGitignoreEntry(localPath);
   if (!changed) {
     return;

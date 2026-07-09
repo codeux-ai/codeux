@@ -131,6 +131,7 @@ import type { SpeechTranscriptionService } from "../services/speech-transcriptio
 import type { NodeFlowService } from "../services/node-flow-service.js";
 import type { CustomDashboardRepository } from "../repositories/custom-dashboard-repository.js";
 import type { CustomDashboardValidationService } from "../services/custom-dashboard-validation-service.js";
+import type { SkillService } from "../services/skill-service.js";
 import {
   parsePreviewSessionIdFromHost,
   parseSelectedPreviewPortFromRequest,
@@ -172,6 +173,7 @@ export interface DashboardServerOptions {
   nodeFlowService?: NodeFlowService;
   customDashboardRepository?: CustomDashboardRepository;
   customDashboardValidationService?: CustomDashboardValidationService;
+  skillService?: SkillService;
   projectManagementRepository?: ProjectManagementRepository;
   executionRepository?: ExecutionRepository;
   getStatus: () => unknown;

@@ -265,7 +265,7 @@ Legacy runtime:
   - Explicitly confirmed Docker installer execution for advertised onboarding modes
   - Also drives the header Docker status control: `cluster.status === "not_ready"` renders the red `Runtime not ready` alert badge, updates the icon-only trigger's accessible name, and exposes Docker dependency resolution details in the popover.
 - `GET /api/local-directories?path=/absolute/path`
-  - Lists child directories for the local Add Project directory picker, including current, parent, root, and home paths for browser-style navigation
+  - Lists child directories for the local Add Project directory picker, including current, parent, root, and home paths for browser-style navigation. Access checks canonicalize allowed roots, validate requested paths inside those roots, and reject symlink segments, so platform-equivalent spellings such as macOS `/var` and `/private/var` are accepted only when they map to an allowed directory.
 - `GET /api/git-status`
   - Git branch, PR, CI, merge history, warnings
 - `POST /api/tasks/:taskId/rerun`

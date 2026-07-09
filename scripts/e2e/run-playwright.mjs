@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 
@@ -49,7 +50,23 @@ async function findDashboardPort() {
 const dashboardPort = await findDashboardPort();
 const mockProviderCliPath = path.resolve(process.cwd(), 'scripts/e2e/mock-provider-cli.mjs');
 const pnpmCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
-const child = spawn(pnpmCommand, ['exec', 'playwright', 'test', ...process.argv.slice(2)], {
+const pnpmArgs = ['exec', 'playwright', 'test', ...process.argv.slice(2)];
+
+function resolvePnpmInvocation(command, args) {
+  if (process.platform !== 'win32' || !process.env.PNPM_HOME) {
+    return { command, args };
+  }
+
+  const pnpmCliPath = path.resolve(process.env.PNPM_HOME, '..', 'pnpm', 'bin', 'pnpm.cjs');
+  if (!existsSync(pnpmCliPath)) {
+    return { command, args };
+  }
+
+  return { command: process.execPath, args: [pnpmCliPath, ...args] };
+}
+
+const invocation = resolvePnpmInvocation(pnpmCommand, pnpmArgs);
+const child = spawn(invocation.command, invocation.args, {
   stdio: 'inherit',
   env: {
     ...process.env,
