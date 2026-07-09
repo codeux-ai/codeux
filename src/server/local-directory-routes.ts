@@ -48,28 +48,49 @@ async function resolveAllowedRoots(): Promise<string[]> {
   return [...new Set(roots.flat())];
 }
 
-async function canonicalizeAllowedPath(resolvedTargetPath: string, resolvedAllowedRoots: string[]): Promise<ValidatedPath | null> {
-  if (!isWithinAnyRoot(resolvedTargetPath, resolvedAllowedRoots)) {
-    return null;
+async function hasSymlinkSegmentBetween(root: string, target: string): Promise<boolean> {
+  const relativePath = path.relative(root, target);
+  if (!relativePath || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    return false;
   }
 
-  let realTargetPath = resolvedTargetPath;
-  try {
-    realTargetPath = await fs.realpath(resolvedTargetPath);
-  } catch {
-    realTargetPath = resolvedTargetPath;
+  let current = root;
+  for (const segment of relativePath.split(path.sep).filter(Boolean)) {
+    current = path.join(current, segment);
+    try {
+      const stats = await fs.lstat(current);
+      if (stats.isSymbolicLink()) {
+        return true;
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return false;
+      }
+      throw error;
+    }
+  }
+  return false;
+}
+
+async function validateAllowedPath(resolvedTargetPath: string, resolvedAllowedRoots: string[]): Promise<ValidatedPath | null> {
+  const matchingRoots = resolvedAllowedRoots
+    .filter((root) => isPathInside(root, resolvedTargetPath))
+    .sort((left, right) => right.length - left.length);
+  for (const root of matchingRoots) {
+    if (!(await hasSymlinkSegmentBetween(root, resolvedTargetPath))) {
+      return asValidatedPath(resolvedTargetPath);
+    }
   }
 
-  return isWithinAnyRoot(realTargetPath, resolvedAllowedRoots) ? asValidatedPath(realTargetPath) : null;
+  return null;
 }
 
 /**
- * Resolves `targetPath` to its canonical real path and confirms it lives inside
- * one of the allowed roots (home, cwd, or configured browser roots). The roots
- * include both configured spellings and canonical realpaths so platform aliases
- * such as macOS `/var` and `/private/var` are treated as the same location.
- * Returns the vetted real path on success, or null if it falls outside every
- * allowed root.
+ * Resolves `targetPath` to an absolute path and confirms it lives inside one of
+ * the allowed roots (home, cwd, or configured browser roots). The roots include
+ * both configured spellings and canonical realpaths so platform aliases such as
+ * macOS `/var` and `/private/var` are treated as the same location. Returns the
+ * vetted path on success, or null if it falls outside every allowed root.
  *
  * Returning the resolved path (rather than a boolean) lets callers run all
  * subsequent filesystem operations against the value that was actually checked,
@@ -78,7 +99,7 @@ async function canonicalizeAllowedPath(resolvedTargetPath: string, resolvedAllow
 async function resolveAllowedPath(targetPath: string): Promise<ValidatedPath | null> {
   const resolvedTargetPath = path.resolve(targetPath);
   const resolvedAllowedRoots = await resolveAllowedRoots();
-  return canonicalizeAllowedPath(resolvedTargetPath, resolvedAllowedRoots);
+  return validateAllowedPath(resolvedTargetPath, resolvedAllowedRoots);
 }
 
 interface LocalBrowserDirectoryListing {
@@ -106,8 +127,9 @@ function hasErrorCode(error: unknown, code: string): boolean {
 async function listAllowedDirectory(requestedPath: string): Promise<LocalBrowserDirectoryListing> {
   const resolvedPath = path.resolve(expandHomePath(requestedPath));
 
-  // safePath is the canonical real path that passed the allow-list check;
-  // every filesystem operation below uses it, never the raw request input.
+  // safePath is the resolved path that passed the allow-list and symlink
+  // segment checks; every filesystem operation below uses it, never the raw
+  // request input.
   const safePath = await resolveAllowedPath(resolvedPath);
   if (!safePath) {
     throw new LocalBrowserError(403, "Access denied");
@@ -123,8 +145,8 @@ async function listAllowedDirectory(requestedPath: string): Promise<LocalBrowser
 
   let stat;
   try {
-    // safePath is the canonical path returned by resolveAllowedPath after
-    // lexical and realpath containment checks against allowed roots.
+    // safePath is the resolved path returned by resolveAllowedPath after
+    // containment and symlink-segment checks against allowed roots.
     stat = await fs.stat(safePathUrl);
   } catch (err: unknown) {
     if (hasErrorCode(err, "ENOENT")) {
@@ -139,8 +161,8 @@ async function listAllowedDirectory(requestedPath: string): Promise<LocalBrowser
 
   let entries;
   try {
-    // safePath is the canonical path returned by resolveAllowedPath after
-    // lexical and realpath containment checks against allowed roots.
+    // safePath is the resolved path returned by resolveAllowedPath after
+    // containment and symlink-segment checks against allowed roots.
     entries = await fs.readdir(safePathUrl, { withFileTypes: true });
   } catch (err: unknown) {
     throw new LocalBrowserError(403, "Access denied");

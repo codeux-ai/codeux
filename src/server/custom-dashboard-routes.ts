@@ -196,18 +196,21 @@ function buildProxyRequestArgs(
   method: string;
   path: string;
   headers: Record<string, string | undefined>;
-  body?: Buffer;
+  bodyBytes?: Buffer;
   rewritePrefix: string;
 } {
   const path = req.originalUrl.startsWith(prefix)
     ? req.originalUrl.slice(prefix.length) || "/"
     : "/";
-  const body = req.body
-    ? Buffer.isBuffer(req.body)
+  const bodyBytes = req.body === undefined || req.body === null
+    ? undefined
+    : Buffer.isBuffer(req.body)
       ? req.body
-      : Buffer.from(JSON.stringify(req.body))
-    : undefined;
-  if (body && body.byteLength > 5 * 1024 * 1024) {
+      : null;
+  if (bodyBytes === null) {
+    throw new HttpRouteError(400, "Proxied custom dashboard validation requests must use a raw request body");
+  }
+  if (bodyBytes && bodyBytes.byteLength > 5 * 1024 * 1024) {
     throw new HttpRouteError(413, "Request body exceeds maximum allowed size for proxied custom dashboard validation");
   }
   return {
@@ -217,7 +220,7 @@ function buildProxyRequestArgs(
     headers: Object.fromEntries(
       Object.entries(req.headers).map(([key, value]) => [key, Array.isArray(value) ? value.join(", ") : value]),
     ) as Record<string, string | undefined>,
-    body,
+    bodyBytes,
     rewritePrefix: prefix,
   };
 }

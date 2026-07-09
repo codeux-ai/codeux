@@ -361,10 +361,10 @@ export class CustomDashboardValidationService {
     method: string;
     path: string;
     headers?: Record<string, string | undefined>;
-    body?: unknown;
+    bodyBytes?: Buffer;
     rewritePrefix?: string;
   }): Promise<CustomDashboardValidationProxyResponse> {
-    const requestBody = this.parseProxyBody(args.body);
+    const requestBody = args.bodyBytes;
     if (requestBody && requestBody.length > 5 * 1024 * 1024) {
       throw new Error("Request body exceeds maximum allowed size for proxied custom dashboard validation");
     }
@@ -492,16 +492,6 @@ export class CustomDashboardValidationService {
   private parseHttpStringParam(value: unknown, fieldName: string): string {
     if (typeof value !== "string") {
       throw new Error(`Invalid ${fieldName}. Expected a string.`);
-    }
-    return value;
-  }
-
-  private parseProxyBody(value: unknown): Buffer | undefined {
-    if (value === undefined || value === null) {
-      return undefined;
-    }
-    if (!Buffer.isBuffer(value)) {
-      throw new Error("Invalid body. Expected a buffer.");
     }
     return value;
   }
