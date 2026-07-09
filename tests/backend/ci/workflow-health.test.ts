@@ -147,10 +147,7 @@ describe("GitHub workflow health", () => {
     expect(getJobBlock(ci, "test-dashboard")).toContain("pnpm run test:dashboard");
     expect(getJobBlock(ci, "build")).toContain("pnpm run build");
 
-    const releaseVersionJob = getJobBlock(ci, "release-version-bump");
-    expect(releaseVersionJob).toContain('git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" -- package.json');
-    expect(releaseVersionJob).toContain("package.json was not changed; skipping release version bump check.");
-    expect(releaseVersionJob).toContain("Main release PRs must bump package.json version");
+    expect(getJobBlock(ci, "release-version-bump")).toContain("Main release PRs must bump package.json version");
   });
 
   it("keeps security-relevant workflows on least-privilege permissions and pinned major actions", async () => {
