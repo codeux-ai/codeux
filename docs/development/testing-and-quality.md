@@ -270,7 +270,7 @@ Use [Mockup Sprint Pentest](./mockup-sprint-pentest.md) for local commands, CI t
 pnpm run build
 ```
   - The build script intentionally runs toolchain commands directly (`tsc`, dashboard typecheck, `vite build`) instead of nested package-manager calls to keep child-process overhead and command noise down.
-  - TypeScript validation now uses incremental `.tsbuildinfo` files in `.cache/tsc/`, which lets `pnpm run build` reuse work from an earlier `pnpm run lint` or `pnpm run typecheck` in the same job.
+  - Dashboard type validation uses incremental `.tsbuildinfo` files in `.cache/tsc/`, but the server emit intentionally runs non-incrementally so release and Electron packaging always regenerate every `dist/` runtime module before `npm pack`.
   - The repo-root `vite.config.ts` sets `root: "dashboard"`, so `vite build` and `vite` must keep using that config to resolve `dashboard/index.html`.
   - The dashboard build now uses Vite 8's native `build.rolldownOptions` path instead of the Rollup compatibility key.
 
