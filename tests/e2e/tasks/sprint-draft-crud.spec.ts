@@ -1,12 +1,15 @@
 import { expect, type APIRequestContext, type Locator, type Page, test, type TestInfo } from '@playwright/test';
 import type { ProjectSummary, SprintRecord } from '../../../src/contracts/project-management-types.js';
 import {
+  cleanupSprintFixture,
   completeOnboarding,
+  createTaskInSprint,
   createE2eFixturePrefix,
-  deleteSprint,
   ensureSelectedProject,
   fetchSprintsViaApi,
+  fetchTasksViaApi,
   suppressDashboardTour,
+  updateSprintFields,
 } from '../helpers/prepare-app';
 
 async function prepareSprintDraftCrudApp(
@@ -38,7 +41,7 @@ async function activateButtonWithKeyboard(page: Page, button: Locator): Promise<
   await page.keyboard.press('Enter');
 }
 
-async function clickSprintMenuAction(page: Page, sprintName: string, action: 'Delete'): Promise<void> {
+async function clickSprintMenuAction(page: Page, sprintName: string, action: 'Edit' | 'Delete'): Promise<void> {
   const menuButton = page.getByRole('button', { name: `Open actions menu for sprint ${sprintName}` }).last();
   const actionLocator = page
     .getByRole('menuitem', { name: `${action} sprint ${sprintName}` })
@@ -73,7 +76,7 @@ test.describe('draft sprint CRUD from the Sprints page', () => {
 
   test.afterEach(async ({ request }) => {
     if (project && sprintIdForCleanup) {
-      await deleteSprint(request, project.id, sprintIdForCleanup);
+      await cleanupSprintFixture(request, project.id, sprintIdForCleanup);
     }
 
     project = null;
@@ -146,5 +149,124 @@ test.describe('draft sprint CRUD from the Sprints page', () => {
       return sprints.some((sprint) => sprint.id === createdSprint.id);
     }).toBe(false);
     sprintIdForCleanup = null;
+  });
+
+  test('validates empty drafts, reloads edits, and preserves existing task dependencies', async ({ page, request }, testInfo) => {
+    if (!project) {
+      throw new Error('Sprint draft CRUD fixture was not initialized.');
+    }
+
+    const prefix = createE2eFixturePrefix({ testInfo, fixtureKey: 'sprint-draft-edit' });
+    const sprintName = `${prefix} draft with long goal`;
+    const sprintGoal = [
+      'Save a long draft sprint through the visible composer.',
+      'The goal text should reload intact and editing the sprint must not disturb existing tasks.',
+      `Fixture marker: ${prefix}.`,
+    ].join(' ');
+
+    await page.goto('/sprints');
+    await expect(page.getByRole('region', { name: 'Sprint Ledger' })).toBeVisible();
+    await page.getByRole('button', { name: 'New Sprint' }).first().click();
+
+    const composer = page.getByRole('form', { name: 'Sprint composer' });
+    await expect(composer).toBeVisible();
+    await composer.locator('button[type="button"]').filter({ hasText: /^Save Draft/ }).first().click();
+    const submitDraftButton = composer.locator('button[type="submit"]').filter({ hasText: 'Save Draft' });
+    await submitDraftButton.click();
+    await expect(composer.getByText('Sprint name is required')).toBeVisible();
+
+    await composer.getByPlaceholder('Runtime hardening').fill(sprintName);
+    await composer
+      .getByPlaceholder('Describe the outcome, affected systems, and what done looks like when this sprint lands.')
+      .fill(sprintGoal);
+
+    const [createResponse] = await Promise.all([
+      page.waitForResponse((response) => (
+        response.request().method() === 'POST'
+        && response.url().includes(`/api/projects/${encodeURIComponent(project!.id)}/sprints`)
+        && response.status() === 201
+      )),
+      submitDraftButton.click(),
+    ]);
+    const createdSprint = await createResponse.json() as SprintRecord;
+    sprintIdForCleanup = createdSprint.id;
+
+    await expect.poll(async () => {
+      const { sprints } = await fetchSprintsViaApi(request, project!.id);
+      return sprints.find((sprint) => sprint.id === createdSprint.id);
+    }).toMatchObject({
+      id: createdSprint.id,
+      name: sprintName,
+      goal: sprintGoal,
+      tasksCount: 0,
+    });
+
+    await page.reload();
+    await expect(page.getByRole('region', { name: 'Sprint Ledger' })).toBeVisible();
+    await page.getByPlaceholder('Search sprints…').fill(sprintName);
+    await clickSprintMenuAction(page, sprintName, 'Edit');
+    const editComposer = page.getByRole('form', { name: 'Sprint composer' });
+    await expect(editComposer.getByText(/Edit (Draft|Planned) Sprint/)).toBeVisible();
+    await expect(editComposer.getByPlaceholder('Runtime hardening')).toHaveValue(sprintName);
+    await expect(editComposer.getByPlaceholder('Describe the outcome, affected systems, and what done looks like when this sprint lands.')).toHaveValue(sprintGoal);
+
+    const updatedName = `${prefix} edited draft`;
+    const updatedGoal = `${sprintGoal} Edited after reload while keeping task dependency edges intact.`;
+    await editComposer.getByPlaceholder('Runtime hardening').fill(updatedName);
+    await editComposer
+      .getByPlaceholder('Describe the outcome, affected systems, and what done looks like when this sprint lands.')
+      .fill(updatedGoal);
+    await editComposer.getByRole('button', { name: /^Save Changes\s+Update the sprint definition/ }).click();
+    const saveChangesButton = editComposer.getByRole('button', { name: 'Save Changes', exact: true });
+    await expect(saveChangesButton).toBeVisible();
+
+    await Promise.all([
+      page.waitForResponse((response) => (
+        response.request().method() === 'PATCH'
+        && response.url().includes(`/api/sprints/${encodeURIComponent(createdSprint.id)}`)
+        && response.status() === 200
+      )),
+      saveChangesButton.click(),
+    ]);
+
+    await expect.poll(async () => {
+      const { sprints } = await fetchSprintsViaApi(request, project!.id);
+      return sprints.find((sprint) => sprint.id === createdSprint.id);
+    }).toMatchObject({
+      id: createdSprint.id,
+      name: updatedName,
+      goal: updatedGoal,
+      tasksCount: 0,
+    });
+
+    const dependencyTask = await createTaskInSprint(request, project.id, createdSprint.id, {
+      title: `${prefix} sprint dependency anchor`,
+      promptMarkdown: 'Sprint edit dependency anchor.',
+    });
+    const dependentTask = await createTaskInSprint(request, project.id, createdSprint.id, {
+      title: `${prefix} sprint dependent task`,
+      promptMarkdown: 'Sprint edit dependent task.',
+      input: { dependsOnTaskIds: [dependencyTask.id] },
+    });
+    const refreshedGoal = `${updatedGoal} Metadata refreshed after tasks were added.`;
+    await updateSprintFields(request, project.id, createdSprint.id, { goal: refreshedGoal });
+
+    await expect.poll(async () => {
+      const { sprints } = await fetchSprintsViaApi(request, project!.id);
+      return sprints.find((sprint) => sprint.id === createdSprint.id);
+    }).toMatchObject({
+      id: createdSprint.id,
+      name: updatedName,
+      goal: refreshedGoal,
+      tasksCount: 2,
+    });
+
+    await expect.poll(async () => {
+      const tasks = await fetchTasksViaApi(request, project!.id, createdSprint.id);
+      return tasks.find((task) => task.id === dependentTask.id);
+    }).toMatchObject({
+      id: dependentTask.id,
+      dependsOnTaskIds: [dependencyTask.id],
+    });
   });
 });
