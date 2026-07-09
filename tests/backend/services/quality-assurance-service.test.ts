@@ -8,6 +8,7 @@ import { ProjectManagementRepository } from "../../../src/repositories/project-m
 import { QaReviewRepository } from "../../../src/repositories/qa-review-repository.js";
 import { AgentPresetRepository } from "../../../src/repositories/agent-preset-repository.js";
 import { QualityAssuranceService } from "../../../src/services/quality-assurance-service.js";
+import { WorkspaceManager } from "../../../src/infrastructure/providers/cli/workspace-manager.js";
 import { StructuredProviderResponseService } from "../../../src/services/structured-provider-response-service.js";
 import { StructuredAgentRequestService } from "../../../src/services/structured-agent-request-service.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
@@ -54,6 +55,8 @@ afterEach(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(syncRemoteBranchIfAvailable).mockResolvedValue(true);
+  vi.spyOn(WorkspaceManager.prototype, "createSnapshotWorkspace").mockResolvedValue("docker-volume://qa-snapshot");
+  vi.spyOn(WorkspaceManager.prototype, "removeWorktree").mockResolvedValue(undefined);
 });
 
 describe("QualityAssuranceService", () => {
@@ -2973,7 +2976,15 @@ describe("QualityAssuranceService", () => {
       followUpPrompt: "Address QA findings",
     });
 
-    expect(prepareWorktreeSpy).toHaveBeenCalledWith("/repo", "docker-volume://session-1", "task/feature-sprint-1-T1-gemini-recovered", "feature/sprint-1", undefined, expect.any(Object));
+    expect(prepareWorktreeSpy).toHaveBeenCalledWith(
+      "/repo",
+      "docker-volume://session-1",
+      "task/feature-sprint-1-T1-gemini-recovered",
+      "feature/sprint-1",
+      undefined,
+      expect.any(Object),
+      { remoteOnly: true },
+    );
     expect(updateTaskRunMock).toHaveBeenCalledWith("task-run-123", { workerBranch: "task/feature-sprint-1-T1-gemini-recovered" });
     expect(taskShape.worker_branch).toBe("task/feature-sprint-1-T1-gemini-recovered");
     expect(taskRunShape.workerBranch).toBe("task/feature-sprint-1-T1-gemini-recovered");
@@ -3105,7 +3116,15 @@ describe("QualityAssuranceService", () => {
       followUpPrompt: "Address QA findings",
     });
 
-    expect(prepareWorktreeSpy).toHaveBeenCalledWith("/repo", "docker-volume://session-1", "task/feature-sprint-1-T1-gemini-pr-recovered", "feature/sprint-1", undefined, expect.any(Object));
+    expect(prepareWorktreeSpy).toHaveBeenCalledWith(
+      "/repo",
+      "docker-volume://session-1",
+      "task/feature-sprint-1-T1-gemini-pr-recovered",
+      "feature/sprint-1",
+      undefined,
+      expect.any(Object),
+      { remoteOnly: true },
+    );
     expect(updateTaskRunMock).toHaveBeenCalledWith("task-run-123", { workerBranch: "task/feature-sprint-1-T1-gemini-pr-recovered" });
     expect(updateTaskRunMock).toHaveBeenLastCalledWith("task-run-123", {
       workerBranch: "task/feature-sprint-1-T1-gemini-pr-recovered",

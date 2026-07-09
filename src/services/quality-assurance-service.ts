@@ -13,6 +13,10 @@ import { extractJsonFromText } from "../domain/llm/json-extraction.js";
 import { StructuredAgentRequestService } from "./structured-agent-request-service.js";
 import { StructuredProviderResponseService } from "./structured-provider-response-service.js";
 import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
+import {
+  buildExplicitBranchSnapshotCheckout,
+  InvocationWorkspacePreparer,
+} from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import { WorkspaceArtifactService } from "../infrastructure/providers/cli/workspace-artifact-service.js";
 import { PrService } from "../infrastructure/providers/cli/pr-service.js";
 import type { IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
@@ -101,6 +105,7 @@ interface QualityAssuranceServiceDependencies {
 
 export class QualityAssuranceService {
   private readonly workspaceManager = new WorkspaceManager();
+  private readonly invocationWorkspacePreparer = new InvocationWorkspacePreparer(this.workspaceManager);
   private readonly workspaceArtifactService = new WorkspaceArtifactService(this.workspaceManager);
 
   private readonly prService = new PrService();
@@ -928,22 +933,23 @@ export class QualityAssuranceService {
       let snapshotWorkspace = args.repoPath;
       let shouldCleanupSnapshot = false;
       if (workflowSettings.executionMode === "DOCKER") {
-        try {
-          snapshotWorkspace = await this.workspaceManager.createSnapshotWorkspace(
-            args.repoPath,
-            `qa-review-${provider}-${Date.now().toString(36)}`,
-            { branch: args.reviewBranch, fallbackBranch: args.baseBranch },
-          );
-          shouldCleanupSnapshot = true;
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          this.deps.logger?.warn("Failed to create QA snapshot workspace, falling back to repository path", {
-            projectId: args.scope.projectId,
-            sprintId: args.scope.sprintId,
-            repoPath: args.repoPath,
-            error: message,
-          });
-        }
+        snapshotWorkspace = await this.invocationWorkspacePreparer.createSnapshotWorkspace({
+          repoPath: args.repoPath,
+          sessionId: `qa-review-${provider}-${Date.now().toString(36)}`,
+          checkout: buildExplicitBranchSnapshotCheckout({
+            githubMode: settings.git.githubMode,
+            defaultBranch: settings.git.defaultBranch,
+            githubToken: settings.git.githubToken,
+            gitlabToken: settings.git.gitlabToken,
+          }, args.reviewBranch, args.baseBranch),
+          gitPolicy: {
+            githubMode: settings.git.githubMode,
+            defaultBranch: settings.git.defaultBranch,
+            githubToken: settings.git.githubToken,
+            gitlabToken: settings.git.gitlabToken,
+          },
+        });
+        shouldCleanupSnapshot = true;
       }
 
       let result;
@@ -1523,7 +1529,19 @@ export class QualityAssuranceService {
       );
 
       if (!hasPreservedWorkspace) {
-        await this.workspaceManager.prepareWorktree(args.repoPath, worktreePath, workerBranch, args.featureBranch, undefined, gitAuth);
+        await this.invocationWorkspacePreparer.prepareWorktree({
+          repoPath: args.repoPath,
+          worktreePath,
+          workerBranch,
+          featureBranch: args.featureBranch,
+          gitAuth,
+          gitPolicy: {
+            githubMode: settings.git.githubMode,
+            defaultBranch: settings.git.defaultBranch,
+            githubToken: settings.git.githubToken,
+            gitlabToken: settings.git.gitlabToken,
+          },
+        });
       } else {
         await this.syncExistingCliFollowUpWorkspace(worktreePath, workerBranch, args.repoPath, gitAuth);
       }

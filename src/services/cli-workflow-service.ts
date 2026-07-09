@@ -29,6 +29,7 @@ import type { Logger } from "../shared/logging/logger.js";
 
 // New Modules
 import { WorkspaceManager, IWorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
+import { InvocationWorkspacePreparer } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import { PrService, IPrService } from "../infrastructure/providers/cli/pr-service.js";
 import { ProviderRunner, IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
@@ -128,12 +129,14 @@ function isNonRecoverableExecutionEnvironmentError(message: string): boolean {
 
 export class CliWorkflowService {
   private readonly workspaceManager: IWorkspaceManager;
+  private readonly invocationWorkspacePreparer: InvocationWorkspacePreparer;
   private readonly workspaceArtifactService: WorkspaceArtifactService;
   private readonly prService: IPrService;
   private readonly providerRunner: IProviderRunner;
 
   constructor(private readonly deps: CliWorkflowServiceDependencies) {
     this.workspaceManager = new WorkspaceManager();
+    this.invocationWorkspacePreparer = new InvocationWorkspacePreparer(this.workspaceManager);
     this.workspaceArtifactService = new WorkspaceArtifactService(this.workspaceManager);
     this.prService = new PrService();
     this.providerRunner = new ProviderRunner(new DockerRunner());
@@ -290,6 +293,7 @@ export class CliWorkflowService {
       memoryTemplateOverrideEnabled: workerAgent?.memoryTemplateOverrideEnabled,
       memoryTemplateMarkdown: workerAgent?.memoryTemplateMarkdown,
       workspaceManager: this.workspaceManager,
+      invocationWorkspacePreparer: this.invocationWorkspacePreparer,
       workspaceArtifactService: this.workspaceArtifactService,
       prService: this.prService,
       providerRunner: this.providerRunner,
