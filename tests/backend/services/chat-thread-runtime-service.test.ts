@@ -1143,6 +1143,76 @@ describe("ChatThreadRuntimeService", () => {
     );
   });
 
+  it("keeps mockup-cli dashboard chat snapshots local for local Git projects", async () => {
+    deps.getDashboardSettings.mockReturnValue({
+      git: { githubMode: "LOCAL", defaultBranch: "main" },
+      cliWorkflow: { executionMode: "DOCKER" },
+      aiProvider: {
+        providers: {
+          "mockup-cli": {
+            provider: "mockup-cli",
+            enabled: true,
+            model: "default",
+            apiKey: "",
+            thinkingMode: "MEDIUM",
+            weight: 1,
+            maxConcurrentTasks: 0,
+          },
+        },
+      },
+    });
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-local", threadId: "t1", bodyMarkdown: "mockup-cli:write answer.txt :: ok" });
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t1",
+      projectId: "p1",
+      connectionId: null,
+      runtimeState: {},
+    });
+    deps.projectManagementRepository.getProject.mockReturnValue({
+      id: "p1",
+      name: "local test project",
+      baseDir: "/tmp/local-test-project",
+      sourceType: "local",
+      defaultBranch: "main",
+    });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "mockup-cli",
+      providers: {
+        "mockup-cli": {
+          provider: "mockup-cli",
+          model: "default",
+          apiKey: "",
+          thinkingMode: "MEDIUM",
+          maxConcurrentTasks: 0,
+        },
+      },
+    });
+    deps.connectionChatRepository.listMessages.mockReturnValue([
+      { authorType: "dashboard_user", bodyMarkdown: "mockup-cli:write answer.txt :: ok" },
+    ]);
+    deps.chatManagementActionService.processManagementAction.mockResolvedValue({
+      replyMarkdown: "local reply",
+      action: null,
+      approvalRequired: false,
+    });
+
+    await service.postMessage("p1", { bodyMarkdown: "mockup-cli:write answer.txt :: ok" });
+
+    expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "mockup-cli",
+        repoPath: "/tmp/local-test-project",
+        snapshotCheckout: expect.objectContaining({ branch: "main" }),
+        gitPolicy: expect.objectContaining({
+          githubMode: "LOCAL",
+          defaultBranch: "main",
+        }),
+      }),
+    );
+    const call = deps.chatManagementActionService.processManagementAction.mock.calls[0]?.[0];
+    expect(call.snapshotCheckout.remoteOnly).toBeUndefined();
+  });
+
   it("folds a provider instance's customModel into the executed model so local-redirect instances do not hit the real subscription", async () => {
     deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-cm", threadId: "t1", bodyMarkdown: "hello" });
     deps.connectionChatRepository.getThread.mockReturnValue({

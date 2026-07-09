@@ -122,6 +122,14 @@ const resolveEffectiveDefaultBranch = (
   || "main"
 );
 
+const resolveEffectiveGithubMode = (
+  project: { sourceType?: string | null },
+  settings: DashboardSettings,
+): "REMOTE" | "LOCAL" => (
+  settings.git?.githubMode
+  || (project.sourceType === "local" ? "LOCAL" : "REMOTE")
+);
+
 const resolveLogicalCompactionContinuationId = (
   provider: Exclude<ProviderId, "jules">,
   threadId: string,
@@ -1163,7 +1171,7 @@ export class ChatThreadRuntimeService {
     const invocationWorkspace = buildProviderInvocationWorkspaceOptions({
       workflowSettings: dashboardSettings.cliWorkflow,
       gitPolicy: {
-        githubMode: dashboardSettings.git?.githubMode ?? "REMOTE",
+        githubMode: resolveEffectiveGithubMode(project, dashboardSettings),
         defaultBranch,
         githubToken: dashboardSettings.git?.githubToken,
         gitlabToken: dashboardSettings.git?.gitlabToken,
@@ -1321,6 +1329,7 @@ export class ChatThreadRuntimeService {
       prompt: finalPrompt,
       repoPath: project.baseDir,
       snapshotCheckout: invocationWorkspace.snapshotCheckout,
+      gitPolicy: invocationWorkspace.gitPolicy,
       workspaceLifecycle: continueSessionId ? "continue" : invocationWorkspace.workspaceLifecycle,
       mcpConnection,
       agentMcpAccess,
@@ -1517,7 +1526,7 @@ export class ChatThreadRuntimeService {
         ...buildProviderInvocationWorkspaceOptions({
           workflowSettings,
           gitPolicy: {
-            githubMode: dashboardSettings.git?.githubMode ?? "REMOTE",
+            githubMode: resolveEffectiveGithubMode(project ?? {}, dashboardSettings),
             defaultBranch,
             githubToken,
             gitlabToken: dashboardSettings.git?.gitlabToken,

@@ -10,6 +10,7 @@ import type { ExecutionRepository } from "../repositories/execution-repository.j
 import type { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
 import type { IProviderRunner, ProviderRunResult } from "../infrastructure/providers/cli/provider-runner.js";
 import type { SnapshotCheckout } from "../infrastructure/providers/cli/workspace-manager.js";
+import type { InvocationWorkspaceGitPolicy } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import type { CliProviderId } from "../infrastructure/providers/cli/provider-command-specs.js";
 import type { ParsedConversationTurn, ProviderUsageTelemetry } from "../infrastructure/providers/cli/provider-usage.js";
 import type { AppendExecutionInvocationMessageInput } from "../contracts/invocation-types.js";
@@ -166,6 +167,7 @@ export interface ExecutionProviderRunArgs {
   workflowSettings: DashboardSettings["cliWorkflow"];
   repoPath: string;
   snapshotCheckout?: SnapshotCheckout;
+  gitPolicy?: InvocationWorkspaceGitPolicy;
   workspaceLifecycle?: "fresh" | "continue";
   githubToken?: string;
   gitlabToken?: string;
@@ -382,6 +384,7 @@ export class ProviderExecutionService {
         workflowSettings: args.workflowSettings,
         repoPath: args.repoPath,
         snapshotCheckout: args.snapshotCheckout,
+        gitPolicy: args.gitPolicy,
         workspaceLifecycle: args.workspaceLifecycle,
         githubToken: args.githubToken ?? this.deps.getGithubToken?.(),
         gitlabToken: args.gitlabToken,

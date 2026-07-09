@@ -450,6 +450,48 @@ describe("ChatManagementActionService", () => {
       expect(calls[1]).toEqual(["exec-123", { role: "assistant", contentMarkdown: "Here are the sprints for your project." }]);
     });
 
+    it("forwards LOCAL git policy for mockup-cli MCP-native chat workers", async () => {
+      providerExecutionService.executeProvider.mockResolvedValue({
+        ok: true,
+        stdout: "",
+        stderr: "",
+        text: "mockup reply",
+        usageTelemetry: { transcriptText: "", inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, nativeSessionId: null },
+        nativeSessionId: "mockup-native",
+      } as any);
+
+      await service.processManagementAction({
+        projectId: "proj1",
+        provider: "mockup-cli",
+        model: "default",
+        apiKey: "",
+        sessionId: "thread-1",
+        settings: mockSettings,
+        prompt: "mockup-cli:write answer.txt :: ok",
+        repoPath: "/tmp/local-test-repo",
+        snapshotCheckout: { branch: "main" },
+        gitPolicy: {
+          githubMode: "LOCAL",
+          defaultBranch: "main",
+          githubToken: undefined,
+          gitlabToken: undefined,
+        },
+        mcpConnection,
+      });
+
+      expect(providerExecutionService.executeProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: "mockup-cli",
+          snapshotCheckout: { branch: "main" },
+          gitPolicy: expect.objectContaining({
+            githubMode: "LOCAL",
+            defaultBranch: "main",
+          }),
+          expectTextOutput: true,
+        }),
+      );
+    });
+
     it("should handle provider failure in MCP-native mode", async () => {
       providerExecutionService.executeProvider.mockResolvedValue({
         ok: false,
