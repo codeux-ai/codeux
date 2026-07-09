@@ -429,7 +429,13 @@ describe("GitHub workflow health", () => {
     expect(runnerScript).toContain("mockup_pentest_progress");
     expect(runnerScript).toContain("mockup_pentest_stalled");
     expect(runnerScript).toContain("mockup_pentest_waiting_for_expected_output");
+    expect(runnerScript).toContain("mockup_pentest_dependency_merge_violation");
+    expect(runnerScript).toContain("findMockupDagDependencyMergeViolations(expectedProjectRun, latestTasks)");
+    expect(runnerScript).toContain("DAG dependency merge invariant failed");
     expect(runnerScript).toContain("lastStateChangeAt = now;");
+    expect(runnerScript).toContain("expectedOutputReadinessChanged");
+    expect(runnerScript).toContain("isMockupPollStateProgress({ progressChanged, expectedOutputReadinessChanged })");
+    expect(runnerScript).not.toContain("if (tasksTerminal && sprintTerminal && sprint.status === \"completed\" && !expectedOutputReady) {\n        lastStateChangeAt = now;");
     expect(runnerScript).toContain("expectedOutputFilesPresent");
     expect(runnerScript).toContain("GITHUB_STEP_SUMMARY");
     expect(runnerScript).toContain("writeRuntimeLogToConsole");
