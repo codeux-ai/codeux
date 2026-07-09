@@ -164,7 +164,7 @@ pnpm run dev:server-only       # boot just the server from source
 # electron:generate-icons, electron:prepare-deps, electron:dev, electron:pack, electron:dist, electron:dist:linux, electron:dist:mac, electron:dist:win, electron:benchmark:runtime, electron:benchmark:win, electron:install-deps
 ```
 
-Electron and npm package builds include the `docs-web` runtime catalog. The backend serves `/api/docs-web` from that packaged directory so the `/docs` dashboard route continues to work after installation.
+Electron and npm package builds must include the `docs-web` runtime catalog. The dashboard Docs page fetches its collection and markdown through `/api/docs-web`, so installed desktop builds and npm-installed CLI/server runs need the same `docs-web` directory beside the compiled runtime root.
 
 ## Contributing workflow
 
