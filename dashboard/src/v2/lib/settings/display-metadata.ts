@@ -9,6 +9,9 @@ import type {
 import {
   DEFAULT_PROVIDER_CONFIG_NAMES,
   DEFAULT_PROVIDER_SETTINGS,
+  getProviderThinkingModeOptions as getProviderThinkingModeOptionsFromDefaults,
+  normalizeProviderThinkingMode,
+  PUBLIC_VIRTUAL_WORKER_PROVIDERS,
   VIRTUAL_WORKER_PROVIDERS,
 } from "../../../../../src/repositories/settings-defaults.js";
 import { AI_MODEL_CATALOG, getConfiguredProviderModel } from "./model-options.js";
@@ -18,10 +21,32 @@ import {
 } from "./provider-instances.js";
 
 export const thinkingModeOptions: Array<{ value: ThinkingMode; label: string }> = [
-  { value: "SMALL", label: "Small" },
-  { value: "MEDIUM", label: "Medium" },
-  { value: "HIGH", label: "High" },
+  ...new Map(
+    ([
+      "gemini",
+      "codex",
+      "claude-code",
+      "qwen-code",
+      "opencode",
+      "antigravity",
+    ] as ProviderId[])
+      .flatMap((providerId) => getProviderThinkingModeOptionsFromDefaults(providerId))
+      .map((option) => [option.value, option] as const),
+  ).values(),
 ];
+
+export const getProviderThinkingModeOptions = (providerId: ProviderId): Array<{ value: ThinkingMode; label: string }> => (
+  [...getProviderThinkingModeOptionsFromDefaults(providerId)]
+);
+
+export const getProviderThinkingModeValue = (providerId: ProviderId, value: ThinkingMode): ThinkingMode => (
+  normalizeProviderThinkingMode(providerId, value)
+);
+
+export const getProviderThinkingModeLabel = (providerId: ProviderId, value: ThinkingMode): string => {
+  const normalized = normalizeProviderThinkingMode(providerId, value);
+  return getProviderThinkingModeOptions(providerId).find((option) => option.value === normalized)?.label || normalized;
+};
 
 export interface ProviderDisplayMetadata {
   providerConfigId: ProviderConfigId;
@@ -94,7 +119,7 @@ export const getVirtualProviderDisplayMetadata = (
   systemSettings: SystemSettings | null,
 ): VirtualProviderDisplayMetadata[] => {
   if (!systemSettings) {
-    return VIRTUAL_WORKER_PROVIDERS.map((provider) => ({
+    return PUBLIC_VIRTUAL_WORKER_PROVIDERS.map((provider) => ({
       providerConfigId: provider,
       provider,
       displayLabel: DEFAULT_PROVIDER_CONFIG_NAMES[provider],
@@ -187,6 +212,15 @@ export const PROVIDER_CARD_TOKENS: Record<ProviderId, {
     watermark: "AGY",
     logoLabel: "AGY",
     badgeLabel: "CLI",
+    badgeClassName: "border-black/[0.08] bg-black/[0.035] text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300",
+    glowClassName: "bg-[radial-gradient(circle_at_top_right,rgba(15,23,42,0.045),transparent_42%),radial-gradient(circle_at_bottom_left,rgba(15,23,42,0.03),transparent_34%)] dark:bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.045),transparent_42%),radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.025),transparent_34%)]",
+    railClassName: "bg-black/[0.12] dark:bg-white/[0.14]",
+    noteClassName: "border-black/[0.08] bg-black/[0.03] text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300",
+  },
+  "mockup-cli": {
+    watermark: "MCK",
+    logoLabel: "M",
+    badgeLabel: "Internal",
     badgeClassName: "border-black/[0.08] bg-black/[0.035] text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300",
     glowClassName: "bg-[radial-gradient(circle_at_top_right,rgba(15,23,42,0.045),transparent_42%),radial-gradient(circle_at_bottom_left,rgba(15,23,42,0.03),transparent_34%)] dark:bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.045),transparent_42%),radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.025),transparent_34%)]",
     railClassName: "bg-black/[0.12] dark:bg-white/[0.14]",

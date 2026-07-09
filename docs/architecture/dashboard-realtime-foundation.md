@@ -41,7 +41,7 @@ Production refinement shipped on March 15, 2026:
 
 ### Coalescing realtime publisher
 
-Code UX now coalesces runtime writes before broadcasting them.
+Code UX now coalesces runtime writes before broadcasting them. This is implemented by `DashboardRealtimeService` (`src/services/dashboard-realtime-service.ts`).
 
 The internal architecture uses a single unified `buildPublishTask` helper for all these endpoints, which handles caching, deduplication, payload fingerprinting, logging, and throttle semantics.
 
@@ -97,7 +97,7 @@ July 5, 2026 helper contract:
 
 The dashboard server now exposes:
 
-- `GET /api/realtime`
+- `GET /api/realtime` (served by `bootDashboardRealtimeWebSocketServer` in `src/server/dashboard-realtime-websocket-server.ts` and wired from `src/server/dashboard-server.ts`)
 
 The protocol is intentionally small:
 
@@ -165,7 +165,7 @@ Realtime refresh scheduling is currently wired from:
 - `src/repositories/connection-chat-repository.ts`
 - `src/repositories/project-attention-repository.ts`
 
-That means the browser is refreshed when execution state or live connection state changes in the DB-native runtime path.
+These repositories explicitly hand off mutation notifications to `DashboardRealtimeService`, which then broadcasts through the websocket server. That means the browser is refreshed when execution state or live connection state changes in the DB-native runtime path.
 
 The publisher intentionally ignores heartbeat-only execution writes where possible to avoid noisy event spam.
 

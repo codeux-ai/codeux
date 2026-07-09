@@ -26,9 +26,10 @@ Loaded by `loadAppConfig` (`src/config/app-config.ts`) given `process.argv` and 
 | `mcpHttp.port` | `--mcp-https-port` CLI → `MCP_HTTPS_PORT` env → `config.json` (mcpHttpPort / MCP_HTTPS_PORT / mcpHttp.port) → `dashboardPort + 1` |
 | `mcpHttp.host` | `--mcp-https-host` CLI → `MCP_HTTPS_HOST` env → `127.0.0.1` |
 | `mcpHttp.path` | `--mcp-https-path` CLI → `MCP_HTTPS_PATH` env → `/mcp` |
-| `mcpHttp.authToken` | `--mcp-https-auth-token` CLI → `MCP_HTTPS_AUTH_TOKEN` env → unset |
+| `mcpHttp.authToken` | `--mcp-https-auth-token` CLI → `MCP_HTTPS_AUTH_TOKEN` env → generated/reused from `~/.code-ux/security.json` when the HTTP gateway is enabled |
 | `runtimeRole` | `--runtime-role` CLI → `project_manager` |
 | `headless` | `--headless` or `--no-dashboard` CLI → `false` |
+| `serverMode` | `--server-mode` CLI → `CODE_UX_SERVER_MODE=true` env → `false` |
 
 ### Config search path
 
@@ -47,6 +48,10 @@ The first file found at each path *wins for its specific key*. There is **no mer
 
 `dotenv` loads `<projectRoot>/.env` very early (before any config resolution). This means any of the above env-driven fields can be set in `.env` and behave identically.
 
+When the MCP HTTP gateway is enabled and no explicit auth token is supplied, bootstrap config creates a user-scoped bearer token in `~/.code-ux/security.json` with restrictive file permissions where the filesystem supports them. The Settings → MCP page can regenerate that token and install the current URL/token into supported local CLI config files.
+
+Server mode is stricter than local headless mode. `--server-mode` or `CODE_UX_SERVER_MODE=true` disables dashboard binding, starts MCP HTTP by default, and requires an explicit non-empty token from the CLI or `MCP_HTTPS_AUTH_TOKEN`/`MCP_HTTP_AUTH_TOKEN`; it does not use the generated user token fallback.
+
 ## Settings tree
 
 After bootstrap, Code UX loads the settings tree from the database. Three tables:
@@ -60,10 +65,10 @@ After bootstrap, Code UX loads the settings tree from the database. Three tables
 For any field, the effective value at sprint scope is:
 
 ```
-defaults  →  system  →  project  →  sprint
+system  →  project  →  sprint
 ```
 
-A field unspecified at higher scopes inherits from lower scopes. The merge is **deep** for object-valued fields (e.g. `aiProvider.providers.codex` only overrides the keys you set, not the whole object).
+System settings act as the base (with built-in defaults folded into them). A field unspecified at higher scopes inherits from lower scopes. The merge is **deep** for object-valued fields (e.g. `aiProvider.providers.codex` only overrides the keys you set, not the whole object).
 
 ### Where defaults live
 
@@ -71,26 +76,29 @@ A field unspecified at higher scopes inherits from lower scopes. The merge is **
 
 - `DEFAULT_PROVIDER_SETTINGS` — per-provider defaults.
 - `DEFAULT_SKILLS`, `DEFAULT_MCP_TOOL_TOGGLES`, etc.
+- `DEFAULT_AGENT_SELF_REFLECTION` — default-off planning and QA self-reflection loop contracts with senior engineering criteria.
 - `DEFAULT_SPRINT_BRANCH_SCHEME`.
 
 System settings on a fresh install are the merge of these defaults plus any external hints applied by the user during onboarding.
 
 ### Live reload
 
-Settings changes via `manage_code_ux` → `settings` → `patch_*_setting` (or the corresponding REST endpoints) trigger:
+Settings changes via `manage_settings` → `patch_*_setting` (or the corresponding REST endpoints) trigger:
 
 - A WebSocket event broadcasting the change.
 - Hot-reload of the relevant subscribers (e.g. the orchestrator picks up new `watchLoopIntervalSeconds` on the next cycle).
 
 There is no need to restart the process for settings changes.
 
+`agents.selfReflection.planning` and `agents.selfReflection.qualityAssurance` are resolved through the same cascade but default to disabled. Each stores criteria with thresholds and a maximum improvement-attempt count; malformed legacy payloads fall back safely during sanitization. When enabled, structured planning and QA requests run the optional rate-and-improve loop through the same provider session and keep the last valid parsed output if reflection fails. Planning reflection also gates `autoStart`: a non-passing final decision saves the plan without starting orchestration automatically.
+
 ### Effective resolution endpoints
 
 - `GET /api/projects/:projectId/settings/effective` — merged at project scope.
 - `GET /api/projects/:projectId/sprints/:sprintId/settings/effective` — merged at sprint scope.
-- `manage_code_ux` → `settings` → `resolve_project_effective` / `resolve_sprint_effective`.
+- `manage_settings` → `resolve_project_effective` / `resolve_sprint_effective`.
 
-These return the full merged tree, useful for debugging "why is this setting taking that value?".
+These endpoints return an `EffectiveSettingsResponse` which includes both the merged tree (`settings`) and field-level provenance metadata (`sources` mapping each path to `system`, `project`, or `sprint`), useful for debugging "why is this setting taking that value?".
 
 ## External hints
 
@@ -124,7 +132,7 @@ The default backend is **SQLite** at `~/.code-ux/database.sqlite`. A migration p
 
 ## Reset semantics
 
-- **Per-project reset** (`reset_project_settings`) clears the project's override row; effective values revert to `system → defaults`.
-- **Per-sprint reset** (`reset_sprint_settings`) clears the sprint's override; effective values revert to `project → system → defaults`.
+- **Per-project reset** (`DELETE /api/projects/:projectId/settings` or `reset_project_settings`) clears the project's override row; effective values revert to `system`.
+- **Per-sprint reset** (`DELETE /api/sprints/:sprintId/settings` or `reset_sprint_settings`) clears the sprint's override; effective values revert to `project → system`.
 - **System reset** (no dedicated action; use `replace_system_settings` with a default tree) requires explicit replacement.
 - **Database reset** (`POST /api/system/reset-database`) wipes everything; use only as a last resort.

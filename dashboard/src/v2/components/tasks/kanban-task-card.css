@@ -106,6 +106,7 @@
   pointer-events: auto;
   transform: translateY(0);
   min-height: 2.75rem;
+  contain: layout;
   transition:
     opacity var(--kanban-card-control-duration, var(--interaction-control-feedback-duration)) var(--kanban-card-control-ease, var(--interaction-control-feedback-ease)),
     transform var(--kanban-card-control-duration, var(--interaction-control-feedback-duration)) var(--kanban-card-control-ease, var(--interaction-control-feedback-ease));
@@ -120,6 +121,26 @@
     color var(--kanban-card-control-duration, var(--interaction-control-feedback-duration)) var(--kanban-card-control-ease, var(--interaction-control-feedback-ease)),
     background-color var(--kanban-card-control-duration, var(--interaction-control-feedback-duration)) var(--kanban-card-control-ease, var(--interaction-control-feedback-ease)),
     transform var(--kanban-card-selection-duration, var(--interaction-selection-movement-duration)) var(--kanban-card-selection-ease, var(--interaction-selection-movement-ease));
+}
+
+.kanban-card__action-reason-summary {
+  flex: 1 1 100%;
+  max-width: 100%;
+  min-height: 1rem;
+  overflow: hidden;
+  padding: 0 0.375rem 0.125rem;
+  color: rgb(100 116 139);
+  font-size: 0.5625rem;
+  font-weight: 700;
+  line-height: 1rem;
+  text-align: right;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+:is(.dark .kanban-card__action-reason-summary) {
+  color: rgb(148 163 184);
 }
 
 .kanban-card__action {
@@ -146,9 +167,9 @@
 
 @media (any-pointer: fine) and (hover: hover) {
   .kanban-card__actions {
-    opacity: 0.92;
-    pointer-events: auto;
-    transform: translateY(0);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(0.375rem);
   }
 
   .kanban-card:hover .kanban-card__actions,

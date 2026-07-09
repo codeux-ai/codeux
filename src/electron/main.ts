@@ -4,13 +4,22 @@ import Module from "module";
 import * as os from "os";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import { isDashboardRuntimeDataUrl, shouldAddRuntimeNoCacheRequestHeaders } from "./dashboard-network-policy.js";
+import {
+  classifyNavigationTarget,
+  isDashboardRuntimeDataUrl,
+  normalizeZoomFactor,
+  resolveDirectoryPickerDefaultPath,
+  shouldAddRuntimeNoCacheRequestHeaders,
+  shouldAllowPermissionCheck,
+  shouldAllowPermissionRequest,
+} from "./dashboard-network-policy.js";
+import { openCodeUxUpdatesPage, toggleWindowMaximized } from "./window-controls.js";
 import { createDebouncedSaver, loadWindowState, saveWindowState } from "./window-state.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "../..");
-const preloadPath = path.join(__dirname, "preload.js");
+const preloadPath = path.join(__dirname, "preload.cjs");
 
 let mainWindow: BrowserWindow | null = null;
 let server: { run(): Promise<void>; close(): Promise<void>; getDashboardRuntimePort(): number } | null = null;
@@ -24,6 +33,13 @@ const dashboardApiUrlFilter = {
     "http://localhost:*/*",
   ],
 };
+
+const isolatedRendererWebPreferences = {
+  contextIsolation: true,
+  nodeIntegration: false,
+  sandbox: true,
+  preload: preloadPath,
+} satisfies Electron.BrowserWindowConstructorOptions["webPreferences"];
 
 const isWindowsPackagedApp = process.platform === "win32" && app.isPackaged;
 
@@ -50,24 +66,6 @@ if (process.env.WSL_DISTRO_NAME && process.env.CODE_UX_WSL_DISABLE_GPU === "1") 
   app.disableHardwareAcceleration();
   app.commandLine.appendSwitch("disable-gpu");
   app.commandLine.appendSwitch("disable-software-rasterizer");
-}
-
-function isSafeInternalUrl(rawUrl: string): boolean {
-  if (!dashboardOrigin) {
-    return false;
-  }
-
-  try {
-    const url = new URL(rawUrl);
-    if (url.origin === dashboardOrigin) {
-      return true;
-    }
-    return url.protocol === "http:"
-      && url.port === new URL(dashboardOrigin).port
-      && /^preview-[a-z0-9-]+\.localhost$/i.test(url.hostname);
-  } catch {
-    return false;
-  }
 }
 
 async function configureDashboardNetworkSession(): Promise<void> {
@@ -113,17 +111,30 @@ async function configureDashboardNetworkSession(): Promise<void> {
       },
     });
   });
+
+  desktopSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    const permissionDetails = details as { mediaTypes?: readonly string[]; securityOrigin?: string };
+    const requestingUrl = permissionDetails.securityOrigin || details.requestingUrl || webContents.getURL();
+    const mediaTypes = permissionDetails.mediaTypes;
+    callback(shouldAllowPermissionRequest(requestingUrl, dashboardOrigin, permission, { mediaTypes }));
+  });
+
+  desktopSession.setPermissionCheckHandler((_webContents, permission, requestingOrigin, details) => {
+    return shouldAllowPermissionCheck(requestingOrigin, dashboardOrigin, permission, {
+      mediaType: details.mediaType,
+      requestingUrl: details.requestingUrl,
+      securityOrigin: details.securityOrigin,
+    });
+  });
 }
 
-function openExternalUrl(rawUrl: string): void {
-  try {
-    const url = new URL(rawUrl);
-    if (["https:", "http:", "mailto:"].includes(url.protocol)) {
-      void shell.openExternal(url.toString());
-    }
-  } catch {
-    // Ignore malformed navigation targets.
+function openExternalUrl(rawUrl: string): boolean {
+  if (classifyNavigationTarget(rawUrl, dashboardOrigin) !== "open-external") {
+    return false;
   }
+
+  void shell.openExternal(new URL(rawUrl).toString());
+  return true;
 }
 
 function registerPackagedNodeModules(): void {
@@ -199,10 +210,7 @@ function createMainWindow(url: string): BrowserWindow {
     thickFrame: false,
     show: false,
     webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-      preload: preloadPath,
+      ...isolatedRendererWebPreferences,
       // Leave backgroundThrottling at its default (true): when the window is blurred/occluded,
       // Chromium throttles rAF and timers, which is essential under software rendering (e.g. WSL,
       // where there is no vsync) — without it, the animation loops busy-spin and peg the CPU even
@@ -256,19 +264,30 @@ function createMainWindow(url: string): BrowserWindow {
   });
 
   window.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
-    if (isSafeInternalUrl(targetUrl)) {
-      return { action: "allow" };
+    const decision = classifyNavigationTarget(targetUrl, dashboardOrigin);
+    if (decision === "allow-internal") {
+      return {
+        action: "allow",
+        overrideBrowserWindowOptions: {
+          webPreferences: isolatedRendererWebPreferences,
+        },
+      };
     }
-    openExternalUrl(targetUrl);
+    if (decision === "open-external") {
+      openExternalUrl(targetUrl);
+    }
     return { action: "deny" };
   });
 
   window.webContents.on("will-navigate", (event, targetUrl) => {
-    if (isSafeInternalUrl(targetUrl)) {
+    const decision = classifyNavigationTarget(targetUrl, dashboardOrigin);
+    if (decision === "allow-internal") {
       return;
     }
     event.preventDefault();
-    openExternalUrl(targetUrl);
+    if (decision === "open-external") {
+      openExternalUrl(targetUrl);
+    }
   });
 
   void window.loadURL(url);
@@ -316,12 +335,7 @@ ipcMain.handle("codeux:window-minimize", (event) => {
 ipcMain.handle("codeux:window-toggle-maximize", (event) => {
   const target = resolveWindow(event);
   if (!target) return false;
-  if (target.isMaximized()) {
-    target.unmaximize();
-    return false;
-  }
-  target.maximize();
-  return true;
+  return toggleWindowMaximized(target);
 });
 
 ipcMain.handle("codeux:window-close", (event) => {
@@ -340,23 +354,28 @@ ipcMain.handle("codeux:window-state", (event) => {
   };
 });
 
-ipcMain.handle("codeux:set-zoom", (event, factor: number) => {
-  const numeric = typeof factor === "number" && Number.isFinite(factor) ? factor : 1;
-  const clamped = Math.min(2.5, Math.max(0.5, numeric));
+ipcMain.handle("codeux:set-zoom", (event, factor: unknown) => {
+  const clamped = normalizeZoomFactor(factor);
   event.sender.setZoomFactor(clamped);
   return clamped;
 });
 
-ipcMain.handle("codeux:pick-directory", async (event, defaultPath?: string) => {
+ipcMain.handle("codeux:open-updates", () => {
+  return openCodeUxUpdatesPage(shell);
+});
+
+ipcMain.handle("codeux:pick-directory", async (event, defaultPath: unknown) => {
   const parentWindow = BrowserWindow.fromWebContents(event.sender) ?? mainWindow ?? undefined;
   const options: Electron.OpenDialogOptions = {
     properties: ["openDirectory"],
   };
 
-  const trimmedDefaultPath = typeof defaultPath === "string" ? defaultPath.trim() : "";
-  options.defaultPath = trimmedDefaultPath
-    ? (path.isAbsolute(trimmedDefaultPath) ? trimmedDefaultPath : path.resolve(os.homedir(), trimmedDefaultPath))
-    : os.homedir();
+  options.defaultPath = resolveDirectoryPickerDefaultPath(
+    defaultPath,
+    os.homedir(),
+    path.resolve,
+    path.isAbsolute,
+  );
 
   const result = parentWindow
     ? await dialog.showOpenDialog(parentWindow, options)

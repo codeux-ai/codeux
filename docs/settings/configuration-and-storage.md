@@ -19,6 +19,7 @@ Additional startup config:
 - `CODE_UX_GIT_FETCH_TIMEOUT_MS` (optional timeout for mandatory Git remote refreshes; default `120000`, clamped between 10 seconds and 10 minutes)
 - `CODE_UX_RUNTIME_LOCK_WAIT_MS` (optional; defaults to `30000`. Startup waits this long for an existing project-manager runtime lock holder to exit before rejecting the new process.)
 - `CODE_UX_ALLOW_MULTIPLE_RUNTIMES=1` (diagnostic only; bypasses the project-manager PID lock that normally prevents duplicate local runtimes from driving the same Docker/session state)
+- MCP Streamable HTTP config uses the existing `--mcp-https*` flags / `MCP_HTTPS_*` env names for compatibility. When enabled and no explicit auth token is supplied, startup creates or reuses `~/.code-ux/security.json` with `mcpHttpAuthToken`.
 
 External hint env keys used for dashboard import:
 - `JULES_API_KEY` / `JULES_KEY`
@@ -26,12 +27,32 @@ External hint env keys used for dashboard import:
 - `OPENAI_API_KEY` (Codex CLI)
 - `GH_TOKEN` / `GITHUB_TOKEN`
 
-## Settings JSON Search Paths
+## Settings Overrides and Scoped Resolution
 
-For `.code-ux/settings.json`, search roots include:
+Code UX settings resolve through a scoped cascade: `system` (base) → `project` (inherits from system) → `sprint` (inherits from project effective). System settings are the base of the cascade.
+
+System settings hold global state, runtime behavior (e.g., ports, `consoleLogLevel`, `debugLogFileLevel`, `consoleLogMode`), and system integration credentials (Jira tokens, GitLab/GitHub tokens). They are also populated with defaults.
+
+Effective settings API endpoints include a `sources` dictionary mapping each JSON path to its originating scope (`system`, `project`, or `sprint`).
+
+Many settings families are handled by specific sanitizers that ensure defaults are applied and invalid shapes are repaired (e.g., `aiProvider`, `ciIntelligence`, `guardrails`, `cliWorkflow`, `git`, `jira`, `sprintLoopSteps`, `memory`, `modelPricing`, `workers`).
+
+Project and sprint scopes can override execution-specific settings, such as `aiProvider` routes (which now include provider instances and `invocationRouting` as first-class citizens instead of legacy top-level keys), `cliWorkflow` settings (like `gitMode`, `executionMode`, `containerImage`, `containerSetupScriptPath`), and preview defaults (like `sprintPreview.startupScriptPath` defaulting to `.code-ux/browser/start-preview.sh`). `git.defaultBranch` fallback is resolved based on scoped overrides too. Jira and GitLab integration configurations are also scoped and can be overridden.
+
+Techstack settings are split across scopes:
+- system settings own `techstackCatalog`, a catalog with `defaultTechstackId` and `entries`
+- project and sprint settings own `techstack`, a selection with `selectedTechstackId` and `applicationKind`
+
+The built-in catalog always includes the Code UX Stack (`code-ux-internal`) with Preact, TanStack Router, GSAP, Three.js, and Lucide Icons. Catalog sanitization trims ids and labels, drops malformed or duplicate ids, preserves the built-in entry, and falls back `defaultTechstackId` to `code-ux-internal` if the saved default is missing or invalid. Project defaults intentionally keep `techstack.selectedTechstackId = null` and `techstack.applicationKind = null`; existing and imported projects therefore do not inherit the built-in stack automatically. New-project flows must apply a catalog default explicitly when they need one.
+
+Design guidance is an inheritable scoped setting under `designGuidance`. System defaults, project overrides, and sprint overrides all participate in the normal effective settings resolution, and source metadata reports whether a guidance field came from `system`, `project`, or `sprint`. The block stores selected tech-stack guidance, selected styleguide guidance, `hideDefaultStyleguides`, and custom tech stack/styleguide entries with stable `id`, `name`, `summary`, and `instructionMarkdown` fields. System defaults resolve both selections to `none`, so existing and imported projects receive no design styleguide by inheritance. New local and new remote project initialization writes an explicit project override selecting the built-in `Code UX` styleguide; imported local or Git projects remain at `none` until an operator or setup flow changes them. Planning prompts receive a compact `Project Guidance` section only for selected non-`none` entries, so generated tasks can reflect active guidance without duplicating inactive defaults. Project Setup prompts use the same selected-entry section and also include a setup-only styling investigation notice whenever the styleguide selection is `none`, including when tech-stack guidance is also `none`.
+
+For `.code-ux/settings.json` (used primarily for credential hints during initial onboarding), search roots include:
 - current working directory
 - project root
 - home directory
+
+Note: `.code-ux/settings.json` is not the primary configuration source; Code UX reads its execution settings from the SQLite `settings.db`.
 
 ## Scoped Settings Persistence
 
@@ -51,6 +72,7 @@ Storage:
   - includes project planning tables (sprints with `original_prompt` and `goal`) plus sprint-scoped runtime projection in `app_settings`, `task_runs`, and `task_run_events`
   - runtime context rows are keyed by sprint (`runtime_context:<projectId>:<sprintId>`); legacy unscoped project-level runtime rows are deprecated and are no longer used for explicit sprint reads or rerun context
   - also stores sprint preview runtime state in `sprint_preview_sessions`
+  - persistent agent skill storage uses separate `skill_storages`, `skills`, `skill_embeddings`, and `agent_skill_storage_bindings` tables. These are distinct from project workspaces, `memories`, and `knowledge_documents`; agent presets attach to named storage records through normalized bindings rather than by storing workspace paths on the preset row.
 
 Runtime resolution:
 - effective runtime settings always resolve as `system -> project -> sprint`
@@ -64,6 +86,7 @@ Runtime resolution:
   2. Project setting override (Dashboard)
   3. System setting default (Dashboard)
   4. Hardcoded default (`main`)
+- Additional Git branching and PR-title behaviors configured here include `git.featureBranchPrefix` (e.g. `feature/codeux/`), `git.sprintBranchScheme` (e.g. `feature/sprint{sprint_id}-implementation`), `git.sprintKeyPrefix` (uppercase identifier such as `SPR`), and `git.taskPrTitleScheme` (default `({sprint_tag}) {task_title}`). Initial task PR creation and QA follow-up PR resolution both use this template with the task's real title. Task PR title templates support `{sprint_tag}`, `{sprint_key}`, `{sprint_number}`, `{sprint_title}`, `{task_key}`, `{task_title}`, and `{provider}`. `{sprint_tag}` resolves in this order: first linked issue key, then `<sprintKeyPrefix>-<sprint number>`, then a stable sprint slug/id fallback. Provider text appears only when the template includes `{provider}`.
 - The legacy project metadata `defaultBranch` column is retained for project records created before the scoped settings model and for display/initialization context, but sprint orchestration and final merge targets do not let that metadata override resolved scoped settings. A project inheriting a system default of `dev` must merge sprint completion PRs into `dev`, even if the older project row still says `main`.
 - In remote git mode, Code UX refreshes `origin` before sprint branch preflight and before each task start so branch resolution is based on current remote state instead of stale local refs.
 - HTTPS GitHub remotes use the configured dashboard token as a temporary Git extraheader during origin refresh, remote branch checks, and branch pushes. HTTPS origin refreshes and branch preflight network checks run with interactive credential prompts disabled and a bounded timeout so orchestration cannot remain stuck waiting on local credential helpers. Mandatory CLI task refreshes fetch the requested starting branch's remote-tracking ref when possible, avoiding a whole-origin fetch for every task dispatch. They use a 120 second default fetch timeout, configurable with `CODE_UX_GIT_FETCH_TIMEOUT_MS` for slow Git transports. If direct remote inspection is unavailable, branch preflight can use an existing `refs/remotes/origin/<branch>` ref as remote-branch evidence. Local origin-refresh failures remain strict for CLI-backed work that needs local git state, but are best-effort for branch preflight and Jules dispatch because Jules works from the remote source and starting branch. SSH remotes continue to use the local SSH agent/key setup unchanged.
@@ -92,7 +115,7 @@ Runtime resolution:
 - startup recovery also repairs parent sprint projection drift for paused runs: if the latest run is paused and no queued/running/cancel-pending run exists for the sprint, the parent sprint row is synced back to `paused` instead of allowing the dashboard to show a false running state.
 - restart recovery respects live sprint lease ownership: if an active run has an unexpired `sprint_orchestrator:<pid>` lease and that PID is still alive, the new process skips recovery instead of releasing the lease and starting a duplicate watch loop.
 - QA review keepalives refresh the sprint-run heartbeat only; the orchestrator heartbeat owns sprint lease renewal with its original lease token.
-- On Code UX shutdown (`SIGINT`, `SIGTERM`, `SIGHUP`, or Electron quit), the server first requests registered active dispatches to abort and then kills any still-running Docker containers with `code-ux.*` labels or deterministic `code-ux-*` runtime names. This prevents provider, preview, browser, login, and workspace-helper containers from surviving a normal app stop. Shutdown does not remove Docker workspace/runtime volumes, and startup recovery can continue from the same workspace volume when `Resume failed task in same workspace` is enabled.
+- On Code UX shutdown (`SIGINT`, `SIGTERM`, `SIGHUP`, or Electron quit), the server first requests registered active dispatches to abort and then kills any still-running Docker containers with `code-ux.*` labels or deterministic `code-ux-*` runtime names. This prevents provider, preview, browser, login, and workspace-helper containers from surviving a normal app stop. Persistent workspace helper containers and their one-shot fallback containers both carry `code-ux.managed=true` and `code-ux.helper=volume` labels so cleanup and inspection can find either path. Shutdown does not remove Docker workspace/runtime volumes, and startup recovery can continue from the same workspace volume when `Resume failed task in same workspace` is enabled.
 - Failed-task retry uses the latest `cli_workspace_bound` task-run event as the authoritative Docker workspace binding. This matters after restart recovery because the interrupted provider session id can differ from the workspace session id that actually names the preserved volume.
 - startup recovery now also requeues task-level CLI follow-up runs that were left in `in_progress` after QA/repair `Fix` work lost its backing container, so the orchestrator can start the container again instead of leaving the sprint stuck after a server restart.
 - startup recovery treats Jules task sessions as durable remote runtime. If Code UX restarts after a sprint run or task dispatch was incorrectly terminalized while the sprint itself is still active, recovery rehydrates one sprint run, reattaches active Jules task runs/dispatches/provider invocation rows to it, and resumes the watch loop instead of failing the sessions.
@@ -104,6 +127,7 @@ Runtime resolution:
 - `main` is only the final fallback when no sprint, project, or system base branch is configured. Normal sprint and task flows use the resolved `git.defaultBranch` value from scoped settings.
 - the old global `/api/settings` contract is removed in favor of explicit scoped endpoints
 - dashboard v2 settings queries clear both cached and in-flight effective-settings requests whenever system/project settings are saved or reset, which prevents stale AI model options immediately after integration updates.
+- Settings actions that mutate state (replace, patch, reset) require human confirmation. Mutating settings actions first return an approval-required response; only the exact same action and payload may execute once with `approval.confirmed: true` within 15 minutes. Get/resolve actions are read-only.
 
 ## Persisted Scoped Settings Model
 
@@ -127,6 +151,11 @@ Runtime resolution:
   - `gitlabToken`
 - `defaults`
   - full inheritable project settings baseline
+- `techstackCatalog`
+  - `defaultTechstackId` (`code-ux-internal` by default)
+  - `entries`
+    - each entry has `id`, `label`, and `items`
+    - each item has `id` and `label`
 - `mcpTools`
 
 `project_settings` fields:
@@ -139,6 +168,13 @@ Runtime resolution:
   - `sprintLoopSteps`
   - `cliWorkflow`
   - `sprintPreview`
+  - `techstack`
+  - `designGuidance`
+    - `selectedTechStackId` (`none` by default)
+    - `selectedStyleguideId` (`none` by default)
+    - `hideDefaultStyleguides` (`false` by default)
+    - `customTechStacks`
+    - `customStyleguides`
   - `agents`
   - `skills`
 
@@ -148,10 +184,16 @@ Runtime resolution:
 
 System-level integrations are injected into effective dashboard settings at resolution time:
 - provider credentials are system-scoped under `integrations.providers`
-  - each entry is a named provider instance with `{ provider, name, apiKey, mountAuth, authPath, authType }`
+  - each entry is a named provider instance with `{ provider, name, apiKey, mountAuth, authPath, authType, providerConfigMode, providerConfigPath }`
   - default instance ids intentionally match the base provider ids (`jules`, `gemini`, `codex`, `claude-code`) for compatibility with older settings payloads
   - additional instances can coexist under the same CLI type
-  - for CLI providers, `mountAuth`, `authPath`, and `authType` are instance-specific Docker auth-copy/login settings. The `authType` property can be set to `"apiKey"` (uses API key text override), `"localAuth"` (mounts a custom local directory like `~/.gemini`), or `"dashboardAuth"` (launches an interactive terminal inside the container and saves tokens directly to a dedicated `~/.code-ux/credentials/<provider-name>` folder on the host). For dynamically-generated unsaved provider configurations (e.g. during onboarding or settings setup prior to saving), the dashboard is directly able to launch interactive login containers by automatically resolving the underlying provider type via prefix-matching on the transient instance ID (such as `gemini-mptfvpkk-u1fui` prefix-matching to `gemini`). To guarantee a fresh login, launching a `dashboardAuth` terminal session automatically clears the target provider credentials directory on the host first, ensuring that stale tokens or cached sessions do not interfere.
+  - for CLI providers, `mountAuth`, `authPath`, and `authType` are instance-specific Docker auth-copy/login settings. The `authType` property can be set to `"apiKey"` (uses API key text override), `"localAuth"` (mounts a custom local directory like `~/.gemini`), or `"dashboardAuth"` (launches an interactive terminal inside the container and saves tokens directly to a dedicated `~/.code-ux/credentials/<provider-name>` folder on the host). `providerConfigMode` is independent of auth mode and controls only Docker config-file materialization:
+    - `"none"` copies no provider config file and stores `providerConfigPath` as an empty string.
+    - `"copyHost"` copies the provider's standard host config file path and stores that standard path.
+    - `"file"` copies the user-selected file from `providerConfigPath`; an empty path is normalized back to `"copyHost"`.
+  - standard config file paths are Codex `~/.codex/config.toml`, Gemini `~/.gemini/settings.json`, Claude Code `~/.claude.json`, Qwen `~/.qwen/settings.json`, OpenCode `~/.config/opencode/opencode.json`, and Antigravity `~/.gemini/antigravity-cli/mcp_config.json`. Jules and mock providers ignore these fields and normalize to `"none"` with an empty path.
+  - Docker-backed CLI runs mount selected config files separately from credential directories under `/opt/provider-config/host-*`, copy them into the provider's expected runtime-home destination, then strip local MCP declarations and apply Code UX generated MCP fragments from the existing `/opt/provider-config/*` mounts. This preserves managed MCP server injection while allowing provider instances to use no copied config, the normal host config, or a selected config file without changing API-key/local-auth/dashboard-auth mutual exclusion. Activity logs may mention resolved config paths but never print file contents.
+  - For dynamically-generated unsaved provider configurations (e.g. during onboarding or settings setup prior to saving), the dashboard is directly able to launch interactive login containers by automatically resolving the underlying provider type via prefix-matching on the transient instance ID (such as `gemini-mptfvpkk-u1fui` prefix-matching to `gemini`). To guarantee a fresh login, launching a `dashboardAuth` terminal session automatically clears the target provider credentials directory on the host first, ensuring that stale tokens or cached sessions do not interfere.
 
     #### Interactive Login Container Lifecycle Management
     Interactive login containers have strict lifecycle gates:
@@ -161,6 +203,10 @@ System-level integrations are injected into effective dashboard settings at reso
 - `git.githubToken` and `git.gitlabToken` are system-scoped
 - runtime fields like `dashboardPort`, `consoleLogLevel`, `debugLogFileLevel`, and `consoleLogMode` are system-scoped
 - project and sprint scopes still own `cliWorkflow.containerMountGithubAuth`, `cliWorkflow.containerGithubAuthPath`, `cliWorkflow.containerMountGitConfig`, `cliWorkflow.containerGitUserName`, and `cliWorkflow.containerGitUserEmail`
+- `agents.selfReflection` is default-off for both `planning` and `qualityAssurance`. Each loop stores an `enabled` flag, senior engineering criteria with per-criterion thresholds, and `maxImprovementAttempts`; sanitization dedupes criteria by id, clamps thresholds to `0..1`, clamps attempts to `0..10`, and falls back to default criteria for malformed legacy payloads. When enabled, structured planning and QA requests run the optional rate-and-improve loop through the same provider session while keeping the last valid parsed output if reflection fails. Planning reflection also gates `autoStart`: a non-passing final decision saves the plan without starting orchestration automatically.
+- `techstackCatalog` is system-owned. It stores the available techstack records and the catalog default id. The built-in `code-ux-internal` entry is restored on every load even when saved settings omit or override it.
+- `techstack` is project/sprint-owned. It stores `{ selectedTechstackId: string|null, applicationKind: "web"|"desktop"|null }`. The default project selection is null by design so imported projects remain unclassified until a later explicit project override selects a stack.
+- `designGuidance` is project/sprint-owned. It stores `{ selectedTechStackId, selectedStyleguideId, hideDefaultStyleguides, customTechStacks, customStyleguides }`; invalid selected ids fall back to `none`, custom entries are preserved when valid, and hiding default styleguides affects presentation only, not the backend default catalog. The dashboard Guidance panel manages this block for the active scope: selectors always support `None`, built-in entries are protected, custom entries can be added/edited/deleted, and deleting a selected custom entry clears that selection back to `none`. Planning and setup prompt builders resolve the selected entries from the effective project settings and omit `none` catalog entries from prompt guidance; setup prompts additionally include the styleguide investigation notice whenever the selected styleguide id is `none`.
 
 Backend contract:
 - `src/contracts/app-types.ts`
@@ -199,11 +245,12 @@ Dashboard behavior:
 - project settings now render a per-setting override badge only when a control is actually overridden at project scope
 - settings UI path pickers can browse allowed local roots for custom container setup script paths. The local browser APIs are limited to the home directory, current working directory, and `CODE_UX_DIRECTORY_BROWSER_ROOTS`; `/api/local-files` returns navigation metadata plus directory and file names/absolute paths only, never file contents.
 - sprint override dialogs use the same field-level source metadata and show override badges only for sprint-local overrides
-- the v2 settings page includes a quick-find field (keyboard shortcut `/`) that filters categories without changing the scoped settings model. Smart Find uses a centralized typed settings search index spanning category metadata, provider and integration labels, invocation routes, instruction templates, and important field synonyms, so provider searches such as `claude` surface both AI model routing and Integrations matches with visible match context. The search UI announces live result counts, active-category match previews, no-match recovery suggestions, and keyboard-friendly quick category chips.
-- settings scope selection is a radiogroup with explicit selected state and disabled project-scope guidance when no project is selected. Save, project reset, dirty, saved, and error states are announced in the active settings panel while visible form values stay mounted during pending operations.
+- the v2 settings page includes a quick-find field (keyboard shortcut `/`) that filters categories without changing the scoped settings model. Smart Find uses a centralized typed settings search index spanning category metadata, provider and integration labels, invocation routes, instruction templates, and important field synonyms, so provider searches such as `claude` surface both AI model routing and Integrations matches with visible match context. Idle Smart Find shows only the search field while keeping the exact category total available to assistive technology; active searches announce live result counts, matching-category counts, active-category context, match previews, and no-match recovery suggestions.
+- settings scope selection is a radiogroup with explicit selected state and disabled project-scope guidance when no project is selected. The last System/Project selection is stored as `runtime.lastActiveScope` in the SQLite-backed system settings document and is saved independently from draft form edits. Save, project reset, dirty, saved, and error states are announced in the active settings panel while visible form values stay mounted during pending operations.
 - Settings category transitions use shared interaction motion tokens and snap directly to the selected category for reduced-motion users, avoiding intermediate fade states.
 - settings field controls expose field-level confidence through error text and ready-to-save cues where validation is available. Single-choice pill controls keep radiogroup/radio semantics and wire helper, valid, pending, and error copy through `aria-describedby`, `aria-errormessage`, and `aria-busy` instead of relying on visual styling alone. Numeric fields derive local min/max validation from their mounted control metadata; Save Changes focuses the first visible invalid field and blocks the patch request until the value is corrected.
 - settings category navigation uses tokenized selection movement and separates focus movement from selection: arrow keys move through categories, while Enter/Space commits the active category. Selected, pending, disabled, and search-match states remain visible and are also announced through ARIA relationships. Disabled category rails and Local Git mode controls expose persistent visible reasons so users do not have to infer why a field is unavailable.
+- Agents and QA settings use shared option-card and toggle-linked row primitives for multi-select rosters and trigger rows. Orchestrator coding rosters and QA trigger agent selectors expose selected-count summaries, empty states, disabled reasons, keyboard focus behavior, and wrapping labels while preserving the same persisted settings paths.
 - provider instance cards keep draft-only feedback visible for display-name edits, API key edits, auth-mode changes, enable/disable changes, dashboard-login completion, and remove confirmation state until the next local provider change or settings reload. Removal remains reversible in the draft with Cancel and Confirm actions, cancel restores focus to the remove trigger, and update failures are announced through alert regions without persisting any removal until Save Changes runs.
 - the unsaved-changes dialog keeps focus inside the modal, exposes save/discard pending states, and labels discard as dropping pending edits without saving.
 - dashboard theme selection is unified through `dashboard/src/v2/hooks/useThemeSetting.ts`: both the top-nav theme toggle and Settings > Appearance theme control persist through `saveSystemSettings` and react to the same `codeux:settings-updated` event stream.
@@ -227,6 +274,7 @@ Dashboard behavior:
 - `providers` map keyed by provider config id
   - each provider config stores `provider`, `name`, `enabled`, `model`, `weight`, `thinkingMode`, and `maxConcurrentTasks`
   - provider config entries are base defaults for route inheritance; manual, weighted, or agent-based selection is controlled by each invocation route rather than by the base provider configuration panel
+  - project and sprint provider config entries are sparse, field-level overrides for the same provider config id; changing `model` or `thinkingMode` does not reset inherited fields such as `enabled`, `weight`, or `maxConcurrentTasks`
   - multiple entries may share the same underlying provider type, so weighted/manual routing can target separate Codex, Gemini, Claude, or Jules instances independently
   - Jules remains routable with `enabled` and `weight`, but the current Jules REST API does not expose model-selection or thinking controls.
   - Dashboard settings editors therefore hide `model` and `thinkingMode` for Jules and show an informational note instead.
@@ -253,7 +301,7 @@ Dashboard behavior:
     - `provider` (`ProviderConfigId|null`)
       - `null` means "inherit the profile default provider"
     - `allowedProviders` (`ProviderConfigId[]`)
-      - empty means "all enabled provider instances remain eligible"
+      - constrains weighted or agent-provider route pools; empty pools fail closed to the selected or inherited provider instead of opening to every enabled provider
     - `providers` sparse override map keyed by provider config id
       - supports per-invocation overrides for `enabled`, `model`, `weight`, and `thinkingMode`
   - default profiles:
@@ -313,7 +361,8 @@ Dashboard behavior:
 - agent presets also carry optional routing preferences:
   - `providerConfigId` (`ProviderConfigId|null`)
   - `model` (`string|null`)
-  - these fields are only applied by invocation routes using the `AGENT` provider strategy; blank values inherit the route, worker, or global default
+  - `containerRunAsRoot` (`boolean|null`): when the resolved worker preset sets an explicit boolean, local CLI task execution uses that value instead of the scoped `cliWorkflow.containerRunAsRoot`; `null` or an omitted field inherits the scoped setting
+  - provider and model preferences are only applied by invocation routes using the `AGENT` provider strategy; blank values inherit the route, worker, or global default
 - `qualityAssurance`
   - `enabled` (default `true`)
   - `maxTaskReviewRuns` (default `3` for new or unset settings)
@@ -332,7 +381,7 @@ Dashboard behavior:
     - `agentPresetIds` (ordered list of review agent preset IDs; empty means the built-in/default QA agent fallback)
     - `agentPresetId`
 
-Quality assurance settings are project-scoped today and are edited from `Settings -> Sprint & Git`, immediately below `Merge Gates & Autofix`. Each QA trigger can persist multiple review agent presets in `agentPresetIds`; Code UX still accepts the legacy single `agentPresetId` field and mirrors it to the first selected ID in sanitized and effective settings for compatibility. When task-level QA is enabled, successful CLI task runs preserve their worktree long enough for a QA follow-up pass to resume the same session/worktree if fixes are required.
+Quality assurance settings are project-scoped today and are edited from `Settings -> Sprint & Git`, immediately below `Merge Gates & Autofix`. Each QA trigger is presented as a toggle-linked row with an enable switch and a multi-select review-agent roster; leaving the roster empty keeps the built-in/default QA agent fallback active. Each QA trigger can persist multiple review agent presets in `agentPresetIds`; Code UX still accepts the legacy single `agentPresetId` field and mirrors it to the first selected ID in sanitized and effective settings for compatibility. When task-level QA is enabled, successful CLI task runs preserve their worktree long enough for a QA follow-up pass to resume the same session/worktree if fixes are required.
 
 QA merge-gate notes:
 - task QA now runs on code-complete tasks before Code UX auto-merges their feature PRs
@@ -369,10 +418,12 @@ QA merge-gate notes:
     - the dashboard picker is a convenience for selecting local absolute paths from allowed host roots
     - manually entered relative paths remain supported; Docker runtime resolves them later against the sprint repo root and current server working directory
     - if empty, Code UX first seeds missing bundled defaults into `~/.code-ux`, then falls back to `.code-ux/container/setup.sh` in repo root, then home directory, then the bundled Code UX default script
+  - `containerMemoryLimitMb` (default `6144`): memory ceiling in MiB applied to all Docker-backed CLI provider containers. `0` disables Docker memory flags. Positive values are passed as both `--memory` and `--memory-swap`, so the configured value is a hard ceiling rather than silent swap overcommit.
   - `containerCacheSetupScriptImage` (default `true`)
     - when enabled, Docker runtime builds and reuses a derived image keyed by the base image plus setup script contents
     - cache misses fall back to the current per-run setup script path if the image build fails
-  - `containerInstallPlaywrightBrowsers` (default `true`): provider coding containers set `CODE_UX_INSTALL_PLAYWRIGHT=1`, so the shared setup script installs Playwright Chromium plus OS dependencies for agent browser checks. Disable it to skip the browser download during setup; preview containers keep this disabled unless they opt into the provider setup path explicitly.
+  - `containerRunAsRoot` (default `false`): opt-in runtime mode for Docker provider containers that must run as root. Invalid or missing values sanitize back to `false`; unless this is explicitly `true`, provider containers run with the resolved host workspace UID/GID and receive a matching mounted `/etc/passwd` worker entry. Because `cliWorkflow` is scoped, project and sprint overrides inherit the resolved system value when they omit this field. The Settings > General > Docker Runtime card exposes this as **Run containers as root** for system defaults and project-scoped overrides. A resolved worker agent preset can override this value for local CLI task execution with its nullable `containerRunAsRoot` field; the agent editor stores **Inherit** as `null`, **Force non-root** as `false`, and **Force root** as `true`. Hosted Jules sessions ignore the per-agent field because they do not run in local Docker provider containers. Root mode is privileged and should be enabled only for trusted repositories and tools that require OS-level writes inside the provider container.
+  - `containerInstallPlaywrightBrowsers` (default `true`): provider coding containers set `CODE_UX_INSTALL_PLAYWRIGHT=1`, so the bundled setup script installs Playwright Chromium plus OS dependencies for agent browser checks. With setup-image caching enabled, the setup-cache build also exports `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`, bakes Chromium into that image after the setup script runs, and leaves the directory readable for non-root provider runs. Cache-disabled workflows and custom setup scripts that replace the bundled script must opt into the same behavior themselves by checking `CODE_UX_INSTALL_PLAYWRIGHT=1` and running an appropriate browser install such as `npx -y playwright@latest install --with-deps chromium` when the base image supports it. Disable this setting to skip the browser download during setup; preview containers keep it disabled unless they opt into the provider setup path explicitly.
   - `containerMountGitConfig` (default `false`): copy the host `.gitconfig` into Docker. When disabled, Docker provider runs configure Git with `containerGitUserName` and `containerGitUserEmail` instead.
   - `containerGitUserName` (default `Code UX`)
   - `containerGitUserEmail` (default `agents@codeux.ai`)
@@ -436,6 +487,7 @@ Container execution notes:
 - `cliWorkflow.executionMode` defaults to `DOCKER`, but Code UX still supports `HOST` worktrees for controlled fallback and legacy-safe paths
 - task, planning, chat, and normal CI-fix flows execute inside isolated Docker-volume workspaces when Docker execution is available
 - Git URL projects must have a local checkout. Dashboard project creation clones them into the selected clone directory, or `~/.code-ux/projects/<repo-name>` when no clone directory is provided.
+- Repositories Code UX creates from scratch include `.code-ux/` in `.gitignore`. Existing repositories are not silently edited, but LOCAL final-merge dirty detection, dirty-backup commits, and dirty restore exclude repo-local `.code-ux/` artifacts by default. User-created dirty files outside `.code-ux/` are preserved on a `dirty-ref-<uuid>` branch before the clean final merge; if they apply cleanly afterward, Code UX copies them back into the visible checkout as uncommitted changes. If they conflict, the dirty branch is kept and surfaced for manual recovery.
 - QA review execution uses a fresh snapshot workspace instead of the mutable task workspace
 - QA-requested follow-up coding and CI autofix continue in the existing task workspace when that workspace is still reusable
 - CI autofix falls back to a host-backed worktree only when Docker is unavailable for that follow-up repair attempt
@@ -483,18 +535,19 @@ Container execution notes:
 - `enabled` (whether tool is visible in MCP `list_tools` and callable)
 - `isInternal` (reserved/internal metadata; currently all built-in tools are internal)
 
-`customMcpServers` contains user-configurable provider MCP servers. New and sanitized settings include a default enabled `playwright` stdio server (`npx @playwright/mcp@latest`) for local CLI providers. Settings resolution treats a user or project server with the same stable id or `playwright` name as the same seeded server, so custom edits replace the default instead of creating duplicates. Docker provider runs do not inherit arbitrary MCP servers from copied local provider config files; runtime strips local `mcpServers` / `mcp_servers.*` entries from mounted auth config and injects only the Code UX-managed MCP servers that are enabled on the MCP settings page.
+`customMcpServers` contains user-configurable provider MCP servers. New and sanitized settings include a default enabled `playwright` stdio server (`npx @playwright/mcp@latest`) for local CLI providers. Settings resolution treats a user or project server with the same stable id or `playwright` name as the same seeded server, so custom edits replace the default instead of creating duplicates. Docker provider runs do not inherit arbitrary MCP servers from copied local provider config files; runtime strips local `mcpServers` / `mcp_servers.*` entries from mounted auth config and injects only the Code UX-managed MCP servers that are enabled on the MCP settings page. The Settings → MCP local setup panel can also write the current Code UX HTTP MCP URL and bearer token into local CLI config files for Claude Code, Gemini, Codex, Qwen Code, OpenCode, and Antigravity after the gateway has bound. Codex reinstalls replace the managed `[mcp_servers.code-ux]` block with the current URL and token while preserving unrelated TOML settings and custom MCP server tables.
 
 Repository demo script:
 - `.code-ux/container/setup.sh` is included as a baseline bootstrap script.
 - Packaged desktop installs also ship this script as a default asset. On first use, Code UX copies it to `~/.code-ux/container/setup.sh` when that file does not already exist, so Docker can mount a normal user-directory script instead of relying on a repo checkout.
 - It verifies `npm`, ensures `git` + `gh`, installs `pnpm` when needed, and leaves provider CLI installation to the runtime's provider-specific fallback.
 - `npm` refresh is now opt-in via `CODE_UX_REFRESH_NPM=1` instead of happening on every container start.
-- Playwright bootstrap is controlled by the Docker Runtime `containerInstallPlaywrightBrowsers` setting. Provider coding containers enable it by default through `CODE_UX_INSTALL_PLAYWRIGHT=1`, while preview containers keep it disabled by default.
+- Playwright bootstrap is controlled by the Docker Runtime `containerInstallPlaywrightBrowsers` setting. Provider coding containers enable it by default through `CODE_UX_INSTALL_PLAYWRIGHT=1`, while preview containers keep it disabled by default. Cached setup images install Chromium and OS dependencies once during image build under `/ms-playwright`; later provider containers inherit `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright` and skip browser installation unless the cache is disabled or rebuilt. If setup-image caching is disabled, the runtime does not inject a separate browser-install step after the mounted setup script runs, so custom setup scripts must honor `CODE_UX_INSTALL_PLAYWRIGHT` when operators expect Playwright availability.
 - Docker CLI execution now uses isolated Docker volumes as the workspace backing store instead of repo-local worktrees or persistent host-side runtime homes.
   - container `/workspace` contains only the Git checkout used for the coding task
   - provider `HOME` lives in a sibling runtime volume mounted at `/code-ux-runtime-home`, so CLI auth/config/cache/session state does not appear inside the Git worktree
   - workspace and runtime volumes are created with deterministic Code UX names and labels; fresh provider containers should not create anonymous Docker volumes
+  - provider runtime containers use Docker bridge networking without published ports, add `no-new-privileges`, and keep managed labels for cleanup. Loopback MCP URLs are rewritten to `host.docker.internal` for Docker Desktop/WSL-style host reachability; on Linux Docker Engine runs with loopback MCP endpoints also add `--add-host host.docker.internal:host-gateway` so the bridge-networked container can reach the host without exposing container ports. Set `CODE_UX_DOCKER_REWRITE_LOCALHOST=0` to opt out.
   - write-back happens via Git patch artifacts applied on the host, not direct file sync from the container
   - patch export preserves raw `git diff --binary` output byte-for-byte so whitespace-only EOF hunks and `\ No newline at end of file` markers still apply cleanly on the host branch
   - patch export still excludes legacy `/workspace/.code-ux-home` paths and root `/workspace/.pnpm-store` package-cache paths as a defense-in-depth guard for older preserved volumes, and untracked export staging asks Git to discover paths internally so large file sets do not exceed Docker command-line limits; fresh Docker workspaces should not contain provider home/cache state
@@ -505,6 +558,7 @@ Repository demo script:
     - Codex: `CODEX_MODEL` plus `--model` when applicable
     - Claude Code: `--model` when applicable
   - When `containerCacheSetupScriptImage` is enabled and a setup script is present, runtime first tries to reuse a prebuilt image named like `code-ux-setup-cache-node-24-bookworm:<hash>` instead of rerunning the setup script on every container launch. The hash covers the base image, setup script content, Playwright browser install setting, and setup-cache Dockerfile content. Build contexts and lock directories live under the repo-scoped Docker runtime root, so cache hits survive dashboard restarts and concurrent launches wait for one build instead of triggering duplicate builds.
+  - Docker-backed CLI provider containers honor `containerMemoryLimitMb`. A positive value becomes `--memory=<value>m --memory-swap=<value>m` for every provider runtime launched through `DockerRunner`, including task coding, QA, planning, CI-fix, merge-conflict, remediation, and dashboard-chat paths that use CLI providers. Set it to `0` only when the host should manage provider memory without a Docker hard limit.
   - An empty `containerSetupScriptPath` still participates in caching because runtime resolves the default script chain automatically, including the bundled Code UX setup script.
   - `claude` fallback uses the official installer: `curl -fsSL https://claude.ai/install.sh | bash`
   - Claude runner uses explicit headless prompt mode (`claude -p "<prompt>"`) with `--dangerously-skip-permissions`.

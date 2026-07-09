@@ -39,6 +39,101 @@ export function formatManagementErrorEnvelope(
   return { result };
 }
 
+type NormalizedApprovalValue =
+  | ["undefined"]
+  | ["null"]
+  | ["boolean", boolean]
+  | ["number", string]
+  | ["string", string]
+  | ["array", NormalizedApprovalValue[]]
+  | ["object", Array<[string, NormalizedApprovalValue]>];
+
+const APPROVAL_PAYLOAD_IGNORED_KEYS = new Set(["action", "approval", "domain"]);
+const APPROVAL_SCOPE_KEYS = [
+  "projectId",
+  "sprintId",
+  "taskId",
+  "path",
+  "memoryId",
+  "claimId",
+  "presetId",
+  "templateId",
+  "sessionId",
+  "entryId",
+  "flowId",
+  "sprintRunId",
+  "taskRunId",
+];
+
+export interface McpApprovalFingerprintInput {
+  domain: string;
+  action: string;
+  payload?: Record<string, unknown>;
+}
+
+function normalizeApprovalValue(value: unknown): NormalizedApprovalValue {
+  if (value === undefined) {
+    return ["undefined"];
+  }
+  if (value === null) {
+    return ["null"];
+  }
+  if (typeof value === "boolean") {
+    return ["boolean", value];
+  }
+  if (typeof value === "number") {
+    return ["number", Number.isNaN(value) ? "NaN" : String(value)];
+  }
+  if (typeof value === "string") {
+    return ["string", value];
+  }
+  if (Array.isArray(value)) {
+    return ["array", value.map((item) => normalizeApprovalValue(item))];
+  }
+  if (typeof value === "object") {
+    return [
+      "object",
+      Object.keys(value as Record<string, unknown>)
+        .sort()
+        .map((key) => [key, normalizeApprovalValue((value as Record<string, unknown>)[key])]),
+    ];
+  }
+  return ["string", String(value)];
+}
+
+function normalizeApprovalPayload(payload: Record<string, unknown>): NormalizedApprovalValue {
+  const filteredPayload: Record<string, unknown> = {};
+  for (const key of Object.keys(payload)) {
+    if (!APPROVAL_PAYLOAD_IGNORED_KEYS.has(key)) {
+      filteredPayload[key] = payload[key];
+    }
+  }
+  return normalizeApprovalValue(filteredPayload);
+}
+
+function normalizeApprovalScope(payload: Record<string, unknown>): NormalizedApprovalValue {
+  const scope: Record<string, unknown> = {};
+  for (const key of APPROVAL_SCOPE_KEYS) {
+    if (key in payload) {
+      scope[key] = payload[key];
+    }
+  }
+  if ("value" in payload) {
+    scope.value = payload.value;
+  }
+  return normalizeApprovalValue(scope);
+}
+
+export function buildMcpApprovalFingerprint(input: McpApprovalFingerprintInput): string {
+  const payload = input.payload ?? {};
+  return JSON.stringify({
+    domain: input.domain,
+    action: input.action,
+    scope: normalizeApprovalScope(payload),
+    payload: normalizeApprovalPayload(payload),
+  });
+}
+
 export function parseRequiredString(payload: Record<string, unknown>, key: string, customError?: string): string {
   const val = payload[key];
   if (typeof val === "string") {
@@ -119,6 +214,21 @@ export function parseOptionalObject<T>(payload: Record<string, unknown>, key: st
     return val as T;
   }
   return undefined;
+}
+
+export function parseRequiredObject<T>(payload: Record<string, unknown>, key: string, customError?: string): T {
+  const val = payload[key];
+  if (typeof val === "object" && val !== null && !Array.isArray(val)) {
+    return val as T;
+  }
+  throw managementValidationError(customError || `${key} object is required`, key);
+}
+
+export function parseRequiredPresentValue(payload: Record<string, unknown>, key: string, customError?: string): unknown {
+  if (!(key in payload)) {
+    throw managementValidationError(customError || `${key} is required`, key);
+  }
+  return payload[key];
 }
 
 export function parseOptionalEnum<T extends string>(payload: Record<string, unknown>, key: string, validValues: readonly T[]): T | undefined {

@@ -4,6 +4,7 @@ import {
   ArrowUp,
   Ban,
   RefreshCw,
+  TimerReset,
 } from "lucide-preact";
 import { buildPresetIndex } from "./lib/chat-entity-index.js";
 import { ChatThreadHeader } from "./components/chat/ChatThreadHeader.js";
@@ -12,31 +13,41 @@ import { ChatRail } from "./components/chat/ChatRail.js";
 import { ThreadListCard } from "./components/chat/ThreadListCard.js";
 import { InvocationListCard } from "./components/chat/InvocationListCard.js";
 import { ChatRailPlaceholder, EmptyChat, LoadingChat } from "./components/chat/ChatEmptyState.js";
+import { NoProjectAssistantPanel } from "./components/chat/NoProjectAssistantPanel.js";
 import { EmptyState } from "./components/ui/EmptyState.js";
 import { MessageCircle } from "lucide-preact";
 import { ChatMessageBubble } from "./components/chat/ChatMessageBubble.js";
+import { ChatCreateAppQuickActions } from "./components/chat/ChatCreateAppQuickActions.js";
+import { SpeechInputButton } from "./components/speech/SpeechInputButton.js";
 import { useChatPageData } from "./hooks/use-chat-page-data.js";
-import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import { formatInvocationPurpose, formatInvocationDuration, InvocationContextChips } from "./components/chat/invocation-display.js";
 import { InvocationMessageBubble } from "./components/chat/InvocationMessageBubble.js";
 import { InvocationRoutingWidget } from "./components/chat/widgets/InvocationRoutingWidget.js";
 import { InvocationContainerWidget } from "./components/chat/widgets/InvocationContainerWidget.js";
 import { TruncatedSystemBubble } from "./components/chat/TruncatedSystemBubble.js";
 import { WorkingBubble } from "./components/chat/WorkingBubble.js";
+import { CinematicStage } from "./components/chat/cinematic/CinematicStage.js";
 import { ConfirmDialog } from "./components/ui/ConfirmDialog.js";
 import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 import { ProviderLogo } from "./components/ui/ProviderLogo.js";
 import { AgentAvatarSvg } from "./components/agents/AgentAvatarSvg.js";
 import { generateRandomAgentAvatar } from "./lib/agent-avatar.js";
 import { formatInvocationRetryAt } from "./lib/invocation-retry-time.js";
-import type { ExecutionInvocationRecord } from "./types.js";
-import { cancelExecutionInvocation, restartExecutionInvocation, type InvocationRestartMode } from "./lib/invocation-api.js";
+import type { ChatMessageRecord, ExecutionInvocationRecord, Sprint, Task } from "./types.js";
+import { cancelExecutionInvocation, resetInvocationUsageLimitTimer, restartExecutionInvocation, type InvocationRestartMode } from "./lib/invocation-api.js";
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
 import {
   formatTokenCount,
   mergeInvocationToolMessages
 } from "./lib/chat-widget-view-models.js";
+import { clearChatDraftFromUrl, readChatDraftFromLocation } from "./lib/no-project-chat-assistant.js";
+import { resolveChatLiveEntities, type ChatLiveEntityWidget } from "./lib/chat-live-entities.js";
+import { STATUS_MESSAGE_MIN_INTERVAL_MS } from "./lib/agent-humor-messages.js";
 
+
+const EMPTY_LIVE_ENTITIES: readonly ChatLiveEntityWidget[] = [];
+const EMPTY_LIVE_SPRINTS: readonly Sprint[] = [];
+const EMPTY_LIVE_TASKS: readonly Task[] = [];
 
 const formatInvocationErrorCategory = (value: ExecutionInvocationRecord["lastErrorCategory"]): string | null => {
   switch (value) {
@@ -55,12 +66,170 @@ const formatInvocationErrorCategory = (value: ExecutionInvocationRecord["lastErr
   }
 };
 
+const hasUsageLimitTimer = (invocation: ExecutionInvocationRecord | null | undefined): invocation is ExecutionInvocationRecord => {
+  return Boolean(
+    invocation
+      && (invocation.status === "running" || invocation.status === "paused")
+      && invocation.lastRetryAfterIso
+      && (invocation.lastErrorCategory === "QUOTA_EXHAUSTED" || invocation.lastErrorCategory === "RATE_LIMITED")
+  );
+};
+
+const getTranscriptJoiner = (before: string, after: string): string => {
+  if (!before || !after) {
+    return "";
+  }
+  return /\s$/.test(before) || /^\s/.test(after) ? "" : " ";
+};
+
+type ComposerStatusTone = "disabled" | "ready" | "sending" | "queued" | "sent" | "failed";
+
+interface ComposerStatusViewModel {
+  tone: ComposerStatusTone;
+  visibleText: string;
+  liveText: string;
+  disabledReason: string | null;
+}
+
+const getLatestDashboardMessage = (messages: readonly ChatMessageRecord[]): ChatMessageRecord | null => {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.direction === "dashboard_to_connection") {
+      return message;
+    }
+  }
+  return null;
+};
+
+const buildComposerStatus = (input: {
+  activeConnectionName: string | null;
+  error: string | null;
+  latestDashboardMessage: ChatMessageRecord | null;
+  pendingDashboardMessages: number;
+  selectedProject: boolean;
+  sending: boolean;
+  trimmedInput: string;
+}): ComposerStatusViewModel => {
+  const disabledReason = !input.selectedProject
+    ? "Select a project before sending a message."
+    : input.sending
+      ? "Message is already sending."
+      : !input.trimmedInput
+        ? "Write a message before sending."
+        : null;
+
+  if (!input.selectedProject) {
+    const noProjectReason = "Select a project before sending a message.";
+    return {
+      tone: "disabled",
+      visibleText: noProjectReason,
+      liveText: noProjectReason,
+      disabledReason,
+    };
+  }
+
+  if (input.sending) {
+    return {
+      tone: "sending",
+      visibleText: "Sending message to Code UX...",
+      liveText: "Sending message.",
+      disabledReason,
+    };
+  }
+
+  if (input.error) {
+    return {
+      tone: "failed",
+      visibleText: `Send failed: ${input.error}`,
+      liveText: `Failed: ${input.error}`,
+      disabledReason,
+    };
+  }
+
+  if (input.pendingDashboardMessages > 0) {
+    const queuedLabel = `${input.pendingDashboardMessages} message${input.pendingDashboardMessages === 1 ? "" : "s"} queued for delivery.`;
+    return {
+      tone: "queued",
+      visibleText: `${queuedLabel} A worker or listener will claim the next turn.`,
+      liveText: queuedLabel,
+      disabledReason,
+    };
+  }
+
+  if (input.latestDashboardMessage?.deliveryStatus === "failed") {
+    return {
+      tone: "failed",
+      visibleText: "The latest dashboard message failed. Review the draft or try again.",
+      liveText: "Latest message failed.",
+      disabledReason,
+    };
+  }
+
+  if (input.latestDashboardMessage?.deliveryStatus === "pending") {
+    return {
+      tone: "queued",
+      visibleText: "Latest message is queued and waiting for a worker route.",
+      liveText: "Latest message queued.",
+      disabledReason,
+    };
+  }
+
+  if (input.latestDashboardMessage?.deliveryStatus === "delivered") {
+    return {
+      tone: "sent",
+      visibleText: "Message sent to Code UX and waiting for the worker response.",
+      liveText: "Message sent.",
+      disabledReason,
+    };
+  }
+
+  if (input.latestDashboardMessage?.deliveryStatus === "processed") {
+    return {
+      tone: "sent",
+      visibleText: "Latest message was processed by the worker route.",
+      liveText: "Latest message processed.",
+      disabledReason,
+    };
+  }
+
+  if (input.trimmedInput) {
+    const target = input.activeConnectionName ? ` to ${input.activeConnectionName}` : "";
+    return {
+      tone: "ready",
+      visibleText: `Ready to send${target}. Enter sends; Shift+Enter adds a newline.`,
+      liveText: "Composer ready.",
+      disabledReason,
+    };
+  }
+
+  return {
+    tone: "disabled",
+    visibleText: "Write a message to enable send. Queued delivery will be shown here.",
+    liveText: "Composer disabled until a message is entered.",
+    disabledReason,
+  };
+};
+
+const COMPOSER_STATUS_TONE_CLASS: Record<ComposerStatusTone, string> = {
+  disabled: "border-black/[0.06] bg-black/[0.025] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.025] dark:text-slate-400",
+  ready: "border-signal-500/20 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300",
+  sending: "border-signal-500/25 bg-signal-500/[0.10] text-signal-700 dark:text-signal-300",
+  queued: "border-status-amber/25 bg-status-amber/[0.10] text-status-amber",
+  sent: "border-signal-500/20 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300",
+  failed: "border-status-red/25 bg-status-red/[0.08] text-status-red",
+};
+
 export const ChatPage: FunctionComponent = () => {
   const messagesRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const composerSelectionRef = useRef<{ start: number; end: number } | null>(null);
   const [workingTimerPhase, setWorkingTimerPhase] = useState<"starting" | "working" | null>(null);
   const [restartingInvocation, setRestartingInvocation] = useState<{ id: string; mode: InvocationRestartMode } | null>(null);
   const [cancellingInvocationId, setCancellingInvocationId] = useState<string | null>(null);
+  const [resettingUsageLimitInvocationId, setResettingUsageLimitInvocationId] = useState<string | null>(null);
+  const [noProjectDraft, setNoProjectDraft] = useState<string | null>(() => (
+    typeof window === "undefined" ? null : readChatDraftFromLocation(window.location)
+  ));
   const invocationFeedback = useActionFeedback();
 
   const {
@@ -100,8 +269,10 @@ export const ChatPage: FunctionComponent = () => {
     handleCancelActiveTurn,
     isCancelling,
     handleSend,
+    handleCreateAppQuickaction,
     navigateHistory,
     handleDeleteThread,
+    handleRenameThread,
     createThreadForCompose,
     threadIndex,
     invocationIndex,
@@ -113,19 +284,183 @@ export const ChatPage: FunctionComponent = () => {
     confirmOptions,
     handleConfirm,
     handleCancel,
+    execution,
+    executionLoading,
+    executionLoaded,
+    projectTasks,
+    projectTasksLoading,
+    projectTasksLoaded,
+    sprintKeyPrefix,
+    liveEntityContext,
   } = useChatPageData({ composerRef, messagesRef });
 
-  const effectiveSettings = useProjectEffectiveSettings(selectedProject?.id ?? null);
-  const sprintKeyPrefix = effectiveSettings.data?.settings?.git?.sprintKeyPrefix || "SPR";
+  useEffect(() => {
+    if (typeof window === "undefined" || selectedProject) {
+      return;
+    }
+    setNoProjectDraft(readChatDraftFromLocation(window.location));
+  }, [selectedProject]);
+
   const projectThreads = useMemo(() => threads.filter((thread) => thread.scope === "project"), [threads]);
   const displayedInvocationTotal = invocationTotalCount ?? invocations.length;
   const runningInvocationCount = useMemo(
-    () => invocations.filter((invocation) => invocation.status === "running" || invocation.id.startsWith("optimistic:")).length,
+    () => invocations.filter((invocation) => invocation.status === "running").length,
     [invocations],
   );
+  const widgetLiveData = useMemo(() => ({
+    projectId: selectedProject?.id ?? null,
+    projectTasks,
+    projectTasksLoading,
+    projectTasksLoaded,
+    execution,
+    executionLoading,
+    executionLoaded,
+    sprintKeyPrefix,
+  }), [
+    execution,
+    executionLoaded,
+    executionLoading,
+    projectTasks,
+    projectTasksLoaded,
+    projectTasksLoading,
+    selectedProject?.id,
+    sprintKeyPrefix,
+  ]);
+  const liveEntitySprints = liveEntityContext?.sprints ?? EMPTY_LIVE_SPRINTS;
+  const liveEntityTasks = liveEntityContext?.tasks ?? EMPTY_LIVE_TASKS;
+  const liveEntitySprintKeyPrefix = liveEntityContext?.sprintKeyPrefix ?? sprintKeyPrefix;
+  const threadLiveEntitiesByMessageId = useMemo(() => {
+    const entitiesByMessageId = new Map<string, readonly ChatLiveEntityWidget[]>();
+    if (liveEntitySprints.length === 0 && liveEntityTasks.length === 0) {
+      return entitiesByMessageId;
+    }
+    for (const message of messages) {
+      entitiesByMessageId.set(message.id, resolveChatLiveEntities({
+        sprints: liveEntitySprints,
+        tasks: liveEntityTasks,
+        sprintKeyPrefix: liveEntitySprintKeyPrefix,
+        message,
+      }));
+    }
+    return entitiesByMessageId;
+  }, [liveEntitySprints, liveEntitySprintKeyPrefix, liveEntityTasks, messages]);
+  const visibleInvocationMessages = useMemo(
+    () => mergeInvocationToolMessages(invocationMessages),
+    [invocationMessages],
+  );
+  const trimmedComposerInput = input.trim();
+  const latestDashboardMessage = useMemo(() => getLatestDashboardMessage(messages), [messages]);
+  const composerStatus = useMemo(() => buildComposerStatus({
+    activeConnectionName: activeConnection?.displayName ?? null,
+    error,
+    latestDashboardMessage,
+    pendingDashboardMessages,
+    selectedProject: Boolean(selectedProject),
+    sending,
+    trimmedInput: trimmedComposerInput,
+  }), [
+    activeConnection?.displayName,
+    error,
+    latestDashboardMessage,
+    pendingDashboardMessages,
+    selectedProject,
+    sending,
+    trimmedComposerInput,
+  ]);
+  const sendDisabled = Boolean(composerStatus.disabledReason);
+  const sendButtonLabel = sending
+    ? "Sending message"
+    : composerStatus.disabledReason
+      ? `Send message unavailable: ${composerStatus.disabledReason}`
+      : "Send message";
+  const invocationLiveEntitiesByMessageId = useMemo(() => {
+    const entitiesByMessageId = new Map<string, readonly ChatLiveEntityWidget[]>();
+    if (liveEntitySprints.length === 0 && liveEntityTasks.length === 0) {
+      return entitiesByMessageId;
+    }
+    for (const message of visibleInvocationMessages) {
+      entitiesByMessageId.set(message.id, resolveChatLiveEntities({
+        sprints: liveEntitySprints,
+        tasks: liveEntityTasks,
+        sprintKeyPrefix: liveEntitySprintKeyPrefix,
+        message,
+        invocation: selectedInvocation,
+      }));
+    }
+    return entitiesByMessageId;
+  }, [
+    liveEntitySprints,
+    liveEntitySprintKeyPrefix,
+    liveEntityTasks,
+    selectedInvocation,
+    visibleInvocationMessages,
+  ]);
+
+  const handlePromptSuggestionSelect = useCallback((prompt: string) => {
+    void handleSend(prompt).finally(() => {
+      requestAnimationFrame(() => {
+        composerRef.current?.focus({ preventScroll: true });
+      });
+    });
+  }, [handleSend]);
+
+  const rememberComposerSelection = useCallback((element: HTMLTextAreaElement): void => {
+    composerSelectionRef.current = {
+      start: element.selectionStart,
+      end: element.selectionEnd,
+    };
+  }, []);
+
+  const handleSpeechTranscript = useCallback((transcript: string) => {
+    const trimmedTranscript = transcript.trim();
+    if (!trimmedTranscript) {
+      return;
+    }
+
+    const composer = composerRef.current;
+    const sourceValue = composer?.value ?? input;
+    const rememberedSelection = composerSelectionRef.current;
+    const canUseRememberedSelection = Boolean(
+      rememberedSelection
+        && rememberedSelection.start >= 0
+        && rememberedSelection.end >= rememberedSelection.start
+        && rememberedSelection.end <= sourceValue.length
+    );
+
+    const selectionStart = canUseRememberedSelection ? rememberedSelection!.start : sourceValue.length;
+    const selectionEnd = canUseRememberedSelection ? rememberedSelection!.end : sourceValue.length;
+    const before = sourceValue.slice(0, selectionStart);
+    const after = sourceValue.slice(selectionEnd);
+    const insert = `${getTranscriptJoiner(before, trimmedTranscript)}${trimmedTranscript}${getTranscriptJoiner(trimmedTranscript, after)}`;
+    const nextValue = `${before}${insert}${after}`;
+    const nextCaret = before.length + insert.length;
+
+    setInput(nextValue);
+    requestAnimationFrame(() => {
+      const nextComposer = composerRef.current;
+      if (!nextComposer) {
+        return;
+      }
+      nextComposer.focus();
+      nextComposer.style.height = "auto";
+      nextComposer.style.height = `${nextComposer.scrollHeight}px`;
+      nextComposer.setSelectionRange(nextCaret, nextCaret);
+      composerSelectionRef.current = { start: nextCaret, end: nextCaret };
+    });
+  }, [input, setInput]);
+
+  const submitComposerMessage = useCallback(async (): Promise<void> => {
+    if (sendDisabled) {
+      return;
+    }
+    await handleSend();
+    requestAnimationFrame(() => {
+      composerRef.current?.focus({ preventScroll: true });
+    });
+  }, [handleSend, sendDisabled]);
 
   const handleRestartInvocation = useCallback(async (mode: InvocationRestartMode = "retry_full_prompt") => {
-    if (!selectedInvocation || selectedInvocation.status !== "failed" || restartingInvocation || cancellingInvocationId) {
+    if (!selectedInvocation || selectedInvocation.status !== "failed" || restartingInvocation || cancellingInvocationId || resettingUsageLimitInvocationId) {
       return;
     }
     setRestartingInvocation({ id: selectedInvocation.id, mode });
@@ -146,10 +481,10 @@ export const ChatPage: FunctionComponent = () => {
     } finally {
       setRestartingInvocation(null);
     }
-  }, [activateInvocation, cancellingInvocationId, invocationFeedback, refreshThreads, restartingInvocation, selectedInvocation]);
+  }, [activateInvocation, cancellingInvocationId, invocationFeedback, refreshThreads, resettingUsageLimitInvocationId, restartingInvocation, selectedInvocation]);
 
   const handleCancelInvocation = useCallback(async () => {
-    if (!selectedInvocation || selectedInvocation.status !== "running" || cancellingInvocationId || restartingInvocation) {
+    if (!selectedInvocation || selectedInvocation.status !== "running" || cancellingInvocationId || restartingInvocation || resettingUsageLimitInvocationId) {
       return;
     }
     setCancellingInvocationId(selectedInvocation.id);
@@ -168,7 +503,29 @@ export const ChatPage: FunctionComponent = () => {
     } finally {
       setCancellingInvocationId(null);
     }
-  }, [activateInvocation, cancellingInvocationId, invocationFeedback, refreshThreads, restartingInvocation, selectedInvocation]);
+  }, [activateInvocation, cancellingInvocationId, invocationFeedback, refreshThreads, resettingUsageLimitInvocationId, restartingInvocation, selectedInvocation]);
+
+  const handleResetUsageLimitTimer = useCallback(async () => {
+    if (!hasUsageLimitTimer(selectedInvocation) || cancellingInvocationId || restartingInvocation || resettingUsageLimitInvocationId) {
+      return;
+    }
+    setResettingUsageLimitInvocationId(selectedInvocation.id);
+    invocationFeedback.setPending("Resetting usage limit timer...", { autoDismiss: false });
+    try {
+      const result = await resetInvocationUsageLimitTimer(selectedInvocation.id);
+      invocationFeedback.setSuccess(result.reset ? "Usage limit timer reset." : (result.message || "Usage limit timer was already cleared."));
+      await refreshThreads({ mode: "invocations" });
+      void activateInvocation(selectedInvocation.id, { foreground: true });
+    } catch (error) {
+      invocationFeedback.setError(error instanceof Error ? error.message : String(error), {
+        retryAction: () => void handleResetUsageLimitTimer(),
+        retryLabel: "Retry",
+        autoDismiss: false,
+      });
+    } finally {
+      setResettingUsageLimitInvocationId(null);
+    }
+  }, [activateInvocation, cancellingInvocationId, invocationFeedback, refreshThreads, resettingUsageLimitInvocationId, restartingInvocation, selectedInvocation]);
 
   // Build lookups from agentPresets
   const presetIdMap = useMemo(() => {
@@ -238,7 +595,7 @@ export const ChatPage: FunctionComponent = () => {
       setWorkingTimerPhase("starting");
       const timer = setTimeout(() => {
         setWorkingTimerPhase("working");
-      }, 4000);
+      }, STATUS_MESSAGE_MIN_INTERVAL_MS);
       return () => clearTimeout(timer);
     } else {
       setWorkingTimerPhase(null);
@@ -320,6 +677,51 @@ export const ChatPage: FunctionComponent = () => {
   };
 
   const renderDetail = () => {
+    if (chatMode === "stage") {
+      // Prefer the preset of the most recent agent reply; fall back to the
+      // thread/connection-linked preset (getLinkedAgentPreset handles both).
+      let stagePreset;
+      for (let i = messages.length - 1; i >= 0 && !stagePreset; i--) {
+        const message = messages[i];
+        if (message.direction !== "dashboard_to_connection" && message.authorType !== "system") {
+          stagePreset = getLinkedAgentPreset(message);
+        }
+      }
+      if (!stagePreset) {
+        stagePreset = getLinkedAgentPreset({ metadata: undefined } as (typeof messages)[0]);
+      }
+      return (
+        <>
+          <ConfirmDialog isOpen={isConfirmOpen} options={confirmOptions} onConfirm={handleConfirm} onCancel={handleCancel} />
+          {feedback.status !== "idle" && (
+            <div className="absolute top-4 right-4 z-50 shadow-lg">
+              <ActionFeedbackRegion status={feedback.status} message={feedback.message} onDismiss={clearFeedback} />
+            </div>
+          )}
+          <div id="chat-panel" role="tabpanel" aria-labelledby="tab-stage" className="flex flex-1 min-h-0 flex-col overflow-hidden">
+            <CinematicStage
+              selectedProject={selectedProject}
+              selectedThread={selectedThread}
+              messages={messages}
+              threadMessagesLoading={threadsLoading || threadMessagesLoading}
+              hasWorkingReply={hasWorkingReply}
+              runningInvocationCount={runningInvocationCount}
+              sending={sending}
+              error={error}
+              input={input}
+              setInput={setInput}
+              handleSend={handleSend}
+              navigateHistory={navigateHistory}
+              composerRef={composerRef}
+              activeConnection={activeConnection}
+              agentPreset={stagePreset}
+              onOpenThreads={() => setChatMode("threads")}
+            />
+          </div>
+        </>
+      );
+    }
+
     if (chatMode === "threads") {
       return (
         <>
@@ -333,8 +735,12 @@ export const ChatPage: FunctionComponent = () => {
             thread={selectedThread}
             onCompact={() => void handleCompactThread()}
             onCancelActiveTurn={() => void handleCancelActiveTurn()}
+            onRename={handleRenameThread}
             isCompacting={compacting}
             isCancelling={isCancelling}
+            actionFeedbackStatus={feedback.status}
+            actionFeedbackMessage={feedback.message}
+            error={error}
           />
 
           <div id="chat-panel" role="tabpanel" aria-labelledby="tab-threads" className="flex-1 min-h-0 flex flex-col overflow-y-auto">
@@ -364,13 +770,17 @@ export const ChatPage: FunctionComponent = () => {
                       allMessages={messages}
                       agentAvatarConfig={preset?.avatarConfig}
                       agentName={preset?.name}
+                      widgetLiveData={widgetLiveData}
+                      liveEntities={threadLiveEntitiesByMessageId.get(message.id) ?? EMPTY_LIVE_ENTITIES}
+                      onPromptSuggestionSelect={handlePromptSuggestionSelect}
                     />
                   );
                 })}
                 {hasWorkingReply && workingTimerPhase === "starting" ? (
                   <InvocationContainerWidget
                     containerPhase="starting"
-                    providerName={selectedThread?.runtimeState?.virtualProvider ?? null}
+                    providerName={selectedThread?.runtimeState?.providerLabel ?? selectedThread?.runtimeState?.virtualProvider ?? null}
+                    modelName={selectedThread?.runtimeState?.modelLabel ?? null}
                     agentName={activeConnection?.displayName || null}
                   />
                 ) : hasWorkingReply && workingTimerPhase === "working" ? (
@@ -382,11 +792,18 @@ export const ChatPage: FunctionComponent = () => {
           </div>
 
           <div className="shrink-0 border-t border-black/[0.05] p-5 dark:border-white/[0.05]">
+            <div className="mb-3">
+              <ChatCreateAppQuickActions
+                hasProject={Boolean(selectedProject)}
+                sending={sending}
+                onSelect={(kind) => void handleCreateAppQuickaction(kind)}
+              />
+            </div>
             <div className={`rounded-2xl border bg-black/[0.03] p-3 focus-within:border-signal-500/30 dark:bg-white/[0.03] ${error ? 'border-status-red/50 dark:border-status-red/50' : 'border-black/[0.06] dark:border-white/[0.06]'}`}>
               <label htmlFor="message-composer" className="sr-only">Message</label>
               <textarea
                 id="message-composer"
-                aria-describedby="composer-help"
+                aria-describedby="composer-help composer-status"
                 ref={composerRef}
                 value={input}
                 rows={1}
@@ -396,15 +813,20 @@ export const ChatPage: FunctionComponent = () => {
                   const element = event.currentTarget;
                   element.style.height = "auto";
                   element.style.height = `${element.scrollHeight}px`;
+                  rememberComposerSelection(element);
                   setInput(element.value);
                 }}
+                onFocus={(event) => rememberComposerSelection(event.currentTarget)}
+                onClick={(event) => rememberComposerSelection(event.currentTarget)}
+                onSelect={(event) => rememberComposerSelection(event.currentTarget)}
+                onKeyUp={(event) => rememberComposerSelection(event.currentTarget)}
                 onKeyDown={(event) => {
                   if (event.isComposing) {
                     return;
                   }
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
-                    void handleSend();
+                    void submitComposerMessage();
                     return;
                   }
                   if (event.key === "ArrowUp" || event.key === "ArrowDown") {
@@ -426,37 +848,57 @@ export const ChatPage: FunctionComponent = () => {
                         composerRef.current.style.height = `${composerRef.current.scrollHeight}px`;
                         const pos = direction === "up" ? 0 : composerRef.current.value.length;
                         composerRef.current.setSelectionRange(pos, pos);
+                        composerSelectionRef.current = { start: pos, end: pos };
                       });
                     }
                   }
                 }}
               />
               <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div id="composer-help" className="text-[10px] font-mono text-slate-400">
-                  {activeConnection
-                    ? `${activeConnection.displayName} · ${activeConnection.status} · Enter sends`
-                    : "Messages will stay queued until a listener claims or is assigned to this thread · Enter sends · Shift+Enter newline"}
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div id="composer-help" className="text-[10px] font-mono text-slate-400">
+                    {activeConnection
+                      ? `${activeConnection.displayName} · ${activeConnection.status} · Enter sends`
+                      : "Messages will stay queued until a listener claims or is assigned to this thread · Enter sends · Shift+Enter newline"}
+                  </div>
+                  <div
+                    id="composer-status"
+                    role={composerStatus.tone === "failed" ? "alert" : "status"}
+                    aria-live={composerStatus.tone === "failed" ? "assertive" : "polite"}
+                    aria-atomic="true"
+                    className={`rounded-xl border px-3 py-2 text-xs font-semibold leading-relaxed ${COMPOSER_STATUS_TONE_CLASS[composerStatus.tone]}`}
+                  >
+                    {composerStatus.visibleText}
+                  </div>
                 </div>
-                <div className="sr-only" aria-live="polite">
-                  {sending ? "Sending message..." : ""}
-                  {error ? `Failed: ${error}` : ""}
+                <div className="sr-only" aria-live={composerStatus.tone === "failed" ? "assertive" : "polite"} aria-atomic="true">
+                  {composerStatus.liveText}
                 </div>
-                <button
-                  aria-label={sending ? "Sending message" : "Send message"}
-                  aria-busy={sending}
-                  type="button"
-                  onClick={() => void handleSend()}
-                  disabled={!selectedProject || !input.trim() || sending}
-                  className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[1rem] transition-all self-end sm:self-auto ${
-                    !selectedProject || (!input.trim() && !sending)
-                      ? "cursor-not-allowed bg-black/[0.06] text-slate-400 shadow-none dark:bg-white/[0.06]"
-                      : sending
-                        ? "cursor-wait bg-signal-500/50 text-white dark:text-void-900 shadow-none scale-95"
-                        : "bg-signal-500 text-white dark:text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] hover:bg-signal-400 hover:scale-105 active:scale-95"
-                  }`}
-                >
-                  {sending ? <RefreshCw className="h-4 w-4 animate-spin text-void-900/70 motion-reduce:animate-none" /> : <ArrowUp className="h-5 w-5" strokeWidth={2.5} />}
-                </button>
+                <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+                  <SpeechInputButton
+                    disabled={!selectedProject || sending}
+                    projectId={selectedProject?.id ?? null}
+                    onTranscript={handleSpeechTranscript}
+                    className="h-11 min-w-[7.5rem] sm:min-w-[8.75rem]"
+                  />
+                  <button
+                    aria-label={sendButtonLabel}
+                    aria-busy={sending ? "true" : "false"}
+                    aria-describedby="composer-help composer-status"
+                    type="button"
+                    onClick={() => void submitComposerMessage()}
+                    disabled={sendDisabled}
+                    className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[1rem] transition-all ${
+                      sendDisabled && !sending
+                        ? "cursor-not-allowed bg-black/[0.06] text-slate-400 shadow-none dark:bg-white/[0.06]"
+                        : sending
+                          ? "cursor-wait bg-signal-500/50 text-white dark:text-void-900 shadow-none motion-safe:scale-95"
+                          : "bg-signal-500 text-white dark:text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] hover:bg-signal-400 motion-safe:hover:scale-105 motion-safe:active:scale-95"
+                    }`}
+                  >
+                    {sending ? <RefreshCw className="h-4 w-4 animate-spin text-void-900/70 motion-reduce:animate-none" /> : <ArrowUp className="h-5 w-5" strokeWidth={2.5} />}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -469,6 +911,7 @@ export const ChatPage: FunctionComponent = () => {
     const inv = selectedInvocation;
     const canRestartInvocation = inv?.status === "failed" && inv.type === "planning";
     const canCancelInvocation = inv?.status === "running";
+    const canResetUsageLimitTimer = hasUsageLimitTimer(inv);
     const headerStatus = inv
       ? inv.status === "failed"
         ? { dot: "bg-status-red shadow-[0_0_6px_rgba(227,0,15,0.5)]", text: "text-status-red" }
@@ -542,8 +985,21 @@ export const ChatPage: FunctionComponent = () => {
                     </span>
                   )}
                 </div>
-                {(canRestartInvocation || canCancelInvocation) && (
+                {(canRestartInvocation || canCancelInvocation || canResetUsageLimitTimer) && (
                   <div className="flex flex-wrap items-center gap-2">
+                    {canResetUsageLimitTimer && (
+                      <button
+                        type="button"
+                        onClick={() => void handleResetUsageLimitTimer()}
+                        disabled={resettingUsageLimitInvocationId === inv.id}
+                        aria-busy={resettingUsageLimitInvocationId === inv.id}
+                        aria-label={resettingUsageLimitInvocationId === inv.id ? "Resetting usage limit timer" : "Reset usage limit timer"}
+                        className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-signal-500/25 bg-signal-500/10 px-3 py-2 text-[12px] font-bold text-signal-700 transition hover:border-signal-500/40 hover:bg-signal-500/15 disabled:cursor-wait disabled:opacity-60 dark:text-signal-400"
+                      >
+                        <TimerReset className={`h-3.5 w-3.5 ${resettingUsageLimitInvocationId === inv.id ? "animate-pulse motion-reduce:animate-none" : ""}`} />
+                        {resettingUsageLimitInvocationId === inv.id ? "Resetting..." : "Reset timer"}
+                      </button>
+                    )}
                     {canCancelInvocation && (
                       <button
                         type="button"
@@ -655,7 +1111,7 @@ export const ChatPage: FunctionComponent = () => {
         </div>
 
         <div id="chat-panel" role="tabpanel" aria-labelledby="tab-invocations" className="flex-1 min-h-0 flex flex-col overflow-y-auto">
-          <div role="log" aria-label="Message history" aria-live={messages.length > 0 && !threadsLoading && !threadMessagesLoading ? "polite" : "off"} aria-atomic="false" aria-relevant="additions" ref={messagesRef} className="flex-1 min-h-0 space-y-6 px-6 py-6">
+          <div role="log" aria-label="Message history" aria-live={visibleInvocationMessages.length > 0 && selectedInvocation && !invocationsLoading && !invocationMessagesLoading ? "polite" : "off"} aria-atomic="false" aria-relevant="additions" ref={messagesRef} className="flex-1 min-h-0 space-y-6 px-6 py-6">
           {invocationsLoading && !selectedInvocation ? (
             <LoadingChat label="Loading invocations" />
           ) : !selectedInvocation ? (
@@ -664,9 +1120,14 @@ export const ChatPage: FunctionComponent = () => {
               message="Select an execution invocation to inspect the exact runtime transcript, retry state, and provider response trail."
             />
           ) : invocationMessagesLoading && invocationMessages.length === 0 ? (
-            <LoadingChat label="Loading messages" />
+            <LoadingChat label="Loading invocation transcript" />
           ) : (
             <>
+              {error && (
+                <div role="alert" aria-live="assertive" className="rounded-xl border border-status-red/25 bg-status-red/[0.08] px-3 py-2 text-xs font-semibold leading-relaxed text-status-red">
+                  Transcript could not update: {error}. Use the invocation actions above when available, or switch to Threads to continue the conversation.
+                </div>
+              )}
               {invocationMessagesLoading && invocationMessages.length > 0 && (
                 <div role="status" aria-live="polite" className="rounded-xl border border-black/[0.06] bg-white/75 px-3 py-2 text-xs font-medium text-slate-500 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
                   Refreshing transcript while keeping the current messages visible.
@@ -685,6 +1146,7 @@ export const ChatPage: FunctionComponent = () => {
               />
               <InvocationContainerWidget
                 providerName={selectedInvocation.provider}
+                modelName={selectedInvocation.model}
                 agentName={selectedAgentPreset?.name ?? null}
                 containerPhase={
                   selectedInvocation.status === "running" && selectedInvocation.messageCount === 0
@@ -698,10 +1160,10 @@ export const ChatPage: FunctionComponent = () => {
                 <EmptyChat
                   tone="invocations"
                   title="Transcript Is Empty"
-                  message="This invocation has no stored messages yet. New provider activity will appear here as the runtime records it."
+                  message="This read-only invocation has no stored messages yet. Wait for provider activity to be recorded, choose another invocation, or switch to Threads to send a message."
                 />
               ) : (
-                mergeInvocationToolMessages(invocationMessages).map((message) => {
+                visibleInvocationMessages.map((message) => {
                   if (message.role === "system") {
                     return <TruncatedSystemBubble key={message.id} content={message.contentMarkdown || ""} />;
                   }
@@ -711,6 +1173,8 @@ export const ChatPage: FunctionComponent = () => {
                       message={message}
                       agentAvatarConfig={message.role === "assistant" ? (selectedAgentPreset?.avatarConfig ?? null) : null}
                       agentName={message.role === "assistant" ? (selectedAgentPreset?.name ?? null) : null}
+                      widgetLiveData={widgetLiveData}
+                      liveEntities={invocationLiveEntitiesByMessageId.get(message.id) ?? EMPTY_LIVE_ENTITIES}
                     />
                   );
                 })
@@ -722,8 +1186,8 @@ export const ChatPage: FunctionComponent = () => {
 
         <div className="shrink-0 border-t border-black/[0.05] p-5 dark:border-white/[0.05]">
           <div className="rounded-[1.5rem] border border-black/[0.06] bg-black/[0.03] p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
-            <div className="min-h-[38px] w-full px-2 py-2 text-[15px] leading-relaxed text-slate-400 dark:text-slate-600">
-              Invocation execution logs are read-only. Switch to Threads to communicate.
+            <div role="note" aria-label="Invocation transcript is read-only" className="min-h-[38px] w-full px-2 py-2 text-[15px] leading-relaxed text-slate-500 dark:text-slate-400">
+              Invocation execution logs are read-only. Switch to Threads to communicate. Wait for this run to update or use available retry/cancel actions above.
             </div>
           </div>
         </div>
@@ -735,7 +1199,7 @@ export const ChatPage: FunctionComponent = () => {
     return (
       <ChatPageShell
         selectedProject={null}
-        chatMode={chatMode}
+        chatMode="stage"
         onSetChatMode={setChatMode}
         onCreateThread={() => void createThreadForCompose()}
         pendingDashboardMessages={pendingDashboardMessages}
@@ -743,20 +1207,19 @@ export const ChatPage: FunctionComponent = () => {
         invocationCount={displayedInvocationTotal}
         runningInvocationCount={runningInvocationCount}
         error={error}
-        railSlot={(
-          <ChatRail title="Threads" count={0} secondaryTitle="Listeners" secondaryCount={0}>
-            <ChatRailPlaceholder
-              title="No Project Scope"
-              message="Connect a project first; the thread rail will then become the live inbox for that workspace."
-              actionLabel="Add Project"
-              actionTo="/projects"
-            />
-          </ChatRail>
-        )}
+        title="Code UX Assistant"
+        subtitle="Ask setup questions before a project exists, then continue through explicit dashboard actions."
+        showProjectControls={false}
+        railSlot={null}
         detailSlot={(
-          <EmptyChat
-            tone="project"
-            message="Choose or add a project from the top navigation to unlock stored chat threads, listener routing, and project-scoped conversation history."
+          <NoProjectAssistantPanel
+            initialDraft={noProjectDraft}
+            onInitialDraftConsumed={() => {
+              setNoProjectDraft(null);
+              if (typeof window !== "undefined") {
+                clearChatDraftFromUrl(window);
+              }
+            }}
           />
         )}
       />
@@ -774,7 +1237,7 @@ export const ChatPage: FunctionComponent = () => {
       invocationCount={displayedInvocationTotal}
       runningInvocationCount={runningInvocationCount}
       error={error}
-      railSlot={renderRail()}
+      railSlot={chatMode === "stage" ? null : renderRail()}
       detailSlot={renderDetail()}
     />
   );

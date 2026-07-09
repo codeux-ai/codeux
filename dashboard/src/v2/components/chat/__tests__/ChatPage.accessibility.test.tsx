@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from '@testing-library/preact';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact';
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
 import * as matchers from '@testing-library/jest-dom/matchers';
 expect.extend(matchers);
 
 import { ChatPageShell } from '../ChatPageShell.js';
 import { ChatRail } from '../ChatRail.js';
+import { ThreadListCard } from '../ThreadListCard.js';
+import { InvocationListCard } from '../InvocationListCard.js';
 import { ChatPage } from '../../../ChatPage.js';
 import { WorkingBubble } from '../WorkingBubble.js';
 import { ProjectDataContext } from '../../../context/project-data.js';
@@ -59,6 +62,7 @@ const mocks = vi.hoisted(() => {
     handleSend: vi.fn(),
     navigateHistory: vi.fn(() => false),
     handleDeleteThread: vi.fn(),
+    handleRenameThread: vi.fn(() => Promise.resolve()),
     createThreadForCompose: vi.fn(),
     threadIndex: new Map(),
     invocationIndex: new Map(),
@@ -76,6 +80,7 @@ const mocks = vi.hoisted(() => {
     data: { ...baseData } as any,
     restartExecutionInvocation: vi.fn(),
     cancelExecutionInvocation: vi.fn(),
+    resetInvocationUsageLimitTimer: vi.fn(),
     reducedMotion: { value: false },
   };
 });
@@ -83,7 +88,7 @@ const mocks = vi.hoisted(() => {
 // Mock router
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
-  Link: ({ children }: any) => <div>{children}</div>
+  Link: ({ children, to, ...props }: any) => <a href={to} {...props}>{children}</a>
 }));
 
 // Mock page data hook
@@ -94,6 +99,7 @@ vi.mock('../../../hooks/use-chat-page-data.js', () => ({
 vi.mock('../../../lib/invocation-api.js', () => ({
   restartExecutionInvocation: mocks.restartExecutionInvocation,
   cancelExecutionInvocation: mocks.cancelExecutionInvocation,
+  resetInvocationUsageLimitTimer: mocks.resetInvocationUsageLimitTimer,
 }));
 
 vi.mock('../../../hooks/use-reduced-motion.js', () => ({
@@ -107,6 +113,11 @@ vi.mock('../../../hooks/use-project-effective-settings.js', () => ({
 }));
 
 describe('ChatPage Accessibility', () => {
+  afterEach(() => {
+    cleanup();
+    window.history.pushState({}, "", "/");
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.reducedMotion.value = false;
@@ -119,10 +130,21 @@ describe('ChatPage Accessibility', () => {
       selectedInvocationId: null,
       invocationMessages: [],
       invocationMessagesLoading: false,
+      selectedProject: { id: "p1", name: "Project 1" },
+      selectedThread: null,
+      selectedThreadId: "thread1",
+      activeConnection: null,
+      pendingDashboardMessages: 0,
+      hasWorkingReply: false,
+      threadsLoading: false,
+      threadMessagesLoading: false,
       sending: true,
       input: "Ship it",
       error: "Test error",
       feedback: { status: "idle", message: null },
+      createThreadForCompose: vi.fn(),
+      handleSend: vi.fn(),
+      handleRenameThread: vi.fn(() => Promise.resolve()),
     };
   });
 
@@ -151,11 +173,13 @@ describe('ChatPage Accessibility', () => {
     expect(tablist).toHaveClass('flex-wrap');
 
     const tabs = screen.getAllByRole('tab');
-    expect(tabs).toHaveLength(2);
-    expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
-    expect(tabs[0]).toHaveAccessibleName('Threads, 2 threads');
-    expect(tabs[1]).toHaveAttribute('aria-selected', 'false');
-    expect(tabs[1]).toHaveAccessibleName('Invocations, 1 running');
+    expect(tabs).toHaveLength(3);
+    expect(tabs[0]).toHaveAttribute('aria-selected', 'false');
+    expect(tabs[0]).toHaveAccessibleName('3D Chat, animated project manager, 2 threads');
+    expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
+    expect(tabs[1]).toHaveAccessibleName('Threads, 2 threads');
+    expect(tabs[2]).toHaveAttribute('aria-selected', 'false');
+    expect(tabs[2]).toHaveAccessibleName('Invocations, 1 running');
     expect(screen.queryByRole('button', { name: /refresh/i })).not.toBeInTheDocument();
   });
 
@@ -218,9 +242,9 @@ describe('ChatPage Accessibility', () => {
     const detailPanel = screen.getByText('Transcript').closest('section');
     const splitPane = detailPanel?.parentElement;
 
-    expect(rail).toHaveClass('h-full', 'overflow-hidden', 'lg:max-h-full');
+    expect(rail).toHaveClass('overflow-hidden', 'md:h-full', 'md:max-h-none');
     expect(detailPanel).toHaveClass('min-h-0', 'overflow-hidden');
-    expect(splitPane).toHaveClass('min-h-0', 'overflow-hidden', 'lg:grid-rows-[minmax(0,1fr)]');
+    expect(splitPane).toHaveClass('min-h-0', 'overflow-hidden', 'md:grid-rows-[minmax(0,1fr)]');
   });
 
   it('has accessible message composer and regions', () => {
@@ -235,7 +259,7 @@ describe('ChatPage Accessibility', () => {
 
     const textbox = screen.getByRole('textbox', { name: "Message" });
     expect(textbox).toBeInTheDocument();
-    expect(textbox).toHaveAttribute('aria-describedby', 'composer-help');
+    expect(textbox).toHaveAttribute('aria-describedby', 'composer-help composer-status');
 
     const helpText = screen.getByText(/Enter sends/i);
     expect(helpText).toHaveAttribute('id', 'composer-help');
@@ -245,12 +269,552 @@ describe('ChatPage Accessibility', () => {
     expect(sendBtn).toHaveAttribute('aria-busy', 'true');
 
     // We mocked sending: true, so the "Sending message..." text should exist
-    const liveRegion = screen.getByText(/Sending message\.\.\./);
-    expect(liveRegion).toHaveAttribute('aria-live', 'polite');
+    const statusText = screen.getByText(/Sending message to Code UX/i);
+    expect(statusText).toHaveAttribute('id', 'composer-status');
+    expect(statusText).toHaveAttribute('aria-live', 'polite');
+    expect(sendBtn).toHaveAttribute('aria-describedby', 'composer-help composer-status');
+  });
 
-    // Check if error is correctly displayed as well
-    const liveError = screen.getByText(/Failed: Test error/);
-    expect(liveError).toHaveAttribute('aria-live', 'polite');
+  it('explains disabled and ready send states without hiding the composer', () => {
+    mocks.data = {
+      ...mocks.data,
+      sending: false,
+      input: "",
+      error: null,
+      pendingDashboardMessages: 0,
+      messages: [],
+    };
+
+    const renderPage = () => (
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+    const { rerender } = render(renderPage());
+
+    expect(screen.getByText(/Write a message to enable send/i)).toHaveAttribute("id", "composer-status");
+    expect(screen.getByRole("button", { name: /Write a message before sending/i })).toBeDisabled();
+
+    mocks.data = {
+      ...mocks.data,
+      input: "Ready now",
+    };
+    rerender(renderPage());
+
+    expect(screen.getByText(/Ready to send/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
+  });
+
+  it('uses invocation message loading state for invocation transcript announcements', () => {
+    const invocation = {
+      id: "inv-1",
+      projectId: "p1",
+      sprintId: null,
+      taskId: null,
+      sprintRunId: null,
+      dispatchId: null,
+      taskRunId: null,
+      attentionItemId: null,
+      providerInvocationId: null,
+      type: "planning",
+      status: "running",
+      provider: "mock",
+      model: "mock",
+      systemPrompt: null,
+      startedAt: "2026-03-10T12:00:00.000Z",
+      finishedAt: null,
+      errorMessage: null,
+      lastErrorCategory: null,
+      lastErrorMessage: null,
+      lastRetryAfterIso: null,
+      messageCount: 1,
+      lastMessageAt: "2026-03-10T12:01:00.000Z",
+      createdAt: "2026-03-10T12:00:00.000Z",
+      updatedAt: "2026-03-10T12:00:00.000Z",
+    } as any;
+
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "invocations",
+      sending: false,
+      input: "",
+      error: null,
+      messages: [{
+        id: "thread-msg-1",
+        threadId: "thread1",
+        direction: "dashboard_to_connection",
+        authorType: "dashboard_user",
+        authorConnectionId: null,
+        bodyMarkdown: "Thread message should not drive invocation live state.",
+        deliveryStatus: "delivered",
+        metadata: null,
+        createdAt: "2026-03-10T12:00:00.000Z",
+      }],
+      invocations: [invocation],
+      selectedInvocationId: "inv-1",
+      selectedInvocation: invocation,
+      invocationMessages: [],
+      invocationMessagesLoading: true,
+      threadsLoading: false,
+      threadMessagesLoading: false,
+    };
+
+    const renderPage = () => (
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+    const { rerender } = render(renderPage());
+
+    expect(screen.getByRole("log", { name: "Message history" })).toHaveAttribute("aria-live", "off");
+    expect(screen.getByText("Loading invocation transcript")).toBeInTheDocument();
+
+    mocks.data = {
+      ...mocks.data,
+      invocationMessagesLoading: false,
+      invocationMessages: [{
+        id: "inv-msg-1",
+        invocationId: "inv-1",
+        role: "assistant",
+        contentMarkdown: "Invocation message loaded.",
+        toolCallsJson: null,
+        metadata: null,
+        createdAt: "2026-03-10T12:01:00.000Z",
+      }],
+    };
+    rerender(renderPage());
+
+    expect(screen.getByRole("log", { name: "Message history" })).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByText("Invocation message loaded.")).toBeInTheDocument();
+    expect(screen.getByRole("note", { name: "Invocation transcript is read-only" })).toHaveTextContent(/Switch to Threads to communicate/i);
+    expect(screen.getByRole("note", { name: "Invocation transcript is read-only" })).toHaveTextContent(/use available retry\/cancel actions/i);
+  });
+
+  it('marks selected rail cards and pending or failed runtime state distinctly', () => {
+    const thread = {
+      id: "thread-selected",
+      projectId: "p1",
+      connectionId: null,
+      scope: "project",
+      title: "Selected Thread",
+      status: "open",
+      createdAt: "2026-03-10T12:00:00.000Z",
+      updatedAt: "2026-03-10T12:00:00.000Z",
+      messageCount: 2,
+      pendingMessageCount: 1,
+      lastMessageAt: "2026-03-10T12:00:00.000Z",
+      lastMessagePreview: "Queued work",
+      runtimeState: null,
+    } as any;
+    const invocation = {
+      id: "inv-failed",
+      projectId: "p1",
+      sprintId: null,
+      taskId: null,
+      sprintRunId: null,
+      dispatchId: null,
+      taskRunId: null,
+      attentionItemId: null,
+      providerInvocationId: null,
+      type: "planning",
+      status: "failed",
+      provider: "mock",
+      model: "mock",
+      systemPrompt: null,
+      startedAt: "2026-03-10T12:00:00.000Z",
+      finishedAt: "2026-03-10T12:02:00.000Z",
+      errorMessage: null,
+      lastErrorCategory: "UNKNOWN",
+      lastErrorMessage: "Provider failed.",
+      lastRetryAfterIso: null,
+      messageCount: 1,
+      lastMessageAt: "2026-03-10T12:02:00.000Z",
+      createdAt: "2026-03-10T12:00:00.000Z",
+      updatedAt: "2026-03-10T12:02:00.000Z",
+    } as any;
+
+    const { container, unmount } = render(
+      <ThreadListCard
+        threads={[thread]}
+        selectedThreadId="thread-selected"
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+        deletingThreadId={null}
+      />
+    );
+    const threadCard = screen.getByRole("button", { name: /Selected Thread.*Selected.*1 queued message/i });
+    expect(threadCard).toHaveAttribute("data-selected", "true");
+    expect(threadCard).toHaveAttribute("data-pending", "true");
+    expect(container.textContent).toContain("Selected");
+    unmount();
+
+    render(
+      <InvocationListCard
+        invocations={[invocation]}
+        selectedInvocationId="inv-failed"
+        onSelect={vi.fn()}
+      />
+    );
+    const invocationCard = screen.getByRole("button", { name: /Planning.*Selected.*Failed/i });
+    expect(invocationCard).toHaveAttribute("data-selected", "true");
+    expect(invocationCard).toHaveAttribute("data-status", "failed");
+    expect(screen.getAllByText("Failed").length).toBeGreaterThan(0);
+  });
+
+  it('renders local no-project onboarding assistant without the project composer', async () => {
+    const user = userEvent.setup();
+    mocks.reducedMotion.value = true;
+    mocks.data = {
+      ...mocks.data,
+      selectedProject: null,
+      chatMode: "threads",
+      sending: false,
+      input: "",
+      error: null,
+      pendingDashboardMessages: 0,
+    };
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [], selectedProject: null } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+
+    expect(screen.getByRole("heading", { name: "Code UX Assistant" })).toBeInTheDocument();
+    expect(screen.getByRole("log", { name: "No-project assistant replies" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Message" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tablist", { name: "Chat Mode" })).not.toBeInTheDocument();
+
+    const quickBubbles = [
+      "Add my first project",
+      "Build a desktop app",
+      "Build a web app",
+      "Explain Code UX",
+      "Change settings",
+    ];
+    for (const label of quickBubbles) {
+      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+    }
+
+    await user.click(screen.getByRole("button", { name: "Explain Code UX" }));
+
+    expect(screen.getByText("Explain what Code UX does before I add a project.")).toBeInTheDocument();
+    expect(screen.getByText(/Code UX is a local-first runtime/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Start Onboarding/i }).length).toBeGreaterThan(0);
+  });
+
+  it('turns no-project URL drafts into local assistant turns without sending', () => {
+    mocks.reducedMotion.value = true;
+    mocks.data = {
+      ...mocks.data,
+      selectedProject: null,
+      chatMode: "threads",
+      sending: false,
+      input: "",
+      error: null,
+      handleSend: vi.fn(),
+    };
+    window.history.pushState({}, "", "/chat?draft=Can%20you%20help%20me%20get%20started%3F");
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [], selectedProject: null } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+
+    expect(screen.getByText("Can you help me get started?")).toBeInTheDocument();
+    expect(screen.getByText(/I can help once a project exists/i)).toBeInTheDocument();
+    expect(mocks.data.handleSend).not.toHaveBeenCalled();
+    expect(window.location.search).not.toContain("draft=");
+  });
+
+  it('sends web and desktop setup as idle 3D chat quick actions for the active project', async () => {
+    const user = userEvent.setup();
+    mocks.reducedMotion.value = true;
+    const handleSend = vi.fn(() => Promise.resolve());
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "stage",
+      sending: false,
+      input: "",
+      error: null,
+      hasWorkingReply: false,
+      runningInvocationCount: 0,
+      selectedThread: mocks.data.threads[0],
+      handleSend,
+    };
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+
+    const webAction = screen.getByRole("button", { name: "Web App" });
+    const desktopAction = screen.getByRole("button", { name: "Desktop App" });
+
+    expect(webAction).toBeInTheDocument();
+    expect(desktopAction).toBeInTheDocument();
+
+    await user.click(webAction);
+
+    expect(handleSend).toHaveBeenCalledWith(expect.stringContaining("Set up this existing project as a web app"));
+    expect(handleSend).toHaveBeenCalledWith(expect.stringContaining("Do not create or import a new Code UX project."));
+    expect(handleSend).toHaveBeenCalledWith(expect.stringContaining("current techstack setting"));
+  });
+
+  it('sends prompt suggestions directly without changing the thread composer', async () => {
+    const user = userEvent.setup();
+    const handleSend = vi.fn(() => Promise.resolve());
+    const setInput = vi.fn();
+    const assistantMessage = {
+      id: "message-suggestion",
+      threadId: "thread1",
+      projectId: "p1",
+      connectionId: null,
+      direction: "connection_to_dashboard",
+      authorType: "connection",
+      authorName: "Assistant",
+      bodyMarkdown: "Pick a follow-up.",
+      metadata: {
+        promptSuggestions: [{
+          id: "audit",
+          label: "Run audit",
+          prompt: "Run pnpm audit and summarize the result.",
+          icon: "terminal",
+        }],
+      },
+      deliveryStatus: "delivered",
+      createdAt: "2026-03-10T12:02:00.000Z",
+      updatedAt: "2026-03-10T12:02:00.000Z",
+    };
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "threads",
+      sending: false,
+      input: "Keep this draft",
+      setInput,
+      error: null,
+      messages: [assistantMessage],
+      selectedThread: mocks.data.threads[0],
+      handleSend,
+    };
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+
+    const suggestion = screen.getByRole("button", { name: "Use suggestion: Run audit" });
+    await user.click(suggestion);
+
+    expect(handleSend).toHaveBeenCalledWith("Run pnpm audit and summarize the result.");
+    expect(setInput).not.toHaveBeenCalled();
+    const composer = screen.getByRole("textbox", { name: "Message" });
+    expect(composer).toHaveValue("Keep this draft");
+    await waitFor(() => expect(composer).toHaveFocus());
+  });
+
+  it('sends prompt suggestions from keyboard activation like pointer activation', async () => {
+    const user = userEvent.setup();
+    const handleSend = vi.fn(() => Promise.resolve());
+    const setInput = vi.fn();
+    const assistantMessage = {
+      id: "message-keyboard-suggestion",
+      threadId: "thread1",
+      projectId: "p1",
+      connectionId: null,
+      direction: "connection_to_dashboard",
+      authorType: "connection",
+      authorName: "Assistant",
+      bodyMarkdown: "Pick a keyboard follow-up.",
+      metadata: {
+        promptSuggestions: [{
+          id: "status",
+          label: "Status report",
+          prompt: "Give me the current project status.",
+          icon: "search",
+        }],
+      },
+      deliveryStatus: "delivered",
+      createdAt: "2026-03-10T12:03:00.000Z",
+      updatedAt: "2026-03-10T12:03:00.000Z",
+    };
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "threads",
+      sending: false,
+      input: "Draft stays",
+      setInput,
+      error: null,
+      messages: [assistantMessage],
+      selectedThread: mocks.data.threads[0],
+      handleSend,
+    };
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+
+    const suggestion = screen.getByRole("button", { name: "Use suggestion: Status report" });
+    suggestion.focus();
+    await user.keyboard("{Enter}");
+
+    expect(handleSend).toHaveBeenCalledWith("Give me the current project status.");
+    expect(setInput).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("Draft stays");
+  });
+
+  it('sends cinematic stage action widgets directly without changing the composer', async () => {
+    const user = userEvent.setup();
+    mocks.reducedMotion.value = true;
+    const handleSend = vi.fn(() => Promise.resolve());
+    const setInput = vi.fn();
+    const assistantMessage = {
+      id: "message-stage-action",
+      threadId: "thread1",
+      projectId: "p1",
+      connectionId: null,
+      direction: "connection_to_dashboard",
+      authorType: "connection",
+      authorName: "Assistant",
+      bodyMarkdown: [
+        "Choose a next step.",
+        "```codeux:actions",
+        JSON.stringify({ items: [{ label: "Widget next step", prompt: "Plan the next sprint tasks." }] }),
+        "```",
+      ].join("\n"),
+      metadata: {},
+      deliveryStatus: "delivered",
+      createdAt: "2026-03-10T12:04:00.000Z",
+      updatedAt: "2026-03-10T12:04:00.000Z",
+    };
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "stage",
+      sending: false,
+      input: "Stage draft",
+      setInput,
+      error: null,
+      hasWorkingReply: false,
+      runningInvocationCount: 0,
+      messages: [assistantMessage],
+      selectedThread: mocks.data.threads[0],
+      handleSend,
+    };
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Widget next step" }));
+
+    expect(handleSend).toHaveBeenCalledWith("Plan the next sprint tasks.");
+    expect(setInput).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "Message the project manager" })).toHaveValue("Stage draft");
+  });
+
+  it('sends cinematic stage action widgets from keyboard activation without changing the composer', async () => {
+    const user = userEvent.setup();
+    mocks.reducedMotion.value = true;
+    const handleSend = vi.fn(() => Promise.resolve());
+    const setInput = vi.fn();
+    const assistantMessage = {
+      id: "message-stage-keyboard-action",
+      threadId: "thread1",
+      projectId: "p1",
+      connectionId: null,
+      direction: "connection_to_dashboard",
+      authorType: "connection",
+      authorName: "Assistant",
+      bodyMarkdown: [
+        "Choose a keyboard next step.",
+        "```codeux:actions",
+        JSON.stringify({ items: [{ label: "Keyboard widget next step", prompt: "Inspect the test failures." }] }),
+        "```",
+      ].join("\n"),
+      metadata: {},
+      deliveryStatus: "delivered",
+      createdAt: "2026-03-10T12:05:00.000Z",
+      updatedAt: "2026-03-10T12:05:00.000Z",
+    };
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "stage",
+      sending: false,
+      input: "Keyboard stage draft",
+      setInput,
+      error: null,
+      hasWorkingReply: false,
+      runningInvocationCount: 0,
+      messages: [assistantMessage],
+      selectedThread: mocks.data.threads[0],
+      handleSend,
+    };
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+
+    const action = screen.getByRole("button", { name: "Keyboard widget next step" });
+    action.focus();
+    await user.keyboard("{Enter}");
+
+    expect(handleSend).toHaveBeenCalledWith("Inspect the test failures.");
+    expect(setInput).not.toHaveBeenCalled();
+    const composer = screen.getByRole("textbox", { name: "Message the project manager" });
+    expect(composer).toHaveValue("Keyboard stage draft");
+    await waitFor(() => expect(composer).toHaveFocus());
+  });
+
+  it('keeps the active header and thread rail synchronized after rename', async () => {
+    const user = userEvent.setup();
+    const initialThread = { ...mocks.data.threads[0], title: "Thread 1" };
+    mocks.data = {
+      ...mocks.data,
+      threads: [initialThread],
+      selectedThread: initialThread,
+      selectedThreadId: initialThread.id,
+      threadIndex: new Map([[initialThread.id, initialThread]]),
+      sending: false,
+      input: "",
+      error: null,
+    };
+    mocks.data.handleRenameThread = vi.fn(async (title: string) => {
+      const updatedThread = { ...initialThread, title, updatedAt: "2026-03-10T12:01:00.000Z" };
+      mocks.data.threads = [updatedThread];
+      mocks.data.selectedThread = updatedThread;
+      mocks.data.threadIndex = new Map([[updatedThread.id, updatedThread]]);
+    });
+
+    const renderPage = () => (
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+    const { rerender } = render(renderPage());
+
+    await user.click(screen.getByRole("button", { name: "Rename Thread 1" }));
+    const titleInput = screen.getByRole("textbox", { name: "Thread title" });
+    await user.clear(titleInput);
+    await user.type(titleInput, "Renamed Session");
+    await user.click(screen.getByRole("button", { name: "Save thread title" }));
+
+    await waitFor(() => {
+      expect(mocks.data.handleRenameThread).toHaveBeenCalledWith("Renamed Session");
+    });
+
+    rerender(renderPage());
+
+    expect(screen.getAllByRole("heading", { name: "Renamed Session" })).toHaveLength(2);
+    expect(screen.getAllByText("Renamed Session")).toHaveLength(2);
   });
 
   it('suppresses duplicate invocation restarts and shows retry feedback', async () => {
@@ -314,7 +878,7 @@ describe('ChatPage Accessibility', () => {
     const status = screen.getByRole("status");
     expect(status).toHaveAttribute("aria-live", "polite");
     expect(status).toHaveAttribute("aria-atomic", "true");
-    expect(status).toHaveTextContent("Codex is preparing a reply. Working on a reply.");
+    expect(status).not.toHaveTextContent("Codex is preparing a reply. Working on a reply.");
     expect(status).toHaveTextContent("Working");
   });
 });

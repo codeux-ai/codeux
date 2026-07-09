@@ -52,6 +52,25 @@ function serializePayload(payload?: Record<string, unknown> | null): string | nu
   return JSON.stringify(payload);
 }
 
+function getSeverityRank(severity: string): number {
+  switch (severity) {
+    case "critical":
+      return 0;
+    case "high":
+      return 1;
+    case "medium":
+      return 2;
+    default:
+      return 3;
+  }
+}
+
+function compareProjectAttentionRows(left: ProjectAttentionItemRow, right: ProjectAttentionItemRow): number {
+  return getSeverityRank(left.severity) - getSeverityRank(right.severity)
+    || right.opened_at.localeCompare(left.opened_at)
+    || right.id.localeCompare(left.id);
+}
+
 export interface OpenProjectAttentionItemInput {
   projectId: string;
   sprintId?: string | null;
@@ -89,6 +108,12 @@ export interface ResolveProjectAttentionItemInput {
   payloadPatch?: Record<string, unknown> | null;
 }
 
+export interface ListProjectAttentionItemsOptions {
+  statuses?: ProjectAttentionStatus[];
+  limit?: number;
+  selectedSprintId?: string | null;
+}
+
 export class ProjectAttentionRepository {
   private readonly db: DatabaseAdapter;
 
@@ -108,11 +133,67 @@ export class ProjectAttentionRepository {
     return rows.map(r => r.project_id);
   }
 
+  listResolvedWorkerMergeConflicts(projectId: string, sprintId?: string | null): Array<{
+    itemId: string;
+    taskId: string;
+    sourceBranch: string | null;
+    targetBranch: string | null;
+  }> {
+    const sprintClause = sprintId ? "AND sprint_id = ?" : "";
+    const rows = this.db.prepare(`
+      SELECT DISTINCT
+        id,
+        task_id,
+        json_extract(payload_json, '$.conflictingBranches.source') AS source_branch,
+        json_extract(payload_json, '$.conflictingBranches.target') AS target_branch
+      FROM project_attention_items
+      WHERE project_id = ?
+        ${sprintClause}
+        AND task_id IS NOT NULL
+        AND attention_type = 'merge_conflict'
+        AND owner_type = 'worker'
+        AND status = 'resolved'
+        AND json_extract(payload_json, '$.resolutionReason') IN (
+          'virtual_worker_merge_conflict_resolved',
+          'virtual_worker_merge_conflict_already_resolved'
+        )
+        AND COALESCE(json_extract(payload_json, '$.branchMergeRetryConsumed'), 0) != 1
+    `).all(...(sprintId ? [projectId, sprintId] : [projectId])) as Array<{
+      id: string;
+      task_id: string | null;
+      source_branch: string | null;
+      target_branch: string | null;
+    }>;
+
+    return rows
+      .filter((row): row is { id: string; task_id: string; source_branch: string | null; target_branch: string | null } => Boolean(row.task_id))
+      .map(row => ({
+        itemId: row.id,
+        taskId: row.task_id,
+        sourceBranch: row.source_branch,
+        targetBranch: row.target_branch,
+      }));
+  }
+
+  listResolvedWorkerMergeConflictTaskIds(projectId: string, sprintId?: string | null): string[] {
+    return this.listResolvedWorkerMergeConflicts(projectId, sprintId).map(row => row.taskId);
+  }
+
   listProjectAttentionItems(
     projectId: string,
-    options?: { statuses?: ProjectAttentionStatus[]; limit?: number },
+    options?: ListProjectAttentionItemsOptions,
   ): ProjectAttentionItemRecord[] {
     const statuses = (options?.statuses || []).filter(Boolean);
+    const selectedSprintId = typeof options?.selectedSprintId === "string" && options.selectedSprintId.length > 0
+      ? options.selectedSprintId
+      : null;
+    if (selectedSprintId) {
+      return this.listProjectAttentionItemsForSprint(projectId, selectedSprintId, {
+        statuses,
+        limit: options?.limit,
+      });
+    }
+
     const statusClause = statuses.length > 0
       ? `AND status IN (${statuses.map(() => "?").join(", ")})`
       : "";
@@ -129,6 +210,69 @@ export class ProjectAttentionRepository {
     `).all(projectId, ...statuses, Math.max(1, options?.limit || 50)) as unknown as ProjectAttentionItemRow[];
 
     return rows.map((row) => this.mapRow(row));
+  }
+
+  private listProjectAttentionItemsForSprint(
+    projectId: string,
+    selectedSprintId: string,
+    options: { statuses: ProjectAttentionStatus[]; limit?: number },
+  ): ProjectAttentionItemRecord[] {
+    const limit = Math.max(1, options.limit || 50);
+    const statusClause = options.statuses.length > 0
+      ? `AND status IN (${options.statuses.map(() => "?").join(", ")})`
+      : "";
+
+    const sprintRows = this.db.prepare(`
+      SELECT *
+      FROM project_attention_items
+      WHERE project_id = ?
+        AND sprint_id = ?
+        ${statusClause}
+      ORDER BY
+        CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END ASC,
+        opened_at DESC,
+        id DESC
+      LIMIT ?
+    `).all(projectId, selectedSprintId, ...options.statuses, limit) as unknown as ProjectAttentionItemRow[];
+
+    const sprintRunIds = this.db.prepare(`
+      SELECT id
+      FROM sprint_runs
+      WHERE project_id = ?
+        AND sprint_id = ?
+      ORDER BY created_at DESC, id DESC
+    `).all(projectId, selectedSprintId) as Array<{ id: string }>;
+
+    const sprintRunRows = sprintRunIds.length > 0
+      ? executeChunkedInQuery<ProjectAttentionItemRow>((sql) => this.db.prepare(sql), {
+        sqlPrefix: `
+          SELECT *
+          FROM project_attention_items
+          WHERE sprint_run_id
+        `,
+        sqlSuffix: `
+          AND project_id = ?
+          ${statusClause}
+          ORDER BY
+            CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END ASC,
+            opened_at DESC,
+            id DESC
+          LIMIT ?
+        `,
+        items: sprintRunIds.map((row) => row.id),
+        bindParamsAfter: [projectId, ...options.statuses, limit],
+      })
+      : [];
+
+    const byId = new Map<string, ProjectAttentionItemRow>();
+    for (const row of [...sprintRows, ...sprintRunRows]) {
+      byId.set(row.id, row);
+    }
+
+    return [...byId.values()]
+      .sort(compareProjectAttentionRows)
+      .slice(0, limit)
+      .map((row) => this.mapRow(row));
   }
 
   getAttentionItem(itemId: string): ProjectAttentionItemRecord | null {

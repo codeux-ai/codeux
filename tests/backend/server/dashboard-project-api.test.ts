@@ -16,6 +16,7 @@ import { AgentPresetRepository } from "../../../src/repositories/agent-preset-re
 import { SettingsRepository } from "../../../src/repositories/settings-repository.js";
 import { WorkerEndpointRepository } from "../../../src/repositories/worker-endpoint-repository.js";
 import { ProjectWorkerAssignmentRepository } from "../../../src/repositories/project-worker-assignment-repository.js";
+import { TaskSelfReflectionRatingRepository } from "../../../src/repositories/task-self-reflection-rating-repository.js";
 import { SprintMarkdownService } from "../../../src/services/sprint-markdown-service.js";
 import { AgentPresetSyncService } from "../../../src/services/agent-preset-sync-service.js";
 import { ProjectAttentionService } from "../../../src/domain/workers/project-attention-service.js";
@@ -28,6 +29,20 @@ type TestFetchResponse = {
   status: number;
   json: () => Promise<unknown>;
 };
+
+interface ApiTaskWithSelfReflection {
+  id: string;
+  selfReflectionRating?: {
+    sourceTaskRunId: string;
+    overallRating: number;
+    sections: Array<{
+      label: string;
+      normalizedLabel: string;
+      rating: number;
+      note: string | null;
+    }>;
+  };
+}
 
 const mapExecutionConnections = (connections: McpConnectionRecord[]) => (
   connections.map((connection) => ({
@@ -213,6 +228,7 @@ async function createServerHandle(): Promise<{
       attentionItems: mapAttentionItems(projectAttentionRepository, projectId),
     }),
     getProjectStatsSnapshot: (projectId, window) => executionRepository.getProjectStatsSnapshot(projectId, window),
+    getHeaderTokenThroughputSnapshot: (query) => executionRepository.getHeaderTokenThroughputSnapshot(query),
     setPreferredWorker: (projectId, input) => mapAssignedWorkers(
       projectWorkerAssignmentRepository,
       projectId,
@@ -338,6 +354,9 @@ async function createServerHandle(): Promise<{
     deleteAgentPreset: async (agentPresetId) => await agentPresetSyncService.deleteAgentPreset(agentPresetId),
     importAgentPresetFromMarkdown: async (agentPresetId) => await agentPresetSyncService.importAgentPresetFromMarkdown(agentPresetId),
     syncAllAgentPresetsFromMarkdown: async (projectId) => await agentPresetSyncService.syncAllAgentPresetsFromMarkdown(projectId),
+    pullAgentPresetsFromMarkdown: async (projectId) => await agentPresetSyncService.pullAgentPresetsFromMarkdown(projectId),
+    pushAgentPresetsToMarkdown: async (projectId, options) => await agentPresetSyncService.pushAgentPresetsToMarkdown(projectId, options),
+    exportAgentPresetToMarkdown: async (agentPresetId) => await agentPresetSyncService.exportAgentPresetToMarkdown(agentPresetId),
     listConversationThreads: (projectId) => connectionRepository.listThreads(projectId),
     createConversationThread: (projectId, input) => connectionRepository.createThread(projectId, input),
     updateConversationThread: (threadId, input) => connectionRepository.updateThread(threadId, input),
@@ -697,6 +716,187 @@ describe("dashboard project management API", () => {
       name: "Activity Project",
       lastRunAt: "2026-03-12T10:11:12.000Z",
       lastRunStatus: "in_progress",
+    });
+  });
+
+  it("serializes latest task self-reflection ratings in GET /api/projects/:projectId/tasks", async () => {
+    const { fetch, storage, executionRepository } = await createServerHandle();
+    const ratingRepository = new TaskSelfReflectionRatingRepository(storage);
+    const baseUrl = "http://127.0.0.1";
+
+    const projectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Task Rating API Project", sourceType: "local", sourceRef: "/tmp/task-rating-api" }),
+    });
+    expect(projectResponse.status).toBe(201);
+    const project = await projectResponse.json() as { id: string };
+
+    const sprintResponse = await fetch(`${baseUrl}/api/projects/${project.id}/sprints`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Task Rating API Sprint", goal: "Expose ratings" }),
+    });
+    expect(sprintResponse.status).toBe(201);
+    const sprint = await sprintResponse.json() as { id: string };
+
+    const ratedTaskResponse = await fetch(`${baseUrl}/api/projects/${project.id}/tasks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sprintId: sprint.id, taskKey: "T1", title: "Rated task" }),
+    });
+    expect(ratedTaskResponse.status).toBe(201);
+    const ratedTask = await ratedTaskResponse.json() as { id: string };
+
+    const unratedTaskResponse = await fetch(`${baseUrl}/api/projects/${project.id}/tasks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sprintId: sprint.id, taskKey: "T2", title: "Unrated task" }),
+    });
+    expect(unratedTaskResponse.status).toBe(201);
+    const unratedTask = await unratedTaskResponse.json() as { id: string };
+
+    const olderRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: ratedTask.id,
+      provider: "codex",
+      state: "COMPLETED",
+    });
+    const latestRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: ratedTask.id,
+      provider: "codex",
+      state: "COMPLETED",
+    });
+    ratingRepository.upsertForTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: ratedTask.id,
+      sourceTaskRunId: olderRun.id,
+      overallRating: 2,
+      sections: [],
+      capturedAt: "2026-06-01T10:00:00.000Z",
+    });
+    ratingRepository.upsertForTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: ratedTask.id,
+      sourceTaskRunId: latestRun.id,
+      overallRating: 4,
+      sections: [
+        { label: "Testing", normalizedLabel: "testing", rating: 5, note: "Serialized" },
+      ],
+      capturedAt: "2026-06-01T10:10:00.000Z",
+    });
+
+    const tasksResponse = await fetch(`${baseUrl}/api/projects/${project.id}/tasks?sprintId=${sprint.id}`);
+    expect(tasksResponse.status).toBe(200);
+    const tasks = await tasksResponse.json() as ApiTaskWithSelfReflection[];
+    const mappedRated = tasks.find((task) => task.id === ratedTask.id);
+    const mappedUnrated = tasks.find((task) => task.id === unratedTask.id);
+
+    expect(mappedUnrated?.selfReflectionRating).toBeUndefined();
+    expect(mappedRated?.selfReflectionRating).toEqual(expect.objectContaining({
+      sourceTaskRunId: latestRun.id,
+      overallRating: 4,
+      sections: [
+        { label: "Testing", normalizedLabel: "testing", rating: 5, note: "Serialized" },
+      ],
+    }));
+  });
+
+  it("round-trips agent presets through explicit markdown pull and push API routes", async () => {
+    const { fetch, dir, repository } = await createServerHandle();
+    const baseUrl = "http://127.0.0.1";
+    const repoPath = path.join(dir, "agent-markdown-round-trip-repo");
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+    const project = repository.createProject({
+      name: "Agent Markdown API Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+
+    const disabledSettingsResponse = await fetch(`${baseUrl}/api/projects/${project.id}/settings`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        agents: {
+          saveToProjectDirectory: false,
+        },
+      }),
+    });
+    expect(disabledSettingsResponse.status).toBe(200);
+
+    const createResponse = await fetch(`${baseUrl}/api/projects/${project.id}/agent-presets`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Database Writer",
+        instructionMarkdown: "Persisted in sqlite before export.",
+      }),
+    });
+    expect(createResponse.status).toBe(201);
+    const created = await createResponse.json() as { id: string; sourcePath: string | null };
+    expect(created.sourcePath).toBeNull();
+
+    const disabledPushResponse = await fetch(`${baseUrl}/api/projects/${project.id}/agent-presets/push-markdown`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agentPresetIds: [created.id] }),
+    });
+    expect(disabledPushResponse.status).toBe(400);
+    expect(await disabledPushResponse.json()).toMatchObject({
+      error: expect.stringContaining("Project agent markdown mirroring is disabled"),
+    });
+
+    const enabledSettingsResponse = await fetch(`${baseUrl}/api/projects/${project.id}/settings`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        agents: {
+          saveToProjectDirectory: true,
+        },
+      }),
+    });
+    expect(enabledSettingsResponse.status).toBe(200);
+
+    const pushResponse = await fetch(`${baseUrl}/api/projects/${project.id}/agent-presets/push-markdown`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agentPresetIds: [created.id] }),
+    });
+    expect(pushResponse.status).toBe(200);
+    const pushed = await pushResponse.json() as Array<{ id: string; sourceScope: string; sourcePath: string; syncStatus: string }>;
+    const pushedAgent = pushed.find((entry) => entry.id === created.id);
+    const exportedPath = path.join(repoPath, ".code-ux", "agents", "database_writer.md");
+    expect(pushedAgent).toMatchObject({
+      sourceScope: "project",
+      sourcePath: exportedPath,
+      syncStatus: "synced",
+    });
+    expect(await fs.readFile(exportedPath, "utf8")).toContain("Persisted in sqlite before export.");
+
+    await fs.writeFile(path.join(repoPath, ".code-ux", "agents", "reviewer.md"), "Imported through explicit pull.\n", "utf8");
+    const pullResponse = await fetch(`${baseUrl}/api/projects/${project.id}/agent-presets/pull-markdown`, {
+      method: "POST",
+    });
+    expect(pullResponse.status).toBe(200);
+    const pulled = await pullResponse.json() as Array<{ name: string; instructionMarkdown: string; syncStatus: string }>;
+    expect(pulled.find((entry) => entry.name === "reviewer")).toMatchObject({
+      instructionMarkdown: "Imported through explicit pull.",
+      syncStatus: "synced",
+    });
+
+    const singleExportResponse = await fetch(`${baseUrl}/api/agent-presets/${created.id}/export-markdown`, {
+      method: "POST",
+    });
+    expect(singleExportResponse.status).toBe(200);
+    expect(await singleExportResponse.json()).toMatchObject({
+      id: created.id,
+      sourcePath: exportedPath,
+      syncStatus: "synced",
     });
   });
 

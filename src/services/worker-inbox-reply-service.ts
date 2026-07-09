@@ -24,6 +24,15 @@ import type { KnowledgeService } from "./knowledge-service.js";
 import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
 import type { ResolvedProviderRoute } from "./provider-routing.js";
 import { resolveEffectiveModel } from "./provider-execution-service.js";
+import type { SkillService, PersistentSkillStorageRuntime } from "./skill-service.js";
+import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
+import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
+import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
+import {
+  dashboardReplyAgentMcpAccess,
+  isSchedulerOnlyAgentMcpAccess,
+  resolveAgentMcpRuntime,
+} from "./agent-mcp-access.js";
 
 export interface GenerateDashboardReplyInput {
   projectId: string;
@@ -50,6 +59,9 @@ interface WorkerInboxReplyServiceDependencies {
   providerRunner: IProviderRunner;
   providerConcurrencyService: ProviderConcurrencyService;
   knowledgeService: KnowledgeService;
+  skillService?: SkillService;
+  agentPresetRepository?: AgentPresetRepository;
+  getMcpConnectionInfo?: () => McpConnectionInfo | null;
   /**
    * Fetches the most recent activities for a Jules session straight from the
    * Jules API. Used to read the live clarification request at reply time so we
@@ -96,6 +108,8 @@ export class WorkerInboxReplyService {
     const messages = this.deps.connectionChatRepository.listMessages(input.threadId);
     let rawPrompt = input.bodyMarkdown.trim();
     let agentProvider: { providerConfigId?: string | null; model?: string | null } | null = null;
+    let agentMcpAccess: AgentMcpAccessConfig | null | undefined;
+    let mcpAgentId: string | null | undefined;
 
     if (input.mode !== "compact_thread") {
       const settings = this.deps.getDashboardSettings({ projectId: input.projectId });
@@ -107,8 +121,14 @@ export class WorkerInboxReplyService {
         providerConfigId: dashboardReplyAgent.providerConfigId,
         model: dashboardReplyAgent.model,
       };
+      agentMcpAccess = this.resolveDashboardReplyMcpAccess(
+        dashboardReplyAgent.mcpAccess,
+        dashboardReplyAgentPresetId,
+      );
+      mcpAgentId = dashboardReplyAgent.id;
       const workerInstructions = dashboardReplyAgent.instructionMarkdown.trim();
       const knowledgeManifest = this.deps.knowledgeService?.buildManifestMarkdownForAgent(dashboardReplyAgent.id) ?? null;
+      const mcpAvailable = Boolean(agentMcpAccess.codeUxEnabled && this.deps.getMcpConnectionInfo?.());
       rawPrompt = buildChatReplayPrompt({
         projectId: input.projectId,
         repoPath: project.baseDir,
@@ -119,13 +139,15 @@ export class WorkerInboxReplyService {
         bodyMarkdown: input.bodyMarkdown,
         workerInstructions,
         isDashboardReply: true,
+        mcpAvailable,
+        mcpAccessMode: isSchedulerOnlyAgentMcpAccess(agentMcpAccess) ? "scheduler_only" : "management",
         knowledgeManifest,
       });
     }
     const route = this.resolveProviderRoute("dashboard_reply", input.bodyMarkdown, agentProvider);
     const providerConfigId = route.providerConfigId || route.provider;
     const providerSettings = route.providers[providerConfigId];
-    const prompt = buildProviderPrompt(rawPrompt, providerSettings.thinkingMode);
+    const prompt = buildProviderPrompt(rawPrompt, providerSettings.thinkingMode, route.provider);
     const startedAt = new Date().toISOString();
     const sessionId = `dashboard-reply-${randomUUID().slice(0, 8)}`;
 
@@ -172,6 +194,7 @@ export class WorkerInboxReplyService {
         prompt,
         repoPath: project.baseDir,
         model: providerSettings.model,
+        thinkingMode: providerSettings.thinkingMode,
         apiKey: providerSettings.apiKey,
         qwenAuthMode: providerSettings.qwenAuthMode,
         qwenRegion: providerSettings.qwenRegion,
@@ -188,9 +211,14 @@ export class WorkerInboxReplyService {
         openCodePackage: providerSettings.openCodePackage,
         providerMountAuth: providerSettings.mountAuth,
         providerAuthPath: providerSettings.authPath,
+        providerConfigMode: providerSettings.providerConfigMode,
+        providerConfigPath: providerSettings.providerConfigPath,
         customBaseUrl: providerSettings.customBaseUrl,
         customModel: providerSettings.customModel,
         githubToken: this.deps.getGithubToken(),
+        projectId: input.projectId,
+        agentMcpAccess,
+        mcpAgentId,
       });
       output = result.text;
     } catch (err) {
@@ -308,7 +336,7 @@ export class WorkerInboxReplyService {
 
     const providerConfigId = route.providerConfigId || route.provider;
     const providerSettings = route.providers[providerConfigId];
-    const prompt = buildProviderPrompt(fullContextPrompt, providerSettings.thinkingMode);
+    const prompt = buildProviderPrompt(fullContextPrompt, providerSettings.thinkingMode, route.provider);
 
     const startedAt = new Date().toISOString();
 
@@ -360,6 +388,7 @@ export class WorkerInboxReplyService {
         prompt,
         repoPath: project.baseDir,
         model: providerSettings.model,
+        thinkingMode: providerSettings.thinkingMode,
         apiKey: providerSettings.apiKey,
         qwenAuthMode: providerSettings.qwenAuthMode,
         qwenRegion: providerSettings.qwenRegion,
@@ -376,9 +405,14 @@ export class WorkerInboxReplyService {
         openCodePackage: providerSettings.openCodePackage,
         providerMountAuth: providerSettings.mountAuth,
         providerAuthPath: providerSettings.authPath,
+        providerConfigMode: providerSettings.providerConfigMode,
+        providerConfigPath: providerSettings.providerConfigPath,
         customBaseUrl: providerSettings.customBaseUrl,
         customModel: providerSettings.customModel,
         githubToken: this.deps.getGithubToken(),
+        projectId: args.projectId,
+        agentMcpAccess: clarificationAgent.mcpAccess ?? null,
+        mcpAgentId: clarificationAgent.id,
       });
       output = providerResult.text;
     } catch (err) {
@@ -561,6 +595,7 @@ export class WorkerInboxReplyService {
     prompt: string;
     repoPath: string;
     model: string;
+    thinkingMode?: import("../contracts/app-types.js").ThinkingMode;
     apiKey: string;
     qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
     qwenRegion?: "china" | "international";
@@ -577,11 +612,31 @@ export class WorkerInboxReplyService {
   openCodePackage?: string;
     providerMountAuth?: boolean;
     providerAuthPath?: string;
+    providerConfigMode?: import("../contracts/app-types.js").ProviderConfigMode;
+    providerConfigPath?: string;
     customBaseUrl?: string;
     customModel?: string;
     githubToken?: string;
+    projectId?: string;
+    agentMcpAccess?: AgentMcpAccessConfig | null;
+    mcpAgentId?: string | null;
   }): Promise<ProviderRunResult & { text: string }> {
-    const workflowSettings = this.deps.getDashboardSettings().cliWorkflow;
+    const dashboardSettings = this.deps.getDashboardSettings();
+    const workflowSettings = dashboardSettings.cliWorkflow;
+    const persistentSkillRuntime = await this.resolvePersistentSkillRuntime(input.projectId, input.mcpAgentId);
+    const prompt = persistentSkillRuntime
+      ? `${input.prompt}\n\n${persistentSkillRuntime.instructionMarkdown}`
+      : input.prompt;
+    const mcpConnection = persistentSkillRuntime || input.agentMcpAccess?.codeUxEnabled
+      ? this.deps.getMcpConnectionInfo?.() ?? null
+      : null;
+    const resolvedMcp = resolveAgentMcpRuntime({
+      access: input.agentMcpAccess,
+      agentId: input.mcpAgentId,
+      customMcpServers: dashboardSettings.customMcpServers ?? [],
+      mcpConnection,
+      persistentSkillRetrievalEnabled: Boolean(persistentSkillRuntime),
+    });
 
     const effectiveModel = resolveEffectiveModel({
       provider: input.provider,
@@ -597,9 +652,10 @@ export class WorkerInboxReplyService {
 
     return await this.deps.providerRunner.runProviderForText({
       provider: input.provider,
-      prompt: input.prompt,
+      prompt,
       cwd: input.repoPath,
       model: effectiveModel,
+      thinkingMode: input.thinkingMode,
       apiKey: input.apiKey,
       qwenAuthMode: input.qwenAuthMode,
       qwenRegion: input.qwenRegion,
@@ -616,13 +672,43 @@ export class WorkerInboxReplyService {
         openCodePackage: input.openCodePackage,
       providerMountAuth: input.providerMountAuth,
       providerAuthPath: input.providerAuthPath,
+      providerConfigMode: input.providerConfigMode,
+      providerConfigPath: input.providerConfigPath,
       customBaseUrl: input.customBaseUrl,
       customModel: input.customModel,
       sessionId: "worker-reply-" + randomUUID(),
       workflowSettings,
       repoPath: input.repoPath,
       githubToken: input.githubToken,
+      mcpConnection: resolvedMcp.mcpConnection,
+      customMcpServers: resolvedMcp.customMcpServers,
+      persistentSkillStorageMounts: persistentSkillRuntime?.mounts,
       onActivity: () => {},
+    });
+  }
+
+  private resolveDashboardReplyMcpAccess(
+    access: AgentMcpAccessConfig | undefined,
+    _dashboardReplyAgentPresetId: string | null,
+  ): AgentMcpAccessConfig {
+    return dashboardReplyAgentMcpAccess(access);
+  }
+
+  private async resolvePersistentSkillRuntime(
+    projectId: string | undefined,
+    agentPresetId: string | null | undefined,
+  ): Promise<PersistentSkillStorageRuntime | null> {
+    if (!projectId || !agentPresetId || !this.deps.skillService || !this.deps.agentPresetRepository) {
+      return null;
+    }
+    const agent = this.deps.agentPresetRepository.getAgentPreset(agentPresetId);
+    if (!agent || agent.projectId !== projectId || !agent.persistentSkillStorage?.enabled) {
+      return null;
+    }
+    return await this.deps.skillService.resolvePersistentSkillStorageRuntime({
+      projectId,
+      agentPresetId,
+      enabled: true,
     });
   }
 

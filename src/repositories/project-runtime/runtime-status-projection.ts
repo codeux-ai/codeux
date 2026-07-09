@@ -2,9 +2,11 @@ import { DatabaseAdapter } from "../db/database-adapter.js";
 import { AppDbStorage } from "../app-db-storage.js";
 import type { DashboardStatus, JulesActivity, Subtask, SubtaskStatus } from "../../contracts/app-types.js";
 import type { SprintReviewSummary } from "../../contracts/project-management-types.js";
+import type { TaskSelfReflectionRating } from "../../contracts/task-self-reflection-types.js";
 import { mapPlanningStatusToRuntimeStatus, toMergeIndicator } from "../../services/subtask-state-mapper.js";
 import { RuntimeContextPayload } from "./runtime-context-store.js";
 import { toNumber, toBoolean, parsePayloadJson } from "../repository-utils.js";
+import { TaskSelfReflectionRatingRepository } from "../task-self-reflection-rating-repository.js";
 
 export type PlanningTaskStatus = "pending" | "in_progress" | "coding_completed" | "completed" | "QA_REVIEW_FAILED";
 export type ProjectStatus = "running" | "failed" | "intervention" | "idle";
@@ -85,6 +87,7 @@ export interface MappedTask {
   row: TaskRow;
   dependsOnTaskIds: string[];
   latestReview?: SprintReviewSummary;
+  selfReflectionRating?: TaskSelfReflectionRating;
 }
 
 interface RecentActivitiesCacheEntry {
@@ -131,7 +134,8 @@ export class RuntimeStatusProjection {
 
   constructor(
     private readonly storage: AppDbStorage,
-    private readonly db: DatabaseAdapter
+    private readonly db: DatabaseAdapter,
+    private readonly taskSelfReflectionRatingRepository: TaskSelfReflectionRatingRepository = new TaskSelfReflectionRatingRepository(storage),
   ) {}
 
   buildProjectStatus(
@@ -160,11 +164,12 @@ export class RuntimeStatusProjection {
         session_name: run?.session_name || undefined,
         provider: run?.provider ? run.provider as Subtask["provider"] : undefined,
         agentPresetId: task.row.agent_preset_id || null,
-        worker_branch: run?.worker_branch || undefined,
+        worker_branch: merged ? undefined : run?.worker_branch || undefined,
         pr_url: run?.pr_url || undefined,
         activities: recentActivitiesByTaskId.get(task.row.id),
         is_independent: toBoolean(task.row.is_independent),
         latestReview: task.latestReview,
+        selfReflectionRating: task.selfReflectionRating,
         is_merged: merged,
         merge_indicator: toMergeIndicator(task.row.merge_indicator),
       };
@@ -218,12 +223,15 @@ export class RuntimeStatusProjection {
       dependencyMap.set(row.task_id, current);
     }
 
-    const reviewMap = this.getLatestTaskReviewSummaryMap(taskRows.map((row) => row.id));
+    const taskIds = taskRows.map((row) => row.id);
+    const reviewMap = this.getLatestTaskReviewSummaryMap(taskIds);
+    const selfReflectionRatingMap = this.taskSelfReflectionRatingRepository.getLatestByTaskIds(taskIds);
 
     return taskRows.map((row) => ({
       row,
       dependsOnTaskIds: dependencyMap.get(row.id) || [],
       latestReview: reviewMap.get(row.id),
+      selfReflectionRating: selfReflectionRatingMap.get(row.id),
     }));
   }
 

@@ -101,7 +101,12 @@ describe("PlanningAgentService Integration", () => {
   function createPlanningProviderRunner(payload: unknown): IProviderRunner {
     return {
       runProvider: vi.fn(),
-      runProviderForText: vi.fn().mockResolvedValue({
+      runProviderForText: vi.fn().mockResolvedValue(providerTextResult(JSON.stringify(payload))),
+    };
+  }
+
+  function providerTextResult(text: string) {
+    return {
         ok: true,
         stdout: "",
         stderr: "",
@@ -119,9 +124,88 @@ describe("PlanningAgentService Integration", () => {
           transcriptText: "",
           nativeSessionId: null,
         },
-        text: JSON.stringify(payload),
-      }),
+        text,
+      };
+  }
+
+  function createPlanningTextProviderRunner(texts: string[]): IProviderRunner {
+    const runProviderForText = vi.fn();
+    for (const text of texts) {
+      runProviderForText.mockResolvedValueOnce(providerTextResult(text));
+    }
+    return {
+      runProvider: vi.fn(),
+      runProviderForText,
     };
+  }
+
+  function planningProviderPayload(title: string): Record<string, unknown> {
+    return {
+      goal: "Updated sprint goal",
+      tasks: [
+        {
+          key: "T01",
+          title,
+          description: `${title} description.`,
+          promptMarkdown: validPromptMarkdown,
+          priority: "high",
+          executorType: "auto",
+          dependsOn: [],
+        },
+      ],
+    };
+  }
+
+  function findCompletedExecutionPlanMessage(
+    executionRepository: ExecutionRepository,
+    invocationId: string,
+  ) {
+    return executionRepository.listExecutionInvocationMessages(invocationId).find((message) => {
+      const widgetMetadata = message.metadata?.widget_metadata as Record<string, unknown> | undefined;
+      return widgetMetadata?.type === "planning_request" && widgetMetadata.status === "completed";
+    });
+  }
+
+  function reflectionResult(score: number): string {
+    return JSON.stringify({
+      criteria: [
+        {
+          id: "autostart_gate",
+          score,
+          rationale: score >= 8 ? "The plan is ready to start." : "The plan needs more review before starting.",
+          improvementInstructions: score >= 8 ? "" : "Tighten the executable task definition.",
+        },
+      ],
+    });
+  }
+
+  function enablePlanningSelfReflection(
+    settingsRepository: SettingsRepository,
+    projectId: string,
+    maxImprovementAttempts: number,
+  ): void {
+    settingsRepository.saveProjectSettings(projectId, {
+      agents: {
+        selfReflection: {
+          planning: {
+            enabled: true,
+            criteria: [
+              {
+                id: "autostart_gate",
+                label: "Autostart gate",
+                prompt: "The plan is safe and complete enough to start automatically.",
+                threshold: 0.8,
+              },
+            ],
+            maxImprovementAttempts,
+          },
+        },
+      },
+      cliWorkflow: {
+        maxPlanningJsonRetries: 0,
+        maxParsingRetries: 0,
+      },
+    });
   }
 
   it("successfully plans a sprint, mapping dependencies and recording invocation lifecycle", async () => {
@@ -225,6 +309,211 @@ describe("PlanningAgentService Integration", () => {
     expect(messages.length).toBeGreaterThan(0);
     expect(messages[0].role).toBe("user");
     expect(messages[0].contentMarkdown).toContain("Turn sprint goals into concrete executable tasks.");
+  });
+
+  it("persists sprint-specific execution plan metadata for separate planning invocations", async () => {
+    const {
+      projectRepository,
+      connectionRepository,
+      executionRepository,
+      settingsRepository,
+      syncService,
+      executionControlService,
+      project,
+      sprint: firstSprint,
+    } = await setupTestHarness({
+      name: "First Planning Sprint",
+      goal: "Plan the first sprint.",
+    });
+    const secondSprint = projectRepository.createSprint(project.id, {
+      name: "Second Planning Sprint",
+      goal: "Plan the second sprint.",
+    });
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      executionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: executionControlService as any,
+      providerRunner: createPlanningTextProviderRunner([
+        JSON.stringify(planningProviderPayload("First sprint task")),
+        JSON.stringify(planningProviderPayload("Second sprint task")),
+      ]),
+    });
+
+    const firstResult = await service.planSprint(project.id, firstSprint.id, {});
+    const secondResult = await service.planSprint(project.id, secondSprint.id, {});
+
+    const firstInvocation = executionRepository
+      .listExecutionInvocations({ projectId: project.id, sprintId: firstSprint.id })
+      .find((record) => record.sprintId === firstSprint.id);
+    const secondInvocation = executionRepository
+      .listExecutionInvocations({ projectId: project.id, sprintId: secondSprint.id })
+      .find((record) => record.sprintId === secondSprint.id);
+    expect(firstInvocation).toBeDefined();
+    expect(secondInvocation).toBeDefined();
+
+    const firstMessage = findCompletedExecutionPlanMessage(executionRepository, firstInvocation!.id);
+    const secondMessage = findCompletedExecutionPlanMessage(executionRepository, secondInvocation!.id);
+    const firstPlan = firstMessage?.metadata?.executionPlan as {
+      projectId: string;
+      sprintId: string;
+      sprintName: string;
+      taskCount: number;
+      createdTaskIds: string[];
+      tasks: Array<{ title: string }>;
+    } | undefined;
+    const secondPlan = secondMessage?.metadata?.executionPlan as {
+      projectId: string;
+      sprintId: string;
+      sprintName: string;
+      taskCount: number;
+      createdTaskIds: string[];
+      tasks: Array<{ title: string }>;
+    } | undefined;
+
+    expect(firstPlan).toMatchObject({
+      projectId: project.id,
+      sprintId: firstSprint.id,
+      sprintName: "First Planning Sprint",
+      taskCount: 1,
+      createdTaskIds: firstResult.createdTaskIds,
+      tasks: [{ title: "First sprint task" }],
+    });
+    expect(secondPlan).toMatchObject({
+      projectId: project.id,
+      sprintId: secondSprint.id,
+      sprintName: "Second Planning Sprint",
+      taskCount: 1,
+      createdTaskIds: secondResult.createdTaskIds,
+      tasks: [{ title: "Second sprint task" }],
+    });
+    expect(firstPlan?.sprintId).not.toBe(secondPlan?.sprintId);
+    expect(firstMessage?.contentMarkdown).toContain("- `T01` - First sprint task");
+    expect(secondMessage?.contentMarkdown).toContain("- `T01` - Second sprint task");
+  });
+
+  it("auto-starts after planning when self-reflection is disabled", async () => {
+    const {
+      projectRepository,
+      connectionRepository,
+      executionRepository,
+      settingsRepository,
+      syncService,
+      executionControlService,
+      project,
+      sprint,
+    } = await setupTestHarness();
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      executionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: executionControlService as any,
+      providerRunner: createPlanningProviderRunner(planningProviderPayload("Autostart disabled reflection task")),
+    });
+
+    const result = await service.planSprint(project.id, sprint.id, { autoStart: true });
+
+    expect(result.started).toBe(true);
+    expect(projectRepository.listTasks(project.id, sprint.id)).toHaveLength(1);
+    expect(executionControlService.orchestrateSprint).toHaveBeenCalledTimes(1);
+    expect(executionControlService.orchestrateSprint).toHaveBeenCalledWith(project.id, sprint.id);
+  });
+
+  it("auto-starts after planning self-reflection passes", async () => {
+    const {
+      projectRepository,
+      connectionRepository,
+      executionRepository,
+      settingsRepository,
+      syncService,
+      executionControlService,
+      project,
+      sprint,
+    } = await setupTestHarness();
+    enablePlanningSelfReflection(settingsRepository, project.id, 0);
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      executionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: executionControlService as any,
+      providerRunner: createPlanningTextProviderRunner([
+        JSON.stringify(planningProviderPayload("Passing reflected task")),
+        reflectionResult(9),
+      ]),
+    });
+
+    const result = await service.planSprint(project.id, sprint.id, { autoStart: true });
+
+    expect(result.started).toBe(true);
+    expect(projectRepository.listTasks(project.id, sprint.id)).toHaveLength(1);
+    expect(executionControlService.orchestrateSprint).toHaveBeenCalledTimes(1);
+    expect(executionControlService.orchestrateSprint).toHaveBeenCalledWith(project.id, sprint.id);
+    const invocation = executionRepository.listExecutionInvocations({ projectId: project.id })[0];
+    const messages = executionRepository.listExecutionInvocationMessages(invocation.id);
+    expect(messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          reflection: expect.objectContaining({
+            finalDecision: "passed",
+            passed: true,
+          }),
+        }),
+      }),
+    ]));
+  });
+
+  it("does not auto-start when planning self-reflection reaches max attempts without passing", async () => {
+    const {
+      projectRepository,
+      connectionRepository,
+      executionRepository,
+      settingsRepository,
+      syncService,
+      executionControlService,
+      project,
+      sprint,
+    } = await setupTestHarness();
+    enablePlanningSelfReflection(settingsRepository, project.id, 0);
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      executionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: executionControlService as any,
+      providerRunner: createPlanningTextProviderRunner([
+        JSON.stringify(planningProviderPayload("Non-passing reflected task")),
+        reflectionResult(5),
+      ]),
+    });
+
+    const result = await service.planSprint(project.id, sprint.id, { autoStart: true });
+
+    expect(result.started).toBe(false);
+    expect(projectRepository.listTasks(project.id, sprint.id)).toHaveLength(1);
+    expect(executionControlService.orchestrateSprint).not.toHaveBeenCalled();
+    const invocation = executionRepository.listExecutionInvocations({ projectId: project.id })[0];
+    const messages = executionRepository.listExecutionInvocationMessages(invocation.id);
+    expect(messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          reflection: expect.objectContaining({
+            finalDecision: "max_attempts_reached",
+            passed: false,
+          }),
+        }),
+      }),
+    ]));
   });
 
   it("assigns a planning title to an untitled sprint", async () => {

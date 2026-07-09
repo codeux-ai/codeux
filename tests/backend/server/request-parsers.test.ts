@@ -10,6 +10,7 @@ import {
   parseCreateDashboardConversationMessageInput,
   parseProjectStatsQuery,
   parseCreateProjectInput,
+  parseProjectSetupRequestInput,
   parseUpdateProjectInput,
   parseCreateSprintInput,
   parseUpdateSprintInput,
@@ -26,9 +27,44 @@ import {
   parseCreateConversationThreadInput,
   parseUpdateConversationThreadInput,
   parseStatsDateInput,
+  DASHBOARD_DEFAULT_JSON_BODY_LIMIT,
+  DASHBOARD_LARGE_SETTINGS_JSON_BODY_LIMIT,
+  getDashboardJsonBodyLimit,
+  isSupportedDashboardJsonContentType,
 } from "../../../src/server/request-parsers.js";
 
 describe("Request Parsers", () => {
+  describe("dashboard JSON body policy", () => {
+    it("uses the small default JSON body limit for normal API mutations", () => {
+      expect(DASHBOARD_DEFAULT_JSON_BODY_LIMIT).toBe("1mb");
+      expect(getDashboardJsonBodyLimit("POST", "/api/projects/project-1/tasks")).toBe("default");
+      expect(getDashboardJsonBodyLimit("PATCH", "/api/tasks/task-1")).toBe("default");
+    });
+
+    it("keeps the large JSON body limit scoped to settings routes that can carry appearance images", () => {
+      expect(DASHBOARD_LARGE_SETTINGS_JSON_BODY_LIMIT).toBe("25mb");
+      expect(getDashboardJsonBodyLimit("PUT", "/api/system-settings")).toBe("large");
+      expect(getDashboardJsonBodyLimit("PUT", "/api/projects/project-1/settings")).toBe("large");
+      expect(getDashboardJsonBodyLimit("PUT", "/api/sprints/sprint-1/settings")).toBe("large");
+    });
+
+    it("bypasses JSON parsing for upload, preview proxy, reads, and non-runtime paths", () => {
+      expect(getDashboardJsonBodyLimit("POST", "/api/projects/project-1/knowledge/documents/upload")).toBeNull();
+      expect(getDashboardJsonBodyLimit("POST", "/api/browser/sessions/session-1/proxy/api/comment")).toBeNull();
+      expect(getDashboardJsonBodyLimit("GET", "/api/system-settings")).toBeNull();
+      expect(getDashboardJsonBodyLimit("POST", "/assets/index.js")).toBeNull();
+    });
+
+    it("accepts JSON media types and rejects ambiguous alternatives", () => {
+      expect(isSupportedDashboardJsonContentType("application/json")).toBe(true);
+      expect(isSupportedDashboardJsonContentType("application/json; charset=utf-8")).toBe(true);
+      expect(isSupportedDashboardJsonContentType("application/vnd.codeux+json")).toBe(true);
+      expect(isSupportedDashboardJsonContentType("text/plain;charset=UTF-8")).toBe(false);
+      expect(isSupportedDashboardJsonContentType("multipart/form-data; boundary=abc")).toBe(false);
+      expect(isSupportedDashboardJsonContentType(undefined)).toBe(false);
+    });
+  });
+
   describe("Validation Helpers", () => {
     it("parseOptionalBoolean rejects invalid forms", () => {
       expect(() => parseOptionalBoolean("yes")).toThrow();
@@ -47,6 +83,12 @@ describe("Request Parsers", () => {
       expect(parseOptionalBoolean(null)).toBeUndefined();
       expect(parseOptionalBoolean(undefined)).toBeUndefined();
     });
+
+    it("parseOptionalBoolean rejects empty strings instead of silently coercing", () => {
+      expect(() => parseOptionalBoolean("")).toThrow("Invalid boolean value for field.");
+      expect(() => parseOptionalBoolean("   ", "enabled")).toThrow("Invalid boolean value for enabled.");
+    });
+
     it("parseOptionalInteger handles strings, numbers, flooring, and throws on invalid boundaries and formats", () => {
       expect(parseOptionalInteger(2.8)).toBe(2);
       expect(parseOptionalInteger("5")).toBe(5);
@@ -58,6 +100,15 @@ describe("Request Parsers", () => {
       expect(() => parseOptionalInteger(NaN)).toThrow(/valid integer/);
       expect(() => parseOptionalInteger(Infinity)).toThrow(/valid integer/);
       expect(() => parseOptionalInteger({})).toThrow(/valid integer/);
+    });
+
+    it("parseOptionalInteger preserves nullable fields and enforces inclusive integer bounds", () => {
+      expect(parseOptionalInteger(null, 1, 5, "count")).toBeUndefined();
+      expect(parseOptionalInteger(undefined, 1, 5, "count")).toBeUndefined();
+      expect(parseOptionalInteger("1", 1, 5, "count")).toBe(1);
+      expect(parseOptionalInteger("5", 1, 5, "count")).toBe(5);
+      expect(() => parseOptionalInteger("0", 1, 5, "count")).toThrow("Invalid value for count. Must be between 1 and 5.");
+      expect(() => parseOptionalInteger("6", 1, 5, "count")).toThrow("Invalid value for count. Must be between 1 and 5.");
     });
   });
 
@@ -245,6 +296,42 @@ describe("Request Parsers", () => {
 
     it("rejects invalid enum values", () => {
       expect(() => parseCreateProjectInput({ name: "n", sourceType: "ftp", sourceRef: "r" })).toThrow(/sourceType/);
+      expect(() => parseCreateProjectInput({ name: "n", sourceType: null, sourceRef: "r" })).toThrow(/sourceType/);
+      expect(() => parseCreateProjectInput({ name: "n", sourceType: "", sourceRef: "r" })).toThrow(/sourceType/);
+    });
+  });
+
+  describe("parseProjectSetupRequestInput", () => {
+    it("parses setup option booleans including techstack and docs", () => {
+      expect(parseProjectSetupRequestInput({
+        enabled: true,
+        clientRequestId: " setup-1 ",
+        options: {
+          agents: "true",
+          quicksprints: "false",
+          previewScript: 1,
+          ci: 0,
+          techstack: true,
+          docs: true,
+        },
+      })).toEqual({
+        enabled: true,
+        clientRequestId: "setup-1",
+        options: {
+          agents: true,
+          quicksprints: false,
+          previewScript: true,
+          ci: false,
+          techstack: true,
+          docs: true,
+        },
+      });
+    });
+
+    it("rejects invalid setup option booleans", () => {
+      expect(() => parseProjectSetupRequestInput({
+        options: { techstack: "yes" },
+      })).toThrow(/setup.options.techstack/);
     });
   });
 
@@ -253,6 +340,20 @@ describe("Request Parsers", () => {
       const result = parseUpdateProjectInput({ name: "n", defaultBranch: null, featureBranchPrefix: "feat/" });
       expect(result.defaultBranch).toBeNull();
       expect(result.featureBranchPrefix).toBe("feat/");
+    });
+
+    it("drops empty optional strings while preserving nullable project fields", () => {
+      const result = parseUpdateProjectInput({
+        name: "   ",
+        sourceRef: "",
+        defaultBranch: null,
+        featureBranchPrefix: null,
+      });
+
+      expect(result.name).toBe("");
+      expect(result.sourceRef).toBe("");
+      expect(result.defaultBranch).toBeNull();
+      expect(result.featureBranchPrefix).toBeNull();
     });
 
     it("rejects a non-object body", () => {
@@ -277,6 +378,13 @@ describe("Request Parsers", () => {
       expect(result.number).toBe(7);
       expect(result.showcasePinned).toBe(true);
     });
+
+    it("rejects invalid sprint enums and out-of-range numbers", () => {
+      expect(() => parseCreateSprintInput({ status: "blocked" })).toThrow(/status/);
+      expect(() => parseUpdateSprintInput({ status: "blocked" })).toThrow(/status/);
+      expect(() => parseCreateSprintInput({ number: 1000001 })).toThrow(/between -1000000 and 1000000/);
+      expect(() => parseUpdateSprintInput({ number: -1000001 })).toThrow(/between -1000000 and 1000000/);
+    });
   });
 
   describe("task parsers", () => {
@@ -300,6 +408,7 @@ describe("Request Parsers", () => {
 
     it("rejects an invalid task priority", () => {
       expect(() => parseCreateTaskInput({ sprintId: "s", title: "t", priority: "urgent" })).toThrow(/priority/);
+      expect(() => parseUpdateTaskInput({ executorType: "manual" })).toThrow(/executorType/);
     });
 
     it("parses update task optional fields", () => {
@@ -332,6 +441,10 @@ describe("Request Parsers", () => {
       expect(parseQuicksprintExecutionInput({ templateId: "t", taskCount: 2.8, submitMode: "plan_and_start" })).toMatchObject({ taskCount: 2, submitMode: "plan_and_start" });
       expect(parseQuicksprintExecutionInput({ templateId: "t", taskCount: "2", submitMode: "plan_and_start" })).toMatchObject({ taskCount: 2, submitMode: "plan_and_start" });
       expect(parseQuicksprintExecutionInput({ templateId: "t", submitMode: "plan_only", noTaskLimit: true })).toMatchObject({ taskCount: 5, noTaskLimit: true, submitMode: "plan_only" });
+    });
+
+    it("does not let noTaskLimit bypass invalid boolean coercion", () => {
+      expect(() => parseQuicksprintExecutionInput({ templateId: "t", submitMode: "plan_only", noTaskLimit: "yes" })).toThrow(/Invalid boolean value/);
     });
   });
 

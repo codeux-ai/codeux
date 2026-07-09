@@ -20,8 +20,10 @@ import {
   Palette,
   SlidersHorizontal,
   Library,
+  Database,
+  ShieldCheck,
 } from "lucide-preact";
-import type { AgentMcpAccessConfig, AgentPreset, CustomMcpServer } from "../../types.js";
+import type { AgentMcpAccessConfig, AgentPreset, CustomMcpServer, SkillStorageRecord } from "../../types.js";
 import type { AgentAvatarExpression } from "../../lib/agent-avatar.js";
 import { DEFAULT_AGENT_MEMORY_CONFIG, type AgentMemoryConfig } from "../../memory-types.js";
 import { AgentMemoryConfigPanel } from "./AgentMemoryConfigPanel.js";
@@ -48,6 +50,7 @@ const INSTRUCTION_SOFT_MAX = 8000;
 
 type FormErrors = Partial<Record<"name" | "description" | "instruction" | "memory", string>>;
 type ActionStatus = { tone: "neutral" | "success" | "error" | "pending"; message: string };
+type ContainerRootMode = "inherit" | "non_root" | "root";
 
 export interface AgentProviderOption {
   value: string;
@@ -92,6 +95,44 @@ function validate({
 
   return errors;
 }
+
+const toContainerRootMode = (value: boolean | null | undefined): ContainerRootMode => {
+  if (value === true) return "root";
+  if (value === false) return "non_root";
+  return "inherit";
+};
+
+const fromContainerRootMode = (value: ContainerRootMode): boolean | null => {
+  if (value === "root") return true;
+  if (value === "non_root") return false;
+  return null;
+};
+
+const CONTAINER_ROOT_MODE_OPTIONS: Array<{
+  value: ContainerRootMode;
+  label: string;
+  hint: string;
+  ariaLabel: string;
+}> = [
+  {
+    value: "inherit",
+    label: "Inherit",
+    hint: "Use the scoped Docker Runtime setting.",
+    ariaLabel: "Inherit global Docker root setting",
+  },
+  {
+    value: "non_root",
+    label: "Force non-root",
+    hint: "Keep this agent on the default safer posture.",
+    ariaLabel: "Force Docker non-root for this agent",
+  },
+  {
+    value: "root",
+    label: "Force root",
+    hint: "Only for tools that need package-manager or OS-level writes.",
+    ariaLabel: "Force Docker root for this agent",
+  },
+];
 
 /* ─────────────────────────────────────────────────────────
  * Field helpers
@@ -216,9 +257,11 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   defaultMemoryInstruction?: string;
   providerOptions?: AgentProviderOption[];
   availableMcpServers?: CustomMcpServer[];
+  availableSkillStorages?: SkillStorageRecord[];
+  isDashboardReplyAgent?: boolean;
   onSave: (id: string, updates: Partial<AgentPreset>) => void;
   onCancel: () => void;
-}> = ({ preset, saving, defaultMemoryInstruction = "", providerOptions = [], availableMcpServers = [], onSave, onCancel }) => {
+}> = ({ preset, saving, defaultMemoryInstruction = "", providerOptions = [], availableMcpServers = [], availableSkillStorages = [], isDashboardReplyAgent = false, onSave, onCancel }) => {
   const panelRef = useRef<HTMLFormElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
@@ -234,6 +277,9 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   const [memoryMarkdown, setMemoryMarkdown] = useState(preset.memoryTemplateMarkdown ?? "");
   const [providerConfigId, setProviderConfigId] = useState(preset.providerConfigId || "");
   const [model, setModel] = useState(preset.model || "");
+  const [containerRootMode, setContainerRootMode] = useState<ContainerRootMode>(
+    toContainerRootMode(preset.containerRunAsRoot)
+  );
   const [avatarConfig, setAvatarConfig] = useState(preset.avatarConfig);
   const [mcpAccess, setMcpAccess] = useState<AgentMcpAccessConfig>(
     normalizeAgentMcpAccess(preset.mcpAccess ?? defaultAgentMcpAccess())
@@ -242,6 +288,8 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   const [memoryConfig, setMemoryConfig] = useState<AgentMemoryConfig>(
     preset.memoryConfig ?? DEFAULT_AGENT_MEMORY_CONFIG
   );
+  const [persistentSkillStorageIds, setPersistentSkillStorageIds] = useState<string[]>(preset.persistentSkillStorageIds ?? []);
+  const [persistentSkillsEnabled, setPersistentSkillsEnabled] = useState(Boolean(preset.persistentSkillStorage?.enabled));
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
   const memoryButtonRef = useRef<HTMLButtonElement>(null);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -272,9 +320,12 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     setMemoryMarkdown(preset.memoryTemplateMarkdown ?? "");
     setProviderConfigId(preset.providerConfigId || "");
     setModel(preset.model || "");
+    setContainerRootMode(toContainerRootMode(preset.containerRunAsRoot));
     setAvatarConfig(preset.avatarConfig);
     setMcpAccess(normalizeAgentMcpAccess(preset.mcpAccess ?? defaultAgentMcpAccess()));
     setMemoryConfig(preset.memoryConfig ?? DEFAULT_AGENT_MEMORY_CONFIG);
+    setPersistentSkillStorageIds(preset.persistentSkillStorageIds ?? []);
+    setPersistentSkillsEnabled(Boolean(preset.persistentSkillStorage?.enabled));
     setShowMemoryPanel(false);
     setTouched({});
     setKnowledgeDirty(false);
@@ -311,9 +362,12 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     if ((preset.memoryTemplateMarkdown ?? "") !== memoryMarkdown && memoryOverrideEnabled) return true;
     if (providerConfigId !== (preset.providerConfigId || "")) return true;
     if (model !== (preset.model || "")) return true;
+    if (containerRootMode !== toContainerRootMode(preset.containerRunAsRoot)) return true;
     if (JSON.stringify(avatarConfig ?? {}) !== JSON.stringify(preset.avatarConfig ?? {})) return true;
     if (JSON.stringify(mcpAccess) !== JSON.stringify(normalizeAgentMcpAccess(preset.mcpAccess ?? defaultAgentMcpAccess()))) return true;
     if (JSON.stringify(memoryConfig) !== JSON.stringify(preset.memoryConfig ?? DEFAULT_AGENT_MEMORY_CONFIG)) return true;
+    if (JSON.stringify(persistentSkillStorageIds) !== JSON.stringify(preset.persistentSkillStorageIds ?? [])) return true;
+    if (persistentSkillsEnabled !== Boolean(preset.persistentSkillStorage?.enabled)) return true;
     return false;
   }, [
     name,
@@ -323,9 +377,12 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     memoryMarkdown,
     providerConfigId,
     model,
+    containerRootMode,
     avatarConfig,
     mcpAccess,
     memoryConfig,
+    persistentSkillStorageIds,
+    persistentSkillsEnabled,
     preset,
     knowledgeDirty,
   ]);
@@ -372,9 +429,12 @@ export const AgentPresetEditorPanel: FunctionComponent<{
       memoryTemplateMarkdown: memoryOverrideEnabled ? memoryMarkdown : undefined,
       providerConfigId: providerConfigId || null,
       model: model.trim() || null,
+      containerRunAsRoot: fromContainerRootMode(containerRootMode),
       avatarConfig,
       mcpAccess,
       memoryConfig,
+      persistentSkillStorageIds,
+      persistentSkillStorage: { enabled: persistentSkillsEnabled && persistentSkillStorageIds.length > 0 },
     });
     setKnowledgeDirty(false);
   };
@@ -436,8 +496,19 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   const visibleMcpItems = mcpItems.slice(0, 5);
   const hiddenMcpCount = mcpItems.length - visibleMcpItems.length;
   const activeMcpCount = mcpItems.filter((item) => item.active).length;
+  const persistentSkillsActive = persistentSkillsEnabled && persistentSkillStorageIds.length > 0;
 
   const toggleMcpItem = (item: (typeof mcpItems)[number]): void => {
+    if (item.kind === "code_ux" && !item.active) {
+      setMcpModalOpen(true);
+      setActionStatus({
+        tone: isDashboardReplyAgent ? "neutral" : "error",
+        message: isDashboardReplyAgent
+          ? "Review Code UX MCP and scheduler access before enabling it for the dashboard reply agent."
+          : "Code UX access is risk-gated for non-chat agents. Review the MCP manager warning before enabling it.",
+      });
+      return;
+    }
     setActionStatus({
       tone: "success",
       message: `${item.label} ${item.active ? "disabled" : "enabled"} for this agent. Save Agent to persist MCP access.`,
@@ -824,6 +895,70 @@ export const AgentPresetEditorPanel: FunctionComponent<{
               </div>
             </SectionCard>
 
+          <SectionCard icon={Database} eyebrow="Persistent Skills" title="Storage Attachments">
+            <div className="flex flex-col gap-4 rounded-2xl border border-black/[0.05] bg-white/30 p-5 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02]">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0">
+                  <div className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                    Persistent skill retrieval
+                  </div>
+                  <p className="mt-1 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
+                    Attach durable skill storages to this agent. Retrieval is disabled until storage is attached and this opt-in is enabled.
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  <span className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${persistentSkillsActive ? "border-signal-500/25 bg-signal-500/[0.08] text-signal-700 dark:text-signal-200" : "border-black/[0.06] bg-black/[0.03] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"}`}>
+                    {persistentSkillsActive ? "Enabled" : "Default off"}
+                  </span>
+                  <label className="relative inline-flex cursor-pointer shrink-0 items-center">
+                    <input
+                      type="checkbox"
+                      aria-label="Enable persistent skill retrieval"
+                      checked={persistentSkillsEnabled}
+                      disabled={saving || persistentSkillStorageIds.length === 0}
+                      onChange={(event) => setPersistentSkillsEnabled(event.currentTarget.checked)}
+                      className="peer sr-only"
+                    />
+                    <div className="h-6 w-11 rounded-full border border-black/[0.08] bg-slate-200 transition-colors peer-checked:border-signal-500/40 peer-checked:bg-signal-500/30 peer-focus-visible:ring-2 peer-focus-visible:ring-signal-500/30 peer-disabled:opacity-50 dark:border-white/[0.08] dark:bg-void-800" />
+                    <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-all peer-checked:translate-x-5 peer-checked:bg-signal-500 dark:bg-slate-500 dark:peer-checked:bg-signal-400" />
+                  </label>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {availableSkillStorages.length === 0 ? (
+                  <div className="rounded-[1rem] border border-dashed border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">
+                    No project skill storages are available. Create one in Settings, Agents.
+                  </div>
+                ) : availableSkillStorages.map((storage) => {
+                  const checked = persistentSkillStorageIds.includes(storage.id);
+                  return (
+                    <label
+                      key={storage.id}
+                      className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-[11px] font-semibold transition-colors ${checked ? "border-signal-500/30 bg-signal-500/[0.1] text-signal-800 dark:text-signal-100" : "border-black/[0.06] bg-black/[0.02] text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300"}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={saving}
+                        onChange={() => {
+                          const nextIds = checked
+                            ? persistentSkillStorageIds.filter((id) => id !== storage.id)
+                            : [...persistentSkillStorageIds, storage.id];
+                          setPersistentSkillStorageIds(nextIds);
+                          if (nextIds.length === 0) {
+                            setPersistentSkillsEnabled(false);
+                          }
+                        }}
+                        className="h-4 w-4 rounded border-black/20 text-signal-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-focus-ring)]"
+                      />
+                      {storage.name}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </SectionCard>
+
           {/* Knowledge subscriptions */}
           <SectionCard icon={Library} eyebrow="Grounding" title="Knowledge Base">
             <p className="-mt-1 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
@@ -903,6 +1038,50 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                       className="rounded-2xl border border-black/[0.05] bg-white/40 px-5 py-3 shadow-sm text-[13px] font-medium text-slate-900 outline-none backdrop-blur-md transition-all placeholder-slate-400 focus:border-signal-500 focus:ring-4 focus:ring-signal-500/10 disabled:opacity-50 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-white dark:placeholder-slate-600 dark:focus:ring-signal-500/15"
                     />
                   </FieldShell>
+
+                  <FieldShell
+                    icon={ShieldCheck}
+                    label="Docker Root Mode"
+                    helper="Root mode is off by default. Force root only for tools that require package-manager or OS-level writes inside Docker."
+                  >
+                    <div role="radiogroup" aria-label="Agent Docker root mode" className="grid gap-2 sm:grid-cols-3">
+                      {CONTAINER_ROOT_MODE_OPTIONS.map((option) => {
+                        const active = containerRootMode === option.value;
+                        return (
+                          <label
+                            key={option.value}
+                            className={`relative flex min-w-0 cursor-pointer flex-col gap-1 rounded-2xl border px-4 py-3 transition-colors ${
+                              active
+                                ? option.value === "root"
+                                  ? "border-status-red/30 bg-status-red/[0.08] text-status-red"
+                                  : "border-signal-500/30 bg-signal-500/[0.1] text-signal-700 dark:text-signal-200"
+                                : "border-black/[0.06] bg-white/50 text-slate-600 hover:bg-white dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06]"
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name={`container-root-mode-${preset.id}`}
+                              value={option.value}
+                              checked={active}
+                              disabled={saving}
+                              aria-label={option.ariaLabel}
+                              onChange={() => {
+                                setContainerRootMode(option.value);
+                                setActionStatus({ tone: "success", message: "Docker root mode changed. Save Agent to persist the runtime posture." });
+                              }}
+                              className="peer sr-only"
+                            />
+                            <span className="text-[10px] font-bold uppercase tracking-[0.14em] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-signal-500">
+                              {option.label}
+                            </span>
+                            <span className={`text-[11px] leading-relaxed ${active ? "text-current/75" : "text-slate-400 dark:text-slate-500"}`}>
+                              {option.hint}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </FieldShell>
                 </div>
               </div>
             </SectionCard>
@@ -931,6 +1110,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                               setActionStatus({ tone: "success", message: "MCP access updated. Save Agent to persist tool access." });
                             }}
                             availableServers={availableMcpServers}
+                            isDashboardReplyAgent={isDashboardReplyAgent}
                             onClose={() => setMcpModalOpen(false)}
                           />
                         )}
@@ -957,6 +1137,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                       onClick={() => toggleMcpItem(item)}
                       disabled={saving}
                       aria-pressed={item.active}
+                      aria-label={`${item.label} ${item.active ? "Enabled" : "Disabled"}`}
                       className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:opacity-50 ${
                         item.active
                           ? "border-signal-500/30 bg-signal-500/[0.12] text-signal-700 dark:text-signal-200"

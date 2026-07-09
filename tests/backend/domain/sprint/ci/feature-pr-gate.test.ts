@@ -621,6 +621,61 @@ jobs:
     expect(result.reportText).toContain("Worker CI fix already running");
   });
 
+  it("holds a failed-check task in CI until a later green observation explicitly settles it", async () => {
+    subtasks[0].session_id = undefined;
+    subtasks[0].provider = "gemini" as any;
+    context.ciIntelligence.featurePrAutoMergeMode = "WHEN_GREEN";
+    context.gitStatus.openPullRequests[0].checks = [
+      { name: "build", status: "completed", conclusion: "failure" }
+    ];
+    context.openCiFixAttentionItems = vi.fn();
+    context.hasActiveWorkerCiFixAttempt = vi.fn().mockReturnValue(true);
+    context.autoMergeFeaturePr = vi.fn().mockResolvedValue({
+      ok: true,
+      merged: true,
+      autoMergeScheduled: false,
+    });
+
+    const failed = await service.evaluateCiGate(subtasks, context);
+
+    expect(failed.subtasks[0]).toMatchObject({
+      status: "RUNNING",
+      merge_indicator: "CI",
+    });
+    expect(failed.subtasks[0].is_merged).toBeFalsy();
+    expect(context.autoMergeFeaturePr).not.toHaveBeenCalled();
+    expect(context.openCiFixAttentionItems).not.toHaveBeenCalled();
+
+    failed.subtasks[0].status = "COMPLETED";
+    context.gitStatus.openPullRequests[0].checks = [
+      { name: "build", status: "completed", conclusion: "success" }
+    ];
+    vi.mocked(context.hasActiveWorkerCiFixAttempt!).mockReturnValue(false);
+
+    const green = await service.evaluateCiGate(failed.subtasks, context);
+
+    expect(green.subtasks[0]).toMatchObject({
+      status: "COMPLETED",
+      is_merged: true,
+      merge_indicator: "AUTOMERGE",
+    });
+    expect(context.autoMergeFeaturePr).toHaveBeenCalledTimes(1);
+    expect(context.executionRepository?.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "ci_gate_status",
+      "system",
+      expect.objectContaining({ state: "waiting_checks", hasFailedChecks: true, prNumber: 101 }),
+      expect.any(Object),
+    );
+    expect(context.executionRepository?.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "ci_gate_status",
+      "system",
+      expect.objectContaining({ state: "automerge_succeeded", prNumber: 101 }),
+      expect.any(Object),
+    );
+  });
+
   it("does not block a task at the retry limit while the current worker CI fix attempt is still active", async () => {
     subtasks[0].session_id = undefined;
     subtasks[0].provider = "gemini" as any;
@@ -732,17 +787,159 @@ jobs:
     subtasks[0].worker_branch = "feat/T1";
     subtasks[0].is_merged = false;
 
-    vi.mocked(runCommandStrict).mockResolvedValue({ stdout: "", stderr: "" } as any);
+    vi.mocked(runCommandStrict).mockImplementation((_cmd: string, args: string[]) => {
+      if (args[0] === "rev-list") {
+        return Promise.resolve({ stdout: "1", stderr: "" } as any);
+      }
+      return Promise.resolve({ stdout: "", stderr: "" } as any);
+    });
 
     const result = await service.evaluateCiGate(subtasks, context);
 
     expect(result.subtasks[0].status).toBe("COMPLETED");
     expect(result.subtasks[0].is_merged).toBe(true);
     expect(result.subtasks[0].merge_indicator).toBe("MERGED");
+    expect(result.subtasks[0].worker_branch).toBeUndefined();
+    expect(context.executionRepository?.updateTaskRun).toHaveBeenCalledWith("run-1", { workerBranch: null });
+    expect(context.executionRepository?.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "ci_gate_status",
+      "system",
+      expect.objectContaining({
+        state: "merged_branch",
+        workerBranch: "feat/T1",
+        githubMode: "LOCAL",
+      }),
+      expect.any(Object),
+    );
     expect(context.persistMergedTask).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "T1", is_merged: true, status: "COMPLETED" })
+      expect.objectContaining({ id: "T1", is_merged: true, status: "COMPLETED", worker_branch: undefined })
     );
     expect(result.reportText).toContain("Merged locally");
+  });
+
+  it("merges and pushes remote branch-only tasks when no PR exists", async () => {
+    context.githubMode = "REMOTE";
+    context.gitStatus.openPullRequests = [];
+    context.gitStatus.mergedPullRequests = [];
+    subtasks[0].status = "CODING_COMPLETED";
+    subtasks[0].worker_branch = "task/feature-sprint1-t1-mockup";
+    subtasks[0].pr_url = undefined;
+    subtasks[0].is_merged = false;
+    vi.mocked(context.executionRepository!.getLatestTaskRun).mockReturnValue({
+      id: "run-1",
+      state: "COMPLETED",
+      workerBranch: "task/feature-sprint1-t1-mockup",
+    } as any);
+
+    vi.mocked(runCommandStrict).mockImplementation((_cmd: string, args: string[]) => {
+      if (args[0] === "rev-list") {
+        return Promise.resolve({ stdout: "1", stderr: "" } as any);
+      }
+      return Promise.resolve({ stdout: "", stderr: "" } as any);
+    });
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].status).toBe("COMPLETED");
+    expect(result.subtasks[0].is_merged).toBe(true);
+    expect(result.subtasks[0].merge_indicator).toBe("MERGED");
+    expect(result.subtasks[0].worker_branch).toBeUndefined();
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "git",
+      ["push", "origin", "refs/heads/feature/sprint1:refs/heads/feature/sprint1"],
+      "/repo",
+    );
+    expect(context.executionRepository?.updateTaskRun).toHaveBeenCalledWith("run-1", { workerBranch: null });
+    expect(context.executionRepository?.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "ci_gate_status",
+      "system",
+      expect.objectContaining({
+        state: "merged_branch",
+        workerBranch: "task/feature-sprint1-t1-mockup",
+        githubMode: "REMOTE",
+      }),
+      expect.any(Object),
+    );
+    expect(context.persistMergedTask).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "T1", is_merged: true, status: "COMPLETED", worker_branch: undefined })
+    );
+    expect(result.reportText).toContain("Merged branch");
+  });
+
+  it("recovers remote branch-only merge evidence from the completed task run", async () => {
+    context.githubMode = "REMOTE";
+    context.gitStatus.openPullRequests = [];
+    context.gitStatus.mergedPullRequests = [];
+    subtasks[0].status = "CODING_COMPLETED";
+    subtasks[0].worker_branch = undefined;
+    subtasks[0].pr_url = undefined;
+    subtasks[0].is_merged = false;
+    vi.mocked(context.executionRepository!.getLatestTaskRun).mockReturnValue({
+      id: "run-1",
+      state: "COMPLETED",
+      workerBranch: "task/feature-sprint1-t1-mockup",
+    } as any);
+
+    vi.mocked(runCommandStrict).mockImplementation((_cmd: string, args: string[]) => {
+      if (args[0] === "rev-list") {
+        return Promise.resolve({ stdout: "1", stderr: "" } as any);
+      }
+      return Promise.resolve({ stdout: "", stderr: "" } as any);
+    });
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].worker_branch).toBeUndefined();
+    expect(result.subtasks[0].status).toBe("COMPLETED");
+    expect(result.subtasks[0].is_merged).toBe(true);
+    expect(result.subtasks[0].merge_indicator).toBe("MERGED");
+    expect(context.executionRepository?.updateTaskRun).toHaveBeenCalledWith("run-1", { workerBranch: null });
+    expect(context.persistMergedTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "T1",
+        worker_branch: undefined,
+        is_merged: true,
+        status: "COMPLETED",
+      })
+    );
+  });
+
+  it("fails closed when a remote branch-only merge cannot be pushed", async () => {
+    context.githubMode = "REMOTE";
+    context.gitStatus.openPullRequests = [];
+    context.gitStatus.mergedPullRequests = [];
+    subtasks[0].status = "CODING_COMPLETED";
+    subtasks[0].worker_branch = "task/feature-sprint1-t1-mockup";
+    subtasks[0].pr_url = undefined;
+    subtasks[0].is_merged = false;
+    vi.mocked(context.executionRepository!.getLatestTaskRun).mockReturnValue({
+      id: "run-1",
+      state: "COMPLETED",
+      workerBranch: "task/feature-sprint1-t1-mockup",
+    } as any);
+
+    vi.mocked(runCommandStrict).mockImplementation((_cmd: string, args: string[]) => {
+      if (args[0] === "push") {
+        return Promise.reject(new Error("remote rejected"));
+      }
+      if (args[0] === "rev-list") {
+        return Promise.resolve({ stdout: "1", stderr: "" } as any);
+      }
+      return Promise.resolve({ stdout: "", stderr: "" } as any);
+    });
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].status).toBe("CODING_COMPLETED");
+    expect(result.subtasks[0].is_merged).toBe(false);
+    expect(result.subtasks[0].merge_indicator).toBe("MERGE_BLOCKED");
+    expect(result.subtasks[0].intervention_owner).toBe("HUMAN");
+    expect(context.persistMergedTask).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "T1", is_merged: false, merge_indicator: "MERGE_BLOCKED" })
+    );
+    expect(result.reportText).toContain("Remote branch push failed");
   });
 
   it("recovers a lost worker branch from local refs and merges it in LOCAL mode", async () => {
@@ -773,10 +970,57 @@ jobs:
     const result = await service.evaluateCiGate(subtasks, context);
 
     expect(updateTaskRun).toHaveBeenCalledWith("run-1", { workerBranch: recovered });
-    expect(result.subtasks[0].worker_branch).toBe(recovered);
+    expect(updateTaskRun).toHaveBeenCalledWith("run-1", { workerBranch: null });
+    expect(result.subtasks[0].worker_branch).toBeUndefined();
     expect(result.subtasks[0].is_merged).toBe(true);
     expect(result.subtasks[0].merge_indicator).toBe("MERGED");
     expect(result.reportText).toContain("Merged locally");
+  });
+
+  it("waits for local CLI git finalization before settling branch-only work", async () => {
+    context.githubMode = "LOCAL";
+    context.gitStatus.openPullRequests = [];
+    context.gitStatus.mergedPullRequests = [];
+    subtasks[0].status = "COMPLETED";
+    subtasks[0].session_state = "COMPLETED";
+    subtasks[0].worker_branch = "task/feature-sprint1-t1-mockup";
+    subtasks[0].pr_url = undefined;
+    subtasks[0].is_merged = false;
+
+    context.executionRepository = {
+      getLatestTaskRun: vi.fn().mockReturnValue({
+        id: "run-1",
+        provider: "mockup-cli",
+        mode: "docker_cli",
+        sessionId: "cli-mockup-cli-1",
+        state: "RUNNING",
+        workerBranch: "task/feature-sprint1-t1-mockup",
+      }),
+      updateTaskRun: vi.fn(),
+      appendTaskRunEvent: vi.fn(),
+    } as any;
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].status).toBe("CODING_COMPLETED");
+    expect(result.subtasks[0].worker_branch).toBe("task/feature-sprint1-t1-mockup");
+    expect(result.subtasks[0].is_merged).toBe(false);
+    expect(context.persistMergedTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "T1",
+        status: "CODING_COMPLETED",
+        worker_branch: "task/feature-sprint1-t1-mockup",
+      })
+    );
+    expect(context.executionRepository.updateTaskRun).not.toHaveBeenCalledWith("run-1", { workerBranch: null });
+    expect(context.executionRepository.appendTaskRunEvent).not.toHaveBeenCalledWith(
+      "run-1",
+      "ci_gate_status",
+      "system",
+      expect.objectContaining({ state: "no_merge_work" }),
+      expect.anything()
+    );
+    expect(runCommandStrict).not.toHaveBeenCalled();
   });
 });
 

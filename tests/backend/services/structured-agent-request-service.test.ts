@@ -2,6 +2,98 @@ import { describe, expect, it, vi } from "vitest";
 import { StructuredAgentRequestService } from "../../../src/services/structured-agent-request-service.js";
 import { StructuredProviderResponseService } from "../../../src/services/structured-provider-response-service.js";
 import type { ProviderExecutionService } from "../../../src/services/provider-execution-service.js";
+import { normalizeQaReviewResult } from "../../../src/domain/qa-review/qa-review-result-normalizer.js";
+import { parsePlannedSprintReply } from "../../../src/services/planning-json-extractor.js";
+
+const reflectionSettings = (maxImprovementAttempts = 1) => ({
+  cliWorkflow: {
+    maxParsingRetries: 0,
+    maxPlanningJsonRetries: 0,
+  },
+  agents: {
+    selfReflection: {
+      planning: {
+        enabled: true,
+        criteria: [
+          {
+            id: "correctness",
+            label: "Correctness",
+            prompt: "The output is correct.",
+            threshold: 0.8,
+          },
+        ],
+        maxImprovementAttempts,
+      },
+      qualityAssurance: {
+        enabled: true,
+        criteria: [
+          {
+            id: "correctness",
+            label: "Correctness",
+            prompt: "The review is correct.",
+            threshold: 0.8,
+          },
+        ],
+        maxImprovementAttempts,
+      },
+    },
+  },
+});
+
+const reflectionPass = (score = 9) => JSON.stringify({
+  criteria: [
+    {
+      id: "correctness",
+      score,
+      rationale: "Meets the requested criteria.",
+      improvementInstructions: "",
+    },
+  ],
+});
+
+const reflectionFail = JSON.stringify({
+  criteria: [
+    {
+      id: "correctness",
+      score: 5,
+      rationale: "The output is incomplete.",
+      improvementInstructions: "Add the missing required detail.",
+    },
+  ],
+});
+
+const validPromptMarkdown = [
+  "## Objective",
+  "Do the work.",
+  "",
+  "## Scope",
+  "- src/example.ts",
+  "",
+  "## Implementation Requirements",
+  "1. Implement the change.",
+  "",
+  "## Constraints",
+  "- Keep scope tight.",
+  "",
+  "## Verification",
+  "- Run the focused test.",
+].join("\n");
+
+const planningPayload = (overrides: Record<string, unknown> = {}) => JSON.stringify({
+  goal: "Plan the sprint.",
+  tasks: [
+    {
+      key: "T01",
+      title: "Implement first task",
+      description: "Implement the first task.",
+      promptMarkdown: validPromptMarkdown,
+      priority: "medium",
+      executorType: "auto",
+      dependsOn: [],
+      ...overrides,
+    },
+  ],
+});
 
 describe("StructuredAgentRequestService", () => {
   it("parses valid JSON output successfully without retrying", async () => {
@@ -518,5 +610,297 @@ describe("StructuredAgentRequestService", () => {
       role: "system",
       contentMarkdown: "System route message",
     }));
+  });
+
+  it("keeps self-reflection disabled by default", async () => {
+    const mockProviderExecutionService = {
+      executeProvider: vi.fn().mockResolvedValue({
+        ok: true,
+        text: '{"result": "ok"}',
+        nativeSessionId: "native-1",
+      }),
+    } as unknown as ProviderExecutionService;
+
+    const service = new StructuredAgentRequestService({
+      structuredProviderResponseService: new StructuredProviderResponseService({
+        providerExecutionService: mockProviderExecutionService,
+      }),
+    });
+
+    const result = await service.executeRequest<{ result: string }>({
+      projectId: "proj-1",
+      purpose: "planning",
+      type: "planning",
+      provider: "claude-code",
+      model: "model-1",
+      apiKey: "test-key",
+      providerPrompt: "initial prompt",
+      repoPath: "/repo",
+      settings: {} as any,
+      parseFn: (text) => JSON.parse(text),
+      buildRetryPrompt: () => "retry",
+      providerLabel: "Claude",
+      sessionIdPrefix: "test",
+    });
+
+    expect(result.parsed).toEqual({ result: "ok" });
+    expect(result.selfReflection).toEqual({
+      enabled: false,
+      finalDecision: "disabled",
+      attemptCount: 0,
+      passed: true,
+      scores: [],
+    });
+    expect(mockProviderExecutionService.executeProvider).toHaveBeenCalledTimes(1);
+  });
+
+  it("improves a below-threshold planning output in the same provider session", async () => {
+    const mockExecutionRepository = {
+      createExecutionInvocation: vi.fn().mockReturnValue({ id: "inv-reflect" }),
+      appendExecutionInvocationMessage: vi.fn(),
+      listExecutionInvocationMessages: vi.fn().mockReturnValue([]),
+    };
+    const mockProviderExecutionService = {
+      executeProvider: vi.fn()
+        .mockResolvedValueOnce({ ok: true, text: '{"result": "rough"}', nativeSessionId: "native-1" })
+        .mockResolvedValueOnce({ ok: true, text: reflectionFail, nativeSessionId: "native-1" })
+        .mockResolvedValueOnce({ ok: true, text: '{"result": "better"}', nativeSessionId: "native-1" })
+        .mockResolvedValueOnce({ ok: true, text: reflectionPass(), nativeSessionId: "native-1" }),
+    } as unknown as ProviderExecutionService;
+
+    const service = new StructuredAgentRequestService({
+      executionRepository: mockExecutionRepository as any,
+      structuredProviderResponseService: new StructuredProviderResponseService({
+        providerExecutionService: mockProviderExecutionService,
+      }),
+    });
+
+    const result = await service.executeRequest<{ result: string }>({
+      projectId: "proj-1",
+      purpose: "planning",
+      type: "planning",
+      provider: "claude-code",
+      model: "model-1",
+      apiKey: "test-key",
+      providerPrompt: "initial prompt",
+      repoPath: "/repo",
+      settings: reflectionSettings() as any,
+      parseFn: (text) => JSON.parse(text),
+      buildRetryPrompt: () => "retry",
+      providerLabel: "Claude",
+      sessionIdPrefix: "test",
+    });
+
+    expect(result.parsed).toEqual({ result: "better" });
+    expect(result.selfReflection).toMatchObject({
+      enabled: true,
+      finalDecision: "passed",
+      attemptCount: 1,
+      passed: true,
+    });
+    expect(result.selfReflection.scores).toEqual([
+      expect.objectContaining({
+        id: "correctness",
+        score: 9,
+        threshold: 0.8,
+        passed: true,
+      }),
+    ]);
+    expect(mockProviderExecutionService.executeProvider).toHaveBeenCalledTimes(4);
+    const calls = vi.mocked(mockProviderExecutionService.executeProvider).mock.calls;
+    expect(calls[1]?.[0].continueSessionId).toBe("native-1");
+    expect(calls[2]?.[0].prompt).toContain("Improve your previous structured JSON output");
+    expect(mockExecutionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith("inv-reflect", expect.objectContaining({
+      metadata: expect.objectContaining({
+        reflection: expect.objectContaining({ event: "reflection_improved" }),
+      }),
+    }));
+  });
+
+  it("stops at the max reflection attempt limit and keeps the last valid output", async () => {
+    const mockProviderExecutionService = {
+      executeProvider: vi.fn()
+        .mockResolvedValueOnce({ ok: true, text: '{"result": "rough"}', nativeSessionId: "native-1" })
+        .mockResolvedValueOnce({ ok: true, text: reflectionFail, nativeSessionId: "native-1" }),
+    } as unknown as ProviderExecutionService;
+
+    const service = new StructuredAgentRequestService({
+      structuredProviderResponseService: new StructuredProviderResponseService({
+        providerExecutionService: mockProviderExecutionService,
+      }),
+    });
+
+    const result = await service.executeRequest<{ result: string }>({
+      projectId: "proj-1",
+      purpose: "planning",
+      type: "planning",
+      provider: "claude-code",
+      model: "model-1",
+      apiKey: "test-key",
+      providerPrompt: "initial prompt",
+      repoPath: "/repo",
+      settings: reflectionSettings(0) as any,
+      parseFn: (text) => JSON.parse(text),
+      buildRetryPrompt: () => "retry",
+      providerLabel: "Claude",
+      sessionIdPrefix: "test",
+    });
+
+    expect(result.parsed).toEqual({ result: "rough" });
+    expect(result.selfReflection).toMatchObject({
+      enabled: true,
+      finalDecision: "max_attempts_reached",
+      attemptCount: 0,
+      passed: false,
+    });
+    expect(result.selfReflection.scores).toEqual([
+      expect.objectContaining({
+        id: "correctness",
+        score: 5,
+        passed: false,
+      }),
+    ]);
+    expect(mockProviderExecutionService.executeProvider).toHaveBeenCalledTimes(2);
+  });
+
+  it("falls back to the accepted output when reflection JSON is malformed", async () => {
+    const mockProviderExecutionService = {
+      executeProvider: vi.fn()
+        .mockResolvedValueOnce({ ok: true, text: '{"result": "accepted"}', nativeSessionId: "native-1" })
+        .mockResolvedValueOnce({ ok: true, text: "not json", nativeSessionId: "native-1" }),
+    } as unknown as ProviderExecutionService;
+
+    const service = new StructuredAgentRequestService({
+      structuredProviderResponseService: new StructuredProviderResponseService({
+        providerExecutionService: mockProviderExecutionService,
+      }),
+    });
+
+    const result = await service.executeRequest<{ result: string }>({
+      projectId: "proj-1",
+      purpose: "planning",
+      type: "planning",
+      provider: "claude-code",
+      model: "model-1",
+      apiKey: "test-key",
+      providerPrompt: "initial prompt",
+      repoPath: "/repo",
+      settings: reflectionSettings() as any,
+      maxRetries: 0,
+      parseFn: (text) => JSON.parse(text),
+      buildRetryPrompt: () => "retry",
+      providerLabel: "Claude",
+      sessionIdPrefix: "test",
+    });
+
+    expect(result.parsed).toEqual({ result: "accepted" });
+    expect(result.selfReflection).toEqual({
+      enabled: true,
+      finalDecision: "reflection_failed",
+      attemptCount: 0,
+      passed: false,
+      scores: [],
+    });
+    expect(mockProviderExecutionService.executeProvider).toHaveBeenCalledTimes(2);
+  });
+
+  it("revalidates improved planning JSON and keeps the original when the DAG is invalid", async () => {
+    const original = planningPayload();
+    const invalidImprovement = JSON.stringify({
+      goal: "Plan the sprint.",
+      tasks: [
+        {
+          key: "T01",
+          title: "Invalid task",
+          description: "Invalid forward dependency.",
+          promptMarkdown: validPromptMarkdown,
+          priority: "medium",
+          executorType: "auto",
+          dependsOn: ["T02"],
+        },
+      ],
+    });
+    const mockProviderExecutionService = {
+      executeProvider: vi.fn()
+        .mockResolvedValueOnce({ ok: true, text: original, nativeSessionId: "native-1" })
+        .mockResolvedValueOnce({ ok: true, text: reflectionFail, nativeSessionId: "native-1" })
+        .mockResolvedValueOnce({ ok: true, text: invalidImprovement, nativeSessionId: "native-1" }),
+    } as unknown as ProviderExecutionService;
+
+    const service = new StructuredAgentRequestService({
+      structuredProviderResponseService: new StructuredProviderResponseService({
+        providerExecutionService: mockProviderExecutionService,
+      }),
+    });
+
+    const result = await service.executeRequest({
+      projectId: "proj-1",
+      purpose: "planning",
+      type: "planning",
+      provider: "claude-code",
+      model: "model-1",
+      apiKey: "test-key",
+      providerPrompt: "initial prompt",
+      repoPath: "/repo",
+      settings: reflectionSettings() as any,
+      maxRetries: 0,
+      parseFn: (text) => parsePlannedSprintReply(text),
+      buildRetryPrompt: () => "retry",
+      providerLabel: "Claude",
+      sessionIdPrefix: "test",
+    });
+
+    expect(result.parsed.tasks[0]?.title).toBe("Implement first task");
+    expect(result.selfReflection).toMatchObject({
+      enabled: true,
+      finalDecision: "improvement_failed",
+      attemptCount: 1,
+      passed: false,
+    });
+    expect(mockProviderExecutionService.executeProvider).toHaveBeenCalledTimes(3);
+  });
+
+  it("revalidates improved QA JSON and keeps the original when schema normalization fails", async () => {
+    const original = JSON.stringify({ verdict: "pass", summary: "Looks good.", findings: [] });
+    const invalidImprovement = JSON.stringify({ verdict: "maybe", summary: "Invalid.", findings: [] });
+    const mockProviderExecutionService = {
+      executeProvider: vi.fn()
+        .mockResolvedValueOnce({ ok: true, text: original, nativeSessionId: "native-1" })
+        .mockResolvedValueOnce({ ok: true, text: reflectionFail, nativeSessionId: "native-1" })
+        .mockResolvedValueOnce({ ok: true, text: invalidImprovement, nativeSessionId: "native-1" }),
+    } as unknown as ProviderExecutionService;
+
+    const service = new StructuredAgentRequestService({
+      structuredProviderResponseService: new StructuredProviderResponseService({
+        providerExecutionService: mockProviderExecutionService,
+      }),
+    });
+
+    const result = await service.executeRequest({
+      projectId: "proj-1",
+      purpose: "qa_review",
+      type: "qa_review",
+      provider: "claude-code",
+      model: "model-1",
+      apiKey: "test-key",
+      providerPrompt: "qa prompt",
+      repoPath: "/repo",
+      settings: reflectionSettings() as any,
+      maxRetries: 0,
+      parseFn: (text) => normalizeQaReviewResult(text),
+      buildRetryPrompt: () => "retry",
+      providerLabel: "QA",
+      sessionIdPrefix: "qa-review",
+    });
+
+    expect(result.parsed.verdict).toBe("pass");
+    expect(result.parsed.summary).toBe("Looks good.");
+    expect(result.selfReflection).toMatchObject({
+      enabled: true,
+      finalDecision: "improvement_failed",
+      attemptCount: 1,
+      passed: false,
+    });
+    expect(mockProviderExecutionService.executeProvider).toHaveBeenCalledTimes(3);
   });
 });

@@ -105,6 +105,28 @@ export const buildGitHubModeProjectSettingsOverride = (
   };
 };
 
+export const buildProjectCreationSettingsOverride = (input: {
+  githubMode?: DashboardSettings["git"]["githubMode"];
+  selectedTechstackId?: DashboardSettings["techstack"]["selectedTechstackId"];
+  applicationKind?: DashboardSettings["techstack"]["applicationKind"];
+}): ProjectSettingsOverride => {
+  const override: ProjectSettingsOverride = input.githubMode
+    ? buildGitHubModeProjectSettingsOverride(input.githubMode)
+    : {};
+
+  if (
+    Object.prototype.hasOwnProperty.call(input, "selectedTechstackId")
+    || Object.prototype.hasOwnProperty.call(input, "applicationKind")
+  ) {
+    override.techstack = {
+      selectedTechstackId: input.selectedTechstackId ?? null,
+      applicationKind: input.applicationKind ?? null,
+    };
+  }
+
+  return override;
+};
+
 export const updateCiIntelligence = (
   settings: DashboardSettings,
   patch: Partial<DashboardSettings["ciIntelligence"]>

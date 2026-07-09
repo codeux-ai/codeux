@@ -8,15 +8,22 @@ It is for contributors and integrators who need to reason about *how* Code UX ma
 
 | # | Page | Topic |
 | --- | --- | --- |
-| 1 | [System overview](./system-overview.md) | Process model, runtime composition, top-level data flow |
+| 1 | [System overview](./system-overview.md) | Container-first process model, runtime composition, top-level data flow |
 | 2 | [MCP server](./mcp-server.md) | Tool dispatch, transports, authentication, session lifecycle |
 | 3 | [Sprint engine](./sprint-engine.md) | Cycle pipeline, watch loop state machine, dependency resolution, retries |
 | 4 | [Virtual workers](./virtual-workers.md) | Provisioning, lifecycle, Docker vs host execution, attention-item handling |
 | 5 | [CI integration](./ci-integration.md) | Feature PR gate, merge protocol, autofix retries, conflict handling |
 | 6 | [Dashboard architecture](./dashboard-architecture.md) | Preact stack, real-time client, route map, state model |
 | 7 | [Data model](./data-model.md) | Projects, sprints, tasks, runs, dispatches, memory, conversations |
-| 8 | [Configuration resolution](./configuration-resolution.md) | Cascade order, search paths, settings hierarchy |
-| 9 | [Security model](./security.md) | Authentication, authorisation, secrets, network surface |
+| 8 | [Custom dashboard foundation](./custom-dashboard-foundation.md) | Persisted dashboard manifests, generated bundles, validation history, and publication state |
+| 9 | [External chat connectors](./external-chat-providers.md) | Provider setup, channel bindings, inbound dedupe, outbound delivery state |
+| 10 | [Configuration resolution](./configuration-resolution.md) | Cascade order, search paths, settings hierarchy |
+| 11 | [Speech input](./speech-input.md) | Persisted transcription settings, privacy boundary, provider fallback contract |
+| 12 | [Security model](./security.md) | Authentication, authorisation, secrets, network surface |
+
+## Runtime Notes
+
+Agent persistent skill storage is opt-in per preset. When enabled and attached to a storage, provider invocations receive search-first instructions, retrieval-only `search_skills` MCP access where eligible, and writable storage mounts outside the project workspace (`~/.code-ux/persistent-skill-storages/...` on host, `/code-ux/persistent-skills/...` in Docker).
 
 ## Reading order suggestions
 

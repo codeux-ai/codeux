@@ -109,6 +109,131 @@ describe("WorkerInboxReplyService", () => {
     );
   });
 
+  it("passes Code UX MCP with scheduler for dashboard replies without explicit MCP access", async () => {
+    mockRunProviderForText.mockResolvedValue({ text: "I can schedule a follow-up." });
+
+    const service = new WorkerInboxReplyService({
+      projectManagementRepository: {
+        getProject: vi.fn().mockReturnValue({
+          id: "project-1",
+          name: "Code UX",
+          baseDir: "/repo",
+        }),
+      } as any,
+      connectionChatRepository: {
+        getThread: vi.fn().mockReturnValue({ id: "thread-1", title: "Status", runtimeState: null }),
+        listMessages: vi.fn().mockReturnValue([
+          { id: "m1", authorType: "dashboard_user", bodyMarkdown: "Remind yourself tomorrow." },
+        ]),
+      } as any,
+      taskService: {
+        resolveInvocationProvider: vi.fn().mockReturnValue(geminiRoute),
+      } as any,
+      agentPresetSyncService: {
+        resolveDashboardReplyAgent: vi.fn().mockResolvedValue({
+          id: "reply-agent",
+          instructionMarkdown: "Answer dashboard chat.",
+        }),
+      } as any,
+      executionRepository: {
+        createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-scheduler" }),
+        appendExecutionInvocationMessage: vi.fn(),
+        updateExecutionInvocation: vi.fn(),
+      } as any,
+      getDashboardSettings: () => ({
+        ...settings,
+        agents: { routing: { dashboardReply: { agentPresetId: null } } },
+      }),
+      getGithubToken: () => undefined,
+      providerRunner: { runProviderForText: mockRunProviderForText } as any,
+      providerConcurrencyService: {
+        waitForSlotAndClaim: vi.fn().mockImplementation((p, l, input) => ({ ...input, id: "inv-1" })),
+      } as any,
+      getMcpConnectionInfo: () => ({ url: "http://127.0.0.1:3000/mcp", authToken: "token" }),
+    });
+
+    await service.generateReply({
+      projectId: "project-1",
+      threadId: "thread-1",
+      bodyMarkdown: "Remind yourself tomorrow.",
+    });
+
+    expect(mockRunProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+      mcpConnection: expect.objectContaining({ url: "http://127.0.0.1:3000/mcp", authToken: "token", agentId: "reply-agent" }),
+      customMcpServers: [],
+      prompt: expect.stringContaining("You also have the `scheduler_code_ux` MCP tool available"),
+    }));
+    expect(mockRunProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: expect.stringContaining("You have the `manage_code_ux` MCP tool available"),
+    }));
+  });
+
+  it("uses full Code UX MCP access in the configured dashboard reply inbox path", async () => {
+    mockRunProviderForText.mockResolvedValue({ text: "I can use the explicit access." });
+    const explicitAccess = {
+      codeUxEnabled: true,
+      codeUxToolToggles: [{ name: "manage_tasks", enabled: false, isInternal: true }],
+      linkedServerIds: ["docs"],
+    };
+
+    const service = new WorkerInboxReplyService({
+      projectManagementRepository: {
+        getProject: vi.fn().mockReturnValue({
+          id: "project-1",
+          name: "Code UX",
+          baseDir: "/repo",
+        }),
+      } as any,
+      connectionChatRepository: {
+        getThread: vi.fn().mockReturnValue({ id: "thread-1", title: "Status", runtimeState: null }),
+        listMessages: vi.fn().mockReturnValue([
+          { id: "m1", authorType: "dashboard_user", bodyMarkdown: "List tasks." },
+        ]),
+      } as any,
+      taskService: {
+        resolveInvocationProvider: vi.fn().mockReturnValue(geminiRoute),
+      } as any,
+      agentPresetSyncService: {
+        resolveDashboardReplyAgent: vi.fn().mockResolvedValue({
+          id: "custom-reply",
+          instructionMarkdown: "Answer dashboard chat.",
+          mcpAccess: explicitAccess,
+        }),
+      } as any,
+      executionRepository: {
+        createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-explicit" }),
+        appendExecutionInvocationMessage: vi.fn(),
+        updateExecutionInvocation: vi.fn(),
+      } as any,
+      getDashboardSettings: () => ({
+        ...settings,
+        agents: { routing: { dashboardReply: { agentPresetId: "custom-reply" } } },
+        customMcpServers: [
+          { id: "docs", name: "docs", enabled: true, transport: "http", url: "https://docs.example.com/mcp" },
+          { id: "other", name: "other", enabled: true, transport: "http", url: "https://other.example.com/mcp" },
+        ],
+      }),
+      getGithubToken: () => undefined,
+      providerRunner: { runProviderForText: mockRunProviderForText } as any,
+      providerConcurrencyService: {
+        waitForSlotAndClaim: vi.fn().mockImplementation((p, l, input) => ({ ...input, id: "inv-1" })),
+      } as any,
+      getMcpConnectionInfo: () => ({ url: "http://127.0.0.1:3000/mcp", authToken: "token" }),
+    });
+
+    await service.generateReply({
+      projectId: "project-1",
+      threadId: "thread-1",
+      bodyMarkdown: "List tasks.",
+    });
+
+    expect(mockRunProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+      mcpConnection: expect.objectContaining({ url: "http://127.0.0.1:3000/mcp", authToken: "token", agentId: "custom-reply" }),
+      customMcpServers: [expect.objectContaining({ id: "docs" })],
+      prompt: expect.stringContaining("You have the `manage_code_ux` MCP tool available"),
+    }));
+  });
+
   it("includes the editable worker agent instructions in the reply prompt", async () => {
     mockRunProviderForText.mockResolvedValue({ text: "Use the worker queue view in Live." });
 
@@ -477,6 +602,85 @@ describe("WorkerInboxReplyService", () => {
       githubToken: undefined,
       gitlabToken: undefined,
     });
+  });
+
+  it("does not grant scheduler-only Code UX access to clarification replies without explicit MCP access", async () => {
+    mockRunProviderForText.mockResolvedValue({ text: "Only the clarification answer." });
+
+    const service = new WorkerInboxReplyService({
+      projectManagementRepository: {
+        getProject: vi.fn().mockReturnValue({
+          id: "project-1",
+          name: "Code UX",
+          baseDir: "/repo",
+        }),
+      } as any,
+      connectionChatRepository: {
+        getThread: vi.fn(),
+        listMessages: vi.fn(),
+      } as any,
+      taskService: {
+        resolveInvocationProvider: vi.fn().mockReturnValue(geminiRoute),
+      } as any,
+      agentPresetSyncService: {
+        getProjectManagerAgent: vi.fn().mockResolvedValue({
+          id: "project-manager",
+          instructionMarkdown: "Project manager guide fallback",
+        }),
+      } as any,
+      executionRepository: {
+        createProviderInvocationUsage: vi.fn().mockReturnValue({ id: "usage-no-scheduler" }),
+        updateProviderInvocationUsage: vi.fn(),
+        createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-no-scheduler" }),
+        appendExecutionInvocationMessage: vi.fn(),
+        updateExecutionInvocation: vi.fn(),
+      } as any,
+      getDashboardSettings: () => settings,
+      getGithubToken: () => undefined,
+      providerRunner: { runProviderForText: mockRunProviderForText } as any,
+      providerConcurrencyService: {
+        waitForSlotAndClaim: vi.fn().mockImplementation((p, l, input) => ({ ...input, id: "inv-1" })),
+      } as any,
+      getMcpConnectionInfo: () => ({ url: "http://127.0.0.1:3000/mcp", authToken: "token" }),
+    });
+
+    await service.generateClarificationReply({
+      projectId: "project-1",
+      sprintGoal: "Ship the fix",
+      subtasks: [{
+        id: "T1",
+        title: "Fix clarification handling",
+        prompt: "Repair the clarification flow.",
+        depends_on: [],
+        is_independent: true,
+        status: "BLOCKED",
+        session_state: "AWAITING_USER_FEEDBACK",
+        activities: [{
+          agentMessaged: {
+            agentMessage: "Should I proceed?",
+          },
+        }],
+      }],
+      task: {
+        id: "T1",
+        title: "Fix clarification handling",
+        prompt: "Repair the clarification flow.",
+        depends_on: [],
+        is_independent: true,
+        status: "BLOCKED",
+        session_state: "AWAITING_USER_FEEDBACK",
+        activities: [{
+          agentMessaged: {
+            agentMessage: "Should I proceed?",
+          },
+        }],
+      },
+    });
+
+    expect(mockRunProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+      mcpConnection: null,
+      customMcpServers: [],
+    }));
   });
 
   it("refreshes the task worker branch before clarification replies when one is recorded", async () => {

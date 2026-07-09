@@ -1,8 +1,11 @@
 import type {
   AgentPreset,
   CreateAgentPresetInput,
+  SkillStorageKind,
+  SkillStorageRecord,
   UpdateAgentPresetInput,
 } from "../types.js";
+import type { PushAgentPresetsToMarkdownOptions } from "../../../../src/contracts/agent-preset-types.js";
 import { fetchJson } from "../../lib/api/fetch-json.js";
 
 export const fetchAgentPresets = async (projectId: string): Promise<AgentPreset[]> => {
@@ -21,9 +24,12 @@ export const createAgentPreset = async (
     avatarConfig: input.avatarConfig,
     providerConfigId: input.providerConfigId,
     model: input.model,
+    containerRunAsRoot: input.containerRunAsRoot,
     memoryTemplateOverrideEnabled: input.memoryTemplateOverrideEnabled,
     memoryTemplateMarkdown: input.memoryTemplateMarkdown,
     memoryConfig: input.memoryConfig,
+    persistentSkillStorageIds: input.persistentSkillStorageIds,
+    persistentSkillStorage: input.persistentSkillStorage,
   };
   return fetchJson<AgentPreset>(`/api/projects/${encodeURIComponent(projectId)}/agent-presets`, {
     method: "POST",
@@ -44,10 +50,13 @@ export const updateAgentPreset = async (
     avatarConfig: input.avatarConfig,
     providerConfigId: input.providerConfigId,
     model: input.model,
+    containerRunAsRoot: input.containerRunAsRoot,
     memoryTemplateOverrideEnabled: input.memoryTemplateOverrideEnabled,
     memoryTemplateMarkdown: input.memoryTemplateMarkdown,
     mcpAccess: input.mcpAccess,
     memoryConfig: input.memoryConfig,
+    persistentSkillStorageIds: input.persistentSkillStorageIds,
+    persistentSkillStorage: input.persistentSkillStorage,
   };
   return fetchJson<AgentPreset>(`/api/agent-presets/${encodeURIComponent(agentPresetId)}`, {
     method: "PATCH",
@@ -74,6 +83,29 @@ export const syncAllAgentPresetsFromMarkdown = async (projectId: string): Promis
   });
 };
 
+export const pullAgentPresetsFromMarkdown = async (projectId: string): Promise<AgentPreset[]> => {
+  return fetchJson<AgentPreset[]>(`/api/projects/${encodeURIComponent(projectId)}/agent-presets/pull-markdown`, {
+    method: "POST",
+  });
+};
+
+export const pushAgentPresetsToMarkdown = async (
+  projectId: string,
+  options: PushAgentPresetsToMarkdownOptions = {},
+): Promise<AgentPreset[]> => {
+  return fetchJson<AgentPreset[]>(`/api/projects/${encodeURIComponent(projectId)}/agent-presets/push-markdown`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(options),
+  });
+};
+
+export const exportAgentPresetToMarkdown = async (agentPresetId: string): Promise<AgentPreset> => {
+  return fetchJson<AgentPreset>(`/api/agent-presets/${encodeURIComponent(agentPresetId)}/export-markdown`, {
+    method: "POST",
+  });
+};
+
 export const pushAgentPresetsToRepository = async (
   projectId: string,
   options: { mode: "commit_only" | "commit_and_push" | "pull_request"; branchName?: string },
@@ -88,5 +120,27 @@ export const pushAgentPresetsToRepository = async (
         branchName: options.branchName,
       }),
     },
+  );
+};
+
+export const fetchSkillStorages = async (projectId: string): Promise<SkillStorageRecord[]> => {
+  return fetchJson<SkillStorageRecord[]>(`/api/projects/${encodeURIComponent(projectId)}/skill-storages`);
+};
+
+export const createSkillStorage = async (
+  projectId: string,
+  input: { name: string; description?: string; storageKind?: SkillStorageKind },
+): Promise<SkillStorageRecord> => {
+  return fetchJson<SkillStorageRecord>(`/api/projects/${encodeURIComponent(projectId)}/skill-storages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+};
+
+export const deleteSkillStorage = async (projectId: string, storageId: string): Promise<void> => {
+  await fetchJson<{ ok: boolean }>(
+    `/api/projects/${encodeURIComponent(projectId)}/skill-storages/${encodeURIComponent(storageId)}`,
+    { method: "DELETE" },
   );
 };

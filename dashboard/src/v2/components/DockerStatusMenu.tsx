@@ -8,7 +8,7 @@
 
 import { FunctionComponent } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
-import { Box, Info, Play, Square, Terminal } from "lucide-preact";
+import { Box, CircleAlert, Play, Square, Terminal } from "lucide-preact";
 import { useFocusTrap } from "../hooks/use-focus-trap";
 import { fetchOnboardingReadiness } from "../../lib/api/dashboard-api.js";
 import type { OnboardingRuntimeReadiness } from "../../types.js";
@@ -127,13 +127,33 @@ export const DockerStatusMenu: FunctionComponent = () => {
 
     const activeContainers = containers.filter(c => c.state === "running");
     const clusterNotReady = readiness?.cluster.status === "not_ready";
+    const dockerStatusLabel = clusterNotReady
+        ? `Docker Status: runtime not ready, ${activeContainers.length} active containers`
+        : `Docker Status: ${activeContainers.length} active containers`;
 
     return (
       <div className="relative inline-flex items-center gap-2" ref={containerRef}>
         {clusterNotReady ? (
-            <div className="hidden h-9 items-center gap-1.5 rounded-full border border-status-amber/25 bg-status-amber/10 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-status-amber md:inline-flex">
-                <Info className="h-3.5 w-3.5" strokeWidth={2.4} />
-                Cluster not ready
+            <div
+                role="alert"
+                aria-live="assertive"
+                aria-atomic="true"
+                className="sr-only rounded-full border border-status-red/35 bg-status-red/[0.12] px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-status-red shadow-[0_0_18px_rgba(211,47,47,0.16)] dark:bg-status-red/15 md:not-sr-only md:inline-flex md:h-9 md:items-center md:gap-2"
+            >
+                <span
+                    className="relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-white"
+                    aria-hidden="true"
+                    data-testid="runtime-critical-marker"
+                >
+                    <span className="absolute inset-0 rounded-full bg-status-red/35 motion-safe:animate-ping motion-reduce:animate-none" />
+                    <span
+                        className="relative flex h-5 w-5 items-center justify-center rounded-full bg-status-red text-[13px] font-black leading-none text-white shadow-[0_0_10px_rgba(211,47,47,0.36)] motion-safe:animate-pulse motion-reduce:animate-none"
+                        data-testid="runtime-critical-glyph"
+                    >
+                        !
+                    </span>
+                </span>
+                Runtime not ready
             </div>
         ) : null}
         <div
@@ -145,7 +165,7 @@ export const DockerStatusMenu: FunctionComponent = () => {
             <button
                 type="button"
                 data-tour-id="docker-containers"
-                aria-label={`Docker Status: ${activeContainers.length} active containers`}
+                aria-label={dockerStatusLabel}
                 aria-haspopup="dialog"
                 aria-expanded={interactionState !== 'closed'}
                 aria-controls={interactionState !== 'closed' ? menuId : undefined}
@@ -180,11 +200,17 @@ export const DockerStatusMenu: FunctionComponent = () => {
             >
                 <div className="relative">
                     <Box aria-hidden="true" className={`w-4 h-4 transition-colors ${
-                        activeContainers.length > 0
+                        clusterNotReady
+                            ? "text-status-red"
+                            : activeContainers.length > 0
                             ? "text-signal-500 dark:text-signal-400"
                             : "text-slate-500 dark:text-slate-400"
                         } group-hover:text-slate-900 dark:group-hover:text-white`} strokeWidth={1.5} />
-                    {activeContainers.length > 0 && (
+                    {clusterNotReady ? (
+                        <span className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-status-red text-[10px] font-black leading-none text-white shadow-[0_0_10px_rgba(211,47,47,0.35)] ring-1 ring-[#F9F8F4] motion-safe:animate-pulse motion-reduce:animate-none dark:ring-void-900" aria-hidden="true">
+                            !
+                        </span>
+                    ) : activeContainers.length > 0 && (
                         <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-signal-500 shadow-[0_0_6px_rgba(0,224,160,0.8)] ring-1 ring-[#F9F8F4] dark:ring-void-900" />
                     )}
                 </div>
@@ -204,8 +230,8 @@ export const DockerStatusMenu: FunctionComponent = () => {
                             Docker Containers
                         </span>
                         <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-black/[0.03] dark:bg-white/[0.03]">
-                            <span className={`w-1.5 h-1.5 rounded-full ${clusterNotReady ? "bg-status-amber" : "bg-signal-500 motion-safe:animate-pulse"}`} />
-                            <span className="text-[10px] font-mono font-medium text-slate-500 dark:text-slate-400">
+                            <span className={`w-1.5 h-1.5 rounded-full ${clusterNotReady ? "bg-status-red motion-safe:animate-pulse motion-reduce:animate-none" : "bg-signal-500 motion-safe:animate-pulse"}`} />
+                            <span className={`text-[10px] font-mono font-medium ${clusterNotReady ? "text-status-red" : "text-slate-500 dark:text-slate-400"}`}>
                                 {clusterNotReady ? "Not Ready" : `${activeContainers.length} Active`}
                             </span>
                         </div>
@@ -218,8 +244,8 @@ export const DockerStatusMenu: FunctionComponent = () => {
                             </div>
                         ) : clusterNotReady ? (
                             <div className="flex flex-col gap-3 px-4 py-5">
-                                <div className="flex items-start gap-3 rounded-xl border border-status-amber/20 bg-status-amber/10 p-3">
-                                    <Info className="mt-0.5 h-4 w-4 shrink-0 text-status-amber" strokeWidth={2.4} />
+                                <div className="flex items-start gap-3 rounded-xl border border-status-red/25 bg-status-red/10 p-3">
+                                    <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-status-red" strokeWidth={2.4} aria-hidden="true" />
                                     <div>
                                         <div className="text-sm font-bold text-slate-800 dark:text-slate-100">Docker is mandatory</div>
                                         <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
@@ -231,7 +257,7 @@ export const DockerStatusMenu: FunctionComponent = () => {
                                     <div key={dependency.id} className="rounded-xl border border-black/[0.05] bg-black/[0.02] p-3 dark:border-white/[0.05] dark:bg-white/[0.03]">
                                         <div className="flex flex-wrap items-center justify-between gap-3">
                                             <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{dependency.label}</span>
-                                            <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${dependency.status === "ready" ? "bg-signal-500/10 text-signal-600 dark:text-signal-300" : "bg-status-amber/10 text-status-amber"}`}>
+                                            <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${dependency.status === "ready" ? "bg-signal-500/10 text-signal-600 dark:text-signal-300" : "bg-status-red/10 text-status-red"}`}>
                                                 {dependency.status}
                                             </span>
                                         </div>

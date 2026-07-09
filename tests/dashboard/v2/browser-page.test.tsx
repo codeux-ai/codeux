@@ -8,7 +8,8 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 import { BrowserPage } from "../../../dashboard/src/v2/BrowserPage.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
 import { usePreviewSessions } from "../../../dashboard/src/v2/hooks/use-preview-sessions.js";
-import { fetchPreviewLogs, fetchPreviewScript, savePreviewScript } from "../../../dashboard/src/v2/lib/browser-api.js";
+import { fetchPreviewLogs, fetchPreviewScript, rebuildPreviewSession, savePreviewEnvironmentOverrides, savePreviewScript } from "../../../dashboard/src/v2/lib/browser-api.js";
+import { saveProjectPreviewEnvironmentVariables } from "../../../dashboard/src/v2/lib/settings-api.js";
 
 expect.extend(matchers);
 
@@ -39,6 +40,7 @@ const effectiveSettingsMock = vi.hoisted(() => ({
         sprintPreview: {
           enabled: true,
           showInAppBrowser: true,
+          environmentVariables: [{ key: "API_BASE_URL", value: "http://api.local", enabled: true }],
         },
       },
     },
@@ -102,17 +104,20 @@ vi.mock("../../../dashboard/src/v2/components/browser/PreviewSessionSlider.js", 
     sessions,
     onSelectSession,
     onRemoveSession,
+    onManageEnvironment,
     removingSessionIds = [],
   }: {
     sessions: Array<{ id: string; sprintName: string; hostPort?: number | null }>;
     onSelectSession: (id: string) => void;
     onRemoveSession: (id: string) => void;
+    onManageEnvironment: (id: string) => void;
     removingSessionIds?: string[];
   }) => (
     <div>
       {sessions.filter((session) => !removingSessionIds.includes(session.id)).map((session) => (
         <div key={session.id}>
           <button type="button" onClick={() => onSelectSession(session.id)}>{session.sprintName}</button>
+          <button type="button" onClick={() => onManageEnvironment(session.id)}>Env {session.sprintName}</button>
           <button type="button" onClick={() => onRemoveSession(session.id)}>Remove</button>
           <a href={session.hostPort ? `http://preview-${session.id}.localhost` : undefined}>Open Link</a>
         </div>
@@ -223,14 +228,50 @@ vi.mock("../../../dashboard/src/v2/lib/browser-api.js", () => ({
   removePreviewSession: mockRemovePreviewSession,
   rebuildPreviewSession: vi.fn().mockResolvedValue(undefined),
   savePreviewScript: vi.fn().mockResolvedValue({ content: "new mock script", mode: "script", path: "/script.sh" }),
+  savePreviewEnvironmentOverrides: vi.fn().mockResolvedValue({
+    id: "sess-1",
+    projectId: "p1",
+    sprintId: "s1",
+    sprintName: "Sprint 1",
+    status: "running",
+    healthStatus: "healthy",
+    containerAppPort: 3000,
+    hostPort: 8080,
+    portMappings: [{ containerPort: 3000, hostPort: 8080, isPrimary: true }],
+    environmentOverrides: [{ key: "CODE_UX_ALLOW_PUBLIC_DASHBOARD", value: "1", enabled: true }],
+  }),
   startPreviewSession: mockStartPreviewSession,
   stopPreviewSession: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../../../dashboard/src/v2/lib/settings-api.js", () => ({
+  saveProjectPreviewEnvironmentVariables: vi.fn().mockResolvedValue({
+    settings: {
+      sprintPreview: {
+        environmentVariables: [
+          { key: "API_BASE_URL", value: "http://api.local", enabled: true },
+          { key: "CODE_UX_ALLOW_PUBLIC_DASHBOARD", value: "1", enabled: true },
+        ],
+      },
+    },
+  }),
 }));
 
 afterEach(() => {
   cleanup();
   vi.mocked(usePreviewSessions).mockReset();
   vi.mocked(usePreviewSessions).mockImplementation(() => buildDefaultPreviewSessionsResult());
+  vi.mocked(saveProjectPreviewEnvironmentVariables).mockReset();
+  vi.mocked(saveProjectPreviewEnvironmentVariables).mockResolvedValue({
+    settings: {
+      sprintPreview: {
+        environmentVariables: [
+          { key: "API_BASE_URL", value: "http://api.local", enabled: true },
+          { key: "CODE_UX_ALLOW_PUBLIC_DASHBOARD", value: "1", enabled: true },
+        ],
+      },
+    },
+  } as any);
 });
 
 describe("BrowserPage", () => {
@@ -244,6 +285,7 @@ describe("BrowserPage", () => {
           sprintPreview: {
             enabled: true,
             showInAppBrowser: true,
+            environmentVariables: [{ key: "API_BASE_URL", value: "http://api.local", enabled: true }],
           },
         },
       },
@@ -376,6 +418,13 @@ describe("BrowserPage", () => {
     vi.mocked(fetchPreviewScript).mockResolvedValue({ content: "mock script", mode: "script", path: "/script.sh" });
     vi.mocked(savePreviewScript).mockReset();
     vi.mocked(savePreviewScript).mockResolvedValue({ content: "new mock script", mode: "script", path: "/script.sh" });
+    vi.mocked(savePreviewEnvironmentOverrides).mockReset();
+    vi.mocked(savePreviewEnvironmentOverrides).mockResolvedValue({
+      ...buildDefaultPreviewSessionsResult().selectedSession,
+      environmentOverrides: [{ key: "CODE_UX_ALLOW_PUBLIC_DASHBOARD", value: "1", enabled: true }],
+    } as any);
+    vi.mocked(rebuildPreviewSession).mockReset();
+    vi.mocked(rebuildPreviewSession).mockResolvedValue(undefined);
   });
 
   it("renders correctly with new slider and chrome components", async () => {
@@ -440,7 +489,7 @@ describe("BrowserPage", () => {
       await waitFor(() => {
         expect(screen.getByLabelText("Preview container logs")).toHaveTextContent("mock logs");
       });
-      expect(vi.mocked(fetchPreviewLogs)).toHaveBeenCalledWith("sess-1", 160);
+      expect(vi.mocked(fetchPreviewLogs)).toHaveBeenCalledWith("p1", "s1", "sess-1", 160);
     } finally {
       vi.useRealTimers();
     }
@@ -611,6 +660,81 @@ describe("BrowserPage", () => {
     });
 
     expect(screen.getByText("Script saved successfully")).toBeInTheDocument();
+  });
+
+  it("shows pending session action feedback and suppresses duplicate rebuild submissions", async () => {
+    const user = userEvent.setup();
+    let resolveRebuild: (() => void) | null = null;
+    vi.mocked(rebuildPreviewSession).mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveRebuild = resolve;
+        })
+    );
+
+    render(<BrowserPage />);
+
+    const rebuildButton = screen.getByRole("button", { name: "Rebuild preview container" });
+    await user.click(rebuildButton);
+    await user.click(rebuildButton);
+
+    expect(vi.mocked(rebuildPreviewSession)).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Rebuilding preview container" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Rebuilding preview container" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Stop preview container" })).toBeDisabled();
+    expect(screen.getByText("Rebuild in progress. Rebuild and stop controls are temporarily unavailable.")).toBeInTheDocument();
+
+    await act(async () => {
+      resolveRebuild?.();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("Container rebuilt successfully")).toBeInTheDocument();
+  });
+
+  it("saves selected container environment overrides", async () => {
+    const user = userEvent.setup();
+    render(<BrowserPage />);
+
+    await user.click(screen.getByRole("button", { name: "Env Sprint 1" }));
+    expect(screen.getByText("API_BASE_URL=http://api.local")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Sprint 1" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Add override" }));
+    const nameInputs = screen.getAllByLabelText("Environment variable name");
+    const valueInputs = screen.getAllByLabelText("Preview environment override value");
+    await user.type(nameInputs.at(-1) as HTMLElement, "CODE_UX_ALLOW_PUBLIC_DASHBOARD");
+    await user.type(valueInputs.at(-1) as HTMLElement, "1");
+    await user.click(screen.getByRole("button", { name: "Save overrides" }));
+
+    expect(savePreviewEnvironmentOverrides).toHaveBeenCalledWith(
+      "p1",
+      "s1",
+      "sess-1",
+      [{ key: "CODE_UX_ALLOW_PUBLIC_DASHBOARD", value: "1", enabled: true }],
+    );
+    expect(screen.getByText("Preview environment saved. Rebuild the container to apply changes.")).toBeInTheDocument();
+  });
+
+  it("saves project-wide preview environment defaults from the right sidebar", async () => {
+    const user = userEvent.setup();
+    render(<BrowserPage />);
+
+    await user.click(screen.getByRole("button", { name: "Add default" }));
+    const nameInputs = screen.getAllByLabelText("Environment variable name");
+    const valueInputs = screen.getAllByLabelText("Preview environment default value");
+    await user.type(nameInputs.at(-1) as HTMLElement, "CODE_UX_ALLOW_PUBLIC_DASHBOARD");
+    await user.type(valueInputs.at(-1) as HTMLElement, "1");
+    await user.click(screen.getByRole("button", { name: "Save defaults" }));
+
+    expect(saveProjectPreviewEnvironmentVariables).toHaveBeenCalledWith(
+      "p1",
+      [
+        { key: "API_BASE_URL", value: "http://api.local", enabled: true },
+        { key: "CODE_UX_ALLOW_PUBLIC_DASHBOARD", value: "1", enabled: true },
+      ],
+    );
+    expect(screen.getByText("Preview environment defaults saved. Rebuild containers to apply changes.")).toBeInTheDocument();
   });
 
   it("shows script save error feedback and keeps the editor available for recovery", async () => {
@@ -864,7 +988,7 @@ describe("BrowserPage", () => {
       fireEvent.click(screen.getAllByRole("button", { name: "Remove" })[0]!);
     });
 
-    expect(mockRemovePreviewSession).toHaveBeenCalledWith("sess-1");
+    expect(mockRemovePreviewSession).toHaveBeenCalledWith("p1", "s1", "sess-1");
     expect(mockRefreshSessions).toHaveBeenCalled();
   });
 
@@ -891,6 +1015,6 @@ describe("BrowserPage", () => {
       resolveRemoval?.();
     });
 
-    expect(mockRemovePreviewSession).toHaveBeenCalledWith("sess-1");
+    expect(mockRemovePreviewSession).toHaveBeenCalledWith("p1", "s1", "sess-1");
   });
 });

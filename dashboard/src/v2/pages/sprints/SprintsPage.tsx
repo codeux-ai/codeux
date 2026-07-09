@@ -36,6 +36,8 @@ import { SprintSettingsOverrideModal } from "../../components/ui/SprintSettingsO
 import { SprintImportMenu } from "../../components/sprints/SprintImportMenu.js";
 import { SprintIssueImportModal } from "../../components/sprints/SprintIssueImportModal.js";
 import { SprintJiraImportModal } from "../../components/sprints/SprintJiraImportModal.js";
+import { SprintProjectManagementImportModal } from "../../components/sprints/SprintProjectManagementImportModal.js";
+import { SprintCanvasImportModal } from "../../components/sprints/SprintCanvasImportModal.js";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ActionFeedbackRegion } from "../../components/ui/ActionFeedbackRegion.js";
@@ -69,6 +71,12 @@ const dedupeImportedTasks = (tasks: SprintImportedTaskInput[]): SprintImportedTa
   }
   return Array.from(deduped.values());
 };
+
+const getLinkedIssueKey = (issue: SprintLinkedIssueInput): string => (
+  issue.externalId
+    ? `${issue.provider}:${issue.sourceProvider || ""}:${issue.sourceKind || ""}:${issue.hostDomain}:${issue.repository}:${issue.externalId}`
+    : `${issue.provider}:${issue.hostDomain}:${issue.repository}:${issue.issueKey || ""}:${issue.issueNumber ?? ""}`
+);
 
 const readStoredSprintGalleryVisibility = (): boolean => {
   try {
@@ -224,10 +232,13 @@ export const SprintsPage: FunctionComponent = () => {
     defaultAgentRoutingMode,
     defaultWorkerAgentPresetId,
     showQuicksprint, setShowQuicksprint,
+    projectManagementImportProvider = null, setProjectManagementImportProvider = () => undefined,
+    canvasImportProvider = null, setCanvasImportProvider = () => undefined,
     quicksprintTemplates,
     quicksprintLoading,
     agentPresets,
     handleQuicksprintExecute,
+    handleQuicksprintSchedule,
     handleCreateQuicksprintTemplate,
     handleUpdateQuicksprintTemplate,
     handleDeleteQuicksprintTemplate,
@@ -255,6 +266,16 @@ export const SprintsPage: FunctionComponent = () => {
   const activeRowMenuSprint = useMemo(() => rowMenu
     ? sortedSprints.find((sprint) => sprint.id === rowMenu.sprintId) || null
     : null, [rowMenu, sortedSprints]);
+
+  const scheduleAnchorSprintOptions = useMemo(
+    () => sortedSprints
+      .filter((sprint) => sprint.id !== editingSprint?.id)
+      .map((sprint) => ({
+        id: sprint.id,
+        label: sprint.name,
+      })),
+    [editingSprint?.id, sortedSprints],
+  );
 
   const mergeImportedTasks = useCallback((tasks: SprintImportedTaskInput[]) => {
     setPendingImportedTasks((current) => dedupeImportedTasks([...current, ...tasks]));
@@ -469,10 +490,10 @@ export const SprintsPage: FunctionComponent = () => {
     setLinkedIssues((current) => {
       const next = new Map<string, SprintLinkedIssueInput>();
       for (const issue of current) {
-        next.set(`${issue.provider}:${issue.hostDomain}:${issue.repository}:${issue.issueNumber}`, issue);
+        next.set(getLinkedIssueKey(issue), issue);
       }
       for (const issue of issues) {
-        next.set(`${issue.provider}:${issue.hostDomain}:${issue.repository}:${issue.issueNumber}`, issue);
+        next.set(getLinkedIssueKey(issue), issue);
       }
       return Array.from(next.values());
     });
@@ -603,6 +624,13 @@ export const SprintsPage: FunctionComponent = () => {
                       setShowIssueImportModal(true);
                     }}
                     onImportJira={() => setIsJiraModalOpen(true)}
+                    onImportNotion={() => setProjectManagementImportProvider("notion")}
+                    onImportAsana={() => setProjectManagementImportProvider("asana")}
+                    onImportLinear={() => setProjectManagementImportProvider("linear")}
+                    onImportMiro={() => setCanvasImportProvider("miro")}
+                    onImportLucid={() => setCanvasImportProvider("lucid")}
+                    onImportFigma={() => setCanvasImportProvider("figma")}
+                    onImportMural={() => setCanvasImportProvider("mural")}
                   />
                   <button
                     type="button"
@@ -800,6 +828,7 @@ export const SprintsPage: FunctionComponent = () => {
                     defaultAgentRoutingMode={defaultAgentRoutingMode}
                     defaultWorkerAgentPresetId={defaultWorkerAgentPresetId}
                     planningEta={planningEta}
+                    scheduleAnchorSprintOptions={scheduleAnchorSprintOptions}
                     onClose={() => {
                       setShowCreateComposer(false);
                       setEditingSprint(null);
@@ -818,10 +847,7 @@ export const SprintsPage: FunctionComponent = () => {
                     onAppendTasks={editingSprint ? () => { void handleOpenAppendTasks(editingSprint); } : undefined}
                     onRemoveLinkedIssue={(issue) => {
                       setLinkedIssues((current) => current.filter((candidate) => (
-                        candidate.provider !== issue.provider
-                        || candidate.hostDomain !== issue.hostDomain
-                        || candidate.repository !== issue.repository
-                        || candidate.issueNumber !== issue.issueNumber
+                        getLinkedIssueKey(candidate) !== getLinkedIssueKey(issue)
                       )));
                     }}
                     onRemoveImportedTask={removeImportedTask}
@@ -858,6 +884,8 @@ export const SprintsPage: FunctionComponent = () => {
                         animateLatestCell();
                       }
                     }}
+                    onSchedule={handleQuicksprintSchedule}
+                    scheduleAnchorSprintOptions={scheduleAnchorSprintOptions}
                     onCreateTemplate={handleCreateQuicksprintTemplate}
                     onUpdateTemplate={handleUpdateQuicksprintTemplate}
                     onDeleteTemplate={handleDeleteQuicksprintTemplate}
@@ -956,6 +984,38 @@ export const SprintsPage: FunctionComponent = () => {
           onImportSpecialTasks={(tasks) => {
             mergeImportedTasks(tasks);
             setIsJiraModalOpen(false);
+            setShowQuicksprint(false);
+            if (!editingSprint) {
+              setShowCreateComposer(true);
+            }
+          }}
+        />
+      )}
+
+      {projectManagementImportProvider && selectedProject && (
+        <SprintProjectManagementImportModal
+          projectId={selectedProject.id}
+          provider={projectManagementImportProvider}
+          onClose={() => setProjectManagementImportProvider(null)}
+          onImport={(issues) => {
+            mergeLinkedIssues(issues);
+            setProjectManagementImportProvider(null);
+            setShowQuicksprint(false);
+            if (!editingSprint) {
+              setShowCreateComposer(true);
+            }
+          }}
+        />
+      )}
+
+      {canvasImportProvider && selectedProject && (
+        <SprintCanvasImportModal
+          projectId={selectedProject.id}
+          provider={canvasImportProvider}
+          onClose={() => setCanvasImportProvider(null)}
+          onImport={(issues) => {
+            mergeLinkedIssues(issues);
+            setCanvasImportProvider(null);
             setShowQuicksprint(false);
             if (!editingSprint) {
               setShowCreateComposer(true);

@@ -2,13 +2,14 @@ import type {
   ThinkingMode,
   QwenModelProviderSettings,
   ProviderSettings,
-  ProviderId
+  ProviderConfigMode,
 } from "../contracts/app-types.js";
 
 export interface ProviderSettingsOverride {
   model: string;
   thinkingMode: ThinkingMode;
   apiKey: string;
+  maxConcurrentTasks: number;
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
   qwenRegion?: "china" | "international";
   qwenBaseUrl?: string;
@@ -24,6 +25,8 @@ export interface ProviderSettingsOverride {
   openCodePackage?: string;
   providerMountAuth?: boolean;
   providerAuthPath?: string;
+  providerConfigMode?: ProviderConfigMode;
+  providerConfigPath?: string;
   customBaseUrl?: string;
   customModel?: string;
 }
@@ -38,6 +41,7 @@ export function buildProviderSettingsOverride(
     model: resolvedModel,
     thinkingMode: providerSettings.thinkingMode,
     apiKey: usesMountedAuth ? "" : providerSettings.apiKey,
+    maxConcurrentTasks: providerSettings.maxConcurrentTasks,
     qwenAuthMode: usesMountedAuth && providerSettings.provider === "qwen-code"
       ? "LOCAL_AUTH"
       : providerSettings.qwenAuthMode,
@@ -57,6 +61,8 @@ export function buildProviderSettingsOverride(
     openCodePackage: providerSettings.openCodePackage,
     providerMountAuth: providerSettings.mountAuth,
     providerAuthPath: providerSettings.authPath,
+    providerConfigMode: providerSettings.providerConfigMode,
+    providerConfigPath: providerSettings.providerConfigPath,
     customBaseUrl: usesMountedAuth ? undefined : providerSettings.customBaseUrl,
     customModel: usesMountedAuth ? undefined : providerSettings.customModel,
   };

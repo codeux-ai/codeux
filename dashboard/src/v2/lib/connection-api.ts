@@ -1,14 +1,60 @@
 import type {
   AgentConnection,
+  ChatDraftRecord,
+  ConversationMessageHistoryRecord,
   ChatMessageRecord,
   ChatThread,
   CreateConversationThreadInput,
   CreateDashboardConversationMessageInput,
+  UpsertConversationDraftInput,
   UpdateConversationThreadInput,
   UpdateConversationThreadRouteInput,
   UpdateMcpConnectionInput,
 } from "../types.js";
 import { fetchJson } from "../../lib/api/fetch-json.js";
+
+const CHAT_DRAFT_USER_STORAGE_KEY = "codeux.chat.draftUserId";
+const CHAT_DRAFT_USER_HEADER = "X-CodeUX-Dashboard-User-Id";
+let draftUserIdMemoryFallback: string | null = null;
+
+const createCryptoRandomId = (): string => {
+  const cryptoApi = globalThis.crypto;
+  if (typeof cryptoApi?.randomUUID === "function") {
+    return cryptoApi.randomUUID();
+  }
+  if (typeof cryptoApi?.getRandomValues === "function") {
+    const bytes = new Uint8Array(16);
+    cryptoApi.getRandomValues(bytes);
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+  throw new Error("Secure random generation is unavailable.");
+};
+
+const createDraftUserId = (): string => `dashboard-user-${createCryptoRandomId()}`;
+
+export const getOrCreateDashboardDraftUserId = (): string => {
+  if (typeof window === "undefined") {
+    return "dashboard-user-server";
+  }
+  try {
+    const stored = window.localStorage.getItem(CHAT_DRAFT_USER_STORAGE_KEY)?.trim();
+    if (stored) {
+      draftUserIdMemoryFallback = stored;
+      return stored;
+    }
+    const next = createDraftUserId();
+    window.localStorage.setItem(CHAT_DRAFT_USER_STORAGE_KEY, next);
+    draftUserIdMemoryFallback = next;
+    return next;
+  } catch {
+    draftUserIdMemoryFallback ??= createDraftUserId();
+    return draftUserIdMemoryFallback;
+  }
+};
+
+const chatDraftHeaders = (userId: string): Record<string, string> => ({
+  [CHAT_DRAFT_USER_HEADER]: userId,
+});
 
 export const fetchProjectConnections = async (projectId: string): Promise<AgentConnection[]> => {
   return fetchJson<AgentConnection[]>(`/api/projects/${encodeURIComponent(projectId)}/connections`);
@@ -42,6 +88,60 @@ export const createConversationThread = async (
 
 export const fetchConversationMessages = async (threadId: string): Promise<ChatMessageRecord[]> => {
   return fetchJson<ChatMessageRecord[]>(`/api/conversations/threads/${encodeURIComponent(threadId)}/messages`);
+};
+
+export const fetchConversationDraft = async (
+  projectId: string,
+  input: { userId: string; contextKey: string },
+): Promise<ChatDraftRecord | null> => {
+  const params = new URLSearchParams({ contextKey: input.contextKey });
+  return fetchJson<ChatDraftRecord | null>(
+    `/api/projects/${encodeURIComponent(projectId)}/conversations/draft?${params.toString()}`,
+    { headers: chatDraftHeaders(input.userId) },
+  );
+};
+
+export const upsertConversationDraft = async (
+  projectId: string,
+  input: UpsertConversationDraftInput,
+): Promise<ChatDraftRecord | null> => {
+  return fetchJson<ChatDraftRecord | null>(`/api/projects/${encodeURIComponent(projectId)}/conversations/draft`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...chatDraftHeaders(input.userId),
+    },
+    body: JSON.stringify({
+      contextKey: input.contextKey,
+      bodyMarkdown: input.bodyMarkdown,
+    }),
+  });
+};
+
+export const fetchConversationMessageHistory = async (
+  projectId: string,
+  input: { userId: string },
+): Promise<ConversationMessageHistoryRecord[]> => {
+  return fetchJson<ConversationMessageHistoryRecord[]>(
+    `/api/projects/${encodeURIComponent(projectId)}/conversations/message-history`,
+    { headers: chatDraftHeaders(input.userId) },
+  );
+};
+
+export const recordConversationMessageHistory = async (
+  projectId: string,
+  input: { userId: string; bodyMarkdown: string },
+): Promise<ConversationMessageHistoryRecord> => {
+  return fetchJson<ConversationMessageHistoryRecord>(`/api/projects/${encodeURIComponent(projectId)}/conversations/message-history`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...chatDraftHeaders(input.userId),
+    },
+    body: JSON.stringify({
+      bodyMarkdown: input.bodyMarkdown,
+    }),
+  });
 };
 
 export const updateConversationThread = async (

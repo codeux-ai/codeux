@@ -67,6 +67,332 @@ describe("ProviderRunner", () => {
     }));
   });
 
+  it("executes mockup-cli in host mode without credentials and mutates only the workspace", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-host-"));
+    const outsidePath = path.join(os.tmpdir(), "mockup-cli-outside.txt");
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: [
+        "mockup-cli:write src/generated.txt :: hello from mockup",
+        "mockup-cli:append src/generated.txt :: second line",
+        `mockup-cli:run node -e "require('fs').accessSync('src/generated.txt')"`,
+      ].join("\n"),
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-1",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.nativeSessionId).toMatch(/^mockup-cli-[0-9a-f]{16}$/);
+    expect(result.text).toBe("Mockup CLI completed deterministic workspace task.");
+    expect(result.usageTelemetry).toMatchObject({
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      usageSource: "unsupported",
+      transcriptText: "Mockup CLI completed deterministic workspace task.",
+      nativeSessionId: result.nativeSessionId,
+    });
+    await expect(fs.readFile(path.join(repoPath, "src/generated.txt"), "utf8")).resolves.toBe("hello from mockup\nsecond line\n");
+    await expect(fs.access(outsidePath)).rejects.toThrow();
+    expect(runStreamingCommand).not.toHaveBeenCalled();
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
+  it("ignores generic validation language outside explicit mockup directives", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-explicit-only-"));
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: [
+        "## SYSTEM INSTRUCTIONS",
+        "2. **Unit & Integration**: `npm run test` and `npm run test:coverage` must pass.",
+        "",
+        "## SUBTASK TO EXECUTE",
+        "Use only the deterministic mockup-cli directives below.",
+        "mockup-cli:write src/generated.txt :: explicit directives only",
+        "",
+        "## MEMORY CONTEXT",
+        "- [patterns] Run validation commands: npm run missing-script",
+      ].join("\n"),
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-explicit-only",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.text).toBe("Mockup CLI completed deterministic workspace task.");
+    await expect(fs.readFile(path.join(repoPath, "src/generated.txt"), "utf8")).resolves.toBe("explicit directives only\n");
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
+  it("returns a nonzero mockup-cli failure for explicit failure directives", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-fail-"));
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: "mockup-cli:fail",
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-fail",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("mockup-cli intentional failure directive triggered");
+    expect(result.text).toBe("Mockup CLI intentional failure directive triggered.");
+    expect(result.nativeSessionId).toMatch(/^mockup-cli-[0-9a-f]{16}$/);
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
+  it("supports the full deterministic mockup directive surface in one sprint step", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-full-"));
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: [
+        "mockup-cli:write src/base.txt :: base",
+        "mockup-cli:append src/base.txt :: appended",
+        "mockup-cli:replace src/base.txt :: appended => replaced",
+        "mockup-cli:write src/delete-me.txt :: remove me",
+        "mockup-cli:delete src/delete-me.txt",
+        "mockup-cli:conflict src/conflict.txt :: incoming deterministic edit",
+        `mockup-cli:run node -e "const fs=require('fs'); const text=fs.readFileSync('src/base.txt','utf8'); if (!text.includes('replaced')) process.exit(1)"`,
+      ].join("\n"),
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-full",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.text).toBe("Mockup CLI completed deterministic workspace task.");
+    await expect(fs.readFile(path.join(repoPath, "src/base.txt"), "utf8")).resolves.toContain("replaced");
+    await expect(fs.access(path.join(repoPath, "src", "delete-me.txt"))).rejects.toThrow();
+    await expect(fs.readFile(path.join(repoPath, "src", "conflict.txt"), "utf8")).resolves.toContain("<<<<<<< mockup-cli-current");
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
+  it("resolves active merge conflict markers for mockup virtual conflict workers", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-conflict-resolve-"));
+    await fs.mkdir(path.join(repoPath, "src"), { recursive: true });
+    await fs.writeFile(path.join(repoPath, "README.md"), [
+      "# Fixture",
+      "<<<<<<< HEAD",
+      "Left sibling edited the conflict target.",
+      "=======",
+      "Right sibling edited the conflict target.",
+      ">>>>>>> task/right",
+      "",
+    ].join("\n"), "utf8");
+    await fs.writeFile(path.join(repoPath, "src", "conflict-target.js"), [
+      "export function conflictValue() {",
+      "<<<<<<< HEAD",
+      "  return 'left';",
+      "=======",
+      "  return 'right';",
+      ">>>>>>> task/right",
+      "}",
+      "",
+    ].join("\n"), "utf8");
+    await fs.mkdir(path.join(repoPath, ".code-ux"), { recursive: true });
+    await fs.writeFile(path.join(repoPath, ".code-ux", "mockup-pentest.log"), [
+      "<<<<<<< HEAD",
+      "left task completed",
+      "||||||| merged common ancestors",
+      "root task completed",
+      "=======",
+      "right task completed",
+      ">>>>>>> task/right",
+      "",
+    ].join("\n"), "utf8");
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: "Resolve the active Git merge conflict already present in this worktree.",
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-conflict-resolve",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    const readme = await fs.readFile(path.join(repoPath, "README.md"), "utf8");
+    expect(readme).toContain("Left sibling edited the conflict target.");
+    expect(readme).toContain("Right sibling edited the conflict target.");
+    expect(readme).not.toContain("<<<<<<<");
+    expect(readme).not.toContain(">>>>>>>");
+    await expect(fs.readFile(path.join(repoPath, "src", "conflict-target.js"), "utf8")).resolves.toContain("return 'left+right';");
+    const pentestLog = await fs.readFile(path.join(repoPath, ".code-ux", "mockup-pentest.log"), "utf8");
+    expect(pentestLog).toContain("left task completed");
+    expect(pentestLog).toContain("right task completed");
+    expect(pentestLog).not.toContain("|||||||");
+    expect(pentestLog).not.toContain("<<<<<<<");
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
+  it("resolves final local merge conflict markers for mockup virtual conflict workers", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-final-conflict-resolve-"));
+    await fs.mkdir(path.join(repoPath, "src"), { recursive: true });
+    await fs.writeFile(path.join(repoPath, "src", "final-merge-conflict.js"), [
+      "export function finalMergeValue() {",
+      "<<<<<<< HEAD",
+      "  return 'feature';",
+      "=======",
+      "  return 'default';",
+      ">>>>>>> main",
+      "}",
+      "",
+    ].join("\n"), "utf8");
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: "Resolve the active Git merge conflict already present in this worktree.",
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-final-conflict-resolve",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    const resolved = await fs.readFile(path.join(repoPath, "src", "final-merge-conflict.js"), "utf8");
+    expect(resolved).toContain("return 'feature+default';");
+    expect(resolved).not.toContain("<<<<<<<");
+    expect(resolved).not.toContain(">>>>>>>");
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
+  it("prioritizes active merge conflict repair over embedded mockup directives", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-conflict-directives-"));
+    await fs.mkdir(path.join(repoPath, "src"), { recursive: true });
+    await fs.writeFile(path.join(repoPath, "README.md"), [
+      "# Fixture",
+      "<<<<<<< HEAD",
+      "Left sibling edited the conflict target.",
+      "=======",
+      "Right sibling edited the conflict target.",
+      ">>>>>>> task/right",
+      "",
+    ].join("\n"), "utf8");
+    await fs.writeFile(path.join(repoPath, "src", "conflict-target.js"), [
+      "export function conflictValue() {",
+      "<<<<<<< HEAD",
+      "  return 'left';",
+      "=======",
+      "  return 'right';",
+      ">>>>>>> task/right",
+      "}",
+      "",
+    ].join("\n"), "utf8");
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: [
+        "Resolve the active Git merge conflict already present in this worktree.",
+        "",
+        "Original task prompt included for context:",
+        "mockup-cli:write src/conflict-target.js :: export function conflictValue() {\\n  return 'left+right';\\n}",
+      ].join("\n"),
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-conflict-directives",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    const readme = await fs.readFile(path.join(repoPath, "README.md"), "utf8");
+    expect(readme).toContain("Left sibling edited the conflict target.");
+    expect(readme).toContain("Right sibling edited the conflict target.");
+    expect(readme).not.toContain("<<<<<<<");
+    expect(readme).not.toContain(">>>>>>>");
+    await expect(fs.readFile(path.join(repoPath, "src", "conflict-target.js"), "utf8")).resolves.toContain("left+right");
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
+  it("forwards mockup-cli through Docker command construction with no API key requirement", async () => {
+    await runner.runProvider({
+      provider: "mockup-cli",
+      prompt: "mockup-cli:write fixture.txt :: hello",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-docker-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
+      command: "node",
+      args: expect.arrayContaining(["-e", "mockup-cli:write fixture.txt :: hello"]),
+      providerLabel: "mockup-cli",
+      providerEnv: expect.objectContaining({
+        CODE_UX_MOCKUP_MODEL: "default",
+        CODE_UX_MOCKUP_SESSION_ID: "mock-docker-1",
+      }),
+    }));
+    const env = dockerRunner.runProviderInDocker.mock.calls[0][0].providerEnv;
+    expect(env.OPENAI_API_KEY).toBeUndefined();
+    expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(env.GEMINI_API_KEY).toBeUndefined();
+  });
+
+  it("sanitizes mockup-cli transcript output", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-sanitize-"));
+    const rawSecret = "sk-or-v1-mockupSecret1234567890";
+
+    const result = await runner.runProviderForText({
+      provider: "mockup-cli",
+      prompt: `mockup-cli:write secret.txt :: ${rawSecret}`,
+      cwd: repoPath,
+      model: "default",
+      apiKey: "",
+      sessionId: "mock-session-sanitize",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.stdout).not.toContain(rawSecret);
+    expect(result.text).not.toContain(rawSecret);
+    expect(result.usageTelemetry.transcriptText).not.toContain(rawSecret);
+    expect(await fs.readFile(path.join(repoPath, "secret.txt"), "utf8")).toContain(rawSecret);
+
+    await fs.rm(repoPath, { recursive: true, force: true });
+  });
+
   it("sanitizes bootstrap-branch fatal fallback text in runProviderForText", async () => {
     dockerRunner.readWorkspaceFile.mockResolvedValue("");
     dockerRunner.runProviderInDocker.mockResolvedValueOnce({
@@ -90,6 +416,76 @@ describe("ProviderRunner", () => {
     });
 
     expect(result.text).toBe("keep this line");
+  });
+
+  it("sanitizes host provider activity callbacks and returned command output", async () => {
+    const rawSecret = "sk-or-v1-providerRunnerHostSecret1234567890";
+    const onActivity = vi.fn();
+    vi.mocked(runStreamingCommand).mockImplementationOnce(async (_command, _args, _cwd, _env, options: any) => {
+      options.onStdoutLine?.(`stdout OPENROUTER_API_KEY=${rawSecret}`);
+      options.onStderrLine?.(`stderr Authorization: Bearer ${rawSecret}`);
+      return {
+        ok: true,
+        stdout: `stdout OPENROUTER_API_KEY=${rawSecret}`,
+        stderr: `stderr Authorization: Bearer ${rawSecret}`,
+        code: 0,
+        signal: null,
+      };
+    });
+
+    const result = await runner.runProvider({
+      provider: "codex",
+      prompt: "hello",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "key",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath: "/repo",
+      onActivity,
+    });
+
+    const activityText = JSON.stringify(onActivity.mock.calls);
+    expect(activityText).not.toContain(rawSecret);
+    expect(activityText).toContain("[REDACTED]");
+    expect(result.stdout).not.toContain(rawSecret);
+    expect(result.stderr).not.toContain(rawSecret);
+    expect(result.stdout).toContain("OPENROUTER_API_KEY=[REDACTED]");
+    expect(result.stderr).toContain("Authorization: Bearer [REDACTED]");
+  });
+
+  it("sanitizes Docker provider activity callbacks and returned command output", async () => {
+    const rawSecret = "github_pat_1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_1234567890";
+    const onActivity = vi.fn();
+    dockerRunner.runProviderInDocker.mockImplementationOnce(async ({ onActivity: emit }: any) => {
+      emit(`cloned with ${rawSecret}`, "agent");
+      emit(`provider Authorization: Bearer ${rawSecret}`, "provider");
+      return {
+        ok: true,
+        stdout: `stdout ${rawSecret}`,
+        stderr: `stderr Authorization: Bearer ${rawSecret}`,
+        code: 0,
+        signal: null,
+      };
+    });
+
+    const result = await runner.runProvider({
+      provider: "gemini",
+      prompt: "hello",
+      cwd: "/repo",
+      model: "gemini-2.5-pro",
+      apiKey: "key",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity,
+    });
+
+    const activityText = JSON.stringify(onActivity.mock.calls);
+    expect(activityText).not.toContain(rawSecret);
+    expect(activityText).toContain("[REDACTED]");
+    expect(result.stdout).not.toContain(rawSecret);
+    expect(result.stderr).not.toContain(rawSecret);
   });
 
   it("persists the fresh Claude session id after missing-conversation fallback", async () => {
@@ -183,6 +579,94 @@ describe("ProviderRunner", () => {
     }));
   });
 
+  it.each([
+    {
+      provider: "codex" as const,
+      continueSessionId: "codex-native-1",
+      expectedNativePrompt: "/compact",
+      expectedResumeArgs: ["exec", "resume", "--last"],
+    },
+    {
+      provider: "claude-code" as const,
+      continueSessionId: "66e95743-e82e-445d-891a-ac01b27ddcb9",
+      expectedNativePrompt: "/compact",
+      expectedResumeArgs: ["--resume", "66e95743-e82e-445d-891a-ac01b27ddcb9"],
+    },
+    {
+      provider: "gemini" as const,
+      continueSessionId: "gemini-native-1",
+      expectedNativePrompt: "/compress",
+      expectedResumeArgs: ["--resume"],
+    },
+    {
+      provider: "qwen-code" as const,
+      continueSessionId: "thread-qwen-code",
+      expectedNativePrompt: "/compress",
+      expectedResumeArgs: ["--continue"],
+    },
+    {
+      provider: "opencode" as const,
+      continueSessionId: "ses_19151020bffeNmMNdnhmFM3fA5",
+      expectedNativePrompt: "/compact",
+      expectedResumeArgs: ["--session", "ses_19151020bffeNmMNdnhmFM3fA5"],
+    },
+    {
+      provider: "antigravity" as const,
+      continueSessionId: "antigravity-native-1",
+      expectedNativePrompt: "/compact",
+      expectedResumeArgs: ["--conversation=antigravity-native-1"],
+    },
+  ])("runs native compaction for $provider by resuming the existing CLI session", async ({ provider, continueSessionId, expectedNativePrompt, expectedResumeArgs }) => {
+    const sessionId = `thread-${provider}`;
+
+    await runner.runProviderForText({
+      provider,
+      prompt: "this transcript must not be replayed for compaction",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "key",
+      sessionId,
+      workspaceSessionId: sessionId,
+      continueSessionId,
+      nativeSessionOperation: "compact",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    const providerRun = dockerRunner.runProviderInDocker.mock.calls
+      .map((call: any[]) => call[0])
+      .find((call: any) => call.providerLabel === provider && call.sessionId === sessionId);
+
+    expect(providerRun).toBeTruthy();
+    expect(providerRun.args).toEqual(expect.arrayContaining(expectedResumeArgs));
+    expect(providerRun.args).toContain(expectedNativePrompt);
+    expect(providerRun.args).not.toContain("this transcript must not be replayed for compaction");
+    expect(JSON.stringify(dockerRunner.runProviderInDocker.mock.calls)).not.toContain(":compaction");
+    expect(dockerRunner.ensureWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId,
+      preserve: true,
+      reuseExisting: true,
+    }));
+  });
+
+  it("rejects native compaction when no continuation session is available", async () => {
+    await expect(runner.runProvider({
+      provider: "claude-code",
+      prompt: "compact",
+      cwd: "/repo",
+      model: "sonnet",
+      apiKey: "key",
+      sessionId: "thread-1",
+      nativeSessionOperation: "compact",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    })).rejects.toThrow("requires continueSessionId");
+
+    expect(dockerRunner.runProviderInDocker).not.toHaveBeenCalled();
+  });
+
   it("preserves provider result and logs errors when cleanup operations fail", async () => {
     vi.mocked(runStreamingCommand).mockResolvedValueOnce({
       ok: true,
@@ -213,6 +697,63 @@ describe("ProviderRunner", () => {
     expect(mockRm).toHaveBeenCalled();
     mockRm.mockRestore();
   });
+
+  it("logs runtime cleanup failures as sanitized metadata without raw command payloads", async () => {
+    vi.mocked(runStreamingCommand).mockResolvedValueOnce({
+      ok: true,
+      stdout: "provider output",
+      stderr: "",
+      code: 0,
+      signal: null,
+    });
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn(),
+    };
+    const runnerWithLogger = new ProviderRunner(dockerRunner, logger as any);
+    const repoDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-runner-cleanup-"));
+    const rawPrompt = "raw prompt transcript that must not be logged";
+    const rawSecret = "sk-cleanup-secret";
+    const mockRm = vi.spyOn(fs, "rm").mockRejectedValueOnce(
+      new Error(`rm failed after antigravity ${rawPrompt} ANTHROPIC_API_KEY=${rawSecret}`),
+    );
+
+    const result = await runnerWithLogger.runProvider({
+      provider: "opencode",
+      prompt: rawPrompt,
+      cwd: repoDir,
+      model: "anthropic/claude-sonnet-4-5",
+      apiKey: rawSecret,
+      openCodeAuthMode: "ENV_KEY",
+      sessionId: "session-1",
+      invocationId: "exec-inv-1",
+      providerInvocationId: "provider-inv-1",
+      purpose: "task_coding",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath: repoDir,
+      mcpConnection: { url: "http://127.0.0.1:4444/mcp", authToken: "mcp-secret" },
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(logger.error).toHaveBeenCalledWith(
+      "Provider cleanup task failed: runtime cleanup",
+      expect.objectContaining({
+        logPurpose: "runtime",
+        errorName: "Error",
+      }),
+    );
+    const loggedMetadata = JSON.stringify(logger.error.mock.calls);
+    expect(loggedMetadata).not.toContain(rawPrompt);
+    expect(loggedMetadata).not.toContain(rawSecret);
+    expect(loggedMetadata).not.toContain("ANTHROPIC_API_KEY");
+    mockRm.mockRestore();
+    await fs.rm(repoDir, { recursive: true, force: true });
+  });
+
   it("cleans up workspace and codex output path if internal execution throws in runProvider", async () => {
     dockerRunner.runProviderInDocker.mockRejectedValueOnce(new Error("Execution failed"));
 
@@ -305,8 +846,13 @@ describe("ProviderRunner", () => {
   });
 
   it("uses the configured Qwen custom model and rewrites local Docker endpoints", async () => {
+    const originalPlatform = process.platform;
     const originalRewrite = process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
-    process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST = "1";
+    Object.defineProperty(process, "platform", {
+      value: "linux",
+      configurable: true,
+    });
+    delete process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
     try {
       const runArgs = {
         provider: "qwen-code" as const,
@@ -328,6 +874,10 @@ describe("ProviderRunner", () => {
       const model = resolveEffectiveModel(runArgs);
       await runner.runProvider({ ...runArgs, model });
     } finally {
+      Object.defineProperty(process, "platform", {
+        value: originalPlatform,
+        configurable: true,
+      });
       if (originalRewrite === undefined) {
         delete process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
       } else {
@@ -738,8 +1288,13 @@ describe("ProviderRunner", () => {
   });
 
   it("uses the configured OpenCode custom provider model instead of a stale placeholder", async () => {
+    const originalPlatform = process.platform;
     const originalRewrite = process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
-    process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST = "1";
+    Object.defineProperty(process, "platform", {
+      value: "linux",
+      configurable: true,
+    });
+    delete process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
     try {
       const runArgs = {
         provider: "opencode" as const,
@@ -760,6 +1315,10 @@ describe("ProviderRunner", () => {
       const model = resolveEffectiveModel(runArgs);
       await runner.runProvider({ ...runArgs, model });
     } finally {
+      Object.defineProperty(process, "platform", {
+        value: originalPlatform,
+        configurable: true,
+      });
       if (originalRewrite === undefined) {
         delete process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
       } else {
@@ -1063,6 +1622,8 @@ describe("ProviderRunner MCP config generation", () => {
     mockReadFile.mockResolvedValue(null as any);
     const mockWriteFile = vi.spyOn(fs, 'writeFile');
     mockWriteFile.mockResolvedValue(undefined);
+    const mockChmod = vi.spyOn(fs, 'chmod');
+    mockChmod.mockResolvedValue(undefined);
   });
 
   const writeConfig = (conn: any, cwd: string, provider: any, qwenSettings?: string, customServers: any[] = []) =>

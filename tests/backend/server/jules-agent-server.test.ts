@@ -26,6 +26,8 @@ vi.mock("../../../src/services/cli-process-runner.js", () => {
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } from "vitest";
 import { CodeUxServer } from "../../../src/server/code-ux-server.js";
 import { loadAppConfig } from "../../../src/config/app-config.js";
+import { bootDashboard } from "../../../src/app/lifecycle/dashboard-lifecycle-service.js";
+import { bootMcpHttpTransport } from "../../../src/app/lifecycle/mcp-lifecycle-service.js";
 import axios from "axios";
 import path from "path";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
@@ -45,7 +47,7 @@ describe("CodeUxServer", () => {
   let sharedSessionTracking: unknown;
   let sharedActivityCacheService: unknown;
   const projectRoot = path.resolve(process.cwd());
-  const appConfig = loadAppConfig([], projectRoot);
+  const appConfig = loadAppConfig(["node", "index.js", "--no-mcp-https"], projectRoot);
 
   beforeAll(() => {
     server = new CodeUxServer({ projectRoot, appConfig });
@@ -60,6 +62,7 @@ describe("CodeUxServer", () => {
     (server as any).sessionTracking = sharedSessionTracking;
     (server as any).activityCacheService = sharedActivityCacheService;
     (server as any).completedSprints = new Set();
+    (server as any).startupRecoveryCompleted = false;
   });
 
   afterAll(async () => {
@@ -75,6 +78,31 @@ describe("CodeUxServer", () => {
     expect(context.getProjectRoot()).toBe(projectRoot);
     expect(context.getAppConfig()).toEqual(appConfig);
     expect(context.runtimeContext).toBeDefined();
+  });
+
+  it("skips dashboard boot and starts authenticated MCP HTTP transport in server mode", async () => {
+    const serverModeConfig = loadAppConfig([
+      "node",
+      "index.js",
+      "--server-mode",
+      "--mcp-https-auth-token",
+      "cux_test_abcdefghijklmnopqrstuvwxyz123456",
+    ], projectRoot);
+    const serverModeServer = new CodeUxServer({ projectRoot, appConfig: serverModeConfig });
+
+    try {
+      await serverModeServer.run();
+
+      expect(bootDashboard).not.toHaveBeenCalled();
+      expect(bootMcpHttpTransport).toHaveBeenCalledWith(expect.objectContaining({
+        enabled: true,
+        authToken: "cux_test_abcdefghijklmnopqrstuvwxyz123456",
+        requireAuth: true,
+        getReady: expect.any(Function),
+      }));
+    } finally {
+      await serverModeServer.close();
+    }
   });
 
   describe("getEffectiveJulesApiKey", () => {
@@ -912,7 +940,7 @@ describe("CodeUxServer", () => {
       expect(bootMcpArgs.getMissingJulesApiKeyInstruction).toBeUndefined();
     }, 30000);
 
-    it("reports ready once runtime services are bound even before a project status timestamp exists", async () => {
+    it("reports ready once runtime services are bound and startup recovery has completed", async () => {
       (runServer as any).runtimeStartupRecoveryService = {
         recover: vi.fn().mockResolvedValue({
           recoveredCliSessionIds: [],
@@ -939,11 +967,24 @@ describe("CodeUxServer", () => {
       const bootDashboardArgs = (bootDashboard as any).mock.calls.at(-1)?.[0];
 
       expect(bootDashboardArgs.isReady()).toEqual({
+        status: "NOT_READY",
+        components: {
+          settingsDb: "UP",
+          dashboardBind: "UP",
+          mcpService: "UP",
+          startupRecovery: "DOWN",
+        },
+      });
+
+      await (runServer as any).runStartupRecovery();
+
+      expect(bootDashboardArgs.isReady()).toEqual({
         status: "READY",
         components: {
           settingsDb: "UP",
           dashboardBind: "UP",
           mcpService: "UP",
+          startupRecovery: "UP",
         },
       });
     }, 30000);

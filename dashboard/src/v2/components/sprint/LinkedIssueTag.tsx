@@ -11,15 +11,18 @@ import {
   X,
 } from "lucide-preact";
 import { getSafeUrl } from "../../lib/safe-url.js";
+import type { LinkedIssueProvider } from "../../types.js";
 import { JiraIcon } from "../icons/JiraIcon.js";
 
 export interface LinkedIssueTagProps {
   issue: {
     id?: string;
-    provider?: "github" | "gitlab" | "jira";
+    provider?: LinkedIssueProvider;
     repository?: string;
     projectKey?: string;
-    issueNumber?: number;
+    issueNumber?: number | null;
+    externalId?: string | null;
+    sourceKind?: string;
     issueKey?: string;
     title: string;
     url?: string;
@@ -34,10 +37,11 @@ export interface LinkedIssueTagProps {
   onRemove?: (issue: LinkedIssueTagProps["issue"]) => void;
 }
 
-const PROVIDER_LABELS: Record<NonNullable<LinkedIssueTagProps["issue"]["provider"]>, string> = {
-  github: "GitHub",
-  gitlab: "GitLab",
-  jira: "Jira",
+const providerLabel = (provider: LinkedIssueTagProps["issue"]["provider"]): string => {
+  if (provider === "github") return "GitHub";
+  if (provider === "gitlab") return "GitLab";
+  if (provider === "jira") return "Jira";
+  return provider ? provider.charAt(0).toUpperCase() + provider.slice(1) : "Issue";
 };
 
 const getProviderClasses = (provider: LinkedIssueTagProps["issue"]["provider"]): string => {
@@ -76,7 +80,10 @@ const ProviderIcon = ({ provider }: { provider: LinkedIssueTagProps["issue"]["pr
       </span>
     );
   }
-  return <Github className="h-4 w-4" strokeWidth={2.1} aria-hidden="true" />;
+  if (provider === "github" || !provider) {
+    return <Github className="h-4 w-4" strokeWidth={2.1} aria-hidden="true" />;
+  }
+  return <Link2 className="h-4 w-4" strokeWidth={2.1} aria-hidden="true" />;
 };
 
 export const LinkedIssueTag: FunctionComponent<LinkedIssueTagProps> = ({
@@ -88,7 +95,7 @@ export const LinkedIssueTag: FunctionComponent<LinkedIssueTagProps> = ({
   const issueKey = getIssueKey(issue);
 
   if (variant === "composer-card") {
-    const providerLabel = issue.provider ? PROVIDER_LABELS[issue.provider] : "Issue";
+    const providerName = providerLabel(issue.provider);
     const projectLabel = issue.projectKey || issue.repository || "Unmapped project";
     const stateLabel = issue.state || issue.status || "No state";
     const labels = issue.labels || [];
@@ -102,13 +109,13 @@ export const LinkedIssueTag: FunctionComponent<LinkedIssueTagProps> = ({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
           <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.9rem] border ${getProviderClasses(issue.provider)}`}>
             <ProviderIcon provider={issue.provider} />
-            <span className="sr-only">{providerLabel}</span>
+            <span className="sr-only">{providerName}</span>
           </div>
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
               <span className="rounded-full border border-black/[0.05] bg-white/70 px-2 py-1 text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
-                {providerLabel}
+                {providerName}
               </span>
               <span className="min-w-0 break-all">{projectLabel}</span>
               <span className="shrink-0 text-signal-600 dark:text-signal-300">{issueKey}</span>

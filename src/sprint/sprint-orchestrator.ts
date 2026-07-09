@@ -299,6 +299,7 @@ export class SprintOrchestrator {
       // the PR entirely, since resolveOrCreateMainBranchPr still needs some non-empty body.
       const freshSprint = this.deps.projectManagementRepository.getSprint(args.sprintId);
       const dashboardSettings = this.deps.getDashboardSettings({ projectId: args.projectId, sprintId: args.sprintId });
+      const mainPrCompletionTimestamp = new Date().toISOString();
       const title = freshSprint
         ? composeSprintPrTitle({ sprintNumber: freshSprint.number, sprintName: freshSprint.name, featureBranch: args.featureBranch, defaultBranch: args.defaultBranch })
         : `Merge ${args.featureBranch} into ${args.defaultBranch}`;
@@ -312,6 +313,7 @@ export class SprintOrchestrator {
           aiProviderSettings: dashboardSettings.aiProvider,
           sections: dashboardSettings.git.prDescription.sprint,
           sectionOrder: dashboardSettings.git.prDescription.sprintSectionOrder,
+          completionTimestamp: mainPrCompletionTimestamp,
           executionRepository: this.deps.executionRepository,
         }))
         : `Automated sprint completion PR opened by Code UX.\n\nBase: \`${args.defaultBranch}\`\nHead: \`${args.featureBranch}\``;

@@ -1,9 +1,9 @@
 # Management actions
 
 Code UX exposes **one MCP tool per management domain** — `manage_projects`, `manage_sprints`,
-`manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_agents`, `manage_memory`,
-`manage_settings`, `manage_preview`, and `manage_telemetry` — ten domains, each with a set of
-**actions**. This page is the complete matrix. (See [MCP tools](./mcp-tools.md) for the tool list and
+`manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_agents`, `manage_node_flows`, `manage_memory`,
+`manage_settings`, `manage_preview`, `manage_custom_dashboards`, `manage_chat_providers`, and `manage_telemetry` — each with a set of
+**actions**. This page is the complete matrix. (See [MCP tools](/docs/developer-mcp-tools) for the tool list and
 schemas.)
 
 A dedicated-tool call takes the `action` plus action-specific fields:
@@ -16,11 +16,7 @@ A dedicated-tool call takes the `action` plus action-specific fields:
 }
 ```
 
-The **deprecated** `manage_code_ux` tool reaches the same handlers via an explicit envelope —
-`{ "domain": "<name>", "action": "<name>", "payload": { … }, "approval": { … } }` — and is kept only
-for backward compatibility.
-
-**Approval handshake:** Destructive actions return `{ approvalRequired: true, approvalMessage: "..." }` on first call. Re-call with `approval: { confirmed: true }` to proceed.
+**Approval handshake:** Destructive actions return `{ approvalRequired: true, approvalMessage: "..." }` on first call. Re-call with `approval: { confirmed: true }` (or `--payload-json '{"approval":{"confirmed":true}}'` in the CLI) to proceed.
 
 ---
 
@@ -35,7 +31,7 @@ Domain for project CRUD and selection.
 | `create` | – | `CreateProjectInput` | Create a new project. |
 | `update` | – | `projectId`, `UpdateProjectInput` | Update a project. |
 | `select` | – | `projectId \| null` | Set the active project. |
-| `setup` | – | `projectId`, optional `setup` | Run the Project Setup Agent to generate agents, templates, and guidance. |
+| `setup` | – | `projectId`, optional `setup` or top-level `options` | Run the Project Setup Agent to generate agents, templates, guidance, and optional docs embedding (`options.docs`). |
 | `delete` | ✅ | `projectId` | Delete a project (+ approval). |
 
 `CreateProjectInput` includes: `name`, `repositoryPath`, optional `defaultBranch`, `featureBranchPrefix`, `description`, `githubMode`.
@@ -57,7 +53,7 @@ Domain for project CRUD and selection.
 | `force_cancel` | – | `sprintRunId` | Force-cancel (immediate). |
 | `inspect_run` | – | `projectId`, `sprintId`, `sprintRunId?` | Inspect run(s). |
 | `import_issues` | – | `projectId`, optional `sprintId`, filters | Search provider issues, and optionally replace sprint linked issues. |
-| `plan` | – | `projectId`, `sprintId` | Run the planning agent. Optional `autoStart`, `replan`, `planningAgentPresetId`, and `overrides`. |
+| `plan` | – | `projectId`, `sprintId` | Run the planning agent. Optional `autoStart`, `replan`, `planningAgentPresetId`, and `overrides`. Planning self-reflection gates `autoStart` when enabled; non-passing reflection saves the plan without starting the sprint. |
 
 `title` and `goalMarkdown` are MCP-friendly aliases. The repository stores sprint `name` and `goal`.
 
@@ -103,15 +99,18 @@ Task create/update fields include `title`, `name`, `promptMarkdown`, `descriptio
 | Action | Destructive | Required payload | Description |
 | --- | --- | --- | --- |
 | `list` | – | `projectId`, optional `from`, `to` | List scheduler entries and occurrences for a project window. |
-| `create` | – | `projectId`, `targetType`, `scheduledFor`, target payload | Create a generic scheduler entry for `sprint`, `quicksprint`, or `chat`. |
+| `create` | – | `projectId`, `targetType`, `scheduledFor`, target payload | Create a generic scheduler entry for `sprint`, `quicksprint`, `chat`, `node_flow`, or `memory_remediation`. |
 | `schedule_sprint` | – | `projectId`, `scheduledFor`, `sprintId` | Schedule a sprint orchestration. |
 | `schedule_quicksprint` | – | `projectId`, `scheduledFor`, `templateId` | Schedule a quicksprint. Optional `taskCount`, `submitMode`, `additionalPrompt`, `agentPresetId`, `planningOverrides`. |
 | `schedule_chat` | – | `projectId`, `scheduledFor`, `bodyMarkdown` | Schedule a chat message. Optional `threadId`, `connectionId`, `title`, `timezone`, `recurrence`. |
+| `schedule_node_flow` | – | `projectId`, `scheduledFor`, `flowId` | Schedule a node flow. Optional JSON `input`, `flowVersion`, `timezone`, and `recurrence`. |
 | `update` | – | `entryId`, update fields | Update scheduler title, status, time, recurrence, or target payload. |
 | `delete` | ✅ | `entryId` | Delete a scheduler entry. |
-| `run_due` | – | optional `now` | Evaluate due entries immediately, mostly for operational verification. |
+| `run_due` | – | optional `now` ISO date override | Evaluate due entries immediately, mostly for operational verification. |
 
-`create` accepts nested targets (`sprintTarget`, `quicksprintTarget`, `chatTarget`) or the flattened fields used by the `schedule_*` aliases. Scheduled chat entries post through the dashboard chat runtime when due, so they can target an existing thread with `threadId` or create/use a titled thread with `title`.
+`create` accepts nested targets (`sprintTarget`, `quicksprintTarget`, `chatTarget`, `nodeFlowTarget`) or the flattened fields used by the `schedule_*` aliases. `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, and `schedule_node_flow` infer the target type. Scheduling supports an absolute time (`scheduledFor`) or an `after_sprint_end` anchor via `scheduleMode` or `anchorMode`, with `sourceSprintId` / `anchorSourceSprintId` and optional `offsetMinutes` / `anchorOffsetMinutes`.
+
+Memory remediation schedules use `targetType: "memory_remediation"` but have their own dedicated `/api/projects/:projectId/scheduler/memory-remediation` HTTP routes separate from the normal scheduler entries.
 
 ---
 
@@ -127,13 +126,13 @@ Task create/update fields include `title`, `name`, `promptMarkdown`, `descriptio
 | `replace_system_settings` | ✅ | `settings` | Replace all system settings. |
 | `patch_system_setting` | ✅ | `path`, `value` | Patch one field by JSON path. |
 | `replace_project_settings` | ✅ | `projectId`, `settings` | Replace project settings. |
-| `patch_project_setting` | – | `projectId`, `path`, `value` | Patch a project setting. |
+| `patch_project_setting` | ✅ | `projectId`, `path`, `value` | Patch a project setting. |
 | `reset_project_settings` | ✅ | `projectId` | Reset project to defaults. |
 | `replace_sprint_settings` | ✅ | `projectId`, `sprintId`, `settings` | Replace sprint settings. |
-| `patch_sprint_setting` | – | `projectId`, `sprintId`, `path`, `value` | Patch a sprint setting. |
+| `patch_sprint_setting` | ✅ | `projectId`, `sprintId`, `path`, `value` | Patch a sprint setting. |
 | `reset_sprint_settings` | ✅ | `projectId`, `sprintId` | Reset sprint to defaults. |
 
-All mutating settings actions are human-confirmation gated, including patch actions. The first call records the exact action and payload for up to 15 minutes and returns `approvalRequired: true`; it does not mutate settings, even if `approval.confirmed: true` was sent. After the user explicitly confirms, repeat the same action with the same payload and `approval.confirmed: true`. The approval is one-use and cannot approve a different settings payload.
+All mutating settings actions (replace, patch, reset) require human confirmation. Get/resolve actions are read-only. Mutating settings actions first return an approval-required response; only the exact same action and payload may execute once with `approval.confirmed: true` within 15 minutes. The approval is one-use and cannot approve a different settings payload.
 
 JSON path examples for `patch_*`:
 - `aiProvider.providers.codex.model` → string
@@ -178,6 +177,19 @@ Manages agent presets per project.
 | `count` | – | `projectId`, `scope` | Count by scope. |
 | `model_status` | – | – | Get embedding model status. |
 
+### Claim actions
+
+The memory domain also exposes durable claim management:
+
+| Action | Destructive | Required payload | Description |
+| --- | --- | --- | --- |
+| `create_claim` | – | `projectId`, `claim` | Create a project claim. Accepts `category`, `confidence`, `durability`, `tags`, `appliesToPaths`, `sourceMemoryId`, `supersedesClaimId`, `supportType`, `weight`, and `evidenceWeight`. |
+| `list_claims` | – | `projectId` | List project claims. Accepts `status`, `category`, and `limit`. |
+| `get_claim` | – | `projectId`, `claimId` | Get a specific claim. |
+| `update_claim` | – | `projectId`, `claimId` | Update a claim. Accepts `claim`, `category`, `confidence`, `durability`, `status`, `tags`, `appliesToPaths`, and `supersedesClaimId`. |
+| `add_claim_evidence` | – | `projectId`, `claimId`, `memoryId` | Add evidence to a claim. Accepts `supportType` and `weight`. |
+| `deprecate_claim` | ✅ | `projectId`, `claimId` | Deprecate a claim and require approval confirmation. |
+
 ---
 
 ## `preview`
@@ -198,6 +210,50 @@ Sprint preview browser sessions.
 
 ---
 
+## `custom_dashboards`
+
+Project-scoped generated dashboards, immutable revisions, detached validation sessions, and publication state.
+
+| Action | Destructive | Required payload | Description |
+| --- | --- | --- | --- |
+| `list` | – | `projectId` | List project custom dashboards. |
+| `get` | – | `dashboardId` | Get one dashboard with revisions. |
+| `create` | – | `projectId`, `title`, `manifest`, `fileBundle` | Create a mutable draft. Optional `description`, `sourceNodeGraph`, `styleguide`, and `runtimeMetadata`. |
+| `update` | – | `dashboardId`, update fields | Update mutable draft fields without mutating existing revisions. |
+| `create_revision` | – | `dashboardId` | Create an immutable revision from the draft or supplied bundle overrides. |
+| `validate_revision` | – | `projectId`, `dashboardId`, `revisionId` | Start detached Docker validation for a revision. |
+| `validation_status` | – | `sessionId` | Read validation session status and report metadata. |
+| `validation_logs` | – | `sessionId`, optional `tail` | Read validation logs. |
+| `publish_revision` | – | `dashboardId`, `revisionId`, optional `validationSessionId` | Publish only a passed revision with a valid report. |
+| `archive` | ✅ | `dashboardId` | Clear active publication and mark the dashboard archived. |
+| `data_catalog` | – | `projectId` | Return dashboard summaries and declared source nodes. |
+
+Publication rejects failed, queued, running, cancelled, missing, or cross-revision validation sessions before the active publication pointer changes.
+
+---
+
+## `chat_providers`
+
+External chat provider configuration and delivery-state inspection.
+
+| Action | Destructive | Required payload | Description |
+| --- | --- | --- | --- |
+| `list_provider_definitions` | – | optional `providerKind` | List supported provider setup schemas, bridge modes, secret fields, and ingress URL guidance. |
+| `list_connections` | – | optional `providerKind`, `enabledOnly` | List provider connections with redacted credential metadata and generated ingress URLs. |
+| `get_connection` | – | `providerConnectionId` or `connectionId` | Get one provider connection. |
+| `create_connection` | – | `providerKind`, `displayName`; optional `bridgeMode`, `status`, `enabled`, `setup`, `secrets` | Create a provider connection. Responses redact credentials. |
+| `update_connection` | – | `providerConnectionId` or `connectionId`, update fields | Update connection metadata, setup, enabled state, or secrets. Replacing a non-empty `secrets` payload requires one-use approval. |
+| `delete_connection` | ✅ | `providerConnectionId` or `connectionId` | Delete the provider connection and cascade bindings/delivery rows. |
+| `list_channel_bindings` | – | optional `providerConnectionId`, `projectId`, `projectIds`, `externalChannelId`, `enabledOnly` | List channel/project bindings. Multiple projects can bind to the same external channel. |
+| `create_channel_binding` | – | `providerConnectionId`, `externalChannelId`, `externalChannelName`, `projectId` | Bind an external channel to a project with optional routing hints and enablement flags. |
+| `update_channel_binding` | – | `channelBindingId` or `bindingId`, update fields | Update channel metadata, routing hints, project, agent preset, and enablement flags. |
+| `delete_channel_binding` | ✅ | `channelBindingId` or `bindingId` | Delete one channel/project binding. |
+| `list_outbound_deliveries` | – | optional filters | Inspect outbound delivery rows by provider, channel, or delivery status. Does not send messages. |
+
+Raw `secrets` are never returned by MCP responses or validation errors. `list_outbound_deliveries` is an inspection surface only; inbound routing and outbound sending are outside this management contract.
+
+---
+
 ## `telemetry`
 
 Read-only execution telemetry.
@@ -209,6 +265,7 @@ Read-only execution telemetry.
 | `list_sprint_runs` | – | `projectId`, `sprintId` | Compact run list. |
 | `list_task_dispatches` | – | `projectId`, `sprintId`, `taskId` | Per-task dispatch list. |
 | `list_execution_invocations` | – | `projectId`, optional `sprintId`, `taskId`, `type` | Filter MCP invocations. |
+| `list_execution_invocation_messages` | – | `invocationId` | List messages for a specific execution invocation. |
 
 ---
 

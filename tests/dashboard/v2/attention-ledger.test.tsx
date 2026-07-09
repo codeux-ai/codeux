@@ -7,8 +7,9 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 expect.extend(matchers);
 
-import { AttentionLedger } from "../../../dashboard/src/v2/components/AttentionLedger.js";
+import { AttentionLedger, AttentionQueueItemsList } from "../../../dashboard/src/v2/components/AttentionLedger.js";
 import { useExecutionTimeline } from "../../../dashboard/src/hooks/ExecutionTimelineContext.js";
+import type { ExecutionAttentionItemSummary } from "../../../dashboard/src/types.js";
 import * as useReducedMotionModule from "../../../dashboard/src/v2/hooks/use-reduced-motion.js";
 import gsap from "gsap";
 
@@ -138,5 +139,41 @@ describe("AttentionLedger", () => {
         render(<AttentionLedger />);
 
         expect(screen.queryByText("Attention Queue")).toBeNull();
+    });
+
+    it("renders queue rows in read-only mode without action controls", () => {
+        const attentionItem: ExecutionAttentionItemSummary = {
+            id: "item-readonly",
+            sprintId: "sprint-1",
+            taskId: "task-1",
+            sprintRunId: "run-1",
+            dispatchId: "dispatch-1",
+            attentionType: "merge_required",
+            severity: "high",
+            ownerType: "worker",
+            status: "open",
+            assignedWorkerEndpointId: null,
+            title: "Read-only blocker",
+            summaryMarkdown: "Shared rendering without duplicate actions.",
+            payload: null,
+            openedAt: "2024-01-01T00:00:00Z",
+            claimedAt: null,
+            resolvedAt: null,
+            updatedAt: "2024-01-01T00:01:00Z",
+        };
+
+        render(
+            <AttentionQueueItemsList
+                attentionItems={[attentionItem]}
+                snapshot={baseContext.execution as any}
+                showActions={false}
+                listLabel="Overview scoped attention items"
+            />,
+        );
+
+        expect(screen.getByRole("list", { name: "Overview scoped attention items" })).toBeInTheDocument();
+        expect(screen.getByText("Read-only blocker")).toBeInTheDocument();
+        expect(screen.getByText("Shared rendering without duplicate actions.")).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: /attention item/i })).not.toBeInTheDocument();
     });
 });

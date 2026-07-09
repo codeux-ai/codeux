@@ -42,15 +42,29 @@ let mockResetProject;
 let mockResetDatabase;
 let mockFetchExternal;
 let mockFetchAgentPresets;
+let mockFetchSkillStorages;
 
 const cloneDashboardSettings = () => JSON.parse(JSON.stringify(DEFAULT_DASHBOARD_SETTINGS));
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  mockSaveSystem = vi.spyOn(settingsApi, 'saveSystemSettings').mockResolvedValue({ defaults: cloneDashboardSettings(), runtime: {} } as any);
-  mockSaveProject = vi.spyOn(settingsApi, 'saveProjectSettings').mockResolvedValue({ settings: {}, sources: {} } as any);
-  mockFetchSystem = vi.spyOn(settingsApi, 'fetchSystemSettings').mockResolvedValue({
-    runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
+const buildSystemRuntimeSettings = (overrides: Record<string, unknown> = {}) => ({
+  dashboardPort: 4444,
+  consoleLogLevel: "info",
+  debugLogFileLevel: "error",
+  consoleLogMode: "standard",
+  lastActiveScope: "system",
+  dbAutoVacuumOnStartup: false,
+  dbPruningEnabled: true,
+  dbRetentionDays: 30,
+  restartSprintPolicy: "restart",
+  restartInvocationPolicy: "restart",
+  ...overrides,
+});
+
+const buildSystemSettings = (overrides: Record<string, any> = {}) => {
+  const runtimeOverrides = overrides.runtime ?? {};
+  const integrationOverrides = overrides.integrations ?? {};
+  return {
+    runtime: buildSystemRuntimeSettings(runtimeOverrides),
     integrations: {
       providers: {
         jules: { provider: "jules", name: "Jules Primary", apiKey: "" },
@@ -59,10 +73,20 @@ beforeEach(() => {
         "claude-code": { provider: "claude-code", name: "Claude Primary", apiKey: "" },
       },
       githubToken: "",
+      ...integrationOverrides,
     },
     defaults: cloneDashboardSettings(),
     mcpTools: [],
-  } as any);
+    ...overrides,
+    runtime: buildSystemRuntimeSettings(runtimeOverrides),
+  };
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockSaveSystem = vi.spyOn(settingsApi, 'saveSystemSettings').mockImplementation(async (settings) => settings as any);
+  mockSaveProject = vi.spyOn(settingsApi, 'saveProjectSettings').mockResolvedValue({ settings: {}, sources: {} } as any);
+  mockFetchSystem = vi.spyOn(settingsApi, 'fetchSystemSettings').mockResolvedValue(buildSystemSettings() as any);
   mockFetchProject = vi.spyOn(settingsApi, 'fetchProjectEffectiveSettings').mockResolvedValue({ settings: cloneDashboardSettings(), sources: {} } as any);
   mockResetProject = vi.spyOn(settingsApi, 'resetProjectSettings').mockResolvedValue();
   mockResetDatabase = vi.spyOn(settingsApi, 'resetSystemDatabase').mockResolvedValue();
@@ -70,6 +94,17 @@ beforeEach(() => {
     { id: "worker-1", name: "Delivery Agent", labels: ["worker"] },
     { id: "qa-2", name: "QA Agent Beta", labels: ["qa"] },
     { id: "qa-1", name: "Risk Reviewer", labels: ["quality-assurance"] },
+  ] as any);
+  mockFetchSkillStorages = vi.spyOn(agentPresetApi, 'fetchSkillStorages').mockResolvedValue([
+    {
+      id: "storage-1",
+      projectId: "proj-1",
+      name: "Implementation Skills",
+      description: "Durable implementation playbooks",
+      storageKind: "project",
+      createdAt: "2023-01-01T00:00:00.000Z",
+      updatedAt: "2023-01-01T00:00:00.000Z",
+    },
   ] as any);
   mockFetchExternal = vi.spyOn(dashboardApi, 'fetchExternalSettingsHints').mockResolvedValue({
     env: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
@@ -101,12 +136,14 @@ describe("useSettingsPageState", () => {
     expect(result.current.systemSettings?.defaults.ciIntelligence.resolveMainMergeConflicts).toBe(true);
     expect(result.current.systemSettings?.defaults.memory.enabled).toBe(true);
     expect(result.current.systemSettings?.defaults.agents.qualityAssurance.enabled).toBe(true);
+    expect(result.current.systemSettings?.defaults.cliWorkflow.containerRunAsRoot).toBe(false);
     expect(result.current.editableSettings?.ciIntelligence.featurePrAutoMergeMode).toBe("ALWAYS");
     expect(result.current.editableSettings?.ciIntelligence.mainBranchAutoMergeMode).toBe("ALWAYS");
     expect(result.current.editableSettings?.ciIntelligence.resolveMergeConflicts).toBe(true);
     expect(result.current.editableSettings?.ciIntelligence.resolveMainMergeConflicts).toBe(true);
     expect(result.current.editableSettings?.memory.enabled).toBe(true);
     expect(result.current.editableSettings?.agents.qualityAssurance.enabled).toBe(true);
+    expect(result.current.editableSettings?.cliWorkflow.containerRunAsRoot).toBe(false);
   });
 
   it("maps fresh effective settings defaults into project settings view-model", () => {
@@ -123,6 +160,7 @@ describe("useSettingsPageState", () => {
     expect(mapped.settings.ciIntelligence.resolveMainMergeConflicts).toBe(true);
     expect(mapped.settings.memory.enabled).toBe(true);
     expect(mapped.settings.agents.qualityAssurance.enabled).toBe(true);
+    expect(mapped.settings.cliWorkflow.containerRunAsRoot).toBe(false);
   });
 
   it("updates editable settings for project scope", async () => {
@@ -221,6 +259,49 @@ describe("useSettingsPageState", () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
   });
 
+  it("restores the last settings scope from persisted system settings", async () => {
+    mockFetchSystem.mockResolvedValueOnce(buildSystemSettings({
+      runtime: { lastActiveScope: "project" },
+    }) as any);
+
+    const { result } = renderHook(() => useSettingsPageState(CATEGORIES));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.activeScope).toBe("project");
+  });
+
+  it("persists scope changes through system settings without saving unrelated draft edits", async () => {
+    const { result } = renderHook(() => useSettingsPageState(CATEGORIES));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => {
+      result.current.updateSystem((current) => ({
+        ...current,
+        runtime: {
+          ...current.runtime,
+          consoleLogLevel: "debug",
+        },
+      }));
+    });
+    expect(result.current.activeDirty).toBe(true);
+
+    await act(async () => {
+      await result.current.setActiveScope("project");
+    });
+
+    expect(mockSaveSystem).toHaveBeenCalledWith(expect.objectContaining({
+      runtime: expect.objectContaining({
+        consoleLogLevel: "info",
+        lastActiveScope: "project",
+      }),
+    }));
+    expect(result.current.activeScope).toBe("project");
+    expect(result.current.systemSettings?.runtime.consoleLogLevel).toBe("debug");
+    expect(result.current.systemSettings?.runtime.lastActiveScope).toBe("project");
+    expect(result.current.activeDirty).toBe(true);
+  });
+
   it("renders settings loading state as a busy category region", () => {
     mockFetchSystem.mockReturnValueOnce(new Promise(() => {}));
 
@@ -251,7 +332,9 @@ describe("useSettingsPageState", () => {
     fireEvent.input(screen.getByLabelText("Search settings categories"), {
       target: { value: "this_should_not_exist_at_all" },
     });
-    const emptySearchStatus = screen.getByText(/No settings match this_should_not_exist_at_all\./);
+    const emptySearchStatus = screen.getByText(
+      '0 results across 0 matching categories for "this_should_not_exist_at_all". Active category: General. Match previews: none. Clear the search or try routing, provider, auth, CI, agent, or memory.',
+    );
     expect(emptySearchStatus.closest('[role="status"]')).toBeInTheDocument();
 
     fireEvent.input(screen.getByLabelText("Search settings categories"), {
@@ -301,6 +384,30 @@ describe("useSettingsPageState", () => {
     expect(result.current.filteredCategories.length).toBe(CATEGORIES.length);
   });
 
+  it("renders self-reflection controls default off and supports criteria add/remove", async () => {
+    render(<SettingsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("region", { name: "Settings category panel" })).not.toHaveAttribute("aria-busy");
+    });
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Agents/ }).at(-1)!);
+
+    await waitFor(() => {
+      expect(screen.getByText("Planning self-reflection")).toBeInTheDocument();
+      expect(screen.getAllByText("Off by default").length).toBeGreaterThan(0);
+    });
+
+    const addButtons = screen.getAllByRole("button", { name: /Add criterion/i });
+    fireEvent.click(addButtons[0]);
+    expect(screen.getByDisplayValue("New criterion")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Remove New criterion/i }));
+    await waitFor(() => {
+      expect(screen.queryByDisplayValue("New criterion")).not.toBeInTheDocument();
+    });
+  });
+
   it("moves category rail focus with arrow keys and commits selection with Enter", () => {
     const onSwitchCategory = vi.fn();
     render(
@@ -340,6 +447,8 @@ describe("useSettingsPageState", () => {
     root.append(valid, invalid, laterInvalid);
     document.body.append(root);
     const invalidFocus = vi.spyOn(invalid, "focus");
+    const invalidScroll = vi.fn();
+    invalid.scrollIntoView = invalidScroll;
     const laterFocus = vi.spyOn(laterInvalid, "focus");
 
     const message = focusFirstInvalidSettingsControl(root);
@@ -347,7 +456,25 @@ describe("useSettingsPageState", () => {
     expect(message).toBeTruthy();
     expect(invalid.getAttribute("aria-invalid")).toBe("true");
     expect(invalidFocus).toHaveBeenCalled();
+    expect(invalidScroll).toHaveBeenCalledWith({ block: "center", inline: "nearest", behavior: "auto" });
     expect(laterFocus).not.toHaveBeenCalled();
+    root.remove();
+  });
+
+  it("uses owned validation copy when focusing an invalid settings field", () => {
+    const root = document.createElement("div");
+    const invalid = document.createElement("input");
+    const error = document.createElement("span");
+    error.id = "custom-error";
+    error.textContent = "Use a port between 1 and 65535.";
+    invalid.setAttribute("aria-invalid", "true");
+    invalid.setAttribute("aria-errormessage", "custom-error");
+    invalid.scrollIntoView = vi.fn();
+    root.append(invalid, error);
+    document.body.append(root);
+
+    expect(focusFirstInvalidSettingsControl(root)).toBe("Use a port between 1 and 65535.");
+
     root.remove();
   });
 

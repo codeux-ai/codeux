@@ -1,6 +1,7 @@
 import type { PipelineContext } from "./pipeline-context.js";
+import { formatTaskPrTitle } from "../../../domain/git/task-pr-title-template.js";
 import { buildTaskPrComposerInput } from "../../../domain/sprint/composer/task-pr-input-builder.js";
-import { composeTaskPrBody, composeTaskPrTitle } from "../../../domain/sprint/composer/pr-description-composer.js";
+import { composeTaskPrBody } from "../../../domain/sprint/composer/pr-description-composer.js";
 
 export interface PrFinalizeStageOptions {
   completionTimestamp?: string;
@@ -36,7 +37,17 @@ export async function executePrFinalizeStage(ctx: PipelineContext, options: PrFi
       {
         taskId: ctx.task.id,
         provider: ctx.provider,
-        title: composeTaskPrTitle(composerInput),
+        title: formatTaskPrTitle({
+          scheme: ctx.settings.git.taskPrTitleScheme,
+          sprintKeyPrefix: ctx.settings.git.sprintKeyPrefix,
+          sprint: sprint ?? (ctx.task.sprint_id ? { id: ctx.task.sprint_id } : null),
+          task: {
+            id: ctx.task.record_id ?? ctx.task.id,
+            taskKey: ctx.task.id,
+            title: ctx.task.title,
+          },
+          provider: ctx.provider,
+        }),
         body: composeTaskPrBody(composerInput),
         featureBranch: ctx.featureBranch,
         workerBranch: ctx.workerBranch,

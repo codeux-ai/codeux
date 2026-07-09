@@ -67,9 +67,17 @@ describe("ManagementToolHandler", () => {
       },
       settingsRepository: {
         getGlobalSettings: vi.fn(),
+        getSystemSettings: vi.fn(() => ({ defaults: { automationLevel: "FULL" } })),
+        getProjectSettings: vi.fn(() => ({ automationLevel: "SEMI_AUTO" })),
+        getSprintSettings: vi.fn(() => ({ automationLevel: "MANUAL" })),
+        saveSystemSettings: vi.fn((settings: unknown) => settings),
+        saveProjectSettings: vi.fn((projectId: string, settings: unknown) => settings),
+        saveSprintSettings: vi.fn((sprintId: string, base: unknown, settings: unknown) => settings),
+        getProjectResolvedSettings: vi.fn(() => ({})),
       },
       agentPresetSyncService: {
         syncPresets: vi.fn(),
+        updateAgentPreset: vi.fn(),
       },
       memoryService: {
         searchMemory: vi.fn(),
@@ -79,6 +87,12 @@ describe("ManagementToolHandler", () => {
       },
       embeddingModelManager: {
         getModelStatus: vi.fn(),
+      },
+      skillService: {
+        listStorages: vi.fn(),
+      },
+      nodeFlowService: {
+        list: vi.fn(),
       },
       planningAgentService: {
         planSprint: vi.fn(),
@@ -92,6 +106,11 @@ describe("ManagementToolHandler", () => {
       },
       schedulerService: {
         listProjectSchedule: vi.fn(),
+      },
+      workerTaskDispatchService: {
+        registerExternalWorkerEndpoint: vi.fn(),
+        pullNextDispatch: vi.fn(),
+        updateDispatch: vi.fn(),
       },
     };
     handler = new ManagementToolHandler(deps);
@@ -215,6 +234,121 @@ describe("ManagementToolHandler", () => {
     });
   });
 
+  it("does not let a destructive settings approval be reused", async () => {
+    const payload = { path: "defaults.automationLevel", value: "SEMI_AUTO" };
+
+    let response = await handler.handleManageSettings({
+      action: "patch_system_setting",
+      ...payload,
+    });
+    let parsed = JSON.parse(response.content[0].text);
+    expect(parsed.approvalRequired).toBe(true);
+
+    response = await handler.handleManageSettings({
+      action: "patch_system_setting",
+      ...payload,
+      approval: { confirmed: true },
+    });
+    parsed = JSON.parse(response.content[0].text);
+    expect(parsed.result.settings.defaults.automationLevel).toBe("SEMI_AUTO");
+
+    response = await handler.handleManageSettings({
+      action: "patch_system_setting",
+      ...payload,
+      approval: { confirmed: true },
+    });
+    parsed = JSON.parse(response.content[0].text);
+    expect(parsed.approvalRequired).toBe(true);
+    expect(deps.settingsRepository.saveSystemSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not let a destructive settings approval execute a mismatched payload", async () => {
+    await handler.handleManageSettings({
+      action: "patch_system_setting",
+      path: "defaults.automationLevel",
+      value: "SEMI_AUTO",
+    });
+
+    const response = await handler.handleManageSettings({
+      action: "patch_system_setting",
+      path: "defaults.automationLevel",
+      value: "MANUAL",
+      approval: { confirmed: true },
+    });
+    const parsed = JSON.parse(response.content[0].text);
+
+    expect(parsed.approvalRequired).toBe(true);
+    expect(deps.settingsRepository.saveSystemSettings).not.toHaveBeenCalled();
+  });
+
+  it("registers worker endpoints through the MCP worker control-plane tool", async () => {
+    deps.workerTaskDispatchService.registerExternalWorkerEndpoint.mockReturnValue({
+      id: "endpoint-1",
+      endpointKey: "mcp:worker-1",
+      connectionId: "conn-1",
+    });
+
+    const response = await handler.handleRegisterWorkerEndpoint({
+      connectionKey: "worker-1",
+      displayName: "Worker 1",
+      transport: "streamable-http",
+      projectIds: ["project-A", "project-B"],
+      activeProjectIds: ["project-B"],
+      capabilities: { canExecuteTasks: true, canSuperviseProjects: true },
+    });
+    const parsed = JSON.parse(response.content[0].text);
+
+    expect(parsed.endpoint.id).toBe("endpoint-1");
+    expect(deps.workerTaskDispatchService.registerExternalWorkerEndpoint).toHaveBeenCalledWith(expect.objectContaining({
+      connectionKey: "worker-1",
+      projectIds: ["project-A", "project-B"],
+      activeProjectIds: ["project-B"],
+    }));
+  });
+
+  it("claims and updates worker dispatches through the MCP worker control-plane tools", async () => {
+    deps.workerTaskDispatchService.pullNextDispatch.mockReturnValue({
+      dispatch: { id: "dispatch-1" },
+      leaseToken: "lease-1",
+    });
+    deps.workerTaskDispatchService.updateDispatch.mockReturnValue({
+      dispatch: { id: "dispatch-1", status: "running" },
+      controlAction: "cancel",
+    });
+
+    const claimResponse = await handler.handlePullTaskDispatch({
+      connectionKey: "worker-1",
+      projectId: "project-B",
+    });
+    const updateResponse = await handler.handleUpdateTaskDispatch({
+      connectionKey: "worker-1",
+      dispatchId: "dispatch-1",
+      leaseToken: "lease-1",
+      state: "RUNNING",
+      sessionId: "session-1",
+    });
+
+    expect(JSON.parse(claimResponse.content[0].text)).toMatchObject({
+      dispatch: { id: "dispatch-1" },
+      leaseToken: "lease-1",
+    });
+    expect(JSON.parse(updateResponse.content[0].text)).toMatchObject({
+      dispatch: { id: "dispatch-1" },
+      controlAction: "cancel",
+    });
+    expect(deps.workerTaskDispatchService.pullNextDispatch).toHaveBeenCalledWith(expect.objectContaining({
+      connectionKey: "worker-1",
+      projectId: "project-B",
+    }));
+    expect(deps.workerTaskDispatchService.updateDispatch).toHaveBeenCalledWith(expect.objectContaining({
+      connectionKey: "worker-1",
+      dispatchId: "dispatch-1",
+      leaseToken: "lease-1",
+      state: "RUNNING",
+      sessionId: "session-1",
+    }));
+  });
+
   it("should return approvalRequired for destructive actions without approval in handleManageCodeUx", async () => {
     const response = await handler.handleManageCodeUx({ domain: "unknown", action: "delete_something", payload: {} });
     const parsed = JSON.parse(response.content[0].text);
@@ -267,6 +401,89 @@ describe("ManagementToolHandler", () => {
     expect(parsed.result).toEqual({ entries: [], occurrences: [], from: "from", to: "to" });
   });
 
+  it("routes manage_node_flows through the node-flow action handler", async () => {
+    deps.nodeFlowService.list.mockReturnValue({ flows: [] });
+
+    const response = await handler.handleManageNodeFlows({ action: "list", projectId: "p1" });
+    const parsed = JSON.parse(response.content[0].text);
+
+    expect(deps.nodeFlowService.list).toHaveBeenCalledWith("p1");
+    expect(parsed.result).toEqual({ flows: [] });
+  });
+
+  it("updates agent MCP access without replacing unrelated agent fields", async () => {
+    deps.agentPresetSyncService.updateAgentPreset.mockResolvedValue({
+      id: "agent-1",
+      projectId: "p1",
+      name: "Specialist",
+      labels: ["review"],
+      avatarConfig: { body: "bot" },
+      providerConfigId: "codex-primary",
+      model: "gpt-5",
+      memoryConfig: { tier: "both", categories: [], minStrength: 0, minStrengthPerCategory: {}, maxShortTerm: 0, maxLongTerm: 0 },
+      mcpAccess: {
+        codeUxEnabled: true,
+        codeUxToolToggles: [{ name: "manage_node_flows", enabled: true, isInternal: true }],
+        linkedServerIds: ["playwright"],
+      },
+    });
+
+    const response = await handler.handleManageAgents({
+      action: "update",
+      projectId: "p1",
+      presetId: "agent-1",
+      mcpAccess: {
+        codeUxEnabled: true,
+        codeUxToolToggles: [{ name: "manage_node_flows", enabled: true, isInternal: true }],
+        linkedServerIds: ["playwright"],
+      },
+    });
+    const parsed = JSON.parse(response.content[0].text);
+
+    expect(deps.agentPresetSyncService.updateAgentPreset).toHaveBeenCalledWith("agent-1", {
+      mcpAccess: {
+        codeUxEnabled: true,
+        codeUxToolToggles: [{ name: "manage_node_flows", enabled: true, isInternal: true }],
+        linkedServerIds: ["playwright"],
+      },
+    });
+    expect(parsed.result.agent.mcpAccess.codeUxToolToggles).toEqual([
+      { name: "manage_node_flows", enabled: true, isInternal: true },
+    ]);
+    expect(parsed.result.agent.labels).toEqual(["review"]);
+    expect(parsed.result.agent.providerConfigId).toBe("codex-primary");
+    expect(parsed.result.agent.model).toBe("gpt-5");
+  });
+
+  it("exposes the manage_node_flows MCP schema", () => {
+    const tool = TOOL_DEFINITIONS.find((definition) => definition.name === "manage_node_flows");
+    expect(tool).toBeDefined();
+
+    const schema = tool?.inputSchema as { properties: Record<string, JsonSchemaProperty> } | undefined;
+    const properties = schema?.properties ?? {};
+
+    expect(properties.action?.enum).toEqual([
+      "list",
+      "get",
+      "create",
+      "update",
+      "delete",
+      "validate",
+      "run",
+      "list_runs",
+      "get_run",
+      "attach_to_agent",
+      "detach_from_agent",
+    ]);
+    expect(properties.graph).toMatchObject({ type: "object" });
+    expect(properties.widgets).toMatchObject({ type: "object" });
+    expect(properties.input).toMatchObject({ type: "object" });
+    expect(properties.agentPresetId).toMatchObject({ type: "string" });
+    expect(properties.skillAlias).toMatchObject({ type: "string" });
+    expect(tool?.description).toContain("Code UX-adapted flows");
+    expect(tool?.description).toContain("dynamic widget schemas");
+  });
+
   it("exposes the expanded import_issues MCP schema on manage_sprints", () => {
     const tool = TOOL_DEFINITIONS.find((definition) => definition.name === "manage_sprints");
     expect(tool).toBeDefined();
@@ -275,8 +492,8 @@ describe("ManagementToolHandler", () => {
     const properties = schema?.properties ?? {};
 
     expect(properties.action?.enum).toContain("import_issues");
-    expect(properties.provider?.enum).toEqual(["github", "gitlab", "jira"]);
-    expect(properties.state?.enum).toEqual(["open", "closed", "all"]);
+    expect(properties.provider?.enum).toEqual(["github", "gitlab", "jira", "notion", "asana", "linear", "miro", "lucid", "figma", "mural"]);
+    expect(properties.state).toMatchObject({ type: "string" });
     expect(properties.labels).toMatchObject({ type: "array", items: { type: "string" } });
     expect(properties.issueKeys).toMatchObject({ type: "array", items: { type: "string" } });
     expect(properties.issueNumbers).toMatchObject({ type: "array", items: { type: "number" } });
@@ -304,10 +521,81 @@ describe("ManagementToolHandler", () => {
     }
   });
 
-  it("should execute handleManageProjects delete action if approval is provided", async () => {
+  it("exposes settings bundle actions and fields on manage_settings", () => {
+    const tool = TOOL_DEFINITIONS.find((definition) => definition.name === "manage_settings");
+    expect(tool).toBeDefined();
+
+    const schema = tool?.inputSchema as { properties: Record<string, JsonSchemaProperty> } | undefined;
+    const properties = schema?.properties ?? {};
+
+    expect(properties.action?.enum).toContain("export_settings_bundle");
+    expect(properties.action?.enum).toContain("apply_settings_bundle");
+    expect(properties.bundle).toMatchObject({ type: "object" });
+    expect(properties.includeSecrets).toMatchObject({ type: "boolean" });
+    expect(properties.scopes).toMatchObject({ type: "array" });
+    expect(properties.projectIds).toMatchObject({ type: "array", items: { type: "string" } });
+    expect(properties.sprintIds).toMatchObject({ type: "array", items: { type: "string" } });
+  });
+
+  it("routes settings bundle apply through the one-use approval flow", async () => {
+    const bundle = {
+      metadata: {
+        schemaVersion: 1,
+        exportedAt: "2026-07-07T00:00:00.000Z",
+        includedScopes: ["system"],
+        fingerprint: "fp",
+        containsSecrets: true,
+      },
+      system: {
+        integrations: {
+          providers: { codex: { provider: "codex", name: "Codex", apiKey: "sk-imported" } },
+          githubToken: "",
+          jira: { apiToken: "" },
+        },
+      },
+    };
+
+    let response = await handler.handleManageSettings({ action: "apply_settings_bundle", bundle });
+    let parsed = JSON.parse(response.content[0].text);
+    expect(parsed.approvalRequired).toBe(true);
+    expect(deps.settingsRepository.saveSystemSettings).not.toHaveBeenCalled();
+
+    response = await handler.handleManageSettings({ action: "apply_settings_bundle", bundle, approval: { confirmed: true } });
+    parsed = JSON.parse(response.content[0].text);
+    expect(parsed.result.applied).toEqual({ system: 1, projects: 0, sprints: 0 });
+    expect(deps.settingsRepository.saveSystemSettings).toHaveBeenCalledWith(bundle.system);
+  });
+
+  it("redacts secret-bearing settings validation errors in management envelopes", async () => {
+    const secret = "ghp-never-print-this";
+    const response = await handler.handleManageSettings({
+      action: "apply_settings_bundle",
+      bundle: {
+        metadata: { schemaVersion: 1, includedScopes: ["projects"], fingerprint: "fp", containsSecrets: true },
+        projects: [{ projectId: "proj-1", settings: "bad", githubToken: secret }],
+      },
+    });
+
+    const text = response.content[0].text;
+    expect(response.isError).toBe(true);
+    expect(text).not.toContain(secret);
+    expect(JSON.parse(text).result.message).toContain("bundle.projects[0]");
+  });
+
+  it("should execute handleManageProjects delete action only after exact approval is pending", async () => {
     deps.projectManagementRepository.deleteProject.mockReturnValue({ ok: true });
-    const response = await handler.handleManageProjects({ action: "delete", projectId: "p1", approval: { confirmed: true } });
-    const parsed = JSON.parse(response.content[0].text);
+
+    let response = await handler.handleManageProjects({ action: "delete", projectId: "p1", approval: { confirmed: true } });
+    let parsed = JSON.parse(response.content[0].text);
+    expect(parsed.approvalRequired).toBe(true);
+    expect(deps.projectManagementRepository.deleteProject).not.toHaveBeenCalled();
+
+    response = await handler.handleManageProjects({ action: "delete", projectId: "p1" });
+    parsed = JSON.parse(response.content[0].text);
+    expect(parsed.approvalRequired).toBe(true);
+
+    response = await handler.handleManageProjects({ action: "delete", projectId: "p1", approval: { confirmed: true } });
+    parsed = JSON.parse(response.content[0].text);
     expect(parsed).toEqual({
       result: {
         status: "success",
@@ -315,6 +603,34 @@ describe("ManagementToolHandler", () => {
       }
     });
     expect(deps.projectManagementRepository.deleteProject).toHaveBeenCalledWith("p1");
+  });
+
+  it("rejects destructive handleManageProjects payload substitution without consuming the original approval", async () => {
+    deps.projectManagementRepository.deleteProject.mockReturnValue({ ok: true });
+
+    await handler.handleManageProjects({ action: "delete", projectId: "p1" });
+
+    let response = await handler.handleManageProjects({ action: "delete", projectId: "p2", approval: { confirmed: true } });
+    let parsed = JSON.parse(response.content[0].text);
+    expect(parsed.approvalRequired).toBe(true);
+    expect(deps.projectManagementRepository.deleteProject).not.toHaveBeenCalled();
+
+    response = await handler.handleManageProjects({ action: "delete", projectId: "p1", approval: { confirmed: true } });
+    parsed = JSON.parse(response.content[0].text);
+    expect(parsed.result).toEqual({ status: "success", deletedProjectId: "p1" });
+    expect(deps.projectManagementRepository.deleteProject).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not replay a consumed destructive handleManageProjects approval", async () => {
+    deps.projectManagementRepository.deleteProject.mockReturnValue({ ok: true });
+
+    await handler.handleManageProjects({ action: "delete", projectId: "p1" });
+    await handler.handleManageProjects({ action: "delete", projectId: "p1", approval: { confirmed: true } });
+    const response = await handler.handleManageProjects({ action: "delete", projectId: "p1", approval: { confirmed: true } });
+    const parsed = JSON.parse(response.content[0].text);
+
+    expect(parsed.approvalRequired).toBe(true);
+    expect(deps.projectManagementRepository.deleteProject).toHaveBeenCalledTimes(1);
   });
 
   it("should cover the full lifecycle of project management", async () => {

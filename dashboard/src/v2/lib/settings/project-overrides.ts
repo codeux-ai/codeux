@@ -9,15 +9,24 @@ import type {
   SkillToggle,
   SystemSettings,
 } from "../../../types.js";
-import { cloneGuardrails } from "../../../lib/settings.js";
+import { cloneGuardrails, cloneTechstackCatalog, DEFAULT_DASHBOARD_SETTINGS } from "../../../lib/settings.js";
 import { getHintApiKey } from "./provider-instances.js";
+import { cloneDesignGuidanceSettings } from "../../../../../src/domain/settings/design-guidance-catalog.js";
 
 const cloneMemorySettings = (memory: ProjectSettings["memory"]): ProjectSettings["memory"] => ({
   ...memory,
   externalEmbedding: { ...memory.externalEmbedding },
 });
 
+const cloneSpeechSettings = (speech: ProjectSettings["speech"]): ProjectSettings["speech"] => ({
+  ...speech,
+  externalTranscription: { ...speech.externalTranscription },
+});
+
 const cloneJiraSettings = (jira: SystemSettings["integrations"]["jira"]): SystemSettings["integrations"]["jira"] => ({ ...jira });
+const cloneImporterSettings = (
+  settings: SystemSettings["integrations"]["notion"],
+): SystemSettings["integrations"]["notion"] => ({ ...settings });
 
 const cloneQualityAssuranceTrigger = (
   trigger: ProjectSettings["agents"]["qualityAssurance"]["taskCompletion"],
@@ -46,6 +55,23 @@ const cloneQualityAssuranceSettings = (qa: ProjectSettings["agents"]["qualityAss
   completedTaskWithoutPr: cloneQualityAssuranceTrigger(qa.completedTaskWithoutPr),
 });
 
+const cloneSelfReflectionSettings = (
+  settings: ProjectSettings["agents"]["selfReflection"] | undefined,
+): ProjectSettings["agents"]["selfReflection"] => ({
+  planning: {
+    ...(settings?.planning ?? DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection.planning),
+    criteria: (settings?.planning.criteria ?? DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection.planning.criteria)
+      .map((criterion) => ({ ...criterion })),
+  },
+  qualityAssurance: {
+    ...(settings?.qualityAssurance ?? DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection.qualityAssurance),
+    criteria: (
+      settings?.qualityAssurance.criteria
+      ?? DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection.qualityAssurance.criteria
+    ).map((criterion) => ({ ...criterion })),
+  },
+});
+
 const cloneSkills = (skills: SkillToggle[]): SkillToggle[] => skills.map((skill) => ({ ...skill }));
 const cloneMcpTools = (tools: McpToolToggle[]): McpToolToggle[] => tools.map((tool) => ({ ...tool }));
 const cloneCustomMcpServers = (servers: CustomMcpServer[] = []): CustomMcpServer[] => servers.map((server) => ({
@@ -54,6 +80,24 @@ const cloneCustomMcpServers = (servers: CustomMcpServer[] = []): CustomMcpServer
   env: server.env ? { ...server.env } : undefined,
   providers: server.providers ? [...server.providers] : undefined,
 }));
+
+const cloneTechstackSelection = (
+  techstack: ProjectSettings["techstack"] | undefined,
+): ProjectSettings["techstack"] | undefined => (
+  techstack ? { ...techstack } : undefined
+);
+
+const cloneDesignGuidance = (
+  designGuidance: ProjectSettings["designGuidance"] | undefined,
+): ProjectSettings["designGuidance"] => (
+  cloneDesignGuidanceSettings(designGuidance ?? DEFAULT_DASHBOARD_SETTINGS.designGuidance)
+);
+
+const cloneSprintPreviewSettings = (settings: ProjectSettings["sprintPreview"]): ProjectSettings["sprintPreview"] => ({
+  ...settings,
+  ...("containerAppPorts" in settings ? { containerAppPorts: [...(settings.containerAppPorts ?? [])] } : {}),
+  ...("environmentVariables" in settings ? { environmentVariables: (settings.environmentVariables ?? []).map((variable) => ({ ...variable })) } : {}),
+});
 
 export const cloneProjectProviders = (
   providers: ProjectSettings["aiProvider"]["providers"],
@@ -115,6 +159,8 @@ const defaultJiraSettings = (): SystemSettings["integrations"]["jira"] => ({
   host: "",
   email: "",
   apiToken: "",
+  autoTransitionLinkedIssuesOnImport: true,
+  importTransitionName: "In Work",
   autoCloseLinkedIssues: false,
   defaultProject: "",
   closeTransitionName: "Done",
@@ -127,6 +173,8 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
     ...settings.automationInterventions,
   },
   aiProvider: cloneProjectAiProviderSettings(settings.aiProvider),
+  techstack: cloneTechstackSelection(settings.techstack) ?? { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
+  designGuidance: cloneDesignGuidance(settings.designGuidance),
   git: {
     githubMode: settings.git.githubMode,
     githubToken: settings.git.githubToken,
@@ -138,9 +186,17 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
     featureBranchPrefix: settings.git.featureBranchPrefix,
     sprintBranchScheme: settings.git.sprintBranchScheme,
     sprintKeyPrefix: settings.git.sprintKeyPrefix,
+    taskPrTitleScheme: settings.git.taskPrTitleScheme,
     prDescription: settings.git.prDescription,
   },
   jira: cloneJiraSettings(settings.jira),
+  notion: cloneImporterSettings(settings.notion),
+  asana: cloneImporterSettings(settings.asana),
+  linear: cloneImporterSettings(settings.linear),
+  miro: cloneImporterSettings(settings.miro),
+  lucid: cloneImporterSettings(settings.lucid),
+  figma: cloneImporterSettings(settings.figma),
+  mural: cloneImporterSettings(settings.mural),
   ciIntelligence: {
     ...settings.ciIntelligence,
   },
@@ -151,9 +207,7 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
   cliWorkflow: {
     ...settings.cliWorkflow,
   },
-  sprintPreview: {
-    ...settings.sprintPreview,
-  },
+  sprintPreview: cloneSprintPreviewSettings(settings.sprintPreview),
   workers: {
     ...settings.workers,
   },
@@ -162,11 +216,13 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
     routing: cloneAgentRouting(settings.agents.routing),
     instructionTemplates: { ...settings.agents.instructionTemplates },
     qualityAssurance: cloneQualityAssuranceSettings(settings.agents.qualityAssurance),
+    selfReflection: cloneSelfReflectionSettings(settings.agents.selfReflection),
   },
   skills: cloneSkills(settings.skills),
   mcpTools: cloneMcpTools(settings.mcpTools),
   customMcpServers: cloneCustomMcpServers(settings.customMcpServers),
   memory: cloneMemorySettings(settings.memory),
+  speech: cloneSpeechSettings(settings.speech),
 });
 
 export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings => ({
@@ -176,10 +232,19 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
     ...settings.automationInterventions,
   },
   aiProvider: cloneProjectAiProviderSettings(settings.aiProvider),
+  techstack: cloneTechstackSelection(settings.techstack) ?? { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
+  designGuidance: cloneDesignGuidance(settings.designGuidance),
   git: {
     ...settings.git,
   },
   jira: cloneJiraSettings(settings.jira),
+  notion: cloneImporterSettings(settings.notion),
+  asana: cloneImporterSettings(settings.asana),
+  linear: cloneImporterSettings(settings.linear),
+  miro: cloneImporterSettings(settings.miro),
+  lucid: cloneImporterSettings(settings.lucid),
+  figma: cloneImporterSettings(settings.figma),
+  mural: cloneImporterSettings(settings.mural),
   ciIntelligence: {
     ...settings.ciIntelligence,
   },
@@ -190,9 +255,7 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
   cliWorkflow: {
     ...settings.cliWorkflow,
   },
-  sprintPreview: {
-    ...settings.sprintPreview,
-  },
+  sprintPreview: cloneSprintPreviewSettings(settings.sprintPreview),
   workers: {
     ...settings.workers,
   },
@@ -201,11 +264,13 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
     routing: cloneAgentRouting(settings.agents.routing),
     instructionTemplates: { ...settings.agents.instructionTemplates },
     qualityAssurance: cloneQualityAssuranceSettings(settings.agents.qualityAssurance),
+    selfReflection: cloneSelfReflectionSettings(settings.agents.selfReflection),
   },
   skills: cloneSkills(settings.skills),
   mcpTools: settings.mcpTools ? cloneMcpTools(settings.mcpTools) : undefined,
   customMcpServers: settings.customMcpServers ? cloneCustomMcpServers(settings.customMcpServers) : undefined,
   memory: cloneMemorySettings(settings.memory),
+  speech: cloneSpeechSettings(settings.speech),
 });
 
 export const cloneSystemSettings = (settings: SystemSettings): SystemSettings => ({
@@ -215,8 +280,16 @@ export const cloneSystemSettings = (settings: SystemSettings): SystemSettings =>
   integrations: {
     ...settings.integrations,
     jira: settings.integrations.jira ? cloneJiraSettings(settings.integrations.jira) : defaultJiraSettings(),
+    notion: cloneImporterSettings(settings.integrations.notion),
+    asana: cloneImporterSettings(settings.integrations.asana),
+    linear: cloneImporterSettings(settings.integrations.linear),
+    miro: cloneImporterSettings(settings.integrations.miro),
+    lucid: cloneImporterSettings(settings.integrations.lucid),
+    figma: cloneImporterSettings(settings.integrations.figma),
+    mural: cloneImporterSettings(settings.integrations.mural),
     providers: cloneIntegrationProviders(settings.integrations.providers),
   },
+  techstackCatalog: cloneTechstackCatalog(settings.techstackCatalog ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog),
   defaults: cloneProjectSettings(settings.defaults),
   mcpTools: cloneMcpTools(settings.mcpTools),
   customMcpServers: cloneCustomMcpServers(settings.customMcpServers),
@@ -246,10 +319,12 @@ export const applyExternalHintsToSystemSettings = (
   }
 
   const currentJira = settings.integrations.jira || defaultJiraSettings();
+  const clonedSettings = cloneSystemSettings(settings);
 
   return {
-    ...cloneSystemSettings(settings),
+    ...clonedSettings,
     integrations: {
+      ...clonedSettings.integrations,
       providers: nextProviders,
       githubToken: settings.integrations.githubToken || hints.resolved.githubToken || "",
       gitlabToken: settings.integrations.gitlabToken || hints.resolved.gitlabToken || "",

@@ -1,12 +1,13 @@
 import type { ManageCodeUxArgs, ManagementResponseEnvelope } from "../contracts/internal-management-types.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
-import type { DashboardSettings, ProviderId, QwenModelProviderSettings } from "../contracts/app-types.js";
+import type { DashboardSettings, ProviderConfigMode, ProviderId, QwenModelProviderSettings, ThinkingMode } from "../contracts/app-types.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { ManagementToolHandler } from "../mcp/management-tool-handler.js";
 import type { StructuredProviderResponseService } from "./structured-provider-response-service.js";
 import type { ProviderExecutionService } from "./provider-execution-service.js";
 import type { SnapshotCheckout } from "../infrastructure/providers/cli/workspace-manager.js";
+import type { PromptSuggestion } from "../contracts/connection-chat-types.js";
 import { findAllJsonCandidates } from "../domain/llm/json-extraction.js";
 
 export interface ChatManagementActionServiceDeps {
@@ -23,18 +24,62 @@ export interface ManagementActionProposedResult {
   approvalMessage?: string;
   result?: unknown;
   nativeSessionId?: string | null;
+  promptSuggestions?: PromptSuggestion[];
 }
 
 interface ParsedProviderManagementJSON {
   replyMarkdown: string;
   action: ManageCodeUxArgs | null;
+  promptSuggestions?: PromptSuggestion[];
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return !!value && typeof value === "object" && !Array.isArray(value);
 };
 
-const parseProviderManagementJson = (bodyMarkdown: string, depth = 0): ParsedProviderManagementJSON => {
+const MAX_PROMPT_SUGGESTIONS = 6;
+
+function trimmedString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function sanitizePromptSuggestions(value: unknown): PromptSuggestion[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const suggestions: PromptSuggestion[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) {
+      continue;
+    }
+
+    const label = trimmedString(item.label);
+    const prompt = trimmedString(item.prompt);
+    if (!label || !prompt) {
+      continue;
+    }
+
+    const suggestion: PromptSuggestion = { label, prompt };
+    const icon = trimmedString(item.icon);
+    if (icon) {
+      suggestion.icon = icon;
+    }
+    const id = trimmedString(item.id);
+    if (id) {
+      suggestion.id = id;
+    }
+    suggestions.push(suggestion);
+
+    if (suggestions.length >= MAX_PROMPT_SUGGESTIONS) {
+      break;
+    }
+  }
+
+  return suggestions;
+}
+
+export const parseProviderManagementJson = (bodyMarkdown: string, depth = 0): ParsedProviderManagementJSON => {
   if (depth > 2) {
     throw new Error("Missing or invalid 'replyMarkdown'");
   }
@@ -44,9 +89,14 @@ const parseProviderManagementJson = (bodyMarkdown: string, depth = 0): ParsedPro
       const parsed = JSON.parse(candidate) as unknown;
 
       if (isRecord(parsed) && typeof parsed.replyMarkdown === "string") {
+        const rawSuggestions = Array.isArray(parsed.promptSuggestions)
+          ? parsed.promptSuggestions
+          : parsed.suggestions;
+        const promptSuggestions = sanitizePromptSuggestions(rawSuggestions);
         return {
           replyMarkdown: parsed.replyMarkdown,
           action: isRecord(parsed.action) ? parsed.action as unknown as ManageCodeUxArgs : null,
+          ...(promptSuggestions.length > 0 ? { promptSuggestions } : {}),
         };
       }
 
@@ -65,6 +115,7 @@ export interface ProcessManagementActionArgs {
   projectId: string;
   provider: Exclude<ProviderId, "jules">;
   model: string;
+  thinkingMode?: ThinkingMode;
   apiKey: string;
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
   qwenRegion?: "china" | "international";
@@ -81,6 +132,8 @@ export interface ProcessManagementActionArgs {
   openCodePackage?: string;
   providerMountAuth?: boolean;
   providerAuthPath?: string;
+  providerConfigMode?: ProviderConfigMode;
+  providerConfigPath?: string;
   customBaseUrl?: string;
   customModel?: string;
   sessionId: string;
@@ -202,6 +255,7 @@ export class ChatManagementActionService {
         provider: args.provider,
         prompt: args.prompt,
         model: args.model,
+        thinkingMode: args.thinkingMode,
         apiKey: args.apiKey,
         qwenAuthMode: args.qwenAuthMode,
         qwenRegion: args.qwenRegion,
@@ -218,6 +272,8 @@ export class ChatManagementActionService {
         openCodePackage: args.openCodePackage,
         providerMountAuth: args.providerMountAuth,
         providerAuthPath: args.providerAuthPath,
+        providerConfigMode: args.providerConfigMode,
+        providerConfigPath: args.providerConfigPath,
         customBaseUrl: args.customBaseUrl,
         customModel: args.customModel,
         sessionId: args.sessionId,
@@ -328,6 +384,8 @@ export class ChatManagementActionService {
         openCodePackage: args.openCodePackage,
         providerMountAuth: args.providerMountAuth,
         providerAuthPath: args.providerAuthPath,
+        providerConfigMode: args.providerConfigMode,
+        providerConfigPath: args.providerConfigPath,
         customBaseUrl: args.customBaseUrl,
         customModel: args.customModel,
         sessionId: args.sessionId,
@@ -346,7 +404,7 @@ export class ChatManagementActionService {
           return parseProviderManagementJson(bodyMarkdown);
         },
         buildRetryPrompt: (error: Error) => {
-          return `Your response could not be parsed as valid JSON. Please return STRICT JSON with \`replyMarkdown\` and \`action\` fields.\nError: ${error.message}`;
+          return `Your response could not be parsed as valid JSON. Please return STRICT JSON with \`replyMarkdown\`, \`action\`, and optional \`suggestions\` fields.\nError: ${error.message}`;
         },
         signal: args.signal,
       });
@@ -371,6 +429,7 @@ export class ChatManagementActionService {
           action: null,
           approvalRequired: false,
           nativeSessionId: response.nativeSessionId,
+          ...(parsed.promptSuggestions?.length ? { promptSuggestions: parsed.promptSuggestions } : {}),
         };
       }
 
@@ -403,6 +462,7 @@ export class ChatManagementActionService {
         approvalMessage: envelope.approvalMessage,
         result: envelope.result,
         nativeSessionId: response.nativeSessionId,
+        ...(parsed.promptSuggestions?.length ? { promptSuggestions: parsed.promptSuggestions } : {}),
       };
 
     } catch (err: unknown) {

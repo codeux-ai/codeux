@@ -213,6 +213,106 @@ describe("ConnectionChatRepository", () => {
     });
   });
 
+  it("stores chat drafts per user, project, and context without cross-contamination", async () => {
+    const { projectRepository, connectionRepository } = await createRepositories();
+    const projectOne = projectRepository.createProject({
+      name: "Draft Project One",
+      sourceType: "local",
+      sourceRef: "/tmp/draft-one",
+    });
+    const projectTwo = projectRepository.createProject({
+      name: "Draft Project Two",
+      sourceType: "local",
+      sourceRef: "/tmp/draft-two",
+    });
+    const threadOne = connectionRepository.createThread(projectOne.id, {
+      title: "Thread One",
+    });
+    const threadTwo = connectionRepository.createThread(projectTwo.id, {
+      title: "Thread Two",
+    });
+
+    const contextKey = `thread:${threadOne.id}`;
+    connectionRepository.upsertDraft(projectOne.id, {
+      userId: "user-a",
+      contextKey,
+      bodyMarkdown: "User A draft",
+    });
+    connectionRepository.upsertDraft(projectOne.id, {
+      userId: "user-b",
+      contextKey,
+      bodyMarkdown: "User B draft",
+    });
+    connectionRepository.upsertDraft(projectTwo.id, {
+      userId: "user-a",
+      contextKey: `thread:${threadTwo.id}`,
+      bodyMarkdown: "Project two draft",
+    });
+
+    expect(connectionRepository.getDraft(projectOne.id, { userId: "user-a", contextKey })?.bodyMarkdown).toBe("User A draft");
+    expect(connectionRepository.getDraft(projectOne.id, { userId: "user-b", contextKey })?.bodyMarkdown).toBe("User B draft");
+    expect(connectionRepository.getDraft(projectTwo.id, { userId: "user-a", contextKey: `thread:${threadTwo.id}` })?.bodyMarkdown).toBe("Project two draft");
+    expect(() => connectionRepository.upsertDraft(projectTwo.id, {
+      userId: "user-a",
+      contextKey,
+      bodyMarkdown: "Wrong project",
+    })).toThrow(`Thread ${threadOne.id} does not belong to project ${projectTwo.id}`);
+
+    expect(connectionRepository.upsertDraft(projectOne.id, {
+      userId: "user-a",
+      contextKey,
+      bodyMarkdown: "",
+    })).toBeNull();
+    expect(connectionRepository.getDraft(projectOne.id, { userId: "user-a", contextKey })).toBeNull();
+    expect(connectionRepository.getDraft(projectOne.id, { userId: "user-b", contextKey })?.bodyMarkdown).toBe("User B draft");
+  });
+
+  it("stores recent chat message history per user and project", async () => {
+    const { projectRepository, connectionRepository } = await createRepositories();
+    const projectOne = projectRepository.createProject({
+      name: "History Project One",
+      sourceType: "local",
+      sourceRef: "/tmp/history-one",
+    });
+    const projectTwo = projectRepository.createProject({
+      name: "History Project Two",
+      sourceType: "local",
+      sourceRef: "/tmp/history-two",
+    });
+
+    for (let index = 0; index < 55; index += 1) {
+      vi.setSystemTime(new Date(`2026-03-10T00:${String(index).padStart(2, "0")}:00.000Z`));
+      connectionRepository.recordMessageHistory(projectOne.id, {
+        userId: "user-a",
+        bodyMarkdown: `Message ${index}`,
+      });
+    }
+    vi.setSystemTime(new Date("2026-03-10T01:00:00.000Z"));
+    connectionRepository.recordMessageHistory(projectOne.id, {
+      userId: "user-a",
+      bodyMarkdown: "Message 40",
+    });
+    connectionRepository.recordMessageHistory(projectOne.id, {
+      userId: "user-b",
+      bodyMarkdown: "Other user's message",
+    });
+    connectionRepository.recordMessageHistory(projectTwo.id, {
+      userId: "user-a",
+      bodyMarkdown: "Other project's message",
+    });
+
+    const userProjectHistory = connectionRepository.listMessageHistory(projectOne.id, { userId: "user-a" });
+    expect(userProjectHistory).toHaveLength(50);
+    expect(userProjectHistory[0]?.bodyMarkdown).toBe("Message 5");
+    expect(userProjectHistory.at(-1)?.bodyMarkdown).toBe("Message 40");
+    expect(userProjectHistory.filter((entry) => entry.bodyMarkdown === "Message 40")).toHaveLength(1);
+    expect(userProjectHistory.some((entry) => entry.bodyMarkdown === "Other user's message")).toBe(false);
+    expect(userProjectHistory.some((entry) => entry.bodyMarkdown === "Other project's message")).toBe(false);
+
+    expect(connectionRepository.listMessageHistory(projectOne.id, { userId: "fresh-user" })).toEqual([]);
+    expect(connectionRepository.listMessageHistory(projectTwo.id, { userId: "user-a" }).map((entry) => entry.bodyMarkdown)).toEqual(["Other project's message"]);
+  });
+
   it("stores system-authored project messages without creating worker inbox backlog", async () => {
     const { projectRepository, connectionRepository } = await createRepositories();
     const project = projectRepository.createProject({
@@ -865,11 +965,14 @@ describe("ConnectionChatRepository", () => {
 
       const updatedState = { ...runtimeState, replayRequired: false };
       const updatedThread = connectionRepository.updateThread(thread.id, {
+        title: "Updated Test Thread",
         runtimeState: updatedState,
       });
 
+      expect(updatedThread.title).toBe("Updated Test Thread");
       expect(updatedThread.runtimeState).toEqual(updatedState);
       const rehydratedThreads = connectionRepository.listThreads(project.id);
+      expect(rehydratedThreads[0].title).toBe("Updated Test Thread");
       expect(rehydratedThreads[0].runtimeState).toEqual(updatedState);
 
       const messageMetadata = { testKey: "testValue", numericKey: 123 };
@@ -885,6 +988,38 @@ describe("ConnectionChatRepository", () => {
       expect(messages[0].metadata).toEqual(messageMetadata);
     });
 
+    it("derives a concise thread title from the first visible dashboard message", async () => {
+      const { projectRepository, connectionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Title Project",
+        sourceType: "local",
+        sourceRef: "/tmp/title-project",
+      });
+
+      const message = connectionRepository.postDashboardMessage(project.id, {
+        bodyMarkdown: "### Fix **critical** dashboard routing bug with worker retry state after compaction",
+      });
+
+      const thread = connectionRepository.getThread(message.threadId);
+      expect(thread.title).toBe("Fix critical dashboard routing bug with worker retry");
+      expect(thread.title.split(/\s+/)).toHaveLength(8);
+    });
+
+    it("falls back to the timestamp title when the first dashboard message has no useful words", async () => {
+      const { projectRepository, connectionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Fallback Title Project",
+        sourceType: "local",
+        sourceRef: "/tmp/fallback-title-project",
+      });
+
+      const message = connectionRepository.postDashboardMessage(project.id, {
+        bodyMarkdown: "```ts\n!!!\n```\n---",
+      });
+
+      const thread = connectionRepository.getThread(message.threadId);
+      expect(thread.title).toMatch(/^Project Chat \d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+    });
   describe("Repository single entity operations", () => {
     beforeEach(() => {
       vi.useFakeTimers();

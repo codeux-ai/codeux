@@ -1,9 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { SprintOrchestrator } from "../../../src/sprint/sprint-orchestrator.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import type { CiIntelligenceSettings } from "../../../src/contracts/app-types.js";
 
 describe("sprint-orchestrator", () => {
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
     it("handles renderMainMergeCiFeedback when getCiStatusForScope is not provided", async () => {
         const deps = {
             logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -80,6 +84,8 @@ describe("sprint-orchestrator", () => {
     });
 
     it("creates the missing main PR and auto-merges it when main auto-merge is enabled", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-07-03T02:31:30.000Z"));
         const ciIntelligence: CiIntelligenceSettings = {
             ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
             enabled: true,
@@ -140,7 +146,20 @@ describe("sprint-orchestrator", () => {
                 }),
             },
             executionRepository: {
-                getSprintRun: vi.fn().mockReturnValue(null),
+                getSprintRun: vi.fn().mockReturnValue({
+                    id: "run-1",
+                    projectId: "project-1",
+                    sprintId: "sprint-1",
+                    status: "running",
+                    triggerType: "mcp",
+                    triggeredBy: "worker",
+                    executorMode: "mixed",
+                    startedAt: "2026-07-03T02:18:16.000Z",
+                    finishedAt: null,
+                    lastHeartbeatAt: "2026-07-03T02:20:00.000Z",
+                    createdAt: "2026-07-03T02:18:16.000Z",
+                    updatedAt: "2026-07-03T02:20:00.000Z",
+                }),
                 getSprintUsageGroups: vi.fn().mockReturnValue([]),
                 listProviderInvocationsForSprint: vi.fn().mockReturnValue([]),
             },
@@ -168,6 +187,12 @@ describe("sprint-orchestrator", () => {
             defaultBranch: "main",
             body: expect.stringContaining("Awesome sprint description"),
         }));
+        const mainPrBody = resolveOrCreateMainBranchPr.mock.calls[0][0].body;
+        expect(mainPrBody).toContain("| Started | 2026-07-03 02:18:16 UTC |");
+        expect(mainPrBody).toContain("| Finished | 2026-07-03 02:31:30 UTC |");
+        expect(mainPrBody).toContain("| Duration | 13m 14s |");
+        expect(mainPrBody).not.toContain("NaN");
+        expect(mainPrBody).not.toContain("| Duration | — |");
         expect(autoMergeFeaturePr).toHaveBeenCalledWith({ repoPath: "/tmp/repo", prNumber: 321 });
         expect(feedback.state).toBe("automerge_succeeded");
         expect(feedback.text).toContain("Main PR Created");

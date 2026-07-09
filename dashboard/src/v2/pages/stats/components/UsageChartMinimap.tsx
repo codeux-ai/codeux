@@ -1,7 +1,7 @@
 import type { FunctionComponent, JSX } from "preact";
 import { useMemo, useRef, useState } from "preact/hooks";
 import type { ExecutionUsageBucketSummary } from "../../../types.js";
-import type { ChartZoomRange } from "./stats-ui-primitives.js";
+import { CONTROL_FOCUS_CLASS, SUBPANEL_CLASS, type ChartZoomRange } from "./stats-ui-primitives.js";
 import { buildSmoothAreaPath, buildSmoothPath, buildPoints } from "./stats-geometry.js";
 
 const MINIMAP_WIDTH = 1000;
@@ -17,8 +17,9 @@ export const UsageChartMinimap: FunctionComponent<{
   buckets: ExecutionUsageBucketSummary[];
   zoomRange: ChartZoomRange | null;
   onZoomChange: (range: ChartZoomRange | null) => void;
+  onStatusChange?: (message: string) => void;
   accentHex?: string;
-}> = ({ buckets, zoomRange, onZoomChange, accentHex = "var(--stats-accent-signal)" }) => {
+}> = ({ buckets, zoomRange, onZoomChange, onStatusChange, accentHex = "var(--stats-accent-signal)" }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dragStart, setDragStart] = useState<number | null>(null);
   const [dragCurrent, setDragCurrent] = useState<number | null>(null);
@@ -40,6 +41,12 @@ export const UsageChartMinimap: FunctionComponent<{
     lastIndex <= 0
       ? MINIMAP_PADDING
       : MINIMAP_PADDING + (index / lastIndex) * (MINIMAP_WIDTH - MINIMAP_PADDING * 2);
+
+  const describeRange = (start: number, end: number): string => {
+    const startLabel = buckets[start]?.label ?? `bucket ${start + 1}`;
+    const endLabel = buckets[end]?.label ?? `bucket ${end + 1}`;
+    return `Zoomed overview to ${startLabel} through ${endLabel}, ${end - start + 1} of ${buckets.length} buckets.`;
+  };
 
   const clientXToIndex = (clientX: number): number => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -84,9 +91,11 @@ export const UsageChartMinimap: FunctionComponent<{
     setDragCurrent(null);
     if (end - start >= 1 && !(start === 0 && end === lastIndex)) {
       onZoomChange({ start, end });
+      onStatusChange?.(describeRange(start, end));
     } else if (start === end) {
       // A simple click clears the zoom and restores the full window.
       onZoomChange(null);
+      onStatusChange?.(`Zoom reset to the full ${buckets.length}-bucket range.`);
     }
   };
 
@@ -95,6 +104,7 @@ export const UsageChartMinimap: FunctionComponent<{
       if (event.key === "Escape" || event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         onZoomChange(null);
+        onStatusChange?.('Single-bucket view. Zoom is unavailable until more buckets exist.');
       }
       return;
     }
@@ -102,6 +112,7 @@ export const UsageChartMinimap: FunctionComponent<{
     if (event.key === "Escape") {
       event.preventDefault();
       onZoomChange(null);
+      onStatusChange?.(`Zoom reset to the full ${buckets.length}-bucket range.`);
       return;
     }
 
@@ -109,6 +120,7 @@ export const UsageChartMinimap: FunctionComponent<{
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         onZoomChange({ start: 0, end: lastIndex });
+        onStatusChange?.(`Pinned overview to the full ${buckets.length}-bucket range.`);
       }
       return;
     }
@@ -117,6 +129,7 @@ export const UsageChartMinimap: FunctionComponent<{
     const moveRange = (delta: number) => {
       const nextStart = Math.max(0, Math.min(lastIndex - span, zoomRange.start + delta));
       onZoomChange({ start: nextStart, end: nextStart + span });
+      onStatusChange?.(describeRange(nextStart, nextStart + span));
     };
 
     if (event.key === "ArrowLeft") {
@@ -128,9 +141,11 @@ export const UsageChartMinimap: FunctionComponent<{
     } else if (event.key === "Home") {
       event.preventDefault();
       onZoomChange({ start: 0, end: Math.min(lastIndex, span) });
+      onStatusChange?.(describeRange(0, Math.min(lastIndex, span)));
     } else if (event.key === "End") {
       event.preventDefault();
       onZoomChange({ start: Math.max(0, lastIndex - span), end: lastIndex });
+      onStatusChange?.(describeRange(Math.max(0, lastIndex - span), lastIndex));
     }
   };
 
@@ -160,7 +175,7 @@ export const UsageChartMinimap: FunctionComponent<{
         aria-describedby="usage-chart-minimap-help"
         aria-disabled={!hasZoomableRange ? "true" : undefined}
         tabIndex={0}
-        className={`relative h-16 w-full select-none overflow-hidden rounded-[1rem] border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/72 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--stats-card-bg)] ${hasZoomableRange ? 'cursor-crosshair touch-none' : 'cursor-default opacity-75'}`}
+        className={`${SUBPANEL_CLASS} relative h-16 w-full select-none overflow-hidden p-0 ${CONTROL_FOCUS_CLASS} ${hasZoomableRange ? 'cursor-crosshair touch-none' : 'cursor-default opacity-75'}`}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -168,9 +183,9 @@ export const UsageChartMinimap: FunctionComponent<{
       >
         <div className="sr-only" aria-live="polite">
           {zoomRange
-            ? `Showing ${zoomRange.end - zoomRange.start + 1} of ${buckets.length} buckets.`
+            ? `Showing ${zoomRange.end - zoomRange.start + 1} of ${buckets.length} buckets, ${buckets[zoomRange.start]?.label ?? "start"} through ${buckets[zoomRange.end]?.label ?? "end"}.`
             : hasZoomableRange
-              ? 'Zoom reset. Use arrow keys to pan and escape to clear.'
+              ? `Full ${buckets.length}-bucket range shown. Drag to zoom or press Enter to pin the full range.`
               : 'Single-bucket view. Zoom is unavailable until more buckets exist.'}
         </div>
         <div className="sr-only">

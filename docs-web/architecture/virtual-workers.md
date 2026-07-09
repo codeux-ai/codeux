@@ -4,6 +4,22 @@ A **virtual worker** is an ephemeral, on-demand agent process that handles work 
 
 This page describes the virtual worker lifecycle, provisioning model, execution modes, and attention-item handling.
 
+## External worker client
+
+Code UX also ships a headless external worker process at `dist/worker/index.js` and exposes it through the `codeux-worker` package bin. This worker is separate from the dashboard server: it connects to an authenticated Streamable HTTP MCP endpoint with `--server-url` and `--auth-token`, registers a stable worker endpoint, polls `pull_task_dispatch`, executes leased dispatches through a local worker-host command, and reports `RUNNING` plus terminal status through `update_task_dispatch`.
+
+External workers can cover multiple projects in one process by repeating `--project-id`. Repeating `--active-project-id` narrows the current poll loop to an active subset while the server keeps the full `projectIds` set enrolled for future focus changes. The worker refuses to execute a dispatch unless the control plane returns a lease token, retries transient network failures with bounded backoff, and calls `cancel_local_dispatch` when the control plane returns a cancel action.
+
+Environment fallbacks are available for headless deployment:
+
+- `CODE_UX_WORKER_SERVER_URL`
+- `CODE_UX_WORKER_AUTH_TOKEN`
+- `MCP_HTTP_SERVER_URL`
+- `MCP_HTTP_AUTH_TOKEN`
+- `MCP_HTTPS_AUTH_TOKEN`
+
+Bearer tokens and local provider credentials remain local and are not logged by the worker client.
+
 ## Source
 
 `src/services/virtual-worker-service.ts` (~1000 LOC).
@@ -43,7 +59,7 @@ For each project that needs attention:
    └─ if no item: skip project
 ```
 
-Default reconcile cadence: `VIRTUAL_WORKER_RECONCILE_MS = 3000`. Default session poll: `VIRTUAL_WORKER_SESSION_POLL_MS = 2000`.
+Default reconcile cadence: `VIRTUAL_WORKER_RECONCILE_MS = 3000`. Default session poll: `VIRTUAL_WORKER_SESSION_POLL_MS = 2000`. Initial scheduling uses microtasks to coalesce rapid events, but follow-up cycles after `remaining_worker_work` are deferred on the reconcile cadence so stale or unchanged worker state cannot starve dashboard HTTP probes or shutdown handling.
 
 ## Worker provisioning
 
@@ -81,10 +97,11 @@ Per provider, `executionMode` is `DOCKER` (default) or `HOST`.
 
 ### DOCKER mode
 
-- Image: `node:24-bookworm` (override via `workers.dockerImage`).
+- Image: `node:24-bookworm` (override via `workers.dockerImage`). Images are cached across runs using a setup image cache.
 - Mounts:
-  - The worktree path read-write.
-  - The provider auth path (e.g. `~/.gemini`) read-only, if `mountAuth: true`.
+  - The workspace volume (`code-ux.workspace=true`) is mounted read-write.
+  - Runtime volumes (`code-ux.workspace-runtime=true`) are used for preserving package manager caches and the provider home directory outside of the main workspace.
+  - Provider credentials are conceptually mounted via dedicated, isolated credential mounts (e.g. `mountAuth: true` builds provider-specific mounts without exposing raw host tokens or keys to the workspace root or command arguments).
   - Optional setup script.
 - Network: default bridge.
 - The CLI runs as the container's default user (root, in the default image).
@@ -94,7 +111,7 @@ Per provider, `executionMode` is `DOCKER` (default) or `HOST`.
 
 - The CLI runs directly on the host as the Code UX process user.
 - No mount; the CLI uses its native auth.
-- Faster startup, no Docker dependency, but less hermetic.
+- Used *only* as a fallback for specific edge cases (such as degraded CI autofix runs when Docker is unrecoverably unavailable). Docker is the strict default and is required for merge conflict isolation.
 
 ## Worktree management
 
@@ -178,7 +195,7 @@ Each dispatch records:
 - PR URL on success.
 - Failure reason.
 
-Visible in the dashboard's **Tasks** detail panel and via `manage_code_ux` → `tasks` → `inspect_run` and `telemetry` → `list_task_dispatches`.
+Visible in the dashboard's **Tasks** detail panel and via `manage_tasks` → `inspect_run` and `manage_telemetry` → `list_task_dispatches`.
 
 ## Tuning
 

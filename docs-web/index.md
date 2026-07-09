@@ -1,11 +1,11 @@
 # Code UX Documentation
 
-> **Code UX** is an open-source, container-first agentic coding runtime. It turns a goal into a
+> **Code UX** is a local-first, container-first multi-provider runtime. It turns a goal into a
 > managed sprint — planned, routed to the right agent, executed in isolated Docker workspaces,
-> reviewed through Git and CI, and tracked in a live local dashboard — across Jules, Claude Code,
-> Codex, Gemini, Qwen Code, OpenCode, and Antigravity.
+> reviewed through Git and CI, and tracked in a live local dashboard — across hosted providers (like Code UX)
+> and local CLI/Docker providers (like Gemini, Codex, Claude Code, Qwen Code, OpenCode, and Antigravity).
 
-This site is the canonical reference for installing, operating, integrating, and extending Code UX.
+This site is the public publication and reference mirror for installing, operating, integrating, and extending Code UX. Canonical docs live in `docs/`.
 
 ---
 
@@ -14,6 +14,7 @@ This site is the canonical reference for installing, operating, integrating, and
 | If you are… | Start here |
 | --- | --- |
 | **A user** running sprints from the dashboard or an MCP client | [User Guide →](./user/index.md) |
+| **An operator** tuning runtime, provider, Git, memory, and dashboard behavior | [Settings →](./settings/index.md) |
 | **A developer** integrating with the MCP server, HTTP API, or realtime protocol | [Developer Reference →](./developer/index.md) |
 | **An architect or contributor** working on the engine itself | [Architecture →](./architecture/index.md) |
 
@@ -27,7 +28,7 @@ This site is the canonical reference for installing, operating, integrating, and
 - **Git, CI & issue imports** — branch prep, PR/MR discovery, CI polling and merge gates, automated CI repair, and issue import from GitHub, GitLab, and Jira.
 - **Scoped memory** — short-term sprint memory and long-term project memory keep prompts focused and token-efficient.
 - **Live dashboard** — a real-time Preact UI at `http://localhost:4444` for projects, sprints, tasks, live sessions, agents, chat, memory, stats, and browser previews.
-- **MCP server** — Code UX also speaks Model Context Protocol over stdio and an optional HTTPS gateway, so MCP clients can drive the runtime directly.
+- **MCP server** — Code UX also speaks Model Context Protocol over stdio and authenticated Streamable HTTP, so MCP clients can drive the runtime directly.
 
 ---
 
@@ -41,6 +42,4 @@ This site is the canonical reference for installing, operating, integrating, and
 
 ## Versioning and license
 
-This documentation tracks the `0.8.x` release line of the
-[`@codeuxai/codeux`](https://www.npmjs.com/package/@codeuxai/codeux) npm package. Code UX is released
-under the [MIT License](https://github.com/codeux-ai/codeux/blob/main/LICENSE).
+Code UX is released under the [MIT License](https://github.com/codeux-ai/codeux/blob/main/LICENSE).

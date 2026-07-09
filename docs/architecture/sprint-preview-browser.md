@@ -35,6 +35,7 @@ Key rules:
 - one preview session/container can expose multiple container-to-host port mappings, and one host-facing port is allocated from `sprintPreview.hostPortRangeStart..hostPortRangeEnd` for each configured container app port
 - host ports bind to `127.0.0.1` only
 - preview startup injects `HOST`, `PORT`, `DASHBOARD_HOST`, `DASHBOARD_PORT`, and `SPRINT_PREVIEW_WORKSPACE` so containerized apps can bind to the published preview port and boot from the exported snapshot directory. The primary compatibility variables still point at the first mapping, and `SPRINT_PREVIEW_CONTAINER_PORTS`, `SPRINT_PREVIEW_HOST_PORTS`, and `SPRINT_PREVIEW_PORT_MAPPINGS` expose the full routing list.
+- Browser Preview settings and the Browser page right sidebar can define default preview environment variables for every container in the project scope, and each preview container card can open a modal for per-session overrides. These user variables are written through the preview Docker env-file path alongside provider env, while runtime-owned names such as `HOST`, `PORT`, `HOME`, `DASHBOARD_PORT`, `SPRINT_PREVIEW_*`, and `CODE_UX_GIT_USER_*` remain reserved.
 - preview startup is serialized per `(projectId, sprintId)` so manual starts, rebuilds, and auto-start reconciliation cannot spawn duplicate session containers
 - if the previewed app still binds a loopback-only internal port, the generated preview bootstrap keeps a dedicated in-container bridge open on the published preview proxy port and forwards requests to the live app listener
 - containers are labeled with sprint-preview metadata so runtime reconciliation can rediscover them
@@ -77,7 +78,8 @@ Install behavior:
 - preview containers now reuse the shared Docker runtime package caches instead of mounting host `node_modules`, and pnpm is pinned to a persistent store under that runtime cache so exported workspaces do not trigger cold installs on every rebuild
 - preview docker arguments and runtime path layouts are deterministically constructed via the helper in `sprint-preview-docker-plan.ts`
 - preview fallback now prefers the base image plus app-level install/build commands over re-running the worker-oriented setup script, which avoids unrelated provider/Playwright bootstrap work from blocking app previews
-- preview image resolution keeps Playwright bootstrap disabled even when the provider Docker Runtime setting preinstalls Playwright browsers for coding containers; preview startup avoids unrelated browser downloads unless that runtime is explicitly changed later
+- provider setup-cache images can preinstall Playwright Chromium under `/ms-playwright` when `cliWorkflow.containerInstallPlaywrightBrowsers` and `cliWorkflow.containerCacheSetupScriptImage` are enabled, but preview image resolution keeps that Playwright bootstrap disabled by default so ordinary app previews do not download browser binaries
+- preview scripts that run Playwright themselves should install the browser explicitly in the preview startup path or use a custom image/script that provides Chromium; cache-disabled provider workflows likewise need their custom setup script to honor `CODE_UX_INSTALL_PLAYWRIGHT=1` because the runtime only bakes Chromium automatically during setup-cache image builds
 - before the preview container is created, Code UX repairs the per-sprint Docker volume by creating the expected workspace, `HOME`, npm cache, and pnpm store directories as root, then applying ownership and writable directory permissions so the non-root preview bootstrap can start reliably
 
 Runtime command preference:
@@ -127,10 +129,17 @@ It supports:
 - auto-stop when a sprint becomes terminal
 
 Rebuild behaviors:
-- Preview start and rebuild now use the shared branch-sync rule. In `REMOTE` git mode, Code UX refreshes `origin` before exporting the preview workspace so remote changes (such as those pushed by Jules workers) are reflected in the container. In `LOCAL` git mode, preview export stays local-only.
+- Preview start and rebuild now use the shared branch-sync rule. In `REMOTE` git mode, Code UX refreshes `origin` before exporting the preview workspace so remote changes (such as those pushed by hosted provider workers) are reflected in the container. In `LOCAL` git mode, preview export stays local-only.
 - Preview workspace export no longer depends on a host `tar` executable. Code UX writes the Git archive on the host, then extracts it through a small Docker helper container so packaged Windows Electron builds use the same extraction path as Linux/macOS.
 
 These behaviors are controlled through scoped settings under `sprintPreview`.
+
+Preview environment behavior:
+- scoped defaults live in `sprintPreview.environmentVariables`
+- selected-container overrides live on the `sprint_preview_sessions.environment_overrides_json` row and are edited from the preview container card's Env override modal
+- enabled overrides replace defaults by key; disabled override rows suppress an inherited default for that key
+- values must be single-line Docker env-file values
+- saved environment changes apply on the next start or rebuild because the container process receives its environment at creation time
 
 Current preview controls include:
 - `enabled`
@@ -199,11 +208,16 @@ Preview endpoints are implemented in `src/server/dashboard-server.ts`.
 
 - `GET /api/projects/:projectId/preview/sessions`
 - `POST /api/projects/:projectId/sprints/:sprintId/preview/start`
+- `POST /api/projects/:projectId/sprints/:sprintId/preview/sessions/:sessionId/rebuild`
 - `POST /api/browser/sessions/:sessionId/rebuild`
+- `POST /api/projects/:projectId/sprints/:sprintId/preview/sessions/:sessionId/stop`
 - `POST /api/browser/sessions/:sessionId/stop`
+- `DELETE /api/projects/:projectId/sprints/:sprintId/preview/sessions/:sessionId`
 - `DELETE /api/browser/sessions/:sessionId`
 - `GET /api/projects/:projectId/sprints/:sprintId/preview/script`
 - `PUT /api/projects/:projectId/sprints/:sprintId/preview/script`
+- `PUT /api/projects/:projectId/sprints/:sprintId/preview/sessions/:sessionId/environment`
+- `GET /api/projects/:projectId/sprints/:sprintId/preview/sessions/:sessionId/logs`
 - `GET /api/browser/sessions/:sessionId/logs`
 - `ALL /api/browser/sessions/:sessionId/proxy/*`
 

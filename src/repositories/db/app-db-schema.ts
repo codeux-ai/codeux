@@ -88,7 +88,9 @@ CREATE TABLE IF NOT EXISTS sprint_linked_issues (
         host_domain TEXT NOT NULL,
         project_key TEXT,
         repository TEXT NOT NULL,
-        issue_number INTEGER NOT NULL,
+        issue_number INTEGER,
+        external_id TEXT,
+        source_kind TEXT,
         issue_key TEXT NOT NULL,
         title TEXT NOT NULL,
         url TEXT NOT NULL,
@@ -202,6 +204,61 @@ CREATE TABLE IF NOT EXISTS connection_project_bindings (
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
       );
 
+CREATE TABLE IF NOT EXISTS chat_provider_connections (
+        id TEXT PRIMARY KEY,
+        provider_kind TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        bridge_mode TEXT NOT NULL,
+        status TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        setup_json TEXT NOT NULL DEFAULT '{}',
+        secret_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+CREATE TABLE IF NOT EXISTS chat_provider_channel_bindings (
+        id TEXT PRIMARY KEY,
+        provider_connection_id TEXT NOT NULL,
+        external_channel_id TEXT NOT NULL,
+        external_channel_name TEXT NOT NULL,
+        external_channel_metadata_json TEXT,
+        project_id TEXT NOT NULL,
+        agent_preset_id TEXT,
+        routing_hints_json TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        inbound_enabled INTEGER NOT NULL DEFAULT 1,
+        outbound_enabled INTEGER NOT NULL DEFAULT 1,
+        suppress_rich_widgets INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (provider_connection_id) REFERENCES chat_provider_connections(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (agent_preset_id) REFERENCES agent_presets(id) ON DELETE SET NULL,
+        UNIQUE (provider_connection_id, external_channel_id, project_id)
+      );
+
+CREATE TABLE IF NOT EXISTS chat_provider_message_deliveries (
+        id TEXT PRIMARY KEY,
+        provider_connection_id TEXT NOT NULL,
+        channel_binding_id TEXT,
+        external_channel_id TEXT NOT NULL,
+        external_message_id TEXT,
+        direction TEXT NOT NULL,
+        status TEXT NOT NULL,
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        conversation_thread_id TEXT,
+        conversation_message_id TEXT,
+        payload_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (provider_connection_id) REFERENCES chat_provider_connections(id) ON DELETE CASCADE,
+        FOREIGN KEY (channel_binding_id) REFERENCES chat_provider_channel_bindings(id) ON DELETE SET NULL,
+        FOREIGN KEY (conversation_thread_id) REFERENCES conversation_threads(id) ON DELETE SET NULL,
+        FOREIGN KEY (conversation_message_id) REFERENCES conversation_messages(id) ON DELETE SET NULL
+      );
+
 CREATE TABLE IF NOT EXISTS task_runs (
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,
@@ -224,6 +281,23 @@ CREATE TABLE IF NOT EXISTS task_runs (
         FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
         FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
         FOREIGN KEY (connection_id) REFERENCES mcp_connections(id) ON DELETE SET NULL
+      );
+
+CREATE TABLE IF NOT EXISTS task_self_reflection_ratings (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        sprint_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        source_task_run_id TEXT NOT NULL UNIQUE,
+        overall_rating REAL NOT NULL CHECK (overall_rating >= 0 AND overall_rating <= 5),
+        sections_json TEXT NOT NULL DEFAULT '[]',
+        captured_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+        FOREIGN KEY (source_task_run_id) REFERENCES task_runs(id) ON DELETE CASCADE
       );
 
 CREATE TABLE IF NOT EXISTS task_run_events (
@@ -351,6 +425,28 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
         FOREIGN KEY (author_connection_id) REFERENCES mcp_connections(id) ON DELETE SET NULL
       );
 
+CREATE TABLE IF NOT EXISTS conversation_drafts (
+        user_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        context_key TEXT NOT NULL,
+        body_markdown TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, project_id, context_key),
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
+CREATE TABLE IF NOT EXISTS conversation_message_history (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        body_markdown TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(user_id, project_id, body_markdown),
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
 CREATE TABLE IF NOT EXISTS agent_presets (
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,
@@ -365,11 +461,76 @@ CREATE TABLE IF NOT EXISTS agent_presets (
         avatar_config_json TEXT,
         provider_config_id TEXT,
         model TEXT,
+        container_run_as_root INTEGER,
         memory_template_override_enabled INTEGER NOT NULL DEFAULT 0,
         memory_template_markdown TEXT,
+        persistent_skill_storage_enabled INTEGER NOT NULL DEFAULT 0,
         mcp_access_json TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
+CREATE TABLE IF NOT EXISTS skill_storages (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        storage_kind TEXT NOT NULL DEFAULT 'project',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        UNIQUE (project_id, name)
+      );
+
+CREATE TABLE IF NOT EXISTS skills (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        storage_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        content_markdown TEXT NOT NULL DEFAULT '',
+        source_type TEXT NOT NULL DEFAULT 'manual',
+        source_ref TEXT,
+        content_hash TEXT NOT NULL,
+        tags_json TEXT NOT NULL DEFAULT '[]',
+        applies_to_json TEXT NOT NULL DEFAULT '[]',
+        version TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (storage_id) REFERENCES skill_storages(id) ON DELETE CASCADE,
+        UNIQUE (storage_id, name)
+      );
+
+CREATE TABLE IF NOT EXISTS skill_embeddings (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        storage_id TEXT NOT NULL,
+        skill_id TEXT NOT NULL,
+        embedding_model TEXT NOT NULL,
+        embedding_dimension INTEGER NOT NULL,
+        chunk_index INTEGER NOT NULL DEFAULT 0,
+        content_hash TEXT NOT NULL,
+        embedding_blob BLOB,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (storage_id) REFERENCES skill_storages(id) ON DELETE CASCADE,
+        FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE,
+        UNIQUE (skill_id, embedding_model, chunk_index)
+      );
+
+CREATE TABLE IF NOT EXISTS agent_skill_storage_bindings (
+        agent_preset_id TEXT NOT NULL,
+        storage_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (agent_preset_id, storage_id),
+        FOREIGN KEY (agent_preset_id) REFERENCES agent_presets(id) ON DELETE CASCADE,
+        FOREIGN KEY (storage_id) REFERENCES skill_storages(id) ON DELETE CASCADE,
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
       );
 
@@ -540,6 +701,154 @@ CREATE TABLE IF NOT EXISTS agent_knowledge_subscriptions (
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
       );
 
+CREATE TABLE IF NOT EXISTS node_flows (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        graph_json TEXT NOT NULL,
+        version INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
+CREATE TABLE IF NOT EXISTS node_flow_versions (
+        id TEXT PRIMARY KEY,
+        flow_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        graph_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        UNIQUE (flow_id, version)
+      );
+
+CREATE TABLE IF NOT EXISTS node_flow_agent_skills (
+        flow_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        agent_preset_id TEXT NOT NULL,
+        skill_name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (flow_id, agent_preset_id),
+        FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (agent_preset_id) REFERENCES agent_presets(id) ON DELETE CASCADE
+      );
+
+CREATE TABLE IF NOT EXISTS node_flow_runs (
+        id TEXT PRIMARY KEY,
+        flow_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        execution_invocation_id TEXT,
+        trigger_type TEXT NOT NULL DEFAULT 'manual',
+        trigger_payload_json TEXT,
+        input_json TEXT,
+        output_json TEXT,
+        error_message TEXT,
+        started_at TEXT,
+        finished_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (execution_invocation_id) REFERENCES execution_invocations(id) ON DELETE SET NULL
+      );
+
+CREATE TABLE IF NOT EXISTS node_flow_node_runs (
+        id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL,
+        flow_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        node_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        execution_invocation_id TEXT,
+        input_json TEXT,
+        output_json TEXT,
+        error_message TEXT,
+        started_at TEXT,
+        finished_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (run_id) REFERENCES node_flow_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (execution_invocation_id) REFERENCES execution_invocations(id) ON DELETE SET NULL
+      );
+
+CREATE TABLE IF NOT EXISTS custom_dashboards (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'draft',
+        manifest_json TEXT NOT NULL,
+        files_json TEXT NOT NULL,
+        source_node_graph_json TEXT NOT NULL,
+        styleguide_json TEXT NOT NULL DEFAULT '{}',
+        runtime_metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
+CREATE TABLE IF NOT EXISTS custom_dashboard_revisions (
+        id TEXT PRIMARY KEY,
+        dashboard_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        revision_number INTEGER NOT NULL,
+        manifest_json TEXT NOT NULL,
+        files_json TEXT NOT NULL,
+        source_node_graph_json TEXT NOT NULL,
+        styleguide_json TEXT NOT NULL DEFAULT '{}',
+        validation_status TEXT,
+        validation_report_json TEXT,
+        runtime_metadata_json TEXT NOT NULL DEFAULT '{}',
+        validated_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (dashboard_id) REFERENCES custom_dashboards(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        UNIQUE (dashboard_id, revision_number)
+      );
+
+CREATE TABLE IF NOT EXISTS custom_dashboard_validation_sessions (
+        id TEXT PRIMARY KEY,
+        dashboard_id TEXT NOT NULL,
+        revision_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        validation_report_json TEXT,
+        runtime_metadata_json TEXT NOT NULL DEFAULT '{}',
+        started_at TEXT,
+        finished_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (dashboard_id) REFERENCES custom_dashboards(id) ON DELETE CASCADE,
+        FOREIGN KEY (revision_id) REFERENCES custom_dashboard_revisions(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
+CREATE TABLE IF NOT EXISTS custom_dashboard_publications (
+        dashboard_id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        revision_id TEXT NOT NULL,
+        published_at TEXT NOT NULL,
+        runtime_metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (dashboard_id) REFERENCES custom_dashboards(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (revision_id) REFERENCES custom_dashboard_revisions(id) ON DELETE CASCADE
+      );
+
 CREATE TABLE IF NOT EXISTS execution_invocations (
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,
@@ -628,6 +937,7 @@ CREATE TABLE IF NOT EXISTS sprint_preview_sessions (
         install_command TEXT,
         build_command TEXT,
         run_command TEXT,
+        environment_overrides_json TEXT,
         last_completed_task_count INTEGER NOT NULL DEFAULT 0,
         last_seen_sprint_status TEXT,
         last_known_path TEXT,
@@ -686,15 +996,30 @@ CREATE TABLE IF NOT EXISTS scheduler_entries (
       );
 
 CREATE INDEX IF NOT EXISTS idx_provider_invocations_provider_status ON provider_invocations (provider, status);
+CREATE INDEX IF NOT EXISTS idx_provider_invocations_started ON provider_invocations (started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_provider_invocations_updated ON provider_invocations (updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_provider_invocations_project_started ON provider_invocations (project_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_provider_invocations_project_sprint_started ON provider_invocations (project_id, sprint_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_provider_invocations_project_sprint_run_started ON provider_invocations (project_id, sprint_run_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_provider_invocations_sprint_started ON provider_invocations (sprint_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_provider_invocations_sprint_run_started ON provider_invocations (sprint_run_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_provider_invocations_task_run ON provider_invocations (task_run_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_provider_invocations_session_owner ON provider_invocations (session_id, project_id, sprint_id, task_id);
 CREATE INDEX IF NOT EXISTS idx_task_dispatches_project_executor_status_priority ON task_dispatches (project_id, executor_type, status, priority);
 CREATE INDEX IF NOT EXISTS idx_sprint_runs_project_status_recency ON sprint_runs (project_id, status, last_heartbeat_at DESC, updated_at DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sprint_runs_project_sprint ON sprint_runs (project_id, sprint_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_task_dispatches_project_task_recency ON task_dispatches (project_id, task_id, last_heartbeat_at DESC, started_at DESC, claimed_at DESC, queued_at DESC);
 CREATE INDEX IF NOT EXISTS idx_task_dispatches_project_sprint_run_recency ON task_dispatches (project_id, sprint_run_id, last_heartbeat_at DESC, started_at DESC, claimed_at DESC, queued_at DESC);
+CREATE INDEX IF NOT EXISTS idx_task_runs_dispatch ON task_runs (dispatch_id);
 CREATE INDEX IF NOT EXISTS idx_task_runs_task_sprint_session ON task_runs (task_id, sprint_run_id, session_id);
+CREATE INDEX IF NOT EXISTS idx_task_runs_session_id_owner ON task_runs (session_id, project_id, sprint_id, task_id);
+CREATE INDEX IF NOT EXISTS idx_task_runs_session_name_owner ON task_runs (session_name, project_id, sprint_id, task_id);
+CREATE INDEX IF NOT EXISTS idx_task_runs_pr_url_owner ON task_runs (pr_url, project_id, sprint_id, task_id);
 CREATE INDEX IF NOT EXISTS idx_task_runs_project_sprint_lookup ON task_runs (project_id, sprint_id, sprint_run_id, id);
 CREATE INDEX IF NOT EXISTS idx_task_runs_project_sprint_run_lookup ON task_runs (project_id, sprint_run_id, id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_task_self_reflection_ratings_task_run ON task_self_reflection_ratings (source_task_run_id);
+CREATE INDEX IF NOT EXISTS idx_task_self_reflection_ratings_task_latest ON task_self_reflection_ratings (task_id, captured_at DESC, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_task_self_reflection_ratings_project_task_latest ON task_self_reflection_ratings (project_id, task_id, captured_at DESC);
 CREATE INDEX IF NOT EXISTS idx_task_run_events_project_created ON task_run_events (project_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_task_run_events_task_run_created_id ON task_run_events (task_run_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_task_run_events_provider_activity_run_created ON task_run_events (task_run_id, created_at DESC, id DESC) WHERE event_type = 'provider_activity';
@@ -710,4 +1035,29 @@ CREATE INDEX IF NOT EXISTS idx_execution_invocations_project_sprint_started ON e
 CREATE INDEX IF NOT EXISTS idx_execution_invocations_project_sprint_run_started ON execution_invocations (project_id, sprint_run_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_execution_invocations_status_started ON execution_invocations (status, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_execution_invocations_provider_invocation ON execution_invocations (provider_invocation_id);
+CREATE INDEX IF NOT EXISTS idx_skill_storages_project ON skill_storages (project_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_skills_project_storage ON skills (project_id, storage_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_skill_embeddings_skill ON skill_embeddings (skill_id, embedding_model, chunk_index);
+CREATE INDEX IF NOT EXISTS idx_skill_embeddings_storage ON skill_embeddings (project_id, storage_id, embedding_model);
+CREATE INDEX IF NOT EXISTS idx_agent_skill_storage_bindings_agent ON agent_skill_storage_bindings (agent_preset_id);
+CREATE INDEX IF NOT EXISTS idx_agent_skill_storage_bindings_storage ON agent_skill_storage_bindings (project_id, storage_id);
+CREATE INDEX IF NOT EXISTS idx_node_flows_project_updated ON node_flows (project_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_node_flow_versions_flow_version ON node_flow_versions (flow_id, version DESC);
+CREATE INDEX IF NOT EXISTS idx_node_flow_agent_skills_agent ON node_flow_agent_skills (project_id, agent_preset_id);
+CREATE INDEX IF NOT EXISTS idx_node_flow_runs_flow_created ON node_flow_runs (flow_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_node_flow_runs_project_created ON node_flow_runs (project_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_node_flow_node_runs_run_created ON node_flow_node_runs (run_id, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_custom_dashboards_project_status ON custom_dashboards (project_id, status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_custom_dashboard_revisions_dashboard_revision ON custom_dashboard_revisions (dashboard_id, revision_number DESC);
+CREATE INDEX IF NOT EXISTS idx_custom_dashboard_revisions_project ON custom_dashboard_revisions (project_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_custom_dashboard_validation_sessions_revision ON custom_dashboard_validation_sessions (revision_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_custom_dashboard_validation_sessions_dashboard ON custom_dashboard_validation_sessions (dashboard_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_custom_dashboard_publications_project ON custom_dashboard_publications (project_id, published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_chat_provider_connections_kind ON chat_provider_connections (provider_kind, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_chat_provider_connections_enabled ON chat_provider_connections (enabled, status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_chat_provider_channel_bindings_project ON chat_provider_channel_bindings (project_id, enabled, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_chat_provider_channel_bindings_provider_channel ON chat_provider_channel_bindings (provider_connection_id, external_channel_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_provider_message_deliveries_inbound_dedupe ON chat_provider_message_deliveries (provider_connection_id, external_message_id) WHERE direction = 'inbound' AND external_message_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_provider_message_deliveries_outbound_message ON chat_provider_message_deliveries (provider_connection_id, conversation_message_id) WHERE direction = 'outbound' AND conversation_message_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_chat_provider_message_deliveries_pending_outbound ON chat_provider_message_deliveries (status, updated_at ASC) WHERE direction = 'outbound' AND status IN ('pending', 'sending', 'retryable_failure');
 `;

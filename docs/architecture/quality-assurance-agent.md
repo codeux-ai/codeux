@@ -23,6 +23,7 @@ The QA agent is designed to:
 Project-scoped settings live under:
 
 - `agents.qualityAssurance`
+- `agents.selfReflection.qualityAssurance`
 
 The current settings are:
 
@@ -42,6 +43,14 @@ The current settings are:
   - `enabled`
   - `agentPresetIds`
   - `agentPresetId` legacy compatibility mirror
+
+QA self-reflection is configured separately under `agents.selfReflection.qualityAssurance`:
+
+- `enabled`: defaults to `false`; when false, QA output is accepted exactly as it was before this loop existed
+- `criteria`: ordered `{ id, label, prompt, threshold }` records, where `threshold` is stored on the 0-1 settings scale and compared against the reviewer self-rating converted from 1-10
+- `maxImprovementAttempts`: maximum number of same-session improvement prompts after a below-threshold rating
+
+When enabled, Code UX asks the same QA provider session to return JSON-only self-ratings for the normalized QA result. If every criterion meets its threshold, the original normalized result is used. If any criterion is below threshold and attempts remain, Code UX asks for an improved QA JSON payload and re-runs the normal QA schema normalization. Invalid reflection JSON, provider failures, or invalid improved QA JSON are fail-open for this optional loop: Code UX logs the issue and keeps the last valid normalized QA result.
 
 Each QA trigger owns an ordered reviewer roster in `agentPresetIds`:
 
@@ -82,6 +91,7 @@ Persistence:
 
 - `src/repositories/qa-review-repository.ts`
 - `qa_review_runs` table in `src/repositories/db/app-db-schema.ts`
+- optional self-reflection ratings are recorded as `execution_invocation_messages.metadata_json` on the QA invocation, including criteria ids, labels, thresholds, scores, pass/fail state, attempt count, and final decision. Raw provider credentials are not stored in these metadata records.
 
 Provider routing:
 
@@ -146,7 +156,7 @@ Task-level prompt scope:
 - QA must not tell the current coding session to implement, restore, or modify another task's scope
 - when task-level QA requests changes, `fixInstructions` must target the current task's coding session and `targetTaskKey` must identify that current task
 
-If task QA is still pending, running, or has failed without exhausting `maxTaskReviewRuns`, Code UX marks the task merge state as `QA_PENDING` and keeps the sprint active instead of auto-merging.
+If task QA is still pending, running, or has failed without exhausting `maxTaskReviewRuns`, Code UX marks the task merge state as `QA_PENDING` and keeps the sprint active instead of auto-merging. If QA is exhausted and configured to `ESCALATE_TO_HUMAN`, the task is held in `QA_REVIEW_FAILED` and will not be merged or marked complete until a human resolves it.
 
 Recovery guarantees:
 
@@ -160,7 +170,7 @@ Recovery guarantees:
 - once a task is parked in `QA_REVIEW_FAILED`, status derivation treats it as a stable human-owned state rather than requeueing it just because dependencies are satisfied. Only an explicit rerun/reset should move it back to pending work.
 - human-resolving or dismissing a task QA exhaustion attention item is treated as explicit operator intervention: Code UX clears the task-scoped QA review history and the `qa_review` guardrail counter so the next orchestration cycle can run QA again instead of immediately re-escalating on the exhausted budget. New QA handoffs carry `sourceAttentionType: "qa_review"` in their payload; older handoffs are still recognized by their QA budget payload fields.
 - each sprint cycle reconciles running task QA reviews against their backing provider runtime. If a running QA invocation never links to provider runtime, or if a Docker-backed QA provider invocation no longer has a running `code-ux.session-id` container, Code UX marks the stale QA run failed so the next cycle can retry it instead of leaving the task at `QA_PENDING`.
-- provider concurrency slot waits and claims also reconcile stale Docker-backed provider invocations before counting or creating active slots. This releases orphaned `qwen-code`/CLI QA slots when their containers disappeared before the invocation reached a terminal state, including providers configured with unlimited concurrency, but only after linked execution activity has been idle long enough to avoid racing normal container startup.
+- provider concurrency slot waits and claims also reconcile stale Docker-backed provider invocations before counting or creating active slots. This releases orphaned `qwen-code`/CLI QA slots when their containers disappeared before the invocation reached a terminal state, including providers configured with unlimited concurrency, but only after linked execution activity has been idle long enough to avoid racing normal container startup. For task-coding invocations, the reconciler checks the linked task run and dispatch first; completed linked work closes the provider invocation as completed, and recently heartbeating dispatches are left running instead of being failed by the stale-container sweep.
 - startup recovery also reconciles stale `running` QA review rows and stale QA invocation audit rows globally. If the backing QA execution invocation already ended, never linked to provider runtime, or points at a Docker-backed provider invocation whose container is gone, startup marks the QA run and backing invocation failed so the sprint can retry instead of keeping a historical `QA review running` badge indefinitely.
 - startup recovery also clears stale task-coding runtime projections that can otherwise keep sprint QA and merge gates looking active after the real work ended. This includes terminal linked task runs, terminal provider invocations, orphaned Jules `task_coding` provider rows, active task-run rows without dispatch/provider/execution linkage, and paused sprint-run rows whose owning sprint is already idle or terminal.
 - session sync also clears stale hosted Jules task projections when a task records a session id that is missing from the list snapshot and a direct provider lookup returns not found. In that case Code UX fails the stale provider/execution/task-run rows and requeues the task when failed-task retry is enabled.
@@ -238,7 +248,7 @@ For CLI follow-up runs, Code UX:
 - refreshes `origin` and starts follow-up work from the latest remote feature branch when remote GitHub mode is enabled
 - resolves the expected resume workspace from `sessionId` plus CLI execution mode and recovers the current branch from that workspace when `task.worker_branch` and `taskRun.workerBranch` are empty
 - resets a reused task workspace to the latest remote worker branch when that branch already exists, so QA fixes build on the current task PR tip
-- creates a missing local feature branch from `origin/<feature>` instead of recreating it from the default branch when the remote feature branch already exists
+- creates a missing local feature branch from `origin/<feature>` instead of recreating it from the default branch when the remote tracking base branch exists, or falls back to resolving a repository default branch start point
 - resumes the worker branch
 - records the follow-up invocation in execution tracking
 - pushes/publishes any resulting PR updates when needed

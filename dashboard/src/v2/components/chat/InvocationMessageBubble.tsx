@@ -5,14 +5,20 @@ import { renderMarkdown } from "../../../lib/markdown.js";
 import {
   getInvocationWidgetData,
   getReasoningWidgetData,
+  getSelfReflectionWidgetData,
   sanitizeInvocationOutputText,
 } from "../../lib/chat-widget-view-models.js";
 import { formatChatTime } from "../../lib/chat-time.js";
 import { PlanningRequestWidget } from "./widgets/PlanningRequestWidget.js";
+import { ExternalReferenceWidget } from "./widgets/ExternalReferenceWidget.js";
 import { ToolCallWidget } from "./widgets/ToolCallWidget.js";
 import { ReasoningWidget } from "./widgets/ReasoningWidget.js";
+import { SelfReflectionWidget } from "./widgets/SelfReflectionWidget.js";
+import { LiveEntityStatusWidget } from "./widgets/LiveEntityStatusWidget.js";
+import { AgentMoodAside, buildAgentMoodAsideSeed, resolveAgentMoodAsideText } from "./widgets/AgentMoodAside.js";
 import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
-import type { ParsedTurnTokens } from "../../lib/chat-widget-view-models.js";
+import type { ChatWidgetLiveData, ParsedTurnTokens } from "../../lib/chat-widget-view-models.js";
+import type { ChatLiveEntityWidget } from "../../lib/chat-live-entities.js";
 import type { AgentAvatarConfig } from "../../types.js";
 
 const asString = (value: unknown): string | null => (typeof value === "string" ? value : null);
@@ -38,19 +44,24 @@ export interface InvocationMessageBubbleProps {
   message: ExecutionInvocationMessageRecord;
   agentAvatarConfig?: AgentAvatarConfig | null;
   agentName?: string | null;
+  widgetLiveData?: ChatWidgetLiveData;
+  liveEntities?: readonly ChatLiveEntityWidget[];
 }
 
 export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleProps> = ({
   message,
   agentAvatarConfig,
   agentName,
+  widgetLiveData,
+  liveEntities = [],
 }) => {
   const fromUser = message.role === "user";
   const fromTool = message.role === "tool";
   const fromSystem = message.role === "system";
-  const widgetData = getInvocationWidgetData(message);
+  const widgetData = getInvocationWidgetData(message, widgetLiveData);
   const kind = asString(message.metadata?.kind);
   const reasoningWidgetData = getReasoningWidgetData(message);
+  const reflectionWidgetData = getSelfReflectionWidgetData(message);
 
   // Reasoning and tool turns render as compact, full-width activity cards
   // rather than chat bubbles, so the transcript reads like the real session.
@@ -86,6 +97,16 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
     );
   }
 
+  if (reflectionWidgetData) {
+    return (
+      <div class="flex justify-start">
+        <div class="w-full max-w-full lg:max-w-[760px] min-w-0 pl-11">
+          <SelfReflectionWidget reflection={reflectionWidgetData} />
+        </div>
+      </div>
+    );
+  }
+
   let role: AvatarRole = "agent";
   if (fromUser || fromTool) {
     role = "user";
@@ -104,12 +125,21 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
   const errorLabel = formatErrorCategory(message.metadata?.errorCategory);
   const createdAtLabel = formatChatTime(message.createdAt);
   const isExternalApi = Boolean(message.metadata?.isExternalApi);
+  const hasPrimaryWidget = widgetData.type === "planning"
+    || (widgetData.type === "external_reference" && Boolean(widgetData.externalReference));
+  const hasLiveEntities = !fromTool && liveEntities.length > 0;
+  const liveEntitySlotClass = hasPrimaryWidget
+    ? "mt-3"
+    : widgetData.suppressBodyMarkdown ? "mt-0" : "mt-4 border-t border-white/5 pt-4";
+  const moodAsideText = message.role === "assistant"
+    ? resolveAgentMoodAsideText({
+        metadata: message.metadata,
+        seed: buildAgentMoodAsideSeed([message.id, message.contentMarkdown, senderName]),
+      })
+    : null;
 
   return (
     <div className={`flex ${fromUser || fromTool ? "justify-end" : "justify-start"}`}>
-      <span className="sr-only">
-        From {senderName} at {createdAtLabel}. {displayStatus ? `Status: ${displayStatus}.` : ""} {errorLabel ? `Error: ${errorLabel}.` : ""}
-      </span>
       <span className="sr-only">
         From {senderName} at {createdAtLabel}. {displayStatus ? `Status: ${displayStatus}.` : ""} {errorLabel ? `Error: ${errorLabel}.` : ""}
       </span>
@@ -158,11 +188,15 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
           </div>
 
           {/* Message Body */}
-          <div className="prose prose-sm max-w-none text-[14px] leading-7 text-slate-800 dark:text-slate-200 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit prose-pre:overflow-x-auto prose-code:overflow-x-auto break-words overflow-wrap-anywhere min-w-0"
-            dangerouslySetInnerHTML={{
-              __html: renderMarkdown(sanitizeInvocationOutputText(message.contentMarkdown || "*(No message content)*")),
-            }}
-          />
+          {!widgetData.suppressBodyMarkdown && (
+            <div className="prose prose-sm max-w-none text-[14px] leading-7 text-slate-800 dark:text-slate-200 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit prose-pre:overflow-x-auto prose-code:overflow-x-auto break-words overflow-wrap-anywhere min-w-0"
+              dangerouslySetInnerHTML={{
+                __html: renderMarkdown(sanitizeInvocationOutputText(message.contentMarkdown || "*(No message content)*")),
+              }}
+            />
+          )}
+
+          <AgentMoodAside text={moodAsideText} />
 
           {message.toolCallsJson && !kind && (
             <div className="mt-4 rounded border border-slate-200 bg-slate-200/30 p-3 text-xs dark:border-white/10 dark:bg-black/20">
@@ -175,7 +209,22 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
           {/* Widget Slot */}
           {widgetData.type === "planning" && (
             <div className="mt-4 border-t border-white/5 pt-4">
-              <PlanningRequestWidget status={widgetData.status} planName={widgetData.planName} />
+              <PlanningRequestWidget
+                status={widgetData.status}
+                planName={widgetData.planName}
+                liveStatus={widgetData.liveStatus}
+                executionPlan={widgetData.executionPlan}
+              />
+            </div>
+          )}
+          {widgetData.type === "external_reference" && widgetData.externalReference && (
+            <div className={widgetData.suppressBodyMarkdown ? "mt-0" : "mt-4 border-t border-white/5 pt-4"}>
+              <ExternalReferenceWidget status={widgetData.status} reference={widgetData.externalReference} />
+            </div>
+          )}
+          {hasLiveEntities && (
+            <div className={liveEntitySlotClass}>
+              <LiveEntityStatusWidget entities={liveEntities} />
             </div>
           )}
         </div>

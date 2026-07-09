@@ -2,7 +2,8 @@ import type { FunctionComponent } from "preact";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import { NumberInput, Row, TextInput, Toggle } from "../SettingsFormFields.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
-import { Eye, Gauge } from "lucide-preact";
+import { Eye, Gauge, SlidersHorizontal } from "lucide-preact";
+import { PreviewEnvironmentEditor } from "../../browser/PreviewEnvironmentEditor.js";
 
 export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
   const {
@@ -146,6 +147,28 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
               },
             }))}
             mono
+          />
+        </Row>
+      </SectionCard>
+
+      <SectionCard title="Preview Environment" watermark="ENV" badge={getBadge("sprintPreview.environmentVariables")} icon={<SlidersHorizontal strokeWidth={2.4} />}>
+        <Row
+          label="Default container variables"
+          description="Environment variables injected into every preview container for this scope. Selected containers can override these from the Browser page."
+          badge={getFieldBadge("sprintPreview.environmentVariables")}
+          last
+        >
+          <PreviewEnvironmentEditor
+            variables={editableSettings.sprintPreview.environmentVariables ?? []}
+            onChange={(environmentVariables) => updateEditableSettings((current) => ({
+              ...current,
+              sprintPreview: {
+                ...current.sprintPreview,
+                environmentVariables,
+              },
+            }))}
+            addLabel="Add default"
+            valueLabel="Preview environment default value"
           />
         </Row>
       </SectionCard>

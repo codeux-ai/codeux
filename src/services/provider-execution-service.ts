@@ -1,8 +1,10 @@
-import type { CustomMcpServer, DashboardSettings } from "../contracts/app-types.js";
-import type { QwenModelProviderSettings } from "../contracts/app-types.js";
+import type { CustomMcpServer, DashboardSettings, ThinkingMode } from "../contracts/app-types.js";
+import type { ProviderConfigMode, QwenModelProviderSettings } from "../contracts/app-types.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import { resolveAgentMcpRuntime } from "./agent-mcp-access.js";
+import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
+import type { SkillService, PersistentSkillStorageRuntime } from "./skill-service.js";
 import type { ProviderInvocationPurpose } from "../contracts/execution-types.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
@@ -12,6 +14,7 @@ import type { CliProviderId } from "../infrastructure/providers/cli/provider-com
 import type { ParsedConversationTurn, ProviderUsageTelemetry } from "../infrastructure/providers/cli/provider-usage.js";
 import type { AppendExecutionInvocationMessageInput } from "../contracts/invocation-types.js";
 import type { Logger } from "../shared/logging/logger.js";
+import { getCorrelationId } from "../shared/logging/correlation-id.js";
 import type { ProviderConcurrencyService } from "./provider-concurrency-service.js";
 import { isReadFileNotFoundToolError, buildReadFileRetryPrompt } from "./cli-workflow-text-utils.js";
 import { classifyProviderError, ProviderQuotaError } from "../shared/providers/provider-error-classifier.js";
@@ -114,6 +117,9 @@ export interface ProviderExecutionServiceDeps {
   providerConcurrencyService?: ProviderConcurrencyService;
   logger?: Logger;
   getGithubToken?: () => string | undefined;
+  getMcpConnectionInfo?: () => McpConnectionInfo | null;
+  agentPresetRepository?: AgentPresetRepository;
+  skillService?: SkillService;
 }
 
 export interface ExecutionProviderRunArgs {
@@ -134,6 +140,7 @@ export interface ExecutionProviderRunArgs {
   prompt: string;
   cwd?: string;
   model: string;
+  thinkingMode?: ThinkingMode;
   apiKey: string;
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
   qwenRegion?: "china" | "international";
@@ -150,6 +157,8 @@ export interface ExecutionProviderRunArgs {
   openCodePackage?: string;
   providerMountAuth?: boolean;
   providerAuthPath?: string;
+  providerConfigMode?: ProviderConfigMode;
+  providerConfigPath?: string;
   customBaseUrl?: string;
   customModel?: string;
   sessionId: string;
@@ -218,12 +227,17 @@ export class ProviderExecutionService {
   async executeProvider(args: ExecutionProviderRunArgs): Promise<ProviderRunResult> {
     let execInvocationId: string | null = args.invocationId || null;
     const effectiveModel = resolveEffectiveModel(args);
+    const persistentSkillRuntime = await this.resolvePersistentSkillRuntime(args);
+    const codeUxMcpEnabled = args.agentMcpAccess?.codeUxEnabled === true;
+    const baseMcpConnection = args.mcpConnection
+      ?? (persistentSkillRuntime || codeUxMcpEnabled ? this.deps.getMcpConnectionInfo?.() ?? null : null);
 
     const resolvedMcp = resolveAgentMcpRuntime({
       access: args.agentMcpAccess,
       agentId: args.mcpAgentId,
       customMcpServers: args.customMcpServers ?? [],
-      mcpConnection: args.mcpConnection ?? null,
+      mcpConnection: baseMcpConnection,
+      persistentSkillRetrievalEnabled: Boolean(persistentSkillRuntime),
     });
 
     const runProviderInner = async (p: string, retrySystemMessage?: string, continueSessionId?: string | null, openCodeBaselineRawUsageJson?: Record<string, unknown> | null): Promise<ProviderRunResult> => {
@@ -324,6 +338,7 @@ export class ProviderExecutionService {
       const startedMs = Date.now();
       this.deps.logger?.info("Provider invocation started", {
         logPurpose: "invocation",
+        correlationId: getCorrelationId(),
         invocationId: execInvocationId,
         providerInvocationId: invocation?.id,
         projectId: args.projectId,
@@ -340,6 +355,7 @@ export class ProviderExecutionService {
         prompt: p,
         cwd: args.cwd || args.repoPath,
         model: effectiveModel,
+        thinkingMode: args.thinkingMode,
         apiKey: args.apiKey,
         qwenAuthMode: args.qwenAuthMode,
         qwenRegion: args.qwenRegion,
@@ -356,6 +372,8 @@ export class ProviderExecutionService {
         openCodePackage: args.openCodePackage,
         providerMountAuth: args.providerMountAuth,
         providerAuthPath: args.providerAuthPath,
+        providerConfigMode: args.providerConfigMode,
+        providerConfigPath: args.providerConfigPath,
         customBaseUrl: args.customBaseUrl,
         customModel: args.customModel,
         sessionId: args.sessionId,
@@ -373,6 +391,7 @@ export class ProviderExecutionService {
         purpose: args.purpose,
         mcpConnection: resolvedMcp.mcpConnection,
         customMcpServers: resolvedMcp.customMcpServers,
+        persistentSkillStorageMounts: persistentSkillRuntime?.mounts,
         onActivity: (desc: string, originator?: string) => {
           if (args.onActivity) {
             args.onActivity(desc, originator);
@@ -413,12 +432,12 @@ export class ProviderExecutionService {
             && this.deps.executionRepository
             && this.isExecutionInvocationStillRunning(execInvocationId)
           ) {
-            if (args.trackAssistantInInvocation !== false) {
+            if (args.trackAssistantInInvocation !== false && telemetry.conversation && telemetry.conversation.length > 0) {
               // Record the full parsed agent session for every invocation type —
               // including text-output (QA / planning / setup) runs, which are
               // just as agentic but were previously collapsed to prompt + final
-              // answer. The structured callers parse their result from the
-              // returned text, not from these messages, so this is display-only.
+              // answer. Raw text-only telemetry is left for completion fallback
+              // so live rewrites do not remove retry/error audit messages.
               const messages = buildPersistedInvocationMessages(
                 args.provider,
                 effectiveModel,
@@ -458,6 +477,7 @@ export class ProviderExecutionService {
           }
           const logFields = {
             logPurpose: "invocation" as const,
+            correlationId: getCorrelationId(),
             invocationId: execInvocationId,
             providerInvocationId: invocation?.id,
             projectId: args.projectId,
@@ -466,8 +486,9 @@ export class ProviderExecutionService {
             provider: args.provider,
             model: effectiveModel,
             purpose: args.purpose,
+            executionMode: args.workflowSettings.executionMode,
             durationMs: Date.now() - startedMs,
-            error,
+            errorName: error instanceof Error ? error.name : "Error",
           };
           if (wasCancelled) {
             this.deps.logger?.info("Provider invocation cancelled", logFields);
@@ -524,6 +545,7 @@ export class ProviderExecutionService {
 
       this.deps.logger?.info("Provider invocation finished", {
         logPurpose: "invocation",
+        correlationId: getCorrelationId(),
         invocationId: execInvocationId,
         providerInvocationId: invocation?.id,
         projectId: args.projectId,
@@ -541,7 +563,10 @@ export class ProviderExecutionService {
       return result;
     };
 
-    let currentPrompt = args.prompt;
+    const initialPrompt = persistentSkillRuntime
+      ? `${args.prompt}\n\n${persistentSkillRuntime.instructionMarkdown}`
+      : args.prompt;
+    let currentPrompt = initialPrompt;
     let providerResult: ProviderRunResult;
     let usedReadFileRetry = false;
     let continueSessionId: string | null = args.continueSessionId || null;
@@ -571,7 +596,7 @@ export class ProviderExecutionService {
             description: "Retrying with file-discovery guidance.",
           });
         }
-        currentPrompt = buildReadFileRetryPrompt(args.prompt);
+        currentPrompt = buildReadFileRetryPrompt(initialPrompt);
         usedReadFileRetry = true;
         continue;
       }
@@ -688,12 +713,30 @@ export class ProviderExecutionService {
             });
           }
           continueSessionId = providerResult.nativeSessionId || (args.provider === "claude-code" ? null : args.sessionId);
-          await sleepWithSignal(retryDecision.delayMs, args.signal);
+          await this.sleepUntilInvocationRetryTimer({
+            invocationId: execInvocationId,
+            retryAtIso: retryAfterIso,
+            delayMs: retryDecision.delayMs,
+            signal: args.signal,
+          });
           continue;
         }
       }
 
       if (classification.category !== "UNKNOWN") {
+        if (execInvocationId && this.isExecutionInvocationStillRunning(execInvocationId) && !isRuntimeShutdownInProgress()) {
+          const terminalStatus = args.signal?.aborted ? "cancelled" : "failed";
+          this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
+            status: terminalStatus,
+            provider: args.provider,
+            model: effectiveModel,
+            finishedAt: new Date().toISOString(),
+            errorMessage: classification.userMessage,
+            lastErrorCategory: classification.category,
+            lastErrorMessage: classification.userMessage,
+            lastRetryAfterIso: retryAfterIso,
+          });
+        }
         throw new ProviderQuotaError({
           ...classification,
           resetAtIso: retryAfterIso,
@@ -728,6 +771,30 @@ export class ProviderExecutionService {
     }
   }
 
+  private async resolvePersistentSkillRuntime(args: ExecutionProviderRunArgs): Promise<PersistentSkillStorageRuntime | null> {
+    if (!args.projectId || !args.mcpAgentId || !this.deps.skillService || !this.deps.agentPresetRepository) {
+      return null;
+    }
+    const agent = this.deps.agentPresetRepository.getAgentPreset(args.mcpAgentId);
+    if (!agent || agent.projectId !== args.projectId || !agent.persistentSkillStorage?.enabled) {
+      return null;
+    }
+    try {
+      return await this.deps.skillService.resolvePersistentSkillStorageRuntime({
+        projectId: args.projectId,
+        agentPresetId: agent.id,
+        enabled: true,
+      });
+    } catch (error) {
+      this.deps.logger?.warn("Failed to resolve persistent skill storage runtime", {
+        projectId: args.projectId,
+        agentPresetId: args.mcpAgentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
   private isProviderInvocationStillRunning(providerInvocationId: string): boolean {
     const current = this.deps.executionRepository?.getProviderInvocationUsage?.(providerInvocationId);
     return !current || current.status === "running";
@@ -736,6 +803,40 @@ export class ProviderExecutionService {
   private isExecutionInvocationStillRunning(executionInvocationId: string): boolean {
     const current = this.deps.executionRepository?.getExecutionInvocation?.(executionInvocationId);
     return !current || current.status === "running" || current.status === "paused";
+  }
+
+  private async sleepUntilInvocationRetryTimer(args: {
+    invocationId: string | null;
+    retryAtIso: string | null;
+    delayMs: number;
+    signal?: AbortSignal;
+  }): Promise<void> {
+    if (
+      !args.invocationId
+      || !args.retryAtIso
+      || !this.deps.executionRepository
+      || typeof this.deps.executionRepository.getExecutionInvocation !== "function"
+    ) {
+      await sleepWithSignal(args.delayMs, args.signal);
+      return;
+    }
+
+    const deadlineMs = Date.now() + Math.max(0, args.delayMs);
+    while (Date.now() < deadlineMs) {
+      const invocation = this.deps.executionRepository.getExecutionInvocation(args.invocationId);
+      if (invocation && invocation.status !== "running" && invocation.status !== "paused") {
+        throw new Error(`Invocation retry wait stopped because invocation is ${invocation.status}.`);
+      }
+      if (!invocation?.lastRetryAfterIso || invocation.lastRetryAfterIso !== args.retryAtIso) {
+        return;
+      }
+
+      const beforeSleepMs = Date.now();
+      await sleepWithSignal(Math.min(1000, Math.max(1, deadlineMs - beforeSleepMs)), args.signal);
+      if (Date.now() <= beforeSleepMs) {
+        return;
+      }
+    }
   }
 
   private refreshLinkedDispatchHeartbeat(dispatchId: string | null | undefined): void {

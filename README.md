@@ -39,20 +39,20 @@ After launch, Code UX opens its local dashboard at:
 http://localhost:4444
 ```
 
-### npm (CLI)
+### CLI (from source)
 
-Prefer the command line? Install the runtime globally from npm:
-
-```bash
-npm i -g @codeuxai/codeux
-```
-
-This installs the `codeux` command — the orchestration server, MCP server, and live dashboard (the
-same runtime that powers the desktop app, without the Electron shell). Start it with:
+Prefer the command line? Run the runtime from source using `pnpm` (the package is also published on npm as `@codeuxai/codeux`):
 
 ```bash
-codeux
+git clone https://github.com/codeux-ai/codeux.git
+cd codeux
+pnpm install
+pnpm run build
+pnpm start
 ```
+
+This starts the `codeux` orchestration server, MCP server, and live dashboard (the
+same runtime that powers the desktop app, without the Electron shell).
 
 Then open the dashboard at `http://localhost:4444`. Requires **Node.js 22 or newer**; Docker is
 recommended for virtual worker execution and required for preview containers. Run `codeux --help` for
@@ -141,7 +141,7 @@ Docker-backed execution provides:
 
 - Hermetic task workspaces and snapshot-based QA reviews.
 - Reusable runtime caches for package managers and provider CLIs.
-- Auth-copy support for provider credentials such as `~/.codex`, `~/.claude`, `~/.gemini`, `~/.qwen`, and OpenCode auth.
+- Isolated credential mounts for provider auth (such as `~/.codex`, `~/.claude`, `~/.gemini`, `~/.qwen`, and OpenCode) rather than broad workspace root exposure.
 - Short-lived execution containers that are cleaned up after runs instead of becoming permanent agent environments.
 - Isolated merge-conflict repair and CI autofix flows.
 - Startup cleanup for stale containers, workspaces, and preview sessions.
@@ -278,7 +278,7 @@ start planning sprint work without rebuilding the same agent setup for every CLI
 
 ## Typical Workflow
 
-1. Install Code UX from Releases (or npm) and open the dashboard.
+1. Install Code UX from Releases (or source) and open the dashboard.
 2. Add a local repository or clone a Git URL into a managed project.
 3. Configure provider credentials and choose Docker or host execution for each provider.
 4. Create a sprint from a prompt, linked issue set, or quicksprint template.
@@ -288,6 +288,8 @@ start planning sprint work without rebuilding the same agent setup for every CLI
 8. Let Code UX merge completed work according to your policy, or take over manually when the protocol requires it.
 
 ## Documentation
+
+Canonical repository documentation lives in the `docs/` directory, while `docs-web/` serves as the sole publication and reference mirror. The use of a `docs-release/` directory is explicitly forbidden.
 
 - [User quickstart](./docs-web/user/quickstart.md)
 - [Installation](./docs-web/user/installation.md)
@@ -304,8 +306,8 @@ Use source builds when developing Code UX itself or when you need to inspect/mod
 
 ### Requirements
 
-- Node.js 22 LTS or newer.
-- pnpm 10.33 or newer.
+- Node.js >=22.
+- pnpm 10.33.0 or newer.
 - Git 2.30 or newer.
 - Docker, recommended for virtual worker execution and required for preview containers.
 - Provider credentials are optional for installation and local startup; configure them later in the dashboard when you are ready to dispatch work.
@@ -329,6 +331,7 @@ Codex, Claude Code, Qwen Code, OpenCode, and Antigravity CLI.
 
 ```bash
 pnpm run dev
+pnpm run dev:server-only
 ```
 
 Then open `http://localhost:4444`.
@@ -343,9 +346,11 @@ pnpm start
 ### Validate locally
 
 ```bash
+pnpm run quality:guardrails
+pnpm run audit
 pnpm run lint
-pnpm run typecheck
-pnpm run test
+pnpm run test:backend:coverage
+pnpm run test:dashboard
 pnpm run build
 ```
 
@@ -355,7 +360,7 @@ For the full local CI equivalent:
 pnpm run ci
 ```
 
-GitHub Actions also runs the high-severity dependency audit after the consolidated CI command:
+GitHub Actions runs the high-severity dependency audit independently alongside the consolidated CI commands:
 
 ```bash
 pnpm run audit
@@ -363,7 +368,7 @@ pnpm run audit
 
 Additional GitHub Actions behavior:
 
-- Playwright E2E runs only on pushes to `main` and pull requests targeting `main`.
+- Playwright E2E runs only on pushes to `main` and pull requests targeting `main`. It starts `node dist/index.js` and waits on the local `/health` liveness probe.
 - The models.dev catalogue workflow runs on pushes to `main` and `dev`. When upstream catalogue data changes, it uses the built-in `GITHUB_TOKEN` to push a `chore/models-catalog-<branch>` update branch and open a PR. The repository or organization must allow GitHub Actions to create pull requests, and the workflow grants `contents: write` plus `pull-requests: write`.
 
 ## Contributing

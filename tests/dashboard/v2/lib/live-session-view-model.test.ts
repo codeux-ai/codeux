@@ -262,6 +262,134 @@ describe("live-session-view-model", () => {
     expect(item?.dispatchInfo?.status).toBe("running");
   });
 
+  it("derives task card items from indexed mixed runtime rows without leaking unrelated rows", () => {
+    const tasks = [
+      createTask({ record_id: "task-record-1", id: "TASK-1", status: "RUNNING" }),
+      createTask({ record_id: "task-record-2", id: "TASK-2", title: "Task 2", status: "PENDING" }),
+    ];
+    const dispatches = [
+      createDispatch({
+        id: "dispatch-task-1",
+        taskId: "task-record-1",
+        taskKey: "TASK-1",
+        taskRunId: "task-run-1",
+        status: "running",
+        taskRunState: "RUNNING",
+        startedAt: "2026-03-27T10:02:00.000Z",
+      }),
+      createDispatch({
+        id: "dispatch-task-2",
+        taskId: "task-record-2",
+        taskKey: "TASK-2",
+        taskTitle: "Task 2",
+        taskRunId: "task-run-2",
+        status: "completed",
+        taskRunState: "COMPLETED",
+        startedAt: "2026-03-27T10:05:00.000Z",
+        finishedAt: "2026-03-27T10:08:00.000Z",
+      }),
+      createDispatch({
+        id: "dispatch-other-sprint",
+        sprintId: "sprint-other",
+        taskId: "task-record-1",
+        taskKey: "TASK-1",
+        taskRunId: "task-run-other-sprint",
+        status: "failed",
+        taskRunState: "FAILED",
+        startedAt: "2026-03-27T10:09:00.000Z",
+        finishedAt: "2026-03-27T10:10:00.000Z",
+      }),
+      createDispatch({
+        id: "dispatch-unrelated",
+        taskId: "task-record-3",
+        taskKey: "TASK-3",
+        taskRunId: "task-run-3",
+      }),
+    ];
+    const events = [
+      createEvent({
+        id: "event-task-1",
+        dispatchId: "dispatch-task-1",
+        taskRunId: "task-run-1",
+        taskId: "task-record-1",
+        taskKey: "TASK-1",
+        eventType: "run_started",
+        createdAt: "2026-03-27T10:02:00.000Z",
+      }),
+      createEvent({
+        id: "event-task-2",
+        dispatchId: "dispatch-task-2",
+        taskRunId: "task-run-2",
+        taskId: "task-record-2",
+        taskKey: "TASK-2",
+        taskTitle: "Task 2",
+        eventType: "run_completed",
+        createdAt: "2026-03-27T10:08:00.000Z",
+      }),
+      createEvent({
+        id: "event-other-sprint",
+        sprintId: "sprint-other",
+        dispatchId: "dispatch-other-sprint",
+        taskRunId: "task-run-other-sprint",
+        taskId: "task-record-1",
+        taskKey: "TASK-1",
+        eventType: "run_failed",
+        createdAt: "2026-03-27T10:10:00.000Z",
+      }),
+      createEvent({
+        id: "event-unrelated",
+        dispatchId: "dispatch-unrelated",
+        taskRunId: "task-run-3",
+        taskId: "task-record-3",
+        taskKey: "TASK-3",
+      }),
+    ];
+    const invocations = [
+      createInvocation({
+        id: "invocation-task-1",
+        taskId: null,
+        taskKey: null,
+        dispatchId: "dispatch-task-1",
+        taskRunId: "task-run-1",
+      }),
+      createInvocation({
+        id: "invocation-task-2",
+        taskId: "task-record-2",
+        taskKey: "TASK-2",
+        dispatchId: null,
+        taskRunId: null,
+      }),
+      createInvocation({
+        id: "invocation-unrelated",
+        taskId: "task-record-3",
+        taskKey: "TASK-3",
+        dispatchId: "dispatch-unrelated",
+        taskRunId: "task-run-3",
+      }),
+    ];
+
+    const items = deriveLiveSessionTaskCardItems({
+      filteredTasks: tasks,
+      dispatches,
+      events,
+      invocations,
+      taskTimingMap: new Map(),
+      rerunningIds: new Set(),
+      forceCompletePendingIds: new Set(),
+      forceCompleteErrorByTaskId: new Map(),
+      optimisticallyCompletedTaskIds: new Set(),
+    });
+
+    expect(items.map((item) => item.key)).toEqual(["task-record-1", "task-record-2"]);
+    expect(items[0]?.dispatchInfo?.status).toBe("running");
+    expect(items[0]?.events.map((event) => event.id)).toEqual(["event-task-1"]);
+    expect(items[0]?.invocations.map((invocation) => invocation.id)).toEqual(["invocation-task-1"]);
+    expect(items[1]?.phase).toBe("CODING_COMPLETED");
+    expect(items[1]?.dispatchInfo?.status).toBe("completed");
+    expect(items[1]?.events.map((event) => event.id)).toEqual(["event-task-2"]);
+    expect(items[1]?.invocations.map((invocation) => invocation.id)).toEqual(["invocation-task-2"]);
+  });
+
   it("derives stale transport banner states without snapshot mutation", () => {
     expect(deriveLiveTransportBannerViewModel({
       transportState: "connected",

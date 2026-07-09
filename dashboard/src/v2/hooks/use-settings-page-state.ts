@@ -11,13 +11,29 @@ import {
 } from "../lib/settings-api.js";
 import { fetchAgentPresets } from "../lib/agent-preset-api.js";
 import { clearProjectMemories, clearSystemMemories, type MemoryClearTier } from "../lib/memory-api.js";
+import {
+  createChatProviderChannelBinding,
+  createChatProviderConnection,
+  deleteChatProviderChannelBinding,
+  deleteChatProviderConnection,
+  fetchChatProviderChannelBindings,
+  fetchChatProviderConnectionDeliveries,
+  fetchChatProviderConnections,
+  fetchChatProviderSetupDefinitions,
+  updateChatProviderChannelBinding,
+  updateChatProviderConnection,
+  type DashboardChatProviderConnectionRecord,
+  type DashboardChatProviderSetupDefinition,
+} from "../lib/chat-provider-api.js";
 import { registerNavigationBlocker } from "../router/navigation-blocker.js";
 import {
   applyExternalHintsToSystemSettings,
   cloneProjectSettings,
   cloneSystemSettings,
   dashboardSettingsToProjectSettings,
+  thinkingModeOptions,
 } from "../lib/settings-view-models.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../lib/settings.js";
 import {
   buildSettingsSearchIndex,
   searchSettingsCategories,
@@ -26,19 +42,29 @@ import {
   providerDescriptions,
   providerLabels,
 } from "../lib/onboarding-provider-settings.js";
+import {
+  clearAppearancePreview,
+  publishAppearancePreview,
+} from "../lib/appearance-preview.js";
 import type {
   InvocationRoutingId,
   ProviderConfigId,
+  ChatProviderChannelBindingRecord,
+  ChatProviderKind,
+  ChatProviderMessageDeliveryRecord,
+  CreateChatProviderChannelBindingInput,
+  CreateChatProviderConnectionInput,
   ProjectSettings,
   SettingsValueSource,
   SystemSettings,
-  ThinkingMode,
+  UpdateChatProviderChannelBindingInput,
+  UpdateChatProviderConnectionInput,
 } from "../../types.js";
-import type { AgentAvatarConfig } from "../types.js";
+import type { AgentAvatarConfig, AgentPreset } from "../types.js";
 import { AlertTriangle, Bot, BrainCircuit, Cpu, Plug, Settings, SlidersHorizontal, Target } from "lucide-preact";
 
 type SettingsScope = "system" | "project";
-type CategoryId = "general" | "appearance" | "models" | "sprint" | "browser" | "agents" | "memory" | "integrations" | "mcp" | "danger";
+type CategoryId = "general" | "appearance" | "models" | "sprint" | "browser" | "techstacks" | "guidance" | "agents" | "memory" | "integrations" | "mcp" | "danger";
 type AgentInstructionTemplateId = keyof ProjectSettings["agents"]["instructionTemplates"];
 
 interface Category {
@@ -54,11 +80,10 @@ interface Category {
 
 
 
-const thinkingModeOptions: Array<{ value: ThinkingMode; label: string }> = [
-  { value: "SMALL", label: "Small" },
-  { value: "MEDIUM", label: "Medium" },
-  { value: "HIGH", label: "High" },
-];
+const normalizeSystemSettingsPayload = (settings: SystemSettings): SystemSettings => ({
+  ...settings,
+  techstackCatalog: settings.techstackCatalog ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog,
+});
 
 const invocationRouteDefinitions: Array<{
   id: InvocationRoutingId;
@@ -80,7 +105,25 @@ const routingProfileOptions = [
   { value: "WORKER", label: "Worker defaults" },
 ];
 
-type IntegrationId = "jules" | "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity" | "github" | "gitlab" | "jira";
+type IntegrationId =
+  | "jules"
+  | "gemini"
+  | "codex"
+  | "claude-code"
+  | "qwen-code"
+  | "opencode"
+  | "antigravity"
+  | "github"
+  | "gitlab"
+  | "jira"
+  | "notion"
+  | "asana"
+  | "linear"
+  | "miro"
+  | "lucid"
+  | "figma"
+  | "mural"
+  | ChatProviderKind;
 
 interface IntegrationDefinition {
   id: IntegrationId;
@@ -99,6 +142,19 @@ const INTEGRATIONS: IntegrationDefinition[] = [
   { id: "github", label: "GitHub", description: "Repository, pull request, branch, and CI integration" },
   { id: "gitlab", label: "GitLab", description: "GitLab repository, merge request, and CI token integration" },
   { id: "jira", label: "Jira", description: "Atlassian Jira issue search, sprint linking, and completion transitions" },
+  { id: "whatsapp", label: "WhatsApp", description: "Managed or webhook bridge for WhatsApp groups and business conversations" },
+  { id: "imessage", label: "iMessage", description: "Managed or native macOS bridge for iMessage routing" },
+  { id: "telegram", label: "Telegram", description: "Telegram bot or managed bridge for channel ingress and replies" },
+  { id: "slack", label: "Slack", description: "Slack Events or managed bridge with signed webhooks" },
+  { id: "microsoft-teams", label: "Microsoft Teams", description: "Teams bot or managed bridge for tenant channels" },
+  { id: "discord", label: "Discord", description: "Discord bot or gateway connection for project chat" },
+  { id: "notion", label: "Notion", description: "Read-only import from Notion workspace pages and databases" },
+  { id: "asana", label: "Asana", description: "Read-only import from Asana workspaces, teams, and projects" },
+  { id: "linear", label: "Linear", description: "Read-only import from Linear teams, projects, and issues" },
+  { id: "miro", label: "Miro", description: "Read-only import from Miro teams and boards" },
+  { id: "lucid", label: "Lucid", description: "Read-only import from Lucid or Lucidspark documents" },
+  { id: "figma", label: "Figma / FigJam", description: "Read-only import from Figma files and FigJam boards" },
+  { id: "mural", label: "Mural", description: "Read-only import from Mural workspaces and murals" },
 ];
 
 const AGENT_INSTRUCTION_TEMPLATE_OPTIONS: Array<{
@@ -150,7 +206,7 @@ const sortAgentPresetOptions = (
 export const useSettingsPageState = (
   categories: Category[],
 ) => {
-  const { deleteProject, selectedProject, selectedProjectId } = useProjectData();
+  const { deleteProject, projects, selectedProject, selectedProjectId } = useProjectData();
 
   const isDirtyRef = useRef(false);
 
@@ -178,7 +234,7 @@ export const useSettingsPageState = (
 
 
   const [activeCategory, setActiveCategory] = useState<CategoryId>("general");
-  const [activeScope, setActiveScope] = useState<SettingsScope>("system");
+  const [activeScope, setActiveScopeState] = useState<SettingsScope>("system");
   const [selectedIntegration, setSelectedIntegration] = useState<IntegrationId | null>(null);
   const [selectedAgentTemplate, setSelectedAgentTemplate] = useState<AgentInstructionTemplateId>("planningMissing");
   const [activeInvocationRoute, setActiveInvocationRoute] = useState<InvocationRoutingId>("task_coding");
@@ -204,8 +260,17 @@ export const useSettingsPageState = (
   const [memoryClearBusy, setMemoryClearBusy] = useState<string | null>(null);
   const [importingHints, setImportingHints] = useState(false);
   const [externalHints, setExternalHints] = useState<import("../../types.js").ExternalSettingsHints | null>(null);
+  const [projectAgentPresets, setProjectAgentPresets] = useState<AgentPreset[]>([]);
   const [projectAgentPresetOptions, setProjectAgentPresetOptions] = useState<Array<{ value: string; label: string; avatarConfig?: AgentAvatarConfig }>>([]);
+  const [chatProviderDefinitions, setChatProviderDefinitions] = useState<DashboardChatProviderSetupDefinition[]>([]);
+  const [chatProviderConnections, setChatProviderConnections] = useState<DashboardChatProviderConnectionRecord[]>([]);
+  const [chatProviderBindings, setChatProviderBindings] = useState<ChatProviderChannelBindingRecord[]>([]);
+  const [chatProviderDeliveriesByConnection, setChatProviderDeliveriesByConnection] = useState<Record<string, ChatProviderMessageDeliveryRecord[]>>({});
+  const [chatProvidersLoading, setChatProvidersLoading] = useState(false);
+  const [chatProvidersSavingId, setChatProvidersSavingId] = useState<string | null>(null);
+  const [chatProvidersError, setChatProvidersError] = useState<string | null>(null);
   const previousCategoryRef = useRef<CategoryId>("general");
+  const scopePersistenceRequestRef = useRef(0);
 
   const loadSettings = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -218,19 +283,21 @@ export const useSettingsPageState = (
       // Restore last active scope on initial settings load
       if (!systemSettings) {
         const initialScope = nextSystem.runtime.lastActiveScope === "project" && selectedProjectId ? "project" : "system";
-        setActiveScope(initialScope);
+        setActiveScopeState(initialScope);
       }
+
+      const normalizedSystem = normalizeSystemSettingsPayload(nextSystem);
 
       // Preserve local dirty edits during background reload
       if (!isDirtyRef.current || !systemSettings) {
-        setSystemSettings(cloneSystemSettings(nextSystem));
+        setSystemSettings(cloneSystemSettings(normalizedSystem));
       }
 
-      setSavedSystemSettings(cloneSystemSettings(nextSystem));
+      setSavedSystemSettings(cloneSystemSettings(normalizedSystem));
       setExternalHints(hints);
 
       if (selectedProjectId) {
-        const [effectiveProject, projectAgentPresets] = await Promise.all([
+        const [effectiveProject, nextProjectAgentPresets] = await Promise.all([
           fetchProjectEffectiveSettings(selectedProjectId, { cache: "reload" }),
           fetchAgentPresets(selectedProjectId).catch(() => []),
         ]);
@@ -243,11 +310,13 @@ export const useSettingsPageState = (
 
         setSavedProjectSettings(cloneProjectSettings(nextProject));
         setProjectSources(effectiveProject.sources);
-        setProjectAgentPresetOptions(sortAgentPresetOptions(projectAgentPresets));
+        setProjectAgentPresets(nextProjectAgentPresets);
+        setProjectAgentPresetOptions(sortAgentPresetOptions(nextProjectAgentPresets));
       } else {
         setProjectSettings(null);
         setSavedProjectSettings(null);
         setProjectSources({});
+        setProjectAgentPresets([]);
         setProjectAgentPresetOptions([]);
       }
       setError(null);
@@ -261,6 +330,40 @@ export const useSettingsPageState = (
   useEffect(() => {
     void loadSettings();
   }, [loadSettings]);
+
+  const loadChatProviders = useCallback(async (): Promise<void> => {
+    setChatProvidersLoading(true);
+    try {
+      const [definitions, connections, bindings] = await Promise.all([
+        fetchChatProviderSetupDefinitions(),
+        fetchChatProviderConnections(),
+        fetchChatProviderChannelBindings(),
+      ]);
+      const deliveryEntries = await Promise.all(
+        connections.map(async (connection) => [
+          connection.id,
+          await fetchChatProviderConnectionDeliveries(connection.id, 25).catch(() => []),
+        ] as const),
+      );
+
+      setChatProviderDefinitions(definitions);
+      setChatProviderConnections(connections);
+      setChatProviderBindings(bindings);
+      setChatProviderDeliveriesByConnection(Object.fromEntries(deliveryEntries));
+      setChatProvidersError(null);
+    } catch (loadError) {
+      setChatProvidersError(loadError instanceof Error ? loadError.message : String(loadError));
+    } finally {
+      setChatProvidersLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeCategory !== "integrations") {
+      return;
+    }
+    void loadChatProviders();
+  }, [activeCategory, loadChatProviders]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -291,12 +394,6 @@ export const useSettingsPageState = (
   }, [activeCategory, loadSettings]);
 
   useEffect(() => {
-    if (!selectedProject && activeScope === "project") {
-      setActiveScope("system");
-    }
-  }, [activeScope, selectedProject]);
-
-  useEffect(() => {
     if (!saveMessage) {
       return;
     }
@@ -323,27 +420,102 @@ export const useSettingsPageState = (
   // and leave the Save button greyed out. Assigning during render closes that gap.
   isDirtyRef.current = systemDirty || projectDirty;
 
+  const setPersistedActiveScope = useCallback(async (scope: SettingsScope): Promise<void> => {
+    setActiveScopeState(scope);
+
+    const persistenceBase = savedSystemSettings ?? systemSettings;
+    if (!persistenceBase) {
+      return;
+    }
+
+    const previousSavedSettings = cloneSystemSettings(normalizeSystemSettingsPayload(persistenceBase));
+    const previousLastActiveScope = previousSavedSettings.runtime.lastActiveScope ?? "system";
+    if (previousLastActiveScope === scope) {
+      return;
+    }
+
+    const requestId = scopePersistenceRequestRef.current + 1;
+    scopePersistenceRequestRef.current = requestId;
+    const hadSystemDraft = Boolean(systemSettings && savedSystemSettings && JSON.stringify(systemSettings) !== JSON.stringify(savedSystemSettings));
+    const nextSavedSettings = cloneSystemSettings({
+      ...previousSavedSettings,
+      runtime: {
+        ...previousSavedSettings.runtime,
+        lastActiveScope: scope,
+      },
+    });
+
+    setSavedSystemSettings(cloneSystemSettings(nextSavedSettings));
+    setSystemSettings((current) => current
+      ? {
+          ...current,
+          runtime: {
+            ...current.runtime,
+            lastActiveScope: scope,
+          },
+        }
+      : current);
+
+    try {
+      const saved = await saveSystemSettings(nextSavedSettings);
+      if (scopePersistenceRequestRef.current !== requestId) {
+        return;
+      }
+      const normalizedSaved = normalizeSystemSettingsPayload({
+        ...nextSavedSettings,
+        ...saved,
+        runtime: {
+          ...nextSavedSettings.runtime,
+          ...saved.runtime,
+        },
+      });
+      setSavedSystemSettings(cloneSystemSettings(normalizedSaved));
+      setSystemSettings((current) => {
+        if (hadSystemDraft && current) {
+          return {
+            ...current,
+            runtime: {
+              ...current.runtime,
+              lastActiveScope: normalizedSaved.runtime.lastActiveScope,
+            },
+          };
+        }
+        return cloneSystemSettings(normalizedSaved);
+      });
+      setError((current) => current === "Failed to persist Settings scope selection." ? null : current);
+    } catch {
+      if (scopePersistenceRequestRef.current !== requestId) {
+        return;
+      }
+      setSavedSystemSettings(previousSavedSettings);
+      setSystemSettings((current) => current
+        ? {
+            ...current,
+            runtime: {
+              ...current.runtime,
+              lastActiveScope: previousLastActiveScope,
+            },
+          }
+        : current);
+      setError("Failed to persist Settings scope selection.");
+    }
+  }, [savedSystemSettings, systemSettings]);
+
+  useEffect(() => {
+    if (!selectedProject && activeScope === "project") {
+      void setPersistedActiveScope("system");
+    }
+  }, [activeScope, selectedProject, setPersistedActiveScope]);
+
   const editableSettings = activeScope === "system" ? systemSettings?.defaults ?? null : projectSettings;
   const activeCategoryConfig = categories.find((category) => category.id === activeCategory) ?? categories[0]!;
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    window.dispatchEvent(new CustomEvent("codeux:appearance-preview", {
-      detail: { appearance: editableSettings?.appearance ?? null },
-    }));
+    publishAppearancePreview(editableSettings?.appearance ?? null);
   }, [editableSettings?.appearance]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    return () => {
-      window.dispatchEvent(new CustomEvent("codeux:appearance-preview", {
-        detail: { appearance: null },
-      }));
-    };
+    return clearAppearancePreview;
   }, []);
 
   const normalizedSearch = settingsSearch.trim().toLowerCase();
@@ -419,8 +591,9 @@ export const useSettingsPageState = (
       setSavingSystem(true);
       try {
         const saved = await saveSystemSettings(systemSettings);
-        setSystemSettings(cloneSystemSettings(saved));
-        setSavedSystemSettings(cloneSystemSettings(saved));
+        const normalizedSaved = normalizeSystemSettingsPayload(saved);
+        setSystemSettings(cloneSystemSettings(normalizedSaved));
+        setSavedSystemSettings(cloneSystemSettings(normalizedSaved));
 
         if (selectedProject && !projectDirty) {
           const effectiveProject = await fetchProjectEffectiveSettings(selectedProject.id, { cache: "reload" });
@@ -504,7 +677,7 @@ export const useSettingsPageState = (
     setDeletingProject(true);
     try {
       await deleteProject(selectedProject.id);
-      setActiveScope("system");
+      await setPersistedActiveScope("system");
       setActiveCategory("general");
       setSaveMessage(`Project ${selectedProject.name} deleted.`);
       setError(null);
@@ -513,7 +686,7 @@ export const useSettingsPageState = (
     } finally {
       setDeletingProject(false);
     }
-  }, [selectedProject, deleteProject]);
+  }, [selectedProject, deleteProject, setPersistedActiveScope]);
 
   const handleResetDatabase = useCallback(async (): Promise<void> => {
 
@@ -521,7 +694,7 @@ export const useSettingsPageState = (
     setResettingDatabase(true);
     try {
       await resetSystemDatabase();
-      setActiveScope("system");
+      setActiveScopeState("system");
       setActiveCategory("general");
       await loadSettings();
       setSaveMessage("Database reset to a clean state.");
@@ -561,6 +734,100 @@ export const useSettingsPageState = (
     }
   }, [selectedProject]);
 
+  const createChatProviderConnectionRecord = useCallback(async (
+    input: CreateChatProviderConnectionInput,
+  ): Promise<DashboardChatProviderConnectionRecord | null> => {
+    setChatProvidersSavingId(`connection:${input.providerKind}:create`);
+    try {
+      const created = await createChatProviderConnection(input);
+      await loadChatProviders();
+      return created;
+    } catch (createError) {
+      setChatProvidersError(createError instanceof Error ? createError.message : String(createError));
+      return null;
+    } finally {
+      setChatProvidersSavingId(null);
+    }
+  }, [loadChatProviders]);
+
+  const updateChatProviderConnectionRecord = useCallback(async (
+    connectionId: string,
+    input: UpdateChatProviderConnectionInput,
+  ): Promise<DashboardChatProviderConnectionRecord | null> => {
+    setChatProvidersSavingId(`connection:${connectionId}`);
+    try {
+      const updated = await updateChatProviderConnection(connectionId, input);
+      await loadChatProviders();
+      return updated;
+    } catch (updateError) {
+      setChatProvidersError(updateError instanceof Error ? updateError.message : String(updateError));
+      return null;
+    } finally {
+      setChatProvidersSavingId(null);
+    }
+  }, [loadChatProviders]);
+
+  const deleteChatProviderConnectionRecord = useCallback(async (connectionId: string): Promise<boolean> => {
+    setChatProvidersSavingId(`connection:${connectionId}:delete`);
+    try {
+      await deleteChatProviderConnection(connectionId);
+      await loadChatProviders();
+      return true;
+    } catch (deleteError) {
+      setChatProvidersError(deleteError instanceof Error ? deleteError.message : String(deleteError));
+      return false;
+    } finally {
+      setChatProvidersSavingId(null);
+    }
+  }, [loadChatProviders]);
+
+  const createChatProviderBindingRecord = useCallback(async (
+    input: CreateChatProviderChannelBindingInput,
+  ): Promise<ChatProviderChannelBindingRecord | null> => {
+    setChatProvidersSavingId(`binding:${input.providerConnectionId}:create`);
+    try {
+      const created = await createChatProviderChannelBinding(input);
+      await loadChatProviders();
+      return created;
+    } catch (createError) {
+      setChatProvidersError(createError instanceof Error ? createError.message : String(createError));
+      return null;
+    } finally {
+      setChatProvidersSavingId(null);
+    }
+  }, [loadChatProviders]);
+
+  const updateChatProviderBindingRecord = useCallback(async (
+    bindingId: string,
+    input: UpdateChatProviderChannelBindingInput,
+  ): Promise<ChatProviderChannelBindingRecord | null> => {
+    setChatProvidersSavingId(`binding:${bindingId}`);
+    try {
+      const updated = await updateChatProviderChannelBinding(bindingId, input);
+      await loadChatProviders();
+      return updated;
+    } catch (updateError) {
+      setChatProvidersError(updateError instanceof Error ? updateError.message : String(updateError));
+      return null;
+    } finally {
+      setChatProvidersSavingId(null);
+    }
+  }, [loadChatProviders]);
+
+  const deleteChatProviderBindingRecord = useCallback(async (bindingId: string): Promise<boolean> => {
+    setChatProvidersSavingId(`binding:${bindingId}:delete`);
+    try {
+      await deleteChatProviderChannelBinding(bindingId);
+      await loadChatProviders();
+      return true;
+    } catch (deleteError) {
+      setChatProvidersError(deleteError instanceof Error ? deleteError.message : String(deleteError));
+      return false;
+    } finally {
+      setChatProvidersSavingId(null);
+    }
+  }, [loadChatProviders]);
+
   const getValueByPath = useCallback((obj: any, path: string): any => {
     return path.split(".").reduce((acc, part) => acc && acc[part], obj);
   }, []);
@@ -599,26 +866,6 @@ export const useSettingsPageState = (
     }
     return undefined;
   }, [activeScope, projectSources, resetFieldToDefault]);
-
-  const setPersistedActiveScope = useCallback(async (scope: SettingsScope) => {
-    setActiveScope(scope);
-    if (systemSettings) {
-      const updatedSystem = {
-        ...systemSettings,
-        runtime: {
-          ...systemSettings.runtime,
-          lastActiveScope: scope,
-        },
-      };
-      setSystemSettings(updatedSystem);
-      setSavedSystemSettings(cloneSystemSettings(updatedSystem));
-      try {
-        await saveSystemSettings(updatedSystem);
-      } catch (e) {
-        // Ignore background persistence errors
-      }
-    }
-  }, [systemSettings]);
 
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const pendingNavigationRef = useRef<(() => void) | null>(null);
@@ -725,8 +972,26 @@ export const useSettingsPageState = (
     routingProfileOptions,
     integrations: INTEGRATIONS,
     agentInstructionTemplateOptions: AGENT_INSTRUCTION_TEMPLATE_OPTIONS,
+    projectAgentPresets,
     projectAgentPresetOptions,
+    chatProviders: {
+      definitions: chatProviderDefinitions,
+      connections: chatProviderConnections,
+      bindings: chatProviderBindings,
+      deliveriesByConnection: chatProviderDeliveriesByConnection,
+      loading: chatProvidersLoading,
+      savingId: chatProvidersSavingId,
+      error: chatProvidersError,
+      load: loadChatProviders,
+      createConnection: createChatProviderConnectionRecord,
+      updateConnection: updateChatProviderConnectionRecord,
+      deleteConnection: deleteChatProviderConnectionRecord,
+      createBinding: createChatProviderBindingRecord,
+      updateBinding: updateChatProviderBindingRecord,
+      deleteBinding: deleteChatProviderBindingRecord,
+    },
     selectedProject,
+    projects,
     updateSystem, updateProject, updateEditableSettings,
     handleImportHints, handleSave, handleResetProject,
     handleDeleteProject, handleResetDatabase, handleClearMemory,

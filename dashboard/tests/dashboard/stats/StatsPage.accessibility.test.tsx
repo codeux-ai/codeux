@@ -388,9 +388,9 @@ describe("StatsPage accessibility", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Filters" }));
 
-    const tokenSwitch = screen.getAllByRole("switch").find((button) => button.getAttribute("aria-label") === "Tokens series, enabled") as HTMLElement | undefined;
-    const activeSwitch = screen.getAllByRole("switch").find((button) => button.getAttribute("aria-label") === "Active Time series, enabled") as HTMLElement | undefined;
-    const invocationSwitch = screen.getAllByRole("switch").find((button) => button.getAttribute("aria-label") === "Invocations series, enabled") as HTMLElement | undefined;
+    const tokenSwitch = screen.getAllByRole("switch").find((button) => button.getAttribute("aria-label") === "Tokens Throughput series, enabled") as HTMLElement | undefined;
+    const activeSwitch = screen.getAllByRole("switch").find((button) => button.getAttribute("aria-label") === "Active Time Latency series, enabled") as HTMLElement | undefined;
+    const invocationSwitch = screen.getAllByRole("switch").find((button) => button.getAttribute("aria-label") === "Invocations Volume series, enabled") as HTMLElement | undefined;
 
     expect(tokenSwitch).toBeDefined();
     expect(activeSwitch).toBeDefined();

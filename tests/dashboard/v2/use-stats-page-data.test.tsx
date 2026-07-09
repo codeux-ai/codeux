@@ -105,4 +105,19 @@ describe("useStatsPageData", () => {
 
     expect(result.current.activeQuery).toEqual({ window: "custom", from: "2023-10-01", to: "2023-10-15" });
   });
+
+  it("keeps activeQuery unchanged when an invalid custom range is applied", async () => {
+    const { result } = renderHook(() => useStatsPageData("proj-1"));
+
+    await act(async () => {
+      result.current.setCustomFrom("2023-10-15");
+      result.current.setCustomTo("2023-10-01");
+    });
+
+    await act(async () => {
+      result.current.applyCustomRange();
+    });
+
+    expect(result.current.activeQuery).toEqual({ window: "7d" });
+  });
 });

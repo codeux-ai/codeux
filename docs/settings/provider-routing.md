@@ -18,11 +18,18 @@ Code UX now separates:
 - optional per-agent provider/model preferences
 - provider credentials/instances managed by Integrations
 
+Note that provider configuration is subject to the `system -> project -> sprint` resolution cascade and routing rules resolve against the effective settings at the current scope.
+Effective API responses include `sources` metadata mapping routing rules and provider configurations to the scope that provided them.
+
 *(Note: In routing contexts, `available` means detected credentials/auth presence or local auth enabled on that exact provider instance, whereas `enabled` means user-approved routing participation.)*
 
 ## Provider Runtime Artifacts
 
 Provider runtime artifacts (such as host log paths, temporary output files, and Docker paths) are owned and managed by the `provider-runtime-artifacts` module. `ProviderRunner` delegates path resolution and artifact cleanup logic to this helper to ensure safer execution boundaries and testing.
+
+Persistent skill storage is a separate provider runtime input, not a workspace artifact. When an invoked agent preset has persistent skill storage enabled and at least one attached storage, `ProviderExecutionService` appends a dedicated prompt section and passes explicit read/write storage mounts to the provider runner. The host root is derived under `~/.code-ux/persistent-skill-storages/<project-id>/<agent-id>/<storage-id>/`; Docker mounts that directory at `/code-ux/persistent-skills/<storage-id>/`. Code UX never mounts arbitrary storage paths from settings and never uses the project workspace or `.worktrees` directory as the persistent skill root.
+
+Agents should call `search_skills` before creating a durable skill so they do not duplicate existing guidance. If they need to save a new reusable skill, they should use `manage_skills import_markdown` or another available MCP write action when the agent has that authority; otherwise they may write a markdown skill file into the mounted persistent storage path. The retrieval-only `search_skills` MCP surface can be exposed to skill-enabled agents without enabling unrelated Code UX management tools.
 
 ## Configuration Model
 
@@ -45,15 +52,16 @@ Each `aiProvider.invocationRouting.<routeId>` entry contains:
 - `strategy`
   - `MANUAL`, `WEIGHTED`, or `AGENT`
 - `provider`
-  - explicit manual provider instance id, or `null` to inherit the profile default
+  - explicit manual provider config id, or `null` to inherit the profile default
 - `allowedProviders`
-  - optional provider-instance subset for that invocation; empty means "all enabled providers"
+  - optional provider config id subset for weighted or agent-provider selection; empty weighted/agent pools fail closed to the route's selected or inherited provider rather than opening to every enabled provider
 - `providers`
-  - sparse per-provider-instance overrides for `enabled`, `model`, `weight`, and `thinkingMode`
+  - sparse overrides for `enabled`, `model`, `weight`, and `thinkingMode`, keyed by provider config id
 
 Provider instances are first-class routing targets:
 - the default built-in instances use ids `jules`, `gemini`, `codex`, `claude-code`, `qwen-code`, and `opencode`
 - additional instances can be added under the same provider type, such as multiple Codex credentials with different names and weights
+- the internal `mockup-cli` provider id is reserved for deterministic credential-free sprint validation and should only be configured by test and CI paths such as the [Mockup Sprint Pentest](../development/mockup-sprint-pentest.md)
 - each CLI instance also carries its own optional Docker auth-copy source (`mountAuth` + `authPath`), so routing one Codex, Qwen, or OpenCode instance vs another can change both credentials and local auth mount source
 - Qwen Code instances additionally carry auth mode metadata for local OAuth cache copying, Alibaba Cloud Coding Plan, or custom `modelProviders`-style endpoints
 - OpenCode instances additionally carry auth mode metadata for local `auth.json` cache copying, built-in provider API keys, or generated OpenAI-compatible custom provider config
@@ -63,9 +71,29 @@ Provider instances are first-class routing targets:
 - `WEIGHTED` distributes across enabled instances, even when several share the same provider type
 - `AGENT` uses the selected agent preset's optional provider/model preference when present, then falls back to the route's inherited/manual provider
 
+## Thinking Mode Catalog
+
+Thinking/reasoning settings are provider-keyed rather than global. Base provider settings and route overrides accept only values supported by the selected provider type:
+
+| Provider | Settings values |
+| --- | --- |
+| Gemini | `minimal`, `low`, `medium`, `high` |
+| Codex | `low`, `medium`, `high`, `xhigh` |
+| Claude Code | `low`, `medium`, `high`, `xhigh`, `max` |
+| Qwen Code | `low`, `medium`, `high`, `xhigh`, `max` |
+| OpenCode | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` |
+| Antigravity | `low`, `high` |
+| Jules | Unsupported; no thinking control is rendered or forwarded |
+
+Legacy persisted values `SMALL`, `MEDIUM`, and `HIGH` are accepted during load and validation for CLI providers and are normalized to provider-appropriate values. For example, Codex `HIGH` becomes `high`, while Antigravity `MEDIUM` becomes `high` because Antigravity exposes only low/high reasoning selections.
+
+Route-specific thinking overrides are optional. When the AI Models route card is set to **Inherit base thinking**, Code UX removes the route's `thinkingMode` override and the invocation uses the provider instance's current base thinking value. This keeps provider-level thinking budget changes from being shadowed by stale route overrides.
+
+Runtime delivery matches each CLI's reliable headless surface. Codex receives `model_reasoning_effort` via CLI config overrides, Claude Code receives `--effort`, Qwen Code receives generated runtime config `model.reasoningEffort`, and OpenCode receives `--variant`. Gemini and Antigravity do not expose a reliable per-run headless flag in the supported CLI path, so Code UX adds provider-specific prompt guidance for those providers only.
+
 Legacy saved values of `ORCHESTRATOR` are normalized to `AGENT` when settings are loaded. The old rule-based provider picker is no longer exposed.
 
-Manual route selection is authoritative for that route. If a route sets `provider` to a concrete instance such as `opencode`, Code UX treats that instance as enabled for that route even if its base provider entry is disabled by default. An explicit route override of `providers.<id>.enabled = false` still disables it. This prevents disabled-by-default optional providers from losing to the first enabled default after the user pins a route to them.
+Manual route selection is authoritative for that route. Code UX never falls back from a manually selected provider instance to another enabled provider. If the selected or inherited instance is disabled, missing, unavailable for the invocation type, or blocked by LOCAL Git/Jules constraints, the invocation fails with a clear routing error so the operator can enable that exact instance or choose a different route provider. Dashboard/API routes return these provider-selection failures as visible `409` responses with the routing message; only unexpected internal failures are masked as `Internal Server Error`. A route can deliberately enable an otherwise disabled provider instance with `providers.<id>.enabled = true`; otherwise disabled instances remain unavailable.
 
 ## Supported Invocation Routes
 
@@ -82,14 +110,15 @@ Manual route selection is authoritative for that route. If a route sets `provide
 
 1. Start from the selected route.
 2. Build the baseline provider-instance catalog from the route profile.
-3. Apply worker-profile defaults when `profile = WORKER`. The inherited worker default instance is enabled for worker-profile routes, and incompatible worker model overrides are ignored instead of being forwarded to a different provider.
+3. Apply worker-profile defaults when `profile = WORKER`. Incompatible worker model overrides are ignored instead of being forwarded to a different provider, but the inherited worker provider instance must still be eligible; Code UX does not auto-enable disabled worker defaults.
 4. Apply invocation-specific per-provider overrides.
-5. Filter by `allowedProviders`, then by any runtime provider pool restriction. A manually pinned route provider remains eligible even if an older allowed-pool setting did not include it.
-6. Run the route's selected strategy. For `AGENT`, Code UX reads the selected agent preset's optional `providerConfigId` and `model`; blank agent fields inherit the route default. The top-level `aiProvider.strategy` remains only for legacy settings compatibility.
-7. If Jules is selected but unavailable, Code UX reroutes within the remaining eligible providers.
+5. Filter by `allowedProviders`, then by any runtime provider pool restriction. Under `MANUAL`, the weighted pool is ignored, but the selected provider still must be enabled and available for the invocation.
+6. Run the route's selected strategy. For `AGENT`, Code UX reads the selected agent preset's optional `providerConfigId` and `model`; blank agent fields inherit the route default. If that selected or inherited provider is unavailable, Code UX reports the routing error instead of trying another provider. The top-level `aiProvider.strategy` remains only for legacy settings compatibility.
+7. If Jules is selected but unavailable or the current context requires a CLI provider, Code UX reports the routing error instead of rerouting within the remaining providers.
 8. When a CLI instance is selected for Docker execution, Code UX forwards that instance's `mountAuth` and `authPath` into the runtime so the chosen route controls which local credential directory is copied.
 9. If a persisted task already has a concrete provider assignment, such as `gemini` on retry, Code UX resolves the matching provider instance settings for that provider instead of reusing settings from a newly resolved fallback route. This keeps model and auth-copy settings aligned with the actual CLI being launched.
 10. Legacy provider-id keyed payloads are normalized into the instance model so older settings rows and tests continue to resolve through the new routing engine.
+11. If the resolved invocation is associated with an agent preset that has persistent skill storage enabled and attached, Code UX augments the prompt and runtime mounts after routing is resolved. This applies to task coding, planning, QA review and follow-up, dashboard replies, clarification replies, CI fix, merge-conflict repair, and memory remediation flows whenever the agent preset is known.
 
 ## Credential Mutual Exclusion
 
@@ -104,8 +133,8 @@ To prevent conflicting generated runtime configuration and credential leakage, C
    - The `apiKey` field is cleared.
    - Any custom model provider base URL (`customBaseUrl`) or custom model slug (`customModel`) overrides are cleared and ignored.
    - Provider-instance credentials remain isolated by exact instance id. A custom endpoint configured on a separate instance such as `Codex Local` is not inherited by `Codex Primary`, and mounted-auth runs ignore stale custom model fields even if an older settings row still contains them.
-   - For **Qwen Code**, forces `qwenAuthMode` to `LOCAL_AUTH` and clears all custom API-key sub-mode fields (`qwenRegion`, `qwenBaseUrl`, `qwenEnvKey`, `qwenModelId`, `qwenProtocol`, `qwenAdditionalModelProviders`).
-   - For **OpenCode**, forces `openCodeAuthMode` to `LOCAL_AUTH` and clears all custom API-key sub-mode fields (`openCodeProviderId`, `openCodeModelId`, `openCodeBaseUrl`, `openCodeEnvKey`, `openCodePackage`).
+   - For **Qwen Code**, forces `qwenAuthMode` to `LOCAL_AUTH` (other modes: `ALIBABA_CODING_PLAN`, `MODEL_PROVIDER`) and clears all custom API-key sub-mode fields (`qwenRegion`, `qwenBaseUrl`, `qwenEnvKey`, `qwenModelId`, `qwenProtocol`, `qwenAdditionalModelProviders`).
+   - For **OpenCode**, forces `openCodeAuthMode` to `LOCAL_AUTH` (other modes: `ENV_KEY`, `CUSTOM_PROVIDER`) and clears all custom API-key sub-mode fields (`openCodeProviderId`, `openCodeModelId`, `openCodeBaseUrl`, `openCodeEnvKey`, `openCodePackage`).
    - For **Codex**, ensures that no stale API key or custom model-provider overrides are passed to the child process environment (`withProviderEnv`) or command construction arguments.
 
 ## Current Defaults
@@ -128,6 +157,8 @@ That means:
 
 Provider `maxConcurrentTasks` is enforced before a task is counted as started. When the selected provider is already at its global cap, sprint task dispatch creates or refreshes a queued dispatch/task-run record, records a `provider_concurrency_wait` event, and returns the task to a retryable `PENDING` state for the next orchestration cycle.
 
+Custom provider instances carry their own `maxConcurrentTasks` value through the selected provider-settings override. Enforcement still counts active rows by provider family globally (for example all `qwen-code` invocations share the same running-count pool), but the limit used for a new invocation comes from the exact provider instance selected by routing or agent configuration.
+
 Provider-cap queueing is not a task creation failure. It must not increment the consecutive task creation failure counter, trigger the emergency stop, or record `task_coding` guardrail usage. Real startup failures still use the normal failure path and continue to count toward `maxFailures`.
 
 ## Services Using Invocation Routing
@@ -144,9 +175,8 @@ Provider-cap queueing is not a task creation failure. It must not increment the 
   - CI fix and merge-conflict worker-owned repair flows
 - `src/services/memory-remediation-service.ts`
   - post-sprint memory curation and scheduled long-term memory cleanup
-- `src/services/cli-workflow/pipeline/prepare-stage.ts`
-- `src/services/cli-workflow/pipeline/execute-provider-stage.ts`
-  - consume explicit per-run provider settings instead of implicitly borrowing worker model overrides
+- `src/services/cli-workflow/pipeline/*.ts`
+  - stages including `prepare`, `execute-provider`, `memory-capture`, `git-finalize`, `pr-finalize`, and `cleanup` consume explicit per-run provider settings instead of implicitly borrowing worker model overrides
 
 ## Dashboard Surface
 
@@ -171,10 +201,12 @@ The v2 settings page exposes:
 Dashboard route and model controls share provider display metadata from the settings view-model helpers:
 - provider routes use provider instance ids internally but display the settings page instance name, such as `Codex Primary`, instead of legacy virtual-worker labels
 - provider icons use the underlying provider type, so additional Codex, Qwen Code, OpenCode, and Antigravity instances keep the correct brand icon
+- base and route thinking selectors use the selected provider instance's option catalog, hide for unsupported providers such as Jules, and label legacy saved values through their normalized provider-specific value
 - default route/model options show the resolved inherited worker defaults when available, such as `Default Route (Codex Primary)` and `Default Model (gpt-5.5)`
+- Codex model selectors include `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna` as selectable catalog options while keeping `gpt-5.5` as the Codex default model
 - custom endpoint provider instances display their effective configured model in Settings defaults, route cards, and default model labels. Codex and Claude Code API-key custom endpoint instances use `customModel` and their custom base URL when local auth is not mounted; Qwen Code `MODEL_PROVIDER` and OpenCode `CUSTOM_PROVIDER` instances use their generated configured model ids and endpoint metadata. Mounted/local-auth and dashboard-auth instances ignore stale custom model or base URL fields and keep showing the saved provider default.
 - Sprint Composer and Quicksprint default route/model labels resolve from the `planning` invocation route mapping. A pinned Planning Route provider and its route-specific model override are displayed as the default, even when the worker default points at a different provider.
-- Sprint Composer and Quicksprint explicit route selections keep the selected provider-instance id as the option value for UI state, but send the underlying CLI provider type in `PlanningOverrides.virtualProvider`. That keeps a selected instance such as `Claude Live` paired with the `claude-code` runtime when a model override is also selected.
+- Sprint Composer and Quicksprint explicit route selections keep the selected provider-instance id as the option value for UI state, but send the underlying CLI provider type in `PlanningOverrides.virtualProvider`. This selects by CLI provider type for planning/prompt-improvement runs, and `virtualModel` only overrides that planning run's selected provider model (it is not a general task-coding model override).
 - model option values remain the provider catalog values returned by `getProviderModelOptions`; only labels and icons are display metadata
 
 File:
@@ -184,6 +216,14 @@ File:
 ## Provider Runtime Config Boundary
 
 Code UX extracts provider runtime config and MCP config assembly from `ProviderRunner` into focused typed builder modules, such as `src/infrastructure/providers/cli/provider-runtime-config.ts`. This isolates the JSON/TOML generation logic for providers like Qwen, OpenCode, and Antigravity, while keeping process execution and mount creation in the runner.
+
+## Custom MCP Server Safety
+
+Custom MCP servers saved in settings are sanitized before provider runs generate Claude, Gemini, Qwen, Codex, OpenCode, or Antigravity MCP config. HTTP / SSE custom servers must use `http://` or `https://` URLs without embedded credentials or control characters. Local developer tools on loopback remain supported with explicit `localhost`, `127.0.0.1`, or `[::1]` URLs, but link-local metadata endpoints, multicast and broadcast addresses, and ambiguous numeric IP encodings such as decimal-integer, hexadecimal, shortened, or leading-zero IPv4 forms are rejected.
+
+Custom HTTP headers keep the existing count and length limits and may carry normal auth headers such as `Authorization`. Code UX drops hop-by-hop and request-smuggling-sensitive names including `Host`, `Connection`, `Transfer-Encoding`, `Content-Length`, `TE`, `Trailer`, `Upgrade`, `Keep-Alive`, proxy auth/connection headers, and `Expect`.
+
+Stdio custom servers continue to be serialized as provider-native command, args, and env fields rather than shell command strings. Commands containing shell metacharacters are rejected; args and env values are passed as structured strings in generated config artifacts.
 
 ## Provider Override Settings Boundary
 

@@ -1,4 +1,5 @@
 import type { JulesActivity, JulesSession, Subtask } from "../contracts/app-types.js";
+import type { ProjectAttentionItemRecord } from "../contracts/project-attention-types.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { Logger } from "../shared/logging/logger.js";
@@ -21,6 +22,7 @@ export interface SprintCycleResult {
   reportText: string;
   statusTable: string;
   instructions: string;
+  activeProjectAttentionItems?: ProjectAttentionItemRecord[];
 }
 
 export interface SessionSyncDependencies {

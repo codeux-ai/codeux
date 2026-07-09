@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { h } from "preact";
-import { cleanup, render, screen } from "@testing-library/preact";
+import { useState } from "preact/hooks";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { ActionFeedbackRegion } from "../ActionFeedbackRegion.js";
 import * as matchers from '@testing-library/jest-dom/matchers';
@@ -46,6 +47,12 @@ describe("ActionFeedbackRegion", () => {
     const err = screen.getByRole("alert");
     expect(err).toBeInTheDocument();
     expect(err).toHaveAttribute("aria-live", "assertive");
+    cleanup();
+
+    render(<ActionFeedbackRegion status="warning" message="Warning message" />);
+    const warning = screen.getByRole("status");
+    expect(warning).toBeInTheDocument();
+    expect(warning).toHaveAttribute("aria-live", "polite");
   });
 
   it("applies contextual accessible names to buttons and aria-hidden to progress and does not auto-dismiss error or pending", () => {
@@ -91,5 +98,64 @@ describe("ActionFeedbackRegion", () => {
 
     render(<ActionFeedbackRegion status="pending" message="Pending msg" progress={40} />);
     expect(document.querySelector(".absolute.bottom-0")).toBeInTheDocument();
+  });
+
+  it("moves focus to fallback when retry removes the focused feedback control", async () => {
+    function RetryHarness() {
+      const [status, setStatus] = useState<"error" | "idle">("error");
+      return (
+        <div>
+          <main data-feedback-focus-fallback tabIndex={-1}>Workbench</main>
+          <ActionFeedbackRegion
+            status={status}
+            message={status === "error" ? "Save failed" : null}
+            retryAction={() => {
+              setStatus("idle");
+            }}
+          />
+        </div>
+      );
+    }
+
+    render(<RetryHarness />);
+
+    const retry = screen.getByRole("button", { name: "Retry" });
+    retry.focus();
+    expect(document.activeElement).toBe(retry);
+
+    fireEvent.click(retry);
+
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByText("Workbench")));
+  });
+
+  it("moves focus to fallback when dismiss removes the focused feedback control", async () => {
+    function DismissHarness() {
+      const [visible, setVisible] = useState(true);
+      return (
+        <div>
+          <main data-feedback-focus-fallback tabIndex={-1}>Workbench</main>
+          {visible && (
+            <ActionFeedbackRegion
+              status="success"
+              message="Saved"
+              onDismiss={() => setVisible(false)}
+              autoDismiss={false}
+            />
+          )}
+        </div>
+      );
+    }
+
+    render(<DismissHarness />);
+
+    const dismiss = screen.getByRole("button", { name: "Dismiss" });
+    dismiss.focus();
+    expect(document.activeElement).toBe(dismiss);
+
+    fireEvent.click(dismiss);
+
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Dismiss" })).not.toBeInTheDocument());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByText("Workbench")));
   });
 });

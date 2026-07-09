@@ -141,6 +141,19 @@ vi.mock("../../../dashboard/src/lib/api/dashboard-api.js", () => ({
   fetchExternalSettingsHints: vi.fn(),
 }));
 
+vi.mock("../../../dashboard/src/v2/lib/local-mcp-api.js", () => ({
+  fetchLocalMcpSetup: vi.fn(async () => ({
+    enabled: true,
+    url: "http://127.0.0.1:4445/mcp",
+    authToken: "local-token",
+    providers: [
+      { id: "codex", label: "Codex", configPath: "/home/test/.codex/config.toml" },
+    ],
+  })),
+  regenerateLocalMcpToken: vi.fn(),
+  installLocalMcpProvider: vi.fn(),
+}));
+
 const cloneDashboardSettings = () => JSON.parse(JSON.stringify(DEFAULT_DASHBOARD_SETTINGS));
 
 const createDashboardSettings = () => {
@@ -345,7 +358,41 @@ describe("SettingsPage data interactions", () => {
     const projectScopeBtn = projectScopeBtns[0];
     fireEvent.click(projectScopeBtn);
 
-    expect(screen.getByText(/Editing overrides for Test Project/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Editing overrides for Test Project/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Project settings are inheriting system defaults until an override is edited/).length).toBeGreaterThan(0);
+  });
+
+  it("keeps save disabled reasons visible and accessible while clean", async () => {
+    render(<SettingsPage />);
+
+    await waitFor(() => {
+      expect(fetchSystemSettings).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Save Changes" })).toHaveAccessibleDescription("No settings changes to save.");
+    });
+
+    const saveButton = screen.getByRole("button", { name: "Save Changes" });
+    expect(saveButton).toBeDisabled();
+    expect(saveButton).toHaveAccessibleDescription("No settings changes to save.");
+    expect(screen.getByText("No settings changes to save.")).toBeInTheDocument();
+  });
+
+  it("clears Smart Find search without moving focus away from the search field", async () => {
+    render(<SettingsPage />);
+
+    await waitFor(() => {
+      expect(fetchSystemSettings).toHaveBeenCalledTimes(1);
+    });
+
+    const search = screen.getByLabelText("Search settings categories") as HTMLInputElement;
+    fireEvent.input(search, { target: { value: "mcp" } });
+    expect(search).toHaveValue("mcp");
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear settings search" }));
+
+    expect(search).toHaveValue("");
+    expect(search).toBe(document.activeElement);
   });
 
   it("renders quality assurance controls in agents settings", async () => {
@@ -385,9 +432,9 @@ describe("SettingsPage data interactions", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: "MCP" }).at(-1)!);
 
-    expect(await screen.findByText("MCP connection modes")).toBeInTheDocument();
-    expect(screen.getByText(/built-in MCP server over stdio by default/i)).toBeInTheDocument();
-    expect(screen.getByText(/MCP_HTTP_\* environment variables or --mcp-http\* flags/i)).toBeInTheDocument();
+    expect(await screen.findByText("Local CLI HTTP setup")).toBeInTheDocument();
+    expect(screen.getByText(/HTTPS needs a trusted certificate/i)).toBeInTheDocument();
+    expect(screen.getByText("http://127.0.0.1:4445/mcp")).toBeInTheDocument();
     expect(screen.getByText("Remote Docs")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Manage" }));

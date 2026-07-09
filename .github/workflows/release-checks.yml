@@ -1,13 +1,13 @@
 name: Release Checks
 
 on:
-  push:
+  pull_request:
     branches:
       - main
   workflow_dispatch:
 
 concurrency:
-  group: release-checks-${{ github.ref }}
+  group: release-checks-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -70,7 +70,7 @@ jobs:
             ~/AppData/Local/electron-builder/Cache
             ~/Library/Caches/electron
             ~/Library/Caches/electron-builder
-          key: ${{ runner.os }}-node-22-release-checks-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'tsconfig.json', 'dashboard/tsconfig.json', 'electron-builder.config.cjs', 'scripts/prepare-electron-runtime-deps.mjs', 'scripts/verify-release-install.mjs') }}
+          key: ${{ runner.os }}-node22-pnpm10.33.0-release-checks-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'tsconfig.json', 'dashboard/tsconfig.json', 'electron-builder.config.cjs', 'scripts/prepare-electron-runtime-deps.mjs', 'scripts/verify-release-install.mjs') }}
 
       - name: Install Linux packaging dependencies
         if: runner.os == 'Linux'
@@ -79,7 +79,10 @@ jobs:
           sudo apt-get install --no-install-recommends -y libopenjp2-tools
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Run Security Audit
+        run: pnpm run audit
 
       - name: Build
         run: pnpm run build
@@ -91,7 +94,7 @@ jobs:
         run: pnpm run electron:install-deps
 
       - name: Build desktop package
-        run: pnpm run ${{ matrix.electron-script }}
+        run: pnpm run ${{ matrix.electron-script }} -- --publish never
 
       - name: Upload release-check artifacts
         uses: actions/upload-artifact@v4

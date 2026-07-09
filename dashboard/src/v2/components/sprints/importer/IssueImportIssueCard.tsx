@@ -23,6 +23,9 @@ interface IssueImportIssueCardProps {
   icon?: ComponentChildren;
   compact?: boolean;
   metadataLimit?: number;
+  showConversationToggle?: boolean;
+  conversationLabel?: string;
+  conversationDisabled?: boolean;
   onToggle: () => void;
   onToggleConversation: () => void;
 }
@@ -43,6 +46,9 @@ export const IssueImportIssueCard: FunctionComponent<IssueImportIssueCardProps> 
   icon,
   compact = false,
   metadataLimit,
+  showConversationToggle = true,
+  conversationLabel = "Append Conversation",
+  conversationDisabled = false,
   onToggle,
   onToggleConversation,
 }) => {
@@ -124,19 +130,22 @@ export const IssueImportIssueCard: FunctionComponent<IssueImportIssueCardProps> 
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <label
-              className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:text-white"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <input
-                type="checkbox"
-                checked={includeConversation}
-                onChange={onToggleConversation}
-                className="h-3.5 w-3.5 rounded border-slate-300 text-signal-500 focus:ring-signal-500 dark:border-white/[0.18] dark:bg-transparent"
-              />
-              <MessageSquare className="h-3.5 w-3.5" strokeWidth={2.1} aria-hidden="true" />
-              Append Conversation
-            </label>
+            {showConversationToggle && (
+              <label
+                className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:text-white"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <input
+                  type="checkbox"
+                  checked={includeConversation}
+                  disabled={conversationDisabled}
+                  onChange={onToggleConversation}
+                  className="h-3.5 w-3.5 rounded border-slate-300 text-signal-500 focus:ring-signal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.18] dark:bg-transparent"
+                />
+                <MessageSquare className="h-3.5 w-3.5" strokeWidth={2.1} aria-hidden="true" />
+                {conversationLabel}
+              </label>
+            )}
             <span className="inline-flex items-center gap-1 rounded-full border border-black/[0.06] bg-white px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300">
               <span aria-live="polite">{selectionLabel ?? (selected ? "Selected" : "Click to select")}</span>
             </span>

@@ -11,6 +11,8 @@ import {
   getFieldSourceLabel,
   providerSupportsModelSelection,
   providerSupportsThinkingMode,
+  getProviderThinkingModeLabel,
+  getProviderThinkingModeOptions,
   isProviderAvailable,
   getProviderAuthLabel,
   getProviderInstanceAuthLabel,
@@ -18,6 +20,7 @@ import {
   sourceLabel,
   thinkingModeOptions,
   providerLabels,
+  createProjectProviderDraft,
   createSystemProviderDraft,
   sortProviderConfigEntries,
   getSystemIntegrationProviders,
@@ -30,9 +33,27 @@ import {
   getRelevantModelPricingRefs,
   normalizeModelPricingOverrideId,
   normalizeModelPricingOverrides,
+  TASK_PR_TITLE_TOKEN_LABELS,
+  getTaskPrTitleSchemeOptions,
+  dashboardExperienceModeOptions,
+  getDashboardExperienceModeDescription,
+  getDashboardExperienceModeLabel,
+  isEasyExperienceMode,
+  isExpertExperienceMode,
+  isStandardExperienceMode,
+  normalizeDashboardExperienceMode,
+  createDesignGuidanceCustomEntry,
+  getDesignGuidanceActiveLabel,
+  getVisibleDesignGuidanceEntries,
+  isSelectedDefaultStyleguideHidden,
+  validateDesignGuidanceCustomEntry,
 } from "../../../dashboard/src/v2/lib/settings-view-models.js";
 import type { SystemSettings, ProjectSettings, ExternalSettingsHints, DashboardSettings } from "../../../dashboard/src/types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
+import {
+  CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
+  DESIGN_GUIDANCE_NONE_ID,
+} from "../../../src/domain/settings/design-guidance-catalog.js";
 
 describe("sortProviderConfigEntries", () => {
   it("keeps the primary first and orders added instances by creation, not by name", () => {
@@ -65,6 +86,17 @@ describe("sortProviderConfigEntries", () => {
 });
 
 describe("settings view model source helpers", () => {
+  it("exposes dashboard experience mode labels, descriptions, and helpers", () => {
+    expect(dashboardExperienceModeOptions.map((option) => option.label)).toEqual(["Easy", "Standard", "Expert"]);
+    expect(normalizeDashboardExperienceMode("STANDARD")).toBe("STANDARD");
+    expect(normalizeDashboardExperienceMode("standart")).toBe("EXPERT");
+    expect(getDashboardExperienceModeLabel("STANDARD")).toBe("Standard");
+    expect(getDashboardExperienceModeDescription("EASY")).toContain("Simplified");
+    expect(isEasyExperienceMode("EASY")).toBe(true);
+    expect(isStandardExperienceMode("STANDARD")).toBe(true);
+    expect(isExpertExperienceMode("EXPERT")).toBe(true);
+  });
+
   it("returns the direct field source when a leaf path is present", () => {
     expect(getFieldSource({
       "git.defaultBranch": "project",
@@ -107,13 +139,55 @@ describe("settings view model source helpers", () => {
   });
 
   it("provides thinking mode options", () => {
-    expect(thinkingModeOptions).toHaveLength(3);
-    expect(thinkingModeOptions[0]).toEqual({ value: "SMALL", label: "Small" });
+    expect(thinkingModeOptions).toEqual(expect.arrayContaining([
+      { value: "none", label: "None" },
+      { value: "minimal", label: "Minimal" },
+      { value: "xhigh", label: "Extra High" },
+      { value: "max", label: "Max" },
+    ]));
+    expect(thinkingModeOptions.some((option) => option.value === "SMALL")).toBe(false);
+  });
+
+  it("provides provider-specific thinking mode options and labels", () => {
+    expect(getProviderThinkingModeOptions("jules")).toEqual([]);
+    expect(getProviderThinkingModeOptions("codex")).toEqual([
+      { value: "low", label: "Low" },
+      { value: "medium", label: "Medium" },
+      { value: "high", label: "High" },
+      { value: "xhigh", label: "Extra High" },
+    ]);
+    expect(getProviderThinkingModeOptions("antigravity")).toEqual([
+      { value: "low", label: "Low" },
+      { value: "high", label: "High" },
+    ]);
+    expect(getProviderThinkingModeLabel("codex", "HIGH")).toBe("High");
+    expect(getProviderThinkingModeLabel("opencode", "none")).toBe("None");
   });
 
   it("provides provider labels", () => {
     expect(providerLabels.jules).toBe("Jules");
     expect(providerLabels.gemini).toBe("Gemini");
+  });
+
+  it("provides task PR title scheme placeholder metadata", () => {
+    expect(Object.keys(TASK_PR_TITLE_TOKEN_LABELS)).toEqual([
+      "sprint_tag",
+      "sprint_key",
+      "sprint_number",
+      "sprint_title",
+      "task_key",
+      "task_title",
+      "provider",
+    ]);
+    expect(getTaskPrTitleSchemeOptions()).toEqual([
+      { value: "{sprint_tag}", label: "Sprint Tag" },
+      { value: "{sprint_key}", label: "Sprint Key" },
+      { value: "{sprint_number}", label: "Sprint Number" },
+      { value: "{sprint_title}", label: "Sprint Title" },
+      { value: "{task_key}", label: "Task Key" },
+      { value: "{task_title}", label: "Task Title" },
+      { value: "{provider}", label: "Provider" },
+    ]);
   });
 
   it("marks Jules model and thinking controls as unsupported", () => {
@@ -135,6 +209,17 @@ describe("settings view model source helpers", () => {
   it("includes claude-fable-5 in Claude model options", () => {
     expect(getProviderModelOptions("claude-code")).toEqual(expect.arrayContaining([
       { value: "claude-fable-5", label: "claude-fable-5" },
+    ]));
+  });
+
+  it("includes new Codex models while keeping gpt-5.5 as the first option", () => {
+    const options = getProviderModelOptions("codex");
+
+    expect(options[0]).toEqual({ value: "gpt-5.5", label: "gpt-5.5" });
+    expect(options).toEqual(expect.arrayContaining([
+      { value: "gpt-5.6-sol", label: "gpt-5.6-sol" },
+      { value: "gpt-5.6-terra", label: "gpt-5.6-terra" },
+      { value: "gpt-5.6-luna", label: "gpt-5.6-luna" },
     ]));
   });
 
@@ -250,6 +335,8 @@ describe("settings view model source helpers", () => {
   it("prefills new Qwen and OpenCode custom endpoint settings for local Ollama", () => {
     expect(createSystemProviderDraft("qwen-code", "Qwen Ollama")).toMatchObject({
       apiKey: "",
+      providerConfigMode: "copyHost",
+      providerConfigPath: "~/.qwen/settings.json",
       qwenBaseUrl: "http://127.0.0.1:11434/v1",
       qwenEnvKey: "OLLAMA_API_KEY",
       qwenModelId: "glm-4.7-flash",
@@ -257,10 +344,34 @@ describe("settings view model source helpers", () => {
     });
     expect(createSystemProviderDraft("opencode", "OpenCode Ollama")).toMatchObject({
       apiKey: "",
+      providerConfigMode: "copyHost",
+      providerConfigPath: "~/.config/opencode/opencode.json",
       openCodeProviderId: "ollama",
       openCodeModelId: "glm-4.7-flash",
       openCodeBaseUrl: "http://127.0.0.1:11434/v1",
       openCodeEnvKey: "OLLAMA_API_KEY",
+    });
+  });
+
+  it("defaults new provider instances to provider-supported thinking modes", () => {
+    expect(createProjectProviderDraft("codex", "Codex Staging").thinkingMode).toBe("high");
+    expect(createProjectProviderDraft("opencode", "OpenCode Staging").thinkingMode).toBe("high");
+    expect(createProjectProviderDraft("antigravity", "Antigravity Staging").thinkingMode).toBe("high");
+    expect(createProjectProviderDraft("jules", "Jules Primary").thinkingMode).toBe("MEDIUM");
+  });
+
+  it("defaults provider config files only for CLI providers that support them", () => {
+    expect(createSystemProviderDraft("codex", "Codex Primary")).toMatchObject({
+      providerConfigMode: "copyHost",
+      providerConfigPath: "~/.codex/config.toml",
+    });
+    expect(createSystemProviderDraft("jules", "Jules Primary")).toMatchObject({
+      providerConfigMode: "none",
+      providerConfigPath: "",
+    });
+    expect(createSystemProviderDraft("mockup-cli", "Mockup CLI")).toMatchObject({
+      providerConfigMode: "none",
+      providerConfigPath: "",
     });
   });
 });
@@ -469,6 +580,74 @@ describe("provider settings sanitization", () => {
     expect(codex.customBaseUrl).toBe("");
     expect(codex.customModel).toBe("");
     expect(codex.mountAuth).toBe(true);
+  });
+
+  it("normalizes provider config mode/path combinations like the backend", () => {
+    const systemSettings = {
+      integrations: {
+        providers: {
+          "codex-empty-file": {
+            provider: "codex",
+            name: "Codex Empty File",
+            apiKey: "",
+            authType: "apiKey",
+            mountAuth: false,
+            authPath: "",
+            providerConfigMode: "file",
+            providerConfigPath: "   ",
+          },
+          "codex-custom-file": {
+            provider: "codex",
+            name: "Codex Custom File",
+            apiKey: "",
+            authType: "apiKey",
+            mountAuth: false,
+            authPath: "",
+            providerConfigMode: "file",
+            providerConfigPath: "~/configs/codex.toml",
+          },
+          "gemini-none": {
+            provider: "gemini",
+            name: "Gemini No Config",
+            apiKey: "",
+            authType: "apiKey",
+            mountAuth: false,
+            authPath: "",
+            providerConfigMode: "none",
+            providerConfigPath: "~/.gemini/settings.json",
+          },
+          "mockup-cli": {
+            provider: "mockup-cli",
+            name: "Mockup CLI",
+            apiKey: "",
+            authType: "apiKey",
+            mountAuth: false,
+            authPath: "",
+            providerConfigMode: "copyHost",
+            providerConfigPath: "~/.mockup/config.json",
+          },
+        },
+      },
+    } as any;
+
+    const providers = getSystemIntegrationProviders(systemSettings);
+
+    expect(providers["codex-empty-file"]).toMatchObject({
+      providerConfigMode: "copyHost",
+      providerConfigPath: "~/.codex/config.toml",
+    });
+    expect(providers["codex-custom-file"]).toMatchObject({
+      providerConfigMode: "file",
+      providerConfigPath: "~/configs/codex.toml",
+    });
+    expect(providers["gemini-none"]).toMatchObject({
+      providerConfigMode: "none",
+      providerConfigPath: "",
+    });
+    expect(providers["mockup-cli"]).toMatchObject({
+      providerConfigMode: "none",
+      providerConfigPath: "",
+    });
   });
 });
 
@@ -709,6 +888,100 @@ describe("provider display metadata helpers", () => {
   });
 });
 
+describe("settings guidance view models", () => {
+  it("hides default styleguides from visible choices while preserving None and custom entries", () => {
+    const settings = {
+      ...DEFAULT_DASHBOARD_SETTINGS.designGuidance,
+      selectedStyleguideId: CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
+      hideDefaultStyleguides: true,
+      customStyleguides: [
+        {
+          id: "custom-style",
+          name: "Custom Style",
+          summary: "Custom visual direction.",
+          instructionMarkdown: "Use custom guidance.",
+        },
+      ],
+    };
+
+    const visibleIds = getVisibleDesignGuidanceEntries(settings, "styleguide").map((entry) => entry.id);
+
+    expect(visibleIds).toEqual([DESIGN_GUIDANCE_NONE_ID, "custom-style"]);
+    expect(getDesignGuidanceActiveLabel(settings, "styleguide")).toBe("Code UX");
+    expect(isSelectedDefaultStyleguideHidden(settings)).toBe(true);
+  });
+
+  it("keeps tech stack defaults visible and resolves active custom labels", () => {
+    const settings = {
+      ...DEFAULT_DASHBOARD_SETTINGS.designGuidance,
+      selectedTechStackId: "custom-stack",
+      customTechStacks: [
+        {
+          id: "custom-stack",
+          name: "Custom Stack",
+          summary: "Custom stack direction.",
+          instructionMarkdown: "Use custom stack guidance.",
+        },
+      ],
+    };
+
+    const visibleIds = getVisibleDesignGuidanceEntries(settings, "techStack").map((entry) => entry.id);
+
+    expect(visibleIds[0]).toBe(DESIGN_GUIDANCE_NONE_ID);
+    expect(visibleIds).toContain("custom-stack");
+    expect(visibleIds).toContain("code-ux-product-stack");
+    expect(getDesignGuidanceActiveLabel(settings, "techStack")).toBe("Custom Stack");
+  });
+
+  it("validates duplicate custom ids and names against defaults and peer entries", () => {
+    const entries = [
+      {
+        id: "developer-tools",
+        name: "Custom Style",
+        summary: "Summary",
+        instructionMarkdown: "Instruction",
+      },
+      {
+        id: "custom-style",
+        name: "custom style",
+        summary: "",
+        instructionMarkdown: "",
+      },
+    ];
+
+    expect(validateDesignGuidanceCustomEntry(entries[0], entries, "styleguide", 0)).toMatchObject({
+      id: "Use a custom id that does not match a built-in styleguide.",
+      name: "styleguide name must be unique.",
+      hasError: true,
+    });
+    expect(validateDesignGuidanceCustomEntry(entries[1], entries, "styleguide", 1)).toMatchObject({
+      name: "styleguide name must be unique.",
+      summary: "Summary is required.",
+      instructionMarkdown: "Instruction markdown is required.",
+      hasError: true,
+    });
+  });
+
+  it("creates a unique custom guidance id for the requested kind", () => {
+    const settings = {
+      ...DEFAULT_DASHBOARD_SETTINGS.designGuidance,
+      customTechStacks: [
+        {
+          id: "custom-tech-stack",
+          name: "Custom Tech Stack",
+          summary: "Existing",
+          instructionMarkdown: "Existing",
+        },
+      ],
+    };
+
+    expect(createDesignGuidanceCustomEntry(settings, "techStack")).toMatchObject({
+      id: "custom-tech-stack-2",
+      name: "Custom Tech Stack",
+    });
+  });
+});
+
 
 describe("settings cloning helpers", () => {
   const createMockQualityAssurance = () => ({
@@ -721,8 +994,37 @@ describe("settings cloning helpers", () => {
     completedTaskWithoutPr: { strategy: "CREATE_PR" as const, agentPresetIds: [], agentPresetId: null },
   });
 
+  const createMockImporterSettings = () => ({
+    enabled: false,
+    apiToken: "",
+    apiSecret: "",
+    baseUrl: "",
+    workspaceId: "",
+    teamId: "",
+    teamKey: "",
+    projectId: "",
+    databaseId: "",
+    boardId: "",
+    documentId: "",
+    fileKey: "",
+    defaultSearchLimit: 25,
+  });
+
+  const createMockSpeechSettings = () => ({
+    enabled: false,
+    providerMode: "auto" as const,
+    localModelId: "onnx-community/whisper-base.en",
+    maxAudioSeconds: 120,
+    externalTranscription: {
+      baseUrl: "https://api.openai.com/v1/audio/transcriptions",
+      apiKey: "",
+      model: "whisper-1",
+      language: null,
+    },
+  });
+
   const createMockProjectSettings = (): ProjectSettings => ({
-    appearance: { theme: "system" },
+    appearance: { experienceMode: "STANDARD", theme: "system" },
     automationLevel: "FULL",
     automationInterventions: {},
     aiProvider: {
@@ -731,8 +1033,17 @@ describe("settings cloning helpers", () => {
       providers: {},
       invocationRouting: {},
     },
-    git: { githubMode: "app", githubToken: "", defaultBranch: "main", autoCreatePr: false, autoCloseLinkedIssues: false, deleteMergedBranches: false, featureBranchPrefix: "", sprintBranchScheme: "FLAT", sprintKeyPrefix: "" },
-    jira: { host: "h", email: "e", apiToken: "t", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
+    techstack: { applicationKind: null, selectedTechstackId: null },
+    designGuidance: { ...DEFAULT_DASHBOARD_SETTINGS.designGuidance },
+    git: { githubMode: "app", githubToken: "", defaultBranch: "main", autoCreatePr: false, autoCloseLinkedIssues: false, deleteMergedBranches: false, featureBranchPrefix: "", sprintBranchScheme: "FLAT", sprintKeyPrefix: "", taskPrTitleScheme: "({sprint_tag}) {task_title}" },
+    jira: { host: "h", email: "e", apiToken: "t", autoTransitionLinkedIssuesOnImport: true, importTransitionName: "In Work", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
+    notion: createMockImporterSettings(),
+    asana: createMockImporterSettings(),
+    linear: createMockImporterSettings(),
+    miro: createMockImporterSettings(),
+    lucid: createMockImporterSettings(),
+    figma: createMockImporterSettings(),
+    mural: createMockImporterSettings(),
     ciIntelligence: {},
     guardrails: { onLimitAction: "WARN", defaultLimitOverrides: [], limitOverrides: [], jobConfigOverrides: [], jobs: { task_coding: {}, ci_fix: {}, merge_conflict: {}, clarification_reply: {}, planning: {}, remediation: {} } as any },
     sprintLoopSteps: { apply: { type: "apply" }, pr: { type: "pr" }, runTests: { type: "test" } },
@@ -751,11 +1062,28 @@ describe("settings cloning helpers", () => {
       },
       instructionTemplates: {},
       qualityAssurance: createMockQualityAssurance(),
+      selfReflection: {
+        planning: {
+          enabled: false,
+          criteria: [
+            { id: "correctness", label: "Correctness", prompt: "Check correctness.", threshold: 0.8 },
+          ],
+          maxImprovementAttempts: 1,
+        },
+        qualityAssurance: {
+          enabled: false,
+          criteria: [
+            { id: "security", label: "Security", prompt: "Check security.", threshold: 0.85 },
+          ],
+          maxImprovementAttempts: 1,
+        },
+      },
     },
     skills: [{ id: "skill1", enabled: true }],
     mcpTools: [{ serverName: "s1", toolName: "t1", enabled: true }],
     customMcpServers: [{ serverName: "s1", command: "cmd", args: [], env: { "FOO": "bar" }, headers: { "X-Auth": "abc" }, providers: [] }],
     memory: { enabled: true, embeddingModel: null, externalEmbedding: { baseUrl: "", apiKey: "", model: "", dimensions: null }, autoCaptureSprint: true, autoCaptureAgent: true, autoPromote: false, promotionThreshold: 5, maxSprintMemories: 10, maxProjectMemories: 20, mapMaxEdgesPerNode: 5, workerLearningsInstruction: "" },
+    speech: createMockSpeechSettings(),
   } as ProjectSettings);
 
   const createMockDashboardSettings = (): DashboardSettings => {
@@ -772,26 +1100,36 @@ describe("settings cloning helpers", () => {
     expect(clone).not.toBe(original);
 
     // Mutate clone
+    clone.appearance.experienceMode = "EASY";
     clone.memory.enabled = false;
     clone.memory.autoCaptureSprint = false;
     clone.jira.host = "new-host";
+    clone.notion.databaseId = "mutated-database";
+    clone.figma.fileKey = "mutated-file";
     clone.agents.qualityAssurance.enabled = false;
     clone.agents.qualityAssurance.taskCompletion.strategy = "NEVER";
     clone.agents.qualityAssurance.sprintCompletion.agentPresetIds.push("qa-extra");
+    clone.agents.selfReflection.planning.criteria[0]!.threshold = 0.1;
     clone.agents.routing.taskCoding.orchestratorAgentPresetIds.push("c");
+    clone.git.taskPrTitleScheme = "{task_key}: {task_title}";
     clone.customMcpServers![0].headers!["X-New"] = "123";
     clone.customMcpServers![0].env!["BAZ"] = "qux";
     clone.mcpTools![0].enabled = false;
     clone.skills[0].enabled = false;
 
     // Verify original is untouched
+    expect(original.appearance.experienceMode).toBe("STANDARD");
     expect(original.memory.enabled).toBe(true);
     expect(original.memory.autoCaptureSprint).toBe(true);
     expect(original.jira.host).toBe("h");
+    expect(original.notion.databaseId).toBe("");
+    expect(original.figma.fileKey).toBe("");
     expect(original.agents.qualityAssurance.enabled).toBe(true);
     expect(original.agents.qualityAssurance.taskCompletion.strategy).toBe("ALWAYS");
     expect(original.agents.qualityAssurance.sprintCompletion.agentPresetIds).toEqual(["qa-sprint", "qa-peer"]);
+    expect(original.agents.selfReflection.planning.criteria[0]!.threshold).toBe(0.8);
     expect(original.agents.routing.taskCoding.orchestratorAgentPresetIds).toEqual(["a", "b"]);
+    expect(original.git.taskPrTitleScheme).toBe("({sprint_tag}) {task_title}");
     expect(original.customMcpServers![0].headers!["X-New"]).toBeUndefined();
     expect(original.customMcpServers![0].env!["BAZ"]).toBeUndefined();
     expect(original.mcpTools![0].enabled).toBe(true);
@@ -805,19 +1143,29 @@ describe("settings cloning helpers", () => {
     expect(clone).not.toBe(original);
 
     // Mutate clone
+    clone.appearance.experienceMode = "EASY";
     clone.memory.enabled = false;
     clone.jira.host = "new-host";
+    clone.asana.workspaceId = "mutated-workspace";
+    clone.mural.boardId = "mutated-mural";
     clone.agents.qualityAssurance.enabled = false;
     clone.agents.qualityAssurance.sprintCompletion.agentPresetIds.push("qa-extra");
+    clone.agents.selfReflection.qualityAssurance.criteria.push({ id: "scope_control", label: "Scope control", prompt: "Stay scoped.", threshold: 0.8 });
     clone.agents.routing.taskCoding.orchestratorAgentPresetIds.push("c");
+    clone.git.taskPrTitleScheme = "{provider}: {task_title}";
     clone.customMcpServers![0].headers!["X-New"] = "123";
 
     // Verify original is untouched
+    expect(original.appearance.experienceMode).toBe("STANDARD");
     expect(original.memory.enabled).toBe(true);
     expect(original.jira.host).toBe("h");
+    expect(original.asana.workspaceId).toBe("");
+    expect(original.mural.boardId).toBe("");
     expect(original.agents.qualityAssurance.enabled).toBe(true);
     expect(original.agents.qualityAssurance.sprintCompletion.agentPresetIds).toEqual(["qa-sprint", "qa-peer"]);
+    expect(original.agents.selfReflection.qualityAssurance.criteria).toHaveLength(1);
     expect(original.agents.routing.taskCoding.orchestratorAgentPresetIds).toEqual(["a", "b"]);
+    expect(original.git.taskPrTitleScheme).toBe("({sprint_tag}) {task_title}");
     expect(original.customMcpServers![0].headers!["X-New"]).toBeUndefined();
   });
 
@@ -827,10 +1175,33 @@ describe("settings cloning helpers", () => {
       integrations: {
         githubToken: "gh",
         gitlabToken: "gl",
-        jira: { host: "h", email: "e", apiToken: "t", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
+        jira: { host: "h", email: "e", apiToken: "t", autoTransitionLinkedIssuesOnImport: true, importTransitionName: "In Work", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
+        notion: createMockImporterSettings(),
+        asana: createMockImporterSettings(),
+        linear: createMockImporterSettings(),
+        miro: createMockImporterSettings(),
+        lucid: createMockImporterSettings(),
+        figma: createMockImporterSettings(),
+        mural: createMockImporterSettings(),
         providers: {
           "p1": { provider: "jules", name: "Jules", apiKey: "key", mountAuth: false, authPath: "" }
         }
+      },
+      techstackCatalog: {
+        defaultTechstackId: "code-ux-internal",
+        entries: [
+          {
+            id: "code-ux-internal",
+            label: "Code UX Stack",
+            items: [
+              { id: "preact", label: "Preact" },
+              { id: "tanstack-router", label: "TanStack Router" },
+              { id: "gsap", label: "GSAP" },
+              { id: "three-js", label: "Three.js" },
+              { id: "lucide-icons", label: "Lucide Icons" },
+            ],
+          },
+        ],
       },
       defaults: createMockProjectSettings(),
       mcpTools: [{ serverName: "s1", toolName: "t1", enabled: true }],
@@ -845,14 +1216,20 @@ describe("settings cloning helpers", () => {
 
     // Mutate clone
     clone.integrations.jira!.host = "mutated";
+    clone.integrations.notion.databaseId = "mutated-database";
+    clone.integrations.lucid.documentId = "mutated-document";
     clone.integrations.providers["p1"].apiKey = "mutated-key";
     clone.defaults.memory.enabled = false;
+    clone.defaults.git.taskPrTitleScheme = "{task_title}";
     clone.mcpTools[0].enabled = false;
 
     // Verify original is untouched
     expect(original.integrations.jira!.host).toBe("h");
+    expect(original.integrations.notion.databaseId).toBe("");
+    expect(original.integrations.lucid.documentId).toBe("");
     expect(original.integrations.providers["p1"].apiKey).toBe("key");
     expect(original.defaults.memory.enabled).toBe(true);
+    expect(original.defaults.git.taskPrTitleScheme).toBe("({sprint_tag}) {task_title}");
     expect(original.mcpTools[0].enabled).toBe(true);
   });
 });

@@ -18,6 +18,7 @@ describe("Dashboard Execution Invocation API", () => {
       listInvocationMessages: vi.fn(),
       restartExecutionInvocation: vi.fn(),
       cancelExecutionInvocation: vi.fn(),
+      resetInvocationUsageLimitTimer: vi.fn(),
       // Add required mocks to pass setupDashboardServer validation even if unused in these tests
       dashboardDir: "/mock/dir",
       port: 3000,
@@ -26,6 +27,7 @@ describe("Dashboard Execution Invocation API", () => {
       getExecutionSnapshot: vi.fn(),
       getProjectExecutionSnapshot: vi.fn(),
       getProjectStatsSnapshot: vi.fn(),
+      getHeaderTokenThroughputSnapshot: vi.fn(),
       getOverviewTelemetrySnapshot: vi.fn(),
       getLiveActivities: vi.fn(),
       getGitStatus: vi.fn(),
@@ -270,6 +272,35 @@ describe("Dashboard Execution Invocation API", () => {
 
       expect(response.status).toBe(404);
       expect(response.body).toEqual({ error: "Invocation cancellation is not enabled." });
+    });
+  });
+
+  describe("POST /api/execution/invocations/:invocationId/reset-usage-limit", () => {
+    it("resets a usage-limit wait timer", async () => {
+      vi.mocked(mockOptions.resetInvocationUsageLimitTimer!).mockResolvedValue({
+        reset: true,
+        invocationId: "inv-1",
+      });
+      setupServer();
+
+      const response = await request(app).post("/api/execution/invocations/inv-1/reset-usage-limit");
+
+      expect(response.status).toBe(202);
+      expect(response.body).toEqual({
+        reset: true,
+        invocationId: "inv-1",
+      });
+      expect(mockOptions.resetInvocationUsageLimitTimer).toHaveBeenCalledWith("inv-1");
+    });
+
+    it("reports when invocation usage limit timer reset is disabled", async () => {
+      mockOptions.resetInvocationUsageLimitTimer = undefined;
+      setupServer();
+
+      const response = await request(app).post("/api/execution/invocations/inv-1/reset-usage-limit");
+
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ error: "Invocation usage limit timer reset is not enabled." });
     });
   });
 });

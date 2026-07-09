@@ -16,6 +16,8 @@ Supported ingest paths:
 
 Repo-path ingestion resolves `path` inside the selected project's `baseDir`, rejects traversal outside the project directory, and skips common generated or dependency directories when walking a directory.
 
+`ProjectDocsAutoEmbedService` provides a reusable setup-time path for automatically finding documentation-like repository files and passing them through `KnowledgeService.ingestDocument` as `sourceType: "repo_path"` documents. It only selects root documentation files (`README*`, `CHANGELOG*`, `CONTRIBUTING*`, assistant instruction markdown) plus supported documentation extensions under `docs/`, skips generated/dependency/cache/VCS directories and symlinks, enforces file-count and byte limits, and reports per-file errors without duplicating chunking, embedding, or content-hash logic.
+
 Project imports copy extracted document text into the target project as `sourceType: "project"` documents. The target project embeds the copied documents with the active embedding model and still deduplicates by content hash inside that project.
 
 ## Memory Auto-Capture

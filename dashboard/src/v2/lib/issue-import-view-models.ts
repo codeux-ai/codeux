@@ -1,6 +1,16 @@
-export type IssueImportProvider = "github" | "gitlab" | "jira";
+export type IssueImportProvider =
+  | "github"
+  | "gitlab"
+  | "jira"
+  | "notion"
+  | "asana"
+  | "linear"
+  | "miro"
+  | "lucid"
+  | "figma"
+  | "mural";
 
-export type IssueImportProviderIcon = "github" | "gitlab" | "jira";
+export type IssueImportProviderIcon = IssueImportProvider;
 
 export interface IssueImportProviderAccent {
   badgeClassName: string;
@@ -14,12 +24,20 @@ export interface IssueImportProviderMetadata {
   label: string;
   importLabel: string;
   icon: IssueImportProviderIcon;
+  aliases: string[];
   accent: IssueImportProviderAccent;
 }
 
 export interface IssueImportMetadataSource {
   provider: IssueImportProvider;
+  sourceProvider?: string | null;
+  sourceKind?: string | null;
+  externalId?: string | null;
   repository?: string | null;
+  workspaceId?: string | null;
+  teamId?: string | null;
+  teamKey?: string | null;
+  databaseId?: string | null;
   projectKey?: string | null;
   issueKey?: string | null;
   issueNumber?: number | null;
@@ -93,6 +111,8 @@ export interface IssueImportCompactStateInput {
   sortDirection?: string | null;
   sortFieldOptions?: ReadonlyArray<{ value: string; label: string }>;
   sortDirectionOptions?: ReadonlyArray<{ value: string; label: string }>;
+  resultNounSingular?: string;
+  resultNounPlural?: string;
 }
 
 export interface IssueImportCompactState {
@@ -109,6 +129,7 @@ const PROVIDER_METADATA: Record<IssueImportProvider, IssueImportProviderMetadata
     label: "GitHub",
     importLabel: "GitHub issue import",
     icon: "github",
+    aliases: ["github issues", "repository issues"],
     accent: {
       badgeClassName: "border-signal-500/20 bg-signal-500/10 text-signal-600 dark:text-signal-300",
       selectedCardClassName: "border-signal-500/30 bg-signal-500/[0.08] shadow-[0_14px_32px_rgba(0,224,160,0.08)] dark:border-signal-400/25 dark:bg-signal-400/[0.1]",
@@ -121,6 +142,7 @@ const PROVIDER_METADATA: Record<IssueImportProvider, IssueImportProviderMetadata
     label: "GitLab",
     importLabel: "GitLab issue import",
     icon: "gitlab",
+    aliases: ["gitlab issues", "repository issues"],
     accent: {
       badgeClassName: "border-ember-500/20 bg-ember-500/10 text-ember-600 dark:text-ember-400",
       selectedCardClassName: "border-ember-500/30 bg-ember-500/[0.08] shadow-[0_14px_32px_rgba(255,184,0,0.08)] dark:border-ember-400/25 dark:bg-ember-400/[0.1]",
@@ -133,11 +155,103 @@ const PROVIDER_METADATA: Record<IssueImportProvider, IssueImportProviderMetadata
     label: "Jira",
     importLabel: "Jira issue import",
     icon: "jira",
+    aliases: ["jira issues", "work items"],
     accent: {
       badgeClassName: "border-[#4C9AFF]/25 bg-[#4C9AFF]/10 text-[#0052CC] dark:text-[#9ecbff]",
       selectedCardClassName: "border-[#0052CC]/35 bg-[#0052CC]/[0.08] shadow-[0_14px_32px_rgba(0,82,204,0.08)] dark:border-[#4C9AFF]/35 dark:bg-[#4C9AFF]/[0.12]",
       selectedIconClassName: "bg-[#0052CC] text-white dark:bg-[#4C9AFF] dark:text-slate-950",
       focusRingClassName: "focus-visible:ring-[#0052CC]/30",
+    },
+  },
+  notion: {
+    provider: "notion",
+    label: "Notion",
+    importLabel: "Notion scope import",
+    icon: "notion",
+    aliases: ["notion pages", "notion databases"],
+    accent: {
+      badgeClassName: "border-slate-900/10 bg-slate-900/[0.04] text-slate-800 dark:border-white/10 dark:bg-white/[0.06] dark:text-white",
+      selectedCardClassName: "border-slate-900/20 bg-slate-900/[0.055] shadow-[0_14px_32px_rgba(15,23,42,0.08)] dark:border-white/16 dark:bg-white/[0.08]",
+      selectedIconClassName: "bg-slate-900 text-white dark:bg-white dark:text-slate-950",
+      focusRingClassName: "focus-visible:ring-slate-900/20 dark:focus-visible:ring-white/20",
+    },
+  },
+  asana: {
+    provider: "asana",
+    label: "Asana",
+    importLabel: "Asana task import",
+    icon: "asana",
+    aliases: ["asana tasks", "work items"],
+    accent: {
+      badgeClassName: "border-[#FC636B]/25 bg-[#FC636B]/10 text-[#B42334] dark:text-[#FDA4AF]",
+      selectedCardClassName: "border-[#FC636B]/35 bg-[#FC636B]/[0.08] shadow-[0_14px_32px_rgba(252,99,107,0.08)] dark:border-[#FDA4AF]/30 dark:bg-[#FC636B]/[0.12]",
+      selectedIconClassName: "bg-[#FC636B] text-white",
+      focusRingClassName: "focus-visible:ring-[#FC636B]/30",
+    },
+  },
+  linear: {
+    provider: "linear",
+    label: "Linear",
+    importLabel: "Linear issue import",
+    icon: "linear",
+    aliases: ["linear issues", "work items"],
+    accent: {
+      badgeClassName: "border-[#5E6AD2]/25 bg-[#5E6AD2]/10 text-[#3F46A3] dark:text-[#B8BCF8]",
+      selectedCardClassName: "border-[#5E6AD2]/35 bg-[#5E6AD2]/[0.08] shadow-[0_14px_32px_rgba(94,106,210,0.08)] dark:border-[#B8BCF8]/30 dark:bg-[#5E6AD2]/[0.12]",
+      selectedIconClassName: "bg-[#5E6AD2] text-white",
+      focusRingClassName: "focus-visible:ring-[#5E6AD2]/30",
+    },
+  },
+  miro: {
+    provider: "miro",
+    label: "Miro",
+    importLabel: "Miro canvas import",
+    icon: "miro",
+    aliases: ["miro boards", "miro canvas items"],
+    accent: {
+      badgeClassName: "border-[#FFD02F]/35 bg-[#FFD02F]/15 text-[#835B00] dark:text-[#FFE08A]",
+      selectedCardClassName: "border-[#FFD02F]/40 bg-[#FFD02F]/[0.12] shadow-[0_14px_32px_rgba(255,208,47,0.1)] dark:border-[#FFE08A]/30 dark:bg-[#FFD02F]/[0.12]",
+      selectedIconClassName: "bg-[#FFD02F] text-slate-950",
+      focusRingClassName: "focus-visible:ring-[#FFD02F]/35",
+    },
+  },
+  lucid: {
+    provider: "lucid",
+    label: "Lucid",
+    importLabel: "Lucid document import",
+    icon: "lucid",
+    aliases: ["lucidchart", "lucidspark", "lucid documents"],
+    accent: {
+      badgeClassName: "border-[#FF7A1A]/30 bg-[#FF7A1A]/10 text-[#B64A00] dark:text-[#FDBA74]",
+      selectedCardClassName: "border-[#FF7A1A]/35 bg-[#FF7A1A]/[0.08] shadow-[0_14px_32px_rgba(255,122,26,0.08)] dark:border-[#FDBA74]/30 dark:bg-[#FF7A1A]/[0.12]",
+      selectedIconClassName: "bg-[#FF7A1A] text-white",
+      focusRingClassName: "focus-visible:ring-[#FF7A1A]/30",
+    },
+  },
+  figma: {
+    provider: "figma",
+    label: "Figma / FigJam",
+    importLabel: "Figma / FigJam import",
+    icon: "figma",
+    aliases: ["figma files", "figjam boards"],
+    accent: {
+      badgeClassName: "border-[#A259FF]/25 bg-[#A259FF]/10 text-[#6D28D9] dark:text-[#D8B4FE]",
+      selectedCardClassName: "border-[#A259FF]/35 bg-[#A259FF]/[0.08] shadow-[0_14px_32px_rgba(162,89,255,0.08)] dark:border-[#D8B4FE]/30 dark:bg-[#A259FF]/[0.12]",
+      selectedIconClassName: "bg-[#A259FF] text-white",
+      focusRingClassName: "focus-visible:ring-[#A259FF]/30",
+    },
+  },
+  mural: {
+    provider: "mural",
+    label: "Mural",
+    importLabel: "Mural canvas import",
+    icon: "mural",
+    aliases: ["mural workspaces", "mural canvases"],
+    accent: {
+      badgeClassName: "border-[#12B3A8]/25 bg-[#12B3A8]/10 text-[#0F766E] dark:text-[#67E8F9]",
+      selectedCardClassName: "border-[#12B3A8]/35 bg-[#12B3A8]/[0.08] shadow-[0_14px_32px_rgba(18,179,168,0.08)] dark:border-[#67E8F9]/30 dark:bg-[#12B3A8]/[0.12]",
+      selectedIconClassName: "bg-[#12B3A8] text-white",
+      focusRingClassName: "focus-visible:ring-[#12B3A8]/30",
     },
   },
 };
@@ -215,7 +329,16 @@ export const getIssueImportProviderMetadata = (
   provider: IssueImportProvider | string | null | undefined,
   accentOverride?: Partial<IssueImportProviderAccent>,
 ): IssueImportProviderMetadata => {
-  const metadata = provider === "gitlab" || provider === "jira" || provider === "github"
+  const metadata = provider === "gitlab"
+    || provider === "jira"
+    || provider === "github"
+    || provider === "notion"
+    || provider === "asana"
+    || provider === "linear"
+    || provider === "miro"
+    || provider === "lucid"
+    || provider === "figma"
+    || provider === "mural"
     ? PROVIDER_METADATA[provider]
     : PROVIDER_METADATA.github;
   return {
@@ -295,11 +418,13 @@ export const getIssueImportSelectedResultCountLabel = (
   selectedCount: number,
   visibleCount?: number,
   totalCount?: number,
+  resultNounSingular = "issue",
+  resultNounPlural = "issues",
 ): string => {
   const selected = Math.max(0, Math.trunc(selectedCount));
   const visible = typeof visibleCount === "number" ? Math.max(0, Math.trunc(visibleCount)) : null;
   const total = typeof totalCount === "number" ? Math.max(0, Math.trunc(totalCount)) : null;
-  const issueNoun = selected === 1 ? "issue" : "issues";
+  const issueNoun = selected === 1 ? resultNounSingular : resultNounPlural;
 
   if (visible !== null && total !== null && total !== visible) {
     return `${selected} selected ${issueNoun} across ${visible} visible of ${total} results.`;
@@ -319,6 +444,8 @@ export const buildIssueImportCompactState = ({
   sortDirection,
   sortFieldOptions,
   sortDirectionOptions,
+  resultNounSingular,
+  resultNounPlural,
 }: IssueImportCompactStateInput): IssueImportCompactState => {
   const chips = buildIssueImportFilterSummaryChips(filters);
   const activeFilterCount = getIssueImportActiveFilterCount(filters);
@@ -327,7 +454,13 @@ export const buildIssueImportCompactState = ({
     activeFilterCount,
     activeFilterCountLabel: getIssueImportActiveFilterCountLabel(activeFilterCount),
     sortLabel: getIssueImportDefaultSortLabel(sortField, sortDirection, sortFieldOptions, sortDirectionOptions),
-    selectedCountLabel: getIssueImportSelectedResultCountLabel(selectedCount, visibleCount, totalCount),
+    selectedCountLabel: getIssueImportSelectedResultCountLabel(
+      selectedCount,
+      visibleCount,
+      totalCount,
+      resultNounSingular,
+      resultNounPlural,
+    ),
   };
 };
 
@@ -355,9 +488,31 @@ export const buildIssueImportMetadataRows = (source: IssueImportMetadataSource):
   const rows: IssueImportMetadataRow[] = [];
   const provider = getIssueImportProviderMetadata(source.provider);
   const issueRef = normalizeText(source.issueKey) ?? (source.issueNumber ? `#${source.issueNumber}` : null);
+  const sourceLabel = source.provider === "jira"
+    ? "Project"
+    : source.provider === "notion"
+      ? "Source"
+      : source.provider === "asana"
+        ? "Workspace"
+        : source.provider === "linear"
+          ? "Team"
+          : source.provider === "miro"
+            ? "Board"
+            : source.provider === "lucid"
+              ? "Documents"
+              : source.provider === "figma"
+                ? "Files"
+                : source.provider === "mural"
+                  ? "Workspace"
+          : "Repository";
 
   addMetadataRow(rows, "provider", "Provider", provider.label);
-  addMetadataRow(rows, "repository", source.provider === "jira" ? "Project" : "Repository", normalizeText(source.projectKey) ?? source.repository);
+  addMetadataRow(rows, "sourceKind", "Kind", formatSourceKind(source.provider, source.sourceKind));
+  addMetadataRow(rows, "externalId", "External ID", source.externalId);
+  addMetadataRow(rows, "repository", sourceLabel, normalizeText(source.teamKey) ?? normalizeText(source.projectKey) ?? source.repository);
+  addMetadataRow(rows, "workspace", "Workspace", source.workspaceId);
+  addMetadataRow(rows, "teamId", "Team ID", source.teamId);
+  addMetadataRow(rows, "database", "Database", source.databaseId);
   addMetadataRow(rows, "issue", "Issue", issueRef);
   addMetadataRow(rows, "state", "State", formatState(source.state));
   addMetadataRow(rows, "type", "Type", source.issueType);
@@ -415,15 +570,34 @@ export const getIssueImportEmptyStateCopy = (
   hasSearched: boolean,
 ): IssueImportEmptyStateCopy => {
   const providerLabel = getIssueImportProviderMetadata(provider).label;
+  const noun = provider === "notion"
+    ? "items"
+    : provider === "asana"
+      ? "tasks"
+      : provider === "miro"
+        ? "boards or canvas items"
+        : provider === "lucid"
+          ? "documents"
+          : provider === "figma"
+            ? "files"
+            : provider === "mural"
+              ? "murals"
+      : "issues";
   if (!hasSearched) {
     return {
-      title: `Search ${providerLabel} issues`,
-      description: "Choose filters and run a search to preview importable sprint context.",
+      title: `Search ${providerLabel} ${noun}`,
+      description: provider === "figma"
+        ? "Paste a Figma file key or explicit file keys to preview read-only importable context."
+        : provider === "mural"
+          ? "Paste a workspace ID or mural ID to preview metadata and readable content available to the token."
+          : "Choose filters and run a search to preview importable sprint context.",
     };
   }
   return {
-    title: `No ${providerLabel} issues found`,
-    description: "Adjust the filters, broaden the repository scope, or search for an exact issue key.",
+    title: `No ${providerLabel} ${noun} found`,
+    description: provider === "miro" || provider === "lucid" || provider === "figma" || provider === "mural"
+      ? "Check the pasted identifier, broaden search text, or use exact external IDs for readable canvas scope."
+      : "Adjust the filters, broaden the repository scope, or search for an exact issue key.",
   };
 };
 
@@ -437,3 +611,26 @@ export const getIssueImportErrorCopy = (
     message: normalizeText(message) ?? fallbackMessage,
   };
 };
+
+function formatSourceKind(provider: IssueImportProvider, sourceKind: string | null | undefined): string | null {
+  const normalized = normalizeText(sourceKind);
+  if (!normalized) {
+    return null;
+  }
+  if (provider === "miro" && normalized === "board") {
+    return "Board";
+  }
+  if (provider === "miro" && normalized === "canvas") {
+    return "Canvas item";
+  }
+  if (provider === "lucid" && normalized === "document") {
+    return "Document";
+  }
+  if (provider === "figma" && normalized === "file") {
+    return "File";
+  }
+  if (provider === "mural" && normalized === "canvas") {
+    return "Canvas";
+  }
+  return normalized.replace(/[_-]+/g, " ");
+}

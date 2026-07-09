@@ -19,6 +19,9 @@ import {
   getProviderInstanceLabel,
   getProviderInstanceModelOptions,
   getProviderModelOptions,
+  getProviderThinkingModeLabel,
+  getProviderThinkingModeOptions,
+  getProviderThinkingModeValue,
   getProviderTypeLabel,
   getSystemIntegrationProviders,
   providerSupportsModelSelection,
@@ -132,7 +135,6 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
     externalHints,
     activeInvocationRoute,
     setActiveInvocationRoute,
-    thinkingModeOptions,
     invocationRouteDefinitions,
     routingProfileOptions,
     updateEditableSettings,
@@ -199,6 +201,17 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
       editableSettings.workers.model === "default" ? workerProviderSettings.model : editableSettings.workers.model,
     )
     : null;
+  const getThinkingSelectValue = (
+    provider: ProjectSettings["aiProvider"]["providers"][ProviderConfigId],
+    value: string | undefined,
+  ): string => {
+    const options = getProviderThinkingModeOptions(provider.provider);
+    const candidate = value || provider.thinkingMode;
+    const normalized = getProviderThinkingModeValue(provider.provider, candidate as ThinkingMode);
+    return options.some((option) => option.value === normalized)
+      ? normalized
+      : options[0]?.value || candidate;
+  };
 
   const updateProviderSettings = (
     providerConfigId: ProviderConfigId,
@@ -262,6 +275,43 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
         },
       },
     }));
+  };
+
+  const clearRouteProviderOverrideField = (
+    routeId: InvocationRoutingId,
+    providerConfigId: ProviderConfigId,
+    field: keyof ProjectSettings["aiProvider"]["invocationRouting"][InvocationRoutingId]["providers"][ProviderConfigId],
+  ): void => {
+    updateEditableSettings((current) => {
+      const route = current.aiProvider.invocationRouting[routeId];
+      const currentOverride = route.providers[providerConfigId];
+      if (!currentOverride || !(field in currentOverride)) {
+        return current;
+      }
+
+      const nextOverride = { ...currentOverride };
+      delete nextOverride[field];
+      const nextProviders = { ...route.providers };
+      if (Object.keys(nextOverride).length > 0) {
+        nextProviders[providerConfigId] = nextOverride;
+      } else {
+        delete nextProviders[providerConfigId];
+      }
+
+      return {
+        ...current,
+        aiProvider: {
+          ...current.aiProvider,
+          invocationRouting: {
+            ...current.aiProvider.invocationRouting,
+            [routeId]: {
+              ...route,
+              providers: nextProviders,
+            },
+          },
+        },
+      };
+    });
   };
 
   const clearRouteProviderOverride = (
@@ -553,7 +603,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                   </div>
                   <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
                     <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Thinking</div>
-                    <div className="mt-1 truncate text-sm font-semibold text-slate-900 dark:text-white">{provider.provider === "jules" ? "n/a" : provider.thinkingMode}</div>
+                    <div className="mt-1 truncate text-sm font-semibold text-slate-900 dark:text-white">{providerSupportsThinkingMode(provider.provider) ? getProviderThinkingModeLabel(provider.provider, provider.thinkingMode) : "n/a"}</div>
                   </div>
                   <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
                     <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Cap</div>
@@ -579,10 +629,10 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                   {providerSupportsThinkingMode(provider.provider) ? (
                     <Row label="Base thinking" description="Inherited reasoning depth for this provider instance.">
                         <SelectInput
-                          value={provider.thinkingMode}
+                          value={getThinkingSelectValue(provider, provider.thinkingMode)}
                           aria-label={`${provider.name} base thinking`}
                           onChange={(value) => updateProviderSettings(providerConfigId, { thinkingMode: value as ThinkingMode })}
-                        options={thinkingModeOptions}
+                        options={getProviderThinkingModeOptions(provider.provider)}
                       />
                     </Row>
                   ) : null}
@@ -849,7 +899,9 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                 const detailsId = `route-override-details-${cardKey}`;
                 const effectiveModel = getEffectiveProviderDisplayModel(providerConfigId, provider, override.model || provider.model);
                 const inheritedModel = getEffectiveProviderDisplayModel(providerConfigId, provider);
-                const effectiveThinking = (override.thinkingMode || provider.thinkingMode) as string;
+                const effectiveThinking = getThinkingSelectValue(provider, override.thinkingMode);
+                const inheritedThinkingLabel = getProviderThinkingModeLabel(provider.provider, provider.thinkingMode);
+                const hasThinkingOverride = typeof override.thinkingMode === "string";
                 const effectiveWeight = override.weight ?? provider.weight;
                 const supportsModel = providerSupportsModelSelection(provider.provider);
                 return (
@@ -919,7 +971,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                         </div>
                         <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
                           <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Thinking</div>
-                          <div className="mt-1 truncate text-sm font-semibold text-slate-900 dark:text-white">{provider.provider === "jules" ? "n/a" : effectiveThinking}</div>
+                          <div className="mt-1 truncate text-sm font-semibold text-slate-900 dark:text-white">{providerSupportsThinkingMode(provider.provider) ? getProviderThinkingModeLabel(provider.provider, effectiveThinking as ThinkingMode) : "n/a"}</div>
                         </div>
                         <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
                           <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Cap</div>
@@ -943,12 +995,21 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                           </Row>
                         ) : null}
                         {providerSupportsThinkingMode(provider.provider) ? (
-                          <Row label="Thinking override" description={`Inherited: ${provider.thinkingMode}`}>
+                          <Row label="Thinking override" description={`Inherited: ${inheritedThinkingLabel}`}>
                               <SelectInput
-                                value={(override.thinkingMode || provider.thinkingMode) as string}
+                                value={hasThinkingOverride ? effectiveThinking : INHERIT_VALUE}
                                 aria-label={`${provider.name} thinking override for ${activeRouteDefinition.label}`}
-                                onChange={(value) => updateRouteProviderOverride(activeRouteDefinition.id, providerConfigId, { thinkingMode: value as ThinkingMode })}
-                              options={thinkingModeOptions}
+                                onChange={(value) => {
+                                  if (value === INHERIT_VALUE) {
+                                    clearRouteProviderOverrideField(activeRouteDefinition.id, providerConfigId, "thinkingMode");
+                                    return;
+                                  }
+                                  updateRouteProviderOverride(activeRouteDefinition.id, providerConfigId, { thinkingMode: value as ThinkingMode });
+                                }}
+                              options={[
+                                { value: INHERIT_VALUE, label: `Inherit base thinking (${inheritedThinkingLabel})` },
+                                ...getProviderThinkingModeOptions(provider.provider),
+                              ]}
                             />
                           </Row>
                         ) : null}

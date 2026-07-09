@@ -167,6 +167,58 @@ describe("DashboardRealtimeEventRepository", () => {
     expect(repository.hasNonReplayableEventsSince(["project:project-1"], 60)).toBe(false);
   });
 
+  it("replays only replayable events within the requested bounded window", async () => {
+    const storage = await createStorage();
+    const repository = new DashboardRealtimeEventRepository(storage);
+
+    for (let index = 0; index < 10; index += 1) {
+      repository.appendEvent({
+        scopeType: "project",
+        scopeId: "project-1",
+        eventType: "project.live.updated",
+        entityType: "project_live",
+        entityId: "project-1",
+        projectId: "project-1",
+        replayable: false,
+        payload: { tick: index },
+      });
+      repository.appendEvent({
+        scopeType: "project",
+        scopeId: "project-1",
+        eventType: "conversation.message.created",
+        entityType: "conversation_message",
+        entityId: `message-${index}`,
+        projectId: "project-1",
+        payload: { id: `message-${index}` },
+      });
+    }
+
+    const replay = repository.listEventsSince(["project:project-1"], 0, 3);
+
+    expect(countPersistedRows(storage)).toBe(10);
+    expect(replay).toHaveLength(3);
+    expect(replay.map((event) => event.sequence)).toEqual([2, 4, 6]);
+    expect(replay.every((event) => event.eventType === "conversation.message.created")).toBe(true);
+  });
+
+  it("ignores invalid replay scopes instead of scanning all history", async () => {
+    const repository = await createRepository();
+
+    repository.appendEvent({
+      scopeType: "project",
+      scopeId: "project-1",
+      eventType: "conversation.message.created",
+      entityType: "conversation_message",
+      entityId: "message-1",
+      projectId: "project-1",
+      payload: { id: "message-1" },
+    });
+
+    expect(repository.listEventsSince(["", "invalid", "project:"], 0, 200)).toEqual([]);
+    expect(repository.getLatestSequenceForScopes(["", "invalid", "project:"])).toBeNull();
+    expect(repository.hasNonReplayableEventsSince(["", "invalid", "project:"], 0)).toBe(false);
+  });
+
   it("reseeds the sequence from persisted rows after a restart", async () => {
     const storage = await createStorage();
     const first = new DashboardRealtimeEventRepository(storage);

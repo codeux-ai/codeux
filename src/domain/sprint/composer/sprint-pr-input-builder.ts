@@ -13,6 +13,7 @@ export interface BuildSprintPrComposerInputArgs {
   aiProviderSettings: AiProviderSettings;
   sections: SprintPrTemplateSections;
   sectionOrder?: SprintPrSectionKey[];
+  completionTimestamp?: string;
   executionRepository: ExecutionRepository;
 }
 
@@ -38,6 +39,7 @@ export function buildSprintPrComposerInput(args: BuildSprintPrComposerInputArgs)
   );
 
   const sprintRun = executionRepository.getSprintRun(args.sprintRunId);
+  const finishedAt = sprintRun?.finishedAt ?? args.completionTimestamp ?? null;
 
   const aggregateGroups = executionRepository.getSprintUsageGroups(sprint.projectId, sprint.id);
   const aggregateUsage = aggregateGroups.length > 0 ? foldUsageGroups(aggregateGroups, providerConfigs) : null;
@@ -82,7 +84,7 @@ export function buildSprintPrComposerInput(args: BuildSprintPrComposerInputArgs)
     planning,
     aggregateUsage,
     startedAt: sprintRun?.startedAt ?? null,
-    finishedAt: sprintRun?.finishedAt ?? null,
+    finishedAt,
     qa,
     sections: args.sections,
     sectionOrder: args.sectionOrder,

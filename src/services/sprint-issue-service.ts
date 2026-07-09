@@ -20,15 +20,35 @@ import { createLogger, type Logger } from "../shared/logging/logger.js";
 import { resolveRepositoryHost } from "../infrastructure/git/repository-host-resolver.js";
 import { execFile } from "child_process";
 import * as jiraApiClient from "./jira-api-client.js";
+import * as notionApiClient from "./notion-api-client.js";
+import * as asanaApiClient from "./asana-api-client.js";
+import * as linearApiClient from "./linear-api-client.js";
+import * as miroApiClient from "./miro-api-client.js";
+import * as lucidApiClient from "./lucid-api-client.js";
+import * as figmaApiClient from "./figma-api-client.js";
+import * as muralApiClient from "./mural-api-client.js";
 
 export interface IssueSearchInput {
   provider?: LinkedIssueProvider;
   repository?: string;
   hostDomain?: string;
+  workspaceId?: string;
+  projectId?: string;
+  providerProjectId?: string;
+  teamId?: string;
+  teamKey?: string;
+  databaseId?: string;
+  boardId?: string;
+  documentId?: string;
+  fileKey?: string;
+  muralId?: string;
+  itemTypes?: string[];
   projectKey?: string;
   search?: string;
-  state?: RepositoryIssueSearchInput["state"];
-  status?: JiraIssueSearchInput["status"];
+  state?: RepositoryIssueSearchInput["state"] | string;
+  status?: JiraIssueSearchInput["status"] | string;
+  inProgressStatusName?: string;
+  statusNames?: string[];
   labels?: string[];
   assignee?: string;
   assigneeText?: string;
@@ -39,6 +59,7 @@ export interface IssueSearchInput {
   issueKeys?: string[];
   issueNumbers?: number[];
   issueRefs?: string[];
+  externalIds?: string[];
   includeConversation?: boolean;
   createdAfter?: string;
   createdBefore?: string;
@@ -55,12 +76,30 @@ interface IssueServiceDeps {
   runCommand?: (command: string, args: string[]) => Promise<LocalCommandResult>;
   logger?: Logger;
   jiraApiClient?: typeof jiraApiClient;
+  notionApiClient?: typeof notionApiClient;
+  asanaApiClient?: typeof asanaApiClient;
+  linearApiClient?: typeof linearApiClient;
+  miroApiClient?: typeof miroApiClient;
+  lucidApiClient?: typeof lucidApiClient;
+  figmaApiClient?: typeof figmaApiClient;
+  muralApiClient?: typeof muralApiClient;
 }
 
 interface LocalCommandResult {
   ok: boolean;
   stdout: string;
   stderr: string;
+}
+
+export interface LinkedIssueImportTransitionWarning {
+  issueId: string;
+  issueKey: string;
+  message: string;
+}
+
+export interface LinkedIssueImportResult {
+  linkedIssues: SprintLinkedIssueRecord[];
+  warnings: LinkedIssueImportTransitionWarning[];
 }
 
 export class SprintIssueService {
@@ -76,6 +115,7 @@ export class SprintIssueService {
     apiToken: string,
     input: string | JiraIssueSearchInput,
     defaultProjectKey = '',
+    effectiveInProgressStatusName = '',
   ): Promise<JiraIssueSearchResult[]> {
     if (!this.deps.jiraApiClient) {
       throw new Error("Jira API client is not injected.");
@@ -85,12 +125,82 @@ export class SprintIssueService {
     }
     const searchInput = typeof input === "string"
       ? input
-      : normalizeJiraIssueSearchInput({ ...input, projectKey: input.projectKey || defaultProjectKey });
+      : normalizeJiraIssueSearchInput({
+        ...input,
+        projectKey: input.projectKey || defaultProjectKey,
+        inProgressStatusName: input.inProgressStatusName || effectiveInProgressStatusName,
+      });
     return this.deps.jiraApiClient.searchIssues(host, email, apiToken, searchInput);
+  }
+
+  async searchJiraProjectStatuses(projectId: string, projectKey: string | undefined): Promise<jiraApiClient.JiraProjectStatus[]> {
+    this.requireProject(projectId);
+    if (!this.deps.jiraApiClient) {
+      throw new Error("Jira API client is not injected.");
+    }
+    const settings = this.deps.getDashboardSettings({ projectId });
+    if (!settings.jira.host.trim() || !settings.jira.apiToken.trim()) {
+      throw new Error("Jira site URL and API token must be configured in Settings -> Integrations.");
+    }
+    const effectiveProjectKey = projectKey?.trim() || settings.jira.defaultProject.trim();
+    if (!effectiveProjectKey) {
+      throw new Error("Jira project key is required.");
+    }
+    return this.deps.jiraApiClient.listProjectStatuses(
+      settings.jira.host,
+      settings.jira.email,
+      settings.jira.apiToken,
+      effectiveProjectKey,
+    );
   }
 
   replaceLinkedIssues(sprintId: string, projectId: string, issues: SprintLinkedIssueInput[]): SprintLinkedIssueRecord[] {
     return this.deps.projectManagementRepository.replaceSprintLinkedIssues(projectId, sprintId, issues);
+  }
+
+  async importLinkedIssues(sprintId: string, projectId: string, issues: SprintLinkedIssueInput[]): Promise<LinkedIssueImportResult> {
+    const linkedIssues = this.replaceLinkedIssues(sprintId, projectId, issues);
+    const warnings = await this.transitionLinkedJiraIssuesOnImport(projectId, sprintId, linkedIssues);
+    return { linkedIssues, warnings };
+  }
+
+  async transitionLinkedJiraIssuesOnImport(
+    projectId: string,
+    sprintId: string,
+    linkedIssues: SprintLinkedIssueRecord[],
+  ): Promise<LinkedIssueImportTransitionWarning[]> {
+    const jiraIssues = linkedIssues.filter((issue) => issue.provider === "jira");
+    if (jiraIssues.length === 0) {
+      return [];
+    }
+
+    const settings = this.deps.getDashboardSettings({ projectId, sprintId });
+    if (!settings.jira.autoTransitionLinkedIssuesOnImport) {
+      return [];
+    }
+
+    const warnings: LinkedIssueImportTransitionWarning[] = [];
+    for (const issue of jiraIssues) {
+      try {
+        await this.transitionImportedJiraIssue(issue, settings);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        warnings.push({
+          issueId: issue.id,
+          issueKey: issue.issueKey,
+          message,
+        });
+        this.logger.warn("Failed to transition imported Jira issue", {
+          projectId,
+          sprintId,
+          issueId: issue.id,
+          issueKey: issue.issueKey,
+          transitionName: settings.jira.importTransitionName?.trim() || "In Work",
+          error: message,
+        });
+      }
+    }
+    return warnings;
   }
 
   getLinkedIssues(sprintId: string): SprintLinkedIssueRecord[] {
@@ -112,13 +222,41 @@ export class SprintIssueService {
       return this.searchJiraIssuesForProject(project, searchInput, settings, limit);
     }
 
+    if (provider === "notion") {
+      return this.searchNotionSources(searchInput, settings, limit);
+    }
+
+    if (provider === "asana") {
+      return this.searchAsanaTasks(searchInput, settings, limit);
+    }
+
+    if (provider === "linear") {
+      return this.searchLinearIssues(searchInput, settings, limit);
+    }
+
+    if (provider === "miro") {
+      return this.searchMiroSources(searchInput, settings, limit);
+    }
+
+    if (provider === "lucid") {
+      return this.searchLucidDocuments(searchInput, settings, limit);
+    }
+
+    if (provider === "figma") {
+      return this.searchFigmaFiles(searchInput, settings, limit);
+    }
+
+    if (provider === "mural") {
+      return this.searchMuralSources(searchInput, settings, limit);
+    }
+
     const target = resolveIssueTarget(project, searchInput, provider);
     if (target.provider === "github") {
       return this.searchGitHubIssues({
         ...target,
         token: settings.git.githubToken,
         search: searchInput.search,
-        state: searchInput.state || "open",
+        state: normalizeRepositoryIssueStateValue(searchInput.state) || "open",
         labels: searchInput.labels || [],
         assignee: searchInput.assignee,
         author: searchInput.author,
@@ -139,7 +277,7 @@ export class SprintIssueService {
       ...target,
       token: settings.git.gitlabToken || "",
       search: searchInput.search,
-      state: searchInput.state || "open",
+      state: normalizeRepositoryIssueStateValue(searchInput.state) || "open",
       labels: searchInput.labels || [],
       assignee: searchInput.assignee,
       author: searchInput.author,
@@ -183,6 +321,20 @@ export class SprintIssueService {
         contexts.push(await this.getGitHubIssuePromptContext(issue, settings.git.githubToken || ""));
       } else if (issue.provider === "gitlab") {
         contexts.push(await this.getGitLabIssuePromptContext(issue, settings.git.gitlabToken || ""));
+      } else if (issue.provider === "notion") {
+        contexts.push(await this.getNotionPromptContext(issue, settings));
+      } else if (issue.provider === "asana") {
+        contexts.push(await this.getAsanaPromptContext(issue, settings));
+      } else if (issue.provider === "linear") {
+        contexts.push(await this.getLinearPromptContext(issue, settings));
+      } else if (issue.provider === "miro") {
+        contexts.push(await this.getMiroPromptContext(issue, settings));
+      } else if (issue.provider === "lucid") {
+        contexts.push(await this.getLucidPromptContext(issue, settings));
+      } else if (issue.provider === "figma") {
+        contexts.push(await this.getFigmaPromptContext(issue, settings));
+      } else if (issue.provider === "mural") {
+        contexts.push(await this.getMuralPromptContext(issue, settings));
       } else {
         contexts.push(await this.getJiraIssuePromptContext(issue, settings));
       }
@@ -312,6 +464,36 @@ export class SprintIssueService {
     });
   }
 
+  private async transitionImportedJiraIssue(issue: SprintLinkedIssueRecord, settings: DashboardSettings): Promise<void> {
+    if (!this.deps.jiraApiClient) {
+      throw new Error("Jira API client is not injected.");
+    }
+    if (!settings.jira.host.trim() || !settings.jira.apiToken.trim()) {
+      throw new Error("Jira site URL and API token must be configured in Settings -> Integrations.");
+    }
+
+    const importTransitionName = settings.jira.importTransitionName?.trim() || "In Work";
+    const transitions = await this.deps.jiraApiClient.getTransitions(
+      settings.jira.host,
+      settings.jira.email,
+      settings.jira.apiToken,
+      issue.issueKey,
+    );
+    const importTransition = transitions.find((transition: jiraApiClient.JiraTransition) =>
+      transition.name.toLowerCase() === importTransitionName.toLowerCase()
+    );
+    if (!importTransition) {
+      throw new Error(`Transition '${importTransitionName}' not found for Jira issue ${issue.issueKey}`);
+    }
+    await this.deps.jiraApiClient.transitionIssue(
+      settings.jira.host,
+      settings.jira.email,
+      settings.jira.apiToken,
+      issue.issueKey,
+      importTransition.id,
+    );
+  }
+
   private async searchGitHubIssues(args: ResolvedIssueTarget & SearchRuntimeOptions): Promise<RepositoryIssueSearchResult[]> {
     const token = args.token?.trim();
     if (!token) {
@@ -386,7 +568,9 @@ export class SprintIssueService {
     const jiraInput: JiraIssueSearchInput = {
       projectKey: input.projectKey || settings.jira.defaultProject,
       search: input.search,
-      status: input.status,
+      status: normalizeJiraIssueStatusValue(input.status),
+      inProgressStatusName: input.inProgressStatusName || settings.jira.importTransitionName?.trim() || "In Work",
+      statusNames: input.statusNames || [],
       assignee: normalizeJiraAssignee(input.assignee),
       assigneeText: input.assigneeText || input.assignee,
       labels: input.labels || [],
@@ -410,6 +594,185 @@ export class SprintIssueService {
     );
     const hostDomain = jiraHostDomain(settings.jira.host);
     return issues.map((issue) => normalizeJiraIssueSummary(issue, hostDomain, project));
+  }
+
+  private async searchNotionSources(
+    input: IssueSearchInput,
+    settings: DashboardSettings,
+    limit: number,
+  ): Promise<RepositoryIssueSearchResult[]> {
+    const token = settings.notion.apiToken.trim();
+    if (!token) {
+      throw new Error("Notion API token must be configured in Settings -> Integrations.");
+    }
+    const client = this.deps.notionApiClient ?? notionApiClient;
+    const externalIds = input.externalIds || [];
+    const items = externalIds.length > 0
+      ? await client.getObjects(token, externalIds, limit)
+      : await client.searchObjects(token, {
+        search: input.search,
+        databaseId: input.databaseId || settings.notion.databaseId || undefined,
+        limit: effectiveImporterLimit(limit, settings.notion.defaultSearchLimit),
+      });
+    return items.map((item) => normalizeNotionItem(item));
+  }
+
+  private async searchAsanaTasks(
+    input: IssueSearchInput,
+    settings: DashboardSettings,
+    limit: number,
+  ): Promise<RepositoryIssueSearchResult[]> {
+    const token = settings.asana.apiToken.trim();
+    if (!token) {
+      throw new Error("Asana API token must be configured in Settings -> Integrations.");
+    }
+    const workspaceId = input.workspaceId || settings.asana.workspaceId || undefined;
+    const providerProjectId = input.providerProjectId || settings.asana.projectId || undefined;
+    if (!workspaceId && !providerProjectId && !(input.externalIds && input.externalIds.length > 0)) {
+      throw new Error("Asana workspace ID or project ID must be configured in Settings -> Integrations.");
+    }
+    const client = this.deps.asanaApiClient ?? asanaApiClient;
+    const items = await client.searchTasks(token, {
+      workspaceId,
+      projectId: providerProjectId,
+      search: input.search,
+      status: input.status,
+      labels: input.labels || [],
+      assignee: input.assignee,
+      externalIds: input.externalIds,
+      includeConversation: input.includeConversation === true,
+      limit: effectiveImporterLimit(limit, settings.asana.defaultSearchLimit),
+    });
+    return items.map((item) => normalizeAsanaTask(item));
+  }
+
+  private async searchLinearIssues(
+    input: IssueSearchInput,
+    settings: DashboardSettings,
+    limit: number,
+  ): Promise<RepositoryIssueSearchResult[]> {
+    const token = settings.linear.apiToken.trim();
+    if (!token) {
+      throw new Error("Linear API token must be configured in Settings -> Integrations.");
+    }
+    const client = this.deps.linearApiClient ?? linearApiClient;
+    const items = input.externalIds && input.externalIds.length > 0
+      ? await client.getIssues(token, input.externalIds, {
+        includeConversation: input.includeConversation !== false,
+        limit: effectiveImporterLimit(limit, settings.linear.defaultSearchLimit),
+      })
+      : await client.searchIssues(token, {
+        search: input.search,
+        status: input.status,
+        state: input.state,
+        labels: input.labels || [],
+        assignee: input.assignee,
+        teamId: input.teamId || settings.linear.teamId || undefined,
+        teamKey: input.teamKey || settings.linear.teamKey || undefined,
+        projectId: input.providerProjectId || settings.linear.projectId || undefined,
+        includeConversation: input.includeConversation === true,
+        limit: effectiveImporterLimit(limit, settings.linear.defaultSearchLimit),
+      });
+    return items.map((item) => normalizeLinearIssue(item));
+  }
+
+  private async searchMiroSources(
+    input: IssueSearchInput,
+    settings: DashboardSettings,
+    limit: number,
+  ): Promise<RepositoryIssueSearchResult[]> {
+    const token = settings.miro.apiToken.trim();
+    if (!token) {
+      throw new Error("Miro API token must be configured in Settings -> Integrations.");
+    }
+    const boardId = input.boardId || settings.miro.boardId || undefined;
+    if (!boardId && !input.search) {
+      throw new Error("Miro board ID or search query must be configured in Settings -> Integrations.");
+    }
+    const client = this.deps.miroApiClient ?? miroApiClient;
+    const items = await client.searchBoards(token, {
+      boardId,
+      search: input.search,
+      itemTypes: input.itemTypes || [],
+      externalIds: input.externalIds,
+      limit: effectiveImporterLimit(limit, settings.miro.defaultSearchLimit),
+      baseUrl: settings.miro.baseUrl || undefined,
+    });
+    return items.map((item) => normalizeMiroItem(item));
+  }
+
+  private async searchLucidDocuments(
+    input: IssueSearchInput,
+    settings: DashboardSettings,
+    limit: number,
+  ): Promise<RepositoryIssueSearchResult[]> {
+    const token = settings.lucid.apiToken.trim();
+    if (!token) {
+      throw new Error("Lucid API token must be configured in Settings -> Integrations.");
+    }
+    const documentId = input.documentId || settings.lucid.documentId || undefined;
+    if (!documentId && !input.search && !(input.externalIds && input.externalIds.length > 0)) {
+      throw new Error("Lucid document ID or search query must be configured in Settings -> Integrations.");
+    }
+    const client = this.deps.lucidApiClient ?? lucidApiClient;
+    const items = await client.searchDocuments(token, {
+      documentId,
+      search: input.search,
+      externalIds: input.externalIds,
+      limit: effectiveImporterLimit(limit, settings.lucid.defaultSearchLimit),
+      baseUrl: settings.lucid.baseUrl || undefined,
+    });
+    return items.map((item) => normalizeLucidDocument(item));
+  }
+
+  private async searchFigmaFiles(
+    input: IssueSearchInput,
+    settings: DashboardSettings,
+    limit: number,
+  ): Promise<RepositoryIssueSearchResult[]> {
+    const token = settings.figma.apiToken.trim();
+    if (!token) {
+      throw new Error("Figma API token must be configured in Settings -> Integrations.");
+    }
+    const fileKey = input.fileKey || settings.figma.fileKey || undefined;
+    if (!fileKey && !(input.externalIds && input.externalIds.length > 0)) {
+      throw new Error("Figma file key must be configured in Settings -> Integrations.");
+    }
+    const client = this.deps.figmaApiClient ?? figmaApiClient;
+    const items = await client.getFiles(token, {
+      fileKey,
+      externalIds: input.externalIds,
+      includeConversation: input.includeConversation === true,
+      limit: effectiveImporterLimit(limit, settings.figma.defaultSearchLimit),
+      baseUrl: settings.figma.baseUrl || undefined,
+    });
+    return items.map((item) => normalizeFigmaFile(item));
+  }
+
+  private async searchMuralSources(
+    input: IssueSearchInput,
+    settings: DashboardSettings,
+    limit: number,
+  ): Promise<RepositoryIssueSearchResult[]> {
+    const token = settings.mural.apiToken.trim();
+    if (!token) {
+      throw new Error("Mural API token must be configured in Settings -> Integrations.");
+    }
+    const workspaceId = input.workspaceId || settings.mural.workspaceId || undefined;
+    const muralId = input.muralId || settings.mural.boardId || undefined;
+    if (!workspaceId && !muralId && !(input.externalIds && input.externalIds.length > 0)) {
+      throw new Error("Mural workspace ID or mural ID must be configured in Settings -> Integrations.");
+    }
+    const client = this.deps.muralApiClient ?? muralApiClient;
+    const items = await client.searchMurals(token, {
+      workspaceId,
+      muralId,
+      search: input.search,
+      externalIds: input.externalIds,
+      limit: effectiveImporterLimit(limit, settings.mural.defaultSearchLimit),
+      baseUrl: settings.mural.baseUrl || undefined,
+    });
+    return items.map((item) => normalizeMuralItem(item));
   }
 
   private async getGitHubIssuePromptContext(input: IssuePromptContextInput, tokenValue: string): Promise<IssuePromptContext> {
@@ -611,6 +974,216 @@ export class SprintIssueService {
     });
   }
 
+  private async getNotionPromptContext(input: IssuePromptContextInput, settings: DashboardSettings): Promise<IssuePromptContext> {
+    const token = settings.notion.apiToken.trim();
+    if (!token) {
+      throw new Error("Notion API token must be configured in Settings -> Integrations.");
+    }
+    const externalId = requireExternalPromptId(input, "Notion");
+    const client = this.deps.notionApiClient ?? notionApiClient;
+    const item = (await client.getObjects(token, [externalId], 1))[0];
+    if (!item) {
+      throw new Error(`Notion source not found: ${externalId}`);
+    }
+    return buildIssuePromptContext(input, {
+      title: item.title,
+      url: item.url,
+      state: item.archived ? "archived" : "open",
+      body: item.bodyMarkdown,
+      author: null,
+      createdAt: item.createdTime,
+      updatedAt: item.lastEditedTime,
+      labels: [item.object],
+      assignees: [],
+      conversationMarkdown: "",
+      includeConversation: false,
+    });
+  }
+
+  private async getAsanaPromptContext(input: IssuePromptContextInput, settings: DashboardSettings): Promise<IssuePromptContext> {
+    const token = settings.asana.apiToken.trim();
+    if (!token) {
+      throw new Error("Asana API token must be configured in Settings -> Integrations.");
+    }
+    const externalId = requireExternalPromptId(input, "Asana");
+    const client = this.deps.asanaApiClient ?? asanaApiClient;
+    const item = (await client.getTasks(token, [externalId], {
+      includeConversation: input.includeConversation !== false,
+      limit: 1,
+    }))[0];
+    if (!item) {
+      throw new Error(`Asana task not found: ${externalId}`);
+    }
+    return buildIssuePromptContext(input, {
+      title: item.title,
+      url: item.url,
+      state: item.state,
+      body: item.bodyMarkdown,
+      author: item.issueAuthor,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      labels: item.labels,
+      assignees: item.assignees,
+      conversationMarkdown: item.conversationMarkdown,
+      includeConversation: input.includeConversation !== false,
+    });
+  }
+
+  private async getLinearPromptContext(input: IssuePromptContextInput, settings: DashboardSettings): Promise<IssuePromptContext> {
+    const token = settings.linear.apiToken.trim();
+    if (!token) {
+      throw new Error("Linear API token must be configured in Settings -> Integrations.");
+    }
+    const externalId = requireExternalPromptId(input, "Linear");
+    const client = this.deps.linearApiClient ?? linearApiClient;
+    const item = (await client.getIssues(token, [externalId], {
+      includeConversation: input.includeConversation !== false,
+      limit: 1,
+    }))[0];
+    if (!item) {
+      throw new Error(`Linear issue not found: ${externalId}`);
+    }
+    return buildIssuePromptContext(input, {
+      title: item.title,
+      url: item.url,
+      state: item.state,
+      body: item.bodyMarkdown,
+      author: item.issueAuthor,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      labels: item.labels,
+      assignees: item.assignees,
+      conversationMarkdown: item.conversationMarkdown,
+      includeConversation: input.includeConversation !== false,
+    });
+  }
+
+  private async getMiroPromptContext(input: IssuePromptContextInput, settings: DashboardSettings): Promise<IssuePromptContext> {
+    const token = settings.miro.apiToken.trim();
+    if (!token) {
+      throw new Error("Miro API token must be configured in Settings -> Integrations.");
+    }
+    const boardId = input.repository || settings.miro.boardId;
+    if (!boardId.trim()) {
+      throw new Error("Miro board ID is required for prompt context.");
+    }
+    const externalId = requireExternalPromptId(input, "Miro");
+    const client = this.deps.miroApiClient ?? miroApiClient;
+    const items = await client.getBoardItems(token, boardId, {
+      externalIds: input.sourceKind === "board" ? [] : [externalId],
+      limit: input.sourceKind === "board" ? 50 : 1,
+      baseUrl: settings.miro.baseUrl || undefined,
+    });
+    const item = input.sourceKind === "board"
+      ? items.find((candidate) => candidate.id === boardId) || items[0]
+      : items[0];
+    if (!item) {
+      throw new Error(`Miro source not found: ${externalId}`);
+    }
+    const boardBody = input.sourceKind === "board"
+      ? formatCanvasItemListMarkdown(items.filter((candidate) => candidate.id !== boardId))
+      : item.bodyMarkdown;
+    return buildIssuePromptContext(input, {
+      title: item.title,
+      url: item.url,
+      state: "open",
+      body: boardBody,
+      author: null,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      labels: [item.type],
+      assignees: [],
+      conversationMarkdown: "",
+      includeConversation: false,
+    });
+  }
+
+  private async getLucidPromptContext(input: IssuePromptContextInput, settings: DashboardSettings): Promise<IssuePromptContext> {
+    const token = settings.lucid.apiToken.trim();
+    if (!token) {
+      throw new Error("Lucid API token must be configured in Settings -> Integrations.");
+    }
+    const externalId = requireExternalPromptId(input, "Lucid");
+    const client = this.deps.lucidApiClient ?? lucidApiClient;
+    const item = (await client.getDocuments(token, [externalId], {
+      limit: 1,
+      baseUrl: settings.lucid.baseUrl || undefined,
+    }))[0];
+    if (!item) {
+      throw new Error(`Lucid document not found: ${externalId}`);
+    }
+    return buildIssuePromptContext(input, {
+      title: item.title,
+      url: item.url,
+      state: "open",
+      body: item.bodyMarkdown,
+      author: null,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      labels: ["document"],
+      assignees: [],
+      conversationMarkdown: "",
+      includeConversation: false,
+    });
+  }
+
+  private async getFigmaPromptContext(input: IssuePromptContextInput, settings: DashboardSettings): Promise<IssuePromptContext> {
+    const token = settings.figma.apiToken.trim();
+    if (!token) {
+      throw new Error("Figma API token must be configured in Settings -> Integrations.");
+    }
+    const externalId = requireExternalPromptId(input, "Figma");
+    const client = this.deps.figmaApiClient ?? figmaApiClient;
+    const item = await client.getFile(token, externalId, {
+      includeConversation: input.includeConversation !== false,
+      limit: 1,
+      baseUrl: settings.figma.baseUrl || undefined,
+    });
+    return buildIssuePromptContext(input, {
+      title: item.title,
+      url: item.url,
+      state: "open",
+      body: item.bodyMarkdown,
+      author: null,
+      createdAt: null,
+      updatedAt: item.updatedAt,
+      labels: ["file"],
+      assignees: [],
+      conversationMarkdown: item.conversationMarkdown,
+      includeConversation: input.includeConversation !== false,
+    });
+  }
+
+  private async getMuralPromptContext(input: IssuePromptContextInput, settings: DashboardSettings): Promise<IssuePromptContext> {
+    const token = settings.mural.apiToken.trim();
+    if (!token) {
+      throw new Error("Mural API token must be configured in Settings -> Integrations.");
+    }
+    const externalId = requireExternalPromptId(input, "Mural");
+    const client = this.deps.muralApiClient ?? muralApiClient;
+    const item = (await client.getMurals(token, [externalId], {
+      workspaceId: input.repository !== "murals" ? input.repository : settings.mural.workspaceId || undefined,
+      limit: 1,
+      baseUrl: settings.mural.baseUrl || undefined,
+    }))[0];
+    if (!item) {
+      throw new Error(`Mural source not found: ${externalId}`);
+    }
+    return buildIssuePromptContext(input, {
+      title: item.title,
+      url: item.url,
+      state: "open",
+      body: item.bodyMarkdown,
+      author: null,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      labels: ["mural", "beta-limited"],
+      assignees: [],
+      conversationMarkdown: "",
+      includeConversation: false,
+    });
+  }
+
   private requireProject(projectId: string): ProjectSummary {
     const project = this.deps.projectManagementRepository.getProject(projectId);
     if (!project) {
@@ -729,8 +1302,8 @@ interface BuildIssuePromptContextOptions {
 
 function resolveIssueProvider(project: ProjectSummary, input: IssueSearchInput): LinkedIssueProvider {
   const provider = input.provider || project.gitProvider;
-  if (provider !== "github" && provider !== "gitlab" && provider !== "jira") {
-    throw new Error("Select a GitHub, GitLab, or Jira-backed project before importing issues.");
+  if (provider === "local" || !isIssueImportProvider(provider)) {
+    throw new Error("Select a GitHub, GitLab, Jira, Notion, Asana, Linear, Miro, Lucid, Figma, or Mural provider before importing issues.");
   }
   return provider;
 }
@@ -776,26 +1349,43 @@ function buildExplicitIssuePromptInputs(
   }
 
   const repositoryProvider = preferredProvider === "gitlab" ? "gitlab" : preferredProvider === "github" ? "github" : undefined;
-  if (!repositoryProvider) {
-    return contexts;
+  if (repositoryProvider) {
+    const target = tryResolveRepositoryIssueTarget(project, input, repositoryProvider);
+    if (target) {
+      for (const issueNumber of collectRepositoryIssueNumbers(input)) {
+        contexts.push({
+          provider: target.provider,
+          hostDomain: target.hostDomain,
+          repository: target.repository,
+          issueNumber,
+          issueKey: `${target.provider === "github" ? "#" : "!"}${issueNumber}`,
+          title: `${target.repository}#${issueNumber}`,
+          url: repositoryIssueUrl(target, issueNumber),
+          includeConversation: input.includeConversation !== false,
+        });
+      }
+    }
   }
 
-  const target = tryResolveRepositoryIssueTarget(project, input, repositoryProvider);
-  if (!target) {
-    return contexts;
-  }
-
-  for (const issueNumber of collectRepositoryIssueNumbers(input)) {
-    contexts.push({
-      provider: target.provider,
-      hostDomain: target.hostDomain,
-      repository: target.repository,
-      issueNumber,
-      issueKey: `${target.provider === "github" ? "#" : "!"}${issueNumber}`,
-      title: `${target.repository}#${issueNumber}`,
-      url: repositoryIssueUrl(target, issueNumber),
-      includeConversation: input.includeConversation !== false,
-    });
+  const externalProvider = isExternalIssueImportProvider(preferredProvider) ? preferredProvider : undefined;
+  if (externalProvider) {
+    const externalIds = collectExternalIds(input, externalProvider);
+    for (const externalId of externalIds) {
+      const sourceKind = resolveExplicitSourceKind(externalProvider, input, externalId);
+      contexts.push({
+        provider: externalProvider,
+        sourceProvider: externalProvider,
+        sourceKind,
+        externalId,
+        hostDomain: defaultHostForExternalProvider(externalProvider),
+        repository: defaultRepositoryForExternalProvider(externalProvider, input, settings),
+        issueNumber: null,
+        issueKey: displayKeyForExternalProvider(externalProvider, externalId, sourceKind),
+        title: displayKeyForExternalProvider(externalProvider, externalId, sourceKind),
+        url: defaultExternalUrl(externalProvider, externalId),
+        includeConversation: input.includeConversation !== false,
+      });
+    }
   }
 
   return contexts;
@@ -847,6 +1437,26 @@ function collectRepositoryIssueNumbers(input: IssueSearchInput): number[] {
     .filter((value) => Number.isFinite(value) && value > 0)));
 }
 
+function collectExternalIds(input: IssueSearchInput, provider: LinkedIssueProvider): string[] {
+  const values = [...(input.externalIds || [])];
+  if (provider === "notion" && input.databaseId) {
+    values.push(input.databaseId);
+  }
+  if (provider === "miro" && input.boardId) {
+    values.push(input.boardId);
+  }
+  if (provider === "lucid" && input.documentId) {
+    values.push(input.documentId);
+  }
+  if (provider === "figma" && input.fileKey) {
+    values.push(input.fileKey);
+  }
+  if (provider === "mural" && input.muralId) {
+    values.push(input.muralId);
+  }
+  return uniqueStrings(values);
+}
+
 function extractJiraIssueKeys(value: string): string[] {
   return Array.from(value.matchAll(/\b([A-Z][A-Z0-9_]+-\d+)\b/gi))
     .map((match) => match[1])
@@ -894,6 +1504,218 @@ function normalizeJiraIssueSummary(issue: JiraIssueSearchResult, hostDomain: str
   };
 }
 
+function normalizeNotionItem(item: notionApiClient.NotionItem): RepositoryIssueSearchResult {
+  const sourceKind = item.object === "database" ? "database" : "page";
+  return {
+    provider: "notion",
+    sourceProvider: "notion",
+    sourceKind,
+    externalId: item.id,
+    hostDomain: "notion.so",
+    repository: sourceKind,
+    issueNumber: null,
+    issueKey: displayKeyForExternalProvider("notion", item.id, item.object),
+    title: item.title,
+    url: item.url,
+    state: item.archived ? "archived" : "open",
+    labels: [item.object],
+    assignees: [],
+    bodyPreview: truncatePreview(item.bodyMarkdown),
+    issueBodyMarkdown: item.bodyMarkdown,
+    createdAt: item.createdTime,
+    updatedAt: item.lastEditedTime,
+    issueAuthor: null,
+    issueReporter: null,
+    issueMilestone: null,
+    issueType: item.object,
+    issuePriority: null,
+    issueCommentCount: null,
+    metadata: item.metadata,
+  };
+}
+
+function normalizeAsanaTask(item: asanaApiClient.AsanaTaskItem): RepositoryIssueSearchResult {
+  return {
+    provider: "asana",
+    sourceProvider: "asana",
+    sourceKind: "task",
+    externalId: item.gid,
+    hostDomain: "app.asana.com",
+    repository: "tasks",
+    issueNumber: null,
+    issueKey: displayKeyForExternalProvider("asana", item.gid),
+    title: item.title,
+    url: item.url,
+    state: item.state,
+    labels: item.labels,
+    assignees: item.assignees,
+    bodyPreview: truncatePreview(item.bodyMarkdown),
+    issueBodyMarkdown: item.bodyMarkdown,
+    issueConversationMarkdown: item.conversationMarkdown,
+    includeConversation: item.conversationMarkdown.trim().length > 0,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    issueAuthor: item.issueAuthor,
+    issueReporter: item.issueAuthor,
+    issueMilestone: null,
+    issueType: "Task",
+    issuePriority: null,
+    issueCommentCount: item.conversationMarkdown ? item.conversationMarkdown.split("##### Comment ").length - 1 : 0,
+    metadata: item.metadata,
+  };
+}
+
+function normalizeLinearIssue(item: linearApiClient.LinearIssueItem): RepositoryIssueSearchResult {
+  return {
+    provider: "linear",
+    sourceProvider: "linear",
+    sourceKind: "issue",
+    externalId: item.id,
+    hostDomain: "linear.app",
+    repository: item.teamKey || "issues",
+    projectKey: item.teamKey || undefined,
+    issueNumber: null,
+    issueKey: item.identifier,
+    title: item.title,
+    url: item.url,
+    state: item.state,
+    labels: item.labels,
+    assignees: item.assignees,
+    bodyPreview: truncatePreview(item.bodyMarkdown),
+    issueBodyMarkdown: item.bodyMarkdown,
+    issueConversationMarkdown: item.conversationMarkdown,
+    includeConversation: item.conversationMarkdown.trim().length > 0,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    issueAuthor: item.issueAuthor,
+    issueReporter: item.issueAuthor,
+    issueMilestone: item.projectName,
+    issueType: "Issue",
+    issuePriority: null,
+    issueCommentCount: item.conversationMarkdown ? item.conversationMarkdown.split("##### Comment ").length - 1 : 0,
+    metadata: item.metadata,
+  };
+}
+
+function normalizeMiroItem(item: miroApiClient.MiroCanvasItem): RepositoryIssueSearchResult {
+  const sourceKind = item.type === "board" ? "board" : "canvas";
+  return {
+    provider: "miro",
+    sourceProvider: "miro",
+    sourceKind,
+    externalId: item.id,
+    hostDomain: "miro.com",
+    repository: item.boardId,
+    issueNumber: null,
+    issueKey: displayKeyForExternalProvider("miro", item.id, sourceKind),
+    title: item.title,
+    url: item.url,
+    state: "open",
+    labels: [item.type],
+    assignees: [],
+    bodyPreview: truncatePreview(item.bodyMarkdown),
+    issueBodyMarkdown: item.bodyMarkdown,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    issueAuthor: null,
+    issueReporter: null,
+    issueMilestone: null,
+    issueType: item.type,
+    issuePriority: null,
+    issueCommentCount: null,
+    metadata: item.metadata,
+  };
+}
+
+function normalizeLucidDocument(item: lucidApiClient.LucidDocumentItem): RepositoryIssueSearchResult {
+  return {
+    provider: "lucid",
+    sourceProvider: "lucid",
+    sourceKind: "document",
+    externalId: item.id,
+    hostDomain: "lucid.app",
+    repository: "documents",
+    issueNumber: null,
+    issueKey: displayKeyForExternalProvider("lucid", item.id),
+    title: item.title,
+    url: item.url,
+    state: "open",
+    labels: ["document"],
+    assignees: [],
+    bodyPreview: truncatePreview(item.bodyMarkdown),
+    issueBodyMarkdown: item.bodyMarkdown,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    issueAuthor: null,
+    issueReporter: null,
+    issueMilestone: null,
+    issueType: "Document",
+    issuePriority: null,
+    issueCommentCount: null,
+    metadata: item.metadata,
+  };
+}
+
+function normalizeFigmaFile(item: figmaApiClient.FigmaFileItem): RepositoryIssueSearchResult {
+  return {
+    provider: "figma",
+    sourceProvider: "figma",
+    sourceKind: "file",
+    externalId: item.key,
+    hostDomain: "figma.com",
+    repository: "files",
+    issueNumber: null,
+    issueKey: displayKeyForExternalProvider("figma", item.key),
+    title: item.title,
+    url: item.url,
+    state: "open",
+    labels: ["file"],
+    assignees: [],
+    bodyPreview: truncatePreview(item.bodyMarkdown),
+    issueBodyMarkdown: item.bodyMarkdown,
+    issueConversationMarkdown: item.conversationMarkdown,
+    includeConversation: item.conversationMarkdown.trim().length > 0,
+    createdAt: null,
+    updatedAt: item.updatedAt,
+    issueAuthor: null,
+    issueReporter: null,
+    issueMilestone: null,
+    issueType: "File",
+    issuePriority: null,
+    issueCommentCount: item.conversationMarkdown ? item.conversationMarkdown.split("##### Comment ").length - 1 : 0,
+    metadata: item.metadata,
+  };
+}
+
+function normalizeMuralItem(item: muralApiClient.MuralItem): RepositoryIssueSearchResult {
+  return {
+    provider: "mural",
+    sourceProvider: "mural",
+    sourceKind: "canvas",
+    externalId: item.id,
+    hostDomain: "app.mural.co",
+    repository: item.workspaceId || "murals",
+    issueNumber: null,
+    issueKey: displayKeyForExternalProvider("mural", item.id),
+    title: item.title,
+    url: item.url,
+    state: "open",
+    labels: ["mural", "beta-limited"],
+    assignees: [],
+    bodyPreview: truncatePreview(item.bodyMarkdown),
+    issueBodyMarkdown: item.bodyMarkdown,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    issueAuthor: null,
+    issueReporter: null,
+    issueMilestone: null,
+    issueType: "Mural",
+    issuePriority: null,
+    issueCommentCount: null,
+    metadata: item.metadata,
+  };
+}
+
 function parseIssueNumberFromJiraKey(issueKey: string): number | null {
   const match = issueKey.trim().match(/-(\d+)$/);
   if (!match?.[1]) {
@@ -916,10 +1738,23 @@ function normalizeIssueSearchInput(input: IssueSearchInput): IssueSearchInput {
     provider: normalizeIssueProviderValue(input.provider),
     repository: normalizeOptionalString(input.repository),
     hostDomain: normalizeOptionalString(input.hostDomain)?.toLowerCase(),
+    workspaceId: normalizeOptionalString(input.workspaceId),
+    projectId: normalizeOptionalString(input.projectId),
+    providerProjectId: normalizeOptionalString(input.providerProjectId || input.projectId),
+    teamId: normalizeOptionalString(input.teamId),
+    teamKey: normalizeOptionalString(input.teamKey),
+    databaseId: normalizeOptionalString(input.databaseId),
+    boardId: normalizeOptionalString(input.boardId),
+    documentId: normalizeOptionalString(input.documentId),
+    fileKey: normalizeOptionalString(input.fileKey),
+    muralId: normalizeOptionalString(input.muralId),
+    itemTypes: normalizeStringList(input.itemTypes),
     projectKey: normalizeOptionalString(input.projectKey),
     search: normalizeOptionalString(input.search),
-    state: normalizeRepositoryIssueStateValue(input.state),
-    status: normalizeJiraIssueStatusValue(input.status),
+    state: normalizeIssueStateValue(input.state),
+    status: normalizeIssueStatusValue(input.status),
+    inProgressStatusName: normalizeOptionalString(input.inProgressStatusName),
+    statusNames: normalizeStringList(input.statusNames),
     labels: normalizeStringList(input.labels).slice(0, 12),
     assignee: normalizeOptionalString(input.assignee),
     assigneeText: normalizeOptionalString(input.assigneeText),
@@ -930,6 +1765,7 @@ function normalizeIssueSearchInput(input: IssueSearchInput): IssueSearchInput {
     issueKeys: normalizeStringList(input.issueKeys),
     issueNumbers: normalizeIssueNumbers(input.issueNumbers),
     issueRefs: normalizeStringList(input.issueRefs),
+    externalIds: normalizeStringList(input.externalIds),
     createdAfter: normalizeOptionalString(input.createdAfter),
     createdBefore: normalizeOptionalString(input.createdBefore),
     updatedAfter: normalizeOptionalString(input.updatedAfter),
@@ -948,6 +1784,8 @@ function normalizeJiraIssueSearchInput(input: JiraIssueSearchInput): JiraIssueSe
     search: normalizeOptionalString(input.search),
     issueKey: normalizeOptionalString(input.issueKey),
     status: normalizeJiraIssueStatusValue(input.status),
+    inProgressStatusName: normalizeOptionalString(input.inProgressStatusName),
+    statusNames: normalizeStringList(input.statusNames),
     assignee: normalizeJiraAssigneeValue(input.assignee),
     assigneeText: normalizeOptionalString(input.assigneeText),
     reporterText: normalizeOptionalString(input.reporterText),
@@ -979,14 +1817,23 @@ function normalizeIssueNumbers(values: number[] | undefined): number[] {
 }
 
 function normalizeIssueProviderValue(value: LinkedIssueProvider | undefined): LinkedIssueProvider | undefined {
-  return value === "github" || value === "gitlab" || value === "jira" ? value : undefined;
+  return value && isIssueImportProvider(value) ? value : undefined;
 }
 
-function normalizeRepositoryIssueStateValue(value: IssueSearchInput["state"]): IssueSearchInput["state"] {
+function normalizeIssueStateValue(value: IssueSearchInput["state"]): IssueSearchInput["state"] {
+  const trimmed = normalizeOptionalString(value);
+  return trimmed;
+}
+
+function normalizeRepositoryIssueStateValue(value: IssueSearchInput["state"]): RepositoryIssueSearchInput["state"] {
   return value === "open" || value === "closed" || value === "all" ? value : undefined;
 }
 
-function normalizeJiraIssueStatusValue(value: IssueSearchInput["status"]): IssueSearchInput["status"] {
+function normalizeIssueStatusValue(value: IssueSearchInput["status"]): IssueSearchInput["status"] {
+  return normalizeOptionalString(value);
+}
+
+function normalizeJiraIssueStatusValue(value: IssueSearchInput["status"]): JiraIssueSearchInput["status"] {
   return value === "open" || value === "in_progress" || value === "done" || value === "all" ? value : undefined;
 }
 
@@ -1054,13 +1901,22 @@ export function normalizeIssuePromptContextInputs(issues: IssuePromptContextInpu
   for (const issue of issues) {
     const hostDomain = issue.hostDomain.trim().toLowerCase();
     const repository = issue.repository.trim().replace(/^\/+|\/+$/g, "");
-    const issueNumber = Math.trunc(issue.issueNumber);
+    const issueNumber = typeof issue.issueNumber === "number" ? Math.trunc(issue.issueNumber) : null;
+    const externalId = issue.externalId?.trim() || null;
     const title = issue.title.trim();
     const url = issue.url.trim();
-    if ((issue.provider !== "github" && issue.provider !== "gitlab" && issue.provider !== "jira") || !hostDomain || !repository || !title || !url || !Number.isFinite(issueNumber) || issueNumber < 1) {
+    if (!isIssueImportProvider(issue.provider) || !hostDomain || !repository || !title || !url) {
       continue;
     }
-    const key = `${issue.provider}:${hostDomain}:${repository}:${issueNumber}`;
+    const isNumericProvider = issue.provider === "github" || issue.provider === "gitlab" || issue.provider === "jira";
+    if (isNumericProvider && (!Number.isFinite(issueNumber) || issueNumber === null || issueNumber < 1)) {
+      continue;
+    }
+    if (!isNumericProvider && !externalId) {
+      continue;
+    }
+    const keyValue = isNumericProvider ? `number:${issueNumber}` : `external:${externalId}`;
+    const key = `${issue.provider}:${hostDomain}:${repository}:${keyValue}`;
     if (seen.has(key)) {
       continue;
     }
@@ -1069,8 +1925,11 @@ export function normalizeIssuePromptContextInputs(issues: IssuePromptContextInpu
       ...issue,
       hostDomain,
       repository,
-      issueNumber,
-      issueKey: issue.issueKey?.trim() || `${issue.provider === "github" ? "#" : issue.provider === "gitlab" ? "!" : ""}${issueNumber}`,
+      sourceProvider: issue.sourceProvider || issue.provider,
+      sourceKind: issue.sourceKind || defaultSourceKindForProvider(issue.provider),
+      externalId: externalId ?? undefined,
+      issueNumber: issueNumber ?? undefined,
+      issueKey: issue.issueKey?.trim() || (isNumericProvider ? `${issue.provider === "github" ? "#" : issue.provider === "gitlab" ? "!" : ""}${issueNumber}` : displayKeyForExternalProvider(issue.provider, externalId || title)),
       title,
       url,
       state: issue.state?.trim() || "open",
@@ -1085,11 +1944,14 @@ export function normalizeIssuePromptContextInputs(issues: IssuePromptContextInpu
 function buildIssuePromptContext(input: IssuePromptContextInput, options: BuildIssuePromptContextOptions): IssuePromptContext {
   return {
     provider: input.provider,
+    sourceProvider: input.sourceProvider || input.provider,
+    sourceKind: input.sourceKind || defaultSourceKindForProvider(input.provider),
+    externalId: input.externalId,
     hostDomain: input.hostDomain,
     projectKey: input.projectKey,
     repository: input.repository,
     issueNumber: input.issueNumber,
-    issueKey: input.issueKey || `${input.provider === "github" ? "#" : "!"}${input.issueNumber}`,
+    issueKey: input.issueKey || (typeof input.issueNumber === "number" ? `${input.provider === "github" ? "#" : input.provider === "gitlab" ? "!" : ""}${input.issueNumber}` : displayKeyForExternalProvider(input.provider, input.externalId || input.title)),
     title: options.title || input.title,
     url: options.url || input.url,
     state: options.state || input.state || "open",
@@ -1111,6 +1973,140 @@ function inferRepository(project: ProjectSummary): string {
 
 function defaultHostForProvider(provider: string): string {
   return provider === "gitlab" ? "gitlab.com" : "github.com";
+}
+
+function isIssueImportProvider(provider: LinkedIssueProvider | undefined): provider is LinkedIssueProvider {
+  return provider === "github"
+    || provider === "gitlab"
+    || provider === "jira"
+    || provider === "notion"
+    || provider === "asana"
+    || provider === "linear"
+    || provider === "miro"
+    || provider === "lucid"
+    || provider === "figma"
+    || provider === "mural";
+}
+
+function isExternalIssueImportProvider(provider: LinkedIssueProvider | undefined): provider is Exclude<LinkedIssueProvider, "github" | "gitlab" | "jira"> {
+  return provider === "notion"
+    || provider === "asana"
+    || provider === "linear"
+    || provider === "miro"
+    || provider === "lucid"
+    || provider === "figma"
+    || provider === "mural";
+}
+
+function defaultSourceKindForProvider(provider: LinkedIssueProvider): NonNullable<SprintLinkedIssueInput["sourceKind"]> {
+  if (provider === "asana") return "task";
+  if (provider === "notion") return "page";
+  if (provider === "miro") return "board";
+  if (provider === "lucid") return "document";
+  if (provider === "figma") return "file";
+  if (provider === "mural") return "canvas";
+  return "issue";
+}
+
+function defaultHostForExternalProvider(provider: Exclude<LinkedIssueProvider, "github" | "gitlab" | "jira">): string {
+  if (provider === "notion") return "notion.so";
+  if (provider === "asana") return "app.asana.com";
+  if (provider === "linear") return "linear.app";
+  if (provider === "miro") return "miro.com";
+  if (provider === "lucid") return "lucid.app";
+  if (provider === "figma") return "figma.com";
+  return "app.mural.co";
+}
+
+function defaultRepositoryForExternalProvider(
+  provider: Exclude<LinkedIssueProvider, "github" | "gitlab" | "jira">,
+  input: IssueSearchInput,
+  settings: DashboardSettings,
+): string {
+  if (provider === "notion") return input.databaseId || settings.notion.databaseId || "workspace";
+  if (provider === "asana") return input.providerProjectId || input.projectId || settings.asana.projectId || input.workspaceId || settings.asana.workspaceId || "tasks";
+  if (provider === "linear") return input.teamKey || settings.linear.teamKey || input.teamId || settings.linear.teamId || "issues";
+  if (provider === "miro") return input.boardId || settings.miro.boardId || "boards";
+  if (provider === "lucid") return "documents";
+  if (provider === "figma") return "files";
+  return input.workspaceId || settings.mural.workspaceId || "murals";
+}
+
+function displayKeyForExternalProvider(provider: LinkedIssueProvider, externalId: string, sourceKind?: string): string {
+  if (provider === "notion") {
+    return `${sourceKind === "database" ? "database" : "page"}:${shortExternalId(externalId)}`;
+  }
+  if (provider === "asana") {
+    return `task:${shortExternalId(externalId)}`;
+  }
+  if (provider === "linear") {
+    return externalId.includes("-") && /^[A-Z]+-\d+$/i.test(externalId) ? externalId.toUpperCase() : `issue:${shortExternalId(externalId)}`;
+  }
+  if (provider === "miro") {
+    return `${sourceKind === "board" ? "board" : "item"}:${shortExternalId(externalId)}`;
+  }
+  if (provider === "lucid") {
+    return `document:${shortExternalId(externalId)}`;
+  }
+  if (provider === "figma") {
+    return `file:${shortExternalId(externalId)}`;
+  }
+  if (provider === "mural") {
+    return `mural:${shortExternalId(externalId)}`;
+  }
+  return externalId;
+}
+
+function defaultExternalUrl(provider: Exclude<LinkedIssueProvider, "github" | "gitlab" | "jira">, externalId: string): string {
+  if (provider === "notion") return `https://www.notion.so/${externalId.replace(/-/g, "")}`;
+  if (provider === "asana") return `https://app.asana.com/0/0/${externalId}`;
+  if (provider === "linear") return `https://linear.app/issue/${externalId}`;
+  if (provider === "miro") return `https://miro.com/app/board/${externalId}/`;
+  if (provider === "lucid") return `https://lucid.app/documents#/documents/${externalId}`;
+  if (provider === "figma") return `https://www.figma.com/file/${externalId}`;
+  return `https://app.mural.co/mural/${externalId}`;
+}
+
+function resolveExplicitSourceKind(
+  provider: Exclude<LinkedIssueProvider, "github" | "gitlab" | "jira">,
+  input: IssueSearchInput,
+  externalId: string,
+): NonNullable<SprintLinkedIssueInput["sourceKind"]> {
+  if (provider === "notion" && input.databaseId === externalId) return "database";
+  if (provider === "miro" && input.boardId === externalId) return "board";
+  if (provider === "mural") return "canvas";
+  return defaultSourceKindForProvider(provider);
+}
+
+function shortExternalId(externalId: string): string {
+  return externalId.length > 12 ? externalId.slice(0, 12) : externalId;
+}
+
+function effectiveImporterLimit(requestLimit: number, defaultLimit: number): number {
+  if (Number.isFinite(requestLimit)) {
+    return requestLimit;
+  }
+  return Math.max(1, Math.min(100, Math.trunc(defaultLimit)));
+}
+
+function requireExternalPromptId(input: IssuePromptContextInput, providerName: string): string {
+  const externalId = input.externalId?.trim();
+  if (!externalId) {
+    throw new Error(`${providerName} externalId is required for prompt context.`);
+  }
+  return externalId;
+}
+
+function formatCanvasItemListMarkdown(items: miroApiClient.MiroCanvasItem[]): string {
+  return items
+    .filter((item) => item.title.trim() || item.bodyMarkdown.trim())
+    .slice(0, 50)
+    .map((item) => {
+      const body = item.bodyMarkdown.trim();
+      return `- ${item.title || item.id}${item.type ? ` (${item.type})` : ""}${body ? `: ${body}` : ""}`;
+    })
+    .join("\n")
+    .trim();
 }
 
 export function clampLimit(limit: number | undefined): number {

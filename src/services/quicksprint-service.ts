@@ -3,6 +3,9 @@ import * as path from "path";
 import { randomUUID } from "crypto";
 import type {
   CreateQuicksprintTemplateInput,
+  DetachedQuicksprintLaunchInput,
+  DetachedQuicksprintLaunchResult,
+  DetachedQuicksprintPlanningRequest,
   QuicksprintExecutionInput,
   QuicksprintTemplateRecord,
   UpdateQuicksprintTemplateInput
@@ -38,6 +41,11 @@ interface TemplateCacheEntry {
 interface TemplateDirectoryReadResult {
   templates: QuicksprintTemplateRecord[];
   hiddenTemplateIds: string[];
+}
+
+interface PreparedQuicksprintExecution {
+  sprint: SprintRecord;
+  planningRequest: DetachedQuicksprintPlanningRequest;
 }
 
 export class QuicksprintService {
@@ -292,7 +300,31 @@ export class QuicksprintService {
     this.templateCache.delete(projectId);
   }
 
-  async executeQuicksprint(projectId: string, input: QuicksprintExecutionInput, signal?: AbortSignal): Promise<SprintRecord> {
+  private resolvePlanningOverrides(input: QuicksprintExecutionInput): PlanSprintOptions["overrides"] {
+    return input.planningOverrides ?? (input.modelOverride ? { virtualModel: input.modelOverride } : undefined);
+  }
+
+  private resolveAutoStart(input: QuicksprintExecutionInput): boolean {
+    return input.submitMode === "plan_and_start";
+  }
+
+  private buildPlanSprintOptions(input: QuicksprintExecutionInput, clientRequestId?: string): PlanSprintOptions {
+    const options: PlanSprintOptions = {
+      autoStart: this.resolveAutoStart(input),
+      replan: false,
+      overrides: this.resolvePlanningOverrides(input),
+    };
+    if (clientRequestId) {
+      options.clientRequestId = clientRequestId;
+    }
+    return options;
+  }
+
+  private async prepareQuicksprintExecution(
+    projectId: string,
+    input: QuicksprintExecutionInput,
+    clientRequestId?: string,
+  ): Promise<PreparedQuicksprintExecution> {
     const template = await this.getTemplate(projectId, input.templateId);
     if (!template) {
       throw new Error(`Template ${input.templateId} not found`);
@@ -316,21 +348,74 @@ export class QuicksprintService {
 
     const sprintName = `QS: ${template.name}`;
     const sprintGoal = `${agentContext}${template.agentInstructionMarkdown}${additionalContext}\n\n${taskCountInstruction}`;
-
     const sprint = this.createSprint(projectId, {
       name: sprintName,
       goal: sprintGoal,
       showcasePinned: true,
     });
+    const planOptions = this.buildPlanSprintOptions(input, clientRequestId);
 
-    const autoStart = input.submitMode === "plan_and_start";
+    return {
+      sprint,
+      planningRequest: {
+        projectId,
+        sprintId: sprint.id,
+        templateId: input.templateId,
+        submitMode: input.submitMode,
+        clientRequestId: clientRequestId ?? "",
+        planOptions,
+      },
+    };
+  }
 
-    await this.planSprint(projectId, sprint.id, {
-      autoStart,
-      replan: false,
-      overrides: input.planningOverrides ?? (input.modelOverride ? { virtualModel: input.modelOverride } : undefined),
-    }, signal);
+  private resolveDetachedClientRequestId(input: DetachedQuicksprintLaunchInput, sprintId: string): string {
+    return input.clientRequestId?.trim() || `quicksprint:${sprintId}:planning`;
+  }
 
-    return sprint;
+  async executeQuicksprint(projectId: string, input: QuicksprintExecutionInput, signal?: AbortSignal): Promise<SprintRecord> {
+    const prepared = await this.prepareQuicksprintExecution(projectId, input, input.clientRequestId?.trim() || undefined);
+
+    await this.planSprint(
+      projectId,
+      prepared.sprint.id,
+      prepared.planningRequest.planOptions,
+      signal,
+    );
+
+    return prepared.sprint;
+  }
+
+  async launchDetachedQuicksprint(projectId: string, input: DetachedQuicksprintLaunchInput): Promise<DetachedQuicksprintLaunchResult> {
+    const preparedWithoutRequestId = await this.prepareQuicksprintExecution(projectId, input);
+    const clientRequestId = this.resolveDetachedClientRequestId(input, preparedWithoutRequestId.sprint.id);
+    const prepared: PreparedQuicksprintExecution = {
+      sprint: preparedWithoutRequestId.sprint,
+      planningRequest: {
+        ...preparedWithoutRequestId.planningRequest,
+        clientRequestId,
+        planOptions: this.buildPlanSprintOptions(input, clientRequestId),
+      },
+    };
+
+    const planningPromise = this.planSprint(
+      projectId,
+      prepared.sprint.id,
+      prepared.planningRequest.planOptions,
+    );
+    void planningPromise.catch((error: unknown) => {
+      this.options.logger?.warn("Detached quicksprint planning failed", {
+        error,
+        projectId,
+        sprintId: prepared.sprint.id,
+        templateId: input.templateId,
+        clientRequestId,
+      });
+    });
+
+    return {
+      sprint: prepared.sprint,
+      planningRequest: prepared.planningRequest,
+      planningPromise,
+    };
   }
 }

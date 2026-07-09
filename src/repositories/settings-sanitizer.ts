@@ -1,13 +1,20 @@
 import type {
   BackgroundPattern,
   DashboardSettings,
+  DashboardExperienceMode,
+  DesignGuidanceSettings,
   ExternalSettingsHints,
   McpToolToggle,
   RuntimeLogLevel,
   ConsoleLogMode,
+  ExternalImporterSettings,
   RestartInvocationPolicy,
   RestartSprintPolicy,
   SkillToggle,
+  TechstackCatalogEntrySettings,
+  TechstackCatalogSettings,
+  TechstackItemSettings,
+  TechstackSelectionSettings,
 } from "../contracts/app-types.js";
 import { readBoolean, readPort, readString } from "../shared/config/value-readers.js";
 import { sanitizeCustomMcpServersWithDefaults, sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
@@ -20,18 +27,31 @@ import { sanitizeSprintLoopSteps } from "../domain/settings/settings-sanitizers/
 import { sanitizeCliWorkflow } from "../domain/settings/settings-sanitizers/cli-workflow-sanitizer.js";
 import { sanitizeWorkers } from "../domain/settings/settings-sanitizers/worker-sanitizer.js";
 import { sanitizeMemory } from "../domain/settings/settings-sanitizers/memory-sanitizer.js";
+import { sanitizeSpeech } from "../domain/settings/settings-sanitizers/speech-sanitizer.js";
 import { sanitizeModelPricing } from "../domain/settings/settings-sanitizers/model-pricing-sanitizer.js";
+import { sanitizePreviewEnvironmentVariables } from "../shared/preview-environment.js";
 import {
   buildDashboardProviderSettings,
   buildDefaultIntegrationProviders,
 } from "../domain/settings/provider-config-utils.js";
 import {
+  BUILTIN_CODE_UX_TECHSTACK,
+  BUILTIN_CODE_UX_TECHSTACK_ID,
   DEFAULT_DASHBOARD_SETTINGS,
+  DEFAULT_DASHBOARD_EXPERIENCE_MODE,
+  DEFAULT_AGENT_SELF_REFLECTION,
+  DEFAULT_IMPORTER_SEARCH_LIMIT,
+  DEFAULT_PROJECT_TECHSTACK,
   DEFAULT_SKILLS,
+  DASHBOARD_EXPERIENCE_MODES,
   INTERNAL_SKILL_NAMES,
   INTERNAL_SKILL_SET,
   QA_EXHAUSTION_POLICIES,
 } from "./settings-defaults.js";
+import {
+  cloneDesignGuidanceSettings,
+  sanitizeDesignGuidanceSettings,
+} from "../domain/settings/design-guidance-catalog.js";
 
 const enforceGitManagerSkillset = (skills: SkillToggle[], githubMode: "REMOTE" | "LOCAL"): SkillToggle[] => {
   return skills.map((skill) => {
@@ -121,6 +141,115 @@ const sanitizeMcpTools = (value: unknown): McpToolToggle[] => {
   return sanitizeMcpToolToggles(value).map((tool) => ({ ...tool }));
 };
 
+export const sanitizeExternalImporterSettings = (
+  value: unknown,
+  defaults: ExternalImporterSettings,
+): ExternalImporterSettings => {
+  const input = value && typeof value === "object" ? value as Partial<ExternalImporterSettings> : {};
+  const rawLimit = typeof input.defaultSearchLimit === "number" && Number.isFinite(input.defaultSearchLimit)
+    ? Math.round(input.defaultSearchLimit)
+    : defaults.defaultSearchLimit;
+
+  return {
+    enabled: readBoolean(input.enabled, defaults.enabled),
+    apiToken: readString(input.apiToken, defaults.apiToken).trim(),
+    apiSecret: readString(input.apiSecret, defaults.apiSecret).trim(),
+    baseUrl: readString(input.baseUrl, defaults.baseUrl).trim().replace(/\/+$/, ""),
+    workspaceId: readString(input.workspaceId, defaults.workspaceId).trim(),
+    teamId: readString(input.teamId, defaults.teamId).trim(),
+    teamKey: readString(input.teamKey, defaults.teamKey).trim(),
+    projectId: readString(input.projectId, defaults.projectId).trim(),
+    databaseId: readString(input.databaseId, defaults.databaseId).trim(),
+    boardId: readString(input.boardId, defaults.boardId).trim(),
+    documentId: readString(input.documentId, defaults.documentId).trim(),
+    fileKey: readString(input.fileKey, defaults.fileKey).trim(),
+    defaultSearchLimit: Math.max(1, Math.min(250, rawLimit || DEFAULT_IMPORTER_SEARCH_LIMIT)),
+  };
+};
+
+const cloneTechstackEntry = (entry: TechstackCatalogEntrySettings): TechstackCatalogEntrySettings => ({
+  ...entry,
+  items: entry.items.map((item) => ({ ...item })),
+});
+
+const cloneTechstackCatalog = (catalog: TechstackCatalogSettings): TechstackCatalogSettings => ({
+  defaultTechstackId: catalog.defaultTechstackId,
+  entries: catalog.entries.map((entry) => cloneTechstackEntry(entry)),
+});
+
+const TECHSTACK_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/;
+
+const isValidTechstackId = (id: string): boolean => TECHSTACK_ID_PATTERN.test(id);
+
+const sanitizeTechstackItem = (value: unknown): TechstackItemSettings | null => {
+  const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const id = readString(input.id, "").trim();
+  const label = readString(input.label, "").trim();
+  return id && label && isValidTechstackId(id) ? { id, label } : null;
+};
+
+const sanitizeTechstackEntry = (value: unknown): TechstackCatalogEntrySettings | null => {
+  const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const id = readString(input.id, "").trim();
+  const label = readString(input.label, "").trim();
+  if (!id || !label || !isValidTechstackId(id)) {
+    return null;
+  }
+
+  const items: TechstackItemSettings[] = [];
+  const seenItems = new Set<string>();
+  if (Array.isArray(input.items)) {
+    for (const itemInput of input.items) {
+      const item = sanitizeTechstackItem(itemInput);
+      if (!item || seenItems.has(item.id)) {
+        continue;
+      }
+      items.push(item);
+      seenItems.add(item.id);
+    }
+  }
+
+  return { id, label, items };
+};
+
+const sanitizeTechstackCatalog = (value: unknown): TechstackCatalogSettings => {
+  const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const entries: TechstackCatalogEntrySettings[] = [cloneTechstackEntry(BUILTIN_CODE_UX_TECHSTACK)];
+  const seenEntries = new Set<string>([BUILTIN_CODE_UX_TECHSTACK_ID]);
+
+  if (Array.isArray(input.entries)) {
+    for (const entryInput of input.entries) {
+      const entry = sanitizeTechstackEntry(entryInput);
+      if (!entry || seenEntries.has(entry.id)) {
+        continue;
+      }
+      entries.push(entry);
+      seenEntries.add(entry.id);
+    }
+  }
+
+  const defaultTechstackId = readString(input.defaultTechstackId, "").trim();
+  return {
+    defaultTechstackId: seenEntries.has(defaultTechstackId) ? defaultTechstackId : BUILTIN_CODE_UX_TECHSTACK_ID,
+    entries,
+  };
+};
+
+const sanitizeTechstackSelection = (value: unknown): TechstackSelectionSettings => {
+  const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const selectedTechstackId = readString(input.selectedTechstackId, "").trim();
+  return {
+    selectedTechstackId: selectedTechstackId && isValidTechstackId(selectedTechstackId) ? selectedTechstackId : null,
+    applicationKind: input.applicationKind === "web" || input.applicationKind === "desktop"
+      ? input.applicationKind
+      : DEFAULT_PROJECT_TECHSTACK.applicationKind,
+  };
+};
+
+const cloneDesignGuidance = (settings: DesignGuidanceSettings): DesignGuidanceSettings => (
+  cloneDesignGuidanceSettings(settings)
+);
+
 const BACKGROUND_PATTERNS = new Set<BackgroundPattern>([
   "NONE",
   "DIAGONAL_LINES",
@@ -134,6 +263,13 @@ const BACKGROUND_PATTERNS = new Set<BackgroundPattern>([
   "WAVES",
   "NOISE",
 ]);
+const DASHBOARD_EXPERIENCE_MODE_SET = new Set<DashboardExperienceMode>(DASHBOARD_EXPERIENCE_MODES);
+
+const sanitizeDashboardExperienceMode = (value: unknown): DashboardExperienceMode => (
+  typeof value === "string" && DASHBOARD_EXPERIENCE_MODE_SET.has(value as DashboardExperienceMode)
+    ? value as DashboardExperienceMode
+    : DEFAULT_DASHBOARD_EXPERIENCE_MODE
+);
 
 const sanitizeBackgroundImage = (value: unknown): string | null => {
   if (typeof value !== "string") {
@@ -221,6 +357,73 @@ const sanitizeQualityAssurance = (
   };
 };
 
+const SELF_REFLECTION_MAX_ATTEMPTS_CEILING = 10;
+
+const sanitizeSelfReflectionCriteria = (
+  value: unknown,
+  defaults: DashboardSettings["agents"]["selfReflection"]["planning"]["criteria"],
+): DashboardSettings["agents"]["selfReflection"]["planning"]["criteria"] => {
+  if (!Array.isArray(value)) {
+    return defaults.map((criterion) => ({ ...criterion }));
+  }
+
+  const criteria: DashboardSettings["agents"]["selfReflection"]["planning"]["criteria"] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+    const input = entry as Record<string, unknown>;
+    const id = readString(input.id, "").trim();
+    const label = readString(input.label, "").trim();
+    const prompt = readString(input.prompt, "").trim();
+    if (!id || !label || !prompt || seen.has(id)) {
+      continue;
+    }
+    const rawThreshold = typeof input.threshold === "number" && Number.isFinite(input.threshold)
+      ? input.threshold
+      : defaults.find((criterion) => criterion.id === id)?.threshold ?? 0.8;
+    criteria.push({
+      id,
+      label,
+      prompt,
+      threshold: Math.max(0, Math.min(1, rawThreshold)),
+    });
+    seen.add(id);
+  }
+
+  return criteria.length > 0 ? criteria : defaults.map((criterion) => ({ ...criterion }));
+};
+
+const sanitizeSelfReflectionLoop = (
+  value: unknown,
+  defaults: DashboardSettings["agents"]["selfReflection"]["planning"],
+): DashboardSettings["agents"]["selfReflection"]["planning"] => {
+  const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const maxImprovementAttempts = typeof input.maxImprovementAttempts === "number" && Number.isFinite(input.maxImprovementAttempts)
+    ? Math.max(0, Math.min(SELF_REFLECTION_MAX_ATTEMPTS_CEILING, Math.round(input.maxImprovementAttempts)))
+    : defaults.maxImprovementAttempts;
+
+  return {
+    enabled: readBoolean(input.enabled, defaults.enabled),
+    criteria: sanitizeSelfReflectionCriteria(input.criteria, defaults.criteria),
+    maxImprovementAttempts,
+  };
+};
+
+const sanitizeSelfReflection = (
+  value: unknown,
+): DashboardSettings["agents"]["selfReflection"] => {
+  const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return {
+    planning: sanitizeSelfReflectionLoop(input.planning, DEFAULT_AGENT_SELF_REFLECTION.planning),
+    qualityAssurance: sanitizeSelfReflectionLoop(
+      input.qualityAssurance,
+      DEFAULT_AGENT_SELF_REFLECTION.qualityAssurance,
+    ),
+  };
+};
+
 const cloneAgentRouting = (): DashboardSettings["agents"]["routing"] => ({
   planning: { ...DEFAULT_DASHBOARD_SETTINGS.agents.routing.planning },
   taskCoding: {
@@ -283,6 +486,9 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
       buildDefaultIntegrationProviders(externalHints),
     ),
   },
+  techstackCatalog: cloneTechstackCatalog(DEFAULT_DASHBOARD_SETTINGS.techstackCatalog),
+  techstack: { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
+  designGuidance: cloneDesignGuidance(DEFAULT_DASHBOARD_SETTINGS.designGuidance),
   git: {
     ...DEFAULT_DASHBOARD_SETTINGS.git,
     githubToken: externalHints?.resolved.githubToken || DEFAULT_DASHBOARD_SETTINGS.git.githubToken,
@@ -292,6 +498,13 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
     ...DEFAULT_DASHBOARD_SETTINGS.jira,
     apiToken: externalHints?.resolved?.jiraToken || DEFAULT_DASHBOARD_SETTINGS.jira.apiToken,
   },
+  notion: { ...DEFAULT_DASHBOARD_SETTINGS.notion },
+  asana: { ...DEFAULT_DASHBOARD_SETTINGS.asana },
+  linear: { ...DEFAULT_DASHBOARD_SETTINGS.linear },
+  miro: { ...DEFAULT_DASHBOARD_SETTINGS.miro },
+  lucid: { ...DEFAULT_DASHBOARD_SETTINGS.lucid },
+  figma: { ...DEFAULT_DASHBOARD_SETTINGS.figma },
+  mural: { ...DEFAULT_DASHBOARD_SETTINGS.mural },
   ciIntelligence: {
     ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
   },
@@ -340,13 +553,22 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
         agentPresetIds: [...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.completedTaskWithoutPr.agentPresetIds],
       },
     },
+    selfReflection: sanitizeSelfReflection(DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection),
   },
   skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
   mcpTools: DEFAULT_DASHBOARD_SETTINGS.mcpTools.map((tool) => ({ ...tool })),
   customMcpServers: DEFAULT_DASHBOARD_SETTINGS.customMcpServers.map((server) => ({ ...server })),
   memory: {
     ...DEFAULT_DASHBOARD_SETTINGS.memory,
+    customEmbeddingModels: DEFAULT_DASHBOARD_SETTINGS.memory.customEmbeddingModels.map((model) => ({
+      ...model,
+      tokenizerFiles: [...model.tokenizerFiles],
+    })),
     externalEmbedding: { ...DEFAULT_DASHBOARD_SETTINGS.memory.externalEmbedding },
+  },
+  speech: {
+    ...DEFAULT_DASHBOARD_SETTINGS.speech,
+    externalTranscription: { ...DEFAULT_DASHBOARD_SETTINGS.speech.externalTranscription },
   },
   modelPricing: { overrides: { ...DEFAULT_DASHBOARD_SETTINGS.modelPricing.overrides } },
 });
@@ -382,6 +604,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     : DEFAULT_DASHBOARD_SETTINGS.appearance.zoomLevel;
   const appearance = {
     navigationMode: appearanceInput.navigationMode === "DOCK" ? "DOCK" : "SIDEBAR" as "DOCK" | "SIDEBAR",
+    experienceMode: sanitizeDashboardExperienceMode(appearanceInput.experienceMode),
     theme: appearanceInput.theme === "LIGHT" || appearanceInput.theme === "DARK" ? appearanceInput.theme : "SYSTEM" as "LIGHT" | "DARK" | "SYSTEM",
     reducedMotion: appearanceInput.reducedMotion === "REDUCE" || appearanceInput.reducedMotion === "NONE" ? appearanceInput.reducedMotion : "AUTO" as "AUTO" | "REDUCE" | "NONE",
     backgroundMode: appearanceInput.backgroundMode === "STATIC" ? "STATIC" : "ANIMATED" as "ANIMATED" | "STATIC",
@@ -425,11 +648,21 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   };
 
   const aiProvider = sanitizeAiProvider(input, { externalHints });
+  const techstackCatalog = sanitizeTechstackCatalog(input.techstackCatalog ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog);
+  const techstack = sanitizeTechstackSelection(input.techstack);
+  const designGuidance = sanitizeDesignGuidanceSettings(input.designGuidance);
   const git = sanitizeGit(input, externalHints);
   const jira = sanitizeJira(input.jira, DEFAULT_DASHBOARD_SETTINGS.jira);
   if (externalHints?.resolved?.jiraToken) {
     jira.apiToken = externalHints.resolved.jiraToken;
   }
+  const notion = sanitizeExternalImporterSettings(input.notion, DEFAULT_DASHBOARD_SETTINGS.notion);
+  const asana = sanitizeExternalImporterSettings(input.asana, DEFAULT_DASHBOARD_SETTINGS.asana);
+  const linear = sanitizeExternalImporterSettings(input.linear, DEFAULT_DASHBOARD_SETTINGS.linear);
+  const miro = sanitizeExternalImporterSettings(input.miro, DEFAULT_DASHBOARD_SETTINGS.miro);
+  const lucid = sanitizeExternalImporterSettings(input.lucid, DEFAULT_DASHBOARD_SETTINGS.lucid);
+  const figma = sanitizeExternalImporterSettings(input.figma, DEFAULT_DASHBOARD_SETTINGS.figma);
+  const mural = sanitizeExternalImporterSettings(input.mural, DEFAULT_DASHBOARD_SETTINGS.mural);
   const ciIntelligence = sanitizeCiIntelligence(input, git.githubMode);
   const guardrails = sanitizeGuardrails(input);
   const sprintLoopSteps = sanitizeSprintLoopSteps(input);
@@ -493,6 +726,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
       }
       return raw;
     })(),
+    environmentVariables: sanitizePreviewEnvironmentVariables(sprintPreviewInput.environmentVariables),
   };
   if (sprintPreview.hostPortRangeEnd < sprintPreview.hostPortRangeStart) {
     sprintPreview.hostPortRangeEnd = sprintPreview.hostPortRangeStart;
@@ -518,6 +752,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     qualityAssurance: sanitizeQualityAssurance(
       agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined,
     ),
+    selfReflection: sanitizeSelfReflection(agentsInput.selfReflection),
   };
 
   const normalizedSkills = enforceGitManagerSkillset(sanitizeSkills(input.skills), git.githubMode);
@@ -527,6 +762,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     DEFAULT_DASHBOARD_SETTINGS.customMcpServers,
   );
   const memory = sanitizeMemory(input);
+  const speech = sanitizeSpeech(input);
   const modelPricing = sanitizeModelPricing(input.modelPricing);
 
   return {
@@ -551,8 +787,18 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
       ),
       invocationRouting: aiProvider.invocationRouting,
     },
+    techstackCatalog,
+    techstack,
+    designGuidance,
     git,
     jira,
+    notion,
+    asana,
+    linear,
+    miro,
+    lucid,
+    figma,
+    mural,
     ciIntelligence,
     guardrails,
     sprintLoopSteps,
@@ -564,6 +810,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     mcpTools,
     customMcpServers,
     memory,
+    speech,
     modelPricing,
   };
 };

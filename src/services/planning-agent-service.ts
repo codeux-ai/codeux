@@ -27,6 +27,7 @@ import { parsePlannedSprintReply, PlanningParseError } from "./planning-json-ext
 import { extractJsonFromText } from "../domain/llm/json-extraction.js";
 import type { PlannedSprintPayload, PlannedTaskDraft } from "../contracts/project-management-types.js";
 import { persistPlannedTasks } from "./planning-task-persistence.js";
+import { buildPlanningExecutionPlanMessage } from "./planning-execution-plan-message.js";
 import { ProviderExecutionService, resolveEffectiveModel } from "./provider-execution-service.js";
 import { StructuredAgentRequestService, type StructuredAgentRequestResult } from "./structured-agent-request-service.js";
 import { ProviderInvocationCancelledError, StructuredProviderResponseService } from "./structured-provider-response-service.js";
@@ -191,6 +192,7 @@ export class PlanningAgentService {
       planningAgent,
       sprintName: input.name,
       goal: input.goal,
+      designGuidance: runtime.settings.designGuidance,
       memoryContext,
       learningsInstruction,
     });
@@ -367,6 +369,7 @@ export class PlanningAgentService {
       sprintName: sprint.name,
       canSetSprintTitle: sprint.isGeneratedName,
       goal: sprint.goal,
+      designGuidance: runtime.settings.designGuidance,
       memoryContext,
       learningsInstruction,
     });
@@ -385,6 +388,7 @@ export class PlanningAgentService {
 
     let payload: PlannedSprintPayload;
     let cleanupWorkspace: (() => Promise<void>) | undefined;
+    let planningSelfReflection: StructuredAgentRequestResult<PlannedSprintPayload>["selfReflection"] | undefined;
     try {
       const virtualResult = await this.runVirtualPlanningRequest({
         projectId,
@@ -409,6 +413,7 @@ export class PlanningAgentService {
       });
       payload = virtualResult.parsed;
       cleanupWorkspace = virtualResult.cleanupWorkspace;
+      planningSelfReflection = virtualResult.selfReflection;
 
       if (invocation && isExecutionInvocationActiveForFinalize(this.deps.executionRepository, invocation.id)) {
         this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
@@ -455,6 +460,8 @@ export class PlanningAgentService {
     if (Object.keys(sprintUpdate).length > 0) {
       this.deps.projectManagementRepository.updateSprint(sprint.id, sprintUpdate);
     }
+    const finalSprintName = sprintUpdate.name || sprint.name;
+    const finalSprintGoal = sprintUpdate.goal || sprint.goal;
 
     const { createdTaskIds } = persistPlannedTasks(
       projectId,
@@ -463,6 +470,22 @@ export class PlanningAgentService {
       this.deps.projectManagementRepository,
       { defaultAgentPresetId: manualCodingAgent?.id || null },
     );
+
+    if (invocation && isExecutionInvocationActiveForFinalize(this.deps.executionRepository, invocation.id)) {
+      this.deps.executionRepository?.appendExecutionInvocationMessage(
+        invocation.id,
+        buildPlanningExecutionPlanMessage({
+          invocationId: invocation.id,
+          projectId,
+          sprintId,
+          sprintNumber: sprint.number,
+          sprintName: finalSprintName,
+          goal: finalSprintGoal,
+          tasks: payload.tasks,
+          createdTaskIds,
+        }),
+      );
+    }
 
     const titles: string[] = [];
     for (const t of payload.tasks) {
@@ -474,7 +497,8 @@ export class PlanningAgentService {
       0.8,
     );
 
-    if (options.autoStart) {
+    const shouldAutoStart = this.shouldAutoStartPlannedSprint(options.autoStart === true, planningSelfReflection);
+    if (shouldAutoStart) {
       await this.deps.executionControlService.orchestrateSprint(projectId, sprintId);
     }
     await cleanupWorkspace?.().catch(() => undefined);
@@ -484,8 +508,21 @@ export class PlanningAgentService {
       invocationId: invocation?.id || "",
       agentId: planningAgent.id,
       createdTaskIds,
-      started: options.autoStart,
+      started: shouldAutoStart,
     };
+  }
+
+  private shouldAutoStartPlannedSprint(
+    requested: boolean,
+    selfReflection: StructuredAgentRequestResult<unknown>["selfReflection"] | undefined,
+  ): boolean {
+    if (!requested) {
+      return false;
+    }
+    if (!selfReflection || !selfReflection.enabled) {
+      return true;
+    }
+    return selfReflection.finalDecision === "passed";
   }
 
   private buildPlanningContinuationPrompt(fullPlanningPrompt: string): string {
@@ -635,7 +672,7 @@ export class PlanningAgentService {
       ...DEFAULT_CLI_WORKFLOW_SETTINGS,
       ...args.settings.cliWorkflow,
     };
-    const providerPrompt = buildProviderPrompt(args.rawPrompt, providerSettings.thinkingMode);
+    const providerPrompt = buildProviderPrompt(args.rawPrompt, providerSettings.thinkingMode, provider);
     const systemRoutingMessage = `Planning request routed through virtual ${this.getProviderLabel(provider)} worker (model: ${effectiveModel}).`;
 
     // Reflect the resolved route on the invocation record *before* the snapshot
@@ -695,6 +732,8 @@ export class PlanningAgentService {
         openCodePackage: providerSettings.openCodePackage,
         providerMountAuth: providerSettings.mountAuth,
         providerAuthPath: providerSettings.authPath,
+        providerConfigMode: providerSettings.providerConfigMode,
+        providerConfigPath: providerSettings.providerConfigPath,
         customBaseUrl: providerSettings.customBaseUrl,
         customModel: providerSettings.customModel,
         providerPrompt: args.rawPrompt,
@@ -714,6 +753,8 @@ export class PlanningAgentService {
         openCodeBaselineRawUsageJson: args.continuation?.openCodeBaselineRawUsageJson,
         invocationId: args.invocationId,
         systemRoutingMessage,
+        agentMcpAccess: planningAgent?.mcpAccess ?? null,
+        mcpAgentId: planningAgent?.id ?? null,
         githubToken: args.settings.git.githubToken,
         signal: args.signal,
         onActivity: (description, originator) => {

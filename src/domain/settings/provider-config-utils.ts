@@ -14,11 +14,13 @@ import type {
 } from "../../contracts/settings-scope-types.js";
 import {
   DEFAULT_PROVIDER_AUTH_PATHS,
+  DEFAULT_PROVIDER_CONFIG_FILE_PATHS,
   DEFAULT_PROVIDER_CONFIG_IDS,
   DEFAULT_PROVIDER_CONFIG_NAMES,
   DEFAULT_PROVIDER_SETTINGS,
   PROVIDER_IDS,
-  THINKING_MODES,
+  isProviderThinkingModeSupported,
+  normalizeProviderThinkingMode,
   VIRTUAL_WORKER_PROVIDERS,
 } from "../../repositories/settings-defaults.js";
 
@@ -45,6 +47,12 @@ export const getHintApiKeyForProvider = (
   if (providerId === "qwen-code") {
     return externalHints?.resolved.qwenCodeApiKey || "";
   }
+  if (providerId === "antigravity") {
+    return externalHints?.resolved.antigravityApiKey || "";
+  }
+  if (providerId === "mockup-cli") {
+    return "";
+  }
   return externalHints?.resolved.openCodeApiKey || "";
 };
 
@@ -57,6 +65,8 @@ export const buildDefaultIntegrationProviders = (
     apiKey: getHintApiKeyForProvider("jules", externalHints),
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.jules,
+    providerConfigMode: "none",
+    providerConfigPath: "",
     authType: "apiKey",
   },
   [DEFAULT_PROVIDER_CONFIG_IDS.gemini]: {
@@ -65,6 +75,8 @@ export const buildDefaultIntegrationProviders = (
     apiKey: getHintApiKeyForProvider("gemini", externalHints),
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.gemini,
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS.gemini,
     authType: "apiKey",
   },
   [DEFAULT_PROVIDER_CONFIG_IDS.codex]: {
@@ -73,6 +85,8 @@ export const buildDefaultIntegrationProviders = (
     apiKey: getHintApiKeyForProvider("codex", externalHints),
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.codex,
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS.codex,
     authType: "apiKey",
   },
   [DEFAULT_PROVIDER_CONFIG_IDS["claude-code"]]: {
@@ -81,6 +95,8 @@ export const buildDefaultIntegrationProviders = (
     apiKey: getHintApiKeyForProvider("claude-code", externalHints),
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS["claude-code"],
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS["claude-code"],
     authType: "apiKey",
   },
   [DEFAULT_PROVIDER_CONFIG_IDS["qwen-code"]]: {
@@ -89,6 +105,8 @@ export const buildDefaultIntegrationProviders = (
     apiKey: getHintApiKeyForProvider("qwen-code", externalHints),
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS["qwen-code"],
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS["qwen-code"],
     authType: "apiKey",
     qwenAuthMode: "LOCAL_AUTH",
     qwenRegion: "international",
@@ -104,6 +122,8 @@ export const buildDefaultIntegrationProviders = (
     apiKey: getHintApiKeyForProvider("opencode", externalHints),
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.opencode,
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS.opencode,
     authType: "apiKey",
     openCodeAuthMode: "LOCAL_AUTH",
     openCodeProviderId: "ollama",
@@ -118,6 +138,18 @@ export const buildDefaultIntegrationProviders = (
     apiKey: getHintApiKeyForProvider("antigravity", externalHints),
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.antigravity,
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS.antigravity,
+    authType: "apiKey",
+  },
+  [DEFAULT_PROVIDER_CONFIG_IDS["mockup-cli"]]: {
+    provider: "mockup-cli",
+    name: DEFAULT_PROVIDER_CONFIG_NAMES["mockup-cli"],
+    apiKey: "",
+    mountAuth: false,
+    authPath: DEFAULT_PROVIDER_AUTH_PATHS["mockup-cli"],
+    providerConfigMode: "none",
+    providerConfigPath: "",
     authType: "apiKey",
   },
 });
@@ -147,6 +179,39 @@ const normalizeProviderAuthPath = (providerId: ProviderId, value: unknown): stri
     return value.trim();
   }
   return DEFAULT_PROVIDER_AUTH_PATHS[providerId];
+};
+
+const supportsProviderConfigFile = (providerId: ProviderId): boolean => (
+  providerId !== "jules" && providerId !== "mockup-cli"
+);
+
+const normalizeProviderConfig = (
+  providerId: ProviderId,
+  modeValue: unknown,
+  pathValue: unknown,
+): Pick<SystemProviderCredentialSettings, "providerConfigMode" | "providerConfigPath"> => {
+  if (!supportsProviderConfigFile(providerId)) {
+    return { providerConfigMode: "none", providerConfigPath: "" };
+  }
+
+  const standardPath = DEFAULT_PROVIDER_CONFIG_FILE_PATHS[providerId];
+  const requestedMode = modeValue === "none" || modeValue === "copyHost" || modeValue === "file"
+    ? modeValue
+    : "copyHost";
+
+  if (requestedMode === "none") {
+    return { providerConfigMode: "none", providerConfigPath: "" };
+  }
+
+  if (requestedMode === "file") {
+    const customPath = typeof pathValue === "string" ? pathValue.trim() : "";
+    if (customPath) {
+      return { providerConfigMode: "file", providerConfigPath: customPath };
+    }
+    return { providerConfigMode: "copyHost", providerConfigPath: standardPath };
+  }
+
+  return { providerConfigMode: "copyHost", providerConfigPath: standardPath };
 };
 
 const normalizeQwenAuthMode = (value: unknown): SystemProviderCredentialSettings["qwenAuthMode"] => (
@@ -226,6 +291,7 @@ export const normalizeSystemIntegrationProviders = (
       authPath: authType === "dashboardAuth"
         ? `~/.code-ux/credentials/${providerConfigId}`
         : normalizeProviderAuthPath(providerId, rawValue.authPath),
+      ...normalizeProviderConfig(providerId, rawValue.providerConfigMode, rawValue.providerConfigPath),
       authType,
       ...(typeof rawValue.lastLoginAt === "number" ? { lastLoginAt: rawValue.lastLoginAt } : {}),
       ...(usesApiKeyAuth && typeof rawValue.customBaseUrl === "string" && rawValue.customBaseUrl.trim().length > 0
@@ -302,6 +368,8 @@ export const normalizeSystemIntegrationProviders = (
       apiKey: legacyApiKey,
       mountAuth: result[defaultId]?.mountAuth ?? false,
       authPath: result[defaultId]?.authPath || DEFAULT_PROVIDER_AUTH_PATHS[providerId],
+      providerConfigMode: result[defaultId]?.providerConfigMode || (supportsProviderConfigFile(providerId) ? "copyHost" : "none"),
+      providerConfigPath: result[defaultId]?.providerConfigPath || DEFAULT_PROVIDER_CONFIG_FILE_PATHS[providerId],
       authType: result[defaultId]?.authType || (result[defaultId]?.mountAuth ? "localAuth" : "apiKey"),
     };
   }
@@ -316,10 +384,8 @@ const normalizeWeight = (value: unknown, fallback: number): number => {
   return Math.max(0, Math.round(value));
 };
 
-const normalizeThinkingMode = (value: unknown, fallback: ThinkingMode): ThinkingMode => (
-  typeof value === "string" && THINKING_MODES.includes(value as ThinkingMode)
-    ? value as ThinkingMode
-    : fallback
+const normalizeThinkingMode = (providerId: ProviderId, value: unknown, fallback: ThinkingMode): ThinkingMode => (
+  normalizeProviderThinkingMode(providerId, value, fallback)
 );
 
 const normalizeMaxConcurrentTasks = (value: unknown, fallback: number): number => (
@@ -328,12 +394,58 @@ const normalizeMaxConcurrentTasks = (value: unknown, fallback: number): number =
     : fallback
 );
 
-const readLegacyProviderConfig = (
-  providerId: ProviderId,
-  providersInput: Record<string, unknown>,
-): Record<string, unknown> => (
-  isRecord(providersInput[providerId]) ? providersInput[providerId] : {}
+const normalizeProviderAuthType = (value: unknown): SystemProviderCredentialSettings["authType"] => (
+  value === "apiKey" || value === "localAuth" || value === "dashboardAuth" ? value : undefined
 );
+
+const collectProjectProviderIntegrations = (
+  providersInput: Record<string, unknown>,
+  integrationProviders: Record<ProviderConfigId, SystemProviderCredentialSettings>,
+): Record<ProviderConfigId, SystemProviderCredentialSettings> => {
+  const result: Record<ProviderConfigId, SystemProviderCredentialSettings> = { ...integrationProviders };
+  const defaultIntegrations = buildDefaultIntegrationProviders();
+
+  for (const [providerConfigId, rawValue] of Object.entries(providersInput)) {
+    if (result[providerConfigId] || !isRecord(rawValue)) {
+      continue;
+    }
+
+    const providerId = normalizeProviderId(rawValue.provider) || inferProviderIdFromConfigId(providerConfigId);
+    if (!providerId) {
+      continue;
+    }
+
+    const defaultIntegration = defaultIntegrations[DEFAULT_PROVIDER_CONFIG_IDS[providerId]];
+    const requestedAuthType = normalizeProviderAuthType(rawValue.authType);
+    const authType = requestedAuthType || defaultIntegration.authType || "apiKey";
+    const normalizedProviderConfig = normalizeProviderConfig(
+      providerId,
+      rawValue.providerConfigMode ?? defaultIntegration.providerConfigMode,
+      rawValue.providerConfigPath ?? defaultIntegration.providerConfigPath,
+    );
+
+    result[providerConfigId] = {
+      ...defaultIntegration,
+      provider: providerId,
+      name: normalizeProviderName(providerId, rawValue.name ?? defaultIntegration.name),
+      apiKey: authType === "apiKey" && typeof rawValue.apiKey === "string"
+        ? rawValue.apiKey
+        : defaultIntegration.apiKey,
+      mountAuth: providerId === "jules"
+        ? false
+        : authType === "dashboardAuth"
+          ? true
+          : (typeof rawValue.mountAuth === "boolean" ? rawValue.mountAuth : defaultIntegration.mountAuth),
+      authPath: authType === "dashboardAuth"
+        ? `~/.code-ux/credentials/${providerConfigId}`
+        : normalizeProviderAuthPath(providerId, rawValue.authPath ?? defaultIntegration.authPath),
+      ...normalizedProviderConfig,
+      authType,
+    };
+  }
+
+  return result;
+};
 
 export const buildProjectProviderSettings = (
   providersInput: unknown,
@@ -341,10 +453,10 @@ export const buildProjectProviderSettings = (
 ): Record<ProviderConfigId, ProjectProviderSettings> => {
   const result: Record<ProviderConfigId, ProjectProviderSettings> = {};
   const input = isRecord(providersInput) ? providersInput : {};
+  const availableIntegrations = collectProjectProviderIntegrations(input, integrationProviders);
 
-  for (const [providerConfigId, integration] of Object.entries(integrationProviders)) {
-    const legacySource = readLegacyProviderConfig(integration.provider, input);
-    const directSource = isRecord(input[providerConfigId]) ? input[providerConfigId] : legacySource;
+  for (const [providerConfigId, integration] of Object.entries(availableIntegrations)) {
+    const directSource = isRecord(input[providerConfigId]) ? input[providerConfigId] : {};
     const defaults = DEFAULT_PROVIDER_SETTINGS[integration.provider];
     result[providerConfigId] = {
       provider: integration.provider,
@@ -356,7 +468,7 @@ export const buildProjectProviderSettings = (
         ? directSource.model.trim()
         : defaults.model,
       weight: normalizeWeight(directSource.weight, defaults.weight),
-      thinkingMode: normalizeThinkingMode(directSource.thinkingMode, defaults.thinkingMode),
+      thinkingMode: normalizeThinkingMode(integration.provider, directSource.thinkingMode, defaults.thinkingMode),
       maxConcurrentTasks: normalizeMaxConcurrentTasks(directSource.maxConcurrentTasks, defaults.maxConcurrentTasks),
     };
   }
@@ -382,13 +494,17 @@ export const buildDashboardProviderSettings = (
             ? projectProvider.model
             : defaults.model,
           weight: normalizeWeight(projectProvider.weight, defaults.weight),
-          thinkingMode: normalizeThinkingMode(projectProvider.thinkingMode, defaults.thinkingMode),
+          thinkingMode: normalizeThinkingMode(providerId, projectProvider.thinkingMode, defaults.thinkingMode),
           maxConcurrentTasks: normalizeMaxConcurrentTasks(projectProvider.maxConcurrentTasks, defaults.maxConcurrentTasks),
           apiKey: integrationProviders[providerConfigId]?.apiKey || "",
           mountAuth: integrationProviders[providerConfigId]?.mountAuth
             || false,
           authPath: integrationProviders[providerConfigId]?.authPath
             || DEFAULT_PROVIDER_AUTH_PATHS[providerId],
+          providerConfigMode: integrationProviders[providerConfigId]?.providerConfigMode
+            || (supportsProviderConfigFile(providerId) ? "copyHost" : "none"),
+          providerConfigPath: integrationProviders[providerConfigId]?.providerConfigPath
+            || DEFAULT_PROVIDER_CONFIG_FILE_PATHS[providerId],
           ...(integrationProviders[providerConfigId]?.customBaseUrl
             ? { customBaseUrl: integrationProviders[providerConfigId].customBaseUrl }
             : {}),
@@ -425,14 +541,6 @@ export const resolveProviderConfigId = (
 ): ProviderConfigId | null => {
   if (typeof candidate === "string" && candidate in providers) {
     return candidate;
-  }
-
-  const legacyProviderId = normalizeProviderId(candidate);
-  if (legacyProviderId) {
-    const matchingConfigId = Object.entries(providers).find(([, provider]) => provider.provider === legacyProviderId)?.[0];
-    if (matchingConfigId) {
-      return matchingConfigId;
-    }
   }
 
   if (fallbackProviderId) {
@@ -485,8 +593,8 @@ export const resolveInvocationProviderOverrides = (
     if (typeof rawValue.weight === "number" && Number.isFinite(rawValue.weight)) {
       override.weight = Math.max(0, Math.round(rawValue.weight));
     }
-    if (typeof rawValue.thinkingMode === "string" && THINKING_MODES.includes(rawValue.thinkingMode as ThinkingMode)) {
-      override.thinkingMode = rawValue.thinkingMode as ThinkingMode;
+    if (typeof rawValue.thinkingMode === "string" && isProviderThinkingModeSupported(providers[providerConfigId].provider, rawValue.thinkingMode)) {
+      override.thinkingMode = normalizeProviderThinkingMode(providers[providerConfigId].provider, rawValue.thinkingMode);
     }
 
     if (Object.keys(override).length > 0) {

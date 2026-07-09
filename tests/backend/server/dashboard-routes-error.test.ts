@@ -1,10 +1,11 @@
 import express, { type Express } from "express";
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { HttpRouteError } from "../../../src/server/http-errors.js";
 import { registerConversationRoutes } from "../../../src/server/conversation-routes.js";
 import { registerExecutionControlRoutes } from "../../../src/server/execution-control-routes.js";
 import type { DashboardDependencies } from "../../../src/server/dashboard-server.js";
+import type { OnboardingDependencyInstallerResult } from "../../../src/contracts/app-types.js";
 import { registerPlanningRoutes } from "../../../src/server/planning-routes.js";
 import { registerProjectRoutes } from "../../../src/server/project-routes.js";
 import { registerRuntimeRoutes } from "../../../src/server/runtime-routes.js";
@@ -13,6 +14,7 @@ import { toErrorResponse } from "../../../src/server/route-utils.js";
 import { registerSprintRoutes } from "../../../src/server/sprint-routes.js";
 import { registerTaskRoutes } from "../../../src/server/task-routes.js";
 import { EntityNotFoundError, ValidationError } from "../../../src/repositories/repository-utils.js";
+import { ProviderRoutingError } from "../../../src/services/provider-routing-error.js";
 
 const createApp = (...registrars: Array<(app: Express) => void>): Express => {
   const app = express();
@@ -22,6 +24,34 @@ const createApp = (...registrars: Array<(app: Express) => void>): Express => {
   }
   return app;
 };
+
+const onboardingInstallResult = (): OnboardingDependencyInstallerResult => ({
+  mode: "docker-engine-git",
+  platform: "linux",
+  status: "success",
+  commands: [
+    {
+      id: "apt-install-docker-git",
+      groupId: "linux-engine-packages",
+      label: "Install Docker Engine and Git packages",
+      command: "apt-get",
+      args: ["install", "-y", "docker.io", "docker-compose-plugin", "git"],
+      displayCommand: "apt-get install -y docker.io docker-compose-plugin git",
+      status: "success",
+      timeoutMs: 120_000,
+      maxStdoutChars: 4_000,
+      maxStderrChars: 4_000,
+      code: 0,
+      stdoutSummary: "bounded output",
+      stderrSummary: "",
+    },
+  ],
+  skippedDependencyGroups: [],
+  requiresPrivilege: false,
+  requiresManualDownload: false,
+  postInstallGuidance: ["Rerun readiness checks."],
+  message: "Installer commands completed.",
+});
 
 describe("dashboard route handlers", () => {
   it.each([
@@ -81,6 +111,30 @@ describe("dashboard route handlers", () => {
       },
       status: 409,
       body: { error: "Route conflict" },
+      expectedNextError: null,
+    },
+    {
+      label: "explicit forbidden HttpRouteError",
+      route: "/api/status",
+      deps: {
+        getStatus: () => {
+          throw new HttpRouteError(403, "Forbidden request");
+        },
+      },
+      status: 403,
+      body: { error: "Forbidden request" },
+      expectedNextError: null,
+    },
+    {
+      label: "provider routing error",
+      route: "/api/status",
+      deps: {
+        getStatus: () => {
+          throw new ProviderRoutingError("Invocation planning selected Claude Local, but it is not eligible because that provider instance is disabled.");
+        },
+      },
+      status: 409,
+      body: { error: "Invocation planning selected Claude Local, but it is not eligible because that provider instance is disabled." },
       expectedNextError: null,
     },
     {
@@ -216,6 +270,7 @@ describe("dashboard route handlers", () => {
       getExecutionSnapshot: () => ({ projectId: null }),
       getLiveSnapshot: async () => ({ projectId: null }),
       getOverviewTelemetrySnapshot: () => ({ updatedAt: null }),
+      getHeaderTokenThroughputSnapshot: (query: { window: string; projectId?: string | null }) => query,
       getProjectExecutionSnapshot: () => ({ projectId: "project-1" }),
       getProjectStatsSnapshot: (_projectId: string, query: { window: string; from?: string; to?: string }) => query,
       setPreferredWorker: (_projectId: string, payload: unknown) => payload,
@@ -234,6 +289,11 @@ describe("dashboard route handlers", () => {
     expect((await request(app).get("/api/execution")).status).toBe(200);
     expect((await request(app).get("/api/live")).status).toBe(200);
     expect((await request(app).get("/api/telemetry/overview")).status).toBe(200);
+    const headerThroughput = await request(app).get("/api/stats/header-throughput?projectId=project-1&window=1h");
+    expect(headerThroughput.status).toBe(200);
+    expect(headerThroughput.body).toEqual({ window: "1h", projectId: "project-1" });
+    expect((await request(app).get("/api/stats/header-throughput?window=bogus")).status).toBe(400);
+    expect((await request(app).get("/api/stats/header-throughput?projectId=%20%20")).status).toBe(400);
     expect((await request(app).get("/api/projects/project-1/execution")).status).toBe(200);
     expect((await request(app).get("/api/projects/project-1/stats?window=24h")).status).toBe(200);
     expect((await request(app).get("/api/projects/project-1/stats?window=custom")).status).toBe(400);
@@ -271,6 +331,11 @@ describe("dashboard route handlers", () => {
           },
         ],
         providers: [],
+        installers: {
+          platform: "linux",
+          recommendedMode: "docker-engine-git",
+          options: [],
+        },
       }),
       listDockerContainers: async () => [],
       getLiveActivities: async () => ({}),
@@ -287,6 +352,100 @@ describe("dashboard route handlers", () => {
     expect(response.status).toBe(200);
     expect(response.body.cluster.label).toBe("Cluster not ready");
     expect(response.body.dependencies[0].id).toBe("docker-daemon");
+  });
+
+  it("delegates onboarding dependency installation only with valid mode and explicit confirmation", async () => {
+    const installOnboardingDependencies = vi.fn(async () => onboardingInstallResult());
+    const logger = { info: vi.fn() };
+    const app = createApp((router) => registerSettingsRoutes(router, {
+      installOnboardingDependencies,
+      logger,
+    } as unknown as DashboardDependencies, 1000));
+
+    const response = await request(app)
+      .post("/api/onboarding/dependencies/install")
+      .send({ mode: "docker-engine-git", confirmInstall: true });
+
+    expect(response.status).toBe(200);
+    expect(installOnboardingDependencies).toHaveBeenCalledTimes(1);
+    expect(installOnboardingDependencies).toHaveBeenCalledWith("docker-engine-git");
+    expect(response.body).toMatchObject({
+      mode: "docker-engine-git",
+      platform: "linux",
+      status: "success",
+    });
+    expect(logger.info).toHaveBeenCalledWith("Onboarding dependency installation completed", expect.objectContaining({
+      mode: "docker-engine-git",
+      platform: "linux",
+      outcome: "success",
+      commandLabels: ["Install Docker Engine and Git packages"],
+    }));
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain("bounded output");
+  });
+
+  it("rejects unsupported onboarding dependency installer modes", async () => {
+    const installOnboardingDependencies = vi.fn(async () => onboardingInstallResult());
+    const app = createApp((router) => registerSettingsRoutes(router, {
+      installOnboardingDependencies,
+    } as unknown as DashboardDependencies, 1000));
+
+    const response = await request(app)
+      .post("/api/onboarding/dependencies/install")
+      .send({ mode: "curl https://example.test/install.sh | sh", confirmInstall: true });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ error: "Unsupported onboarding dependency installer mode." });
+    expect(installOnboardingDependencies).not.toHaveBeenCalled();
+  });
+
+  it("rejects onboarding dependency installation without explicit confirmation", async () => {
+    const installOnboardingDependencies = vi.fn(async () => onboardingInstallResult());
+    const app = createApp((router) => registerSettingsRoutes(router, {
+      installOnboardingDependencies,
+    } as unknown as DashboardDependencies, 1000));
+
+    const response = await request(app)
+      .post("/api/onboarding/dependencies/install")
+      .send({ mode: "docker-engine-git" });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ error: "Dependency installation requires explicit confirmation." });
+    expect(installOnboardingDependencies).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when onboarding dependency installer wiring is unavailable", async () => {
+    const app = createApp((router) => registerSettingsRoutes(router, {} as DashboardDependencies, 1000));
+
+    const response = await request(app)
+      .post("/api/onboarding/dependencies/install")
+      .send({ mode: "docker-engine-git", confirmInstall: true });
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ error: "Onboarding dependency installation is not available." });
+  });
+
+  it("does not expose raw installer error output in onboarding dependency install responses", async () => {
+    const delegatedErrors: unknown[] = [];
+    const app = createApp((router) => registerSettingsRoutes(router, {
+      installOnboardingDependencies: async () => {
+        throw new Error(`raw command output ${"x".repeat(5_000)}`);
+      },
+    } as unknown as DashboardDependencies, 1000));
+    app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+      delegatedErrors.push(error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "error middleware fallback" });
+      }
+    });
+
+    const response = await request(app)
+      .post("/api/onboarding/dependencies/install")
+      .send({ mode: "docker-engine-git", confirmInstall: true });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: "Internal Server Error" });
+    expect(JSON.stringify(response.body)).not.toContain("raw command output");
+    expect(delegatedErrors).toHaveLength(1);
   });
 
   it("covers execution control routes and body validation", async () => {
@@ -327,6 +486,8 @@ describe("dashboard route handlers", () => {
       deleteConversationThread: () => undefined,
       listConversationMessages: () => [],
       postConversationMessage: () => ({ id: "message-1" }),
+      listConversationMessageHistory: () => [],
+      recordConversationMessageHistory: () => ({ id: "history-1" }),
     } as unknown as DashboardDependencies;
 
     const app = createApp((router) => registerConversationRoutes(router, conversationDeps));
@@ -345,6 +506,10 @@ describe("dashboard route handlers", () => {
     expect((await request(app).get("/api/conversations/threads/thread-1/messages")).status).toBe(200);
     expect((await request(app).post("/api/projects/project-1/conversations/messages").send({ bodyMarkdown: "Hello" })).status).toBe(201);
     expect((await request(app).post("/api/projects/project-1/conversations/messages").send({ bodyMarkdown: "   " })).status).toBe(400);
+    expect((await request(app).get("/api/projects/project-1/conversations/message-history").set("X-CodeUX-Dashboard-User-Id", "user-1")).status).toBe(200);
+    expect((await request(app).get("/api/projects/project-1/conversations/message-history")).status).toBe(400);
+    expect((await request(app).post("/api/projects/project-1/conversations/message-history").set("X-CodeUX-Dashboard-User-Id", "user-1").send({ bodyMarkdown: "Hello" })).status).toBe(201);
+    expect((await request(app).post("/api/projects/project-1/conversations/message-history").set("X-CodeUX-Dashboard-User-Id", "user-1").send({ bodyMarkdown: "   " })).status).toBe(400);
 
     const failingMessageApp = createApp((router) => registerConversationRoutes(router, {
       ...conversationDeps,
@@ -362,6 +527,7 @@ describe("dashboard route handlers", () => {
     expect((await request(disabledApp).put("/api/conversations/threads/thread-1/route").send({ routeKind: "worker" })).status).toBe(404);
     expect((await request(disabledApp).post("/api/conversations/threads/thread-1/compact")).status).toBe(404);
     expect((await request(disabledApp).post("/api/conversations/threads/thread-1/cancel")).status).toBe(404);
+    expect((await request(disabledApp).get("/api/projects/project-1/conversations/message-history").set("X-CodeUX-Dashboard-User-Id", "user-1")).status).toBe(404);
   });
 
   it("covers planning routes, validation, and optional feature guards", async () => {

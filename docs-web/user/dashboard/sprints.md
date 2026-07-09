@@ -2,18 +2,26 @@
 
 The **Sprints** page (`/sprints`) is where you plan, manage, and launch sprint runs.
 
-## The sprint board
+## The sprint gallery and ledger
 
-Each sprint is rendered as a *bubble* showing:
+Sprints are viewed either in a visual organic cell gallery or a dense ledger format. Each sprint cell/row shows:
 
 - **Status pill** — `idle`, `running`, `paused`, `completed`, `failed`, `cancelled`.
 - **Task counters** — completed / total, plus failures.
 - **Goal** — first line of the sprint goal.
-- **Action buttons** — Plan / Orchestrate / Pause / Cancel as appropriate.
+- **Action buttons** — Plan / Orchestrate / Pause / Cancel as appropriate, with inactive pause guidance kept out of the visible row to preserve ledger density.
 
-Sprints can be **showcase-pinned** to surface them on the Overview page; toggle this from the bubble menu.
+Sprints can be **showcase-pinned** to surface them on the Overview page; toggle this from the cell menu or bulk actions.
+
+Each sprint row and showcase card has separate **Tasks** and **Live** actions. These links carry both `projectId` and `sprintId`, so opening a sprint from the ledger switches the dashboard to that sprint's project before loading the task board or live view.
 
 ## Creating a sprint
+
+You can create a sprint from the Sprints page or directly from the top-bar sprint selector.
+
+From the top bar, open the sprint selector and click **Add Sprint**. This compact flow asks only for a name and goal, creates an idle sprint, refreshes the sprint collection, and selects the new sprint. The selector stays enabled even when the project has no sprints so this action remains available for first-sprint creation. Click **Manage Sprints** in the same selector to open the full Sprints page.
+
+From the Sprints page:
 
 1. Click **+ New sprint**.
 2. Enter:
@@ -36,6 +44,10 @@ Click **Plan sprint**. The planner agent (typically a Gemini, Codex or Claude se
 - Inferred `depends_on` edges.
 - A best-effort `is_independent` flag.
 
+While planning is in flight, the dashboard shows a shared planning overlay for normal sprints and quicksprints. It includes ETA and elapsed timers, request-specific status copy, a vessel that travels across the course and respawns smoothly, and minimize, cancel, and new sprint/quicksprint recovery actions when they are available. The ETA is a visual planning estimate; it does not change how the backend planner runs.
+
+The vessel can also be activated as a small coffee reminder. Planning continues normally, and the minimize, new sprint/quicksprint, and cancellation controls remain available.
+
 You can:
 
 - **Edit** each subtask inline.
@@ -44,6 +56,12 @@ You can:
 - **Cancel** an in-flight planning request via the cancel button (this aborts the underlying provider session).
 
 The plan is persisted as markdown files at `<repo>/.code-ux/sprints/sprint-<n>/<task-id>.md`. See [Sprint format](../../developer/sprint-format.md).
+
+## Chat-created app sprints
+
+The Chat page can create app-building sprints through **Create Web App** and **Create Desktop App** quickactions. Those quickactions start a detached `Plan & Start` quicksprint from the selected project and show planning progress in the chat transcript while the sprint appears here like any other sprint.
+
+If you send more direction in the same chat thread while planning is still running, Code UX applies that text to the sprint goal under `Additional direction from chat` after planning finishes. Once the sprint already has tasks, new chat follow-ups are appended to the sprint goal immediately. The generated task prompts are left unchanged, so use the sprint goal as the record of later direction and re-plan only when you want subtasks regenerated.
 
 ## The sprint DAG view
 
@@ -68,16 +86,17 @@ You can run any sprint multiple times. Each run has its own ID and its own row i
 - **Cancel** — The sprint enters `cancel_requested` and is cancelled gracefully. Active dispatches are signalled to stop.
 - **Force cancel** — Skips graceful steps. Use only if a normal cancel hangs.
 
-Pausing / cancelling are also exposed as MCP actions (`manage_code_ux` → domain `sprints` → actions `pause`, `cancel`, `force_cancel`).
+Pausing / cancelling are also exposed as MCP actions via the `manage_sprints` tool (actions `pause`, `cancel`, `force_cancel`).
 
 ## Importing & exporting sprints
 
-Sprints are portable as Markdown bundles:
+Sprints support importing issues directly from external providers, as well as being portable as Markdown bundles:
 
+- **Issue Import** — Click **+ → Import** and choose **GitHub Issues**, **GitLab Issues**, or **Jira Issues**. You can search by text, labels, status, assignees, or exact issue keys (e.g., `#42` or `OPS-42`). Jira status filters use the active Jira project's workflow labels and include `All statuses`; if those labels cannot be loaded, the modal falls back to the broader category filters. Imported issues are attached as linked contexts, and Jira issues can optionally be converted directly into security or quality tasks. Code UX attempts to auto-transition or auto-close linked issues when the sprint completes.
 - **Export** — Click **⋯ → Export markdown**. You receive a downloadable bundle: one file per subtask plus a `sprint.md` describing the sprint.
-- **Import** — Click **+ → Import**. Drop a previously exported bundle (or a hand-written one). Code UX validates and creates the sprint.
+- **Import Bundle** — Click **+ → Import**. Drop a previously exported bundle (or a hand-written one). Code UX validates and creates the sprint.
 
-Importing is the recommended way to template sprints across projects when [Quicksprints](../quicksprints.md) are not flexible enough.
+Importing bundles is the recommended way to template sprints across projects when [Quicksprints](../quicksprints.md) are not flexible enough.
 
 ## Sprint settings overrides
 
@@ -89,6 +108,10 @@ Each sprint can override project settings, which in turn override system setting
 
 Effective settings are inspectable at `GET /api/projects/:projectId/sprints/:sprintId/settings/effective`.
 
-## Sprint deletion
+## Sprint deletion and bulk actions
 
-Deleting a sprint requires explicit confirmation and removes its database state but leaves the on-disk markdown directory intact (so you can re-import later if you change your mind).
+The Sprints ledger supports multi-select for bulk starting, pinning, or deleting sprints.
+
+Sorting, filtering, search, list-window changes, row selection, and bulk actions announce concise result-count updates without moving focus back through the table. Sortable headers expose their current direction, rows show selected/pending/deleting/bulk-disabled states directly, and pending bulk buttons switch to static progress labels such as **Starting** or **Deleting** for reduced-motion users.
+
+Deleting a sprint (single or bulk) requires explicit confirmation in a destructive dialog and removes its database state but leaves the on-disk markdown directory intact (so you can re-import later if you change your mind).

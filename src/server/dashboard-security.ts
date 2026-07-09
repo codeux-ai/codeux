@@ -1,45 +1,218 @@
 import type { Request, Response } from "express";
-import { parsePreviewSessionIdFromHost } from "./preview-host-utils.js";
+import { PREVIEW_HOST_PREFIX } from "./preview-host-utils.js";
+
+type HeaderValue = string | string[] | undefined;
+
+type CanonicalHost = {
+  host: string;
+  hostname: string;
+  boundary: "dashboard" | "preview";
+};
+
+type ParsedHost = Pick<CanonicalHost, "host" | "hostname">;
+
+const CONTROL_CHAR_PATTERN = /[\u0000-\u001f\u007f]/;
+const HOST_FORBIDDEN_CHAR_PATTERN = /[/?#\\]/;
+const LOCAL_DASHBOARD_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+function readSingleHeaderValue(headerValue: HeaderValue): string | null {
+  if (typeof headerValue !== "string") {
+    return null;
+  }
+  const value = headerValue.trim();
+  if (!value || CONTROL_CHAR_PATTERN.test(value) || value.includes(",")) {
+    return null;
+  }
+  return value;
+}
+
+function parseHostSyntax(headerValue: HeaderValue): ParsedHost | null {
+  const value = readSingleHeaderValue(headerValue);
+  if (!value || value.includes("@") || HOST_FORBIDDEN_CHAR_PATTERN.test(value)) {
+    return null;
+  }
+
+  let url: URL;
+  try {
+    url = new URL(`http://${value}/`);
+  } catch {
+    return null;
+  }
+
+  if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
+    return null;
+  }
+
+  const hostname = url.hostname.toLowerCase();
+  const host = url.host.toLowerCase();
+  if (!hostname || !host) {
+    return null;
+  }
+
+  return { host, hostname };
+}
+
+function parseCanonicalHost(headerValue: HeaderValue): CanonicalHost | null {
+  const parsed = parseHostSyntax(headerValue);
+  if (!parsed) {
+    return null;
+  }
+
+  if (LOCAL_DASHBOARD_HOSTS.has(parsed.hostname) || isConfiguredDashboardHostname(parsed.hostname)) {
+    return { ...parsed, boundary: "dashboard" };
+  }
+
+  if (isLocalPreviewHostname(parsed.hostname)) {
+    return { ...parsed, boundary: "preview" };
+  }
+
+  return null;
+}
+
+function parseCanonicalUrlHost(headerValue: HeaderValue): CanonicalHost | null {
+  const value = readSingleHeaderValue(headerValue);
+  if (!value) {
+    return null;
+  }
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+
+  if ((url.protocol !== "http:" && url.protocol !== "https:") || url.username || url.password) {
+    return null;
+  }
+
+  return parseCanonicalHost(url.host);
+}
+
+function isConfiguredDashboardHostname(hostname: string): boolean {
+  const configuredHost = parseConfiguredDashboardHost();
+  return configuredHost !== null && hostname === configuredHost.hostname;
+}
+
+function parseConfiguredDashboardHost(): CanonicalHost | null {
+  const configuredHost = process.env.DASHBOARD_HOST?.trim();
+  if (!configuredHost) {
+    return null;
+  }
+  const parsed = parseRawConfiguredHost(configuredHost);
+  if (!parsed || parsed.boundary !== "dashboard") {
+    return null;
+  }
+  return parsed;
+}
+
+function parseRawConfiguredHost(configuredHost: string): CanonicalHost | null {
+  const parsed = configuredHost.includes("://")
+    ? parseConfiguredUrlHost(configuredHost)
+    : parseHostSyntax(configuredHost);
+  if (!parsed || isLocalPreviewHostname(parsed.hostname)) {
+    return null;
+  }
+  return { ...parsed, boundary: "dashboard" };
+}
+
+function isLocalDashboardHostname(hostname: string): boolean {
+  return LOCAL_DASHBOARD_HOSTS.has(hostname);
+}
+
+function parseConfiguredUrlHost(configuredHost: string): ParsedHost | null {
+  if (CONTROL_CHAR_PATTERN.test(configuredHost) || configuredHost.includes(",")) {
+    return null;
+  }
+  try {
+    const url = new URL(configuredHost);
+    if ((url.protocol !== "http:" && url.protocol !== "https:") || url.username || url.password) {
+      return null;
+    }
+    return parseHostSyntax(url.host);
+  } catch {
+    return null;
+  }
+}
+
+function isLocalPreviewHostname(hostname: string): boolean {
+  if (!hostname.endsWith(".localhost") || !hostname.startsWith(PREVIEW_HOST_PREFIX)) {
+    return false;
+  }
+  const firstSegment = hostname.slice(0, hostname.indexOf("."));
+  const sessionId = firstSegment.slice(PREVIEW_HOST_PREFIX.length);
+  return /^[a-z0-9][a-z0-9-]*$/i.test(sessionId);
+}
+
+function isSafeForwardedHost(actualHost: CanonicalHost, forwardedHost: CanonicalHost): boolean {
+  if (actualHost.host === forwardedHost.host) {
+    return true;
+  }
+
+  if (actualHost.boundary !== "dashboard" || forwardedHost.boundary !== "dashboard") {
+    return false;
+  }
+
+  const actualIsLocal = isLocalDashboardHostname(actualHost.hostname);
+  const forwardedIsLocal = isLocalDashboardHostname(forwardedHost.hostname);
+  if (actualIsLocal && forwardedIsLocal) {
+    return true;
+  }
+
+  // Reverse proxies should keep Code UX bound to loopback and present the
+  // externally routed hostname through X-Forwarded-Host. The forwarded hostname
+  // must be the explicit DASHBOARD_HOST value, not an arbitrary client header.
+  const configuredHost = parseConfiguredDashboardHost();
+  return actualIsLocal
+    && configuredHost !== null
+    && forwardedHost.hostname === configuredHost.hostname;
+}
+
+function getAllowedRequestHosts(req: Request): CanonicalHost[] | null {
+  const actualHost = parseCanonicalHost(req.headers.host);
+  if (!actualHost) {
+    return null;
+  }
+
+  const forwardedHostHeader = req.headers["x-forwarded-host"];
+  if (forwardedHostHeader === undefined) {
+    return [actualHost];
+  }
+
+  const forwardedHost = parseCanonicalHost(forwardedHostHeader);
+  if (!forwardedHost || !isSafeForwardedHost(actualHost, forwardedHost)) {
+    return null;
+  }
+
+  return [actualHost, forwardedHost];
+}
 
 /**
  * Validates if the given host header is considered a trusted local dashboard boundary.
  */
-export function isTrustedDashboardHost(hostHeader: string | undefined): boolean {
-  if (!hostHeader) {
+export function isTrustedDashboardHost(hostHeader: HeaderValue, forwardedHostHeader?: HeaderValue): boolean {
+  const actualHost = parseCanonicalHost(hostHeader);
+  if (!actualHost) {
     return false;
   }
 
-  const hostWithoutPort = hostHeader.startsWith("[::1]") ? "[::1]" : hostHeader.split(":")[0]?.toLowerCase();
-  if (!hostWithoutPort) {
-    return false;
-  }
-
-  if (hostWithoutPort === "localhost" || hostWithoutPort === "127.0.0.1" || hostWithoutPort === "[::1]") {
+  if (forwardedHostHeader === undefined) {
     return true;
   }
 
-  const configuredHost = process.env.DASHBOARD_HOST?.trim().toLowerCase();
-  if (configuredHost && hostWithoutPort === configuredHost) {
-    return true;
-  }
+  const forwardedHost = parseCanonicalHost(forwardedHostHeader);
+  return forwardedHost !== null && isSafeForwardedHost(actualHost, forwardedHost);
+}
 
-  const previewSessionId = parsePreviewSessionIdFromHost(hostHeader);
-  if (previewSessionId !== null) {
-    return true;
-  }
-
-  return false;
+export function isTrustedDashboardPreviewHost(hostHeader: HeaderValue): boolean {
+  return parseCanonicalHost(hostHeader)?.boundary === "preview";
 }
 
 /**
  * Validates whether the incoming browser request is from a hostile cross-site origin.
- * We only block mutation requests to sensitive paths if the browser indicates a cross-site context.
+ * Runtime data routes only accept browser origins that match the trusted request boundary.
  */
 export function isHostileBrowserOrigin(req: Request): boolean {
-  // Only protect mutations to APIs and health endpoints
-  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
-    return false;
-  }
   if (!req.path.startsWith("/api/") && req.path !== "/health" && req.path !== "/ready") {
     return false;
   }
@@ -49,34 +222,31 @@ export function isHostileBrowserOrigin(req: Request): boolean {
   const origin = req.headers.origin;
   const referer = req.headers.referer;
 
+  if (!secFetchSite && !origin && !referer) {
+    return false;
+  }
+
   // Sec-Fetch-Site is the most modern and reliable check
   if (secFetchSite === "cross-site") {
     return true;
   }
 
   // If Sec-Fetch-Site is not cross-site (or missing), check Origin and Referer
-  const requestHost = req.headers.host;
+  const requestHosts = getAllowedRequestHosts(req);
+  if (!requestHosts) {
+    return true;
+  }
 
-  if (origin && requestHost) {
-    try {
-      const originUrl = new URL(origin);
-      if (originUrl.host !== requestHost) {
-        return true; // Hostile Origin
-      }
-    } catch {
-      return true; // Malformed Origin is considered hostile
+  if (origin) {
+    const originHost = parseCanonicalUrlHost(origin);
+    if (!originHost || !requestHosts.some((requestHost) => requestHost.host === originHost.host)) {
+      return true;
     }
   }
 
-  if (referer && requestHost && !origin) {
-    try {
-      const refererUrl = new URL(referer);
-      if (refererUrl.host !== requestHost) {
-         return true; // Hostile Referer
-      }
-    } catch {
-       return true; // Malformed Referer
-    }
+  if (referer) {
+    const refererHost = parseCanonicalUrlHost(referer);
+    return !refererHost || !requestHosts.some((requestHost) => requestHost.host === refererHost.host);
   }
 
   return false;
@@ -89,5 +259,5 @@ export function applyDashboardSecurityHeaders(res: Response): void {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("X-Frame-Options", "SAMEORIGIN");
-  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(self), geolocation=()");
 }

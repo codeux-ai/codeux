@@ -4,7 +4,7 @@ import { AppDbStorage } from "./app-db-storage.js";
 import { requireRecord } from "./repository-utils.js";
 import { deriveWorkerEndpointStatus } from "./connection-lifecycle.js";
 import type { McpConnectionRecord } from "../contracts/connection-chat-types.js";
-import type { WorkerEndpointCapabilities, WorkerEndpointRecord, WorkerEndpointStatus } from "../contracts/worker-types.js";
+import type { UpsertExternalWorkerEndpointInput, WorkerEndpointCapabilities, WorkerEndpointRecord, WorkerEndpointStatus } from "../contracts/worker-types.js";
 
 interface WorkerEndpointRow {
   id: string;
@@ -81,6 +81,19 @@ export class WorkerEndpointRepository {
       FROM worker_endpoints
       WHERE connection_id = ?
     `).get(connectionId) as WorkerEndpointRow | undefined;
+
+    return row ? this.mapRow(row) : null;
+  }
+
+  getWorkerEndpointByConnectionKey(connectionKey: string): WorkerEndpointRecord | null {
+    const row = this.db.prepare(`
+      SELECT *
+      FROM worker_endpoints
+      WHERE connection_key = ?
+        AND endpoint_type = 'mcp_connection'
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `).get(connectionKey.trim()) as WorkerEndpointRow | undefined;
 
     return row ? this.mapRow(row) : null;
   }
@@ -203,6 +216,69 @@ export class WorkerEndpointRepository {
     });
   }
 
+  upsertExternalWorkerEndpoint(input: UpsertExternalWorkerEndpointInput): WorkerEndpointRecord {
+    const connectionKey = input.connectionKey.trim();
+    if (!connectionKey) {
+      throw new Error("Worker connection key cannot be blank.");
+    }
+    const displayName = input.displayName.trim();
+    if (!displayName) {
+      throw new Error("Worker display name cannot be blank.");
+    }
+    const transport = input.transport.trim();
+    if (!transport) {
+      throw new Error("Worker transport cannot be blank.");
+    }
+
+    const now = new Date().toISOString();
+    const existing = this.getWorkerEndpointByKey(this.toExternalEndpointKey(connectionKey))
+      || this.getWorkerEndpointByConnectionKey(connectionKey);
+    const id = existing?.id || randomUUID();
+    const capabilities = {
+      ...DEFAULT_WORKER_ENDPOINT_CAPABILITIES,
+      ...(input.capabilities || {}),
+    };
+
+    this.db.prepare(`
+      INSERT INTO worker_endpoints (
+        id,
+        endpoint_key,
+        endpoint_type,
+        display_name,
+        status,
+        connection_id,
+        connection_key,
+        transport,
+        capabilities_json,
+        last_heartbeat_at,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, 'mcp_connection', ?, 'connected', NULL, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        endpoint_key = excluded.endpoint_key,
+        endpoint_type = excluded.endpoint_type,
+        display_name = excluded.display_name,
+        status = excluded.status,
+        connection_key = excluded.connection_key,
+        transport = excluded.transport,
+        capabilities_json = excluded.capabilities_json,
+        last_heartbeat_at = excluded.last_heartbeat_at,
+        updated_at = excluded.updated_at
+    `).run(
+      id,
+      this.toExternalEndpointKey(connectionKey),
+      displayName,
+      connectionKey,
+      transport,
+      JSON.stringify(capabilities),
+      now,
+      existing?.createdAt || now,
+      now,
+    );
+
+    return requireRecord(this.getWorkerEndpoint(id), "Worker endpoint", id);
+  }
+
   deleteWorkerEndpoint(endpointId: string): void {
     this.db.prepare(`
       DELETE FROM worker_endpoints
@@ -216,7 +292,9 @@ export class WorkerEndpointRepository {
       return null;
     }
 
-    const existing = this.getWorkerEndpointByConnectionId(connection.id);
+    const existing = this.getWorkerEndpointByConnectionId(connection.id)
+      || this.getWorkerEndpointByKey(this.toExternalEndpointKey(connection.connectionKey))
+      || this.getWorkerEndpointByConnectionKey(connection.connectionKey);
     const now = new Date().toISOString();
     const id = existing?.id || randomUUID();
 
@@ -235,11 +313,12 @@ export class WorkerEndpointRepository {
         created_at,
         updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(connection_id) DO UPDATE SET
+      ON CONFLICT(id) DO UPDATE SET
         endpoint_key = excluded.endpoint_key,
         endpoint_type = excluded.endpoint_type,
         display_name = excluded.display_name,
         status = excluded.status,
+        connection_id = excluded.connection_id,
         connection_key = excluded.connection_key,
         transport = excluded.transport,
         capabilities_json = excluded.capabilities_json,
@@ -247,7 +326,7 @@ export class WorkerEndpointRepository {
         updated_at = excluded.updated_at
     `).run(
       id,
-      this.toEndpointKey(connection.id),
+      this.toExternalEndpointKey(connection.connectionKey),
       "mcp_connection",
       connection.displayName,
       this.mapConnectionStatus(connection.status),
@@ -288,8 +367,8 @@ export class WorkerEndpointRepository {
     };
   }
 
-  private toEndpointKey(connectionId: string): string {
-    return `mcp:${connectionId}`;
+  private toExternalEndpointKey(connectionKey: string): string {
+    return `mcp:${connectionKey}`;
   }
 
   private mapConnectionStatus(status: McpConnectionRecord["status"]): WorkerEndpointStatus {

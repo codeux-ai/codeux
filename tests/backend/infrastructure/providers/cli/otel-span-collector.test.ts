@@ -129,6 +129,25 @@ describe("buildProviderSpan", () => {
     expect(span.status.message).toBe("quota exceeded");
   });
 
+  it("redacts failed span status messages without redacting safe model names", () => {
+    const rawSecret = "sk-or-v1-otelSpanSecret1234567890";
+    const span = buildProviderSpan({
+      provider: "codex",
+      model: "openrouter/anthropic/claude-sonnet-4.5",
+      startTimeMs: Date.now(),
+      endTimeMs: Date.now() + 1000,
+      success: false,
+      errorMessage: `upstream rejected Authorization: Bearer ${rawSecret}`,
+    });
+    const attrs = Object.fromEntries(
+      span.attributes.map((a) => [a.key, Object.values(a.value)[0]]),
+    );
+
+    expect(span.status.message).toBe("upstream rejected Authorization: Bearer [REDACTED]");
+    expect(JSON.stringify(span)).not.toContain(rawSecret);
+    expect(attrs["gen_ai.request.model"]).toBe("openrouter/anthropic/claude-sonnet-4.5");
+  });
+
   it("includes token usage attributes", () => {
     const now = Date.now();
     const span = buildProviderSpan({
@@ -262,6 +281,25 @@ describe("buildProviderLogRecord", () => {
 
     expect(record.severityText).toBe("ERROR");
     expect(record.severityNumber).toBe(17);
+  });
+
+  it("redacts log record body and string attributes", () => {
+    const rawSecret = "fixtureMcpBearerToken1234567890";
+    const record = buildProviderLogRecord({
+      message: `export failed Authorization: Bearer ${rawSecret}`,
+      severity: "error",
+      provider: "claude-code",
+      model: "claude-sonnet-4.5",
+      extraAttributes: [
+        { key: "http.request.header.authorization", value: { stringValue: `Bearer ${rawSecret}` } },
+        { key: "provider.retry_count", value: { intValue: 2 } },
+      ],
+    });
+
+    const serialized = JSON.stringify(record);
+    expect(serialized).not.toContain(rawSecret);
+    expect(record.body.stringValue).toBe("export failed Authorization: Bearer [REDACTED]");
+    expect(record.attributes.find((attr) => attr.key === "provider.retry_count")?.value).toEqual({ intValue: 2 });
   });
 
   it("includes trace/span link when provided", () => {
@@ -458,6 +496,42 @@ describe("OtelSpanCollector", () => {
 
     const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
     expect((init.headers as Record<string, string>)["Authorization"]).toBe("Bearer my-token");
+
+    fetchSpy.mockRestore();
+  });
+
+  it("redacts directly buffered span and log records before OTLP export", async () => {
+    const rawSecret = "glpat-12345678901234567890";
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 200 }));
+    const collector = new OtelSpanCollector({ endpoint: "http://localhost:4318" });
+
+    collector.addSpan({
+      traceId: "a".repeat(32),
+      spanId: "b".repeat(16),
+      name: "provider.invoke/codex",
+      kind: 3,
+      startTimeUnixNano: "1",
+      endTimeUnixNano: "2",
+      attributes: [
+        { key: "provider.error", value: { stringValue: `token ${rawSecret}` } },
+        { key: "provider.conversation_turns", value: { intValue: 3 } },
+      ],
+      status: { code: 2, message: `Authorization: Bearer ${rawSecret}` },
+    });
+    collector.addLog({
+      timeUnixNano: "2",
+      severityNumber: 17,
+      severityText: "ERROR",
+      body: { stringValue: `failed ${rawSecret}` },
+      attributes: [
+        { key: "provider.id", value: { stringValue: "codex" } },
+      ],
+    });
+    await collector.flush();
+
+    const exportedBodies = fetchSpy.mock.calls.map(([, init]) => String((init as RequestInit).body)).join("\n");
+    expect(exportedBodies).not.toContain(rawSecret);
+    expect(exportedBodies).toContain("[REDACTED]");
 
     fetchSpy.mockRestore();
   });

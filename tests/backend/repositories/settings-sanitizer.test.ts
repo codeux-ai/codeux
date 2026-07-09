@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { cloneDefaults, sanitizeSettings } from "../../../src/repositories/settings-sanitizer.js";
+import { cloneSystemSettings } from "../../../dashboard/src/v2/lib/settings/project-overrides.js";
+import {
+  buildDefaultSystemSettings,
+  resolveDashboardSettings,
+  sanitizeProjectSettings,
+} from "../../../src/services/settings-resolution-service.js";
+import { DESIGN_GUIDANCE_NONE_ID } from "../../../src/domain/settings/design-guidance-catalog.js";
 
 describe("settings-sanitizer", () => {
   it("clones defaults using resolved external hints", () => {
@@ -38,8 +45,30 @@ describe("settings-sanitizer", () => {
     expect(settings.aiProvider.providers.codex.apiKey).toBe("resolved-codex");
     expect(settings.aiProvider.providers["claude-code"].apiKey).toBe("resolved-claude");
     expect(settings.git.githubToken).toBe("resolved-github");
+    expect(settings.notion).toEqual({
+      enabled: false,
+      apiToken: "",
+      apiSecret: "",
+      baseUrl: "",
+      workspaceId: "",
+      teamId: "",
+      teamKey: "",
+      projectId: "",
+      databaseId: "",
+      boardId: "",
+      documentId: "",
+      fileKey: "",
+      defaultSearchLimit: 25,
+    });
     expect(settings.agents.saveToProjectDirectory).toBe(true);
     expect(settings.agents.instructionTemplates.planningMissing).toContain("Sprint Planning Missing");
+    expect(settings.designGuidance).toEqual({
+      selectedTechStackId: DESIGN_GUIDANCE_NONE_ID,
+      selectedStyleguideId: DESIGN_GUIDANCE_NONE_ID,
+      hideDefaultStyleguides: false,
+      customTechStacks: [],
+      customStyleguides: [],
+    });
   });
 
   it("sanitizes malformed input back to safe defaults", () => {
@@ -79,7 +108,9 @@ describe("settings-sanitizer", () => {
         executionMode: "invalid",
         containerImage: 42,
         containerSetupScriptPath: 7,
+        containerMemoryLimitMb: "bad",
         containerCacheSetupScriptImage: "bad",
+        containerRunAsRoot: "bad",
         containerMountGeminiAuth: "bad",
       },
       agents: {
@@ -118,6 +149,7 @@ describe("settings-sanitizer", () => {
     expect(settings.automationLevel).toBe("SEMI_AUTO");
     expect(settings.automationInterventions.autoApprovePlan).toBe(true);
     expect(settings.appearance.navigationMode).toBe("SIDEBAR");
+    expect(settings.appearance.experienceMode).toBe("EXPERT");
     expect(settings.aiProvider.provider).toBe("jules");
     expect(settings.git.githubMode).toBe("REMOTE");
     expect(settings.ciIntelligence.waitForJulesCiAutofix).toBe(false);
@@ -129,7 +161,9 @@ describe("settings-sanitizer", () => {
     expect(settings.sprintLoopSteps.watchLoopOutputIntervalSeconds).toBe(300);
     expect(settings.cliWorkflow.executionMode).toBe("DOCKER");
     expect(settings.cliWorkflow.containerImage).toBe("node:24-bookworm");
+    expect(settings.cliWorkflow.containerMemoryLimitMb).toBe(6144);
     expect(settings.cliWorkflow.containerCacheSetupScriptImage).toBe(true);
+    expect(settings.cliWorkflow.containerRunAsRoot).toBe(false);
     expect(settings.cliWorkflow.containerMountGeminiAuth).toBe(false);
     expect(settings.agents.saveToProjectDirectory).toBe(true);
     expect(settings.agents.instructionTemplates.planningMissing).toContain("Sprint Planning Missing");
@@ -151,6 +185,120 @@ describe("settings-sanitizer", () => {
     expect(settings.skills.find((skill) => skill.name === "custom-skill")?.isInternal).toBe(false);
     expect(settings.mcpTools.find((tool) => tool.name === "manage_tasks")?.enabled).toBe(false);
     expect(settings.memory.enabled).toBe(true);
+    expect(settings.designGuidance.selectedTechStackId).toBe(DESIGN_GUIDANCE_NONE_ID);
+    expect(settings.designGuidance.selectedStyleguideId).toBe(DESIGN_GUIDANCE_NONE_ID);
+    expect(settings.notion).toMatchObject({
+      enabled: false,
+      apiToken: "",
+      defaultSearchLimit: 25,
+    });
+  });
+
+  it("sanitizes design guidance selections and custom entries", () => {
+    const settings = sanitizeSettings({
+      designGuidance: {
+        selectedTechStackId: " custom-stack ",
+        selectedStyleguideId: "missing-style",
+        hideDefaultStyleguides: true,
+        customTechStacks: [
+          {
+            id: " custom-stack ",
+            name: " Custom Stack ",
+            summary: " Stack summary ",
+            instructionMarkdown: " Use TypeScript boundaries. ",
+          },
+          {
+            id: "custom-stack",
+            name: "Duplicate",
+            summary: "Duplicate.",
+            instructionMarkdown: "Ignore.",
+          },
+        ],
+        customStyleguides: [
+          {
+            id: "custom-style",
+            name: "",
+            summary: "Missing name.",
+            instructionMarkdown: "Invalid.",
+          },
+        ],
+      },
+    });
+
+    expect(settings.designGuidance).toEqual({
+      selectedTechStackId: "custom-stack",
+      selectedStyleguideId: DESIGN_GUIDANCE_NONE_ID,
+      hideDefaultStyleguides: true,
+      customTechStacks: [
+        {
+          id: "custom-stack",
+          name: "Custom Stack",
+          summary: "Stack summary",
+          instructionMarkdown: "Use TypeScript boundaries.",
+        },
+      ],
+      customStyleguides: [],
+    });
+  });
+
+  it("sanitizes malformed external importer settings", () => {
+    const settings = sanitizeSettings({
+      notion: {
+        enabled: "definitely",
+        apiToken: 42,
+        apiSecret: ["bad"],
+        baseUrl: "https://api.notion.test/",
+        workspaceId: 17,
+        defaultSearchLimit: 1000,
+      },
+      figma: {
+        enabled: true,
+        apiToken: " figma-token ",
+        fileKey: " file-key ",
+        defaultSearchLimit: 0,
+      },
+    });
+
+    expect(settings.notion).toMatchObject({
+      enabled: false,
+      apiToken: "",
+      apiSecret: "",
+      baseUrl: "https://api.notion.test",
+      workspaceId: "",
+      defaultSearchLimit: 250,
+    });
+    expect(settings.figma).toMatchObject({
+      enabled: true,
+      apiToken: "figma-token",
+      fileKey: "file-key",
+      defaultSearchLimit: 25,
+    });
+  });
+
+  it("deep-clones external importer settings in project override helpers", () => {
+    const systemSettings = buildDefaultSystemSettings({
+      env: {},
+      settingsJson: {},
+      resolved: {},
+    });
+    systemSettings.integrations.notion = {
+      ...systemSettings.integrations.notion,
+      enabled: true,
+      apiToken: "notion-token",
+      databaseId: "database-1",
+    };
+    systemSettings.defaults.figma = {
+      ...systemSettings.defaults.figma,
+      enabled: true,
+      fileKey: "figma-file",
+    };
+
+    const cloned = cloneSystemSettings(systemSettings);
+    cloned.integrations.notion.apiToken = "changed";
+    cloned.defaults.figma.fileKey = "changed";
+
+    expect(systemSettings.integrations.notion.apiToken).toBe("notion-token");
+    expect(systemSettings.defaults.figma.fileKey).toBe("figma-file");
   });
 
   it("normalizes QA trigger agent preset ids from legacy and multi-agent settings", () => {
@@ -195,10 +343,31 @@ describe("settings-sanitizer", () => {
     expect(settings.sprintPreview.containerAppPorts).toEqual([5173, 6006, 7007, 9000]);
   });
 
+  it("sanitizes preview container environment variables", () => {
+    const settings = sanitizeSettings({
+      sprintPreview: {
+        environmentVariables: [
+          { key: " CODE_UX_ALLOW_PUBLIC_DASHBOARD ", value: "1", enabled: true },
+          { key: "SPRINT_PREVIEW_PORT", value: "9999", enabled: true },
+          { key: "BAD-NAME", value: "bad", enabled: true },
+          { key: "MULTILINE", value: "one\ntwo", enabled: true },
+          { key: "FEATURE_FLAG", value: "old", enabled: true },
+          { key: "FEATURE_FLAG", value: "new", enabled: false },
+        ],
+      },
+    });
+
+    expect(settings.sprintPreview.environmentVariables).toEqual([
+      { key: "CODE_UX_ALLOW_PUBLIC_DASHBOARD", value: "1", enabled: true },
+      { key: "FEATURE_FLAG", value: "new", enabled: false },
+    ]);
+  });
+
   it("preserves valid appearance background image and pattern settings", () => {
     const settings = sanitizeSettings({
       appearance: {
         navigationMode: "DOCK",
+        experienceMode: "STANDARD",
         backgroundMode: "STATIC",
         animatedBackground: "neon-dreams",
         staticBackgroundColor: "#123456",
@@ -208,11 +377,32 @@ describe("settings-sanitizer", () => {
     });
 
     expect(settings.appearance.navigationMode).toBe("DOCK");
+    expect(settings.appearance.experienceMode).toBe("STANDARD");
     expect(settings.appearance.backgroundMode).toBe("STATIC");
     expect(settings.appearance.animatedBackground).toBe("neon-dreams");
     expect(settings.appearance.staticBackgroundColor).toBe("#123456");
     expect(settings.appearance.backgroundImage).toBe("data:image/png;base64,abc123");
     expect(settings.appearance.backgroundPattern).toBe("DIAGONAL_LINES");
+  });
+
+  it("preserves dashboard experience mode through project and effective settings", () => {
+    expect(sanitizeProjectSettings({}).appearance.experienceMode).toBe("EXPERT");
+    expect(sanitizeProjectSettings({ appearance: { experienceMode: "invalid" } }).appearance.experienceMode).toBe("EXPERT");
+
+    const systemSettings = buildDefaultSystemSettings({ env: {}, settingsJson: {}, resolved: {} });
+    systemSettings.defaults.appearance.experienceMode = "STANDARD";
+
+    const resolved = resolveDashboardSettings({
+      systemSettings,
+      projectOverride: {
+        appearance: {
+          experienceMode: "EASY",
+        },
+      },
+    });
+
+    expect(resolved.settings.appearance.experienceMode).toBe("EASY");
+    expect(resolved.sources["appearance.experienceMode"]).toBe("project");
   });
 
   it("normalizes legacy orchestrator provider routing to agent routing", () => {
@@ -234,11 +424,13 @@ describe("settings-sanitizer", () => {
   it("drops unsafe appearance background image and unknown pattern values", () => {
     const settings = sanitizeSettings({
       appearance: {
+        experienceMode: "standart",
         backgroundImage: "javascript:alert(1)",
         backgroundPattern: "SPIRAL",
       },
     });
 
+    expect(settings.appearance.experienceMode).toBe("EXPERT");
     expect(settings.appearance.backgroundImage).toBe(null);
     expect(settings.appearance.backgroundPattern).toBe("NONE");
   });

@@ -9,6 +9,7 @@ import { AppDbStorage } from "../../repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../repositories/project-management-repository.js";
 import { ProjectRuntimeRepository } from "../../repositories/project-runtime-repository.js";
 import { ConnectionChatRepository } from "../../repositories/connection-chat-repository.js";
+import { ChatProviderRepository } from "../../repositories/chat-provider-repository.js";
 import { ExecutionRepository } from "../../repositories/execution-repository.js";
 import { GuardrailRepository } from "../../repositories/guardrail-repository.js";
 import { GuardrailService } from "../../services/guardrail-service.js";
@@ -33,14 +34,19 @@ import { SprintRunLifecycleService } from "../../services/sprint-run-lifecycle-s
 import { DockerRuntimePruneService } from "../../services/docker-runtime-prune-service.js";
 import { DashboardRealtimeService } from "../../services/dashboard-realtime-service.js";
 import { MemoryRepository } from "../../repositories/memory-repository.js";
+import { TaskSelfReflectionRatingRepository } from "../../repositories/task-self-reflection-rating-repository.js";
 import { SchedulerRepository } from "../../repositories/scheduler-repository.js";
+import { SkillRepository } from "../../repositories/skill-repository.js";
+import { NodeFlowRepository } from "../../repositories/node-flow-repository.js";
 import { EmbeddingService } from "../../services/embedding-service.js";
 import { EmbeddingModelManager } from "../../services/embedding-model-manager.js";
 import { MemoryService } from "../../services/memory-service.js";
 import { MemoryPromotionService } from "../../services/memory-promotion-service.js";
+import { SkillService } from "../../services/skill-service.js";
 import { KnowledgeRepository } from "../../repositories/knowledge-repository.js";
 import { KnowledgeIngestionService } from "../../services/knowledge-ingestion-service.js";
 import { KnowledgeService } from "../../services/knowledge-service.js";
+import { NodeFlowService } from "../../services/node-flow-service.js";
 import { ProviderConcurrencyService } from "../../services/provider-concurrency-service.js";
 import { DashboardSettings, ExternalSettingsHints } from "../../contracts/app-types.js";
 import { loadExternalSettingsHints } from "../../config/external-settings.js";
@@ -58,6 +64,8 @@ import { SprintPreviewRepository } from "../../repositories/sprint-preview-repos
 import { SprintFileBrowserService } from "../../services/sprint-file-browser-service.js";
 import { SprintFileBrowserRepository } from "../../repositories/sprint-file-browser-repository.js";
 import { DockerService } from "../../services/docker-service.js";
+import { CustomDashboardRepository } from "../../repositories/custom-dashboard-repository.js";
+import { CustomDashboardValidationService } from "../../services/custom-dashboard-validation-service.js";
 
 export interface CoreDependencies {
   providerRunner: IProviderRunner;
@@ -75,6 +83,7 @@ export interface CoreDependencies {
   projectManagementRepository: ProjectManagementRepository;
   projectRuntimeRepository: ProjectRuntimeRepository;
   connectionChatRepository: ConnectionChatRepository;
+  chatProviderRepository: ChatProviderRepository;
   workerEndpointRepository: WorkerEndpointRepository;
   projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
   qaReviewRepository: QaReviewRepository;
@@ -97,11 +106,16 @@ export interface CoreDependencies {
   externalSettingsHints: ExternalSettingsHints;
   dashboardSettings: DashboardSettings;
   memoryRepository: MemoryRepository;
+  taskSelfReflectionRatingRepository: TaskSelfReflectionRatingRepository;
   schedulerRepository: SchedulerRepository;
+  skillRepository: SkillRepository;
+  nodeFlowRepository: NodeFlowRepository;
+  nodeFlowService: NodeFlowService;
   embeddingService: EmbeddingService;
   embeddingModelManager: EmbeddingModelManager;
   memoryService: MemoryService;
   memoryPromotionService: MemoryPromotionService;
+  skillService: SkillService;
   knowledgeRepository: KnowledgeRepository;
   knowledgeService: KnowledgeService;
   providerConcurrencyService: ProviderConcurrencyService;
@@ -109,6 +123,8 @@ export interface CoreDependencies {
   sprintPreviewRepository: SprintPreviewRepository;
   sprintFileBrowserService: SprintFileBrowserService;
   sprintFileBrowserRepository: SprintFileBrowserRepository;
+  customDashboardRepository: CustomDashboardRepository;
+  customDashboardValidationService: CustomDashboardValidationService;
 }
 
 export function createCoreDependencies(
@@ -189,6 +205,7 @@ export function createCoreDependencies(
     dashboardRealtimeService,
     workerEndpointRepository,
   );
+  const chatProviderRepository = new ChatProviderRepository(appDbStorage);
   const workerAttentionOutcomeService = new WorkerAttentionOutcomeService(
     projectAttentionService,
     connectionChatRepository,
@@ -207,6 +224,7 @@ export function createCoreDependencies(
   );
   const providerConcurrencyService = new ProviderConcurrencyService({
     executionRepository,
+    projectManagementRepository,
     logger: logger.child({ component: "provider-concurrency-service" }),
     dockerService: new DockerService(),
   });
@@ -224,6 +242,13 @@ export function createCoreDependencies(
     projectManagementRepository,
     settingsRepository,
     logger: logger.child({ component: "sprint-file-browser-service" }),
+  });
+  const customDashboardRepository = new CustomDashboardRepository(appDbStorage);
+  const customDashboardValidationService = new CustomDashboardValidationService({
+    customDashboardRepository,
+    projectManagementRepository,
+    settingsRepository,
+    logger: logger.child({ component: "custom-dashboard-validation-service" }),
   });
   const sprintMarkdownService = new SprintMarkdownService(projectManagementRepository);
   const sprintIssueService = new SprintIssueService({
@@ -257,12 +282,17 @@ export function createCoreDependencies(
   );
   const activitySummary = new ActivitySummaryService();
   const memoryRepository = new MemoryRepository(appDbStorage);
+  const taskSelfReflectionRatingRepository = new TaskSelfReflectionRatingRepository(appDbStorage);
   const schedulerRepository = new SchedulerRepository(appDbStorage, dashboardRealtimeService);
+  const skillRepository = new SkillRepository(appDbStorage);
+  const nodeFlowRepository = new NodeFlowRepository(appDbStorage, dashboardRealtimeService);
+  const nodeFlowService = new NodeFlowService(nodeFlowRepository);
   const embeddingService = new EmbeddingService();
   const embeddingModelManager = new EmbeddingModelManager(
     embeddingService,
     memoryRepository,
     logger.child({ component: "embedding-model-manager" }),
+    settingsRepository,
   );
 
   const memoryService = new MemoryService(
@@ -275,6 +305,11 @@ export function createCoreDependencies(
     memoryService,
     memoryRepository,
     logger.child({ component: "memory-promotion-service" }),
+  );
+  const skillService = new SkillService(
+    skillRepository,
+    embeddingService,
+    logger.child({ component: "skill-service" }),
   );
   const knowledgeRepository = new KnowledgeRepository(appDbStorage);
   const knowledgeService = new KnowledgeService(
@@ -313,6 +348,7 @@ export function createCoreDependencies(
     projectManagementRepository,
     projectRuntimeRepository,
     connectionChatRepository,
+    chatProviderRepository,
     workerEndpointRepository,
     projectWorkerAssignmentRepository,
     qaReviewRepository,
@@ -335,11 +371,16 @@ export function createCoreDependencies(
     externalSettingsHints,
     dashboardSettings,
     memoryRepository,
+    taskSelfReflectionRatingRepository,
     schedulerRepository,
+    skillRepository,
+    nodeFlowRepository,
+    nodeFlowService,
     embeddingService,
     embeddingModelManager,
     memoryService,
     memoryPromotionService,
+    skillService,
     knowledgeRepository,
     knowledgeService,
     providerConcurrencyService,
@@ -347,5 +388,7 @@ export function createCoreDependencies(
     sprintPreviewRepository,
     sprintFileBrowserService,
     sprintFileBrowserRepository,
+    customDashboardRepository,
+    customDashboardValidationService,
   };
 }

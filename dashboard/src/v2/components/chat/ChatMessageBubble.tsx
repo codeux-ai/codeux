@@ -7,10 +7,18 @@ import { renderMarkdown } from "../../../lib/markdown.js";
 import { getChatWidgetData } from "../../lib/chat-widget-view-models.js";
 import { formatChatTime } from "../../lib/chat-time.js";
 import { PlanningRequestWidget } from "./widgets/PlanningRequestWidget.js";
+import { AppCreationProgressWidget } from "./widgets/AppCreationProgressWidget.js";
+import { ExternalReferenceWidget } from "./widgets/ExternalReferenceWidget.js";
+import { LiveEntityStatusWidget } from "./widgets/LiveEntityStatusWidget.js";
+import { AgentMoodAside, buildAgentMoodAsideSeed, resolveAgentMoodAsideText } from "./widgets/AgentMoodAside.js";
 import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
+import { PromptSuggestionTags } from "./PromptSuggestionTags.js";
 import { resolveDisplayDeliveryStatus } from "../../hooks/use-chat-thread-data.js";
 import { useGsapDurations } from "../../lib/motion/constants.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import type { ChatWidgetLiveData } from "../../lib/chat-widget-view-models.js";
+import type { ChatLiveEntityWidget } from "../../lib/chat-live-entities.js";
+import { getPromptSuggestionViewModels } from "../../lib/chat-suggestion-view-models.js";
 
 export interface ChatMessageBubbleProps {
   message: ChatMessageRecord;
@@ -18,6 +26,9 @@ export interface ChatMessageBubbleProps {
   agentAvatarConfig?: AgentAvatarConfig;
   agentName?: string;
   animationDelay?: number;
+  widgetLiveData?: ChatWidgetLiveData;
+  liveEntities?: readonly ChatLiveEntityWidget[];
+  onPromptSuggestionSelect?: (prompt: string) => void;
 }
 
 export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
@@ -26,9 +37,23 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
   agentAvatarConfig,
   agentName,
   animationDelay = 0,
+  widgetLiveData,
+  liveEntities = [],
+  onPromptSuggestionSelect,
 }) => {
   const fromDashboard = message.direction === "dashboard_to_connection";
-  const widgetData = getChatWidgetData(message);
+  const widgetData = getChatWidgetData(message, widgetLiveData);
+  const hasPlanningWidget = widgetData.type === "planning";
+  const hasExternalReferenceWidget = widgetData.type === "external_reference" && Boolean(widgetData.externalReference);
+  const hasPrimaryWidget = hasPlanningWidget || hasExternalReferenceWidget;
+  const hasLiveEntityWidgets = liveEntities.length > 0;
+  const hasWidgetSlot = hasPrimaryWidget || hasLiveEntityWidgets;
+  const widgetSlotClassName = widgetData.suppressBodyMarkdown
+    ? "mt-0 space-y-4"
+    : "mt-4 border-t border-white/5 pt-4 space-y-4";
+  const promptSuggestions = !fromDashboard
+    ? getPromptSuggestionViewModels(message.metadata)
+    : [];
 
   const bubbleRef = useRef<HTMLDivElement>(null);
   const durations = useGsapDurations();
@@ -58,6 +83,12 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
     : agentName || (message.metadata?.agentName as string) || "Assistant";
   const providerLabel = message.metadata?.provider as string | undefined;
   const createdAtLabel = formatChatTime(message.createdAt);
+  const moodAsideText = (!fromDashboard && message.authorType === "connection")
+    ? resolveAgentMoodAsideText({
+        metadata: message.metadata,
+        seed: buildAgentMoodAsideSeed([message.id, message.bodyMarkdown, senderName]),
+      })
+    : null;
 
   const displayDeliveryStatus = resolveDisplayDeliveryStatus(message, allMessages);
 
@@ -97,14 +128,42 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
           </div>
 
           {/* Message Body */}
-          <div className="prose prose-sm max-w-none text-[14px] leading-7 text-slate-800 dark:text-slate-200 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit prose-pre:overflow-x-auto break-words overflow-wrap-anywhere min-w-0"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(message.bodyMarkdown) }}
-          />
+          {!widgetData.suppressBodyMarkdown && (
+            <div className="prose prose-sm max-w-none text-[14px] leading-7 text-slate-800 dark:text-slate-200 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit prose-pre:overflow-x-auto break-words overflow-wrap-anywhere min-w-0"
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(message.bodyMarkdown) }}
+            />
+          )}
+
+          <AgentMoodAside text={moodAsideText} />
+
+          {promptSuggestions.length > 0 && (
+            <PromptSuggestionTags
+              suggestions={promptSuggestions}
+              onSelect={(suggestion) => onPromptSuggestionSelect?.(suggestion.prompt)}
+              className="mt-3"
+            />
+          )}
 
           {/* Widget Slot */}
-          {widgetData.type === "planning" && (
+          {hasWidgetSlot && (
+            <div className={widgetSlotClassName}>
+              {hasPlanningWidget && (
+                <PlanningRequestWidget status={widgetData.status} planName={widgetData.planName} liveStatus={widgetData.liveStatus} />
+              )}
+              {hasExternalReferenceWidget && widgetData.externalReference && (
+                <ExternalReferenceWidget status={widgetData.status} reference={widgetData.externalReference} />
+              )}
+              {hasLiveEntityWidgets && (
+                <div className={hasPrimaryWidget ? "border-t border-white/5 pt-4" : undefined}>
+                  <LiveEntityStatusWidget entities={liveEntities} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {widgetData.type === "app_creation_progress" && widgetData.appCreationProgress && (
             <div className="mt-4 border-t border-white/5 pt-4">
-              <PlanningRequestWidget status={widgetData.status} planName={widgetData.planName} />
+              <AppCreationProgressWidget progress={widgetData.appCreationProgress} />
             </div>
           )}
 

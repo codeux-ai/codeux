@@ -1,5 +1,9 @@
 import { test, expect, type Page } from '@playwright/test';
-import { completeOnboarding, createDraftSprint, ensureSelectedProject } from './helpers/prepare-app';
+import {
+  createSprintWithTasks,
+  prepareSelectedLocalGitProject,
+  type SeededCodeUxProject,
+} from './helpers/e2e-fixtures';
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -21,22 +25,31 @@ async function ensureProjectSelected(page: Page, projectName: string): Promise<v
 }
 
 test.describe('Sprint Ledger Responsive Layout E2E Tests', () => {
+  let fixture: SeededCodeUxProject | null = null;
   let projectName: string;
   let sprintName: string;
 
-  test.beforeEach(async ({ request }, testInfo) => {
-    await completeOnboarding(request);
-    const project = await ensureSelectedProject(request, { testInfo, fixtureKey: 'responsive' });
-    const sprint = await createDraftSprint(request, project.id, {
-      testInfo,
-      fixtureKey: 'responsive',
-      goal: 'Verify that sprint ledger remains readable on narrow viewports.',
+  test.beforeEach(async ({ page, request }, testInfo) => {
+    fixture = await prepareSelectedLocalGitProject(page, request, testInfo, 'responsive');
+    const { sprint } = await createSprintWithTasks(request, fixture.project.id, {
+      sprint: {
+        name: `${fixture.project.name} responsive ledger sprint`,
+        goal: 'Verify that sprint ledger remains readable on narrow viewports.',
+      },
     });
-    projectName = project.name;
+    projectName = fixture.project.name;
     sprintName = sprint.name;
   });
 
-  test('adapts layout and displays correct labels on mobile vs desktop', async ({ page }) => {
+  test.afterEach(async () => {
+    await fixture?.cleanup();
+    fixture = null;
+  });
+
+  test('adapts layout and displays correct labels on mobile vs desktop', async ({ page, request }) => {
+    const health = await request.get('/health');
+    await expect(health).toBeOK();
+
     // 1. Navigate to sprints page
     await page.goto('/sprints');
 

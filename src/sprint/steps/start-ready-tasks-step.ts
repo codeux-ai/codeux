@@ -37,6 +37,38 @@ export const runStartReadyTasksStep = async (
 
   const currentRunningCounts = options.getRunningCounts();
   const readyTasks = subtasks.filter((task) => task.status === "PENDING");
+  const providerCapBlocks = new Map<string, {
+    count: number;
+    limit?: number;
+    currentCount?: number;
+    source: "pre_dispatch" | "dispatch";
+    taskIds: string[];
+  }>();
+
+  const recordProviderCapBlock = (input: {
+    taskId: string;
+    provider?: string;
+    limit?: number;
+    currentCount?: number;
+    source: "pre_dispatch" | "dispatch";
+  }): void => {
+    const key = input.provider || "unknown";
+    const current = providerCapBlocks.get(key) || {
+      count: 0,
+      limit: input.limit,
+      currentCount: input.currentCount,
+      source: input.source,
+      taskIds: [],
+    };
+    current.count += 1;
+    current.limit = input.limit ?? current.limit;
+    current.currentCount = input.currentCount ?? current.currentCount;
+    current.source = current.source === "dispatch" || input.source === "dispatch" ? "dispatch" : "pre_dispatch";
+    if (current.taskIds.length < 8) {
+      current.taskIds.push(input.taskId);
+    }
+    providerCapBlocks.set(key, current);
+  };
 
   for (const task of readyTasks) {
     if (options.shouldSkipTask?.(task)) {
@@ -49,6 +81,22 @@ export const runStartReadyTasksStep = async (
     }
 
     const provider = options.getProviderForTask(task);
+    if (provider) {
+      const providerSettings = options.getProviderSettings(provider);
+      const limit = providerSettings.maxConcurrentTasks ?? 0;
+      const runningCount = currentRunningCounts[provider] || 0;
+      if (limit > 0 && runningCount >= limit) {
+        task.status = "PENDING";
+        recordProviderCapBlock({
+          taskId: task.id,
+          provider,
+          limit,
+          currentCount: runningCount,
+          source: "pre_dispatch",
+        });
+        continue;
+      }
+    }
 
     try {
       const session = await options.startTask(task);
@@ -72,11 +120,12 @@ export const runStartReadyTasksStep = async (
         const runningCount = deferredProvider ? currentRunningCounts[deferredProvider] : undefined;
 
         task.status = "PENDING";
-        options.logger.info("Task blocked: provider concurrency cap reached at dispatch", {
+        recordProviderCapBlock({
           taskId: task.id,
           provider: deferredProvider,
           limit: deferral.limit ?? providerSettings.maxConcurrentTasks,
           currentCount: deferral.currentCount ?? runningCount,
+          source: "dispatch",
         });
         continue;
       }
@@ -93,6 +142,17 @@ export const runStartReadyTasksStep = async (
         throw new Error(`CRITICAL: Emergency stop triggered after ${currentFails} consecutive task creation failures.`);
       }
     }
+  }
+
+  for (const [provider, block] of providerCapBlocks) {
+    options.logger.info("Provider concurrency cap deferred ready tasks", {
+      provider,
+      limit: block.limit,
+      currentCount: block.currentCount,
+      blockedTaskCount: block.count,
+      sampleTaskIds: block.taskIds,
+      source: block.source,
+    });
   }
 
   return { subtasks, reportText };

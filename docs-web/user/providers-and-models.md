@@ -16,9 +16,25 @@ Code UX dispatches work across **seven providers**, each accepting one or more *
 
 All non-Jules providers are *virtual workers* — Code UX shells out to the provider's CLI, optionally inside a Docker container. Authentication is provided by the host CLI's normal login flow; Code UX merely detects and references it.
 
+## External chat connectors
+
+Settings -> Integrations -> Chat Connectors includes external chat connector connections for WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, and Discord channels. These are not AI model providers and they do not affect invocation routing. They bind authenticated external chat bridges to Code UX projects so inbound messages can enter project chat threads and assistant replies can be delivered back through the same bridge.
+
+Supported bridge modes are:
+
+- `managed_bridge` — HTTP delivery to a configured managed bridge URL.
+- `webhook` — HTTP delivery to a configured generic bridge or bot gateway URL.
+- `native_bridge` — shell-free local command execution for native bridge scripts, with JSON on stdin and optional bridge token environment variables.
+
+Code UX does not call the official WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, or Discord APIs directly. Provider-specific API interaction belongs to the managed bridge, webhook gateway, or native bridge you connect.
+
+Chat provider setup stores connection records, write-only secrets, channel bindings, routing hints, and outbound delivery state separately from AI provider credentials. Webhook ingress requires HMAC signatures when a signing secret is configured; Managed and native bridge ingress use bearer-style bridge tokens. Shared external channels can route to multiple projects only when a selector or routing hint chooses exactly one binding.
+
+For the full setup and routing contract in the published docs, see [External chat connectors](../architecture/external-chat-providers.md).
+
 ## The models
 
-The full model catalog lives in `src/repositories/settings-defaults.ts`. The defaults below reflect the shipped 0.8.x release.
+The full model catalog lives in `src/repositories/settings-defaults.ts`. The defaults below reflect the currently shipped release.
 
 ### Gemini
 ```
@@ -39,7 +55,8 @@ claude-fable-5
 
 ### Codex (OpenAI)
 ```
-gpt-5.5, gpt-5.4, gpt-5.4-mini,
+gpt-5.5, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna,
+gpt-5.4, gpt-5.4-mini,
 gpt-5.3-codex, gpt-5.3-codex-spark,
 gpt-5.2-codex, gpt-5.2,
 gpt-5.1-codex-max, gpt-5.1, gpt-5.1-codex,
@@ -67,7 +84,7 @@ qwen3-max, qwen3-max-2026-01-23,
 qwen-plus, qwen-max
 ```
 
-Qwen custom-endpoint instances define their model id in Settings -> Providers. Code UX adds that configured model to the AI Models selector and writes it into Qwen Code `modelProviders` at runtime. The Custom endpoint preset is Ollama-compatible by default: API key `your_api_key`, model `glm-4.7-flash`, environment key `OLLAMA_API_KEY`, and base URL `http://127.0.0.1:11434/v1`. In Docker mode on Docker Desktop, WSL, macOS, or Windows, Code UX rewrites that loopback URL to `host.docker.internal` inside the container.
+Qwen custom-endpoint instances define their model id in Settings -> Providers. Code UX adds that configured model to the AI Models selector and writes it into Qwen Code `modelProviders` at runtime. The Custom endpoint preset is Ollama-compatible by default: API key `your_api_key`, model `glm-4.7-flash`, environment key `OLLAMA_API_KEY`, and base URL `http://127.0.0.1:11434/v1`. In Docker mode, Code UX rewrites loopback URLs to `host.docker.internal` inside the container; Linux Docker Engine runs with loopback endpoints use Docker's `host-gateway` mapping.
 
 ### OpenCode
 ```
@@ -77,7 +94,7 @@ github-copilot/gpt-5,
 openrouter/anthropic/claude-sonnet-4.5
 ```
 
-OpenCode provider-key and custom-endpoint instances generate a per-run OpenCode config. Code UX writes that generated config to a temporary `opencode.json`, sets `OPENCODE_CONFIG`, and maps the saved key to `OPENCODE_API_KEY`. The Custom endpoint preset is Ollama-compatible by default: API key `your_api_key`, provider/model `ollama/glm-4.7-flash`, environment key `OLLAMA_API_KEY`, and base URL `http://127.0.0.1:11434/v1`. In Docker mode on Docker Desktop, WSL, macOS, or Windows, Code UX rewrites that loopback URL to `host.docker.internal` inside the container.
+OpenCode provider-key and custom-endpoint instances generate a per-run OpenCode config. Code UX writes that generated config to a temporary `opencode.json`, sets `OPENCODE_CONFIG`, and maps the saved key to `OPENCODE_API_KEY`. The Custom endpoint preset is Ollama-compatible by default: API key `your_api_key`, provider/model `ollama/glm-4.7-flash`, environment key `OLLAMA_API_KEY`, and base URL `http://127.0.0.1:11434/v1`. In Docker mode, Code UX rewrites loopback URLs to `host.docker.internal` inside the container; Linux Docker Engine runs with loopback endpoints use Docker's `host-gateway` mapping.
 
 ### Antigravity
 ```
@@ -94,7 +111,7 @@ gpt-oss-120b
 | Gemini | `auto` |
 | Claude Code | `default` |
 | Codex | `gpt-5.5` |
-| Qwen | `qwen3-coder-plus` |
+| Qwen Code | `qwen3-coder-plus` |
 | OpenCode | `anthropic/claude-sonnet-4-5` |
 | Antigravity | `default` |
 
@@ -102,11 +119,20 @@ Set per-provider model in **Settings → AI providers**.
 
 ## Thinking modes
 
-Each provider has a **thinking mode** governing reasoning depth:
+CLI providers expose provider-specific **thinking** or **reasoning** selections. Jules is hosted/managed and does not expose a thinking control in Code UX.
 
-- `SMALL` — fastest, lowest cost.
-- `MEDIUM` — balanced (default for most providers).
-- `HIGH` — deepest reasoning; recommended for `task_coding` on Codex and Claude.
+| Provider | Thinking selections |
+| --- | --- |
+| Gemini | `minimal`, `low`, `medium`, `high` |
+| Codex | `low`, `medium`, `high`, `xhigh` |
+| Claude Code | `low`, `medium`, `high`, `xhigh`, `max` |
+| Qwen Code | `low`, `medium`, `high`, `xhigh`, `max` |
+| OpenCode | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` |
+| Antigravity | `low`, `high` |
+
+Older saved values `SMALL`, `MEDIUM`, and `HIGH` continue to load and are migrated to the closest supported value for the selected provider.
+
+Route-specific thinking overrides are optional. Selecting **Inherit base thinking** on a route removes that route's `thinkingMode` override, so later provider-level thinking budget changes apply to the route.
 
 ## Provider weights and strategies
 
@@ -137,6 +163,12 @@ For each ID, you can pick:
 - A **provider config**.
 - An **agent preset** (optional).
 - A **routing profile** (`GLOBAL` for system-wide, `WORKER` for per-worker overrides).
+
+Route provider values are exact provider-config IDs, not provider-type aliases. For example, `gemini` only selects the provider instance whose id is exactly `gemini`; it will not silently select another Gemini instance such as `gemini-fast`. If a sprint or project override adds a dedicated provider instance, that instance must be present in the effective provider list before routes, allowed-provider pools, worker defaults, and per-route overrides can reference it.
+
+Manual routing never falls back to another provider when the selected or inherited provider instance is unavailable. If that exact instance is disabled, missing, blocked by the invocation type, or incompatible with the current Git/Jules mode, Code UX stops with a visible routing error in the dashboard so you can enable that instance or choose a different route.
+
+Project and sprint route-provider overrides replace the inherited provider map for that specific invocation route. If an override declares `task_coding.providers`, `merge_conflict.providers`, or `qa_review.providers`, only those provider-config IDs are eligible for that route; parent providers are not merged back in.
 
 A common high-quality setup:
 
@@ -192,7 +224,7 @@ Rules of thumb:
 | You want… | Provider |
 | --- | --- |
 | Hosted, no local install | `jules` |
-| Best raw code generation | `codex` (gpt-5.3-codex / gpt-5.4) |
+| Best raw code generation | `codex` (gpt-5.5 / gpt-5.6-sol / gpt-5.6-terra / gpt-5.6-luna) |
 | Best reasoning / planning | `claude-code` (opus / sonnet[1m]) |
 | Cheap, fast iteration | `gemini` (flash) |
 | Privacy / on-prem | `qwen-code` (local-model) |

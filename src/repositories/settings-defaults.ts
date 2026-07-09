@@ -1,9 +1,13 @@
 import type {
   CliExecutionMode,
   DashboardSettings,
+  DashboardExperienceMode,
+  DesignGuidanceSettings,
   FeaturePrAutoMergeMode,
   GuardrailJobType,
   GuardrailOnLimitAction,
+  ExternalImporterProvider,
+  ExternalImporterSettings,
   QaExhaustionPolicy,
   InvocationRoutingId,
   InvocationRoutingProfile,
@@ -14,14 +18,24 @@ import type {
   ProviderSettings,
   ProviderStrategy,
   SkillToggle,
+  TechstackCatalogEntrySettings,
+  TechstackCatalogSettings,
+  TechstackSelectionSettings,
   VirtualWorkerProvider,
   WorkerExecutionMode,
   ThinkingMode,
+  ThinkingModeOption,
+  LegacyThinkingMode,
 } from "../contracts/app-types.js";
 import { DEFAULT_SPRINT_BRANCH_SCHEME } from "../domain/sprint/branch-name-generator.js";
+import { DEFAULT_TASK_PR_TITLE_SCHEME } from "../domain/git/task-pr-title-template.js";
 import { DEFAULT_TASK_SECTION_ORDER, DEFAULT_SPRINT_SECTION_ORDER } from "../domain/sprint/composer/pr-description-composer.js";
 import { DEFAULT_INSTRUCTION_TEMPLATES } from "../instructions/instruction-template-catalog.js";
 import { DEFAULT_MCP_TOOL_TOGGLES } from "../mcp/mcp-tool-availability.js";
+import {
+  DEFAULT_DESIGN_GUIDANCE_SETTINGS,
+  cloneDesignGuidanceSettings,
+} from "../domain/settings/design-guidance-catalog.js";
 
 export const INTERNAL_SKILL_NAMES = [
   "git_manager",
@@ -36,6 +50,39 @@ export const DEFAULT_SKILLS: SkillToggle[] = INTERNAL_SKILL_NAMES.map((name) => 
   enabled: name === "git_manager_local" ? false : true,
   isInternal: true,
 }));
+
+export const BUILTIN_CODE_UX_TECHSTACK_ID = "code-ux-internal";
+
+export const BUILTIN_CODE_UX_TECHSTACK: TechstackCatalogEntrySettings = {
+  id: BUILTIN_CODE_UX_TECHSTACK_ID,
+  label: "Code UX Stack",
+  items: [
+    { id: "preact", label: "Preact" },
+    { id: "tanstack-router", label: "TanStack Router" },
+    { id: "gsap", label: "GSAP" },
+    { id: "three-js", label: "Three.js" },
+    { id: "lucide-icons", label: "Lucide Icons" },
+  ],
+};
+
+export const DEFAULT_TECHSTACK_CATALOG: TechstackCatalogSettings = {
+  defaultTechstackId: BUILTIN_CODE_UX_TECHSTACK_ID,
+  entries: [
+    {
+      ...BUILTIN_CODE_UX_TECHSTACK,
+      items: BUILTIN_CODE_UX_TECHSTACK.items.map((item) => ({ ...item })),
+    },
+  ],
+};
+
+export const DEFAULT_PROJECT_TECHSTACK: TechstackSelectionSettings = {
+  selectedTechstackId: null,
+  applicationKind: null,
+};
+
+export const DEFAULT_PROJECT_DESIGN_GUIDANCE: DesignGuidanceSettings = cloneDesignGuidanceSettings(
+  DEFAULT_DESIGN_GUIDANCE_SETTINGS,
+);
 
 export const DEFAULT_PR_DESCRIPTION_SETTINGS: PrDescriptionSettings = {
   task: {
@@ -62,8 +109,123 @@ export const DEFAULT_PR_DESCRIPTION_SETTINGS: PrDescriptionSettings = {
   sprintSectionOrder: [...DEFAULT_SPRINT_SECTION_ORDER],
 };
 
-export const PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"];
-export const THINKING_MODES: ThinkingMode[] = ["SMALL", "MEDIUM", "HIGH"];
+export const PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity", "mockup-cli"];
+export const PUBLIC_PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"];
+export const LEGACY_THINKING_MODES: LegacyThinkingMode[] = ["SMALL", "MEDIUM", "HIGH"];
+export const PROVIDER_THINKING_MODE_CATALOG = {
+  gemini: [
+    { value: "minimal", label: "Minimal" },
+    { value: "low", label: "Low" },
+    { value: "medium", label: "Medium" },
+    { value: "high", label: "High" },
+  ],
+  codex: [
+    { value: "low", label: "Low" },
+    { value: "medium", label: "Medium" },
+    { value: "high", label: "High" },
+    { value: "xhigh", label: "Extra High" },
+  ],
+  "claude-code": [
+    { value: "low", label: "Low" },
+    { value: "medium", label: "Medium" },
+    { value: "high", label: "High" },
+    { value: "xhigh", label: "Extra High" },
+    { value: "max", label: "Max" },
+  ],
+  "qwen-code": [
+    { value: "low", label: "Low" },
+    { value: "medium", label: "Medium" },
+    { value: "high", label: "High" },
+    { value: "xhigh", label: "Extra High" },
+    { value: "max", label: "Max" },
+  ],
+  opencode: [
+    { value: "none", label: "None" },
+    { value: "minimal", label: "Minimal" },
+    { value: "low", label: "Low" },
+    { value: "medium", label: "Medium" },
+    { value: "high", label: "High" },
+    { value: "xhigh", label: "Extra High" },
+    { value: "max", label: "Max" },
+  ],
+  antigravity: [
+    { value: "low", label: "Low" },
+    { value: "high", label: "High" },
+  ],
+} as const satisfies Partial<Record<ProviderId, readonly ThinkingModeOption[]>>;
+export const THINKING_MODES: ThinkingMode[] = [
+  ...new Set<ThinkingMode>([
+    ...LEGACY_THINKING_MODES,
+    ...Object.values(PROVIDER_THINKING_MODE_CATALOG).flat().map((option) => option.value),
+  ]),
+];
+export const DEFAULT_PROVIDER_THINKING_MODES: Record<ProviderId, ThinkingMode> = {
+  jules: "MEDIUM",
+  gemini: "medium",
+  codex: "high",
+  "claude-code": "high",
+  "qwen-code": "high",
+  opencode: "high",
+  antigravity: "high",
+  "mockup-cli": "MEDIUM",
+};
+const LEGACY_THINKING_MODE_ALIASES_BY_PROVIDER: Partial<Record<ProviderId, Record<LegacyThinkingMode, ThinkingMode>>> = {
+  gemini: { SMALL: "low", MEDIUM: "medium", HIGH: "high" },
+  codex: { SMALL: "low", MEDIUM: "medium", HIGH: "high" },
+  "claude-code": { SMALL: "low", MEDIUM: "medium", HIGH: "high" },
+  "qwen-code": { SMALL: "low", MEDIUM: "medium", HIGH: "high" },
+  opencode: { SMALL: "low", MEDIUM: "medium", HIGH: "high" },
+  antigravity: { SMALL: "low", MEDIUM: "high", HIGH: "high" },
+};
+export const getProviderThinkingModeOptions = (providerId: ProviderId): readonly ThinkingModeOption[] => (
+  (PROVIDER_THINKING_MODE_CATALOG as Partial<Record<ProviderId, readonly ThinkingModeOption[]>>)[providerId] ?? []
+);
+export const providerSupportsThinkingModeSelection = (providerId: ProviderId): boolean => (
+  getProviderThinkingModeOptions(providerId).length > 0
+);
+export const getDefaultThinkingModeForProvider = (providerId: ProviderId): ThinkingMode => (
+  DEFAULT_PROVIDER_THINKING_MODES[providerId]
+);
+export const isProviderThinkingModeSupported = (
+  providerId: ProviderId,
+  value: unknown,
+): value is ThinkingMode => {
+  if (typeof value !== "string") {
+    return false;
+  }
+  if (getProviderThinkingModeOptions(providerId).some((option) => option.value === value)) {
+    return true;
+  }
+  if (LEGACY_THINKING_MODES.includes(value as LegacyThinkingMode)) {
+    return providerSupportsThinkingModeSelection(providerId)
+      ? Boolean(LEGACY_THINKING_MODE_ALIASES_BY_PROVIDER[providerId]?.[value as LegacyThinkingMode])
+      : value === DEFAULT_PROVIDER_THINKING_MODES[providerId];
+  }
+  return false;
+};
+export const normalizeProviderThinkingMode = (
+  providerId: ProviderId,
+  value: unknown,
+  fallback: ThinkingMode = getDefaultThinkingModeForProvider(providerId),
+): ThinkingMode => {
+  if (typeof value === "string") {
+    const options = getProviderThinkingModeOptions(providerId);
+    if (options.some((option) => option.value === value)) {
+      return value as ThinkingMode;
+    }
+    const legacyAlias = LEGACY_THINKING_MODE_ALIASES_BY_PROVIDER[providerId]?.[value as LegacyThinkingMode];
+    if (legacyAlias) {
+      return legacyAlias;
+    }
+    if (!providerSupportsThinkingModeSelection(providerId) && LEGACY_THINKING_MODES.includes(value as LegacyThinkingMode)) {
+      return fallback;
+    }
+  }
+  if (isProviderThinkingModeSupported(providerId, fallback)) {
+    return fallback;
+  }
+  return getDefaultThinkingModeForProvider(providerId);
+};
 export const PROVIDER_STRATEGIES: ProviderStrategy[] = ["MANUAL", "WEIGHTED", "AGENT"];
 export const INVOCATION_ROUTING_PROFILES: InvocationRoutingProfile[] = ["GLOBAL", "WORKER"];
 export const INVOCATION_ROUTING_IDS: InvocationRoutingId[] = [
@@ -79,9 +241,14 @@ export const INVOCATION_ROUTING_IDS: InvocationRoutingId[] = [
 export const CLI_EXECUTION_MODES: CliExecutionMode[] = ["DOCKER", "HOST"];
 export const FEATURE_PR_AUTOMERGE_MODES: FeaturePrAutoMergeMode[] = ["OFF", "CREATE_PR", "WHEN_GREEN", "ALWAYS"];
 export const WORKER_EXECUTION_MODES: WorkerExecutionMode[] = ["VIRTUAL"];
-export const VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"];
+export const VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity", "mockup-cli"];
+export const PUBLIC_VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"];
 export const RUNTIME_LOG_LEVELS = ["off", "debug", "info", "warn", "error"] as const;
 export const CONSOLE_LOG_MODES = ["standard", "full"] as const;
+export const EXTERNAL_IMPORTER_PROVIDERS: ExternalImporterProvider[] = ["notion", "asana", "linear", "miro", "lucid", "figma", "mural"];
+export const DASHBOARD_EXPERIENCE_MODES: DashboardExperienceMode[] = ["EASY", "STANDARD", "EXPERT"];
+export const DEFAULT_DASHBOARD_EXPERIENCE_MODE: DashboardExperienceMode = "EXPERT";
+export const DEFAULT_IMPORTER_SEARCH_LIMIT = 25;
 export const DEFAULT_PROVIDER_CONFIG_IDS: Record<ProviderId, ProviderConfigId> = {
   jules: "jules",
   gemini: "gemini",
@@ -90,6 +257,7 @@ export const DEFAULT_PROVIDER_CONFIG_IDS: Record<ProviderId, ProviderConfigId> =
   "qwen-code": "qwen-code",
   opencode: "opencode",
   antigravity: "antigravity",
+  "mockup-cli": "mockup-cli",
 };
 
 export const DEFAULT_PLAYWRIGHT_MCP_SERVER_ID = "playwright";
@@ -113,6 +281,7 @@ export const DEFAULT_PROVIDER_CONFIG_NAMES: Record<ProviderId, string> = {
   "qwen-code": "Qwen Primary",
   opencode: "OpenCode Primary",
   antigravity: "Antigravity Primary",
+  "mockup-cli": "Mockup CLI",
 };
 export const DEFAULT_PROVIDER_AUTH_PATHS: Record<ProviderId, string> = {
   jules: "",
@@ -122,6 +291,18 @@ export const DEFAULT_PROVIDER_AUTH_PATHS: Record<ProviderId, string> = {
   "qwen-code": "~/.qwen",
   opencode: "~/.local/share/opencode",
   antigravity: "~/.antigravity",
+  "mockup-cli": "",
+};
+
+export const DEFAULT_PROVIDER_CONFIG_FILE_PATHS: Record<ProviderId, string> = {
+  jules: "",
+  gemini: "~/.gemini/settings.json",
+  codex: "~/.codex/config.toml",
+  "claude-code": "~/.claude.json",
+  "qwen-code": "~/.qwen/settings.json",
+  opencode: "~/.config/opencode/opencode.json",
+  antigravity: "~/.gemini/antigravity-cli/mcp_config.json",
+  "mockup-cli": "",
 };
 
 // AI Models catalog — available model identifiers per virtual worker provider
@@ -165,6 +346,9 @@ export const CLAUDE_MODELS: string[] = [
 
 export const CODEX_MODELS: string[] = [
   "gpt-5.5",
+  "gpt-5.6-sol",
+  "gpt-5.6-terra",
+  "gpt-5.6-luna",
   "gpt-5.4",
   "gpt-5.4-mini",
   "gpt-5.3-codex",
@@ -217,6 +401,7 @@ export const AI_MODEL_CATALOG: Record<string, string[]> = {
   "qwen-code": QWEN_MODELS,
   opencode: OPENCODE_MODELS,
   antigravity: ANTIGRAVITY_MODELS,
+  "mockup-cli": ["default"],
 };
 
 export const DEFAULT_VIRTUAL_WORKER_MODELS: Record<string, string> = {
@@ -226,6 +411,7 @@ export const DEFAULT_VIRTUAL_WORKER_MODELS: Record<string, string> = {
   "qwen-code": "qwen3-coder-plus",
   opencode: "anthropic/claude-sonnet-4-5",
   antigravity: "default",
+  "mockup-cli": "default",
 };
 
 export const MIN_WATCH_LOOP_INTERVAL_SECONDS = 1;
@@ -257,10 +443,90 @@ export const QA_EXHAUSTION_POLICIES: QaExhaustionPolicy[] = [
   "FAIL_TASK",
   "FINISH_TASK",
 ];
+
+const DEFAULT_SELF_REFLECTION_CRITERIA: DashboardSettings["agents"]["selfReflection"]["planning"]["criteria"] = [
+  {
+    id: "correctness",
+    label: "Correctness",
+    prompt: "The plan or review accurately addresses the requested behavior and repository facts.",
+    threshold: 0.85,
+  },
+  {
+    id: "completeness",
+    label: "Completeness",
+    prompt: "The response covers all required deliverables, edge cases, and verification expectations.",
+    threshold: 0.85,
+  },
+  {
+    id: "decomposition_quality",
+    label: "Decomposition quality",
+    prompt: "Work is broken into coherent, dependency-aware steps with clear ownership boundaries.",
+    threshold: 0.8,
+  },
+  {
+    id: "risk_handling",
+    label: "Risk handling",
+    prompt: "Important technical, operational, and rollback risks are identified and handled.",
+    threshold: 0.8,
+  },
+  {
+    id: "testability",
+    label: "Testability",
+    prompt: "The proposed work can be validated with focused deterministic checks.",
+    threshold: 0.8,
+  },
+  {
+    id: "maintainability",
+    label: "Maintainability",
+    prompt: "The approach preserves local architecture and avoids unnecessary complexity.",
+    threshold: 0.8,
+  },
+  {
+    id: "security",
+    label: "Security",
+    prompt: "The approach avoids weakening validation, secrets handling, permissions, and auditability.",
+    threshold: 0.85,
+  },
+  {
+    id: "scope_control",
+    label: "Scope control",
+    prompt: "The work stays within the task contract and avoids unrelated behavior changes.",
+    threshold: 0.85,
+  },
+];
+
+export const DEFAULT_AGENT_SELF_REFLECTION: DashboardSettings["agents"]["selfReflection"] = {
+  planning: {
+    enabled: false,
+    criteria: DEFAULT_SELF_REFLECTION_CRITERIA.map((criterion) => ({ ...criterion })),
+    maxImprovementAttempts: 1,
+  },
+  qualityAssurance: {
+    enabled: false,
+    criteria: DEFAULT_SELF_REFLECTION_CRITERIA.map((criterion) => ({ ...criterion })),
+    maxImprovementAttempts: 1,
+  },
+};
 /** Fallback cap used when migrating the legacy hardcoded clarification auto-answer limit. */
 export const LEGACY_CLARIFICATION_RETRY_CAP = 3;
 
 export const DEFAULT_PROVIDER_WEIGHT = 50;
+
+export const createDefaultExternalImporterSettings = (): ExternalImporterSettings => ({
+  enabled: false,
+  apiToken: "",
+  apiSecret: "",
+  baseUrl: "",
+  workspaceId: "",
+  teamId: "",
+  teamKey: "",
+  projectId: "",
+  databaseId: "",
+  boardId: "",
+  documentId: "",
+  fileKey: "",
+  defaultSearchLimit: DEFAULT_IMPORTER_SEARCH_LIMIT,
+});
 
 export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
   jules: {
@@ -269,10 +535,12 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     enabled: true,
     model: "default",
     weight: DEFAULT_PROVIDER_WEIGHT,
-    thinkingMode: "MEDIUM",
+    thinkingMode: DEFAULT_PROVIDER_THINKING_MODES.jules,
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.jules,
+    providerConfigMode: "none",
+    providerConfigPath: "",
     maxConcurrentTasks: 15,
   },
   gemini: {
@@ -281,10 +549,12 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     enabled: true,
     model: "default",
     weight: DEFAULT_PROVIDER_WEIGHT,
-    thinkingMode: "MEDIUM",
+    thinkingMode: DEFAULT_PROVIDER_THINKING_MODES.gemini,
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.gemini,
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS.gemini,
     maxConcurrentTasks: 0,
   },
   codex: {
@@ -293,10 +563,12 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     enabled: true,
     model: "gpt-5.5",
     weight: DEFAULT_PROVIDER_WEIGHT,
-    thinkingMode: "HIGH",
+    thinkingMode: DEFAULT_PROVIDER_THINKING_MODES.codex,
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.codex,
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS.codex,
     maxConcurrentTasks: 0,
   },
   "claude-code": {
@@ -305,10 +577,12 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     enabled: false,
     model: "default",
     weight: DEFAULT_PROVIDER_WEIGHT,
-    thinkingMode: "HIGH",
+    thinkingMode: DEFAULT_PROVIDER_THINKING_MODES["claude-code"],
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS["claude-code"],
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS["claude-code"],
     maxConcurrentTasks: 0,
   },
   "qwen-code": {
@@ -317,10 +591,12 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     enabled: false,
     model: "qwen3-coder-plus",
     weight: DEFAULT_PROVIDER_WEIGHT,
-    thinkingMode: "HIGH",
+    thinkingMode: DEFAULT_PROVIDER_THINKING_MODES["qwen-code"],
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS["qwen-code"],
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS["qwen-code"],
     maxConcurrentTasks: 0,
   },
   opencode: {
@@ -329,10 +605,12 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     enabled: false,
     model: "anthropic/claude-sonnet-4-5",
     weight: DEFAULT_PROVIDER_WEIGHT,
-    thinkingMode: "HIGH",
+    thinkingMode: DEFAULT_PROVIDER_THINKING_MODES.opencode,
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.opencode,
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS.opencode,
     maxConcurrentTasks: 0,
   },
   antigravity: {
@@ -341,10 +619,26 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     enabled: false,
     model: "default",
     weight: DEFAULT_PROVIDER_WEIGHT,
-    thinkingMode: "HIGH",
+    thinkingMode: DEFAULT_PROVIDER_THINKING_MODES.antigravity,
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.antigravity,
+    providerConfigMode: "copyHost",
+    providerConfigPath: DEFAULT_PROVIDER_CONFIG_FILE_PATHS.antigravity,
+    maxConcurrentTasks: 0,
+  },
+  "mockup-cli": {
+    provider: "mockup-cli",
+    name: DEFAULT_PROVIDER_CONFIG_NAMES["mockup-cli"],
+    enabled: false,
+    model: "default",
+    weight: 0,
+    thinkingMode: DEFAULT_PROVIDER_THINKING_MODES["mockup-cli"],
+    apiKey: "",
+    mountAuth: false,
+    authPath: DEFAULT_PROVIDER_AUTH_PATHS["mockup-cli"],
+    providerConfigMode: "none",
+    providerConfigPath: "",
     maxConcurrentTasks: 0,
   },
 };
@@ -366,6 +660,7 @@ export const buildDefaultProviderSettingsMap = (): Record<ProviderConfigId, Prov
   [DEFAULT_PROVIDER_CONFIG_IDS["qwen-code"]]: createDefaultProviderSettings("qwen-code"),
   [DEFAULT_PROVIDER_CONFIG_IDS.opencode]: createDefaultProviderSettings("opencode"),
   [DEFAULT_PROVIDER_CONFIG_IDS.antigravity]: createDefaultProviderSettings("antigravity"),
+  [DEFAULT_PROVIDER_CONFIG_IDS["mockup-cli"]]: createDefaultProviderSettings("mockup-cli"),
 });
 
 export const DEFAULT_INVOCATION_ROUTING: Record<InvocationRoutingId, InvocationRoutingSettings> = {
@@ -439,6 +734,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   restartInvocationPolicy: "continue",
   appearance: {
     navigationMode: "SIDEBAR",
+    experienceMode: DEFAULT_DASHBOARD_EXPERIENCE_MODE,
     theme: "SYSTEM",
     reducedMotion: "AUTO",
     backgroundMode: "ANIMATED",
@@ -471,6 +767,15 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
       remediation: { ...DEFAULT_INVOCATION_ROUTING.remediation, allowedProviders: [], providers: {} },
     },
   },
+  techstackCatalog: {
+    defaultTechstackId: DEFAULT_TECHSTACK_CATALOG.defaultTechstackId,
+    entries: DEFAULT_TECHSTACK_CATALOG.entries.map((entry) => ({
+      ...entry,
+      items: entry.items.map((item) => ({ ...item })),
+    })),
+  },
+  techstack: { ...DEFAULT_PROJECT_TECHSTACK },
+  designGuidance: cloneDesignGuidanceSettings(DEFAULT_PROJECT_DESIGN_GUIDANCE),
   git: {
     githubMode: "REMOTE",
     githubToken: "",
@@ -482,16 +787,26 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     featureBranchPrefix: "feature/",
     sprintBranchScheme: DEFAULT_SPRINT_BRANCH_SCHEME,
     sprintKeyPrefix: "SPR",
+    taskPrTitleScheme: DEFAULT_TASK_PR_TITLE_SCHEME,
     prDescription: DEFAULT_PR_DESCRIPTION_SETTINGS,
   },
   jira: {
     host: "",
     email: "",
     apiToken: "",
+    autoTransitionLinkedIssuesOnImport: true,
+    importTransitionName: "In Work",
     autoCloseLinkedIssues: false,
     defaultProject: "",
     closeTransitionName: "Done",
   },
+  notion: createDefaultExternalImporterSettings(),
+  asana: createDefaultExternalImporterSettings(),
+  linear: createDefaultExternalImporterSettings(),
+  miro: createDefaultExternalImporterSettings(),
+  lucid: createDefaultExternalImporterSettings(),
+  figma: createDefaultExternalImporterSettings(),
+  mural: createDefaultExternalImporterSettings(),
   ciIntelligence: {
     enabled: true,
     enableLivePrMonitoring: true,
@@ -545,8 +860,10 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     executionMode: "DOCKER",
     containerImage: "node:24-bookworm",
     containerSetupScriptPath: "",
+    containerMemoryLimitMb: 6144,
     containerCacheSetupScriptImage: true,
     containerInstallPlaywrightBrowsers: true,
+    containerRunAsRoot: false,
     containerMountGitConfig: false,
     containerGitUserName: "Code UX",
     containerGitUserEmail: "agents@codeux.ai",
@@ -580,6 +897,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     containerAppPort: 3000,
     containerAppPorts: [3000],
     startupScriptPath: ".code-ux/browser/start-preview.sh",
+    environmentVariables: [],
   },
   workers: {
     executionMode: "VIRTUAL",
@@ -624,6 +942,18 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
         agentPresetId: null,
       },
     },
+    selfReflection: {
+      planning: {
+        enabled: DEFAULT_AGENT_SELF_REFLECTION.planning.enabled,
+        criteria: DEFAULT_AGENT_SELF_REFLECTION.planning.criteria.map((criterion) => ({ ...criterion })),
+        maxImprovementAttempts: DEFAULT_AGENT_SELF_REFLECTION.planning.maxImprovementAttempts,
+      },
+      qualityAssurance: {
+        enabled: DEFAULT_AGENT_SELF_REFLECTION.qualityAssurance.enabled,
+        criteria: DEFAULT_AGENT_SELF_REFLECTION.qualityAssurance.criteria.map((criterion) => ({ ...criterion })),
+        maxImprovementAttempts: DEFAULT_AGENT_SELF_REFLECTION.qualityAssurance.maxImprovementAttempts,
+      },
+    },
   },
   skills: DEFAULT_SKILLS,
   mcpTools: DEFAULT_MCP_TOOL_TOGGLES.map((tool) => ({ ...tool })),
@@ -632,6 +962,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     enabled: true,
     embeddingProvider: "in_app",
     embeddingModel: null,
+    customEmbeddingModels: [],
     externalEmbedding: {
       baseUrl: "https://api.openai.com/v1/embeddings",
       apiKey: "",
@@ -671,8 +1002,27 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
       "## Category: learning",
       "- [bullet point per general learning, insight, or discovery]",
       "",
+      "## Self Reflection Rating",
+      "Overall: [0-5]/5",
+      "- Implementation: [0-5]/5 - [brief note]",
+      "- Tests: [0-5]/5 - [brief note]",
+      "- Integration: [0-5]/5 - [brief note]",
+      "",
       "Each bullet should be a self-contained statement (1-2 sentences) that would be useful context for a future developer or AI working on this project.",
+      "The self-reflection rating is optional but, when present, should use numeric 0-5 scores.",
     ].join("\n"),
+  },
+  speech: {
+    enabled: false,
+    providerMode: "auto",
+    localModelId: "onnx-community/whisper-base.en",
+    maxAudioSeconds: 120,
+    externalTranscription: {
+      baseUrl: "https://api.openai.com/v1/audio/transcriptions",
+      apiKey: "",
+      model: "whisper-1",
+      language: null,
+    },
   },
   modelPricing: {
     overrides: {},

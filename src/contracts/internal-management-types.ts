@@ -1,4 +1,21 @@
-import type { CreateProjectInput } from "./project-management-types.js";
+import type { AgentMcpAccessConfig } from "./agent-preset-types.js";
+import type {
+  ChatProviderBridgeMode,
+  ChatProviderConnectionStatus,
+  ChatProviderDeliveryStatus,
+  ChatProviderKind,
+  ChatProviderSetupConfig,
+  ChatProviderSecretConfig,
+  ChatProviderRoutingHints,
+  ExternalChannelMetadata,
+} from "./chat-provider-types.js";
+import type { NodeFlowGraph, NodeFlowJsonObject, NodeWidgetSchema } from "./node-flow-types.js";
+import type { CreateProjectInput, ProjectSetupOptions, ProjectSetupRequestInput } from "./project-management-types.js";
+import type {
+  CreateCustomDashboardDraftInput,
+  CreateCustomDashboardRevisionInput,
+  UpdateCustomDashboardDraftInput,
+} from "./custom-dashboard-types.js";
 
 export interface ManagementApproval {
   confirmed: boolean;
@@ -17,6 +34,9 @@ export interface ManageProjectsArgs extends Partial<CreateProjectInput> {
   action: "list" | "get" | "create" | "update" | "select" | "setup" | "delete";
   projectId?: string;
   description?: string;
+  setup?: ProjectSetupRequestInput;
+  options?: Partial<ProjectSetupOptions>;
+  clientRequestId?: string;
   approval?: ManagementApproval;
 }
 
@@ -102,20 +122,30 @@ export interface ManageQuicksprintsArgs {
 }
 
 export interface ManageSchedulerArgs {
-  action: "list" | "create" | "schedule_sprint" | "schedule_quicksprint" | "schedule_chat" | "update" | "delete" | "run_due";
+  action: "list" | "create" | "schedule_sprint" | "schedule_quicksprint" | "schedule_chat" | "schedule_node_flow" | "update" | "delete" | "run_due";
   projectId?: string;
   entryId?: string;
   from?: string;
   to?: string;
   title?: string;
-  targetType?: "sprint" | "quicksprint" | "chat";
+  targetType?: "sprint" | "quicksprint" | "chat" | "node_flow";
   status?: "scheduled" | "paused" | "completed" | "failed" | "cancelled";
   scheduledFor?: string;
+  scheduleMode?: "absolute" | "after_sprint_end" | "after_task_end";
+  anchorMode?: "after_sprint_end" | "after_task_end";
+  scheduleAnchor?: Record<string, unknown>;
+  sourceSprintId?: string;
+  anchorSourceSprintId?: string;
+  sourceTaskId?: string;
+  anchorSourceTaskId?: string;
+  offsetMinutes?: number | string;
+  anchorOffsetMinutes?: number | string;
   timezone?: string;
   recurrence?: Record<string, unknown>;
   sprintTarget?: Record<string, unknown>;
   quicksprintTarget?: Record<string, unknown>;
   chatTarget?: Record<string, unknown>;
+  nodeFlowTarget?: Record<string, unknown>;
   sprintId?: string;
   templateId?: string;
   taskCount?: number | string;
@@ -126,8 +156,31 @@ export interface ManageSchedulerArgs {
   bodyMarkdown?: string;
   threadId?: string | null;
   connectionId?: string | null;
+  flowId?: string;
+  input?: Record<string, unknown>;
+  flowVersion?: number | string;
   now?: string;
   approval?: ManagementApproval;
+}
+
+export interface SchedulerArgs {
+  action: "list" | "schedule_wakeup" | "cancel";
+  projectId?: string;
+  entryId?: string;
+  from?: string;
+  to?: string;
+  scheduledFor?: string;
+  delaySeconds?: number | string;
+  delayMinutes?: number | string;
+  wakeAfterReply?: boolean;
+  afterSprintId?: string;
+  afterTaskId?: string;
+  offsetMinutes?: number | string;
+  title?: string;
+  timezone?: string;
+  bodyMarkdown?: string;
+  threadId?: string | null;
+  connectionId?: string | null;
 }
 
 export interface ManageAgentsArgs {
@@ -135,11 +188,31 @@ export interface ManageAgentsArgs {
   projectId?: string;
   presetId?: string;
   name?: string;
+  description?: string;
   instructionMarkdown?: string;
   labels?: string[];
   avatarConfig?: Record<string, unknown>;
+  providerConfigId?: string | null;
+  model?: string | null;
+  memoryConfig?: Record<string, unknown>;
+  mcpAccess?: AgentMcpAccessConfig;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
+  approval?: ManagementApproval;
+}
+
+export interface ManageNodeFlowsArgs {
+  action: "list" | "get" | "create" | "update" | "delete" | "validate" | "run" | "list_runs" | "get_run" | "attach_to_agent" | "detach_from_agent";
+  projectId?: string;
+  flowId?: string;
+  runId?: string;
+  name?: string;
+  description?: string;
+  graph?: NodeFlowGraph;
+  widgets?: NodeWidgetSchema | Record<string, NodeWidgetSchema>;
+  input?: NodeFlowJsonObject;
+  agentPresetId?: string;
+  skillAlias?: string;
   approval?: ManagementApproval;
 }
 
@@ -174,13 +247,59 @@ export interface ManageMemoryArgs {
   approval?: ManagementApproval;
 }
 
+export interface ManageSkillsArgs {
+  action:
+    | "authoring_prompt"
+    | "list_storages"
+    | "get_storage"
+    | "create_storage"
+    | "update_storage"
+    | "delete_storage"
+    | "reset_storage"
+    | "list_agent_storages"
+    | "attach_storage"
+    | "detach_storage"
+    | "list_skills"
+    | "get_skill"
+    | "create_skill"
+    | "update_skill"
+    | "delete_skill"
+    | "import_markdown"
+    | "export_markdown";
+  projectId?: string;
+  storageId?: string;
+  skillId?: string;
+  agentPresetId?: string;
+  name?: string;
+  description?: string;
+  storageKind?: string;
+  markdown?: string;
+  sourceType?: string;
+  sourceRef?: string | null;
+  limit?: number;
+  includeContent?: boolean;
+  approval?: ManagementApproval;
+}
+
+export interface SearchSkillsArgs {
+  projectId: string;
+  query: string;
+  agentPresetId?: string;
+  storageId?: string;
+  limit?: number;
+  minSimilarity?: number;
+}
+
 export interface ManageSettingsArgs {
-  action: "get_system" | "get_project_override" | "resolve_project_effective" | "get_sprint_override" | "resolve_sprint_effective" | "replace_system_settings" | "patch_system_setting" | "replace_project_settings" | "patch_project_setting" | "reset_project_settings" | "replace_sprint_settings" | "patch_sprint_setting" | "reset_sprint_settings";
+  action: "get_system" | "get_project_override" | "resolve_project_effective" | "get_sprint_override" | "resolve_sprint_effective" | "replace_system_settings" | "patch_system_setting" | "replace_project_settings" | "patch_project_setting" | "reset_project_settings" | "replace_sprint_settings" | "patch_sprint_setting" | "reset_sprint_settings" | "export_settings_bundle" | "apply_settings_bundle";
   projectId?: string;
   sprintId?: string;
   path?: string;
   value?: unknown;
   settings?: Record<string, unknown>;
+  bundle?: Record<string, unknown>;
+  includeSecrets?: boolean;
+  scopes?: string[];
   approval?: ManagementApproval;
 }
 
@@ -190,6 +309,71 @@ export interface ManagePreviewArgs {
   sprintId?: string;
   sessionId?: string;
   path?: string;
+  approval?: ManagementApproval;
+}
+
+export interface ManageCustomDashboardsArgs extends Partial<CreateCustomDashboardDraftInput>, Partial<UpdateCustomDashboardDraftInput>, Partial<CreateCustomDashboardRevisionInput> {
+  action:
+    | "list"
+    | "get"
+    | "create"
+    | "update"
+    | "create_revision"
+    | "validate_revision"
+    | "validation_status"
+    | "validation_logs"
+    | "publish_revision"
+    | "archive"
+    | "data_catalog";
+  projectId?: string;
+  dashboardId?: string;
+  revisionId?: string;
+  validationSessionId?: string;
+  sessionId?: string;
+  tail?: number | string;
+  approval?: ManagementApproval;
+}
+
+export type ManageChatProvidersAction =
+  | "list_provider_definitions"
+  | "list_connections"
+  | "get_connection"
+  | "create_connection"
+  | "update_connection"
+  | "delete_connection"
+  | "list_channel_bindings"
+  | "create_channel_binding"
+  | "update_channel_binding"
+  | "delete_channel_binding"
+  | "list_outbound_deliveries";
+
+export interface ManageChatProvidersArgs {
+  action: ManageChatProvidersAction;
+  providerKind?: ChatProviderKind;
+  providerConnectionId?: string;
+  connectionId?: string;
+  displayName?: string;
+  bridgeMode?: ChatProviderBridgeMode;
+  status?: ChatProviderConnectionStatus;
+  enabled?: boolean;
+  enabledOnly?: boolean;
+  setup?: ChatProviderSetupConfig;
+  secrets?: ChatProviderSecretConfig | null;
+  channelBindingId?: string;
+  bindingId?: string;
+  externalChannelId?: string;
+  externalChannelName?: string;
+  externalChannelMetadata?: ExternalChannelMetadata | null;
+  projectId?: string;
+  projectIds?: string[];
+  agentPresetId?: string | null;
+  routingHints?: ChatProviderRoutingHints | null;
+  inboundEnabled?: boolean;
+  outboundEnabled?: boolean;
+  suppressRichWidgets?: boolean;
+  deliveryStatus?: ChatProviderDeliveryStatus;
+  limit?: number | string;
+  baseUrl?: string;
   approval?: ManagementApproval;
 }
 

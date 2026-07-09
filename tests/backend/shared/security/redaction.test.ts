@@ -8,6 +8,8 @@ describe("redaction", () => {
       expect(isSensitiveKey("APIKEY")).toBe(true);
       expect(isSensitiveKey("authorization")).toBe(true);
       expect(isSensitiveKey("githubToken")).toBe(true);
+      expect(isSensitiveKey("openaiCompatibleApiKey")).toBe(true);
+      expect(isSensitiveKey("jiraApiToken")).toBe(true);
     });
 
     it("returns false for normal keys", () => {
@@ -45,6 +47,50 @@ describe("redaction", () => {
     it("redacts GitLab tokens", () => {
       const input = 'gitlab token glpat-12345678901234567890';
       expect(redactText(input)).toBe('gitlab token [REDACTED]');
+    });
+
+    it("redacts realistic provider and tracker token shapes", () => {
+      const input = [
+        "github ghp_123456789012345678901234567890123456",
+        "fine-grained github_pat_1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_1234567890",
+        "gitlab glpat-12345678901234567890",
+        "jira ATATT3xFfGF0fixtureTokenValue1234567890",
+        "openai-compatible sk-fixtureOpenAiCompatibleToken1234567890",
+        "openrouter sk-or-v1-fixtureOpenRouterToken1234567890",
+        "session codex-session-token=fixtureSessionToken1234567890",
+        "bearer Authorization: Bearer fixture-bearer-token-value",
+      ].join("\n");
+
+      const result = redactText(input);
+
+      expect(result).toBe([
+        "github [REDACTED]",
+        "fine-grained [REDACTED]",
+        "gitlab [REDACTED]",
+        "jira [REDACTED]",
+        "openai-compatible [REDACTED]",
+        "openrouter [REDACTED]",
+        "session codex-session-token=[REDACTED]",
+        "bearer Authorization: Bearer [REDACTED]",
+      ].join("\n"));
+    });
+
+    it("redacts MCP and OTEL authorization headers in JSON, TOML, and env header syntax", () => {
+      const token = "fixtureMcpBearerToken1234567890";
+      const input = [
+        `{"headers":{"Authorization":"Bearer ${token}"},"url":"https://example.invalid/mcp"}`,
+        `http_headers = { "Authorization" = "Bearer ${token}", "X-Code-Ux-Agent" = "agent-1" }`,
+        `OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer ${token},X-Team=platform`,
+      ].join("\n");
+
+      const result = redactText(input);
+
+      expect(result).not.toContain(token);
+      expect(result).toContain('"Authorization": "[REDACTED]"');
+      expect(result).toContain('"Authorization" = "[REDACTED]"');
+      expect(result).toContain("OTEL_EXPORTER_OTLP_HEADERS=[REDACTED]");
+      expect(result).toContain('"X-Code-Ux-Agent" = "agent-1"');
+      expect(result).toContain('"url":"https://example.invalid/mcp"');
     });
 
     it("redacts URL credentials", () => {
@@ -141,6 +187,52 @@ describe("redaction", () => {
       expect(result.request.headers.authorization).toBe("[REDACTED]");
       expect(result.provider.githubToken).toBe("[REDACTED]");
       expect(result.message).toBe("Authorization: Bearer [REDACTED]");
+    });
+
+    it("redacts provider, issue tracker, URL credential, and nested array secrets without leaking originals", () => {
+      const secrets = {
+        providerKey: "sk-providerFixtureKey123456789012",
+        openaiCompatible: "sk-openaiCompatibleFixtureKey123456789",
+        githubToken: "ghp_123456789012345678901234567890123456",
+        gitlabToken: "glpat-12345678901234567890",
+        jiraToken: "ATATT3xFfGF0fixtureJiraToken1234567890",
+        bearerToken: "fixture-bearer-token",
+        urlPassword: "fixture-password",
+      };
+      const nestedError = new Error(`Provider failed with Authorization: Bearer ${secrets.bearerToken}`);
+      nestedError.stack = `Error: token ${secrets.openaiCompatible}\n    at provider`;
+
+      const result = redactMetadata({
+        providers: {
+          codex: { apiKey: secrets.providerKey },
+          openaiCompatible: { openaiCompatibleApiKey: secrets.openaiCompatible },
+        },
+        integrations: [
+          { githubToken: secrets.githubToken },
+          { gitlabToken: secrets.gitlabToken },
+          { jiraApiToken: secrets.jiraToken },
+          `remote=https://user:${secrets.urlPassword}@example.invalid/repo.git`,
+        ],
+        failure: {
+          cause: nestedError,
+          attempts: [
+            { authorization: `Bearer ${secrets.bearerToken}` },
+            [`Authorization: Bearer ${secrets.openaiCompatible}`],
+          ],
+        },
+      }) as any;
+      const serialized = JSON.stringify(result);
+
+      for (const secret of Object.values(secrets)) {
+        expect(serialized).not.toContain(secret);
+      }
+      expect(result.providers.codex.apiKey).toBe("[REDACTED]");
+      expect(result.providers.openaiCompatible.openaiCompatibleApiKey).toBe("[REDACTED]");
+      expect(result.integrations[3]).toBe("remote=https://[REDACTED]@example.invalid/repo.git");
+      expect(result.failure.cause.message).toBe("Provider failed with Authorization: Bearer [REDACTED]");
+      expect(result.failure.cause.stack).toBe("Error: token [REDACTED]\n    at provider");
+      expect(result.failure.attempts[0].authorization).toBe("[REDACTED]");
+      expect(result.failure.attempts[1][0]).toBe("Authorization: Bearer [REDACTED]");
     });
   });
 });

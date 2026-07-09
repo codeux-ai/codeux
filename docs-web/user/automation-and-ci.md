@@ -51,8 +51,8 @@ The `ciIntelligence` block (Settings → CI & Merge) controls how Code UX intera
 
 | Field | Default | Notes |
 | --- | --- | --- |
-| `waitForJulesCiAutofix` | `false` | If true, dispatch a `ci_fix` worker on failing CI. |
-| `julesCiAutofixMaxRetries` | `3` (max `20`) | Max attempts before escalating. |
+| `waitForJulesCiAutofix` | `false` | If true, dispatch a `VirtualWorkerService` doing `ci_fix` tasks on failing CI. |
+| `julesCiAutofixMaxRetries` | `3` (max `20`) | Max CI autofix attempts before escalation to human intervention. |
 
 ### Auto-merge modes
 
@@ -80,7 +80,7 @@ Per cycle, for every task in `CODING_COMPLETED`:
 2. **If already merged** → mark `COMPLETED`, set `is_merged: true`, `merge_indicator = MERGED` or `AUTOMERGE`.
 3. **If no PR found** → revert to `RUNNING`, set `merge_indicator = CI` (waiting for the worker to push).
 4. **If PR has merge conflict** → set `merge_indicator = MERGE_CONFLICT`. If `resolveMergeConflicts: true`, dispatch a worker; else create an attention item.
-5. **If CI failing** → if `waitForJulesCiAutofix: true` and retry budget remains, dispatch a `ci_fix` worker; else create an attention item.
+5. **If CI failing** → if `waitForJulesCiAutofix: true` and retry budget remains, dispatch a `VirtualWorkerService` doing `ci_fix` tasks; else create an attention item.
 6. **If CI green** → check comment-resolution gate; if pass, run `featurePrAutoMergeMode` policy.
 
 The same flow drives the *main branch* merge during finalisation, using `mainBranchAutoMergeMode` and the `resolveMainMergeConflicts` / `resolveAllCommentsBeforeMainMerge` toggles.

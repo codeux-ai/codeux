@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   normalizeProviderReply,
+  stripDashboardOnlyWidgets,
   getCompactionSummary,
   getMessagesAfterCompaction,
   buildChatReplayPrompt,
@@ -107,7 +108,9 @@ describe("chat-reply-prompt", () => {
       });
       expect(prompt).not.toContain("## WORKER INSTRUCTIONS");
       expect(prompt).toContain("### User\nHello");
-      expect(prompt).toContain("You must return STRICT JSON format containing exactly two keys: `replyMarkdown` and `action`");
+      expect(prompt).toContain("You must return STRICT JSON format containing `replyMarkdown`, `action`, and optional `suggestions`.");
+      expect(prompt).toContain("Each item must be `{ \"label\": string, \"prompt\": string, \"icon\"?: string, \"id\"?: string }`.");
+      expect(prompt).toContain("Use only stable string icon identifiers");
     });
 
     it("includes pending management action context if it exists in runtime state", () => {
@@ -161,6 +164,9 @@ describe("chat-reply-prompt", () => {
         mcpAvailable: false,
       });
       expect(prompt).toContain("You must return STRICT JSON format");
+      expect(prompt).toContain("optional `suggestions`");
+      expect(prompt).toContain("`custom_dashboards`");
+      expect(prompt).toContain("maps to the `manage_custom_dashboards` MCP surface");
       expect(prompt).not.toContain("manage_code_ux");
     });
 
@@ -175,7 +181,49 @@ describe("chat-reply-prompt", () => {
         mcpAvailable: true,
       });
       expect(prompt).toContain("manage_code_ux");
+      expect(prompt).toContain("manage_custom_dashboards");
+      expect(prompt).toContain("publish_revision");
       expect(prompt).toContain("Do NOT wrap your response in JSON");
+      expect(prompt).not.toContain("You must return STRICT JSON format");
+    });
+
+    it("instructs custom dashboard requests to create validated management revisions before publishing", () => {
+      const prompt = buildChatReplayPrompt({
+        projectId: "p1",
+        repoPath: "/repo",
+        projectName: "Proj",
+        thread,
+        messages: [{ authorType: "dashboard_user", bodyMarkdown: "Build me an ops dashboard and publish it" } as any],
+        workerInstructions: "",
+        mcpAvailable: true,
+      });
+
+      expect(prompt).toContain("Custom dashboard management");
+      expect(prompt).toContain("purpose, data sources, styleguide constraints, layout expectations, and publication intent");
+      expect(prompt).toContain("manifest metadata");
+      expect(prompt).toContain("source node graph definitions");
+      expect(prompt).toContain("dependency-free Preact/Tailwind-compatible");
+      expect(prompt).toContain("Do not instruct agents to write user-created dashboards into `dashboard/src`");
+      expect(prompt).toContain("start `validate_revision`");
+      expect(prompt).toContain("Never call `publish_revision` until validation status is `passed`");
+      expect(prompt).toContain("create a repair revision");
+    });
+
+    it("uses scheduler-only MCP instructions without advertising management tools", () => {
+      const prompt = buildChatReplayPrompt({
+        projectId: "p1",
+        repoPath: "/repo",
+        projectName: "Proj",
+        thread,
+        messages: [{ authorType: "dashboard_user", bodyMarkdown: "Remind yourself later" } as any],
+        workerInstructions: "",
+        mcpAvailable: true,
+        mcpAccessMode: "scheduler_only",
+      });
+      expect(prompt).toContain("You have the `scheduler_code_ux` MCP tool available");
+      expect(prompt).toContain("It supports `list`, `schedule_wakeup`, and `cancel`.");
+      expect(prompt).not.toContain("schedule_task");
+      expect(prompt).not.toContain("You have the `manage_code_ux` MCP tool available");
       expect(prompt).not.toContain("You must return STRICT JSON format");
     });
 
@@ -191,6 +239,81 @@ describe("chat-reply-prompt", () => {
       expect(prompt).toContain("You must return STRICT JSON format");
       expect(prompt).not.toContain("manage_code_ux");
     });
+
+    it("omits dashboard widget instructions for chat-provider-sourced replies", () => {
+      const prompt = buildChatReplayPrompt({
+        projectId: "p1",
+        repoPath: "/repo",
+        projectName: "Proj",
+        thread,
+        messages: [{ authorType: "dashboard_user", bodyMarkdown: "Hello" } as any],
+        workerInstructions: "",
+        suppressRichWidgets: true,
+      });
+      expect(prompt).not.toContain("## RICH WIDGETS");
+      expect(prompt).not.toContain("codeux:status");
+    });
+
+    it("strips dashboard widget fences from replayed assistant replies for external chat threads", () => {
+      const prompt = buildChatReplayPrompt({
+        projectId: "p1",
+        repoPath: "/repo",
+        projectName: "Proj",
+        thread,
+        messages: [
+          { authorType: "dashboard_user", bodyMarkdown: "How is the build?" } as any,
+          {
+            authorType: "connection",
+            bodyMarkdown: [
+              "The build is green.",
+              "",
+              "```codeux:status",
+              JSON.stringify({ title: "Build", items: [{ label: "Lint", state: "ok" }] }),
+              "```",
+            ].join("\n"),
+          } as any,
+        ],
+        workerInstructions: "",
+        suppressRichWidgets: true,
+      });
+
+      expect(prompt).toContain("The build is green.");
+      expect(prompt).toContain("Build\n- Lint: ok");
+      expect(prompt).not.toContain("```codeux:status");
+      expect(prompt).not.toContain('"items"');
+    });
+
+    it("strips dashboard widget fences from compacted history for external chat threads", () => {
+      const compactedThread = {
+        id: "t1",
+        title: "Test",
+        runtimeState: {
+          compactionSummary: {
+            markdown: [
+              "Earlier status was summarized.",
+              "",
+              "```codeux:status",
+              JSON.stringify({ title: "Deploy", items: [{ label: "Ready", state: "ok" }] }),
+              "```",
+            ].join("\n"),
+          },
+        },
+      } as any;
+      const prompt = buildChatReplayPrompt({
+        projectId: "p1",
+        repoPath: "/repo",
+        projectName: "Proj",
+        thread: compactedThread,
+        messages: [],
+        workerInstructions: "",
+        suppressRichWidgets: true,
+      });
+
+      expect(prompt).toContain("Earlier status was summarized.");
+      expect(prompt).toContain("Deploy\n- Ready: ok");
+      expect(prompt).not.toContain("```codeux:status");
+      expect(prompt).not.toContain('"items"');
+    });
   });
 
   describe("buildChatContinuationPrompt", () => {
@@ -201,6 +324,12 @@ describe("chat-reply-prompt", () => {
       expect(prompt).toContain("ignore provider/system setup text");
     });
 
+    it("tells external chat continuations not to emit dashboard widgets", () => {
+      const prompt = buildChatContinuationPrompt({ bodyMarkdown: "hello" } as any, undefined, false, undefined, true);
+      expect(prompt).toContain("Do not include dashboard-only `codeux:*` fenced widget blocks.");
+      expect(prompt).not.toContain("codeux:status / codeux:tasks");
+    });
+
     it("includes pending management action context if provided", () => {
       const prompt = buildChatContinuationPrompt(
         { bodyMarkdown: "hello" } as any,
@@ -209,6 +338,45 @@ describe("chat-reply-prompt", () => {
       expect(prompt).toContain("## PENDING ACTION CONTEXT");
       expect(prompt).toContain("approve?");
       expect(prompt).toContain("### User\nhello");
+    });
+  });
+
+  describe("stripDashboardOnlyWidgets", () => {
+    it("removes dashboard-only widget fences while preserving markdown prose", () => {
+      const markdown = [
+        "Here is the status.",
+        "",
+        "```codeux:status",
+        JSON.stringify({
+          title: "Build",
+          items: [{ label: "Lint", state: "ok", value: "passed" }],
+          note: "Ready for review.",
+        }),
+        "```",
+        "",
+        "Approval still required: please reply yes.",
+      ].join("\n");
+
+      expect(stripDashboardOnlyWidgets(markdown)).toBe([
+        "Here is the status.",
+        "",
+        "Build",
+        "- Lint: ok: passed",
+        "Ready for review.",
+        "",
+        "Approval still required: please reply yes.",
+      ].join("\n"));
+    });
+
+    it("downgrades suggested actions to readable markdown", () => {
+      const markdown = [
+        "Next options:",
+        "```codeux:actions",
+        JSON.stringify({ items: [{ label: "Start sprint", prompt: "Start the queued sprint" }] }),
+        "```",
+      ].join("\n");
+
+      expect(stripDashboardOnlyWidgets(markdown)).toContain("Suggested next steps:\n- Start sprint: Start the queued sprint");
     });
   });
 

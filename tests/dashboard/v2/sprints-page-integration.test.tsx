@@ -278,8 +278,11 @@ describe("SprintsPage Integration Regressions", () => {
 
     render(<SprintsPage />);
 
+    // Create a real selection so the bulk action bar is rendered.
+    await userEvent.click(screen.getByRole("button", { name: /Select sprint Sprint 4/i }));
+
     // Check bulk action feedback
-    const clearBtn = screen.getByRole('button', { name: /Clear/i });
+    const clearBtn = screen.getByRole("button", { name: /Clear sprint selection/i });
     expect(clearBtn).toBeInTheDocument();
     expect(clearBtn.className).toContain("focus-visible:ring-offset-2");
 

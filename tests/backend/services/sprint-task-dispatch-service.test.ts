@@ -138,6 +138,169 @@ describe("SprintTaskDispatchService", () => {
     });
   });
 
+  it("re-queues docker-cli dispatches when the provider cap is reached during startup", async () => {
+    const { projectManagementRepository, executionRepository, taskService, service } = await createFixture();
+    const project = projectManagementRepository.createProject({
+      name: "Dispatch Deferral Project",
+      sourceType: "local",
+      sourceRef: "/workspace/dispatch-deferral-project",
+    });
+    const sprint = projectManagementRepository.createSprint(project.id, {
+      name: "Dispatch Deferral Sprint",
+      number: 9,
+    });
+    const taskRecord = projectManagementRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Wait for provider slot",
+      promptMarkdown: "The provider reaches its cap after task-run creation.",
+      executorType: "docker_cli",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      executorMode: "mixed",
+    });
+
+    taskService.startSprintTask.mockRejectedValue(new ProviderCapReachedError("codex", 2, 2));
+
+    await expect(service.startTask({
+      task: {
+        id: taskRecord.taskKey,
+        record_id: taskRecord.id,
+        title: taskRecord.title,
+        prompt: taskRecord.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "PENDING",
+      },
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      featureBranch: "feature/sprint-9",
+      repoPath: "/workspace/dispatch-deferral-project",
+      sprintNumber: 9,
+    })).rejects.toBeInstanceOf(ProviderCapReachedError);
+
+    const [dispatch] = executionRepository.listTaskDispatches({
+      projectId: project.id,
+      sprintRunId: sprintRun.id,
+    });
+    const taskRun = executionRepository.getLatestTaskRun(taskRecord.id, sprintRun.id);
+    const task = projectManagementRepository.getTask(taskRecord.id);
+
+    expect(dispatch).toMatchObject({
+      taskId: taskRecord.id,
+      status: "queued",
+      errorMessage: null,
+    });
+    expect(taskRun).toMatchObject({
+      state: "PENDING",
+      provider: "codex",
+      finishedAt: null,
+      durationMs: null,
+    });
+    expect(task).toMatchObject({ status: "pending" });
+  });
+
+  it("resumes a queued provider-cap deferral when capacity is available", async () => {
+    const { projectManagementRepository, executionRepository, taskService, service } = await createFixture();
+    const project = projectManagementRepository.createProject({
+      name: "Dispatch Resume Project",
+      sourceType: "local",
+      sourceRef: "/workspace/dispatch-resume-project",
+    });
+    const sprint = projectManagementRepository.createSprint(project.id, {
+      name: "Dispatch Resume Sprint",
+      number: 10,
+    });
+    const taskRecord = projectManagementRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Resume queued task",
+      promptMarkdown: "The provider cap clears on the next scheduling cycle.",
+      executorType: "docker_cli",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      executorMode: "mixed",
+    });
+    const startArgs = {
+      task: {
+        id: taskRecord.taskKey,
+        record_id: taskRecord.id,
+        title: taskRecord.title,
+        prompt: taskRecord.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "PENDING" as const,
+      },
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      featureBranch: "feature/sprint-10",
+      repoPath: "/workspace/dispatch-resume-project",
+      sprintNumber: 10,
+    };
+    const customSettings = {
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      aiProvider: {
+        ...DEFAULT_DASHBOARD_SETTINGS.aiProvider,
+        providers: {
+          ...DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers,
+          codex: {
+            provider: "codex" as any,
+            maxConcurrentTasks: 2,
+          },
+        },
+      },
+    };
+    const customService = new SprintTaskDispatchService(
+      executionRepository,
+      projectManagementRepository,
+      taskService as any,
+      (service as any).guardrailService,
+      (service as any).providerConcurrencyService,
+      () => customSettings,
+      (service as any).logger,
+    );
+    vi.spyOn((service as any).providerConcurrencyService, "getGlobalRunningCounts")
+      .mockReturnValueOnce({ codex: 2 })
+      .mockReturnValue({ codex: 0 });
+
+    await expect(customService.startTask(startArgs)).rejects.toBeInstanceOf(ProviderCapReachedError);
+    taskService.startSprintTask.mockResolvedValue({
+      id: "resumed-session",
+      name: "Resumed session",
+      provider: "codex",
+    });
+
+    const result = await customService.startTask(startArgs);
+
+    expect(result).toMatchObject({
+      id: "resumed-session",
+      name: "Resumed session",
+      provider: "codex",
+    });
+    expect(taskService.startSprintTask).toHaveBeenCalledTimes(1);
+    const dispatches = executionRepository.listTaskDispatches({
+      projectId: project.id,
+      sprintRunId: sprintRun.id,
+      taskId: taskRecord.id,
+    });
+    expect(dispatches).toHaveLength(1);
+    expect(dispatches[0]).toMatchObject({
+      status: "running",
+      errorMessage: null,
+    });
+    const latestRun = executionRepository.getLatestTaskRun(taskRecord.id, sprintRun.id);
+    expect(latestRun).toMatchObject({
+      state: "RUNNING",
+      sessionId: "resumed-session",
+    });
+  });
+
   it("does not revive a dispatch cancelled while session startup is in flight", async () => {
     const { projectManagementRepository, executionRepository, taskService, service } = await createFixture();
     const project = projectManagementRepository.createProject({
@@ -315,6 +478,85 @@ describe("SprintTaskDispatchService", () => {
     });
   });
 
+  it("reuses an active dispatch instead of creating duplicate task-run or provider invocation rows", async () => {
+    const { projectManagementRepository, executionRepository, taskService, service } = await createFixture();
+    const project = projectManagementRepository.createProject({
+      name: "Duplicate Dispatch Project",
+      sourceType: "local",
+      sourceRef: "/workspace/duplicate-dispatch-project",
+    });
+    const sprint = projectManagementRepository.createSprint(project.id, {
+      name: "Duplicate Dispatch Sprint",
+      number: 19,
+    });
+    const taskRecord = projectManagementRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Run once in Jules",
+      promptMarkdown: "This task must only start once.",
+      executorType: "jules",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      executorMode: "mixed",
+    });
+
+    taskService.resolveTaskProvider.mockReturnValue("jules");
+    taskService.startSprintTask.mockResolvedValue({
+      id: "jules-session-once",
+      name: "sessions/jules-session-once",
+      provider: "jules",
+    });
+
+    const startArgs = {
+      task: {
+        id: taskRecord.taskKey,
+        record_id: taskRecord.id,
+        title: taskRecord.title,
+        prompt: taskRecord.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "PENDING" as const,
+      },
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      featureBranch: "feature/sprint-19",
+      repoPath: "/workspace/duplicate-dispatch-project",
+      sprintNumber: 19,
+    };
+
+    await service.startTask(startArgs);
+    taskService.startSprintTask.mockClear();
+
+    const reused = await service.startTask(startArgs);
+
+    expect(reused).toMatchObject({
+      id: "jules-session-once",
+      name: "sessions/jules-session-once",
+      provider: "jules",
+    });
+    expect(taskService.startSprintTask).not.toHaveBeenCalled();
+    expect(executionRepository.listTaskDispatches({
+      projectId: project.id,
+      sprintRunId: sprintRun.id,
+      taskId: taskRecord.id,
+    })).toHaveLength(1);
+    expect(executionRepository.listExecutionInvocations({
+      projectId: project.id,
+      sprintRunId: sprintRun.id,
+    }).filter((invocation) => invocation.taskId === taskRecord.id)).toHaveLength(1);
+    expect(executionRepository.listProviderInvocationsForTask(project.id, taskRecord.id)).toHaveLength(1);
+
+    const latestRun = executionRepository.getLatestTaskRun(taskRecord.id, sprintRun.id);
+    expect(latestRun).toMatchObject({
+      state: "RUNNING",
+      sessionId: "jules-session-once",
+    });
+    expect(executionRepository.listTaskRunEvents(latestRun!.id).filter((event) => event.eventType === "dispatch_started")).toHaveLength(1);
+  });
+
   it("marks the dispatch-created Jules invocation failed when session creation fails", async () => {
     const { projectManagementRepository, executionRepository, taskService, service } = await createFixture();
     const project = projectManagementRepository.createProject({
@@ -375,6 +617,32 @@ describe("SprintTaskDispatchService", () => {
 
     const providerUsage = executionRepository.getProviderInvocationUsage(julesInvocation.providerInvocationId!);
     expect(providerUsage?.status).toBe("failed");
+
+    const dispatches = executionRepository.listTaskDispatches({
+      projectId: project.id,
+      sprintRunId: sprintRun.id,
+      taskId: taskRecord.id,
+    });
+    expect(dispatches).toHaveLength(1);
+    expect(dispatches[0]).toMatchObject({
+      status: "failed",
+      errorMessage: "Jules API unavailable",
+    });
+
+    const taskRun = executionRepository.getLatestTaskRun(taskRecord.id, sprintRun.id);
+    expect(taskRun).toMatchObject({
+      state: "FAILED",
+      provider: "jules",
+    });
+    expect(executionRepository.listTaskRunEvents(taskRun!.id)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        eventType: "dispatch_failed",
+        payload: expect.objectContaining({
+          dispatchId: dispatches[0]!.id,
+          error: "Jules API unavailable",
+        }),
+      }),
+    ]));
 
     const messages = executionRepository.listExecutionInvocationMessages(julesInvocation.id);
     expect(messages.some((message) => message.contentMarkdown.includes("Jules dispatch failed: Jules API unavailable"))).toBe(true);

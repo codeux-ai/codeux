@@ -72,7 +72,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
   onClose,
   markCompletedIcon = "circle",
   role,
-  buttonClassName = "flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-medium leading-snug text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 [&>span]:min-w-0 [&>span]:break-words",
+  buttonClassName = "flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-medium leading-snug text-slate-600 no-underline decoration-transparent transition-colors hover:bg-black/[0.04] hover:text-slate-900 hover:no-underline focus:no-underline dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 [&>span]:min-w-0 [&>span]:break-words",
 }) => {
   const actionConfirm = useConfirmDialog();
   const handleDeleteClassName = buttonClassName.replace(
@@ -141,6 +141,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
               disabled={primaryBusy}
               title={primaryBusy ? "Sprint action in progress" : undefined}
               aria-busy={primaryBusy}
+              aria-disabled={primaryBusy}
               className={disabledClassName}
             >
               {primaryBusy ? (
@@ -173,6 +174,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
               disabled={pauseResumeBusy}
               title={pauseResumeBusy ? "Sprint pause or resume action in progress" : undefined}
               aria-busy={pauseResumeBusy}
+              aria-disabled={pauseResumeBusy}
               className={disabledClassName}
             >
               {pauseResumeBusy ? (
@@ -264,6 +266,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
         disabled={showcaseBusy}
         title={showcaseBusy ? "Showcase update in progress" : undefined}
         aria-busy={showcaseBusy}
+        aria-disabled={showcaseBusy}
         className={disabledClassName}
       >
         {showcaseBusy ? (
@@ -287,6 +290,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
           disabled={markCompletedDisabled}
           title={markCompletedDisabled ? "Mark complete is disabled while another sprint action is in progress" : undefined}
           aria-label={`Mark sprint ${sprint.name} as completed`}
+          aria-disabled={markCompletedDisabled}
           className={disabledClassName}
         >
           {markCompletedIcon === "square" ? (
@@ -306,6 +310,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
         }}
         disabled={deleteBusy}
         aria-busy={deleteBusy}
+        aria-disabled={deleteBusy}
         aria-label={deleteBusy ? `Deleting sprint ${sprint.name}` : `Delete sprint ${sprint.name}`}
         title={deleteBusy ? "Delete action in progress" : undefined}
         className={deleteBusy ? `${handleDeleteClassName} disabled:cursor-not-allowed disabled:opacity-40` : handleDeleteClassName}
@@ -315,7 +320,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
         ) : (
           <XCircle className="h-3.5 w-3.5" strokeWidth={2.1} />
         )}
-        {deleteBusy ? "Deleting..." : "Delete"}
+        {deleteBusy ? "Deleting" : "Delete"}
       </button>
     </>
   );

@@ -320,6 +320,68 @@ describe("SprintComposer", () => {
     });
   });
 
+  it("submits schedule payloads with after-sprint-end anchors and preserves composer fields", async () => {
+    const onSubmit = vi.fn();
+    const issue: SprintLinkedIssueInput = {
+      provider: "github",
+      hostDomain: "github.com",
+      repository: "openai/example",
+      issueNumber: 12,
+      issueKey: "#12",
+      title: "Follow linked issue",
+      url: "https://github.com/openai/example/issues/12",
+      state: "open",
+      labels: ["scheduler"],
+      assignees: [],
+      includeConversation: false,
+    };
+
+    const { getByPlaceholderText, getByRole, getAllByText, getByText } = render(
+      <SprintComposer
+        {...defaultProps}
+        onSubmit={onSubmit}
+        linkedIssues={[issue]}
+        defaultPlanningAgentPresetId="planner-1"
+        defaultAgentRoutingMode="ORCHESTRATOR"
+        scheduleAnchorSprintOptions={[{ id: "source-sprint-1", label: "Release prep" }]}
+      />
+    );
+
+    fireEvent.input(getByPlaceholderText("Runtime hardening"), { target: { value: "Scheduled Sprint" } });
+    fireEvent.input(getByPlaceholderText("Describe the outcome, affected systems, and what done looks like when this sprint lands."), {
+      target: { value: "Run after the release prep sprint ends." },
+    });
+    fireEvent.input(getByRole("textbox", { name: /sprint key override/i }), { target: { value: "OPS-42" } });
+
+    fireEvent.click(getAllByText("Schedule")[0]!);
+    fireEvent.click(getByRole("button", { name: "After End" }));
+    fireEvent.click(getByRole("button", { name: "Source Sprint" }));
+    fireEvent.click(getByText("Release prep"));
+    fireEvent.input(getByRole("spinbutton", { name: /offset minutes/i }), { target: { value: "15" } });
+    fireEvent.click(getAllByText("Schedule").pop()!);
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({
+      name: "Scheduled Sprint",
+      goal: "Run after the release prep sprint ends.",
+      submitMode: "schedule",
+      sprintKeyOverride: "OPS-42",
+      planningAgentPresetId: "planner-1",
+      agentRoutingMode: "ORCHESTRATOR",
+      workerAgentPresetId: null,
+      linkedIssues: [issue],
+      schedule: {
+        scheduleAnchor: {
+          mode: "after_sprint_end",
+          sourceSprintId: "source-sprint-1",
+          offsetMinutes: 15,
+        },
+      },
+    });
+  });
+
   it("keeps default planning and worker agents while agent options load", async () => {
     const agentPresets = [
       {
@@ -528,7 +590,7 @@ describe("SprintComposer", () => {
     const mockOnCancelPlanningRequest = vi.fn();
     const mockOnSubmit = vi.fn(async () => new Promise(() => undefined));
 
-    const { getByText, getByPlaceholderText, queryByText, getAllByText } = render(
+    const { getByText, getByPlaceholderText, queryByText, getAllByText, getByRole } = render(
       <SprintComposer {...defaultProps} onSubmit={mockOnSubmit} onCancelPlanningRequest={mockOnCancelPlanningRequest} />
     );
 
@@ -548,6 +610,9 @@ describe("SprintComposer", () => {
     });
 
     expect(mockOnSubmit).toHaveBeenCalled();
+
+    fireEvent.click(getByRole("button", { name: /turn planning vessel into a coffee break reminder/i }));
+    expect(getByText("Coffee break unlocked. Grab a fresh cup while planning keeps moving.")).toBeInTheDocument();
 
     // Click Cancel Active Request through the overlay specifically.
     const cancelBtns = getAllByText("Cancel Active Request");
@@ -582,7 +647,7 @@ describe("SprintComposer", () => {
     const mockOnStartNewSprint = vi.fn();
     const mockOnClose = vi.fn();
 
-    const { getByText, getByPlaceholderText, getAllByText } = render(
+    const { getByText, getByPlaceholderText, getAllByText, getByRole } = render(
       <SprintComposer
         {...defaultProps}
         onClose={mockOnClose}
@@ -610,6 +675,9 @@ describe("SprintComposer", () => {
     expect(mockOnSubmit).toHaveBeenCalled();
     const firstSignal = mockOnSubmit.mock.calls[0]?.[0]?.signal as AbortSignal;
     expect(firstSignal).toBeInstanceOf(AbortSignal);
+
+    fireEvent.click(getByRole("button", { name: /turn planning vessel into a coffee break reminder/i }));
+    expect(getByText("Coffee break unlocked. Grab a fresh cup while planning keeps moving.")).toBeInTheDocument();
 
     // Click New Sprint
     const newSprintBtn = getByText("New Sprint");
@@ -733,6 +801,7 @@ describe("AddTaskModal Lifecycle", () => {
 
     const errorRegion = getByText("Failed");
     expect(errorRegion).toBeInTheDocument();
+    expect(getByRole("button", { name: "Retry" })).toBeInTheDocument();
 
     const dismissBtn = getByRole("button", { name: "Clear error" });
 
@@ -746,6 +815,36 @@ describe("AddTaskModal Lifecycle", () => {
       expect(queryByText("API Error 500")).not.toBeInTheDocument();
       // focus placement after error recovery: activeElement should not be a dead reference
       expect(document.activeElement).not.toBe(dismissBtn);
+    });
+  });
+
+  it("keeps the modal open and retries task submission after a failure", async () => {
+    const mockOnClose = vi.fn();
+    const mockOnSubmit = vi.fn()
+      .mockRejectedValueOnce(new Error("Task API unavailable"))
+      .mockResolvedValueOnce(undefined);
+
+    const { getByLabelText, getByRole, getByText } = render(
+      <AddTaskModal {...defaultProps} onClose={mockOnClose} onSubmit={mockOnSubmit} />
+    );
+
+    fireEvent.input(getByLabelText(/Sprint/i), { target: { value: "SPR-1" } });
+    fireEvent.input(getByLabelText(/Title/i), { target: { value: "Retryable task" } });
+    fireEvent.click(getByRole("button", { name: "Create Task" }));
+
+    await waitFor(() => {
+      expect(getByText("Task API unavailable")).toBeInTheDocument();
+      expect(getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    });
+    expect(mockOnClose).not.toHaveBeenCalled();
+
+    fireEvent.click(getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => {
+      expect(mockOnSubmit).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(mockOnClose).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -4,8 +4,8 @@
   right: 0;
   z-index: 50;
   margin-top: 0.65rem;
-  width: min(26rem, calc(100vw - 2rem));
-  max-height: calc(100dvh - 8rem);
+  width: min(30rem, calc(100vw - 2rem));
+  max-height: min(42rem, calc(100dvh - 6rem));
   transform-origin: top right;
 }
 
@@ -14,31 +14,32 @@
   flex-direction: column;
   overflow: hidden;
   max-height: inherit;
-  border-radius: 1.35rem;
-  border: 1px solid var(--stats-card-border);
-  background-color: var(--stats-card-bg);
-  box-shadow: var(--elevation-floating);
-  backdrop-filter: blur(24px);
+  border-radius: var(--stats-panel-radius);
+  border: 1px solid var(--stats-border-hairline);
+  background-color: var(--stats-surface-panel);
+  box-shadow: var(--stats-panel-shadow);
 }
 
 :global(.dark) .content {
-  border: 1px solid var(--stats-card-border);
-  background-color: var(--stats-card-bg);
-  box-shadow: var(--elevation-floating);
+  border-color: var(--stats-border-hairline);
+  background-color: var(--stats-surface-panel);
 }
 
 .header {
+  flex: 0 0 auto;
   padding: 1rem 1.1rem;
-  border-bottom: 1px solid var(--stats-card-border);
+  border-bottom: 1px solid var(--stats-border-hairline);
 }
 
 :global(.dark) .header {
-  border-bottom: 1px solid var(--stats-card-border);
+  border-bottom-color: var(--stats-border-hairline);
 }
 
 .section {
+  min-height: 0;
+  flex: 1 1 auto;
   padding: 1.1rem;
-  border-bottom: 1px solid var(--stats-card-border);
+  border-bottom: 1px solid var(--stats-border-hairline);
 }
 
 .section:last-child {
@@ -46,7 +47,7 @@
 }
 
 :global(.dark) .section {
-  border-bottom: 1px solid var(--stats-card-border);
+  border-bottom-color: var(--stats-border-hairline);
 }
 
 .label {
@@ -56,7 +57,29 @@
   text-transform: uppercase;
   letter-spacing: 0.14em;
   color: var(--stats-label-color);
+  margin-bottom: 0.2rem;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
   margin-bottom: 0.85rem;
+}
+
+.sectionCopy {
+  color: var(--stats-detail-color);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.scrollArea {
+  max-height: min(31rem, calc(100dvh - 15rem));
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 0.2rem;
+  overscroll-behavior: contain;
 }
 
 .grid {
@@ -82,7 +105,21 @@
   .menu {
     left: 0;
     right: auto;
-    width: min(100%, calc(100vw - 2rem));
+    width: min(100%, calc(100vw - 1rem));
+    max-height: calc(100dvh - 4rem);
     transform-origin: top left;
+  }
+
+  .header {
+    padding: 0.9rem;
+  }
+
+  .section {
+    padding: 0.9rem;
+  }
+
+  .scrollArea {
+    max-height: calc(100dvh - 14rem);
+    padding-right: 0;
   }
 }

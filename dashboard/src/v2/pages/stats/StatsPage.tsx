@@ -125,12 +125,12 @@ export const StatsPage: FunctionComponent = () => {
       <div className={styles.statePanelInner}>
         {renderContextRail()}
         <div className={`${SUBPANEL_CLASS} ${styles.stateMessage}`}>
-          <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-warning-text)] ${CHIP_CLASS}`}>
+          <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
             {options.badge}
           </div>
           <div className={styles.stateMessageContent}>
             <div className={styles.stateMessageIcon} aria-hidden="true">
-              <options.icon className={`h-8 w-8 text-[color:var(--stats-warning-text)] ${options.iconClassName || ""}`} />
+              <options.icon className={`h-8 w-8 text-[color:var(--stats-detail-color)] ${options.iconClassName || ""}`} />
             </div>
             <h3 className={styles.stateMessageTitle}>{options.title}</h3>
             <p className={styles.stateMessageDescription}>{options.description}</p>

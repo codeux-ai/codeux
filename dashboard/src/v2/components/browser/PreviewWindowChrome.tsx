@@ -74,6 +74,11 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
   const [navigationAnnouncement, setNavigationAnnouncement] = useState("");
   const restoreButtonRef = useRef<HTMLButtonElement>(null);
   const reopenButtonRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const minimizeButtonRef = useRef<HTMLButtonElement>(null);
+  const fullscreenButtonRef = useRef<HTMLButtonElement>(null);
+  const lastChromeControlRef = useRef<HTMLButtonElement | null>(null);
+  const previousWindowStateRef = useRef<WindowState>("normal");
   const portTabRefs = useRef<Record<number, HTMLButtonElement | null>>({});
   const isFullscreen = windowState === "fullscreen";
   const isMinimized = windowState === "minimized";
@@ -100,6 +105,17 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
 
   const announceNavigation = (message: string) => {
     setNavigationAnnouncement(message);
+  };
+
+  const rememberChromeControl = (element: HTMLButtonElement | null) => {
+    lastChromeControlRef.current = element;
+  };
+
+  const restoreChromeControlFocus = () => {
+    const target = lastChromeControlRef.current;
+    if (target && target.isConnected) {
+      target.focus({ preventScroll: true });
+    }
   };
 
   const selectPortTab = (mapping: SprintPreviewPortMapping) => {
@@ -140,7 +156,11 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
     if (isClosed) {
       reopenButtonRef.current?.focus({ preventScroll: true });
     }
-  }, [isClosed, isMinimized]);
+    if (windowState === "normal" && previousWindowStateRef.current !== "normal") {
+      queueMicrotask(restoreChromeControlFocus);
+    }
+    previousWindowStateRef.current = windowState;
+  }, [isClosed, isMinimized, windowState]);
 
   if (!session) {
     return (
@@ -234,30 +254,42 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <button
+                ref={closeButtonRef}
                 type="button"
                 title="Close window"
                 aria-label="Close preview window"
-                onClick={() => setWindowState("closed")}
+                onClick={() => {
+                  rememberChromeControl(closeButtonRef.current);
+                  setWindowState("closed");
+                }}
               className="group flex h-3 w-3 items-center justify-center rounded-full bg-status-red/80 transition hover:bg-status-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/50 motion-reduce:transition-none"
               style={{ transition: controlTransition }}
             >
               <X className="h-2 w-2 text-red-900 opacity-0 group-hover:opacity-100" strokeWidth={3} />
             </button>
             <button
+              ref={minimizeButtonRef}
               type="button"
               title="Minimize window"
               aria-label="Minimize preview window"
-              onClick={() => setWindowState("minimized")}
+              onClick={() => {
+                rememberChromeControl(minimizeButtonRef.current);
+                setWindowState("minimized");
+              }}
               className="group flex h-3 w-3 items-center justify-center rounded-full bg-amber-400/80 transition hover:bg-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50 motion-reduce:transition-none"
               style={{ transition: controlTransition }}
             >
               <Minus className="h-2 w-2 text-amber-900 opacity-0 group-hover:opacity-100" strokeWidth={3} />
             </button>
             <button
+              ref={fullscreenButtonRef}
               type="button"
               title={isFullscreen ? "Restore window" : "Maximize window"}
               aria-label={isFullscreen ? "Restore preview window" : "Enter preview fullscreen"}
-              onClick={() => setWindowState(isFullscreen ? "normal" : "fullscreen")}
+              onClick={() => {
+                rememberChromeControl(fullscreenButtonRef.current);
+                setWindowState(isFullscreen ? "normal" : "fullscreen");
+              }}
               className="group flex h-3 w-3 items-center justify-center rounded-full bg-signal-500/90 transition hover:bg-signal-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 motion-reduce:transition-none"
               style={{ transition: controlTransition }}
             >
@@ -277,6 +309,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
           <div
             role="tablist"
             aria-label={`Preview ports for ${sessionName}`}
+            aria-busy={navigationBusy}
             className="mt-3 flex min-w-0 gap-1 overflow-x-auto rounded-2xl border border-black/[0.06] bg-slate-100/70 p-1 dark:border-white/[0.06] dark:bg-void-950/50"
           >
             {visiblePortMappings.map((mapping, index) => {
@@ -295,6 +328,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
                   role="tab"
                   aria-selected={selected}
                   aria-label={`Select preview port ${routeLabel}`}
+                  aria-controls="preview-window-frame"
                   tabIndex={selected ? 0 : -1}
                   onClick={() => selectPortTab(mapping)}
                   onKeyDown={(event) => handlePortTabKeyDown(event as KeyboardEvent, index)}
@@ -414,6 +448,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
         )}
       </div>
       <div
+        id="preview-window-frame"
         className={
           isFullscreen
             ? "flex-1 bg-slate-100/70 dark:bg-void-950"

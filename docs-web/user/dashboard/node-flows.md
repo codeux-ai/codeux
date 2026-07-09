@@ -1,0 +1,41 @@
+# Node Flows
+
+The **Nodes** page (`/nodes`) is where dashboard users create and operate saved node-flow workflows for the active project. A node flow is a repeatable graph that can be validated, run manually, scheduled, inspected through persisted runs, and attached to project agents as a reusable skill.
+
+## Flow Library And Canvas
+
+The flow library lists project-owned flows. Selecting one opens an editable graph canvas with nodes, directed edges, positions, and node JSON data. The canvas is built into Code UX and is not a generic n8n importer; runtime execution supports Code UX node types rather than arbitrary external workflow nodes.
+
+New editable canvas surfaces use a pure dashboard state module for typed nodes, ports, edges, config fields, selection, deterministic layout, validation issues, JSON serialization, and malformed-draft recovery. Its starter graph lays out trigger, agent, task, condition, and output nodes so workflows begin from a useful Code UX shape.
+
+Agent-driven graph edits use a separate UI-free helper that accepts structured JSON commands for adding nodes, patching node fields, connecting ports, deleting graph entities, selecting entities, and replacing a graph from serialized JSON. The helper applies commands through the canvas reducer and returns deterministic summaries, diffs, and validation blockers.
+
+Side panels stay controlled by the page shell: the palette emits typed create-node actions, the inspector
+emits field/config/metadata changes for the selected node, edge details are read-only, and validation
+issues expose select/focus callbacks for the affected node or edge.
+
+## Dynamic Widgets
+
+The inspector renders widget schemas attached to the selected node. Supported field types are text, textarea, number, boolean, select, JSON, secret reference, and key-value entries. Graph-level input widgets describe manual or scheduled run input.
+
+Use secret reference fields for credentials. Do not paste raw tokens, API keys, cookies, passwords, or private headers into widget defaults, node data, metadata, or run input.
+
+## Validation
+
+Validation checks graph shape before saving: unique node ids, valid edge endpoints, acyclic edges, JSON-safe data, and valid widget field definitions. Validation issues are shown as field-level messages so you can repair the draft before saving.
+
+A graph can be structurally valid even when it contains a future node type that the runtime cannot execute yet. Current executable node types are `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, and `output`.
+
+## Running And Inspection
+
+The manual run panel accepts JSON object input and starts a node-flow run. Runs persist both the parent flow result and per-node rows, including status, error messages, redacted input/output, and linked execution invocation ids when a provider or HTTP node is externally observable.
+
+Rendered run payloads redact secret-shaped keys such as `apiKey`, `authorization`, `cookie`, `password`, `secret`, and `token`.
+
+## Agent Attachment
+
+A flow can be attached to a project agent preset as a repeatable skill with a name and description. Detaching removes only that binding; the flow, its graph, schedules, and run history remain in the project.
+
+## Scheduling
+
+Use the [Scheduler](./scheduler.md) page to run a saved node flow once or on a recurrence. Scheduled node-flow entries select a project-owned flow and may include optional JSON object input. Pause, resume, failure handling, and due-run behavior match the normal scheduler model.

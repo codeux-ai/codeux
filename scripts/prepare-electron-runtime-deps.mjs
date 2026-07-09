@@ -23,7 +23,7 @@ const fingerprintPath = path.join(runtimeDir, ".runtime-fingerprint");
 const packageJson = JSON.parse(readFileSync(path.join(projectRoot, "package.json"), "utf8"));
 const lockfile = readFileSync(path.join(projectRoot, "pnpm-lock.yaml"), "utf8");
 const workspace = readFileSync(path.join(projectRoot, "pnpm-workspace.yaml"), "utf8");
-const pruneVersion = 3;
+const pruneVersion = 4;
 const targetPlatform = process.env.CODE_UX_ELECTRON_TARGET_PLATFORM || process.platform;
 const targetArch = process.env.CODE_UX_ELECTRON_TARGET_ARCH || process.arch;
 const keepAllNativeBinaries = process.env.CODE_UX_ELECTRON_KEEP_ALL_NATIVE_BINARIES === "1";
@@ -142,6 +142,31 @@ function normalizeNativeArch(arch) {
   return arch;
 }
 
+function findOnnxRuntimeNativeRoots(rootDir) {
+  const candidates = [
+    path.join(rootDir, "onnxruntime-node", "bin", "napi-v6"),
+  ];
+  const pnpmStoreDir = path.join(rootDir, ".pnpm");
+  if (existsSync(pnpmStoreDir)) {
+    for (const entry of readdirSync(pnpmStoreDir, { withFileTypes: true })) {
+      if (!entry.isDirectory() || !entry.name.startsWith("onnxruntime-node@")) {
+        continue;
+      }
+      candidates.push(
+        path.join(
+          pnpmStoreDir,
+          entry.name,
+          "node_modules",
+          "onnxruntime-node",
+          "bin",
+          "napi-v6",
+        ),
+      );
+    }
+  }
+  return candidates.filter((candidate) => existsSync(candidate));
+}
+
 function pruneOnnxRuntimeNativeBinaries(rootDir) {
   if (keepAllNativeBinaries) {
     return;
@@ -149,39 +174,29 @@ function pruneOnnxRuntimeNativeBinaries(rootDir) {
 
   // Hoisted layout puts the package at node_modules/onnxruntime-node; the
   // legacy .pnpm store path is kept as a fallback for stale caches.
-  const nativeRootCandidates = [
-    path.join(rootDir, "onnxruntime-node", "bin", "napi-v6"),
-    path.join(
-      rootDir,
-      ".pnpm",
-      "onnxruntime-node@1.24.3",
-      "node_modules",
-      "onnxruntime-node",
-      "bin",
-      "napi-v6",
-    ),
-  ];
-  const nativeRoot = nativeRootCandidates.find((candidate) => existsSync(candidate));
-  if (!nativeRoot) {
+  const nativeRoots = findOnnxRuntimeNativeRoots(rootDir);
+  if (nativeRoots.length === 0) {
     return;
   }
 
   const wantedPlatform = normalizeNativePlatform(targetPlatform);
   const wantedArch = normalizeNativeArch(targetArch);
 
-  for (const platformEntry of readdirSync(nativeRoot, { withFileTypes: true })) {
-    if (!platformEntry.isDirectory()) {
-      continue;
-    }
-    const platformPath = path.join(nativeRoot, platformEntry.name);
-    if (platformEntry.name !== wantedPlatform) {
-      rmSync(platformPath, { recursive: true, force: true });
-      continue;
-    }
+  for (const nativeRoot of nativeRoots) {
+    for (const platformEntry of readdirSync(nativeRoot, { withFileTypes: true })) {
+      if (!platformEntry.isDirectory()) {
+        continue;
+      }
+      const platformPath = path.join(nativeRoot, platformEntry.name);
+      if (platformEntry.name !== wantedPlatform) {
+        rmSync(platformPath, { recursive: true, force: true });
+        continue;
+      }
 
-    for (const archEntry of readdirSync(platformPath, { withFileTypes: true })) {
-      if (archEntry.isDirectory() && archEntry.name !== wantedArch) {
-        rmSync(path.join(platformPath, archEntry.name), { recursive: true, force: true });
+      for (const archEntry of readdirSync(platformPath, { withFileTypes: true })) {
+        if (archEntry.isDirectory() && archEntry.name !== wantedArch) {
+          rmSync(path.join(platformPath, archEntry.name), { recursive: true, force: true });
+        }
       }
     }
   }

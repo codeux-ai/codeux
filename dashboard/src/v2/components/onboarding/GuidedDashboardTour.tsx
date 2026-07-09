@@ -1,10 +1,12 @@
 import type { FunctionComponent } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { ArrowLeft, ArrowRight, Box, CalendarDays, Check, Compass, EyeOff, FolderOpen, FolderTree, MessageCircle, Sparkles } from "lucide-preact";
+import { ArrowLeft, ArrowRight, BookOpen, Box, CalendarDays, Check, Compass, EyeOff, FolderOpen, FolderTree, LayoutDashboard, Library, MessageCircle, Sparkles } from "lucide-preact";
 import { DASHBOARD_TOUR_START_EVENT, DASHBOARD_TOUR_STORAGE_KEY } from "../../lib/onboarding-control.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import type { DashboardFeatureId } from "../../lib/dashboard-feature-flags.js";
+import { isDashboardFeatureEnabled } from "../../lib/dashboard-feature-flags.js";
 
 type TourStep = {
   id: string;
@@ -13,6 +15,7 @@ type TourStep = {
   title: string;
   body: string;
   accent: "signal" | "ember" | "sky";
+  feature?: DashboardFeatureId;
 };
 
 type RectState = {
@@ -88,6 +91,24 @@ const TOUR_STEPS: TourStep[] = [
     accent: "signal",
   },
   {
+    id: "nodes",
+    targetId: "nav-nodes",
+    eyebrow: "Workflow graph",
+    title: "Nodes",
+    body: "Nodes lets you compose project workflow graphs, configure node widgets, attach flows to agents, and inspect persisted runs.",
+    accent: "signal",
+    feature: "nodes",
+  },
+  {
+    id: "custom-dashboards",
+    targetId: "nav-custom-dashboards",
+    eyebrow: "Dashboard lab",
+    title: "Dashboards",
+    body: "Dashboards lets you manage generated dashboard manifests, file bundles, validation previews, and validated publication state for the active project.",
+    accent: "signal",
+    feature: "custom-dashboards",
+  },
+  {
     id: "stats",
     targetId: "nav-stats",
     eyebrow: "Telemetry",
@@ -112,11 +133,19 @@ const TOUR_STEPS: TourStep[] = [
     accent: "ember",
   },
   {
+    id: "knowledge",
+    targetId: "nav-knowledge",
+    eyebrow: "Reference layer",
+    title: "Knowledge",
+    body: "Knowledge is the project reference base for durable facts, source material, and curated context that agents can reuse during planning and execution.",
+    accent: "signal",
+  },
+  {
     id: "browser",
     targetId: "nav-browser",
     eyebrow: "Preview lab",
-    title: "Browser",
-    body: "Browser is the in-app surface for preview containers. Use it to inspect running apps, navigate sessions, and validate work quickly.",
+    title: "Browser Preview",
+    body: "Browser Preview is the in-app surface for preview containers. Use it to inspect running apps, navigate sessions, and validate work quickly.",
     accent: "sky",
   },
   {
@@ -134,6 +163,14 @@ const TOUR_STEPS: TourStep[] = [
     title: "Live",
     body: "Live exposes active connections and runtime activity so you can see what is listening, connected, or waiting for work.",
     accent: "ember",
+  },
+  {
+    id: "docs",
+    targetId: "nav-docs",
+    eyebrow: "Reference guide",
+    title: "Docs",
+    body: "Docs opens the built-in operator guide for dashboard concepts, runtime behavior, MCP tools, and operational workflows.",
+    accent: "sky",
   },
   {
     id: "config",
@@ -223,6 +260,9 @@ export const GuidedDashboardTour: FunctionComponent = () => {
 
   const refreshSteps = useCallback(() => {
     const steps = TOUR_STEPS.filter((step) => {
+      if (step.feature && !isDashboardFeatureEnabled(step.feature)) {
+        return false;
+      }
       const element = getTourElement(step.targetId);
       return element ? isVisibleTarget(element) : false;
     });
@@ -496,7 +536,7 @@ export const GuidedDashboardTour: FunctionComponent = () => {
 
           <div className="mt-5 flex items-start gap-4">
             <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${accent.bgPanel} ${accent.text} ring-1 ring-white/10`}>
-              {activeStep.id === "projects" ? <FolderOpen className="h-5 w-5" /> : activeStep.id === "docker" ? <Box className="h-5 w-5" /> : activeStep.id === "chat" ? <MessageCircle className="h-5 w-5" /> : activeStep.id === "schedule" ? <CalendarDays className="h-5 w-5" /> : activeStep.id === "files" ? <FolderTree className="h-5 w-5" /> : <Compass className="h-5 w-5" />}
+              {activeStep.id === "projects" ? <FolderOpen className="h-5 w-5" /> : activeStep.id === "docker" ? <Box className="h-5 w-5" /> : activeStep.id === "chat" ? <MessageCircle className="h-5 w-5" /> : activeStep.id === "schedule" ? <CalendarDays className="h-5 w-5" /> : activeStep.id === "custom-dashboards" ? <LayoutDashboard className="h-5 w-5" /> : activeStep.id === "knowledge" ? <Library className="h-5 w-5" /> : activeStep.id === "files" ? <FolderTree className="h-5 w-5" /> : activeStep.id === "docs" ? <BookOpen className="h-5 w-5" /> : <Compass className="h-5 w-5" />}
             </div>
             <div>
               <h2 id="dashboard-tour-title" className="font-display text-xl font-semibold leading-none tracking-tight">{activeStep.title}</h2>

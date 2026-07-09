@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ChatManagementActionService } from "../../../src/services/chat-management-action-service.js";
+import {
+  ChatManagementActionService,
+  parseProviderManagementJson,
+} from "../../../src/services/chat-management-action-service.js";
 import type { StructuredProviderResponseService } from "../../../src/services/structured-provider-response-service.js";
 import type { ManagementToolHandler } from "../../../src/mcp/management-tool-handler.js";
 import type { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
@@ -152,6 +155,75 @@ describe("ChatManagementActionService", () => {
     });
   });
 
+  it("should dispatch custom dashboard management proposals through the management handler", async () => {
+    const action = {
+      domain: "custom_dashboards",
+      action: "create_revision",
+      payload: {
+        dashboardId: "dash-1",
+        manifest: {
+          schemaVersion: 1,
+          title: "Operations Dashboard",
+          entryFile: "src/dashboard.tsx",
+          filePaths: ["src/dashboard.tsx"],
+        },
+        fileBundle: {
+          files: [
+            {
+              path: "src/dashboard.tsx",
+              content: "export default function Dashboard() { return <main>Ops</main>; }",
+            },
+          ],
+        },
+        sourceNodeGraph: {
+          nodes: [{ id: "project-status", type: "codeux_project", title: "Project Status" }],
+          edges: [],
+        },
+        styleguide: {
+          tokens: { color: "system" },
+          accessibilityNotes: ["Use semantic landmarks and visible focus states."],
+        },
+        runtimeMetadata: {
+          validationExpectations: ["Build succeeds", "Root route responds"],
+        },
+      },
+    };
+
+    structuredProviderResponseService.executeAndParse.mockResolvedValue({
+      parsed: {
+        replyMarkdown: "I created a dashboard revision and will validate it next.",
+        action,
+      },
+      nativeSessionId: "sess1",
+      bodyMarkdown: "",
+    });
+
+    managementToolHandler.handleManageCodeUx.mockResolvedValue({
+      content: [{ type: "text", text: JSON.stringify({ result: { status: "success", domain: "custom_dashboards", action: "create_revision", revisionId: "rev-1" } }) }]
+    });
+
+    const result = await service.processManagementAction({
+      projectId: "proj1",
+      provider: "claude-code",
+      model: "claude-3",
+      apiKey: "test-key",
+      sessionId: "sess1",
+      settings: mockSettings,
+      prompt: "Create an operations dashboard",
+      repoPath: "/tmp/test-repo",
+    });
+
+    expect(managementToolHandler.handleManageCodeUx).toHaveBeenCalledWith(action);
+    expect(result).toEqual({
+      replyMarkdown: "I created a dashboard revision and will validate it next.",
+      action,
+      approvalRequired: false,
+      approvalMessage: undefined,
+      result: { status: "success", domain: "custom_dashboards", action: "create_revision", revisionId: "rev-1" },
+      nativeSessionId: "sess1",
+    });
+  });
+
   it("should handle reply only (no action)", async () => {
     structuredProviderResponseService.executeAndParse.mockResolvedValue({
       parsed: {
@@ -182,6 +254,41 @@ describe("ChatManagementActionService", () => {
     const calls = executionRepository.appendExecutionInvocationMessage.mock.calls;
     expect(calls[0]).toEqual(["exec-123", { role: "user", contentMarkdown: "Say hello" }]);
     expect(calls[1]).toEqual(["exec-123", { role: "assistant", contentMarkdown: "Hello world" }]);
+  });
+
+  it("should pass sanitized prompt suggestions through reply-only results", async () => {
+    structuredProviderResponseService.executeAndParse.mockResolvedValue({
+      parsed: {
+        replyMarkdown: "Pick a next step.",
+        action: null,
+        promptSuggestions: [
+          { label: "Inspect status", prompt: "Show the current project status", icon: "search", id: "status" },
+        ],
+      },
+      nativeSessionId: "sess1",
+      bodyMarkdown: "",
+    });
+
+    const result = await service.processManagementAction({
+      projectId: "proj1",
+      provider: "claude-code",
+      model: "claude-3",
+      apiKey: "test-key",
+      sessionId: "sess1",
+      settings: mockSettings,
+      prompt: "What next?",
+      repoPath: "/tmp/test-repo",
+    });
+
+    expect(result).toEqual({
+      replyMarkdown: "Pick a next step.",
+      action: null,
+      approvalRequired: false,
+      nativeSessionId: "sess1",
+      promptSuggestions: [
+        { label: "Inspect status", prompt: "Show the current project status", icon: "search", id: "status" },
+      ],
+    });
   });
 
   it("should track error in invocation on failure", async () => {
@@ -233,6 +340,61 @@ describe("ChatManagementActionService", () => {
      expect(parseFn(`[setup] Bootstrap complete.\n${providerEnvelope}\nnpm notice`)).toEqual({replyMarkdown: "Nested hello", action: null});
 
      expect(() => parseFn('{"action": null}')).toThrow("Missing or invalid 'replyMarkdown'");
+  });
+
+  it("should parse and sanitize prompt suggestions from JSON provider replies", () => {
+    const parsed = parseProviderManagementJson(JSON.stringify({
+      replyMarkdown: "Here are options.",
+      action: null,
+      suggestions: [
+        { label: "  Start sprint  ", prompt: "  Start the queued sprint  ", icon: " play ", id: " start " },
+        { label: "", prompt: "Missing label" },
+        { label: "Missing prompt", prompt: "   " },
+        "not an object",
+      ],
+    }));
+
+    expect(parsed).toEqual({
+      replyMarkdown: "Here are options.",
+      action: null,
+      promptSuggestions: [
+        { label: "Start sprint", prompt: "Start the queued sprint", icon: "play", id: "start" },
+      ],
+    });
+  });
+
+  it("should parse promptSuggestions aliases and cap stored suggestions", () => {
+    const promptSuggestions = Array.from({ length: 8 }, (_, index) => ({
+      label: `Option ${index + 1}`,
+      prompt: `Run option ${index + 1}`,
+    }));
+
+    const parsed = parseProviderManagementJson(JSON.stringify({
+      replyMarkdown: "Choose one.",
+      action: null,
+      promptSuggestions,
+    }));
+
+    expect(parsed.promptSuggestions).toHaveLength(6);
+    expect(parsed.promptSuggestions?.at(0)).toEqual({ label: "Option 1", prompt: "Run option 1" });
+    expect(parsed.promptSuggestions?.at(5)).toEqual({ label: "Option 6", prompt: "Run option 6" });
+  });
+
+  it("should omit promptSuggestions when all suggestions are malformed", () => {
+    const parsed = parseProviderManagementJson(JSON.stringify({
+      replyMarkdown: "No useful options.",
+      action: null,
+      suggestions: [
+        { label: "Missing prompt" },
+        { prompt: "Missing label" },
+        null,
+      ],
+    }));
+
+    expect(parsed).toEqual({
+      replyMarkdown: "No useful options.",
+      action: null,
+    });
   });
 
   describe("MCP-native mode", () => {

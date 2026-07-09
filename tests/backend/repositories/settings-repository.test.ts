@@ -4,14 +4,26 @@ import * as os from "os";
 import * as path from "path";
 import { DatabaseSync } from "node:sqlite";
 import { SettingsRepository } from "../../../src/repositories/settings-repository.js";
+import {
+  BUILTIN_CODE_UX_TECHSTACK_ID,
+  CODEX_MODELS,
+  DEFAULT_VIRTUAL_WORKER_MODELS,
+} from "../../../src/repositories/settings-defaults.js";
+import {
+  CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
+  DESIGN_GUIDANCE_NONE_ID,
+} from "../../../src/domain/settings/design-guidance-catalog.js";
 
 const tempDirs: string[] = [];
+const openRepos: SettingsRepository[] = [];
 
 const createRepo = async (): Promise<{ repo: SettingsRepository; dbPath: string; dir: string }> => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "jules-settings-"));
   tempDirs.push(dir);
   const dbPath = path.join(dir, "settings.db");
-  return { repo: new SettingsRepository(dbPath), dbPath, dir };
+  const repo = new SettingsRepository(dbPath);
+  openRepos.push(repo);
+  return { repo, dbPath, dir };
 };
 
 afterEach(async () => {
@@ -19,6 +31,14 @@ afterEach(async () => {
   tempDirs.push(cacheResetDir);
   const repo = new SettingsRepository(path.join(cacheResetDir, "settings.db"));
   repo.resetAllData();
+  repo.close();
+  for (const openRepo of openRepos.splice(0).reverse()) {
+    try {
+      openRepo.close();
+    } catch {
+      // Already closed by the test.
+    }
+  }
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
@@ -31,11 +51,44 @@ describe("SettingsRepository", () => {
     expect(system.runtime.consoleLogLevel).toBe("info");
     expect(system.runtime.debugLogFileLevel).toBe("error");
     expect(system.runtime.consoleLogMode).toBe("standard");
+    expect(system.runtime.lastActiveScope).toBe("system");
     expect(system.runtime.restartSprintPolicy).toBe("continue");
     expect(system.runtime.restartInvocationPolicy).toBe("continue");
     expect(system.defaults.automationLevel).toBe("SEMI_AUTO");
     expect(system.defaults.aiProvider.provider).toBe("jules");
     expect(system.defaults.aiProvider.providers.codex.model).toBe("gpt-5.5");
+    expect(system.techstackCatalog.defaultTechstackId).toBe(BUILTIN_CODE_UX_TECHSTACK_ID);
+    expect(system.techstackCatalog.entries).toEqual([
+      {
+        id: BUILTIN_CODE_UX_TECHSTACK_ID,
+        label: "Code UX Stack",
+        items: [
+          { id: "preact", label: "Preact" },
+          { id: "tanstack-router", label: "TanStack Router" },
+          { id: "gsap", label: "GSAP" },
+          { id: "three-js", label: "Three.js" },
+          { id: "lucide-icons", label: "Lucide Icons" },
+        ],
+      },
+    ]);
+    expect(system.defaults.techstack).toEqual({
+      selectedTechstackId: null,
+      applicationKind: null,
+    });
+    expect(system.defaults.designGuidance).toEqual({
+      selectedTechStackId: DESIGN_GUIDANCE_NONE_ID,
+      selectedStyleguideId: DESIGN_GUIDANCE_NONE_ID,
+      hideDefaultStyleguides: false,
+      customTechStacks: [],
+      customStyleguides: [],
+    });
+    expect(DEFAULT_VIRTUAL_WORKER_MODELS.codex).toBe("gpt-5.5");
+    expect(CODEX_MODELS.slice(0, 4)).toEqual([
+      "gpt-5.5",
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
+    ]);
     expect(system.defaults.git.defaultBranch).toBe("main");
     expect(system.defaults.cliWorkflow.containerMountGithubAuth).toBe(false);
     expect(system.defaults.cliWorkflow.containerMountGeminiAuth).toBe(false);
@@ -53,6 +106,19 @@ describe("SettingsRepository", () => {
     expect(system.defaults.agents.qualityAssurance.sprintCompletion.agentPresetIds).toEqual([]);
     expect(system.defaults.agents.qualityAssurance.completedTaskWithoutPr.enabled).toBe(true);
     expect(system.defaults.agents.qualityAssurance.completedTaskWithoutPr.agentPresetIds).toEqual([]);
+    expect(system.defaults.agents.selfReflection.planning.enabled).toBe(false);
+    expect(system.defaults.agents.selfReflection.planning.maxImprovementAttempts).toBe(1);
+    expect(system.defaults.agents.selfReflection.planning.criteria.map((criterion) => criterion.id)).toEqual([
+      "correctness",
+      "completeness",
+      "decomposition_quality",
+      "risk_handling",
+      "testability",
+      "maintainability",
+      "security",
+      "scope_control",
+    ]);
+    expect(system.defaults.agents.selfReflection.qualityAssurance.enabled).toBe(false);
     expect(system.defaults.agents.instructionTemplates.planningMissing).toContain("Sprint Planning Missing");
     expect(system.mcpTools.length).toBeGreaterThan(0);
 
@@ -63,8 +129,14 @@ describe("SettingsRepository", () => {
 
     const effectiveProject = repo.resolveProjectDashboardSettings("project-1");
     expect(effectiveProject.settings.aiProvider.providers.codex.apiKey).toBe("");
+    expect(effectiveProject.settings.techstackCatalog.defaultTechstackId).toBe(BUILTIN_CODE_UX_TECHSTACK_ID);
+    expect(effectiveProject.settings.techstack.selectedTechstackId).toBe(null);
+    expect(effectiveProject.settings.techstack.applicationKind).toBe(null);
+    expect(effectiveProject.settings.designGuidance.selectedTechStackId).toBe(DESIGN_GUIDANCE_NONE_ID);
+    expect(effectiveProject.settings.designGuidance.selectedStyleguideId).toBe(DESIGN_GUIDANCE_NONE_ID);
     expect(effectiveProject.settings.git.githubToken).toBe("");
     expect(effectiveProject.sources["automationLevel"]).toBe("system");
+    expect(effectiveProject.sources["designGuidance.selectedStyleguideId"]).toBe("system");
   });
 
   it("persists system settings and resolves project/sprint overrides", async () => {
@@ -76,6 +148,7 @@ describe("SettingsRepository", () => {
         consoleLogLevel: "debug",
         debugLogFileLevel: "warn",
         consoleLogMode: "full",
+        lastActiveScope: "project",
         restartSprintPolicy: "pause",
         restartInvocationPolicy: "restart",
       },
@@ -180,6 +253,7 @@ describe("SettingsRepository", () => {
               agentPresetId: null,
             },
           },
+          selfReflection: repo.getSystemSettings().defaults.agents.selfReflection,
         },
         skills: [
           { name: "worker", enabled: true, isInternal: true },
@@ -214,6 +288,7 @@ describe("SettingsRepository", () => {
     expect(sprintOverride.sprintLoopSteps?.watchLoop).toBe(false);
 
     const reloaded = new SettingsRepository(dbPath);
+    expect(reloaded.getSystemSettings().runtime.lastActiveScope).toBe("project");
     const effectiveProject = reloaded.resolveProjectDashboardSettings("project-1");
     expect(effectiveProject.settings.dashboardPort).toBe(4450);
     expect(effectiveProject.settings.consoleLogLevel).toBe("debug");
@@ -278,6 +353,537 @@ describe("SettingsRepository", () => {
     expect(effectiveProject.sources["automationLevel"]).toBe("system");
     expect(effectiveProject.settings.git.defaultBranch).toBe("develop");
     expect(effectiveProject.sources["git.defaultBranch"]).toBe("project");
+  });
+
+  it("keeps explicit sprint provider routes when modern integrations omit that provider", async () => {
+    const { repo } = await createRepo();
+    const system = repo.getSystemSettings();
+
+    repo.saveSystemSettings({
+      ...system,
+      integrations: {
+        ...system.integrations,
+        providers: {
+          gemini: system.integrations.providers.gemini,
+          codex: system.integrations.providers.codex,
+        },
+      },
+      defaults: {
+        ...system.defaults,
+        aiProvider: {
+          ...system.defaults.aiProvider,
+          provider: "gemini",
+          strategy: "MANUAL",
+          providers: {
+            gemini: {
+              ...system.defaults.aiProvider.providers.gemini,
+              enabled: true,
+              weight: 100,
+            },
+            codex: {
+              ...system.defaults.aiProvider.providers.codex,
+              enabled: true,
+              weight: 0,
+            },
+          },
+          invocationRouting: {
+            ...system.defaults.aiProvider.invocationRouting,
+            task_coding: {
+              ...system.defaults.aiProvider.invocationRouting.task_coding,
+              profile: "WORKER",
+              strategy: "MANUAL",
+              provider: "gemini",
+              allowedProviders: ["gemini"],
+              providers: {},
+            },
+            merge_conflict: {
+              ...system.defaults.aiProvider.invocationRouting.merge_conflict,
+              profile: "WORKER",
+              strategy: "MANUAL",
+              provider: "gemini",
+              allowedProviders: ["gemini"],
+              providers: {},
+            },
+          },
+        },
+        workers: {
+          ...system.defaults.workers,
+          virtualWorkerProvider: "gemini",
+          model: "gemini-2.5-flash",
+        },
+      },
+    });
+
+    const baseProjectSettings = repo.getProjectResolvedSettings("project-1");
+    repo.saveSprintSettings("sprint-1", baseProjectSettings, {
+      aiProvider: {
+        provider: "mockup-cli",
+        strategy: "MANUAL",
+        providers: {
+          "mockup-cli": {
+            provider: "mockup-cli",
+            name: "Mockup CLI",
+            enabled: true,
+            model: "default",
+            weight: 100,
+            thinkingMode: "MEDIUM",
+            maxConcurrentTasks: 12,
+          },
+        },
+        invocationRouting: {
+          task_coding: {
+            profile: "WORKER",
+            strategy: "MANUAL",
+            provider: "mockup-cli",
+            allowedProviders: ["mockup-cli"],
+            providers: {
+              "mockup-cli": {
+                enabled: true,
+                model: "default",
+              },
+            },
+          },
+          merge_conflict: {
+            profile: "WORKER",
+            strategy: "MANUAL",
+            provider: "mockup-cli",
+            allowedProviders: ["mockup-cli"],
+            providers: {
+              "mockup-cli": {
+                enabled: true,
+                model: "default",
+              },
+            },
+          },
+        },
+      },
+      workers: {
+        virtualWorkerProvider: "mockup-cli",
+        model: "default",
+      },
+    });
+
+    const effective = repo.resolveSprintDashboardSettings("project-1", "sprint-1").settings;
+
+    expect(Object.keys(effective.aiProvider.providers)).toContain("mockup-cli");
+    expect(effective.aiProvider.provider).toBe("mockup-cli");
+    expect(effective.aiProvider.providers["mockup-cli"].enabled).toBe(true);
+    expect(effective.aiProvider.providers["mockup-cli"].model).toBe("default");
+    expect(effective.workers.virtualWorkerProvider).toBe("mockup-cli");
+    expect(effective.workers.model).toBe("default");
+    expect(effective.aiProvider.invocationRouting.task_coding.provider).toBe("mockup-cli");
+    expect(effective.aiProvider.invocationRouting.task_coding.allowedProviders).toEqual(["mockup-cli"]);
+    expect(effective.aiProvider.invocationRouting.task_coding.providers).toEqual({
+      "mockup-cli": {
+        enabled: true,
+        model: "default",
+      },
+    });
+    expect(effective.aiProvider.invocationRouting.merge_conflict.provider).toBe("mockup-cli");
+    expect(effective.aiProvider.invocationRouting.merge_conflict.allowedProviders).toEqual(["mockup-cli"]);
+  });
+
+  it("replaces scoped route provider pools instead of retaining inherited providers", async () => {
+    const { repo } = await createRepo();
+    const system = repo.getSystemSettings();
+
+    repo.saveSystemSettings({
+      ...system,
+      defaults: {
+        ...system.defaults,
+        aiProvider: {
+          ...system.defaults.aiProvider,
+          provider: "gemini",
+          strategy: "MANUAL",
+          providers: {
+            gemini: {
+              ...system.defaults.aiProvider.providers.gemini,
+              enabled: true,
+              weight: 100,
+            },
+            codex: {
+              ...system.defaults.aiProvider.providers.codex,
+              enabled: true,
+              weight: 0,
+            },
+          },
+          invocationRouting: {
+            ...system.defaults.aiProvider.invocationRouting,
+            task_coding: {
+              ...system.defaults.aiProvider.invocationRouting.task_coding,
+              profile: "WORKER",
+              strategy: "MANUAL",
+              provider: "gemini",
+              allowedProviders: ["gemini"],
+              providers: {
+                gemini: { enabled: true, model: "gemini-2.5-pro" },
+                codex: { enabled: true, model: "gpt-5.5" },
+              },
+            },
+            merge_conflict: {
+              ...system.defaults.aiProvider.invocationRouting.merge_conflict,
+              profile: "WORKER",
+              strategy: "MANUAL",
+              provider: "codex",
+              allowedProviders: ["codex"],
+              providers: {
+                gemini: { enabled: false, model: "gemini-2.5-pro" },
+                codex: { enabled: true, model: "gpt-5.5" },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    repo.saveProjectSettings("project-1", {
+      aiProvider: {
+        provider: "mockup-cli",
+        strategy: "MANUAL",
+        providers: {
+          "mockup-cli": {
+            provider: "mockup-cli",
+            name: "Mockup CLI",
+            enabled: true,
+            model: "default",
+            weight: 100,
+            thinkingMode: "MEDIUM",
+            maxConcurrentTasks: 12,
+          },
+        },
+        invocationRouting: {
+          task_coding: {
+            profile: "WORKER",
+            strategy: "MANUAL",
+            provider: "mockup-cli",
+            allowedProviders: ["mockup-cli"],
+            providers: {
+              "mockup-cli": {
+                enabled: true,
+                model: "default",
+              },
+            },
+          },
+          merge_conflict: {
+            profile: "WORKER",
+            strategy: "MANUAL",
+            provider: "mockup-cli",
+            allowedProviders: ["mockup-cli"],
+            providers: {
+              "mockup-cli": {
+                enabled: true,
+                model: "default",
+              },
+            },
+          },
+        },
+      },
+      workers: {
+        virtualWorkerProvider: "mockup-cli",
+        model: "default",
+      },
+    });
+
+    const effective = repo.resolveProjectDashboardSettings("project-1").settings;
+
+    expect(effective.aiProvider.provider).toBe("mockup-cli");
+    expect(effective.aiProvider.invocationRouting.task_coding.provider).toBe("mockup-cli");
+    expect(effective.aiProvider.invocationRouting.task_coding.allowedProviders).toEqual(["mockup-cli"]);
+    expect(effective.aiProvider.invocationRouting.task_coding.providers).toEqual({
+      "mockup-cli": {
+        enabled: true,
+        model: "default",
+      },
+    });
+    expect(effective.aiProvider.invocationRouting.merge_conflict.provider).toBe("mockup-cli");
+    expect(effective.aiProvider.invocationRouting.merge_conflict.allowedProviders).toEqual(["mockup-cli"]);
+    expect(effective.aiProvider.invocationRouting.merge_conflict.providers).toEqual({
+      "mockup-cli": {
+        enabled: true,
+        model: "default",
+      },
+    });
+  });
+
+  it("resolves partial persisted scoped settings while preserving default fallbacks", async () => {
+    const { repo } = await createRepo();
+    const now = new Date().toISOString();
+    const db = repo.getDatabase();
+
+    db.prepare(`
+      INSERT INTO system_settings (id, payload, updated_at)
+      VALUES (1, ?, ?)
+    `).run(JSON.stringify({
+      runtime: {
+        dashboardPort: 4555,
+      },
+      defaults: {
+        git: {
+          defaultBranch: "develop",
+        },
+        agents: {
+          qualityAssurance: {
+            taskCompletion: {
+              enabled: false,
+            },
+          },
+          selfReflection: {
+            planning: {
+              enabled: true,
+              maxImprovementAttempts: 99,
+              criteria: [
+                {
+                  id: " correctness ",
+                  label: " Correctness ",
+                  prompt: " Check correctness. ",
+                  threshold: 2,
+                },
+                {
+                  id: "correctness",
+                  label: "Duplicate",
+                  prompt: "Duplicate should be ignored.",
+                  threshold: 0.1,
+                },
+                {
+                  id: "",
+                  label: "Invalid",
+                  prompt: "Missing id.",
+                  threshold: 0.5,
+                },
+                {
+                  id: "scope_control",
+                  label: "Scope control",
+                  prompt: "Stay inside scope.",
+                  threshold: -1,
+                },
+              ],
+            },
+            qualityAssurance: {
+              enabled: "yes",
+              maxImprovementAttempts: "many",
+              criteria: "invalid",
+            },
+          },
+        },
+      },
+    }), now);
+    db.prepare(`
+      INSERT INTO project_settings (project_id, payload, updated_at)
+      VALUES (?, ?, ?)
+    `).run("project-partial", JSON.stringify({
+      git: {
+        featureBranchPrefix: "work/",
+      },
+    }), now);
+    db.prepare(`
+      INSERT INTO sprint_settings (sprint_id, payload, updated_at)
+      VALUES (?, ?, ?)
+    `).run("sprint-partial", JSON.stringify({
+      sprintLoopSteps: {
+        watchLoop: false,
+      },
+    }), now);
+
+    const effectiveProject = repo.resolveProjectDashboardSettings("project-partial");
+    expect(effectiveProject.settings.dashboardPort).toBe(4555);
+    expect(effectiveProject.settings.consoleLogLevel).toBe("info");
+    expect(effectiveProject.settings.git.defaultBranch).toBe("develop");
+    expect(effectiveProject.settings.git.featureBranchPrefix).toBe("work/");
+    expect(effectiveProject.settings.agents.qualityAssurance.taskCompletion.enabled).toBe(false);
+    expect(effectiveProject.settings.agents.qualityAssurance.maxTaskReviewRuns).toBe(3);
+    expect(effectiveProject.settings.agents.selfReflection.planning.enabled).toBe(true);
+    expect(effectiveProject.settings.agents.selfReflection.planning.maxImprovementAttempts).toBe(10);
+    expect(effectiveProject.settings.agents.selfReflection.planning.criteria).toEqual([
+      {
+        id: "correctness",
+        label: "Correctness",
+        prompt: "Check correctness.",
+        threshold: 1,
+      },
+      {
+        id: "scope_control",
+        label: "Scope control",
+        prompt: "Stay inside scope.",
+        threshold: 0,
+      },
+    ]);
+    expect(effectiveProject.settings.agents.selfReflection.qualityAssurance.enabled).toBe(false);
+    expect(effectiveProject.settings.agents.selfReflection.qualityAssurance.criteria.length).toBeGreaterThan(1);
+    expect(effectiveProject.sources["git.featureBranchPrefix"]).toBe("project");
+
+    const effectiveSprint = repo.resolveSprintDashboardSettings("project-partial", "sprint-partial");
+    expect(effectiveSprint.settings.sprintLoopSteps.watchLoop).toBe(false);
+    expect(effectiveSprint.settings.sprintLoopSteps.watchLoopIntervalSeconds).toBe(10);
+    expect(effectiveSprint.settings.git.defaultBranch).toBe("develop");
+    expect(effectiveSprint.settings.git.featureBranchPrefix).toBe("work/");
+    expect(effectiveSprint.sources["sprintLoopSteps.watchLoop"]).toBe("sprint");
+  });
+
+  it("sanitizes malformed persisted techstack catalogs while preserving the built-in entry", async () => {
+    const { repo } = await createRepo();
+    const now = new Date().toISOString();
+    const db = repo.getDatabase();
+
+    db.prepare(`
+      INSERT INTO system_settings (id, payload, updated_at)
+      VALUES (1, ?, ?)
+    `).run(JSON.stringify({
+      techstackCatalog: {
+        defaultTechstackId: "missing-default",
+        entries: [
+          {
+            id: " custom-web ",
+            label: " Custom Web ",
+            items: [
+              { id: " react ", label: " React " },
+              { id: "react", label: "Duplicate React" },
+              { id: "", label: "Missing id" },
+              { id: "invalid id", label: "Invalid id" },
+            ],
+          },
+          {
+            id: BUILTIN_CODE_UX_TECHSTACK_ID,
+            label: "Overridden Built-in",
+            items: [{ id: "fake", label: "Fake" }],
+          },
+          {
+            id: "custom-web",
+            label: "Duplicate custom",
+            items: [],
+          },
+          {
+            id: "   ",
+            label: "Missing id",
+            items: [],
+          },
+        ],
+      },
+      defaults: {
+        techstack: {
+          selectedTechstackId: " custom-web ",
+          applicationKind: "web",
+        },
+      },
+    }), now);
+
+    const system = repo.getSystemSettings();
+
+    expect(system.techstackCatalog.defaultTechstackId).toBe(BUILTIN_CODE_UX_TECHSTACK_ID);
+    expect(system.techstackCatalog.entries).toEqual([
+      {
+        id: BUILTIN_CODE_UX_TECHSTACK_ID,
+        label: "Code UX Stack",
+        items: [
+          { id: "preact", label: "Preact" },
+          { id: "tanstack-router", label: "TanStack Router" },
+          { id: "gsap", label: "GSAP" },
+          { id: "three-js", label: "Three.js" },
+          { id: "lucide-icons", label: "Lucide Icons" },
+        ],
+      },
+      {
+        id: "custom-web",
+        label: "Custom Web",
+        items: [
+          { id: "react", label: "React" },
+        ],
+      },
+    ]);
+    expect(system.defaults.techstack).toEqual({
+      selectedTechstackId: "custom-web",
+      applicationKind: "web",
+    });
+  });
+
+  it("sanitizes malformed design guidance while preserving valid custom entries", async () => {
+    const { repo } = await createRepo();
+    const now = new Date().toISOString();
+    const db = repo.getDatabase();
+
+    db.prepare(`
+      INSERT INTO system_settings (id, payload, updated_at)
+      VALUES (1, ?, ?)
+    `).run(JSON.stringify({
+      defaults: {
+        designGuidance: {
+          selectedTechStackId: " missing-tech-stack ",
+          selectedStyleguideId: " custom-style ",
+          hideDefaultStyleguides: true,
+          customTechStacks: [
+            {
+              id: " custom-stack ",
+              name: " Custom Stack ",
+              summary: " Stack summary ",
+              instructionMarkdown: " Use this stack thoughtfully. ",
+            },
+            {
+              id: "custom-stack",
+              name: "Duplicate",
+              summary: "Duplicate.",
+              instructionMarkdown: "Ignore duplicate.",
+            },
+            {
+              id: "invalid id",
+              name: "Invalid",
+              summary: "Invalid.",
+              instructionMarkdown: "Invalid.",
+            },
+          ],
+          customStyleguides: [
+            {
+              id: " custom-style ",
+              name: " Custom Style ",
+              summary: " Style summary ",
+              instructionMarkdown: " Make senior design decisions from context. ",
+            },
+            {
+              id: CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
+              name: "Override default",
+              summary: "Should be ignored.",
+              instructionMarkdown: "Should not replace default.",
+            },
+          ],
+        },
+      },
+    }), now);
+
+    const system = repo.getSystemSettings();
+    expect(system.defaults.designGuidance).toEqual({
+      selectedTechStackId: DESIGN_GUIDANCE_NONE_ID,
+      selectedStyleguideId: "custom-style",
+      hideDefaultStyleguides: true,
+      customTechStacks: [
+        {
+          id: "custom-stack",
+          name: "Custom Stack",
+          summary: "Stack summary",
+          instructionMarkdown: "Use this stack thoughtfully.",
+        },
+      ],
+      customStyleguides: [
+        {
+          id: "custom-style",
+          name: "Custom Style",
+          summary: "Style summary",
+          instructionMarkdown: "Make senior design decisions from context.",
+        },
+      ],
+    });
+
+    const projectOverride = repo.saveProjectSettings("project-1", {
+      designGuidance: {
+        selectedTechStackId: "custom-stack",
+        selectedStyleguideId: "missing-style",
+      },
+    });
+    expect(projectOverride.designGuidance?.selectedTechStackId).toBe("custom-stack");
+    expect(projectOverride.designGuidance?.selectedStyleguideId).toBe(DESIGN_GUIDANCE_NONE_ID);
+
+    const effectiveProject = repo.resolveProjectDashboardSettings("project-1");
+    expect(effectiveProject.settings.designGuidance.selectedTechStackId).toBe("custom-stack");
+    expect(effectiveProject.settings.designGuidance.selectedStyleguideId).toBe(DESIGN_GUIDANCE_NONE_ID);
+    expect(effectiveProject.sources["designGuidance.selectedTechStackId"]).toBe("project");
+    expect(effectiveProject.sources["designGuidance.selectedStyleguideId"]).toBe("project");
   });
 
   it("resets all scoped settings back to defaults", async () => {
@@ -574,6 +1180,78 @@ describe("SettingsRepository", () => {
     const afterMutation = resolver.resolveProjectDashboardSettings("project-1");
     expect(afterMutation).not.toBe(first);
     expect(afterMutation.settings.git.defaultBranch).toBe("develop");
+  });
+
+  it("invalidates effective settings caches after system, project, and sprint resets or mutations", async () => {
+    const { repo } = await createRepo();
+    const resolver = repo.createScopedResolver();
+
+    repo.saveSystemSettings({
+      ...repo.getSystemSettings(),
+      defaults: {
+        ...repo.getSystemSettings().defaults,
+        git: {
+          ...repo.getSystemSettings().defaults.git,
+          defaultBranch: "develop",
+        },
+      },
+    });
+    repo.saveProjectSettings("project-1", {
+      git: {
+        featureBranchPrefix: "work/",
+      },
+    });
+    repo.saveSprintSettings("sprint-1", repo.getProjectResolvedSettings("project-1"), {
+      sprintLoopSteps: {
+        watchLoop: false,
+      },
+    });
+
+    const first = resolver.resolveSprintDashboardSettings("project-1", "sprint-1");
+    expect(first.settings.git.defaultBranch).toBe("develop");
+    expect(first.settings.git.featureBranchPrefix).toBe("work/");
+    expect(first.settings.sprintLoopSteps.watchLoop).toBe(false);
+
+    repo.saveSystemSettings({
+      ...repo.getSystemSettings(),
+      defaults: {
+        ...repo.getSystemSettings().defaults,
+        git: {
+          ...repo.getSystemSettings().defaults.git,
+          defaultBranch: "release",
+        },
+      },
+    });
+
+    const afterSystemMutation = resolver.resolveSprintDashboardSettings("project-1", "sprint-1");
+    expect(afterSystemMutation).not.toBe(first);
+    expect(afterSystemMutation.settings.git.defaultBranch).toBe("release");
+    expect(afterSystemMutation.settings.git.featureBranchPrefix).toBe("work/");
+
+    repo.resetProjectSettings("project-1");
+
+    const afterProjectReset = resolver.resolveSprintDashboardSettings("project-1", "sprint-1");
+    expect(afterProjectReset).not.toBe(afterSystemMutation);
+    expect(afterProjectReset.settings.git.featureBranchPrefix).toBe("feature/");
+    expect(afterProjectReset.settings.sprintLoopSteps.watchLoop).toBe(false);
+
+    repo.saveSprintSettings("sprint-1", repo.getProjectResolvedSettings("project-1"), {
+      sprintLoopSteps: {
+        watchLoopIntervalSeconds: 45,
+      },
+    });
+
+    const afterSprintMutation = resolver.resolveSprintDashboardSettings("project-1", "sprint-1");
+    expect(afterSprintMutation).not.toBe(afterProjectReset);
+    expect(afterSprintMutation.settings.sprintLoopSteps.watchLoop).toBe(true);
+    expect(afterSprintMutation.settings.sprintLoopSteps.watchLoopIntervalSeconds).toBe(45);
+
+    repo.resetAllData();
+
+    const afterSystemReset = resolver.resolveSprintDashboardSettings("project-1", "sprint-1");
+    expect(afterSystemReset).not.toBe(afterSprintMutation);
+    expect(afterSystemReset.settings.git.defaultBranch).toBe("main");
+    expect(afterSystemReset.settings.sprintLoopSteps.watchLoopIntervalSeconds).toBe(10);
   });
 
   it("resolves default autoApprovePlan as true, and preserves explicit false", async () => {

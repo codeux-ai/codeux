@@ -1,4 +1,5 @@
 import type { CliWorkflowSettings, ProviderId, ThinkingMode } from "../contracts/app-types.js";
+import { normalizeProviderThinkingMode } from "../repositories/settings-defaults.js";
 
 export const DEFAULT_CLI_WORKFLOW_SETTINGS: CliWorkflowSettings = {
   cleanupWorktreeOnSuccess: true,
@@ -14,8 +15,10 @@ export const DEFAULT_CLI_WORKFLOW_SETTINGS: CliWorkflowSettings = {
   executionMode: "DOCKER",
   containerImage: "node:24-bookworm",
   containerSetupScriptPath: "",
+  containerMemoryLimitMb: 6144,
   containerCacheSetupScriptImage: true,
   containerInstallPlaywrightBrowsers: true,
+  containerRunAsRoot: false,
   containerMountGitConfig: false,
   containerGitUserName: "Code UX",
   containerGitUserEmail: "agents@codeux.ai",
@@ -63,10 +66,34 @@ export const buildWorkerBranch = (featureBranch: string, taskId: string, provide
   return `${buildWorkerBranchPrefix(featureBranch, taskId, provider)}${suffix}`;
 };
 
-export const buildProviderPrompt = (prompt: string, thinkingMode: ThinkingMode): string => {
+export const buildProviderPrompt = (prompt: string, thinkingMode: ThinkingMode, provider?: ProviderId): string => {
+  if (provider === "codex" || provider === "claude-code" || provider === "qwen-code" || provider === "opencode") {
+    return prompt;
+  }
+  if (provider === "jules" || provider === "mockup-cli") {
+    return prompt;
+  }
+  if (provider === "gemini") {
+    const mode = normalizeProviderThinkingMode(provider, thinkingMode);
+    return [
+      "# Gemini Thinking Level",
+      `Use Gemini thinking_level "${mode}" when the selected model supports it.`,
+      "",
+      prompt,
+    ].join("\n");
+  }
+  if (provider === "antigravity") {
+    const mode = normalizeProviderThinkingMode(provider, thinkingMode);
+    return [
+      "# Antigravity Reasoning",
+      `Use ${mode} reasoning effort for this task.`,
+      "",
+      prompt,
+    ].join("\n");
+  }
   return [
     "# Thinking Mode",
-    `Use ${thinkingMode} reasoning depth.`,
+    `Use ${String(thinkingMode)} reasoning depth.`,
     "",
     prompt,
   ].join("\n");

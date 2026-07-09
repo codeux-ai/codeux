@@ -23,12 +23,11 @@ A single orchestration *cycle* runs the following pipeline (each step is indepen
 1. **branchPreflight** — Ensure the feature branch exists; create it from default branch if not.
 2. **planningPreflight** — Validate the subtask graph: detect cycles, ensure required fields, sanity-check dependencies.
 3. **loadSubtasks** — Read subtask markdown files and reconcile with DB state.
-4. **sessionSync** — Pull the latest state of every active worker session (Jules / virtual).
+4. **sessionSync** — Synchronize the latest state of every active provider invocation (hosted and CLI providers).
 5. **statusDerivation** — Apply state rules to derive each subtask's effective status (`PENDING`, `RUNNING`, `CODING_COMPLETED`, `COMPLETED`, etc.).
 6. **startReadyTasks** — Find subtasks whose dependencies are met and start a new worker session for each. Concurrency is capped per provider via `maxConcurrentTasks`.
-7. **mergeProtocol** — Run the [CI gate](./automation-and-ci.md): create PRs, watch CI, auto-merge per policy, surface attention items for conflicts and CI failures.
-8. **actionRequiredProtocol** — Auto-handle plan approvals, clarification answers, paused sessions per `automationInterventions` settings.
-9. **statusTable** — Render the cycle report.
+7. **protocol** — Run the [CI gate](./automation-and-ci.md): create PRs, watch CI, evaluate QA, auto-merge per policy, surface attention items for conflicts and CI failures. Also handles action-required automation for plan approvals, clarification answers, and paused sessions.
+8. **statusTable** — Render the cycle report.
 
 Each step is independently catchable; a failure in one step does not crash the cycle. Errors are logged and surface as attention items.
 
@@ -81,12 +80,14 @@ PENDING ──start──► RUNNING ──finish──► CODING_COMPLETED ─�
                           ├──fail──► FAILED ──retry┤
                           ├──quota──► QUOTA ──next cycle┤
                           ├──QA reject──► QA_REVIEW_FAILED
+                          ├──QA pass──► (proceeds to CI/merge gate)
                           └──blocked deps──► BLOCKED
 ```
 
 Detailed transitions:
 
-- **CODING_COMPLETED → COMPLETED** when the merge protocol confirms `is_merged: true` or a settled merge indicator (`MERGED`, `AUTOMERGE`, `PR_ONLY`).
+- **CODING_COMPLETED → COMPLETED** when the protocol confirms `is_merged: true` or a settled merge indicator (`MERGED`, `AUTOMERGE`, `PR_ONLY`) after any configured QA reviews pass.
+- **CODING_COMPLETED → QA_REVIEW_FAILED** if QA review finds issues and the retry budget is exhausted.
 - **COMPLETED → CODING_COMPLETED** if `is_merged` is false but there is merge evidence (an open PR or a worker branch). This is a temporary "awaiting merge" state.
 - **FAILED**: retried in a new session if `retryFailed: true` (default).
 - **QUOTA**: retried next cycle automatically.
@@ -97,7 +98,7 @@ Per-provider concurrency is controlled by `provider.maxConcurrentTasks`:
 
 | Provider | Default cap |
 | --- | --- |
-| Jules | `15` |
+| Hosted Provider | `15` |
 | Gemini | `0` (unlimited) |
 | Codex | `0` (unlimited) |
 | Claude Code | `0` (unlimited) |
@@ -105,6 +106,18 @@ Per-provider concurrency is controlled by `provider.maxConcurrentTasks`:
 | OpenCode | `0` (unlimited) |
 
 `0` means no cap. Set explicit caps when running on shared infrastructure to avoid resource contention.
+
+For CLI/Docker providers, Code UX counts both running provider invocations and running task runs when enforcing provider capacity. A task run can reserve orchestration capacity before its provider invocation row starts, so this prevents wide DAGs from creating hidden running backlogs while provider calls appear idle.
+
+Docker-backed task workspaces prepare independently. Code UX locks only the workspace being created or resumed, deduplicates exact remote-branch fetches, reuses short-lived targeted seed bundles for concurrent workspaces with identical ref tips, checks out the worker branch during the seed container, and caches the public helper image readiness check per process. Completed task patch export and host-side patch materialization are collapsed into single Git shell phases to avoid repeated helper-container startup and large argv transfers.
+
+On restart, interrupted local CLI task runs may be cancelled and redispatched, but their workspace volumes are preserved. Session sync treats finished local CLI task runs as terminal even if a stale cached session snapshot still reports the old session as running.
+
+When a worker resolves a merge conflict, Code UX clears the task's stale `MERGE_CONFLICT` marker while keeping the task unmerged. The next protocol cycle retries the normal merge path instead of reopening the same attention item. That clear history is separate from merge-required suppression: suppression applies only after Git confirms the source branch has no commits ahead of the target feature branch. If the branch still has merge work, the task remains merge-required. Task-level human conflict handoffs are dismissed automatically once the task marker is cleared, while main-merge and unrelated manual handoffs remain visible.
+
+CLI tasks that complete with a worker branch but no PR use a branch-only merge path in both LOCAL and REMOTE git modes; REMOTE mode then pushes the sprint feature branch. If the task snapshot lost the worker branch, Code UX recovers it from the completed task run before checking merge readiness. For CLI-backed runs, branch-only classification waits for the git-finalize event (`cli_git_pushed` or `cli_git_no_changes`) so provider/session completion cannot race ahead of branch materialization. That merge runs in a temporary worktree so the visible checkout and `.code-ux/` runtime files do not interfere with task settlement. Once the task is settled as merged, stale task-run worker branch evidence is suppressed from live status so old branches do not keep re-entering merge scans.
+
+Worker-owned merge-conflict repair and LOCAL task-branch merges resolve `.code-ux/**` conflicts to the target branch side before deciding whether a provider is needed. A conflict only in Code UX runtime artifacts does not dispatch a provider, and invalid Docker repair workspaces are reseeded before provider execution. Real source conflicts outside `.code-ux/` still fail closed and remain visible as merge-conflict work.
 
 ## Emergency stop
 
@@ -156,6 +169,8 @@ When every subtask reaches a terminal merged state, the watch loop runs the **fi
 4. **Cleanup** — remove Docker worktrees from terminal CLI dispatches; trigger memory auto-promotion.
 5. **Status transition** — `completed`, `failed`, `paused` (if main merge needs human), or `cancelled`.
 
+In `LOCAL` mode, the final merge runs in a temporary worktree without waiting for remote PR-style main merge states such as `ready_for_merge`. Once tasks are settled, Code UX enters the host-side merge path even when individual tasks completed without PR merge markers. Remote PR feedback does not open or clear LOCAL final-merge attention; LOCAL conflict attention follows the actual host-side merge result and remains open while a worker-owned repair is active. If the visible checkout has user-created dirty work, Code UX preserves that work on a `dirty-ref-<uuid>` backup branch first, completes the clean sprint merge, and then copies non-conflicting dirty work back into the visible checkout as ordinary uncommitted changes. Dirty files under `.code-ux/` are ignored by this preservation and restore flow. If the dirty restore conflicts, Code UX aborts the restore, keeps the dirty branch, and opens a dashboard notification naming the branch and affected paths. When the target branch is the checked-out branch in the visible repo, the working tree is refreshed after the merge so the local project reflects the merged state before dirty work is restored.
+
 ## Cancellation & pause
 
 Both are emitted as **control interventions** picked up at the top of each cycle:
@@ -181,8 +196,8 @@ Every UI action has an MCP equivalent:
 
 | UI action | MCP call |
 | --- | --- |
-| Plan a sprint | `manage_code_ux` → `domain: "sprints"` (planning is internal during start) or use planning REST API |
-| Orchestrate | `manage_code_ux` → `domain: "sprints", action: "start"` |
+| Plan a sprint | `manage_sprints` (planning is internal during start) or use planning REST API |
+| Orchestrate | `manage_sprints` → `action: "start"` |
 | Pause | `domain: "sprints", action: "pause"` |
 | Cancel | `domain: "sprints", action: "cancel"` (or `force_cancel`) |
 | Inspect run | `domain: "sprints", action: "inspect_run"` |

@@ -73,6 +73,9 @@ export const sanitizeGit = (
     sprintKeyPrefix: typeof gitInput.sprintKeyPrefix === "string" && gitInput.sprintKeyPrefix.trim().length >= 2 && gitInput.sprintKeyPrefix.trim().length <= 10
       ? gitInput.sprintKeyPrefix.trim().toUpperCase()
       : DEFAULT_DASHBOARD_SETTINGS.git.sprintKeyPrefix,
+    taskPrTitleScheme: typeof gitInput.taskPrTitleScheme === "string" && gitInput.taskPrTitleScheme.trim().length > 0
+      ? gitInput.taskPrTitleScheme.trim()
+      : DEFAULT_DASHBOARD_SETTINGS.git.taskPrTitleScheme,
     prDescription: sanitizePrDescriptionSections(gitInput.prDescription),
   };
 };

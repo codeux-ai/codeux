@@ -1,7 +1,9 @@
 import type { ManageCodeUxArgs, ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
 import type {
   CreateSchedulerEntryInput,
+  ScheduleAnchor,
   ScheduleChatTarget,
+  ScheduleNodeFlowTarget,
   ScheduleQuicksprintTarget,
   ScheduleRecurrenceRule,
   ScheduleSprintTarget,
@@ -12,7 +14,7 @@ import type {
 import { normalizeRecurrenceRule } from "../../domain/scheduler/schedule-time.js";
 import type { SchedulerService } from "../../services/scheduler-service.js";
 
-const VALID_TARGET_TYPES: ScheduleTargetType[] = ["sprint", "quicksprint", "chat"];
+const VALID_TARGET_TYPES: ScheduleTargetType[] = ["sprint", "quicksprint", "chat", "node_flow"];
 const VALID_STATUSES: ScheduleStatus[] = ["scheduled", "paused", "completed", "failed", "cancelled"];
 
 function readString(payload: Record<string, unknown>, key: string): string | undefined {
@@ -46,11 +48,19 @@ function readTargetType(payload: Record<string, unknown>, action: string): Sched
   if (action === "schedule_sprint") return "sprint";
   if (action === "schedule_quicksprint") return "quicksprint";
   if (action === "schedule_chat") return "chat";
+  if (action === "schedule_node_flow") return "node_flow";
   const targetType = payload.targetType;
   if (typeof targetType === "string" && VALID_TARGET_TYPES.includes(targetType as ScheduleTargetType)) {
     return targetType as ScheduleTargetType;
   }
-  throw new Error("targetType is required and must be sprint, quicksprint, or chat");
+  throw new Error("targetType is required and must be sprint, quicksprint, chat, or node_flow");
+}
+
+function readOptionalTargetType(payload: Record<string, unknown>): ScheduleTargetType | undefined {
+  if (!("targetType" in payload)) {
+    return undefined;
+  }
+  return readTargetType(payload, "create");
 }
 
 function readStatus(value: unknown): ScheduleStatus | undefined {
@@ -72,6 +82,19 @@ function parsePositiveInteger(value: unknown): number | undefined {
   return undefined;
 }
 
+function parseNonNegativeInteger(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return Math.floor(value);
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return Math.floor(parsed);
+    }
+  }
+  return undefined;
+}
+
 function readPositiveInteger(payload: Record<string, unknown>, key: string, fallback: number): number {
   return parsePositiveInteger(payload[key]) ?? fallback;
 }
@@ -83,6 +106,59 @@ function readSubmitMode(value: unknown): ScheduleQuicksprintTarget["submitMode"]
 function readRecurrence(payload: Record<string, unknown>): Partial<ScheduleRecurrenceRule> | undefined {
   const recurrence = readObject(payload, "recurrence");
   return recurrence ? normalizeRecurrenceRule(recurrence) : undefined;
+}
+
+function readScheduleAnchor(payload: Record<string, unknown>): ScheduleAnchor | null | undefined {
+  const mode = readString(payload, "scheduleMode") ?? readString(payload, "anchorMode");
+  if (mode === "absolute") {
+    return null;
+  }
+
+  const nested = readObject(payload, "scheduleAnchor");
+  const source = nested ?? payload;
+  const nestedMode = nested ? readString(nested, "mode") : undefined;
+  const effectiveMode = nestedMode
+    ?? mode
+    ?? (("sourceTaskId" in source || "anchorSourceTaskId" in source) ? "after_task_end" : undefined);
+  const hasAnchorFields = Boolean(
+    nested
+    || effectiveMode === "after_sprint_end"
+    || effectiveMode === "after_task_end"
+    || "sourceSprintId" in payload
+    || "anchorSourceSprintId" in payload
+    || "sourceTaskId" in payload
+    || "anchorSourceTaskId" in payload
+    || "offsetMinutes" in payload
+    || "anchorOffsetMinutes" in payload
+  );
+  if (!hasAnchorFields) {
+    return undefined;
+  }
+  if (effectiveMode && effectiveMode !== "after_sprint_end" && effectiveMode !== "after_task_end") {
+    throw new Error("scheduleMode must be absolute, after_sprint_end, or after_task_end");
+  }
+  if (effectiveMode === "after_task_end") {
+    const sourceTaskId = readString(source, "sourceTaskId") ?? readString(source, "anchorSourceTaskId");
+    if (!sourceTaskId) {
+      throw new Error("sourceTaskId or scheduleAnchor.sourceTaskId is required for after_task_end schedules");
+    }
+    const offsetMinutes = parseNonNegativeInteger(source.offsetMinutes ?? source.anchorOffsetMinutes);
+    return {
+      mode: "after_task_end",
+      sourceTaskId,
+      offsetMinutes: offsetMinutes ?? 0,
+    };
+  }
+  const sourceSprintId = readString(source, "sourceSprintId") ?? readString(source, "anchorSourceSprintId");
+  if (!sourceSprintId) {
+    throw new Error("sourceSprintId or scheduleAnchor.sourceSprintId is required for after_sprint_end schedules");
+  }
+  const offsetMinutes = parseNonNegativeInteger(source.offsetMinutes ?? source.anchorOffsetMinutes);
+  return {
+    mode: "after_sprint_end",
+    sourceSprintId,
+    offsetMinutes: offsetMinutes ?? 0,
+  };
 }
 
 function normalizeSprintTarget(payload: Record<string, unknown>): ScheduleSprintTarget {
@@ -106,6 +182,9 @@ function normalizeQuicksprintTarget(payload: Record<string, unknown>): ScheduleQ
     taskCount: readPositiveInteger(source, "taskCount", 5),
     submitMode: readSubmitMode(source.submitMode),
   };
+  if (source.noTaskLimit === true) {
+    target.noTaskLimit = true;
+  }
   const additionalPrompt = readString(source, "additionalPrompt");
   const agentPresetId = readString(source, "agentPresetId");
   if (additionalPrompt) target.additionalPrompt = additionalPrompt;
@@ -133,11 +212,51 @@ function normalizeChatTarget(payload: Record<string, unknown>): ScheduleChatTarg
   return target;
 }
 
+function normalizeNodeFlowTarget(payload: Record<string, unknown>): ScheduleNodeFlowTarget {
+  const nested = readObject(payload, "nodeFlowTarget");
+  const source = nested ?? payload;
+  const flowId = readString(source, "flowId");
+  if (!flowId) {
+    throw new Error("flowId or nodeFlowTarget.flowId is required");
+  }
+  const target: ScheduleNodeFlowTarget = { flowId };
+  if ("input" in source) {
+    if (!source.input || typeof source.input !== "object" || Array.isArray(source.input) || !isJsonValue(source.input)) {
+      throw new Error("input or nodeFlowTarget.input must be a JSON object");
+    }
+    target.input = source.input as ScheduleNodeFlowTarget["input"];
+  }
+  const flowVersion = parsePositiveInteger(source.flowVersion);
+  if (flowVersion !== undefined) {
+    target.flowVersion = flowVersion;
+  }
+  return target;
+}
+
+function isJsonValue(value: unknown): boolean {
+  if (value === null) {
+    return true;
+  }
+  if (typeof value === "string" || typeof value === "boolean") {
+    return true;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+  if (Array.isArray(value)) {
+    return value.every((entry) => isJsonValue(entry));
+  }
+  return typeof value === "object"
+    && Object.values(value as Record<string, unknown>).every((entry) => isJsonValue(entry));
+}
+
 function assignTarget(input: CreateSchedulerEntryInput | UpdateSchedulerEntryInput, targetType: ScheduleTargetType, payload: Record<string, unknown>): void {
   if (targetType === "sprint") {
     input.sprintTarget = normalizeSprintTarget(payload);
   } else if (targetType === "quicksprint") {
     input.quicksprintTarget = normalizeQuicksprintTarget(payload);
+  } else if (targetType === "node_flow") {
+    input.nodeFlowTarget = normalizeNodeFlowTarget(payload);
   } else {
     input.chatTarget = normalizeChatTarget(payload);
   }
@@ -145,10 +264,15 @@ function assignTarget(input: CreateSchedulerEntryInput | UpdateSchedulerEntryInp
 
 function normalizeCreateInput(payload: Record<string, unknown>, action: string): CreateSchedulerEntryInput {
   const targetType = readTargetType(payload, action);
+  const scheduleAnchor = readScheduleAnchor(payload);
   const input: CreateSchedulerEntryInput = {
     targetType,
-    scheduledFor: readRequiredString(payload, "scheduledFor"),
   };
+  if (scheduleAnchor) {
+    input.scheduleAnchor = scheduleAnchor;
+  } else {
+    input.scheduledFor = readRequiredString(payload, "scheduledFor");
+  }
   const title = readString(payload, "title");
   const timezone = readString(payload, "timezone");
   const recurrence = readRecurrence(payload);
@@ -166,12 +290,16 @@ function normalizeUpdateInput(payload: Record<string, unknown>): UpdateScheduler
   const scheduledFor = readString(payload, "scheduledFor");
   const timezone = readString(payload, "timezone");
   const recurrence = readRecurrence(payload);
+  const scheduleAnchor = readScheduleAnchor(payload);
 
   if ("title" in payload) input.title = title;
   if (status) input.status = status;
   if (scheduledFor) input.scheduledFor = scheduledFor;
   if (timezone) input.timezone = timezone;
   if (recurrence) input.recurrence = recurrence;
+  if (scheduleAnchor !== undefined) input.scheduleAnchor = scheduleAnchor;
+  const targetType = readOptionalTargetType(payload);
+  if (targetType) input.targetType = targetType;
 
   if ("sprintTarget" in payload || "sprintId" in payload) {
     input.sprintTarget = normalizeSprintTarget(payload);
@@ -181,6 +309,9 @@ function normalizeUpdateInput(payload: Record<string, unknown>): UpdateScheduler
   }
   if ("chatTarget" in payload || "bodyMarkdown" in payload || "threadId" in payload || "connectionId" in payload) {
     input.chatTarget = normalizeChatTarget(payload);
+  }
+  if ("nodeFlowTarget" in payload || "flowId" in payload || "flowVersion" in payload || "input" in payload) {
+    input.nodeFlowTarget = normalizeNodeFlowTarget(payload);
   }
 
   return input;
@@ -217,7 +348,8 @@ export class SchedulerActions {
       case "create":
       case "schedule_sprint":
       case "schedule_quicksprint":
-      case "schedule_chat": {
+      case "schedule_chat":
+      case "schedule_node_flow": {
         const projectId = readRequiredString(payload, "projectId");
         const entry = this.schedulerService.createEntry(projectId, normalizeCreateInput(payload, args.action));
         return { result: { entry } };

@@ -5,6 +5,7 @@ import * as path from "path";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
+import { RunEventWrites } from "../../../src/repositories/project-runtime/run-event-writes.js";
 import { ProjectRuntimeRepository } from "../../../src/repositories/project-runtime-repository.js";
 
 const tempDirs: string[] = [];
@@ -179,10 +180,339 @@ describe("ProjectRuntimeRepository", () => {
       session_id: "session-1",
       session_name: "sessions/session-1",
     });
+    const eventRows = db.prepare(`
+      SELECT tre.project_id, tre.event_type, tre.originator
+      FROM task_run_events tre
+      INNER JOIN task_runs tr ON tr.id = tre.task_run_id
+      WHERE tr.task_id = ?
+      ORDER BY tre.created_at ASC
+    `).all(taskA.id) as Array<{ project_id: string | null; event_type: string; originator: string | null }>;
+    expect(eventRows).toEqual([
+      {
+        project_id: project.id,
+        event_type: "status_sync",
+        originator: "system",
+      },
+    ]);
 
     const storedProject = projectRepository.getProject(project.id);
     expect(storedProject?.status).toBe("running");
     expect(realtimeNotifier.scheduleProjectRuntimeStatusRefresh).toHaveBeenCalledWith(project.id);
+  });
+
+  it("does not churn status sync events for code-complete tasks persisted as completed runs", async () => {
+    const { storage, projectRepository, runtimeRepository } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Runtime Stable Project",
+      sourceType: "local",
+      sourceRef: "/workspace/runtime-stable",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Stable Sprint",
+      number: 9,
+      status: "running",
+    });
+    projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Merge pending worker",
+      promptMarkdown: "Produce branch work.",
+      status: "coding_completed",
+    });
+
+    const payload = {
+      project_id: project.id,
+      sprint_id: sprint.id,
+      sprint_number: 9,
+      repo_path: "/workspace/runtime-stable",
+      feature_branch: "feature/stable",
+      subtasks: [
+        {
+          id: "T01",
+          title: "Merge pending worker",
+          prompt: "Produce branch work.",
+          depends_on: [],
+          is_independent: true,
+          status: "CODING_COMPLETED" as const,
+          session_id: "cli-mockup-terminal",
+          session_name: "sessions/cli-mockup-terminal",
+          session_state: "COMPLETED",
+          provider: "mockup-cli" as const,
+          worker_branch: "task/feature/stable-t01",
+          is_merged: false,
+        },
+      ],
+    };
+
+    runtimeRepository.syncDashboardStatus(payload);
+    runtimeRepository.syncDashboardStatus(payload);
+
+    const db = storage.getDatabase().getRawDatabase();
+    const runRows = db.prepare(`
+      SELECT state, worker_branch
+      FROM task_runs
+    `).all() as Array<{ state: string; worker_branch: string | null }>;
+    expect(runRows).toEqual([
+      {
+        state: "COMPLETED",
+        worker_branch: "task/feature/stable-t01",
+      },
+    ]);
+
+    const eventCount = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM task_run_events
+      WHERE event_type = 'status_sync'
+    `).get() as { count: number };
+    expect(eventCount.count).toBe(1);
+  });
+
+  it("closes a stale active task run when the linked provider invocation already failed", async () => {
+    const { storage, executionRepository, projectRepository, runtimeRepository } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Live Stale Failed Run Project",
+      sourceType: "local",
+      sourceRef: "/workspace/live-stale-failed-run",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Live Stale Failed Run Sprint",
+      number: 30,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Stale active task",
+      promptMarkdown: "The backing provider failed.",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "completed",
+      startedAt: "2026-07-08T13:26:23.000Z",
+      finishedAt: "2026-07-08T13:37:38.000Z",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "mockup-cli",
+      mode: "docker_cli",
+      sessionId: "cli-mockup-stale-failed",
+      state: "RUNNING",
+      startedAt: "2026-07-08T13:26:23.000Z",
+    });
+    const invocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      dispatchId: dispatch.id,
+      taskRunId: taskRun.id,
+      sessionId: "cli-mockup-stale-failed",
+      provider: "mockup-cli",
+      purpose: "task_coding",
+      status: "running",
+      startedAt: "2026-07-08T13:27:03.000Z",
+    });
+    executionRepository.updateProviderInvocationUsage(invocation.id, {
+      status: "failed",
+      finishedAt: "2026-07-08T13:35:12.000Z",
+      durationMs: 488_000,
+    });
+
+    runtimeRepository.syncDashboardStatus({
+      project_id: project.id,
+      sprint_id: sprint.id,
+      sprint_number: 30,
+      subtasks: [
+        {
+          id: "T01",
+          record_id: task.id,
+          title: task.title,
+          prompt: task.promptMarkdown,
+          depends_on: [],
+          is_independent: true,
+          status: "RUNNING",
+          session_id: "cli-mockup-stale-failed",
+          provider: "mockup-cli",
+          worker_branch: "task/stale-failed",
+        },
+      ],
+      reportText: "Older live snapshot still says the task is running.",
+    });
+
+    const runRow = storage.getDatabase().getRawDatabase().prepare(`
+      SELECT state, finished_at
+      FROM task_runs
+      WHERE id = ?
+    `).get(taskRun.id) as { state: string; finished_at: string | null };
+    expect(runRow.state).toBe("FAILED");
+    expect(runRow.finished_at).toEqual(expect.any(String));
+    expect(executionRepository.countGlobalRunningTaskRunsPerProvider(["mockup-cli"]).get("mockup-cli")).toBeUndefined();
+
+    const status = runtimeRepository.getProjectStatus(project.id, sprint.id);
+    expect(status.subtasks).toHaveLength(1);
+    expect(status.subtasks[0]).toMatchObject({
+      id: "T01",
+      status: "FAILED",
+    });
+  });
+
+  it("closes a stale active task run as code-complete when its dispatch completed without failed provider evidence", async () => {
+    const { storage, executionRepository, projectRepository, runtimeRepository } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Live Stale Completed Run Project",
+      sourceType: "local",
+      sourceRef: "/workspace/live-stale-completed-run",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Live Stale Completed Run Sprint",
+      number: 31,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Stale completed task",
+      promptMarkdown: "The dispatch completed.",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "completed",
+      startedAt: "2026-07-08T14:00:00.000Z",
+      finishedAt: "2026-07-08T14:01:00.000Z",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "mockup-cli",
+      mode: "docker_cli",
+      sessionId: "cli-mockup-stale-completed",
+      state: "RUNNING",
+      startedAt: "2026-07-08T14:00:00.000Z",
+    });
+
+    runtimeRepository.syncDashboardStatus({
+      project_id: project.id,
+      sprint_id: sprint.id,
+      sprint_number: 31,
+      subtasks: [
+        {
+          id: "T01",
+          record_id: task.id,
+          title: task.title,
+          prompt: task.promptMarkdown,
+          depends_on: [],
+          is_independent: true,
+          status: "RUNNING",
+          session_id: "cli-mockup-stale-completed",
+          provider: "mockup-cli",
+          worker_branch: "task/stale-completed",
+        },
+      ],
+      reportText: "Older live snapshot still says the task is running.",
+    });
+
+    const runRow = storage.getDatabase().getRawDatabase().prepare(`
+      SELECT state, finished_at
+      FROM task_runs
+      WHERE id = ?
+    `).get(taskRun.id) as { state: string; finished_at: string | null };
+    expect(runRow.state).toBe("COMPLETED");
+    expect(runRow.finished_at).toEqual(expect.any(String));
+    expect(projectRepository.getTask(task.id)?.status).toBe("coding_completed");
+  });
+
+  it("deduplicates run events by source event key for the same task run", async () => {
+    const { executionRepository, projectRepository, storage } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Runtime Event Project",
+      sourceType: "local",
+      sourceRef: "/workspace/runtime-events",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Runtime Event Sprint",
+      number: 8,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "E01",
+      title: "Write provider events",
+      promptMarkdown: "Persist source-keyed events.",
+      status: "in_progress",
+    });
+    const run = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      provider: "codex",
+      state: "RUNNING",
+      startedAt: "2026-07-06T10:00:00.000Z",
+    });
+
+    const writer = new RunEventWrites(storage.getDatabase());
+    const firstInserted = writer.insertRunEvent({
+      taskRunId: run.id,
+      eventType: "provider_activity",
+      originator: "agent",
+      payload: { activityId: "activity-1", preview: "First copy" },
+      sourceEventKey: "activity:activity-1",
+      createdAt: "2026-07-06T10:01:00.000Z",
+    });
+    const duplicateInserted = writer.insertRunEvent({
+      taskRunId: run.id,
+      eventType: "provider_activity",
+      originator: "agent",
+      payload: { activityId: "activity-1", preview: "Duplicate copy" },
+      sourceEventKey: "activity:activity-1",
+      createdAt: "2026-07-06T10:02:00.000Z",
+    });
+
+    expect(firstInserted).toBe(true);
+    expect(duplicateInserted).toBe(false);
+    const eventRows = storage.getDatabase().getRawDatabase().prepare(`
+      SELECT project_id, source_event_key, payload_json
+      FROM task_run_events
+      WHERE task_run_id = ?
+    `).all(run.id) as Array<{ project_id: string | null; source_event_key: string | null; payload_json: string | null }>;
+
+    expect(eventRows).toHaveLength(1);
+    expect(eventRows[0]).toMatchObject({
+      project_id: project.id,
+      source_event_key: "activity:activity-1",
+    });
+    expect(JSON.parse(eventRows[0].payload_json || "{}")).toMatchObject({
+      preview: "First copy",
+    });
   });
 
   it("does not create task runs for status-only dependency blockers", async () => {
@@ -322,6 +652,103 @@ describe("ProjectRuntimeRepository", () => {
       pr_url: "https://github.com/numnx/codeuxweb/pull/256",
       finished_at: "2026-06-28T08:27:38.000Z",
     });
+  });
+
+  it("does not downgrade completed merged tasks from stale dashboard snapshots", async () => {
+    const { projectRepository, runtimeRepository } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Merged Runtime Project",
+      sourceType: "local",
+      sourceRef: "/workspace/merged-runtime",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Merged Runtime Sprint",
+      number: 28,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Already merged task",
+      promptMarkdown: "This task already merged.",
+      status: "completed",
+      isMerged: true,
+      mergeIndicator: "MERGED",
+    });
+
+    runtimeRepository.syncDashboardStatus({
+      project_id: project.id,
+      sprint_id: sprint.id,
+      sprint_number: 28,
+      feature_branch: "feature/merged-runtime",
+      subtasks: [
+        {
+          id: "T01",
+          record_id: task.id,
+          title: task.title,
+          prompt: task.promptMarkdown,
+          depends_on: [],
+          is_independent: true,
+          status: "CODING_COMPLETED",
+          is_merged: false,
+          merge_indicator: "CI",
+        },
+      ],
+      reportText: "Stale cycle still sees the task waiting on CI.",
+    });
+
+    const persistedTask = projectRepository.getTask(task.id);
+    expect(persistedTask?.status).toBe("completed");
+    expect(persistedTask?.isMerged).toBe(true);
+    expect(persistedTask?.mergeIndicator).toBe("MERGED");
+  });
+
+  it("does not downgrade coding-completed tasks from older pending or running snapshots", async () => {
+    const { projectRepository, runtimeRepository } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Code Complete Runtime Project",
+      sourceType: "local",
+      sourceRef: "/workspace/code-complete-runtime",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Code Complete Runtime Sprint",
+      number: 29,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Already code complete",
+      promptMarkdown: "This task already finished coding.",
+      status: "coding_completed",
+      mergeIndicator: "CI",
+    });
+
+    for (const status of ["RUNNING", "PENDING"] as const) {
+      runtimeRepository.syncDashboardStatus({
+        project_id: project.id,
+        sprint_id: sprint.id,
+        sprint_number: 29,
+        subtasks: [
+          {
+            id: "T01",
+            record_id: task.id,
+            title: task.title,
+            prompt: task.promptMarkdown,
+            depends_on: [],
+            is_independent: true,
+            status,
+            provider: status === "RUNNING" ? "mockup-cli" : undefined,
+            session_id: status === "RUNNING" ? "stale-running-session" : undefined,
+          },
+        ],
+        reportText: `Stale cycle reports ${status}.`,
+      });
+
+      expect(projectRepository.getTask(task.id)?.status).toBe("coding_completed");
+    }
   });
 
   it("preserves active sprint-run status when dashboard snapshots have no running subtasks", async () => {
@@ -973,5 +1400,80 @@ describe("ProjectRuntimeRepository", () => {
         },
       }),
     ]);
+  });
+
+  it("does not resurrect a worker-resolved merge conflict from a stale sprint snapshot", async () => {
+    const { projectRepository, runtimeRepository, storage } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Resolved Conflict Project",
+      sourceType: "local",
+      sourceRef: "/workspace/resolved-conflict",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Resolved Conflict Sprint",
+      number: 31,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Merge once",
+      promptMarkdown: "Resolve a conflict.",
+      status: "coding_completed",
+      mergeIndicator: "MERGE_CONFLICT",
+    });
+
+    const now = "2026-07-07T12:00:00.000Z";
+    storage.getDatabase().getRawDatabase().prepare(`
+      INSERT INTO project_attention_items (
+        id, project_id, sprint_id, task_id, sprint_run_id, dispatch_id,
+        attention_type, severity, owner_type, status, assigned_worker_endpoint_id,
+        title, summary_markdown, payload_json, opened_at, claimed_at, resolved_at, updated_at
+      ) VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL, ?, ?)
+    `).run(
+      "resolved-conflict-attention",
+      project.id,
+      sprint.id,
+      task.id,
+      "merge_conflict",
+      "high",
+      "worker",
+      "resolved",
+      "Merge conflict for T01",
+      "Virtual worker resolved this conflict.",
+      JSON.stringify({
+        resolutionReason: "virtual_worker_merge_conflict_already_resolved",
+        conflictingBranches: {
+          source: "task/resolved-conflict-t01",
+          target: "feature/resolved-conflict",
+        },
+      }),
+      now,
+      now,
+      now,
+    );
+
+    runtimeRepository.syncDashboardStatus({
+      project_id: project.id,
+      sprint_id: sprint.id,
+      sprint_number: 31,
+      feature_branch: "feature/resolved-conflict",
+      subtasks: [
+        {
+          id: "T01",
+          record_id: task.id,
+          title: "Merge once",
+          prompt: "Resolve a conflict.",
+          depends_on: [],
+          status: "CODING_COMPLETED",
+          worker_branch: "task/resolved-conflict-t01",
+          merge_indicator: "MERGE_CONFLICT",
+        },
+      ],
+      reportText: "Stale cycle still had the old conflict marker.",
+    });
+
+    expect(projectRepository.getTask(task.id)?.mergeIndicator).toBeNull();
   });
 });

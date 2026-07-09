@@ -22,7 +22,6 @@ import {
   DASHED_EMPTY_CLASS,
   DonutCard,
   STATUS_TONE_CLASS,
-  StudioHeader,
   TEXT_DETAIL_CLASS,
   TEXT_LABEL_CLASS,
   TEXT_VALUE_CLASS,
@@ -40,7 +39,7 @@ import {
 
 const LOW_SAMPLE_THRESHOLD = 3;
 
-const SUCCESS_TONE_CLASS: Record<ReturnType<typeof getSuccessTone>, string> = {
+export const SUCCESS_TONE_CLASS: Record<ReturnType<typeof getSuccessTone>, string> = {
   strong: STATUS_TONE_CLASS.positive,
   warn: STATUS_TONE_CLASS.warning,
   critical: STATUS_TONE_CLASS.negative,
@@ -83,12 +82,14 @@ export const HighlightTile: FunctionComponent<{
   highlight: ModelHighlight | null;
   tone: string;
 }> = ({ icon: Icon, label, highlight, tone }) => (
-  <div className={`${SUBPANEL_CLASS} p-4`}>
-    <div className={`inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] ${tone}`}>
-      <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
-      {label}
+  <div className={`${SUBPANEL_CLASS} min-w-0 p-3`}>
+    <div className="flex min-w-0 items-center justify-between gap-3">
+      <div className={`min-w-0 break-words text-[10px] font-bold uppercase tracking-[0.16em] ${TEXT_LABEL_CLASS}`}>
+        {label}
+      </div>
+      <Icon className={`h-3.5 w-3.5 shrink-0 ${tone}`} strokeWidth={2.2} aria-hidden="true" />
     </div>
-    <div className={`mt-3 break-words text-base font-semibold ${TEXT_VALUE_CLASS}`}>
+    <div className={`mt-3 break-words text-sm font-semibold ${TEXT_VALUE_CLASS}`} title={highlight?.model.label}>
       {highlight ? highlight.model.label : "—"}
     </div>
     <div className={`mt-1 text-xs font-medium ${TEXT_DETAIL_CLASS}`}>
@@ -103,9 +104,9 @@ export const ModelMetric: FunctionComponent<{
   value: string;
   detail?: string;
 }> = ({ label, value, detail }) => (
-  <div className={`${SUBPANEL_CLASS} p-4`}>
-    <div className={`text-[10px] font-bold uppercase tracking-[0.16em] ${TEXT_LABEL_CLASS}`}>{label}</div>
-    <div className={`mt-2 text-base font-semibold ${value === "—" ? TEXT_DETAIL_CLASS : TEXT_VALUE_CLASS}`}>{value}</div>
+  <div className={`${SUBPANEL_CLASS} min-w-0 p-3`}>
+    <div className={`break-words text-[10px] font-bold uppercase tracking-[0.14em] ${TEXT_LABEL_CLASS}`}>{label}</div>
+    <div className={`mt-2 break-words text-sm font-semibold ${value === "—" ? TEXT_DETAIL_CLASS : TEXT_VALUE_CLASS}`}>{value}</div>
     {detail ? <div className={`mt-1 text-[10px] font-bold uppercase tracking-[0.14em] ${TEXT_LABEL_CLASS}`}>{detail}</div> : null}
   </div>
 );
@@ -130,15 +131,15 @@ export const ModelCard: FunctionComponent<{
   const statusSummary = `${model.statusCounts.completed} completed · ${model.statusCounts.failed} failed · ${model.statusCounts.running} running · ${model.statusCounts.cancelled} cancelled`;
 
   return (
-    <article className={`${PANEL_CLASS} p-4 md:p-5`} aria-label={`${model.label} model leaderboard rank ${rank}`}>
+    <article className={`${PANEL_CLASS} p-4`} aria-label={`${model.label} model leaderboard rank ${rank}`}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 flex-1 items-start gap-3">
-          <div className={`shrink-0 rounded-xl p-2 ${bg} ${text}`}>
+          <div className={`shrink-0 rounded-[var(--stats-chip-radius)] p-2 ${bg} ${text}`}>
             <Icon className="h-4 w-4" strokeWidth={2.1} />
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className={`inline-flex shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${CHIP_CLASS}`}>
+              <span className={`inline-flex shrink-0 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${CHIP_CLASS}`}>
                 #{rank}
               </span>
               <h3 className="min-w-0 max-w-full break-words text-base font-semibold leading-tight text-[color:var(--stats-value-color)]" title={model.label}>
@@ -155,24 +156,24 @@ export const ModelCard: FunctionComponent<{
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start">
-          <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${CHIP_CLASS}`}>
+          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${CHIP_CLASS}`}>
             Volume rank
           </div>
-          <div className={`inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
+          <div className={`inline-flex items-center gap-2 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${CHIP_CLASS}`}>
             <BarChart3 className="h-3.5 w-3.5 text-[color:var(--stats-signal-text)]" strokeWidth={2.2} />
-            <span className="text-base font-semibold normal-case text-[color:var(--stats-value-color)]">
+            <span className="text-sm font-semibold normal-case text-[color:var(--stats-value-color)]">
               {formatTokens(model.usage.totalTokens)}
             </span>
             <span className="text-[color:var(--stats-label-color)]">tokens</span>
           </div>
-          <div className={`inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
+          <div className={`inline-flex items-center gap-2 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${CHIP_CLASS}`}>
             <DollarSign className="h-3.5 w-3.5 text-[color:var(--stats-positive-text)]" strokeWidth={2.2} />
-            <span className="text-base font-semibold normal-case text-[color:var(--stats-value-color)]">
+            <span className="text-sm font-semibold normal-case text-[color:var(--stats-value-color)]">
               {formatPricingValue(hasCost ? model.usage.totalCostUsd : null)}
             </span>
             <span className="text-[color:var(--stats-label-color)]">cost</span>
           </div>
-          <div className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${SUCCESS_TONE_CLASS[successTone]}`}>
+          <div className={`inline-flex items-center gap-1.5 rounded-[var(--stats-chip-radius)] border px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${SUCCESS_TONE_CLASS[successTone]}`}>
             <ShieldCheck className="h-3 w-3" strokeWidth={2.4} />
             {formatSuccessRate(model.successRate)}
           </div>
@@ -185,7 +186,7 @@ export const ModelCard: FunctionComponent<{
         </div>
       ) : null}
 
-      <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-5">
+      <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-5">
         <ModelMetric
           label="Invocations"
           value={model.usage.invocationCount.toLocaleString()}
@@ -238,15 +239,15 @@ export const ModelCard: FunctionComponent<{
         />
       </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-[0.85fr_1.15fr]">
-        <div className={`${SUBPANEL_CLASS} p-4`}>
+      <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[0.85fr_1.15fr]">
+        <div className={`${SUBPANEL_CLASS} p-3`}>
           <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Outcome Mix</div>
           <div className="mt-2 text-sm font-semibold text-[color:var(--stats-value-color)]">{statusSummary}</div>
           <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">
             Last active {formatDateTime(model.lastActivityAt)}
           </div>
         </div>
-        <div className={`${SUBPANEL_CLASS} p-4`}>
+        <div className={`${SUBPANEL_CLASS} p-3`}>
           <div className="flex items-center justify-between gap-3">
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Token-Flow Anatomy</div>
             <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">{formatTokens(model.usage.totalTokens)} total</div>
@@ -292,18 +293,24 @@ export const ModelsStudio: FunctionComponent<{
 
   return (
     <section className="space-y-6">
-      <div className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7`}>
-        <StudioHeader
-          icon={Cpu}
-          eyebrow="Model Intelligence"
-          title="Model performance & efficiency"
-          description="Per-model telemetry across the selected window — token volume, reliability, latency distribution, cache efficiency, and output velocity for every model that participated."
-        />
+      <div className={`${PANEL_CLASS} p-5 md:p-6`}>
+        <div className="flex max-w-4xl items-start gap-4">
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center border px-2 ${CHIP_CLASS} text-[color:var(--stats-signal-text)]`}>
+            <Cpu className="h-4 w-4" strokeWidth={2.2} aria-hidden="true" />
+          </div>
+          <div className="min-w-0">
+            <div className={`text-[10px] font-bold uppercase tracking-[0.18em] ${TEXT_LABEL_CLASS}`}>Model Intelligence</div>
+            <div className={`mt-1 break-words text-xl font-semibold ${TEXT_VALUE_CLASS}`}>Model performance & efficiency</div>
+            <div className={`mt-2 max-w-3xl text-sm leading-relaxed ${TEXT_DETAIL_CLASS}`}>
+              Per-model telemetry across the selected window — token volume, reliability, latency distribution, cache efficiency, and output velocity for every model that participated.
+            </div>
+          </div>
+        </div>
       </div>
 
       {models.length === 0 ? (
         <div className={`${PANEL_CLASS} border-dashed p-10 text-center`}>
-          <div className={`mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-chip)] ${TEXT_LABEL_CLASS}`}>
+          <div className={`mx-auto flex h-12 w-12 items-center justify-center rounded-[var(--stats-control-radius)] border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-chip)] ${TEXT_LABEL_CLASS}`}>
             <Cpu className="h-5 w-5" strokeWidth={2.2} />
           </div>
           <div className="mt-4 text-base font-semibold text-[color:var(--stats-value-color)]">No model telemetry yet</div>
@@ -327,7 +334,7 @@ export const ModelsStudio: FunctionComponent<{
                 <Gauge className="h-4 w-4 text-[color:var(--stats-signal-text)]" strokeWidth={2} />
                 <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Efficiency Highlights</div>
               </div>
-              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 <HighlightTile
                   icon={TrendingUp}
                   label="Volume Leader"
@@ -371,7 +378,7 @@ export const ModelsStudio: FunctionComponent<{
                 <Activity className="h-3.5 w-3.5 text-[color:var(--stats-signal-text)]" strokeWidth={2.2} />
                 Window Volume
               </div>
-              <div className="mt-4 text-xl font-semibold text-[color:var(--stats-value-color)]">{formatTokens(totalTokens)}</div>
+              <div className="mt-4 break-words text-xl font-semibold text-[color:var(--stats-value-color)]">{formatTokens(totalTokens)}</div>
               <div className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">tokens ranked by model volume</div>
               <div className="mt-5 grid grid-cols-2 gap-3">
                 <ModelMetric label="Calls" value={totalCalls.toLocaleString()} detail={totalCalls < LOW_SAMPLE_THRESHOLD ? "sparse sample" : "invocations"} />

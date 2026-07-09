@@ -1,5 +1,6 @@
-import type { DashboardSettings, ExternalSettingsHints, GuardrailSettings } from "../types.js";
+import type { DashboardSettings, ExternalSettingsHints, GuardrailSettings, TechstackCatalogSettings } from "../types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
+import { cloneDesignGuidanceSettings } from "../../../src/domain/settings/design-guidance-catalog.js";
 
 export { DEFAULT_DASHBOARD_SETTINGS };
 
@@ -14,6 +15,14 @@ export const cloneGuardrails = (guardrails: GuardrailSettings): GuardrailSetting
     planning: { ...guardrails.jobs.planning },
     remediation: { ...guardrails.jobs.remediation },
   },
+});
+
+export const cloneTechstackCatalog = (catalog: TechstackCatalogSettings): TechstackCatalogSettings => ({
+  defaultTechstackId: catalog.defaultTechstackId,
+  entries: catalog.entries.map((entry) => ({
+    ...entry,
+    items: entry.items.map((item) => ({ ...item })),
+  })),
 });
 
 export const cloneDefaultSettings = (): DashboardSettings => ({
@@ -47,8 +56,18 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
       ]),
     ) as DashboardSettings["aiProvider"]["invocationRouting"],
   },
+  techstackCatalog: cloneTechstackCatalog(DEFAULT_DASHBOARD_SETTINGS.techstackCatalog),
+  techstack: { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
+  designGuidance: cloneDesignGuidanceSettings(DEFAULT_DASHBOARD_SETTINGS.designGuidance),
   git: { ...DEFAULT_DASHBOARD_SETTINGS.git },
   jira: { ...DEFAULT_DASHBOARD_SETTINGS.jira },
+  notion: { ...DEFAULT_DASHBOARD_SETTINGS.notion },
+  asana: { ...DEFAULT_DASHBOARD_SETTINGS.asana },
+  linear: { ...DEFAULT_DASHBOARD_SETTINGS.linear },
+  miro: { ...DEFAULT_DASHBOARD_SETTINGS.miro },
+  lucid: { ...DEFAULT_DASHBOARD_SETTINGS.lucid },
+  figma: { ...DEFAULT_DASHBOARD_SETTINGS.figma },
+  mural: { ...DEFAULT_DASHBOARD_SETTINGS.mural },
   ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence },
   guardrails: cloneGuardrails(DEFAULT_DASHBOARD_SETTINGS.guardrails),
   sprintLoopSteps: { ...DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps },
@@ -87,6 +106,16 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
         agentPresetIds: [...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.completedTaskWithoutPr.agentPresetIds],
       },
     },
+    selfReflection: {
+      planning: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection.planning,
+        criteria: DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection.planning.criteria.map((criterion) => ({ ...criterion })),
+      },
+      qualityAssurance: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection.qualityAssurance,
+        criteria: DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection.qualityAssurance.criteria.map((criterion) => ({ ...criterion })),
+      },
+    },
   },
   skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
   mcpTools: DEFAULT_DASHBOARD_SETTINGS.mcpTools.map((tool) => ({ ...tool })),
@@ -94,6 +123,10 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
   memory: {
     ...DEFAULT_DASHBOARD_SETTINGS.memory,
     externalEmbedding: { ...DEFAULT_DASHBOARD_SETTINGS.memory.externalEmbedding },
+  },
+  speech: {
+    ...DEFAULT_DASHBOARD_SETTINGS.speech,
+    externalTranscription: { ...DEFAULT_DASHBOARD_SETTINGS.speech.externalTranscription },
   },
   modelPricing: { overrides: { ...DEFAULT_DASHBOARD_SETTINGS.modelPricing.overrides } },
 });

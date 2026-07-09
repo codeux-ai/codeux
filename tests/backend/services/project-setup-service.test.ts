@@ -1,7 +1,7 @@
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { SettingsRepository } from "../../../src/repositories/settings-repository.js";
@@ -10,6 +10,7 @@ import { ExecutionRepository } from "../../../src/repositories/execution-reposit
 import { AgentPresetSyncService } from "../../../src/services/agent-preset-sync-service.js";
 import { QuicksprintService } from "../../../src/services/quicksprint-service.js";
 import { ProjectSetupService } from "../../../src/services/project-setup-service.js";
+import type { ProjectDocsAutoEmbedService } from "../../../src/services/project-docs-auto-embed-service.js";
 import type { IProviderRunner, ProviderRunResult } from "../../../src/infrastructure/providers/cli/provider-runner.js";
 import { DEFAULT_PLAYWRIGHT_MCP_SERVER_ID } from "../../../src/repositories/settings-defaults.js";
 
@@ -96,6 +97,61 @@ class DeferredProviderRunner implements IProviderRunner {
   }
 }
 
+async function createProjectSetupHarness(
+  fixtureName: string,
+  providerPayload: unknown,
+  projectDocsAutoEmbedService?: Pick<ProjectDocsAutoEmbedService, "embedProjectDocs">,
+) {
+  const repoDir = await fs.mkdtemp(path.join(os.tmpdir(), fixtureName));
+  tempDirs.push(repoDir);
+  await fs.writeFile(path.join(repoDir, "package.json"), JSON.stringify({
+    dependencies: {
+      "@preact/signals": "^2.0.0",
+      "preact": "^10.0.0",
+      "vite": "^8.0.0",
+    },
+    devDependencies: {
+      "typescript": "^5.0.0",
+      "vitest": "^4.0.0",
+    },
+    scripts: { test: "vitest run", build: "vite build" },
+  }, null, 2));
+
+  const storage = new AppDbStorage();
+  const projectManagementRepository = new ProjectManagementRepository(storage);
+  const settingsRepository = new SettingsRepository();
+  const agentPresetRepository = new AgentPresetRepository(storage);
+  const executionRepository = new ExecutionRepository(storage);
+  const agentPresetSyncService = new AgentPresetSyncService({
+    projectManagementRepository,
+    agentPresetRepository,
+    settingsRepository,
+    projectRoot: repoDir,
+  });
+  const project = projectManagementRepository.createProject({
+    name: "Detected Stack App",
+    sourceType: "local",
+    sourceRef: repoDir,
+  });
+  const providerRunner = new FakeProviderRunner(JSON.stringify(providerPayload));
+  const service = new ProjectSetupService({
+    projectManagementRepository,
+    settingsRepository,
+    executionRepository,
+    agentPresetSyncService,
+    providerRunner,
+    projectDocsAutoEmbedService,
+    projectRoot: process.cwd(),
+  });
+
+  return {
+    project,
+    settingsRepository,
+    providerRunner,
+    service,
+  };
+}
+
 afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
@@ -140,6 +196,29 @@ describe("ProjectSetupService", () => {
       name: "Previewable App",
       sourceType: "local",
       sourceRef: repoDir,
+    });
+    settingsRepository.saveProjectSettings(project.id, {
+      designGuidance: {
+        selectedTechStackId: "setup-service-stack",
+        selectedStyleguideId: "setup-service-style",
+        hideDefaultStyleguides: false,
+        customTechStacks: [
+          {
+            id: "setup-service-stack",
+            name: "Setup Service Stack",
+            summary: "Generate setup artifacts for the service's Preact Vite stack.",
+            instructionMarkdown: "Use the repository package manager, strict TypeScript, and Vitest commands.",
+          },
+        ],
+        customStyleguides: [
+          {
+            id: "setup-service-style",
+            name: "Setup Service Style",
+            summary: "Generate setup artifacts with compact product UI guidance.",
+            instructionMarkdown: "Preserve local visual tokens, responsive states, and accessible interactions.",
+          },
+        ],
+      },
     });
 
     const providerPayload = {
@@ -197,6 +276,11 @@ describe("ProjectSetupService", () => {
     expect(fullSetupPrompt).toContain("Code Quality & Performance Audit");
     expect(fullSetupPrompt).toContain("## Container Setup Script Template");
     expect(fullSetupPrompt).toContain("Force rebuild version");
+    expect(fullSetupPrompt).toContain("## Project Guidance");
+    expect(fullSetupPrompt).toContain("Name: Setup Service Stack");
+    expect(fullSetupPrompt).toContain("Use the repository package manager, strict TypeScript, and Vitest commands.");
+    expect(fullSetupPrompt).toContain("Name: Setup Service Style");
+    expect(fullSetupPrompt).toContain("Preserve local visual tokens, responsive states, and accessible interactions.");
     expect(result.createdAgentIds.length).toBeGreaterThanOrEqual(1);
     expect(result.createdQuicksprintTemplateIds).toHaveLength(1);
     const writtenFiles = result.writtenFiles.map(normalizeSeparators);
@@ -221,6 +305,7 @@ describe("ProjectSetupService", () => {
     });
     expect(generatedAgent?.avatarConfig).toBeTruthy();
     expect(generatedAgent?.mcpAccess?.linkedServerIds).toEqual([DEFAULT_PLAYWRIGHT_MCP_SERVER_ID]);
+    expect(generatedAgent?.mcpAccess?.codeUxEnabled).toBe(false);
     expect(setupAgent?.mcpAccess).toBeUndefined();
     await expect(fs.readFile(path.join(repoDir, ".code-ux", "agents", "frontend_runtime_agent.md"), "utf8"))
       .resolves.toContain("\"avatarConfig\"");
@@ -305,6 +390,7 @@ describe("ProjectSetupService", () => {
     expect(effective.agents.routing.taskCoding.mode).toBe("ORCHESTRATOR");
     expect(effective.agents.routing.taskCoding.orchestratorAgentPresetIds).toContain(generatedWorker?.id);
     expect(generatedWorker?.mcpAccess?.linkedServerIds).toEqual([DEFAULT_PLAYWRIGHT_MCP_SERVER_ID]);
+    expect(generatedWorker?.mcpAccess?.codeUxEnabled).toBe(false);
   });
 
   it("passes a Docker snapshot checkout for the effective default branch", async () => {
@@ -351,7 +437,7 @@ describe("ProjectSetupService", () => {
     });
 
     await service.setupProject(project.id, {
-      options: { agents: false, quicksprints: false, previewScript: false, ci: false },
+      options: { agents: false, quicksprints: false, previewScript: false, ci: false, techstack: false },
     });
 
     expect(providerRunner.lastInput).toEqual(expect.objectContaining({
@@ -394,7 +480,7 @@ describe("ProjectSetupService", () => {
     });
 
     const started = await service.startProjectSetup(project.id, {
-      options: { agents: false, quicksprints: false, previewScript: false, ci: false },
+      options: { agents: false, quicksprints: false, previewScript: false, ci: false, techstack: false },
     });
 
     expect(started.accepted).toBe(true);
@@ -418,9 +504,211 @@ describe("ProjectSetupService", () => {
       quicksprints: [],
       previewScript: null,
       ci: [],
+      techstack: null,
     }));
 
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(executionRepository.getExecutionInvocation(started.invocationId)?.status).toBe("completed");
+  });
+
+  it("adds a detected techstack to the system catalog and selects it for the project", async () => {
+    const { project, settingsRepository, service } = await createProjectSetupHarness(
+      "code-ux-project-setup-techstack-",
+      {
+        summary: "Detected Preact Vite stack from package.json.",
+        agents: [],
+        quicksprints: [],
+        previewScript: null,
+        ci: [],
+        techstack: {
+          name: "Preact Vite Dashboard",
+          description: "package.json declares Preact, Vite, TypeScript, and Vitest.",
+          detectedFrameworks: ["Preact", "Vite"],
+          detectedLibraries: ["TypeScript", "Vitest", "Preact"],
+        },
+      },
+    );
+
+    await service.setupProject(project.id, {
+      options: { agents: false, quicksprints: false, previewScript: false, ci: false, techstack: true },
+    });
+
+    const systemSettings = settingsRepository.getSystemSettings();
+    const detectedEntry = systemSettings.techstackCatalog.entries.find((entry) => entry.label === "Preact Vite Dashboard");
+    expect(detectedEntry).toMatchObject({
+      id: "detected-preact-vite-dashboard",
+      items: [
+        { id: "preact", label: "Preact" },
+        { id: "vite", label: "Vite" },
+        { id: "typescript", label: "TypeScript" },
+        { id: "vitest", label: "Vitest" },
+      ],
+    });
+    expect(settingsRepository.resolveProjectDashboardSettings(project.id).settings.techstack.selectedTechstackId)
+      .toBe("detected-preact-vite-dashboard");
+  });
+
+  it("selects an existing catalog techstack instead of creating a duplicate entry", async () => {
+    const { project, settingsRepository, service } = await createProjectSetupHarness(
+      "code-ux-project-setup-techstack-duplicate-",
+      {
+        summary: "Detected existing duplicate test stack.",
+        agents: [],
+        quicksprints: [],
+        previewScript: null,
+        ci: [],
+        techstack: {
+          name: "Existing Duplicate Test Stack",
+          description: "package.json declares the same stack as the existing catalog entry.",
+          detectedFrameworks: ["Preact", "Vite"],
+          detectedLibraries: ["Vitest"],
+        },
+      },
+    );
+    const systemSettings = settingsRepository.getSystemSettings();
+    settingsRepository.saveSystemSettings({
+      ...systemSettings,
+      techstackCatalog: {
+        ...systemSettings.techstackCatalog,
+        entries: [
+          ...systemSettings.techstackCatalog.entries,
+          {
+            id: "existing-preact-vite",
+            label: "Existing Duplicate Test Stack",
+            items: [{ id: "preact", label: "Preact" }],
+          },
+        ],
+      },
+    });
+
+    await service.setupProject(project.id, {
+      options: { agents: false, quicksprints: false, previewScript: false, ci: false, techstack: true },
+    });
+
+    const entries = settingsRepository.getSystemSettings().techstackCatalog.entries
+      .filter((entry) => entry.label === "Existing Duplicate Test Stack");
+    expect(entries).toHaveLength(1);
+    expect(settingsRepository.resolveProjectDashboardSettings(project.id).settings.techstack.selectedTechstackId)
+      .toBe("existing-preact-vite");
+  });
+
+  it("leaves the project techstack unchanged when techstack setup is disabled", async () => {
+    const { project, settingsRepository, service } = await createProjectSetupHarness(
+      "code-ux-project-setup-techstack-disabled-",
+      {
+        summary: "Detected a stack that should not be applied.",
+        agents: [],
+        quicksprints: [],
+        previewScript: null,
+        ci: [],
+        techstack: {
+          name: "Disabled Setup Stack",
+          description: "This artifact is present but the option is disabled.",
+          detectedFrameworks: ["Svelte"],
+          detectedLibraries: ["Vite"],
+        },
+      },
+    );
+    settingsRepository.saveProjectSettings(project.id, {
+      techstack: {
+        selectedTechstackId: "manual-stack",
+        applicationKind: "web",
+      },
+    });
+
+    await service.setupProject(project.id, {
+      options: { agents: false, quicksprints: false, previewScript: false, ci: false, techstack: false },
+    });
+
+    expect(settingsRepository.resolveProjectDashboardSettings(project.id).settings.techstack).toEqual({
+      selectedTechstackId: "manual-stack",
+      applicationKind: "web",
+    });
+  });
+
+  it("does not embed project docs when docs setup is omitted", async () => {
+    const projectDocsAutoEmbedService = {
+      embedProjectDocs: vi.fn(async () => ({ documentIds: ["doc-1"], errors: [] })),
+    } satisfies Pick<ProjectDocsAutoEmbedService, "embedProjectDocs">;
+    const { project, service } = await createProjectSetupHarness(
+      "code-ux-project-setup-docs-omitted-",
+      {
+        summary: "No docs requested.",
+        agents: [],
+        quicksprints: [],
+        previewScript: null,
+        ci: [],
+        techstack: null,
+      },
+      projectDocsAutoEmbedService,
+    );
+
+    const result = await service.setupProject(project.id, {
+      options: { agents: false, quicksprints: false, previewScript: false, ci: false, techstack: false },
+    });
+
+    expect(projectDocsAutoEmbedService.embedProjectDocs).not.toHaveBeenCalled();
+    expect(result.embeddedDocumentIds).toEqual([]);
+    expect(result.embeddedDocumentErrors).toEqual([]);
+  });
+
+  it("embeds project docs only when requested and returns document metadata", async () => {
+    const projectDocsAutoEmbedService = {
+      embedProjectDocs: vi.fn(async () => ({
+        documentIds: ["doc-readme", "doc-guide"],
+        errors: [{ fileName: "docs/broken.md", error: "Failed to ingest file" }],
+      })),
+    } satisfies Pick<ProjectDocsAutoEmbedService, "embedProjectDocs">;
+    const { project, providerRunner, service } = await createProjectSetupHarness(
+      "code-ux-project-setup-docs-enabled-",
+      {
+        summary: "Docs requested.",
+        agents: [],
+        quicksprints: [],
+        previewScript: null,
+        ci: [],
+        techstack: null,
+      },
+      projectDocsAutoEmbedService,
+    );
+
+    const result = await service.setupProject(project.id, {
+      options: { agents: false, quicksprints: false, previewScript: false, ci: false, techstack: false, docs: true },
+    });
+
+    expect(projectDocsAutoEmbedService.embedProjectDocs).toHaveBeenCalledWith(project.id, project.baseDir);
+    expect(providerRunner.lastPrompt).toContain("Requested artifacts: Docs Embedding");
+    expect(result.embeddedDocumentIds).toEqual(["doc-readme", "doc-guide"]);
+    expect(result.embeddedDocumentErrors).toEqual([{ fileName: "docs/broken.md", error: "Failed to ingest file" }]);
+    expect(result.createdAgentIds).toEqual([]);
+    expect(result.createdQuicksprintTemplateIds).toEqual([]);
+    expect(result.writtenFiles).toEqual([]);
+  });
+
+  it("reports a docs setup error when docs are requested but the embed service is unavailable", async () => {
+    const { project, service } = await createProjectSetupHarness(
+      "code-ux-project-setup-docs-unavailable-",
+      {
+        summary: "Docs requested without service.",
+        agents: [],
+        quicksprints: [],
+        previewScript: null,
+        ci: [],
+        techstack: null,
+      },
+    );
+
+    const result = await service.setupProject(project.id, {
+      options: { agents: false, quicksprints: false, previewScript: false, ci: false, techstack: false, docs: true },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.embeddedDocumentIds).toEqual([]);
+    expect(result.embeddedDocumentErrors).toEqual([
+      {
+        fileName: "docs",
+        error: "Project docs auto-embed service is not available.",
+      },
+    ]);
   });
 });

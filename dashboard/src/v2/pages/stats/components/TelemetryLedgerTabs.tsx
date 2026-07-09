@@ -12,9 +12,11 @@ import {
   TAB_COUNT_ACTIVE_CLASS,
   TAB_COUNT_IDLE_CLASS,
   TAB_IDLE_CLASS,
+  SUBPANEL_CLASS,
   TEXT_DETAIL_CLASS,
 } from "./StatsShared.js";
 import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
+import { useGsapInteractionTokens, useInteractionTokens } from "../../../lib/motion/index.js";
 
 export interface TelemetryLedgerTabsProps {
   stats: ProjectExecutionStatsSnapshot;
@@ -41,6 +43,8 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
     git: null,
   });
   const reducedMotion = useReducedMotion();
+  const gsapTokens = useGsapInteractionTokens();
+  const interactionTokens = useInteractionTokens();
   const prevTab = useRef(activeTab);
 
   const tabs = useMemo(() => {
@@ -68,10 +72,10 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
     gsap.fromTo(
       contentRef.current,
       { opacity: 0, y: 10 },
-      { opacity: 1, y: 0, duration: 0.3, ease: "power2.out", clearProps: "all" }
+      { opacity: 1, y: 0, duration: gsapTokens.selectionMovement.duration, ease: gsapTokens.selectionMovement.ease, clearProps: "all" }
     );
     prevTab.current = activeTab;
-  }, [activeTab, reducedMotion]);
+  }, [activeTab, reducedMotion, gsapTokens.selectionMovement.duration, gsapTokens.selectionMovement.ease]);
 
   const focusTab = (index: number) => {
     const tab = tabs[index];
@@ -80,13 +84,20 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
     tabRefs.current[tab.id]?.focus();
   };
 
+  const activeTabDetails = tabs.find((tab) => tab.id === activeTab);
+
   return (
     <div className="flex flex-col gap-6">
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {activeTabDetails
+          ? `${activeTabDetails.label} selected, ${activeTabDetails.count.toLocaleString()} ${activeTabDetails.count === 1 ? "entry" : "entries"}.`
+          : "Telemetry ledger selected."}
+      </div>
       <div
         role="tablist"
         aria-orientation="horizontal"
         aria-label="Telemetry ledgers"
-        className="sticky top-3 z-20 grid w-full max-w-full min-w-0 grid-cols-1 gap-1 rounded-[var(--stats-subpanel-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-subpanel)] p-1 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl sm:grid-cols-2 xl:grid-cols-3"
+        className={`${SUBPANEL_CLASS} sticky top-3 z-20 grid w-full max-w-full min-w-0 grid-cols-1 gap-1 !p-1 sm:grid-cols-2 xl:grid-cols-3`}
         onKeyDown={(e) => {
           if (tabs.length === 0) {
             return;
@@ -129,9 +140,10 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
               tabIndex={isActive ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
               aria-label={`${tab.label}, ${tab.count.toLocaleString()} ${tab.count === 1 ? "entry" : "entries"}`}
-              className={`grid min-h-16 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[calc(var(--stats-subpanel-radius)-0.35rem)] px-3 py-2 text-left transition-[background-color,border-color,box-shadow,color] motion-safe:duration-200 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS} ${
+              className={`grid min-h-16 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--stats-control-radius)] px-3 py-2 text-left transition-[background-color,border-color,color] motion-reduce:transition-none ${CONTROL_FOCUS_CLASS} ${
                 isActive ? TAB_ACTIVE_CLASS : TAB_IDLE_CLASS
               }`}
+              style={{ transitionDuration: interactionTokens.selectionMovement.duration, transitionTimingFunction: interactionTokens.selectionMovement.ease }}
             >
               <Icon className="h-4 w-4 shrink-0" strokeWidth={2.2} aria-hidden="true" />
               <span className="min-w-0">
@@ -158,7 +170,7 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
         aria-labelledby={`tab-${activeTab}`}
         tabIndex={0}
         ref={contentRef}
-        className="min-w-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--stats-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--stats-focus-ring-offset)]"
+        className="min-w-0 rounded-[var(--stats-control-radius)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--stats-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--stats-focus-ring-offset)]"
       >
         {activeTab === "git" && stats.git ? (
           <GitTelemetryTab gitStats={stats.git} />

@@ -125,7 +125,7 @@ export const SprintLedgerHeader: FunctionComponent<SprintLedgerHeaderProps> = ({
               onChange={onListWindowChange}
               label="Show"
             />
-            <span className="rounded-full border border-black/[0.06] bg-white/70 px-3 py-1.5 font-mono text-xs text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400" aria-live="polite" aria-atomic="true" aria-label={`Showing ${ledgerSprintsCount} of ${sprintsCount} sprints`}>
+            <span className="rounded-full border border-black/[0.06] bg-white/70 px-3 py-1.5 font-mono text-xs text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400" aria-label={`Showing ${ledgerSprintsCount} of ${sprintsCount} sprints`}>
               {ledgerSprintsCount} / {sprintsCount}
             </span>
             {hasFilters ? (
@@ -182,7 +182,7 @@ export const SprintLedgerHeader: FunctionComponent<SprintLedgerHeaderProps> = ({
         </div>
       </div>
 
-      <div className="sr-only" aria-live="polite" aria-atomic="true">
+      <div className="sr-only">
         {ledgerSprintsCount === 0 && hasFilters
           ? "No matching sprints. Adjust search or filters."
           : hasFilters

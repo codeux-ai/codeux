@@ -123,7 +123,6 @@
   max-width: 100%;
 }
 
-/* Accent Tints */
 .tint {
   @apply pointer-events-none absolute inset-0 opacity-0;
   border-radius: inherit;

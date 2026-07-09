@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The `/stats` page is Code UX's project-scoped analytics workspace. It turns `ProjectExecutionStatsSnapshot` data, Git rollups, and invocation records into a dense Warm Void operational surface for usage trends, composition, model performance, provider reliability, task and sprint ledgers, Git telemetry, and system invocation inspection.
+The `/stats` page is Code UX's project-scoped analytics workspace. It turns `ProjectExecutionStatsSnapshot` data, Git rollups, and invocation records into a dense operational surface for usage trends, composition, model performance, provider reliability, task and sprint ledgers, Git telemetry, and system invocation inspection.
 
 Stats should feel aligned with the broader dashboard design system, but it is intentionally denser than the chat and overview surfaces. Chat remains a conversation workspace, Overview remains a cross-project operations summary, and Stats is the place for repeated measurement, comparison, filtering, and audit-style review. For adjacent visual language, see [Chat Design System](./design-system-chat.md), [Dashboard Design System Overview](./design-system-overview.md), and [Usage Telemetry And Stats](../architecture/usage-telemetry-and-stats.md).
 
@@ -12,6 +12,7 @@ Stats presentation must stay within the implemented snapshot and invocation cont
 
 - `GET /api/projects/:projectId/stats?window=1h|24h|7d|30d|all|custom&from=YYYY-MM-DD&to=YYYY-MM-DD` returns the project snapshot.
 - The snapshot includes project identity, active sprint metadata, query and normalized range metadata, generated time, usage totals, status counts, adaptive buckets, chart series, task/sprint/provider/purpose/model summaries, Git totals and buckets, and optional merge-conflict count.
+- Recent snapshot windows are bucket aligned and half-open while including the latest current bucket: `1h` keeps twelve 5-minute buckets through the current 5-minute bucket end, `24h` keeps twenty-four hourly buckets through the current partial hour, and daily/custom windows include their selected end day or bucket.
 - Usage totals include invocation count, active and wall time, input/cached/output/reasoning/total tokens, cost fields, optional tool-call count, and usage-source counters for `reported`, `estimated`, `unavailable`, and `unsupported`.
 - System mode uses `useSystemViewData(projectId)` and invocation APIs for records, server-projected filters, sort state, pagination, summaries, and transcript expansion.
 
@@ -22,9 +23,9 @@ Do not document or render speculative metrics. Missing telemetry is a first-clas
 The redesigned Stats page uses a stable top-to-bottom shell:
 
 1. Header command band
-   - The hero names the Stats workspace with a Stats-native command masthead rather than the generic dashboard page header. It uses solid Warm Void panel, subpanel, chip, and input primitives, a compact current-state pill, and active lens chips for the selected time window and mode.
-   - The command controls are flat administrative rows inside the subpanel surface. Avoid nested framed glass panels, decorative gradients, or extra wrappers around the preset, custom range, and mode controls.
-   - Keep only selected project, sprint lens, time window, and active visual mode controls visible in the command band.
+   - The hero names the Stats workspace with a Stats-native command masthead rather than the generic dashboard page header. It uses warm void panel, subpanel, chip, and input primitives, a compact current-state pill, active lens chips for the selected time window and mode, and context chips for selected project, generated snapshot time, and sprint lens.
+   - The command controls are flat administrative rows inside the subpanel surface. Avoid nested framed material panels, decorative gradients, or extra wrappers around the preset, custom range, and mode controls.
+   - Keep only selected project, generated snapshot time, sprint lens, time window, and active visual mode controls visible in the command band.
    - Time presets are `1h`, `24h`, `7d`, `30d`, `All time`, and `Custom`.
    - Choosing `Custom` opens start and end date fields. The selected range changes only after `Apply` succeeds.
    - Invalid or incomplete custom ranges keep focusable controls visible, keep Apply keyboard-reachable, set `aria-invalid` on the first invalid field, connect `aria-errormessage`, move focus to that field on failed apply, and announce inline error text.
@@ -40,7 +41,7 @@ The redesigned Stats page uses a stable top-to-bottom shell:
    - Mode-specific top cards are the single primary metric deck for the selected analysis surface. They use `StatsCard` and should put the most actionable metric first for the selected mode.
    - Cards expose title, value, and string description as the analytics article name. Long values must wrap inside stable card slots.
 4. Workspace body
-   - Mode content starts directly after the metric deck without an extra studio header, readiness chip, duplicated KPI strip, summary-card deck, or duplicated workspace context card.
+   - Mode content starts directly after the metric deck with a compact flat metadata strip for the active mode, not a decorative studio header, readiness chip, duplicated KPI strip, summary-card deck, or duplicated workspace context card.
    - Workspace bodies may differ substantially, but each component must consume the shared Stats panel, chip, input, ledger row, status tone, chart track, focus, and motion tokens directly.
 5. Feedback states
    - No-project, first-load loading, first-load error, empty, refresh, and reduced-data states preserve the shell rhythm.
@@ -60,12 +61,17 @@ Trend is the chart-first workspace for time-series telemetry.
 - Do not render a second Trend KPI band inside the studio. The mode metric deck owns total tokens, invocations, active time, cost, and cache-rate summaries; the Trend studio starts with compact secondary signal cards and then the chart.
 - Keep chart state centralized through `use-usage-chart-state.ts`; chart filters change series visibility, not the selected time window.
 - The chart header keeps filter access and zoom reset visible near the graph title. The toolbar summarizes selected range, bucket count, resolution, and active zoom.
+- The graph frame, filter flyout, focused-bucket panel, tooltip, minimap, and series controls use the shared flat panel, subpanel, chip, and focus primitives. Keep semantic series colors on chart lines, swatches, and bucket markers rather than on selected control chrome.
 - The primary plot should use a tall, viewport-bounded canvas area so the graph remains the dominant element in Trend mode.
 - Avoid visible chart-summary card decks above the plot. Keep chart summary text in the screen-reader summary and expose exact values through focused-bucket inspection.
 - Short daily windows show compact bucket labels under the overview strip so the minimap carries its own context without relying only on the main x-axis labels.
-- Series controls sit in a full-width band under the usage graph, grouped into readable categories such as totals, token details, source confidence, providers, models, purposes, and Git. Controls use `role="switch"` and `aria-checked`; at least one series remains enabled.
+- Series controls sit in a full-width band under the usage graph, grouped into readable categories such as totals, token details, source confidence, providers, models, purposes, and Git. Section headers show active/total counts, rows show the series color, readable label, signal type, and visible On/Off text. Each row control uses `role="switch"` with `aria-checked`, and the visible switch state must match the accessible on/off state.
+- The full-width series band and graph filter menu must consume the same chart-series view model from `useUsageChartState`: section order, labels, active counts, total counts, default-enabled counts, and reset defaults should not be recomputed differently in rendered components. Reset restores the snapshot default series, while enable-defaults turns default series on without clearing additional operator selections; both actions announce the resulting active-series count.
 - Hover, keyboard focus, minimap selection, drag zoom, and active bucket controls all update the same focused-bucket summary; avoid a second live-values panel that repeats those values. The focused-bucket card fills the height of its chart-side column, caps to the graph height, and scrolls internally when the graph is tall.
 - The focused-bucket tooltip distinguishes idle, focused, and pinned inspection states in visible copy and polite tooltip text. Marker position has a text equivalent such as `Focused bucket marker at 45 percent of the visible chart window` so color and motion are not the only cues.
+- Chart announcements should describe completed operator actions, not pointer movement frames: focused bucket changes, pinned buckets, drag/minimap zoom ranges, zoom reset, series enable/disable counts, last-series guard reasons, refresh/stale/error status, ready/completed refresh status, and empty data recovery. Dragging may update selection bounds visually, but live-region copy should fire only when a zoom is committed or reset.
+- Filter menus focus the first useful series control when opened, close on Escape, and restore focus to the trigger when possible. The last enabled series remains focusable with `aria-disabled` rather than native `disabled`; activating it leaves the series on and announces an explicit guard reason so operators can discover why it cannot be turned off.
+- Reduced motion renders chart paths, points, focus rings, minimap selection bounds, and tab state as static geometry. Do not rely on draw-in path animation, point scaling, sliding tab content, or moving bounds to reveal values or selected state.
 - The visible SVG, readable chart summary, and screen-reader-only table must agree on peak tokens, peak active time, average tokens, invocation peak, active series, and zoom range.
 
 ### Composition
@@ -75,6 +81,7 @@ Composition explains where usage comes from.
 - Lead with provider share, token mix, cache rate, output/reasoning proportions, source mix, purpose lanes, and available Git-blocker context.
 - Token anatomy can show input, cached input, output, reasoning, cache-hit rate, output ratio, and total cost when `totalCostUsd` is greater than zero.
 - Provider and purpose donuts rank visible segments, handle long labels with wrapping, and render explicit empty states when segment data is absent.
+- Provider share, token anatomy, purpose lanes, token flight, cache efficiency, and provider activity use the same flat panel/subpanel grammar with compact neutral badges. Keep semantic data colors inside donut segments, token bars, and source-quality tracks rather than on decorative mode tags.
 - Purpose lanes show invocation count, active time, token share, and dominant purpose without creating a second conflicting purpose summary.
 - Source-confidence cards distinguish reported, estimated, unavailable, unsupported, and defensive unknown buckets without inventing alternate totals.
 - Donuts, ribbons, and flow bars need nearby text or `role="img"` labels so color is never the only signal.
@@ -83,7 +90,7 @@ Composition explains where usage comes from.
 
 Models compares model activity, latency, reliability, and efficiency.
 
-- The overview balances model-share distribution, efficiency highlights, total window volume, and low-data states.
+- The overview uses the flat Stats panel language to balance model-share distribution, efficiency highlights, total window volume, and low-data states without decorative depth.
 - The leaderboard ranks by `usage.totalTokens` descending with label tie-breaks.
 - Rows surface success tone, p50/p95 latency, tokens per call, output velocity, cache-hit rate, reasoning share, provider identity, pricing stats, and token-flow anatomy when those fields are present.
 - Model pricing stats use `usage.totalCostUsd` and should show total cost, cost per invocation, and blended cost per million tokens only when a positive cost signal exists.
@@ -97,6 +104,7 @@ Providers is the reliability studio.
 - The visible mode label is `Providers`; the studio title may describe reliability.
 - Start with confidence, fallback usage, failure pressure, and provider coverage before detailed rows.
 - Source mix explicitly shows reported, estimated, unavailable, unsupported, and unknown invocation-source counts. Estimated data is usable but lower precision.
+- Telemetry Source Mix, Provider Share, Confidence Board, Provider Breakdown, and Audit Notes follow the same flat hierarchy as Composition: neutral compact metadata chips, small radii, hairline borders, and no animated elevation or glow treatments.
 - Provider cards sort by computed risk first and token volume second, then show failure count, success-rate tone, token volume, pricing stats, active time, duration coverage, and source confidence.
 - Provider pricing stats use `usage.totalCostUsd` and should show total cost, cost per invocation, and blended cost per million tokens only when a positive cost signal exists.
 - Provider status and latency details may be derived from matching model summaries, but health must not be fabricated when model/status telemetry is absent.
@@ -107,11 +115,13 @@ Providers is the reliability studio.
 Ledgers contains operational records for tasks, sprints, and Git.
 
 - Task Telemetry, Sprint Telemetry, and Git Telemetry are real tabs with accessible tab semantics, stable labels, and count badges.
+- Ledger tablists, summary tiles, search/sort controls, progressive sentinels, empty states, task/sprint rows, and Git leaderboard rows use the flat Stats panel, subpanel, chip, input, and ledger-row primitives. Keep dense scanning areas compact, bordered, and stable instead of adding backdrop blur, heavy shadows, animated elevation, or oversized rounded shells.
 - Task and sprint rows expose status, provider, purpose, calls, active time, cost, recency, visible-total share, leader share, token-flow anatomy, and p50/p95 chips when percentile fields are present.
 - Git rows keep churn separate from token flow. Use `ChurnFlowBar` for insertions and deletions, and keep pull requests, merges, files, conflicts, visible share, and leader share readable.
 - Search, sort, and progressive rendering preserve the `useProgressiveList` flow: visible items, scroll container, and sentinel stay wired together.
 - Sort controls use buttons with `aria-pressed` when they represent local ordering choices.
 - Sort controls expose the current direction in both visible icon state and accessible names such as `Tokens, sorted descending` or `Latest, not sorted`.
+- Ledger search, sorting, tab changes, and progressive visible-row changes expose concise polite status copy such as `Showing 8 of 20 tasks, sorted by Tokens descending` or `Sprint Telemetry selected, 2 entries`. Keep cached rows visible during these updates; movement should orient operators through `listReorder` or `selectionMovement` tokens but must not be the only signal.
 - Ledger tab indicators and selected records use `selectionMovement`; progressive rendering, sorting, and visible-row changes use `listReveal` or `listReorder` depending on whether rows are entering or moving. Reduced motion snaps these changes while leaving count badges, selected states, and row labels visible.
 
 ### System
@@ -120,17 +130,18 @@ System is the administrative invocation workbench. It is the place to inspect sp
 
 - `useSystemViewData(projectId)` owns filters, sorting, summaries, pagination, request cancellation, and the legacy array fallback used by older tests.
 - Summary sections are named administrative regions: `Sprint State`, `Health Snapshot`, `External API Activity`, and `Error Categories`. Each region uses the same panel frame, compact eyebrow, section-level count, and subpanel metric cards so operators can scan state before entering the ledger.
+- System summary cards, filters, invocation table rows, sticky headers, loading rows, and transcript panels share the same flat Stats primitives as Ledgers. Keep the workbench compact and bordered, with semantic status fills only where the data state requires them.
 - Sprint State separates active sprint/task state from invocation health. Zero active sprint is neutral information, while running, blocked, failed, and completed signals use semantic status fills rather than decorative color.
 - Invocation Health owns invocation volume, token flow, success rate, average and p95 duration, cache-hit rate, running count, and status distribution. Empty or reduced health data is a polite status state and must not imply universal success.
-- External API Activity isolates classified Git, Jules, Jira, and other integration calls from model invocation records. Empty copy should say that no external API activity was classified, not that integrations never ran.
+- External API Activity isolates classified Git, Code UX Agent, Jira, and other integration calls from model invocation records. Empty copy should say that no external API activity was classified, not that integrations never ran.
 - Error Categories show classified timeout, rate-limit, API, model, cancelled, and other failures with semantic warning/negative/neutral fills. Empty copy should describe no classified errors in the current data set.
 - The record view control is a connected, non-sticky segmented button group mounted inside the records work area for `All`, `Errors`, and `System Msgs`. Count slots stay visually quiet and width-stable; visible badges can be hidden from assistive technology only when each button's accessible name includes the exact count and record pluralization.
-- `SystemFilterBar` presents search and status as the primary row, then groups purpose, provider, and error-category chips below inside one composed Warm Void administrative control surface. Result count, active-filter count, clear-all, and invocation pagination metadata stay visible in the footer of that control surface.
+- `SystemFilterBar` presents search and status as the primary row, then groups purpose, provider, and error-category chips below inside one composed flat administrative control surface. Result count, active-filter count, clear-all, and invocation pagination metadata stay visible in the footer of that control surface.
 - Invocation tables are the System ledger. They preserve a semantic caption, sticky desktop header, `scope="col"` headers, active-column `aria-sort`, explicit sort button labels, and per-cell `headers` relationships. Mobile rows may collapse into block cards, but each cell keeps its visible label because the desktop header is hidden below large breakpoints.
 - Expand controls name the target invocation, set `aria-expanded`, point at the transcript panel with `aria-controls`, and remain keyboard-accessible.
-- Transcript detail surfaces invocation status, model, duration, token flow, cached tokens, message count, role, created time, optional message metadata, errors, and long content with safe wrapping. The expanded transcript panel uses shared Warm Void Stats primitives for its header, compact invocation summary row, status chips, role records, copy control, loading, empty, and error states.
+- Transcript detail surfaces invocation status, model, duration, token flow, cached tokens, message count, role, created time, optional message metadata, errors, and long content with safe wrapping. The expanded transcript panel uses shared flat Stats primitives for its header, compact invocation summary row, status chips, role records, copy control, loading, empty, and error states.
 - Transcript regions set `aria-busy` while messages load. Transcript loading and empty states use polite status semantics; transcript fetch failures use alert semantics and keep the expand control keyboard-accessible for recovery.
-- System feedback states use compact Warm Void subpanels with semantic Lucide icons, short operational copy, and named `status` or `alert` regions. Loading and empty/reduced-data states are polite and include visible text beyond motion, while blocking invocation and transcript failures use alert semantics. Copy must distinguish no classified activity or unavailable metrics from proven zero usage.
+- System feedback states use compact flat subpanels with semantic Lucide icons, short operational copy, and named `status` or `alert` regions. Loading and empty/reduced-data states are polite and include visible text beyond motion, while blocking invocation and transcript failures use alert semantics. Copy must distinguish no classified activity or unavailable metrics from proven zero usage.
 
 ## Telemetry Semantics
 
@@ -148,23 +159,27 @@ Cost displays use two fractional digits for scanability, rounding values such as
 
 ## Primitives And Styling
 
-Use page-scoped Stats primitives instead of one-off analytics chrome. The post-refactor Stats surface vocabulary is a solid Warm Void variant, not the older glass material stack:
+Use page-scoped Stats primitives instead of one-off analytics chrome. The Stats surface vocabulary is a warm void hierarchy:
 
-- `stats-theme.css` defines Stats-specific aliases for panel surfaces, subpanels, chips, inputs, focus rings, status fills, borders, shadows, and motion.
+- `stats-theme.css` defines Stats-specific aliases for panel surfaces, subpanels, chips, inputs, focus rings, status fills, borders, minimal focus shadows, and motion.
 - `PANEL_CLASS`, `SUBPANEL_CLASS`, `CHIP_CLASS`, `INPUT_CLASS`, `LEDGER_ROW_CLASS`, `LEDGER_ROW_MODERN_CLASS`, `STATUS_TONE_CLASS`, `TAB_ACTIVE_CLASS`, `TAB_IDLE_CLASS`, `DASHED_EMPTY_CLASS`, and `TRACK_CLASS` provide the shell vocabulary.
 - `StatsCard`, `StudioHeader`, `SignalMetricCard`, `DonutCard`, `PurposeRibbon`, `TokenChip`, `TokenFlowBar`, `ChurnFlowBar`, `SortButton`, `ViewToggle`, and `SeriesLegendButton` cover repeated Stats patterns.
-- Typed view-model helpers should own reusable derivations for trend, chart, model, provider, and ledger projections. Avoid recalculating meaningful bucket or efficiency summaries directly in JSX.
+- Typed view-model helpers should own reusable derivations for trend, chart, model, provider, and ledger projections. `stats-page-view-model.ts` owns page-level snapshot derivations such as usage defaults, token/active/wall time series, planning lookup, provider/source/token segments, and completion-confidence copy so `useStatsPageData` can stay focused on fetch state, date controls, and chart state. Avoid recalculating meaningful bucket or efficiency summaries directly in JSX or stateful hooks.
 - New or touched Stats surfaces should use semantic Stats variables for backgrounds, borders, text, status tones, focus rings, chart tracks, selection fills, and scrims instead of raw slate/white/black light-dark utility pairs.
-- Signal fills, chart strokes, metric sparklines, selected controls, and Stats card accents must resolve through `--stats-accent-signal`, `--stats-accent-signal-fill`, or `--signal-rgb`. Light mode uses the dashboard blue signal; dark mode keeps the existing dark signal without per-component overrides.
+- Signal fills, chart strokes, metric sparklines, selected controls, and Stats card accents must resolve through `--stats-accent-signal`, `--stats-accent-signal-fill`, or `--signal-rgb`. Light mode uses the dashboard blue signal; dark mode keeps the warm void jade signal without per-component overrides that leak blue into dark surfaces.
 - Stats typography follows the dashboard heading scale directly in Tailwind or component tokens: the page title is the only hero-scale heading, section and studio headings use `text-xl`/`text-2xl font-semibold`, row and card titles use `text-base`/`text-lg font-semibold`, and metric-card values use the restrained `--stats-card-value-size` tokens.
-- Panels are warm, grounded work surfaces with solid `--stats-surface-*` tokens, hairline borders, and restrained shadows. They should feel administrative and durable, not translucent.
-- Chips, tabs, inputs, subpanels, summary rows, and table cells are non-glass primitives. Use quiet fills, fixed control geometry, and compact labels instead of frosted capsules or nested glass cards.
+- Panels and stat cards are grounded warm void work surfaces with solid `--stats-surface-*` tokens, hairline borders, and subtle depth shadows. They should feel administrative, compact, and durable without blue ambient color.
+- Chips, tabs, inputs, subpanels, summary rows, and table cells are flat primitives. Use quiet fills, fixed control geometry, compact labels, small radii, and neutral selected states instead of decorative capsules, glow, animated elevation, or nested decorative cards.
 - Status fills are semantic. Signal, positive, warning, negative, neutral, and cyan tones should communicate running, success, warning, failure, informational, or data-accent meaning; avoid using them as ambient decoration.
-- Backdrop blur is not a primary Stats material. Do not add `backdrop-blur-*`, shared glass tokens, large glow washes, or translucent chrome to panels, chips, inactive legend controls, ledger rows, System filters, invocation tables, or transcript detail as the default treatment.
+- Backdrop blur is not a primary Stats material. Do not add `backdrop-blur-*`, shared translucent material tokens, large glow washes, or translucent chrome to panels, chips, inactive legend controls, ledger rows, System filters, invocation tables, or transcript detail as the default treatment.
 - Do not fix design drift with broad page-root `:global()` color or spacing overrides. Tokenize the owning component or extend the shared primitive vocabulary so Trend, Composition, Models, Providers, Ledgers, and System stay consistent without hidden CSS bridges.
 - Metric cards with sparkline micrographs use the standard card surface, not a separate muted graph background. The sparkline must fit its own stable slot so hover glow and line geometry are not cut off by card overflow. Populated sparklines expose a concise `role="img"` summary with point count and high/low values; empty sparkline slots show a static `No sparkline data` label and an explicit no-data `role="img"` description.
 
 Dense analytics layouts should stay calm: restrained contrast, low-opacity fills, semantic color, stable grids, and short labels. Avoid nested decorative cards; repeated cards, ledger rows, modals, and tool panels may be framed, while page sections should read as workspaces.
+
+## Architecture
+
+The `StatsPage` uses the `useStatsPageData` hook to coordinate visual modes. The hook manages and exposes state including `activeQuery`, `visualMode`, `chartState`, `providerSegments`, `sourceSegments`, `tokenSegments`, and `planningUsage`, ensuring seamless transitions across Trend, Composition, Models, Providers, Ledgers, and System views.
 
 ## Responsive Behavior
 
@@ -219,7 +234,7 @@ For documentation-only Stats changes without TypeScript or TSX examples, run rep
 
 ```bash
 pnpm run lint
-rg "Warm Void|System|stats" docs/dashboard/design-system-stats.md docs/index.md docs/SUMMARY.md
+rg "System|stats" docs/dashboard/design-system-stats.md docs/index.md docs/SUMMARY.md
 ```
 
 For Stats UI changes, run focused tests first. `pnpm run test:dashboard` covers `tests/dashboard`; source-adjacent Stats tests under `dashboard/src/v2/pages/stats/__tests__/` should be run directly when those components change:
@@ -230,6 +245,6 @@ pnpm run test:dashboard
 pnpm run typecheck:dashboard
 ```
 
-The source-adjacent Stats suite includes System workbench regressions for named regions, grouped command/filter controls, semantic invocation table headers, transcript feedback states, wrapping-safe operational copy, and Warm Void surfaces that avoid backdrop-blur glass utilities in touched System components.
+The source-adjacent Stats suite includes System workbench regressions for named regions, grouped command/filter controls, semantic invocation table headers, transcript feedback states, wrapping-safe operational copy, and flat surfaces that avoid backdrop-blur utilities in touched System components.
 
 Run `pnpm run build` when changes touch shared contracts, routing, CSS token boundaries, dashboard imports, or production bundling behavior. Do not record a check as passed unless it was run for the current change.

@@ -32,9 +32,13 @@ Each new major doc should include:
 When behavior changes:
 
 1. Update the relevant topic doc.
-2. Update `docs/index.md` if a new page is added.
-3. Update `docs/SUMMARY.md` table of contents.
-4. Add migration notes when behavior is not backward compatible.
+2. If a new page is added, link it from both `docs/index.md` and `docs/SUMMARY.md`.
+3. Add migration notes when behavior is not backward compatible.
+
+**Publication Workflow:**
+- `docs/` is the canonical source of truth, and `docs-web/` is the publication and reference mirror.
+- Update canonical `docs/` first, then align the matching `docs-web/` page consistently whenever public-facing behavior changes or new subsystems are introduced.
+- A `docs-release/` directory should not be created or used.
 
 ## Source of Truth Hierarchy
 

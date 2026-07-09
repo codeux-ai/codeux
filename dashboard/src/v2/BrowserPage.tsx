@@ -6,8 +6,10 @@ import {
   RefreshCw,
   RotateCcw,
   Save,
+  SlidersHorizontal,
   Square,
   FileCode2,
+  X,
 } from "lucide-preact";
 import { useProjectData } from "./context/project-data.js";
 import { useSprints } from "../hooks/useSprints.js";
@@ -17,6 +19,7 @@ import {
   fetchPreviewScript,
   removePreviewSession,
   rebuildPreviewSession,
+  savePreviewEnvironmentOverrides,
   savePreviewScript,
   startPreviewSession,
   stopPreviewSession,
@@ -32,9 +35,11 @@ import {
 } from "./lib/preview-origin.js";
 import { usePreviewSessions } from "./hooks/use-preview-sessions.js";
 import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
+import { saveProjectPreviewEnvironmentVariables } from "./lib/settings-api.js";
 import { PreviewSessionSlider } from "./components/browser/PreviewSessionSlider.js";
 import { PreviewWindowChrome } from "./components/browser/PreviewWindowChrome.js";
 import { LaunchContainerPanel } from "./components/browser/LaunchContainerPanel.js";
+import { PreviewEnvironmentEditor } from "./components/browser/PreviewEnvironmentEditor.js";
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
 import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
@@ -43,6 +48,7 @@ import { getSafeUrl } from "./lib/safe-url.js";
 
 const PREVIEW_MESSAGE_TYPE = "sprint-preview:state";
 const PREVIEW_NAVIGATION_TYPE = "sprint-preview:navigate";
+const EMPTY_PREVIEW_ENVIRONMENT: SprintPreviewSession["environmentOverrides"] = [];
 
 const getSessionPortPathKey = (sessionId: string, containerPort: number): string => `${sessionId}:${containerPort}`;
 
@@ -51,7 +57,7 @@ export const BrowserPage: FunctionComponent = () => {
   const currentPathRef = useRef("/");
   const { selectedProject } = useProjectData();
   const { data: sprints, selectedSprint, selectedSprintId } = useSprints(selectedProject?.id || null);
-  const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
+  const { data: effectiveSettings, refresh: refreshEffectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
 
   const [script, setScript] = useState<SprintPreviewScript | null>(null);
   const [scriptDraft, setScriptDraft] = useState("");
@@ -64,12 +70,17 @@ export const BrowserPage: FunctionComponent = () => {
   const [launching, setLaunching] = useState(false);
   const [pendingSessionAction, setPendingSessionAction] = useState<"rebuild" | "stop" | null>(null);
   const [savingScript, setSavingScript] = useState(false);
+  const [savingEnvironment, setSavingEnvironment] = useState(false);
+  const [savingDefaultEnvironment, setSavingDefaultEnvironment] = useState(false);
   const [navigationPending, setNavigationPending] = useState(false);
   const [removingSessionIds, setRemovingSessionIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [addressValue, setAddressValue] = useState("/");
   const [currentPath, setCurrentPath] = useState("/");
   const [showScriptEditor, setShowScriptEditor] = useState(false);
+  const [environmentDraft, setEnvironmentDraft] = useState<SprintPreviewSession["environmentOverrides"]>([]);
+  const [defaultEnvironmentDraft, setDefaultEnvironmentDraft] = useState<SprintPreviewSession["environmentOverrides"]>([]);
+  const [environmentModalSessionId, setEnvironmentModalSessionId] = useState<string | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [launchSprintId, setLaunchSprintId] = useState("");
   const [frameSrc, setFrameSrc] = useState("");
@@ -84,8 +95,11 @@ export const BrowserPage: FunctionComponent = () => {
   const launchingRef = useRef(false);
   const pendingSessionActionRef = useRef<"rebuild" | "stop" | null>(null);
   const savingScriptRef = useRef(false);
+  const savingEnvironmentRef = useRef(false);
+  const savingDefaultEnvironmentRef = useRef(false);
   const removingSessionIdsRef = useRef<Set<string>>(new Set());
   const logsCacheRef = useRef<Map<string, string>>(new Map());
+  const logsRef = useRef("");
   const pathBySessionPortRef = useRef<Map<string, string>>(new Map());
   const selectedPortPathKeyRef = useRef<string | null>(null);
 
@@ -118,6 +132,7 @@ export const BrowserPage: FunctionComponent = () => {
   const previewEnabled = effectiveSettings?.settings.sprintPreview.enabled ?? true;
   const showInAppBrowser = effectiveSettings?.settings.sprintPreview.showInAppBrowser ?? true;
   const launchEnabled = previewEnabled && showInAppBrowser;
+  const defaultEnvironmentVariables = effectiveSettings?.settings.sprintPreview.environmentVariables ?? EMPTY_PREVIEW_ENVIRONMENT;
   const visibleSelectedSession = selectedSession && !removingSessionIdSet.has(selectedSession.id)
     ? selectedSession
     : null;
@@ -142,6 +157,9 @@ export const BrowserPage: FunctionComponent = () => {
   const sessionCards = sessions.filter((session) =>
     (!selectedProject || session.projectId === selectedProject.id) && !removingSessionIdSet.has(session.id)
   );
+  const environmentModalSession = environmentModalSessionId
+    ? sessionCards.find((session) => session.id === environmentModalSessionId) ?? null
+    : null;
   const navigationDisabledReason = navigationPending
     ? "Preview navigation is sending the previous command. Wait for the control to become available before submitting another navigation command."
     : !visibleSelectedSession
@@ -185,6 +203,13 @@ export const BrowserPage: FunctionComponent = () => {
           : "Preview logs loaded. Logs refresh automatically and may be slightly stale."
         : "No preview logs are available yet."
     : "No preview session selected for logs.";
+  const sessionActionDisabledReason = pendingSessionAction === "rebuild"
+    ? "Rebuild in progress. Rebuild and stop controls are temporarily unavailable."
+    : pendingSessionAction === "stop"
+      ? "Stop in progress. Rebuild and stop controls are temporarily unavailable."
+      : !visibleSelectedSession
+        ? "Select or launch a preview session to enable container actions."
+        : "Container actions are available.";
 
   const scriptTargetSprint = useMemo(() => {
     if (visibleSelectedSession) {
@@ -195,6 +220,7 @@ export const BrowserPage: FunctionComponent = () => {
 
   useEffect(() => {
     if (visibleSelectedSession) {
+      setEnvironmentDraft(visibleSelectedSession.environmentOverrides ?? []);
       const nextPrimary = getPrimaryPreviewPortMapping(visibleSelectedSession);
       if (nextPrimary) {
         setSelectedPortBySessionId((current) => (
@@ -203,6 +229,19 @@ export const BrowserPage: FunctionComponent = () => {
       }
     }
   }, [visibleSelectedSession?.id]);
+
+  useEffect(() => {
+    setDefaultEnvironmentDraft(defaultEnvironmentVariables);
+  }, [defaultEnvironmentVariables, selectedProject?.id]);
+
+  useEffect(() => {
+    if (!environmentModalSessionId) {
+      return;
+    }
+    if (!environmentModalSession) {
+      setEnvironmentModalSessionId(null);
+    }
+  }, [environmentModalSession?.id, environmentModalSessionId]);
 
   useEffect(() => {
     if (visibleSelectedSession && selectedPortMapping) {
@@ -232,6 +271,10 @@ export const BrowserPage: FunctionComponent = () => {
   }, [currentPath]);
 
   useEffect(() => {
+    logsRef.current = logs;
+  }, [logs]);
+
+  useEffect(() => {
     if (!visibleSelectedSession || !frameSrc) {
       return;
     }
@@ -246,7 +289,7 @@ export const BrowserPage: FunctionComponent = () => {
     setLogsLoading(true);
     setLogsError(null);
     try {
-      const result = await fetchPreviewLogs(session.id, 160);
+      const result = await fetchPreviewLogs(session.projectId, session.sprintId, session.id, 160);
       const nextLogs = result.logs;
       if (nextLogs) {
         logsCacheRef.current.set(session.id, nextLogs);
@@ -262,7 +305,7 @@ export const BrowserPage: FunctionComponent = () => {
         } else {
           setLogs((current) => current || "");
           setLogsSessionId((current) => current || session.id);
-          setLogsStale(Boolean(logs));
+          setLogsStale(Boolean(logsRef.current));
         }
       }
       setLogsError(null);
@@ -272,7 +315,7 @@ export const BrowserPage: FunctionComponent = () => {
     } catch (fetchLogsError) {
       const message = fetchLogsError instanceof Error ? fetchLogsError.message : "Unknown log error";
       setLogsError(message);
-      setLogsStale(Boolean(logs || logsCacheRef.current.get(session.id)));
+      setLogsStale(Boolean(logsRef.current || logsCacheRef.current.get(session.id)));
       if (announce) {
         browserFeedback.setError(`Failed to refresh logs: ${message}`);
       }
@@ -336,7 +379,7 @@ export const BrowserPage: FunctionComponent = () => {
     setLogsError(null);
     let cancelled = false;
     const deferredFetch = window.setTimeout(() => {
-      void fetchPreviewLogs(visibleSelectedSession.id, 160)
+      void fetchPreviewLogs(visibleSelectedSession.projectId, visibleSelectedSession.sprintId, visibleSelectedSession.id, 160)
         .then((result) => {
           if (cancelled) {
             return;
@@ -350,7 +393,7 @@ export const BrowserPage: FunctionComponent = () => {
           } else if (!logsCacheRef.current.has(visibleSelectedSession.id)) {
             setLogs((current) => current || "");
             setLogsSessionId((current) => current || visibleSelectedSession.id);
-            setLogsStale(Boolean(logs));
+            setLogsStale(Boolean(logsRef.current));
           } else {
             setLogs(logsCacheRef.current.get(visibleSelectedSession.id) || "");
             setLogsSessionId(visibleSelectedSession.id);
@@ -361,7 +404,7 @@ export const BrowserPage: FunctionComponent = () => {
         .catch((fetchLogsError) => {
           if (!cancelled) {
             setLogsError(fetchLogsError instanceof Error ? fetchLogsError.message : "Unknown log error");
-            setLogsStale(Boolean(logs || logsCacheRef.current.get(visibleSelectedSession.id)));
+            setLogsStale(Boolean(logsRef.current || logsCacheRef.current.get(visibleSelectedSession.id)));
           }
         })
         .finally(() => {
@@ -393,14 +436,18 @@ export const BrowserPage: FunctionComponent = () => {
     }
   };
 
+  const clearNavigationSuccessTimers = () => {
+    clearNavigationTimer(navigationActionSuccessTimerRef);
+    clearNavigationTimer(addressNavigationSuccessTimerRef);
+  };
+
   useEffect(() => () => {
     mountedRef.current = false;
     if (navigationPendingTimerRef.current !== null) {
       window.clearTimeout(navigationPendingTimerRef.current);
       navigationPendingTimerRef.current = null;
     }
-    clearNavigationTimer(navigationActionSuccessTimerRef);
-    clearNavigationTimer(addressNavigationSuccessTimerRef);
+    clearNavigationSuccessTimers();
     navigationPendingRef.current = false;
   }, []);
 
@@ -451,6 +498,7 @@ export const BrowserPage: FunctionComponent = () => {
     if (!visibleSelectedSession || containerPort === selectedContainerPort) {
       return;
     }
+    clearNavigationSuccessTimers();
     if (selectedPortPathKeyRef.current) {
       pathBySessionPortRef.current.set(selectedPortPathKeyRef.current, normalizePath(currentPathRef.current));
     }
@@ -481,7 +529,7 @@ export const BrowserPage: FunctionComponent = () => {
     browserFeedback.setPending(pendingMessage);
     markNavigationPending();
     action();
-    clearNavigationTimer(navigationActionSuccessTimerRef);
+    clearNavigationSuccessTimers();
     navigationActionSuccessTimerRef.current = window.setTimeout(() => {
       navigationActionSuccessTimerRef.current = null;
       if (!mountedRef.current) {
@@ -531,7 +579,7 @@ export const BrowserPage: FunctionComponent = () => {
     setPendingSessionAction("rebuild");
     browserFeedback.setPending("Rebuilding container...");
     try {
-      await rebuildPreviewSession(visibleSelectedSession.id);
+      await rebuildPreviewSession(visibleSelectedSession.projectId, visibleSelectedSession.sprintId, visibleSelectedSession.id);
       await refreshSessions(true);
       reloadFrame();
       browserFeedback.setSuccess("Container rebuilt successfully");
@@ -550,7 +598,7 @@ export const BrowserPage: FunctionComponent = () => {
     setPendingSessionAction("stop");
     browserFeedback.setPending("Stopping container...");
     try {
-      await stopPreviewSession(visibleSelectedSession.id);
+      await stopPreviewSession(visibleSelectedSession.projectId, visibleSelectedSession.sprintId, visibleSelectedSession.id);
       await refreshSessions(true);
       browserFeedback.setSuccess("Container stopped successfully");
     } catch (actionError) {
@@ -574,7 +622,11 @@ export const BrowserPage: FunctionComponent = () => {
     }
     browserFeedback.setPending("Removing preview session...");
     try {
-      await removePreviewSession(sessionId);
+      const session = sessions.find((candidate) => candidate.id === sessionId);
+      if (!session) {
+        throw new Error("Preview session is unavailable.");
+      }
+      await removePreviewSession(session.projectId, session.sprintId, session.id);
       await refreshSessions(true);
       browserFeedback.setSuccess("Preview session removed successfully");
     } catch (actionError) {
@@ -606,6 +658,60 @@ export const BrowserPage: FunctionComponent = () => {
     }
   };
 
+  const handleOpenEnvironmentOverrides = (sessionId: string) => {
+    const nextSession = sessionCards.find((session) => session.id === sessionId);
+    if (!nextSession) {
+      return;
+    }
+    setActiveSessionId(sessionId);
+    setEnvironmentDraft(nextSession.environmentOverrides ?? []);
+    setEnvironmentModalSessionId(sessionId);
+  };
+
+  const handleSaveEnvironmentOverrides = async () => {
+    const targetSession = environmentModalSession ?? visibleSelectedSession;
+    if (!targetSession) return;
+    if (savingEnvironmentRef.current) return;
+    savingEnvironmentRef.current = true;
+    setSavingEnvironment(true);
+    browserFeedback.setPending("Saving preview environment overrides...");
+    try {
+      const updated = await savePreviewEnvironmentOverrides(
+        targetSession.projectId,
+        targetSession.sprintId,
+        targetSession.id,
+        environmentDraft,
+      );
+      setEnvironmentDraft(updated.environmentOverrides ?? []);
+      await refreshSessions(true);
+      browserFeedback.setSuccess("Preview environment saved. Rebuild the container to apply changes.");
+    } catch (actionError) {
+      browserFeedback.setError(`Failed to save preview environment: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
+    } finally {
+      savingEnvironmentRef.current = false;
+      setSavingEnvironment(false);
+    }
+  };
+
+  const handleSaveDefaultEnvironmentVariables = async () => {
+    if (!selectedProject) return;
+    if (savingDefaultEnvironmentRef.current) return;
+    savingDefaultEnvironmentRef.current = true;
+    setSavingDefaultEnvironment(true);
+    browserFeedback.setPending("Saving preview environment defaults...");
+    try {
+      const updated = await saveProjectPreviewEnvironmentVariables(selectedProject.id, defaultEnvironmentDraft);
+      setDefaultEnvironmentDraft(updated.settings.sprintPreview.environmentVariables ?? []);
+      await refreshEffectiveSettings();
+      browserFeedback.setSuccess("Preview environment defaults saved. Rebuild containers to apply changes.");
+    } catch (actionError) {
+      browserFeedback.setError(`Failed to save preview environment defaults: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
+    } finally {
+      savingDefaultEnvironmentRef.current = false;
+      setSavingDefaultEnvironment(false);
+    }
+  };
+
   const navigate = () => {
     if (!navigationEnabled || navigationPendingRef.current) {
       return;
@@ -613,6 +719,7 @@ export const BrowserPage: FunctionComponent = () => {
     const nextPath = normalizePath(addressValue);
     browserFeedback.setPending(`Navigating preview to ${nextPath}...`);
     markNavigationPending();
+    clearNavigationSuccessTimers();
     if (selectedPortPathKeyRef.current) {
       pathBySessionPortRef.current.set(selectedPortPathKeyRef.current, nextPath);
     }
@@ -714,6 +821,7 @@ export const BrowserPage: FunctionComponent = () => {
             }
           }}
           onRemoveSession={(sessionId) => void handleRemove(sessionId)}
+          onManageEnvironment={handleOpenEnvironmentOverrides}
           removingSessionIds={removingSessionIds}
         />
       </div>
@@ -766,6 +874,8 @@ export const BrowserPage: FunctionComponent = () => {
             {pendingSessionAction === "rebuild" ? " Rebuilding preview container." : ""}
             {pendingSessionAction === "stop" ? " Stopping preview container." : ""}
             {savingScript ? " Saving preview script." : ""}
+            {savingEnvironment ? " Saving preview environment overrides." : ""}
+            {savingDefaultEnvironment ? " Saving preview environment defaults." : ""}
             {launching ? " Launching preview container." : ""}
             {navigationPending ? " Preview navigation command is being sent." : ""}
             {!navigationEnabled && navigationDisabledReason ? ` ${navigationDisabledReason}` : ""}
@@ -849,6 +959,7 @@ export const BrowserPage: FunctionComponent = () => {
                   aria-label={pendingSessionAction === "rebuild" ? "Rebuilding preview container" : "Rebuild preview container"}
                   aria-busy={pendingSessionAction === "rebuild"}
                   aria-describedby="preview-session-action-status"
+                  title={sessionActionPending || !visibleSelectedSession ? sessionActionDisabledReason : "Rebuild preview container"}
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-300/50 disabled:bg-slate-200/60 disabled:text-slate-500 disabled:opacity-100 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:border-slate-700 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                 >
                   <RotateCcw className={`h-4 w-4 ${pendingSessionAction === "rebuild" ? 'animate-spin motion-reduce:animate-none' : ''}`} strokeWidth={2} />
@@ -862,6 +973,7 @@ export const BrowserPage: FunctionComponent = () => {
                   aria-label={pendingSessionAction === "stop" ? "Stopping preview container" : "Stop preview container"}
                   aria-busy={pendingSessionAction === "stop"}
                   aria-describedby="preview-session-action-status"
+                  title={sessionActionPending || !visibleSelectedSession ? sessionActionDisabledReason : "Stop preview container"}
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-300/50 disabled:bg-slate-200/60 disabled:text-slate-500 disabled:opacity-100 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:border-slate-700 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                 >
                   <Square className="h-4 w-4" strokeWidth={2} />
@@ -881,13 +993,52 @@ export const BrowserPage: FunctionComponent = () => {
                 </a>
               </div>
               <div id="preview-session-action-status" role="status" aria-live="polite" className="mt-3 min-h-4 text-xs text-slate-500 dark:text-slate-400">
-                {pendingSessionAction === "rebuild"
-                  ? "Rebuild in progress. Rebuild and stop controls are temporarily unavailable."
-                  : pendingSessionAction === "stop"
-                    ? "Stop in progress. Rebuild and stop controls are temporarily unavailable."
-                    : !visibleSelectedSession
-                      ? "Select or launch a preview session to enable container actions."
-                      : "Container actions are available."}
+                {sessionActionDisabledReason}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Environment</div>
+                <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                  {defaultEnvironmentDraft.length} default{defaultEnvironmentDraft.length === 1 ? "" : "s"} for all preview containers
+                </div>
+              </div>
+              <SlidersHorizontal className="mt-1 h-4 w-4 text-slate-400" strokeWidth={2} aria-hidden="true" />
+            </div>
+            <div className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+              These project-wide variables are injected into every preview container after its next rebuild. Use each container card's Env button for overrides.
+            </div>
+            <div id="preview-default-environment-editor" className="mt-4 space-y-3">
+              <PreviewEnvironmentEditor
+                variables={defaultEnvironmentDraft}
+                onChange={setDefaultEnvironmentDraft}
+                disabled={!selectedProject || savingDefaultEnvironment}
+                addLabel="Add default"
+                valueLabel="Preview environment default value"
+              />
+              <div className="flex items-center justify-between gap-3">
+                <div id="preview-default-environment-save-status" role="status" aria-live="polite" className="min-h-4 text-xs text-slate-500 dark:text-slate-400">
+                  {savingDefaultEnvironment
+                    ? "Saving preview environment defaults."
+                    : selectedProject
+                      ? "Save defaults, then rebuild containers to apply them."
+                      : "Select a project before editing preview defaults."}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveDefaultEnvironmentVariables}
+                  disabled={!selectedProject || savingDefaultEnvironment}
+                  aria-disabled={!selectedProject || savingDefaultEnvironment}
+                  aria-busy={savingDefaultEnvironment}
+                  aria-describedby="preview-default-environment-save-status"
+                  className="inline-flex h-10 shrink-0 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                >
+                  <Save className="h-4 w-4" strokeWidth={2} />
+                  {savingDefaultEnvironment ? "Saving..." : "Save defaults"}
+                </button>
               </div>
             </div>
           </div>
@@ -968,6 +1119,8 @@ export const BrowserPage: FunctionComponent = () => {
                   aria-disabled={!visibleSelectedSession || logsLoading}
                   aria-busy={logsLoading}
                   aria-label={logsLoading ? "Refreshing preview logs" : "Refresh preview logs"}
+                  aria-describedby="preview-logs-status"
+                  title={logsLoading ? logsStatusMessage : visibleSelectedSession ? "Refresh preview logs" : logsStatusMessage}
                   className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-black/[0.08] px-2.5 text-[11px] font-semibold text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${logsLoading ? "animate-spin motion-reduce:animate-none" : ""}`} strokeWidth={2.2} />
@@ -990,6 +1143,73 @@ export const BrowserPage: FunctionComponent = () => {
           </div>
         </div>
       </div>
+      )}
+      {environmentModalSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-void-950/55 px-4 py-6 backdrop-blur-sm" role="presentation">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="preview-environment-override-title"
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[1.75rem] border border-white/12 bg-white p-5 shadow-[0_28px_90px_rgba(15,23,42,0.28)] dark:bg-void-950"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Container overrides</div>
+                <h2 id="preview-environment-override-title" className="mt-1 break-words text-lg font-semibold text-slate-900 dark:text-white">
+                  {environmentModalSession.sprintName}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEnvironmentModalSessionId(null)}
+                aria-label="Close environment overrides"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-500 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
+              >
+                <X className="h-4 w-4" strokeWidth={2} />
+              </button>
+            </div>
+            <p className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+              Overrides apply only to this preview container after its next rebuild. Disabled overrides suppress matching defaults.
+            </p>
+            <div className="mt-4">
+              <PreviewEnvironmentEditor
+                variables={environmentDraft}
+                onChange={setEnvironmentDraft}
+                disabled={savingEnvironment}
+                inheritedVariables={defaultEnvironmentDraft}
+                addLabel="Add override"
+                valueLabel="Preview environment override value"
+              />
+            </div>
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div id="preview-environment-save-status" role="status" aria-live="polite" className="min-h-4 text-xs text-slate-500 dark:text-slate-400">
+                {savingEnvironment ? "Saving environment overrides." : "Save overrides, then rebuild this container to apply them."}
+              </div>
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEnvironmentModalSessionId(null)}
+                  disabled={savingEnvironment}
+                  className="inline-flex h-10 items-center justify-center rounded-2xl border border-black/[0.08] px-4 text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEnvironmentOverrides}
+                  disabled={savingEnvironment}
+                  aria-disabled={savingEnvironment}
+                  aria-busy={savingEnvironment}
+                  aria-describedby="preview-environment-save-status"
+                  className="inline-flex h-10 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                >
+                  <Save className="h-4 w-4" strokeWidth={2} />
+                  {savingEnvironment ? "Saving..." : "Save overrides"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </PageContainer>
   );

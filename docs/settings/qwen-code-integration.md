@@ -14,7 +14,7 @@ Qwen Code can be selected anywhere a virtual CLI provider is accepted: task codi
 
 ## Authentication Modes
 
-The system integration entry for each named Qwen instance stores a `qwenAuthMode`.
+The system integration entry for each named Qwen instance stores a `qwenAuthMode` (`LOCAL_AUTH`, `ALIBABA_CODING_PLAN`, or `MODEL_PROVIDER`). Non-local API-key mode can use either `ALIBABA_CODING_PLAN` or `MODEL_PROVIDER`, but if `authType` is local or dashboard auth, runtime forces `qwenAuthMode` to `LOCAL_AUTH`.
 
 ### Local Auth
 
@@ -48,6 +48,8 @@ The Qwen runner launches with `--auth-type openai` and sets `OPENAI_BASE_URL` to
 - API key
 - model id registered in Qwen Code `modelProviders`
 
+Placeholder models like `custom/model` or `local-model` resolve to `qwenModelId`.
+
 For OpenAI-compatible providers, Code UX also forwards `OPENAI_API_KEY` and `OPENAI_BASE_URL` to the Qwen process. This covers DashScope compatible mode, OpenRouter, Ollama, vLLM, LM Studio, and similar endpoints.
 
 Custom endpoint instances appear on the AI Models page with their configured model id, such as `glm-4.7-flash`, instead of stale placeholders such as `custom/model` or `local-model`.
@@ -70,7 +72,7 @@ Docker execution prepares Qwen in the same bootstrap path as other CLI providers
 - copies mounted local auth from `/opt/credentials/qwen-code`
 - merges generated MCP/settings fragments from `/opt/provider-config/qwen-settings.json`
 - writes generated `modelProviders`, selected model, and MCP settings into the mounted settings fragment for custom endpoint and Coding Plan runs
-- rewrites loopback URLs in generated Qwen settings from `127.0.0.1` or `localhost` to `host.docker.internal` on Docker Desktop, WSL, macOS, and Windows so local endpoints such as Ollama remain reachable from the provider container
+- rewrites loopback URLs in generated Qwen settings from `127.0.0.1` or `localhost` to `host.docker.internal` on Docker Desktop, WSL, macOS, Windows, and Linux Docker runs with loopback MCP or model endpoints so local endpoints such as Ollama remain reachable from the provider container
 - installs Qwen Code if `qwen` is missing and fallback installs are enabled
 
 The bootstrap merge is additive and preserves existing `mcpServers` entries.

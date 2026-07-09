@@ -6,8 +6,10 @@ import type {
   CiIntelligenceSettings,
   CliWorkflowSettings,
   CustomMcpServer,
+  DesignGuidanceSettings,
   GuardrailSettings,
   ProviderConfigId,
+  ProviderConfigMode,
   DashboardSettings,
   InvocationProviderOverrideSettings,
   InvocationRoutingId,
@@ -25,8 +27,12 @@ import type {
   RestartInvocationPolicy,
   RestartSprintPolicy,
   JiraSettings,
+  ExternalImporterSettings,
+  TechstackCatalogSettings,
+  TechstackSelectionSettings,
 } from "./app-types.js";
 import type { MemorySettings } from "./memory-types.js";
+import type { SpeechSettings } from "./speech-types.js";
 import type { WorkerRuntimeSettings } from "./worker-types.js";
 
 export type { WorkerRuntimeSettings };
@@ -67,6 +73,7 @@ export interface ProjectGitSettings {
   featureBranchPrefix: string;
   sprintBranchScheme: string;
   sprintKeyPrefix: string;
+  taskPrTitleScheme: string;
   prDescription: DashboardSettings["git"]["prDescription"];
 }
 
@@ -75,8 +82,17 @@ export interface ProjectSettings {
   automationLevel: AutomationLevel;
   automationInterventions: AutomationInterventionsSettings;
   aiProvider: ProjectAiProviderSettings;
+  techstack: TechstackSelectionSettings;
+  designGuidance: DesignGuidanceSettings;
   git: ProjectGitSettings;
   jira: JiraSettings;
+  notion: ExternalImporterSettings;
+  asana: ExternalImporterSettings;
+  linear: ExternalImporterSettings;
+  miro: ExternalImporterSettings;
+  lucid: ExternalImporterSettings;
+  figma: ExternalImporterSettings;
+  mural: ExternalImporterSettings;
   ciIntelligence: CiIntelligenceSettings;
   guardrails: GuardrailSettings;
   sprintLoopSteps: DashboardSettings["sprintLoopSteps"];
@@ -88,6 +104,7 @@ export interface ProjectSettings {
   mcpTools?: McpToolToggle[];
   customMcpServers?: CustomMcpServer[];
   memory: MemorySettings;
+  speech: SpeechSettings;
 }
 
 export interface SystemRuntimeSettings {
@@ -109,6 +126,8 @@ export interface SystemProviderCredentialSettings {
   apiKey: string;
   mountAuth: boolean;
   authPath: string;
+  providerConfigMode: ProviderConfigMode;
+  providerConfigPath: string;
   authType?: "apiKey" | "localAuth" | "dashboardAuth";
   lastLoginAt?: number;
   /** Custom API endpoint base URL for providers that support it (claude-code, codex). */
@@ -139,6 +158,13 @@ export interface SystemIntegrationSettings {
   githubToken: string;
   gitlabToken?: string;
   jira: JiraSettings;
+  notion: ExternalImporterSettings;
+  asana: ExternalImporterSettings;
+  linear: ExternalImporterSettings;
+  miro: ExternalImporterSettings;
+  lucid: ExternalImporterSettings;
+  figma: ExternalImporterSettings;
+  mural: ExternalImporterSettings;
 }
 
 export interface QwenModelProviderSettings {
@@ -154,6 +180,7 @@ export interface QwenModelProviderSettings {
 export interface SystemSettings {
   runtime: SystemRuntimeSettings;
   integrations: SystemIntegrationSettings;
+  techstackCatalog: TechstackCatalogSettings;
   defaults: ProjectSettings;
   mcpTools: McpToolToggle[];
   customMcpServers: CustomMcpServer[];
@@ -163,7 +190,7 @@ export interface SystemSettings {
 export type SettingsOverride<T> = {
   [K in keyof T]?: T[K] extends Array<infer U>
     ? U[]
-    : T[K] extends Record<string, unknown>
+    : T[K] extends object
       ? SettingsOverride<T[K]>
       : T[K];
 };

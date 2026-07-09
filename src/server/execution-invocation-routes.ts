@@ -79,4 +79,19 @@ export function registerExecutionInvocationRoutes(router: Express, deps: Dashboa
       next(error);
     }
   });
+
+  router.post("/api/execution/invocations/:invocationId/reset-usage-limit", async (req, res, next) => {
+    try {
+      if (!deps.resetInvocationUsageLimitTimer) {
+        res.status(404).json({ error: "Invocation usage limit timer reset is not enabled." });
+        return;
+      }
+      const result = await deps.resetInvocationUsageLimitTimer(
+        requireTrimmedString(req.params.invocationId, "invocationId"),
+      );
+      res.status(202).json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
 }

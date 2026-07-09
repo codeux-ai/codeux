@@ -9,7 +9,7 @@ This map explains where major responsibilities live.
 ├─ src/                        # Backend MCP server and orchestration engine
 ├─ tests/                      # Dedicated backend + dashboard test suites
 ├─ dashboard/                  # Preact dashboard app
-├─ .jules-subagents/           # Local default guides + instruction templates
+├─ .code-ux/                   # Local configuration, artifacts, and templates
 ├─ docs/                       # Project documentation
 ├─ dist/                       # Compiled backend output
 └─ package.json                # Scripts and dependencies
@@ -23,6 +23,11 @@ backup files appear there.
 
 - `index.ts`
   - Minimal bootstrap (`dotenv`, app config, server launch).
+- `electron/`
+  - `main.ts`
+  - Desktop shell entrypoint and network policy, which hosts the Code UX UI without owning backend orchestration.
+- `worker/`
+  - Headless execution role entrypoint for worker-host mode.
 - `config/`
   - `app-config.ts`, `external-settings.ts`
   - Startup/env config loading and external settings hints.
@@ -32,12 +37,14 @@ backup files appear there.
 - `contracts/`
   - `app-types.ts`, `mcp-tool-definitions.ts`
   - Shared backend contracts and MCP tool definitions.
+  - `chat-provider-types.ts`
+  - External chat provider setup schemas, redacted credential contracts, channel binding records, and message delivery state types.
 - `integrations/`
   - `jules-api-client.ts`
   - Jules API HTTP client.
 - `server/`
   - `code-ux-server.ts`
-  - Main runtime composition and MCP server class.
+  - Main runtime composition wiring backend services (dashboard API on default port 4444 and MCP server).
   - `mcp-request-router.ts`
   - MCP list/call handler registration and dispatch routing.
   - `activity-cache-service.ts`
@@ -45,6 +52,7 @@ backup files appear there.
   - `dashboard-server.ts`
   - Express routes for dashboard APIs and static assets.
 - `repositories/`
+  - Persistence using SQLite via `node:sqlite`.
   - `execution-repository.ts`
   - Delegates snapshot projection to `execution/project-execution-snapshot-query.ts` while keeping validation boundary. The snapshot query owns shared sprint-run/task ID deduplication before invoking bounded slice queries and usage/wall-time enrichment.
   - `execution/execution-invocations-query.ts`
@@ -53,6 +61,10 @@ backup files appear there.
   - Focused runtime-event live snapshot slice that merges bounded project-recent, selected-sprint, and expanded-run event rows by event ID without changing the dashboard response contract.
   - `execution/execution-stats-types.ts`
   - Dedicated module for stats query types to decouple queries from the main execution repository.
+  - `project-runtime/run-event-writes.ts`
+  - Focused write module for legacy runtime status-sync task runs and task-run events, including candidate run matching, status-sync event signatures, denormalized `task_run_events.project_id`, and source event key deduplication.
+  - `chat-provider-repository.ts`
+  - External chat connector connections, channel bindings, inbound message idempotency, and outbound delivery state.
   - `settings-repository.ts`
   - `settings-defaults.ts`
   - `settings-sanitizer.ts`
@@ -63,6 +75,8 @@ backup files appear there.
 - `infrastructure/repositories/`
   - `file-template-repository.ts`
   - Shared file lookup implementation used by guide and instruction template repositories.
+- `infrastructure/providers/cli/`
+  - Docker and host CLI provider implementations for task execution.
 - `mcp/`
   - `core-tool-handler.ts`
   - `agent-tool-handler.ts`
@@ -96,7 +110,7 @@ backup files appear there.
 - `instructions/`
   - Template loading, fallback, and placeholder rendering.
 
-## Dashboard (`dashboard/src/`)
+## Dashboard (`dashboard/src/v2/`)
 
 - `app.tsx`
   - Main view orchestration and polling.
@@ -113,6 +127,8 @@ backup files appear there.
   - project/home/default agent markdown mirrors such as `planning_agent.md` and `worker.md`
 - `sprints/`
   - Runtime sprint plans and generated subtask markdown files.
+- `conversations/<thread-id>/session-title.md`
+  - Project-local dashboard chat session title mirror. New dashboard chat threads derive a concise title from the first visible user message, and manual title edits update this file alongside the sqlite thread record.
 
 ## Documentation (`docs/`)
 

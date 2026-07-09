@@ -1,10 +1,113 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  buildResolvedWorkerMergeConflictKey,
   CycleStateCoordinator,
   hasMergeStateChanges,
+  isTaskLevelHumanMergeConflictEscalation,
+  shouldEscalateFeatureMergeConflict,
 } from "../../../../../src/domain/sprint/orchestrator/cycle-state-coordinator.js";
 
 describe("CycleStateCoordinator", () => {
+  describe("shouldEscalateFeatureMergeConflict", () => {
+    it("does not keep stale worker conflict attention alive after the task marker is cleared", () => {
+      const task = {
+        id: "T01",
+        record_id: "task-1",
+        status: "CODING_COMPLETED",
+        merge_indicator: undefined,
+      };
+
+      expect(shouldEscalateFeatureMergeConflict(
+        task as any,
+        { ciIntelligence: { resolveMergeConflicts: true } } as any,
+        null,
+        new Set(["task-1"]),
+      )).toBe(false);
+    });
+
+    it("does not reopen a stale worker conflict snapshot for an already resolved branch pair", () => {
+      const task = {
+        id: "T01",
+        record_id: "task-1",
+        worker_branch: "worker/task-1",
+        status: "CODING_COMPLETED",
+        merge_indicator: "MERGE_CONFLICT",
+      };
+
+      expect(shouldEscalateFeatureMergeConflict(
+        task as any,
+        {
+          ciIntelligence: { resolveMergeConflicts: true },
+          defaultFeatureBranch: "feature/sprint",
+        } as any,
+        null,
+        new Set(),
+        undefined,
+        new Set([
+          buildResolvedWorkerMergeConflictKey("task-1", "worker/task-1", "feature/sprint"),
+        ]),
+      )).toBe(false);
+    });
+
+    it("allows a new worker conflict on a different branch pair to escalate", () => {
+      const task = {
+        id: "T01",
+        record_id: "task-1",
+        worker_branch: "worker/task-1-rerun",
+        status: "CODING_COMPLETED",
+        merge_indicator: "MERGE_CONFLICT",
+      };
+
+      expect(shouldEscalateFeatureMergeConflict(
+        task as any,
+        {
+          ciIntelligence: { resolveMergeConflicts: true },
+          defaultFeatureBranch: "feature/sprint",
+        } as any,
+        null,
+        new Set(),
+        undefined,
+        new Set([
+          buildResolvedWorkerMergeConflictKey("task-1", "worker/task-1", "feature/sprint"),
+        ]),
+      )).toBe(true);
+    });
+
+    it("does not recreate resolved worker conflict attention from stale dirty PR mergeability", () => {
+      const task = {
+        id: "T01",
+        record_id: "task-1",
+        worker_branch: "worker/task-1",
+        status: "CODING_COMPLETED",
+        merge_indicator: null,
+      };
+
+      const gitStatus = {
+        available: true,
+        openPullRequests: [
+          {
+            number: 1,
+            url: "https://example.com/pr/1",
+            headRefName: "worker/task-1",
+            mergeStateStatus: "DIRTY",
+          },
+        ],
+        mergedPullRequests: [],
+      };
+
+      expect(shouldEscalateFeatureMergeConflict(
+        task as any,
+        { ciIntelligence: { resolveMergeConflicts: true } } as any,
+        gitStatus as any,
+        new Set(),
+        undefined,
+        new Set([
+          buildResolvedWorkerMergeConflictKey("task-1", "worker/task-1", undefined),
+        ]),
+      )).toBe(false);
+    });
+  });
+
   describe("hasMergeStateChanges", () => {
     it("detects merge indicator changes even when merged state is unchanged", () => {
       const previous = new Map([
@@ -274,6 +377,221 @@ describe("CycleStateCoordinator", () => {
       expect(actionItem.payload.sessionId).toBe("3478292433877515748");
     });
 
+    it("dismisses stale task-level human merge-conflict handoffs after the task marker is cleared", async () => {
+      const deps = {
+        projectAttentionService: {
+          openItems: vi.fn(),
+          resolveItems: vi.fn(),
+          resolveItem: vi.fn(),
+        },
+      } as any;
+
+      const coordinator = new CycleStateCoordinator(deps);
+      const subtasks = [
+        {
+          id: "T01",
+          record_id: "task-1",
+          title: "Task 1",
+          status: "COMPLETED",
+          is_merged: false,
+          merge_indicator: null,
+        },
+      ] as any[];
+      const protocolResult = {
+        awaitingMerge: [],
+        actionRequiredTasks: [] as any[],
+      };
+      const args = {
+        executionContext: { project: { id: "proj-1" }, sprint: { id: "sprint-1" } },
+        sprintRunId: "run-1",
+        defaultFeatureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+        repoPath: "/repo",
+        ciIntelligence: { resolveMergeConflicts: true },
+      } as any;
+
+      coordinator.syncProtocolAttentionItems(
+        subtasks,
+        protocolResult,
+        args,
+        null,
+        new Set(),
+        new Set(),
+        undefined,
+        new Set(),
+        new Set(),
+        [
+          {
+            id: "human-conflict-1",
+            projectId: "proj-1",
+            sprintId: "sprint-1",
+            taskId: "task-1",
+            sprintRunId: "run-1",
+            dispatchId: null,
+            attentionType: "human_escalation_required",
+            severity: "high",
+            ownerType: "human",
+            status: "open",
+            assignedWorkerEndpointId: null,
+            title: "Virtual worker escalation: Merge conflict for T01",
+            summaryMarkdown: "Virtual worker escalated.",
+            payload: {
+              sourceAttentionType: "merge_conflict",
+              escalatedBy: "virtual_worker",
+              conflictingBranches: {
+                source: "task/t01",
+                target: "feature/sprint-1",
+              },
+            },
+            openedAt: "2026-07-07T10:00:00.000Z",
+            claimedAt: null,
+            resolvedAt: null,
+            updatedAt: "2026-07-07T10:00:00.000Z",
+          },
+        ] as any[],
+      );
+
+      expect(deps.projectAttentionService.resolveItem).toHaveBeenCalledWith(
+        "human-conflict-1",
+        expect.objectContaining({
+          status: "dismissed",
+          reason: "stale_merge_conflict_handoff_cleared",
+          payloadPatch: expect.objectContaining({
+            staleHandoffClearedByCycle: true,
+            staleHandoffClearedAtTaskState: expect.objectContaining({
+              status: "COMPLETED",
+              mergeIndicator: null,
+              isMerged: false,
+            }),
+          }),
+        }),
+      );
+    });
+
+    it("keeps human merge-conflict handoffs while the task still carries MERGE_CONFLICT", () => {
+      const deps = {
+        projectAttentionService: {
+          openItems: vi.fn(),
+          resolveItems: vi.fn(),
+          resolveItem: vi.fn(),
+        },
+      } as any;
+
+      const coordinator = new CycleStateCoordinator(deps);
+      coordinator.syncProtocolAttentionItems(
+        [{
+          id: "T01",
+          record_id: "task-1",
+          status: "CODING_COMPLETED",
+          is_merged: false,
+          merge_indicator: "MERGE_CONFLICT",
+        }] as any[],
+        { awaitingMerge: [], actionRequiredTasks: [] as any[] },
+        {
+          executionContext: { project: { id: "proj-1" }, sprint: { id: "sprint-1" } },
+          sprintRunId: "run-1",
+          defaultFeatureBranch: "feature/sprint-1",
+          defaultBranch: "main",
+          repoPath: "/repo",
+          ciIntelligence: { resolveMergeConflicts: true },
+        } as any,
+        null,
+        new Set(),
+        new Set(),
+        undefined,
+        new Set(),
+        new Set(),
+        [{
+          id: "human-conflict-1",
+          sprintId: "sprint-1",
+          taskId: "task-1",
+          attentionType: "human_escalation_required",
+          ownerType: "human",
+          payload: { sourceAttentionType: "merge_conflict" },
+        }] as any[],
+      );
+
+      expect(deps.projectAttentionService.resolveItem).not.toHaveBeenCalled();
+    });
+
+    it("matches stale human conflict handoffs by payload task key when the subtask record id is missing", () => {
+      const deps = {
+        projectAttentionService: {
+          openItems: vi.fn(),
+          resolveItems: vi.fn(),
+          resolveItem: vi.fn(),
+        },
+      } as any;
+
+      const coordinator = new CycleStateCoordinator(deps);
+      coordinator.syncProtocolAttentionItems(
+        [{
+          id: "T01",
+          title: "Task 1",
+          status: "CODING_COMPLETED",
+          is_merged: false,
+          merge_indicator: null,
+        }] as any[],
+        { awaitingMerge: [], actionRequiredTasks: [] as any[] },
+        {
+          executionContext: { project: { id: "proj-1" }, sprint: { id: "sprint-1" } },
+          sprintRunId: "run-1",
+          defaultFeatureBranch: "feature/sprint-1",
+          defaultBranch: "main",
+          repoPath: "/repo",
+          ciIntelligence: { resolveMergeConflicts: true },
+        } as any,
+        null,
+        new Set(),
+        new Set(),
+        undefined,
+        new Set(),
+        new Set(),
+        [{
+          id: "human-conflict-1",
+          sprintId: "sprint-1",
+          taskId: "db-task-1",
+          attentionType: "human_escalation_required",
+          ownerType: "human",
+          payload: {
+            sourceAttentionType: "merge_conflict",
+            taskKey: "T01",
+          },
+        }] as any[],
+      );
+
+      expect(deps.projectAttentionService.resolveItem).toHaveBeenCalledWith(
+        "human-conflict-1",
+        expect.objectContaining({ reason: "stale_merge_conflict_handoff_cleared" }),
+      );
+    });
+
+    it("classifies only task-level human merge-conflict escalations as stale-cleanup candidates", () => {
+      expect(isTaskLevelHumanMergeConflictEscalation({
+        sprintId: "sprint-1",
+        taskId: "task-1",
+        attentionType: "human_escalation_required",
+        ownerType: "human",
+        payload: { sourceAttentionType: "merge_conflict" },
+      } as any, "sprint-1")).toBe(true);
+
+      expect(isTaskLevelHumanMergeConflictEscalation({
+        sprintId: "sprint-1",
+        taskId: "task-1",
+        attentionType: "human_escalation_required",
+        ownerType: "human",
+        payload: { sourceAttentionType: "merge_conflict", mergeStage: "main" },
+      } as any, "sprint-1")).toBe(false);
+
+      expect(isTaskLevelHumanMergeConflictEscalation({
+        sprintId: "sprint-1",
+        taskId: "task-1",
+        attentionType: "human_escalation_required",
+        ownerType: "human",
+        payload: { sourceAttentionType: "manual_attention" },
+      } as any, "sprint-1")).toBe(false);
+    });
+
     it("keeps active worker CI-fix attention while checks are being re-evaluated", async () => {
       const deps = {
         projectAttentionService: {
@@ -384,6 +702,56 @@ describe("CycleStateCoordinator", () => {
       expect(resolvePayload).toEqual(expect.arrayContaining([
         expect.objectContaining({
           filter: { projectId: "proj-1", taskId: "rec-1", attentionTypes: ["action_required"] },
+        }),
+      ]));
+    });
+
+    it("resolves stale merge attention for worker-resolved branch pairs", async () => {
+      const deps = {
+        projectAttentionService: {
+          openItems: vi.fn(),
+          resolveItems: vi.fn(),
+        },
+      } as any;
+
+      const coordinator = new CycleStateCoordinator(deps);
+      const task = {
+        id: "T01",
+        record_id: "rec-1",
+        title: "Task 1",
+        prompt: "Prompt 1",
+        status: "CODING_COMPLETED",
+        merge_indicator: "MERGE_CONFLICT",
+        worker_branch: "worker/task-1",
+      } as any;
+      const args = {
+        executionContext: { project: { id: "proj-1" }, sprint: { id: "sprint-1" } },
+        sprintRunId: "run-1",
+        defaultFeatureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+        repoPath: "/repo",
+        ciIntelligence: { resolveMergeConflicts: true },
+      } as any;
+
+      await coordinator.syncProtocolAttentionItems(
+        [task],
+        { awaitingMerge: [task], actionRequiredTasks: [] },
+        args,
+        null,
+        new Set(),
+        new Set(),
+        undefined,
+        new Set(),
+        new Set([
+          buildResolvedWorkerMergeConflictKey("rec-1", "worker/task-1", "feature/sprint-1"),
+        ]),
+      );
+
+      expect(deps.projectAttentionService.openItems).not.toHaveBeenCalled();
+      expect(deps.projectAttentionService.resolveItems).toHaveBeenCalledWith(expect.arrayContaining([
+        expect.objectContaining({
+          filter: { projectId: "proj-1", taskId: "rec-1", attentionTypes: ["merge_required", "merge_conflict"] },
+          resolution: { status: "resolved", reason: "merge_attention_cleared" },
         }),
       ]));
     });

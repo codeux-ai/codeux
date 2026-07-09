@@ -23,6 +23,7 @@ import { calculateInvocationDurationMs, isTerminalTaskRunState } from "./runtime
 import { cancelStaleProviderInvocation, failStaleProviderInvocation } from "../domain/runtime/provider-invocation-recovery.js";
 import type { GuardrailService } from "./guardrail-service.js";
 import type { SprintRunLifecycleService } from "./sprint-run-lifecycle-service.js";
+import { runCommandStrict } from "./cli-process-runner.js";
 
 const ACTIVE_SPRINT_RUN_STATUSES = ["queued", "running"] as const;
 const ACTIVE_DISPATCH_STATUSES = ["queued", "claimed", "running", "cancel_requested"] as const;
@@ -129,7 +130,7 @@ export class RuntimeStartupRecoveryService {
       : [];
     const reconciledQaReviewRunIds = await qaReviewRecovery.reconcileInterruptedQaReviewRuns(activeContainerSessionIds);
     const reconciledTerminalProviderLinkedInvocationIds = invocationRecovery.reconcileTerminalProviderLinkedInvocations();
-    const demotedPrematureMergeConflictEscalationIds = this.demotePrematureMergeConflictEscalations();
+    const demotedPrematureMergeConflictEscalationIds = await this.demotePrematureMergeConflictEscalations();
     const reconciledStructuredInvocationIds = await invocationRecovery.reconcileInterruptedStructuredInvocations(activeContainerSessionIds);
     const rehydratedSprintRunIds = this.rehydrateDurableProviderSprintRuns();
     const restartPolicySyncedOrphanedSprintIds = this.syncOrphanedRunningSprintProjections();
@@ -223,7 +224,7 @@ export class RuntimeStartupRecoveryService {
     };
   }
 
-  private demotePrematureMergeConflictEscalations(): string[] {
+  private async demotePrematureMergeConflictEscalations(): Promise<string[]> {
     const projectAttentionService = this.deps.projectAttentionService;
     const guardrailService = this.deps.guardrailService;
     if (!projectAttentionService || !guardrailService) {
@@ -243,6 +244,32 @@ export class RuntimeStartupRecoveryService {
           || item.payload?.sourceAttentionType !== "merge_conflict"
           || item.payload?.escalatedBy !== "virtual_worker"
         ) {
+          continue;
+        }
+
+        const alreadyResolved = await this.isEscalatedMergeConflictAlreadyResolved(item);
+        if (alreadyResolved) {
+          const task = this.deps.projectManagementRepository.getTask(item.taskId);
+          if (task?.mergeIndicator === "MERGE_CONFLICT") {
+            this.deps.projectManagementRepository.updateTask(item.taskId, {
+              mergeIndicator: null,
+              isMerged: false,
+            });
+          }
+          projectAttentionService.resolveItem(item.id, {
+            status: "dismissed",
+          reason: "startup_resolved_merge_conflict_escalation_dismissed",
+            resolutionSummaryMarkdown: [
+              "Startup recovery dismissed this stale merge-conflict escalation because Git already shows the worker branch contained in the target branch.",
+              "",
+              "The task remains unmerged so the normal merge gate can retry without reopening the same stale conflict.",
+            ].join("\n"),
+            payloadPatch: {
+              recoveredByStartup: true,
+              recoveryReason: "startup_resolved_merge_conflict_escalation_dismissed",
+            },
+          });
+          demotedIds.push(item.id);
           continue;
         }
 
@@ -296,6 +323,41 @@ export class RuntimeStartupRecoveryService {
     }
 
     return demotedIds;
+  }
+
+  private async isEscalatedMergeConflictAlreadyResolved(item: {
+    payload?: Record<string, unknown> | null;
+  }): Promise<boolean> {
+    const payload = item.payload || {};
+    const repoPath = typeof payload.repoPath === "string" ? payload.repoPath.trim() : "";
+    const conflictingBranches = payload.conflictingBranches && typeof payload.conflictingBranches === "object"
+      ? payload.conflictingBranches as Record<string, unknown>
+      : {};
+    const sourceBranch = typeof conflictingBranches.source === "string"
+      ? conflictingBranches.source.trim()
+      : (typeof payload.workerBranch === "string" ? payload.workerBranch.trim() : "");
+    const targetBranch = typeof conflictingBranches.target === "string"
+      ? conflictingBranches.target.trim()
+      : (typeof payload.featureBranch === "string" ? payload.featureBranch.trim() : "");
+
+    if (!repoPath || !sourceBranch || !targetBranch) {
+      return false;
+    }
+
+    const candidatePairs: Array<[string, string]> = [
+      [sourceBranch, targetBranch],
+      [`origin/${sourceBranch}`, `origin/${targetBranch}`],
+    ];
+    for (const [sourceRef, targetRef] of candidatePairs) {
+      try {
+        await runCommandStrict("git", ["merge-base", "--is-ancestor", sourceRef, targetRef], repoPath);
+        return true;
+      } catch {
+        // Try the next available ref form; startup recovery must stay best-effort.
+      }
+    }
+
+    return false;
   }
 
   private rehydrateDurableProviderSprintRuns(): string[] {
@@ -544,12 +606,24 @@ export class RuntimeStartupRecoveryService {
 
       if (resolution.resetTaskToPending) {
         this.resetTaskToPending(taskRun.taskId);
+      } else if (resolution.state === "COMPLETED") {
+        this.reconcileCompletedTaskStatus(taskRun.taskId);
       }
 
       reconciledTaskRunIds.push(taskRun.id);
     }
 
     return reconciledTaskRunIds;
+  }
+
+  private reconcileCompletedTaskStatus(taskId: string): void {
+    const task = this.deps.projectManagementRepository.getTask(taskId);
+    if (!task || task.status !== "in_progress") {
+      return;
+    }
+    this.deps.projectManagementRepository.updateTask(taskId, {
+      status: task.isMerged ? "completed" : "coding_completed",
+    });
   }
 
   private reconcileTerminalTaskRunDispatches(): string[] {
@@ -786,15 +860,32 @@ export class RuntimeStartupRecoveryService {
       };
     }
 
-    if (taskRun.dispatchId) {
-      const dispatch = this.deps.executionRepository.getTaskDispatch(taskRun.dispatchId);
-      if (dispatch && ACTIVE_DISPATCH_STATUSES.includes(dispatch.status as (typeof ACTIVE_DISPATCH_STATUSES)[number])) {
+    const dispatch = taskRun.dispatchId ? this.deps.executionRepository.getTaskDispatch(taskRun.dispatchId) : null;
+    if (dispatch) {
+      if (ACTIVE_DISPATCH_STATUSES.includes(dispatch.status as (typeof ACTIVE_DISPATCH_STATUSES)[number])) {
         return null;
       }
     }
 
     if (runningProviderTaskRunIds.has(taskRun.id) || activeExecutionTaskRunIds.has(taskRun.id)) {
       return null;
+    }
+
+    if (!dispatch && task?.status === "in_progress" && this.taskHasCompletedDispatch(taskRun)) {
+      return {
+        state: "COMPLETED",
+        message: "Recovered stale task run after the same task already had a completed dispatch.",
+        resetTaskToPending: false,
+      };
+    }
+
+    if (dispatch && !ACTIVE_DISPATCH_STATUSES.includes(dispatch.status as (typeof ACTIVE_DISPATCH_STATUSES)[number])) {
+      const dispatchCompleted = dispatch.status === "completed";
+      return {
+        state: dispatchCompleted ? "COMPLETED" : "FAILED",
+        message: `Recovered stale task run after the linked dispatch was already ${dispatch.status}.`,
+        resetTaskToPending: !dispatchCompleted && task?.status === "in_progress",
+      };
     }
 
     const referenceAt = Date.parse(taskRun.startedAt || "");
@@ -808,6 +899,13 @@ export class RuntimeStartupRecoveryService {
       message: "Recovered stale task run after it remained active without dispatch or provider runtime linkage.",
       resetTaskToPending: task?.status === "in_progress",
     };
+  }
+
+  private taskHasCompletedDispatch(taskRun: TaskRunRecord): boolean {
+    return this.deps.executionRepository.listTaskDispatches({
+      projectId: taskRun.projectId,
+      taskId: taskRun.taskId,
+    }).some((dispatch) => dispatch.status === "completed");
   }
 
   private async reconcileInterruptedCliInvocations(
@@ -968,18 +1066,21 @@ export class RuntimeStartupRecoveryService {
       if (taskRun && isTerminalTaskRunState(taskRun)) {
         continue;
       }
+      const linkedProviderInvocations = taskRun
+        ? this.deps.executionRepository.listProviderInvocationsForTask(dispatch.projectId, dispatch.taskId)
+          .filter((invocation) => invocation.taskRunId === taskRun.id || invocation.dispatchId === dispatch.id)
+        : [];
+      if (linkedProviderInvocations.some((invocation) => ["completed", "failed", "cancelled"].includes(invocation.status))) {
+        continue;
+      }
 
       const sessionId = taskRun?.sessionId || null;
       const sessionRecovered = sessionId ? recoveredCliSessionIds.has(sessionId) : false;
-      const sessionStillRunning = sessionId ? activeContainerSessionIds.has(sessionId) : false;
-      if (invocationPolicy === "continue" && sessionStillRunning) {
-        continue;
-      }
       const interruptionMessage = sessionRecovered
         ? "Local CLI execution was interrupted by Code UX restart. The task was moved back to a retryable state."
         : "Local CLI execution was interrupted before Code UX could persist a resumable session. The task was moved back to a retryable state.";
       const retryTask = invocationPolicy !== "cancel";
-      if (sessionId && invocationPolicy !== "continue") {
+      if (sessionId) {
         await this.removeContainersForSessions(new Set([sessionId]));
       }
 

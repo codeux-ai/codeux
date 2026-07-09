@@ -1,5 +1,22 @@
 import { describe, it, expect } from "vitest";
-import { extractJsonLikeBlock } from "../../../src/services/planning-json-extractor.js";
+import { extractJsonLikeBlock, parsePlannedSprintReply } from "../../../src/services/planning-json-extractor.js";
+
+const validPromptMarkdown = [
+  "## Objective",
+  "Do the work.",
+  "",
+  "## Scope",
+  "- src/example.ts",
+  "",
+  "## Implementation Requirements",
+  "1. Implement the change.",
+  "",
+  "## Constraints",
+  "- Keep scope tight.",
+  "",
+  "## Verification",
+  "- Run the focused test.",
+].join("\n");
 
 describe("extractJsonLikeBlock", () => {
   it("extracts plain top-level JSON", () => {
@@ -131,5 +148,43 @@ ${directPayload}
     expect(result).toEqual(directPayload);
     // Parsing should be fast
     expect(end - start).toBeLessThan(100);
+  });
+
+  it("validates strict DAG order after extracting planning JSON", () => {
+    const payload = JSON.stringify({
+      goal: "test",
+      tasks: [
+        {
+          key: "T01",
+          title: "First task",
+          description: "References a later task.",
+          promptMarkdown: validPromptMarkdown,
+          priority: "medium",
+          executorType: "auto",
+          dependsOn: ["T02"],
+        },
+      ],
+    });
+
+    expect(() => parsePlannedSprintReply(payload)).toThrow(/defined later/);
+  });
+
+  it("validates required prompt sections after extracting planning JSON", () => {
+    const payload = JSON.stringify({
+      goal: "test",
+      tasks: [
+        {
+          key: "T01",
+          title: "First task",
+          description: "Uses an incomplete prompt.",
+          promptMarkdown: "## Objective\nDo the work.",
+          priority: "medium",
+          executorType: "auto",
+          dependsOn: [],
+        },
+      ],
+    });
+
+    expect(() => parsePlannedSprintReply(payload)).toThrow(/missing required section/);
   });
 });

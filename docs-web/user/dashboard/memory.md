@@ -16,33 +16,32 @@ Both tiers are vector-indexed using a locally-running embedding model (ONNX Runt
 Each memory has a **category**:
 
 - `context` — generic context (default).
-- `architecture` — design decisions, patterns.
+- `architecture` — design decisions, architectural rules.
 - `codebase` — file/symbol landmarks.
-- `convention` — coding standards.
-- `gotcha` — known issue, workaround.
-- `feedback` — user-validated patterns.
-- *(extensible)*
+- `preferences` — formatting, naming, and style preferences.
+- `patterns` — recurring implementation patterns.
+- `decision` — explicit technical decisions made.
+- `error` — known errors or workarounds.
+- `learning` — task learnings.
 
 Categories drive default rendering and can be used as filters in search.
 
-## Filters and tabs
+## Header summary, filters, and actions
 
-The page splits into:
+The Memory header is the main place to choose what the graph, sidebar, and inspector are showing. It is grouped into separate rows so the current state stays readable on desktop and wraps cleanly on narrow screens:
 
-- **Short-term** tab — memories scoped to a specific sprint.
-- **Long-term** tab — project-wide memories.
-- **Search** — vector similarity search across both tiers (cosine similarity, configurable `minSimilarity`).
+- **Tier summary tabs** — **Short Term** and **Long Term** show their memory counts directly in the tab cards.
+- **Current scope line** — shows copy such as `Short Term: showing 7 memories of 17 memories · Sprint 2 · All Agents` or `Long Term: showing 1 memory of 1 memory · Project-wide · All Agents`.
+- **Scope filters** — Short-term memory shows the sprint selector and both tiers show the agent preset selector. Disabled selectors remain visible with reason copy when there are no matching sprints or agent presets.
+- **Actions** — **Add Memory**, **Model Catalog**, and **Danger Delete** are separated from the selectors. Model Catalog shows whether it is shown or hidden plus active-model status. Danger Delete always shows Off/Armed state plus persistent explanatory copy.
 
-Filter bar:
+The sidebar search field filters the current visible tier, sprint, and agent slice by memory text/category. Programmatic semantic search still uses vector similarity across requested scopes (cosine similarity, configurable `minSimilarity`).
 
-- **Category** (multi-select).
-- **Sprint** (short-term only).
-- **Agent preset** (only memories scoped to that preset).
-- **Strength range** — filter by promotion strength score (0.0 – 1.0+).
+Danger Delete semantics are unchanged: graph and inspector single-memory deletes are immediate only while Danger Delete is armed, while sidebar card deletion uses its separate arm/cancel guard.
 
 ## Creating a memory
 
-Click **+ New memory**. Provide:
+Click **Add Memory**. Provide:
 
 - **Content** — the memory body (markdown supported).
 - **Category** (default `context`).
@@ -52,9 +51,13 @@ Click **+ New memory**. Provide:
 
 The memory is embedded immediately using the active embedding model.
 
+## Worker capture
+
+Worker `.task-learnings.md` files still create short-term memories from `## Category:` bullets. They may also include an optional `## Self Reflection Rating` section with `Overall: N/5` and per-section bullets such as `- Implementation: 4/5 - note`. Ratings are stored as task-run self-reflection records, separate from semantic memories, and malformed rating sections are ignored.
+
 ## Editing & deleting
 
-Each memory card has **Edit** (content, category, strength) and **Delete**. Deletion requires confirmation.
+Sidebar memory cards use their own guarded delete flow. Graph and inspector single-memory deletion is immediate only while Danger Delete is armed.
 
 ## Promotion (short-term → long-term)
 
@@ -72,9 +75,15 @@ Open a memory and click **Inspect** to see its **embedding map**: a 2D projectio
 
 You can rebuild the map after re-embedding or after promotion.
 
-## Embedding models
+## Model browser
 
-The right sidebar lists available embedding models. Each card shows:
+The **Model Catalog** action opens a compact model browser instead of a flat card list. It separates:
+
+- **Embedding Models** — memory search models that can be downloaded, activated, deleted, and used for re-embedding.
+- **Add Custom Hugging Face Embedding Model** — a form for compatible ONNX embedding models.
+- **TTS / Speech-Adjacent Hugging Face Models** — informational speech rows that are not memory embedding models and do not show embedding actions.
+
+Each embedding row shows:
 
 - Model ID and provenance (e.g. `bge-small-en-v1.5`).
 - Download status (not downloaded / downloading / ready).
@@ -83,6 +92,8 @@ The right sidebar lists available embedding models. Each card shows:
 
 The local embedding runtime supports both BGE-style WordPiece tokenizers and XLM-R/SentencePiece Unigram tokenizers such as `multilingual-e5-large`.
 
+Custom in-app models can be added from Hugging Face model links. The form accepts either `owner/repo` identifiers or `https://huggingface.co/...` model/file URLs plus display name, ONNX model file, tokenizer files, dimension, approximate size, and language. The backend rejects other hosts and stores the normalized repo, ONNX model file path, tokenizer files, dimension, approximate size, language, and validation status. Custom entries are durable settings, so they appear beside built-in models after restart.
+
 Actions per model:
 
 - **Download** — Pulls model weights to local cache.
@@ -90,9 +101,17 @@ Actions per model:
 - **Select** — Activates the model. Subsequent embed operations use it.
 - **Delete** — Removes the local cache.
 
+Custom models use the same download, select, delete, source-link, and status actions as built-ins. A custom model cannot be selected until its ONNX file and required tokenizer files are downloaded. Speech-adjacent Hugging Face rows open safe source links only; they cannot be activated as memory embeddings.
+
 ### Re-embedding
 
 Switching the active model leaves existing memories embedded with the previous model — search results across mixed dimensions are nonsensical. Click **Re-embed all** to re-vectorize the project's memories with the new model. Progress is shown live; you can leave the page and check back.
+
+## Persistent skills
+
+Persistent skills are reusable agent instructions, not sprint learnings. They are stored in project-owned skill storages, attached to agent presets, and kept out of the project workspace and `.code-ux/` sprint files.
+
+Skill markdown has frontmatter for `title`, `description`, `tags`, `appliesTo`, and `version`; the markdown body is the stored instruction content. When embeddings are available, skills are vectorized into `skill_embeddings` with model and dimension metadata. Search only compares vectors from the requested project/storage or agent-attached storages, skips dimension mismatches, caps candidate loading, ranks by cosine similarity, and uses skill id as a deterministic tie-breaker.
 
 ## Stats
 
@@ -100,4 +119,4 @@ The footer shows aggregate memory statistics: total counts per scope/category, a
 
 ## Programmatic access
 
-The Memory MCP domain (`manage_code_ux` → `domain: "memory"`) exposes search, list, get, create, update, delete, promote, start_reembed, get_map, count, and model_status actions. See [Management actions → memory](../../developer/management-actions.md#memory).
+The Memory MCP tool (`manage_memory`) exposes search, list, get, create, update, delete, promote, start_reembed, get_map, count, and model_status actions, as well as durable claim actions. Destructive actions require approval confirmation. See [Management actions → memory](../../developer/management-actions.md#memory).

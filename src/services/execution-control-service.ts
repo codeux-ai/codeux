@@ -75,6 +75,13 @@ export class ExecutionControlService {
 
     const blockingRun = this.resolveBlockingSprintRun(projectId, sprintId);
     if (blockingRun) {
+      if (blockingRun.status === "running" || blockingRun.status === "queued") {
+        this.deps.sprintOrchestrator.setConsecutiveFailures(0);
+        this.reapRecomputedSprintAttention(projectId, sprintId);
+        this.recoverSprintRunAfterResume(blockingRun, blockingRun.id);
+        return { ok: true };
+      }
+
       const label = blockingRun.status === "cancel_requested" ? "cancellation is still pending" : "another run is already active";
       throw new Error(
         `Sprint ${sprint.number ?? sprint.name} cannot be started because ${label} (run ${blockingRun.id}, status ${blockingRun.status}).`,
@@ -273,6 +280,7 @@ export class ExecutionControlService {
         projectId,
         sprintRunId,
         reason,
+        ["merge_conflict", "ci_fix_required", "manual_attention"],
       );
     } catch {
       // Best-effort cleanup — never block cancellation on attention housekeeping.

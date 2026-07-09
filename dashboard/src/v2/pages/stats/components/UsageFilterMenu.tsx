@@ -8,7 +8,8 @@ import type {
 } from '../../../types.js';
 import styles from './UsageFilterMenu.module.css';
 import { UsageGraphLegend } from './UsageGraphLegend.js';
-import { groupChartSeries } from '../chart-view-models.js';
+import type { GroupedChartSeriesSection } from '../chart-view-models.js';
+import { CHIP_CLASS, CONTROL_FOCUS_CLASS } from './stats-ui-primitives.js';
 
 interface UsageFilterMenuProps {
   isOpen: boolean;
@@ -16,6 +17,10 @@ interface UsageFilterMenuProps {
   stats: ProjectExecutionStatsSnapshot | null;
   enabledSeries: Record<string, boolean>;
   setEnabledSeries: (val: Record<string, boolean> | ((curr: Record<string, boolean>) => Record<string, boolean>)) => void;
+  resetEnabledSeries: () => void;
+  activeSeriesCount: number;
+  seriesGroups: GroupedChartSeriesSection[];
+  onStatusChange?: (message: string) => void;
 }
 
 export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
@@ -24,9 +29,27 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
   stats,
   enabledSeries,
   setEnabledSeries,
+  resetEnabledSeries,
+  activeSeriesCount,
+  seriesGroups,
+  onStatusChange,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
+
+  const defaultEnabledCount = seriesGroups.reduce((count, group) => count + group.defaultEnabledCount, 0);
+  const totalSeriesCount = seriesGroups.reduce((count, group) => count + group.totalCount, 0);
+  const resetActiveCount = defaultEnabledCount > 0
+    ? defaultEnabledCount
+    : totalSeriesCount > 0
+      ? 1
+      : 0;
+
+  const closeAndRestoreFocus = () => {
+    onClose();
+    restoreFocusRef.current?.focus();
+  };
 
   useLayoutEffect(() => {
     if (!menuRef.current) return;
@@ -44,8 +67,8 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
           opacity: MODAL_MOTION.dropdown.opacityStart,
           scale: MODAL_MOTION.dropdown.scaleStart,
           y: MODAL_MOTION.dropdown.yStart,
-          duration: MODAL_MOTION.dropdown.duration * 0.8,
-          ease: 'power2.in',
+          duration: MODAL_MOTION.overlay.exit,
+          ease: MODAL_MOTION.overlay.exitEase,
         });
       }
     });
@@ -59,8 +82,13 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
     });
 
     if (isOpen) {
-      // Focus the close button when opened for keyboard support
-      closeButtonRef.current?.focus();
+      restoreFocusRef.current = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+      const firstSeriesSwitch = menuRef.current?.querySelector<HTMLButtonElement>('button[role="switch"]:not([aria-disabled="true"])')
+        ?? menuRef.current?.querySelector<HTMLButtonElement>('button[role="switch"]');
+      const resetButton = menuRef.current?.querySelector<HTMLButtonElement>('[data-usage-filter-reset]');
+      (firstSeriesSwitch ?? resetButton ?? closeButtonRef.current)?.focus();
     }
 
     return () => ctx.revert();
@@ -69,7 +97,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
-        onClose();
+        closeAndRestoreFocus();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -78,55 +106,79 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
 
   if (!isOpen && !menuRef.current) return null;
 
-  const activeSeriesCount = Object.values(enabledSeries).filter(Boolean).length;
   const handleResetFilters = () => {
-    const chartSeries = stats?.chartSeries ?? [];
-    const resetSeries = chartSeries.reduce((acc, series) => {
-      acc[series.id] = series.defaultEnabled;
-      return acc;
-    }, {} as Record<string, boolean>);
-
-    if (chartSeries.length > 0 && Object.values(resetSeries).every((enabled) => !enabled)) {
-      resetSeries[chartSeries[0]!.id] = true;
-    }
-
-    setEnabledSeries(resetSeries);
+    resetEnabledSeries();
+    onStatusChange?.(`Graph filters reset. ${resetActiveCount} series active.`);
   };
 
-  const orderedSeriesGroups = groupChartSeries(stats?.chartSeries ?? []);
+  const handleEnableDefaultSeries = () => {
+    setEnabledSeries((curr) => {
+      const next = { ...curr };
+      let changedCount = 0;
+      for (const group of seriesGroups) {
+        for (const series of group.series) {
+          if (series.defaultEnabled && !next[series.id]) {
+            next[series.id] = true;
+            changedCount++;
+          }
+        }
+      }
+      if (changedCount === 0 && activeSeriesCount === 0 && seriesGroups[0]?.series[0]) {
+        next[seriesGroups[0].series[0].id] = true;
+        changedCount = 1;
+      }
+      return next;
+    });
+    const nextActiveCount = activeSeriesCount + seriesGroups.reduce((count, group) => (
+      count + group.series.filter((series) => series.defaultEnabled && !enabledSeries[series.id]).length
+    ), 0);
+    onStatusChange?.(`Default series enabled. ${Math.max(nextActiveCount, resetActiveCount)} series active.`);
+  };
 
   return (
     <div
       ref={menuRef}
       role="dialog"
       aria-labelledby="usage-graph-filter-menu-title"
-      aria-describedby="usage-graph-filter-menu-count"
+      aria-describedby="usage-graph-filter-menu-count usage-graph-filter-menu-help"
       className={styles.menu}
       style={{ display: isOpen || (menuRef.current && gsap.getProperty(menuRef.current, 'opacity') as number > 0) ? 'block' : 'none' }}
     >
       <div className={styles.content}>
-        <div className={`${styles.header} flex items-center justify-between`}>
+        <div className={`${styles.header} flex items-start justify-between gap-3`}>
           <div id="usage-graph-filter-menu-count" aria-live="polite" className="sr-only">Showing {activeSeriesCount} filter{activeSeriesCount !== 1 ? 's' : ''}</div>
-          <div className="flex items-center gap-3">
+          <div id="usage-graph-filter-menu-help" className="sr-only">At least one chart series must remain enabled.</div>
+          <div className="min-w-0">
             <span id="usage-graph-filter-menu-title" className="text-[11px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-value-color)]">
               Graph Filters
             </span>
-            {activeSeriesCount > 0 && (
+            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
               <button
                 type="button"
+                data-usage-filter-reset
+                aria-label="Reset filters"
                 onClick={handleResetFilters}
-                className="rounded text-xs text-[var(--stats-detail-color)] transition-colors hover:text-[var(--stats-value-color)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--stats-card-bg)] motion-reduce:transition-none"
+                className={`${CHIP_CLASS} px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--stats-detail-color)] hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}
               >
-                Reset filters
+                Reset defaults
               </button>
-            )}
+              {defaultEnabledCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={handleEnableDefaultSeries}
+                  className={`${CHIP_CLASS} px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--stats-detail-color)] hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}
+                >
+                  Enable defaults
+                </button>
+              ) : null}
+            </div>
           </div>
           <button
             ref={closeButtonRef}
             type="button"
-            onClick={onClose}
+            onClick={closeAndRestoreFocus}
             aria-label="Close graph filters"
-            className="rounded-full p-1 text-[var(--stats-detail-color)] transition-colors hover:bg-[color:var(--fill-muted-hover)] hover:text-[var(--stats-value-color)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--stats-card-bg)] motion-reduce:transition-none"
+            className={`rounded-[var(--stats-control-radius)] p-1 text-[var(--stats-detail-color)] transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[var(--stats-value-color)] motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`}
           >
             <X className="h-4 w-4" />
           </button>
@@ -134,17 +186,26 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
 
         {stats && (
           <div className={styles.section}>
-            <div className={styles.label}>Metric Series</div>
-            <div className="flex max-h-[320px] flex-col gap-4 overflow-y-auto pr-1">
+            <div className={styles.sectionHeader}>
+              <div>
+                <div className={styles.label}>Metric Series</div>
+                <div className={styles.sectionCopy}>{activeSeriesCount} of {totalSeriesCount} series active</div>
+              </div>
+            </div>
+            <div className={styles.scrollArea}>
               <UsageGraphLegend
-                seriesGroups={orderedSeriesGroups}
+                seriesGroups={seriesGroups}
                 enabledSeries={enabledSeries}
                 activeSeriesCount={activeSeriesCount}
                 onToggleSeries={(id) => {
                   if (activeSeriesCount === 1 && enabledSeries[id]) {
+                    onStatusChange?.("Keep at least one series enabled. The last active series cannot be turned off.");
                     return;
                   }
                   setEnabledSeries((curr) => ({ ...curr, [id]: !curr[id] }));
+                  const seriesLabel = stats.chartSeries.find((series) => series.id === id)?.label ?? id;
+                  const nextEnabled = !enabledSeries[id];
+                  onStatusChange?.(`${seriesLabel} series ${nextEnabled ? "enabled" : "disabled"}. ${activeSeriesCount + (nextEnabled ? 1 : -1)} series active.`);
                 }}
               />
             </div>

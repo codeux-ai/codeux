@@ -9,7 +9,7 @@ import { NoticePanel } from "./SettingsSurface.js";
 import { SHARED_INTERACTION_CLASSES } from "../ui/Button.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
-import { AlertTriangle, Bot, BrainCircuit, ChevronDown, Compass, Cpu, Monitor, Plug, Server, Settings, SlidersHorizontal, Target } from "lucide-preact";
+import { AlertTriangle, Bot, BrainCircuit, ChevronDown, Compass, Cpu, Layers3, Monitor, Palette, Plug, Server, Settings, SlidersHorizontal, Target } from "lucide-preact";
 
 export const CATEGORIES: Category[] = [
   { id: "general", num: "01", label: "General", icon: SlidersHorizontal, description: "Scope, runtime, and automation posture" },
@@ -17,11 +17,13 @@ export const CATEGORIES: Category[] = [
   { id: "models", num: "03", label: "AI Models", icon: Cpu, description: "Provider routing, models, and weighting" },
   { id: "sprint", num: "04", label: "Sprint & Git", icon: Target, description: "Git flow, branch naming, merge rules, and execution runtime" },
   { id: "browser", num: "05", label: "Browser Preview", icon: Compass, description: "Preview runtime, browser visibility, and container policy" },
-  { id: "agents", num: "06", label: "Agents", icon: Bot, description: "Project-local markdown mirrors and agent authoring behavior" },
-  { id: "memory", num: "07", label: "Memory", icon: BrainCircuit, description: "Embedding models, auto-capture, and promotion policy" },
-  { id: "integrations", num: "08", label: "Integrations", icon: Plug, description: "Provider keys, Git hosts, and external connection policy" },
-  { id: "mcp", num: "09", label: "MCP", icon: Server, description: "MCP servers injected into CLIs and built-in tool access" },
-  { id: "danger", num: "10", label: "Danger Zone", icon: AlertTriangle, description: "Reset project overrides only when needed", danger: true },
+  { id: "techstacks", num: "06", label: "Techstacks", icon: Layers3, description: "Catalog stacks, application kind, and project assignment" },
+  { id: "guidance", num: "07", label: "Guidance", icon: Palette, description: "Tech stack guidance, styleguides, and custom instructions" },
+  { id: "agents", num: "08", label: "Agents", icon: Bot, description: "Agent routing, skill storage, reflection, and authoring behavior" },
+  { id: "memory", num: "09", label: "Memory", icon: BrainCircuit, description: "Embedding models, auto-capture, and promotion policy" },
+  { id: "integrations", num: "10", label: "Integrations", icon: Plug, description: "Provider keys, Git hosts, and external connection policy" },
+  { id: "mcp", num: "11", label: "MCP", icon: Server, description: "MCP servers injected into CLIs and built-in tool access" },
+  { id: "danger", num: "12", label: "Danger Zone", icon: AlertTriangle, description: "Reset project overrides only when needed", danger: true },
 ];
 
 export interface SettingsCategoryRailProps {
@@ -32,6 +34,7 @@ export interface SettingsCategoryRailProps {
   onSwitchCategory: (categoryId: CategoryId) => void;
   pendingCategory?: CategoryId | null;
   disabledCategoryReason?: string | null;
+  className?: string;
 }
 
 export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> = ({
@@ -42,6 +45,7 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
   onSwitchCategory,
   pendingCategory = null,
   disabledCategoryReason = null,
+  className,
 }) => {
   const normalizedSearch = settingsSearch.trim().toLowerCase();
   const railRef = useRef<HTMLElement | null>(null);
@@ -126,7 +130,10 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
       onScroll={updateRailMetrics}
       style={railHeightStyle}
       data-motion-contract="selectionMovement"
-      className="scrollbar-hide flex min-w-0 flex-col gap-3 rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-3 backdrop-blur-2xl shadow-[var(--elevation-base)] lg:sticky lg:top-16 lg:max-h-[var(--settings-category-rail-available-height)] lg:overflow-y-auto lg:overscroll-contain"
+      className={[
+        "scrollbar-hide flex min-w-0 flex-col gap-3 rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-3 backdrop-blur-2xl shadow-[var(--elevation-base)] lg:sticky lg:top-16 lg:max-h-[var(--settings-category-rail-available-height)] lg:overflow-y-auto lg:overscroll-contain",
+        className,
+      ].filter(Boolean).join(" ")}
     >
       <div
         id={instructionsId}

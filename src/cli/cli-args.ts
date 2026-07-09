@@ -53,6 +53,10 @@ const STARTUP_FLAGS_WITH_VALUES = new Set([
   "--mcp-http-path",
   "--mcp-https-auth-token",
   "--mcp-http-auth-token",
+  "--mcp-https-max-sessions",
+  "--mcp-http-max-sessions",
+  "--mcp-https-session-timeout-ms",
+  "--mcp-http-session-timeout-ms",
 ]);
 
 const FLAG_KEY_ALIASES: Record<string, string> = {
@@ -121,6 +125,7 @@ const FLAG_KEY_ALIASES: Record<string, string> = {
   "sort-order": "sortOrder",
   "payload-json": "payloadJson",
   "settings-json": "settingsJson",
+  "bundle-json": "bundleJson",
   "labels-json": "labelsJson",
   "depends-on-task-ids": "dependsOnTaskIds",
   "memory-ids": "memoryIds",
@@ -184,6 +189,8 @@ const DOMAIN_ACTION_ALIASES: Record<string, string> = {
   "replace-sprint-settings": "replace_sprint_settings",
   "patch-sprint-setting": "patch_sprint_setting",
   "reset-sprint-settings": "reset_sprint_settings",
+  "export-settings-bundle": "export_settings_bundle",
+  "apply-settings-bundle": "apply_settings_bundle",
   "start-session": "start_session",
   "rebuild-session": "rebuild_session",
   "stop-session": "stop_session",
@@ -274,6 +281,8 @@ const DOMAIN_ACTION_SPECS: Record<string, Record<string, ActionSpec>> = {
     replace_sprint_settings: { display: "Replace sprint settings", requiredFlags: ["--project", "--sprint", "--settings-json"] },
     patch_sprint_setting: { display: "Patch a sprint setting", requiredFlags: ["--project", "--sprint", "--path", "--value"] },
     reset_sprint_settings: { display: "Reset sprint settings", requiredFlags: ["--sprint"] },
+    export_settings_bundle: { display: "Export a settings synchronization bundle", requiredFlags: [] },
+    apply_settings_bundle: { display: "Apply a settings synchronization bundle", requiredFlags: ["--bundle-json"] },
   },
   agents: {
     list: { display: "List agents", requiredFlags: ["--project"] },
@@ -384,7 +393,7 @@ function coercePayloadValue(key: string, value: unknown): unknown {
     }
   }
 
-  if (key === "payloadJson" || key === "settingsJson") {
+  if (key === "payloadJson" || key === "settingsJson" || key === "bundleJson") {
     return trimmed;
   }
 
@@ -591,24 +600,35 @@ export function buildHelpText(appConfig: AppConfig): string {
     "  --runtime-role VALUE",
     "                    Runtime role: project_manager (default) or worker-host",
     "  --headless        Start MCP-only without binding the dashboard",
-    "  --mcp-https      Enable the remote MCP HTTPS worker gateway (enabled by default)",
-    "  --no-mcp-https    Disable the remote MCP HTTPS worker gateway",
-    "  --mcp-https-port N Port for the remote MCP HTTPS worker gateway",
-    "  --mcp-https-host H Host/interface for the remote MCP HTTPS worker gateway",
-    "  --mcp-https-path P Path for the remote MCP HTTPS worker gateway (default: /mcp)",
+    "  --server-mode     Start authenticated MCP HTTP server mode without binding the dashboard",
+    "  --mcp-https      Enable the MCP Streamable HTTP gateway (enabled by default; legacy flag name)",
+    "  --no-mcp-https    Disable the MCP Streamable HTTP gateway",
+    "  --mcp-https-port N Port for the MCP Streamable HTTP gateway",
+    "  --mcp-https-host H Host/interface for the MCP Streamable HTTP gateway",
+    "  --mcp-https-path P Path for the MCP Streamable HTTP gateway (default: /mcp)",
     "  --mcp-https-auth-token VALUE",
-    "                    Bearer token required for MCP HTTPS requests when on non-loopback host",
+    "                    Bearer token for MCP HTTP requests",
+    "  --mcp-https-max-sessions N",
+    "                    Maximum active MCP HTTP sessions (default: 100)",
+    "  --mcp-https-session-timeout-ms N",
+    "                    Idle MCP HTTP session timeout in milliseconds (default: 3600000)",
     "  --help, -h        Show this help message",
     "",
     "Environment Variables:",
     "  JULES_API_KEY      Jules API key",
     "  DASHBOARD_PORT     Port for the dashboard (default: 4444)",
-    "  MCP_HTTPS_ENABLED  Enable the MCP HTTPS worker gateway (default: true)",
-    "  MCP_HTTPS_PORT     Port for the MCP HTTPS worker gateway",
-    "  MCP_HTTPS_HOST     Host/interface for the MCP HTTPS worker gateway",
-    "  MCP_HTTPS_PATH     Path for the MCP HTTPS worker gateway",
+    "  CODE_UX_SERVER_MODE",
+    "                     Require authenticated MCP HTTP server mode and disable the dashboard",
+    "  MCP_HTTPS_ENABLED  Enable the MCP HTTP gateway (default: true)",
+    "  MCP_HTTPS_PORT     Port for the MCP HTTP gateway",
+    "  MCP_HTTPS_HOST     Host/interface for the MCP HTTP gateway",
+    "  MCP_HTTPS_PATH     Path for the MCP HTTP gateway",
     "  MCP_HTTPS_AUTH_TOKEN",
-    "                     Bearer token for MCP HTTPS requests",
+    "                     Bearer token for MCP HTTP requests",
+    "  MCP_HTTPS_MAX_SESSIONS",
+    "                     Maximum active MCP HTTP sessions (default: 100)",
+    "  MCP_HTTPS_SESSION_TIMEOUT_MS",
+    "                     Idle MCP HTTP session timeout in milliseconds (default: 3600000)",
   ];
 
   return lines.join("\n");
@@ -655,6 +675,8 @@ function getExampleLines(domain: Exclude<ManagementDomain, "manage">): string[] 
       return [
         "  codeux settings get_system",
         "  codeux settings patch_project_setting --project <id> --path git.defaultBranch --value main",
+        "  codeux settings export-settings-bundle --json",
+        "  codeux settings apply-settings-bundle --bundle-json '<bundle-json>'",
       ];
     case "agents":
       return [

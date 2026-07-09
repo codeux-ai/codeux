@@ -1,7 +1,9 @@
 import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
+import type { DesignGuidanceSettings } from "../contracts/app-types.js";
 import type { ProjectSetupOptions, ProjectSummary } from "../contracts/project-management-types.js";
 import type { QuicksprintTemplateRecord } from "../contracts/quicksprint-types.js";
 import { formatQuicksprintTemplateMarkdown } from "../domain/quicksprint/quicksprint-template-markdown.js";
+import { buildProjectGuidanceSection } from "./planning-prompt-builder.js";
 import { buildGeneratedSprintPreviewScript } from "./sprint-preview-utils.js";
 
 
@@ -11,6 +13,7 @@ export interface ProjectSetupPromptArgs {
   baseAgentTemplates?: AgentPresetRecord[];
   baseQuicksprintTemplates?: QuicksprintTemplateRecord[];
   containerSetupScriptTemplate?: string | null;
+  designGuidance?: DesignGuidanceSettings;
   options: ProjectSetupOptions;
 }
 
@@ -20,6 +23,8 @@ const requestedArtifacts = (options: ProjectSetupOptions): string[] => {
   if (options.quicksprints) artifacts.push("Quicksprint Templates");
   if (options.previewScript) artifacts.push("Preview Container Script");
   if (options.ci) artifacts.push("GitHub/GitLab CI");
+  if (options.techstack) artifacts.push("Techstack Detection");
+  if (options.docs) artifacts.push("Docs Embedding");
   return artifacts;
 };
 
@@ -191,6 +196,9 @@ export function buildDefaultProjectSetupAgentInstructions(): string {
 
 export function buildProjectSetupPrompt(args: ProjectSetupPromptArgs): string {
   const selected = requestedArtifacts(args.options);
+  const projectGuidanceSection = buildProjectGuidanceSection(args.designGuidance, {
+    includeStyleguideInvestigationNotice: true,
+  });
   const baseTemplateSection = args.options.agents && args.baseAgentTemplates?.length
     ? [
       "## Base Agent Templates To Adapt",
@@ -242,6 +250,8 @@ export function buildProjectSetupPrompt(args: ProjectSetupPromptArgs): string {
     "## Project Setup Agent Instructions",
     args.setupAgent.instructionMarkdown.trim() || buildDefaultProjectSetupAgentInstructions(),
     "",
+    ...projectGuidanceSection,
+    ...(projectGuidanceSection.length > 0 ? [""] : []),
     ...baseTemplateSection,
     ...(baseTemplateSection.length > 0 ? [""] : []),
     ...quicksprintTemplateSection,
@@ -255,11 +265,15 @@ export function buildProjectSetupPrompt(args: ProjectSetupPromptArgs): string {
     `Repository root: ${args.project.baseDir}`,
     `Source type: ${args.project.sourceType}`,
     `Requested artifacts: ${selected.length > 0 ? selected.join(", ") : "none"}`,
+    ...(args.options.docs ? [
+      "Docs embedding requested: Code UX will automatically discover repository documentation and embed it into the Knowledge docs library after generated setup artifacts are applied. You should still read repository docs as evidence, but you do not need to return document contents or knowledge rows in the JSON.",
+    ] : []),
     "",
     "## Mandatory Research Scope",
     "- Start by listing the repository root and identifying the package manager, primary language(s), framework(s), app entrypoints, scripts, and test commands.",
     "- Read all assistant and CLI instruction markdown files that exist, especially AGENTS.md, GEMINI.md, Gemini.md, CLAUDE.md, Claude.md, README.md, docs/**/*.md, and equivalent local convention files.",
     "- Read dependency manifests and configuration that determine architecture or commands, including package.json and relevant workspace/config files.",
+    "- When techstack detection is requested, inspect dependency manifests carefully, especially package.json dependencies/devDependencies/peerDependencies/optionalDependencies, lockfiles, workspace manifests, and framework config files before naming the stack.",
     "- Read enough source files to identify the app's important subsystems and boundaries before proposing agents.",
     "",
     "## Output Contract",
@@ -296,11 +310,32 @@ export function buildProjectSetupPrompt(args: ProjectSetupPromptArgs): string {
     '      "path": ".github/workflows/code-ux-basic-checks.yml",',
     '      "content": "name: Code UX Basic Checks\\n..."',
     "    }",
-    "  ]",
+    "  ],",
+    ...(args.options.techstack ? [
+      '  "techstack": {',
+      '    "name": "React Vite TypeScript",',
+      '    "description": "Short evidence-based description of the detected application stack.",',
+      '    "detectedFrameworks": ["Vite", "React"],',
+      '    "detectedLibraries": ["TypeScript", "Vitest", "Tailwind CSS"]',
+      "  }",
+    ] : [
+      '  "techstack": null',
+    ]),
     "}",
     "",
     "## Artifact Rules",
     "",
+    ...(args.options.techstack ? [
+      "### Techstack Detection Rules",
+      "",
+      "- Return exactly one `techstack` object when the repository evidence supports a coherent stack.",
+      "- Base the techstack on repository evidence, especially package.json dependency sections, package scripts, lockfiles, workspace manifests, framework config files, and source entrypoints.",
+      "- The `name` must be concise and human-readable, such as `Next.js TypeScript`, `Preact Vite`, `Electron React`, or `Node API`.",
+      "- The `description` must explain the evidence used to identify the stack in one compact sentence.",
+      "- Put detected frameworks in `detectedFrameworks` and reusable libraries/tools in `detectedLibraries`. Include only items supported by manifests or source/config evidence.",
+      "- If evidence is too weak or contradictory, set `techstack` to null rather than guessing.",
+      "",
+    ] : ["- Set `techstack` to null.", ""]),
     ...(args.options.agents ? [
       "### Agent Rules",
       "",
@@ -348,5 +383,13 @@ export function buildProjectSetupPrompt(args: ProjectSetupPromptArgs): string {
       "- For CI, produce basic GitHub Actions and/or GitLab CI files only when appropriate for the detected repository. Prefer install, lint if present, typecheck if present, test if present, and build if present.",
       "- CI must use the detected package manager and avoid secret-dependent deployment steps.",
     ] : ["- Set `ci` to an empty array."]),
+    ...(args.options.docs ? [
+      "",
+      "### Docs Embedding Rules",
+      "",
+      "- Do not include embedded documents, document contents, or knowledge-library writes in the JSON output.",
+      "- Code UX will discover root documentation files and files under `docs/`, then embed them into the project's Knowledge docs library after applying this setup response.",
+      "- Use discovered documentation only as evidence for generated agents, quicksprints, preview scripts, CI, and techstack detection.",
+    ] : []),
   ].join("\n");
 }

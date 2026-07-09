@@ -197,6 +197,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
                     className="relative z-0 flex h-9 w-full items-center rounded-xl border border-black/[0.08] bg-white/88 pl-9 pr-12 text-left text-sm font-medium text-slate-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.82),0_1px_10px_rgba(15,23,42,0.05)] backdrop-blur-xl transition-colors hover:border-black/[0.12] hover:bg-white focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.1] dark:bg-white/[0.11] dark:text-slate-200 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_8px_24px_rgba(0,0,0,0.2)] dark:hover:border-white/[0.16] dark:hover:bg-white/[0.15]"
                     aria-expanded={isSearchOpen}
                     aria-haspopup="dialog"
+                    aria-controls={isSearchOpen ? "global-search-overlay" : undefined}
                 >
                     <span className="block min-w-0 truncate">Search workspace</span>
                 </button>
@@ -213,6 +214,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
                 aria-label="Open search"
                 aria-expanded={isSearchOpen}
                 aria-haspopup="dialog"
+                aria-controls={isSearchOpen ? "global-search-overlay" : undefined}
                 style={{ transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-black/[0.08] bg-white/88 shadow-sm backdrop-blur-xl transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.1] dark:bg-white/[0.11] dark:hover:bg-white/[0.15] md:hidden"
             >

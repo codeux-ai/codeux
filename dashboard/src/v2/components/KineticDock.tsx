@@ -2,33 +2,19 @@ import type { FunctionComponent } from "preact";
 import { useRef, useEffect, useState, useLayoutEffect, useCallback } from "preact/hooks";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { prefetchRoute } from "../router/route-prefetch.js";
-import { MessageCircle, Hexagon, Layers, ListChecks, Zap, Settings, Inbox, Cpu, BarChart3, Compass, CalendarDays, FolderTree, Library } from "lucide-preact";
 import gsap from "gsap";
 import { useProjectData } from "../context/project-data.js";
 import { useProjectEffectiveSettings } from "../hooks/use-project-effective-settings.js";
 import { useReducedMotion } from "../hooks/use-reduced-motion.js";
+import type { DashboardExperienceMode } from "../../types.js";
+import {
+    getNavigationItemLabel,
+    getPrimaryNavigationItems,
+    isRouteNavigationItem,
+    type PrimaryNavigationItem,
+} from "../lib/navigation-items.js";
 
-/* Chat sits left of the divider — the rest are standard nav */
-const LEFT_ITEMS = [
-    { icon: MessageCircle, label: "Chat",     path: "/chat",    color: "text-signal-400" },
-] as const;
-
-const RIGHT_ITEMS = [
-    { icon: Hexagon,    label: "Overview", path: "/",        color: "text-signal-500" },
-    { icon: Layers,     label: "Sprints",  path: "/sprints", color: "text-ember-500"  },
-    { icon: ListChecks, label: "Tasks",    path: "/tasks",   color: "text-signal-400" },
-    { icon: Cpu,        label: "Agents",   path: "/agents",  color: "text-signal-400" },
-    { icon: BarChart3,  label: "Stats",    path: "/stats",   color: "text-signal-500" },
-    { icon: CalendarDays, label: "Schedule", path: "/scheduler", color: "text-signal-500" },
-    { icon: Inbox,    label: "Memory",   path: "/memory",  color: "text-signal-500" },
-    { icon: Library,  label: "Knowledge", path: "/knowledge", color: "text-signal-500" },
-    { icon: Compass,  label: "Browser",  path: "/browser", color: "text-signal-500" },
-    { icon: FolderTree, label: "Files",  path: "/files",   color: "text-signal-500" },
-    { icon: Zap,      label: "Live",     path: "/live",    color: "text-signal-500" },
-    { icon: Settings, label: "Config",   path: "/config",  color: "text-slate-400 dark:text-slate-400" },
-] as const;
-
-type DockItem = (typeof LEFT_ITEMS)[number] | (typeof RIGHT_ITEMS)[number];
+type DockItem = PrimaryNavigationItem;
 
 const DockItemIcon: FunctionComponent<{ item: DockItem; isActive: boolean }> = ({ item, isActive }) => {
     return (
@@ -52,7 +38,11 @@ const DockItemIcon: FunctionComponent<{ item: DockItem; isActive: boolean }> = (
     );
 };
 
-export const KineticDock: FunctionComponent = () => {
+interface KineticDockProps {
+    experienceMode?: DashboardExperienceMode | null;
+}
+
+export const KineticDock: FunctionComponent<KineticDockProps> = ({ experienceMode }) => {
     const dockRef    = useRef<HTMLDivElement>(null);
     const itemRefs   = useRef<(HTMLAnchorElement | null)[]>([]);
     const [indicatorState, setIndicatorState] = useState({ left: 22, initialized: false });
@@ -63,18 +53,26 @@ export const KineticDock: FunctionComponent = () => {
         (effectiveSettings?.settings.sprintPreview.enabled ?? true)
         && (effectiveSettings?.settings.sprintPreview.showInAppBrowser ?? true)
     );
-    const rightItems = browserVisible ? RIGHT_ITEMS : RIGHT_ITEMS.filter((item) => item.path !== "/browser");
-    const allItems = [...LEFT_ITEMS, ...rightItems];
+    const navigationItems = getPrimaryNavigationItems(experienceMode ?? effectiveSettings?.settings.appearance?.experienceMode, {
+        browserVisible,
+    });
+    const leftItems = navigationItems.filter((item) => item.dockSection === "left");
+    const rightItems = navigationItems.filter((item) => item.dockSection === "right");
+    const allItems = [...leftItems, ...rightItems];
     const prefersReducedMotion = useReducedMotion();
 
     const matches     = useRouterState({ select: (s) => s.matches });
     const currentPath = (matches && matches.length > 0) ? (matches[matches.length - 1]?.pathname || "/") : "/";
-    const activeIndex = Math.max(0, allItems.findIndex((item) => item.path === currentPath || (item.path !== "/" && currentPath.startsWith(`${item.path}/`))));
+    const activeIndex = allItems.findIndex((item) => isRouteNavigationItem(item) && (item.path === currentPath || (item.path !== "/" && currentPath.startsWith(`${item.path}/`))));
     const activeItem = allItems[activeIndex];
 
     /* Active indicator position update */
     const updateIndicatorPosition = useCallback(() => {
         requestAnimationFrame(() => {
+            if (activeIndex < 0) {
+                setIndicatorState((current) => ({ ...current, initialized: false }));
+                return;
+            }
             const el = itemRefs.current[activeIndex];
             if (!el || !dockRef.current) return;
 
@@ -82,7 +80,7 @@ export const KineticDock: FunctionComponent = () => {
             const center = el.offsetLeft + (el.offsetWidth / 2);
             setIndicatorState({ left: center - 14, initialized: true });
         });
-    }, [activeIndex, browserVisible]);
+    }, [activeIndex, allItems.length]);
 
     /* Entrance */
     useEffect(() => {
@@ -196,24 +194,14 @@ export const KineticDock: FunctionComponent = () => {
 
     const renderItem = (item: DockItem, globalIndex: number) => {
         const isActive = activeIndex === globalIndex;
-        return (
-            <Link
-                key={item.label}
-                to={item.path}
-                aria-label={item.label}
-                aria-current={isActive ? 'page' : undefined}
-                data-active={isActive ? "true" : "false"}
-                ref={(el: HTMLAnchorElement | null) => { itemRefs.current[globalIndex] = el; }}
-                onMouseEnter={() => prefetchRoute(item.path)}
-                onPointerDown={() => prefetchRoute(item.path)}
-                onFocus={() => prefetchRoute(item.path)}
-                data-tour-id={`nav-${item.label.toLowerCase()}`}
-                className={`relative group flex flex-col items-center justify-center w-[52px] h-[52px] min-w-[44px] min-h-[44px] shrink-0 snap-center rounded-[1.4rem] transition-[background-color,border-color,box-shadow] motion-reduce:transition-none duration-300 decoration-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F9F8F4] dark:focus-visible:ring-offset-void-800 ${
-                    isActive
-                        ? "bg-signal-500/[0.12] shadow-[inset_0_0_0_1px_rgba(0,224,160,0.32),0_10px_24px_rgba(0,224,160,0.12)]"
-                        : "bg-transparent active:bg-black/[0.06] dark:active:bg-white/[0.08]"
-                }`}
-            >
+        const label = getNavigationItemLabel(item, "dock");
+        const className = `relative group flex flex-col items-center justify-center w-[52px] h-[52px] min-w-[44px] min-h-[44px] shrink-0 snap-center rounded-[1.4rem] transition-[background-color,border-color,box-shadow] motion-reduce:transition-none duration-300 decoration-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F9F8F4] dark:focus-visible:ring-offset-void-800 ${
+            isActive
+                ? "bg-signal-500/[0.12] shadow-[inset_0_0_0_1px_rgba(0,224,160,0.32),0_10px_24px_rgba(0,224,160,0.12)]"
+                : "bg-transparent active:bg-black/[0.06] dark:active:bg-white/[0.08]"
+        }`;
+        const content = (
+            <>
                 <div className={`absolute inset-0 rounded-[1.4rem] pointer-events-none transition-colors duration-300 motion-reduce:transition-none ${isActive ? "bg-signal-500/[0.08]" : "bg-transparent group-hover:bg-black/[0.04] dark:group-hover:bg-white/[0.05] group-focus-visible:bg-black/[0.04] dark:group-focus-visible:bg-white/[0.05]"}`} />
 
                 <DockItemIcon item={item} isActive={isActive} />
@@ -233,8 +221,44 @@ export const KineticDock: FunctionComponent = () => {
                                  pointer-events-none
                                  transition-all motion-reduce:transition-none duration-200 ease-out
                                  shadow-xl backdrop-blur-md whitespace-nowrap">
-                    {item.label}
+                    {label}
                 </span>
+            </>
+        );
+
+        if (!isRouteNavigationItem(item)) {
+            return (
+                <a
+                    key={item.id}
+                    href={item.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={label}
+                    data-active="false"
+                    ref={(el: HTMLAnchorElement | null) => { itemRefs.current[globalIndex] = el; }}
+                    data-tour-id={item.tourId}
+                    className={className}
+                >
+                    {content}
+                </a>
+            );
+        }
+
+        return (
+            <Link
+                key={item.id}
+                to={item.path}
+                aria-label={label}
+                aria-current={isActive ? 'page' : undefined}
+                data-active={isActive ? "true" : "false"}
+                ref={(el: HTMLAnchorElement | null) => { itemRefs.current[globalIndex] = el; }}
+                onMouseEnter={() => prefetchRoute(item.path)}
+                onPointerDown={() => prefetchRoute(item.path)}
+                onFocus={() => prefetchRoute(item.path)}
+                data-tour-id={item.tourId}
+                className={className}
+            >
+                {content}
             </Link>
         );
     };
@@ -275,18 +299,18 @@ export const KineticDock: FunctionComponent = () => {
                 />
 
                 {/* Chat — left of divider */}
-                {LEFT_ITEMS.map((item, i) => renderItem(item, i))}
+                {leftItems.map((item, i) => renderItem(item, i))}
 
                 {/* Thin vertical divider */}
                 <div className="w-px h-5 bg-black/[0.1] dark:bg-white/[0.1] mx-0.5 self-center shrink-0" />
 
                 {/* Main nav items */}
-                {rightItems.map((item, i) => renderItem(item, LEFT_ITEMS.length + i))}
+                {rightItems.map((item, i) => renderItem(item, leftItems.length + i))}
 
                 {/* Right edge scroll spacer */}
                 <div className="w-[1px] shrink-0" aria-hidden="true" />
                 <span id="dock-route-status" role="status" aria-live="polite" className="sr-only">
-                    Active route: {activeItem?.label ?? "Overview"}
+                    Active route: {activeItem ? getNavigationItemLabel(activeItem, "dock") : "None"}
                 </span>
             </nav>
         </div>

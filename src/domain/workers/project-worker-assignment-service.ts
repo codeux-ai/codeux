@@ -38,6 +38,10 @@ export class ProjectWorkerAssignmentService {
     return this.upsertWorkerAssignment(projectId, workerEndpointId, false);
   }
 
+  getActiveWorkerAssignment(projectId: string, workerEndpointId: string): ProjectWorkerAssignmentRecord | null {
+    return this.projectWorkerAssignmentRepository.getActiveAssignment(projectId, workerEndpointId);
+  }
+
   releaseWorkerAssignment(projectId: string, workerEndpointId: string, releaseReason?: string): ProjectWorkerAssignmentRecord | null {
     const current = this.projectWorkerAssignmentRepository.getActiveAssignment(projectId, workerEndpointId);
     if (!current) {

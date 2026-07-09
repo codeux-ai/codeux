@@ -38,6 +38,16 @@ describe("ActionFeedbackRegion", () => {
     expect(element.textContent).toContain("Success message");
   });
 
+  it("announces warning feedback politely", () => {
+    const { getByRole } = render(
+      <ActionFeedbackRegion status="warning" message="Warning message" />
+    );
+    const element = getByRole("status");
+    expect(element).toHaveAttribute("aria-live", "polite");
+    expect(element).toHaveTextContent("warning");
+    expect(element).toHaveTextContent("Warning message");
+  });
+
   it("announces pending progress politely with aria-busy", () => {
     const { getByRole, rerender } = render(
       <ActionFeedbackRegion status="pending" message="Saving settings" progress={25} />
@@ -153,5 +163,34 @@ describe("ActionFeedbackRegion", () => {
 
     fireEvent.click(clearButton);
     await waitFor(() => expect(document.activeElement).toBe(fallback));
+  });
+
+  it("moves focus to the existing fallback after dismissing a focused success control", async () => {
+    const FeedbackHarness = () => {
+      const [visible, setVisible] = useState(true);
+      return (
+        <main data-feedback-focus-fallback tabIndex={-1}>
+          {visible && (
+            <ActionFeedbackRegion
+              status="success"
+              message="Saved"
+              onDismiss={() => setVisible(false)}
+              autoDismiss={false}
+            />
+          )}
+        </main>
+      );
+    };
+
+    const { getByRole, queryByRole } = render(<FeedbackHarness />);
+    const fallback = getByRole("main");
+    const dismissButton = getByRole("button", { name: "Dismiss" });
+
+    dismissButton.focus();
+    expect(document.activeElement).toBe(dismissButton);
+
+    fireEvent.click(dismissButton);
+    await waitFor(() => expect(queryByRole("button", { name: "Dismiss" })).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(fallback);
   });
 });

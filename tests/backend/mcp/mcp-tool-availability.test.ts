@@ -13,11 +13,27 @@ describe("tool availability", () => {
     expect(projectManagerTools.some((tool) => tool.name === "manage_tasks")).toBe(true);
     expect(projectManagerTools.some((tool) => tool.name === "manage_quicksprints")).toBe(true);
     expect(projectManagerTools.some((tool) => tool.name === "manage_scheduler")).toBe(true);
+    expect(projectManagerTools.some((tool) => tool.name === "scheduler_code_ux")).toBe(true);
+    expect(projectManagerTools.some((tool) => tool.name === "manage_node_flows")).toBe(true);
+    expect(projectManagerTools.some((tool) => tool.name === "manage_custom_dashboards")).toBe(true);
+    expect(projectManagerTools.some((tool) => tool.name === "manage_skills")).toBe(true);
+    expect(projectManagerTools.some((tool) => tool.name === "search_skills")).toBe(true);
+    expect(projectManagerTools.some((tool) => tool.name === "register_worker_endpoint")).toBe(true);
+    expect(projectManagerTools.some((tool) => tool.name === "pull_task_dispatch")).toBe(true);
+    expect(projectManagerTools.some((tool) => tool.name === "update_task_dispatch")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_code_ux", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_projects", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_sprints", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_quicksprints", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_scheduler", "project_manager")).toBe(true);
+    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "scheduler_code_ux", "project_manager")).toBe(true);
+    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_node_flows", "project_manager")).toBe(true);
+    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_custom_dashboards", "project_manager")).toBe(true);
+    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_skills", "project_manager")).toBe(true);
+    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "search_skills", "project_manager")).toBe(true);
+    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "register_worker_endpoint", "project_manager")).toBe(true);
+    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "pull_task_dispatch", "project_manager")).toBe(true);
+    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "update_task_dispatch", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "claim_attention_item", "project_manager" as any)).toBe(false);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "execute_worker_dispatch", "project_manager" as any)).toBe(false);
   });
@@ -41,7 +57,7 @@ describe("tool availability", () => {
     const settings = {
       ...DEFAULT_DASHBOARD_SETTINGS,
       mcpTools: DEFAULT_DASHBOARD_SETTINGS.mcpTools.map((tool) =>
-        tool.name === "manage_preview" || tool.name === "manage_telemetry"
+        tool.name === "manage_preview" || tool.name === "manage_telemetry" || tool.name === "scheduler_code_ux"
           ? { ...tool, enabled: false }
           : tool
       ),
@@ -50,8 +66,10 @@ describe("tool availability", () => {
     const names = getEnabledToolDefinitions(settings, "project_manager").map((tool) => tool.name);
     expect(names).not.toContain("manage_preview");
     expect(names).not.toContain("manage_telemetry");
+    expect(names).not.toContain("scheduler_code_ux");
     expect(isToolEnabled(settings, "manage_preview", "project_manager")).toBe(false);
     expect(isToolEnabled(settings, "manage_telemetry", "project_manager")).toBe(false);
+    expect(isToolEnabled(settings, "scheduler_code_ux", "project_manager")).toBe(false);
   });
 
   it("applies per-agent tool overrides over the system toggles", () => {
@@ -63,14 +81,28 @@ describe("tool availability", () => {
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_projects", "project_manager", agentToggles)).toBe(true);
   });
 
+  it("allows per-agent policy to expose skill retrieval without skill management", () => {
+    const agentToggles = [
+      { name: "manage_skills", enabled: false, isInternal: true },
+      { name: "search_skills", enabled: true, isInternal: true },
+    ];
+    const names = getEnabledToolDefinitions(DEFAULT_DASHBOARD_SETTINGS, "project_manager", agentToggles).map((tool) => tool.name);
+    expect(names).not.toContain("manage_skills");
+    expect(names).toContain("search_skills");
+    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_skills", "project_manager", agentToggles)).toBe(false);
+    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "search_skills", "project_manager", agentToggles)).toBe(true);
+  });
+
   it("sanitizes toggles and ignores unknown tool names", () => {
     const sanitized = sanitizeMcpToolToggles([
       { name: "manage_tasks", enabled: false },
+      { name: "manage_node_flows", enabled: false },
       { name: "unknown_tool", enabled: false },
       { name: " ", enabled: true },
     ]);
 
     expect(sanitized.find((tool) => tool.name === "manage_tasks")?.enabled).toBe(false);
+    expect(sanitized.find((tool) => tool.name === "manage_node_flows")?.enabled).toBe(false);
     expect(sanitized.find((tool) => tool.name === "manage_projects")?.enabled).toBe(true);
     expect(sanitized.some((tool) => tool.name === "unknown_tool")).toBe(false);
   });
@@ -132,12 +164,12 @@ describe("sanitizeCustomMcpServers", () => {
 
   it("dedupes by id, last entry wins", () => {
     const result = sanitizeCustomMcpServers([
-      { id: "x", name: "first", url: "https://1", enabled: true },
-      { id: "x", name: "second", url: "https://2", enabled: false },
+      { id: "x", name: "first", url: "https://one.example.com", enabled: true },
+      { id: "x", name: "second", url: "https://two.example.com", enabled: false },
     ]);
 
     expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({ name: "second", url: "https://2", enabled: false });
+    expect(result[0]).toMatchObject({ name: "second", url: "https://two.example.com", enabled: false });
   });
 
   it("returns an empty array for non-array input", () => {
@@ -207,6 +239,29 @@ describe("sanitizeCustomMcpServers", () => {
     expect(result.map((s) => s.id)).toEqual(["d"]);
   });
 
+  it("drops HTTP servers targeting unsafe or ambiguous network destinations", () => {
+    const result = sanitizeCustomMcpServers([
+      { id: "metadata", name: "metadata", url: "http://169.254.169.254/latest/meta-data", transport: "http" },
+      { id: "mapped-metadata", name: "mapped_metadata", url: "http://[::ffff:169.254.169.254]/mcp", transport: "http" },
+      { id: "metadata-host", name: "metadata_host", url: "http://metadata.google.internal/computeMetadata/v1", transport: "http" },
+      { id: "link-local-v6", name: "link_local_v6", url: "http://[fe80::1]/mcp", transport: "http" },
+      { id: "multicast-v4", name: "multicast_v4", url: "http://224.0.0.1/mcp", transport: "http" },
+      { id: "multicast-v6", name: "multicast_v6", url: "http://[ff02::1]/mcp", transport: "http" },
+      { id: "broadcast", name: "broadcast", url: "http://255.255.255.255/mcp", transport: "http" },
+      { id: "single-number", name: "single_number", url: "http://2130706433/mcp", transport: "http" },
+      { id: "hex", name: "hex", url: "http://0x7f000001/mcp", transport: "http" },
+      { id: "short-ip", name: "short_ip", url: "http://127.1/mcp", transport: "http" },
+      { id: "leading-zero", name: "leading_zero", url: "http://0177.0.0.1/mcp", transport: "http" },
+      { id: "localhost", name: "localhost", url: "http://localhost:3000/mcp", transport: "http" },
+      { id: "ipv4-loopback", name: "ipv4_loopback", url: "http://127.0.0.1:3000/mcp", transport: "http" },
+      { id: "ipv6-loopback", name: "ipv6_loopback", url: "http://[::1]:3000/mcp", transport: "http" },
+      { id: "mapped-loopback", name: "mapped_loopback", url: "http://[::ffff:127.0.0.1]:3000/mcp", transport: "http" },
+      { id: "remote", name: "remote", url: "https://mcp.example.com/sse", transport: "http" },
+    ]);
+
+    expect(result.map((s) => s.id)).toEqual(["localhost", "ipv4-loopback", "ipv6-loopback", "mapped-loopback", "remote"]);
+  });
+
   it("sanitizes headers to drop invalid names and control chars in values", () => {
     const result = sanitizeCustomMcpServers([
       {
@@ -222,6 +277,31 @@ describe("sanitizeCustomMcpServers", () => {
       },
     ]);
     expect(result[0].headers).toEqual({ "Valid-Header": "ok" });
+  });
+
+  it("drops hop-by-hop and request-smuggling-sensitive custom headers", () => {
+    const result = sanitizeCustomMcpServers([
+      {
+        id: "srv",
+        name: "test",
+        url: "https://example.com",
+        headers: {
+          Authorization: "Bearer redacted",
+          Host: "attacker.example",
+          Connection: "keep-alive",
+          "Transfer-Encoding": "chunked",
+          "Content-Length": "5",
+          TE: "trailers",
+          Trailer: "X-Injected",
+          Upgrade: "websocket",
+          "Proxy-Authorization": "Basic redacted",
+          "Proxy-Connection": "keep-alive",
+          Expect: "100-continue",
+          "X-Mcp-Session": "ok",
+        },
+      },
+    ]);
+    expect(result[0].headers).toEqual({ Authorization: "Bearer redacted", "X-Mcp-Session": "ok" });
   });
 
   it("sanitizes environment variables to drop invalid names and control chars", () => {

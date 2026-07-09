@@ -11,9 +11,16 @@ export const sanitizeCliWorkflow = (
     ? input.cliWorkflow
     : {}) as Partial<DashboardSettings["cliWorkflow"]>;
 
-  // Execution is Docker-only. HOST persists only as a runtime fallback applied when
-  // Docker is unavailable (see virtual-worker-service), never as a user-selectable setting.
-  const normalizedExecutionMode: CliExecutionMode = "DOCKER";
+  // Execution is Docker-only in production. The Playwright fake-provider lane
+  // runs without Docker and is gated by an explicit E2E-only provider shim.
+  const requestedExecutionMode = readString(
+    cliInput.executionMode,
+    DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.executionMode,
+  ) as CliExecutionMode;
+  const e2eProviderShimEnabled = Boolean(process.env.CODEUX_E2E_PROVIDER_CLI_SHIM?.trim());
+  const normalizedExecutionMode: CliExecutionMode = e2eProviderShimEnabled && requestedExecutionMode === "HOST"
+    ? "HOST"
+    : "DOCKER";
 
   const containerImage = readString(
     cliInput.containerImage,
@@ -67,6 +74,10 @@ export const sanitizeCliWorkflow = (
       cliInput.containerSetupScriptPath,
       DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerSetupScriptPath
     ).trim(),
+    containerMemoryLimitMb: Math.max(0, Math.min(262144, readInteger(
+      cliInput.containerMemoryLimitMb,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerMemoryLimitMb
+    ))),
     containerCacheSetupScriptImage: readBoolean(
       cliInput.containerCacheSetupScriptImage,
       DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerCacheSetupScriptImage
@@ -74,6 +85,10 @@ export const sanitizeCliWorkflow = (
     containerInstallPlaywrightBrowsers: readBoolean(
       cliInput.containerInstallPlaywrightBrowsers,
       DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerInstallPlaywrightBrowsers
+    ),
+    containerRunAsRoot: readBoolean(
+      cliInput.containerRunAsRoot,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerRunAsRoot
     ),
     containerMountGitConfig: readBoolean(
       cliInput.containerMountGitConfig,

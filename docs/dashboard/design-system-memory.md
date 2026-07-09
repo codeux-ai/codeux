@@ -6,11 +6,11 @@ Make the Memory page feel like a focused knowledge graph tool.
 The Memory UI relies on specific hex colors that match existing app accents:
 - **Architecture:** Signal (Teal) `#00E0A0` -> `r: 0, g: 224, b: 160`
 - **Codebase:** Ember (Orange) `#FFB800` -> `r: 255, g: 184, b: 0`
-- **Context:** Violet `#8B5CF6` -> `r: 139, g: 92, b: 246` (Updated from previous green)
+- **Context:** Violet `#8B5CF6` -> `r: 139, g: 92, b: 246`
 - **Preferences:** Slate `#94A3B8` -> `r: 148, g: 163, b: 184`
 - **Patterns:** Amber/Ember variant `#F59E0B` -> `r: 245, g: 158, b: 11`
-- **Decision:** Slate/Alternative `#64748B` -> `r: 100, g: 116, b: 139` (Updated to keep it aligned, or another accent)
-- **Error:** Rose `#F43F5E` -> `r: 244, g: 63, b: 94` (Updated from simple red)
+- **Decision:** Slate/Alternative `#64748B` -> `r: 100, g: 116, b: 139`
+- **Error:** Rose `#F43F5E` -> `r: 244, g: 63, b: 94`
 - **Learning:** Cyan/Teal `#33FFB8` -> `r: 51, g: 255, b: 184`
 
 ## Accessibility Rules
@@ -33,7 +33,9 @@ The Memory UI relies on specific hex colors that match existing app accents:
 - **Sidebar & Details:** The memory sidebar starts collapsed as a narrow rail so the canvas stays available by default. When expanded, it becomes a mobile drawer with an internal scrolling list and a desktop side rail.
 - **Inspector Dock:** The inspector is a bottom sheet on mobile and a fixed right dock on desktop. Its scroll area is internal, the close button is always labeled, and the panel never blocks the ability to dismiss it.
 - **Overlay Safety:** Zoom controls, legend, and node count live inside the canvas wrapper with safe offsets that move away from the inspector on desktop and stay reachable on mobile.
-- **Filters & Search:** Filter controls wrap into multiple rows with `flex-wrap`, `min-w-0`, and `max-w-full` so tier tabs, sprint selectors, agent selectors, model catalog, add memory, and danger actions never force horizontal scrolling.
+- **Header Filters & Actions:** The Memory header control surface groups tier summary tabs, current-scope copy, scope selectors, and actions into distinct rows. Tier tabs show Short Term and Long Term counts directly; the compact scope line uses the pattern `Short Term: showing 7 memories of 17 memories · Sprint 2 · All Agents` or `Long Term: showing 1 memory of 1 memory · Project-wide · All Agents`.
+- **Filters & Search:** Filter controls wrap into multiple rows with `flex-wrap`, `min-w-0`, stable flex bases, and `max-w-full` so tier tabs, sprint selectors, agent selectors, model catalog, add memory, and danger actions never force horizontal scrolling.
+- **Header Actions:** Add Memory, Model Catalog, and Danger Delete are visually separated from selectors. Model Catalog keeps `aria-pressed`, shown/hidden text, and active-model status visible. Danger Delete keeps `aria-pressed`, Off/Armed button text, and persistent explanatory copy visible in both states.
 - **Sidebar Search:** The expanded memory sidebar includes a visible search field above the list. Search filters are debounced and optional; clearing the field must restore the full alive memory list for the current tier/filter context.
 - **Truncation:** Metadata limits string lengths gracefully using `truncate`, `break-words`, and compact badges for connected-memory details.
 

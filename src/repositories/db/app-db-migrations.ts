@@ -17,6 +17,417 @@ export function ensureUniqueIndex(db: DatabaseAdapter, indexName: string, tableN
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ${indexName} ON ${tableName} (${columns})`);
 }
 
+interface TableColumnInfo {
+  name?: string;
+  notnull?: number;
+}
+
+function getTableColumns(db: DatabaseAdapter, tableName: string): Map<string, TableColumnInfo> {
+  const rows = db.prepare(`PRAGMA table_info(${tableName})`).all() as TableColumnInfo[];
+  return new Map(rows.filter((row) => row.name).map((row) => [row.name!, row]));
+}
+
+function columnSelectExpression(columns: Map<string, TableColumnInfo>, columnName: string, fallbackSql: string): string {
+  return columns.has(columnName) ? columnName : `${fallbackSql} AS ${columnName}`;
+}
+
+export function ensureChatProviderTables(db: DatabaseAdapter): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_provider_connections (
+      id TEXT PRIMARY KEY,
+      provider_kind TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      bridge_mode TEXT NOT NULL,
+      status TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      setup_json TEXT NOT NULL DEFAULT '{}',
+      secret_json TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_provider_channel_bindings (
+      id TEXT PRIMARY KEY,
+      provider_connection_id TEXT NOT NULL,
+      external_channel_id TEXT NOT NULL,
+      external_channel_name TEXT NOT NULL,
+      external_channel_metadata_json TEXT,
+      project_id TEXT NOT NULL,
+      agent_preset_id TEXT,
+      routing_hints_json TEXT,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      inbound_enabled INTEGER NOT NULL DEFAULT 1,
+      outbound_enabled INTEGER NOT NULL DEFAULT 1,
+      suppress_rich_widgets INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (provider_connection_id) REFERENCES chat_provider_connections(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (agent_preset_id) REFERENCES agent_presets(id) ON DELETE SET NULL,
+      UNIQUE (provider_connection_id, external_channel_id, project_id)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_provider_message_deliveries (
+      id TEXT PRIMARY KEY,
+      provider_connection_id TEXT NOT NULL,
+      channel_binding_id TEXT,
+      external_channel_id TEXT NOT NULL,
+      external_message_id TEXT,
+      direction TEXT NOT NULL,
+      status TEXT NOT NULL,
+      attempt_count INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      conversation_thread_id TEXT,
+      conversation_message_id TEXT,
+      payload_json TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (provider_connection_id) REFERENCES chat_provider_connections(id) ON DELETE CASCADE,
+      FOREIGN KEY (channel_binding_id) REFERENCES chat_provider_channel_bindings(id) ON DELETE SET NULL,
+      FOREIGN KEY (conversation_thread_id) REFERENCES conversation_threads(id) ON DELETE SET NULL,
+      FOREIGN KEY (conversation_message_id) REFERENCES conversation_messages(id) ON DELETE SET NULL
+    )
+  `);
+
+  ensureIndex(db, "idx_chat_provider_connections_kind", "chat_provider_connections", "provider_kind, updated_at DESC");
+  ensureIndex(db, "idx_chat_provider_connections_enabled", "chat_provider_connections", "enabled, status, updated_at DESC");
+  ensureIndex(db, "idx_chat_provider_channel_bindings_project", "chat_provider_channel_bindings", "project_id, enabled, updated_at DESC");
+  ensureIndex(db, "idx_chat_provider_channel_bindings_provider_channel", "chat_provider_channel_bindings", "provider_connection_id, external_channel_id");
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_provider_message_deliveries_inbound_dedupe
+    ON chat_provider_message_deliveries (provider_connection_id, external_message_id)
+    WHERE direction = 'inbound' AND external_message_id IS NOT NULL
+  `);
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_provider_message_deliveries_outbound_message
+    ON chat_provider_message_deliveries (provider_connection_id, conversation_message_id)
+    WHERE direction = 'outbound' AND conversation_message_id IS NOT NULL
+  `);
+  db.exec("DROP INDEX IF EXISTS idx_chat_provider_message_deliveries_pending_outbound");
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_chat_provider_message_deliveries_pending_outbound
+    ON chat_provider_message_deliveries (status, updated_at ASC)
+    WHERE direction = 'outbound' AND status IN ('pending', 'sending', 'retryable_failure')
+  `);
+}
+
+export function ensureTaskSelfReflectionRatingTables(db: DatabaseAdapter): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS task_self_reflection_ratings (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      sprint_id TEXT NOT NULL,
+      task_id TEXT NOT NULL,
+      source_task_run_id TEXT NOT NULL UNIQUE,
+      overall_rating REAL NOT NULL CHECK (overall_rating >= 0 AND overall_rating <= 5),
+      sections_json TEXT NOT NULL DEFAULT '[]',
+      captured_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
+      FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+      FOREIGN KEY (source_task_run_id) REFERENCES task_runs(id) ON DELETE CASCADE
+    )
+  `);
+  ensureUniqueIndex(db, "idx_task_self_reflection_ratings_task_run", "task_self_reflection_ratings", "source_task_run_id");
+  ensureIndex(db, "idx_task_self_reflection_ratings_task_latest", "task_self_reflection_ratings", "task_id, captured_at DESC, updated_at DESC");
+  ensureIndex(db, "idx_task_self_reflection_ratings_project_task_latest", "task_self_reflection_ratings", "project_id, task_id, captured_at DESC");
+}
+
+export function ensureConversationDraftTables(db: DatabaseAdapter): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS conversation_drafts (
+      user_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      context_key TEXT NOT NULL,
+      body_markdown TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, project_id, context_key),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+  ensureIndex(db, "idx_conversation_drafts_project_updated", "conversation_drafts", "project_id, updated_at DESC");
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS conversation_message_history (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      body_markdown TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(user_id, project_id, body_markdown),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+  ensureIndex(db, "idx_conversation_message_history_user_project_updated", "conversation_message_history", "user_id, project_id, updated_at DESC");
+}
+
+export function ensureNodeFlowTables(db: DatabaseAdapter): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS node_flows (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      graph_json TEXT NOT NULL,
+      version INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS node_flow_versions (
+      id TEXT PRIMARY KEY,
+      flow_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      graph_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      UNIQUE (flow_id, version)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS node_flow_agent_skills (
+      flow_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      agent_preset_id TEXT NOT NULL,
+      skill_name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (flow_id, agent_preset_id),
+      FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (agent_preset_id) REFERENCES agent_presets(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS node_flow_runs (
+      id TEXT PRIMARY KEY,
+      flow_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      execution_invocation_id TEXT,
+      trigger_type TEXT NOT NULL DEFAULT 'manual',
+      trigger_payload_json TEXT,
+      input_json TEXT,
+      output_json TEXT,
+      error_message TEXT,
+      started_at TEXT,
+      finished_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (execution_invocation_id) REFERENCES execution_invocations(id) ON DELETE SET NULL
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS node_flow_node_runs (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL,
+      flow_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      execution_invocation_id TEXT,
+      input_json TEXT,
+      output_json TEXT,
+      error_message TEXT,
+      started_at TEXT,
+      finished_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (run_id) REFERENCES node_flow_runs(id) ON DELETE CASCADE,
+      FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (execution_invocation_id) REFERENCES execution_invocations(id) ON DELETE SET NULL
+    )
+  `);
+
+  ensureColumn(db, "node_flow_runs", "execution_invocation_id", "TEXT");
+  ensureColumn(db, "node_flow_node_runs", "execution_invocation_id", "TEXT");
+
+  ensureIndex(db, "idx_node_flows_project_updated", "node_flows", "project_id, updated_at DESC");
+  ensureIndex(db, "idx_node_flow_versions_flow_version", "node_flow_versions", "flow_id, version DESC");
+  ensureIndex(db, "idx_node_flow_agent_skills_agent", "node_flow_agent_skills", "project_id, agent_preset_id");
+  ensureIndex(db, "idx_node_flow_runs_flow_created", "node_flow_runs", "flow_id, created_at DESC");
+  ensureIndex(db, "idx_node_flow_runs_project_created", "node_flow_runs", "project_id, created_at DESC");
+  ensureIndex(db, "idx_node_flow_node_runs_run_created", "node_flow_node_runs", "run_id, created_at ASC");
+}
+
+export function ensureCustomDashboardTables(db: DatabaseAdapter): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS custom_dashboards (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'draft',
+      manifest_json TEXT NOT NULL,
+      files_json TEXT NOT NULL,
+      source_node_graph_json TEXT NOT NULL,
+      styleguide_json TEXT NOT NULL DEFAULT '{}',
+      runtime_metadata_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS custom_dashboard_revisions (
+      id TEXT PRIMARY KEY,
+      dashboard_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      revision_number INTEGER NOT NULL,
+      manifest_json TEXT NOT NULL,
+      files_json TEXT NOT NULL,
+      source_node_graph_json TEXT NOT NULL,
+      styleguide_json TEXT NOT NULL DEFAULT '{}',
+      validation_status TEXT,
+      validation_report_json TEXT,
+      runtime_metadata_json TEXT NOT NULL DEFAULT '{}',
+      validated_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (dashboard_id) REFERENCES custom_dashboards(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      UNIQUE (dashboard_id, revision_number)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS custom_dashboard_validation_sessions (
+      id TEXT PRIMARY KEY,
+      dashboard_id TEXT NOT NULL,
+      revision_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      validation_report_json TEXT,
+      runtime_metadata_json TEXT NOT NULL DEFAULT '{}',
+      started_at TEXT,
+      finished_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (dashboard_id) REFERENCES custom_dashboards(id) ON DELETE CASCADE,
+      FOREIGN KEY (revision_id) REFERENCES custom_dashboard_revisions(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS custom_dashboard_publications (
+      dashboard_id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      revision_id TEXT NOT NULL,
+      published_at TEXT NOT NULL,
+      runtime_metadata_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (dashboard_id) REFERENCES custom_dashboards(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (revision_id) REFERENCES custom_dashboard_revisions(id) ON DELETE CASCADE
+    )
+  `);
+
+  ensureIndex(db, "idx_custom_dashboards_project_status", "custom_dashboards", "project_id, status, updated_at DESC");
+  ensureIndex(db, "idx_custom_dashboard_revisions_dashboard_revision", "custom_dashboard_revisions", "dashboard_id, revision_number DESC");
+  ensureIndex(db, "idx_custom_dashboard_revisions_project", "custom_dashboard_revisions", "project_id, created_at DESC");
+  ensureIndex(db, "idx_custom_dashboard_validation_sessions_revision", "custom_dashboard_validation_sessions", "revision_id, created_at DESC");
+  ensureIndex(db, "idx_custom_dashboard_validation_sessions_dashboard", "custom_dashboard_validation_sessions", "dashboard_id, created_at DESC");
+  ensureIndex(db, "idx_custom_dashboard_publications_project", "custom_dashboard_publications", "project_id, published_at DESC");
+}
+
+export function migrateSprintLinkedIssuesExternalSources(db: DatabaseAdapter): void {
+  ensureColumn(db, "sprint_linked_issues", "project_key", "TEXT");
+  ensureColumn(db, "sprint_linked_issues", "external_id", "TEXT");
+  ensureColumn(db, "sprint_linked_issues", "source_kind", "TEXT");
+
+  const columns = getTableColumns(db, "sprint_linked_issues");
+  if (columns.get("issue_number")?.notnull !== 1) {
+    return;
+  }
+
+  db.exec("PRAGMA foreign_keys = OFF");
+  try {
+    db.exec("BEGIN");
+    db.exec(`
+      CREATE TABLE sprint_linked_issues_new (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        sprint_id TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        host_domain TEXT NOT NULL,
+        project_key TEXT,
+        repository TEXT NOT NULL,
+        issue_number INTEGER,
+        external_id TEXT,
+        source_kind TEXT,
+        issue_key TEXT NOT NULL,
+        title TEXT NOT NULL,
+        url TEXT NOT NULL,
+        state TEXT NOT NULL DEFAULT 'open',
+        labels_json TEXT NOT NULL DEFAULT '[]',
+        assignees_json TEXT NOT NULL DEFAULT '[]',
+        imported_at TEXT NOT NULL,
+        closed_at TEXT,
+        close_state TEXT NOT NULL DEFAULT 'open',
+        close_error TEXT,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE
+      )
+    `);
+    db.exec(`
+      INSERT INTO sprint_linked_issues_new (
+        id, project_id, sprint_id, provider, host_domain, project_key, repository,
+        issue_number, external_id, source_kind, issue_key, title, url, state,
+        labels_json, assignees_json, imported_at, closed_at, close_state, close_error, updated_at
+      )
+      SELECT
+        id,
+        project_id,
+        sprint_id,
+        provider,
+        host_domain,
+        ${columnSelectExpression(columns, "project_key", "NULL")},
+        repository,
+        issue_number,
+        ${columnSelectExpression(columns, "external_id", "NULL")},
+        ${columnSelectExpression(columns, "source_kind", "NULL")},
+        issue_key,
+        title,
+        url,
+        state,
+        labels_json,
+        assignees_json,
+        imported_at,
+        closed_at,
+        close_state,
+        close_error,
+        updated_at
+      FROM sprint_linked_issues
+    `);
+    db.exec("DROP TABLE sprint_linked_issues");
+    db.exec("ALTER TABLE sprint_linked_issues_new RENAME TO sprint_linked_issues");
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  } finally {
+    db.exec("PRAGMA foreign_keys = ON");
+  }
+}
+
 export function backfillEstimatedDockerCliUsage(db: DatabaseAdapter): void {
   db.prepare(`
     UPDATE provider_invocations
@@ -142,6 +553,11 @@ export function runMigrations(db: DatabaseAdapter): void {
   // We can group future schema changes here.
   // The current phase 1 approach calls schema definitions directly, but these ensure*
   // helpers allow progressive column additions safely.
+  ensureChatProviderTables(db);
+  ensureTaskSelfReflectionRatingTables(db);
+  ensureConversationDraftTables(db);
+  ensureNodeFlowTables(db);
+  ensureCustomDashboardTables(db);
 
   ensureColumn(db, "provider_invocations", "tool_call_count", "INTEGER NOT NULL DEFAULT 0");
 
@@ -151,6 +567,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "sprints", "is_generated_name", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "tasks", "executor_type", "TEXT NOT NULL DEFAULT 'auto'");
   ensureColumn(db, "sprint_preview_sessions", "port_mappings_json", "TEXT");
+  ensureColumn(db, "sprint_preview_sessions", "environment_overrides_json", "TEXT");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS sprint_linked_issues (
@@ -159,8 +576,11 @@ export function runMigrations(db: DatabaseAdapter): void {
       sprint_id TEXT NOT NULL,
       provider TEXT NOT NULL,
       host_domain TEXT NOT NULL,
+      project_key TEXT,
       repository TEXT NOT NULL,
-      issue_number INTEGER NOT NULL,
+      issue_number INTEGER,
+      external_id TEXT,
+      source_kind TEXT,
       issue_key TEXT NOT NULL,
       title TEXT NOT NULL,
       url TEXT NOT NULL,
@@ -176,6 +596,7 @@ export function runMigrations(db: DatabaseAdapter): void {
       FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE
     )
   `);
+  migrateSprintLinkedIssuesExternalSources(db);
 
   ensureColumn(db, "task_runs", "sprint_run_id", "TEXT");
   ensureColumn(db, "task_runs", "dispatch_id", "TEXT");
@@ -192,10 +613,12 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "agent_presets", "avatar_config_json", "TEXT");
   ensureColumn(db, "agent_presets", "provider_config_id", "TEXT");
   ensureColumn(db, "agent_presets", "model", "TEXT");
+  ensureColumn(db, "agent_presets", "container_run_as_root", "INTEGER");
   ensureColumn(db, "agent_presets", "memory_template_override_enabled", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "agent_presets", "memory_template_markdown", "TEXT");
   ensureColumn(db, "agent_presets", "mcp_access_json", "TEXT");
   ensureColumn(db, "agent_presets", "memory_config_json", "TEXT");
+  ensureColumn(db, "agent_presets", "persistent_skill_storage_enabled", "INTEGER NOT NULL DEFAULT 0");
 
   ensureColumn(db, "connection_project_bindings", "last_attention_cursor", "TEXT");
   ensureColumn(db, "connection_project_bindings", "last_assignment_cursor", "TEXT");
@@ -214,6 +637,7 @@ export function runMigrations(db: DatabaseAdapter): void {
 
   ensureUniqueIndex(db, "idx_tasks_sprint_key", "tasks", "sprint_id, task_key");
   ensureUniqueIndex(db, "idx_sprint_linked_issues_unique", "sprint_linked_issues", "sprint_id, provider, host_domain, repository, issue_number");
+  ensureUniqueIndex(db, "idx_sprint_linked_issues_external_unique", "sprint_linked_issues", "sprint_id, provider, host_domain, repository, external_id");
   ensureIndex(db, "idx_sprint_linked_issues_sprint", "sprint_linked_issues", "project_id, sprint_id, close_state");
   ensureIndex(db, "idx_sprint_runs_project_sprint", "sprint_runs", "project_id, sprint_id, created_at DESC");
   ensureIndex(db, "idx_sprint_runs_project_status_recency", "sprint_runs", "project_id, status, last_heartbeat_at DESC, updated_at DESC, created_at DESC");
@@ -223,6 +647,9 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_task_runs_task_session_id", "task_runs", "task_id, session_id");
   ensureIndex(db, "idx_task_runs_task_session_name", "task_runs", "task_id, session_name");
   ensureIndex(db, "idx_task_runs_task_finished", "task_runs", "task_id, finished_at");
+  ensureIndex(db, "idx_task_runs_session_id_owner", "task_runs", "session_id, project_id, sprint_id, task_id");
+  ensureIndex(db, "idx_task_runs_session_name_owner", "task_runs", "session_name, project_id, sprint_id, task_id");
+  ensureIndex(db, "idx_task_runs_pr_url_owner", "task_runs", "pr_url, project_id, sprint_id, task_id");
   ensureIndex(db, "idx_task_runs_sprint_run_started", "task_runs", "sprint_run_id, started_at DESC");
   ensureIndex(db, "idx_task_runs_project_sprint_lookup", "task_runs", "project_id, sprint_id, sprint_run_id, id");
   ensureIndex(db, "idx_task_runs_project_sprint_run_lookup", "task_runs", "project_id, sprint_run_id, id");
@@ -232,6 +659,8 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "provider_invocations", "token_accounting_version", "INTEGER NOT NULL DEFAULT 1");
   backfillTokenAccountingV2(db);
   ensureIndex(db, "idx_provider_invocations_project_started", "provider_invocations", "project_id, started_at DESC");
+  ensureIndex(db, "idx_provider_invocations_started", "provider_invocations", "started_at DESC");
+  ensureIndex(db, "idx_provider_invocations_updated", "provider_invocations", "updated_at DESC");
   ensureIndex(db, "idx_provider_invocations_project_sprint_started", "provider_invocations", "project_id, sprint_id, started_at DESC");
   ensureIndex(db, "idx_provider_invocations_project_sprint_run_started", "provider_invocations", "project_id, sprint_run_id, started_at DESC");
   ensureIndex(db, "idx_provider_invocations_sprint_started", "provider_invocations", "sprint_id, started_at DESC");
@@ -239,6 +668,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_provider_invocations_task_run", "provider_invocations", "task_run_id, started_at DESC");
   ensureIndex(db, "idx_provider_invocations_attention", "provider_invocations", "attention_item_id, started_at DESC");
   ensureIndex(db, "idx_provider_invocations_session", "provider_invocations", "session_id, started_at DESC");
+  ensureIndex(db, "idx_provider_invocations_session_owner", "provider_invocations", "session_id, project_id, sprint_id, task_id");
   ensureIndex(db, "idx_qa_review_runs_task_started", "qa_review_runs", "task_id, started_at DESC");
   ensureIndex(db, "idx_qa_review_runs_sprint_started", "qa_review_runs", "sprint_id, started_at DESC");
   ensureIndex(db, "idx_qa_review_runs_run_status", "qa_review_runs", "status, started_at DESC");
@@ -299,6 +729,8 @@ export function runMigrations(db: DatabaseAdapter): void {
   db.exec("DELETE FROM dashboard_realtime_events WHERE is_replayable = 0");
   ensureIndex(db, "idx_conversation_threads_project_updated", "conversation_threads", "project_id, updated_at DESC");
   ensureIndex(db, "idx_conversation_messages_thread_created", "conversation_messages", "thread_id, created_at ASC");
+  ensureIndex(db, "idx_conversation_drafts_project_updated", "conversation_drafts", "project_id, updated_at DESC");
+  ensureIndex(db, "idx_conversation_message_history_user_project_updated", "conversation_message_history", "user_id, project_id, updated_at DESC");
   ensureIndex(db, "idx_memories_project_scope", "memories", "project_id, scope, updated_at DESC");
   ensureIndex(db, "idx_memories_project_sprint", "memories", "project_id, sprint_id, created_at DESC");
   ensureIndex(db, "idx_memories_project_agent", "memories", "project_id, agent_preset_id, created_at DESC");
@@ -345,6 +777,81 @@ export function runMigrations(db: DatabaseAdapter): void {
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_claims_project_fingerprint_active ON memory_claims (project_id, fingerprint) WHERE status = 'active'");
   ensureIndex(db, "idx_agent_presets_project_updated", "agent_presets", "project_id, updated_at DESC");
   ensureIndex(db, "idx_agent_presets_project_name", "agent_presets", "project_id, name");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS skill_storages (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      storage_kind TEXT NOT NULL DEFAULT 'project',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      UNIQUE (project_id, name)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS skills (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      storage_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      content_markdown TEXT NOT NULL DEFAULT '',
+      source_type TEXT NOT NULL DEFAULT 'manual',
+      source_ref TEXT,
+      content_hash TEXT NOT NULL,
+      tags_json TEXT NOT NULL DEFAULT '[]',
+      applies_to_json TEXT NOT NULL DEFAULT '[]',
+      version TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (storage_id) REFERENCES skill_storages(id) ON DELETE CASCADE,
+      UNIQUE (storage_id, name)
+    )
+  `);
+  ensureColumn(db, "skills", "applies_to_json", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, "skills", "version", "TEXT");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS skill_embeddings (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      storage_id TEXT NOT NULL,
+      skill_id TEXT NOT NULL,
+      embedding_model TEXT NOT NULL,
+      embedding_dimension INTEGER NOT NULL,
+      chunk_index INTEGER NOT NULL DEFAULT 0,
+      content_hash TEXT NOT NULL,
+      embedding_blob BLOB,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (storage_id) REFERENCES skill_storages(id) ON DELETE CASCADE,
+      FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE,
+      UNIQUE (skill_id, embedding_model, chunk_index)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_skill_storage_bindings (
+      agent_preset_id TEXT NOT NULL,
+      storage_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (agent_preset_id, storage_id),
+      FOREIGN KEY (agent_preset_id) REFERENCES agent_presets(id) ON DELETE CASCADE,
+      FOREIGN KEY (storage_id) REFERENCES skill_storages(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+  ensureIndex(db, "idx_skill_storages_project", "skill_storages", "project_id, updated_at DESC");
+  ensureIndex(db, "idx_skills_project_storage", "skills", "project_id, storage_id, updated_at DESC");
+  ensureIndex(db, "idx_skill_embeddings_skill", "skill_embeddings", "skill_id, embedding_model, chunk_index");
+  ensureIndex(db, "idx_skill_embeddings_storage", "skill_embeddings", "project_id, storage_id, embedding_model");
+  ensureIndex(db, "idx_agent_skill_storage_bindings_agent", "agent_skill_storage_bindings", "agent_preset_id");
+  ensureIndex(db, "idx_agent_skill_storage_bindings_storage", "agent_skill_storage_bindings", "project_id, storage_id");
   ensureUniqueIndex(db, "idx_worker_endpoints_connection", "worker_endpoints", "connection_id");
   ensureIndex(db, "idx_worker_endpoints_type_status", "worker_endpoints", "endpoint_type, status, updated_at DESC");
   ensureIndex(db, "idx_connection_project_bindings_connection_active", "connection_project_bindings", "connection_id, is_active DESC, project_id ASC");

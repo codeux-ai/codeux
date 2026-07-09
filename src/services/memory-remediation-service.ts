@@ -266,7 +266,7 @@ export class MemoryRemediationService {
       ...args.settings.cliWorkflow,
     };
 
-    const prompt = buildProviderPrompt(this.buildPrompt(args), providerSettings.thinkingMode);
+    const prompt = buildProviderPrompt(this.buildPrompt(args), providerSettings.thinkingMode, provider);
     const result = await this.deps.structuredAgentRequestService.executeRequest<AiRemediationResponse>({
       projectId: args.projectId,
       sprintId: args.sprintId,
@@ -292,6 +292,8 @@ export class MemoryRemediationService {
       openCodePackage: providerSettings.openCodePackage,
       providerMountAuth: providerSettings.mountAuth,
       providerAuthPath: providerSettings.authPath,
+      providerConfigMode: providerSettings.providerConfigMode,
+      providerConfigPath: providerSettings.providerConfigPath,
       customBaseUrl: providerSettings.customBaseUrl,
       customModel: providerSettings.customModel,
       providerPrompt: prompt,
@@ -408,7 +410,7 @@ export class MemoryRemediationService {
       })), null, 2),
       "",
       "Return only JSON: { \"promote\": [], \"delete\": [{ \"id\": \"memory-id\", \"reason\": \"why deletion is safe\" }] }",
-    ].join("\n"), providerSettings.thinkingMode);
+    ].join("\n"), providerSettings.thinkingMode, provider);
 
     const result = await this.deps.structuredAgentRequestService.executeRequest<AiRemediationResponse>({
       projectId: args.projectId,
@@ -433,6 +435,8 @@ export class MemoryRemediationService {
       openCodePackage: providerSettings.openCodePackage,
       providerMountAuth: providerSettings.mountAuth,
       providerAuthPath: providerSettings.authPath,
+      providerConfigMode: providerSettings.providerConfigMode,
+      providerConfigPath: providerSettings.providerConfigPath,
       customBaseUrl: providerSettings.customBaseUrl,
       customModel: providerSettings.customModel,
       providerPrompt: prompt,

@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Solutions to the most common issues. If your problem is not covered here, see the [Operations runbook](../architecture/system-overview.md) or open an issue.
+Solutions to the most common issues. If your problem is not covered here, see the [system overview](../architecture/system-overview.md), the [MCP client guide](./mcp-clients.md), or open an issue.
 
 ## Code UX won't start
 
@@ -60,17 +60,41 @@ This is normal. `listen` is a long-poll: it blocks until a message is available 
 
 **Fix:** call `listen` in a loop. The call returns immediately when a dashboard user posts to the connection.
 
+### Server mode fails on startup
+
+`--server-mode` or `CODE_UX_SERVER_MODE=true` is set without a valid explicit bearer token.
+
+**Fix:** set `MCP_HTTP_AUTH_TOKEN` or `MCP_HTTPS_AUTH_TOKEN`, or pass `--mcp-http-auth-token` / `--mcp-https-auth-token`. Use at least 32 bearer-safe characters. Server mode does not use the generated local user token.
+
 ### HTTP gateway returns 401
 
-You enabled `--mcp-https-auth-token` but the client did not send `Authorization: Bearer <token>`, or the token mismatches.
+The client did not send `Authorization: Bearer <token>`, sent the wrong token, sent duplicate authorization headers, or is still using the old token after rotation.
 
-**Fix:** include the header. Tokens are case-sensitive.
+**Fix:** update the client secret, reconnect, and avoid diagnostics that print authorization headers. Tokens are case-sensitive.
 
 ### HTTP gateway returns 400 "must be initialize"
 
 You called the endpoint without an `mcp-session-id` header, but with a non-`initialize` JSON-RPC method.
 
 **Fix:** the *first* call on a new session must be `{"method": "initialize"}`. The response carries the session ID via `mcp-session-id` header — include it on subsequent calls.
+
+### `/health` passes but `/ready` fails
+
+The MCP HTTP listener is alive, but runtime readiness has not completed or the server is degraded.
+
+**Fix:** wait for startup recovery to finish, then inspect structured logs. Use `/ready` for load balancer readiness gates.
+
+### Worker connects but does not claim work
+
+The worker may not have an active project assignment, the project may be missing from `--project-id` / `--active-project-id`, the endpoint may be stale, the queued task may use a different executor, or the server may not have returned a lease token.
+
+**Fix:** confirm the worker status and project assignment, verify queued dispatches, and do not start local execution without a lease token.
+
+### Settings bundle import requires approval
+
+Secret-bearing `manage_settings` bundle exports and imports use a one-use approval flow tied to the exact payload.
+
+**Fix:** review the bundle, then repeat the same request with `approval.confirmed: true` within the approval window. Keep redacted bundles in review channels and secret-bearing bundles only in approved secret storage.
 
 ## Sprint orchestration
 
@@ -100,9 +124,9 @@ CLI-backed tasks refresh the remote branch before preparing the worker branch. T
 
 ### CI autofix loops
 
-A `ci_fix` worker keeps trying and failing.
+A `VirtualWorkerService` doing `ci_fix` tasks keeps trying and failing.
 
-**Fix:** the underlying CI failure is structural. Check the PR's CI log, fix manually, push, mark the attention item resolved. Optionally lower `julesCiAutofixMaxRetries` to fail faster next time.
+**Fix:** the underlying CI failure is structural. Triage it operationally: inspect the failing PR's CI log, reproduce the issue locally with repo scripts, fix it manually, push, and mark the attention item resolved. Escalate only after you have local evidence. Optionally lower `julesCiAutofixMaxRetries` to fail faster next time.
 
 ### Sprint paused at finalisation
 
@@ -124,11 +148,13 @@ The CLI is installed but not logged in.
 
 **Fix:** run the CLI's auth command directly (e.g. `gemini auth login`, `codex login`, `claude login`). Refresh Settings.
 
-### Docker mode fails to start a container
+### Preview/file-browser failures or Docker mode fails to start a container
 
 The Docker daemon is unreachable, or the worker image cannot be pulled.
 
-**Fix:** verify `docker ps` works. Pre-pull the image: `docker pull node:24-bookworm`.
+**Fix:** verify `docker ps` works. Pre-pull the image: `docker pull node:24-bookworm`. For preview/file-browser issues specifically, triage routes through preview host middleware (`src/server/preview-host-middleware.ts`) and cleanup/rebuild/restart steps. Ensure any commands used are safe and avoid exposing local DB contents, tokens, hostnames, or private paths.
+
+If the header Docker status control shows the red `Runtime not ready` warning, open the Docker status menu for the dependency list. The warning is tied to `GET /api/onboarding/readiness` and reflects required Docker CLI, Docker daemon, and Git CLI checks; it clears only after the runtime reports those required checks as ready.
 
 For packaged Windows builds, Docker errors that show `C:\...` as a container `--workdir`, `HOME`, or mount target indicate an outdated build. Current preview containers mount Windows/macOS/Linux host runtime storage at Linux container paths under `/code-ux-preview-runtime`.
 

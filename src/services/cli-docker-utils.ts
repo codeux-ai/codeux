@@ -17,6 +17,12 @@ export const resolveConfiguredPath = (repoPath: string, rawValue: string): strin
 
 const FALLBACK_WORKER_UID = "1000:1000";
 
+export const DOCKER_BRIDGE_NETWORK_ARGS = ["--network", "bridge"] as const;
+export const DOCKER_HOST_GATEWAY_ARGS = ["--add-host", "host.docker.internal:host-gateway"] as const;
+export const DOCKER_NETWORK_NONE_ARGS = ["--network", "none"] as const;
+export const DOCKER_NO_NEW_PRIVILEGES_ARGS = ["--security-opt", "no-new-privileges"] as const;
+export const DOCKER_DROP_ALL_CAPS_ARGS = ["--cap-drop", "ALL"] as const;
+
 export const getDockerUserSpec = (): string => {
   const getUid = (process as NodeJS.Process & { getuid?: () => number }).getuid;
   const getGid = (process as NodeJS.Process & { getgid?: () => number }).getgid;
@@ -68,6 +74,8 @@ export const pickContainerEnv = (env: NodeJS.ProcessEnv): Array<{ key: string; v
     "ANTIGRAVITY_API_KEY",
     "ANTIGRAVITY_MODEL",
     "AGY_MODEL",
+    "CODE_UX_MOCKUP_MODEL",
+    "CODE_UX_MOCKUP_SESSION_ID",
     "GH_TOKEN",
     "GITHUB_TOKEN",
     "HTTP_PROXY",

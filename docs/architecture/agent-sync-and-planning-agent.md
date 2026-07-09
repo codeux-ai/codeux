@@ -41,7 +41,7 @@ These agents are used as follows:
 
 ## Source Of Truth
 
-Agents are stored in sqlite and edited from the dashboard.
+Agents are stored in sqlite and edited from the dashboard. SQLite is the live authority used by routing, planning, execution, chat, and the Agents dashboard. Markdown files are a project-reviewable import/export surface, not the runtime source of truth while Code UX is running.
 
 SQLite remains the live authority, but projects can also mirror dashboard edits into project-local markdown under:
 
@@ -58,8 +58,10 @@ That means:
 - when project markdown mirroring is enabled, dashboard create/update writes the agent body into a project-local markdown file
 - mirrored project files use a filesystem-safe slug format such as `planning_agent.md`
 - editing a default or home-backed agent from the dashboard creates a project-local override file instead of modifying the default/home source
-- if the linked markdown file later differs from the DB copy, the agent is marked `out_of_sync`
-- the dashboard can re-import one agent or bulk-sync all out-of-sync project agents back into sqlite on demand
+- if the linked markdown file later differs from the DB copy (including changes to memory settings, avatar config, or provider/model preferences), the agent is marked `out_of_sync`
+- the dashboard can re-import one linked agent or use **Pull from files** to explicitly copy project markdown into sqlite on demand
+- the dashboard can use **Push to files** to export sqlite-backed agents into project-local `.code-ux/agents/*.md` files when sqlite should win over file drift
+- the dashboard can use an individual agent's **Push to file** action to export only that sqlite preset to the selected project's `.code-ux/agents/` directory
 - the dashboard can push `.code-ux/agents/*.md` back into git, either as a local commit, a commit plus branch push, or a feature-branch pull request into the default branch
 - when opening a pull request, Code UX resolves the effective dashboard GitHub/GitLab host tokens and forwards them to the PR service so repository-host authentication stays aligned with the current project settings
 
@@ -95,14 +97,14 @@ The API record also exposes derived sync state:
 
 - `manual`
 - `synced`
-- `out_of_sync`
+- `out_of_sync` (triggers when name, description, markdown, avatar config, provider, model, or memory config differs between the DB and the file)
 - `missing_source`
 
 When markdown does not include `avatarConfig`, Code UX still persists a resolved avatar before writing sqlite. Built-in base roles use curated defaults, while generated or custom project agents receive a deterministic random look seeded from project, agent, and label metadata. Project Setup Agent output goes through the same resolver, so generated specialist agents get a stable avatar that is mirrored into project markdown instead of being recalculated on every dashboard load.
 
 ## Import Resolution
 
-When Code UX syncs project agents:
+When Code UX pulls project agents from files:
 
 1. missing packaged base agents are installed into `~/.code-ux/agents` without overwriting existing files only until the project-level default-agent copy flag is recorded
 2. project-level `.code-ux/agents` is scanned first
@@ -112,6 +114,8 @@ When Code UX syncs project agents:
 6. project-scoped files win on name collisions
 7. previously unseen agents are imported into sqlite automatically
 8. after the first default-agent import for a project, built-in default/home roles are skipped on future automatic syncs so user deletions are not recreated
+
+When Code UX pushes project agents to files, it writes only under the selected repository's `.code-ux/agents/` directory. Manual, missing-source, out-of-sync, home-backed, and default-backed sqlite presets are exported as project-local markdown overrides, then linked back to those project files. The push path intentionally does not import markdown drift first, because an explicit push means sqlite should overwrite the project-file representation.
 
 ## Planning Agent Flow
 
@@ -134,6 +138,8 @@ When memory is enabled, planning prompts also include:
 - the current sprint's short-term learnings for that same planning agent when a sprint scope exists
 - the effective learnings-capture instruction, using the agent-specific memory template override when configured
 
+Planning prompts also resolve `designGuidance` from the effective project settings. Selected non-`none` tech-stack and styleguide entries are injected as a compact `Project Guidance` section before the task/output instructions; `none` selections are omitted so the planner receives active guidance without copying inactive defaults into every generated task prompt.
+
 In Docker execution mode, planning runs against a snapshot workspace and captures `.task-learnings.md` back out of that snapshot volume so memory capture still works even though the provider never writes directly into the host repo path.
 
 ## Project Setup Agent Flow
@@ -147,11 +153,12 @@ Behavior:
 3. The setup prompt includes those base templates as normative source material only for agent generation, requiring generated repository-specific agents to adapt their scope discipline, workspace protocol, verification standards, DAG planning model, and QA review boundaries instead of inventing a generic role prompt from scratch.
 4. When quicksprint generation is selected, Code UX injects the built-in quicksprint templates as the reusable-template quality baseline so generated project templates preserve the audit/improvement structure while adapting to repository evidence.
 5. When preview-script generation is selected, Code UX injects the exact bundled `.code-ux/container/setup.sh` bootstrap script so the generated `.code-ux/browser/start-preview.sh` complements the container bootstrap instead of duplicating provider CLI or OS setup work.
-6. The setup prompt requires repository discovery across assistant instruction markdown, documentation, dependency manifests, package scripts, source layout, preview/runtime configuration, and existing CI files.
-7. The provider returns strict JSON containing selected artifacts.
-8. Code UX writes agents through `AgentPresetSyncService`, quicksprints through `QuicksprintService`, preview startup to `.code-ux/browser/start-preview.sh`, and CI files to the returned GitHub/GitLab paths.
-9. Agent routing preserves the existing Planning agent default and updates generated worker specialists into the task-coding orchestrator roster.
-10. Newly generated coding specialists that are added to the orchestrator roster are created with `code_ux` MCP enabled and the default Playwright MCP custom server (`playwright`) linked. This gives setup-generated task-coding agents the same browser automation MCP default as the built-in Worker and Project manager agents.
+6. The setup prompt includes the same selected project guidance before artifact instructions. If the styleguide remains `none`, the prompt tells the setup agent to inspect existing styling, brand assets, design tokens, components, layouts, and interaction patterns before proposing a repository-specific styleguide, even when tech-stack guidance is also `none`.
+7. The setup prompt requires repository discovery across assistant instruction markdown, documentation, dependency manifests, package scripts, source layout, preview/runtime configuration, and existing CI files.
+8. The provider returns strict JSON containing selected artifacts.
+9. Code UX writes agents through `AgentPresetSyncService`, quicksprints through `QuicksprintService`, preview startup to `.code-ux/browser/start-preview.sh`, and CI files to the returned GitHub/GitLab paths.
+10. Agent routing preserves the existing Planning agent default and updates generated worker specialists into the task-coding orchestrator roster.
+11. Newly generated coding specialists that are added to the orchestrator roster are created with `code_ux` MCP enabled and the default Playwright MCP custom server (`playwright`) linked. This gives setup-generated task-coding agents the same browser automation MCP default as the built-in Worker and Project manager agents.
 11. Updating an existing generated specialist preserves its current MCP access selection, including any user-edited `linkedServerIds`, instead of reapplying the default Playwright MCP link.
 
 Generated agents keep persisted avatar metadata. Existing generated agents that predate avatar persistence receive a stable avatar the next time Project Setup Agent updates them.
@@ -237,7 +244,7 @@ When a retryable provider error occurs, Code UX appends an explicit system event
 - whether Code UX is waiting on quota reset or rate-limit backoff
 - which virtual model the planning agent actually used
 
-If `autoStart` is enabled, Code UX starts orchestration after the tasks are created.
+If `autoStart` is enabled, Code UX starts orchestration after the tasks are created unless planning self-reflection is enabled and the final reflection decision does not pass. In that case the valid planned tasks stay saved, and the operator can start the sprint manually after review.
 
 Provider slot recovery also runs before every provider claim, including providers configured with `maxConcurrentTasks = 0` (unlimited). If a Docker-backed planning invocation is still marked `running` but the container with its `code-ux.session-id` label has disappeared and the linked execution invocation has been idle long enough, Code UX marks the provider and execution invocation failed so the next planning request is not blocked by an orphaned runtime row. Startup recovery also closes stale `running` planning invocation audit rows that never linked to provider runtime or whose provider invocation is already terminal, keeping the dashboard invocation ledger from showing historical planning work as active.
 
@@ -280,7 +287,9 @@ The Agents page now shows:
 - whether an agent is DB-only or markdown-backed
 - out-of-sync state for changed markdown
 - `Import` action for linked markdown agents
-- `Sync All` action for pulling all out-of-sync local markdown back into sqlite
+- `Pull from files` action for copying project markdown into sqlite
+- `Push to files` action for exporting sqlite-backed agents to project markdown
+- `Push to file` action for exporting one sqlite-backed agent to project markdown
 - agent preset management only; QA execution settings live under `Settings -> Sprint & Git`
 
 ### Sprints page

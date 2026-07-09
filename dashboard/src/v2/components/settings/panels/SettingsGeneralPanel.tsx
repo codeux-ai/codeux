@@ -6,10 +6,12 @@ import { ActionFeedbackRegion } from "../../ui/ActionFeedbackRegion.js";
 import { NumberInput, Row, Toggle, TextInput, PillChoiceGroup } from "../SettingsFormFields.js";
 import { LocalFilePickerField } from "../LocalFilePickerField.js";
 import type { ProjectSettings } from "../../../../../../src/contracts/settings-scope-types.js";
+import type { DashboardExperienceMode } from "../../../../types.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
-import { Bot, Cog, Database, FolderOpen, RotateCcw, Sparkles } from "lucide-preact";
+import { Bot, Cog, Database, FolderOpen, RotateCcw, SlidersHorizontal, Sparkles } from "lucide-preact";
 import { openOnboarding } from "../../../lib/onboarding-control.js";
 import { useProjectData } from "../../../context/project-data.js";
+import { dashboardExperienceModeOptions } from "../../../lib/experience-mode.js";
 
 const toRestartSprintPolicy = (value: string) => (
   value === "pause" || value === "cancel" ? value : "continue"
@@ -17,6 +19,38 @@ const toRestartSprintPolicy = (value: string) => (
 
 const toRestartInvocationPolicy = (value: string) => (
   value === "cancel" || value === "restart" ? value : "continue"
+);
+
+const ExperienceModeCard: FunctionComponent<{
+  settings: ProjectSettings;
+  update: (recipe: (current: ProjectSettings) => ProjectSettings) => void;
+  getFieldBadge: (path: string) => string | undefined;
+}> = ({ settings, update, getFieldBadge }) => (
+  <SectionCard title="Experience Mode" watermark="MODE" icon={<SlidersHorizontal strokeWidth={2.4} />}>
+    <Row
+      label="Dashboard mode"
+      description="Choose how much of the dashboard surface is shown. Hidden routes and settings are preserved."
+      badge={getFieldBadge("appearance.experienceMode")}
+      last
+    >
+      <PillChoiceGroup
+        aria-label="Dashboard experience mode"
+        value={settings.appearance.experienceMode}
+        onChange={(value) => update((current) => ({
+          ...current,
+          appearance: {
+            ...current.appearance,
+            experienceMode: value as DashboardExperienceMode,
+          },
+        }))}
+        options={dashboardExperienceModeOptions.map((option) => ({
+          value: option.value,
+          label: option.label,
+          hint: option.description,
+        }))}
+      />
+    </Row>
+  </SectionCard>
 );
 
 const ProjectContextCard: FunctionComponent<{
@@ -223,6 +257,46 @@ const DockerRuntimeCard: FunctionComponent<{
         placeholder=".code-ux/container/setup.sh"
       />
     </Row>
+    <Row label="Container memory limit" description="Memory ceiling in MiB for all Docker-backed CLI provider containers. Use 0 to disable the cap." badge={getFieldBadge("cliWorkflow.containerMemoryLimitMb")}>
+      <NumberInput
+        value={settings.cliWorkflow.containerMemoryLimitMb}
+        min={0}
+        max={262144}
+        step={256}
+        aria-label="Container memory limit"
+        aria-description="Memory ceiling in MiB for all Docker-backed CLI provider containers. Use 0 to disable the cap."
+        onChange={(value) => update((current) => ({
+          ...current,
+          cliWorkflow: {
+            ...current.cliWorkflow,
+            containerMemoryLimitMb: value,
+          },
+        }))}
+      />
+    </Row>
+    <Row label="Run containers as root" description="Off by default. Enable only for tools that require package-manager or OS-level writes inside Docker." badge={getFieldBadge("cliWorkflow.containerRunAsRoot")}>
+      <div className="flex flex-wrap items-center gap-3">
+        <Toggle
+          aria-label="Run Docker agents as root"
+          value={settings.cliWorkflow.containerRunAsRoot}
+          danger={settings.cliWorkflow.containerRunAsRoot}
+          onChange={() => update((current) => ({
+            ...current,
+            cliWorkflow: {
+              ...current.cliWorkflow,
+              containerRunAsRoot: !current.cliWorkflow.containerRunAsRoot,
+            },
+          }))}
+        />
+        <span className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${
+          settings.cliWorkflow.containerRunAsRoot
+            ? "border-status-red/25 bg-status-red/[0.08] text-status-red"
+            : "border-black/[0.06] bg-black/[0.03] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"
+        }`}>
+          {settings.cliWorkflow.containerRunAsRoot ? "Root enabled" : "Non-root default"}
+        </span>
+      </div>
+    </Row>
     <Row label="Cache setup as image" description="Build and reuse a derived Docker image from the base image plus setup script contents." badge={getFieldBadge("cliWorkflow.containerCacheSetupScriptImage")}>
       <Toggle aria-label="Toggle setting" value={settings.cliWorkflow.containerCacheSetupScriptImage} onChange={() => update((current) => ({
         ...current,
@@ -262,12 +336,19 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
       return (
         <div className="flex flex-col gap-5">
           {editableSettings ? (
-            <AutomationCard
-              settings={editableSettings}
-              update={updateEditableSettings}
-              getBadge={getBadge}
-              getFieldBadge={getFieldBadge}
-            />
+            <>
+              <ExperienceModeCard
+                settings={editableSettings}
+                update={updateEditableSettings}
+                getFieldBadge={getFieldBadge}
+              />
+              <AutomationCard
+                settings={editableSettings}
+                update={updateEditableSettings}
+                getBadge={getBadge}
+                getFieldBadge={getFieldBadge}
+              />
+            </>
           ) : null}
           <SectionCard title="System Runtime" watermark="SYS" icon={<Cog strokeWidth={2.4} />}>
             <Row label="Dashboard port" description="System-wide HTTP port for the dashboard server.">
@@ -454,6 +535,13 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
         />
 
         <AutomationCard
+          settings={projectSettings}
+          update={updateEditableSettings}
+          getBadge={getBadge}
+          getFieldBadge={getFieldBadge}
+        />
+
+        <DockerRuntimeCard
           settings={projectSettings}
           update={updateEditableSettings}
           getBadge={getBadge}

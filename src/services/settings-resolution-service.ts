@@ -3,12 +3,18 @@ import type {
   ConsoleLogMode,
   CustomMcpServer,
   DashboardSettings,
+  DashboardExperienceMode,
+  DesignGuidanceSettings,
   ExternalSettingsHints,
   McpToolToggle,
   RestartInvocationPolicy,
   RestartSprintPolicy,
   RuntimeLogLevel,
   SkillToggle,
+  TechstackCatalogEntrySettings,
+  TechstackCatalogSettings,
+  TechstackItemSettings,
+  TechstackSelectionSettings,
 } from "../contracts/app-types.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
 import type {
@@ -27,8 +33,10 @@ import { sanitizeGit } from "../domain/settings/settings-sanitizers/git-sanitize
 import { sanitizeJira } from "../domain/settings/settings-sanitizers/jira-sanitizer.js";
 import { sanitizeSprintLoopSteps } from "../domain/settings/settings-sanitizers/sprint-loop-sanitizer.js";
 import { sanitizeMemory } from "../domain/settings/settings-sanitizers/memory-sanitizer.js";
+import { sanitizeSpeech } from "../domain/settings/settings-sanitizers/speech-sanitizer.js";
 import { sanitizeModelPricing } from "../domain/settings/settings-sanitizers/model-pricing-sanitizer.js";
 import { sanitizeWorkers } from "../domain/settings/settings-sanitizers/worker-sanitizer.js";
+import { sanitizeExternalImporterSettings } from "../repositories/settings-sanitizer.js";
 import {
   buildDashboardProviderSettings,
   buildDefaultIntegrationProviders,
@@ -36,7 +44,23 @@ import {
 } from "../domain/settings/provider-config-utils.js";
 import { sanitizeCustomMcpServersWithDefaults, sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
 import { DEFAULT_INSTRUCTION_TEMPLATES, INSTRUCTION_TEMPLATE_IDS, type InstructionTemplateId } from "../instructions/instruction-template-catalog.js";
-import { DEFAULT_DASHBOARD_SETTINGS, DEFAULT_SKILLS, INTERNAL_SKILL_NAMES, INTERNAL_SKILL_SET } from "../repositories/settings-defaults.js";
+import {
+  BUILTIN_CODE_UX_TECHSTACK,
+  BUILTIN_CODE_UX_TECHSTACK_ID,
+  DEFAULT_AGENT_SELF_REFLECTION,
+  DEFAULT_DASHBOARD_SETTINGS,
+  DEFAULT_DASHBOARD_EXPERIENCE_MODE,
+  DEFAULT_PROJECT_TECHSTACK,
+  DEFAULT_SKILLS,
+  DASHBOARD_EXPERIENCE_MODES,
+  INTERNAL_SKILL_NAMES,
+  INTERNAL_SKILL_SET,
+} from "../repositories/settings-defaults.js";
+import {
+  cloneDesignGuidanceSettings,
+  sanitizeDesignGuidanceSettings,
+} from "../domain/settings/design-guidance-catalog.js";
+import { sanitizePreviewEnvironmentVariables } from "../shared/preview-environment.js";
 
 function cloneSkills(skills: SkillToggle[]): SkillToggle[] {
   return skills.map((skill) => ({ ...skill }));
@@ -55,6 +79,7 @@ const BACKGROUND_PATTERNS = new Set<BackgroundPattern>([
   "WAVES",
   "NOISE",
 ]);
+const DASHBOARD_EXPERIENCE_MODE_SET = new Set<DashboardExperienceMode>(DASHBOARD_EXPERIENCE_MODES);
 
 const RUNTIME_LOG_LEVEL_SET = new Set<RuntimeLogLevel>(["off", "debug", "info", "warn", "error"]);
 const RESTART_SPRINT_POLICY_SET = new Set<RestartSprintPolicy>(["continue", "pause", "cancel"]);
@@ -101,8 +126,52 @@ const sanitizeBackgroundPattern = (value: unknown): BackgroundPattern => {
     : "NONE";
 };
 
+const sanitizeDashboardExperienceMode = (value: unknown): DashboardExperienceMode => (
+  typeof value === "string" && DASHBOARD_EXPERIENCE_MODE_SET.has(value as DashboardExperienceMode)
+    ? value as DashboardExperienceMode
+    : DEFAULT_DASHBOARD_EXPERIENCE_MODE
+);
+
 function cloneMcpTools(tools: McpToolToggle[]): McpToolToggle[] {
   return tools.map((tool) => ({ ...tool }));
+}
+
+function cloneUnknown(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => cloneUnknown(entry));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nested]) => [key, cloneUnknown(nested)]),
+    );
+  }
+  return value;
+}
+
+function cloneTechstackItems(items: TechstackItemSettings[]): TechstackItemSettings[] {
+  return items.map((item) => ({ ...item }));
+}
+
+function cloneTechstackEntry(entry: TechstackCatalogEntrySettings): TechstackCatalogEntrySettings {
+  return {
+    ...entry,
+    items: cloneTechstackItems(entry.items),
+  };
+}
+
+function cloneTechstackCatalog(catalog: TechstackCatalogSettings): TechstackCatalogSettings {
+  return {
+    defaultTechstackId: catalog.defaultTechstackId,
+    entries: catalog.entries.map((entry) => cloneTechstackEntry(entry)),
+  };
+}
+
+function cloneTechstackSelection(selection: TechstackSelectionSettings): TechstackSelectionSettings {
+  return { ...selection };
+}
+
+function cloneDesignGuidance(settings: DesignGuidanceSettings): DesignGuidanceSettings {
+  return cloneDesignGuidanceSettings(settings);
 }
 
 function resolveEffectiveMcpTools(
@@ -168,6 +237,23 @@ function cloneQualityAssuranceSettings(
   };
 }
 
+function cloneSelfReflectionSettings(
+  settings: ProjectSettings["agents"]["selfReflection"],
+): ProjectSettings["agents"]["selfReflection"] {
+  return {
+    planning: {
+      enabled: settings.planning.enabled,
+      criteria: settings.planning.criteria.map((criterion) => ({ ...criterion })),
+      maxImprovementAttempts: settings.planning.maxImprovementAttempts,
+    },
+    qualityAssurance: {
+      enabled: settings.qualityAssurance.enabled,
+      criteria: settings.qualityAssurance.criteria.map((criterion) => ({ ...criterion })),
+      maxImprovementAttempts: settings.qualityAssurance.maxImprovementAttempts,
+    },
+  };
+}
+
 function cloneAgentRoutingSettings(
   settings: ProjectSettings["agents"]["routing"],
 ): ProjectSettings["agents"]["routing"] {
@@ -217,9 +303,7 @@ function deepMerge<T>(base: T, patch: unknown): T {
   for (const [key, value] of Object.entries(patchRecord)) {
     const current = result[key];
     if (Array.isArray(value)) {
-      result[key] = value.map((entry) => (
-        entry && typeof entry === "object" ? JSON.parse(JSON.stringify(entry)) : entry
-      ));
+      result[key] = cloneUnknown(value);
       continue;
     }
     if (value && typeof value === "object") {
@@ -230,6 +314,34 @@ function deepMerge<T>(base: T, patch: unknown): T {
   }
 
   return result as T;
+}
+
+function mergeSettingsPatch<T>(base: T, patch: unknown): T {
+  const merged = deepMerge(base, patch) as Record<string, unknown>;
+  const patchRecord = toRecord(patch);
+  const patchAiProvider = toRecord(patchRecord.aiProvider);
+  const patchInvocationRouting = toRecord(patchAiProvider.invocationRouting);
+  const mergedAiProvider = toRecord(merged.aiProvider);
+  const mergedInvocationRouting = toRecord(mergedAiProvider.invocationRouting);
+
+  for (const [routeId, rawRoutePatch] of Object.entries(patchInvocationRouting)) {
+    const routePatch = toRecord(rawRoutePatch);
+    if (!Object.prototype.hasOwnProperty.call(routePatch, "providers")) {
+      continue;
+    }
+    const mergedRoute = toRecord(mergedInvocationRouting[routeId]);
+    mergedInvocationRouting[routeId] = {
+      ...mergedRoute,
+      providers: cloneUnknown(routePatch.providers),
+    };
+  }
+
+  if (Object.keys(patchInvocationRouting).length > 0) {
+    mergedAiProvider.invocationRouting = mergedInvocationRouting;
+    merged.aiProvider = mergedAiProvider;
+  }
+
+  return merged as T;
 }
 
 function deepDiff(base: unknown, value: unknown): unknown {
@@ -330,6 +442,85 @@ function sanitizeSkills(value: unknown, githubMode: DashboardSettings["git"]["gi
   return [...internalSkills, ...customSkills];
 }
 
+const TECHSTACK_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/;
+
+function isValidTechstackId(id: string): boolean {
+  return TECHSTACK_ID_PATTERN.test(id);
+}
+
+function sanitizeTechstackItem(value: unknown): TechstackItemSettings | null {
+  const input = toRecord(value);
+  const id = typeof input.id === "string" ? input.id.trim() : "";
+  const label = typeof input.label === "string" ? input.label.trim() : "";
+  if (!id || !label || !isValidTechstackId(id)) {
+    return null;
+  }
+  return { id, label };
+}
+
+function sanitizeTechstackEntry(value: unknown): TechstackCatalogEntrySettings | null {
+  const input = toRecord(value);
+  const id = typeof input.id === "string" ? input.id.trim() : "";
+  const label = typeof input.label === "string" ? input.label.trim() : "";
+  if (!id || !label || !isValidTechstackId(id)) {
+    return null;
+  }
+
+  const items: TechstackItemSettings[] = [];
+  const seenItems = new Set<string>();
+  if (Array.isArray(input.items)) {
+    for (const itemInput of input.items) {
+      const item = sanitizeTechstackItem(itemInput);
+      if (!item || seenItems.has(item.id)) {
+        continue;
+      }
+      items.push(item);
+      seenItems.add(item.id);
+    }
+  }
+
+  return { id, label, items };
+}
+
+function sanitizeTechstackCatalog(value: unknown): TechstackCatalogSettings {
+  const input = toRecord(value);
+  const entries: TechstackCatalogEntrySettings[] = [cloneTechstackEntry(BUILTIN_CODE_UX_TECHSTACK)];
+  const seenEntries = new Set<string>([BUILTIN_CODE_UX_TECHSTACK_ID]);
+
+  if (Array.isArray(input.entries)) {
+    for (const entryInput of input.entries) {
+      const entry = sanitizeTechstackEntry(entryInput);
+      if (!entry || seenEntries.has(entry.id)) {
+        continue;
+      }
+      entries.push(entry);
+      seenEntries.add(entry.id);
+    }
+  }
+
+  const defaultTechstackId = typeof input.defaultTechstackId === "string"
+    ? input.defaultTechstackId.trim()
+    : "";
+
+  return {
+    defaultTechstackId: seenEntries.has(defaultTechstackId) ? defaultTechstackId : BUILTIN_CODE_UX_TECHSTACK_ID,
+    entries,
+  };
+}
+
+function sanitizeTechstackSelection(value: unknown): TechstackSelectionSettings {
+  const input = toRecord(value);
+  const selectedTechstackId = typeof input.selectedTechstackId === "string"
+    ? input.selectedTechstackId.trim()
+    : "";
+  return {
+    selectedTechstackId: selectedTechstackId && isValidTechstackId(selectedTechstackId) ? selectedTechstackId : null,
+    applicationKind: input.applicationKind === "web" || input.applicationKind === "desktop"
+      ? input.applicationKind
+      : DEFAULT_PROJECT_TECHSTACK.applicationKind,
+  };
+}
+
 function sanitizeInstructionTemplates(value: unknown): Record<InstructionTemplateId, string> {
   const input = toRecord(value);
   const nextTemplates = { ...DEFAULT_INSTRUCTION_TEMPLATES };
@@ -428,6 +619,65 @@ function sanitizeQualityAssuranceSettings(
   };
 }
 
+const SELF_REFLECTION_MAX_ATTEMPTS_CEILING = 10;
+
+function sanitizeSelfReflectionCriteria(
+  value: unknown,
+  defaults: ProjectSettings["agents"]["selfReflection"]["planning"]["criteria"],
+): ProjectSettings["agents"]["selfReflection"]["planning"]["criteria"] {
+  if (!Array.isArray(value)) {
+    return defaults.map((criterion) => ({ ...criterion }));
+  }
+
+  const criteria: ProjectSettings["agents"]["selfReflection"]["planning"]["criteria"] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    const input = toRecord(entry);
+    const id = typeof input.id === "string" ? input.id.trim() : "";
+    const label = typeof input.label === "string" ? input.label.trim() : "";
+    const prompt = typeof input.prompt === "string" ? input.prompt.trim() : "";
+    if (!id || !label || !prompt || seen.has(id)) {
+      continue;
+    }
+    const rawThreshold = typeof input.threshold === "number" && Number.isFinite(input.threshold)
+      ? input.threshold
+      : defaults.find((criterion) => criterion.id === id)?.threshold ?? 0.8;
+    criteria.push({
+      id,
+      label,
+      prompt,
+      threshold: Math.max(0, Math.min(1, rawThreshold)),
+    });
+    seen.add(id);
+  }
+
+  return criteria.length > 0 ? criteria : defaults.map((criterion) => ({ ...criterion }));
+}
+
+function sanitizeSelfReflectionLoop(
+  value: unknown,
+  defaults: ProjectSettings["agents"]["selfReflection"]["planning"],
+): ProjectSettings["agents"]["selfReflection"]["planning"] {
+  const input = toRecord(value);
+  return {
+    enabled: typeof input.enabled === "boolean" ? input.enabled : defaults.enabled,
+    criteria: sanitizeSelfReflectionCriteria(input.criteria, defaults.criteria),
+    maxImprovementAttempts: typeof input.maxImprovementAttempts === "number" && Number.isFinite(input.maxImprovementAttempts)
+      ? Math.max(0, Math.min(SELF_REFLECTION_MAX_ATTEMPTS_CEILING, Math.round(input.maxImprovementAttempts)))
+      : defaults.maxImprovementAttempts,
+  };
+}
+
+function sanitizeSelfReflectionSettings(
+  value: unknown,
+): ProjectSettings["agents"]["selfReflection"] {
+  const input = toRecord(value);
+  return {
+    planning: sanitizeSelfReflectionLoop(input.planning, DEFAULT_AGENT_SELF_REFLECTION.planning),
+    qualityAssurance: sanitizeSelfReflectionLoop(input.qualityAssurance, DEFAULT_AGENT_SELF_REFLECTION.qualityAssurance),
+  };
+}
+
 function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintPreview"] {
   const input = toRecord(value);
   const defaults = DEFAULT_DASHBOARD_SETTINGS.sprintPreview;
@@ -485,6 +735,7 @@ function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintP
       }
       return raw;
     })(),
+    environmentVariables: sanitizePreviewEnvironmentVariables(input.environmentVariables),
   };
 }
 
@@ -522,6 +773,8 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
       ),
       invocationRouting: cloneInvocationRouting(aiProvider.invocationRouting),
     },
+    techstack: cloneTechstackSelection(DEFAULT_PROJECT_TECHSTACK),
+    designGuidance: cloneDesignGuidance(DEFAULT_DASHBOARD_SETTINGS.designGuidance),
     git: {
       githubMode: git.githubMode,
       githubToken: git.githubToken,
@@ -533,12 +786,20 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
       featureBranchPrefix: git.featureBranchPrefix,
       sprintBranchScheme: git.sprintBranchScheme,
       sprintKeyPrefix: git.sprintKeyPrefix,
+      taskPrTitleScheme: git.taskPrTitleScheme,
       prDescription: git.prDescription,
     },
     jira: sanitizeJira(undefined, {
       ...DEFAULT_DASHBOARD_SETTINGS.jira,
       apiToken: externalHints?.resolved.jiraToken || DEFAULT_DASHBOARD_SETTINGS.jira.apiToken,
     }),
+    notion: { ...DEFAULT_DASHBOARD_SETTINGS.notion },
+    asana: { ...DEFAULT_DASHBOARD_SETTINGS.asana },
+    linear: { ...DEFAULT_DASHBOARD_SETTINGS.linear },
+    miro: { ...DEFAULT_DASHBOARD_SETTINGS.miro },
+    lucid: { ...DEFAULT_DASHBOARD_SETTINGS.lucid },
+    figma: { ...DEFAULT_DASHBOARD_SETTINGS.figma },
+    mural: { ...DEFAULT_DASHBOARD_SETTINGS.mural },
     ciIntelligence: sanitizeCiIntelligence(DEFAULT_DASHBOARD_SETTINGS, git.githubMode),
     guardrails: sanitizeGuardrails(DEFAULT_DASHBOARD_SETTINGS),
     sprintLoopSteps: sanitizeSprintLoopSteps(DEFAULT_DASHBOARD_SETTINGS),
@@ -550,11 +811,20 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
       routing: cloneAgentRoutingSettings(DEFAULT_DASHBOARD_SETTINGS.agents.routing),
       instructionTemplates: cloneInstructionTemplates(DEFAULT_DASHBOARD_SETTINGS.agents.instructionTemplates),
       qualityAssurance: cloneQualityAssuranceSettings(DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance),
+      selfReflection: cloneSelfReflectionSettings(DEFAULT_DASHBOARD_SETTINGS.agents.selfReflection),
     },
     skills: cloneSkills(DEFAULT_SKILLS),
     memory: {
       ...DEFAULT_DASHBOARD_SETTINGS.memory,
+      customEmbeddingModels: DEFAULT_DASHBOARD_SETTINGS.memory.customEmbeddingModels.map((model) => ({
+        ...model,
+        tokenizerFiles: [...model.tokenizerFiles],
+      })),
       externalEmbedding: { ...DEFAULT_DASHBOARD_SETTINGS.memory.externalEmbedding },
+    },
+    speech: {
+      ...DEFAULT_DASHBOARD_SETTINGS.speech,
+      externalTranscription: { ...DEFAULT_DASHBOARD_SETTINGS.speech.externalTranscription },
     },
   };
 }
@@ -581,7 +851,15 @@ export function buildDefaultSystemSettings(externalHints?: ExternalSettingsHints
         ...DEFAULT_DASHBOARD_SETTINGS.jira,
         apiToken: externalHints?.resolved.jiraToken || "",
       },
+      notion: { ...DEFAULT_DASHBOARD_SETTINGS.notion },
+      asana: { ...DEFAULT_DASHBOARD_SETTINGS.asana },
+      linear: { ...DEFAULT_DASHBOARD_SETTINGS.linear },
+      miro: { ...DEFAULT_DASHBOARD_SETTINGS.miro },
+      lucid: { ...DEFAULT_DASHBOARD_SETTINGS.lucid },
+      figma: { ...DEFAULT_DASHBOARD_SETTINGS.figma },
+      mural: { ...DEFAULT_DASHBOARD_SETTINGS.mural },
     },
+    techstackCatalog: cloneTechstackCatalog(DEFAULT_DASHBOARD_SETTINGS.techstackCatalog),
     defaults: buildDefaultProjectSettings(externalHints),
     mcpTools: cloneMcpTools(DEFAULT_DASHBOARD_SETTINGS.mcpTools),
     customMcpServers: sanitizeCustomMcpServersWithDefaults(
@@ -614,6 +892,13 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
     ...DEFAULT_DASHBOARD_SETTINGS.jira,
     apiToken: externalHints?.resolved.jiraToken || DEFAULT_DASHBOARD_SETTINGS.jira.apiToken,
   });
+  const notion = sanitizeExternalImporterSettings(input.notion ?? integrationsInput.notion, DEFAULT_DASHBOARD_SETTINGS.notion);
+  const asana = sanitizeExternalImporterSettings(input.asana ?? integrationsInput.asana, DEFAULT_DASHBOARD_SETTINGS.asana);
+  const linear = sanitizeExternalImporterSettings(input.linear ?? integrationsInput.linear, DEFAULT_DASHBOARD_SETTINGS.linear);
+  const miro = sanitizeExternalImporterSettings(input.miro ?? integrationsInput.miro, DEFAULT_DASHBOARD_SETTINGS.miro);
+  const lucid = sanitizeExternalImporterSettings(input.lucid ?? integrationsInput.lucid, DEFAULT_DASHBOARD_SETTINGS.lucid);
+  const figma = sanitizeExternalImporterSettings(input.figma ?? integrationsInput.figma, DEFAULT_DASHBOARD_SETTINGS.figma);
+  const mural = sanitizeExternalImporterSettings(input.mural ?? integrationsInput.mural, DEFAULT_DASHBOARD_SETTINGS.mural);
   const aiProvider = sanitizeAiProvider(aiInput, {
     externalHints,
     integrationProviders,
@@ -627,6 +912,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
   return {
     appearance: {
       navigationMode: appearanceInput.navigationMode === "DOCK" ? "DOCK" : "SIDEBAR",
+      experienceMode: sanitizeDashboardExperienceMode(appearanceInput.experienceMode),
       theme: appearanceInput.theme === "LIGHT" || appearanceInput.theme === "DARK" ? appearanceInput.theme : "SYSTEM",
       reducedMotion: appearanceInput.reducedMotion === "REDUCE" || appearanceInput.reducedMotion === "NONE" ? appearanceInput.reducedMotion : "AUTO",
       backgroundMode: appearanceInput.backgroundMode === "STATIC" ? "STATIC" : "ANIMATED",
@@ -664,6 +950,8 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       ),
       invocationRouting: cloneInvocationRouting(aiProvider.invocationRouting),
     },
+    techstack: sanitizeTechstackSelection(input.techstack),
+    designGuidance: sanitizeDesignGuidanceSettings(input.designGuidance),
     git: {
       githubMode: git.githubMode,
       githubToken: git.githubToken,
@@ -675,9 +963,17 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       featureBranchPrefix: git.featureBranchPrefix,
       sprintBranchScheme: git.sprintBranchScheme,
       sprintKeyPrefix: git.sprintKeyPrefix,
+      taskPrTitleScheme: git.taskPrTitleScheme,
       prDescription: git.prDescription,
     },
     jira,
+    notion,
+    asana,
+    linear,
+    miro,
+    lucid,
+    figma,
+    mural,
     ciIntelligence: sanitizeCiIntelligence({
       ...DEFAULT_DASHBOARD_SETTINGS,
       ciIntelligence: deepMerge(DEFAULT_DASHBOARD_SETTINGS.ciIntelligence, input.ciIntelligence),
@@ -704,6 +1000,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       routing: sanitizeAgentRoutingSettings(toRecord(input.agents).routing),
       instructionTemplates: sanitizeInstructionTemplates(toRecord(input.agents).instructionTemplates),
       qualityAssurance: sanitizeQualityAssuranceSettings(toRecord(input.agents).qualityAssurance),
+      selfReflection: sanitizeSelfReflectionSettings(toRecord(input.agents).selfReflection),
     },
     skills: sanitizeSkills(input.skills, git.githubMode),
     ...(Array.isArray(input.mcpTools) ? { mcpTools: sanitizeMcpToolToggles(input.mcpTools) } : {}),
@@ -714,6 +1011,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       ),
     } : {}),
     memory: sanitizeMemory(input as Partial<DashboardSettings>),
+    speech: sanitizeSpeech(input as Partial<DashboardSettings>),
   };
 }
 
@@ -723,10 +1021,18 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
   const runtime = toRecord(input.runtime);
   const integrations = normalizeSystemIntegrationProviders(input.integrations, externalHints);
   const integrationInput = toRecord(input.integrations);
+  const techstackCatalog = sanitizeTechstackCatalog(input.techstackCatalog ?? defaults.techstackCatalog);
   const jiraSettings = sanitizeJira(integrationInput.jira, {
     ...DEFAULT_DASHBOARD_SETTINGS.jira,
     apiToken: externalHints?.resolved.jiraToken || DEFAULT_DASHBOARD_SETTINGS.jira.apiToken,
   });
+  const notionSettings = sanitizeExternalImporterSettings(integrationInput.notion, DEFAULT_DASHBOARD_SETTINGS.notion);
+  const asanaSettings = sanitizeExternalImporterSettings(integrationInput.asana, DEFAULT_DASHBOARD_SETTINGS.asana);
+  const linearSettings = sanitizeExternalImporterSettings(integrationInput.linear, DEFAULT_DASHBOARD_SETTINGS.linear);
+  const miroSettings = sanitizeExternalImporterSettings(integrationInput.miro, DEFAULT_DASHBOARD_SETTINGS.miro);
+  const lucidSettings = sanitizeExternalImporterSettings(integrationInput.lucid, DEFAULT_DASHBOARD_SETTINGS.lucid);
+  const figmaSettings = sanitizeExternalImporterSettings(integrationInput.figma, DEFAULT_DASHBOARD_SETTINGS.figma);
+  const muralSettings = sanitizeExternalImporterSettings(integrationInput.mural, DEFAULT_DASHBOARD_SETTINGS.mural);
 
   const dashboardPort = typeof runtime.dashboardPort === "number" ? runtime.dashboardPort : defaults.runtime.dashboardPort;
   const legacyConsoleLogMode = runtime.consoleLogLevel === "full" || runtime.consoleLogLevel === "standard"
@@ -779,6 +1085,13 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
       githubToken: systemGithubToken,
       gitlabToken: systemGitlabToken,
       jira: jiraSettings,
+      notion: notionSettings,
+      asana: asanaSettings,
+      linear: linearSettings,
+      miro: miroSettings,
+      lucid: lucidSettings,
+      figma: figmaSettings,
+      mural: muralSettings,
     },
   }, externalHints);
 
@@ -800,7 +1113,15 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
       githubToken: systemGithubToken,
       gitlabToken: systemGitlabToken,
       jira: jiraSettings,
+      notion: notionSettings,
+      asana: asanaSettings,
+      linear: linearSettings,
+      miro: miroSettings,
+      lucid: lucidSettings,
+      figma: figmaSettings,
+      mural: muralSettings,
     },
+    techstackCatalog,
     defaults: defaultsInput,
     mcpTools: sanitizeMcpToolToggles(input.mcpTools ?? defaults.mcpTools).map((tool) => ({ ...tool })),
     customMcpServers: sanitizeCustomMcpServersWithDefaults(
@@ -864,7 +1185,7 @@ export function resolveProjectSettings(
 ): ProjectSettings {
   return sanitizeProjectSettings(
     {
-      ...deepMerge(systemSettings.defaults, projectOverride || {}),
+      ...mergeSettingsPatch(systemSettings.defaults, projectOverride || {}),
       integrations: systemSettings.integrations,
     },
     undefined
@@ -879,7 +1200,7 @@ export function resolveSprintProjectSettings(
   const projectSettings = resolveProjectSettings(systemSettings, projectOverride);
   return sanitizeProjectSettings(
     {
-      ...deepMerge(projectSettings, sprintOverride || {}),
+      ...mergeSettingsPatch(projectSettings, sprintOverride || {}),
       integrations: systemSettings.integrations,
     },
     undefined
@@ -1010,6 +1331,7 @@ export function resolveDashboardSettings(args: {
   const baseProject = args.systemSettings.defaults;
   const projectSettings = resolveProjectSettings(args.systemSettings, args.projectOverride);
   const sprintSettings = resolveSprintProjectSettings(args.systemSettings, args.projectOverride, args.sprintOverride);
+  const techstackCatalog = args.systemSettings.techstackCatalog ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog;
   // Provider concurrency caps: the system-level cap is a hard ceiling. Resolve the scoped
   // (project/sprint) caps, then clamp each provider to the system cap so an override can
   // only lower a cap, never raise it above the system value.
@@ -1033,6 +1355,9 @@ export function resolveDashboardSettings(args: {
     automationLevel: sprintSettings.automationLevel,
     automationInterventions: { ...sprintSettings.automationInterventions },
     aiProvider: resolvedAiProvider,
+    techstackCatalog: cloneTechstackCatalog(techstackCatalog),
+    techstack: cloneTechstackSelection(sprintSettings.techstack),
+    designGuidance: cloneDesignGuidance(sprintSettings.designGuidance),
     // GitHub/GitLab/Jira resolve through the scoped project/sprint settings, which
     // inherit the system integration values unless a project or sprint overrides
     // them. A blank scoped value falls back to the system integration value.
@@ -1045,10 +1370,19 @@ export function resolveDashboardSettings(args: {
       host: sprintSettings.jira.host || systemJira.host,
       email: sprintSettings.jira.email || systemJira.email,
       apiToken: sprintSettings.jira.apiToken || systemJira.apiToken,
+      autoTransitionLinkedIssuesOnImport: sprintSettings.jira.autoTransitionLinkedIssuesOnImport,
+      importTransitionName: sprintSettings.jira.importTransitionName || systemJira.importTransitionName,
       defaultProject: sprintSettings.jira.defaultProject || systemJira.defaultProject,
       closeTransitionName: sprintSettings.jira.closeTransitionName || systemJira.closeTransitionName,
       autoCloseLinkedIssues: sprintSettings.jira.autoCloseLinkedIssues,
     },
+    notion: { ...sprintSettings.notion },
+    asana: { ...sprintSettings.asana },
+    linear: { ...sprintSettings.linear },
+    miro: { ...sprintSettings.miro },
+    lucid: { ...sprintSettings.lucid },
+    figma: { ...sprintSettings.figma },
+    mural: { ...sprintSettings.mural },
     ciIntelligence: { ...sprintSettings.ciIntelligence },
     guardrails: {
       ...sprintSettings.guardrails,
@@ -1070,11 +1404,20 @@ export function resolveDashboardSettings(args: {
       routing: cloneAgentRoutingSettings(sprintSettings.agents.routing),
       instructionTemplates: cloneInstructionTemplates(sprintSettings.agents.instructionTemplates),
       qualityAssurance: cloneQualityAssuranceSettings(sprintSettings.agents.qualityAssurance),
+      selfReflection: cloneSelfReflectionSettings(sprintSettings.agents.selfReflection),
     },
     skills: cloneSkills(sprintSettings.skills),
     mcpTools: resolveEffectiveMcpTools(args.systemSettings.mcpTools, sprintSettings.mcpTools),
     customMcpServers: resolveEffectiveCustomMcpServers(args.systemSettings.customMcpServers, sprintSettings.customMcpServers),
-    memory: { ...sprintSettings.memory, externalEmbedding: { ...sprintSettings.memory.externalEmbedding } },
+    memory: {
+      ...sprintSettings.memory,
+      customEmbeddingModels: sprintSettings.memory.customEmbeddingModels.map((model) => ({
+        ...model,
+        tokenizerFiles: [...model.tokenizerFiles],
+      })),
+      externalEmbedding: { ...sprintSettings.memory.externalEmbedding },
+    },
+    speech: { ...sprintSettings.speech, externalTranscription: { ...sprintSettings.speech.externalTranscription } },
     modelPricing: { overrides: { ...args.systemSettings.modelPricing?.overrides } },
   };
 
@@ -1107,7 +1450,7 @@ export function toProjectSettingsOverride(
 ): ProjectSettingsOverride {
   const merged = sanitizeProjectSettings(
     {
-      ...deepMerge(base, patch),
+      ...mergeSettingsPatch(base, patch),
       integrations,
     },
     externalHints
@@ -1123,7 +1466,7 @@ export function toSprintSettingsOverride(
 ): SprintSettingsOverride {
   const merged = sanitizeProjectSettings(
     {
-      ...deepMerge(base, patch),
+      ...mergeSettingsPatch(base, patch),
       integrations,
     },
     externalHints

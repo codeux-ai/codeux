@@ -155,6 +155,13 @@ test('dropdown keyboard navigation skips disabled menu items and suppresses aria
     fireEvent.click(getByRole('menuitem', { name: 'Disabled item' }));
     expect(disabledClick).not.toHaveBeenCalled();
 
+    const disabledItem = getByRole('menuitem', { name: 'Disabled item' });
+    disabledItem.focus();
+    fireEvent.keyDown(document, { key: 'Enter' });
+    fireEvent.keyDown(disabledItem, { key: ' ' });
+    expect(disabledClick).not.toHaveBeenCalled();
+
+    enabledItem.focus();
     fireEvent.keyDown(document, { key: 'Enter' });
     expect(enabledClick).toHaveBeenCalledTimes(1);
 });
@@ -228,6 +235,25 @@ test('Input wires helper/error text properly', () => {
     expect(container.querySelector('.min-h-\\[1\\.25rem\\]')).toBeInTheDocument();
 });
 
+test('Input restores helper ownership while focused invalid value is being corrected', async () => {
+    const { container, getByRole, queryByRole } = render(
+        <Input id="recover-input" errorText="Name is required" helperText="Use the project display name." forceValidation />
+    );
+
+    const input = container.querySelector('input')!;
+    expect(input).toHaveAttribute('aria-describedby', 'recover-input-error');
+    expect(getByRole('alert')).toHaveTextContent('Name is required');
+
+    fireEvent.focus(input);
+    await waitFor(() => expect(queryByRole('alert')).not.toBeInTheDocument());
+    await waitFor(() => expect(input).toHaveAttribute('aria-describedby', 'recover-input-helper'));
+    expect(input).not.toHaveAttribute('aria-invalid', 'true');
+
+    fireEvent.blur(input);
+    expect(input).toHaveAttribute('aria-describedby', 'recover-input-error');
+    expect(getByRole('alert')).toHaveTextContent('Name is required');
+});
+
 test('Select wires helper/error text properly', () => {
     const { container, getByRole } = render(<Select id="test-select" helperText="Choose wisely"><option>1</option></Select>);
 
@@ -237,4 +263,26 @@ test('Select wires helper/error text properly', () => {
 
     const select = container.querySelector('select');
     expect(select).toHaveAttribute('aria-describedby', 'test-select-helper');
+});
+
+test('Select suppresses disabled keyboard activation and restores helper ownership during focused recovery', async () => {
+    const { container, getByRole, queryByRole } = render(
+        <Select id="recover-select" aria-label="Provider" helperText="Choose a provider." errorText="Provider is required.">
+            <option value="">Choose</option>
+            <option value="local">Local</option>
+        </Select>
+    );
+
+    const select = container.querySelector('select')!;
+    expect(select).toHaveAttribute('aria-describedby', 'recover-select-error');
+    expect(getByRole('alert')).toHaveTextContent('Provider is required.');
+
+    fireEvent.focus(select);
+    await waitFor(() => expect(queryByRole('alert')).not.toBeInTheDocument());
+    await waitFor(() => expect(select).toHaveAttribute('aria-describedby', 'recover-select-helper'));
+    expect(select).not.toHaveAttribute('aria-invalid', 'true');
+
+    fireEvent.blur(select);
+    expect(select).toHaveAttribute('aria-describedby', 'recover-select-error');
+    expect(getByRole('alert')).toHaveTextContent('Provider is required.');
 });

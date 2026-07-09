@@ -1,24 +1,122 @@
-import { randomUUID } from "crypto";
 import * as path from "path";
 import { DatabaseAdapter } from "./db/database-adapter.js";
-import type { DashboardStatus, Subtask, SubtaskStatus } from "../contracts/app-types.js";
+import type { DashboardStatus, Subtask } from "../contracts/app-types.js";
 import type { SprintStatus } from "../contracts/project-management-types.js";
 import { AppDbStorage } from "./app-db-storage.js";
 import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
 import { mapRuntimeStatusToPlanningStatus } from "../services/subtask-state-mapper.js";
 import { RuntimeContextStore } from "./project-runtime/runtime-context-store.js";
 import {
+  RunEventWrites,
+  buildSessionIdentityCandidates,
+  nonEmptyString,
+  shouldPreserveCompletedSessionState,
+  toPersistedTaskRunState,
+} from "./project-runtime/run-event-writes.js";
+import {
   RuntimeStatusProjection,
   ProjectStatus,
-  TaskRunState,
+  MappedTask,
   TaskRow,
   TaskRunRow,
+  TaskRunState,
   ProjectRow,
   SprintRow
 } from "./project-runtime/runtime-status-projection.js";
 import { toNumber } from "./repository-utils.js";
 
-const TERMINAL_TASK_STATES = new Set<TaskRunState>(["CODING_COMPLETED", "COMPLETED", "FAILED", "BLOCKED", "QA_REVIEW_FAILED"]);
+const RUNTIME_TERMINAL_STATES = new Set<TaskRunState>([
+  "CODING_COMPLETED",
+  "COMPLETED",
+  "FAILED",
+  "BLOCKED",
+  "QA_REVIEW_FAILED",
+]);
+
+interface RuntimeStatusSubtask {
+  index: number;
+  mappedTask: MappedTask;
+  subtask: Subtask;
+}
+
+interface RuntimeArtifactTaskRunRow {
+  project_id: string;
+  sprint_id: string;
+  task_id: string;
+  session_id: string | null;
+  session_name: string | null;
+  pr_url: string | null;
+}
+
+interface RuntimeArtifactProviderInvocationRow {
+  project_id: string;
+  sprint_id: string | null;
+  task_id: string | null;
+  session_id: string | null;
+}
+
+interface RuntimeCandidateTaskRunRow extends TaskRunRow {
+  dispatch_status: string | null;
+  dispatch_finished_at: string | null;
+  latest_provider_invocation_status: string | null;
+  latest_provider_invocation_finished_at: string | null;
+}
+
+function addStringMapValue<V>(map: Map<string, V[]>, key: string | null | undefined, value: V): void {
+  const normalizedKey = nonEmptyString(key);
+  if (!normalizedKey) {
+    return;
+  }
+  const values = map.get(normalizedKey) || [];
+  values.push(value);
+  map.set(normalizedKey, values);
+}
+
+function isSameTaskRunOwner(task: TaskRow, row: RuntimeArtifactTaskRunRow): boolean {
+  return row.project_id === task.project_id
+    && row.sprint_id === task.sprint_id
+    && row.task_id === task.id;
+}
+
+function isSameProviderInvocationOwner(task: TaskRow, row: RuntimeArtifactProviderInvocationRow): boolean {
+  return row.project_id === task.project_id
+    && (row.sprint_id === task.sprint_id || row.sprint_id === null)
+    && (row.task_id === task.id || row.task_id === null);
+}
+
+function resolveTerminalEvidenceState(candidateRun: RuntimeCandidateTaskRunRow | null, reportedState: TaskRunState): TaskRunState {
+  if (
+    reportedState !== "RUNNING"
+    || !candidateRun
+    || candidateRun.state !== "RUNNING"
+    || candidateRun.finished_at !== null
+  ) {
+    return reportedState;
+  }
+
+  switch (candidateRun.latest_provider_invocation_status) {
+    case "failed":
+    case "cancelled":
+      return "FAILED";
+    case "completed":
+      return "CODING_COMPLETED";
+  }
+
+  switch (candidateRun.dispatch_status) {
+    case "completed":
+      return "CODING_COMPLETED";
+    case "failed":
+    case "cancelled":
+      return "FAILED";
+    case "blocked":
+      return "BLOCKED";
+    case "quota":
+      return "QUOTA";
+    default:
+      return reportedState;
+  }
+}
+
 function normalizePath(value: string | null | undefined): string | null {
   if (typeof value !== "string") {
     return null;
@@ -30,69 +128,11 @@ function normalizePath(value: string | null | undefined): string | null {
   return path.resolve(trimmed);
 }
 
-function subtaskSignature(subtask: Subtask): string {
-  return JSON.stringify({
-    status: subtask.status || "PENDING",
-    provider: subtask.provider || null,
-    sessionId: subtask.session_id || null,
-    sessionName: subtask.session_name || null,
-    workerBranch: subtask.worker_branch || null,
-    prUrl: subtask.pr_url || null,
-    isMerged: Boolean(subtask.is_merged),
-    mergeIndicator: subtask.merge_indicator || null,
-  });
-}
-
-function nonEmptyString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
-}
-
-function buildSessionIdentityCandidates(sessionId?: string | null, sessionName?: string | null): string[] {
-  const candidates = new Set<string>();
-  for (const value of [sessionId, sessionName]) {
-    const normalized = nonEmptyString(value);
-    if (!normalized) {
-      continue;
-    }
-    candidates.add(normalized);
-    const raw = normalized.replace(/^sessions\//, "");
-    if (raw) {
-      candidates.add(raw);
-      candidates.add(`sessions/${raw}`);
-    }
-  }
-  return [...candidates];
-}
-
-function toPersistedTaskRunState(status: TaskRunState): Exclude<TaskRunState, "CODING_COMPLETED" | "QA_REVIEW_FAILED"> {
-  // `QA_REVIEW_FAILED` is a task/planning state, not a provider-run state: the
-  // underlying session genuinely COMPLETED (that is what QA reviewed). Persist
-  // the run as COMPLETED so the task_runs.state column stays within the valid
-  // execution-state set; the escalation lives on the task row, not the run.
-  if (status === "CODING_COMPLETED" || status === "QA_REVIEW_FAILED") {
-    return "COMPLETED";
-  }
-  return status;
-}
-
-function shouldPreserveCompletedSessionState(existing: TaskRunRow | null, subtask: Subtask): boolean {
-  if (!existing || existing.state !== "COMPLETED" || subtask.status !== "RUNNING") {
-    return false;
-  }
-  if (subtask.session_state !== "COMPLETED") {
-    return false;
-  }
-  return Boolean(
-    nonEmptyString(subtask.pr_url)
-    || nonEmptyString(subtask.worker_branch)
-    || nonEmptyString(subtask.merge_indicator),
-  );
-}
-
 export class ProjectRuntimeRepository {
   private readonly db: DatabaseAdapter;
   private readonly runtimeContextStore: RuntimeContextStore;
   private readonly runtimeStatusProjection: RuntimeStatusProjection;
+  private readonly runEventWrites: RunEventWrites;
 
   constructor(
     private readonly storage: AppDbStorage = new AppDbStorage(),
@@ -101,6 +141,7 @@ export class ProjectRuntimeRepository {
     this.db = storage.getDatabase();
     this.runtimeContextStore = new RuntimeContextStore(this.db);
     this.runtimeStatusProjection = new RuntimeStatusProjection(this.storage, this.db);
+    this.runEventWrites = new RunEventWrites(this.db);
   }
 
   syncDashboardStatus(status: Partial<DashboardStatus> | null): DashboardStatus | null {
@@ -118,6 +159,14 @@ export class ProjectRuntimeRepository {
     const tasksByRecordId = new Map(tasks.map((task) => [task.row.id, task]));
     const tasksByKey = new Map(tasks.map((task) => [task.row.task_key, task]));
     const subtasks = Array.isArray(status.subtasks) ? status.subtasks : [];
+    const mappedSubtasks = subtasks
+      .map((subtask, index): RuntimeStatusSubtask | null => {
+        const mappedTask = this.runtimeStatusProjection.resolveMappedTask(subtask, tasksByRecordId, tasksByKey);
+        return mappedTask ? { index, mappedTask, subtask } : null;
+      })
+      .filter((entry): entry is RuntimeStatusSubtask => entry !== null);
+    const artifactScopes = this.resolveRuntimeArtifactScopes(mappedSubtasks);
+    const candidateRuns = this.resolveCandidateTaskRuns(mappedSubtasks, artifactScopes);
     const now = new Date().toISOString();
 
     this.runInTransaction(() => {
@@ -142,23 +191,61 @@ export class ProjectRuntimeRepository {
       let hasRunning = false;
       let hasFailure = false;
       let hasIntervention = false;
+      const updateTaskFromRuntimeStatus = this.db.prepare(`
+        UPDATE tasks
+        SET status = CASE
+              WHEN (status = 'completed' OR is_merged = 1 OR merge_indicator IN ('MERGED', 'AUTOMERGE'))
+                AND ? != 'completed'
+              THEN 'completed'
+              WHEN status = 'coding_completed' AND ? IN ('pending', 'in_progress')
+              THEN status
+              ELSE COALESCE(?, status)
+            END,
+            is_merged = CASE
+              WHEN is_merged = 1 AND ? = 0 THEN is_merged
+              WHEN merge_indicator IN ('MERGED', 'AUTOMERGE') AND ? = 0 THEN is_merged
+              ELSE ?
+            END,
+            merge_indicator = CASE
+              WHEN status = 'pending' THEN NULL
+              WHEN ? = 'MERGE_CONFLICT'
+                AND EXISTS (
+                  SELECT 1
+                  FROM project_attention_items
+                  WHERE task_id = tasks.id
+                    AND attention_type = 'merge_conflict'
+                    AND owner_type = 'worker'
+                    AND status = 'resolved'
+                    AND json_extract(payload_json, '$.resolutionReason') IN (
+                      'virtual_worker_merge_conflict_resolved',
+                      'virtual_worker_merge_conflict_already_resolved'
+                    )
+                    AND (? IS NULL OR json_extract(payload_json, '$.conflictingBranches.source') = ?)
+                    AND (? IS NULL OR json_extract(payload_json, '$.conflictingBranches.target') = ?)
+                )
+              THEN NULL
+              WHEN merge_indicator IN ('MERGED', 'AUTOMERGE')
+                AND (? IS NULL OR ? NOT IN ('MERGED', 'AUTOMERGE'))
+              THEN merge_indicator
+              WHEN ? IS NOT NULL THEN ?
+              ELSE merge_indicator
+            END,
+            updated_at = ?
+        WHERE id = ?
+      `);
 
-      for (const subtask of subtasks) {
-        const mappedTask = this.runtimeStatusProjection.resolveMappedTask(subtask, tasksByRecordId, tasksByKey);
-        if (!mappedTask) {
-          continue;
-        }
-
-        const artifactScope = this.resolveRuntimeArtifactScope(mappedTask.row, subtask);
+      for (const { index, mappedTask, subtask } of mappedSubtasks) {
+        const artifactScope = artifactScopes.get(index) || "local";
         const scopedSubtask = artifactScope === "foreign"
           ? this.stripRuntimeArtifacts(subtask)
           : subtask;
         const candidateRun = artifactScope === "foreign"
           ? null
-          : this.findCandidateRun(mappedTask.row.id, scopedSubtask);
-        const runtimeState = shouldPreserveCompletedSessionState(candidateRun, scopedSubtask)
+          : candidateRuns.get(index) ?? null;
+        const reportedRuntimeState = shouldPreserveCompletedSessionState(candidateRun, scopedSubtask)
           ? "CODING_COMPLETED"
           : (scopedSubtask.status || "PENDING");
+        const runtimeState = resolveTerminalEvidenceState(candidateRun, reportedRuntimeState);
         if (artifactScope !== "foreign") {
           if (runtimeState === "RUNNING") {
             hasRunning = true;
@@ -176,31 +263,35 @@ export class ProjectRuntimeRepository {
         // After a rerun, the management API sets the DB task to status='pending' and
         // merge_indicator=null. A concurrent sprint cycle that loaded the task before
         // the rerun may still attempt to write the old merge_indicator (e.g. 'CI').
-        // The CASE expression below uses the pre-UPDATE DB status column value: when it
-        // is 'pending' (i.e. the task was just reset), always write NULL so that stale
-        // in-memory cycle data cannot restore a cleared indicator.
-        this.db.prepare(`
-          UPDATE tasks
-          SET status = COALESCE(?, status),
-              is_merged = ?,
-              merge_indicator = CASE
-                WHEN status = 'pending' THEN NULL
-                WHEN ? IS NOT NULL THEN ?
-                ELSE merge_indicator
-              END,
-              updated_at = ?
-          WHERE id = ?
-        `).run(
+        // The CASE expression below uses pre-UPDATE DB column values. It also blocks
+        // stale MERGE_CONFLICT snapshots from resurrecting a marker that a virtual
+        // worker just cleared after resolving the matching attention item.
+        const incomingMerged = Number(Boolean(scopedSubtask.is_merged));
+        const incomingMergeIndicator = scopedSubtask.merge_indicator || null;
+        const incomingWorkerBranch = scopedSubtask.worker_branch || null;
+        const incomingFeatureBranch = status.feature_branch || null;
+        updateTaskFromRuntimeStatus.run(
           planningStatus,
-          Number(Boolean(subtask.is_merged)),
-          scopedSubtask.merge_indicator || null,
-          scopedSubtask.merge_indicator || null,
+          planningStatus,
+          planningStatus,
+          incomingMerged,
+          incomingMerged,
+          incomingMerged,
+          incomingMergeIndicator,
+          incomingWorkerBranch,
+          incomingWorkerBranch,
+          incomingFeatureBranch,
+          incomingFeatureBranch,
+          incomingMergeIndicator,
+          incomingMergeIndicator,
+          incomingMergeIndicator,
+          incomingMergeIndicator,
           now,
           mappedTask.row.id
         );
 
         if (artifactScope !== "foreign") {
-          this.syncTaskRun(mappedTask.row, scopedSubtask, now, candidateRun, runtimeState);
+          this.runEventWrites.syncTaskRun(mappedTask.row, scopedSubtask, now, candidateRun, runtimeState);
         }
       }
 
@@ -479,231 +570,157 @@ export class ProjectRuntimeRepository {
     return null;
   }
 
-  private syncTaskRun(
-    task: TaskRow,
-    subtask: Subtask,
-    now: string,
-    candidateRun?: TaskRunRow | null,
-    effectiveRuntimeState?: TaskRunState,
-  ): void {
-    const runtimeState = effectiveRuntimeState || subtask.status || "PENDING";
-    const persistedRunState = toPersistedTaskRunState(runtimeState);
-    const existing = candidateRun === undefined ? this.findCandidateRun(task.id, subtask) : candidateRun;
-    const signature = subtaskSignature({
-      ...subtask,
-      status: runtimeState,
+  private resolveCandidateTaskRuns(
+    entries: RuntimeStatusSubtask[],
+    artifactScopes: Map<number, "local" | "foreign">,
+  ): Map<number, RuntimeCandidateTaskRunRow | null> {
+    const localEntries = entries.filter((entry) => (artifactScopes.get(entry.index) || "local") === "local");
+    const rows = this.storage.executeChunkedInQuery<RuntimeCandidateTaskRunRow>({
+      sqlPrefix: `SELECT task_runs.*,
+        td.status AS dispatch_status,
+        td.finished_at AS dispatch_finished_at,
+        (
+          SELECT pi.status
+          FROM provider_invocations pi
+          WHERE pi.task_run_id = task_runs.id
+          ORDER BY COALESCE(pi.finished_at, pi.started_at, pi.created_at) DESC, pi.rowid DESC
+          LIMIT 1
+        ) AS latest_provider_invocation_status,
+        (
+          SELECT pi.finished_at
+          FROM provider_invocations pi
+          WHERE pi.task_run_id = task_runs.id
+          ORDER BY COALESCE(pi.finished_at, pi.started_at, pi.created_at) DESC, pi.rowid DESC
+          LIMIT 1
+        ) AS latest_provider_invocation_finished_at
+        FROM task_runs
+        LEFT JOIN task_dispatches td ON td.id = task_runs.dispatch_id
+        WHERE task_runs.task_id`,
+      sqlSuffix: "ORDER BY task_runs.task_id ASC, task_runs.rowid DESC",
+      items: localEntries.map((entry) => entry.mappedTask.row.id),
     });
+    const rowsByTaskId = new Map<string, RuntimeCandidateTaskRunRow[]>();
+    for (const row of rows) {
+      const taskRows = rowsByTaskId.get(row.task_id) || [];
+      taskRows.push(row);
+      rowsByTaskId.set(row.task_id, taskRows);
+    }
 
-    if (!existing) {
-      if (!this.shouldCreateTaskRun(subtask)) {
-        return;
+    const candidateRuns = new Map<number, RuntimeCandidateTaskRunRow | null>();
+    for (const { index, mappedTask, subtask } of localEntries) {
+      const taskRows = rowsByTaskId.get(mappedTask.row.id) || [];
+      const sessionId = nonEmptyString(subtask.session_id);
+      if (sessionId) {
+        const row = taskRows.find((candidate) => nonEmptyString(candidate.session_id) === sessionId);
+        if (row) {
+          candidateRuns.set(index, row);
+          continue;
+        }
       }
 
-      const runId = randomUUID();
-      this.db.prepare(`
-        INSERT INTO task_runs (
-          id, project_id, sprint_id, task_id, connection_id, provider, mode, session_id, session_name,
-          state, worker_branch, pr_url, started_at, finished_at, duration_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        runId,
-        task.project_id,
-        task.sprint_id,
-        task.id,
-        null,
-        subtask.provider || null,
-        "legacy-orchestrator",
-        subtask.session_id || null,
-        subtask.session_name || null,
-        persistedRunState,
-        subtask.worker_branch || null,
-        subtask.pr_url || null,
-        persistedRunState === "PENDING" ? null : now,
-        TERMINAL_TASK_STATES.has(runtimeState) ? now : null,
-        null
-      );
-      this.insertRunEvent(runId, "status_sync", {
-        signature,
-      }, now);
-      return;
+      const sessionName = nonEmptyString(subtask.session_name);
+      if (sessionName) {
+        const row = taskRows.find((candidate) => nonEmptyString(candidate.session_name) === sessionName);
+        if (row) {
+          candidateRuns.set(index, row);
+          continue;
+        }
+      }
+
+      const activeRun = taskRows.find((candidate) => candidate.finished_at === null);
+      if (activeRun) {
+        candidateRuns.set(index, activeRun);
+        continue;
+      }
+
+      const persistedState = toPersistedTaskRunState(subtask.status || "PENDING");
+      if (RUNTIME_TERMINAL_STATES.has(persistedState)) {
+        const terminalRun = taskRows.find((candidate) => candidate.state === persistedState);
+        if (terminalRun) {
+          candidateRuns.set(index, terminalRun);
+          continue;
+        }
+      }
+
+      candidateRuns.set(index, null);
     }
 
-    const previousSignature = JSON.stringify({
-      status: existing.state,
-      provider: existing.provider,
-      sessionId: existing.session_id,
-      sessionName: existing.session_name,
-      workerBranch: existing.worker_branch,
-      prUrl: existing.pr_url,
-      isMerged: Boolean(subtask.is_merged),
-      mergeIndicator: subtask.merge_indicator || null,
-    });
-
-    const startedAt = existing.started_at || (runtimeState === "PENDING" ? null : now);
-    const finishedAt = TERMINAL_TASK_STATES.has(runtimeState)
-      ? (existing.finished_at || now)
-      : null;
-    const incomingPrUrl = nonEmptyString(subtask.pr_url);
-    const existingPrUrl = nonEmptyString(existing.pr_url);
-    const preservesSameRuntime =
-      runtimeState !== "PENDING"
-      && existingPrUrl
-      && (
-        (nonEmptyString(subtask.session_id) && nonEmptyString(subtask.session_id) === nonEmptyString(existing.session_id))
-        || (nonEmptyString(subtask.session_name) && nonEmptyString(subtask.session_name) === nonEmptyString(existing.session_name))
-        || (nonEmptyString(subtask.worker_branch) && nonEmptyString(subtask.worker_branch) === nonEmptyString(existing.worker_branch))
-      );
-    const prUrl = incomingPrUrl || (preservesSameRuntime ? existingPrUrl : null);
-
-    this.db.prepare(`
-      UPDATE task_runs
-      SET provider = ?, mode = ?, session_id = ?, session_name = ?, state = ?, worker_branch = ?, pr_url = ?,
-          started_at = ?, finished_at = ?, duration_ms = ?
-      WHERE id = ?
-    `).run(
-      subtask.provider || existing.provider || null,
-      existing.mode || "legacy-orchestrator",
-      subtask.session_id || existing.session_id || null,
-      subtask.session_name || existing.session_name || null,
-      persistedRunState,
-      subtask.worker_branch || null,
-      prUrl,
-      startedAt,
-      finishedAt,
-      startedAt && finishedAt ? Math.max(0, new Date(finishedAt).getTime() - new Date(startedAt).getTime()) : null,
-      existing.id
-    );
-
-    if (previousSignature !== signature) {
-      this.insertRunEvent(existing.id, "status_sync", {
-        previousSignature,
-        signature,
-      }, now);
-    }
+    return candidateRuns;
   }
 
-  private findCandidateRun(taskId: string, subtask: Subtask): TaskRunRow | null {
-    if (typeof subtask.session_id === "string" && subtask.session_id.trim().length > 0) {
-      const row = this.db.prepare(`
-        SELECT *
-        FROM task_runs
-        WHERE task_id = ? AND session_id = ?
-        ORDER BY rowid DESC
-        LIMIT 1
-      `).get(taskId, subtask.session_id.trim()) as TaskRunRow | undefined;
-      if (row) {
-        return row;
+  private resolveRuntimeArtifactScopes(entries: RuntimeStatusSubtask[]): Map<number, "local" | "foreign"> {
+    const sessionIdentities: string[] = [];
+    const prUrls: string[] = [];
+    for (const { subtask } of entries) {
+      sessionIdentities.push(...buildSessionIdentityCandidates(subtask.session_id, subtask.session_name));
+      const prUrl = nonEmptyString(subtask.pr_url);
+      if (prUrl) {
+        prUrls.push(prUrl);
       }
     }
 
-    if (typeof subtask.session_name === "string" && subtask.session_name.trim().length > 0) {
-      const row = this.db.prepare(`
-        SELECT *
-        FROM task_runs
-        WHERE task_id = ? AND session_name = ?
-        ORDER BY rowid DESC
-        LIMIT 1
-      `).get(taskId, subtask.session_name.trim()) as TaskRunRow | undefined;
-      if (row) {
-        return row;
-      }
+    const taskRunsBySession = new Map<string, RuntimeArtifactTaskRunRow[]>();
+    const taskRunSessionRows = [
+      ...this.storage.executeChunkedInQuery<RuntimeArtifactTaskRunRow>({
+        sqlPrefix: "SELECT project_id, sprint_id, task_id, session_id, session_name, pr_url FROM task_runs WHERE session_id",
+        items: sessionIdentities,
+      }),
+      ...this.storage.executeChunkedInQuery<RuntimeArtifactTaskRunRow>({
+        sqlPrefix: "SELECT project_id, sprint_id, task_id, session_id, session_name, pr_url FROM task_runs WHERE session_name",
+        items: sessionIdentities,
+      }),
+    ];
+    for (const row of taskRunSessionRows) {
+      addStringMapValue(taskRunsBySession, row.session_id, row);
+      addStringMapValue(taskRunsBySession, row.session_name, row);
     }
 
-    const row = this.db.prepare(`
-      SELECT *
-      FROM task_runs
-      WHERE task_id = ? AND finished_at IS NULL
-      ORDER BY rowid DESC
-      LIMIT 1
-    `).get(taskId) as TaskRunRow | undefined;
-    if (row) {
-      return row;
+    const providerInvocationsBySession = new Map<string, RuntimeArtifactProviderInvocationRow[]>();
+    const providerInvocationRows = this.storage.executeChunkedInQuery<RuntimeArtifactProviderInvocationRow>({
+      sqlPrefix: "SELECT project_id, sprint_id, task_id, session_id FROM provider_invocations WHERE session_id",
+      items: sessionIdentities,
+    });
+    for (const row of providerInvocationRows) {
+      addStringMapValue(providerInvocationsBySession, row.session_id, row);
     }
 
-    // A task can re-sync in a terminal state with no session id — e.g. a task
-    // parked BLOCKED by the coding guardrail. Terminal runs have finished_at
-    // set, so the unfinished-run lookup above misses them, and without this
-    // fallback syncTaskRun would INSERT a fresh BLOCKED run on every watch-loop
-    // cycle (observed as hundreds of duplicate rows / a CPU-burning spin).
-    // Reuse the latest run already in this terminal state so the sync is
-    // idempotent.
-    const persistedState = toPersistedTaskRunState(subtask.status || "PENDING");
-    if (TERMINAL_TASK_STATES.has(persistedState)) {
-      const terminalRow = this.db.prepare(`
-        SELECT *
-        FROM task_runs
-        WHERE task_id = ? AND state = ?
-        ORDER BY rowid DESC
-        LIMIT 1
-      `).get(taskId, persistedState) as TaskRunRow | undefined;
-      if (terminalRow) {
-        return terminalRow;
-      }
+    const taskRunsByPrUrl = new Map<string, RuntimeArtifactTaskRunRow[]>();
+    const taskRunPrRows = this.storage.executeChunkedInQuery<RuntimeArtifactTaskRunRow>({
+      sqlPrefix: "SELECT project_id, sprint_id, task_id, session_id, session_name, pr_url FROM task_runs WHERE pr_url",
+      items: prUrls,
+    });
+    for (const row of taskRunPrRows) {
+      addStringMapValue(taskRunsByPrUrl, row.pr_url, row);
     }
 
-    return null;
-  }
-
-  private resolveRuntimeArtifactScope(task: TaskRow, subtask: Subtask): "local" | "foreign" {
-    const sessionCandidates = buildSessionIdentityCandidates(subtask.session_id, subtask.session_name);
-    if (sessionCandidates.length > 0) {
-      const sessionPlaceholders = sessionCandidates.map(() => "?").join(", ");
-      const row = this.db.prepare(`
-        SELECT project_id, sprint_id, task_id
-        FROM task_runs
-        WHERE (session_id IN (${sessionPlaceholders}) OR session_name IN (${sessionPlaceholders}))
-          AND NOT (project_id = ? AND sprint_id = ? AND task_id = ?)
-        ORDER BY rowid DESC
-        LIMIT 1
-      `).get(
-        ...sessionCandidates,
-        ...sessionCandidates,
-        task.project_id,
-        task.sprint_id,
-        task.id,
-      ) as TaskRunRow | undefined;
-      if (row) {
-        return "foreign";
+    const scopes = new Map<number, "local" | "foreign">();
+    for (const { index, mappedTask, subtask } of entries) {
+      const task = mappedTask.row;
+      const sessionCandidates = buildSessionIdentityCandidates(subtask.session_id, subtask.session_name);
+      const hasForeignSessionRun = sessionCandidates.some((candidate) =>
+        (taskRunsBySession.get(candidate) || []).some((row) => !isSameTaskRunOwner(task, row))
+      );
+      if (hasForeignSessionRun) {
+        scopes.set(index, "foreign");
+        continue;
       }
 
-      const providerInvocation = this.db.prepare(`
-        SELECT project_id, sprint_id, task_id
-        FROM provider_invocations
-        WHERE session_id IN (${sessionPlaceholders})
-          AND NOT (
-            project_id = ?
-            AND (sprint_id = ? OR sprint_id IS NULL)
-            AND (task_id = ? OR task_id IS NULL)
-          )
-        ORDER BY rowid DESC
-        LIMIT 1
-      `).get(
-        ...sessionCandidates,
-        task.project_id,
-        task.sprint_id,
-        task.id,
-      ) as { project_id: string; sprint_id: string | null; task_id: string | null } | undefined;
-      if (providerInvocation) {
-        return "foreign";
+      const hasForeignProviderInvocation = sessionCandidates.some((candidate) =>
+        (providerInvocationsBySession.get(candidate) || []).some((row) => !isSameProviderInvocationOwner(task, row))
+      );
+      if (hasForeignProviderInvocation) {
+        scopes.set(index, "foreign");
+        continue;
       }
+
+      const prUrl = nonEmptyString(subtask.pr_url);
+      const hasForeignPrUrl = prUrl
+        ? (taskRunsByPrUrl.get(prUrl) || []).some((row) => !isSameTaskRunOwner(task, row))
+        : false;
+      scopes.set(index, hasForeignPrUrl ? "foreign" : "local");
     }
 
-    const prUrl = nonEmptyString(subtask.pr_url);
-    if (prUrl) {
-      const row = this.db.prepare(`
-        SELECT project_id, sprint_id, task_id
-        FROM task_runs
-        WHERE pr_url = ?
-          AND NOT (project_id = ? AND sprint_id = ? AND task_id = ?)
-        ORDER BY rowid DESC
-        LIMIT 1
-      `).get(prUrl, task.project_id, task.sprint_id, task.id) as TaskRunRow | undefined;
-      if (row) {
-        return "foreign";
-      }
-    }
-
-    return "local";
+    return scopes;
   }
 
   private stripRuntimeArtifacts(subtask: Subtask): Subtask {
@@ -716,39 +733,6 @@ export class ProjectRuntimeRepository {
       pr_url: undefined,
       activities: undefined,
     };
-  }
-
-  private shouldCreateTaskRun(subtask: Subtask): boolean {
-    const hasRuntimeEvidence = Boolean(
-      (subtask.session_id && subtask.session_id.trim().length > 0)
-      || (subtask.session_name && subtask.session_name.trim().length > 0)
-      || (subtask.provider && subtask.provider.trim().length > 0)
-      || (subtask.worker_branch && subtask.worker_branch.trim().length > 0)
-      || (subtask.pr_url && subtask.pr_url.trim().length > 0)
-    );
-
-    if (subtask.status === "BLOCKED" && !hasRuntimeEvidence) {
-      return false;
-    }
-
-    return Boolean(hasRuntimeEvidence || (subtask.status && subtask.status !== "PENDING"));
-  }
-
-  private insertRunEvent(taskRunId: string, eventType: string, payload: Record<string, unknown>, createdAt: string): void {
-    // project_id is denormalized from the parent task_run (PK lookup, negligible cost) so the live
-    // execution feed can read a project's recent events straight off idx_task_run_events_project_created.
-    this.db.prepare(`
-      INSERT INTO task_run_events (id, task_run_id, project_id, event_type, originator, payload_json, created_at)
-      VALUES (?, ?, (SELECT project_id FROM task_runs WHERE id = ?), ?, ?, ?, ?)
-    `).run(
-      randomUUID(),
-      taskRunId,
-      taskRunId,
-      eventType,
-      "system",
-      JSON.stringify(payload),
-      createdAt
-    );
   }
 
   private runInTransaction(operation: () => void): void {

@@ -20,10 +20,10 @@ export const LiveSessionRuntimeSidebar: FunctionComponent<{
   pendingActionIds: Set<string>;
   onOrchestrateSprint: (projectId: string, sprintId: string) => void;
   onPauseSprintRun: (sprintRunId: string) => void;
-  onCancelSprintRun: (sprintRunId: string) => void;
-  onForceCancelSprintRun: (sprintRunId: string) => void;
-  onCancelTaskDispatch: (dispatchId: string) => void;
-  onForceCancelTaskDispatch: (dispatchId: string) => void;
+  onCancelSprintRun: (sprintRunId: string, targetLabel?: string) => void;
+  onForceCancelSprintRun: (sprintRunId: string, targetLabel?: string) => void;
+  onCancelTaskDispatch: (dispatchId: string, targetLabel?: string) => void;
+  onForceCancelTaskDispatch: (dispatchId: string, targetLabel?: string) => void;
   onRetryTaskDispatch: (dispatchId: string) => void;
   onClaimAttentionItem: (projectId: string, attentionItemId: string) => void;
   onResolveAttentionItem: (projectId: string, attentionItemId: string) => void;

@@ -1,10 +1,11 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import { randomUUID } from "crypto";
-import type { DashboardSettings, ProviderId } from "../contracts/app-types.js";
+import type { DashboardSettings, ProviderId, TechstackCatalogEntrySettings, TechstackItemSettings } from "../contracts/app-types.js";
 import type {
   ProjectSetupArtifactPayload,
   ProjectSetupOptions,
+  ProjectSetupRequestInput,
   ProjectSetupResult,
   ProjectSetupStartResult,
   ProjectSummary,
@@ -33,6 +34,7 @@ import type { QuicksprintTemplateRecord } from "../contracts/quicksprint-types.j
 import type { DashboardRealtimeMutationNotifier } from "./dashboard-realtime-service.js";
 import { resolveAgentAvatarConfig } from "../contracts/agent-avatar-style.js";
 import { defaultCodingAgentMcpAccess } from "./agent-mcp-access.js";
+import type { ProjectDocsAutoEmbedService } from "./project-docs-auto-embed-service.js";
 
 export const PROJECT_SETUP_AGENT_NAME = "Project Setup Agent";
 
@@ -41,6 +43,30 @@ const DEFAULT_OPTIONS: ProjectSetupOptions = {
   quicksprints: true,
   previewScript: true,
   ci: true,
+  techstack: true,
+  docs: false,
+};
+
+const TECHSTACK_ID_MAX_LENGTH = 80;
+
+const normalizeComparableText = (value: string): string => value.trim().toLowerCase();
+
+const toTechstackIdSegment = (value: string): string => {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "detected";
+};
+
+const toDetectedTechstackId = (name: string): string => {
+  const base = `detected-${toTechstackIdSegment(name)}`;
+  return base.slice(0, TECHSTACK_ID_MAX_LENGTH).replace(/-+$/g, "") || "detected-techstack";
+};
+
+const toDetectedTechstackItemId = (label: string): string => {
+  return toTechstackIdSegment(label).slice(0, TECHSTACK_ID_MAX_LENGTH).replace(/-+$/g, "") || "detected-item";
 };
 
 interface ProjectSetupServiceDeps {
@@ -52,6 +78,7 @@ interface ProjectSetupServiceDeps {
   providerRunner?: IProviderRunner;
   providerConcurrencyService?: ProviderConcurrencyService;
   realtimeNotifier?: DashboardRealtimeMutationNotifier;
+  projectDocsAutoEmbedService?: Pick<ProjectDocsAutoEmbedService, "embedProjectDocs">;
   logger?: Logger;
   projectRoot?: string;
   getGithubToken?: () => string | undefined;
@@ -97,10 +124,7 @@ export class ProjectSetupService {
 
   async setupProject(
     projectId: string,
-    input?: {
-      options?: Partial<ProjectSetupOptions>;
-      clientRequestId?: string;
-    },
+    input?: ProjectSetupRequestInput,
     signal?: AbortSignal,
   ): Promise<ProjectSetupResult> {
     const prepared = await this.prepareSetupRun(projectId, input);
@@ -109,10 +133,7 @@ export class ProjectSetupService {
 
   async startProjectSetup(
     projectId: string,
-    input?: {
-      options?: Partial<ProjectSetupOptions>;
-      clientRequestId?: string;
-    },
+    input?: ProjectSetupRequestInput,
   ): Promise<ProjectSetupStartResult> {
     const prepared = await this.prepareSetupRun(projectId, input);
     void this.executePreparedSetupRun(prepared).catch((error) => {
@@ -132,10 +153,7 @@ export class ProjectSetupService {
 
   private async prepareSetupRun(
     projectId: string,
-    input?: {
-      options?: Partial<ProjectSetupOptions>;
-      clientRequestId?: string;
-    },
+    input?: ProjectSetupRequestInput,
   ): Promise<PreparedProjectSetupRun> {
     const project = this.deps.projectManagementRepository.getProject(projectId);
     if (!project) {
@@ -172,6 +190,7 @@ export class ProjectSetupService {
       baseAgentTemplates,
       baseQuicksprintTemplates,
       containerSetupScriptTemplate,
+      designGuidance: settings.designGuidance,
       options,
     });
     if (invocation) {
@@ -277,6 +296,8 @@ export class ProjectSetupService {
         openCodePackage: providerConfig.openCodePackage,
         providerMountAuth: providerConfig.providerMountAuth,
         providerAuthPath: providerConfig.providerAuthPath,
+        providerConfigMode: providerConfig.providerConfigMode,
+        providerConfigPath: providerConfig.providerConfigPath,
         customBaseUrl: providerConfig.customBaseUrl,
         customModel: providerConfig.customModel,
         sessionId,
@@ -306,6 +327,7 @@ export class ProjectSetupService {
 
       const payload = this.parsePayload(result.text || result.stdout || result.usageTelemetry.transcriptText);
       const applied = await this.applyArtifacts(projectId, project.baseDir, options, payload);
+      const embeddedDocs = await this.embedRequestedDocs(projectId, project.baseDir, options);
 
       if (invocationId) {
         this.deps.executionRepository?.updateExecutionInvocation(invocationId, {
@@ -323,6 +345,7 @@ export class ProjectSetupService {
         agentId: setupAgent.id,
         summary: payload.summary || "Project setup completed.",
         ...applied,
+        ...embeddedDocs,
       };
     } catch (error) {
       if (invocationId) {
@@ -342,7 +365,49 @@ export class ProjectSetupService {
       quicksprints: options?.quicksprints ?? DEFAULT_OPTIONS.quicksprints,
       previewScript: options?.previewScript ?? DEFAULT_OPTIONS.previewScript,
       ci: options?.ci ?? DEFAULT_OPTIONS.ci,
+      techstack: options?.techstack ?? DEFAULT_OPTIONS.techstack,
+      docs: options?.docs ?? DEFAULT_OPTIONS.docs,
     };
+  }
+
+  private async embedRequestedDocs(
+    projectId: string,
+    projectBaseDir: string,
+    options: ProjectSetupOptions,
+  ): Promise<Pick<ProjectSetupResult, "embeddedDocumentIds" | "embeddedDocumentErrors">> {
+    if (!options.docs) {
+      return { embeddedDocumentIds: [], embeddedDocumentErrors: [] };
+    }
+
+    if (!this.deps.projectDocsAutoEmbedService) {
+      return {
+        embeddedDocumentIds: [],
+        embeddedDocumentErrors: [
+          {
+            fileName: "docs",
+            error: "Project docs auto-embed service is not available.",
+          },
+        ],
+      };
+    }
+
+    try {
+      const result = await this.deps.projectDocsAutoEmbedService.embedProjectDocs(projectId, projectBaseDir);
+      return {
+        embeddedDocumentIds: result.documentIds,
+        embeddedDocumentErrors: result.errors,
+      };
+    } catch (error) {
+      return {
+        embeddedDocumentIds: [],
+        embeddedDocumentErrors: [
+          {
+            fileName: "docs",
+            error: error instanceof Error ? error.message : String(error),
+          },
+        ],
+      };
+    }
   }
 
   private async ensureProjectSetupAgent(projectId: string): Promise<AgentPresetRecord> {
@@ -396,6 +461,8 @@ export class ProjectSetupService {
     openCodePackage?: string;
     providerMountAuth?: boolean;
     providerAuthPath?: string;
+    providerConfigMode?: DashboardSettings["aiProvider"]["providers"][string]["providerConfigMode"];
+    providerConfigPath?: string;
     customBaseUrl?: string;
     customModel?: string;
   } {
@@ -439,6 +506,8 @@ export class ProjectSetupService {
       openCodePackage: providerSettings.openCodePackage,
       providerMountAuth: providerSettings.mountAuth,
       providerAuthPath: providerSettings.authPath,
+      providerConfigMode: providerSettings.providerConfigMode,
+      providerConfigPath: providerSettings.providerConfigPath,
       customBaseUrl: providerSettings.customBaseUrl,
       customModel: providerSettings.customModel,
     };
@@ -509,7 +578,120 @@ export class ProjectSetupService {
       }
     }
 
+    if (options.techstack) {
+      try {
+        this.applyDetectedTechstack(projectId, payload.techstack);
+      } catch (error) {
+        this.deps.logger?.warn("Failed to apply project setup techstack detection; continuing with other artifacts.", {
+          projectId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     return { createdAgentIds, createdQuicksprintTemplateIds, writtenFiles };
+  }
+
+  private applyDetectedTechstack(
+    projectId: string,
+    techstack: ProjectSetupArtifactPayload["techstack"],
+  ): void {
+    const detected = this.normalizeDetectedTechstack(projectId, techstack);
+    if (!detected) {
+      return;
+    }
+
+    const systemSettings = this.deps.settingsRepository.getSystemSettings();
+    const existingEntry = systemSettings.techstackCatalog.entries.find((entry) =>
+      entry.id === detected.id
+      || normalizeComparableText(entry.label) === normalizeComparableText(detected.label)
+    );
+    const selectedTechstackId = existingEntry?.id || detected.id;
+
+    if (!existingEntry) {
+      this.deps.settingsRepository.saveSystemSettings({
+        ...systemSettings,
+        techstackCatalog: {
+          ...systemSettings.techstackCatalog,
+          entries: [
+            ...systemSettings.techstackCatalog.entries,
+            detected,
+          ],
+        },
+      });
+    }
+
+    const current = this.deps.settingsRepository.getProjectSettings(projectId);
+    const effectiveTechstack = this.deps.settingsRepository.resolveProjectDashboardSettings(projectId).settings.techstack;
+    this.deps.settingsRepository.saveProjectSettings(projectId, {
+      ...current,
+      techstack: {
+        ...effectiveTechstack,
+        ...current.techstack,
+        selectedTechstackId,
+      },
+    });
+  }
+
+  private normalizeDetectedTechstack(
+    projectId: string,
+    techstack: ProjectSetupArtifactPayload["techstack"],
+  ): TechstackCatalogEntrySettings | null {
+    if (!techstack || typeof techstack !== "object") {
+      if (techstack !== null && techstack !== undefined) {
+        this.warnIgnoredTechstack(projectId, "artifact must be an object or null");
+      }
+      return null;
+    }
+
+    const name = typeof techstack.name === "string" ? techstack.name.trim() : "";
+    const description = typeof techstack.description === "string" ? techstack.description.trim() : "";
+    const items = this.normalizeDetectedTechstackItems([
+      ...(Array.isArray(techstack.detectedFrameworks) ? techstack.detectedFrameworks : []),
+      ...(Array.isArray(techstack.detectedLibraries) ? techstack.detectedLibraries : []),
+    ]);
+
+    if (!name || !description || items.length === 0) {
+      this.warnIgnoredTechstack(
+        projectId,
+        "artifact requires a name, description, and at least one detected framework or library",
+      );
+      return null;
+    }
+
+    return {
+      id: toDetectedTechstackId(name),
+      label: name,
+      items,
+    };
+  }
+
+  private normalizeDetectedTechstackItems(values: unknown[]): TechstackItemSettings[] {
+    const items: TechstackItemSettings[] = [];
+    const seenIds = new Set<string>();
+    for (const value of values) {
+      if (typeof value !== "string") {
+        continue;
+      }
+      const label = value.trim();
+      if (!label) {
+        continue;
+      }
+      const id = toDetectedTechstackItemId(label);
+      if (seenIds.has(id)) {
+        continue;
+      }
+      items.push({ id, label });
+      seenIds.add(id);
+    }
+    return items;
+  }
+
+  private warnIgnoredTechstack(projectId: string, reason: string): void {
+    this.deps.logger?.warn("Ignoring project setup techstack detection.", {
+      projectId,
+      reason,
+    });
   }
 
   private async createOrUpdateAgent(

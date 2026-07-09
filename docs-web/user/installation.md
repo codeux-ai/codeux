@@ -1,18 +1,52 @@
 # Installation
 
-Code UX runs entirely on your machine. You can install it as a **desktop app** or as the
-**`@codeuxai/codeux` npm CLI** — both ship the same runtime, dashboard, and MCP server. You can
+Code UX runs entirely on your machine. You can install it as a **desktop app** or build it from
+**source** — both ship the same runtime, dashboard, and MCP server. You can
 install and start Code UX with **no configuration**; providers are set up later from the dashboard.
 
 ## Prerequisites
 
 | Requirement | Needed for | Notes |
 | --- | --- | --- |
-| **Node.js 22+** | npm CLI and source installs | Not required for the desktop app, which bundles its own runtime. |
+| **Node.js 22+** | Source installs | Not required for the desktop app, which bundles its own runtime. |
 | **Docker** | Containerized (default) execution and preview containers | Recommended. Without it, run providers in host mode. |
 | **Git ≥ 2.30** | All project work | Code UX manages branches, worktrees, and merges. |
 | **An agent provider** | Dispatching work | At least one of Jules, Claude Code, Codex, Gemini, Qwen Code, OpenCode, or Antigravity. See [Providers and models](./providers-and-models.md). |
 | **GitHub CLI (`gh`)** | Remote merge protocol *(optional)* | Used when GitHub operations run in remote mode. |
+
+## Onboarding dependency installers
+
+First-run readiness checks report Docker CLI, Docker daemon, and Git CLI status. The backend also
+probes installer prerequisites before advertising safe Docker/Git setup options: supported Linux
+package managers plus `systemctl`, Homebrew on macOS, and winget on Windows. These options are
+structured metadata only until an installer action is invoked, and installer execution is limited
+to hardcoded command and argument arrays with bounded output capture. Onboarding invokes installation through
+`POST /api/onboarding/dependencies/install` only after sending the selected `mode` with
+`confirmInstall: true`; unsupported modes and unconfirmed requests are rejected.
+
+| Platform | Recommended mode | Automated behavior | Manual or degraded behavior |
+| --- | --- | --- | --- |
+| **macOS** | `docker-desktop-git` | Uses Homebrew to install Docker Desktop and Git when Homebrew is available. | `docker-engine-git` is degraded because standalone Docker Engine requires a Linux VM; use Docker Desktop unless you manage that VM yourself. |
+| **Windows** | `docker-desktop-git` | Uses winget exact package installs for Docker Desktop and Git, including package/source agreement flags. | `docker-engine-git` is degraded because Docker Engine is not installed directly on Windows desktops; use Docker Desktop or WSL guidance instead. |
+| **Linux** | `docker-engine-git` | Uses `apt`, `dnf`, `yum`, `zypper`, or `pacman` to install Docker Engine packages and Git, then attempts to start Docker with `systemctl` when available. | Linux Docker Desktop artifacts are distro-specific, so `docker-desktop-git` automates Git when possible and points to Docker's official Desktop download guidance. |
+
+Linux privilege handling is noninteractive. Root runs package commands directly; non-root runs use
+`sudo -n`. If passwordless sudo is unavailable, Code UX returns the display commands and privilege
+guidance instead of prompting for a password.
+
+In onboarding, missing Docker/Git checks show an explicit **Auto Install dependencies** action when
+the recommended installer is available. Clicking it sends the recommended confirmed installer mode and
+lets Code UX run the detected OS package manager for Docker and Git. The same step also keeps advanced
+**Docker Desktop + Git** and **Docker Engine + Git** choices visible with platform availability,
+degraded/manual-download guidance, privilege notes, live progress, command summaries, retry, recheck,
+and manual Docker/Git links for fallback. Onboarding presents local dependency setup only.
+
+Installer attempts do not mark onboarding complete. After any completed installer response, including
+permission-limited or manual-download outcomes, onboarding shows the structured result and rechecks
+readiness so Docker CLI, Docker daemon, and Git status refresh. You may still need to refresh your
+terminal PATH, start Docker Desktop or the Docker Engine daemon, add your user to the Docker group, or
+rerun from an elevated shell. Permission failures are shown as guidance with bounded command summaries
+and short command messages, not as raw full command output.
 
 ## Option 1 — Desktop app (recommended)
 
@@ -29,26 +63,42 @@ Download the latest installer for your platform from
 > code-signed. Choose **More info → Run anyway**. Only do this for builds downloaded from the official
 > releases page.
 
-The desktop app launches the runtime and opens the dashboard automatically.
+The desktop app launches the runtime and opens the dashboard automatically. The title bar shows the
+running version so you can confirm which build is active.
 
-## Option 2 — npm CLI
+### Speech input on desktop
 
-Install globally:
+The microphone control in project chat uses the local dashboard origin served by the desktop app.
+The app grants microphone access only to that trusted dashboard window; camera, geolocation,
+notifications, sprint preview pages, and unrelated sites are denied.
 
-```bash
-npm i -g @codeuxai/codeux
+Local speech transcription does not require an external API key, but it does require the selected
+ONNX speech model files in your Code UX home cache:
+
+```text
+~/.code-ux/models/speech/<sanitized-model-id>/model.onnx
+~/.code-ux/models/speech/<sanitized-model-id>/labels.json  # optional
 ```
 
-This installs the `codeux` command — the orchestration server, dashboard, and MCP server. Start it:
+For the default model, the directory is:
 
-```bash
-codeux
+```text
+~/.code-ux/models/speech/onnx-community--whisper-base.en/
 ```
 
-Then open the dashboard at **`http://localhost:4444`**. Prefer not to install globally? Run it on
-demand with `npx -y @codeuxai/codeux` (this is also how most MCP clients launch it).
+In `auto` mode, Code UX uses the local model when present. If the model is missing, Code UX can
+fall back to an OpenAI-compatible transcription endpoint only when you configure a base URL, API key,
+and model in speech settings. Without a local model or complete external fallback settings, the
+dashboard shows a setup error instead of sending audio elsewhere.
 
-## Option 3 — From source
+Platform notes:
+
+- **macOS**: allow microphone access in the system prompt, or later in System Settings > Privacy & Security > Microphone.
+- **Windows**: allow microphone access in Windows privacy settings and confirm desktop apps can use the microphone.
+- **Linux**: microphone availability depends on the host PulseAudio/PipeWire and desktop permission setup for your package format.
+- **Browser/npm dashboard**: `http://localhost:<port>` and `http://127.0.0.1:<port>` are treated by modern browsers as secure contexts for microphone capture. If you bind the dashboard to a non-loopback host, use HTTPS and grant browser permission.
+
+## Option 2 — From source
 
 Use a source build to develop Code UX itself or inspect the runtime. Requires Node.js 22+ and
 pnpm 10.33+.
@@ -68,11 +118,13 @@ See [Building from source](../developer/building-from-source.md) for the full de
 When Code UX starts it:
 
 1. Serves the dashboard at `http://localhost:4444`.
-2. Exposes an **MCP server** (over stdio, plus an optional HTTPS worker gateway).
+2. Exposes an **MCP server** (over stdio, plus an authenticated Streamable HTTP gateway).
 3. Loads any settings it finds, then waits for you to add a project and configure providers.
 
 Nothing is required to reach this point — no API keys, no environment variables. Configure providers
 when you are ready to dispatch work (see [Configuring providers](#configuring-providers)).
+
+For headless server deployments, use `--server-mode` with an explicit MCP HTTP bearer token. Server mode does not bind dashboard routes or websockets; operators connect through authenticated MCP HTTP and probe `/health` and `/ready` on the MCP listener.
 
 ## CLI flags
 
@@ -83,11 +135,19 @@ Run `codeux --help` for the authoritative list. The current flags are:
 | `--api-key VALUE` | Set the Jules API key (overrides env and settings). |
 | `--runtime-role VALUE` | Runtime role: `project_manager` (default) or `worker-host`. |
 | `--headless` (alias `--no-dashboard`) | Start MCP-only without binding the dashboard. |
-| `--mcp-https` / `--no-mcp-https` | Enable/disable the remote MCP HTTPS worker gateway (**enabled by default**). |
-| `--mcp-https-port N` | Port for the MCP HTTPS worker gateway. |
-| `--mcp-https-host H` | Host/interface for the MCP HTTPS worker gateway. |
-| `--mcp-https-path P` | Path for the MCP HTTPS worker gateway (default `/mcp`). |
-| `--mcp-https-auth-token VALUE` | Bearer token required for MCP HTTPS requests on a non-loopback host. |
+| `--server-mode` | Start authenticated MCP HTTP server mode without binding dashboard routes or websockets. Requires an explicit bearer token with at least 32 bearer-safe characters. |
+| `--no-mcp-http` | Preferred alias for disabling the MCP Streamable HTTP gateway outside server mode. |
+| `--mcp-https` / `--no-mcp-https` | Enable/disable the MCP Streamable HTTP gateway (**enabled by default**; legacy flag name). |
+| `--mcp-http-port N` | Preferred alias for the MCP HTTP gateway port. |
+| `--mcp-https-port N` | Port for the MCP HTTP gateway. |
+| `--mcp-http-host H` | Preferred alias for the MCP HTTP gateway host/interface. |
+| `--mcp-https-host H` | Host/interface for the MCP HTTP gateway. |
+| `--mcp-http-path P` | Preferred alias for the MCP HTTP gateway path. |
+| `--mcp-https-path P` | Path for the MCP HTTP gateway (default `/mcp`). |
+| `--mcp-http-auth-token VALUE` | Preferred alias for the MCP HTTP bearer token. |
+| `--mcp-https-auth-token VALUE` | Bearer token for MCP HTTP requests; overrides the generated user token. |
+| `--mcp-http-max-sessions N` | Preferred alias for the active Streamable HTTP session cap. |
+| `--mcp-http-session-timeout-ms N` | Preferred alias for the idle Streamable HTTP session timeout. |
 | `--help`, `-h` | Show help. |
 
 ## Environment variables
@@ -96,11 +156,25 @@ Run `codeux --help` for the authoritative list. The current flags are:
 | --- | --- |
 | `JULES_API_KEY` | Jules API key (also accepted as `JULES_KEY`). |
 | `DASHBOARD_PORT` | Dashboard port (default `4444`). |
-| `MCP_HTTPS_ENABLED` | Enable the MCP HTTPS worker gateway (default `true`). |
-| `MCP_HTTPS_PORT` | Port for the MCP HTTPS worker gateway. |
-| `MCP_HTTPS_HOST` | Host/interface for the MCP HTTPS worker gateway. |
-| `MCP_HTTPS_PATH` | Path for the MCP HTTPS worker gateway. |
-| `MCP_HTTPS_AUTH_TOKEN` | Bearer token for MCP HTTPS requests. |
+| `DASHBOARD_HOST` | Dashboard bind address (default `127.0.0.1`). Non-loopback values require `CODE_UX_ALLOW_PUBLIC_DASHBOARD=1`. |
+| `CODE_UX_ALLOW_PUBLIC_DASHBOARD` | Set to `1` to explicitly allow unauthenticated dashboard binding outside loopback. |
+| `CODE_UX_SERVER_MODE` | Set to `true` for authenticated MCP HTTP server mode without dashboard binding. Requires an explicit bearer token with at least 32 bearer-safe characters. |
+| `MCP_HTTP_ENABLED` | Preferred alias to enable the MCP HTTP gateway. |
+| `MCP_HTTPS_ENABLED` | Enable the MCP HTTP gateway (default `true`). |
+| `MCP_HTTP_PORT` | Preferred alias for the MCP HTTP gateway port. |
+| `MCP_HTTPS_PORT` | Port for the MCP HTTP gateway. |
+| `MCP_HTTP_HOST` | Preferred alias for the MCP HTTP gateway host/interface. |
+| `MCP_HTTPS_HOST` | Host/interface for the MCP HTTP gateway. |
+| `MCP_HTTP_PATH` | Preferred alias for the MCP HTTP gateway path. |
+| `MCP_HTTPS_PATH` | Path for the MCP HTTP gateway. |
+| `MCP_HTTP_AUTH_TOKEN` | Preferred alias for the MCP HTTP bearer token. |
+| `MCP_HTTPS_AUTH_TOKEN` | Bearer token for MCP HTTP requests; if unset, Code UX creates `~/.code-ux/security.json`. |
+| `MCP_HTTP_MAX_SESSIONS` | Preferred alias for the active Streamable HTTP session cap. |
+| `MCP_HTTP_SESSION_TIMEOUT_MS` | Preferred alias for the idle Streamable HTTP session timeout. |
+
+In server mode, `MCP_HTTPS_AUTH_TOKEN`, `MCP_HTTP_AUTH_TOKEN`, `--mcp-https-auth-token`, or `--mcp-http-auth-token` must provide an explicit token with at least 32 bearer-safe characters. Server mode does not fall back to the generated user token.
+
+For server-mode startup commands, token handling, worker enrollment, settings synchronization, and troubleshooting, see [Connecting MCP clients](./mcp-clients.md#secure-headless-server-mode).
 
 A project-local `.env` file is read on startup, so you can keep settings per repository:
 
@@ -149,19 +223,24 @@ See [Configuration](../developer/configuration.md) for the full search path and 
 ## Updating
 
 ```bash
-# npm
-npm update -g @codeuxai/codeux
+# source
+git pull
+pnpm install
+pnpm run build
 
 # desktop app
 # download and run the latest installer from GitHub Releases
 ```
 
+In the desktop app, the title-bar **Update** action opens the latest GitHub Releases page in your
+default browser. It is a download shortcut, not an automatic background or in-app update flow.
+
 ## Uninstall
 
 ```bash
-npm uninstall -g @codeuxai/codeux
+# source
 rm -rf ~/.code-ux
 ```
 
-This removes the global CLI and home-directory settings. Project-local `.code-ux/` directories are
+This removes the home-directory settings. Project-local `.code-ux/` directories are
 left in place — remove them per project if you no longer need them.

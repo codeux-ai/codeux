@@ -13,6 +13,7 @@ Execution invocations span various purposes:
 - **Coding & Virtual Planning**: Core orchestration loops.
 - **Clarification**: Prompt rewrites or operator clarification flows.
 - **QA Coverage**: Automated verification and quality assurance sweeps.
+- **Node Flows**: Repeatable node-flow runs and externally observable node steps.
 
 Failed invocations can be explicitly preserved with `preserved_at`. Preservation is used for high-value transcripts such as quota-expensive planning runs that should remain available for operator review. Preserved sprint-scoped invocation rows block sprint deletion through the repository boundary so their transcripts are not removed by a foreign-key cascade.
 
@@ -25,7 +26,7 @@ Provider log parsers emit normalized turns in the shared `ParsedConversationTurn
 
 Before being written to the database, provider-specific conversation turns are normalized and mapped into a standard message format within `src/services/provider-conversation-message-mapper.ts`. User turns are persisted verbatim and are not storage-truncated, so long planning prompts remain auditable from the invocation transcript. Reasoning turns remain `role: "assistant"` messages and are distinguished only by `metadata.kind === "reasoning"`, so the existing database schema does not need to change.
 
-During live telemetry, `ProviderExecutionService` rewrites invocation messages from the parsed provider conversation for every provider invocation purpose that carries an agent transcript, including planning, QA, remediation, setup, chat replies, and task coding. The rewrite signature is derived from the persisted message payloads so changes in reasoning text, tool arguments, tool output, or metadata trigger a refresh even when the transcript length does not change. When a provider only exposes final text, the service falls back to appending the sanitized assistant text instead of replacing earlier retry/history messages.
+During live telemetry, `ProviderExecutionService` rewrites invocation messages from parsed provider conversation turns for every provider-backed invocation type that carries an agent transcript. That includes planning, QA review, dashboard/chat replies, CI repair, merge-conflict repair, memory remediation, setup, and task coding. The rewrite signature is derived from the persisted message payloads so changes in reasoning text, tool arguments, tool output, or metadata trigger a refresh even when the transcript length does not change. When a provider only exposes final text, the service falls back to appending the sanitized assistant text instead of replacing earlier retry/history messages.
 
 Provider telemetry uses the richest data the provider actually exposes. Readable reasoning is captured only when the structured parser can reconstruct it; if a provider exposes only token-level reasoning counts or opaque encrypted reasoning, the invocation keeps the token telemetry but does not fabricate a transcript turn.
 
@@ -38,10 +39,28 @@ Execution invocations are heavily used by the Chat page to track activity.
 When chat conversations take place (routed to either connected workers or virtual providers), those discrete operations and interactions generate `execution_invocations` with `type === "chat"`.
 This provides a clear audit log of the agent's work and prompt history separate from the user-facing `ConversationThreadRecord` and `ConversationMessageRecord` items.
 User-facing chat threads show up with `scope === "project"`, while agent background logs and execution runs appear with `scope === "connection"`.
+The dashboard Chat -> Invocations rail renders only `execution_invocations` returned by the server list endpoint or project realtime refreshes. Invocation rows are created by the backend when the routed operation starts or is persisted. Sending a chat message still updates the thread transcript from the returned conversation message immediately, but the invocation rail waits for the persisted backend invocation row instead of inserting a frontend-only optimistic invocation placeholder.
 
 The Chat -> Invocations detail view exposes same-session recovery actions for failed planning invocations. **Restart** preserves the original failed transcript, creates a new invocation row, and resends the full planning prompt while passing the failed provider row's native session id as `continueSessionId` (Claude Code uses `--resume <nativeSessionId>`). **Continue** uses the same native-session resume path and asks the provider to finish the previous planning attempt, but the continuation prompt also embeds the original planning instructions so a provider fallback to a fresh session still has the full schema, sprint goal, and task-generation context. Docker-backed planning runs use a stable project/sprint snapshot workspace and preserve its paired provider runtime volume while the run is failed or incomplete; Restart and Continue reuse that workspace so provider-local session files remain available. Successful planning cleans up that workspace and paired runtime volume. The replacement invocation has its own provider usage trail; the failed row remains immutable evidence of the quota/error history. If Claude Code reports "No conversation found" during resume, Code UX retries once with a fresh Claude session and persists that fresh native session id rather than the rejected id.
 
 Running invocations can also be cancelled from the same detail header. Cancellation is available for every running invocation type, not just planning. The dashboard posts to `/api/execution/invocations/:invocationId/cancel`; the server requests any registered active dispatch to stop, finds Docker containers by the existing `code-ux.session-id` label from the linked provider/task runtime, kills those containers, marks the provider usage row `cancelled`, and appends a system cancellation message to the invocation transcript. Provider finalizers check the current invocation state before writing terminal status so a cancelled row is not overwritten by a late provider failure while the process unwinds.
+
+Invocations waiting on provider usage limits expose a **Reset timer** action when they are still active, have `last_retry_after_iso`, and carry `last_error_category = QUOTA_EXHAUSTED` or `RATE_LIMITED`. The dashboard posts to `/api/execution/invocations/:invocationId/reset-usage-limit`; the server clears the retry timestamp and records a transcript audit message. The provider retry loop watches that persisted timestamp while sleeping, so clearing it wakes the active wait and lets the same invocation retry immediately instead of waiting for the original reset time.
+
+## Node Flow Usage
+
+Node-flow execution uses `execution_invocations` as the dashboard-observable audit surface while keeping graph and run details in the node-flow tables.
+
+Runtime behavior:
+
+- `NodeFlowRuntimeService.runFlow` creates one parent invocation with `type = "node_flow"` and links it from `node_flow_runs.execution_invocation_id`.
+- The parent invocation starts as `running`, receives a system start message with `flowId` and flow version metadata, and is updated to `completed`, `failed`, or `cancelled` when the run finishes.
+- Externally observable node types create separate invocation rows with `type = "node_flow_node"` and link them from `node_flow_node_runs.execution_invocation_id`.
+- Current externally observable node types are `provider_prompt` and `http_request`. Deterministic nodes such as `input`, `set_fields`, `template`, and `output` only create `node_flow_node_runs` rows.
+- Provider prompt nodes pass the existing `node_flow_node` invocation id into `ProviderExecutionService` and disable raw prompt/assistant transcript capture for that node-flow prompt.
+- HTTP nodes append a redacted request summary to the node invocation. Secret-shaped query keys are redacted before they are written.
+
+The run tables remain the source for node order, node status, flow input/output, trigger payload, and per-node JSON payloads. Those payloads are masked for secret-shaped keys before persistence and before MCP/dashboard responses.
 
 ## Realtime Synchronization
 
@@ -50,7 +69,7 @@ When an invocation or its messages are created/updated, the server emits a proje
 - \`scheduleProjectExecutionRefresh(projectId, { includeOverview: false })\`: Triggered when appending messages to avoid heavy recalculations if only appending content.
 - Burst writes are coalesced in \`ExecutionRepository\` per project on the next tick. If any write in the burst requires overview refresh, the coalesced dispatch escalates to \`includeOverview: true\`.
 
-The Live dashboard consumes invocation records through the same project execution snapshot used for runtime events. `getProjectExecutionSnapshot(projectId, { selectedSprintId })` merges three slices into `recentInvocations`: the latest project-wide records, all invocation records for expanded active/paused/queued sprint runs, and all invocation records for the selected sprint. This keeps the Live invocation feed available for stopped or paused sprints even when other sprints have newer activity, while still letting active multi-sprint sessions stream through the existing `project.live.updated` websocket flow. The page-level feed is intentionally summary-level and scoped to the selected sprint when one is selected: status, provider/model, task/sprint context, message count, timing, tokens, and latest error. Task cards filter the same records by task id/task key plus current dispatch and task-run ids to show local invocation activity on the card. Full invocation messages remain loaded on demand from the Chat invocation view.
+The Live dashboard consumes invocation records through the same project execution snapshot used for runtime events. `getProjectExecutionSnapshot(projectId, { selectedSprintId })` merges three slices into `recentInvocations`: the latest project-wide records, all invocation records for expanded active/paused/queued sprint runs, and all invocation records for the selected sprint. This keeps the Live invocation feed available for stopped or paused sprints even when other sprints have newer activity, while still letting active multi-sprint sessions stream through the existing `project.live.updated` websocket flow. The REST project execution endpoint returns the full bounded feeds, while the realtime `project.execution.updated` channel remains feed-less for payload size. The page-level feed is intentionally summary-level and scoped to the selected sprint when one is selected: status, provider/model/execution mode, task/sprint context, message and prompt/transcript character counts, timing, tokens, and latest error. Task cards filter the same records by task id/task key plus current dispatch and task-run ids to show local invocation activity on the card. Full invocation messages remain loaded on demand from the Chat invocation view.
 
 SQLite startup schema and migrations both maintain scalar indexes for these live snapshot slices: project/sprint/run invocation recency, provider fallback sprint/run recency for legacy rows, active invocation status recency, task dispatch recency, runtime event recency, and attention item status/update ordering. These indexes intentionally avoid prompt, transcript, markdown, JSON, and other large text fields so dashboard polling stays read-efficient without making provider writes heavy.
 
@@ -82,6 +101,8 @@ This prevents stale `qa_review` or worker invocations from remaining indefinitel
 ## Relationships
 
 Execution invocations cascade when their parent \`project_id\`, \`sprint_id\`, or \`task_id\` are deleted. They optionally reference \`task_run_id\` or \`dispatch_id\` but function independently to track planning sweeps, conflict resolution, or ad-hoc agent activity.
+
+Node-flow run rows reference execution invocations with `ON DELETE SET NULL`. Deleting an invocation should not delete the node-flow run history, and deleting a node flow cascades its versions, attachments, run rows, and node-run rows through the node-flow table relationships.
 
 Additionally, every execution invocation explicitly links to a `provider_invocations` usage row. The execution transcripts stored in `execution_invocation_messages` serve as the replayable prompt history corresponding to the exact token and time consumption recorded in the usage row, allowing the dashboard Stats page to drill down into the exact sequence that generated specific costs.
 

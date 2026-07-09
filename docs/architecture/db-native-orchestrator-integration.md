@@ -106,7 +106,7 @@ Implementation note:
 
 Executor mapping in this slice:
 
-- `jules` provider -> `jules` dispatch executor
+- `jules` provider (hosted) -> `jules` dispatch executor
 - CLI providers (`gemini`, `codex`, `claude-code`) -> `docker_cli` dispatch executor
 - explicit task `executorType = mcp_worker` -> queued `mcp_worker` dispatch
 

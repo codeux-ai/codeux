@@ -5,6 +5,7 @@ import type {
   UpdateProviderInvocationUsageInput,
 } from "../../contracts/execution-types.js";
 import type { Logger } from "../../shared/logging/logger.js";
+import { getCorrelationId } from "../../shared/logging/correlation-id.js";
 import type { DatabaseAdapter } from "../db/database-adapter.js";
 import { RepositoryError } from "../repository-utils.js";
 import {
@@ -250,6 +251,7 @@ export function writeProviderInvocationUsageUpdate(
     logger.info("Provider invocation usage updated", {
       logPurpose: "invocation",
       eventType: "provider_invocation_usage_updated",
+      correlationId: getCorrelationId(),
       providerInvocationId: invocationId,
       projectId: updated.projectId,
       sprintId: updated.sprintId,

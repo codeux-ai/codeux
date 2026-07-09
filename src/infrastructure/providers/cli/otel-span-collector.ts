@@ -36,6 +36,8 @@
  *     Code, and Antigravity all use the same span shape.
  */
 
+import { redactMetadata, redactText } from "../../../shared/security/redaction.js";
+
 // ─── OTLP wire types (subset of the protobuf spec we actually use) ───────────
 
 /** An OTLP attribute key-value pair. */
@@ -214,7 +216,7 @@ function msToNano(ms: number): string {
 }
 
 function strAttr(key: string, value: string): OtelAttribute {
-  return { key, value: { stringValue: value } };
+  return { key, value: { stringValue: redactMetadata(value, key) as string } };
 }
 
 function intAttr(key: string, value: number): OtelAttribute {
@@ -277,7 +279,7 @@ export function buildProviderSpan(args: ProviderSpanArgs): OtelSpan {
     attributes,
     status: args.success
       ? { code: 1 } // OK
-      : { code: 2, message: args.errorMessage ?? "provider invocation failed" },
+      : { code: 2, message: redactText(args.errorMessage ?? "provider invocation failed") },
   };
 }
 
@@ -355,7 +357,7 @@ export class OtelSpanCollector {
 
   /** Buffer a span for the next flush. */
   addSpan(span: OtelSpan): void {
-    this.spans.push(span);
+    this.spans.push(sanitizeOtelSpan(span));
     if (this.spans.length >= this.batchSize) {
       void this.flush();
     }
@@ -363,7 +365,7 @@ export class OtelSpanCollector {
 
   /** Buffer a log record for the next flush. */
   addLog(log: OtelLogRecord): void {
-    this.logs.push(log);
+    this.logs.push(sanitizeOtelLogRecord(log));
     if (this.logs.length >= this.batchSize) {
       void this.flush();
     }
@@ -492,10 +494,45 @@ export function buildProviderLogRecord(args: {
     timeUnixNano: ts,
     severityNumber,
     severityText: severity.toUpperCase(),
-    body: { stringValue: args.message },
-    attributes,
+    body: { stringValue: redactText(args.message) },
+    attributes: attributes.map(sanitizeOtelAttribute),
     ...(args.traceId ? { traceId: args.traceId } : {}),
     ...(args.spanId ? { spanId: args.spanId } : {}),
+  };
+}
+
+function sanitizeOtelAttribute(attribute: OtelAttribute): OtelAttribute {
+  if ("stringValue" in attribute.value) {
+    return {
+      ...attribute,
+      value: {
+        stringValue: redactMetadata(attribute.value.stringValue, attribute.key) as string,
+      },
+    };
+  }
+  return attribute;
+}
+
+function sanitizeOtelSpan(span: OtelSpan): OtelSpan {
+  return {
+    ...span,
+    attributes: span.attributes.map(sanitizeOtelAttribute),
+    status: {
+      ...span.status,
+      ...(span.status.message ? { message: redactText(span.status.message) } : {}),
+    },
+    events: span.events?.map((event) => ({
+      ...event,
+      attributes: event.attributes?.map(sanitizeOtelAttribute),
+    })),
+  };
+}
+
+function sanitizeOtelLogRecord(log: OtelLogRecord): OtelLogRecord {
+  return {
+    ...log,
+    body: { stringValue: redactText(log.body.stringValue) },
+    attributes: log.attributes.map(sanitizeOtelAttribute),
   };
 }
 

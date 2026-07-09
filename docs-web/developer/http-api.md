@@ -6,7 +6,7 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 
 > **Authentication:** The dashboard REST API is intended for trusted local consumption. It is not authenticated. Bind only to loopback (default) or front it with a reverse proxy when exposing remotely.
 
-> **MCP HTTP gateway** (`--mcp-https`) is a *separate* listener for JSON-RPC and is documented in [MCP server](../architecture/mcp-server.md).
+> **MCP HTTP gateway** (`--mcp-http`) is a *separate* listener for JSON-RPC and is documented in [MCP server](../architecture/mcp-server.md).
 
 ---
 
@@ -15,9 +15,9 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 | Method | Path | Returns |
 | --- | --- | --- |
 | `GET` | `/health` | `{ "status": "UP" }` — liveness. |
-| `GET` | `/ready` | `{ "components": { "settingsDb", "dashboardBind", "mcpService" } }` — readiness. |
+| `GET` | `/ready` | `{ "components": { "settingsDb", "dashboardBind", "mcpService", "startupRecovery" } }` — readiness. |
 | `GET` | `/api/status` | High-level system status snapshot. |
-| `GET` | `/api/execution` | Current execution state across all sprints. |
+| `GET` | `/api/execution` | Current selected-project execution state without heavy recent feeds. |
 | `GET` | `/api/live?projectId=` | Combined live snapshot. Optional project filter. |
 | `GET` | `/api/telemetry/overview` | Overview metrics for the home page. |
 | `GET` | `/api/live-activities` | Live agent activities (cached 10 s). |
@@ -36,7 +36,7 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 | `DELETE` | `/api/projects/:projectId` | Delete. |
 | `PUT` | `/api/projects/:projectId/select` | Set active project. |
 | `PUT` | `/api/projects/:projectId/selected-sprint` | Set selected sprint for project. |
-| `GET` | `/api/projects/:projectId/execution` | Project execution state. |
+| `GET` | `/api/projects/:projectId/execution` | Project execution state with recent runtime events and invocation summaries. |
 | `GET` | `/api/projects/:projectId/stats?window=24h\|7d\|30d\|custom` | Stats. |
 | `PUT` | `/api/projects/:projectId/preferred-worker` | Set preferred worker connection. |
 | `POST` | `/api/projects/:projectId/attention-items/:id/claim` | Claim an attention item. |
@@ -61,7 +61,7 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/api/projects/:projectId/tasks?sprintId=` | List. |
+| `GET` | `/api/projects/:projectId/tasks?sprintId=` | List tasks. Rated tasks include optional latest `selfReflectionRating`; unrated tasks omit it. |
 | `POST` | `/api/projects/:projectId/tasks` | Create. |
 | `PATCH` | `/api/tasks/:taskId` | Update. |
 | `DELETE` | `/api/tasks/:taskId` | Delete. |
@@ -108,6 +108,8 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 | `DELETE` | `/api/sprints/:sprintId/settings` | Reset sprint settings. |
 | `GET` | `/api/projects/:projectId/sprints/:sprintId/settings/effective` | Merged effective. |
 | `GET` | `/api/settings/import-sources` | External settings hints (env, gh CLI). |
+| `GET` | `/api/onboarding/readiness` | First-run Docker/Git readiness checks and installer metadata. |
+| `POST` | `/api/onboarding/dependencies/install` | Body: `{ mode: "docker-desktop-git" \| "docker-engine-git", confirmInstall: true }`. Runs the constrained dependency installer and returns bounded command summaries. |
 | `POST` | `/api/system/reset-database` | **Destructive.** Wipe all state. |
 
 ---
@@ -120,6 +122,8 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 | `POST` | `/api/projects/:projectId/conversations/threads` | Create thread. |
 | `GET` | `/api/conversations/threads/:threadId/messages` | List messages. |
 | `POST` | `/api/projects/:projectId/conversations/messages` | Post message. |
+| `GET` | `/api/projects/:projectId/conversations/message-history` | List recent submitted composer messages for the dashboard user header. |
+| `POST` | `/api/projects/:projectId/conversations/message-history` | Record a submitted composer message for the dashboard user header. |
 | `PATCH` | `/api/conversations/threads/:threadId` | Update thread (title, etc.). |
 | `PUT` | `/api/conversations/threads/:threadId/route` | Update routing config. |
 | `POST` | `/api/conversations/threads/:threadId/compact` | Compact thread. |
@@ -232,6 +236,8 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 
 | Method | Path | Description |
 | --- | --- | --- |
+| `GET` | `/api/local-directories?path=` | List child directories for the local Add Project picker. Allowed roots are canonicalized, requested paths are validated inside those roots, and symlink segments are rejected, so equivalent host spellings such as macOS `/var` and `/private/var` map to the same allowed directory. |
+| `GET` | `/api/local-files?path=` | List child directories and file names for trusted local file picking; file contents are not returned. Uses the same allowed-root and symlink-segment access check as `/api/local-directories`. |
 | `GET` | `/api/projects/:projectId/file-browser/sessions` | List file-browser sessions. |
 | `POST` | `/api/projects/:projectId/sprints/:sprintId/file-browser/start` | Start a session for a sprint. |
 | `POST` | `/api/file-browser/sessions/:sessionId/rebuild` | Rebuild a session. |
@@ -244,6 +250,29 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 
 ---
 
+## Custom Dashboards
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/api/projects/:projectId/custom-dashboards` | List project custom dashboards. |
+| `POST` | `/api/projects/:projectId/custom-dashboards` | Create a draft custom dashboard. |
+| `GET` | `/api/projects/:projectId/custom-dashboards/data-catalog` | List dashboard data-source catalog entries for a project. |
+| `GET` | `/api/custom-dashboards/:dashboardId` | Get a dashboard with revisions. |
+| `PATCH` | `/api/custom-dashboards/:dashboardId` | Update draft dashboard metadata and bundle fields. |
+| `DELETE` | `/api/custom-dashboards/:dashboardId` | Archive a dashboard and clear its active publication. |
+| `POST` | `/api/custom-dashboards/:dashboardId/revisions` | Create an immutable revision. |
+| `POST` | `/api/custom-dashboards/:dashboardId/revisions/:revisionId/validate` | Start validation for a revision. |
+| `POST` | `/api/custom-dashboards/:dashboardId/revisions/:revisionId/publish` | Publish a validated revision. |
+| `GET` | `/api/custom-dashboard-validations/:sessionId` | Get validation session status. |
+| `GET` | `/api/custom-dashboard-validations/:sessionId/logs` | Get validation logs. |
+| `POST` | `/api/custom-dashboard-validations/:sessionId/stop` | Stop a validation runtime. |
+| `DELETE` | `/api/custom-dashboard-validations/:sessionId` | Remove a validation session after cleanup. |
+| `ALL` | `/api/custom-dashboard-validations/:sessionId/proxy{*rest}` | Proxy same-origin traffic to the validation runtime host port. |
+
+Publishing rejects failed, queued, running, cancelled, missing, or cross-revision validation sessions and keeps the previously published revision unchanged.
+
+---
+
 ## Sprint preview
 
 | Method | Path | Description |
@@ -253,6 +282,7 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 | `POST` | `/api/browser/sessions/:sessionId/rebuild` | Rebuild. |
 | `POST` | `/api/browser/sessions/:sessionId/stop` | Stop. |
 | `DELETE` | `/api/browser/sessions/:sessionId` | Remove. |
+| `ALL` | `/api/browser/sessions/:sessionId/proxy{*rest}` | Proxy traffic to the container. |
 | `GET` | `/api/projects/:projectId/sprints/:sprintId/preview/script` | Get script. |
 | `PUT` | `/api/projects/:projectId/sprints/:sprintId/preview/script` | Save script. |
 | `GET` | `/api/browser/sessions/:sessionId/logs` | Stream logs. |

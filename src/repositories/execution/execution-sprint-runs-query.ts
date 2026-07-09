@@ -2,6 +2,7 @@ import type { DatabaseAdapter } from "../db/database-adapter.js";
 import type { ExecutionSprintRunSummaryRow } from "./execution-repository-types.js";
 
 const EXPANDED_RUN_STATUSES = ["running", "queued", "paused", "cancel_requested"];
+const SPRINT_RUN_SNAPSHOT_LIMIT = 12;
 
 const SPRINT_RUN_SELECT = `
       sr.id,
@@ -43,9 +44,10 @@ export function queryExecutionSprintRuns(
     WHERE sr.project_id = ?
       AND sr.status IN (${statusPlaceholders})
     ${SPRINT_RUN_ORDER}
-  `).all(projectId, ...EXPANDED_RUN_STATUSES) as unknown as ExecutionSprintRunSummaryRow[];
+    LIMIT ?
+  `).all(projectId, ...EXPANDED_RUN_STATUSES, SPRINT_RUN_SNAPSHOT_LIMIT) as unknown as ExecutionSprintRunSummaryRow[];
 
-  const inactiveLimit = Math.max(12 - activeSprintRuns.length, 0);
+  const inactiveLimit = Math.max(SPRINT_RUN_SNAPSHOT_LIMIT - activeSprintRuns.length, 0);
   const inactiveSprintRuns = inactiveLimit > 0
     ? db.prepare(`
       SELECT${SPRINT_RUN_SELECT}

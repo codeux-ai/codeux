@@ -12,16 +12,75 @@ import { type RefObject } from "preact";
 import { useChatThreadData, isWorkingMessage } from "./use-chat-thread-data.js";
 import { useInvocationPaneData } from "./use-invocation-pane-data.js";
 import { useChatPageResources } from "./use-chat-page-resources.js";
-import type { AgentPresetRecord } from "../types.js";
+import type { AgentPresetRecord, ExecutionInvocationRecord, Sprint, Task } from "../types.js";
+import { useSprints } from "../../hooks/useSprints.js";
+import { useProjectTasks } from "./use-project-tasks.js";
+import { clearChatDraftFromUrl, readChatDraftFromLocation } from "../lib/no-project-chat-assistant.js";
+
+/** "stage" is the cinematic 3D chat view; threads/invocations are the classic panes. */
+export type ChatMode = "stage" | "threads" | "invocations";
+
+const CHAT_MODE_STORAGE_KEY = "codeux.chat.mode";
+
+export interface ChatLiveEntityContext {
+  sprints: readonly Sprint[];
+  tasks: readonly Task[];
+  loading: boolean;
+  loaded: boolean;
+  error: string | null;
+  sprintKeyPrefix: string;
+}
+
+const isChatMode = (value: unknown): value is ChatMode =>
+  value === "stage" || value === "threads" || value === "invocations";
+
+export const getActiveInvocationPollingKey = (
+  invocations: Pick<ExecutionInvocationRecord, "id" | "status">[],
+): string => invocations
+  .filter((invocation) => invocation.status === "running")
+  .map((invocation) => invocation.id)
+  .sort()
+  .join(",");
+
+const readStoredChatMode = (): ChatMode => {
+  if (typeof window === "undefined") return "stage";
+  try {
+    const stored = window.localStorage.getItem(CHAT_MODE_STORAGE_KEY);
+    return isChatMode(stored) ? stored : "stage";
+  } catch {
+    return "stage";
+  }
+};
 
 export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextAreaElement>; messagesRef?: RefObject<HTMLDivElement> }) => {
   const cache = useMessageCache();
-  const { selectedProject } = useProjectData();
+  const { projects, selectedProject } = useProjectData();
 
   const { data: execution, loading: executionLoading } = useExecutions(selectedProject?.id || null);
   const { data: effectiveSettings, loading: effectiveSettingsLoading } = useProjectEffectiveSettings(selectedProject?.id || null);
+  const { data: sprints, loading: sprintsLoading, error: sprintsError } = useSprints(selectedProject?.id || null);
+  const {
+    tasks: projectTasks,
+    loading: projectTasksLoading,
+    loaded: projectTasksLoaded,
+    error: projectTasksError,
+  } = useProjectTasks(
+    selectedProject?.id || null,
+    projects,
+    sprints,
+    null,
+    { enabled: Boolean(selectedProject) },
+  );
 
-  const [chatMode, setChatMode] = useState<"threads" | "invocations">("threads");
+  const [chatMode, setChatModeState] = useState<ChatMode>(readStoredChatMode);
+  const setChatMode = (mode: ChatMode): void => {
+    setChatModeState(mode);
+    try {
+      window.localStorage.setItem(CHAT_MODE_STORAGE_KEY, mode);
+    } catch {
+      // Private-mode storage failures should never break mode switching.
+    }
+  };
   const routedInvocationIdRef = useRef<string | null>(null);
 
   const [deferredAgentPresets, setDeferredAgentPresets] = useState<AgentPresetRecord[]>([]);
@@ -36,28 +95,9 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
     selectedProject,
     cache,
     execution,
+    dashboardSettings: effectiveSettings?.settings ?? null,
     composerRef: options?.composerRef,
     messagesRef: options?.messagesRef,
-    onMessageSending: ({ projectId, createdAt }) => invocationData.addOptimisticInvocation({
-      projectId,
-      createdAt,
-    }),
-    onMessageSent: ({ message, optimisticInvocationId }) => {
-      if (!selectedProject) {
-        return;
-      }
-      if (!optimisticInvocationId) {
-        return;
-      }
-      void invocationData.reconcileOptimisticInvocation({
-        optimisticId: optimisticInvocationId,
-        projectId: selectedProject.id,
-        messageCreatedAt: message.createdAt,
-      });
-    },
-    onMessageSendFailed: (optimisticInvocationId) => {
-      invocationData.clearOptimisticInvocation(optimisticInvocationId);
-    },
   });
 
   const {
@@ -71,7 +111,8 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
   } = useChatPageResources({
     selectedProject,
     cache,
-    chatMode,
+    // The cinematic stage converses over threads, so it shares their data loading.
+    chatMode: chatMode === "invocations" ? "invocations" : "threads",
     threadData,
     invocationData,
   });
@@ -81,8 +122,8 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
     const params = new URLSearchParams(window.location.search);
     const mode = params.get("mode");
     const invocationId = params.get("invocation");
-    if (mode === "invocations") {
-      setChatMode("invocations");
+    if (isChatMode(mode)) {
+      setChatModeState(mode);
     }
     if (!invocationId || routedInvocationIdRef.current === invocationId) {
       return;
@@ -92,6 +133,26 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
       void invocationData.activateInvocation(invocationId, { foreground: true });
     });
   }, [invocationData, refreshThreads]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !selectedProject) {
+      return;
+    }
+    const draft = readChatDraftFromLocation(window.location);
+    if (!draft) {
+      return;
+    }
+    threadData.setInput(draft);
+    clearChatDraftFromUrl(window);
+    requestAnimationFrame(() => {
+      const composer = options?.composerRef?.current;
+      if (!composer) return;
+      composer.focus();
+      composer.style.height = "auto";
+      composer.style.height = `${composer.scrollHeight}px`;
+      composer.setSelectionRange(draft.length, draft.length);
+    });
+  }, [options?.composerRef, selectedProject, threadData]);
 
   const connectionIndex = useMemo(() => buildConnectionIndex(connections), [connections]);
 
@@ -106,13 +167,10 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
     }
   }, [threadData.messages, options?.messagesRef]);
 
-  const activeInvocationKey = useMemo(() => {
-    return invocationData.invocations
-      .filter((inv) => inv.status === "running" || inv.id.startsWith("optimistic:"))
-      .map((inv) => inv.id)
-      .sort()
-      .join(",");
-  }, [invocationData.invocations]);
+  const activeInvocationKey = useMemo(
+    () => getActiveInvocationPollingKey(invocationData.invocations),
+    [invocationData.invocations],
+  );
 
   const selectedInvocationRefreshKey = useMemo(() => {
     const selectedInvocation = invocationData.selectedInvocation;
@@ -168,6 +226,26 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
   )).length;
 
   const hasWorkingReply = useMemo(() => threadData.messages.some((message) => isWorkingMessage(message, threadData.messages)), [threadData.messages]);
+  const sprintKeyPrefix = effectiveSettings?.settings?.git?.sprintKeyPrefix || "SPR";
+  const liveEntityContext = useMemo<ChatLiveEntityContext>(() => ({
+    sprints,
+    tasks: projectTasks,
+    loading: sprintsLoading || projectTasksLoading || effectiveSettingsLoading,
+    loaded: Boolean(selectedProject && projectTasksLoaded && !sprintsLoading && !effectiveSettingsLoading),
+    error: sprintsError || projectTasksError,
+    sprintKeyPrefix,
+  }), [
+    effectiveSettingsLoading,
+    projectTasks,
+    projectTasksError,
+    projectTasksLoaded,
+    selectedProject,
+    sprintKeyPrefix,
+    sprints,
+    sprintsError,
+    sprintsLoading,
+    projectTasksLoading,
+  ]);
 
   const hasProjectSnapshot = Boolean(selectedProject && cache.hasThreads(selectedProject.id));
   const hasThreadSnapshot = Boolean(
@@ -228,12 +306,22 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
     handleCancelActiveTurn: threadData.handleCancelActiveTurn,
     isCancelling: threadData.isCancelling,
     handleSend: threadData.handleSend,
+    handleCreateAppQuickaction: threadData.handleCreateAppQuickaction,
     navigateHistory: threadData.navigateHistory,
     handleDeleteThread: threadData.handleDeleteThread,
+    handleRenameThread: threadData.handleRenameThread,
     createThreadForCompose: threadData.createThreadForCompose,
     threadIndex: threadData.threadIndex,
     invocationIndex: invocationData.invocationIndex,
     selectedProject,
+    execution,
+    executionLoading,
+    executionLoaded: Boolean(selectedProject && !executionLoading && execution.projectId === selectedProject.id),
+    projectTasks,
+    projectTasksLoading,
+    projectTasksLoaded: Boolean(selectedProject && projectTasksLoaded),
+    sprintKeyPrefix,
+    liveEntityContext,
     feedback: threadData.feedback,
     clearFeedback: threadData.clearFeedback,
     isConfirmOpen: threadData.isConfirmOpen,

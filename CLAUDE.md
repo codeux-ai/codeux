@@ -13,7 +13,7 @@ The runtime ships three ways from one codebase: the **CLI/server** (`codeux`), a
 app**, and an **MCP server** (stdio + optional HTTPS worker gateway) so MCP-aware clients can drive
 it. The same backend powers all three.
 
-Key distinction from older docs: this is **no longer just a Jules MCP server**. Jules is one of
+Key distinction from older docs: this is **no longer just a hosted MCP server**. The Code UX runtime supports
 several providers. Local CLI providers (Gemini, Codex, Claude Code, Qwen, OpenCode, Antigravity) run
 in Docker-backed workspaces; Jules is the one hosted provider.
 
@@ -33,15 +33,15 @@ pnpm run test:watch     # Vitest watch mode
 pnpm test tests/backend/smoke.test.ts   # Single test file
 pnpm run test:coverage  # Coverage with threshold enforcement
 pnpm run typecheck      # tsc --noEmit (alias: lint — same command)
-pnpm run ci             # lint + test:backend:coverage + test:dashboard + build
+pnpm run ci             # quality:guardrails -> audit -> lint -> test:backend:coverage -> test:dashboard -> build
 pnpm run audit          # pnpm audit --audit-level=high
 ```
 
 Electron: `pnpm run electron:dev`, `pnpm run electron:dist[:linux|:mac|:win]`.
 
-Coverage thresholds (vitest.config.ts, ratchet-only — never lower): lines 73.2%, functions 67.5%,
-branches 61.13%, statements 72.0%. `src/server/activity-cache-service.ts` has a separate 80% line
-gate. CI runs on Node 22: lint → backend coverage → dashboard tests → build → audit.
+Coverage thresholds (vitest.config.ts, ratchet-only — never lower): lines 77.4%, functions 71.5%,
+branches 66.1%, statements 76.0%. `src/server/activity-cache-service.ts` has a separate 80% line
+gate. CI runs on Node 22: lint -> test:backend:coverage -> test:dashboard -> build.
 
 ## Architecture
 
@@ -152,7 +152,8 @@ In this working environment you have broad latitude to operate the running syste
 
 - Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`). **`dev` is the integration branch** —
   branch off `dev` and open PRs **into `dev`** (not `main`) after CI passes; use `gh` for PR workflow.
-- Remotes: `origin` is `codeux-ai/codeux` — push feature branches there and target it for PRs.
+- Remotes: `origin` is the **`numnx/codeux` fork** — push branches there and target it for PRs.
+  `upstream` is `codeux-ai/codeux`; do not push or PR there unless explicitly asked.
 - 2-space indent, `camelCase` vars/functions, `PascalCase` types/components. Strict typing — avoid
   `any`. No new plain-JS modules. Tailwind is the only styling approach; don't add UI frameworks.
 - Documentation source of truth is `docs/` (entrypoint `docs/index.md`, index `docs/SUMMARY.md`).

@@ -87,6 +87,7 @@ describe("AddProjectModal", () => {
     expect(screen.getByRole("button", { name: /local repo/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /remote repo/i })).toBeInTheDocument();
     expect(screen.queryByText(/Initialize with Project Setup Agent/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Docs/i })).not.toBeInTheDocument();
   });
 
   it("hides git inputs and allows a blank local directory path", async () => {
@@ -118,9 +119,82 @@ describe("AddProjectModal", () => {
           quicksprints: true,
           previewScript: false,
           ci: true,
+          techstack: true,
+          docs: false,
         },
       },
     });
+  });
+
+  it("renders the Docs setup option and submits docs only when selected", async () => {
+    const onAdd = vi.fn().mockResolvedValue(undefined);
+    render(<AddProjectModal onClose={vi.fn()} onAdd={onAdd} />);
+
+    const nameInput = screen.getByLabelText(/Project Name/i);
+    fireEvent.input(nameInput, { target: { value: "Docs Project" } });
+    await waitFor(() => expect(nameInput).toHaveValue("Docs Project"));
+
+    const form = nameInput.closest("form");
+    fireEvent.submit(form!);
+
+    const docsOption = screen.getByRole("button", { name: /Docs/i });
+    expect(docsOption).toHaveAttribute("aria-pressed", "false");
+    expect(onAdd).not.toHaveBeenCalled();
+
+    fireEvent.click(docsOption);
+    expect(docsOption).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.submit(form!);
+
+    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
+    expect(onAdd).toHaveBeenCalledWith({
+      name: "Docs Project",
+      type: "local",
+      path: "",
+      setup: {
+        enabled: true,
+        options: {
+          agents: true,
+          quicksprints: true,
+          previewScript: false,
+          ci: true,
+          techstack: true,
+          docs: true,
+        },
+      },
+    });
+  });
+
+  it("includes Docs when selecting all setup options", async () => {
+    const onAdd = vi.fn().mockResolvedValue(undefined);
+    render(<AddProjectModal onClose={vi.fn()} onAdd={onAdd} />);
+
+    const nameInput = screen.getByLabelText(/Project Name/i);
+    fireEvent.input(nameInput, { target: { value: "All Setup Project" } });
+    await waitFor(() => expect(nameInput).toHaveValue("All Setup Project"));
+
+    const form = nameInput.closest("form");
+    fireEvent.submit(form!);
+
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    expect(screen.getByRole("button", { name: /Docs/i })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.submit(form!);
+
+    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
+    expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({
+      setup: {
+        enabled: true,
+        options: {
+          agents: true,
+          quicksprints: true,
+          previewScript: true,
+          ci: true,
+          techstack: true,
+          docs: true,
+        },
+      },
+    }));
   });
 
   it("submits the new project local payload without a slug", async () => {
@@ -144,6 +218,37 @@ describe("AddProjectModal", () => {
       type: "new_project",
       path: "/tmp/alpha",
       initMode: "new-local",
+      selectedTechstackId: "code-ux-internal",
+      applicationKind: null,
+    });
+  });
+
+  it("passes quickaction application kind and selected techstack through new project submissions", async () => {
+    const onAdd = vi.fn().mockResolvedValue(undefined);
+    render(
+      <AddProjectModal
+        onClose={vi.fn()}
+        onAdd={onAdd}
+        initialSourceType="new_project"
+        quickActionDefaults={{ applicationKind: "desktop", selectedTechstackId: "react-saas" }}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: /Create Desktop App/i })).toBeInTheDocument();
+
+    const nameInput = screen.getByLabelText(/Project Name/i);
+    fireEvent.input(nameInput, { target: { value: "Desk App" } });
+    await waitFor(() => expect(nameInput).toHaveValue("Desk App"));
+    fireEvent.submit(nameInput.closest("form")!);
+
+    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
+    expect(onAdd).toHaveBeenCalledWith({
+      name: "Desk App",
+      type: "new_project",
+      path: "",
+      initMode: "new-local",
+      selectedTechstackId: "react-saas",
+      applicationKind: "desktop",
     });
   });
 
@@ -169,6 +274,8 @@ describe("AddProjectModal", () => {
       type: "new_project",
       path: "",
       initMode: "new-remote",
+      selectedTechstackId: "code-ux-internal",
+      applicationKind: null,
       repoSlug: "alpha-beta",
       remoteProvider: "github",
       isPrivate: true,
@@ -197,14 +304,17 @@ describe("AddProjectModal", () => {
     fireEvent.click(screen.getByRole("button", { name: /browse/i }));
 
     expect(await screen.findByText("/home/user")).toBeInTheDocument();
+    expect(screen.getByText(/1 child directory in \/home\/user\./i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /^project$/i }));
 
     expect(await screen.findByText("/home/user/project")).toBeInTheDocument();
+    expect(screen.getByText(/No child directories in \/home\/user\/project/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /^use$/i }));
 
     expect(screen.getByLabelText(/Directory Path/i)).toHaveValue("/home/user/project");
+    expect(screen.getByText("Selected directory: /home/user/project")).toBeInTheDocument();
   });
 
   it("applies the directory picker selection to the optional clone directory", async () => {
@@ -238,5 +348,55 @@ describe("AddProjectModal", () => {
     fireEvent.click(screen.getByRole("button", { name: /^use$/i }));
 
     expect(screen.getByLabelText(/Clone Into Directory/i)).toHaveValue("/home/user/repos");
+    expect(screen.getByText("Selected directory: /home/user/repos")).toBeInTheDocument();
+  });
+
+  it("shows directory picker loading and failure feedback without moving focus", async () => {
+    let rejectLoad: (error: Error) => void = () => {};
+    vi.mocked(fetchLocalDirectories).mockImplementationOnce(() => new Promise((_resolve, reject) => {
+      rejectLoad = reject;
+    }));
+
+    render(<AddProjectModal onClose={vi.fn()} onAdd={vi.fn()} />);
+
+    const browseButton = screen.getByRole("button", { name: /browse/i });
+    browseButton.focus();
+    fireEvent.click(browseButton);
+
+    expect(screen.getAllByText(/Loading directories/i).length).toBeGreaterThan(0);
+    expect(document.activeElement).toBe(browseButton);
+
+    rejectLoad(new Error("Permission denied"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("Permission denied");
+      expect(screen.getByText(/Directory load failed: Permission denied/i)).toBeInTheDocument();
+    });
+    expect(document.activeElement).toBe(browseButton);
+  });
+
+  it("keeps the modal open and exposes retry when project submission fails", async () => {
+    const onAdd = vi.fn()
+      .mockRejectedValueOnce(new Error("Create failed"))
+      .mockResolvedValueOnce(undefined);
+    const onClose = vi.fn();
+    render(<AddProjectModal onClose={onClose} onAdd={onAdd} />);
+
+    fireEvent.input(screen.getByLabelText(/Project Name/i), { target: { value: "Retry Project" } });
+    fireEvent.click(screen.getByText(/Initialize with Project Setup Agent/i).closest("label")!);
+    fireEvent.submit(screen.getByLabelText(/Project Name/i).closest("form")!);
+
+    await waitFor(() => {
+      expect(screen.getByText("Create failed")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    });
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => {
+      expect(onAdd).toHaveBeenCalledTimes(2);
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
   });
 });

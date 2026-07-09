@@ -39,6 +39,7 @@ import {
   toPlanningOverrides,
   type SprintSubmitMode,
   type PlanningRouteOption,
+  type SprintSchedulePayload,
 } from "../../lib/sprint-composer-state.js";
 import {
   executeQuicksprint,
@@ -46,8 +47,10 @@ import {
   updateCustomQuicksprintTemplate,
   deleteCustomQuicksprintTemplate,
 } from "../../lib/quicksprint-api.js";
+import { createSchedulerEntry } from "../../lib/scheduler-api.js";
 import { SprintPageActionRunner } from "../../lib/sprint-page-action-runner.js";
-import { buildGitHubModeProjectSettingsOverride } from "../../../lib/settings-updaters.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../lib/settings.js";
+import { buildProjectCreationSettingsOverride } from "../../../lib/settings-updaters.js";
 
 export interface SprintsPageActionsDeps {
   selectedProject: any;
@@ -311,6 +314,7 @@ export function useSprintsPageActions({
       linkedIssues?: SprintLinkedIssueInput[];
       importedTasks?: SprintImportedTaskInput[];
       importedTaskCallbacks?: ImportedTaskSubmissionCallbacks;
+      schedule?: SprintSchedulePayload;
       clientRequestId?: string;
       sprintKeyOverride?: string;
       signal?: AbortSignal;
@@ -351,7 +355,7 @@ export function useSprintsPageActions({
       }
 
       if (editingSprint) {
-        await updateSprint(editingSprint.id, {
+        const updated = await updateSprint(editingSprint.id, {
           name: payload.name,
           goal,
           originalPrompt: payload.originalPrompt,
@@ -369,6 +373,22 @@ export function useSprintsPageActions({
             importedTaskCallbacks?.onError?.(error instanceof Error ? error.message : String(error));
             throw error;
           }
+        }
+
+        if (payload.submitMode === "schedule") {
+          if (!payload.schedule) {
+            throw new Error("Choose when this sprint should be scheduled.");
+          }
+          await createSchedulerEntry(selectedProject.id, {
+            title: `Start ${updated.name}`,
+            targetType: "sprint",
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+            ...payload.schedule,
+            sprintTarget: { sprintId: updated.id },
+          });
+          await refresh();
+          setEditingSprint(null);
+          return;
         }
 
         if (
@@ -435,6 +455,21 @@ export function useSprintsPageActions({
             importedTaskCallbacks?.onError?.(error instanceof Error ? error.message : String(error));
             throw error;
           }
+        }
+
+        if (payload.submitMode === "schedule") {
+          if (!payload.schedule) {
+            throw new Error("Choose when this sprint should be scheduled.");
+          }
+          await createSchedulerEntry(selectedProject.id, {
+            title: `Start ${created.name}`,
+            targetType: "sprint",
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+            ...payload.schedule,
+            sprintTarget: { sprintId: created.id },
+          });
+          await Promise.all([refresh(), refreshExecution()]);
+          return;
         }
 
         if (payload.submitMode === "plan_only") {
@@ -676,6 +711,41 @@ export function useSprintsPageActions({
     ],
   );
 
+  const handleQuicksprintSchedule = useCallback(
+    async (input: {
+      templateId: string;
+      taskCount: number;
+      noTaskLimit: boolean;
+      submitMode: "plan_only" | "plan_and_start";
+      additionalPrompt?: string;
+      routeOverride?: PlanningRouteOption | null;
+      modelOverride?: string | null;
+      schedule: SprintSchedulePayload;
+      title?: string;
+    }): Promise<void> => {
+      if (!selectedProject) return;
+      await createSchedulerEntry(selectedProject.id, {
+        title: input.title || "Scheduled quicksprint",
+        targetType: "quicksprint",
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        ...input.schedule,
+        quicksprintTarget: {
+          templateId: input.templateId,
+          taskCount: input.taskCount,
+          noTaskLimit: input.noTaskLimit,
+          submitMode: input.submitMode,
+          additionalPrompt: input.additionalPrompt?.trim() || undefined,
+          planningOverrides: toPlanningOverrides(
+            input.routeOverride ?? null,
+            input.modelOverride ?? null,
+          ),
+        },
+      });
+      await refresh();
+    },
+    [refresh, selectedProject],
+  );
+
   const handleCreateQuicksprintTemplate = useCallback(
     async (data: {
       name: string;
@@ -739,7 +809,11 @@ export function useSprintsPageActions({
           initMode: project.initMode,
           remoteProvider: project.remoteProvider,
           isPrivate: project.isPrivate,
-          ...(isLocalProject ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
+          settingsOverrides: buildProjectCreationSettingsOverride({
+            ...(isLocalProject ? { githubMode: "LOCAL" as const } : {}),
+            selectedTechstackId: project.selectedTechstackId ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.defaultTechstackId,
+            applicationKind: project.applicationKind ?? null,
+          }),
         });
         return;
       }
@@ -749,7 +823,7 @@ export function useSprintsPageActions({
         sourceType: project.type,
         sourceRef: project.path,
         cloneDir: project.cloneDir,
-        ...(project.type === "local" ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
+        ...(project.type === "local" ? { settingsOverrides: buildProjectCreationSettingsOverride({ githubMode: "LOCAL" }) } : {}),
       });
     },
     [createProject],
@@ -770,6 +844,7 @@ export function useSprintsPageActions({
     handleOpenExport,
     handleImportSprint,
     handleQuicksprintExecute,
+    handleQuicksprintSchedule,
     handleCreateQuicksprintTemplate,
     handleUpdateQuicksprintTemplate,
     handleDeleteQuicksprintTemplate,

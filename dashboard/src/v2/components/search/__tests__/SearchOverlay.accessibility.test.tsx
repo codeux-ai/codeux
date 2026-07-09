@@ -195,6 +195,39 @@ describe("SearchOverlay Accessibility", () => {
         expect(combobox).not.toHaveAttribute("aria-activedescendant");
     });
 
+    it("resets the active descendant when query text changes", async () => {
+        const user = userEvent.setup();
+        const { rerender } = render(
+            <SearchOverlay
+                isOpen={true}
+                onClose={mockOnClose}
+                searchQuery="t"
+                onSearchChange={mockOnSearchChange}
+                results={mockResults}
+            />
+        );
+
+        const combobox = screen.getByRole("combobox", { name: "Global search", hidden: true });
+        combobox.focus();
+        await user.keyboard("{ArrowDown}");
+        expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-spr-1");
+
+        rerender(
+            <SearchOverlay
+                isOpen={true}
+                onClose={mockOnClose}
+                searchQuery="ta"
+                onSearchChange={mockOnSearchChange}
+                results={mockResults}
+                isLoading={true}
+            />
+        );
+
+        await waitFor(() => {
+            expect(combobox).not.toHaveAttribute("aria-activedescendant");
+        });
+    });
+
     it("marks stale result lists busy while keeping options available", () => {
         render(
             <SearchOverlay
@@ -208,9 +241,41 @@ describe("SearchOverlay Accessibility", () => {
         );
 
         expect(screen.getByRole("listbox", { hidden: true })).toHaveAttribute("aria-busy", "true");
-        expect(screen.getAllByRole("option", { hidden: true })).toHaveLength(2);
+        const options = screen.getAllByRole("option", { hidden: true });
+        expect(options).toHaveLength(2);
+        expect(options[0]).toHaveAttribute("data-loading-adjacent", "true");
         expect(screen.getByRole("status", { hidden: true })).toHaveTextContent("Updating results for 't'. 2 current results remain available.");
         expect(screen.getByText("Updating visible results")).toBeInTheDocument();
+    });
+
+    it("uses stable listbox wiring and safe option IDs", async () => {
+        const user = userEvent.setup();
+        render(
+            <SearchOverlay
+                isOpen={true}
+                onClose={mockOnClose}
+                searchQuery="runtime"
+                onSearchChange={mockOnSearchChange}
+                results={{
+                    sprints: [],
+                    tasks: [{ id: "task 1/alpha", title: "Runtime Task", routeTaskId: "task 1/alpha", routeSprintId: "sprint-1" }],
+                    agents: [],
+                    containers: [],
+                }}
+            />
+        );
+
+        const combobox = screen.getByRole("combobox", { name: "Global search", hidden: true });
+        const listbox = screen.getByRole("listbox", { name: "Search results", hidden: true });
+        const option = screen.getByRole("option", { name: /runtime task/i, hidden: true });
+
+        expect(combobox).toHaveAttribute("aria-controls", "search-results-list");
+        expect(listbox).toHaveAttribute("id", "search-results-list");
+        expect(option).toHaveAttribute("id", "search-result-task-1-alpha");
+
+        combobox.focus();
+        await user.keyboard("{ArrowDown}");
+        expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-task-1-alpha");
     });
 
     it("uses the committed query for true empty states after refresh completes", () => {

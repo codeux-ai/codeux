@@ -13,20 +13,26 @@ describe("Dashboard Security Helper", () => {
       expect(isTrustedDashboardHost("127.0.0.1")).toBe(true);
       expect(isTrustedDashboardHost("127.0.0.1:4000")).toBe(true);
       expect(isTrustedDashboardHost("[::1]")).toBe(true);
+      expect(isTrustedDashboardHost("[::1]:4444")).toBe(true);
     });
 
     it("should allow configured DASHBOARD_HOST", () => {
       const originalHost = process.env.DASHBOARD_HOST;
-      process.env.DASHBOARD_HOST = "my-custom-host";
+      try {
+        process.env.DASHBOARD_HOST = "my-custom-host";
 
-      expect(isTrustedDashboardHost("my-custom-host")).toBe(true);
-      expect(isTrustedDashboardHost("my-custom-host:8080")).toBe(true);
-
-      process.env.DASHBOARD_HOST = originalHost;
+        expect(isTrustedDashboardHost("my-custom-host")).toBe(true);
+        expect(isTrustedDashboardHost("my-custom-host:8080")).toBe(true);
+      } finally {
+        if (originalHost === undefined) {
+          delete process.env.DASHBOARD_HOST;
+        } else {
+          process.env.DASHBOARD_HOST = originalHost;
+        }
+      }
     });
 
     it("should allow preview hosts", () => {
-      expect(isTrustedDashboardHost("preview-123.my-domain.com")).toBe(true);
       expect(isTrustedDashboardHost("preview-abc.localhost:3000")).toBe(true);
     });
 
@@ -35,6 +41,51 @@ describe("Dashboard Security Helper", () => {
       expect(isTrustedDashboardHost("evil.com:80")).toBe(false);
       expect(isTrustedDashboardHost(undefined)).toBe(false);
       expect(isTrustedDashboardHost("")).toBe(false);
+    });
+
+    it("should reject malformed host values", () => {
+      expect(isTrustedDashboardHost("localhost, evil.com")).toBe(false);
+      expect(isTrustedDashboardHost("evil@localhost")).toBe(false);
+      expect(isTrustedDashboardHost("localhost/path")).toBe(false);
+      expect(isTrustedDashboardHost("local\u0000host")).toBe(false);
+    });
+
+    it("should reject non-local preview host spoofing", () => {
+      expect(isTrustedDashboardHost("preview-123.my-domain.com")).toBe(false);
+      expect(isTrustedDashboardHost("preview-123.evil.com:4444")).toBe(false);
+      expect(isTrustedDashboardHost("preview-.localhost:4444")).toBe(false);
+    });
+
+    it("should validate forwarded hosts against the actual host boundary", () => {
+      expect(isTrustedDashboardHost("127.0.0.1:4444", "localhost:4444")).toBe(true);
+      expect(isTrustedDashboardHost("localhost:4444", "127.0.0.1:4444")).toBe(true);
+      expect(isTrustedDashboardHost("localhost:4444", "localhost:4444, evil.com")).toBe(false);
+      expect(isTrustedDashboardHost("localhost:4444", "evil.com")).toBe(false);
+      expect(isTrustedDashboardHost("localhost:4444", "preview-test.localhost:4444")).toBe(false);
+    });
+
+    it("should only trust configured forwarded hosts from a loopback backend host", () => {
+      const originalHost = process.env.DASHBOARD_HOST;
+      try {
+        process.env.DASHBOARD_HOST = "dashboard.example.com";
+
+        expect(isTrustedDashboardHost("127.0.0.1:4444", "dashboard.example.com")).toBe(true);
+        expect(isTrustedDashboardHost("dashboard.example.com", "127.0.0.1:4444")).toBe(false);
+        expect(isTrustedDashboardHost("127.0.0.1:4444", "other.example.com")).toBe(false);
+      } finally {
+        if (originalHost === undefined) {
+          delete process.env.DASHBOARD_HOST;
+        } else {
+          process.env.DASHBOARD_HOST = originalHost;
+        }
+      }
+    });
+
+    it("should reject forwarded preview hosts that switch preview sessions", () => {
+      expect(isTrustedDashboardHost(
+        "preview-test.localhost:4444",
+        "preview-other.localhost:4444",
+      )).toBe(false);
     });
   });
 
@@ -48,8 +99,8 @@ describe("Dashboard Security Helper", () => {
       } as Request;
     };
 
-    it("should allow non-mutation methods", () => {
-      const req = createReq({ method: "GET", headers: { "sec-fetch-site": "cross-site" } });
+    it("should allow same-origin non-mutation methods", () => {
+      const req = createReq({ method: "GET", headers: { origin: "http://localhost:3000", host: "localhost:3000" } });
       expect(isHostileBrowserOrigin(req)).toBe(false);
     });
 
@@ -83,9 +134,104 @@ describe("Dashboard Security Helper", () => {
       expect(isHostileBrowserOrigin(req)).toBe(true);
     });
 
+    it("should reject malformed Referer even when Origin is same-origin", () => {
+      const req = createReq({
+        headers: {
+          origin: "http://localhost:3000",
+          referer: "not a valid referer",
+          host: "localhost:3000",
+        },
+      });
+      expect(isHostileBrowserOrigin(req)).toBe(true);
+    });
+
+    it("should reject comma-separated forwarded hosts", () => {
+      const req = createReq({
+        headers: {
+          host: "localhost:3000",
+          "x-forwarded-host": "localhost:3000, evil.com",
+          origin: "http://localhost:3000",
+        },
+      });
+      expect(isHostileBrowserOrigin(req)).toBe(true);
+    });
+
+    it("should reject preview-host spoofing through forwarded hosts", () => {
+      const req = createReq({
+        headers: {
+          host: "localhost:3000",
+          "x-forwarded-host": "preview-test.localhost:3000",
+          origin: "http://preview-test.localhost:3000",
+        },
+      });
+      expect(isHostileBrowserOrigin(req)).toBe(true);
+    });
+
     it("should allow same-origin requests", () => {
       const req = createReq({ headers: { origin: "http://localhost:3000", referer: "http://localhost:3000/dashboard", host: "localhost:3000" } });
       expect(isHostileBrowserOrigin(req)).toBe(false);
+    });
+
+    it("should allow local dashboard origins", () => {
+      expect(isHostileBrowserOrigin(createReq({
+        headers: { origin: "http://127.0.0.1:3000", host: "127.0.0.1:3000" },
+      }))).toBe(false);
+      expect(isHostileBrowserOrigin(createReq({
+        headers: { origin: "http://[::1]:3000", host: "[::1]:3000" },
+      }))).toBe(false);
+    });
+
+    it("should allow same-boundary forwarded local dashboard origins", () => {
+      const req = createReq({
+        headers: {
+          host: "127.0.0.1:4444",
+          "x-forwarded-host": "localhost:4444",
+          origin: "http://localhost:4444",
+        },
+      });
+      expect(isHostileBrowserOrigin(req)).toBe(false);
+    });
+
+    it("should allow a configured forwarded dashboard origin only behind loopback", () => {
+      const originalHost = process.env.DASHBOARD_HOST;
+      try {
+        process.env.DASHBOARD_HOST = "dashboard.example.com";
+        const req = createReq({
+          headers: {
+            host: "127.0.0.1:4444",
+            "x-forwarded-host": "dashboard.example.com",
+            origin: "https://dashboard.example.com",
+          },
+        });
+        expect(isHostileBrowserOrigin(req)).toBe(false);
+      } finally {
+        if (originalHost === undefined) {
+          delete process.env.DASHBOARD_HOST;
+        } else {
+          process.env.DASHBOARD_HOST = originalHost;
+        }
+      }
+    });
+
+    it("should reject forwarded dashboard origins when the actual host is not loopback", () => {
+      const originalHost = process.env.DASHBOARD_HOST;
+      try {
+        process.env.DASHBOARD_HOST = "dashboard.example.com";
+        const req = createReq({
+          headers: {
+            host: "dashboard.example.com",
+            "x-forwarded-host": "127.0.0.1:4444",
+            origin: "http://127.0.0.1:4444",
+          },
+        });
+        expect(isHostileBrowserOrigin(req)).toBe(true);
+      } finally {
+        if (originalHost === undefined) {
+          delete process.env.DASHBOARD_HOST;
+        } else {
+          process.env.DASHBOARD_HOST = originalHost;
+        }
+      }
     });
 
     it("should allow CLI/API requests missing all browser origin headers", () => {
@@ -104,7 +250,7 @@ describe("Dashboard Security Helper", () => {
       expect(setHeaderMock).toHaveBeenCalledWith("X-Content-Type-Options", "nosniff");
       expect(setHeaderMock).toHaveBeenCalledWith("Referrer-Policy", "no-referrer");
       expect(setHeaderMock).toHaveBeenCalledWith("X-Frame-Options", "SAMEORIGIN");
-      expect(setHeaderMock).toHaveBeenCalledWith("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+      expect(setHeaderMock).toHaveBeenCalledWith("Permissions-Policy", "camera=(), microphone=(self), geolocation=()");
     });
   });
 });

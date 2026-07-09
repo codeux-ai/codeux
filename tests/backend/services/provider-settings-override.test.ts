@@ -12,8 +12,11 @@ describe("buildProviderSettingsOverride", () => {
       weight: 1,
       thinkingMode: { type: "disabled" },
       apiKey: "sk-test",
+      maxConcurrentTasks: 3,
       mountAuth: false,
       authPath: "/some/path",
+      providerConfigMode: "file",
+      providerConfigPath: "/some/config.json",
       qwenAuthMode: "LOCAL_AUTH",
       qwenRegion: "international",
       qwenBaseUrl: "https://qwen.url",
@@ -37,6 +40,7 @@ describe("buildProviderSettingsOverride", () => {
       model: "resolved-model",
       thinkingMode: { type: "disabled" },
       apiKey: "sk-test",
+      maxConcurrentTasks: 3,
       qwenAuthMode: "LOCAL_AUTH",
       qwenRegion: "international",
       qwenBaseUrl: "https://qwen.url",
@@ -52,6 +56,8 @@ describe("buildProviderSettingsOverride", () => {
       openCodePackage: "oc-pkg",
       providerMountAuth: false,
       providerAuthPath: "/some/path",
+      providerConfigMode: "file",
+      providerConfigPath: "/some/config.json",
       customBaseUrl: "https://custom.url",
       customModel: "custom-claude",
     });
@@ -66,8 +72,11 @@ describe("buildProviderSettingsOverride", () => {
       weight: 1,
       thinkingMode: "HIGH",
       apiKey: "sk-local",
+      maxConcurrentTasks: 4,
       mountAuth: true,
       authPath: "~/.code-ux/credentials/codex",
+      providerConfigMode: "copyHost",
+      providerConfigPath: "~/.codex/config.toml",
       customBaseUrl: "http://192.168.0.38:1234/v1",
       customModel: "local-model",
     };
@@ -78,6 +87,8 @@ describe("buildProviderSettingsOverride", () => {
     expect(override.customBaseUrl).toBeUndefined();
     expect(override.customModel).toBeUndefined();
     expect(override.providerMountAuth).toBe(true);
+    expect(override.providerConfigMode).toBe("copyHost");
+    expect(override.providerConfigPath).toBe("~/.codex/config.toml");
     expect(override.model).toBe("gpt-5.5");
   });
 });

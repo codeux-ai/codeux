@@ -3,7 +3,7 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import request from "supertest";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerLocalDirectoryRoutes } from "../../../src/server/local-directory-routes.js";
 
 const tempDirs: string[] = [];
@@ -13,6 +13,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
   delete process.env.CODE_UX_DIRECTORY_BROWSER_ROOTS;
 });
@@ -32,17 +33,18 @@ describe("local directory routes", () => {
     await fs.writeFile(path.join(dir, "README.md"), "# test");
 
     const response = await request(createApp()).get("/api/local-directories").query({ path: dir });
+    const realDir = await fs.realpath(dir);
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
-      currentPath: dir,
-      parentPath: path.dirname(dir),
-      rootPath: path.parse(dir).root,
+      currentPath: realDir,
+      parentPath: path.dirname(realDir),
+      rootPath: path.parse(realDir).root,
       homePath: os.homedir(),
     });
     expect(response.body.directories).toEqual([
-      { name: "docs", path: path.join(dir, "docs") },
-      { name: "src", path: path.join(dir, "src") },
+      { name: "docs", path: path.join(realDir, "docs") },
+      { name: "src", path: path.join(realDir, "src") },
     ]);
     expect(response.body).not.toHaveProperty("files");
   });
@@ -50,14 +52,14 @@ describe("local directory routes", () => {
   it("allows access to home directory", async () => {
     const response = await request(createApp()).get("/api/local-directories").query({ path: os.homedir() });
     expect(response.status).toBe(200);
-    expect(response.body.currentPath).toBe(os.homedir());
+    expect(response.body.currentPath).toBe(await fs.realpath(os.homedir()));
   });
 
   it("allows access to current working directory", async () => {
     const cwd = process.cwd();
     const response = await request(createApp()).get("/api/local-directories").query({ path: cwd });
     expect(response.status).toBe(200);
-    expect(response.body.currentPath).toBe(cwd);
+    expect(response.body.currentPath).toBe(await fs.realpath(cwd));
   });
 
   it("resolves parent traversal (..) into allowed roots", async () => {
@@ -67,27 +69,63 @@ describe("local directory routes", () => {
     const response = await request(createApp()).get("/api/local-directories").query({ path: traversalPath });
     // Should be allowed and resolved correctly
     expect(response.status).toBe(200);
-    expect(response.body.currentPath).toBe(childDir);
+    expect(response.body.currentPath).toBe(await fs.realpath(childDir));
+  });
+
+  it("allows equivalent configured-root and requested-path spellings after realpath canonicalization", async () => {
+    const realRoot = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-real-local-root-"));
+    const aliasParent = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-alias-local-root-"));
+    tempDirs.push(aliasParent, realRoot);
+    await fs.mkdir(path.join(realRoot, "project"));
+    const aliasRoot = path.join(aliasParent, "alias-root");
+
+    try {
+      await fs.symlink(realRoot, aliasRoot, "dir");
+    } catch (error: any) {
+      if (error?.code === "EPERM" || error?.code === "EACCES" || error?.code === "ENOTSUP") {
+        return;
+      }
+      throw error;
+    }
+
+    process.env.CODE_UX_DIRECTORY_BROWSER_ROOTS = aliasRoot;
+
+    const response = await request(createApp()).get("/api/local-directories").query({ path: realRoot });
+    const realPath = await fs.realpath(realRoot);
+
+    expect(response.status).toBe(200);
+    expect(response.body.currentPath).toBe(realPath);
+    expect(response.body.directories).toEqual([
+      { name: "project", path: path.join(realPath, "project") },
+    ]);
   });
 
   it("rejects path traversal outside allowed roots", async () => {
     const rootDir = path.parse(process.cwd()).root;
+    const statSpy = vi.spyOn(fs, "stat");
+    const readdirSpy = vi.spyOn(fs, "readdir");
     // Assuming rootDir is not an allowed root
     const response = await request(createApp()).get("/api/local-directories").query({ path: rootDir });
     expect(response.status).toBe(403);
     expect(response.body.error).toBe("Access denied");
+    expect(statSpy).not.toHaveBeenCalled();
+    expect(readdirSpy).not.toHaveBeenCalled();
   });
 
   it("rejects encoded traversal that resolves outside allowed roots", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-local-directories-"));
     tempDirs.push(dir);
     const encodedTraversal = `${dir}/%2e%2e/%2e%2e`;
+    const statSpy = vi.spyOn(fs, "stat");
+    const readdirSpy = vi.spyOn(fs, "readdir");
 
     const response = await request(createApp()).get(`/api/local-directories?path=${encodedTraversal}`);
 
     expect(response.status).toBe(403);
     expect(response.body.error).toBe("Access denied");
     expect(response.text).not.toContain(dir);
+    expect(statSpy).not.toHaveBeenCalled();
+    expect(readdirSpy).not.toHaveBeenCalled();
   });
 
   it("rejects Windows-style separator traversal attempts without listing directories", async () => {
@@ -103,11 +141,15 @@ describe("local directory routes", () => {
 
   it("rejects absolute paths outside the allowed roots", async () => {
     const outsideRoot = path.parse(process.cwd()).root;
+    const statSpy = vi.spyOn(fs, "stat");
+    const readdirSpy = vi.spyOn(fs, "readdir");
 
     const response = await request(createApp()).get("/api/local-directories").query({ path: outsideRoot });
 
     expect(response.status).toBe(403);
     expect(response.body.error).toBe("Access denied");
+    expect(statSpy).not.toHaveBeenCalled();
+    expect(readdirSpy).not.toHaveBeenCalled();
   });
 
   it("rejects symlink escapes outside allowed roots", async () => {
@@ -178,21 +220,22 @@ describe("local directory routes", () => {
     await fs.writeFile(path.join(dir, "README.md"), "# test");
 
     const response = await request(createApp()).get("/api/local-files").query({ path: dir });
+    const realDir = await fs.realpath(dir);
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
-      currentPath: dir,
-      parentPath: path.dirname(dir),
-      rootPath: path.parse(dir).root,
+      currentPath: realDir,
+      parentPath: path.dirname(realDir),
+      rootPath: path.parse(realDir).root,
       homePath: os.homedir(),
     });
     expect(response.body.directories).toEqual([
-      { name: "docs", path: path.join(dir, "docs") },
-      { name: "src", path: path.join(dir, "src") },
+      { name: "docs", path: path.join(realDir, "docs") },
+      { name: "src", path: path.join(realDir, "src") },
     ]);
     expect(response.body.files).toEqual([
-      { name: "README.md", path: path.join(dir, "README.md") },
-      { name: "setup.sh", path: path.join(dir, "setup.sh") },
+      { name: "README.md", path: path.join(realDir, "README.md") },
+      { name: "setup.sh", path: path.join(realDir, "setup.sh") },
     ]);
     expect(JSON.stringify(response.body)).not.toContain("echo secret");
   });

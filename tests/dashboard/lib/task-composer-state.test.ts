@@ -25,6 +25,7 @@ describe("Task Composer State Helper", () => {
     expect(result.current.status).toBe("pending");
     expect(result.current.priority).toBe("medium");
     expect(result.current.executorType).toBe("auto");
+    expect(result.current.agentPresetId).toBeNull();
     expect(result.current.dependsOnTaskIds).toEqual([]);
     expect(result.current.isValid).toBe(false);
   });
@@ -38,15 +39,62 @@ describe("Task Composer State Helper", () => {
   it("hydrates edit state correctly", () => {
     const initialTask = {
       ...mockTasks[1],
+      agentPresetId: "preset-reviewer",
       description: "some desc",
       promptMarkdown: "some prompt"
     }; // t2 with required fields
-    const { result } = renderHook(() => useTaskComposerState(mockSprints, mockTasks, initialTask as any));
+    const { result } = renderHook(() => useTaskComposerState(mockSprints, mockTasks, initialTask));
 
     expect(result.current.isEditing).toBe(true);
     expect(result.current.sprintId).toBe("s1");
     expect(result.current.title).toBe("Task 2");
+    expect(result.current.agentPresetId).toBe("preset-reviewer");
     expect(result.current.isValid).toBe(true);
+  });
+
+  it("preserves agent presets when switching between edited tasks", () => {
+    const firstTask: Task = {
+      ...mockTasks[0],
+      agentPresetId: "preset-planner",
+      description: "first desc",
+      promptMarkdown: "first prompt",
+    };
+    const secondTask: Task = {
+      ...mockTasks[1],
+      agentPresetId: "preset-worker",
+      description: "second desc",
+      promptMarkdown: "second prompt",
+    };
+    const { result, rerender } = renderHook(
+      ({ initialTask }) => useTaskComposerState(mockSprints, mockTasks, initialTask),
+      { initialProps: { initialTask: firstTask } }
+    );
+
+    expect(result.current.agentPresetId).toBe("preset-planner");
+
+    rerender({ initialTask: secondTask });
+
+    expect(result.current.title).toBe("Task 2");
+    expect(result.current.agentPresetId).toBe("preset-worker");
+  });
+
+  it("clears agent preset selections for new tasks and payloads", () => {
+    const { result } = renderHook(() => useTaskComposerState(mockSprints, mockTasks));
+
+    act(() => {
+      result.current.setAgentPresetId("preset-worker");
+      result.current.setAgentPresetId("");
+    });
+
+    expect(result.current.agentPresetId).toBe("");
+    expect(result.current.getPayload().agentPresetId).toBeNull();
+
+    act(() => {
+      result.current.setAgentPresetId(null);
+    });
+
+    expect(result.current.agentPresetId).toBeNull();
+    expect(result.current.getPayload().agentPresetId).toBeNull();
   });
 
   it("filters dependency options to prevent cycles", () => {
@@ -89,6 +137,7 @@ describe("Task Composer State Helper", () => {
       result.current.setDescription("Desc");
       result.current.setPromptMarkdown("Prompt");
       result.current.setPriority("high");
+      result.current.setAgentPresetId(" preset-worker ");
       result.current.toggleDependency("t1");
     });
 
@@ -101,6 +150,7 @@ describe("Task Composer State Helper", () => {
       status: "pending",
       priority: "high",
       executorType: "auto",
+      agentPresetId: "preset-worker",
       dependsOnTaskIds: ["t1"],
     });
   });

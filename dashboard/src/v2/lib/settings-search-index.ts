@@ -145,6 +145,42 @@ const BASE_CATEGORY_TERMS: Record<CategoryId, string[]> = {
     "visibility",
     "proxy",
   ],
+  techstacks: [
+    "techstack",
+    "techstacks",
+    "stack",
+    "catalog",
+    "catalogue",
+    "default stack",
+    "preact",
+    "tanstack router",
+    "gsap",
+    "three.js",
+    "three js",
+    "lucide",
+    "lucide icons",
+    "web app",
+    "desktop app",
+    "package scan",
+    "application kind",
+    "unassigned",
+  ],
+  guidance: [
+    "guidance",
+    "design guidance",
+    "styleguide",
+    "styleguides",
+    "style guide",
+    "style guides",
+    "tech stack",
+    "tech stacks",
+    "stack",
+    "custom guidance",
+    "custom instructions",
+    "hide default styleguides",
+    "hide defaults",
+    "none",
+  ],
   agents: [
     "agent",
     "agents",
@@ -157,6 +193,15 @@ const BASE_CATEGORY_TERMS: Record<CategoryId, string[]> = {
     "authoring",
     "sync",
     "mirror",
+    "persistent skills",
+    "skill storage",
+    "storage attachment",
+    "self-reflection",
+    "self reflection",
+    "criteria",
+    "planning rating",
+    "qa rating",
+    "quality rating",
   ],
   memory: [
     "memory",
@@ -190,6 +235,25 @@ const BASE_CATEGORY_TERMS: Record<CategoryId, string[]> = {
     "repository",
     "pull request",
     "issue",
+    "chat provider",
+    "channel binding",
+    "external channel",
+    "whatsapp",
+    "telegram",
+    "slack",
+    "teams",
+    "microsoft teams",
+    "discord",
+    "imessage",
+    "managed_bridge",
+    "webhook",
+    "native bridge",
+    "bridge token",
+    "webhook signature",
+    "routing hint",
+    "project selector prefix",
+    "outbound replies",
+    "delivery status",
     "jules",
     "clarification",
     "auto-answer clarification",
@@ -226,6 +290,69 @@ const BASE_CATEGORY_TERMS: Record<CategoryId, string[]> = {
     "project overrides",
   ],
 };
+
+const INTEGRATION_FIELD_TERMS: Record<string, string[]> = {
+  notion: [
+    "notion workspace",
+    "notion database",
+    "notion api token",
+    "database id",
+  ],
+  asana: [
+    "asana workspace",
+    "asana team",
+    "asana project",
+    "workspace gid",
+    "team gid",
+    "project gid",
+  ],
+  linear: [
+    "linear workspace",
+    "linear team",
+    "linear project",
+    "team key",
+    "workspace url key",
+  ],
+  miro: [
+    "miro board",
+    "miro team",
+    "board id",
+  ],
+  lucid: [
+    "lucid",
+    "lucidspark",
+    "lucid document",
+    "lucidspark document",
+    "document id",
+  ],
+  figma: [
+    "figma",
+    "figjam",
+    "figma file",
+    "figjam board",
+    "file key",
+  ],
+  mural: [
+    "mural",
+    "mural workspace",
+    "mural id",
+  ],
+};
+
+const IMPORTER_COMMON_TERMS = [
+  "read-only import",
+  "importer",
+  "api token",
+  "api secret",
+  "base url",
+  "default workspace",
+  "default team",
+  "default project",
+  "default board",
+  "default document",
+  "default file",
+  "search limit",
+];
 
 const normalizeSearchText = (value: string): string => value.trim().toLowerCase();
 
@@ -277,6 +404,14 @@ export const buildSettingsSearchIndex = ({
 
   addTerms(index.integrations, integrations.map((integration) => integration.label), "label");
   addTerms(index.integrations, integrations.map((integration) => integration.description), "description");
+  addTerms(
+    index.integrations,
+    integrations.flatMap((integration) => [
+      ...(INTEGRATION_FIELD_TERMS[integration.id] || []),
+      ...(INTEGRATION_FIELD_TERMS[integration.id] ? IMPORTER_COMMON_TERMS : []),
+    ]),
+    "term",
+  );
 
   addTerms(index.agents, agentInstructionTemplateOptions.map((template) => template.label), "label");
   addTerms(index.agents, agentInstructionTemplateOptions.map((template) => template.description), "description");

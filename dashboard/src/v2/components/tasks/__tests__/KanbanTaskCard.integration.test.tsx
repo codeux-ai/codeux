@@ -2,17 +2,45 @@
 /// <reference types="@testing-library/jest-dom" />
 import { readFileSync } from "node:fs";
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, cleanup } from "@testing-library/preact";
+import { render, cleanup, fireEvent, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import userEvent from "@testing-library/user-event";
 import gsap from "gsap";
 import { KanbanTaskCard } from "../KanbanTaskCard.js";
 import type { TaskCardViewModel } from "../../../lib/tasks/task-card-view-model.js";
+import type { TaskSelfReflectionRating } from "../../../../../../src/contracts/task-self-reflection-types.js";
 
 expect.extend(matchers);
 
 const mockRequestConfirm = vi.fn().mockResolvedValue(true);
 const taskCardCss = readFileSync("dashboard/src/v2/components/tasks/kanban-task-card.css", "utf8");
+
+const createRating = (overrides: Partial<TaskSelfReflectionRating> = {}): TaskSelfReflectionRating => ({
+  id: "rating-1",
+  projectId: "project-1",
+  sprintId: "sprint-1",
+  taskId: "rec_1",
+  sourceTaskRunId: "run-1",
+  overallRating: 4.5,
+  sections: [
+    {
+      label: "Implementation",
+      normalizedLabel: "implementation",
+      rating: 4.5,
+      note: "Covered edge cases.",
+    },
+    {
+      label: "Scope control",
+      normalizedLabel: "scope_control",
+      rating: 4,
+      note: "Stayed focused.",
+    },
+  ],
+  capturedAt: "2026-07-07T00:00:00.000Z",
+  createdAt: "2026-07-07T00:00:00.000Z",
+  updatedAt: "2026-07-07T00:00:00.000Z",
+  ...overrides,
+});
 
 vi.mock("../../../hooks/use-confirm-dialog.js", () => ({
   useConfirmDialog: () => ({
@@ -140,6 +168,62 @@ describe("KanbanTaskCard Integration", () => {
     // Dependencies (based on DependencyStatusIndicators rendering)
     expect(getByText("TASK-124")).toBeInTheDocument();
     expect(getByText("TASK-125")).toBeInTheDocument();
+  });
+
+  it("renders self-reflection ratings with overall and section details", async () => {
+    const rating = createRating();
+    const ratedViewModel: TaskCardViewModel = {
+      ...mockViewModel,
+      task: {
+        ...mockViewModel.task,
+        selfReflectionRating: rating,
+      },
+      selfReflectionRating: rating,
+    };
+
+    const { getByLabelText, findByRole } = render(
+      <KanbanTaskCard
+        viewModel={ratedViewModel}
+        onEdit={onEdit}
+        onDelete={onDelete}
+      />
+    );
+
+    const badge = getByLabelText("Self-reflection rating 4.5 out of 5");
+    expect(badge).toHaveAttribute("role", "meter");
+    expect(badge).toHaveTextContent("4.5/5");
+
+    fireEvent.focus(badge);
+    const overlay = await findByRole("tooltip");
+    const overlayQueries = within(overlay);
+    expect(overlayQueries.getByText("Self-reflection rating")).toBeInTheDocument();
+    expect(overlayQueries.getAllByText("4.5/5")).toHaveLength(2);
+
+    const implementationRow = overlayQueries
+      .getByText("Implementation")
+      .closest('[data-self-reflection-section="true"]');
+    expect(implementationRow).not.toBeNull();
+    expect(within(implementationRow as HTMLElement).getByText("4.5/5")).toBeInTheDocument();
+    expect(within(implementationRow as HTMLElement).getByText("Covered edge cases.")).toBeInTheDocument();
+
+    const scopeControlRow = overlayQueries
+      .getByText("Scope control")
+      .closest('[data-self-reflection-section="true"]');
+    expect(scopeControlRow).not.toBeNull();
+    expect(within(scopeControlRow as HTMLElement).getByText("4/5")).toBeInTheDocument();
+    expect(within(scopeControlRow as HTMLElement).getByText("Stayed focused.")).toBeInTheDocument();
+  });
+
+  it("does not render a self-reflection placeholder when no rating exists", () => {
+    const { queryByLabelText } = render(
+      <KanbanTaskCard
+        viewModel={{ ...mockViewModel, selfReflectionRating: undefined }}
+        onEdit={onEdit}
+        onDelete={onDelete}
+      />
+    );
+
+    expect(queryByLabelText(/Self-reflection rating/i)).not.toBeInTheDocument();
   });
 
   const mockCliViewModel: TaskCardViewModel = {
@@ -310,7 +394,8 @@ describe("KanbanTaskCard Integration", () => {
     }));
   });
 
-  it("keeps quick actions mounted and reachable without hover on pointer-fine devices", () => {
+  it("keeps quick actions mounted at the card bottom and keyboard reachable without hover", async () => {
+    const user = userEvent.setup();
     const { container, getByRole } = render(
       <KanbanTaskCard
         viewModel={mockViewModel}
@@ -326,11 +411,18 @@ describe("KanbanTaskCard Integration", () => {
     expect(actionsContainer).toHaveAttribute("aria-label", "Actions for task TASK-123");
     expect(getByRole("button", { name: /Edit task TASK-123: Implement new feature/i })).toBeInTheDocument();
     expect(getByRole("button", { name: /Delete task TASK-123: Implement new feature/i })).toBeInTheDocument();
+    expect(actionsContainer).not.toHaveClass("absolute");
+    expect(actionsContainer?.previousElementSibling).toHaveClass("sm:flex-row");
+
+    await user.tab();
+    expect(card).toHaveFocus();
+    await user.tab();
+    expect(getByRole("button", { name: /Rerun task TASK-123: Implement new feature/i })).toHaveFocus();
 
     expect(taskCardCss).toContain("@media (any-pointer: fine) and (hover: hover)");
     expect(taskCardCss).toMatch(/\.kanban-card__actions\s*\{[\s\S]*opacity:\s*1;[\s\S]*pointer-events:\s*auto;[\s\S]*transform:\s*translateY\(0\);/);
-    expect(taskCardCss).toMatch(/@media \(any-pointer: fine\) and \(hover: hover\)\s*\{[\s\S]*\.kanban-card__actions\s*\{[\s\S]*opacity:\s*0\.92;[\s\S]*pointer-events:\s*auto;[\s\S]*transform:\s*translateY\(0\);/);
-    expect(taskCardCss).toMatch(/\.kanban-card:hover \.kanban-card__actions,[\s\S]*\.kanban-card:focus \.kanban-card__actions,[\s\S]*\.kanban-card:focus-visible \.kanban-card__actions,[\s\S]*\.kanban-card:focus-within \.kanban-card__actions\s*\{[\s\S]*opacity:\s*1;[\s\S]*pointer-events:\s*auto;/);
+    expect(taskCardCss).toMatch(/@media \(any-pointer: fine\) and \(hover: hover\)\s*\{[\s\S]*\.kanban-card__actions\s*\{[\s\S]*opacity:\s*0;[\s\S]*pointer-events:\s*none;[\s\S]*transform:\s*translateY\(0\.375rem\);/);
+    expect(taskCardCss).toMatch(/\.kanban-card:hover \.kanban-card__actions,[\s\S]*\.kanban-card:focus \.kanban-card__actions,[\s\S]*\.kanban-card:focus-visible \.kanban-card__actions,[\s\S]*\.kanban-card:focus-within \.kanban-card__actions\s*\{[\s\S]*opacity:\s*1;[\s\S]*pointer-events:\s*auto;[\s\S]*transform:\s*translateY\(0\);/);
   });
 
   it("renders status transition clearly when a task status updates", async () => {
@@ -515,6 +607,7 @@ describe("KanbanTaskCard Integration", () => {
     expect(getByRole("button", { name: /Rerun task TASK-123: Implement new feature/i })).toHaveAccessibleDescription("Open Live to rerun task TASK-123.");
     expect(getByRole("button", { name: /Open pull request for task TASK-123: Implement new feature/i })).toHaveAccessibleDescription("No pull request is available for task TASK-123 yet.");
     expect(getByRole("button", { name: /Open live runtime for task TASK-123: Implement new feature/i })).toHaveAccessibleDescription("Live runtime has not started for task TASK-123.");
+    expect(getByText("Unavailable: Rerun, PR pending, Live idle.")).toBeVisible();
     expect(getByText("1 dependency blocker")).toBeInTheDocument();
     expect(getByText("QA no review")).toBeInTheDocument();
   });
@@ -537,12 +630,13 @@ describe("KanbanTaskCard Integration", () => {
       optimisticSavingLabel: "Saving task changes",
     };
 
-    const { getByRole } = render(<KanbanTaskCard viewModel={optimisticViewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    const { getByRole, getByText } = render(<KanbanTaskCard viewModel={optimisticViewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
 
     const liveAction = getByRole("button", { name: /Open live runtime for task TASK-123: Implement new feature/i });
     expect(liveAction).toHaveAttribute("aria-disabled", "true");
     expect(liveAction).toHaveAttribute("aria-busy", "true");
     expect(liveAction).toHaveAccessibleDescription("Saving task TASK-123; Live is temporarily unavailable.");
+    expect(getByText("Saving task TASK-123; actions are paused.")).toBeVisible();
   });
 
   it("prevents long metadata strings from overflowing the card horizontally", () => {
@@ -569,13 +663,14 @@ describe("KanbanTaskCard Integration", () => {
 
     const title = container.querySelector("h4");
     expect(title).toHaveClass("break-words");
-    expect(title).toHaveClass("pr-12");
+    expect(title).not.toHaveClass("pr-12");
 
     const sourceSpan = container.querySelector('.font-mono.truncate');
     expect(sourceSpan).toHaveClass('min-w-0');
 
-    const actionsContainer = container.querySelector('.absolute.top-3.right-3');
+    const actionsContainer = container.querySelector('.kanban-card__actions');
     expect(actionsContainer).toHaveClass('kanban-card__actions');
+    expect(actionsContainer).not.toHaveClass('absolute');
     expect(actionsContainer).toHaveAttribute("aria-label", "Actions for task TASK-123");
   });
 

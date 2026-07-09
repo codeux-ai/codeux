@@ -3,7 +3,7 @@ import axios from "axios";
 import type { AxiosError } from "axios";
 import express from "express";
 import type { Server as HttpServer } from "node:http";
-import type { AppConfig } from "../config/app-config.js";
+import { regenerateUserMcpHttpAuthToken, type AppConfig } from "../config/app-config.js";
 import { JulesApiClient } from "../integrations/jules-api-client.js";
 import type {
   DashboardSettings,
@@ -27,6 +27,7 @@ import { SettingsRepository } from "../repositories/settings-repository.js";
 import { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import { ProjectRuntimeRepository } from "../repositories/project-runtime-repository.js";
 import { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
+import { ChatProviderRepository } from "../repositories/chat-provider-repository.js";
 import { ExecutionRepository } from "../repositories/execution-repository.js";
 import { QaReviewRepository } from "../repositories/qa-review-repository.js";
 import { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
@@ -43,6 +44,7 @@ import { ActivityCacheService } from "./activity-cache-service.js";
 import { registerMcpRequestHandlers } from "./mcp-request-router.js";
 import { TaskRerunService } from "../services/task-rerun-service.js";
 import { ExecutionControlService } from "../services/execution-control-service.js";
+import { dashboardReplyAgentMcpAccess, toAgentCodeUxToolAccess } from "../services/agent-mcp-access.js";
 import { JulesSourceResolver } from "../services/jules-source-resolver.js";
 import { RuntimeCleanupService } from "../services/runtime-cleanup-service.js";
 import { RuntimeStartupRecoveryService } from "../services/runtime-startup-recovery-service.js";
@@ -87,6 +89,9 @@ import {
 } from "../services/runtime-process-lock.js";
 import { workspaceVolumeHelperPool } from "../infrastructure/providers/cli/workspace-volume-helper.js";
 import { disposeCommandSpawner, shutdownGitHelperPool } from "../shared/subprocess/command-runner.js";
+import { LocalMcpCliConfigService } from "../services/local-mcp-cli-config-service.js";
+import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
+import type { ChatProviderIngressService } from "../services/chat-provider-ingress-service.js";
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
   const normalized = String(message || "").trim().toLowerCase();
@@ -150,6 +155,7 @@ export class CodeUxServer {
   private projectManagementRepository: ProjectManagementRepository;
   private projectRuntimeRepository: ProjectRuntimeRepository;
   private connectionChatRepository: ConnectionChatRepository;
+  private chatProviderRepository: ChatProviderRepository;
   private projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
   private projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   private projectAttentionRepository: ProjectAttentionRepository;
@@ -161,6 +167,8 @@ export class CodeUxServer {
   private sprintPreviewRepository: SprintPreviewRepository;
   private sprintPreviewService: SprintPreviewService;
   private sprintFileBrowserService: SprintFileBrowserService;
+  private customDashboardRepository: import("../repositories/custom-dashboard-repository.js").CustomDashboardRepository;
+  private customDashboardValidationService: import("../services/custom-dashboard-validation-service.js").CustomDashboardValidationService;
   private agentPresetSyncService: AgentPresetSyncService;
   private executionRepository: ExecutionRepository;
   private guardrailService: GuardrailService;
@@ -181,7 +189,10 @@ export class CodeUxServer {
   private quicksprintService: import("../services/quicksprint-service.js").QuicksprintService;
   private projectSetupService: import("../services/project-setup-service.js").ProjectSetupService;
   private schedulerService: import("../services/scheduler-service.js").SchedulerService;
+  private nodeFlowService: import("../services/node-flow-service.js").NodeFlowService;
   private chatThreadRuntimeService: import("../services/chat-thread-runtime-service.js").ChatThreadRuntimeService;
+  private chatProviderIngressService: ChatProviderIngressService;
+  private speechTranscriptionService: import("../services/speech-transcription-service.js").SpeechTranscriptionService;
   private runtimeCleanupService: RuntimeCleanupService;
   private runtimeStartupRecoveryService: RuntimeStartupRecoveryService;
   private dashboardRealtimeService: DashboardRealtimeService;
@@ -191,6 +202,7 @@ export class CodeUxServer {
   private embeddingService: import("../services/embedding-service.js").EmbeddingService;
   private memoryRepository: import("../repositories/memory-repository.js").MemoryRepository;
   private knowledgeService: import("../services/knowledge-service.js").KnowledgeService;
+  private skillService: import("../services/skill-service.js").SkillService;
   private runtimeCleanupInterval: ReturnType<typeof setInterval> | null = null;
   private sprintPreviewInterval: ReturnType<typeof setInterval> | null = null;
   private liveSnapshotInterval: ReturnType<typeof setInterval> | null = null;
@@ -199,9 +211,11 @@ export class CodeUxServer {
   private mcpHttpHandle: McpHttpTransportHandle | null = null;
   private dashboardHandle: DashboardServerHandle | null = null;
   private mcpServiceBound = false;
+  private startupRecoveryCompleted = false;
   private isClosing = false;
   private closePromise: Promise<void> | null = null;
   private readonly mcpApprovalTracker = new McpApprovalTracker();
+  private readonly localMcpCliConfigService = new LocalMcpCliConfigService();
   private readonly signalHandler: () => void;
   private runtimeProcessLockRelease: RuntimeProcessLockRelease | null = null;
 
@@ -224,6 +238,7 @@ export class CodeUxServer {
     this.projectManagementRepository = deps.projectManagementRepository;
     this.projectRuntimeRepository = deps.projectRuntimeRepository;
     this.connectionChatRepository = deps.connectionChatRepository;
+    this.chatProviderRepository = deps.chatProviderRepository;
     this.projectWorkerAssignmentRepository = deps.projectWorkerAssignmentRepository;
     this.projectWorkerAssignmentService = deps.projectWorkerAssignmentService;
     this.projectAttentionRepository = deps.projectAttentionRepository;
@@ -236,6 +251,8 @@ export class CodeUxServer {
     this.sprintPreviewRepository = deps.sprintPreviewRepository;
     this.sprintPreviewService = deps.sprintPreviewService;
     this.sprintFileBrowserService = deps.sprintFileBrowserService;
+    this.customDashboardRepository = deps.customDashboardRepository;
+    this.customDashboardValidationService = deps.customDashboardValidationService;
     this.sprintMarkdownService = deps.sprintMarkdownService;
     this.sprintIssueService = deps.sprintIssueService;
     this.virtualWorkerService = deps.virtualWorkerService;
@@ -258,7 +275,10 @@ export class CodeUxServer {
     this.quicksprintService = deps.quicksprintService;
     this.projectSetupService = deps.projectSetupService;
     this.schedulerService = deps.schedulerService;
+    this.nodeFlowService = deps.nodeFlowService;
     this.chatThreadRuntimeService = deps.chatThreadRuntimeService;
+    this.chatProviderIngressService = deps.chatProviderIngressService;
+    this.speechTranscriptionService = deps.speechTranscriptionService;
     this.runtimeCleanupService = deps.runtimeCleanupService;
     this.runtimeStartupRecoveryService = new RuntimeStartupRecoveryService({
       sessionTracking: this.sessionTracking,
@@ -289,6 +309,7 @@ export class CodeUxServer {
     this.embeddingService = deps.embeddingService;
     this.memoryRepository = deps.memoryRepository;
     this.knowledgeService = deps.knowledgeService;
+    this.skillService = deps.skillService;
 
     this.configureMcpServer(this.server, this.appConfig.runtimeRole);
 
@@ -435,8 +456,22 @@ export class CodeUxServer {
       managementToolHandler: this.managementToolHandler,
       getDashboardSettings: () => this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
       getRuntimeRole: () => runtimeRole,
-      resolveAgentMcpToolToggles: (agentId) =>
-        this.agentPresetRepository.getAgentPreset(agentId)?.mcpAccess?.codeUxToolToggles ?? null,
+      resolveAgentMcpToolAccess: (agentId) => {
+        const agent = this.agentPresetRepository.getAgentPreset(agentId);
+        const access = agent && this.isDashboardReplyRouteAgent(agent)
+          ? dashboardReplyAgentMcpAccess(agent.mcpAccess)
+          : agent?.mcpAccess;
+        const persistentSkillRetrievalEnabled = Boolean(
+          agent?.persistentSkillStorage?.enabled
+          && agent.persistentSkillStorageIds
+          && agent.persistentSkillStorageIds.length > 0,
+        );
+        return access
+          ? toAgentCodeUxToolAccess(access, persistentSkillRetrievalEnabled)
+          : persistentSkillRetrievalEnabled
+            ? toAgentCodeUxToolAccess({ codeUxEnabled: false, codeUxToolToggles: [] }, true)
+            : null;
+      },
       formatError: (error: unknown) => this.formatError(error),
       logger: this.logger.child({ component: "mcp-request-router", runtimeRole }),
       withCorrelationContext: (request, operation) => this.runWithMcpCorrelationContext(request, operation),
@@ -446,6 +481,25 @@ export class CodeUxServer {
     server.onerror = (error) => {
       this.logger.error("MCP server error", { error, runtimeRole });
     };
+  }
+
+  private isDashboardReplyRouteAgent(agent: { id: string; projectId: string; name: string }): boolean {
+    try {
+      const settings = this.settingsRepository.resolveProjectDashboardSettings(agent.projectId).settings;
+      const assignedAgentId = settings.agents?.routing?.dashboardReply?.agentPresetId ?? null;
+      if (assignedAgentId) {
+        return assignedAgentId === agent.id;
+      }
+      const normalizedName = agent.name.trim().toLowerCase();
+      return normalizedName === "project manager" || normalizedName === "iris";
+    } catch (error) {
+      this.logger.warn("Failed to resolve dashboard reply agent MCP defaults", {
+        projectId: agent.projectId,
+        agentId: agent.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    }
   }
 
   private createMcpServerInstance(runtimeRole: "project_manager"): Server {
@@ -576,14 +630,25 @@ export class CodeUxServer {
       persistTaskMergedFlag: (args) => this.persistTaskMergedFlag(args),
       normalizeName: (type, id) => this.normalizeName(type, id),
       isTrackedCliSession: (sessionId) => this.isTrackedCliSession(sessionId),
-      getMcpConnectionInfo: () => this.mcpHttpHandle
-        ? {
-            url: `http://${this.mcpHttpClientHost()}:${this.mcpHttpHandle.port}${this.mcpHttpHandle.path}`,
-            authToken: this.appConfig.mcpHttpAuthToken,
-          }
-        : null,
+      getMcpConnectionInfo: () => this.getConfiguredMcpConnectionInfo(),
       getMcpApprovalTracker: () => this.mcpApprovalTracker,
     };
+  }
+
+  private getConfiguredMcpConnectionInfo(): McpConnectionInfo | null {
+    if (!this.appConfig.mcpHttpEnabled || !this.appConfig.mcpHttpPort || !this.mcpHttpHandle) {
+      return null;
+    }
+    return {
+      url: `http://${this.mcpHttpClientHost()}:${this.mcpHttpHandle.port}${this.mcpHttpHandle.path}`,
+      authToken: this.appConfig.mcpHttpAuthToken,
+    };
+  }
+
+  private regenerateMcpHttpAuthToken(): string {
+    const token = regenerateUserMcpHttpAuthToken();
+    this.appConfig.mcpHttpAuthToken = token;
+    return token;
   }
 
   private mcpHttpClientHost(): string {
@@ -779,8 +844,9 @@ export class CodeUxServer {
     const settingsDbUp = this.runtimeContext.settings !== undefined;
     const dashboardBindUp = !this.isDashboardEnabled() || this.runtimeContext.dashboardRuntimePort !== null;
     const mcpServiceUp = this.mcpServiceBound;
+    const startupRecoveryUp = this.startupRecoveryCompleted;
 
-    const isReady = settingsDbUp && dashboardBindUp && mcpServiceUp;
+    const isReady = settingsDbUp && dashboardBindUp && mcpServiceUp && startupRecoveryUp;
 
     return {
       status: isReady ? "READY" : "NOT_READY",
@@ -788,6 +854,7 @@ export class CodeUxServer {
         settingsDb: settingsDbUp ? "UP" : "DOWN",
         dashboardBind: dashboardBindUp ? "UP" : "DOWN",
         mcpService: mcpServiceUp ? "UP" : "DOWN",
+        startupRecovery: startupRecoveryUp ? "UP" : "DOWN",
       }
     };
   }
@@ -1148,6 +1215,8 @@ export class CodeUxServer {
       }
     } catch (error) {
       this.logger.error("Failed to recover runtime state on startup", { error });
+    } finally {
+      this.startupRecoveryCompleted = true;
     }
   }
 
@@ -1275,6 +1344,7 @@ export class CodeUxServer {
         projectRuntimeRepository: this.projectRuntimeRepository,
         executionRepository: this.executionRepository,
         connectionChatRepository: this.connectionChatRepository,
+        chatProviderRepository: this.chatProviderRepository,
         projectWorkerAssignmentRepository: this.projectWorkerAssignmentRepository,
         projectWorkerAssignmentService: this.projectWorkerAssignmentService,
         projectAttentionRepository: this.projectAttentionRepository,
@@ -1293,7 +1363,13 @@ export class CodeUxServer {
         quicksprintService: this.quicksprintService,
         projectSetupService: this.projectSetupService,
         schedulerService: this.schedulerService,
+        nodeFlowService: this.nodeFlowService,
+        customDashboardRepository: this.customDashboardRepository,
+        customDashboardValidationService: this.customDashboardValidationService,
+        skillService: this.skillService,
         chatThreadRuntimeService: this.chatThreadRuntimeService,
+        chatProviderIngressService: this.chatProviderIngressService,
+        speechTranscriptionService: this.speechTranscriptionService,
         dashboardRealtimeService: this.dashboardRealtimeService,
         logger: this.logger,
         getLiveActivitiesForActiveTasks: () => this.getLiveActivitiesForActiveTasks(),
@@ -1303,14 +1379,21 @@ export class CodeUxServer {
         listDockerContainers: () => this.dockerService.listContainers(),
         listSprintPreviewSessions: (projectId) => this.sprintPreviewService.listSessions(projectId),
         getSprintPreviewSession: (sessionId: string) => this.sprintPreviewService.getSession(sessionId),
+        getSprintPreviewSessionForProjectSprint: (projectId, sprintId, sessionId) => this.sprintPreviewService.getSessionForProjectSprint(projectId, sprintId, sessionId),
         startSprintPreviewSession: (projectId, sprintId) => this.sprintPreviewService.startSession(projectId, sprintId),
         rebuildSprintPreviewSession: (sessionId) => this.sprintPreviewService.rebuildSession(sessionId),
+        rebuildSprintPreviewSessionForProjectSprint: (projectId, sprintId, sessionId) => this.sprintPreviewService.rebuildSessionForProjectSprint(projectId, sprintId, sessionId),
         stopSprintPreviewSession: (sessionId) => this.sprintPreviewService.stopSession(sessionId),
+        stopSprintPreviewSessionForProjectSprint: (projectId, sprintId, sessionId) => this.sprintPreviewService.stopSessionForProjectSprint(projectId, sprintId, sessionId),
         removeSprintPreviewSession: (sessionId) => this.sprintPreviewService.removeSession(sessionId),
+        removeSprintPreviewSessionForProjectSprint: (projectId, sprintId, sessionId) => this.sprintPreviewService.removeSessionForProjectSprint(projectId, sprintId, sessionId),
         getSprintPreviewScript: (projectId, sprintId) => this.sprintPreviewService.getScript(projectId, sprintId),
         saveSprintPreviewScript: (projectId, sprintId, content) => this.sprintPreviewService.saveScript(projectId, sprintId, content),
+        updateSprintPreviewEnvironmentOverrides: (projectId, sprintId, sessionId, environmentOverrides) => this.sprintPreviewService.updateEnvironmentOverridesForProjectSprint(projectId, sprintId, sessionId, environmentOverrides),
         getSprintPreviewLogs: (sessionId, tail) => this.sprintPreviewService.getLogs(sessionId, tail),
+        getSprintPreviewLogsForProjectSprint: (projectId, sprintId, sessionId, tail) => this.sprintPreviewService.getLogsForProjectSprint(projectId, sprintId, sessionId, tail),
         proxySprintPreviewRequest: (args) => this.sprintPreviewService.proxyRequest(args),
+        proxySprintPreviewRequestForProjectSprint: (projectId, sprintId, args) => this.sprintPreviewService.proxyRequestForProjectSprint(projectId, sprintId, args),
         listFileBrowserSessions: (projectId) => this.sprintFileBrowserService.listSessions(projectId),
         startFileBrowserSession: (projectId, sprintId) => this.sprintFileBrowserService.startSession(projectId, sprintId),
         rebuildFileBrowserSession: (sessionId) => this.sprintFileBrowserService.rebuildSession(sessionId),
@@ -1329,10 +1412,13 @@ export class CodeUxServer {
         embeddingModelManager: this.embeddingModelManager,
         embeddingService: this.embeddingService,
         memoryRepository: this.memoryRepository,
+        localMcpCliConfigService: this.localMcpCliConfigService,
+        getLocalMcpConnectionInfo: () => this.getConfiguredMcpConnectionInfo(),
+        regenerateMcpHttpAuthToken: () => this.regenerateMcpHttpAuthToken(),
       });
     } else {
-      this.logger.info("Dashboard startup skipped for headless Code UX runtime", {
-        runtimeRole: this.appConfig.runtimeRole,
+      this.logger.info("Dashboard startup skipped for Code UX runtime", {
+        mode: this.appConfig.serverMode ? "server" : "headless",
       });
     }
 
@@ -1351,6 +1437,11 @@ export class CodeUxServer {
       port: mcpHttpPort,
       path: this.appConfig.mcpHttpPath,
       authToken: this.appConfig.mcpHttpAuthToken,
+      getAuthToken: () => this.appConfig.mcpHttpAuthToken,
+      requireAuth: this.appConfig.serverMode,
+      maxSessions: this.appConfig.mcpHttpMaxSessions,
+      sessionTimeoutMs: this.appConfig.mcpHttpSessionTimeoutMs,
+      getReady: () => this.isReady(),
       logger: this.logger.child({ component: "mcp-http-transport" }),
       createServer: () => this.createMcpServerInstance("project_manager"),
       recoveryService: this.runtimeStartupRecoveryService,

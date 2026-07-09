@@ -11,7 +11,7 @@ describe("planSessionActivityFetches", () => {
   } as const;
 
   const mockDeps = {
-    logger: { warn: vi.fn() } as any,
+    logger: { debug: vi.fn(), warn: vi.fn() } as any,
   };
   const mockSessionMetadataLookup = {
     getForSession: (session: JulesSession) => ({
@@ -23,6 +23,7 @@ describe("planSessionActivityFetches", () => {
   let isForeignSessionMatch = vi.fn().mockReturnValue(false);
 
   beforeEach(() => {
+    mockDeps.logger.debug.mockClear();
     mockDeps.logger.warn.mockClear();
     isForeignSessionMatch = vi.fn().mockReturnValue(false);
   });
@@ -107,7 +108,7 @@ describe("planSessionActivityFetches", () => {
     const result = planSessionActivityFetches(subtasks, sessionMap, mockContext, mockSessionMetadataLookup, mockDeps.logger, isForeignSessionMatch, isLocallyTerminal);
 
     expect(result).toEqual([]);
-    expect(mockDeps.logger.warn).toHaveBeenCalledWith(
+    expect(mockDeps.logger.debug).toHaveBeenCalledWith(
       "Skipping activity fetch for fully synchronized terminal session",
       expect.objectContaining({
         taskId: "rec1",
@@ -170,7 +171,7 @@ describe("planSessionActivityFetches", () => {
     );
 
     expect(result).toEqual([]);
-    expect(mockDeps.logger.warn).toHaveBeenCalledWith(
+    expect(mockDeps.logger.debug).toHaveBeenCalledWith(
       "Skipping activity fetch for fully synchronized terminal session",
       expect.objectContaining({ sessionState: "CANCELLED" }),
     );

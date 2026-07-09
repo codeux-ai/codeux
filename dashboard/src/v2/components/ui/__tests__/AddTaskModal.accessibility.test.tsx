@@ -27,6 +27,8 @@ describe("AddTaskModal Accessibility", () => {
   test("dependency search and options handle accessibility", async () => {
     render(<AddTaskModal sprints={dummySprints as any} availableTasks={dummyTasks as any} onClose={() => {}} onSubmit={() => {}} />);
 
+    expect(screen.getByText(/0 dependency options available. 0 selected./i)).toBeInTheDocument();
+
     // "No existing tasks" status should have polite live region
     const statusRegion = screen.getAllByText(/No existing tasks in this sprint yet/i)[0];
     expect(statusRegion).toHaveAttribute("aria-live", "polite");
@@ -56,6 +58,7 @@ describe("AddTaskModal Accessibility", () => {
       expect(titleInput.getAttribute("aria-errormessage")).toContain("add-task-title-error");
       expect(document.activeElement).toBe(titleInput);
       expect(scrollTo).toHaveBeenCalled();
+      expect(screen.getAllByRole("alert")).toHaveLength(1);
     });
   });
 
@@ -82,7 +85,9 @@ describe("AddTaskModal Accessibility", () => {
     render(<AddTaskModal sprints={dummySprints as any} availableTasks={dependencyTasks as any} onClose={() => {}} onSubmit={() => {}} />);
 
     fireEvent.click(screen.getByRole("checkbox", { name: /Database migration/i }));
-    expect(screen.getByRole("status", { name: "" })).toHaveTextContent(/6 dependency options available. 1 selected./i);
+    expect(screen.getByText(/Database migration added to dependencies./i)).toBeInTheDocument();
+    expect(screen.getByText(/6 dependency options available. 1 selected./i)).toBeInTheDocument();
+    expect(screen.getByText("Selected")).toBeInTheDocument();
 
     fireEvent.input(screen.getByLabelText(/Filter dependencies/i), { target: { value: "follow" } });
 
@@ -91,9 +96,17 @@ describe("AddTaskModal Accessibility", () => {
     });
     expect(screen.queryByRole("checkbox", { name: /Database migration/i })).not.toBeInTheDocument();
 
+    fireEvent.input(screen.getByLabelText(/Filter dependencies/i), { target: { value: "missing" } });
+    await waitFor(() => {
+      expect(screen.getByText(/No dependency results match "missing"/i)).toBeInTheDocument();
+    });
+
     fireEvent.input(screen.getByLabelText(/Filter dependencies/i), { target: { value: "" } });
     await waitFor(() => {
       expect(screen.getByRole("checkbox", { name: /Database migration/i })).toBeChecked();
     });
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Database migration/i }));
+    expect(screen.getByText(/Database migration removed from dependencies./i)).toBeInTheDocument();
   });
 });

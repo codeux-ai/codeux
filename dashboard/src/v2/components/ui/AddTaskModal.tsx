@@ -1,12 +1,13 @@
 import type { FunctionComponent } from "preact";
 import { useMemo, useRef, useState } from "preact/hooks";
-import { X, ListChecks, Target, Bot, Plus } from "lucide-preact";
+import { Check, X, ListChecks, Target, Bot, Plus } from "lucide-preact";
 import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from "../../types.js";
 import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
 import { Button } from "./Button.js";
 import { Modal } from "./Modal.js";
 import { FieldWrapper } from "../forms/FieldWrapper.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface TaskDraft {
   sprintId: string;
@@ -52,7 +53,7 @@ function unselectedChoiceClass(tone: "signal" | "ember"): string {
     : "border-black/[0.08] bg-white/40 text-slate-500 hover:border-ember-500/35 hover:text-slate-800 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-slate-200";
 }
 
-function focusFirstInvalidField(formId: string, scrollContainerId: string): void {
+function focusFirstInvalidField(formId: string, scrollContainerId: string, reducedMotion: boolean): void {
   const firstInvalid = document.getElementById(formId)?.querySelector('[aria-invalid="true"]');
   if (!(firstInvalid instanceof HTMLElement)) return;
 
@@ -64,7 +65,7 @@ function focusFirstInvalidField(formId: string, scrollContainerId: string): void
   const elementRect = firstInvalid.getBoundingClientRect();
   const targetTop = elementRect.top - containerRect.top + container.scrollTop - 20;
   const maxTop = Math.max(0, container.scrollHeight - container.clientHeight);
-  container.scrollTo({ top: Math.min(Math.max(targetTop, 0), maxTop), behavior: "smooth" });
+  container.scrollTo({ top: Math.min(Math.max(targetTop, 0), maxTop), behavior: reducedMotion ? "auto" : "smooth" });
 }
 
 export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
@@ -77,6 +78,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   onSubmit,
 }) => {
   const fieldsRef = useRef<HTMLFormElement>(null);
+  const reducedMotion = useReducedMotion();
   const [sprintId, setSprintId] = useState(initialTask?.sprintId || defaultSprintId || initialSprintId || sprints[0]?.id || "");
   const [title, setTitle] = useState(initialTask?.title || "");
   const [description, setDescription] = useState(initialTask?.description || "");
@@ -90,6 +92,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [touched, setTouched] = useState({ sprintId: false, title: false });
   const [dependencySearchQuery, setDependencySearchQuery] = useState("");
+  const [dependencySelectionAnnouncement, setDependencySelectionAnnouncement] = useState("");
 
 
   const validationErrors = useMemo(() => {
@@ -128,6 +131,10 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   const dependencyLiveMessage = dependencySearchQuery.trim()
     ? `${dependencyOptions.length} dependency result${dependencyOptions.length === 1 ? "" : "s"} match "${dependencySearchQuery}". ${dependsOnTaskIds.length} selected.`
     : `${totalDependencyCount} dependency option${totalDependencyCount === 1 ? "" : "s"} available. ${dependsOnTaskIds.length} selected.`;
+  const dependencySearchIsEmpty = dependencySearchQuery.trim().length > 0 && dependencyOptions.length === 0;
+  const taskSubmitDisabledReason = isSubmitting
+    ? "Task submission is in progress. Wait for it to finish or retry if it fails."
+    : undefined;
 
 
   const handleSubmit = async (event: Event) => {
@@ -135,7 +142,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
     if (Object.keys(validationErrors).length > 0) {
       setTouched({ sprintId: true, title: true });
       setError(`Review required fields: ${Object.values(validationErrors).join(" ")}`, { autoDismiss: false });
-      setTimeout(() => focusFirstInvalidField('add-task-form', 'add-task-form-body'), 0);
+      setTimeout(() => focusFirstInvalidField('add-task-form', 'add-task-form-body', reducedMotion), 0);
       return;
     }
 
@@ -163,12 +170,14 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
     }
   };
 
-  const toggleDependency = (taskId: string) => {
-    setDependsOnTaskIds((current) => (
-      current.includes(taskId)
-        ? current.filter((dependencyId) => dependencyId !== taskId)
-        : [...current, taskId]
-    ));
+  const toggleDependency = (task: Task) => {
+    setDependsOnTaskIds((current) => {
+      const isSelected = current.includes(task.recordId);
+      setDependencySelectionAnnouncement(`${task.title} ${isSelected ? "removed from" : "added to"} dependencies.`);
+      return isSelected
+        ? current.filter((dependencyId) => dependencyId !== task.recordId)
+        : [...current, task.recordId];
+    });
   };
 
   return (
@@ -216,6 +225,8 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               onClick={handleClose}
               aria-label="Close dialog"
               disabled={isSubmitting}
+              aria-describedby={taskSubmitDisabledReason ? "add-task-submit-disabled-reason" : undefined}
+              title={taskSubmitDisabledReason}
               className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all active:scale-95 shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500"
             >
               <X aria-hidden="true" className="w-4 h-4" />
@@ -226,7 +237,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             <form ref={fieldsRef} id="add-task-form" onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
             <ActionFeedbackRegion status={feedback.status} message={feedback.message} onDismiss={clearFeedback} clearError={clearError} autoDismiss={feedback.autoDismiss} retryAction={feedback.retryAction} retryLabel={feedback.retryLabel} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <FieldWrapper label="Sprint" required error={validationErrors.sprintId} forceTouch={touched.sprintId}>
+              <FieldWrapper label="Sprint" required error={validationErrors.sprintId} forceTouch={touched.sprintId} announceError={false}>
                 <select
                   id="add-task-sprint"
                   value={sprintId}
@@ -245,7 +256,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                 </select>
               </FieldWrapper>
 
-              <FieldWrapper label="Title" required error={validationErrors.title} forceTouch={touched.title}>
+              <FieldWrapper label="Title" required error={validationErrors.title} forceTouch={touched.title} announceError={false}>
                 <input
                   id="add-task-title"
                   type="text"
@@ -387,12 +398,27 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                   </div>
                 )}
               </div>
-              <div id="dependency-result-count" role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+              <div
+                id="dependency-result-count"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                className={`mb-2 rounded-xl border px-3 py-2 text-xs font-semibold ${
+                  dependencySearchIsEmpty
+                    ? "border-status-amber/30 bg-status-amber/[0.06] text-status-amber"
+                    : "border-black/[0.06] bg-black/[0.025] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-400"
+                }`}
+              >
                 {dependencyLiveMessage}
+              </div>
+              <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+                {dependencySelectionAnnouncement}
               </div>
               {dependencyOptions.length === 0 ? (
                 <div role="status" aria-live="polite" className="rounded-2xl border border-dashed border-black/[0.08] dark:border-white/[0.08] px-4 py-4 text-xs text-slate-400">
-                  {totalDependencyCount === 0 ? "No existing tasks in this sprint yet." : "No dependency results match the current filter."}
+                  {totalDependencyCount === 0
+                    ? "No existing tasks in this sprint yet."
+                    : `No dependency results match "${dependencySearchQuery.trim()}". Clear the filter to show ${totalDependencyCount} available option${totalDependencyCount === 1 ? "" : "s"}.`}
                 </div>
               ) : (
                 <div role="group" aria-label="Dependency choices" className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1">
@@ -411,7 +437,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                           type="checkbox"
                           checked={active}
                           disabled={isSubmitting}
-                          onChange={() => toggleDependency(task.recordId)}
+                          onChange={() => toggleDependency(task)}
                           className={srOnlyInputClass}
                         />
                         <div className="min-w-0 flex-1 pr-2">
@@ -423,7 +449,14 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                           </div>
                           <div className="text-sm font-semibold truncate leading-tight">{task.title}</div>
                         </div>
-                        <span className={`w-4 h-4 rounded-full border ${active ? "border-ember-500 bg-ember-500" : "border-slate-300 dark:border-slate-600"}`} />
+                        <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] ${
+                          active
+                            ? "border-ember-500 bg-ember-500 text-void-900"
+                            : "border-slate-300 text-slate-400 dark:border-slate-600"
+                        }`}>
+                          {active && <Check aria-hidden="true" className="h-3 w-3" strokeWidth={3} />}
+                          {active ? "Selected" : "Add"}
+                        </span>
                       </label>
                     );
                   })}
@@ -438,6 +471,8 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                 type="button"
                 onClick={handleClose}
                 disabled={isSubmitting}
+                aria-describedby={taskSubmitDisabledReason ? "add-task-submit-disabled-reason" : undefined}
+                title={taskSubmitDisabledReason}
                 className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 rounded disabled:opacity-50 disabled:cursor-not-allowed py-2 sm:py-0 w-full sm:w-auto"
               >
                 Cancel
@@ -446,6 +481,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                 type="submit"
                 form="add-task-form"
                 pending={isSubmitting}
+                disabledReason={taskSubmitDisabledReason}
                 variant="signal"
                 size="lg"
                 className="w-full sm:w-auto"
@@ -453,6 +489,9 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                 <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
                 {initialTask ? "Save Task" : "Create Task"}
               </Button>
+              <span id="add-task-submit-disabled-reason" className="sr-only">
+                {taskSubmitDisabledReason}
+              </span>
             </div>
         </div>
       </div>

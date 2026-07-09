@@ -2,25 +2,74 @@
  * @vitest-environment jsdom
  */
 import { h } from "preact";
+import { useRef, useState } from "preact/hooks";
+import { readFileSync } from "node:fs";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
-import { BranchNameSchemeEditor } from "../BranchNameSchemeEditor";
+import { BranchNameSchemeEditor, TaskPrTitleSchemeEditor } from "../BranchNameSchemeEditor";
 import { SprintKeyEditor } from "../SprintKeyEditor";
-import { TextInput, SecretInput, NumberInput, TextAreaInput, PillChoiceGroup, SelectInput } from "../SettingsFormFields";
+import { TextInput, SecretInput, NumberInput, TextAreaInput, PillChoiceGroup, SelectInput, OptionCardChoiceGroup, ToggleLinkedControlRow } from "../SettingsFormFields";
 
 
-import { SettingsCategoryRail } from "../SettingsCategoryRail";
+import { SettingsCategoryRail, CATEGORIES } from "../SettingsCategoryRail";
+import { SettingsScopeControls } from "../SettingsScopeControls";
 import { ActionButton, NoticePanel } from "../SettingsSurface";
 import { OverrideBadge } from "../panels/SharedPanelComponents";
+import { SettingsTechstacksPanel } from "../panels/SettingsTechstacksPanel";
 import { SlidersHorizontal } from "lucide-preact";
 import type { SettingsSearchMatches } from "../../../lib/settings-search-index";
+import type { Source } from "../../../types";
 import userEvent from "@testing-library/user-event";
+import { SettingsActivePanelStatus } from "../SettingsActivePanelStatus";
 import { SettingsContentPanels } from "../SettingsContentPanels";
+import { SettingsSprintPanel } from "../panels/SettingsSprintPanel";
 import { UnsavedChangesModal } from "../../ui/UnsavedChangesModal";
 import { ProviderInstanceCard } from "../ProviderInstanceCard";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../lib/settings";
+import { dashboardSettingsToProjectSettings } from "../../../lib/settings-view-models";
+import type { ProjectSettings, SystemSettings, TechstackCatalogEntrySettings } from "../../../../types";
+import { SettingsSmartFindSearch } from "../../../SettingsPage";
 
 const defaultInnerHeight = window.innerHeight;
+const interactionStyle = { transitionDuration: "200ms", transitionTimingFunction: "ease" };
+const genericProject = {
+  id: "project-1",
+  name: "Test Project",
+} as Source;
+
+const renderSettingsScopeControls = (overrides: Partial<Parameters<typeof SettingsScopeControls>[0]> = {}) => render(
+  <SettingsScopeControls
+    activeScope="system"
+    setActiveScope={() => {}}
+    selectedProject={genericProject}
+    scopeStatusText="System scope selected. Editing live system defaults."
+    projectSourceSummary={null}
+    filteredCategoryCount={10}
+    isSearchActive={false}
+    activeDirty={false}
+    activeSaving={false}
+    saveMessage={null}
+    error={null}
+    interactionStyle={interactionStyle}
+    {...overrides}
+  />,
+);
+
+const renderSettingsSmartFindSearch = (overrides: Partial<Parameters<typeof SettingsSmartFindSearch>[0]> = {}) => {
+  const defaultProps: Parameters<typeof SettingsSmartFindSearch>[0] = {
+    settingsSearch: "",
+    setSettingsSearch: () => {},
+    searchInputRef: { current: null },
+    filteredCategories: CATEGORIES,
+    settingsSearchMatches: {},
+    activeCategory: "general",
+    activeCategoryConfig: CATEGORIES[0],
+    interactionStyle,
+  };
+
+  return render(<SettingsSmartFindSearch {...defaultProps} {...overrides} />);
+};
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -31,6 +80,44 @@ afterEach(() => {
 vi.mock("../panels/SettingsGeneralPanel", () => ({
   SettingsGeneralPanel: () => <div>General panel values stay mounted</div>,
 }));
+
+const customTechstack: TechstackCatalogEntrySettings = {
+  id: "custom-web",
+  label: "Custom Web",
+  items: [
+    { id: "vite", label: "Vite" },
+    { id: "tailwind", label: "Tailwind" },
+  ],
+};
+
+const createProjectSettings = (techstack?: ProjectSettings["techstack"]): ProjectSettings => ({
+  ...dashboardSettingsToProjectSettings(DEFAULT_DASHBOARD_SETTINGS),
+  ...(techstack ? { techstack } : {}),
+});
+
+const createCatalogEntries = (): TechstackCatalogEntrySettings[] => [
+  ...DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.entries.map((entry) => ({
+    ...entry,
+    items: entry.items.map((item) => ({ ...item })),
+  })),
+  {
+    ...customTechstack,
+    items: customTechstack.items.map((item) => ({ ...item })),
+  },
+];
+
+const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings => ({
+  runtime: {} as SystemSettings["runtime"],
+  integrations: {} as SystemSettings["integrations"],
+  defaults: projectSettings,
+  techstackCatalog: {
+    defaultTechstackId: DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.defaultTechstackId,
+    entries: createCatalogEntries(),
+  },
+  mcpTools: [],
+  customMcpServers: [],
+  modelPricing: { overrides: {} },
+});
 
   it("SettingsCategoryRail renders categories with proper aria-current semantics", () => {
     const mockCategories = [
@@ -54,6 +141,26 @@ vi.mock("../panels/SettingsGeneralPanel", () => ({
     );
     expect(screen.queryByText("Categories")).not.toBeInTheDocument();
     expect(screen.queryByText("Jump directly into the area you need without digging through the full settings tree.")).not.toBeInTheDocument();
+  });
+
+  it("SettingsCategoryRail includes the Techstacks category without changing selection semantics", () => {
+    const techstacks = CATEGORIES.find((category) => category.id === "techstacks");
+
+    expect(techstacks?.label).toBe("Techstacks");
+
+    render(
+      <SettingsCategoryRail
+        filteredCategories={CATEGORIES}
+        activeCategory="techstacks"
+        settingsSearch=""
+        settingsSearchMatches={{}}
+        onSwitchCategory={() => {}}
+      />
+    );
+
+    const btn = screen.getByRole("button", { name: /Techstacks/ });
+    expect(btn).toHaveAttribute("aria-current", "page");
+    expect(btn).toHaveAttribute("aria-selected", "true");
   });
 
   it("SettingsCategoryRail subtracts the measured page-top margin from its desktop height", async () => {
@@ -184,6 +291,121 @@ vi.mock("../panels/SettingsGeneralPanel", () => ({
     expect(screen.getByText(/Keep the search field focused/)).toBeInTheDocument();
   });
 
+  it("SettingsSmartFindSearch shows only the search field by default while preserving the category count for assistive technology", () => {
+    renderSettingsSmartFindSearch();
+
+    expect(screen.getByText(`${CATEGORIES.length} settings categories available.`)).toHaveClass("sr-only");
+    expect(screen.queryByText("Press slash to search settings.")).not.toBeInTheDocument();
+    expect(screen.queryByText(`${CATEGORIES.length} settings categories available. Press slash to search.`)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Clear settings search" })).not.toBeInTheDocument();
+    expect(screen.getByText("/")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Settings context")).not.toBeInTheDocument();
+    expect(screen.queryByText("Quick actions")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Appearance" })).not.toBeInTheDocument();
+  });
+
+  it("SettingsSmartFindSearch keeps scope and save feedback out of the compact idle state", () => {
+    renderSettingsSmartFindSearch();
+
+    expect(screen.queryByLabelText("Settings context")).not.toBeInTheDocument();
+    expect(screen.queryByText("Project scope")).not.toBeInTheDocument();
+    expect(screen.queryByText("Unsaved edits")).not.toBeInTheDocument();
+  });
+
+  it("SettingsSmartFindSearch announces active matches with counts, active category, and previews", () => {
+    const modelsCategory = CATEGORIES.find((category) => category.id === "models")!;
+    const integrationsCategory = CATEGORIES.find((category) => category.id === "integrations")!;
+    const settingsSearchMatches: SettingsSearchMatches = {
+      models: {
+        categoryId: "models",
+        matchedLabels: ["Claude Code"],
+        matchedDescriptions: [],
+        matchedTerms: ["routing"],
+      },
+      integrations: {
+        categoryId: "integrations",
+        matchedLabels: [],
+        matchedDescriptions: ["API keys"],
+        matchedTerms: [],
+      },
+    };
+
+    renderSettingsSmartFindSearch({
+      settingsSearch: "claude",
+      filteredCategories: [modelsCategory, integrationsCategory],
+      settingsSearchMatches,
+      activeCategory: "models",
+      activeCategoryConfig: modelsCategory,
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      '3 results across 2 matching categories for "claude". Active category: AI Models. Active matches: Claude Code, routing. Match previews: Claude Code, routing, API keys.',
+    );
+    expect(screen.getByLabelText("Smart Find match previews")).toHaveTextContent("Claude Code");
+    expect(screen.queryByRole("button", { name: "Integrations" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Appearance" })).not.toBeInTheDocument();
+  });
+
+  it("SettingsSmartFindSearch announces active no-match searches without hiding recovery context", () => {
+    renderSettingsSmartFindSearch({
+      settingsSearch: "zzzz",
+      filteredCategories: [],
+      settingsSearchMatches: {},
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      '0 results across 0 matching categories for "zzzz". Active category: General. Match previews: none. Clear the search or try routing, provider, auth, CI, agent, or memory.',
+    );
+    expect(screen.queryByLabelText("Smart Find match previews")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Appearance" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clear settings search" })).toBeInTheDocument();
+  });
+
+  it("SettingsSmartFindSearch clear button restores focus and removes search-only chips", async () => {
+    const user = userEvent.setup();
+    const integrationsCategory = CATEGORIES.find((category) => category.id === "integrations")!;
+    const settingsSearchMatches: SettingsSearchMatches = {
+      integrations: {
+        categoryId: "integrations",
+        matchedLabels: ["Claude Code"],
+        matchedDescriptions: [],
+        matchedTerms: [],
+      },
+    };
+
+    const SmartFindHarness = () => {
+      const [settingsSearch, setSettingsSearch] = useState("claude");
+      const searchInputRef = useRef<HTMLInputElement>(null);
+      const searchActive = settingsSearch.trim().length > 0;
+
+      return (
+        <SettingsSmartFindSearch
+          settingsSearch={settingsSearch}
+          setSettingsSearch={setSettingsSearch}
+          searchInputRef={searchInputRef}
+          filteredCategories={searchActive ? [integrationsCategory] : CATEGORIES}
+          settingsSearchMatches={searchActive ? settingsSearchMatches : {}}
+          activeCategory="general"
+          activeCategoryConfig={CATEGORIES[0]}
+          interactionStyle={interactionStyle}
+        />
+      );
+    };
+
+    render(<SmartFindHarness />);
+
+    const searchInput = screen.getByRole("textbox", { name: "Search settings categories" });
+    await user.click(screen.getByRole("button", { name: "Clear settings search" }));
+
+    expect(searchInput).toHaveFocus();
+    expect(searchInput).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Clear settings search" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Smart Find match previews")).not.toBeInTheDocument();
+    expect(screen.queryByText("Claude Code")).not.toBeInTheDocument();
+    expect(screen.queryByText("Press slash to search settings.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Appearance" })).not.toBeInTheDocument();
+  });
+
   it("SettingsCategoryRail exposes pending and disabled category states without selected or pending badges", () => {
     cleanup();
     const mockCategories = [
@@ -250,6 +472,162 @@ vi.mock("../panels/SettingsGeneralPanel", () => ({
     expect(screen.getByRole("radio", { name: "Project" })).toHaveAttribute("aria-checked", "false");
   });
 
+  it("OptionCardChoiceGroup exposes selected option display and keyboard radio semantics", () => {
+    const onChange = vi.fn();
+    render(
+      <OptionCardChoiceGroup
+        value="manual"
+        onChange={onChange}
+        aria-label="Agent routing mode"
+        options={[
+          {
+            value: "manual",
+            label: "Manual",
+            description: "Pin every coding task to one preset.",
+            countLabel: "1 preset",
+            icon: <SlidersHorizontal className="h-4 w-4" />,
+          },
+          {
+            value: "orchestrator",
+            label: "Orchestrator with a very long option label that must wrap",
+            description: "Planning assigns the best specialist for each task.",
+            countLabel: "4 presets",
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getByRole("radiogroup", { name: "Agent routing mode" })).toBeInTheDocument();
+    expect(screen.getByText("Selected: Manual")).toBeInTheDocument();
+    expect(screen.getByText("1 preset")).toBeInTheDocument();
+    const manual = screen.getByRole("radio", { name: "Manual" });
+    expect(manual).toHaveAttribute("aria-checked", "true");
+    expect(manual).toHaveAccessibleDescription("Pin every coding task to one preset.");
+
+    fireEvent.keyDown(manual, { key: "ArrowRight" });
+    expect(onChange).toHaveBeenCalledWith("orchestrator");
+  });
+
+  it("OptionCardChoiceGroup supports multi-select counts and disabled option descriptions", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <OptionCardChoiceGroup
+        selectionMode="multiple"
+        value={["task"]}
+        onChange={onChange}
+        aria-label="QA review triggers"
+        options={[
+          {
+            value: "task",
+            label: "Task completion",
+            description: "Run QA after every completed task.",
+          },
+          {
+            value: "project-agent",
+            label: "Project QA agent",
+            description: "Use a project-specific QA preset.",
+            disabled: true,
+            disabledReason: "Select a project before assigning QA presets.",
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getByRole("group", { name: "QA review triggers" })).toBeInTheDocument();
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Task completion" })).toHaveAttribute("aria-checked", "true");
+    const disabledOption = screen.getByRole("checkbox", { name: "Project QA agent" });
+    expect(disabledOption).toBeDisabled();
+    expect(disabledOption).toHaveAccessibleDescription("Use a project-specific QA preset. Select a project before assigning QA presets.");
+
+    await user.click(disabledOption);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("SettingsScopeControls renders system scope without duplicated visible system context", () => {
+    renderSettingsScopeControls();
+
+    const group = screen.getByRole("radiogroup", { name: "Settings scope" });
+    expect(group).toHaveAccessibleDescription(
+      "Editing live system defaults. Project scope is available for the selected project. System scope selected. Editing live system defaults.",
+    );
+    expect(screen.getByRole("radio", { name: "System" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Project" })).toHaveAttribute("aria-checked", "false");
+    expect(screen.queryByText("System (selected)")).not.toBeInTheDocument();
+    expect(screen.getByText("Editing live system defaults.")).toHaveClass("sr-only");
+    expect(screen.queryByText(/visible categor/)).not.toBeInTheDocument();
+  });
+
+  it("SettingsScopeControls keeps project unavailable guidance wired to the disabled radio", () => {
+    const setActiveScope = vi.fn();
+    renderSettingsScopeControls({
+      selectedProject: null,
+      setActiveScope,
+      scopeStatusText: "Project scope is unavailable until a project is selected.",
+    });
+
+    const projectRadio = screen.getByRole("radio", { name: "Project" });
+    expect(projectRadio).toBeDisabled();
+    expect(projectRadio).toHaveAccessibleDescription("Project scope unlocks after selecting a project.");
+    expect(screen.getByText("Project scope unlocks after selecting a project.")).toHaveAttribute("id", "settings-project-scope-disabled");
+
+    fireEvent.click(projectRadio);
+    expect(setActiveScope).not.toHaveBeenCalled();
+  });
+
+  it("SettingsScopeControls renders project inheritance and saved state chips", () => {
+    renderSettingsScopeControls({
+      activeScope: "project",
+      scopeStatusText: "Project scope selected. Editing overrides for Test Project.",
+      projectSourceSummary: "2 overridden settings and 8 inherited settings in this project scope.",
+      saveMessage: "Settings saved.",
+    });
+
+    expect(screen.getByRole("radio", { name: "Project" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByText("Editing overrides for Test Project")).toBeInTheDocument();
+    expect(screen.getByText("2 overridden settings and 8 inherited settings in this project scope.")).toBeInTheDocument();
+    expect(screen.getByText("Saved")).toBeInTheDocument();
+  });
+
+  it("SettingsScopeControls renders unsaved edits without the saved badge", () => {
+    renderSettingsScopeControls({
+      activeDirty: true,
+      saveMessage: "Settings saved.",
+    });
+
+    expect(screen.getByText("Unsaved edits")).toBeInTheDocument();
+    expect(screen.queryByText("Saved")).not.toBeInTheDocument();
+  });
+
+  it("SettingsScopeControls shows visible category count only while Smart Find is active", () => {
+    const { rerender } = renderSettingsScopeControls({
+      filteredCategoryCount: 4,
+      isSearchActive: false,
+    });
+
+    expect(screen.queryByText("4 visible categories")).not.toBeInTheDocument();
+
+    rerender(
+      <SettingsScopeControls
+        activeScope="system"
+        setActiveScope={() => {}}
+        selectedProject={genericProject}
+        scopeStatusText="System scope selected. Editing live system defaults."
+        projectSourceSummary={null}
+        filteredCategoryCount={1}
+        isSearchActive
+        activeDirty={false}
+        activeSaving={false}
+        saveMessage={null}
+        error={null}
+        interactionStyle={interactionStyle}
+      />,
+    );
+
+    expect(screen.getByText("1 visible category")).toBeInTheDocument();
+  });
+
   it("SelectInput keeps disabled reason visible and described by the control", () => {
     render(
       <SelectInput
@@ -269,6 +647,39 @@ vi.mock("../panels/SettingsGeneralPanel", () => ({
     const reason = screen.getByText("Switch GitHub mode to Remote to use this policy.");
     expect(reason.id).toBeTruthy();
     expect(trigger).toHaveAccessibleDescription("Switch GitHub mode to Remote to use this policy.");
+  });
+
+  it("ToggleLinkedControlRow invokes toggle and nested select callbacks", async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn();
+    const onSelect = vi.fn();
+    render(
+      <ToggleLinkedControlRow
+        enabled={false}
+        onEnabledChange={onToggle}
+        toggleLabel="Review completed tasks"
+        description="Runs QA after task completion."
+      >
+        <SelectInput
+          value="builtin"
+          onChange={onSelect}
+          aria-label="QA provider"
+          options={[
+            { value: "builtin", label: "Built-in QA" },
+            { value: "project", label: "Project QA" },
+          ]}
+        />
+      </ToggleLinkedControlRow>
+    );
+
+    const toggle = screen.getByRole("switch", { name: "Review completed tasks" });
+    expect(toggle).toHaveAccessibleDescription("Runs QA after task completion.");
+    await user.click(toggle);
+    expect(onToggle).toHaveBeenCalledWith(true);
+
+    await user.click(screen.getByRole("button", { name: "QA provider" }));
+    await user.click(await screen.findByRole("option", { name: "Project QA" }));
+    expect(onSelect).toHaveBeenCalledWith("project");
   });
 
   it("ActionButton provides busy state feedback", () => {
@@ -323,6 +734,65 @@ describe("SettingsControls Accessibility", () => {
     const input = screen.getByRole("textbox");
     expect(input).toHaveAttribute("aria-label", "Sprint branch scheme");
     expect(input).toHaveAttribute("aria-description", "Template used when naming sprint branches.");
+  });
+
+  it("TaskPrTitleSchemeEditor renders accessible task PR title placeholders", () => {
+    render(
+      <TaskPrTitleSchemeEditor
+        value="({sprint_tag}) {task_title}"
+        onChange={() => {}}
+      />
+    );
+
+    const input = screen.getByRole("textbox", { name: "Task PR title scheme" });
+    expect(input).toHaveAttribute("aria-description", "Template used when naming automatically-created task pull requests.");
+    expect(input).toHaveAttribute("placeholder", "e.g. ({sprint_tag}) {task_title}");
+    expect(screen.getByText("{sprint_tag}")).toBeInTheDocument();
+    expect(screen.getByText("{sprint_key}")).toBeInTheDocument();
+    expect(screen.getByText("{sprint_number}")).toBeInTheDocument();
+    expect(screen.getByText("{sprint_title}")).toBeInTheDocument();
+    expect(screen.getByText("{task_key}")).toBeInTheDocument();
+    expect(screen.getByText("{task_title}")).toBeInTheDocument();
+    expect(screen.getByText("{provider}")).toBeInTheDocument();
+  });
+
+  it("SettingsSprintPanel renders and updates the task PR title scheme row", () => {
+    const updateEditableSettings = vi.fn();
+
+    const Harness = () => {
+      const [settings, setSettings] = useState(() => createProjectSettings());
+      updateEditableSettings.mockImplementation((recipe: (current: ProjectSettings) => ProjectSettings) => {
+        setSettings((current) => recipe(current));
+      });
+
+      return (
+        <SettingsSprintPanel
+          state={{
+            activeScope: "project",
+            setActiveScope: () => {},
+            selectedProject: null,
+            editableSettings: settings,
+            projectSettings: null,
+            projectSources: { "git.taskPrTitleScheme": "project" },
+            projectAgentPresetOptions: [],
+            updateProject: () => {},
+            updateEditableSettings,
+          } as any}
+        />
+      );
+    };
+
+    render(<Harness />);
+
+    expect(screen.getByText("Task PR title scheme")).toBeInTheDocument();
+    expect(screen.getByText("Template used when naming automatically-created task pull requests.")).toBeInTheDocument();
+    expect(screen.getByText("Project override")).toBeInTheDocument();
+
+    const input = screen.getByRole("textbox", { name: "Task PR title scheme" });
+    fireEvent.input(input, { target: { value: "{task_key}: {task_title} - {provider}" } });
+
+    expect(updateEditableSettings).toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "Task PR title scheme" })).toHaveValue("{task_key}: {task_title} - {provider}");
   });
 
   it("SprintKeyEditor passes aria-label and aria-description", () => {
@@ -512,7 +982,59 @@ describe("SettingsControls Accessibility", () => {
     expect(discardButton).toHaveAttribute("aria-busy", "true");
   });
 
-  it("SettingsContentPanels renders dirty-to-saving-to-saved feedback while keeping values mounted", async () => {
+  it("SettingsActivePanelStatus renders the sticky active panel save state contract", () => {
+    render(
+      <SettingsActivePanelStatus
+        stickyTop="112px"
+        state={{
+          activeCategory: "models",
+          activeCategoryConfig: { label: "AI Models" },
+          activeDirty: true,
+          activeSaving: false,
+          error: null,
+          saveMessage: null,
+          loading: false,
+          resettingProject: false,
+        } as any}
+      />
+    );
+
+    expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByRole("status")).toHaveTextContent("AI Models settings have local unsaved changes.");
+    expect(screen.getByText("AI Models")).toBeInTheDocument();
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    const activePanelStrip = screen.getByText("Active panel").parentElement;
+    expect(activePanelStrip).toHaveAttribute("data-settings-sticky", "active-panel");
+    expect(activePanelStrip).toHaveClass("sticky", "top-[var(--settings-active-panel-top)]", "flex-wrap", "overflow-visible");
+    expect(activePanelStrip).toHaveStyle("--settings-active-panel-top: 112px");
+  });
+
+  it("SettingsActivePanelStatus can render inline without duplicating status logic", () => {
+    render(
+      <SettingsActivePanelStatus
+        sticky={false}
+        state={{
+          activeCategory: "general",
+          activeDirty: false,
+          activeSaving: false,
+          error: "Save failed",
+          saveMessage: null,
+          loading: false,
+          resettingProject: false,
+        } as any}
+      />
+    );
+
+    expect(screen.getByRole("alert")).toHaveAttribute("aria-live", "assertive");
+    expect(screen.getByRole("alert")).toHaveTextContent("General settings blocked: Save failed");
+    expect(screen.getByText("Blocked")).toBeInTheDocument();
+    const activePanelStrip = screen.getByText("Active panel").parentElement;
+    expect(activePanelStrip).not.toHaveAttribute("data-settings-sticky");
+    expect(activePanelStrip).not.toHaveClass("sticky", "top-[var(--settings-active-panel-top)]");
+    expect(activePanelStrip).not.toHaveStyle("--settings-active-panel-top: 9.5rem");
+  });
+
+  it("SettingsContentPanels renders its standalone sticky active-panel strip while keeping values mounted", async () => {
     const { rerender } = render(
       <SettingsContentPanels
         state={{
@@ -530,6 +1052,13 @@ describe("SettingsControls Accessibility", () => {
     expect(screen.getByText("General panel values stay mounted")).toBeInTheDocument();
     expect(screen.getByText("General")).toBeInTheDocument();
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    const activePanelStrip = screen.getByText("Active panel").parentElement;
+    expect(activePanelStrip).toHaveAttribute("data-settings-sticky", "active-panel");
+    expect(activePanelStrip).toHaveClass("sticky", "top-[var(--settings-active-panel-top)]", "flex-wrap", "overflow-visible");
+    expect(activePanelStrip).toHaveStyle("--settings-active-panel-top: 9.5rem");
+    const panelStatus = screen.getByText("General settings have local unsaved changes.");
+    expect(panelStatus).toHaveAttribute("role", "status");
+    expect(panelStatus).toHaveAttribute("aria-live", "polite");
     expect(screen.getByText("General panel values stay mounted").parentElement).toHaveAttribute("data-motion-contract", "enterExit");
     expect(screen.getByText("General panel values stay mounted").parentElement).toHaveClass("motion-reduce:animate-none");
 
@@ -566,6 +1095,165 @@ describe("SettingsControls Accessibility", () => {
     await waitFor(() => expect(screen.getAllByText("Settings saved.").length).toBeGreaterThan(0));
     expect(screen.getByText("Saved")).toBeInTheDocument();
     expect(screen.getByText("General panel values stay mounted")).toBeInTheDocument();
+  });
+
+  it("SettingsContentPanels can suppress the active panel strip for a shared command/status bar", () => {
+    render(
+      <SettingsContentPanels
+        showActivePanelStatus={false}
+        state={{
+          activeCategory: "general",
+          activeDirty: false,
+          activeSaving: false,
+          error: null,
+          saveMessage: null,
+          loading: false,
+          resettingProject: false,
+        } as any}
+      />
+    );
+
+    expect(screen.queryByText("Active panel")).not.toBeInTheDocument();
+    expect(screen.getByText("General panel values stay mounted")).toBeInTheDocument();
+  });
+
+  it("SettingsContentPanels routes the Techstacks category to the catalog panel", () => {
+    const projectSettings = createProjectSettings();
+    render(
+      <SettingsContentPanels
+        state={{
+          activeCategory: "techstacks",
+          activeScope: "system",
+          activeDirty: false,
+          activeSaving: false,
+          error: null,
+          saveMessage: null,
+          loading: false,
+          resettingProject: false,
+          systemSettings: createSystemSettings(projectSettings),
+          updateSystem: () => {},
+        } as any}
+      />
+    );
+
+    expect(screen.getByText("Techstacks Catalog")).toBeInTheDocument();
+    expect(screen.getAllByText("Code UX Stack").length).toBeGreaterThan(0);
+  });
+
+  it("SettingsTechstacksPanel protects the built-in Code UX Stack from removal", () => {
+    const projectSettings = createProjectSettings();
+    render(
+      <SettingsTechstacksPanel
+        state={{
+          activeScope: "system",
+          activeSaving: false,
+          systemSettings: createSystemSettings(projectSettings),
+          updateSystem: () => {},
+        } as any}
+      />
+    );
+
+    expect(screen.getByText("Built-in stack protected")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove Code UX Stack" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove Custom Web" })).toBeInTheDocument();
+  });
+
+  it("SettingsTechstacksPanel lets project scope clear the selected stack to Unassigned", async () => {
+    const user = userEvent.setup();
+    let latestProjectSettings = createProjectSettings({
+      selectedTechstackId: "custom-web",
+      applicationKind: "web",
+    });
+    const systemSettings = createSystemSettings(latestProjectSettings);
+
+    const Harness = () => {
+      const [projectSettings, setProjectSettings] = useState(latestProjectSettings);
+      latestProjectSettings = projectSettings;
+      return (
+        <SettingsTechstacksPanel
+          state={{
+            activeScope: "project",
+            activeSaving: false,
+            projectSources: {},
+            selectedProject: { id: "project-1", name: "Test project" },
+            projectSettings,
+            systemSettings,
+            updateEditableSettings: (recipe: (current: ProjectSettings) => ProjectSettings) => setProjectSettings(recipe),
+            getFieldReset: () => undefined,
+          } as any}
+        />
+      );
+    };
+
+    render(<Harness />);
+
+    await user.click(screen.getByRole("radio", { name: /Unassigned/ }));
+
+    expect(latestProjectSettings.techstack.selectedTechstackId).toBeNull();
+  });
+
+  it("SettingsTechstacksPanel persists project stack and application kind through editable settings helpers", async () => {
+    const user = userEvent.setup();
+    let latestProjectSettings = createProjectSettings({
+      selectedTechstackId: null,
+      applicationKind: null,
+    });
+    const systemSettings = createSystemSettings(latestProjectSettings);
+
+    const Harness = () => {
+      const [projectSettings, setProjectSettings] = useState(latestProjectSettings);
+      latestProjectSettings = projectSettings;
+      return (
+        <SettingsTechstacksPanel
+          state={{
+            activeScope: "project",
+            activeSaving: false,
+            projectSources: {},
+            selectedProject: { id: "project-1", name: "Test project" },
+            projectSettings,
+            systemSettings,
+            updateEditableSettings: (recipe: (current: ProjectSettings) => ProjectSettings) => setProjectSettings(recipe),
+            getFieldReset: () => undefined,
+          } as any}
+        />
+      );
+    };
+
+    render(<Harness />);
+
+    await user.click(screen.getByRole("radio", { name: /Custom Web/ }));
+    await user.click(screen.getByRole("radio", { name: /Web app/ }));
+
+    expect(latestProjectSettings.techstack).toEqual({
+      selectedTechstackId: "custom-web",
+      applicationKind: "web",
+    });
+  });
+
+  it("SettingsPage keeps scope controls and active panel status in one unified sticky wrapping bar", () => {
+    const source = readFileSync("dashboard/src/v2/SettingsPage.tsx", "utf8");
+    const commandStatusBarSource = source.match(
+      /<div\s+data-settings-sticky="settings-command-status"[\s\S]*?<SettingsCategoryRail/,
+    )?.[0] ?? "";
+
+    expect(source).toContain('import { SettingsScopeControls } from "./components/settings/SettingsScopeControls.js";');
+    expect(source).toContain('import { SettingsActivePanelStatus } from "./components/settings/SettingsActivePanelStatus.js";');
+    expect(source).toContain('data-settings-sticky="settings-command-status"');
+    expect(commandStatusBarSource).toContain("sticky top-16 z-30");
+    expect(commandStatusBarSource).toContain("flex min-w-0 max-w-full flex-wrap");
+    expect(commandStatusBarSource).toContain("<SettingsScopeControls");
+    expect(commandStatusBarSource).toContain("<SettingsActivePanelStatus");
+    expect(commandStatusBarSource).toContain("sticky={false}");
+    expect(commandStatusBarSource).toContain("ml-auto");
+    expect(commandStatusBarSource).toContain("Save Changes");
+    expect(commandStatusBarSource).toContain("Reset Project");
+    expect(commandStatusBarSource).toContain("rounded-[1.75rem]");
+    expect(commandStatusBarSource).toContain("bg-void-950");
+    expect(commandStatusBarSource).not.toContain("bg-[var(--surface-glass)]");
+    expect(source.match(/<SettingsContentPanels/g) ?? []).toHaveLength(1);
+    expect(source).toMatch(/<SettingsContentPanels\s+state=\{state\}\s+showActivePanelStatus=\{false\}\s+\/>/);
+    expect(source).not.toContain("scopeSticky.getBoundingClientRect()");
+    expect(source).not.toContain("panelStickyTop");
   });
 
   it("SettingsContentPanels renders reset pending feedback while keeping values mounted", () => {

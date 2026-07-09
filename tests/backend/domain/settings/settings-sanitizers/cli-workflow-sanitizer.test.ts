@@ -47,7 +47,9 @@ describe("sanitizeCliWorkflow", () => {
     expect(defaults.rateLimitRetryDelaySeconds).toBe(10);
     expect(defaults.maxRateLimitRetries).toBe(5);
     expect(defaults.containerMountGitConfig).toBe(false);
+    expect(defaults.containerMemoryLimitMb).toBe(6144);
     expect(defaults.containerInstallPlaywrightBrowsers).toBe(true);
+    expect(defaults.containerRunAsRoot).toBe(false);
     expect(defaults.containerGitUserName).toBe("Code UX");
     expect(defaults.containerGitUserEmail).toBe("agents@codeux.ai");
     expect(defaults.containerMountGithubAuth).toBe(false);
@@ -63,6 +65,29 @@ describe("sanitizeCliWorkflow", () => {
     });
     expect(clamped.rateLimitRetryDelaySeconds).toBe(1);
     expect(clamped.maxRateLimitRetries).toBe(1);
+  });
+
+  it("sanitizes the Docker provider container memory limit", () => {
+    const disabled = sanitizeCliWorkflow({
+      cliWorkflow: {
+        containerMemoryLimitMb: 0,
+      },
+    });
+    expect(disabled.containerMemoryLimitMb).toBe(0);
+
+    const clamped = sanitizeCliWorkflow({
+      cliWorkflow: {
+        containerMemoryLimitMb: 300000,
+      },
+    });
+    expect(clamped.containerMemoryLimitMb).toBe(262144);
+
+    const invalid = sanitizeCliWorkflow({
+      cliWorkflow: {
+        containerMemoryLimitMb: "bad" as any,
+      },
+    });
+    expect(invalid.containerMemoryLimitMb).toBe(6144);
   });
 
   it("sanitizes the Playwright browser install toggle", () => {
@@ -81,15 +106,37 @@ describe("sanitizeCliWorkflow", () => {
     expect(invalid.containerInstallPlaywrightBrowsers).toBe(true);
   });
 
+  it("defaults Docker root execution off and falls back to false for invalid values", () => {
+    const defaults = sanitizeCliWorkflow(undefined);
+    expect(defaults.containerRunAsRoot).toBe(false);
+    expect(DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerRunAsRoot).toBe(false);
+
+    const enabled = sanitizeCliWorkflow({
+      cliWorkflow: {
+        containerRunAsRoot: true,
+      },
+    });
+    expect(enabled.containerRunAsRoot).toBe(true);
+
+    const invalid = sanitizeCliWorkflow({
+      cliWorkflow: {
+        containerRunAsRoot: "bad" as any,
+      },
+    });
+    expect(invalid.containerRunAsRoot).toBe(false);
+  });
+
   it("keeps default container setup behavior enabled for dashboard settings", () => {
     expect(DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerSetupScriptPath).toBe("");
     expect(DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerCacheSetupScriptImage).toBe(true);
     expect(DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerInstallPlaywrightBrowsers).toBe(true);
+    expect(DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerRunAsRoot).toBe(false);
 
     const defaults = sanitizeCliWorkflow(undefined);
     expect(defaults.containerSetupScriptPath).toBe("");
     expect(defaults.containerCacheSetupScriptImage).toBe(true);
     expect(defaults.containerInstallPlaywrightBrowsers).toBe(true);
+    expect(defaults.containerRunAsRoot).toBe(false);
   });
 
   it("trims custom container setup script paths without requiring the file to exist", () => {

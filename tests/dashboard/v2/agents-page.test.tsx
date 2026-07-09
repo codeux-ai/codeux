@@ -113,6 +113,14 @@ vi.mock("../../../dashboard/src/v2/components/agents/AgentsHero.js", async () =>
   const { h } = await import("preact");
   return {
     AgentsHero: (props: any) => h("div", { "data-testid": "agents-hero" },
+      h("button", {
+        disabled: !props.selectedProject || props.fileSyncDisabled || props.pullingFromFiles,
+        onClick: props.onPullFromFiles,
+      }, props.pullingFromFiles ? "Pulling from files" : "Pull from files"),
+      h("button", {
+        disabled: !props.selectedProject || props.fileSyncDisabled || props.pushingToFiles,
+        onClick: props.onPushToFiles,
+      }, props.pushingToFiles ? "Pushing to files" : "Push to files"),
       h("button", { onClick: props.onCreate }, "New Agent")
     )
   };
@@ -135,6 +143,14 @@ vi.mock("../../../dashboard/src/v2/components/agents/AgentPresetDetailPanel.js",
       h("h2", null, props.preset.name),
       ...(props.routeTags || []).map((tag: string) => h("span", { key: tag }, tag)),
       h("div", null, props.preset.instructionMarkdown),
+      props.preset.sourcePath && h("button", {
+        disabled: props.importing,
+        onClick: () => props.onImport(props.preset.id),
+      }, "Import"),
+      h("button", {
+        disabled: props.pushingToFile || !props.canPushToFile,
+        onClick: () => props.onPushToFile(props.preset.id),
+      }, props.pushingToFile ? "Pushing to file" : "Push to file"),
       h("button", { onClick: props.onEdit }, "Edit Agent")
     )
   };
@@ -151,6 +167,7 @@ vi.mock("../../../dashboard/src/v2/components/agents/AgentPresetEditorPanel.js",
       const { props, state } = this;
       return h("div", { "data-testid": "editor-panel" },
         h("h2", null, "Edit Agent"),
+        h("div", null, props.isDashboardReplyAgent ? "Dashboard reply MCP context" : "Standard MCP context"),
         h("input", { defaultValue: props.preset.name, "aria-label": "Name" }),
         h("input", {
           type: "checkbox",
@@ -159,6 +176,24 @@ vi.mock("../../../dashboard/src/v2/components/agents/AgentPresetEditorPanel.js",
           onChange: (e: any) => this.setState({ override: e.target.checked })
         }),
         state.override && h("textarea", { placeholder: "Override the default memory prompt template for this agent." }),
+        h("div", null,
+          h("span", null, props.preset.persistentSkillStorage?.enabled ? "Persistent skills enabled" : "Persistent skills off until storage is attached and enabled."),
+          ...(props.availableSkillStorages || []).map((storage: any) => h("label", { key: storage.id },
+            h("input", {
+              type: "checkbox",
+              "aria-label": `Attach ${storage.name}`,
+              checked: (props.preset.persistentSkillStorageIds || []).includes(storage.id),
+              onChange: () => {}
+            }),
+            storage.name
+          )),
+          h("button", {
+            onClick: () => props.onSave(props.preset.id, {
+              persistentSkillStorageIds: ["storage-1"],
+              persistentSkillStorage: { enabled: true },
+            })
+          }, "Save Persistent Skills")
+        ),
         h("button", { onClick: () => props.onSave(props.preset.id, {}) }, "Save Agent"),
         h("button", { onClick: props.onCancel }, "Cancel")
       );
@@ -273,6 +308,21 @@ describe("AgentsPage", () => {
     };
 
     vi.mocked(agentPresetApi.fetchAgentPresets).mockResolvedValue(mockPresets as any);
+    vi.mocked(agentPresetApi.importAgentPresetFromMarkdown).mockResolvedValue(mockPresets[0] as any);
+    vi.mocked(agentPresetApi.pullAgentPresetsFromMarkdown).mockResolvedValue(mockPresets as any);
+    vi.mocked(agentPresetApi.pushAgentPresetsToMarkdown).mockResolvedValue(mockPresets as any);
+    vi.mocked(agentPresetApi.exportAgentPresetToMarkdown).mockResolvedValue(mockPresets[0] as any);
+    vi.mocked(agentPresetApi.fetchSkillStorages).mockResolvedValue([
+      {
+        id: "storage-1",
+        projectId: "project-1",
+        name: "Review Playbooks",
+        description: "Durable review skills",
+        storageKind: "project",
+        createdAt: "2023-01-01T00:00:00.000Z",
+        updatedAt: "2023-01-01T00:00:00.000Z",
+      },
+    ] as any);
     vi.mocked(settingsApi.fetchProjectEffectiveSettings).mockResolvedValue(createEffectiveSettings() as any);
 
     mockProjectData.projects = [{ id: "project-1", name: "Test Project", status: "ready" }];
@@ -584,6 +634,109 @@ describe("AgentsPage", () => {
     // Textarea should now be visible
     const textarea = screen.getByPlaceholderText("Override the default memory prompt template for this agent.");
     expect(textarea).toBeInTheDocument();
+  });
+
+  it("persists persistent skill storage attachments in the agent update payload", async () => {
+    vi.mocked(agentPresetApi.updateAgentPreset).mockResolvedValue({
+      ...mockPresets[0],
+      persistentSkillStorageIds: ["storage-1"],
+      persistentSkillStorage: { enabled: true },
+    } as any);
+
+    await renderPage();
+    const editBtn = await screen.findByText("Edit Agent");
+    fireEvent.click(editBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Persistent skills off until storage is attached and enabled.")).toBeInTheDocument();
+      expect(screen.getByRole("checkbox", { name: "Attach Review Playbooks" })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Save Persistent Skills"));
+
+    await waitFor(() => {
+      expect(agentPresetApi.updateAgentPreset).toHaveBeenCalledWith("agent-1", expect.objectContaining({
+        persistentSkillStorageIds: ["storage-1"],
+        persistentSkillStorage: { enabled: true },
+      }));
+    });
+  });
+
+  it("passes dashboard reply route context to the agent editor", async () => {
+    const effective = createEffectiveSettings();
+    effective.settings.agents.routing.dashboardReply.agentPresetId = "agent-1";
+    vi.mocked(settingsApi.fetchProjectEffectiveSettings).mockResolvedValue(effective as any);
+
+    await renderPage();
+    const editBtn = await screen.findByText("Edit Agent");
+    fireEvent.click(editBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Dashboard reply MCP context")).toBeInTheDocument();
+    });
+  });
+
+  it("pulls and pushes agent presets between project files and sqlite", async () => {
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Planning Agent")[0]).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Pull from files"));
+
+    await waitFor(() => {
+      expect(agentPresetApi.pullAgentPresetsFromMarkdown).toHaveBeenCalledWith("project-1");
+    });
+    expect(await screen.findByText("Agent presets pulled from project files.")).toBeInTheDocument();
+    expect(screen.getByText("Do some planning")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Push to files"));
+
+    await waitFor(() => {
+      expect(agentPresetApi.pushAgentPresetsToMarkdown).toHaveBeenCalledWith("project-1");
+    });
+    expect(await screen.findByText("Agent presets pushed to project files.")).toBeInTheDocument();
+    expect(screen.getByText("Do some planning")).toBeInTheDocument();
+  });
+
+  it("disables markdown file actions when project markdown mirroring is disabled", async () => {
+    const effective = createEffectiveSettings();
+    effective.settings.agents.saveToProjectDirectory = false;
+    vi.mocked(settingsApi.fetchProjectEffectiveSettings).mockResolvedValue(effective as any);
+
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Pull from files")).toBeDisabled();
+      expect(screen.getByText("Push to files")).toBeDisabled();
+      expect(screen.getByText("Push to file")).toBeDisabled();
+    });
+  });
+
+  it("pushes the selected agent preset to a project file", async () => {
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Planning Agent")[0]).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Push to file"));
+
+    await waitFor(() => {
+      expect(agentPresetApi.exportAgentPresetToMarkdown).toHaveBeenCalledWith("agent-1");
+    });
+    expect(await screen.findByText("Agent preset pushed to project file.")).toBeInTheDocument();
+  });
+
+  it("surfaces markdown sync backend errors in the existing error banner", async () => {
+    vi.mocked(agentPresetApi.pullAgentPresetsFromMarkdown).mockRejectedValueOnce(new Error("Project files unavailable"));
+
+    await renderPage();
+    fireEvent.click(await screen.findByText("Pull from files"));
+
+    expect(await screen.findByText("Project files unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Pull failed: Project files unavailable")).toBeInTheDocument();
   });
 });
 

@@ -21,7 +21,14 @@ import { resolveDockerRuntimeRoot } from "../infrastructure/providers/cli/docker
 import { formatSprintBranch } from "../domain/sprint/branch-name-generator.js";
 import { commandRunner, runCommandStrict } from "./cli-process-runner.js";
 import { pruneOrphanedDockerVolumes, removeContainersByIds } from "./docker-orphan-cleanup-utils.js";
-import { getDockerUserSpec, mapPathPrefix, toDockerMountArg } from "./cli-docker-utils.js";
+import {
+  DOCKER_DROP_ALL_CAPS_ARGS,
+  DOCKER_NETWORK_NONE_ARGS,
+  DOCKER_NO_NEW_PRIVILEGES_ARGS,
+  getDockerUserSpec,
+  mapPathPrefix,
+  toDockerMountArg,
+} from "./cli-docker-utils.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { fetchOriginIfAvailable } from "./git-branch-sync-service.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "./git-http-auth.js";
@@ -145,7 +152,11 @@ export class SprintFileBrowserService {
         const dockerArgs = [
           "create",
           "--name", containerName,
+          ...DOCKER_NETWORK_NONE_ARGS,
+          ...DOCKER_NO_NEW_PRIVILEGES_ARGS,
+          ...DOCKER_DROP_ALL_CAPS_ARGS,
           "--label", FILE_BROWSER_LABEL,
+          "--label", "code-ux.managed=true",
           "--label", `code-ux.project-id=${projectId}`,
           "--label", `code-ux.sprint-id=${sprintId}`,
           "--label", `code-ux.session-id=${session.id}`,

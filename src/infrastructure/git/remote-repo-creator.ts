@@ -2,7 +2,9 @@ import * as fs from "fs";
 import * as path from "path";
 import { runCommandStrict } from "../../services/cli-process-runner.js";
 import { validateSafeRepoName, validateSafeClonePath, validateNonEmptyDir } from "../../utils/path-validator.js";
+import type { ValidatedPath } from "../../utils/path-validator.js";
 import { buildGitHttpAuthEnvWithFallbacks } from "../../services/git-http-auth.js";
+import { ensureCodeUxGitignoreEntry } from "./code-ux-gitignore.js";
 
 export interface RemoteRepoResult {
   localPath: string;
@@ -37,6 +39,22 @@ const cloneRepository = async (remoteUrl: string, cloneParentDir: string, repoNa
     })) || process.env,
   );
 };
+
+async function seedCodeUxGitignore(remoteUrl: string, localPath: ValidatedPath, hostToken?: string): Promise<void> {
+  const changed = await ensureCodeUxGitignoreEntry(localPath);
+  if (!changed) {
+    return;
+  }
+  const env = (await buildGitHttpAuthEnvWithFallbacks(remoteUrl, {
+    githubToken: hostToken,
+    gitlabToken: hostToken,
+  })) || process.env;
+  await runCommandStrict("git", ["config", "user.email", "code-ux@local"], localPath);
+  await runCommandStrict("git", ["config", "user.name", "Code UX"], localPath);
+  await runCommandStrict("git", ["add", ".gitignore"], localPath);
+  await runCommandStrict("git", ["commit", "-m", "chore: ignore Code UX runtime files"], localPath);
+  await runCommandStrict("git", ["push", "origin", "HEAD"], localPath, env);
+}
 
 /**
  * Creates a new GitHub repository and clones it locally through the shared
@@ -92,6 +110,7 @@ export async function createGitHubRepo(opts: {
 
     await cloneRepository(remoteUrl, safeParentDir, opts.repoName, opts.hostToken);
     const localPath = safeTargetDir;
+    await seedCodeUxGitignore(remoteUrl, localPath, opts.hostToken);
     return { localPath, remoteUrl };
   } catch (error: any) {
     const message = error.stderr?.toString() || error.message;
@@ -157,6 +176,7 @@ export async function createGitLabRepo(opts: {
     const localPath = safeTargetDir;
 
     await cloneRepository(remoteUrl, safeParentDir, opts.repoName, opts.hostToken);
+    await seedCodeUxGitignore(remoteUrl, localPath, opts.hostToken);
 
     return { localPath, remoteUrl };
   } catch (error: any) {

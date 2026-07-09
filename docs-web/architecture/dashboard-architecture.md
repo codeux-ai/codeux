@@ -77,7 +77,10 @@ const routes = [
   { path: "/live",     component: LiveSessionPage },
   { path: "/chat",     component: ChatPage },
   { path: "/agents",   component: AgentsPage },
+  { path: "/scheduler", component: SchedulerPage },
   { path: "/memory",   component: MemoryPage },
+  { path: "/knowledge", component: KnowledgePage },
+  { path: "/files",    component: FileBrowserPage },
   { path: "/browser",  component: BrowserPage },
   { path: "/stats",    component: StatsPage },
   { path: "/config",   component: SettingsPage },
@@ -87,7 +90,7 @@ const routes = [
 The root layout renders an `AppLayout` wrapper around every page. Layout features:
 
 - **Dock or Sidebar** navigation (chosen per `appearance.navigationMode`).
-- **Top bar** with project selector and theme toggle.
+- **Top bar** with bounded project and sprint selectors, search, runtime controls, notifications, and theme toggle.
 - **`ProjectDataProvider`** in context — supplies the active project + selected sprint to descendants.
 - Lazy-loaded **`DeepOceanBackground`** (Three.js scene) after first paint.
 
@@ -98,7 +101,7 @@ State is managed with a mix of:
 - **`@preact/signals`** for global and page-level reactive state.
 - **Custom data hooks** wrapping REST + WebSocket subscriptions:
   - `useDashboardRuntimeData()` — live execution data.
-  - `useRealTimeResource()` — generic WebSocket subscription wrapper.
+  - `useRealtimeResource()` — generic WebSocket subscription wrapper.
   - `useProjectData()` — active project / sprint.
   - `useSprints()`, `usePreviewSessions()`, `useChatPageData()`, `useSettingsPageState()`, `useMemoryPageData()`, `useOverviewPageData()`, `useExecutionTimeline()`, `useProgressiveList()`.
 

@@ -248,6 +248,7 @@ Current dashboard behavior:
 
 - claim prefers the item's current assigned worker endpoint
 - if the item is unassigned, claim falls back to the project's primary supervising worker, then overflow worker
+- live and project execution snapshots scope the active attention queue to the selected sprint when `selectedSprintId` is present. The scoped queue includes active rows whose `sprint_id` matches the selected sprint plus active rows tied to sprint runs for that sprint, while project-wide snapshots with no selected sprint still include all active project attention items.
 - resolved and dismissed items drop out of the active execution snapshot because the dashboard only shows `open` and `claimed` items
 - resolving or dismissing a human-owned handoff item that was created from a guardrail-managed worker item resets that task's matching guardrail counter (for example, a `human_escalation_required` item with `payload.sourceAttentionType = "merge_conflict"` clears the task's `merge_conflict` ledger row). This makes the operator action an explicit acknowledgement that another automated attempt may be tried, instead of leaving the task permanently capped at the previous guardrail limit.
 - attention open/claim/resolve mutations now trigger a direct project execution realtime refresh, so the Live view updates immediately instead of waiting for adjacent execution events

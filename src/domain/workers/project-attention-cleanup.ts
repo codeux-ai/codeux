@@ -2,8 +2,17 @@ import type { ProjectAttentionItemRecord } from "../../contracts/project-attenti
 import type { ProjectAttentionService } from "./project-attention-service.js";
 
 type TransientMergeAttentionService = Pick<ProjectAttentionService, "listActiveProjectItems" | "resolveItem">;
+type TransientSourceAttentionType = "merge_conflict" | "ci_fix_required" | "manual_attention";
 
-export function isTransientMergeAttentionHandoff(item: ProjectAttentionItemRecord): boolean {
+const DEFAULT_TRANSIENT_SOURCE_ATTENTION_TYPES: readonly TransientSourceAttentionType[] = [
+  "merge_conflict",
+  "ci_fix_required",
+];
+
+export function isTransientMergeAttentionHandoff(
+  item: ProjectAttentionItemRecord,
+  sourceAttentionTypes: readonly TransientSourceAttentionType[] = DEFAULT_TRANSIENT_SOURCE_ATTENTION_TYPES,
+): boolean {
   if (
     item.attentionType !== "human_escalation_required"
     && item.attentionType !== "dashboard_reply_required"
@@ -12,7 +21,7 @@ export function isTransientMergeAttentionHandoff(item: ProjectAttentionItemRecor
   }
 
   const sourceAttentionType = item.payload?.sourceAttentionType;
-  return sourceAttentionType === "merge_conflict" || sourceAttentionType === "ci_fix_required";
+  return sourceAttentionTypes.some((candidate) => candidate === sourceAttentionType);
 }
 
 export function resolveTransientMergeAttentionHandoffs(
@@ -20,11 +29,12 @@ export function resolveTransientMergeAttentionHandoffs(
   projectId: string,
   sprintRunId: string,
   reason: string,
+  sourceAttentionTypes: readonly TransientSourceAttentionType[] = DEFAULT_TRANSIENT_SOURCE_ATTENTION_TYPES,
 ): number {
   let resolved = 0;
   const activeItems = service.listActiveProjectItems(projectId);
   for (const item of activeItems) {
-    if (item.sprintRunId !== sprintRunId || !isTransientMergeAttentionHandoff(item)) {
+    if (item.sprintRunId !== sprintRunId || !isTransientMergeAttentionHandoff(item, sourceAttentionTypes)) {
       continue;
     }
     service.resolveItem(item.id, { status: "resolved", reason });

@@ -9,18 +9,26 @@ Implemented in:
 - `src/mcp/management-tool-handler.ts`
 
 These cover:
-- `manage_code_ux`
 - `manage_projects`
 - `manage_sprints`
 - `manage_tasks`
 - `manage_quicksprints`
 - `manage_scheduler`
+- `scheduler_code_ux`
 - `manage_agents`
+- `manage_node_flows`
 - `manage_memory`
+- `manage_skills`
 - `search_knowledge`
+- `search_skills`
 - `manage_settings`
 - `manage_preview`
+- `manage_custom_dashboards`
+- `manage_chat_providers`
 - `manage_telemetry`
+- `register_worker_endpoint`
+- `pull_task_dispatch`
+- `update_task_dispatch`
 
 The same management domains are also exposed through the direct `codeux` CLI management surface. See [CLI Commands Reference](../reference/cli-commands.md) for the command syntax, aliases, interactive prompting behavior, and approval handling.
 
@@ -40,18 +48,30 @@ These cover:
 - `generate_dashboard_reply`
 
 ### Management
-- `manage_code_ux`
 - `manage_projects`
 - `manage_sprints`
 - `manage_tasks`
 - `manage_quicksprints`
 - `manage_scheduler`
+- `scheduler_code_ux`
 - `manage_agents`
+- `manage_node_flows`
 - `manage_memory`
+- `manage_skills`
 - `search_knowledge`
+- `search_skills`
 - `manage_settings`
 - `manage_preview`
+- `manage_custom_dashboards`
+- `manage_chat_providers`
 - `manage_telemetry`
+
+### Worker control plane
+- `register_worker_endpoint`
+- `pull_task_dispatch`
+- `update_task_dispatch`
+
+These tools are exposed by the main `project_manager` MCP runtime, including server mode. `register_worker_endpoint` records the full eligible `projectIds` set and stores `activeProjectIds` only as the current focus subset. `pull_task_dispatch` returns a dispatch only with a lease token; workers must not start local execution without that token. `update_task_dispatch` renews running leases, records terminal state, and may return `controlAction: "cancel"` when the dashboard has requested cancellation.
 
 ## Registered Tools
 
@@ -71,6 +91,18 @@ Typed tool argument contracts and registry dispatch are defined in `src/api/mcp/
 
 ### Output minimization
 - `get_session` returns a compact session summary (state, provider, PR links, last activity summary) instead of full raw payload.
+
+## Per-Agent Tool Access
+
+Worker MCP clients can advertise their agent preset with the `X-Code-Ux-Agent` header on the Code UX MCP connection. When the header is absent, Code UX treats the request as a project-manager or stdio-style client and applies the system MCP tool toggles for the current runtime role.
+
+When the header is present, Code UX must resolve it to an explicit agent MCP access policy before exposing built-in Code UX management tools. Malformed HTTP header values are rejected before MCP routing; if an advertised agent identity reaches the router but is unknown or resolves to an agent without an explicit MCP access policy, `list_tools` returns no Code UX tools and `call_tool` rejects every Code UX management tool with MCP `MethodNotFound`. This fail-closed behavior prevents an unrecognized agent from inheriting broad system-level management access.
+
+For a resolved agent policy:
+- `codeUxEnabled: false` removes every built-in Code UX tool from `list_tools` and causes `call_tool` to return `MethodNotFound`, even when system-level toggles enable those tools.
+- `codeUxEnabled: true` applies the agent's per-tool overrides over the system MCP tool toggles.
+- Runtime-role filtering still applies after system and agent policy checks.
+- Custom external MCP servers remain limited to the agent's linked server ids and are not broadened by Code UX tool availability.
 
 ## Common Response Shape
 
@@ -120,13 +152,66 @@ The parsed management envelope has:
 
 Approval responses are not errors. Calls that need human confirmation still return `approvalRequired: true` and do not set `isError`.
 
+Tool arguments are validated against `src/contracts/mcp-tool-definitions.ts` before dispatch. Invalid tool payload shapes, missing required schema fields, invalid enum values, and malformed approval envelopes fail as MCP `InvalidParams` errors before management action handlers run. Management action parser failures still use the standardized management error envelope described above, with sanitized validation messages and a `field` when the helper can identify one.
+
+## Scheduler Tools
+
+Code UX exposes two scheduler MCP surfaces:
+
+- `manage_scheduler` is the project-manager management surface. It can list, create, schedule sprints, schedule quicksprints, schedule chat messages, update entries, delete entries with approval, and run due entries. It remains unchanged for project-manager clients.
+- `scheduler_code_ux` is the restricted agent-owned surface. It supports only `list`, `schedule_wakeup`, and `cancel`. The Code UX suffix intentionally avoids collisions with scheduler tools exposed by provider CLIs or other MCP servers.
+
+The restricted `scheduler_code_ux` tool accepts exactly one wakeup timing mode:
+- `scheduledFor`: absolute ISO timestamp.
+- `delaySeconds` or `delayMinutes`: positive relative delay.
+- `wakeAfterReply: true`: schedule the wakeup for the current time so the dashboard chat runtime drains it immediately after the current reply is sent.
+- `afterSprintId`: wake after the referenced sprint reaches a terminal state, with optional non-negative `offsetMinutes`.
+- `afterTaskId`: wake after the referenced task reaches a terminal project status, with optional non-negative `offsetMinutes`.
+
+`schedule_wakeup` requires `projectId` and `bodyMarkdown`, and may include `title`, `timezone`, `threadId`, and `connectionId`. Completion anchors are persisted as `scheduleAnchor` payloads: `afterSprintId` maps to `{ mode: "after_sprint_end", sourceSprintId, offsetMinutes? }`, and `afterTaskId` maps to `{ mode: "after_task_end", sourceTaskId, offsetMinutes? }`.
+
+Every `scheduler_code_ux` entry is persisted as an `agent_scheduler` wakeup target. The runtime stamps `origin: "agent_scheduler"`, `source: "agent_scheduler"`, and `createdByAgentId` from the current MCP agent context. `list` returns only wakeup entries created by the calling agent. `cancel` changes the matching entry status to `cancelled` only when the entry is an agent-scheduler wakeup created by that same agent. Dashboard-created entries, `manage_scheduler` entries, entries without agent-scheduler metadata, task entries, and entries created by another agent are rejected with the standard management validation envelope.
+
+The restricted tool intentionally does not expose due-entry execution, arbitrary update, recurrence editing, sprint scheduling, quicksprint scheduling, memory remediation scheduling, or global scheduler destructive controls.
+
+## Custom Dashboard Management
+
+`manage_custom_dashboards` exposes the custom dashboard repository and validation runtime to agents through stable management actions:
+
+- `list`, `get`, `create`, and `update` manage project-scoped dashboard drafts.
+- `create_revision` snapshots the current draft or provided bundle fields into an immutable revision.
+- `validate_revision`, `validation_status`, and `validation_logs` delegate to the validation runtime.
+- `publish_revision` publishes only a revision that is already marked passed with a valid report or a revision accompanied by a passed `validationSessionId`.
+- `archive` clears any active publication and marks the dashboard archived. It follows the normal destructive-action approval fingerprint flow.
+- `data_catalog` returns project dashboard summaries and declared source nodes for agents building or inspecting generated dashboards.
+
+Payload fields:
+
+- `projectId` is required for `list`, `create`, `validate_revision`, and `data_catalog`.
+- `dashboardId` is required for `get`, `update`, `create_revision`, `validate_revision`, `publish_revision`, and `archive`.
+- `revisionId` is required for `validate_revision` and `publish_revision`.
+- `sessionId` is required for `validation_status` and `validation_logs`.
+- `validationSessionId` is optional for `publish_revision` and, when supplied, must identify a passed session for the same dashboard, revision, and project.
+- `manifest`, `fileBundle`, `sourceNodeGraph`, `styleguide`, and `runtimeMetadata` are accepted by `create`, `update`, and `create_revision` according to each action's required fields.
+- `tail` limits validation log output.
+
+Validation sessions move through `queued`, `building`, `running`, `passed`, `failed`, or `cancelled`. `validate_revision` starts the detached Docker validation runtime; it does not publish the revision. A passed session means install, build, detached preview startup, and root health checks completed successfully.
+
+`publish_revision` is gated by repository state. The revision must belong to the dashboard, have `validationStatus: "passed"`, have `validatedAt`, and have `validationReport.valid === true`. Failed, queued, running, cancelled, missing, or cross-revision validation sessions are rejected before publication state changes, so the prior published revision remains active.
+
+The generated dashboard data-source graph is user-declared JSON with `nodes`, `edges`, and optional `metadata`. Runtime viewer source types currently map to Code UX project execution data, project stats, overview telemetry, non-secret integration metadata, and unavailable `external_api` placeholders. Do not claim arbitrary external API connectors are available through this surface until a dedicated sanitized proxy contract exists.
+
+For the user workflow, REST route list, detached runtime details, and rollback expectations, see [Custom Dashboards](../dashboard/custom-dashboards.md).
+
 ### Destructive Action Approvals
 
-Destructive actions (e.g., actions starting with `delete_`, `reset_`, `replace_`) executed via the `manage_code_ux` tool follow an explicit approval flow to prevent accidental data loss:
+Destructive actions (e.g., actions starting with `delete_`, `reset_`, `replace_`) follow an explicit approval flow to prevent accidental data loss:
 1. The initial call is sent without an `approval` block, or with `approval.confirmed: false`.
 2. The server short-circuits the action, returning an early envelope with `approvalRequired: true` and an explanatory `approvalMessage`.
-3. The agent reviews the message and issues the exact same call again, but with `approval.confirmed: true` added to the payload.
-4. The server executes the operation and returns the `result` block.
+3. The server records a pending approval fingerprint for the normalized tool domain, action, scope identifiers, and payload. Scope identifiers include project, sprint, and task ids when present; settings fingerprints also include the setting path and proposed value.
+4. The agent reviews the message and issues the exact same call again, but with `approval.confirmed: true` added to the payload.
+5. The server executes the operation only when the confirmed call matches the pending fingerprint exactly and the pending approval has not expired. The approval is consumed before execution and cannot be replayed.
+6. A confirmed call with any payload substitution, changed identifier, changed setting path, changed proposed value, meaningful array-order change, or `null` versus missing-field change is rejected with another approval-required response and does not consume the original pending approval.
 
 ### Settings Human Confirmation Gate
 
@@ -139,18 +224,39 @@ All mutating settings actions require a stateful human-confirmation step. This i
 - `replace_sprint_settings`
 - `patch_sprint_setting`
 - `reset_sprint_settings`
+- `apply_settings_bundle` when the bundle contains provider credentials, git tokens, issue-tracker tokens, or login credentials
+- `export_settings_bundle` when `includeSecrets: true` would export provider credentials, git tokens, issue-tracker tokens, or login credentials
 
 Runtime behavior:
 1. The first mutating settings call never changes settings, even if it includes `approval.confirmed: true`.
-2. The server records a pending approval for the exact settings action and normalized payload for 15 minutes.
+2. The server records a pending approval for the exact settings action, scope, setting path, and normalized payload for 15 minutes.
 3. The response returns `approvalRequired: true` with instructions to ask the user for confirmation.
 4. The client must not call the same endpoint again with `approval.confirmed: true` unless the user explicitly confirms the exact change.
-5. After user confirmation, the same action and same payload can be called once with `approval.confirmed: true`; the pending approval is consumed and cannot be reused.
-6. A different settings payload, even for the same setting path, creates a separate pending approval and does not execute.
+5. After user confirmation, the same action and same payload can be called once with `approval.confirmed: true` within 15 minutes; the pending approval is consumed and cannot be reused.
+6. A different settings payload, even for the same setting path, creates a separate pending approval and does not execute. Fingerprints preserve explicit `null`, explicit `undefined`, and array order, while object key order is normalized.
+
+### Settings Synchronization Bundles
+
+`manage_settings` supports settings synchronization through:
+- `export_settings_bundle`
+- `apply_settings_bundle`
+
+Bundles use the existing `SettingsRepository` system, project, and sprint APIs. Applies are normalized through the same sanitizer and resolution helpers used by dashboard-saved settings, so imports do not persist raw unsanitized payloads.
+
+Bundle metadata includes:
+- `schemaVersion: 1`
+- `exportedAt`
+- `includedScopes`, containing `system`, `projects`, and/or `sprints`
+- `fingerprint`, a SHA-256 fingerprint computed from a secret-redacted bundle representation
+- `containsSecrets`
+
+Export defaults to the `system` scope and redacts secret-bearing fields. `includeSecrets: true` may return provider API keys, git tokens, issue-tracker tokens, and login credential markers only after the one-use approval flow succeeds for the exact export payload. Bearer tokens are not generated by export; they appear only if they already exist in an explicitly approved settings payload.
+
+Apply accepts a `bundle` object and optional `scopes` for partial import. Project entries must include `projectId`; sprint entries must include both `projectId` and `sprintId` so sprint overrides can be normalized against the resolved project base. Any bundle marked as containing secrets, or any bundle whose payload includes secret-bearing fields, requires the same one-use approval before persistence.
 
 ### Project Setup Action
 
-`manage_projects` and `manage_code_ux` support project setup:
+`manage_projects` supports project setup with the nested setup request shape used by project creation and dashboard setup:
 
 ```json
 {
@@ -162,19 +268,78 @@ Runtime behavior:
       "agents": true,
       "quicksprints": true,
       "previewScript": true,
-      "ci": true
+      "ci": true,
+      "techstack": true,
+      "docs": true
     }
   }
 }
 ```
 
-The action runs the Project Setup Agent and returns the applied artifact summary, including created agent IDs, created quicksprint template IDs, and written project-relative files.
+For the `setup` action, clients may also send the normalized setup request shape directly on the project payload. The same `options.docs` flag is accepted there:
+
+```json
+{
+  "action": "setup",
+  "projectId": "project-id",
+  "options": {
+    "agents": true,
+    "quicksprints": true,
+    "previewScript": true,
+    "ci": true,
+    "techstack": true,
+    "docs": true
+  }
+}
+```
+
+The deprecated `manage_code_ux` envelope delegates `domain: "projects"` setup calls to the same handler, so it accepts the same nested `setup.options` shape:
+
+```json
+{
+  "domain": "projects",
+  "action": "setup",
+  "payload": {
+    "projectId": "project-id",
+    "setup": {
+      "enabled": true,
+      "options": {
+        "agents": true,
+        "quicksprints": true,
+        "previewScript": true,
+        "ci": true,
+        "techstack": true,
+        "docs": true
+      }
+    }
+  }
+}
+```
+
+It also accepts the normalized setup request shape:
+
+```json
+{
+  "domain": "projects",
+  "action": "setup",
+  "payload": {
+    "projectId": "project-id",
+    "options": {
+      "docs": true
+    }
+  }
+}
+```
+
+The action runs the Project Setup Agent and returns the applied artifact summary, including created agent IDs, created quicksprint template IDs, written project-relative files, `embeddedDocumentIds`, and `embeddedDocumentErrors`. `docs` defaults to `false`; when explicitly enabled, Code UX discovers repository documentation and ingests it through the Knowledge docs library without requiring the setup agent to return document contents. The Knowledge pipeline keeps its existing dedupe, extraction, chunking, embedding, and status behavior, so setup does not imply every document is already `ready`.
+
+Docs embedding is best-effort. Individual file failures are reported as `{ "fileName": "...", "error": "..." }` entries in `embeddedDocumentErrors`; they do not fail the entire setup run or roll back provider-generated setup artifacts.
 
 Dashboard calls can add `background: true` to the HTTP setup request. In that mode Code UX returns the created `invocationId` immediately and the invocation rail becomes the live tracking surface while setup continues.
 
 ### Project Creation Paths
 
-`manage_projects` and `manage_code_ux` project creation use the same initialization path as the dashboard. Git URL projects are cloned into the selected `cloneDir`, or `~/.code-ux/projects/<repo-name>` when `cloneDir` is omitted. `new-remote` project creation treats `cloneDir` as the clone parent directory and stores the project base directory as the single repository checkout root. `new-local` project creation resolves relative `sourceRef` values from the user's home directory and accepts absolute paths selected by the desktop picker without constraining them to the Code UX process working directory.
+`manage_projects` project creation uses the same initialization path as the dashboard. Git URL projects are cloned into the selected `cloneDir`, or `~/.code-ux/projects/<repo-name>` when `cloneDir` is omitted. `new-remote` project creation treats `cloneDir` as the clone parent directory and stores the project base directory as the single repository checkout root. `new-local` project creation resolves relative `sourceRef` values from the user's home directory and accepts absolute paths selected by the desktop picker without constraining them to the Code UX process working directory.
 
 ### Sprint, Task, and Settings Payload Normalization
 
@@ -186,10 +351,303 @@ For payload normalization in management tools, Code UX centralizes parsing behav
 - **Optional Numbers**: Extracted via `parseOptionalNumber`. Validates finiteness and optional min/max constraints.
 - **Optional Enums**: Extracted via `parseOptionalEnum`. Normalizes case and whitespace to match allowed literal types.
 - **Strict Optional Integers and Enums**: Extracted via `parseOptionalIntegerStrict` and `parseOptionalEnumStrict` when a supplied invalid value should be rejected instead of silently ignored. Omitted values still allow action-level defaults.
+- **Required Objects**: Extracted via `parseRequiredObject`. The value must be a non-null object and not an array.
+- **Required Present Values**: Extracted via `parseRequiredPresentValue` for patch-style payloads. The key must be present, but the value may explicitly be `null`; omitted and `undefined` values are distinct from `null` in approval fingerprints and patch application.
 - **Validation Errors**: Parser failures throw `ManagementValidationError`, which the management tool handler serializes as the standardized `result.status: "error"` envelope with `errorType: "validation"` and `isError: true`.
 
 
-The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_settings`) and the legacy `manage_code_ux` dispatcher share the same action handlers.
+The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_node_flows`, `manage_settings`) share the same action handlers.
+
+## Node Flow Tools
+
+`manage_node_flows` exposes project node workflows through the project-manager MCP surface. It supports `list`, `get`, `create`, `update`, `delete`, `validate`, `run`, `list_runs`, `get_run`, `attach_to_agent`, and `detach_from_agent`.
+
+Node-flow management always delegates graph validation and persistence to `NodeFlowService`; `run` delegates execution through the configured node-flow runtime service. Create and update calls reject malformed graph specs before repository writes. `delete` uses the standard stateful approval handshake.
+
+The graph payload is the shared `NodeFlowGraph` contract:
+
+- `nodes`: `{ id, type, title, description?, position?, widgetSchema?, data? }`
+- `edges`: `{ id?, fromNodeId, toNodeId, fromHandle?, toHandle? }`
+- `inputSchema`: optional graph-level widget schema for run input
+- `metadata`: optional JSON object
+
+Validation checks graph shape, unique node ids, edge endpoints, acyclicity, JSON-safe node data, widget schema fields, select options, finite numeric constraints, and default values that match field types. Runtime support is narrower than graph storage: executable node types are currently `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, and `output`.
+
+Agents should build Code UX-adapted flows from structured graph specs instead of cloning n8n workflows one-to-one. A good flow exposes the values an operator or agent should edit, keeps runtime behavior repeatable, names nodes by Code UX behavior, and validates every required field before saving. MCP callers can provide `widgets` as a graph-level `{ fields: [...] }` schema or as node-id keys mapped to each node's `widgetSchema`.
+
+Secret-safe widget guidance:
+
+- use `secretRef` for credential references, not raw secret values
+- do not put API keys, bearer tokens, cookies, passwords, or private headers in `graph.metadata`, `node.data`, widget defaults, run `input`, or examples
+- use placeholder references such as `settings.provider.default` or `secret://service/token`
+- treat MCP responses as redacted summaries; flow and run responses mask secret-shaped graph data, inputs, trigger payloads, node payloads, and outputs before returning them through MCP
+
+Attach a flow as an agent skill:
+
+```json
+{
+  "action": "attach_to_agent",
+  "flowId": "flow-123",
+  "agentPresetId": "agent-123",
+  "skillAlias": "Review automation",
+  "description": "Runs the reusable review node flow."
+}
+```
+
+Run a flow:
+
+```json
+{
+  "action": "run",
+  "projectId": "project-123",
+  "flowId": "flow-123",
+  "input": {
+    "prompt": "Review the current diff"
+  }
+}
+```
+
+Create a small executable flow with graph-level run widgets:
+
+```json
+{
+  "action": "create",
+  "projectId": "project-123",
+  "name": "Daily API Check",
+  "description": "Fetches a status endpoint and returns a compact result.",
+  "graph": {
+    "nodes": [
+      { "id": "input", "type": "input", "title": "Run input" },
+      {
+        "id": "request",
+        "type": "http_request",
+        "title": "Fetch status",
+        "data": {
+          "method": "GET",
+          "url": "{{ input.statusUrl }}",
+          "headers": { "authorization": "Bearer {{ input.apiTokenRef }}" },
+          "responsePath": "status"
+        }
+      },
+      {
+        "id": "output",
+        "type": "output",
+        "title": "Return status",
+        "data": { "fields": { "status": "{{ nodes.request.extracted }}" } }
+      }
+    ],
+    "edges": [
+      { "fromNodeId": "input", "toNodeId": "request" },
+      { "fromNodeId": "request", "toNodeId": "output" }
+    ]
+  },
+  "widgets": {
+    "fields": [
+      { "id": "statusUrl", "type": "text", "label": "Status URL", "required": true },
+      { "id": "apiTokenRef", "type": "secretRef", "label": "API token reference", "required": true }
+    ]
+  }
+}
+```
+
+Use node-id keyed widgets when node configuration should stay editable in the dashboard inspector:
+
+```json
+{
+  "action": "update",
+  "flowId": "flow-123",
+  "graph": {
+    "nodes": [
+      { "id": "request", "type": "http_request", "title": "Fetch status" }
+    ],
+    "edges": []
+  },
+  "widgets": {
+    "request": {
+      "fields": [
+        {
+          "id": "method",
+          "type": "select",
+          "label": "HTTP method",
+          "defaultValue": "GET",
+          "options": [
+            { "label": "GET", "value": "GET" },
+            { "label": "POST", "value": "POST" }
+          ]
+        },
+        { "id": "url", "type": "text", "label": "URL", "required": true }
+      ]
+    }
+  }
+}
+```
+
+Validate a draft graph without saving:
+
+```json
+{
+  "action": "validate",
+  "projectId": "project-123",
+  "graph": {
+    "nodes": [
+      { "id": "input", "type": "input", "title": "Run input" }
+    ],
+    "edges": []
+  }
+}
+```
+
+Inspect runs:
+
+```json
+{ "action": "list_runs", "flowId": "flow-123" }
+```
+
+```json
+{ "action": "get_run", "runId": "run-123" }
+```
+
+Detach a flow from an agent:
+
+```json
+{
+  "action": "detach_from_agent",
+  "flowId": "flow-123",
+  "agentPresetId": "agent-123"
+}
+```
+
+### `manage_skills` persistent skill actions
+
+`manage_skills` is the management surface for persistent project skill storage. It is available in the `agents_memory` category for project-manager clients and for agents with explicit Code UX tool access. It is separate from workspace files: callers save skill markdown through the MCP payload, and Code UX writes the durable skill rows and embeddings through `SkillService`.
+
+Available actions:
+- `authoring_prompt`: returns the comprehensive skill-authoring prompt, including markdown/frontmatter format and the workflow for saving skills through `manage_skills` instead of writing into the workspace.
+- `list_storages`: requires `projectId`; returns project-owned skill storages.
+- `get_storage`: requires `projectId` and `storageId`; returns one project-owned skill storage.
+- `create_storage`: requires `projectId` and `name`; accepts `description` and `storageKind` (`project` or `shared`).
+- `update_storage`: requires `projectId` and `storageId`; accepts `name`, `description`, and `storageKind`.
+- `delete_storage`: requires `projectId` and `storageId`; approval-gated. Deletes the storage, contained skills, embeddings, and agent attachments.
+- `reset_storage`: requires `projectId` and `storageId`; approval-gated. Deletes skills and embeddings in the storage while keeping the storage and attachments.
+- `list_agent_storages`: requires `projectId` and `agentPresetId`; returns the agent's enabled storage attachments and attached storages.
+- `attach_storage`: requires `projectId`, `agentPresetId`, and `storageId`; attaches a project-owned storage to a project-owned agent preset.
+- `detach_storage`: requires `projectId`, `agentPresetId`, and `storageId`; removes the attachment.
+- `list_skills`: requires `projectId` and `storageId`; accepts `limit`; returns concise skill summaries, not full markdown bodies.
+- `get_skill`: requires `projectId` and `skillId`; accepts `includeContent`. By default the response is concise; set `includeContent: true` only when the caller needs the full stored body.
+- `create_skill` and `import_markdown`: require `projectId`, `storageId`, and `markdown`; accept `sourceType` (`manual`, `imported`, or `generated`) and nullable `sourceRef`.
+- `update_skill`: requires `projectId`, `storageId`, `skillId`, and `markdown`; accepts `sourceType` and nullable `sourceRef`. The supplied `storageId` must match the skill's current storage because updates edit skills in place; moving a skill between storages requires a future explicit move operation. When `sourceType` or `sourceRef` are omitted, the existing skill provenance is preserved.
+- `delete_skill`: requires `projectId` and `skillId`; approval-gated. Deletes the stored markdown and embeddings.
+- `export_markdown`: requires `projectId` and `skillId`; returns the full reconstructed markdown with frontmatter.
+
+Skill markdown uses YAML-like frontmatter followed by the instruction body:
+
+```md
+---
+title: Review Discipline
+description: Keep review findings concrete.
+tags: ["review", "quality"]
+appliesTo: ["src/services", "tests/backend"]
+version: 1.0.0
+---
+
+Focus on bugs, regressions, missing tests, and rollback risk.
+```
+
+The parser supports scalar frontmatter fields and simple list forms for `tags` and `appliesTo`. The body is the authoritative instruction content. Metadata is stored in dedicated columns so `export_markdown` can reconstruct the markdown.
+
+Updating a skill replaces its markdown-derived metadata and instruction body while keeping the skill in its current storage. The update path preserves existing provenance (`sourceType` and `sourceRef`) unless the caller explicitly supplies replacement source fields.
+
+Create or import example:
+
+```json
+{
+  "action": "import_markdown",
+  "projectId": "project-123",
+  "storageId": "skills-review",
+  "markdown": "---\ntitle: Review Discipline\ndescription: Keep review findings concrete.\ntags: [\"review\"]\n---\n\nFocus on bugs, regressions, and missing tests."
+}
+```
+
+Approval example for destructive skill deletion:
+
+```json
+{
+  "action": "delete_skill",
+  "projectId": "project-123",
+  "skillId": "skill-123"
+}
+```
+
+The first call returns `approvalRequired: true`. After human approval, repeat the same request with:
+
+```json
+{
+  "action": "delete_skill",
+  "projectId": "project-123",
+  "skillId": "skill-123",
+  "approval": { "confirmed": true }
+}
+```
+
+Project isolation is enforced below the MCP handler by `SkillService` and `SkillRepository`. Storage, skill, embedding, and agent-attachment operations verify the supplied `projectId`; IDs from another project are rejected instead of being read or mutated.
+
+### `search_skills` retrieval tool
+
+`search_skills` is the retrieval-focused skill surface. It can be exposed to agents independently from `manage_skills` through per-agent MCP tool filtering. This lets an agent retrieve durable skill guidance without granting it storage creation, mutation, attachment management, export, delete, or reset capabilities.
+
+Persistent skill runtime behavior is documented with agent preset storage ownership in [Agent Preset Foundation](../architecture/agent-preset-foundation.md#data-model) and the Settings/Agents UI contract in [Agents Design System](../dashboard/design-system-agents.md#persistent-skills). The integration regression in `tests/backend/integration/persistent-skills-runtime.test.ts` covers the MCP retrieval contract together with repository attachments and provider runtime injection.
+
+Schema:
+
+```json
+{
+  "projectId": "project-123",
+  "query": "review pull request risk checklist",
+  "agentPresetId": "agent-123",
+  "storageId": "skills-review",
+  "limit": 5,
+  "minSimilarity": 0.3
+}
+```
+
+Fields:
+- `projectId` and non-blank `query` are required.
+- `agentPresetId` is optional. When supplied without `storageId`, only storages attached to that project-owned agent are searched.
+- `storageId` is optional. When supplied, search is limited to that project-owned storage.
+- `limit` defaults to 10 and is capped by the handler.
+- `minSimilarity` is optional and must be between 0 and 1 when supplied.
+
+Response shape:
+
+```json
+{
+  "result": {
+    "results": [
+      {
+        "similarity": 0.91,
+        "skill": {
+          "id": "skill-123",
+          "projectId": "project-123",
+          "storageId": "skills-review",
+          "name": "Review Discipline",
+          "description": "Keep review findings concrete.",
+          "sourceType": "manual",
+          "sourceRef": null,
+          "tags": ["review"],
+          "appliesTo": ["src/services"],
+          "version": "1.0.0",
+          "contentHash": "sha256...",
+          "createdAt": "2026-07-07T00:00:00.000Z",
+          "updatedAt": "2026-07-07T00:00:00.000Z",
+          "summary": "Focus on bugs, regressions, missing tests, and rollback risk."
+        }
+      }
+    ]
+  }
+}
+```
+
+Search responses intentionally return concise summaries. To retrieve a complete stored skill, call `manage_skills` with `export_markdown`, or call `get_skill` with `includeContent: true` when the caller has management access.
 
 ### `manage_memory` claim actions
 
@@ -254,15 +712,23 @@ For sprint create/update calls:
 
 ### `manage_sprints import_issues`
 
-`manage_sprints` action `import_issues` is the MCP contract for Jira, GitHub, and GitLab issue importer access. Internal MCP clients use it for search-only discovery, assigned-work searches, explicit ticket imports, linked sprint issue attachment, and optional planning after import.
+`manage_sprints` action `import_issues` is the MCP contract for GitHub, GitLab, Jira, Notion, Asana, Linear, Miro, Lucid, Figma/FigJam, and Mural importer access. Internal MCP clients use it for search-only discovery, assigned-work searches, explicit ticket or external-object imports, linked sprint issue attachment, and optional planning after import.
 
 Provider requirements:
 - GitHub imports require a saved effective `git.githubToken` in system or project settings.
 - GitLab imports require a saved effective `git.gitlabToken` in system or project settings.
 - Jira imports require Jira integration settings: host/site URL, account email, API token, and usually a default project key.
+- Notion imports require a saved effective `notion.apiToken`. `databaseId` can narrow page search or explicitly import a database.
+- Asana imports require a saved effective `asana.apiToken` plus either `workspaceId` for workspace task search or `providerProjectId` / `asana.projectId` for project task fallback.
+- Linear imports require a saved effective `linear.apiToken`. `teamId`, `teamKey`, and `providerProjectId` can narrow issue search when configured or supplied.
+- Miro imports require a saved effective `miro.apiToken`. `boardId` identifies a board for board item imports, and `itemTypes` can narrow item types.
+- Lucid imports require a saved effective `lucid.apiToken`. `documentId` identifies a Lucidchart/Lucidspark document; `search` can discover documents.
+- Figma/FigJam imports require a saved effective `figma.apiToken` plus `fileKey` or explicit file keys in `externalIds`.
+- Mural imports require a saved effective `mural.apiToken` plus `workspaceId` for workspace mural search or `muralId` / `mural.boardId` for a specific mural. Mural API support is beta/limited and may return only metadata and readable content available to the token.
 - Importer workflows do not fall back to local CLI authentication. A locally authenticated `gh`, `glab`, or Git remote is not enough for MCP issue search, explicit import, sprint attachment, or planning import paths.
+- External imports are read/attach only. Code UX does not transition, complete, close, write back, comment on, or otherwise mutate imported work items, boards, documents, files, or murals.
 
-Search/import callers can provide `provider` (`github`, `gitlab`, or `jira`), `repository`, `hostDomain`, `projectKey`, `search`, `state`, `status`, `labels`, `assignee`, `assigneeText`, `issueKeys`, `issueNumbers`, `issueRefs`, `includeConversation`, `limit`, and optional sprint attachment fields. `sprintId` and `attachToSprint` represent sprint attachment intent. `planAfterImport`, `autoStart`, `planningAgentPresetId`, `replan`, and `overrides` represent optional planning intent after import.
+Search/import callers can provide `provider` (`github`, `gitlab`, `jira`, `notion`, `asana`, `linear`, `miro`, `lucid`, `figma`, or `mural`), `repository`, `hostDomain`, `workspaceId`, `providerProjectId`, `externalProjectId`, `asanaProjectId`, `linearProjectId`, `teamId`, `teamKey`, `databaseId`, `boardId`, `documentId`, `fileKey`, `muralId`, `itemTypes`, `projectKey`, `search`, `state`, `status`, `labels`, `assignee`, `assigneeText`, `issueKeys`, `issueNumbers`, `issueRefs`, `externalIds`, `includeConversation`, `limit`, and optional sprint attachment fields. `sprintId` and `attachToSprint` represent sprint attachment intent. `planAfterImport`, `autoStart`, `planningAgentPresetId`, `replan`, and `overrides` represent optional planning intent after import.
 
 Search-only GitHub example:
 
@@ -308,6 +774,100 @@ Assigned-to-me Jira example:
 }
 ```
 
+Search-only Notion example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "notion",
+  "databaseId": "notion-database-id",
+  "search": "roadmap acceptance criteria",
+  "limit": 10
+}
+```
+
+Search-only Asana example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "asana",
+  "workspaceId": "asana-workspace-gid",
+  "providerProjectId": "asana-project-gid",
+  "search": "checkout import",
+  "includeConversation": true,
+  "limit": 20
+}
+```
+
+Search-only Linear example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "linear",
+  "teamKey": "ENG",
+  "state": "In Progress",
+  "labels": ["import"],
+  "search": "checkout",
+  "includeConversation": true,
+  "limit": 20
+}
+```
+
+Miro board item example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "miro",
+  "boardId": "miro-board-id",
+  "itemTypes": ["sticky_note", "text"],
+  "limit": 25
+}
+```
+
+Lucid document search example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "lucid",
+  "search": "architecture",
+  "limit": 10
+}
+```
+
+Figma/FigJam file example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "figma",
+  "fileKey": "figma-file-key",
+  "includeConversation": true
+}
+```
+
+Mural workspace example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "mural",
+  "workspaceId": "mural-workspace-id",
+  "search": "planning",
+  "limit": 10
+}
+```
+
 Explicit Jira key example:
 
 ```json
@@ -345,6 +905,30 @@ Explicit GitHub issue number example:
   "repository": "codeux-ai/codeux",
   "hostDomain": "github.com",
   "issueNumbers": [42],
+  "includeConversation": true
+}
+```
+
+Explicit external object example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "notion",
+  "externalIds": ["notion-page-id"],
+  "includeConversation": false
+}
+```
+
+Explicit canvas object example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "figma",
+  "fileKey": "figma-file-key",
   "includeConversation": true
 }
 ```
@@ -389,12 +973,13 @@ Attach imported issues and run planning after the sprint goal is enriched:
 
 Result shape:
 - Search mode returns `mode: "search"` and populates `searchedIssues` with lightweight normalized issue summaries.
-- Explicit-reference mode returns `mode: "explicit"` and populates `importedContexts` with prompt contexts that can include full issue body and conversation text.
+- Explicit-reference mode returns `mode: "explicit"` and populates `importedContexts` with prompt contexts that can include full issue body and conversation text. For Notion, Asana, Linear, and canvas providers, explicit imports use `externalIds` or provider-specific identifiers such as `databaseId`, `boardId`, `documentId`, `fileKey`, and `muralId`.
 - When `sprintId` is supplied and `attachToSprint` is not `false`, the response includes persisted `linkedIssues` metadata records and the updated `sprint`.
 - When `planAfterImport` is `true`, the response includes the optional `planning` result from sprint planning. `planAfterImport` requires `sprintId` because planning runs against an existing sprint.
 
 Persistence and prompt behavior:
 - `issueKeys` and Jira-style refs such as `OPS-123` resolve through Jira. `issueNumbers` and refs such as `#42` or `!42` resolve through GitHub/GitLab when `repository` and `hostDomain` are provided or inferable from the project.
+- `externalIds` resolve through Notion page/database fetches, Asana task fetches, Linear issue fetches, Miro board/item fetches, Lucid document content fetches, Figma/FigJam file fetches, or Mural metadata/content fetches. Search results and explicit contexts normalize to linked-source records with `externalId`, `sourceKind`, stable display keys, source URL, preview text, metadata, and prompt markdown when readable provider content is available.
 - Full issue body and comment/conversation text are merged into the sprint goal under `## Linked Issues` before planning so the Planning agent receives the complete context.
 - Linked issue persistence stores metadata only: provider, repository or project key, issue key/number, title, labels, assignees, status, source URL, and related tracking fields. Full remote issue bodies and comments remain prompt-only data and are not stored in linked issue rows.
 - Issue search and import are not destructive actions. Sprint deletion remains approval-gated.
@@ -413,15 +998,82 @@ For quicksprint calls:
 - `delete_template` requires approval confirmation. Custom templates are removed from the project template directory; built-in/default templates are hidden for the project by writing a local tombstone marker instead of deleting shared bundled assets.
 
 For scheduler calls:
-- `manage_scheduler` supports `list`, `create`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `update`, `delete`, and `run_due`.
-- Generic `create` requires `targetType: "sprint" | "quicksprint" | "chat"`.
+- `manage_scheduler` supports `list`, `create`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `schedule_node_flow`, `update`, `delete`, and `run_due`.
+- Generic `create` requires `targetType: "sprint" | "quicksprint" | "chat" | "node_flow"`.
 - The `schedule_*` aliases infer the target type and accept flattened target fields.
 - Recurrence `frequency` accepts `minutely`, `hourly`, `daily`, `weekly`, and `monthly`; the dashboard renders `minutely` as `Minutes` and the matching recurrence summaries use labels such as `Every minute` and `Every 15 minutes`.
 - Minute recurrence uses the same UTC scheduler math as longer intervals, so the normalized rule advances `nextRunAt` and expands occurrences exactly like other frequencies once the minute literal has been parsed.
 - Scheduled quicksprints use the same `taskCount` number or numeric-string normalization as direct quicksprints.
 - Scheduled chat messages use `bodyMarkdown`, optional `threadId`, optional `connectionId`, and optional `title`. When due, the scheduler posts through the same chat runtime used by dashboard conversations.
+- Scheduled node flows use `flowId`, optional JSON object `input`, and optional `flowVersion`, either flattened or nested under `nodeFlowTarget`. When due, the scheduler calls the node-flow runtime with scheduler trigger metadata and only advances the entry after the runtime returns.
 - `update` supports pausing and resuming entries via the `status` field. Resuming a `paused` entry to `scheduled` recomputes the next run time to the next future occurrence, preventing immediate execution of missed runs. Pause/resume acts as automation gating and does not manually trigger the target.
 - `delete` requires approval confirmation.
+
+For preview calls:
+- `manage_preview` supports `list_sessions`, `start_session`, `rebuild_session`, `stop_session`, `remove_session`, `get_logs`, `get_url`, `get_script`, and `update_script`.
+- `remove_session` requires approval confirmation.
+
+For external chat provider calls:
+- `manage_chat_providers` supports `list_provider_definitions`, `list_connections`, `get_connection`, `create_connection`, `update_connection`, `delete_connection`, `list_channel_bindings`, `create_channel_binding`, `update_channel_binding`, `delete_channel_binding`, and `list_outbound_deliveries`.
+- Supported provider kinds are `whatsapp`, `imessage`, `telegram`, `slack`, `microsoft-teams`, and `discord`, delivered through the implemented `managed_bridge`, `webhook`, or `native_bridge` bridge contracts. The tool does not claim direct official API integration with those providers.
+- Connection responses return redacted credential metadata and generated ingress URL guidance; raw `secrets` are not exposed in success responses, validation errors, or approval envelopes.
+- `delete_connection` and `delete_channel_binding` require approval confirmation.
+- `update_connection` requires a one-use approval handshake before replacing a non-empty `secrets` payload. The preflight response is bound to a redacted payload plus secret hash and does not echo secret values.
+- Channel bindings attach an external channel to a project with optional routing hints, inbound/outbound flags, and `suppressRichWidgets`. Multiple projects may share one external channel; runtime ingress uses selectors and records `disambiguation_needed` instead of guessing when no selector chooses exactly one project.
+- `list_outbound_deliveries` is read-only delivery-state inspection. It can filter by provider connection, channel binding, external channel, delivery status, and limit. Delivery statuses include `pending`, `sending`, `delivered`, `retryable_failure`, `processed`, `failed`, `duplicate`, and `cancelled`.
+- The management surface only configures providers, bindings, setup definitions, ingress URL guidance, and outbound delivery inspection. Authenticated ingress and outbound sending remain runtime services outside this management contract.
+
+Create a webhook-backed connection:
+
+```json
+{
+  "action": "create_connection",
+  "providerKind": "slack",
+  "displayName": "Team chat bridge",
+  "bridgeMode": "webhook",
+  "status": "active",
+  "enabled": true,
+  "setup": {
+    "eventsUrl": "https://bridge.example.test/events",
+    "appId": "app-generic"
+  },
+  "secrets": {
+    "signingSecret": "replace-with-secret",
+    "botToken": "replace-with-token"
+  }
+}
+```
+
+Bind a shared channel to a project:
+
+```json
+{
+  "action": "create_channel_binding",
+  "providerConnectionId": "connection-generic",
+  "externalChannelId": "channel-shared",
+  "externalChannelName": "Shared engineering channel",
+  "projectId": "project-alpha",
+  "routingHints": {
+    "projectSelectorPrefix": "alpha",
+    "aliases": ["alpha", "project-alpha"]
+  },
+  "inboundEnabled": true,
+  "outboundEnabled": true,
+  "suppressRichWidgets": true
+}
+```
+
+Inspect retryable outbound delivery state:
+
+```json
+{
+  "action": "list_outbound_deliveries",
+  "providerConnectionId": "connection-generic",
+  "externalChannelId": "channel-shared",
+  "deliveryStatus": "retryable_failure",
+  "limit": 25
+}
+```
 
 For settings patch calls, `value` may be any JSON value, including strings, booleans, numbers, `null`, arrays, or objects.
 Settings patch and replacement calls still require the stateful human-confirmation gate described above.

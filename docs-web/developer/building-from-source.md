@@ -6,8 +6,8 @@ This page covers cloning, building, running, and contributing.
 
 ## Prerequisites
 
-- **Node.js 22 LTS+** — The project targets Node 22 in CI and uses ES2022 / NodeNext modules.
-- **pnpm 10.33+** — The package manager declared in `packageManager`.
+- **Node.js >=22** — The project targets Node 22 in CI and uses ES2022 / NodeNext modules.
+- **pnpm 10.33.0** — The package manager declared in `packageManager`.
 - **Git ≥ 2.30**.
 - **(Optional) Docker** — for testing virtual workers in DOCKER mode and sprint preview browsers.
 
@@ -64,7 +64,13 @@ Without rebuilding, using `ts-node`:
 pnpm run dev
 ```
 
-This boots `src/index.ts` directly. Useful for iteration on the server side.
+This boots the server and Vite dashboard in watch mode side-by-side using `scripts/dev.mjs`.
+
+To boot just the server from source without the dashboard watcher:
+
+```bash
+pnpm run dev:server-only
+```
 
 For the dashboard with HMR:
 
@@ -72,7 +78,7 @@ For the dashboard with HMR:
 pnpm run dev:dashboard
 ```
 
-This starts Vite at the dashboard port with hot module reload. The dashboard expects an API server at the same origin — typically you also run `pnpm run dev` (or a built server) in another terminal.
+This starts Vite at the dashboard port (default `4444`) with hot module reload. The dashboard expects an API server at the same origin — typically you also run `pnpm run dev:server-only` (or a built server) in another terminal.
 
 ## Run after build
 
@@ -94,6 +100,7 @@ codeux --help
 ```
 src/
 ├── index.ts                  # CLI entry
+├── electron/                 # desktop shell entrypoint and policies (does not own orchestration)
 ├── app/                      # lifecycle, dependency factory
 ├── config/                   # CLI flag + env parsing
 ├── contracts/                # shared types, MCP tool definitions
@@ -104,11 +111,11 @@ src/
 ├── integrations/             # Jules API client
 ├── mcp/                      # MCP server, request router, tool handlers
 ├── repositories/             # settings, agents, memory, project
-├── server/                   # Express dashboard server, routes, websocket
+├── server/                   # Express dashboard server (default port 4444), routes, websocket
 ├── services/                 # virtual-worker-service, sprint-markdown-service, etc.
 ├── shared/                   # config search paths, common utils
 ├── sprint/                   # cycle steps (start-ready-tasks, etc.)
-└── worker/                   # worker-mode entry (reserved)
+└── worker/                   # worker-host mode entrypoint (separate from main server)
 
 dashboard/
 ├── index.html
@@ -143,14 +150,18 @@ tests/
 pnpm run typecheck             # tsc --noEmit (server)
 pnpm run typecheck:dashboard   # tsc --noEmit (dashboard)
 pnpm run lint                  # alias for typecheck (no eslint shipped)
-pnpm test                      # vitest run (full suite)
+pnpm run test                  # vitest run (full suite)
+pnpm run test:watch            # vitest watch mode
 pnpm run test:backend          # backend only
 pnpm run test:dashboard        # dashboard only
 pnpm run test:coverage         # full coverage report
 pnpm run test:backend:coverage # backend coverage with threshold gate
-pnpm run ci                    # local CI: lint + backend coverage + dashboard tests + build
+pnpm run ci                    # local CI: quality:guardrails -> audit -> lint -> test:backend:coverage -> test:dashboard -> build
 pnpm run audit                 # pnpm audit --audit-level=high
 pnpm run smoke-test            # node dist/index.js --help
+pnpm run dev:server-only       # boot just the server from source
+# Electron helper scripts:
+# electron:generate-icons, electron:prepare-deps, electron:dev, electron:pack, electron:dist, electron:dist:linux, electron:dist:mac, electron:dist:win, electron:benchmark:runtime, electron:benchmark:win, electron:install-deps
 ```
 
 ## Contributing workflow
@@ -184,6 +195,6 @@ The CI tag pipeline runs the full build, runs the audit, and publishes to npm.
 
 ## Development tips
 
-- Use `pnpm run dev` + `pnpm run dev:dashboard` in two terminals for the fastest iteration loop.
+- Use `pnpm run dev` in one terminal (which starts both the server and dashboard watcher) for the fastest iteration loop.
 - The MCP stdio server only activates if stdin is not a TTY. To exercise it locally, pipe a JSON-RPC request: `echo '{"jsonrpc":"2.0","id":1,"method":"initialize"}' | node dist/index.js`.
-- For one-off MCP integration tests, the `--mcp-https` flag plus `curl` is the simplest harness.
+- For one-off MCP HTTP integration tests, the legacy `--mcp-https` flag plus `curl` is the simplest harness.

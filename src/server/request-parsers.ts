@@ -1,4 +1,6 @@
 import type {
+  HeaderTokenThroughputQuery,
+  HeaderTokenThroughputWindow,
   ProjectStatsQuery,
   ProjectStatsWindow,
 } from "../contracts/app-types.js";
@@ -25,9 +27,103 @@ import type {
   UpdateQuicksprintTemplateInput,
   QuicksprintExecutionInput,
 } from "../contracts/quicksprint-types.js";
+import type {
+  ChatProviderBridgeMode,
+  ChatProviderConnectionStatus,
+  ChatProviderKind,
+  ChatProviderRoutingHints,
+  ChatProviderSecretConfig,
+  ChatProviderSetupConfig,
+  CreateChatProviderChannelBindingInput,
+  CreateChatProviderConnectionInput,
+  ExternalChannelMetadata,
+  UpdateChatProviderChannelBindingInput,
+  UpdateChatProviderConnectionInput,
+} from "../contracts/chat-provider-types.js";
+import { CHAT_PROVIDER_SETUP_SCHEMAS, getChatProviderSetupSchema } from "../contracts/chat-provider-types.js";
 import { mergePromptWithLinkedIssues } from "../services/linked-issue-prompt-markdown.js";
 
+export const DASHBOARD_DEFAULT_JSON_BODY_LIMIT = "1mb";
+export const DASHBOARD_LARGE_SETTINGS_JSON_BODY_LIMIT = "25mb";
+
+export type DashboardJsonBodyLimit = "default" | "large";
+
+const JSON_MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+export function isDashboardJsonMutationMethod(method: string | undefined): boolean {
+  return JSON_MUTATION_METHODS.has((method || "").toUpperCase());
+}
+
+export function isDashboardRuntimeDataPath(pathname: string): boolean {
+  return pathname.startsWith("/api/")
+    || pathname === "/health"
+    || pathname === "/ready";
+}
+
+export function isDashboardPreviewProxyPath(pathname: string): boolean {
+  return (pathname.startsWith("/api/browser/sessions/") && pathname.includes("/proxy"))
+    || (pathname.startsWith("/api/custom-dashboard-validations/") && pathname.includes("/proxy"))
+    || (pathname.startsWith("/api/custom-dashboards/validation-sessions/") && pathname.includes("/proxy"));
+}
+
+export function isDashboardKnowledgeUploadPath(pathname: string): boolean {
+  return /^\/api\/projects\/[^/]+\/knowledge\/documents\/upload$/.test(pathname);
+}
+
+export function isDashboardSpeechTranscriptionUploadPath(pathname: string): boolean {
+  return pathname === "/api/speech/transcriptions";
+}
+
+export function isDashboardLargeSettingsJsonPath(method: string | undefined, pathname: string): boolean {
+  if ((method || "").toUpperCase() !== "PUT") {
+    return false;
+  }
+  return pathname === "/api/system-settings"
+    || /^\/api\/projects\/[^/]+\/settings$/.test(pathname)
+    || /^\/api\/sprints\/[^/]+\/settings$/.test(pathname);
+}
+
+export function getDashboardJsonBodyLimit(method: string | undefined, pathname: string): DashboardJsonBodyLimit | null {
+  if (!isDashboardRuntimeDataPath(pathname)
+    || !isDashboardJsonMutationMethod(method)
+    || isDashboardPreviewProxyPath(pathname)
+    || isDashboardKnowledgeUploadPath(pathname)
+    || isDashboardSpeechTranscriptionUploadPath(pathname)) {
+    return null;
+  }
+  return isDashboardLargeSettingsJsonPath(method, pathname) ? "large" : "default";
+}
+
+export function isSupportedDashboardJsonContentType(contentType: string | undefined): boolean {
+  const mediaType = (contentType || "").split(";")[0]?.trim().toLowerCase();
+  return mediaType === "application/json" || Boolean(mediaType?.endsWith("+json"));
+}
+
 // Validation Helpers
+
+export interface DashboardValidationIssue {
+  field: string;
+  code: string;
+  message: string;
+}
+
+export class DashboardValidationError extends Error {
+  readonly details: DashboardValidationIssue[];
+
+  constructor(message: string, details: DashboardValidationIssue[]) {
+    super(message);
+    this.name = "ValidationError";
+    this.details = details;
+  }
+}
+
+function validationIssue(field: string, code: string, message: string): DashboardValidationIssue {
+  return { field, code, message };
+}
+
+function throwValidation(issue: DashboardValidationIssue): never {
+  throw new DashboardValidationError(issue.message, [issue]);
+}
 
 function parseEnum<T extends string>(value: unknown, allowedValues: T[], fieldName: string): T | undefined {
   if (value === undefined || value === null) return undefined;
@@ -70,6 +166,269 @@ export function parseOptionalBoolean(value: unknown, fieldName: string = "field"
   throw new Error(`Invalid boolean value for ${fieldName}.`);
 }
 
+function requireObjectBody(body: unknown): Record<string, unknown> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Invalid input: body must be an object");
+  }
+  return body as Record<string, unknown>;
+}
+
+function parseStrictBoolean(value: unknown, fieldName: string): boolean | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== "boolean") {
+    throwValidation(validationIssue(fieldName, "invalid_boolean", `${fieldName} must be a boolean.`));
+  }
+  return value;
+}
+
+function parseRequiredChatProviderString(value: unknown, fieldName: string): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throwValidation(validationIssue(fieldName, "required", `Missing or empty required field: ${fieldName}`));
+  }
+  return value.trim();
+}
+
+function parseOptionalNullableChatProviderString(value: unknown, fieldName: string): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+  if (typeof value !== "string") {
+    throwValidation(validationIssue(fieldName, "invalid_string", `${fieldName} must be a string or null.`));
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function parseOptionalChatProviderString(value: unknown, fieldName: string): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== "string") {
+    throwValidation(validationIssue(fieldName, "invalid_string", `${fieldName} must be a string.`));
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function parseJsonRecordField<T extends Record<string, unknown>>(
+  value: unknown,
+  fieldName: string,
+  options: { nullable: true },
+): T | null | undefined;
+function parseJsonRecordField<T extends Record<string, unknown>>(
+  value: unknown,
+  fieldName: string,
+  options?: { nullable?: false },
+): T | undefined;
+function parseJsonRecordField<T extends Record<string, unknown>>(
+  value: unknown,
+  fieldName: string,
+  options: { nullable?: boolean } = {},
+): T | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    if (options.nullable) {
+      return null;
+    }
+    throwValidation(validationIssue(fieldName, "invalid_object", `${fieldName} must be an object.`));
+  }
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throwValidation(validationIssue(fieldName, "invalid_object", `${fieldName} must be an object.`));
+  }
+  return value as T;
+}
+
+const CHAT_PROVIDER_KINDS = CHAT_PROVIDER_SETUP_SCHEMAS.map((schema) => schema.kind);
+const CHAT_PROVIDER_CONNECTION_STATUSES: ChatProviderConnectionStatus[] = ["draft", "active", "disabled", "error"];
+
+export function parseChatProviderKind(value: unknown, fieldName = "providerKind"): ChatProviderKind | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  if (typeof value !== "string" || !CHAT_PROVIDER_KINDS.includes(value as ChatProviderKind)) {
+    throwValidation(validationIssue(fieldName, "unsupported_provider_kind", `Unsupported chat provider kind: ${String(value)}`));
+  }
+  return value as ChatProviderKind;
+}
+
+function requireChatProviderKind(value: unknown, fieldName = "providerKind"): ChatProviderKind {
+  const providerKind = parseChatProviderKind(value, fieldName);
+  if (!providerKind) {
+    throwValidation(validationIssue(fieldName, "required", `Missing or empty required field: ${fieldName}`));
+  }
+  return providerKind;
+}
+
+function parseChatProviderStatus(value: unknown): ChatProviderConnectionStatus | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  if (typeof value !== "string" || !CHAT_PROVIDER_CONNECTION_STATUSES.includes(value as ChatProviderConnectionStatus)) {
+    throwValidation(validationIssue("status", "unsupported_status", `Unsupported chat provider connection status: ${String(value)}`));
+  }
+  return value as ChatProviderConnectionStatus;
+}
+
+function parseChatProviderBridgeMode(providerKind: ChatProviderKind, value: unknown): ChatProviderBridgeMode | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  const schema = getChatProviderSetupSchema(providerKind);
+  if (typeof value !== "string" || !schema.bridgeModes.some((bridge) => bridge.mode === value)) {
+    throwValidation(validationIssue("bridgeMode", "unsupported_bridge_mode", `Unsupported bridge mode for ${providerKind}: ${String(value)}`));
+  }
+  return value as ChatProviderBridgeMode;
+}
+
+function resolveChatProviderBridgeMode(providerKind: ChatProviderKind, value: unknown): ChatProviderBridgeMode {
+  return parseChatProviderBridgeMode(providerKind, value) ?? getChatProviderSetupSchema(providerKind).defaultBridgeMode;
+}
+
+function validateSetupValue(value: unknown, fieldName: string, type: string, options?: string[]): void {
+  if (value === null || value === undefined) {
+    return;
+  }
+  if (type === "boolean") {
+    if (typeof value !== "boolean") {
+      throwValidation(validationIssue(fieldName, "invalid_setup_field", `${fieldName} must be a boolean.`));
+    }
+    return;
+  }
+  if (typeof value !== "string") {
+    throwValidation(validationIssue(fieldName, "invalid_setup_field", `${fieldName} must be a string.`));
+  }
+  if (type === "select" && options && !options.includes(value)) {
+    throwValidation(validationIssue(fieldName, "invalid_setup_field", `${fieldName} must be one of: ${options.join(", ")}.`));
+  }
+}
+
+function parseChatProviderSetup(
+  providerKind: ChatProviderKind,
+  bridgeMode: ChatProviderBridgeMode,
+  value: unknown,
+): ChatProviderSetupConfig | undefined {
+  const rawSetup = parseJsonRecordField<ChatProviderSetupConfig>(value, "setup");
+  if (rawSetup === undefined) {
+    return undefined;
+  }
+  const bridgeSchema = getChatProviderSetupSchema(providerKind).bridgeModes.find((bridge) => bridge.mode === bridgeMode);
+  const allowedFields = new Map((bridgeSchema?.setupFields ?? []).map((field) => [field.key, field]));
+  const secretFields = new Set((bridgeSchema?.secretFields ?? []).map((field) => field.key));
+  const setup: ChatProviderSetupConfig = {};
+  for (const field of bridgeSchema?.setupFields ?? []) {
+    if (field.defaultValue !== undefined && rawSetup[field.key] === undefined) {
+      setup[field.key] = field.defaultValue;
+    }
+  }
+  for (const [key, setupValue] of Object.entries(rawSetup)) {
+    const field = allowedFields.get(key);
+    if (!field || secretFields.has(key)) {
+      throwValidation(validationIssue(`setup.${key}`, "unsupported_setup_field", `Unsupported setup field for ${providerKind}/${bridgeMode}: ${key}`));
+    }
+    validateSetupValue(setupValue, `setup.${key}`, field.type, field.options);
+    setup[key] = setupValue;
+  }
+  return setup;
+}
+
+function parseChatProviderSecrets(
+  providerKind: ChatProviderKind,
+  bridgeMode: ChatProviderBridgeMode,
+  value: unknown,
+): ChatProviderSecretConfig | null | undefined {
+  const rawSecrets = parseJsonRecordField<ChatProviderSecretConfig>(value, "secrets", { nullable: true });
+  if (rawSecrets === undefined || rawSecrets === null) {
+    return rawSecrets;
+  }
+  const bridgeSchema = getChatProviderSetupSchema(providerKind).bridgeModes.find((bridge) => bridge.mode === bridgeMode);
+  const allowedSecretFields = new Set((bridgeSchema?.secretFields ?? []).map((field) => field.key));
+  const secrets: ChatProviderSecretConfig = {};
+  for (const [key, secretValue] of Object.entries(rawSecrets)) {
+    if (!allowedSecretFields.has(key)) {
+      throwValidation(validationIssue(`secrets.${key}`, "unsupported_secret_field", `Unsupported secret field for ${providerKind}/${bridgeMode}: ${key}`));
+    }
+    if (typeof secretValue !== "string") {
+      throwValidation(validationIssue(`secrets.${key}`, "invalid_secret", `secrets.${key} must be a string.`));
+    }
+    secrets[key] = secretValue;
+  }
+  return secrets;
+}
+
+export function parseCreateChatProviderConnectionInput(body: unknown): CreateChatProviderConnectionInput {
+  const input = requireObjectBody(body);
+  const providerKind = requireChatProviderKind(input.providerKind);
+  const bridgeMode = resolveChatProviderBridgeMode(providerKind, input.bridgeMode);
+  const displayName = parseRequiredChatProviderString(input.displayName, "displayName");
+  return {
+    providerKind,
+    displayName,
+    bridgeMode,
+    status: parseChatProviderStatus(input.status),
+    enabled: parseStrictBoolean(input.enabled, "enabled"),
+    setup: parseChatProviderSetup(providerKind, bridgeMode, input.setup),
+    secrets: parseChatProviderSecrets(providerKind, bridgeMode, input.secrets),
+  };
+}
+
+export function parseUpdateChatProviderConnectionInput(
+  body: unknown,
+  existing: { providerKind: ChatProviderKind; bridgeMode: ChatProviderBridgeMode },
+): UpdateChatProviderConnectionInput {
+  const input = requireObjectBody(body);
+  const bridgeMode = parseChatProviderBridgeMode(existing.providerKind, input.bridgeMode) ?? existing.bridgeMode;
+  const displayName = input.displayName === undefined
+    ? undefined
+    : parseRequiredChatProviderString(input.displayName, "displayName");
+  return {
+    displayName,
+    bridgeMode: input.bridgeMode === undefined ? undefined : bridgeMode,
+    status: parseChatProviderStatus(input.status),
+    enabled: parseStrictBoolean(input.enabled, "enabled"),
+    setup: parseChatProviderSetup(existing.providerKind, bridgeMode, input.setup),
+    secrets: parseChatProviderSecrets(existing.providerKind, bridgeMode, input.secrets),
+  };
+}
+
+export function parseCreateChatProviderChannelBindingInput(body: unknown): CreateChatProviderChannelBindingInput {
+  const input = requireObjectBody(body);
+  return {
+    providerConnectionId: parseRequiredChatProviderString(input.providerConnectionId, "providerConnectionId"),
+    externalChannelId: parseRequiredChatProviderString(input.externalChannelId, "externalChannelId"),
+    externalChannelName: parseRequiredChatProviderString(input.externalChannelName, "externalChannelName"),
+    externalChannelMetadata: parseJsonRecordField<ExternalChannelMetadata>(input.externalChannelMetadata, "externalChannelMetadata", { nullable: true }),
+    projectId: parseRequiredChatProviderString(input.projectId, "projectId"),
+    agentPresetId: parseOptionalNullableChatProviderString(input.agentPresetId, "agentPresetId"),
+    routingHints: parseJsonRecordField<ChatProviderRoutingHints>(input.routingHints, "routingHints", { nullable: true }),
+    enabled: parseStrictBoolean(input.enabled, "enabled"),
+    inboundEnabled: parseStrictBoolean(input.inboundEnabled, "inboundEnabled"),
+    outboundEnabled: parseStrictBoolean(input.outboundEnabled, "outboundEnabled"),
+    suppressRichWidgets: parseStrictBoolean(input.suppressRichWidgets, "suppressRichWidgets"),
+  };
+}
+
+export function parseUpdateChatProviderChannelBindingInput(body: unknown): UpdateChatProviderChannelBindingInput {
+  const input = requireObjectBody(body);
+  return {
+    externalChannelName: parseOptionalChatProviderString(input.externalChannelName, "externalChannelName"),
+    externalChannelMetadata: parseJsonRecordField<ExternalChannelMetadata>(input.externalChannelMetadata, "externalChannelMetadata", { nullable: true }),
+    projectId: parseOptionalChatProviderString(input.projectId, "projectId"),
+    agentPresetId: parseOptionalNullableChatProviderString(input.agentPresetId, "agentPresetId"),
+    routingHints: parseJsonRecordField<ChatProviderRoutingHints>(input.routingHints, "routingHints", { nullable: true }),
+    enabled: parseStrictBoolean(input.enabled, "enabled"),
+    inboundEnabled: parseStrictBoolean(input.inboundEnabled, "inboundEnabled"),
+    outboundEnabled: parseStrictBoolean(input.outboundEnabled, "outboundEnabled"),
+    suppressRichWidgets: parseStrictBoolean(input.suppressRichWidgets, "suppressRichWidgets"),
+  };
+}
+
 // Project Parsers
 
 export function parseCreateProjectInput(body: unknown): CreateProjectInput {
@@ -90,7 +449,7 @@ export function parseCreateProjectInput(body: unknown): CreateProjectInput {
     sourceType,
     sourceRef,
     cloneDir: parseOptionalString(input.cloneDir),
-    setup: input.setup as ProjectSetupRequestInput | undefined,
+    setup: parseProjectSetupRequestInput(input.setup),
     defaultBranch: parseOptionalString(input.defaultBranch),
     featureBranchPrefix: parseOptionalString(input.featureBranchPrefix),
     status: parseEnum(input.status, ["running", "failed", "intervention", "idle"], "status"),
@@ -99,6 +458,33 @@ export function parseCreateProjectInput(body: unknown): CreateProjectInput {
     remoteProvider: parseEnum(input.remoteProvider, ["github", "gitlab"], "remoteProvider"),
     settingsOverrides: input.settingsOverrides && typeof input.settingsOverrides === "object"
       ? input.settingsOverrides as CreateProjectInput["settingsOverrides"]
+      : undefined,
+  };
+}
+
+export function parseProjectSetupRequestInput(body: unknown): ProjectSetupRequestInput | undefined {
+  if (body === undefined || body === null) return undefined;
+  if (typeof body !== "object") throw new Error("Invalid setup input: setup must be an object");
+  const input = body as Record<string, unknown>;
+  if (input.options !== undefined && input.options !== null && typeof input.options !== "object") {
+    throw new Error("Invalid setup input: setup.options must be an object");
+  }
+  const optionsInput = input.options && typeof input.options === "object"
+    ? input.options as Record<string, unknown>
+    : undefined;
+
+  return {
+    enabled: parseOptionalBoolean(input.enabled, "setup.enabled"),
+    clientRequestId: parseOptionalString(input.clientRequestId),
+    options: optionsInput
+      ? {
+        agents: parseOptionalBoolean(optionsInput.agents, "setup.options.agents"),
+        quicksprints: parseOptionalBoolean(optionsInput.quicksprints, "setup.options.quicksprints"),
+        previewScript: parseOptionalBoolean(optionsInput.previewScript, "setup.options.previewScript"),
+        ci: parseOptionalBoolean(optionsInput.ci, "setup.options.ci"),
+        techstack: parseOptionalBoolean(optionsInput.techstack, "setup.options.techstack"),
+        docs: parseOptionalBoolean(optionsInput.docs, "setup.options.docs"),
+      }
       : undefined,
   };
 }
@@ -383,6 +769,8 @@ import type {
   CreateConversationThreadInput,
   UpdateConversationThreadInput,
   CreateDashboardConversationMessageInput,
+  RecordConversationMessageHistoryInput,
+  UpsertConversationDraftInput,
   ConversationThreadScope,
 } from "../contracts/connection-chat-types.js";
 
@@ -568,7 +956,16 @@ export function parseUpdateConversationThreadInput(body: unknown): UpdateConvers
     throw new Error("Invalid input: body must be an object");
   }
   const typedBody = body as Record<string, unknown>;
+  const title = typedBody.title === undefined
+    ? undefined
+    : typeof typedBody.title === "string"
+      ? typedBody.title.trim()
+      : "";
+  if (typedBody.title !== undefined && !title) {
+    throw new Error("Thread title must be a non-empty string.");
+  }
   return {
+    title,
     connectionId: typeof typedBody.connectionId === "string" ? typedBody.connectionId.trim() : (typedBody.connectionId === null ? null : undefined),
     runtimeState: typedBody.runtimeState as UpdateConversationThreadInput["runtimeState"],
   };
@@ -590,6 +987,50 @@ export function parseCreateDashboardConversationMessageInput(body: unknown): Cre
     title: typeof typedBody.title === "string" ? typedBody.title.trim() : undefined,
     connectionId: typeof typedBody.connectionId === "string" ? typedBody.connectionId.trim() : (typedBody.connectionId === null ? null : undefined),
     metadata: typedBody.metadata as CreateDashboardConversationMessageInput["metadata"],
+  };
+}
+
+export function parseConversationDraftQuery(query: Record<string, unknown>): { contextKey: string } {
+  const contextKey = typeof query.contextKey === "string" ? query.contextKey.trim() : "";
+  if (!contextKey) {
+    throw new Error("Missing or empty required field: contextKey");
+  }
+  return { contextKey };
+}
+
+export function parseUpsertConversationDraftInput(body: unknown, userId: string): UpsertConversationDraftInput {
+  if (!body || typeof body !== "object") {
+    throw new Error("Invalid input: body must be an object");
+  }
+  const typedBody = body as Record<string, unknown>;
+  const contextKey = typeof typedBody.contextKey === "string" ? typedBody.contextKey.trim() : "";
+  if (!contextKey) {
+    throw new Error("Missing or empty required field: contextKey");
+  }
+  if (typeof typedBody.bodyMarkdown !== "string") {
+    throw new Error("Invalid input: bodyMarkdown must be a string");
+  }
+
+  return {
+    userId,
+    contextKey,
+    bodyMarkdown: typedBody.bodyMarkdown,
+  };
+}
+
+export function parseRecordConversationMessageHistoryInput(body: unknown, userId: string): RecordConversationMessageHistoryInput {
+  if (!body || typeof body !== "object") {
+    throw new Error("Invalid input: body must be an object");
+  }
+  const typedBody = body as Record<string, unknown>;
+  const bodyMarkdown = typeof typedBody.bodyMarkdown === "string" ? typedBody.bodyMarkdown.trim() : "";
+  if (!bodyMarkdown) {
+    throw new Error("Missing or empty required field: bodyMarkdown");
+  }
+
+  return {
+    userId,
+    bodyMarkdown,
   };
 }
 
@@ -645,4 +1086,38 @@ export function parseProjectStatsQuery(query: Record<string, unknown>): ProjectS
   }
 
   return { window, from, to, limit };
+}
+
+export function parseHeaderTokenThroughputQuery(query: Record<string, unknown>): HeaderTokenThroughputQuery {
+  const requestedWindow = typeof query.window === "string" ? query.window.trim() : "";
+  const window: HeaderTokenThroughputWindow = requestedWindow.length === 0
+    ? "24h"
+    : parseHeaderTokenThroughputWindow(requestedWindow);
+
+  if (!Object.prototype.hasOwnProperty.call(query, "projectId")) {
+    return { window, projectId: null };
+  }
+
+  if (typeof query.projectId !== "string") {
+    throw new Error("Invalid projectId query parameter.");
+  }
+  const projectId = query.projectId.trim();
+  if (!projectId) {
+    throw new Error("Missing required projectId when projectId is provided.");
+  }
+  return { window, projectId };
+}
+
+function parseHeaderTokenThroughputWindow(window: string): HeaderTokenThroughputWindow {
+  if (
+    window === "20s"
+    || window === "1h"
+    || window === "24h"
+    || window === "7d"
+    || window === "30d"
+    || window === "all"
+  ) {
+    return window;
+  }
+  throw new Error("Invalid header throughput window. Expected one of: 20s, 1h, 24h, 7d, 30d, all.");
 }

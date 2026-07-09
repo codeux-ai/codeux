@@ -7,6 +7,7 @@ import { ExecutionControlService } from "../../services/execution-control-servic
 import { PlanningAgentService } from "../../services/planning-agent-service.js";
 import { QuicksprintService } from "../../services/quicksprint-service.js";
 import { ProjectSetupService } from "../../services/project-setup-service.js";
+import { ProjectDocsAutoEmbedService } from "../../services/project-docs-auto-embed-service.js";
 import { WorkspaceManager } from "../../infrastructure/providers/cli/workspace-manager.js";
 import { formatSprintBranch } from "../../domain/sprint/branch-name-generator.js";
 
@@ -18,9 +19,19 @@ import { ProviderExecutionService } from "../../services/provider-execution-serv
 import { SchedulerService } from "../../services/scheduler-service.js";
 import { ExecutionInvocationControlService } from "../../services/execution-invocation-control-service.js";
 import { createLateBoundDependency } from "../../shared/late-bound-dependency.js";
+import { ChatProviderIngressService } from "../../services/chat-provider-ingress-service.js";
+import { ChatProviderOutboundService } from "../../services/chat-provider-outbound-service.js";
+import { SpeechTranscriptionService } from "../../services/speech-transcription-service.js";
+import { NodeFlowRuntimeService } from "../../services/node-flow-runtime-service.js";
+import { NodeFlowService } from "../../services/node-flow-service.js";
 
 export interface DashboardDependencies {
   chatThreadRuntimeService: ChatThreadRuntimeService;
+  chatProviderRepository: CoreDependencies["chatProviderRepository"];
+  chatProviderIngressService: ChatProviderIngressService;
+  chatProviderOutboundService: ChatProviderOutboundService;
+  speechTranscriptionService: SpeechTranscriptionService;
+  nodeFlowService: CoreDependencies["nodeFlowService"];
   activityCacheService: ActivityCacheService;
   taskRerunService: TaskRerunService;
   executionControlService: ExecutionControlService;
@@ -31,6 +42,7 @@ export interface DashboardDependencies {
   sprintIssueService: CoreDependencies["sprintIssueService"];
   schedulerService: SchedulerService;
   searchJiraIssues: CoreDependencies["sprintIssueService"]["searchJiraIssues"];
+  searchJiraProjectStatuses: CoreDependencies["sprintIssueService"]["searchJiraProjectStatuses"];
   replaceSprintLinkedIssues: CoreDependencies["projectManagementRepository"]["replaceSprintLinkedIssues"];
   listSprintLinkedIssues: CoreDependencies["projectManagementRepository"]["listSprintLinkedIssues"];
   closeSprintLinkedIssues: CoreDependencies["sprintIssueService"]["closeLinkedIssues"];
@@ -46,6 +58,7 @@ export function createDashboardDependencies(
     projectRuntimeRepository,
     projectManagementRepository,
     connectionChatRepository,
+    chatProviderRepository,
     projectWorkerAssignmentRepository,
     projectAttentionService,
     agentPresetSyncService,
@@ -83,16 +96,21 @@ export function createDashboardDependencies(
 
   const managementToolHandler = new ManagementToolHandler({
     sprintPreviewService: coreDeps.sprintPreviewService,
+    customDashboardRepository: coreDeps.customDashboardRepository,
+    customDashboardValidationService: coreDeps.customDashboardValidationService,
     executionRepository: coreDeps.executionRepository,
     getDashboardSettings: () => settingsRepository.getDefaultDashboardSettings(),
     projectManagementRepository: coreDeps.projectManagementRepository,
     executionControlService,
     taskRerunService: taskRerunServiceRef,
     settingsRepository: coreDeps.settingsRepository,
+    chatProviderRepository: coreDeps.chatProviderRepository,
     agentPresetSyncService: coreDeps.agentPresetSyncService,
     memoryService: coreDeps.memoryService,
     memoryPromotionService: coreDeps.memoryPromotionService,
     embeddingModelManager: coreDeps.embeddingModelManager,
+    skillService: coreDeps.skillService,
+    nodeFlowService: coreDeps.nodeFlowService,
     knowledgeService: coreDeps.knowledgeService,
     planningAgentService: planningAgentServiceRef,
     projectSetupService: projectSetupServiceRef,
@@ -107,6 +125,9 @@ export function createDashboardDependencies(
     providerRunner,
     providerConcurrencyService: coreDeps.providerConcurrencyService,
     logger: logger.child({ component: "provider-execution-service" }),
+    getMcpConnectionInfo: () => context.getMcpConnectionInfo?.() ?? null,
+    skillService: coreDeps.skillService,
+    agentPresetRepository: coreDeps.agentPresetRepository,
   });
 
   const structuredProviderResponseService = new StructuredProviderResponseService({
@@ -122,6 +143,11 @@ export function createDashboardDependencies(
     executionRepository,
   });
 
+  const chatProviderOutboundService = new ChatProviderOutboundService({
+    chatProviderRepository,
+    logger: logger.child({ component: "chat-provider-outbound-service" }),
+  });
+
   const chatThreadRuntimeService = new ChatThreadRuntimeService({
     connectionChatRepository,
     projectWorkerAssignmentRepository,
@@ -133,11 +159,37 @@ export function createDashboardDependencies(
     projectManagementRepository,
     providerRunner,
     chatManagementActionService,
+    chatProviderOutboundService,
     knowledgeService: coreDeps.knowledgeService,
     getMcpConnectionInfo: context.getMcpConnectionInfo,
     getMcpApprovalTracker: context.getMcpApprovalTracker,
+    runDueSchedulerEntriesAfterReply: async () => {
+      if (!schedulerServiceRef.isLinked()) {
+        return;
+      }
+      await schedulerServiceRef.get().runDueEntries();
+    },
     logger: logger.child({ component: "chat-thread-runtime-service" }),
   });
+
+  const chatProviderIngressService = new ChatProviderIngressService({
+    chatProviderRepository,
+    chatThreadRuntimeService,
+    logger: logger.child({ component: "chat-provider-ingress-service" }),
+  });
+  const speechTranscriptionService = new SpeechTranscriptionService({
+    settingsRepository,
+    logger: logger.child({ component: "speech-transcription-service" }),
+  });
+  const nodeFlowRuntimeService = new NodeFlowRuntimeService({
+    nodeFlowRepository: coreDeps.nodeFlowRepository,
+    executionRepository,
+    projectManagementRepository,
+    settingsRepository,
+    providerExecutionService,
+    getDashboardSettings: (projectId) => settingsRepository.resolveProjectDashboardSettings(projectId).settings,
+  });
+  const nodeFlowService = new NodeFlowService(coreDeps.nodeFlowRepository, nodeFlowRuntimeService);
 
   const activityCacheService = new ActivityCacheService(
     {
@@ -416,6 +468,7 @@ export function createDashboardDependencies(
     },
   );
   quicksprintServiceRef.set(quicksprintService);
+  chatThreadRuntimeService.setQuicksprintLauncher(quicksprintService);
 
   const projectSetupService = new ProjectSetupService({
     projectManagementRepository,
@@ -425,6 +478,7 @@ export function createDashboardDependencies(
     quicksprintService,
     providerRunner,
     providerConcurrencyService: coreDeps.providerConcurrencyService,
+    projectDocsAutoEmbedService: new ProjectDocsAutoEmbedService(coreDeps.knowledgeService),
     projectRoot: typeof context.getProjectRoot === "function" ? context.getProjectRoot() : process.cwd(),
     getGithubToken: () => context.getEffectiveGithubToken(),
     logger: logger.child({ component: "project-setup-service" }),
@@ -434,16 +488,25 @@ export function createDashboardDependencies(
   const schedulerService = new SchedulerService({
     schedulerRepository: coreDeps.schedulerRepository,
     projectManagementRepository,
+    executionRepository,
     quicksprintService,
     chatThreadRuntimeService,
     executionControlService,
+    taskRerunService,
     memoryRemediationService,
+    nodeFlowRuntimeService,
+    nodeFlowRepository: coreDeps.nodeFlowRepository,
     logger: logger.child({ component: "scheduler-service" }),
   });
   schedulerServiceRef.set(schedulerService);
 
   return {
+    chatProviderRepository,
     chatThreadRuntimeService,
+    chatProviderIngressService,
+    chatProviderOutboundService,
+    speechTranscriptionService,
+    nodeFlowService,
     activityCacheService,
     taskRerunService,
     executionControlService,
@@ -454,6 +517,10 @@ export function createDashboardDependencies(
     sprintIssueService: coreDeps.sprintIssueService,
     schedulerService,
     searchJiraIssues: coreDeps.sprintIssueService.searchJiraIssues.bind(coreDeps.sprintIssueService),
+    searchJiraProjectStatuses: coreDeps.sprintIssueService.searchJiraProjectStatuses?.bind(coreDeps.sprintIssueService)
+      ?? (() => {
+        throw new Error("Jira project status search is not available.");
+      }),
     replaceSprintLinkedIssues: projectManagementRepository.replaceSprintLinkedIssues.bind(projectManagementRepository),
     listSprintLinkedIssues: projectManagementRepository.listSprintLinkedIssues.bind(projectManagementRepository),
     closeSprintLinkedIssues: coreDeps.sprintIssueService.closeLinkedIssues.bind(coreDeps.sprintIssueService),

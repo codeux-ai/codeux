@@ -1,9 +1,13 @@
 import type { QuicksprintExecutionInput } from "./quicksprint-types.js";
+import type { ProviderId } from "./app-types.js";
+import type { NodeFlowJsonObject } from "./node-flow-types.js";
 
-export type ScheduleTargetType = "sprint" | "quicksprint" | "chat" | "memory_remediation";
+export type ScheduleTargetType = "sprint" | "quicksprint" | "chat" | "memory_remediation" | "agent_wakeup" | "task" | "node_flow";
 export type ScheduleStatus = "scheduled" | "paused" | "completed" | "failed" | "cancelled";
 export type ScheduleRecurrenceFrequency = "none" | "minutely" | "hourly" | "daily" | "weekly" | "monthly";
 export type ScheduleRecurrenceEndMode = "never" | "after_count" | "on_date";
+export type ScheduleAnchorMode = "after_sprint_end" | "after_task_end";
+export type ScheduleAgentSchedulerSource = "agent_scheduler";
 
 export interface ScheduleRecurrenceRule {
   frequency: ScheduleRecurrenceFrequency;
@@ -13,6 +17,20 @@ export interface ScheduleRecurrenceRule {
   until?: string | null;
 }
 
+export interface ScheduleAfterSprintEndAnchor {
+  mode: "after_sprint_end";
+  sourceSprintId: string;
+  offsetMinutes?: number;
+}
+
+export interface ScheduleAfterTaskEndAnchor {
+  mode: "after_task_end";
+  sourceTaskId: string;
+  offsetMinutes?: number;
+}
+
+export type ScheduleAnchor = ScheduleAfterSprintEndAnchor | ScheduleAfterTaskEndAnchor;
+
 export interface ScheduleSprintTarget {
   sprintId: string;
 }
@@ -20,6 +38,7 @@ export interface ScheduleSprintTarget {
 export interface ScheduleQuicksprintTarget {
   templateId: string;
   taskCount: number;
+  noTaskLimit?: boolean;
   submitMode: QuicksprintExecutionInput["submitMode"];
   additionalPrompt?: string;
   agentPresetId?: string;
@@ -33,9 +52,33 @@ export interface ScheduleChatTarget {
   connectionId?: string | null;
 }
 
+export interface ScheduleAgentSchedulerMetadata {
+  origin: ScheduleAgentSchedulerSource;
+  source: ScheduleAgentSchedulerSource;
+  createdByAgentId?: string | null;
+}
+
+export interface ScheduleAgentWakeupTarget extends ScheduleAgentSchedulerMetadata {
+  bodyMarkdown: string;
+  threadId?: string | null;
+  title?: string;
+  connectionId?: string | null;
+}
+
+export interface ScheduleTaskTarget extends ScheduleAgentSchedulerMetadata {
+  taskId: string;
+  provider?: ProviderId;
+}
+
 export interface ScheduleMemoryRemediationTarget {
   mode: "deterministic" | "ai";
   source?: "scheduler" | "memory_settings";
+}
+
+export interface ScheduleNodeFlowTarget {
+  flowId: string;
+  input?: NodeFlowJsonObject;
+  flowVersion?: number;
 }
 
 export interface SchedulerEntryRecord {
@@ -45,6 +88,7 @@ export interface SchedulerEntryRecord {
   targetType: ScheduleTargetType;
   status: ScheduleStatus;
   scheduledFor: string;
+  scheduleAnchor?: ScheduleAnchor;
   timezone: string;
   recurrence: ScheduleRecurrenceRule;
   nextRunAt: string | null;
@@ -54,7 +98,10 @@ export interface SchedulerEntryRecord {
   sprintTarget?: ScheduleSprintTarget;
   quicksprintTarget?: ScheduleQuicksprintTarget;
   chatTarget?: ScheduleChatTarget;
+  agentWakeupTarget?: ScheduleAgentWakeupTarget;
+  taskTarget?: ScheduleTaskTarget;
   memoryRemediationTarget?: ScheduleMemoryRemediationTarget;
+  nodeFlowTarget?: ScheduleNodeFlowTarget;
   createdAt: string;
   updatedAt: string;
 }
@@ -82,13 +129,17 @@ export interface SchedulerCollectionResponse {
 export interface CreateSchedulerEntryInput {
   title?: string;
   targetType: ScheduleTargetType;
-  scheduledFor: string;
+  scheduledFor?: string;
+  scheduleAnchor?: ScheduleAnchor;
   timezone?: string;
   recurrence?: Partial<ScheduleRecurrenceRule>;
   sprintTarget?: ScheduleSprintTarget;
   quicksprintTarget?: ScheduleQuicksprintTarget;
   chatTarget?: ScheduleChatTarget;
+  agentWakeupTarget?: ScheduleAgentWakeupTarget;
+  taskTarget?: ScheduleTaskTarget;
   memoryRemediationTarget?: ScheduleMemoryRemediationTarget;
+  nodeFlowTarget?: ScheduleNodeFlowTarget;
 }
 
 export interface UpdateSchedulerEntryInput {
@@ -96,12 +147,16 @@ export interface UpdateSchedulerEntryInput {
   status?: ScheduleStatus;
   targetType?: ScheduleTargetType;
   scheduledFor?: string;
+  scheduleAnchor?: ScheduleAnchor | null;
   timezone?: string;
   recurrence?: Partial<ScheduleRecurrenceRule>;
   sprintTarget?: ScheduleSprintTarget;
   quicksprintTarget?: ScheduleQuicksprintTarget;
   chatTarget?: ScheduleChatTarget;
+  agentWakeupTarget?: ScheduleAgentWakeupTarget;
+  taskTarget?: ScheduleTaskTarget;
   memoryRemediationTarget?: ScheduleMemoryRemediationTarget;
+  nodeFlowTarget?: ScheduleNodeFlowTarget;
 }
 
 export type MemoryRemediationScheduleCadence = "off" | "daily" | "weekly";

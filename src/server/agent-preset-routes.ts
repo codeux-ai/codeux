@@ -2,7 +2,8 @@ import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute } from "./route-utils.js";
 import { requireTrimmedString } from "./request-parsers.js";
-import type { CreateAgentPresetInput, UpdateAgentPresetInput } from "../contracts/agent-preset-types.js";
+import type { CreateAgentPresetInput, PushAgentPresetsToMarkdownOptions, UpdateAgentPresetInput } from "../contracts/agent-preset-types.js";
+import type { CreateSkillStorageInput } from "../contracts/skill-types.js";
 
 export function registerAgentPresetRoutes(router: Express, deps: DashboardDependencies): void {
   router.get("/api/projects/:projectId/agent-presets", asyncRoute(async (req, res) => {
@@ -30,12 +31,40 @@ export function registerAgentPresetRoutes(router: Express, deps: DashboardDepend
     res.json(await deps.importAgentPresetFromMarkdown(requireTrimmedString(req.params.agentPresetId, "agentPresetId")));
   }));
 
+  router.post("/api/agent-presets/:agentPresetId/export-markdown", asyncRoute(async (req, res) => {
+    if (!deps.exportAgentPresetToMarkdown) {
+      res.status(404).json({ error: "Markdown export is not enabled for agents." });
+      return;
+    }
+    res.json(await deps.exportAgentPresetToMarkdown(requireTrimmedString(req.params.agentPresetId, "agentPresetId")));
+  }));
+
   router.post("/api/projects/:projectId/agent-presets/sync-markdown", asyncRoute(async (req, res) => {
     if (!deps.syncAllAgentPresetsFromMarkdown) {
       res.status(404).json({ error: "Bulk markdown sync is not enabled for agents." });
       return;
     }
     res.json(await deps.syncAllAgentPresetsFromMarkdown(requireTrimmedString(req.params.projectId, "projectId")));
+  }));
+
+  router.post("/api/projects/:projectId/agent-presets/pull-markdown", asyncRoute(async (req, res) => {
+    if (!deps.pullAgentPresetsFromMarkdown) {
+      res.status(404).json({ error: "Bulk markdown pull is not enabled for agents." });
+      return;
+    }
+    res.json(await deps.pullAgentPresetsFromMarkdown(requireTrimmedString(req.params.projectId, "projectId")));
+  }));
+
+  router.post("/api/projects/:projectId/agent-presets/push-markdown", asyncRoute(async (req, res) => {
+    if (!deps.pushAgentPresetsToMarkdown) {
+      res.status(404).json({ error: "Bulk markdown push is not enabled for agents." });
+      return;
+    }
+    const body = req.body as PushAgentPresetsToMarkdownOptions | undefined;
+    res.json(await deps.pushAgentPresetsToMarkdown(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      body,
+    ));
   }));
 
   router.post("/api/projects/:projectId/agent-presets/push", asyncRoute(async (req, res) => {
@@ -53,4 +82,32 @@ export function registerAgentPresetRoutes(router: Express, deps: DashboardDepend
       branchName: body.branchName,
     }));
   }));
+
+  router.get("/api/projects/:projectId/skill-storages", asyncRoute(async (req, res) => {
+    const skillService = requireSkillService(deps);
+    res.json(skillService.listStorages(requireTrimmedString(req.params.projectId, "projectId")));
+  }));
+
+  router.post("/api/projects/:projectId/skill-storages", asyncRoute(async (req, res) => {
+    const skillService = requireSkillService(deps);
+    const projectId = requireTrimmedString(req.params.projectId, "projectId");
+    const body = req.body as CreateSkillStorageInput;
+    res.status(201).json(skillService.createStorage(projectId, body));
+  }));
+
+  router.delete("/api/projects/:projectId/skill-storages/:storageId", asyncRoute(async (req, res) => {
+    const skillService = requireSkillService(deps);
+    skillService.deleteStorage(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      requireTrimmedString(req.params.storageId, "storageId"),
+    );
+    res.json({ ok: true });
+  }));
+}
+
+function requireSkillService(deps: DashboardDependencies): NonNullable<DashboardDependencies["skillService"]> {
+  if (!deps.skillService) {
+    throw new Error("Persistent skill storage is unavailable.");
+  }
+  return deps.skillService;
 }

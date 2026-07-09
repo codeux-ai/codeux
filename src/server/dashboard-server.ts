@@ -10,8 +10,11 @@ import type {
   ExternalSettingsHints,
   GitTrackingStatus,
   JulesActivity,
+  OnboardingDependencyInstallerResult,
+  OnboardingDependencyInstallMode,
   OnboardingRuntimeReadiness,
   OverviewTelemetrySnapshot,
+  PreviewEnvironmentVariable,
   ProjectExecutionStatsSnapshot,
   ProjectLiveDashboardSnapshot,
   ProjectStatsQuery,
@@ -24,6 +27,8 @@ import type {
   FileBrowserFileContent,
   FileBrowserChangeSet,
   FileBrowserDiff,
+  HeaderTokenThroughputQuery,
+  HeaderTokenThroughputSnapshot,
 } from "../contracts/app-types.js";
 import type { OnboardingStateRecord } from "../domain/user/onboarding-state.js";
 import type {
@@ -42,6 +47,7 @@ import type {
 import type { QuicksprintService } from "../services/quicksprint-service.js";
 import type { SchedulerService } from "../services/scheduler-service.js";
 import type { SprintIssueService } from "../services/sprint-issue-service.js";
+import type { JiraProjectStatus } from "../services/jira-api-client.js";
 import type {
   InstructionFileContent,
   InstructionFileSummary,
@@ -49,9 +55,11 @@ import type {
 import type {
   AgentPresetRecord,
   CreateAgentPresetInput,
+  PushAgentPresetsToMarkdownOptions,
   UpdateAgentPresetInput,
 } from "../contracts/agent-preset-types.js";
 import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
+import type { ChatProviderRepository } from "../repositories/chat-provider-repository.js";
 import type {
   ExecutionInvocationRecord,
   ExecutionInvocationMessageRecord,
@@ -59,9 +67,13 @@ import type {
 import type { PlanningInvocationRestartMode } from "../services/planning-agent-service.js";
 import type {
   ConversationMessageRecord,
+  ConversationDraftRecord,
+  ConversationMessageHistoryRecord,
   ConversationThreadRecord,
   CreateConversationThreadInput,
   CreateDashboardConversationMessageInput,
+  RecordConversationMessageHistoryInput,
+  UpsertConversationDraftInput,
   McpConnectionRecord,
   UpdateConversationThreadInput,
   UpdateConversationThreadRouteInput,
@@ -112,6 +124,14 @@ import type { EmbeddingModelManager } from "../services/embedding-model-manager.
 import type { EmbeddingService } from "../services/embedding-service.js";
 import type { KnowledgeService } from "../services/knowledge-service.js";
 import type { UpdateStatus } from "../services/update-checker-service.js";
+import type { LocalMcpCliProvider, LocalMcpInstallResult, LocalMcpSetupInfo } from "../services/local-mcp-cli-config-service.js";
+import { resolveDashboardBindHost } from "../config/app-config.js";
+import type { ChatProviderIngressService } from "../services/chat-provider-ingress-service.js";
+import type { SpeechTranscriptionService } from "../services/speech-transcription-service.js";
+import type { NodeFlowService } from "../services/node-flow-service.js";
+import type { CustomDashboardRepository } from "../repositories/custom-dashboard-repository.js";
+import type { CustomDashboardValidationService } from "../services/custom-dashboard-validation-service.js";
+import type { SkillService } from "../services/skill-service.js";
 import {
   parsePreviewSessionIdFromHost,
   parseSelectedPreviewPortFromRequest,
@@ -129,6 +149,9 @@ export type DashboardDependencies = Omit<
   | "getUpdateStatus"
 > & {
   getUpdateStatus: () => Promise<UpdateStatus>;
+  getLocalMcpSetup: () => LocalMcpSetupInfo;
+  regenerateLocalMcpAuthToken: () => LocalMcpSetupInfo;
+  installLocalMcpProvider: (provider: LocalMcpCliProvider) => Promise<LocalMcpInstallResult> | LocalMcpInstallResult;
 };
 
 export interface DashboardServerOptions {
@@ -144,6 +167,13 @@ export interface DashboardServerOptions {
   settingsRepository?: SettingsRepository;
   knowledgeService?: KnowledgeService;
   agentPresetRepository?: AgentPresetRepository;
+  chatProviderRepository?: ChatProviderRepository;
+  chatProviderIngressService?: ChatProviderIngressService;
+  speechTranscriptionService?: SpeechTranscriptionService;
+  nodeFlowService?: NodeFlowService;
+  customDashboardRepository?: CustomDashboardRepository;
+  customDashboardValidationService?: CustomDashboardValidationService;
+  skillService?: SkillService;
   projectManagementRepository?: ProjectManagementRepository;
   executionRepository?: ExecutionRepository;
   getStatus: () => unknown;
@@ -151,6 +181,7 @@ export interface DashboardServerOptions {
   getExecutionSnapshot: () => ExecutionDashboardSnapshot;
   getProjectExecutionSnapshot: (projectId: string) => ExecutionDashboardSnapshot;
   getProjectStatsSnapshot: (projectId: string, query?: ProjectStatsQuery) => ProjectExecutionStatsSnapshot;
+  getHeaderTokenThroughputSnapshot: (query?: HeaderTokenThroughputQuery) => HeaderTokenThroughputSnapshot;
   setPreferredWorker?: (
     projectId: string,
     input?: {
@@ -176,6 +207,9 @@ export interface DashboardServerOptions {
   getLiveActivities: () => Promise<Record<string, JulesActivity[]>>;
   getGitStatus: () => Promise<GitTrackingStatus>;
   getExternalSettingsHints: () => ExternalSettingsHints;
+  getLocalMcpSetup?: () => LocalMcpSetupInfo;
+  regenerateLocalMcpAuthToken?: () => LocalMcpSetupInfo;
+  installLocalMcpProvider?: (provider: LocalMcpCliProvider) => Promise<LocalMcpInstallResult> | LocalMcpInstallResult;
   getSystemSettings: () => SystemSettings;
   getUpdateStatus?: () => Promise<UpdateStatus>;
   saveSystemSettings: (settings: SystemSettings) => SystemSettings;
@@ -211,6 +245,7 @@ export interface DashboardServerOptions {
   updateTask: (taskId: string, input: UpdateTaskInput) => TaskRecord;
   deleteTask: (taskId: string) => void;
   searchJiraIssues: (projectId: string, input: JiraIssueSearchInput) => Promise<JiraIssueSearchResult[]>;
+  searchJiraProjectStatuses: (projectId: string, projectKey?: string) => Promise<JiraProjectStatus[]>;
   listSprintLinkedIssues: (sprintId: string) => SprintLinkedIssueRecord[];
   replaceSprintLinkedIssues: (sprintId: string, projectId: string, issues: SprintLinkedIssueInput[]) => SprintLinkedIssueRecord[];
   listConnections: (projectId: string) => McpConnectionRecord[];
@@ -221,6 +256,9 @@ export interface DashboardServerOptions {
   deleteAgentPreset: (agentPresetId: string) => Promise<void> | void;
   importAgentPresetFromMarkdown?: (agentPresetId: string) => Promise<AgentPresetRecord> | AgentPresetRecord;
   syncAllAgentPresetsFromMarkdown?: (projectId: string) => Promise<AgentPresetRecord[]> | AgentPresetRecord[];
+  pullAgentPresetsFromMarkdown?: (projectId: string) => Promise<AgentPresetRecord[]> | AgentPresetRecord[];
+  pushAgentPresetsToMarkdown?: (projectId: string, options?: PushAgentPresetsToMarkdownOptions) => Promise<AgentPresetRecord[]> | AgentPresetRecord[];
+  exportAgentPresetToMarkdown?: (agentPresetId: string) => Promise<AgentPresetRecord> | AgentPresetRecord;
   pushAgentPresetsToRepository?: (projectId: string, options: {
     mode: "commit_only" | "commit_and_push" | "pull_request";
     branchName?: string;
@@ -234,18 +272,23 @@ export interface DashboardServerOptions {
   writeInstructionFile: (projectId: string, fileId: string, content: string) => Promise<InstructionFileContent> | InstructionFileContent;
   listConversationThreads: (projectId: string) => ConversationThreadRecord[];
   createConversationThread: (projectId: string, input: CreateConversationThreadInput) => ConversationThreadRecord;
-  updateConversationThread: (threadId: string, input: UpdateConversationThreadInput) => ConversationThreadRecord;
+  updateConversationThread: (threadId: string, input: UpdateConversationThreadInput) => Promise<ConversationThreadRecord> | ConversationThreadRecord;
   updateThreadRoute: (threadId: string, input: UpdateConversationThreadRouteInput) => ConversationThreadRecord;
   compactThreadSession: (threadId: string) => Promise<ConversationThreadRecord> | ConversationThreadRecord;
   cancelThreadTurn?: (threadId: string) => Promise<{ cancelled: boolean }> | { cancelled: boolean };
   deleteConversationThread: (threadId: string) => void;
   listConversationMessages: (threadId: string) => ConversationMessageRecord[];
   postConversationMessage: (projectId: string, input: CreateDashboardConversationMessageInput) => Promise<ConversationMessageRecord> | ConversationMessageRecord;
+  getConversationDraft?: (projectId: string, input: { userId: string; contextKey: string }) => ConversationDraftRecord | null;
+  upsertConversationDraft?: (projectId: string, input: UpsertConversationDraftInput) => ConversationDraftRecord | null;
+  listConversationMessageHistory?: (projectId: string, input: { userId: string; limit?: number }) => ConversationMessageHistoryRecord[];
+  recordConversationMessageHistory?: (projectId: string, input: RecordConversationMessageHistoryInput) => ConversationMessageHistoryRecord;
 
   listProjectInvocations: (projectId: string) => ExecutionInvocationRecord[];
   listInvocationMessages: (invocationId: string) => ExecutionInvocationMessageRecord[];
   restartExecutionInvocation?: (invocationId: string, mode?: PlanningInvocationRestartMode) => Promise<unknown> | unknown;
   cancelExecutionInvocation?: (invocationId: string) => Promise<unknown> | unknown;
+  resetInvocationUsageLimitTimer?: (invocationId: string) => Promise<unknown> | unknown;
 
   rerunTask: (taskId: string, options?: { provider?: string; providerConfigId?: string; model?: string; clearWorktree?: boolean; resetDependents?: boolean; undoMerge?: boolean }) => Promise<unknown>;
   orchestrateSprint: (projectId: string, sprintId: string) => Promise<unknown>;
@@ -270,19 +313,34 @@ export interface DashboardServerOptions {
   isHealthy?: () => ReadinessProbeStatus;
   listDockerContainers: () => Promise<DockerContainer[]>;
   getOnboardingRuntimeReadiness?: () => Promise<OnboardingRuntimeReadiness> | OnboardingRuntimeReadiness;
+  installOnboardingDependencies?: (mode: OnboardingDependencyInstallMode) => Promise<OnboardingDependencyInstallerResult> | OnboardingDependencyInstallerResult;
   getOnboardingState?: () => OnboardingStateRecord;
   markOnboardingCompleted?: () => OnboardingStateRecord;
   resetOnboardingState?: () => OnboardingStateRecord;
   listSprintPreviewSessions?: (projectId: string) => Promise<SprintPreviewSession[]> | SprintPreviewSession[];
   getSprintPreviewSession?: (sessionId: string) => Promise<SprintPreviewSession | null> | SprintPreviewSession | null;
+  getSprintPreviewSessionForProjectSprint?: (projectId: string, sprintId: string, sessionId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
   startSprintPreviewSession?: (projectId: string, sprintId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
   rebuildSprintPreviewSession?: (sessionId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
+  rebuildSprintPreviewSessionForProjectSprint?: (projectId: string, sprintId: string, sessionId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
   stopSprintPreviewSession?: (sessionId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
+  stopSprintPreviewSessionForProjectSprint?: (projectId: string, sprintId: string, sessionId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
   removeSprintPreviewSession?: (sessionId: string) => Promise<void> | void;
+  removeSprintPreviewSessionForProjectSprint?: (projectId: string, sprintId: string, sessionId: string) => Promise<void> | void;
   getSprintPreviewScript?: (projectId: string, sprintId: string) => Promise<SprintPreviewScript> | SprintPreviewScript;
   saveSprintPreviewScript?: (projectId: string, sprintId: string, content: string) => Promise<SprintPreviewScript> | SprintPreviewScript;
   getSprintPreviewLogs?: (sessionId: string, tail?: number) => Promise<{ logs: string }> | { logs: string };
+  getSprintPreviewLogsForProjectSprint?: (projectId: string, sprintId: string, sessionId: string, tail?: number) => Promise<{ logs: string }> | { logs: string };
+  updateSprintPreviewEnvironmentOverrides?: (projectId: string, sprintId: string, sessionId: string, environmentOverrides: PreviewEnvironmentVariable[]) => Promise<SprintPreviewSession> | SprintPreviewSession;
   proxySprintPreviewRequest?: (args: {
+    sessionId: string;
+    method: string;
+    path: string;
+    headers?: Record<string, string | undefined>;
+    body?: Buffer;
+    selectedPort?: string | number | null;
+  }) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>;
+  proxySprintPreviewRequestForProjectSprint?: (projectId: string, sprintId: string, args: {
     sessionId: string;
     method: string;
     path: string;
@@ -403,7 +461,7 @@ const bindDashboardServer = async (
   startPort: number,
   logger: Logger
 ): Promise<DashboardServerHandle> => {
-  const host = (process.env.DASHBOARD_HOST || "127.0.0.1").trim() || "127.0.0.1";
+  const host = resolveDashboardBindHost();
   const roundedPort = Math.round(startPort);
   const initialPort = Number.isFinite(roundedPort)
     ? Math.max(0, Math.min(65535, roundedPort))

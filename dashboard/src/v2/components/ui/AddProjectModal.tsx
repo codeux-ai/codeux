@@ -1,21 +1,19 @@
 import type { FunctionComponent } from "preact";
-import { useRef, useState, useMemo } from "preact/hooks";
+import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { AlertCircle, Bot, Check, ChevronUp, Cloud, FolderOpen, GitBranch, FolderInput, Globe, Home, Info, Link2, Loader2, Lock, PlaySquare, Plus, RefreshCw, ShieldCheck, Sparkles, Workflow, X } from "lucide-preact";
+import { AlertCircle, BookOpen, Bot, Check, ChevronUp, Cloud, FolderOpen, GitBranch, FolderInput, Globe, Home, Info, Layers3, Link2, Loader2, Lock, PlaySquare, Plus, RefreshCw, ShieldCheck, Sparkles, Workflow, X } from "lucide-preact";
 import { FormError } from "../forms/FormError.js";
 import { Modal } from "./Modal.js";
 import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
 import { fetchLocalDirectories } from "../../lib/project-api.js";
-import type { LocalDirectoryBrowserResponse } from "../../types.js";
+import type { LocalDirectoryBrowserResponse, ProjectSetupOptions } from "../../types.js";
+import type { ApplicationKind } from "../../../types.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../lib/settings.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 export type SourceType = 'local' | 'git' | 'new_project';
-
-type ProjectSetupOptions = {
-    agents: boolean;
-    quicksprints: boolean;
-    previewScript: boolean;
-    ci: boolean;
-};
 
 type ExistingProjectSubmission = {
     name: string;
@@ -33,6 +31,8 @@ type NewProjectSubmission = {
     type: 'new_project';
     path: string;
     initMode: 'new-local' | 'new-remote';
+    applicationKind?: ApplicationKind | null;
+    selectedTechstackId?: string | null;
     remoteProvider?: 'github' | 'gitlab';
     isPrivate?: boolean;
     repoSlug?: string;
@@ -51,6 +51,10 @@ interface AddProjectModalProps {
     onClose: () => void;
     onAdd: (project: AddProjectModalSubmission) => void | Promise<void>;
     initialSourceType?: SourceType;
+    quickActionDefaults?: {
+        applicationKind: ApplicationKind;
+        selectedTechstackId: string;
+    };
 }
 
 type DirectoryPickerTarget = 'localPath' | 'cloneDir';
@@ -63,7 +67,7 @@ const detailInputSurfaceClass = "w-full rounded-[1.15rem] border border-black/[0
 const detailInputClass = `mt-2.5 ${detailInputSurfaceClass}`;
 const modalMinHeight = "min(640px, calc(100dvh - 2rem))";
 
-function focusFirstInvalidField(formId: string, scrollContainerId: string): void {
+function focusFirstInvalidField(formId: string, scrollContainerId: string, reducedMotion: boolean): void {
     const firstInvalid = document.getElementById(formId)?.querySelector('[aria-invalid="true"]');
     if (!(firstInvalid instanceof HTMLElement)) return;
 
@@ -75,11 +79,16 @@ function focusFirstInvalidField(formId: string, scrollContainerId: string): void
     const elementRect = firstInvalid.getBoundingClientRect();
     const targetTop = elementRect.top - containerRect.top + container.scrollTop - 20;
     const maxTop = Math.max(0, container.scrollHeight - container.clientHeight);
-    container.scrollTo({ top: Math.min(Math.max(targetTop, 0), maxTop), behavior: 'smooth' });
+    container.scrollTo({ top: Math.min(Math.max(targetTop, 0), maxTop), behavior: reducedMotion ? 'auto' : 'smooth' });
 }
 
-export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClose, onAdd, initialSourceType }) => {
+export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClose, onAdd, initialSourceType, quickActionDefaults }) => {
     const fieldsRef   = useRef<HTMLFormElement>(null);
+    const transitionSurfaceRef = useRef<HTMLDivElement>(null);
+    const previousTransitionKeyRef = useRef<string | null>(null);
+    const reducedMotion = useReducedMotion();
+    const motionTokens = useGsapInteractionTokens();
+    const cssTokens = useInteractionTokens();
 
     const [name, setName]           = useState('');
     const [gitUrlSlug, setGitUrlSlug] = useState('');
@@ -93,21 +102,34 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const [newIsPrivate, setNewIsPrivate] = useState(true);
     const [initializeProject, setInitializeProject] = useState(true);
     const [showSetupOptions, setShowSetupOptions] = useState(false);
-    const [setupOptions, setSetupOptions] = useState({
+    const [setupOptions, setSetupOptions] = useState<ProjectSetupOptions>({
         agents: true,
         quicksprints: true,
         previewScript: false,
         ci: true,
+        techstack: true,
+        docs: false,
     });
     const [submitError, setSubmitError] = useState<string | null>(null);
+    const [validationSummary, setValidationSummary] = useState<string | null>(null);
     const [activeDirectoryPickerTarget, setActiveDirectoryPickerTarget] = useState<DirectoryPickerTarget | null>(null);
     const [directoryListing, setDirectoryListing] = useState<LocalDirectoryBrowserResponse | null>(null);
     const [directoryPickerError, setDirectoryPickerError] = useState<string | null>(null);
     const [isDirectoryPickerLoading, setIsDirectoryPickerLoading] = useState(false);
+    const [pendingDirectoryPath, setPendingDirectoryPath] = useState<string | null>(null);
+    const [directorySelectionMessage, setDirectorySelectionMessage] = useState<string | null>(null);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const nameInputRef = useRef<HTMLInputElement>(null);
     const [touched, setTouched] = useState({ name: false, path: false, slug: false });
+    const newProjectTechstackId = quickActionDefaults?.selectedTechstackId
+        ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.defaultTechstackId;
+    const newProjectApplicationKind = quickActionDefaults?.applicationKind ?? null;
+    const quickActionContextLabel = quickActionDefaults?.applicationKind === 'web'
+        ? 'Web App'
+        : quickActionDefaults?.applicationKind === 'desktop'
+            ? 'Desktop App'
+            : null;
 
     const validationErrors = useMemo(() => {
         const errors: Record<string, string> = {};
@@ -122,10 +144,43 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         return errors;
     }, [gitUrl, gitUrlSlug, localPath, name, newInitMode, sourceType]);
 
+    const sourceTransitionKey = `${sourceType}:${newInitMode}:${showSetupOptions ? 'setup' : 'details'}`;
+
+    useLayoutEffect(() => {
+        const surface = transitionSurfaceRef.current;
+        if (!surface) return;
+
+        if (previousTransitionKeyRef.current === null) {
+            previousTransitionKeyRef.current = sourceTransitionKey;
+            return;
+        }
+        if (previousTransitionKeyRef.current === sourceTransitionKey) return;
+        previousTransitionKeyRef.current = sourceTransitionKey;
+
+        if (reducedMotion || motionTokens.listReveal.duration === 0) {
+            gsap.set(surface, { opacity: 1, y: 0, clearProps: "transform" });
+            return;
+        }
+
+        const ctx = gsap.context(() => {
+            gsap.fromTo(
+                surface,
+                { y: 10, opacity: 0 },
+                { y: 0, opacity: 1, duration: motionTokens.listReveal.duration, ease: motionTokens.listReveal.ease, clearProps: "transform" },
+            );
+        }, surface);
+        return () => ctx.revert();
+    }, [motionTokens.listReveal.duration, motionTokens.listReveal.ease, reducedMotion, sourceTransitionKey]);
+
 
     const handleClose = () => {
         if (isSubmitting) return;
         onClose();
+    };
+
+    const clearFeedback = () => {
+        if (submitError) setSubmitError(null);
+        if (validationSummary) setValidationSummary(null);
     };
 
 
@@ -133,6 +188,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const submitProject = async () => {
         setIsSubmitting(true);
         setSubmitError(null);
+        setValidationSummary(null);
         setTouched(prev => ({ ...prev, path: true, slug: true }));
         try {
             if (sourceType === 'new_project') {
@@ -141,6 +197,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     type: 'new_project',
                     path: newInitMode === 'new-local' ? localPath.trim() : '',
                     initMode: newInitMode,
+                    selectedTechstackId: newProjectTechstackId,
+                    applicationKind: newProjectApplicationKind,
                     ...(newInitMode === 'new-remote' && gitUrlSlug.trim()
                         ? { repoSlug: gitUrlSlug.trim() }
                         : {}),
@@ -178,7 +236,9 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
 
         if (Object.keys(validationErrors).length > 0) {
             setTouched({ name: true, path: sourceType === 'git', slug: sourceType === 'new_project' && newInitMode === 'new-remote' });
-            setTimeout(() => focusFirstInvalidField('add-project-form', 'add-project-form-body'), 0);
+            setValidationSummary(`Review required fields: ${Object.values(validationErrors).join(" ")}`);
+            setSubmitError(null);
+            setTimeout(() => focusFirstInvalidField('add-project-form', 'add-project-form-body', reducedMotion), 0);
             return;
         }
 
@@ -199,11 +259,15 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         setActiveDirectoryPickerTarget(target);
         setIsDirectoryPickerLoading(true);
         setDirectoryPickerError(null);
+        setDirectorySelectionMessage(null);
+        setPendingDirectoryPath(directoryPath || null);
         try {
             const listing = await fetchLocalDirectories(directoryPath);
             setDirectoryListing(listing);
+            setPendingDirectoryPath(null);
         } catch (err) {
             setDirectoryPickerError(err instanceof Error ? err.message : String(err));
+            setPendingDirectoryPath(null);
         } finally {
             setIsDirectoryPickerLoading(false);
         }
@@ -223,7 +287,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                 } else {
                     setCloneDir(result.filePath);
                 }
-                setSubmitError(null);
+                clearFeedback();
+                setDirectorySelectionMessage(`Selected directory: ${result.filePath}`);
                 setActiveDirectoryPickerTarget(null);
                 return;
             } catch (err) {
@@ -242,26 +307,31 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         } else if (activeDirectoryPickerTarget === 'cloneDir') {
             setCloneDir(directoryListing.currentPath);
         }
-        setSubmitError(null);
+        clearFeedback();
+        setDirectorySelectionMessage(`Selected directory: ${directoryListing.currentPath}`);
         setActiveDirectoryPickerTarget(null);
     };
 
-    // Re-animate fields when source type changes
     const handleSourceTypeChange = (type: SourceType) => {
         setSourceType(type);
         setActiveDirectoryPickerTarget(null);
-        if (fieldsRef.current) {
-            const conditionalFields = Array.from(fieldsRef.current.children).slice(2);
-            gsap.fromTo(conditionalFields,
-                { y: 12, opacity: 0 },
-                { y: 0, opacity: 1, stagger: 0.06, duration: 0.35, ease: "power3.out" }
-            );
-        }
+        clearFeedback();
     };
 
     const renderDirectoryPicker = (target: DirectoryPickerTarget) => {
         if (activeDirectoryPickerTarget !== target) return null;
         const pickerId = target === 'localPath' ? "add-project-directory-picker" : "add-project-clone-directory-picker";
+        const currentPath = directoryListing?.currentPath || pendingDirectoryPath || "";
+        const loadingLabel = pendingDirectoryPath
+            ? `Loading ${pendingDirectoryPath}`
+            : "Loading directories";
+        const statusMessage = directoryPickerError
+            ? `Directory load failed: ${directoryPickerError}`
+            : isDirectoryPickerLoading
+                ? loadingLabel
+                : directoryListing
+                    ? `${directoryListing.directories.length} child director${directoryListing.directories.length === 1 ? "y" : "ies"} in ${directoryListing.currentPath}.`
+                    : "Directory picker ready.";
 
         return (
             <div
@@ -303,8 +373,11 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     >
                         <><RefreshCw aria-hidden="true" className={`h-4 w-4 ${isDirectoryPickerLoading ? "animate-spin" : ""}`} />{isDirectoryPickerLoading && <span className="sr-only">Loading</span>}</>
                     </button>
-                    <div className="min-w-0 flex-1 truncate rounded-xl bg-white px-3 py-2 font-mono text-xs font-semibold text-slate-600 dark:bg-white/[0.055] dark:text-slate-300">
-                        {directoryListing?.currentPath || "Loading directories..."}
+                    <div
+                        className="min-w-0 flex-1 truncate rounded-xl bg-white px-3 py-2 font-mono text-xs font-semibold text-slate-600 dark:bg-white/[0.055] dark:text-slate-300"
+                        aria-label={isDirectoryPickerLoading ? loadingLabel : currentPath ? `Current path ${currentPath}` : "Directory picker path"}
+                    >
+                        {isDirectoryPickerLoading && pendingDirectoryPath ? loadingLabel : currentPath || "Loading directories..."}
                     </div>
                     <button
                         type="button"
@@ -312,9 +385,17 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                         disabled={!directoryListing || isDirectoryPickerLoading}
                         className="flex h-8 items-center gap-1.5 rounded-xl bg-ember-500 px-3 text-xs font-black uppercase tracking-[0.12em] text-void-900 transition-all hover:bg-ember-400 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-700 dark:disabled:text-slate-400"
                     >
-                        <Check className="h-3.5 w-3.5" />
+                        <Check aria-hidden="true" className="h-3.5 w-3.5" />
                         Use
                     </button>
+                </div>
+                <div
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                    className="border-b border-black/[0.04] px-3 py-2 text-xs font-semibold text-slate-500 dark:border-white/[0.06] dark:text-slate-400"
+                >
+                    {statusMessage}
                 </div>
                 {directoryPickerError ? (
                     <div id="directory-picker-error" role="alert" aria-live="assertive" className="flex items-center gap-2 px-3 py-3 text-xs font-semibold text-status-red">
@@ -325,8 +406,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     <div className="max-h-44 overflow-y-auto p-2">
                         {isDirectoryPickerLoading && !directoryListing ? (
                             <div className="flex items-center gap-2 px-2 py-3 text-xs font-semibold text-slate-400">
-                                <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
-                                Loading directories
+                                <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+                                {loadingLabel}
                             </div>
                         ) : directoryListing?.directories.length ? (
                             <div className="grid gap-1">
@@ -344,7 +425,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                             </div>
                         ) : (
                             <div className="px-2 py-3 text-xs font-semibold text-slate-400">
-                                No child directories
+                                No child directories in {directoryListing?.currentPath || "the current path"}
                             </div>
                         )}
                     </div>
@@ -358,6 +439,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         { key: "quicksprints", label: "Quicksprints", description: "Repository-specific sprint templates.", icon: Workflow },
         { key: "previewScript", label: "Preview Script", description: "Container startup script for browser previews.", icon: PlaySquare },
         { key: "ci", label: "CI", description: "Basic GitHub/GitLab error-checking pipelines.", icon: ShieldCheck },
+        { key: "techstack", label: "Techstack", description: "Detect and assign a project stack from manifests.", icon: Layers3 },
+        { key: "docs", label: "Docs", description: "Embed repository docs into Knowledge docs.", icon: BookOpen },
     ] as const;
 
     return (
@@ -390,6 +473,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                         <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/25 font-mono mb-1.5">Source</div>
                         <div className="text-base font-semibold text-white font-mono tracking-tight leading-snug">
                             {sourceType === 'new_project' ? 'New Project' : sourceType === 'git' ? 'Git Repo' : 'Local Project'}
+                            {quickActionContextLabel ? `: ${quickActionContextLabel}` : ''}
                         </div>
                         <div className="mt-3 w-8 h-[2px] bg-ember-500/50" />
                     </div>
@@ -401,19 +485,24 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     <div className="flex items-start justify-between shrink-0 p-5 sm:p-7 lg:px-8 lg:pt-8 lg:pb-6 border-b border-black/[0.04] dark:border-white/[0.04]">
                         <div>
                             <h2 id="add-project-modal-title" className="text-2xl font-semibold text-slate-900 dark:text-white tracking-tight font-display leading-none">
-                                Add Project.
+                                {quickActionContextLabel ? `Create ${quickActionContextLabel}.` : 'Add Project.'}
                             </h2>
                             <p className="text-xs font-medium text-slate-400 mt-2 tracking-wide">
-                                Connect a local directory or remote repository
+                                {quickActionContextLabel
+                                    ? `Initialize a new ${quickActionContextLabel.toLowerCase()} repository with explicit project techstack settings`
+                                    : 'Connect a local directory or remote repository'}
                             </p>
                         </div>
                         <div className="sr-only" aria-live="polite" role="status">
                             {sourceType === 'new_project' ? 'New Project selected' : sourceType === 'git' ? 'Git Repo selected' : 'Local Project selected'}
+                            {quickActionContextLabel ? `. ${quickActionContextLabel} context selected.` : ''}
                             {showSetupOptions ? '. Setup Options step.' : ''}
                         </div>
                         <button
                             onClick={handleClose}
                             aria-label="Close dialog"
+                            disabled={isSubmitting}
+                            aria-describedby={isSubmitting ? "add-project-submit-disabled-reason" : undefined}
                             className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all active:scale-95 shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
                         >
                             <X aria-hidden="true" className="w-4 h-4" />
@@ -425,8 +514,16 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                         <form ref={fieldsRef} id="add-project-form" onSubmit={handleSubmit} noValidate className="flex flex-col flex-1 gap-5 lg:gap-6">
 
 
-                            {submitError && (
-                                <ActionFeedbackRegion status="error" message={submitError} onDismiss={() => setSubmitError(null)} />
+                            {validationSummary ? (
+                                <ActionFeedbackRegion status="error" message={validationSummary} onDismiss={() => setValidationSummary(null)} />
+                            ) : submitError && (
+                                <ActionFeedbackRegion
+                                    status="error"
+                                    message={submitError}
+                                    onDismiss={() => setSubmitError(null)}
+                                    retryAction={() => fieldsRef.current?.requestSubmit()}
+                                    retryLabel="Retry"
+                                />
                             )}
 
                             {/* Project Name */}
@@ -443,9 +540,10 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                         const newName = (e.target as HTMLInputElement).value;
                                         setName(newName);
                                         if (!isSlugEdited) {
-                                            setGitUrlSlug(newName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""));
+                                            setGitUrlSlug(slugify(newName));
                                         }
                                         setTouched(prev => ({ ...prev, name: true }));
+                                        clearFeedback();
                                     }}
                                     placeholder="My Awesome Project"
                                     className={projectNameInputClass}
@@ -456,7 +554,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                     aria-required="true"
                                     onBlur={() => setTouched(prev => ({ ...prev, name: true }))}
                                 />
-                                <FormError id="project-name-error" error={touched.name ? validationErrors.name : undefined} />
+                                <FormError id="project-name-error" error={touched.name ? validationErrors.name : undefined} announce={false} />
                             </div>
 
                             {/* Source Type Toggle */}
@@ -489,6 +587,12 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                             </fieldset>
 
                             {/* Conditional fields */}
+                            <div
+                                ref={transitionSurfaceRef}
+                                className="flex flex-col gap-5 lg:gap-6"
+                                data-motion-contract="listReveal"
+                                style={{ transitionDuration: cssTokens.listReveal.duration, transitionTimingFunction: cssTokens.listReveal.ease }}
+                            >
                             {sourceType === 'local' && (
                                 <div className="group/field">
                                     <label htmlFor="add-project-path" className={`${fieldLabelClass} flex items-center gap-1.5`}>
@@ -503,7 +607,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             onInput={(e) => {
                                                 setLocalPath((e.target as HTMLInputElement).value);
                                                 setTouched(prev => ({ ...prev, path: true }));
-                                                if (submitError) setSubmitError(null);
+                                                clearFeedback();
                                             }}
                                             placeholder="/home/user/projects/my-project"
                                             className={`${detailInputSurfaceClass} min-w-0 flex-1`}
@@ -526,7 +630,12 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                         </button>
                                     </div>
                                     {renderDirectoryPicker('localPath')}
-                                    <FormError id="project-path-error" error={touched.path ? validationErrors.path : undefined} />
+                                    {directorySelectionMessage && (
+                                        <div role="status" aria-live="polite" className="mt-2 text-xs font-semibold text-status-green">
+                                            {directorySelectionMessage}
+                                        </div>
+                                    )}
+                                    <FormError id="project-path-error" error={touched.path ? validationErrors.path : undefined} announce={false} />
                                 </div>
                             )}
 
@@ -543,7 +652,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             onInput={(e) => {
                                                 setGitUrl((e.target as HTMLInputElement).value);
                                                 setTouched(prev => ({ ...prev, path: true }));
-                                                if (submitError) setSubmitError(null);
+                                                clearFeedback();
                                             }}
                                             placeholder="https://github.com/user/repo.git"
                                             className={detailInputClass}
@@ -555,7 +664,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             aria-required="true"
                                             onBlur={() => setTouched(prev => ({ ...prev, path: true }))}
                                         />
-                                        <FormError id="project-git-error" error={touched.path ? validationErrors.path : undefined} />
+                                        <FormError id="project-git-error" error={touched.path ? validationErrors.path : undefined} announce={false} />
                                     </div>
                                     <div className="group/field">
                                         <label htmlFor="add-project-clone-dir" className={`${fieldLabelClass} flex items-center gap-1.5`}>
@@ -585,6 +694,11 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             </button>
                                         </div>
                                         {renderDirectoryPicker('cloneDir')}
+                                        {directorySelectionMessage && (
+                                            <div role="status" aria-live="polite" className="mt-2 text-xs font-semibold text-status-green">
+                                                {directorySelectionMessage}
+                                            </div>
+                                        )}
                                     </div>
                                 </>
                             )}
@@ -606,6 +720,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                 onChange={(event) => {
                                                     setInitializeProject((event.target as HTMLInputElement).checked);
                                                     setShowSetupOptions(false);
+                                                    clearFeedback();
                                                 }}
                                                 className="sr-only"
                                             />
@@ -615,7 +730,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                     Initialize with Project Setup Agent
                                                 </span>
                                                 <span className="mt-1 block text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
-                                                    Research the codebase after creation and generate project-specific agents, routing, quicksprints, preview startup, and basic CI.
+                                                    Research the codebase after creation and generate project-specific agents, routing, quicksprints, preview startup, basic CI, and a detected techstack.
                                                 </span>
                                             </span>
                                         </label>
@@ -634,7 +749,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                 </div>
                                                 <button
                                                     type="button"
-                                                    onClick={() => setSetupOptions({ agents: true, quicksprints: true, previewScript: true, ci: true })}
+                                                    onClick={() => setSetupOptions({ agents: true, quicksprints: true, previewScript: true, ci: true, techstack: true, docs: true })}
                                                     className="rounded-xl bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 shadow-sm transition-colors hover:text-slate-900 dark:bg-white/[0.08] dark:text-slate-300 dark:hover:text-white"
                                                 >
                                                     All
@@ -647,7 +762,10 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                         <button
                                                             key={key}
                                                             type="button"
-                                                            onClick={() => setSetupOptions(prev => ({ ...prev, [key]: !prev[key] }))}
+                                                            onClick={() => {
+                                                                setSetupOptions(prev => ({ ...prev, [key]: !prev[key] }));
+                                                                clearFeedback();
+                                                            }}
                                                             className={`flex min-w-0 items-start gap-3 rounded-2xl border p-3 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
                                                                 checked
                                                                     ? "border-ember-500/35 bg-ember-500/[0.08] text-slate-900 dark:text-white"
@@ -689,7 +807,10 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                         <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
                                             <button
                                                 type="button"
-                                                onClick={() => setNewInitMode('new-local')}
+                                                onClick={() => {
+                                                    setNewInitMode('new-local');
+                                                    clearFeedback();
+                                                }}
                                                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-[0.14em] transition-all active:scale-95 duration-250 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
                                                     newInitMode === 'new-local'
                                                         ? 'bg-ember-500 text-void-900 shadow-[0_2px_12px_rgba(255,184,0,0.3)]'
@@ -701,7 +822,10 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             </button>
                                             <button
                                                 type="button"
-                                                onClick={() => setNewInitMode('new-remote')}
+                                                onClick={() => {
+                                                    setNewInitMode('new-remote');
+                                                    clearFeedback();
+                                                }}
                                                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-[0.14em] transition-all active:scale-95 duration-250 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
                                                     newInitMode === 'new-remote'
                                                         ? 'bg-ember-500 text-void-900 shadow-[0_2px_12px_rgba(255,184,0,0.3)]'
@@ -728,7 +852,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                     onInput={(e) => {
                                                         setLocalPath((e.target as HTMLInputElement).value);
                                                         setTouched(prev => ({ ...prev, path: true }));
-                                                        if (submitError) setSubmitError(null);
+                                                        clearFeedback();
                                                     }}
                                                     placeholder="/home/user/projects/my-project"
                                                     className={`${detailInputSurfaceClass} min-w-0 flex-1`}
@@ -750,7 +874,12 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                 </button>
                                             </div>
                                             {renderDirectoryPicker('localPath')}
-                                            <FormError id="project-new-path-error" error={touched.path ? validationErrors.path : undefined} />
+                                            {directorySelectionMessage && (
+                                                <div role="status" aria-live="polite" className="mt-2 text-xs font-semibold text-status-green">
+                                                    {directorySelectionMessage}
+                                                </div>
+                                            )}
+                                            <FormError id="project-new-path-error" error={touched.path ? validationErrors.path : undefined} announce={false} />
                                         </div>
                                     ) : (
                                         <>
@@ -766,7 +895,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                         setGitUrlSlug((e.target as HTMLInputElement).value);
                                                         setIsSlugEdited(true);
                                                         setTouched(prev => ({ ...prev, slug: true }));
-                                                        if (submitError) setSubmitError(null);
+                                                        clearFeedback();
                                                     }}
                                                     placeholder="my-awesome-project"
                                                     className={detailInputClass}
@@ -777,7 +906,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                     aria-required="true"
                                                     onBlur={() => setTouched(prev => ({ ...prev, slug: true }))}
                                                 />
-                                                <FormError id="project-git-slug-error" error={touched.slug ? validationErrors.slug : undefined} />
+                                                <FormError id="project-git-slug-error" error={touched.slug ? validationErrors.slug : undefined} announce={false} />
                                             </div>
                                             <div className="group/field">
                                                 <div className="flex items-center justify-between gap-3">
@@ -849,6 +978,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                     )}
                                 </>
                             )}
+                            </div>
 
 
                             </form>
@@ -858,12 +988,17 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 <button
                                     type="button"
                                     onClick={handleClose}
-                                    className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 rounded w-full sm:w-auto py-2 sm:py-0"
+                                    disabled={isSubmitting}
+                                    aria-describedby={isSubmitting ? "add-project-submit-disabled-reason" : undefined}
+                                    title={isSubmitting ? "Project creation is in progress." : undefined}
+                                    className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 rounded w-full sm:w-auto py-2 sm:py-0 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     Cancel
                                 </button>
                                 <button type="submit" form="add-project-form" disabled={isSubmitting}
                                     aria-busy={isSubmitting}
+                                    aria-describedby={isSubmitting ? "add-project-submit-disabled-reason" : undefined}
+                                    title={isSubmitting ? "Project creation is in progress." : undefined}
                                     className="group/btn flex items-center justify-center gap-2.5 px-6 py-3 bg-ember-500 w-full sm:w-auto  hover:bg-ember-400 disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-700 dark:disabled:text-slate-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] disabled:shadow-none active:scale-95 disabled:active:scale-100 hover:-translate-y-px disabled:hover:-translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
                                 >
                                     {isSubmitting ? (
@@ -873,6 +1008,9 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                     )}
                                     {isSubmitting ? (sourceType !== 'new_project' && initializeProject ? "Setting up..." : "Adding...") : (sourceType !== 'new_project' && initializeProject && !showSetupOptions ? "Continue" : "Add Project")}
                                 </button>
+                                <span id="add-project-submit-disabled-reason" className="sr-only">
+                                    Project creation is in progress. Wait for it to finish or retry if it fails.
+                                </span>
                             </div>
                 </div>
             </div>

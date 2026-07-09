@@ -14,7 +14,10 @@ import type {
   ExternalSettingsHints,
   GitTrackingStatus,
   JulesActivity,
+  OnboardingDependencyInstallerResult,
+  OnboardingDependencyInstallMode,
   OnboardingRuntimeReadiness,
+  PreviewEnvironmentVariable,
   ProjectLiveDashboardSnapshot,
   ProjectStatsQuery,
   ReadinessProbeStatus,
@@ -32,6 +35,7 @@ import type { SettingsRepository } from "../../repositories/settings-repository.
 import type { ProjectManagementRepository } from "../../repositories/project-management-repository.js";
 import type { ProjectRuntimeRepository } from "../../repositories/project-runtime-repository.js";
 import type { ConnectionChatRepository } from "../../repositories/connection-chat-repository.js";
+import type { ChatProviderRepository } from "../../repositories/chat-provider-repository.js";
 import type { ProjectWorkerAssignmentRepository } from "../../repositories/project-worker-assignment-repository.js";
 import type { ProjectWorkerAssignmentService } from "../../domain/workers/project-worker-assignment-service.js";
 import type { ProjectAttentionRepository } from "../../repositories/project-attention-repository.js";
@@ -48,15 +52,22 @@ import type { DashboardRealtimeService } from "../../services/dashboard-realtime
 import type { PlanningAgentService } from "../../services/planning-agent-service.js";
 import type { ExecutionInvocationControlService } from "../../services/execution-invocation-control-service.js";
 import type { ChatThreadRuntimeService } from "../../services/chat-thread-runtime-service.js";
+import type { ChatProviderOutboundService } from "../../services/chat-provider-outbound-service.js";
 import type { QuicksprintService } from "../../services/quicksprint-service.js";
 import type { ProjectSetupService } from "../../services/project-setup-service.js";
 import type { SchedulerService } from "../../services/scheduler-service.js";
+import type { ChatProviderIngressService } from "../../services/chat-provider-ingress-service.js";
+import type { SpeechTranscriptionService } from "../../services/speech-transcription-service.js";
+import type { NodeFlowService } from "../../services/node-flow-service.js";
 import type { MemoryService } from "../../services/memory-service.js";
 import type { KnowledgeService } from "../../services/knowledge-service.js";
 import type { MemoryPromotionService } from "../../services/memory-promotion-service.js";
 import type { EmbeddingModelManager } from "../../services/embedding-model-manager.js";
 import type { EmbeddingService } from "../../services/embedding-service.js";
 import type { MemoryRepository } from "../../repositories/memory-repository.js";
+import type { CustomDashboardRepository } from "../../repositories/custom-dashboard-repository.js";
+import type { CustomDashboardValidationService } from "../../services/custom-dashboard-validation-service.js";
+import type { SkillService } from "../../services/skill-service.js";
 import type { GuardrailService } from "../../services/guardrail-service.js";
 import type { ProjectSettings } from "../../contracts/settings-scope-types.js";
 import { UpdateCheckerService } from "../../services/update-checker-service.js";
@@ -65,8 +76,22 @@ import { getRepoDebugLogPath, CODE_UX_SERVICE_NAME } from "../../shared/config/c
 import { getProjectLiveSnapshot } from "../live/project-live-snapshot.js";
 import { DashboardSnapshotCache, mapAssignedWorkers } from "./dashboard-snapshot-cache.js";
 import { prepareGitProjectCreateInput } from "../../services/project-git-clone-service.js";
-import { getOnboardingRuntimeReadiness } from "../../services/onboarding-readiness-service.js";
+import {
+  detectOnboardingInstallerEnvironment,
+  executeOnboardingDependencyInstall,
+} from "../../services/onboarding-dependency-installer-service.js";
+import {
+  getOnboardingRuntimeReadiness,
+  invalidateOnboardingRuntimeReadinessCache,
+} from "../../services/onboarding-readiness-service.js";
 import type { SprintImportedTaskInput } from "../../contracts/project-management-types.js";
+import type { McpConnectionInfo } from "../../contracts/mcp-connection-types.js";
+import type {
+  LocalMcpCliConfigService,
+  LocalMcpCliProvider,
+  LocalMcpInstallResult,
+  LocalMcpSetupInfo,
+} from "../../services/local-mcp-cli-config-service.js";
 
 const updateCheckerService = new UpdateCheckerService();
 
@@ -82,6 +107,7 @@ export interface BootDashboardDeps {
   projectRuntimeRepository: ProjectRuntimeRepository;
   executionRepository: ExecutionRepository;
   connectionChatRepository: ConnectionChatRepository;
+  chatProviderRepository: ChatProviderRepository;
   projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
   projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   projectAttentionRepository: ProjectAttentionRepository;
@@ -100,6 +126,13 @@ export interface BootDashboardDeps {
   schedulerService: SchedulerService;
   sprintIssueService: SprintIssueService;
   chatThreadRuntimeService: ChatThreadRuntimeService;
+  chatProviderIngressService: ChatProviderIngressService;
+  speechTranscriptionService: SpeechTranscriptionService;
+  chatProviderOutboundService?: ChatProviderOutboundService;
+  nodeFlowService?: NodeFlowService;
+  customDashboardRepository?: CustomDashboardRepository;
+  customDashboardValidationService?: CustomDashboardValidationService;
+  skillService: SkillService;
   dashboardRealtimeService: DashboardRealtimeService;
   logger: Logger;
   getLiveActivitiesForActiveTasks: () => Promise<Record<string, JulesActivity[]>>;
@@ -108,21 +141,36 @@ export interface BootDashboardDeps {
   isHealthy: () => ReadinessProbeStatus;
   listDockerContainers: () => Promise<DockerContainer[]>;
   getOnboardingRuntimeReadiness?: () => Promise<OnboardingRuntimeReadiness>;
+  installOnboardingDependencies?: (mode: OnboardingDependencyInstallMode) => Promise<OnboardingDependencyInstallerResult>;
   listSprintPreviewSessions: (projectId: string) => Promise<SprintPreviewSession[]>;
   getSprintPreviewSession: (sessionId: string) => Promise<SprintPreviewSession | null>;
+  getSprintPreviewSessionForProjectSprint: (projectId: string, sprintId: string, sessionId: string) => Promise<SprintPreviewSession>;
   startSprintPreviewSession: (projectId: string, sprintId: string) => Promise<SprintPreviewSession>;
   rebuildSprintPreviewSession: (sessionId: string) => Promise<SprintPreviewSession>;
+  rebuildSprintPreviewSessionForProjectSprint: (projectId: string, sprintId: string, sessionId: string) => Promise<SprintPreviewSession>;
   stopSprintPreviewSession: (sessionId: string) => Promise<SprintPreviewSession>;
+  stopSprintPreviewSessionForProjectSprint: (projectId: string, sprintId: string, sessionId: string) => Promise<SprintPreviewSession>;
   removeSprintPreviewSession: (sessionId: string) => Promise<void>;
+  removeSprintPreviewSessionForProjectSprint: (projectId: string, sprintId: string, sessionId: string) => Promise<void>;
   getSprintPreviewScript: (projectId: string, sprintId: string) => Promise<SprintPreviewScript>;
   saveSprintPreviewScript: (projectId: string, sprintId: string, content: string) => Promise<SprintPreviewScript>;
+  updateSprintPreviewEnvironmentOverrides: (projectId: string, sprintId: string, sessionId: string, environmentOverrides: PreviewEnvironmentVariable[]) => Promise<SprintPreviewSession>;
   getSprintPreviewLogs: (sessionId: string, tail?: number) => Promise<{ logs: string }>;
+  getSprintPreviewLogsForProjectSprint: (projectId: string, sprintId: string, sessionId: string, tail?: number) => Promise<{ logs: string }>;
   proxySprintPreviewRequest: (args: {
     sessionId: string;
     method: string;
     path: string;
     headers?: Record<string, string | undefined>;
     body?: Buffer;
+  }) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>;
+  proxySprintPreviewRequestForProjectSprint: (projectId: string, sprintId: string, args: {
+    sessionId: string;
+    method: string;
+    path: string;
+    headers?: Record<string, string | undefined>;
+    body?: Buffer;
+    selectedPort?: string | number | null;
   }) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>;
   listFileBrowserSessions: (projectId: string) => Promise<FileBrowserSession[]>;
   startFileBrowserSession: (projectId: string, sprintId: string) => Promise<FileBrowserSession>;
@@ -143,6 +191,9 @@ export interface BootDashboardDeps {
   embeddingService: EmbeddingService;
   memoryRepository: MemoryRepository;
   knowledgeService: KnowledgeService;
+  localMcpCliConfigService: LocalMcpCliConfigService;
+  getLocalMcpConnectionInfo: () => McpConnectionInfo | null;
+  regenerateMcpHttpAuthToken: () => string;
 }
 
 export function reinitializeLogger(deps: { projectRoot: string, runtimeContext: RuntimeContext }): Logger {
@@ -363,17 +414,25 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
   });
 
   deps.projectSetupService.setRealtimeNotifier(deps.dashboardRealtimeService);
+  deps.chatThreadRuntimeService?.setQuicksprintLauncher?.(deps.quicksprintService);
 
   // Auto-restore previously active embedding model (fire-and-forget)
   deps.embeddingModelManager.restorePreviousModel().catch((error) => {
     deps.logger.warn(`Embedding model auto-restore failed: ${error}`);
   });
   deps.schedulerService?.start();
+  deps.chatProviderOutboundService?.start();
 
   const instructionFileService = new InstructionFileService({
     projectManagementRepository: deps.projectManagementRepository,
     logger: deps.logger.child({ component: "instruction-file-service" }),
   });
+
+  const getDefaultOnboardingRuntimeReadiness = deps.getOnboardingRuntimeReadiness
+    ?? (async () => getOnboardingRuntimeReadiness(
+      deps.settingsRepository.getSystemSettings(),
+      await detectOnboardingInstallerEnvironment(),
+    ));
 
   const handle = await setupDashboardServer({
     app: deps.app,
@@ -389,6 +448,13 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     settingsRepository: deps.settingsRepository,
     knowledgeService: deps.knowledgeService,
     agentPresetRepository: deps.agentPresetRepository,
+    chatProviderRepository: deps.chatProviderRepository,
+    chatProviderIngressService: deps.chatProviderIngressService,
+    speechTranscriptionService: deps.speechTranscriptionService,
+    nodeFlowService: deps.nodeFlowService,
+    customDashboardRepository: deps.customDashboardRepository,
+    customDashboardValidationService: deps.customDashboardValidationService,
+    skillService: deps.skillService,
     projectManagementRepository: deps.projectManagementRepository,
     executionRepository: deps.executionRepository,
     getLiveSnapshot: (projectIdHint) => getProjectLiveSnapshot({
@@ -416,9 +482,11 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
         };
     },
     getOverviewTelemetrySnapshot: cache.getOverviewTelemetrySnapshot,
-    // `/api/projects/:id/execution` (sprints/overview/chat) — feed-less.
-    getProjectExecutionSnapshot: cache.getProjectExecutionSnapshotLean,
+    // `/api/projects/:id/execution` is the public REST snapshot and includes
+    // recent events/invocations; realtime execution pushes stay feed-less above.
+    getProjectExecutionSnapshot: cache.getProjectExecutionSnapshot,
     getProjectStatsSnapshot: cache.getProjectStatsSnapshot,
+    getHeaderTokenThroughputSnapshot: cache.getHeaderTokenThroughputSnapshot,
     setPreferredWorker: (projectId, input) => {
       requireProject(deps, projectId);
       const assignments = deps.projectWorkerAssignmentService.setProjectPreferredWorker(projectId, input);
@@ -456,6 +524,13 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     getLiveActivities: deps.getLiveActivitiesForActiveTasks,
     getGitStatus: deps.getGitStatus,
     getExternalSettingsHints: () => deps.externalSettingsHints,
+    getLocalMcpSetup: (): LocalMcpSetupInfo => deps.localMcpCliConfigService.getSetupInfo(deps.getLocalMcpConnectionInfo()),
+    regenerateLocalMcpAuthToken: (): LocalMcpSetupInfo => {
+      deps.regenerateMcpHttpAuthToken();
+      return deps.localMcpCliConfigService.getSetupInfo(deps.getLocalMcpConnectionInfo());
+    },
+    installLocalMcpProvider: (provider: LocalMcpCliProvider): Promise<LocalMcpInstallResult> =>
+      deps.localMcpCliConfigService.installProvider(provider, deps.getLocalMcpConnectionInfo()),
     getSystemSettings: () => deps.settingsRepository.getSystemSettings(),
     getUpdateStatus: () => updateCheckerService.checkForUpdate(),
     saveSystemSettings: (settings) => {
@@ -626,8 +701,10 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
         settings.settings.jira.apiToken,
         input,
         settings.settings.jira.defaultProject,
+        settings.settings.jira.importTransitionName?.trim() || "In Work",
       );
     },
+    searchJiraProjectStatuses: (projectId, projectKey) => deps.sprintIssueService.searchJiraProjectStatuses(projectId, projectKey),
     listSprintLinkedIssues: (sprintId) => deps.sprintIssueService.getLinkedIssues(sprintId),
     replaceSprintLinkedIssues: (sprintId, projectId, issues) => deps.sprintIssueService.replaceLinkedIssues(sprintId, projectId, issues),
     listConnections: (projectId) => deps.connectionChatRepository.listConnections(projectId),
@@ -638,19 +715,26 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     deleteAgentPreset: async (agentPresetId) => await deps.agentPresetSyncService.deleteAgentPreset(agentPresetId),
     importAgentPresetFromMarkdown: async (agentPresetId) => await deps.agentPresetSyncService.importAgentPresetFromMarkdown(agentPresetId),
     syncAllAgentPresetsFromMarkdown: async (projectId) => await deps.agentPresetSyncService.syncAllAgentPresetsFromMarkdown(projectId),
+    pullAgentPresetsFromMarkdown: async (projectId) => await deps.agentPresetSyncService.pullAgentPresetsFromMarkdown(projectId),
+    pushAgentPresetsToMarkdown: async (projectId, options) => await deps.agentPresetSyncService.pushAgentPresetsToMarkdown(projectId, options),
+    exportAgentPresetToMarkdown: async (agentPresetId) => await deps.agentPresetSyncService.exportAgentPresetToMarkdown(agentPresetId),
     pushAgentPresetsToRepository: async (projectId, options) => await deps.agentPresetSyncService.pushAgentPresetsToRepository(projectId, options),
     listInstructionFiles: (projectId) => instructionFileService.listInstructionFiles(projectId),
     readInstructionFile: (projectId, fileId) => instructionFileService.readInstructionFile(projectId, fileId),
     writeInstructionFile: (projectId, fileId, content) => instructionFileService.writeInstructionFile(projectId, fileId, content),
     listConversationThreads: (projectId) => deps.connectionChatRepository.listThreads(projectId),
     createConversationThread: (projectId, input) => deps.connectionChatRepository.createThread(projectId, input),
-    updateConversationThread: (threadId, input) => deps.connectionChatRepository.updateThread(threadId, input),
+    updateConversationThread: (threadId, input) => deps.chatThreadRuntimeService.updateConversationThread(threadId, input),
     updateThreadRoute: (threadId, input) => deps.chatThreadRuntimeService.updateThreadRoute(threadId, input),
     compactThreadSession: (threadId) => deps.chatThreadRuntimeService.compactThreadSession(threadId),
     cancelThreadTurn: (threadId) => deps.chatThreadRuntimeService.cancelInFlightTurn(threadId),
     deleteConversationThread: (threadId) => deps.connectionChatRepository.deleteThread(threadId),
     listConversationMessages: (threadId) => deps.connectionChatRepository.listMessages(threadId),
     postConversationMessage: (projectId, input) => deps.chatThreadRuntimeService.postMessage(projectId, input),
+    getConversationDraft: (projectId, input) => deps.connectionChatRepository.getDraft(projectId, input),
+    upsertConversationDraft: (projectId, input) => deps.connectionChatRepository.upsertDraft(projectId, input),
+    listConversationMessageHistory: (projectId, input) => deps.connectionChatRepository.listMessageHistory(projectId, input),
+    recordConversationMessageHistory: (projectId, input) => deps.connectionChatRepository.recordMessageHistory(projectId, input),
 
     listProjectInvocations: (projectId) => deps.executionRepository.listExecutionInvocations({ projectId }),
     listInvocationMessages: (invocationId) => deps.executionRepository.listExecutionInvocationMessages(invocationId),
@@ -661,6 +745,11 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     },
     cancelExecutionInvocation: async (invocationId) => {
       const result = await deps.executionInvocationControlService.cancelInvocation(invocationId);
+      deps.activityCacheService.invalidateGitStatusCache();
+      return result;
+    },
+    resetInvocationUsageLimitTimer: async (invocationId) => {
+      const result = await deps.executionInvocationControlService.resetUsageLimitTimer(invocationId);
       deps.activityCacheService.invalidateGitStatusCache();
       return result;
     },
@@ -715,21 +804,40 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     isReady: deps.isReady,
     isHealthy: deps.isHealthy,
     listDockerContainers: deps.listDockerContainers,
-    getOnboardingRuntimeReadiness: deps.getOnboardingRuntimeReadiness
-      ?? (() => getOnboardingRuntimeReadiness(deps.settingsRepository.getSystemSettings())),
+    getOnboardingRuntimeReadiness: getDefaultOnboardingRuntimeReadiness,
+    installOnboardingDependencies: deps.installOnboardingDependencies
+      ?? (async (mode) => {
+        const environment = await detectOnboardingInstallerEnvironment();
+        const readiness = deps.getOnboardingRuntimeReadiness
+          ? await getDefaultOnboardingRuntimeReadiness()
+          : await getOnboardingRuntimeReadiness(deps.settingsRepository.getSystemSettings(), environment);
+        return executeOnboardingDependencyInstall({
+          mode,
+          dependencies: readiness.dependencies,
+          environment,
+          invalidateReadinessCache: invalidateOnboardingRuntimeReadinessCache,
+        });
+      }),
     getOnboardingState: () => deps.settingsRepository.getOnboardingState(),
     markOnboardingCompleted: () => deps.settingsRepository.markOnboardingCompleted(),
     resetOnboardingState: () => deps.settingsRepository.resetOnboardingState(),
     listSprintPreviewSessions: deps.listSprintPreviewSessions,
     getSprintPreviewSession: deps.getSprintPreviewSession,
+    getSprintPreviewSessionForProjectSprint: deps.getSprintPreviewSessionForProjectSprint,
     startSprintPreviewSession: deps.startSprintPreviewSession,
     rebuildSprintPreviewSession: deps.rebuildSprintPreviewSession,
+    rebuildSprintPreviewSessionForProjectSprint: deps.rebuildSprintPreviewSessionForProjectSprint,
     stopSprintPreviewSession: deps.stopSprintPreviewSession,
+    stopSprintPreviewSessionForProjectSprint: deps.stopSprintPreviewSessionForProjectSprint,
     removeSprintPreviewSession: deps.removeSprintPreviewSession,
+    removeSprintPreviewSessionForProjectSprint: deps.removeSprintPreviewSessionForProjectSprint,
     getSprintPreviewScript: deps.getSprintPreviewScript,
     saveSprintPreviewScript: deps.saveSprintPreviewScript,
+    updateSprintPreviewEnvironmentOverrides: deps.updateSprintPreviewEnvironmentOverrides,
     getSprintPreviewLogs: deps.getSprintPreviewLogs,
+    getSprintPreviewLogsForProjectSprint: deps.getSprintPreviewLogsForProjectSprint,
     proxySprintPreviewRequest: deps.proxySprintPreviewRequest,
+    proxySprintPreviewRequestForProjectSprint: deps.proxySprintPreviewRequestForProjectSprint,
     listFileBrowserSessions: deps.listFileBrowserSessions,
     startFileBrowserSession: deps.startFileBrowserSession,
     rebuildFileBrowserSession: deps.rebuildFileBrowserSession,
@@ -754,5 +862,11 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
       error: error instanceof Error ? error.message : String(error),
     });
   });
-  return handle;
+  return {
+    ...handle,
+    close: async () => {
+      deps.chatProviderOutboundService?.stop();
+      await handle.close?.();
+    },
+  };
 }

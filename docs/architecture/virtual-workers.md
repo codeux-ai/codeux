@@ -67,7 +67,7 @@ Each virtual cycle is project-scoped and one-shot:
 
 This is intentionally not an endless watch loop.
 
-The background reconcile loop stays conservative (`3s`) to avoid unnecessary sqlite write contention, while virtual worker session completion polling is tighter (`2s`) because it only checks local session and dispatch state. Scheduling operations use microtask queueing to consolidate rapid sync events while preventing simultaneous cycle overlap for the same project.
+The background reconcile loop stays conservative (`3s`) to avoid unnecessary sqlite write contention, while virtual worker session completion polling is tighter (`2s`) because it only checks local session and dispatch state. Initial scheduling operations use microtask queueing to consolidate rapid sync events while preventing simultaneous cycle overlap for the same project. If a cycle finishes and work still remains, follow-up scheduling is deferred on the reconcile timer cadence instead of recursively queueing more microtasks, so dashboard HTTP probes and shutdown signals stay responsive even when persisted worker state is temporarily unchanged.
 
 ## Planning Boundary
 
@@ -165,10 +165,10 @@ It deduplicates this project set and explicitly ignores all other projects in th
 
 Startup cleanup prunes orphaned `virtual_cli` endpoints from previous runs.
 
-Startup cleanup also removes stale Code UX Docker assets through a background, label-filtered prune so server boot does not wait on full Docker daemon scans:
+Startup cleanup also removes stale Code UX Docker assets through a background, label-filtered prune so server boot does not wait on full Docker daemon scans (managed via `DockerAssetPruneService`):
 
-- stale labeled workspace/runtime volumes for finished, failed, unrecoverable, or outdated sessions
-- orphaned labeled helper/login containers from previous runs, removing anonymous image-declared volumes with `docker rm -f -v`
+- orphaned labeled helper/login containers and temp credential dirs from previous runs, removing anonymous image-declared volumes with `docker rm -f -v`
+- stale labeled workspace volumes (`code-ux.workspace=true`) and paired runtime volumes (`code-ux.workspace-runtime=true`) for finished, failed, unrecoverable, or outdated sessions
 
 Cached setup-script Docker images are content-addressed by base image, setup script content, and setup-cache Dockerfile content. They are preserved across dashboard restarts and reused until one of those inputs changes or Docker no longer has the image.
 

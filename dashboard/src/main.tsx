@@ -22,6 +22,12 @@ import { LiveSessionPage } from "./v2/LiveSessionPage.js";
 import { OnboardingExperience } from "./v2/components/onboarding/OnboardingExperience.js";
 import { GuidedDashboardTour } from "./v2/components/onboarding/GuidedDashboardTour.js";
 import { TitleBar } from "./v2/components/TitleBar.js";
+import { DashboardAssistantWidget } from "./v2/components/chat/DashboardAssistantWidget.js";
+import { AddProjectModal, type AddProjectModalSubmission } from "./v2/components/ui/AddProjectModal.js";
+import { ASSISTANT_OPEN_ADD_PROJECT_EVENT } from "./v2/lib/no-project-chat-assistant.js";
+import { isDashboardFeatureEnabled } from "./v2/lib/dashboard-feature-flags.js";
+import { buildProjectCreationSettingsOverride } from "./lib/settings-updaters.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "./lib/settings.js";
 import "./styles.css";
 
 const isElectron = typeof window !== "undefined" && Boolean(window.codeUxDesktop);
@@ -47,10 +53,11 @@ const BackgroundManager = lazy(() => import("./v2/components/backgrounds/Backgro
 
 // 0. AppLayout extracted to use context hooks
 const AppLayout = () => {
-  const { selectedProject } = useProjectData();
+  const { selectedProject, createProject } = useProjectData();
   const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
   const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
   const [appearancePreview, setAppearancePreview] = useState<DashboardSettings["appearance"] | null>(null);
+  const [assistantAddProjectOpen, setAssistantAddProjectOpen] = useState(false);
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.matchMedia('(max-width: 767px)').matches : false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -102,6 +109,44 @@ const AppLayout = () => {
       window.removeEventListener("codeux:settings-updated", handler);
     };
   }, []);
+
+  useEffect(() => {
+    const handler = () => setAssistantAddProjectOpen(true);
+    window.addEventListener(ASSISTANT_OPEN_ADD_PROJECT_EVENT, handler);
+    return () => window.removeEventListener(ASSISTANT_OPEN_ADD_PROJECT_EVENT, handler);
+  }, []);
+
+  const handleAssistantCreateProject = async (project: AddProjectModalSubmission): Promise<void> => {
+    if (project.type === "new_project") {
+      const isLocalProject = project.initMode === "new-local";
+      const sourceRef = project.initMode === "new-local"
+        ? (project.path || project.name)
+        : (project.repoSlug || project.name);
+
+      await createProject({
+        name: project.name,
+        sourceType: isLocalProject ? "local" : "git",
+        sourceRef,
+        initMode: project.initMode,
+        remoteProvider: project.remoteProvider,
+        isPrivate: project.isPrivate,
+        settingsOverrides: buildProjectCreationSettingsOverride({
+          ...(isLocalProject ? { githubMode: "LOCAL" as const } : {}),
+          selectedTechstackId: project.selectedTechstackId ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.defaultTechstackId,
+          applicationKind: project.applicationKind ?? null,
+        }),
+      });
+      return;
+    }
+
+    await createProject({
+      name: project.name,
+      sourceType: project.type,
+      sourceRef: project.path,
+      cloneDir: project.cloneDir,
+      ...(project.type === "local" ? { settingsOverrides: buildProjectCreationSettingsOverride({ githubMode: "LOCAL" }) } : {}),
+    });
+  };
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -195,7 +240,7 @@ const AppLayout = () => {
       </a>
       {isElectron && <TitleBar />}
       <div className="flex flex-1 min-h-0 overflow-hidden">
-      {showSidebar && <Sidebar isMobile={isMobile} isOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)} />}
+      {showSidebar && <Sidebar isMobile={isMobile} isOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)} experienceMode={appearanceSettings?.experienceMode} />}
 
       <div className="flex flex-col flex-1 min-h-0 h-full overflow-hidden relative">
         {/*
@@ -250,9 +295,19 @@ const AppLayout = () => {
           </main>
         </div>
 
-        {!showSidebar && <KineticDock />}
+        {!showSidebar && <KineticDock experienceMode={appearanceSettings?.experienceMode} />}
+        <DashboardAssistantWidget />
         <OnboardingExperience />
         <GuidedDashboardTour />
+        {assistantAddProjectOpen && (
+          <AddProjectModal
+            onClose={() => setAssistantAddProjectOpen(false)}
+            onAdd={(project) => {
+              void handleAssistantCreateProject(project);
+              setAssistantAddProjectOpen(false);
+            }}
+          />
+        )}
         <footer className="sr-only">Dashboard Footer</footer>
       </div>
       </div>
@@ -266,6 +321,8 @@ const ProjectsPage  = lazy(() => import("./v2/ProjectsPage.js").then(m => ({ def
 const ChatPage      = lazy(() => import("./v2/ChatPage.js").then(m => ({ default: m.ChatPage })));
 const TasksPage     = lazy(() => import("./v2/TasksPage.js").then(m => ({ default: m.TasksPage })));
 const AgentsPage    = lazy(() => import("./v2/AgentsPage.js").then(m => ({ default: m.AgentsPage })));
+const NodesPage     = lazy(() => import("./v2/NodesPage.js").then(m => ({ default: m.NodesPage })));
+const CustomDashboardsPage = lazy(() => import("./v2/CustomDashboardsPage.js").then(m => ({ default: m.CustomDashboardsPage })));
 const StatsPage     = lazy(() => import("./v2/StatsPage.js").then(m => ({ default: m.StatsPage })));
 const SchedulerPage = lazy(() => import("./v2/SchedulerPage.js").then(m => ({ default: m.SchedulerPage })));
 const SettingsPage  = lazy(() => import("./v2/SettingsPage.js").then(m => ({ default: m.SettingsPage })));
@@ -273,6 +330,7 @@ const MemoryPage    = lazy(() => import("./v2/MemoryPage.js").then(m => ({ defau
 const KnowledgePage = lazy(() => import("./v2/KnowledgePage.js").then(m => ({ default: m.KnowledgePage })));
 const BrowserPage   = lazy(() => import("./v2/BrowserPage.js").then(m => ({ default: m.BrowserPage })));
 const FileBrowserPage = lazy(() => import("./v2/FileBrowserPage.js").then(m => ({ default: m.FileBrowserPage })));
+const DocsWebPage = lazy(() => import("./v2/docs-web/DocsWebPage.js").then(m => ({ default: m.DocsWebPage })));
 const ErrorPage     = lazy(() => import("./v2/ErrorPage.js").then(m => ({ default: m.ErrorPage })));
 
 // 1. Root layout route
@@ -326,6 +384,18 @@ const agentsRoute = createRoute({
   component: AgentsPage,
 });
 
+const nodesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/nodes",
+  component: NodesPage,
+});
+
+const customDashboardsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/custom-dashboards",
+  component: CustomDashboardsPage,
+});
+
 const statsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/stats",
@@ -375,13 +445,27 @@ const fileBrowserRoute = createRoute({
   component: FileBrowserPage,
 });
 
+const docsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/docs",
+  component: DocsWebPage,
+});
+
+const docsDocumentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/docs/$docId",
+  component: DocsWebPage,
+});
+
 const notFoundRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "*",
   component: ErrorPage,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, tasksRoute, projectsRoute, chatRoute, agentsRoute, statsRoute, schedulerRoute, configRoute, memoryRoute, knowledgeRoute, browserRoute, fileBrowserRoute, liveRoute, notFoundRoute]);
+const nodesFeatureEnabled = isDashboardFeatureEnabled("nodes");
+const customDashboardsFeatureEnabled = isDashboardFeatureEnabled("custom-dashboards");
+const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, tasksRoute, projectsRoute, chatRoute, agentsRoute, ...(nodesFeatureEnabled ? [nodesRoute] : []), ...(customDashboardsFeatureEnabled ? [customDashboardsRoute] : []), statsRoute, schedulerRoute, configRoute, memoryRoute, knowledgeRoute, browserRoute, fileBrowserRoute, docsRoute, docsDocumentRoute, liveRoute, notFoundRoute]);
 // `defaultPreload: "intent"` warms route matching on hover/focus; the page chunks themselves are
 // prefetched explicitly by the nav components via prefetchRoute() since they are Preact-lazy.
 const router = createRouter({ routeTree, defaultPreload: "intent", defaultPreloadDelay: 50 });

@@ -27,9 +27,10 @@ import {
   ShieldCheck,
   Sparkles,
   Star,
+  Terminal,
   X,
 } from "lucide-preact";
-import { fetchOnboardingReadiness } from "../../../lib/api/dashboard-api.js";
+import { fetchOnboardingReadiness, installOnboardingDependencies } from "../../../lib/api/dashboard-api.js";
 import { fetchSystemSettings, saveSystemSettings } from "../../lib/settings-api.js";
 import { ONBOARDING_OPEN_EVENT, ONBOARDING_STORAGE_KEY, startDashboardTour } from "../../lib/onboarding-control.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
@@ -40,29 +41,48 @@ import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { OnboardingIntro } from "./OnboardingIntro.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { ProviderInstanceCard } from "../settings/ProviderInstanceCard.js";
+import { TerminalLoginModal } from "../settings/TerminalLoginModal.js";
 import { sanitizeSystemProviderConfig } from "../../lib/provider-runtime-preview.js";
-import { PillChoiceGroup, Row, SelectInput, TextInput, Toggle } from "../settings/SettingsFormFields.js";
+import { PillChoiceGroup, Row, SecretInput, SelectInput, TextInput, Toggle } from "../settings/SettingsFormFields.js";
 import { applyAppearanceSettings } from "../../lib/apply-appearance.js";
+import { clearAppearancePreview, publishAppearancePreview } from "../../lib/appearance-preview.js";
 import { SectionCard } from "../settings/panels/SharedPanelComponents.js";
 import { JiraIcon } from "../icons/JiraIcon.js";
+import { OnboardingInstallationStep } from "./OnboardingInstallationStep.js";
+import { OnboardingAppearanceStep } from "./OnboardingAppearanceStep.js";
 
 type IntroPhase = "intro" | "transitioning" | "onboarding";
-import type { OnboardingProviderCredentialStatus, ProviderConfigId, ProviderId, ProjectSettings, SystemSettings } from "../../../types.js";
+import type {
+  DashboardExperienceMode,
+  OnboardingDependencyInstallerResult,
+  OnboardingDependencyInstallMode,
+  OnboardingProviderCredentialStatus,
+  OnboardingRuntimeReadiness,
+  ProviderConfigId,
+  ProviderId,
+  ProjectSettings,
+  SystemSettings,
+} from "../../../types.js";
 import { getSafeUrl } from "../../lib/safe-url.js";
 import {
+  applyOnboardingExperienceModeDefaults,
   buildProviderConfigId,
+  getEasyRecommendedProvider,
   getSystemProvidersByType,
   syncProjectProvidersToIntegrationCatalog
 } from "../../lib/onboarding-settings-draft.js";
+import { dashboardExperienceModeOptions } from "../../lib/experience-mode.js";
 import {
   createProjectProviderDraft,
   createSystemProviderDraft,
+  getProviderDefaultAuthPath,
   getProviderInstanceLabel,
   getProviderTypeLabel,
   sortProviderConfigEntries,
 } from "../../lib/settings-view-models.js";
 import {
   cloneSystemSettings,
+  defaultOnboardingReadiness,
   onboardingProviderTypes,
   useOnboardingStepFlow,
   type StepId,
@@ -109,6 +129,8 @@ const DEFAULT_JIRA_SETTINGS: SystemSettings["integrations"]["jira"] = {
   host: "",
   email: "",
   apiToken: "",
+  autoTransitionLinkedIssuesOnImport: true,
+  importTransitionName: "In Work",
   autoCloseLinkedIssues: false,
   defaultProject: "",
   closeTransitionName: "Done",
@@ -131,9 +153,11 @@ const providerLabels: Record<ProviderId, string> = {
   "qwen-code": "Qwen Code",
   opencode: "OpenCode",
   antigravity: "Antigravity",
+  "mockup-cli": "Mockup CLI",
 };
 
 const PROVIDER_TYPES = onboardingProviderTypes;
+const EASY_PROVIDER_TYPES: ProviderId[] = ["gemini", "antigravity", "codex", "claude-code", "qwen-code", "opencode"];
 
 const providerDescriptions: Record<ProviderId, string> = {
   jules: "Google Jules API service for agent session and workspace orchestration.",
@@ -143,6 +167,7 @@ const providerDescriptions: Record<ProviderId, string> = {
   "qwen-code": "Qwen Code CLI with OAuth, Alibaba Coding Plan, or custom model provider config.",
   opencode: "OpenCode CLI with local auth, provider keys, or OpenAI-compatible endpoints.",
   antigravity: "Antigravity CLI (agy) for Google-powered local container execution.",
+  "mockup-cli": "Internal test-only mock provider.",
 };
 
 const getProviderWatermark = (providerId: ProviderId): string => (
@@ -154,6 +179,122 @@ const getProviderWatermark = (providerId: ProviderId): string => (
             : providerId === "antigravity" ? "AGY"
               : "CLD"
 );
+
+const createEasyDashboardProviderDraft = (
+  providerId: ProviderId,
+  providerConfigId: ProviderConfigId,
+): SystemSettings["integrations"]["providers"][ProviderConfigId] => sanitizeSystemProviderConfig({
+  ...createSystemProviderDraft(providerId, providerLabels[providerId]),
+  authType: "dashboardAuth",
+  mountAuth: true,
+  authPath: `~/.code-ux/credentials/${providerConfigId}`,
+});
+
+const getEasyAuthMode = (
+  provider: SystemSettings["integrations"]["providers"][ProviderConfigId],
+): "dashboardAuth" | "localAuth" => (
+  provider.authType === "localAuth" ? "localAuth" : "dashboardAuth"
+);
+
+const getEasyAuthUpdates = (
+  providerConfigId: ProviderConfigId,
+  providerId: ProviderId,
+  authType: "dashboardAuth" | "localAuth",
+  currentAuthPath: string,
+): Partial<SystemSettings["integrations"]["providers"][ProviderConfigId]> => ({
+  authType,
+  mountAuth: true,
+  authPath: authType === "dashboardAuth"
+    ? `~/.code-ux/credentials/${providerConfigId}`
+    : (currentAuthPath && !currentAuthPath.includes(".code-ux/credentials/")
+      ? currentAuthPath
+      : getProviderDefaultAuthPath(providerId)),
+});
+
+const EasyProviderAuthCard: FunctionComponent<{
+  providerConfigId: ProviderConfigId;
+  provider: SystemSettings["integrations"]["providers"][ProviderConfigId];
+  selected: boolean;
+  readinessStatus?: OnboardingProviderCredentialStatus;
+  onUpdate: (updates: Partial<SystemSettings["integrations"]["providers"][ProviderConfigId]>) => void;
+}> = ({ providerConfigId, provider, selected, readinessStatus, onUpdate }) => {
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const authMode = getEasyAuthMode(provider);
+  const providerLabel = providerLabels[provider.provider];
+
+  const applyAuthMode = (value: string): void => {
+    const nextAuthMode = value === "localAuth" ? "localAuth" : "dashboardAuth";
+    onUpdate(getEasyAuthUpdates(providerConfigId, provider.provider, nextAuthMode, provider.authPath));
+  };
+
+  const openLogin = (): void => {
+    onUpdate(getEasyAuthUpdates(providerConfigId, provider.provider, "dashboardAuth", provider.authPath));
+    setShowLoginModal(true);
+  };
+
+  return (
+    <div data-onboarding-card className={`relative overflow-hidden rounded-[2rem] border p-5 shadow-[0_18px_50px_rgba(15,23,42,0.055)] transition-colors dark:bg-white/[0.04] ${selected ? "border-signal-500/30 bg-signal-500/10" : "border-black/[0.06] bg-white/78 dark:border-white/[0.06]"}`}>
+      <div aria-hidden className="pointer-events-none absolute -right-6 -top-8 font-display text-[7rem] font-black leading-none tracking-tight text-black/[0.025] dark:text-white/[0.025]">
+        {getProviderWatermark(provider.provider)}
+      </div>
+      <div className="relative z-10 flex flex-wrap items-start justify-between gap-3 border-b border-black/[0.06] pb-4 dark:border-white/[0.06]">
+        <div className="flex min-w-0 items-start gap-3">
+          <ProviderBrandIcon id={provider.provider} />
+          <div className="min-w-0">
+            <div className="text-base font-black text-slate-900 dark:text-white">{providerLabel}</div>
+            <div className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+              {readinessStatus?.detectedFiles.length ? "Credentials detected on this machine." : "Ready for dashboard login."}
+            </div>
+          </div>
+        </div>
+        <span className={`rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] ${selected ? "border border-signal-500/20 bg-signal-500/10 text-signal-700 dark:text-signal-200" : "border border-black/[0.06] bg-white/60 text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300"}`}>
+          {selected ? "Selected" : "Available"}
+        </span>
+      </div>
+
+      <div className="relative z-10 mt-4 space-y-3">
+        <Row label="Authentication mode">
+          <SelectInput
+            value={authMode}
+            onChange={applyAuthMode}
+            aria-label={`${providerLabel} authentication mode`}
+            options={[
+              { value: "dashboardAuth", label: "Dashboard Login" },
+              { value: "localAuth", label: "Local Copy" },
+            ]}
+          />
+        </Row>
+        {authMode === "dashboardAuth" ? (
+          <button
+            type="button"
+            onClick={openLogin}
+            aria-label={`Connect and log in to ${providerLabel}`}
+            aria-haspopup="dialog"
+            aria-expanded={showLoginModal}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-signal-500 px-4 py-3 text-sm font-black text-white shadow-lg transition-colors hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white active:scale-[0.98] dark:text-void-950 dark:focus-visible:ring-offset-void-900"
+          >
+            <Terminal className="h-4 w-4" />
+            Connect and Login
+          </button>
+        ) : (
+          <div className="rounded-2xl border border-black/[0.06] bg-white/60 px-4 py-3 text-sm font-semibold text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+            Local Copy will use this provider's default CLI login.
+          </div>
+        )}
+      </div>
+
+      {showLoginModal ? (
+        <TerminalLoginModal
+          providerConfigId={providerConfigId}
+          providerId={provider.provider}
+          providerName={providerLabel}
+          onClose={() => setShowLoginModal(false)}
+          onSuccess={() => onUpdate({ lastLoginAt: Date.now() })}
+        />
+      ) : null}
+    </div>
+  );
+};
 
 const platform = (typeof window !== "undefined" && window.codeUxDesktop?.platform) || "linux";
 
@@ -198,6 +339,25 @@ const getOSInfo = (plat: string) => {
   };
 };
 
+const normalizeOnboardingReadiness = (nextReadiness: OnboardingRuntimeReadiness): OnboardingRuntimeReadiness => {
+  const installers = nextReadiness.installers ?? defaultOnboardingReadiness.installers;
+  return {
+    ...defaultOnboardingReadiness,
+    ...nextReadiness,
+    cluster: {
+      ...defaultOnboardingReadiness.cluster,
+      ...nextReadiness.cluster,
+    },
+    dependencies: nextReadiness.dependencies ?? [],
+    providers: nextReadiness.providers ?? [],
+    installers: {
+      ...defaultOnboardingReadiness.installers,
+      ...installers,
+      options: installers.options ?? [],
+    },
+  };
+};
+
 export const OnboardingExperience: FunctionComponent = () => {
   const navigate = useNavigate();
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -210,6 +370,7 @@ export const OnboardingExperience: FunctionComponent = () => {
     open,
     activeStep,
     lastStep,
+    experienceMode,
     readiness,
     settings,
     selectedProviders,
@@ -225,17 +386,45 @@ export const OnboardingExperience: FunctionComponent = () => {
   } = useOnboardingStepFlow();
   const [introPhase, setIntroPhase] = useState<IntroPhase>("intro");
   const [checkingReadiness, setCheckingReadiness] = useState(false);
+  const [runningInstallMode, setRunningInstallMode] = useState<OnboardingDependencyInstallMode | null>(null);
+  const [lastInstallResult, setLastInstallResult] = useState<OnboardingDependencyInstallerResult | null>(null);
+  const [installError, setInstallError] = useState<string | null>(null);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
   const reducedMotion = useReducedMotion();
   const gsapTokens = useGsapInteractionTokens();
   const interactionTokens = useInteractionTokens();
   const validationRef = useRef<HTMLDivElement>(null);
+  const openRef = useRef(open);
+  const mountedRef = useRef(true);
+  const loadRequestRef = useRef(0);
   const {
     state: onboardingUserState,
     loading: onboardingStateLoading,
     markCompleted: markOnboardingCompleted,
     reset: resetOnboardingState,
   } = useOnboardingState();
+
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      loadRequestRef.current += 1;
+      clearAppearancePreview();
+    }
+  }, [open]);
+
+  useEffect(() => () => {
+    mountedRef.current = false;
+    loadRequestRef.current += 1;
+    clearAppearancePreview();
+  }, []);
+
+  const closeOnboarding = (): void => {
+    clearAppearancePreview();
+    dispatch({ type: "close" });
+  };
 
   useEffect(() => {
     if (onboardingStateLoading) {
@@ -262,7 +451,7 @@ export const OnboardingExperience: FunctionComponent = () => {
       if (e.key === "Escape") {
         void markOnboardingCompleted("cancel");
         window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
-        dispatch({ type: "close" });
+        closeOnboarding();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -277,18 +466,30 @@ export const OnboardingExperience: FunctionComponent = () => {
     setIntroPhase("onboarding");
   };
 
-  const load = async () => {
+  const load = async (): Promise<void> => {
+    const requestId = loadRequestRef.current + 1;
+    loadRequestRef.current = requestId;
     setCheckingReadiness(true);
     try {
       const [nextReadiness, nextSettings] = await Promise.all([
         fetchOnboardingReadiness(),
         fetchSystemSettings(),
       ]);
-      dispatch({ type: "load-success", readiness: nextReadiness, settings: nextSettings });
+      if (!mountedRef.current || requestId !== loadRequestRef.current || !openRef.current) {
+        return;
+      }
+      dispatch({ type: "load-success", readiness: normalizeOnboardingReadiness(nextReadiness), settings: nextSettings });
+      applyAppearanceSettings(nextSettings.defaults.appearance);
+      publishAppearancePreview(nextSettings.defaults.appearance);
     } catch (loadError) {
+      if (!mountedRef.current || requestId !== loadRequestRef.current || !openRef.current) {
+        return;
+      }
       dispatch({ type: "load-failure", error: loadError instanceof Error ? loadError.message : String(loadError) });
     } finally {
-      setCheckingReadiness(false);
+      if (mountedRef.current && requestId === loadRequestRef.current && openRef.current) {
+        setCheckingReadiness(false);
+      }
     }
   };
 
@@ -297,6 +498,29 @@ export const OnboardingExperience: FunctionComponent = () => {
       void load();
     }
   }, [open]);
+
+  const runDependencyInstall = async (mode: OnboardingDependencyInstallMode): Promise<void> => {
+    setRunningInstallMode(mode);
+    setInstallError(null);
+    try {
+      const result = await installOnboardingDependencies(mode);
+      setLastInstallResult(result);
+      await load();
+    } catch (dependencyInstallError) {
+      setInstallError(dependencyInstallError instanceof Error ? dependencyInstallError.message : String(dependencyInstallError));
+    } finally {
+      setRunningInstallMode(null);
+    }
+  };
+
+  const handleAutoInstall = (): void => {
+    const recommendedOption = readiness.installers.options.find((option) => option.mode === readiness.installers.recommendedMode);
+    if (!recommendedOption?.available) {
+      setInstallError("No recommended dependency installer is available for this platform. Use the manual links and recheck readiness after setup.");
+      return;
+    }
+    void runDependencyInstall(recommendedOption.mode);
+  };
 
   useLayoutEffect(() => {
     if (!open || !shellRef.current) {
@@ -369,6 +593,26 @@ export const OnboardingExperience: FunctionComponent = () => {
     () => Object.fromEntries(readiness.providers.map((provider) => [provider.provider, provider])) as Partial<Record<ProviderId, OnboardingProviderCredentialStatus>>,
     [readiness.providers],
   );
+  const easyRecommendedProvider = useMemo(
+    () => getEasyRecommendedProvider(readiness.providers, settings),
+    [readiness.providers, settings],
+  );
+
+  const applyExperienceMode = (
+    mode: DashboardExperienceMode,
+    options: { useGithub?: boolean; manageGithubPrWorkflow?: boolean } = {},
+  ): void => {
+    const easyUseGithubDefault = options.useGithub ?? false;
+    dispatch({ type: "select-experience-mode", mode });
+    if (mode === "EASY") {
+      dispatch({ type: "set-selected-providers", providers: [easyRecommendedProvider] });
+    }
+    updateSettings((current) => applyOnboardingExperienceModeDefaults(current, mode, {
+      recommendedProvider: easyRecommendedProvider,
+      useGithub: mode === "EASY" ? easyUseGithubDefault : options.useGithub,
+      manageGithubPrWorkflow: mode === "EASY" ? options.manageGithubPrWorkflow ?? false : options.manageGithubPrWorkflow,
+    }));
+  };
 
   const updateAppearance = (updates: Partial<SystemSettings["defaults"]["appearance"]>) => {
     updateSettings((current) => {
@@ -377,6 +621,7 @@ export const OnboardingExperience: FunctionComponent = () => {
         ...updates,
       };
       applyAppearanceSettings(nextAppearance);
+      publishAppearancePreview(nextAppearance);
       return {
         ...current,
         defaults: {
@@ -483,6 +728,34 @@ export const OnboardingExperience: FunctionComponent = () => {
     });
   };
 
+  const configureEasyProviderInstance = (
+    providerId: ProviderId,
+    providerConfigId: ProviderConfigId,
+    updates: Partial<SystemSettings["integrations"]["providers"][ProviderConfigId]>,
+  ): void => {
+    dispatch({ type: "set-selected-providers", providers: [providerId] });
+    updateSettings((current) => {
+      const provider = current.integrations.providers[providerConfigId]
+        ?? createEasyDashboardProviderDraft(providerId, providerConfigId);
+      const nextProviders = {
+        ...current.integrations.providers,
+        [providerConfigId]: sanitizeSystemProviderConfig({
+          ...provider,
+          ...updates,
+        }),
+      };
+      const syncedDefaults = syncProjectProvidersToIntegrationCatalog(current, nextProviders);
+      return {
+        ...current,
+        integrations: {
+          ...current.integrations,
+          providers: nextProviders,
+        },
+        defaults: syncedDefaults,
+      };
+    });
+  };
+
   const configureProjectProvider = (
     providerConfigId: ProviderConfigId,
     updates: Partial<ProjectSettings["aiProvider"]["providers"][ProviderConfigId]>,
@@ -538,6 +811,10 @@ export const OnboardingExperience: FunctionComponent = () => {
   };
 
   const gitMode = settings?.defaults.cliWorkflow.gitMode === "local" ? "local" : "remote";
+  const isEasyMode = experienceMode === "EASY";
+  const easySelectedProvider = selectedProviderTypes.find((provider) => EASY_PROVIDER_TYPES.includes(provider)) ?? easyRecommendedProvider;
+  const easyUseGithub = settings ? settings.defaults.cliWorkflow.gitMode !== "local" : true;
+  const easyManageGithubPrWorkflow = settings ? settings.defaults.git.autoCreatePr : true;
 
   const enabledProviderInstances = settings
     ? sortProviderConfigEntries(Object.entries(settings.defaults.aiProvider.providers))
@@ -605,14 +882,18 @@ export const OnboardingExperience: FunctionComponent = () => {
     if (!settings) {
       await markOnboardingCompleted("complete");
       window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
-      dispatch({ type: "close" });
-      await navigate({ to: "/" });
+      closeOnboarding();
+      await navigate({ to: experienceMode === "EASY" ? "/chat" : "/" });
       window.setTimeout(startDashboardTour, 260);
       return;
     }
     dispatch({ type: "set-saving", saving: true });
     try {
-      let nextSettings = cloneSystemSettings(settings);
+      let nextSettings = applyOnboardingExperienceModeDefaults(cloneSystemSettings(settings), experienceMode, {
+        recommendedProvider: easySelectedProvider,
+        useGithub: settings.defaults.cliWorkflow.gitMode !== "local",
+        manageGithubPrWorkflow: settings.defaults.git.autoCreatePr,
+      });
       for (const provider of selectedProviderTypes) {
         if (!Object.values(nextSettings.integrations.providers).some((entry) => entry.provider === provider)) {
           nextSettings.integrations.providers[provider] = createSystemProviderDraft(provider, providerLabels[provider]);
@@ -676,8 +957,8 @@ export const OnboardingExperience: FunctionComponent = () => {
       dispatch({ type: "set-settings", settings: nextSettings });
       await markOnboardingCompleted("complete");
       window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
-      dispatch({ type: "close" });
-      await navigate({ to: "/" });
+      closeOnboarding();
+      await navigate({ to: experienceMode === "EASY" ? "/chat" : "/" });
       window.setTimeout(startDashboardTour, 260);
     } catch (saveError) {
       dispatch({ type: "set-error", error: saveError instanceof Error ? saveError.message : String(saveError) });
@@ -709,6 +990,21 @@ export const OnboardingExperience: FunctionComponent = () => {
     }));
   const stepProgressValue = Math.round(((activeStep + 1) / steps.length) * 100);
   const stepProgressLabel = `Step ${activeStep + 1} of ${steps.length}: ${active.label}`;
+  const draftAppearance = settings?.defaults.appearance;
+  const onboardingBackgroundDark = (() => {
+    if (draftAppearance?.theme === "DARK") {
+      return true;
+    }
+    if (draftAppearance?.theme === "LIGHT") {
+      return false;
+    }
+    if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+    return typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+  })();
+  const onboardingBackgroundMode = draftAppearance?.backgroundMode ?? "ANIMATED";
+  const onboardingStaticBackgroundColor = draftAppearance?.staticBackgroundColor ?? "#0d0f12";
   const saveStatusText = saving
     ? "Saving onboarding settings"
     : error
@@ -735,133 +1031,66 @@ export const OnboardingExperience: FunctionComponent = () => {
         <OnboardingIntro onExitStart={handleIntroExitStart} onComplete={handleIntroComplete} />
       )}
       {introPhase !== "intro" && (
-    <div ref={backdropRef} style={motionStyle} className="fixed inset-0 z-[200] flex items-center justify-center overflow-hidden bg-[#060A0D] px-3 py-4 md:px-6 md:py-8">
+    <div ref={backdropRef} style={motionStyle} className="fixed inset-0 z-[200] flex items-center justify-center overflow-hidden bg-[#F3F7F5] px-3 py-4 text-slate-900 dark:bg-[#060A0D] dark:text-slate-100 md:px-6 md:py-8">
       <div aria-hidden className="pointer-events-none absolute inset-0">
-        <Suspense fallback={<div className="absolute inset-0 bg-[#060A0D]" />}>
-          <DeepOceanBackground forceDark className="opacity-75 saturate-[0.86] contrast-[0.92]" />
-        </Suspense>
-        <div className="absolute inset-0 bg-[#05070B]/54 backdrop-blur-[1px]" />
-        <div className="absolute inset-x-0 top-0 h-56 bg-[linear-gradient(180deg,rgba(0,224,160,0.12),rgba(5,7,11,0.02)_58%,transparent)]" />
-        <div className="absolute inset-x-0 bottom-0 h-72 bg-[linear-gradient(0deg,rgba(255,184,0,0.08),rgba(5,7,11,0.02)_62%,transparent)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_17%_16%,rgba(0,224,160,0.1),transparent_31%),radial-gradient(circle_at_80%_78%,rgba(255,184,0,0.075),transparent_34%),linear-gradient(115deg,rgba(255,255,255,0.055)_0%,transparent_20%,transparent_72%,rgba(0,224,160,0.05)_100%)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(4,7,10,0.18),rgba(4,7,10,0.62))]" />
+        {onboardingBackgroundMode === "STATIC" ? (
+          <div className="absolute inset-0" style={{ backgroundColor: onboardingStaticBackgroundColor }} />
+        ) : (
+          <Suspense fallback={<div className="absolute inset-0 bg-[#F3F7F5] dark:bg-[#060A0D]" />}>
+            <DeepOceanBackground forceDark={onboardingBackgroundDark} className="opacity-75 saturate-[0.86] contrast-[0.92]" />
+          </Suspense>
+        )}
+        <div className="absolute inset-0 bg-white/58 backdrop-blur-[1px] dark:bg-[#05070B]/54" />
+        <div className="absolute inset-x-0 top-0 h-56 bg-[linear-gradient(180deg,rgba(0,153,112,0.14),rgba(255,255,255,0.14)_58%,transparent)] dark:bg-[linear-gradient(180deg,rgba(0,224,160,0.12),rgba(5,7,11,0.02)_58%,transparent)]" />
+        <div className="absolute inset-x-0 bottom-0 h-72 bg-[linear-gradient(0deg,rgba(226,146,0,0.12),rgba(255,255,255,0.12)_62%,transparent)] dark:bg-[linear-gradient(0deg,rgba(255,184,0,0.08),rgba(5,7,11,0.02)_62%,transparent)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_17%_16%,rgba(0,153,112,0.12),transparent_31%),radial-gradient(circle_at_80%_78%,rgba(226,146,0,0.1),transparent_34%),linear-gradient(115deg,rgba(255,255,255,0.36)_0%,transparent_20%,transparent_72%,rgba(0,153,112,0.08)_100%)] dark:bg-[radial-gradient(circle_at_17%_16%,rgba(0,224,160,0.1),transparent_31%),radial-gradient(circle_at_80%_78%,rgba(255,184,0,0.075),transparent_34%),linear-gradient(115deg,rgba(255,255,255,0.055)_0%,transparent_20%,transparent_72%,rgba(0,224,160,0.05)_100%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(237,242,240,0.48))] dark:bg-[linear-gradient(180deg,rgba(4,7,10,0.18),rgba(4,7,10,0.62))]" />
       </div>
       <section
         ref={shellRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="onboarding-title"
-        className="relative z-10 grid h-[calc(100vh-2rem)] max-h-[940px] min-h-0 w-full max-w-[1360px] grid-rows-[minmax(0,1fr)] overflow-hidden rounded-[2rem] border border-white/15 bg-[#F9F8F4]/96 shadow-[0_30px_90px_rgba(0,0,0,0.46)] backdrop-blur-2xl dark:bg-void-900/96 md:h-[calc(100vh-4rem)] md:grid-cols-[330px_1fr]"
+        className="relative z-10 grid h-[calc(100vh-2rem)] max-h-[940px] min-h-0 w-full max-w-[1360px] grid-rows-[minmax(0,1fr)] overflow-hidden rounded-[2rem] border border-black/[0.08] bg-[#F9F8F4]/96 shadow-[0_30px_90px_rgba(15,23,42,0.2)] backdrop-blur-2xl dark:border-white/15 dark:bg-void-900/96 dark:shadow-[0_30px_90px_rgba(0,0,0,0.46)] md:h-[calc(100vh-4rem)] md:grid-cols-[330px_1fr]"
       >
-        <div aria-hidden className="pointer-events-none absolute inset-0 z-20 rounded-[2rem] ring-1 ring-inset ring-white/10" />
-        <aside ref={sideRef} className="relative hidden h-full min-h-0 overflow-hidden border-r border-white/10 bg-[#0B0F14] p-7 text-white md:block">
-          <div className="absolute inset-0 bg-[linear-gradient(145deg,rgba(0,224,160,0.16),transparent_34%),linear-gradient(330deg,rgba(255,184,0,0.13),transparent_38%)]" />
-          <span className="pointer-events-none absolute -left-5 -top-3 select-none font-display text-[8rem] font-black leading-none tracking-tighter text-white/[0.035]">
+        <div aria-hidden className="pointer-events-none absolute inset-0 z-20 rounded-[2rem] ring-1 ring-inset ring-black/[0.06] dark:ring-white/10" />
+        <aside ref={sideRef} className="relative hidden h-full min-h-0 overflow-hidden border-r border-black/[0.07] bg-white/82 p-7 text-slate-900 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white md:block">
+          <div className="absolute inset-0 bg-[linear-gradient(145deg,rgba(0,153,112,0.12),transparent_34%),linear-gradient(330deg,rgba(226,146,0,0.1),transparent_38%)] dark:bg-[linear-gradient(145deg,rgba(0,224,160,0.16),transparent_34%),linear-gradient(330deg,rgba(255,184,0,0.13),transparent_38%)]" />
+          <span className="pointer-events-none absolute -left-5 -top-3 select-none font-display text-[8rem] font-black leading-none tracking-tighter text-black/[0.035] dark:text-white/[0.035]">
             RUN
           </span>
           <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div className="h-56 w-56 animate-organic bg-signal-500/[0.08]" style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }} />
-            <div className="absolute h-40 w-40 animate-organic-reverse bg-ember-500/[0.12]" style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }} />
-            <div className="absolute h-24 w-24 animate-organic bg-signal-500/[0.18]" style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }} />
+            <div className="h-56 w-56 animate-organic bg-signal-500/[0.08] motion-reduce:animate-none" style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }} />
+            <div className="absolute h-40 w-40 animate-organic-reverse bg-ember-500/[0.12] motion-reduce:animate-none" style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }} />
+            <div className="absolute h-24 w-24 animate-organic bg-signal-500/[0.18] motion-reduce:animate-none" style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }} />
           </div>
-          <div className="absolute inset-x-7 top-24 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+          <div className="absolute inset-x-7 top-24 h-px bg-gradient-to-r from-transparent via-black/10 to-transparent dark:via-white/20" />
           <div className="relative z-10">
-            <div data-sidebar-copy className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/10 shadow-[0_0_35px_rgba(0,224,160,0.12)]">
-              <Compass className="h-5 w-5 text-signal-300" />
+            <div data-sidebar-copy className="flex h-12 w-12 items-center justify-center rounded-2xl border border-black/[0.07] bg-white/70 shadow-[0_0_35px_rgba(0,153,112,0.12)] dark:border-white/10 dark:bg-white/10 dark:shadow-[0_0_35px_rgba(0,224,160,0.12)]">
+              <Compass className="h-5 w-5 text-signal-700 dark:text-signal-300" />
             </div>
-            <div data-sidebar-copy className="mt-8 text-[10px] font-bold uppercase tracking-[0.24em] text-signal-300">Code UX Setup</div>
-            <h2 data-sidebar-copy id="onboarding-title" className="mt-3 font-display text-4xl font-semibold leading-[0.95] tracking-tight text-white">
+            <div data-sidebar-copy className="mt-8 text-[10px] font-bold uppercase tracking-[0.24em] text-signal-700 dark:text-signal-300">Code UX Setup</div>
+            <h2 data-sidebar-copy id="onboarding-title" className="mt-3 font-display text-4xl font-semibold leading-[0.95] tracking-tight text-slate-950 dark:text-white">
               Make the runtime ready.
             </h2>
-            <div data-sidebar-copy className="mt-5 text-sm font-medium leading-relaxed text-slate-300">
-              Configure containers, provider auth, automation, and the workspace shell before the first sprint starts.
-            </div>
-            <div data-sidebar-copy className="mt-6 grid grid-cols-2 gap-2">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
-                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Providers</div>
-                <div className="mt-1 text-xl font-semibold text-white">{selectedProviders.length}</div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
-                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Cluster</div>
-                <div aria-live="polite" className={`mt-2 inline-flex rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${clusterReady ? "bg-signal-400/15 text-signal-200" : "bg-status-amber/15 text-status-amber"}`}>
-                  {clusterReady ? "Ready" : "Blocked"}
-                </div>
-              </div>
-            </div>
             <div className="mt-8 space-y-2">
-              {[
-                {
-                  id: "installation",
-                  label: "Installation",
-                  icon: Box,
-                  active: activeStep === 0,
-                  complete: activeStep > 0,
-                  onClick: () => setActiveStep(0),
-                },
-                {
-                  id: "introduction",
-                  label: "Introduction",
-                  icon: ShieldCheck,
-                  active: activeStep === 1,
-                  complete: activeStep > 1,
-                  onClick: () => setActiveStep(1),
-                },
-                {
-                  id: "providers",
-                  label: "Select Providers",
-                  icon: Cpu,
-                  active: activeStep === 2,
-                  complete: activeStep > 2,
-                  onClick: () => setActiveStep(2),
-                },
-                {
-                  id: "configure-flow",
-                  label:
-                    activeStep === 3 ? "Providers (1/4)"
-                    : activeStep === 4 ? "Git (2/4)"
-                    : activeStep === 5 ? "Jira (3/4)"
-                    : activeStep === 6 ? "Default providers (4/4)"
-                    : "Providers (1/4)",
-                  icon: Settings,
-                  active: activeStep >= 3 && activeStep <= 6,
-                  complete: activeStep > 6,
-                  onClick: () => {
-                    setActiveStep(activeStep >= 3 && activeStep <= 6 ? activeStep : 3);
-                  },
-                },
-                {
-                  id: "automation",
-                  label: "Automation",
-                  icon: Sparkles,
-                  active: activeStep === 7,
-                  complete: activeStep > 7,
-                  onClick: () => setActiveStep(7),
-                },
-                {
-                  id: "appearance",
-                  label: "Appearance",
-                  icon: Monitor,
-                  active: activeStep === 8,
-                  complete: activeStep > 8,
-                  onClick: () => setActiveStep(8),
-                },
-              ].map((step) => {
+              {steps.map((step, stepIndex) => {
                 const StepIcon = step.icon;
-                const activeItem = step.active;
-                const complete = step.complete;
+                const activeItem = activeStep === stepIndex;
+                const complete = activeStep > stepIndex;
                 return (
                   <button
                     key={step.id}
                     data-step-item
                     type="button"
                     aria-current={activeItem ? "step" : undefined}
-                    onClick={step.onClick}
+                    onClick={() => setActiveStep(stepIndex)}
                     className={`group flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-[background-color,border-color,transform] hover:translate-x-1 ${
-                      activeItem ? "border-white/30 bg-white text-slate-950 shadow-[0_16px_40px_rgba(0,0,0,0.18)]" : "border-white/0 text-slate-300 hover:border-white/10 hover:bg-white/8 hover:text-white"
+                      activeItem ? "border-signal-500/28 bg-white text-slate-950 shadow-[0_16px_40px_rgba(15,23,42,0.12)] dark:border-white/30 dark:shadow-[0_16px_40px_rgba(0,0,0,0.18)]" : "border-black/0 text-slate-500 hover:border-black/[0.07] hover:bg-black/[0.035] hover:text-slate-900 dark:border-white/0 dark:text-slate-300 dark:hover:border-white/10 dark:hover:bg-white/8 dark:hover:text-white"
                     }`}
                     style={{ transitionDuration: "var(--onboarding-selection-duration)", transitionTimingFunction: "var(--onboarding-selection-ease)" }}
                   >
-                    <span className={`flex h-8 w-8 items-center justify-center rounded-xl ${activeItem ? "bg-signal-500/14 text-signal-700" : complete ? "bg-signal-400/15 text-signal-300" : "bg-white/8 text-slate-300"}`}>
+                    <span className={`flex h-8 w-8 items-center justify-center rounded-xl ${activeItem ? "bg-signal-500/14 text-signal-700" : complete ? "bg-signal-500/12 text-signal-700 dark:bg-signal-400/15 dark:text-signal-300" : "bg-black/[0.04] text-slate-500 dark:bg-white/8 dark:text-slate-300"}`}>
                       {complete ? <Check className="h-4 w-4" /> : <StepIcon className="h-4 w-4" />}
                     </span>
                     <span className="text-sm font-bold">{step.label}</span>
@@ -878,9 +1107,7 @@ export const OnboardingExperience: FunctionComponent = () => {
             <div aria-hidden className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-signal-500/30 to-transparent" />
             <div>
               <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                {activeStep < 3 ? `Step ${activeStep + 1} of 6`
-                  : activeStep >= 3 && activeStep <= 6 ? `Step 4 of 6 (${activeStep - 2}/4)`
-                  : `Step ${activeStep - 2} of 6`}
+                Step {activeStep + 1} of {steps.length}
               </div>
               <h3 ref={stepHeadingRef} tabIndex={-1} className="mt-1 font-display text-xl font-semibold tracking-tight text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 dark:text-white">{active.label}</h3>
               <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-white/[0.08]" role="progressbar" aria-label={stepProgressLabel} aria-valuemin={1} aria-valuemax={steps.length} aria-valuenow={activeStep + 1}>
@@ -895,7 +1122,7 @@ export const OnboardingExperience: FunctionComponent = () => {
               onClick={async () => {
                 await markOnboardingCompleted("cancel");
                 window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
-                dispatch({ type: "close" });
+                closeOnboarding();
               }}
               className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 dark:hover:bg-white/[0.06] dark:hover:text-white"
               aria-label="Close onboarding"
@@ -926,80 +1153,74 @@ export const OnboardingExperience: FunctionComponent = () => {
               </div>
             ) : null}
 
-            {active.id === "installation" ? (
-              <div className="space-y-5">
-                <div data-onboarding-card className={`relative overflow-hidden rounded-3xl border p-5 shadow-[0_18px_45px_rgba(15,23,42,0.05)] ${clusterReady ? "border-signal-500/20 bg-signal-500/8" : "border-status-amber/25 bg-status-amber/10"}`}>
-                  <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent" />
-                  <div className="flex items-start gap-4">
-                    <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${clusterReady ? "bg-signal-500/12 text-signal-600" : "bg-status-amber/15 text-status-amber"}`}>
-                      {clusterReady ? <Check className="h-6 w-6" /> : <Info className="h-6 w-6" />}
+            {active.id === "mode" ? (
+              <div className="space-y-4">
+                <div data-onboarding-card className="relative overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/80 p-6 shadow-[0_18px_48px_rgba(15,23,42,0.055)] dark:border-white/[0.06] dark:bg-white/[0.045]">
+                  <div aria-hidden className="absolute -right-8 -top-10 font-display text-[7rem] font-black leading-none tracking-tight text-black/[0.025] dark:text-white/[0.025]">UX</div>
+                  <div className="relative z-10 max-w-3xl">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-signal-700 dark:text-signal-200">
+                      <Compass className="h-3.5 w-3.5" strokeWidth={2.4} />
+                      Choose your setup path
                     </div>
-                    <div aria-live="polite">
-                      <div className="text-base font-semibold text-slate-900 dark:text-white">{readiness.cluster.label}</div>
-                      <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{readiness.cluster.detail}</div>
-                    </div>
+                    <h4 className="mt-4 font-display text-2xl font-semibold leading-none tracking-tight text-slate-950 dark:text-white">
+                      Start with the right amount of control.
+                    </h4>
+                    <p className="mt-3 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-300">
+                      Easy keeps setup to one provider login and GitHub defaults. Standard and Expert keep the detailed runtime, provider, automation, and appearance controls.
+                    </p>
                   </div>
                 </div>
-                <div className="grid gap-3 md:grid-cols-3">
-                  {readiness.dependencies.map((dependency) => (
-                    <div data-onboarding-card key={dependency.id} className="rounded-2xl border border-black/[0.06] bg-white/75 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.035)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm font-bold text-slate-900 dark:text-white">{dependency.label}</div>
-                        <span className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${dependency.status === "ready" ? "bg-signal-500/10 text-signal-700 dark:text-signal-300" : "bg-status-amber/10 text-status-amber"}`}>
-                          {dependency.status}
-                        </span>
-                      </div>
-                      <div className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{dependency.description}</div>
-                      {dependency.status !== "ready" ? (
-                        <div className="mt-3 space-y-2.5">
-                          <div className="rounded-xl bg-black/[0.04] p-3 text-xs leading-relaxed text-slate-600 dark:bg-white/[0.05] dark:text-slate-300">
-                            {dependency.resolution}
-                          </div>
-                          {(dependency.id === "docker-cli" || dependency.id === "docker-daemon") && (
-                            <div className="flex flex-col gap-2 pt-1">
-                              <a
-                                href={getSafeUrl(getOSInfo(platform).dockerDesktopLink)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-signal-500/20 bg-signal-500/10 py-2 text-center text-xs font-bold uppercase tracking-[0.12em] text-signal-700 hover:bg-signal-500/15 dark:text-signal-200"
-                              >
-                                Docker Desktop for {getOSInfo(platform).osLabel}
-                              </a>
-                              <a
-                                href={getSafeUrl(getOSInfo(platform).dockerDownloadLink)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-black/[0.06] bg-black/[0.03] py-2 text-center text-xs font-bold uppercase tracking-[0.12em] text-slate-600 hover:bg-black/[0.06] dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:bg-white/[0.08]"
-                              >
-                                Docker Download
-                              </a>
-                            </div>
-                          )}
-                          {dependency.id === "git-cli" && (
-                            <div className="flex flex-col gap-2 pt-1">
-                              <a
-                                href={getSafeUrl(getOSInfo(platform).gitLink)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-signal-500/20 bg-signal-500/10 py-2 text-center text-xs font-bold uppercase tracking-[0.12em] text-signal-700 hover:bg-signal-500/15 dark:text-signal-200"
-                              >
-                                Download Git for {getOSInfo(platform).osLabel}
-                              </a>
-                              <div className="rounded-lg bg-black/[0.04] px-2.5 py-1.5 font-mono text-[10px] text-slate-500 dark:bg-white/[0.05] dark:text-slate-400">
-                                {getOSInfo(platform).gitInstruction}
-                              </div>
-                            </div>
-                          )}
+                <div className="grid gap-3 md:grid-cols-3" role="radiogroup" aria-label="Onboarding setup mode">
+                  {dashboardExperienceModeOptions.map((option) => {
+                    const selected = experienceMode === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        data-onboarding-card
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        disabled={!settings}
+                        onClick={() => applyExperienceMode(option.value)}
+                        className={`group relative overflow-hidden rounded-[1.5rem] border p-5 text-left shadow-[0_14px_34px_rgba(15,23,42,0.04)] transition-[border-color,background-color,transform,box-shadow] hover:-translate-y-1 disabled:cursor-wait disabled:opacity-60 ${
+                          selected
+                            ? "border-signal-500/30 bg-signal-500/10 shadow-[0_18px_46px_rgba(0,224,160,0.08)]"
+                            : "border-black/[0.06] bg-white/75 hover:border-black/[0.12] dark:border-white/[0.06] dark:bg-white/[0.04]"
+                        }`}
+                        style={{ transitionDuration: "var(--onboarding-selection-duration)", transitionTimingFunction: "var(--onboarding-selection-ease)" }}
+                      >
+                        <div aria-hidden className={`absolute left-0 top-5 bottom-5 w-1 rounded-r-full transition-opacity ${selected ? "bg-signal-500 opacity-100" : "bg-slate-300 opacity-0 group-hover:opacity-100 dark:bg-slate-600"}`} />
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-base font-black text-slate-900 dark:text-white">{option.label}</div>
+                          {selected ? <Check className="h-5 w-5 text-signal-600 dark:text-signal-300" /> : <ChevronRight className="h-5 w-5 text-slate-300 dark:text-slate-600" />}
                         </div>
-                      ) : null}
-                    </div>
-                  ))}
+                        <div className="mt-3 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{option.description}</div>
+                        {option.value === "EASY" ? (
+                          <div className="mt-4 rounded-2xl border border-signal-500/15 bg-signal-500/[0.07] px-3 py-2 text-xs font-semibold leading-relaxed text-signal-800 dark:text-signal-200">
+                            Short flow: provider, GitHub, then Chat.
+                          </div>
+                        ) : null}
+                      </button>
+                    );
+                  })}
                 </div>
-                <button type="button" onClick={() => void load()} disabled={checkingReadiness} aria-describedby="onboarding-status" className="inline-flex items-center gap-2 rounded-2xl border border-black/[0.08] bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-200">
-                  <RefreshCw className={`h-4 w-4 ${checkingReadiness ? "animate-spin motion-reduce:animate-none" : ""}`} />
-                  {checkingReadiness ? "Checking" : "Recheck"}
-                </button>
               </div>
+            ) : null}
+
+            {active.id === "installation" ? (
+              <OnboardingInstallationStep
+                clusterReady={clusterReady}
+                readiness={readiness}
+                osInfo={getOSInfo(platform)}
+                selectedInstallMode={runningInstallMode ?? lastInstallResult?.mode ?? null}
+                runningInstallMode={runningInstallMode}
+                lastInstallResult={lastInstallResult}
+                installError={installError}
+                checkingReadiness={checkingReadiness}
+                onAutoInstall={handleAutoInstall}
+                onInstallMode={(mode) => void runDependencyInstall(mode)}
+                onRecheck={() => void load()}
+              />
             ) : null}
 
             {active.id === "introduction" ? (
@@ -1135,7 +1356,45 @@ export const OnboardingExperience: FunctionComponent = () => {
             ) : null}
 
             {active.id === "provider-setup" ? (
-              <div className="space-y-4">
+              isEasyMode ? (
+                <div className="space-y-4">
+                  <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+                    <div className="flex items-start gap-3">
+                      <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-signal-600 dark:text-signal-300" />
+                      <div>
+                        <div className="text-base font-black text-slate-900 dark:text-white">Choose one provider login</div>
+                        <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                          Easy setup keeps routing to one provider. Pick a provider below, use Dashboard Login by default, and add more provider instances later in Settings.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  {settings ? (
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      {EASY_PROVIDER_TYPES.map((providerId) => {
+                        const existingEntry = getSystemProvidersByType(settings, providerId)[0];
+                        const providerConfigId = existingEntry?.[0] ?? providerId;
+                        const integrationProvider = existingEntry?.[1] ?? createEasyDashboardProviderDraft(providerId, providerConfigId);
+                        return (
+                          <EasyProviderAuthCard
+                            key={providerId}
+                            providerConfigId={providerConfigId}
+                            provider={integrationProvider}
+                            selected={easySelectedProvider === providerId}
+                            readinessStatus={readinessByProvider[providerId]}
+                            onUpdate={(updates) => configureEasyProviderInstance(providerId, providerConfigId, updates)}
+                          />
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/75 p-6 text-sm text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04]">
+                      Loading provider settings.
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4">
                 {selectedProviderTypes.length === 0 ? (
                   <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/75 p-6 text-sm text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04]">
                     No providers selected. You can add provider credentials later in Settings.
@@ -1200,10 +1459,63 @@ export const OnboardingExperience: FunctionComponent = () => {
                   );
                 })}
               </div>
+              )
             ) : null}
 
             {active.id === "git" && settings ? (
-              <div className="space-y-4">
+              isEasyMode ? (
+                <div className="space-y-4">
+                  <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+                    <div className="flex items-start gap-3">
+                      <Github className="mt-0.5 h-5 w-5 shrink-0 text-signal-600 dark:text-signal-300" />
+                      <div>
+                        <div className="text-base font-black text-slate-900 dark:text-white">GitHub workflow</div>
+                        <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                          Choose whether this setup should use GitHub PR workflow defaults. Tokens and deeper Git settings remain available later in Settings.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div data-onboarding-card className="space-y-3 rounded-[2rem] border border-black/[0.06] bg-white/80 p-6 shadow-[0_18px_48px_rgba(15,23,42,0.055)] dark:border-white/[0.06] dark:bg-white/[0.045]">
+                    <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-black/[0.06] bg-white/75 p-4 text-left shadow-[0_12px_28px_rgba(15,23,42,0.035)] transition-colors hover:border-signal-500/20 dark:border-white/[0.06] dark:bg-white/[0.04]">
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 rounded border-slate-300 text-signal-600 focus:ring-2 focus:ring-signal-500"
+                        checked={easyUseGithub}
+                        onChange={(event) => applyExperienceMode("EASY", {
+                          useGithub: event.currentTarget.checked,
+                          manageGithubPrWorkflow: event.currentTarget.checked ? easyManageGithubPrWorkflow : false,
+                        })}
+                      />
+                      <span>
+                        <span className="block text-sm font-bold text-slate-900 dark:text-white">Use GitHub for this workspace</span>
+                        <span className="mt-1 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                          Keep remote branches, pull requests, and CI-aware workflow enabled by default.
+                        </span>
+                      </span>
+                    </label>
+                    <label className={`flex items-start gap-3 rounded-2xl border border-black/[0.06] bg-white/75 p-4 text-left shadow-[0_12px_28px_rgba(15,23,42,0.035)] transition-colors dark:border-white/[0.06] dark:bg-white/[0.04] ${easyUseGithub ? "cursor-pointer hover:border-signal-500/20" : "cursor-not-allowed opacity-60"}`}>
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 rounded border-slate-300 text-signal-600 focus:ring-2 focus:ring-signal-500 disabled:cursor-not-allowed"
+                        checked={easyUseGithub && easyManageGithubPrWorkflow}
+                        disabled={!easyUseGithub}
+                        onChange={(event) => applyExperienceMode("EASY", {
+                          useGithub: easyUseGithub,
+                          manageGithubPrWorkflow: event.currentTarget.checked,
+                        })}
+                      />
+                      <span>
+                        <span className="block text-sm font-bold text-slate-900 dark:text-white">Let Code UX create and manage GitHub PR workflow defaults</span>
+                        <span className="mt-1 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                          Create PRs and use conservative PR management defaults instead of configuring merge policies now.
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
                 <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
                   <div className="flex items-start gap-3">
                     <GitBranch className="mt-0.5 h-5 w-5 shrink-0 text-signal-600 dark:text-signal-300" />
@@ -1306,6 +1618,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                   </SectionCard>
                 </div>
               </div>
+              )
             ) : null}
 
             {active.id === "jira" && settings ? (
@@ -1377,122 +1690,7 @@ export const OnboardingExperience: FunctionComponent = () => {
             ) : null}
 
             {active.id === "appearance" && settings ? (
-              <div className="space-y-6">
-                <div className="grid gap-6 md:grid-cols-2">
-                  {/* Left Column: Core Layout & Feel */}
-                  <div className="space-y-4">
-                    <h4 className="text-xs font-black uppercase tracking-[0.2em] text-signal-400">Core Display</h4>
-
-                    <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <div className="text-sm font-semibold text-slate-900 dark:text-white">Theme</div>
-                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Select light, dark, or sync with your system.</div>
-                      <div className="mt-4">
-                        <PillChoiceGroup
-                          value={settings.defaults.appearance.theme}
-                          onChange={(value) => updateAppearance({ theme: value as any })}
-                          options={[
-                            { value: "SYSTEM", label: "System" },
-                            { value: "LIGHT", label: "Light" },
-                            { value: "DARK", label: "Dark" },
-                          ]}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <div className="text-sm font-semibold text-slate-900 dark:text-white">Navigation Mode</div>
-                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose between floating dock or sidebar.</div>
-                      <div className="mt-4">
-                        <PillChoiceGroup
-                          value={settings.defaults.appearance.navigationMode}
-                          onChange={(value) => updateAppearance({ navigationMode: value as any })}
-                          options={[
-                            { value: "SIDEBAR", label: "Sidebar" },
-                            { value: "DOCK", label: "Dock" },
-                          ]}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <div className="text-sm font-semibold text-slate-900 dark:text-white">Reduced Motion</div>
-                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Limit interface animations.</div>
-                      <div className="mt-4">
-                        <PillChoiceGroup
-                          value={settings.defaults.appearance.reducedMotion}
-                          onChange={(value) => updateAppearance({ reducedMotion: value as any })}
-                          options={[
-                            { value: "AUTO", label: "Auto" },
-                            { value: "REDUCE", label: "Reduce" },
-                            { value: "NONE", label: "None" },
-                          ]}
-                        />
-                      </div>
-                    </div>
-
-                    {typeof window !== "undefined" && Boolean(window.codeUxDesktop?.setZoom) && (
-                      <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                        <div className="text-sm font-semibold text-slate-900 dark:text-white">Zoom Level</div>
-                        <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Scale the desktop interface size.</div>
-                        <div className="mt-4">
-                          <SelectInput
-                            value={String(settings.defaults.appearance.zoomLevel ?? 1)}
-                            onChange={(value) => updateAppearance({ zoomLevel: Number(value) })}
-                            options={[
-                              { value: "0.75", label: "75%" },
-                              { value: "0.9", label: "90%" },
-                              { value: "1", label: "100%" },
-                              { value: "1.1", label: "110%" },
-                              { value: "1.25", label: "125%" },
-                              { value: "1.5", label: "150%" },
-                              { value: "1.75", label: "175%" },
-                              { value: "2", label: "200%" },
-                            ]}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Right Column: Custom Aesthetics & Background */}
-                  <div className="space-y-4">
-                    <h4 className="text-xs font-black uppercase tracking-[0.2em] text-signal-400">Background & Styling</h4>
-
-                    <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <div className="text-sm font-semibold text-slate-900 dark:text-white">Background Mode</div>
-                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Select animated textures or a flat color.</div>
-                      <div className="mt-4">
-                        <PillChoiceGroup
-                          value={settings.defaults.appearance.backgroundMode || "ANIMATED"}
-                          onChange={(value) => updateAppearance({ backgroundMode: value as any })}
-                          options={[
-                            { value: "ANIMATED", label: "Animated" },
-                            { value: "STATIC", label: "Static" },
-                          ]}
-                        />
-                      </div>
-                    </div>
-
-                    {(settings.defaults.appearance.backgroundMode || "ANIMATED") === "STATIC" && (
-                      <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                        <div className="text-sm font-semibold text-slate-900 dark:text-white">Static Color</div>
-                        <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose a solid solid back color.</div>
-                        <div className="mt-4 flex items-center gap-3">
-                          <input
-                            type="color"
-                            value={settings.defaults.appearance.staticBackgroundColor || "#0d0f12"}
-                            onInput={(e) => updateAppearance({ staticBackgroundColor: (e.target as HTMLInputElement).value })}
-                            className="h-10 w-20 cursor-pointer rounded-lg border-2 border-black/[0.06] bg-transparent p-1 focus:outline-none focus:ring-2 focus:ring-signal-500 dark:border-white/[0.06]"
-                          />
-                          <span className="font-mono text-sm uppercase text-slate-500 dark:text-slate-400">
-                            {settings.defaults.appearance.staticBackgroundColor || "#0d0f12"}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <OnboardingAppearanceStep settings={settings} updateAppearance={updateAppearance} />
             ) : null}
 
             {active.id === "defaults" && settings ? (
@@ -1594,20 +1792,13 @@ export const OnboardingExperience: FunctionComponent = () => {
               {saveStatusText}
             </div>
             <div className="flex items-center gap-2" aria-label="Onboarding step shortcuts">
-              {[
-                { active: activeStep === 0, onClick: () => setActiveStep(0), label: "Installation" },
-                { active: activeStep === 1, onClick: () => setActiveStep(1), label: "Introduction" },
-                { active: activeStep === 2, onClick: () => setActiveStep(2), label: "Select Providers" },
-                { active: activeStep >= 3 && activeStep <= 6, onClick: () => setActiveStep(activeStep >= 3 && activeStep <= 6 ? activeStep : 3), label: "Providers" },
-                { active: activeStep === 7, onClick: () => setActiveStep(7), label: "Automation" },
-                { active: activeStep === 8, onClick: () => setActiveStep(8), label: "Appearance" },
-              ].map((dot, idx) => (
+              {steps.map((dot, idx) => (
 	                <button
 	                  key={`dot-${idx}`}
 	                  type="button"
 	                  aria-label={`Go to ${dot.label}`}
-	                  onClick={dot.onClick}
-	                  className={`h-2 rounded-full transition-all motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 ${dot.active ? "w-8 bg-signal-500" : "w-2 bg-slate-300 dark:bg-slate-700"}`}
+	                  onClick={() => setActiveStep(idx)}
+	                  className={`h-2 rounded-full transition-all motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 ${activeStep === idx ? "w-8 bg-signal-500" : "w-2 bg-slate-300 dark:bg-slate-700"}`}
 	                  style={{ transitionDuration: "var(--onboarding-selection-duration)", transitionTimingFunction: "var(--onboarding-selection-ease)" }}
 	                />
               ))}

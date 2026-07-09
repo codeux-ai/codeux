@@ -1,6 +1,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
+import { ValidationError } from "../repositories/repository-utils.js";
 import type {
   InstructionFileContent,
   InstructionFileDescriptor,
@@ -81,6 +82,15 @@ interface ResolvedFile {
   updatedAt: string | null;
 }
 
+interface ResolvedProjectBase {
+  realPath: string;
+}
+
+interface ResolvedInstructionFile {
+  entry: CatalogEntry;
+  file: ResolvedFile;
+}
+
 /**
  * Reads and writes the curated set of project-root agent instruction files.
  * All paths are derived from {@link INSTRUCTION_FILE_CATALOG}, resolved within
@@ -90,24 +100,24 @@ export class InstructionFileService {
   constructor(private readonly deps: InstructionFileServiceDeps) {}
 
   async listInstructionFiles(projectId: string): Promise<InstructionFileSummary[]> {
-    const baseDir = this.requireProjectBaseDir(projectId);
+    const projectBase = await this.resolveProjectBase(projectId);
     const summaries: InstructionFileSummary[] = [];
     for (const entry of INSTRUCTION_FILE_CATALOG) {
-      const resolved = await this.resolveFile(baseDir, entry);
-      summaries.push(this.toSummary(entry, resolved));
+      const resolved = await this.resolveInstructionFile(projectBase, entry.id);
+      summaries.push(this.toSummary(resolved.entry, resolved.file));
     }
     return summaries;
   }
 
   async readInstructionFile(projectId: string, fileId: string): Promise<InstructionFileContent> {
-    const baseDir = this.requireProjectBaseDir(projectId);
-    const entry = this.requireEntry(fileId);
-    const resolved = await this.resolveFile(baseDir, entry);
+    const projectBase = await this.resolveProjectBase(projectId);
+    const { entry, file } = await this.resolveInstructionFile(projectBase, fileId);
     let content = "";
-    if (resolved.exists) {
-      content = await fs.readFile(resolved.absolutePath, "utf8");
+    if (file.exists) {
+      await this.assertExistingTargetContained(projectBase, file.absolutePath);
+      content = await fs.readFile(file.absolutePath, "utf8");
     }
-    return { ...this.toSummary(entry, resolved), content };
+    return { ...this.toSummary(entry, file), content };
   }
 
   async writeInstructionFile(
@@ -119,66 +129,92 @@ export class InstructionFileService {
       throw new Error("Instruction file content must be a string.");
     }
     if (Buffer.byteLength(content, "utf8") > MAX_INSTRUCTION_BYTES) {
-      throw new Error(`Instruction file exceeds the ${MAX_INSTRUCTION_BYTES.toLocaleString()} byte limit.`);
+      throw new ValidationError(`Invalid instruction file content: exceeds the ${MAX_INSTRUCTION_BYTES.toLocaleString()} byte limit.`);
     }
-    const baseDir = this.requireProjectBaseDir(projectId);
-    const entry = this.requireEntry(fileId);
-    const resolved = await this.resolveFile(baseDir, entry);
-    const target = resolved.absolutePath;
-    this.assertInside(baseDir, target);
+    const projectBase = await this.resolveProjectBase(projectId);
+    const { entry, file } = await this.resolveInstructionFile(projectBase, fileId);
+    const target = file.absolutePath;
+    await this.assertWritableTargetContained(projectBase, target);
     await fs.mkdir(path.dirname(target), { recursive: true });
+    await this.assertWritableTargetContained(projectBase, target);
     await fs.writeFile(target, content, "utf8");
     this.deps.logger?.info?.(`Wrote instruction file ${entry.label} for project ${projectId}`);
-    const stat = await this.statFile(target);
+    const stat = await this.statFile(projectBase, target);
     return {
       ...this.toSummary(entry, {
         absolutePath: target,
-        relativePath: path.relative(baseDir, target),
+        relativePath: path.relative(projectBase.realPath, target),
         ...stat,
       }),
       content,
     };
   }
 
-  private requireProjectBaseDir(projectId: string): string {
+  private async resolveProjectBase(projectId: string): Promise<ResolvedProjectBase> {
     const project = this.deps.projectManagementRepository.getProject(projectId);
     if (!project || !project.baseDir) {
-      throw new Error(`Project ${projectId} not found or has no base directory.`);
+      throw new ValidationError("Missing project or base directory.");
     }
-    return project.baseDir;
+    try {
+      const absolutePath = path.resolve(project.baseDir);
+      const realPath = await fs.realpath(absolutePath);
+      return { realPath };
+    } catch {
+      throw new ValidationError("Missing project or base directory.");
+    }
   }
 
   private requireEntry(fileId: string): CatalogEntry {
     const entry = INSTRUCTION_FILE_CATALOG.find((candidate) => candidate.id === fileId);
     if (!entry) {
-      throw new Error(`Unknown instruction file: ${fileId}`);
+      throw new ValidationError("Invalid instruction file id.");
     }
     return entry;
   }
 
-  private candidatePaths(baseDir: string, entry: CatalogEntry): string[] {
-    return [entry.relativePath, ...(entry.aliases ?? [])].map((relative) =>
-      path.resolve(baseDir, relative),
-    );
+  private candidatePaths(projectBase: ResolvedProjectBase, entry: CatalogEntry): string[] {
+    return [entry.relativePath, ...(entry.aliases ?? [])].map((relative) => {
+      this.assertCatalogRelativePath(relative);
+      const candidate = path.join(projectBase.realPath, relative);
+      this.assertInside(projectBase.realPath, candidate, "catalog target");
+      return candidate;
+    });
   }
 
-  /** Picks the first existing candidate, falling back to the canonical path. */
-  private async resolveFile(baseDir: string, entry: CatalogEntry): Promise<ResolvedFile> {
-    const candidates = this.candidatePaths(baseDir, entry);
+  /**
+   * Single resolver for editable instruction files. File IDs must match the
+   * static catalog; all filesystem paths come from catalog-owned relative paths.
+   */
+  private async resolveInstructionFile(
+    projectBase: ResolvedProjectBase,
+    fileId: string,
+  ): Promise<ResolvedInstructionFile> {
+    const entry = this.requireEntry(fileId);
+    const candidates = this.candidatePaths(projectBase, entry);
     for (const candidate of candidates) {
-      const stat = await this.statFile(candidate);
+      const stat = await this.statFile(projectBase, candidate);
       if (stat.exists) {
-        const actualPath = await this.resolveExistingPathCase(baseDir, candidate);
-        return { absolutePath: actualPath, relativePath: path.relative(baseDir, actualPath), ...stat };
+        const actualPath = await this.resolveExistingPathCase(projectBase.realPath, candidate);
+        return {
+          entry,
+          file: {
+            absolutePath: actualPath,
+            relativePath: path.relative(projectBase.realPath, actualPath),
+            ...stat,
+          },
+        };
       }
     }
     const canonical = candidates[0];
     return {
-      absolutePath: canonical,
-      relativePath: path.relative(baseDir, canonical),
-      exists: false,
-      size: 0,
-      updatedAt: null,
+      entry,
+      file: {
+        absolutePath: canonical,
+        relativePath: path.relative(projectBase.realPath, canonical),
+        exists: false,
+        size: 0,
+        updatedAt: null,
+      },
     };
   }
 
@@ -205,19 +241,95 @@ export class InstructionFileService {
     return current;
   }
 
-  private async statFile(absolutePath: string): Promise<{ exists: boolean; size: number; updatedAt: string | null }> {
+  private async statFile(
+    projectBase: ResolvedProjectBase,
+    absolutePath: string,
+  ): Promise<{ exists: boolean; size: number; updatedAt: string | null }> {
     try {
+      await fs.lstat(absolutePath);
+      await this.assertExistingTargetContained(projectBase, absolutePath);
       const stat = await fs.stat(absolutePath);
       return { exists: stat.isFile(), size: stat.size, updatedAt: stat.mtime.toISOString() };
-    } catch {
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        throw error;
+      }
       return { exists: false, size: 0, updatedAt: null };
     }
   }
 
-  private assertInside(baseDir: string, target: string): void {
-    const relative = path.relative(path.resolve(baseDir), target);
+  private assertCatalogRelativePath(relativePath: string): void {
+    if (
+      !relativePath
+      || path.isAbsolute(relativePath)
+      || relativePath.split(/[\\/]/).some((segment) => segment === "..")
+    ) {
+      throw new ValidationError("Invalid instruction file catalog path.");
+    }
+  }
+
+  private async assertExistingTargetContained(projectBase: ResolvedProjectBase, target: string): Promise<void> {
+    let realTarget: string;
+    try {
+      realTarget = await fs.realpath(target);
+    } catch {
+      throw new ValidationError("Invalid instruction file path: symlink target cannot be resolved.");
+    }
+    this.assertInside(projectBase.realPath, realTarget, "symlink target");
+  }
+
+  private async assertWritableTargetContained(projectBase: ResolvedProjectBase, target: string): Promise<void> {
+    try {
+      await fs.lstat(target);
+      await this.assertExistingTargetContained(projectBase, target);
+      return;
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        throw error;
+      }
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT") {
+        throw error;
+      }
+    }
+
+    const parentDir = await this.findNearestExistingParent(target);
+    try {
+      const parentRealPath = await fs.realpath(parentDir);
+      this.assertInside(projectBase.realPath, parentRealPath, "parent directory");
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        throw error;
+      }
+      throw new ValidationError("Invalid instruction file path: parent directory cannot be resolved.");
+    }
+  }
+
+  private async findNearestExistingParent(target: string): Promise<string> {
+    let current = path.dirname(target);
+    while (true) {
+      try {
+        await fs.lstat(current);
+        return current;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== "ENOENT") {
+          throw error;
+        }
+      }
+
+      const parent = path.dirname(current);
+      if (parent === current) {
+        throw new ValidationError("Invalid instruction file path: parent directory cannot be resolved.");
+      }
+      current = parent;
+    }
+  }
+
+  private assertInside(baseDir: string, target: string, label: string): void {
+    const relative = path.relative(baseDir, target);
     if (relative.startsWith("..") || path.isAbsolute(relative)) {
-      throw new Error("Resolved instruction file path escapes the project directory.");
+      throw new ValidationError(`Invalid instruction file path: ${label} escapes the project directory.`);
     }
   }
 

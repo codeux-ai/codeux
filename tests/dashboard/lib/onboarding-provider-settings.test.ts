@@ -7,6 +7,36 @@ import {
   syncProjectProvidersToIntegrationCatalog
 } from "../../../dashboard/src/v2/lib/onboarding-provider-settings.js";
 import type { OnboardingProviderCredentialStatus, SystemSettings, ProjectSettings } from "../../../dashboard/src/types.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
+
+const createImporterSettings = () => ({
+  enabled: false,
+  apiToken: "",
+  apiSecret: "",
+  baseUrl: "",
+  workspaceId: "",
+  teamId: "",
+  teamKey: "",
+  projectId: "",
+  databaseId: "",
+  boardId: "",
+  documentId: "",
+  fileKey: "",
+  defaultSearchLimit: 25,
+});
+
+const createSpeechSettings = () => ({
+  enabled: false,
+  providerMode: "auto" as const,
+  localModelId: "onnx-community/whisper-base.en",
+  maxAudioSeconds: 120,
+  externalTranscription: {
+    baseUrl: "https://api.openai.com/v1/audio/transcriptions",
+    apiKey: "",
+    model: "whisper-1",
+    language: null,
+  },
+});
 
 describe("onboarding-provider-settings", () => {
   it("getProviderInitialSelection returns jules, enabled providers, and detected providers", () => {
@@ -40,21 +70,48 @@ describe("onboarding-provider-settings", () => {
     const settings = {
       runtime: {},
       integrations: {
-        jira: { host: "", email: "", apiToken: "", autoCloseLinkedIssues: false, defaultProject: "", closeTransitionName: "Done" },
+        jira: { host: "", email: "", apiToken: "", autoTransitionLinkedIssuesOnImport: true, importTransitionName: "In Work", autoCloseLinkedIssues: false, defaultProject: "", closeTransitionName: "Done" },
+        notion: createImporterSettings(),
+        asana: createImporterSettings(),
+        linear: createImporterSettings(),
+        miro: createImporterSettings(),
+        lucid: createImporterSettings(),
+        figma: createImporterSettings(),
+        mural: createImporterSettings(),
         providers: {
           "p1": { provider: "jules", name: "Jules", apiKey: "key", mountAuth: false, authPath: "" }
-        }
+        },
+        githubToken: "",
+        gitlabToken: "",
+      },
+      techstackCatalog: {
+        defaultTechstackId: "code-ux-internal",
+        entries: [
+          {
+            id: "code-ux-internal",
+            label: "Code UX Stack",
+            items: [
+              { id: "preact", label: "Preact" },
+              { id: "tanstack-router", label: "TanStack Router" },
+              { id: "gsap", label: "GSAP" },
+              { id: "three-js", label: "Three.js" },
+              { id: "lucide-icons", label: "Lucide Icons" },
+            ],
+          },
+        ],
       },
       defaults: {
         appearance: { theme: "system" },
         automationLevel: "FULL",
         automationInterventions: {},
-        git: { githubMode: "app", githubToken: "", defaultBranch: "main", autoCreatePr: false, autoCloseLinkedIssues: false, deleteMergedBranches: false, featureBranchPrefix: "", sprintBranchScheme: "FLAT", sprintKeyPrefix: "" },
-        jira: { host: "h", email: "e", apiToken: "t", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
+        designGuidance: { ...DEFAULT_DASHBOARD_SETTINGS.designGuidance },
+        git: { githubMode: "app", githubToken: "", defaultBranch: "main", autoCreatePr: false, autoCloseLinkedIssues: false, deleteMergedBranches: false, featureBranchPrefix: "", sprintBranchScheme: "FLAT", sprintKeyPrefix: "", taskPrTitleScheme: "" },
+        jira: { host: "h", email: "e", apiToken: "t", autoTransitionLinkedIssuesOnImport: true, importTransitionName: "In Work", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
         ciIntelligence: {},
         sprintLoopSteps: { apply: { type: "apply" }, pr: { type: "pr" }, runTests: { type: "test" } },
         cliWorkflow: { executionMode: "HOST" },
         sprintPreview: { enabled: false },
+        techstack: { applicationKind: null, selectedTechstackId: null },
         aiProvider: {
           provider: "jules",
           strategy: "MANUAL",
@@ -81,13 +138,33 @@ describe("onboarding-provider-settings", () => {
             taskCompletion: { strategy: "ALWAYS", agentPresetIds: [], agentPresetId: null },
             sprintCompletion: { strategy: "ALWAYS", agentPresetIds: [], agentPresetId: null },
             completedTaskWithoutPr: { strategy: "CREATE_PR", agentPresetIds: [], agentPresetId: null },
-          }
+          },
+          selfReflection: {
+            planning: {
+              enabled: false,
+              criteria: [{ id: "correctness", label: "Correctness", prompt: "Check correctness.", threshold: 0.8 }],
+              maxImprovementAttempts: 1,
+            },
+            qualityAssurance: {
+              enabled: false,
+              criteria: [{ id: "security", label: "Security", prompt: "Check security.", threshold: 0.85 }],
+              maxImprovementAttempts: 1,
+            },
+          },
         },
+        notion: createImporterSettings(),
+        asana: createImporterSettings(),
+        linear: createImporterSettings(),
+        miro: createImporterSettings(),
+        lucid: createImporterSettings(),
+        figma: createImporterSettings(),
+        mural: createImporterSettings(),
         guardrails: { onLimitAction: "WARN", defaultLimitOverrides: [], limitOverrides: [], jobConfigOverrides: [], jobs: { task_coding: {}, ci_fix: {}, merge_conflict: {}, clarification_reply: {}, planning: {}, remediation: {} } },
         skills: [],
         mcpTools: [],
         customMcpServers: [],
-        memory: { enabled: true, embeddingModel: null, externalEmbedding: { baseUrl: "", apiKey: "", model: "", dimensions: null }, autoCaptureSprint: true, autoCaptureAgent: true, autoPromote: false, promotionThreshold: 5, maxSprintMemories: 10, maxProjectMemories: 20, mapMaxEdgesPerNode: 5, workerLearningsInstruction: "" }
+        memory: { enabled: true, embeddingModel: null, externalEmbedding: { baseUrl: "", apiKey: "", model: "", dimensions: null }, autoCaptureSprint: true, autoCaptureAgent: true, autoPromote: false, promotionThreshold: 5, maxSprintMemories: 10, maxProjectMemories: 20, mapMaxEdgesPerNode: 5, workerLearningsInstruction: "" },
+        speech: createSpeechSettings(),
       },
       mcpTools: [],
       customMcpServers: [],

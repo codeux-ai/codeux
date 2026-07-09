@@ -34,6 +34,9 @@ import type {
 import type {
   ExecutionAssignedWorkerSummary,
   ExecutionDashboardSnapshot,
+  HeaderTokenThroughputQuery,
+  HeaderTokenThroughputSnapshot,
+  HeaderTokenThroughputWindow,
   ProjectExecutionStatsSnapshot,
   ProjectStatsQuery,
   ProjectStatsWindow,
@@ -140,7 +143,17 @@ export const fetchSprints = async (projectId: string, signal?: AbortSignal): Pro
 export type RemoteIssueSummary = RepositoryIssueSearchResult;
 export type JiraIssueSearchInput = SharedJiraIssueSearchInput;
 export type JiraIssueSearchResult = SharedJiraIssueSearchResult;
-export type RepositoryIssueSearchInput = SharedRepositoryIssueSearchInput;
+export interface JiraProjectStatus {
+  id: string;
+  name: string;
+  issueTypes: string[];
+}
+export type RepositoryIssueSearchInput = Omit<SharedRepositoryIssueSearchInput, "state" | "status"> & {
+  state?: SharedRepositoryIssueSearchInput["state"] | string;
+  status?: SharedJiraIssueSearchInput["status"] | string;
+  providerProjectId?: string;
+  includeConversation?: boolean;
+};
 
 export const searchJiraIssues = async (
   projectId: string,
@@ -152,6 +165,10 @@ export const searchJiraIssues = async (
   if (input.search?.trim()) url.searchParams.set("search", input.search.trim());
   if (input.issueKey?.trim()) url.searchParams.set("issueKey", input.issueKey.trim());
   if (input.status) url.searchParams.set("status", input.status);
+  if (input.inProgressStatusName?.trim()) url.searchParams.set("inProgressStatusName", input.inProgressStatusName.trim());
+  for (const statusName of input.statusNames ?? []) {
+    if (statusName.trim()) url.searchParams.append("statusNames", statusName.trim());
+  }
   if (input.assignee) url.searchParams.set("assignee", input.assignee);
   if (input.assigneeText?.trim()) url.searchParams.set("assigneeText", input.assigneeText.trim());
   if (input.reporterText?.trim()) url.searchParams.set("reporterText", input.reporterText.trim());
@@ -171,6 +188,16 @@ export const searchJiraIssues = async (
   );
 };
 
+export const fetchJiraProjectStatuses = async (
+  projectId: string,
+  projectKey: string,
+  signal?: AbortSignal,
+): Promise<JiraProjectStatus[]> => {
+  const url = new URL(`/api/projects/${encodeURIComponent(projectId)}/jira/statuses`, window.location.origin);
+  if (projectKey.trim()) url.searchParams.set("projectKey", projectKey.trim());
+  return fetchJson<JiraProjectStatus[]>(`${url.pathname}${url.search}`, { signal });
+};
+
 export const listSprintLinkedIssues = async (
   sprintId: string,
   signal?: AbortSignal,
@@ -185,8 +212,8 @@ export const replaceSprintLinkedIssues = async (
   sprintId: string,
   projectId: string,
   issues: SprintLinkedIssueInput[],
-): Promise<SprintLinkedIssueRecord[]> => {
-  return fetchJson<SprintLinkedIssueRecord[]>(
+): Promise<{ linkedIssues: SprintLinkedIssueRecord[]; warnings: Array<{ issueId: string; issueKey: string; message: string }> }> => {
+  return fetchJson<{ linkedIssues: SprintLinkedIssueRecord[]; warnings: Array<{ issueId: string; issueKey: string; message: string }> }>(
     `/api/sprints/${encodeURIComponent(sprintId)}/linked-issues`,
     {
       method: "PUT",
@@ -218,13 +245,29 @@ export const searchProjectIssues = async (
 ): Promise<RemoteIssueSummary[]> => {
   const url = new URL(`/api/projects/${encodeURIComponent(projectId)}/issues`, window.location.origin);
   if (input.provider) url.searchParams.set("provider", input.provider);
+  if (input.externalId?.trim()) url.searchParams.set("externalIds", input.externalId.trim());
+  if (input.externalIds?.length) url.searchParams.set("externalIds", input.externalIds.join(","));
   if (input.repository?.trim()) url.searchParams.set("repository", input.repository.trim());
   if (input.hostDomain?.trim()) url.searchParams.set("hostDomain", input.hostDomain.trim());
+  if (input.workspaceId?.trim()) url.searchParams.set("workspaceId", input.workspaceId.trim());
+  if (input.providerProjectId?.trim()) url.searchParams.set("projectId", input.providerProjectId.trim());
+  if (input.projectId?.trim()) url.searchParams.set("projectId", input.projectId.trim());
+  if (input.teamId?.trim()) url.searchParams.set("teamId", input.teamId.trim());
+  if (input.teamKey?.trim()) url.searchParams.set("teamKey", input.teamKey.trim());
+  if (input.databaseId?.trim()) url.searchParams.set("databaseId", input.databaseId.trim());
+  if (input.boardId?.trim()) url.searchParams.set("boardId", input.boardId.trim());
+  if (input.documentId?.trim()) url.searchParams.set("documentId", input.documentId.trim());
+  if (input.fileKey?.trim()) url.searchParams.set("fileKey", input.fileKey.trim());
+  if (input.muralId?.trim()) url.searchParams.set("muralId", input.muralId.trim());
+  if (input.itemTypes?.length) url.searchParams.set("itemTypes", input.itemTypes.join(","));
+  if (input.projectKey?.trim()) url.searchParams.set("projectKey", input.projectKey.trim());
   if (input.search?.trim()) url.searchParams.set("search", input.search.trim());
   if (input.issueText?.trim()) url.searchParams.set("issueText", input.issueText.trim());
   if (input.state) url.searchParams.set("state", input.state);
+  if (input.status) url.searchParams.set("status", input.status);
   if (input.labels?.length) url.searchParams.set("labels", input.labels.join(","));
   if (input.assignee?.trim()) url.searchParams.set("assignee", input.assignee.trim());
+  if (input.assigneeText?.trim()) url.searchParams.set("assigneeText", input.assigneeText.trim());
   if (input.author?.trim()) url.searchParams.set("author", input.author.trim());
   if (input.reporter?.trim()) url.searchParams.set("reporter", input.reporter.trim());
   if (input.milestone?.trim()) url.searchParams.set("milestone", input.milestone.trim());
@@ -235,6 +278,7 @@ export const searchProjectIssues = async (
   if (input.sortField) url.searchParams.set("sortField", input.sortField);
   if (input.sortDirection) url.searchParams.set("sortDirection", input.sortDirection);
   if (input.limit !== undefined) url.searchParams.set("limit", String(input.limit));
+  if (input.includeConversation !== undefined) url.searchParams.set("includeConversation", String(input.includeConversation));
   return fetchJson<RemoteIssueSummary[]>(`${url.pathname}${url.search}`, { signal });
 };
 
@@ -284,6 +328,19 @@ export const fetchProjectStats = async (
     url.searchParams.set("to", query.to);
   }
   return fetchJson<ProjectExecutionStatsSnapshot>(`${url.pathname}${url.search}`, { signal });
+};
+
+export const fetchHeaderTokenThroughput = async (
+  query: Partial<HeaderTokenThroughputQuery> & { window?: HeaderTokenThroughputWindow } = {},
+  signal?: AbortSignal,
+): Promise<HeaderTokenThroughputSnapshot> => {
+  const url = new URL("/api/stats/header-throughput", window.location.origin);
+  url.searchParams.set("window", query.window || "1h");
+  const projectId = query.projectId?.trim();
+  if (projectId) {
+    url.searchParams.set("projectId", projectId);
+  }
+  return fetchJson<HeaderTokenThroughputSnapshot>(`${url.pathname}${url.search}`, { signal });
 };
 
 export const createSprint = async (projectId: string, input: CreateSprintInput): Promise<SprintRecord> => {

@@ -33,22 +33,28 @@ export function createMcpDependencies(
 
   const managementToolHandler = new ManagementToolHandler({
     sprintPreviewService: coreDeps.sprintPreviewService,
+    customDashboardRepository: coreDeps.customDashboardRepository,
+    customDashboardValidationService: coreDeps.customDashboardValidationService,
     executionRepository: coreDeps.executionRepository,
     getDashboardSettings: () => getDashboardSettings(),
     projectManagementRepository: coreDeps.projectManagementRepository,
     executionControlService: dashboardDeps.executionControlService,
     taskRerunService: dashboardDeps.taskRerunService,
     settingsRepository: coreDeps.settingsRepository,
+    chatProviderRepository: coreDeps.chatProviderRepository,
     agentPresetSyncService: coreDeps.agentPresetSyncService,
     memoryService: coreDeps.memoryService,
     memoryPromotionService: coreDeps.memoryPromotionService,
     embeddingModelManager: coreDeps.embeddingModelManager,
+    skillService: coreDeps.skillService,
+    nodeFlowService: dashboardDeps.nodeFlowService,
     knowledgeService: coreDeps.knowledgeService,
     planningAgentService: dashboardDeps.planningAgentService,
     projectSetupService: dashboardDeps.projectSetupService,
     sprintIssueService: coreDeps.sprintIssueService,
     quicksprintService: dashboardDeps.quicksprintService,
     schedulerService: dashboardDeps.schedulerService,
+    workerTaskDispatchService: sprintDeps.workerTaskDispatchService,
   });
 
   return {

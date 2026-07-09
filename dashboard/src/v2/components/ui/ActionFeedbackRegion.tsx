@@ -137,10 +137,24 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
     }
   }, [displayedStatus, reducedMotion, motionTokens.controlFeedback.duration, motionTokens.controlFeedback.ease]);
 
+  const focusWithoutScroll = (element: HTMLElement) => {
+    try {
+      element.focus({ preventScroll: true });
+    } catch {
+      element.focus();
+    }
+  };
+
   const moveFocusToFallback = () => {
     const fallback = document.querySelector<HTMLElement>('[data-feedback-focus-fallback], [data-focus-fallback], [role="main"], main, #root') || document.body;
     if (fallback.tabIndex < 0) fallback.tabIndex = -1;
-    fallback.focus();
+    if (fallback === document.body) {
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+      return;
+    }
+    focusWithoutScroll(fallback);
     if (
       document.activeElement instanceof HTMLElement &&
       (document.activeElement === dismissBtnRef.current || document.activeElement === clearBtnRef.current || document.activeElement === retryRef.current)
@@ -160,6 +174,12 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
     });
   };
 
+  useLayoutEffect(() => {
+    if (!isOpen && containerRef.current?.contains(document.activeElement)) {
+      moveFocusToFallback();
+    }
+  }, [isOpen]);
+
   const handleDismiss = () => {
     const previousActive = document.activeElement === dismissBtnRef.current ? document.activeElement : null;
     onDismiss?.();
@@ -177,6 +197,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
       return;
     }
 
+    const previousActive = document.activeElement === retryRef.current ? document.activeElement : null;
     retryPendingRef.current = true;
     setLocalRetryPending(true);
     try {
@@ -184,6 +205,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
     } finally {
       retryPendingRef.current = false;
       setLocalRetryPending(false);
+      if (previousActive) moveFocusToFallbackIfRemoved(previousActive);
     }
   };
 
@@ -206,7 +228,11 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
           scale: reducedMotion ? 1 : 0.97,
           duration: motionTokens.enterExit.duration,
           ease: motionTokens.enterExit.ease,
-          onComplete: () => onDismiss?.(),
+          onComplete: () => {
+            const previousActive = containerRef.current?.contains(document.activeElement) ? document.activeElement : null;
+            onDismiss?.();
+            if (previousActive) moveFocusToFallbackIfRemoved(previousActive);
+          },
         }
       );
     });
@@ -233,7 +259,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
     <div
       ref={containerRef}
       role={isError ? "alert" : "status"}
-      aria-live={isError ? "assertive" : isPending ? "polite" : "off"}
+      aria-live={isError ? "assertive" : isPending || displayedStatus === "warning" ? "polite" : "off"}
       aria-atomic="true"
       aria-busy={isPending ? "true" : undefined}
       className={`relative overflow-hidden grid grid-cols-[1.25rem_minmax(0,1fr)_auto] items-start gap-3 p-3 rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.2)] border ${config.colors} bg-white dark:bg-void-800 ${className}`}
@@ -297,11 +323,16 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
         )}
       </div>
       {(displayedStatus === "success" || displayedStatus === "warning") && autoDismiss !== false && !retryAction && (
-        <div
-          ref={progressRef}
-          aria-hidden="true"
-          className={`absolute bottom-0 left-0 h-1 opacity-20 ${config.progressColors}`}
-        />
+        <>
+          <div
+            ref={progressRef}
+            aria-hidden="true"
+            className={`absolute bottom-0 left-0 h-1 opacity-20 ${config.progressColors}`}
+          />
+          <span className="sr-only">
+            {displayedStatus === "warning" ? "Warning feedback" : "Success feedback"} will dismiss automatically.
+          </span>
+        </>
       )}
       {displayedStatus === "pending" && progress !== undefined && (
         <div

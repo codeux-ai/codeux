@@ -1,7 +1,19 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as fs from "fs/promises";
+import * as os from "os";
+import * as path from "path";
 import { SchedulerService } from "../../../src/services/scheduler-service.js";
 import { normalizeRecurrenceRule } from "../../../src/domain/scheduler/schedule-time.js";
 import type { SchedulerEntryRecord } from "../../../src/contracts/scheduler-types.js";
+import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
+import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
+import { SchedulerRepository } from "../../../src/repositories/scheduler-repository.js";
+
+const tempDirs: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
+});
 
 const createLogger = () => ({
   error: vi.fn(),
@@ -96,13 +108,268 @@ describe("SchedulerService", () => {
     expect(schedulerRepository.markRunSucceeded).toHaveBeenCalledWith("entry-1", "2026-05-18T09:00:00.000Z", null);
   });
 
+  it("posts due agent wakeups through the chat runtime with agent scheduler metadata", async () => {
+    const entry = createEntry({
+      targetType: "agent_wakeup",
+      sprintTarget: undefined,
+      agentWakeupTarget: {
+        bodyMarkdown: "Wake up and continue the review.",
+        threadId: "thread-1",
+        title: "Review wakeup",
+        connectionId: "connection-1",
+        origin: "agent_scheduler",
+        source: "agent_scheduler",
+        createdByAgentId: "agent-1",
+      },
+      recurrence: normalizeRecurrenceRule(),
+    });
+    const schedulerRepository = {
+      listDueEntries: vi.fn(() => [entry]),
+      getEntry: vi.fn(() => entry),
+      markRunSucceeded: vi.fn(),
+      markRunFailed: vi.fn(),
+    };
+    const chatThreadRuntimeService = {
+      postMessage: vi.fn().mockResolvedValue({ id: "message-1" }),
+    };
+    const service = buildService(schedulerRepository, { chatThreadRuntimeService });
+
+    await service.runDueEntries(new Date("2026-05-18T09:00:01.000Z"));
+
+    expect(chatThreadRuntimeService.postMessage).toHaveBeenCalledWith("project-1", {
+      threadId: "thread-1",
+      title: "Review wakeup",
+      connectionId: "connection-1",
+      bodyMarkdown: "Wake up and continue the review.",
+      metadata: {
+        source: "agent_scheduler",
+        origin: "agent_scheduler",
+        schedulerEntryId: "entry-1",
+        scheduledFor: "2026-05-18T09:00:00.000Z",
+        createdByAgentId: "agent-1",
+      },
+    });
+    expect(schedulerRepository.markRunSucceeded).toHaveBeenCalledWith("entry-1", "2026-05-18T09:00:00.000Z", null);
+  });
+
+  it("reruns due task targets through the task rerun service", async () => {
+    const entry = createEntry({
+      targetType: "task",
+      sprintTarget: undefined,
+      taskTarget: {
+        taskId: "task-1",
+        provider: "codex",
+        origin: "agent_scheduler",
+        source: "agent_scheduler",
+        createdByAgentId: "agent-1",
+      },
+      recurrence: normalizeRecurrenceRule(),
+    });
+    const schedulerRepository = {
+      listDueEntries: vi.fn(() => [entry]),
+      getEntry: vi.fn(() => entry),
+      markRunSucceeded: vi.fn(),
+      markRunFailed: vi.fn(),
+    };
+    const taskRerunService = {
+      rerunTask: vi.fn().mockResolvedValue({ id: "task-1" }),
+    };
+    const service = buildService(schedulerRepository, { taskRerunService });
+
+    await service.runDueEntries(new Date("2026-05-18T09:00:01.000Z"));
+
+    expect(taskRerunService.rerunTask).toHaveBeenCalledWith("task-1", { provider: "codex" });
+    expect(schedulerRepository.markRunSucceeded).toHaveBeenCalledWith("entry-1", "2026-05-18T09:00:00.000Z", null);
+  });
+
+  it("runs anchored entries only after the source sprint terminal time plus offset", async () => {
+    const entry = createEntry({
+      targetType: "chat",
+      sprintTarget: undefined,
+      scheduleAnchor: {
+        mode: "after_sprint_end",
+        sourceSprintId: "source-sprint",
+        offsetMinutes: 10,
+      },
+      recurrence: normalizeRecurrenceRule(),
+      nextRunAt: null,
+      chatTarget: { bodyMarkdown: "Start follow-up." },
+    });
+    const repo = {
+      listDueEntries: vi.fn(() => []),
+      listScheduledAnchoredEntries: vi.fn(() => [entry]),
+      getEntry: vi.fn(() => entry),
+      markRunSucceeded: vi.fn(),
+      markRunFailed: vi.fn(),
+    };
+    const projectManagementRepository = {
+      getSprint: vi.fn(() => ({
+        id: "source-sprint",
+        projectId: "project-1",
+        status: "completed",
+        endDate: "2026-05-18T09:00:00.000Z",
+      })),
+    };
+    const chatThreadRuntimeService = {
+      postMessage: vi.fn().mockResolvedValue({ id: "message-1" }),
+    };
+    const service = buildService(repo, { projectManagementRepository, chatThreadRuntimeService });
+
+    await service.runDueEntries(new Date("2026-05-18T09:09:59.000Z"));
+    expect(chatThreadRuntimeService.postMessage).not.toHaveBeenCalled();
+    expect(repo.markRunSucceeded).not.toHaveBeenCalled();
+
+    await service.runDueEntries(new Date("2026-05-18T09:10:00.000Z"));
+
+    expect(chatThreadRuntimeService.postMessage).toHaveBeenCalledWith("project-1", expect.objectContaining({
+      bodyMarkdown: "Start follow-up.",
+    }));
+    expect(repo.markRunSucceeded).toHaveBeenCalledWith("entry-1", "2026-05-18T09:10:00.000Z", null);
+  });
+
+  it("prefers the latest terminal sprint run finish time for anchored due checks", async () => {
+    const entry = createEntry({
+      targetType: "chat",
+      sprintTarget: undefined,
+      scheduleAnchor: {
+        mode: "after_sprint_end",
+        sourceSprintId: "source-sprint",
+        offsetMinutes: 5,
+      },
+      recurrence: normalizeRecurrenceRule(),
+      nextRunAt: null,
+      chatTarget: { bodyMarkdown: "Start follow-up." },
+    });
+    const repo = {
+      listDueEntries: vi.fn(() => []),
+      listScheduledAnchoredEntries: vi.fn(() => [entry]),
+      getEntry: vi.fn(() => entry),
+      markRunSucceeded: vi.fn(),
+      markRunFailed: vi.fn(),
+    };
+    const projectManagementRepository = {
+      getSprint: vi.fn(() => ({
+        id: "source-sprint",
+        projectId: "project-1",
+        status: "completed",
+        endDate: "2026-05-18T08:00:00.000Z",
+      })),
+    };
+    const executionRepository = {
+      listSprintRuns: vi.fn(() => [
+        { status: "completed", finishedAt: "2026-05-18T09:30:00.000Z" },
+        { status: "failed", finishedAt: "2026-05-18T09:45:00.000Z" },
+      ]),
+    };
+    const chatThreadRuntimeService = {
+      postMessage: vi.fn().mockResolvedValue({ id: "message-1" }),
+    };
+    const service = buildService(repo, { projectManagementRepository, executionRepository, chatThreadRuntimeService });
+
+    await service.runDueEntries(new Date("2026-05-18T09:49:59.000Z"));
+    expect(chatThreadRuntimeService.postMessage).not.toHaveBeenCalled();
+
+    await service.runDueEntries(new Date("2026-05-18T09:50:00.000Z"));
+    expect(repo.markRunSucceeded).toHaveBeenCalledWith("entry-1", "2026-05-18T09:50:00.000Z", null);
+  });
+
+  it("runs task-anchored wakeups after the source task completion time plus offset", async () => {
+    const entry = createEntry({
+      targetType: "agent_wakeup",
+      sprintTarget: undefined,
+      scheduleAnchor: {
+        mode: "after_task_end",
+        sourceTaskId: "task-1",
+        offsetMinutes: 5,
+      },
+      recurrence: normalizeRecurrenceRule(),
+      nextRunAt: null,
+      agentWakeupTarget: {
+        bodyMarkdown: "Send the task report.",
+        origin: "agent_scheduler",
+        source: "agent_scheduler",
+        createdByAgentId: "agent-1",
+      },
+    });
+    const repo = {
+      listDueEntries: vi.fn(() => []),
+      listScheduledAnchoredEntries: vi.fn(() => [entry]),
+      getEntry: vi.fn(() => entry),
+      markRunSucceeded: vi.fn(),
+      markRunFailed: vi.fn(),
+    };
+    const projectManagementRepository = {
+      getTask: vi.fn(() => ({
+        id: "task-1",
+        projectId: "project-1",
+        status: "completed",
+        updatedAt: "2026-05-18T09:00:00.000Z",
+      })),
+    };
+    const executionRepository = {
+      getLatestTaskRun: vi.fn(() => ({
+        state: "COMPLETED",
+        finishedAt: "2026-05-18T09:10:00.000Z",
+      })),
+      listTaskDispatches: vi.fn(() => []),
+    };
+    const chatThreadRuntimeService = {
+      postMessage: vi.fn().mockResolvedValue({ id: "message-1" }),
+    };
+    const service = buildService(repo, { projectManagementRepository, executionRepository, chatThreadRuntimeService });
+
+    await service.runDueEntries(new Date("2026-05-18T09:14:59.000Z"));
+    expect(chatThreadRuntimeService.postMessage).not.toHaveBeenCalled();
+    expect(repo.markRunSucceeded).not.toHaveBeenCalled();
+
+    await service.runDueEntries(new Date("2026-05-18T09:15:00.000Z"));
+
+    expect(chatThreadRuntimeService.postMessage).toHaveBeenCalledWith("project-1", expect.objectContaining({
+      bodyMarkdown: "Send the task report.",
+    }));
+    expect(repo.markRunSucceeded).toHaveBeenCalledWith("entry-1", "2026-05-18T09:15:00.000Z", null);
+  });
+
+  it("rejects task anchors outside the selected project", () => {
+    const repo = { createEntry: vi.fn() };
+    const projectManagementRepository = {
+      getTask: vi.fn(() => ({
+        id: "task-1",
+        projectId: "other-project",
+        status: "completed",
+        updatedAt: "2026-05-18T09:00:00.000Z",
+      })),
+    };
+    const service = buildService(repo, { projectManagementRepository });
+
+    expect(() => service.createEntry("project-1", {
+      targetType: "agent_wakeup",
+      scheduledFor: "2026-05-18T09:00:00.000Z",
+      scheduleAnchor: {
+        mode: "after_task_end",
+        sourceTaskId: "task-1",
+      },
+      agentWakeupTarget: {
+        bodyMarkdown: "Wake up.",
+        origin: "agent_scheduler",
+        source: "agent_scheduler",
+        createdByAgentId: "agent-1",
+      },
+    })).toThrow("Schedule anchors must reference a task in the selected project.");
+    expect(repo.createEntry).not.toHaveBeenCalled();
+  });
+
   const buildService = (repo: Record<string, unknown>, extra: Partial<Record<string, unknown>> = {}) =>
     new SchedulerService({
       schedulerRepository: repo as any,
       projectManagementRepository: (extra.projectManagementRepository ?? {}) as any,
+      executionRepository: extra.executionRepository as any,
       quicksprintService: (extra.quicksprintService ?? {}) as any,
       chatThreadRuntimeService: (extra.chatThreadRuntimeService ?? {}) as any,
       executionControlService: (extra.executionControlService ?? {}) as any,
+      taskRerunService: extra.taskRerunService as any,
+      nodeFlowRuntimeService: extra.nodeFlowRuntimeService as any,
+      nodeFlowRepository: extra.nodeFlowRepository as any,
       logger: createLogger() as any,
       tickIntervalMs: (extra.tickIntervalMs as number) ?? 30_000,
     });
@@ -126,6 +393,237 @@ describe("SchedulerService", () => {
 
     await service.runDueEntries(new Date("2026-05-18T09:00:01.000Z"));
     expect(quicksprintService.executeQuicksprint).toHaveBeenCalledWith("project-1", { prompt: "do it" });
+  });
+
+  it("runs due node flow targets through the node flow runtime with scheduler metadata", async () => {
+    const entry = createEntry({
+      targetType: "node_flow",
+      sprintTarget: undefined,
+      nodeFlowTarget: {
+        flowId: "flow-1",
+        input: { prompt: "Ship" },
+        flowVersion: 2,
+      },
+      recurrence: normalizeRecurrenceRule(),
+    });
+    const repo = {
+      listDueEntries: vi.fn(() => [entry]),
+      getEntry: vi.fn(() => entry),
+      markRunSucceeded: vi.fn(),
+      markRunFailed: vi.fn(),
+    };
+    const nodeFlowRuntimeService = {
+      runFlow: vi.fn().mockResolvedValue({ run: { status: "succeeded" }, nodeRuns: [], output: {} }),
+    };
+    const nodeFlowRepository = {
+      getFlow: vi.fn(() => ({ id: "flow-1", projectId: "project-1" })),
+    };
+    const service = buildService(repo, { nodeFlowRuntimeService, nodeFlowRepository });
+
+    await service.runDueEntries(new Date("2026-05-18T09:00:01.000Z"));
+    await flush();
+
+    expect(nodeFlowRuntimeService.runFlow).toHaveBeenCalledWith("project-1", "flow-1", { prompt: "Ship" }, {
+      triggerType: "scheduler",
+      triggerPayload: {
+        schedulerEntryId: "entry-1",
+        scheduledFor: "2026-05-18T09:00:00.000Z",
+        targetType: "node_flow",
+        flowVersion: 2,
+      },
+    });
+    expect(repo.markRunSucceeded).toHaveBeenCalledWith("entry-1", "2026-05-18T09:00:00.000Z", null);
+  });
+
+  it("durably claims a due node flow occurrence before a long-running runtime resolves", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "scheduler-service-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectManagementRepository = new ProjectManagementRepository(storage);
+    const schedulerRepository = new SchedulerRepository(storage);
+    const project = projectManagementRepository.createProject({
+      name: "Scheduler Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+    const entry = schedulerRepository.createEntry(project.id, {
+      targetType: "node_flow",
+      scheduledFor: "2026-05-18T09:00:00.000Z",
+      nodeFlowTarget: { flowId: "flow-1" },
+    });
+    let resolveRun: (value: { run: { status: "succeeded" }; nodeRuns: []; output: Record<string, never> }) => void = () => {};
+    const nodeFlowRuntimeService = {
+      runFlow: vi.fn(() => new Promise((resolve) => {
+        resolveRun = resolve;
+      })),
+    };
+    const nodeFlowRepository = {
+      getFlow: vi.fn(() => ({ id: "flow-1", projectId: project.id })),
+    };
+    const firstScheduler = buildService(schedulerRepository, {
+      projectManagementRepository,
+      nodeFlowRuntimeService,
+      nodeFlowRepository,
+    });
+    const restartedScheduler = buildService(schedulerRepository, {
+      projectManagementRepository,
+      nodeFlowRuntimeService,
+      nodeFlowRepository,
+    });
+    const now = new Date("2026-05-18T09:00:01.000Z");
+
+    await firstScheduler.runDueEntries(now);
+
+    expect(nodeFlowRuntimeService.runFlow).toHaveBeenCalledTimes(1);
+    expect(schedulerRepository.listDueEntries(now.toISOString()).find((due) => due.id === entry.id)).toBeUndefined();
+
+    await restartedScheduler.runDueEntries(now);
+
+    expect(nodeFlowRuntimeService.runFlow).toHaveBeenCalledTimes(1);
+
+    resolveRun({ run: { status: "succeeded" }, nodeRuns: [], output: {} });
+    await flush();
+
+    const finalized = schedulerRepository.getEntry(entry.id);
+    expect(finalized?.status).toBe("completed");
+    expect(finalized?.lastRunAt).toBe("2026-05-18T09:00:00.000Z");
+    expect(finalized?.runCount).toBe(1);
+  });
+
+  it("marks node flow schedules failed when the runtime resolves a failed run", async () => {
+    const entry = createEntry({
+      targetType: "node_flow",
+      sprintTarget: undefined,
+      nodeFlowTarget: { flowId: "flow-1" },
+      recurrence: normalizeRecurrenceRule(),
+    });
+    const repo = {
+      listDueEntries: vi.fn(() => [entry]),
+      getEntry: vi.fn(() => entry),
+      markRunSucceeded: vi.fn(),
+      markRunFailed: vi.fn(),
+    };
+    const service = buildService(repo, {
+      nodeFlowRuntimeService: {
+        runFlow: vi.fn().mockResolvedValue({
+          run: { status: "failed", errorMessage: "node execution failed" },
+          nodeRuns: [],
+          output: {},
+        }),
+      },
+      nodeFlowRepository: { getFlow: vi.fn(() => ({ id: "flow-1", projectId: "project-1" })) },
+    });
+
+    await service.runDueEntries(new Date("2026-05-18T09:00:01.000Z"));
+    await flush();
+
+    expect(repo.markRunSucceeded).not.toHaveBeenCalled();
+    expect(repo.markRunFailed).toHaveBeenCalledWith(
+      "entry-1",
+      "node execution failed",
+      "2026-05-18T09:00:00.000Z",
+    );
+  });
+
+  it("does not execute node flow targets before nextRunAt is due", async () => {
+    const entry = createEntry({
+      targetType: "node_flow",
+      sprintTarget: undefined,
+      nextRunAt: "2026-05-18T09:05:00.000Z",
+      nodeFlowTarget: { flowId: "flow-1" },
+      recurrence: normalizeRecurrenceRule(),
+    });
+    const repo = {
+      listDueEntries: vi.fn(() => [entry]),
+      getEntry: vi.fn(() => entry),
+      markRunSucceeded: vi.fn(),
+      markRunFailed: vi.fn(),
+    };
+    const nodeFlowRuntimeService = { runFlow: vi.fn() };
+    const service = buildService(repo, {
+      nodeFlowRuntimeService,
+      nodeFlowRepository: { getFlow: vi.fn(() => ({ id: "flow-1", projectId: "project-1" })) },
+    });
+
+    await service.runDueEntries(new Date("2026-05-18T09:00:01.000Z"));
+
+    expect(nodeFlowRuntimeService.runFlow).not.toHaveBeenCalled();
+    expect(repo.markRunSucceeded).not.toHaveBeenCalled();
+    expect(repo.markRunFailed).not.toHaveBeenCalled();
+  });
+
+  it("marks node flow schedules failed without marking success when runtime startup rejects", async () => {
+    const entry = createEntry({
+      targetType: "node_flow",
+      sprintTarget: undefined,
+      nodeFlowTarget: { flowId: "flow-1" },
+      recurrence: normalizeRecurrenceRule(),
+    });
+    const repo = {
+      listDueEntries: vi.fn(() => [entry]),
+      getEntry: vi.fn(() => entry),
+      markRunSucceeded: vi.fn(),
+      markRunFailed: vi.fn(),
+    };
+    const service = buildService(repo, {
+      nodeFlowRuntimeService: { runFlow: vi.fn().mockRejectedValue(new Error("flow unavailable")) },
+      nodeFlowRepository: { getFlow: vi.fn(() => ({ id: "flow-1", projectId: "project-1" })) },
+    });
+
+    await service.runDueEntries(new Date("2026-05-18T09:00:01.000Z"));
+    await flush();
+
+    expect(repo.markRunSucceeded).not.toHaveBeenCalled();
+    expect(repo.markRunFailed).toHaveBeenCalledWith("entry-1", "flow unavailable");
+  });
+
+  it("validates node flow targets on create and update against the owning project", () => {
+    const current = createEntry({
+      targetType: "node_flow",
+      sprintTarget: undefined,
+      nodeFlowTarget: { flowId: "flow-1" },
+    });
+    const repo = {
+      createEntry: vi.fn(),
+      getEntry: vi.fn(() => current),
+      updateEntry: vi.fn(),
+    };
+    const nodeFlowRepository = {
+      getFlow: vi.fn((flowId: string) => ({ id: flowId, projectId: "other-project" })),
+    };
+    const service = buildService(repo, { nodeFlowRepository });
+
+    expect(() => service.createEntry("project-1", {
+      targetType: "node_flow",
+      nodeFlowTarget: { flowId: "flow-1" },
+    } as any)).toThrow(/Only node flows in the selected project/);
+    expect(() => service.updateEntry("entry-1", {
+      nodeFlowTarget: { flowId: "flow-2" },
+    })).toThrow(/Only node flows in the selected project/);
+    expect(repo.createEntry).not.toHaveBeenCalled();
+    expect(repo.updateEntry).not.toHaveBeenCalled();
+  });
+
+  it("lists node flow schedule entries with computed occurrences", () => {
+    const entry = createEntry({
+      targetType: "node_flow",
+      sprintTarget: undefined,
+      nodeFlowTarget: { flowId: "flow-1" },
+      recurrence: normalizeRecurrenceRule(),
+    });
+    const repo = { listEntries: vi.fn(() => [entry]) };
+    const service = buildService(repo);
+
+    const result = service.listProjectSchedule("project-1", "2026-05-18T00:00:00Z", "2026-05-19T00:00:00Z");
+
+    expect(result.entries).toEqual([entry]);
+    expect(result.occurrences).toEqual([
+      expect.objectContaining({
+        entryId: "entry-1",
+        targetType: "node_flow",
+        startsAt: "2026-05-18T09:00:00.000Z",
+      }),
+    ]);
   });
 
   it("creates a settings-managed memory remediation schedule", () => {
@@ -255,6 +753,99 @@ describe("SchedulerService", () => {
     expect(Array.isArray(result.occurrences)).toBe(true);
   });
 
+  it("does not expose anchored schedule occurrences before the source sprint is terminal", () => {
+    const entry = createEntry({
+      scheduleAnchor: {
+        mode: "after_sprint_end",
+        sourceSprintId: "source-sprint",
+        offsetMinutes: 0,
+      },
+      scheduledFor: "2026-05-18T09:00:00.000Z",
+      recurrence: normalizeRecurrenceRule(),
+      nextRunAt: null,
+    });
+    const repo = { listEntries: vi.fn(() => [entry]) };
+    const projectManagementRepository = {
+      getSprint: vi.fn(() => ({
+        id: "source-sprint",
+        projectId: "project-1",
+        status: "active",
+        endDate: null,
+      })),
+    };
+    const service = buildService(repo, { projectManagementRepository });
+
+    const result = service.listProjectSchedule("project-1", "2026-05-18T00:00:00Z", "2026-05-19T00:00:00Z");
+
+    expect(result.occurrences).toEqual([]);
+  });
+
+  it("exposes an anchored schedule occurrence when the source sprint is terminal", () => {
+    const entry = createEntry({
+      scheduleAnchor: {
+        mode: "after_sprint_end",
+        sourceSprintId: "source-sprint",
+        offsetMinutes: 0,
+      },
+      scheduledFor: "2026-05-18T09:00:00.000Z",
+      recurrence: normalizeRecurrenceRule(),
+      nextRunAt: null,
+    });
+    const repo = { listEntries: vi.fn(() => [entry]) };
+    const projectManagementRepository = {
+      getSprint: vi.fn(() => ({
+        id: "source-sprint",
+        projectId: "project-1",
+        status: "completed",
+        endDate: "2026-05-18T11:30:00.000Z",
+      })),
+    };
+    const service = buildService(repo, { projectManagementRepository });
+
+    const result = service.listProjectSchedule("project-1", "2026-05-18T00:00:00Z", "2026-05-19T00:00:00Z");
+
+    expect(result.occurrences).toHaveLength(1);
+    expect(result.occurrences[0]).toEqual(expect.objectContaining({
+      entryId: entry.id,
+      startsAt: "2026-05-18T11:30:00.000Z",
+      occurrenceIndex: 1,
+    }));
+  });
+
+  it("exposes anchored schedule occurrences at terminal run finish time plus offset", () => {
+    const entry = createEntry({
+      scheduleAnchor: {
+        mode: "after_sprint_end",
+        sourceSprintId: "source-sprint",
+        offsetMinutes: 45,
+      },
+      scheduledFor: "2026-05-18T09:00:00.000Z",
+      recurrence: normalizeRecurrenceRule(),
+      nextRunAt: null,
+    });
+    const repo = { listEntries: vi.fn(() => [entry]) };
+    const projectManagementRepository = {
+      getSprint: vi.fn(() => ({
+        id: "source-sprint",
+        projectId: "project-1",
+        status: "failed",
+        endDate: "2026-05-18T10:00:00.000Z",
+      })),
+    };
+    const executionRepository = {
+      listSprintRuns: vi.fn(() => [
+        { status: "completed", finishedAt: "2026-05-18T12:05:00.000Z" },
+        { status: "active", finishedAt: "2026-05-18T12:30:00.000Z" },
+      ]),
+    };
+    const service = buildService(repo, { projectManagementRepository, executionRepository });
+
+    const result = service.listProjectSchedule("project-1", "2026-05-18T00:00:00Z", "2026-05-19T00:00:00Z");
+
+    expect(result.occurrences).toHaveLength(1);
+    expect(result.occurrences[0]?.startsAt).toBe("2026-05-18T12:50:00.000Z");
+  });
+
   it("validates sprint targets on create against the owning project and status", () => {
     const projectManagementRepository = {
       getSprint: vi.fn(() => ({ id: "sprint-1", projectId: "other-project", status: "active" })),
@@ -265,6 +856,82 @@ describe("SchedulerService", () => {
     expect(() =>
       service.createEntry("project-1", { targetType: "sprint", sprintTarget: { sprintId: "sprint-1" } } as any),
     ).toThrow(/Only sprints in the selected project/);
+    expect(repo.createEntry).not.toHaveBeenCalled();
+  });
+
+  it("validates task targets on create against the owning project", () => {
+    const projectManagementRepository = {
+      getTask: vi.fn(() => ({ id: "task-1", projectId: "other-project", sprintId: "sprint-1" })),
+    };
+    const repo = { createEntry: vi.fn() };
+    const service = buildService(repo, { projectManagementRepository });
+
+    expect(() => service.createEntry("project-1", {
+      targetType: "task",
+      taskTarget: {
+        taskId: "task-1",
+        origin: "agent_scheduler",
+        source: "agent_scheduler",
+      },
+    })).toThrow(/Only tasks in the selected project/);
+    expect(repo.createEntry).not.toHaveBeenCalled();
+  });
+
+  it("rejects agent wakeups without body markdown before persistence", () => {
+    const repo = { createEntry: vi.fn() };
+    const service = buildService(repo);
+
+    expect(() => service.createEntry("project-1", {
+      targetType: "agent_wakeup",
+      agentWakeupTarget: {
+        bodyMarkdown: "   ",
+        origin: "agent_scheduler",
+        source: "agent_scheduler",
+      },
+    })).toThrow(/agentWakeupTarget.bodyMarkdown is required/);
+    expect(repo.createEntry).not.toHaveBeenCalled();
+  });
+
+  it("validates after-sprint-end anchors against project ownership and target sprint identity", () => {
+    const projectManagementRepository = {
+      getSprint: vi.fn((sprintId: string) => {
+        if (sprintId === "source-other") {
+          return { id: sprintId, projectId: "other-project", status: "completed" };
+        }
+        return { id: sprintId, projectId: "project-1", status: "idle" };
+      }),
+    };
+    const repo = { createEntry: vi.fn() };
+    const service = buildService(repo, { projectManagementRepository });
+
+    expect(() => service.createEntry("project-1", {
+      targetType: "chat",
+      scheduleAnchor: { mode: "after_sprint_end", sourceSprintId: "source-other" },
+      chatTarget: { bodyMarkdown: "hi" },
+    })).toThrow(/selected project/);
+
+    expect(() => service.createEntry("project-1", {
+      targetType: "sprint",
+      scheduleAnchor: { mode: "after_sprint_end", sourceSprintId: "sprint-1" },
+      sprintTarget: { sprintId: "sprint-1" },
+    })).toThrow(/own completion/);
+
+    expect(repo.createEntry).not.toHaveBeenCalled();
+  });
+
+  it("rejects recurrence on after-sprint-end anchors before persistence", () => {
+    const projectManagementRepository = {
+      getSprint: vi.fn(() => ({ id: "source-sprint", projectId: "project-1", status: "completed" })),
+    };
+    const repo = { createEntry: vi.fn() };
+    const service = buildService(repo, { projectManagementRepository });
+
+    expect(() => service.createEntry("project-1", {
+      targetType: "chat",
+      scheduleAnchor: { mode: "after_sprint_end", sourceSprintId: "source-sprint" },
+      recurrence: { frequency: "daily", interval: 1 },
+      chatTarget: { bodyMarkdown: "hi" },
+    })).toThrow(/do not support recurrence/);
     expect(repo.createEntry).not.toHaveBeenCalled();
   });
 

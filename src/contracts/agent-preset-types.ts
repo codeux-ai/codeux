@@ -54,6 +54,11 @@ export interface AgentMemoryConfig {
   maxLongTerm: number;
 }
 
+export interface AgentPersistentSkillStorageConfig {
+  /** Default-off runtime flag reserved for future skill retrieval wiring. */
+  enabled: boolean;
+}
+
 export interface AgentPresetRecord {
   id: string;
   projectId: string;
@@ -70,11 +75,18 @@ export interface AgentPresetRecord {
   avatarConfig?: AgentAvatarConfig;
   providerConfigId?: ProviderConfigId | null;
   model?: string | null;
+  /**
+   * Optional Docker root-mode override for local CLI provider containers.
+   * `null`/`undefined` inherits the resolved cliWorkflow.containerRunAsRoot setting.
+   */
+  containerRunAsRoot?: boolean | null;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
   memoryConfig?: AgentMemoryConfig;
   /** Per-agent MCP access config. Undefined for agents that have never been configured. */
   mcpAccess?: AgentMcpAccessConfig;
+  persistentSkillStorageIds?: string[];
+  persistentSkillStorage?: AgentPersistentSkillStorageConfig;
   createdAt: string;
   updatedAt: string;
 }
@@ -88,10 +100,13 @@ export interface CreateAgentPresetInput {
   avatarConfig?: AgentAvatarConfig;
   providerConfigId?: ProviderConfigId | null;
   model?: string | null;
+  containerRunAsRoot?: boolean | null;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
   memoryConfig?: AgentMemoryConfig;
   mcpAccess?: AgentMcpAccessConfig;
+  persistentSkillStorageIds?: string[];
+  persistentSkillStorage?: AgentPersistentSkillStorageConfig;
 }
 
 export interface UpdateAgentPresetInput {
@@ -102,8 +117,15 @@ export interface UpdateAgentPresetInput {
   avatarConfig?: AgentAvatarConfig;
   providerConfigId?: ProviderConfigId | null;
   model?: string | null;
+  containerRunAsRoot?: boolean | null;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
   memoryConfig?: AgentMemoryConfig;
   mcpAccess?: AgentMcpAccessConfig;
+  persistentSkillStorageIds?: string[];
+  persistentSkillStorage?: AgentPersistentSkillStorageConfig;
+}
+
+export interface PushAgentPresetsToMarkdownOptions {
+  agentPresetIds?: string[];
 }

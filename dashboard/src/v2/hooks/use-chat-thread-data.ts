@@ -1,14 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { ChatMessageRecord, ChatThread } from "../types.js";
+import type { DashboardCreateAppQuickactionKind, DashboardCreateAppQuickactionMetadata } from "../types.js";
 import { useMessageCache } from "./useMessageCache.js";
 import {
   createConversationThread,
   deleteConversationThread,
+  fetchConversationDraft,
   fetchConversationMessages,
+  getOrCreateDashboardDraftUserId,
   postConversationMessage,
   updateConversationThread,
   compactThreadSession,
   cancelThreadTurn,
+  fetchConversationMessageHistory,
+  recordConversationMessageHistory,
+  upsertConversationDraft,
 } from "../lib/connection-api.js";
 import { resolveSelectedItemId } from "../lib/chat-page-state-utils.js";
 import { upsertChatThread } from "../lib/chat-thread-utils.js";
@@ -17,7 +23,8 @@ import { toChatTimestampMs } from "../lib/chat-time.js";
 import { useActionFeedback } from "./use-action-feedback.js";
 import { useConfirmDialog } from "./use-confirm-dialog.js";
 import type { RefObject } from "preact";
-import type { ExecutionDashboardSnapshot } from "../../types.js";
+import type { DashboardSettings, ExecutionDashboardSnapshot, TechstackCatalogEntrySettings } from "../../types.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../lib/settings.js";
 
 export const upsertMessage = (messages: ChatMessageRecord[], nextMessage: ChatMessageRecord): ChatMessageRecord[] => {
   if (messages.some((message) => message.id === nextMessage.id)) {
@@ -43,6 +50,7 @@ export const areThreadsEqual = (left: ChatThread[], right: ChatThread[]): boolea
     const candidate = right[index];
     return Boolean(candidate)
       && candidate.id === thread.id
+      && candidate.title === thread.title
       && candidate.updatedAt === thread.updatedAt
       && candidate.lastMessageAt === thread.lastMessageAt
       && candidate.lastMessagePreview === thread.lastMessagePreview
@@ -113,22 +121,177 @@ export const resolveDisplayDeliveryStatus = (
   return status;
 };
 
+const CREATE_APP_QUICKACTION_TEMPLATE_IDS: Record<DashboardCreateAppQuickactionKind, string> = {
+  web_app: "qs-create-web-app",
+  desktop_app: "qs-create-desktop-app",
+};
+
+const NEW_THREAD_DRAFT_CONTEXT_KEY = "new-thread";
+const CHAT_DRAFT_WRITE_DEBOUNCE_MS = 500;
+const LOCAL_CHAT_DRAFT_STORAGE_PREFIX = "codeux.chat.localDraft";
+
+const CREATE_APP_QUICKACTION_BODIES: Record<DashboardCreateAppQuickactionKind, string> = {
+  web_app: "Create a web app",
+  desktop_app: "Create a desktop app",
+};
+
+const createCryptoRandomId = (): string => {
+  const cryptoApi = globalThis.crypto;
+  if (typeof cryptoApi?.randomUUID === "function") {
+    return cryptoApi.randomUUID();
+  }
+  if (typeof cryptoApi?.getRandomValues === "function") {
+    const bytes = new Uint8Array(16);
+    cryptoApi.getRandomValues(bytes);
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+  throw new Error("Secure random generation is unavailable.");
+};
+
+const createQuickactionRequestId = (kind: DashboardCreateAppQuickactionKind): string => {
+  return `dashboard-create-app-${kind}-${createCryptoRandomId()}`;
+};
+
+const normalizeStackToken = (value: string): string => value.toLowerCase().replace(/[^a-z0-9+#.]+/g, "");
+
+const findStackItemLabel = (
+  entry: TechstackCatalogEntrySettings,
+  matches: string[],
+): string | null => {
+  const normalizedMatches = new Set(matches.map(normalizeStackToken));
+  const item = entry.items.find((candidate) => {
+    const id = normalizeStackToken(candidate.id);
+    const label = normalizeStackToken(candidate.label);
+    return normalizedMatches.has(id) || normalizedMatches.has(label);
+  });
+  return item?.label || null;
+};
+
+const uniqueStackSuggestionTags = (entry: TechstackCatalogEntrySettings): string[] => {
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const label of entry.items.map((item) => item.label.trim()).filter(Boolean)) {
+    const key = label.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      tags.push(label);
+    }
+  }
+  return tags;
+};
+
+const resolveCreateAppTechstackEntry = (
+  dashboardSettings: DashboardSettings | null | undefined,
+): { id: string; entry: TechstackCatalogEntrySettings } => {
+  const settings = dashboardSettings ?? DEFAULT_DASHBOARD_SETTINGS;
+  const catalog = settings.techstackCatalog.entries.length > 0
+    ? settings.techstackCatalog
+    : DEFAULT_DASHBOARD_SETTINGS.techstackCatalog;
+  const selectedTechstackId = settings.techstack.selectedTechstackId || catalog.defaultTechstackId;
+  const defaultEntry = catalog.entries.find((entry) => entry.id === catalog.defaultTechstackId)
+    ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.entries[0]!;
+  const entry = catalog.entries.find((candidate) => candidate.id === selectedTechstackId)
+    ?? defaultEntry;
+
+  return { id: entry.id, entry };
+};
+
+const buildCreateAppStackSummary = (
+  kind: DashboardCreateAppQuickactionKind,
+  techstackId: string,
+  entry: TechstackCatalogEntrySettings,
+): NonNullable<DashboardCreateAppQuickactionMetadata["quickaction"]["stackSummary"]> => ({
+  techstackId,
+  techstackName: entry.label,
+  applicationKind: kind,
+  language: findStackItemLabel(entry, ["typescript", "javascript", "python", "go", "rust", "java", "c#", "swift", "kotlin"]),
+  framework: findStackItemLabel(entry, ["preact", "react", "next.js", "nextjs", "vue", "svelte", "angular", "solid", "vite"]),
+  runtime: findStackItemLabel(entry, ["node.js", "nodejs", "node", "bun", "deno", "electron", "tauri"]),
+  packageManager: findStackItemLabel(entry, ["pnpm", "npm", "yarn", "bun"]),
+  styling: findStackItemLabel(entry, ["tailwind", "tailwindcss", "css", "sass", "scss", "styledcomponents", "vanillaextract"]),
+  testFramework: findStackItemLabel(entry, ["vitest", "jest", "playwright", "cypress"]),
+});
+
+const buildCreateAppQuickactionMetadata = (
+  kind: DashboardCreateAppQuickactionKind,
+  dashboardSettings?: DashboardSettings | null,
+): DashboardCreateAppQuickactionMetadata => {
+  const { id, entry } = resolveCreateAppTechstackEntry(dashboardSettings);
+
+  return {
+    quickaction: {
+      type: "create_app",
+      kind,
+      requestId: createQuickactionRequestId(kind),
+      templateId: CREATE_APP_QUICKACTION_TEMPLATE_IDS[kind],
+      stackSummary: buildCreateAppStackSummary(kind, id, entry),
+      suggestionTags: uniqueStackSuggestionTags(entry),
+    },
+  };
+};
+
+const buildLocalDraftStorageKey = (input: {
+  projectId: string;
+  userId: string;
+  contextKey: string;
+}): string => `${LOCAL_CHAT_DRAFT_STORAGE_PREFIX}:${input.projectId}:${input.userId}:${input.contextKey}`;
+
+const readLocalChatDraft = (input: {
+  projectId: string;
+  userId: string;
+  contextKey: string;
+}): string | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    return window.localStorage.getItem(buildLocalDraftStorageKey(input));
+  } catch {
+    return null;
+  }
+};
+
+const writeLocalChatDraft = (input: {
+  projectId: string | null;
+  userId: string | null;
+  contextKey: string | null;
+  bodyMarkdown: string;
+}): void => {
+  if (typeof window === "undefined" || !input.projectId || !input.userId || !input.contextKey) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(
+      buildLocalDraftStorageKey({
+        projectId: input.projectId,
+        userId: input.userId,
+        contextKey: input.contextKey,
+      }),
+      input.bodyMarkdown,
+    );
+  } catch {
+    // Local draft persistence is a best-effort refresh fallback.
+  }
+};
+
 export const useChatThreadData = (options: {
   selectedProject: { id: string } | null;
   cache: ReturnType<typeof useMessageCache>;
   execution: ExecutionDashboardSnapshot | null;
+  dashboardSettings?: DashboardSettings | null;
   composerRef?: RefObject<HTMLTextAreaElement>;
   messagesRef?: RefObject<HTMLDivElement>;
+  workerRouting?: unknown;
   onMessageSending?: (message: { projectId: string; createdAt: string }) => string | null | void;
   onMessageSent?: (payload: { message: ChatMessageRecord; optimisticInvocationId?: string | null }) => void;
   onMessageSendFailed?: (optimisticInvocationId: string) => void;
 }) => {
-  const { selectedProject, cache, execution, composerRef, messagesRef, onMessageSending, onMessageSent, onMessageSendFailed } = options;
+  const { selectedProject, cache, execution, dashboardSettings, composerRef, messagesRef, onMessageSent } = options;
 
   const [threads, setThreads] = useState<ChatThread[]>([]);
-  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [selectedThreadId, setSelectedThreadIdState] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageRecord[]>([]);
-  const [input, setInput] = useState("");
+  const [input, setInputState] = useState("");
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -138,11 +301,21 @@ export const useChatThreadData = (options: {
 
   const selectedThreadIdRef = useRef<string | null>(null);
   const threadsRef = useRef<ChatThread[]>([]);
+  const draftContextKeyRef = useRef<string | null>(null);
+  const draftProjectIdRef = useRef<string | null>(null);
+  const draftUserIdRef = useRef<string | null>(null);
+  const inputContextKeyRef = useRef<string | null>(null);
+  const inputRef = useRef("");
+  const latestDraftRequestRef = useRef(0);
+  const lastSavedDraftRef = useRef<{ contextKey: string; bodyMarkdown: string } | null>(null);
   const inflightMessageFetchesRef = useRef(new Map<string, Promise<ChatMessageRecord[]>>());
   const activationTokenRef = useRef(0);
   const sentHistoryRef = useRef<string[]>([]);
   const historyIndexRef = useRef<number>(-1);
   const historyDraftRef = useRef<string>("");
+  const isHistoryPreviewRef = useRef(false);
+  const latestHistoryRequestRef = useRef(0);
+  const [hydratedDraftContextKey, setHydratedDraftContextKey] = useState<string | null>(null);
 
   const { feedback, setSuccess, clearFeedback } = useActionFeedback();
   const {
@@ -166,6 +339,287 @@ export const useChatThreadData = (options: {
     () => (selectedThreadId ? threadIndex.get(selectedThreadId) || null : null),
     [threadIndex, selectedThreadId]
   );
+  const resolveDraftContextKey = useCallback((threadId: string | null): string | null => {
+    if (!selectedProject) {
+      return null;
+    }
+    return threadId ? `thread:${threadId}` : NEW_THREAD_DRAFT_CONTEXT_KEY;
+  }, [selectedProject?.id]);
+  const activeDraftContextKey = useMemo(
+    () => resolveDraftContextKey(selectedThreadId),
+    [resolveDraftContextKey, selectedThreadId],
+  );
+
+  const flushDraftSnapshot = useCallback((snapshot: {
+    projectId: string | null;
+    userId: string | null;
+    contextKey: string | null;
+    bodyMarkdown: string;
+  }): void => {
+    writeLocalChatDraft(snapshot);
+    if (!snapshot.projectId || !snapshot.userId || !snapshot.contextKey) {
+      return;
+    }
+    const lastSaved = lastSavedDraftRef.current;
+    if (lastSaved?.contextKey === snapshot.contextKey && lastSaved.bodyMarkdown === snapshot.bodyMarkdown) {
+      return;
+    }
+    void upsertConversationDraft(snapshot.projectId, {
+      userId: snapshot.userId,
+      contextKey: snapshot.contextKey,
+      bodyMarkdown: snapshot.bodyMarkdown,
+    }).then(() => {
+      lastSavedDraftRef.current = {
+        contextKey: snapshot.contextKey!,
+        bodyMarkdown: snapshot.bodyMarkdown,
+      };
+    }).catch(() => {
+      // Draft persistence should never block navigation or unmount.
+    });
+  }, []);
+
+  const getPersistableInput = useCallback((): string => (
+    isHistoryPreviewRef.current ? historyDraftRef.current : inputRef.current
+  ), []);
+
+  const resetHistoryTraversal = useCallback((): void => {
+    historyIndexRef.current = -1;
+    historyDraftRef.current = "";
+    isHistoryPreviewRef.current = false;
+  }, []);
+
+  const setSelectedThreadId = useCallback((threadId: string | null): void => {
+    if (inputContextKeyRef.current === draftContextKeyRef.current) {
+      flushDraftSnapshot({
+        projectId: draftProjectIdRef.current,
+        userId: draftUserIdRef.current,
+        contextKey: draftContextKeyRef.current,
+        bodyMarkdown: getPersistableInput(),
+      });
+    }
+    draftContextKeyRef.current = resolveDraftContextKey(threadId);
+    resetHistoryTraversal();
+    setSelectedThreadIdState(threadId);
+  }, [flushDraftSnapshot, getPersistableInput, resetHistoryTraversal, resolveDraftContextKey]);
+
+  const setInput = useCallback((nextInput: string | ((current: string) => string)): void => {
+    const contextKey = draftContextKeyRef.current;
+    resetHistoryTraversal();
+    setInputState((current) => {
+      const nextValue = typeof nextInput === "function" ? nextInput(current) : nextInput;
+      inputRef.current = nextValue;
+      inputContextKeyRef.current = contextKey;
+      writeLocalChatDraft({
+        projectId: draftProjectIdRef.current,
+        userId: draftUserIdRef.current,
+        contextKey,
+        bodyMarkdown: nextValue,
+      });
+      return nextValue;
+    });
+  }, [resetHistoryTraversal]);
+
+  const setInputFromHistoryPreview = useCallback((nextInput: string): void => {
+    const contextKey = draftContextKeyRef.current;
+    isHistoryPreviewRef.current = true;
+    setInputState(() => {
+      inputRef.current = nextInput;
+      inputContextKeyRef.current = contextKey;
+      return nextInput;
+    });
+  }, []);
+
+  useEffect(() => {
+    inputRef.current = input;
+  }, [input]);
+
+  useEffect(() => {
+    if (inputContextKeyRef.current === draftContextKeyRef.current) {
+      flushDraftSnapshot({
+        projectId: draftProjectIdRef.current,
+        userId: draftUserIdRef.current,
+        contextKey: draftContextKeyRef.current,
+        bodyMarkdown: getPersistableInput(),
+      });
+    }
+
+    draftContextKeyRef.current = activeDraftContextKey;
+    draftProjectIdRef.current = selectedProject?.id ?? null;
+    lastSavedDraftRef.current = null;
+    setHydratedDraftContextKey(null);
+    resetHistoryTraversal();
+    if (inputContextKeyRef.current !== activeDraftContextKey) {
+      inputContextKeyRef.current = activeDraftContextKey;
+      inputRef.current = "";
+      setInputState("");
+    }
+
+    if (!selectedProject || !activeDraftContextKey) {
+      return;
+    }
+
+    const userId = getOrCreateDashboardDraftUserId();
+    draftUserIdRef.current = userId;
+    const localDraft = readLocalChatDraft({
+      projectId: selectedProject.id,
+      userId,
+      contextKey: activeDraftContextKey,
+    });
+    const hasLocalDraft = localDraft !== null;
+    if (localDraft !== null) {
+      setInputState((current) => {
+        if (inputRef.current) {
+          return current;
+        }
+        inputRef.current = localDraft;
+        inputContextKeyRef.current = activeDraftContextKey;
+        return localDraft;
+      });
+    }
+    const requestId = latestDraftRequestRef.current + 1;
+    latestDraftRequestRef.current = requestId;
+
+    void fetchConversationDraft(selectedProject.id, {
+      userId,
+      contextKey: activeDraftContextKey,
+    })
+      .then((draft) => {
+        if (
+          latestDraftRequestRef.current !== requestId
+          || draftContextKeyRef.current !== activeDraftContextKey
+        ) {
+          return;
+        }
+
+        const restored = draft?.bodyMarkdown ?? "";
+        lastSavedDraftRef.current = {
+          contextKey: activeDraftContextKey,
+          bodyMarkdown: restored,
+        };
+        if (hasLocalDraft) {
+          setHydratedDraftContextKey(activeDraftContextKey);
+          return;
+        }
+        setInputState((current) => {
+          if (inputRef.current) {
+            return current;
+          }
+          inputRef.current = restored;
+          inputContextKeyRef.current = activeDraftContextKey;
+          return restored;
+        });
+        setHydratedDraftContextKey(activeDraftContextKey);
+      })
+      .catch(() => {
+        if (
+          latestDraftRequestRef.current === requestId
+          && draftContextKeyRef.current === activeDraftContextKey
+        ) {
+          lastSavedDraftRef.current = {
+            contextKey: activeDraftContextKey,
+            bodyMarkdown: inputRef.current,
+          };
+          setHydratedDraftContextKey(activeDraftContextKey);
+        }
+      });
+  }, [activeDraftContextKey, flushDraftSnapshot, getPersistableInput, resetHistoryTraversal, selectedProject?.id]);
+
+  useEffect(() => () => {
+    if (inputContextKeyRef.current !== draftContextKeyRef.current) {
+      return;
+    }
+    flushDraftSnapshot({
+      projectId: draftProjectIdRef.current,
+      userId: draftUserIdRef.current,
+      contextKey: draftContextKeyRef.current,
+      bodyMarkdown: getPersistableInput(),
+    });
+  }, [flushDraftSnapshot, getPersistableInput]);
+
+  useEffect(() => {
+    resetHistoryTraversal();
+    if (!selectedProject) {
+      sentHistoryRef.current = [];
+      return;
+    }
+
+    const userId = draftUserIdRef.current ?? getOrCreateDashboardDraftUserId();
+    draftUserIdRef.current = userId;
+    const requestId = latestHistoryRequestRef.current + 1;
+    latestHistoryRequestRef.current = requestId;
+
+    void fetchConversationMessageHistory(selectedProject.id, { userId })
+      .then((history) => {
+        if (
+          latestHistoryRequestRef.current !== requestId
+          || draftProjectIdRef.current !== selectedProject.id
+        ) {
+          return;
+        }
+        sentHistoryRef.current = history
+          .map((entry) => entry.bodyMarkdown.trim())
+          .filter((entry) => entry.length > 0);
+        resetHistoryTraversal();
+      })
+      .catch(() => {
+        if (latestHistoryRequestRef.current === requestId) {
+          sentHistoryRef.current = [];
+          resetHistoryTraversal();
+        }
+      });
+  }, [resetHistoryTraversal, selectedProject?.id]);
+
+  useEffect(() => {
+    if (
+      !selectedProject
+      || !activeDraftContextKey
+      || hydratedDraftContextKey !== activeDraftContextKey
+      || inputContextKeyRef.current !== activeDraftContextKey
+      || isHistoryPreviewRef.current
+    ) {
+      return;
+    }
+
+    const userId = draftUserIdRef.current ?? getOrCreateDashboardDraftUserId();
+    draftUserIdRef.current = userId;
+    const currentInput = input;
+    const lastSaved = lastSavedDraftRef.current;
+    if (lastSaved?.contextKey === activeDraftContextKey && lastSaved.bodyMarkdown === currentInput) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      if (
+        draftContextKeyRef.current !== activeDraftContextKey
+        || inputContextKeyRef.current !== activeDraftContextKey
+      ) {
+        return;
+      }
+      const bodyMarkdown = inputRef.current;
+      writeLocalChatDraft({
+        projectId: selectedProject.id,
+        userId,
+        contextKey: activeDraftContextKey,
+        bodyMarkdown,
+      });
+      void upsertConversationDraft(selectedProject.id, {
+        userId,
+        contextKey: activeDraftContextKey,
+        bodyMarkdown,
+      }).then(() => {
+        if (draftContextKeyRef.current === activeDraftContextKey) {
+          lastSavedDraftRef.current = {
+            contextKey: activeDraftContextKey,
+            bodyMarkdown,
+          };
+        }
+      }).catch(() => {
+        // Draft persistence should never block normal chat input or sending.
+      });
+    }, CHAT_DRAFT_WRITE_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timeout);
+  }, [activeDraftContextKey, hydratedDraftContextKey, input, selectedProject?.id]);
 
   const setThreadsSnapshot = useCallback((nextThreads: ChatThread[]): void => {
     setThreads((current) => areThreadsEqual(current, nextThreads) ? current : nextThreads);
@@ -216,6 +670,7 @@ export const useChatThreadData = (options: {
     const targetThread = activateOptions?.preferredThread || threadsRef.current.find((thread) => thread.id === threadId) || null;
     const cachedMessages = cache.getMessages(threadId);
     if (cachedMessages) {
+      selectedThreadIdRef.current = threadId;
       setSelectedThreadId(threadId);
       setMessagesSnapshot(cachedMessages);
       setMessagesLoading(false);
@@ -224,6 +679,7 @@ export const useChatThreadData = (options: {
 
     if ((targetThread?.messageCount || 0) === 0) {
       cache.setMessages(threadId, []);
+      selectedThreadIdRef.current = threadId;
       setSelectedThreadId(threadId);
       setMessagesSnapshot([]);
       setMessagesLoading(false);
@@ -231,6 +687,7 @@ export const useChatThreadData = (options: {
     }
 
     if (activateOptions?.foreground) {
+      selectedThreadIdRef.current = threadId;
       setSelectedThreadId(threadId);
       setMessagesSnapshot([]);
       setMessagesLoading(true);
@@ -241,6 +698,7 @@ export const useChatThreadData = (options: {
       if (activationToken !== activationTokenRef.current) {
         return;
       }
+      selectedThreadIdRef.current = threadId;
       setSelectedThreadId(threadId);
       setMessagesSnapshot(nextMessages);
       setError(null);
@@ -369,11 +827,41 @@ export const useChatThreadData = (options: {
     }
   }, [cache, refreshMessages, selectedProject, selectedThread, setSuccess, setThreadsSnapshot]);
 
+  const handleRenameThread = useCallback(async (title: string): Promise<ChatThread> => {
+    if (!selectedThread || !selectedProject) {
+      throw new Error("Select a thread before renaming it.");
+    }
+
+    const updated = await updateConversationThread(selectedThread.id, { title });
+    const nextThreads = (cache.getThreads(selectedProject.id) || threadsRef.current).map((thread) => (
+      thread.id === updated.id ? updated : thread
+    ));
+    cache.setThreads(selectedProject.id, nextThreads);
+    setThreadsSnapshot(nextThreads);
+    setError(null);
+    setSuccess("Thread renamed.");
+    return updated;
+  }, [cache, selectedProject, selectedThread, setSuccess, setThreadsSnapshot]);
+
   const recordSentMessage = useCallback((message: string): void => {
-    sentHistoryRef.current = [...sentHistoryRef.current.filter((entry) => entry !== message), message].slice(-50);
-    historyIndexRef.current = -1;
-    historyDraftRef.current = "";
-  }, []);
+    const normalizedMessage = message.trim();
+    if (!normalizedMessage) {
+      return;
+    }
+    sentHistoryRef.current = [...sentHistoryRef.current.filter((entry) => entry !== normalizedMessage), normalizedMessage].slice(-50);
+    resetHistoryTraversal();
+    if (!selectedProject) {
+      return;
+    }
+    const userId = draftUserIdRef.current ?? getOrCreateDashboardDraftUserId();
+    draftUserIdRef.current = userId;
+    void recordConversationMessageHistory(selectedProject.id, {
+      userId,
+      bodyMarkdown: normalizedMessage,
+    }).catch(() => {
+      // Message history should not affect successful chat delivery.
+    });
+  }, [resetHistoryTraversal, selectedProject?.id]);
 
   const navigateHistory = useCallback((direction: "up" | "down"): boolean => {
     const history = sentHistoryRef.current;
@@ -384,13 +872,21 @@ export const useChatThreadData = (options: {
     if (direction === "up") {
       if (historyIndexRef.current === -1) {
         historyDraftRef.current = input;
+        if (inputContextKeyRef.current === draftContextKeyRef.current) {
+          flushDraftSnapshot({
+            projectId: draftProjectIdRef.current,
+            userId: draftUserIdRef.current,
+            contextKey: draftContextKeyRef.current,
+            bodyMarkdown: input,
+          });
+        }
         historyIndexRef.current = history.length - 1;
       } else if (historyIndexRef.current > 0) {
         historyIndexRef.current -= 1;
       } else {
         return true;
       }
-      setInput(history[historyIndexRef.current]);
+      setInputFromHistoryPreview(history[historyIndexRef.current]);
       return true;
     }
 
@@ -399,31 +895,38 @@ export const useChatThreadData = (options: {
     }
     if (historyIndexRef.current < history.length - 1) {
       historyIndexRef.current += 1;
-      setInput(history[historyIndexRef.current]);
+      setInputFromHistoryPreview(history[historyIndexRef.current]);
     } else {
       historyIndexRef.current = -1;
-      setInput(historyDraftRef.current);
+      const restoredDraft = historyDraftRef.current;
+      historyDraftRef.current = "";
+      isHistoryPreviewRef.current = false;
+      setInputState(() => {
+        inputRef.current = restoredDraft;
+        inputContextKeyRef.current = draftContextKeyRef.current;
+        return restoredDraft;
+      });
     }
     return true;
-  }, [input]);
+  }, [flushDraftSnapshot, input, setInputFromHistoryPreview]);
 
-  const handleSend = useCallback(async (): Promise<void> => {
-    const bodyMarkdown = input.trim();
+  const handleSend = useCallback(async (overrideText?: string): Promise<void> => {
+    // overrideText lets UI affordances (stage quick actions) send a prompt
+    // directly without round-tripping it through the composer draft state.
+    const isComposerSend = overrideText === undefined;
+    const bodyMarkdown = (overrideText ?? input).trim();
     if (!bodyMarkdown || !selectedProject) {
       return;
     }
 
-    setInput("");
-    if (composerRef?.current) {
+    if (isComposerSend) {
+      setInput("");
+    }
+    if (isComposerSend && composerRef?.current) {
       composerRef.current.style.height = "auto";
     }
-    recordSentMessage(bodyMarkdown);
 
     setSending(true);
-    const optimisticInvocationId = onMessageSending?.({
-      projectId: selectedProject.id,
-      createdAt: new Date().toISOString(),
-    }) || null;
     try {
       let thread = selectedThread || await createThreadForCompose();
 
@@ -431,29 +934,59 @@ export const useChatThreadData = (options: {
         threadId: thread.id,
         bodyMarkdown,
       });
-      onMessageSent?.({ message: created, optimisticInvocationId });
       const nextMessages = upsertMessage(cache.getMessages(thread.id) || [], created);
       cache.setMessages(thread.id, nextMessages);
       if (thread.id === selectedThreadIdRef.current) {
         setMessagesSnapshot(nextMessages);
       }
 
+      recordSentMessage(bodyMarkdown);
       // Removed refreshThreads() call since cache is optimistically updated and realtime
       // will handle the rest without needing full fetch.
       setError(null);
     } catch (sendError) {
-      if (optimisticInvocationId) {
-        onMessageSendFailed?.(optimisticInvocationId);
-      }
       setError(sendError instanceof Error ? sendError.message : String(sendError));
-      setInput((current) => current || bodyMarkdown);
+      if (isComposerSend) {
+        setInput((current) => current || bodyMarkdown);
+      }
       if (composerRef?.current) {
         composerRef.current.focus();
       }
     } finally {
       setSending(false);
     }
-  }, [cache, composerRef, createThreadForCompose, execution, input, onMessageSendFailed, onMessageSending, onMessageSent, recordSentMessage, selectedProject, selectedThread, setMessagesSnapshot]);
+  }, [cache, composerRef, createThreadForCompose, input, recordSentMessage, selectedProject, selectedThread, setMessagesSnapshot]);
+
+  const handleCreateAppQuickaction = useCallback(async (kind: DashboardCreateAppQuickactionKind): Promise<void> => {
+    if (!selectedProject || sending) {
+      return;
+    }
+
+    const bodyMarkdown = CREATE_APP_QUICKACTION_BODIES[kind];
+    setSending(true);
+    try {
+      const thread = selectedThread || await createThreadForCompose();
+      const created = await postConversationMessage(selectedProject.id, {
+        threadId: thread.id,
+        bodyMarkdown,
+        metadata: buildCreateAppQuickactionMetadata(kind, dashboardSettings),
+      });
+      onMessageSent?.({ message: created, optimisticInvocationId: null });
+      const nextMessages = upsertMessage(cache.getMessages(thread.id) || [], created);
+      cache.setMessages(thread.id, nextMessages);
+      if (thread.id === selectedThreadIdRef.current) {
+        setMessagesSnapshot(nextMessages);
+      }
+      setError(null);
+    } catch (sendError) {
+      setError(sendError instanceof Error ? sendError.message : String(sendError));
+      if (composerRef?.current) {
+        composerRef.current.focus();
+      }
+    } finally {
+      setSending(false);
+    }
+  }, [cache, composerRef, createThreadForCompose, dashboardSettings, onMessageSent, selectedProject, selectedThread, sending, setMessagesSnapshot]);
 
   const handleDeleteThread = useCallback(async (threadId: string): Promise<void> => {
     const nextThreads = removeThread(cache.getThreads(selectedProject?.id || "") || threadsRef.current, threadId);
@@ -507,8 +1040,10 @@ export const useChatThreadData = (options: {
     createThreadForCompose,
     handleCompactThread,
     handleSend,
+    handleCreateAppQuickaction,
     navigateHistory,
     handleDeleteThread,
+    handleRenameThread,
     feedback,
     clearFeedback,
     isConfirmOpen,

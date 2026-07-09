@@ -11,6 +11,18 @@ describe("AddProjectModal Accessibility", () => {
     cleanup();
   });
 
+  const revealImportedSetupOptions = async () => {
+    render(<AddProjectModal onClose={() => {}} onAdd={() => {}} initialSourceType="local" />);
+
+    const nameInput = screen.getByLabelText(/Project Name/i);
+    fireEvent.input(nameInput, { target: { value: "Imported App" } });
+    fireEvent.submit(nameInput.closest("form")!);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Techstack/i })).toBeInTheDocument();
+    });
+  };
+
   test("renders with accessible name and structure", () => {
     const { container } = render(<AddProjectModal onClose={() => {}} onAdd={() => {}} initialSourceType="local" />);
     const dialogs = screen.getAllByRole("dialog");
@@ -46,6 +58,7 @@ describe("AddProjectModal Accessibility", () => {
     fireEvent.submit(form);
 
     await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent(/Review required fields/i);
       const nameInput = document.getElementById("add-project-name") as HTMLInputElement;
       const pathInput = document.getElementById("add-project-git-url") as HTMLInputElement;
       expect(nameInput).toHaveAttribute("aria-invalid", "true");
@@ -58,5 +71,23 @@ describe("AddProjectModal Accessibility", () => {
     const pathInput = document.getElementById("add-project-git-url") as HTMLInputElement;
     expect(nameInput).toHaveAttribute("aria-errormessage", "project-name-error");
     expect(pathInput).toHaveAttribute("aria-describedby", "project-git-error");
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+  });
+
+  test("imported setup exposes a default-enabled keyboard-focusable techstack option", async () => {
+    await revealImportedSetupOptions();
+
+    const techstackOption = screen.getByRole("button", { name: /Techstack/i });
+    expect(techstackOption).toHaveAttribute("aria-pressed", "true");
+
+    techstackOption.focus();
+    expect(document.activeElement).toBe(techstackOption);
+  });
+
+  test("new project setup omits the techstack detection option", () => {
+    render(<AddProjectModal onClose={() => {}} onAdd={() => {}} initialSourceType="new_project" />);
+
+    expect(screen.queryByRole("button", { name: /Techstack/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Initialize with Project Setup Agent/i)).not.toBeInTheDocument();
   });
 });

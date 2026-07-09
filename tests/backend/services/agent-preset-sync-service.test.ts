@@ -268,7 +268,9 @@ describe("AgentPresetSyncService", () => {
       "Worker",
     ]);
     expect(initial.find((preset) => preset.name === "Worker")?.mcpAccess?.linkedServerIds).toEqual([DEFAULT_PLAYWRIGHT_MCP_SERVER_ID]);
+    expect(initial.find((preset) => preset.name === "Worker")?.mcpAccess?.codeUxEnabled).toBe(false);
     expect(initial.find((preset) => preset.name === "Project manager")?.mcpAccess?.linkedServerIds).toEqual([DEFAULT_PLAYWRIGHT_MCP_SERVER_ID]);
+    expect(initial.find((preset) => preset.name === "Project manager")?.mcpAccess?.codeUxEnabled).toBe(false);
     expect(initial.find((preset) => preset.name === "Planning agent")?.mcpAccess).toBeUndefined();
     expect(initial.find((preset) => preset.name === "Quality assurance agent")?.mcpAccess).toBeUndefined();
     expect(agentPresetRepository.hasCopiedDefaultAgentPresets(project.id)).toBe(false);
@@ -325,6 +327,56 @@ describe("AgentPresetSyncService", () => {
     expect(resolved.name).toBe("Project manager");
     expect(resolved.instructionMarkdown).toContain("Answer Jules clarification requests.");
     expect(resolved.mcpAccess?.linkedServerIds).toEqual([DEFAULT_PLAYWRIGHT_MCP_SERVER_ID]);
+    expect(resolved.mcpAccess?.codeUxEnabled).toBe(false);
+  });
+
+  it("preserves existing explicit MCP access when syncing markdown agents", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-explicit-mcp-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoPath, ".code-ux", "agents", "worker.md"),
+      "Use explicit MCP access from the existing preset.\n",
+      "utf8",
+    );
+
+    const storage = createAppStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const settingsRepository = createSettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Explicit MCP Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+    agentPresetRepository.createAgentPreset(project.id, {
+      name: "Worker",
+      instructionMarkdown: "Existing worker.",
+      mcpAccess: {
+        codeUxEnabled: true,
+        codeUxToolToggles: [{ name: "manage_tasks", enabled: false, isInternal: true }],
+        linkedServerIds: ["custom-docs"],
+      },
+    });
+
+    const presets = await syncService.listAgentPresets(project.id);
+    const worker = presets.find((preset) => preset.name === "Worker");
+
+    expect(worker?.instructionMarkdown).toContain("Use explicit MCP access");
+    expect(worker?.mcpAccess).toEqual({
+      codeUxEnabled: true,
+      codeUxToolToggles: [{ name: "manage_tasks", enabled: false, isInternal: true }],
+      linkedServerIds: ["custom-docs"],
+    });
   });
 
   it("seeds Code UX internal docs as a default Project manager knowledge subscription once", async () => {
@@ -542,6 +594,331 @@ describe("AgentPresetSyncService", () => {
     expect(synced.filter((preset) => preset.syncStatus === "out_of_sync")).toHaveLength(0);
     expect(synced.find((preset) => preset.name === "Planning agent")?.instructionMarkdown).toContain("Updated planning instructions");
     expect(synced.find((preset) => preset.name === "Reviewer")?.instructionMarkdown).toContain("Updated review instructions");
+  });
+
+  it("explicitly pulls newly discovered project markdown agents", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-pull-new-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    const projectAgentsDir = path.join(repoPath, ".code-ux", "agents");
+    await fs.mkdir(projectAgentsDir, { recursive: true });
+    await fs.writeFile(path.join(projectAgentsDir, "reviewer.md"), "Review the local changes.\n", "utf8");
+
+    const storage = createAppStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const settingsRepository = createSettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Pull New Agent Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+
+    const pulled = await syncService.pullAgentPresetsFromMarkdown(project.id);
+
+    expect(pulled).toHaveLength(1);
+    expect(pulled[0]).toMatchObject({
+      name: "reviewer",
+      instructionMarkdown: "Review the local changes.",
+      sourceScope: "project",
+      syncStatus: "synced",
+    });
+  });
+
+  it("explicitly pulls out-of-sync markdown content into sqlite", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-pull-drift-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    const projectAgentsDir = path.join(repoPath, ".code-ux", "agents");
+    await fs.mkdir(projectAgentsDir, { recursive: true });
+    const agentPath = path.join(projectAgentsDir, "planning_agent.md");
+    await fs.writeFile(agentPath, "Initial planning.\n", "utf8");
+
+    const storage = createAppStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const settingsRepository = createSettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Pull Drift Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+
+    await syncService.pullAgentPresetsFromMarkdown(project.id);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await fs.writeFile(agentPath, "Markdown wins on explicit pull.\n", "utf8");
+
+    const pulled = await syncService.pullAgentPresetsFromMarkdown(project.id);
+
+    expect(pulled.find((preset) => preset.name === "Planning agent")).toMatchObject({
+      instructionMarkdown: "Markdown wins on explicit pull.",
+      syncStatus: "synced",
+    });
+  });
+
+  it("pushes manual sqlite agents to project markdown and links source metadata", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-push-manual-md-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    const storage = createAppStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const settingsRepository = createSettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Push Manual Agent Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+    settingsRepository.saveProjectSettings(project.id, {
+      agents: {
+        saveToProjectDirectory: false,
+      },
+    });
+    const manual = await syncService.createAgentPreset(project.id, {
+      name: "Database Reviewer",
+      description: "Reviews sqlite-only instructions.",
+      instructionMarkdown: "Check the diff carefully.\n",
+      avatarConfig: { body: "robot", chassis: "round" },
+      providerConfigId: "codex-main",
+      model: "gpt-5-codex",
+      memoryTemplateOverrideEnabled: true,
+      memoryTemplateMarkdown: "Memory: {{project_memory}}",
+      memoryConfig: {
+        tier: "both",
+        categories: ["context"],
+        minStrength: 1,
+        minStrengthPerCategory: {},
+        maxShortTerm: 3,
+        maxLongTerm: 5,
+      },
+    });
+    settingsRepository.saveProjectSettings(project.id, {
+      agents: {
+        saveToProjectDirectory: true,
+      },
+    });
+
+    const pushed = await syncService.pushAgentPresetsToMarkdown(project.id);
+    const exported = pushed.find((preset) => preset.id === manual.id);
+    const expectedPath = path.join(repoPath, ".code-ux", "agents", "database_reviewer.md");
+    const markdown = await fs.readFile(expectedPath, "utf8");
+
+    expect(exported).toMatchObject({
+      sourcePath: expectedPath,
+      sourceScope: "project",
+      sourceExists: true,
+      syncStatus: "synced",
+    });
+    expect(exported?.sourceUpdatedAt).toBeTruthy();
+    expect(exported?.sourceImportedAt).toBe(exported?.sourceUpdatedAt);
+    expect(markdown).toContain('"description": "Reviews sqlite-only instructions."');
+    expect(markdown).toContain('"providerConfigId": "codex-main"');
+    expect(markdown).toContain('"model": "gpt-5-codex"');
+    expect(markdown).toContain('"memoryTemplateOverrideEnabled": true');
+    expect(markdown).toContain('"tier": "both"');
+    expect(markdown).toContain("Check the diff carefully.");
+  });
+
+  it("pushes out-of-sync sqlite agents over their project markdown source", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-push-drift-md-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    const projectAgentsDir = path.join(repoPath, ".code-ux", "agents");
+    await fs.mkdir(projectAgentsDir, { recursive: true });
+    const agentPath = path.join(projectAgentsDir, "worker.md");
+    await fs.writeFile(agentPath, "Markdown-side worker.\n", "utf8");
+
+    const storage = createAppStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const settingsRepository = createSettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Push Drift Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+    const [worker] = await syncService.pullAgentPresetsFromMarkdown(project.id);
+    agentPresetRepository.updateAgentPreset(worker!.id, {
+      instructionMarkdown: "Sqlite-side worker should be exported.\n",
+    });
+
+    const pushed = await syncService.pushAgentPresetsToMarkdown(project.id);
+
+    expect(pushed.find((preset) => preset.id === worker!.id)?.syncStatus).toBe("synced");
+    expect(await fs.readFile(agentPath, "utf8")).toContain("Sqlite-side worker should be exported.");
+  });
+
+  it("pushes default-backed agents as project markdown overrides", async () => {
+    process.env.CODE_UX_ENABLE_DEFAULT_ASSET_INSTALL_IN_TESTS = "1";
+
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-push-default-md-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    const defaultAgentsDir = path.join(dir, ".code-ux", "agents");
+    await fs.mkdir(defaultAgentsDir, { recursive: true });
+    await fs.mkdir(path.join(dir, ".code-ux", "container"), { recursive: true });
+    await fs.writeFile(path.join(defaultAgentsDir, "planning_agent.md"), "Default planning.\n", "utf8");
+    await fs.writeFile(path.join(defaultAgentsDir, "project_manager.md"), "Default manager.\n", "utf8");
+    await fs.writeFile(path.join(defaultAgentsDir, "quality_assurance_agent.md"), "Default QA.\n", "utf8");
+    await fs.writeFile(path.join(defaultAgentsDir, "worker.md"), "Default worker.\n", "utf8");
+    await fs.writeFile(path.join(dir, ".code-ux", "container", "setup.sh"), "#!/usr/bin/env bash\necho setup\n", "utf8");
+
+    const storage = createAppStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const settingsRepository = createSettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Push Default Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+
+    const imported = await syncService.listAgentPresets(project.id);
+    const planning = imported.find((preset) => preset.name === "Planning agent");
+    expect(planning?.sourceScope).toBe("default");
+
+    const pushed = await syncService.pushAgentPresetsToMarkdown(project.id);
+    const projectPlanningPath = path.join(repoPath, ".code-ux", "agents", "planning_agent.md");
+
+    expect(pushed.find((preset) => preset.id === planning!.id)).toMatchObject({
+      sourceScope: "project",
+      sourcePath: projectPlanningPath,
+      syncStatus: "synced",
+    });
+    expect(await fs.readFile(projectPlanningPath, "utf8")).toContain("Default planning.");
+  });
+
+  it("fails markdown pushes when project markdown mirroring is disabled", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-push-disabled-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    const storage = createAppStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const settingsRepository = createSettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Disabled Push Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+    settingsRepository.saveProjectSettings(project.id, {
+      agents: {
+        saveToProjectDirectory: false,
+      },
+    });
+    const manual = await syncService.createAgentPreset(project.id, {
+      name: "Manual Only",
+      instructionMarkdown: "Do not mirror this yet.\n",
+    });
+
+    await expect(syncService.pushAgentPresetsToMarkdown(project.id)).rejects.toThrow("Project agent markdown mirroring is disabled");
+    await expect(syncService.exportAgentPresetToMarkdown(manual.id)).rejects.toThrow("Project agent markdown mirroring is disabled");
+  });
+
+  it("prevents exporting over a markdown file linked to a different agent", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-push-overwrite-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    const projectAgentsDir = path.join(repoPath, ".code-ux", "agents");
+    await fs.mkdir(projectAgentsDir, { recursive: true });
+    const workerPath = path.join(projectAgentsDir, "worker.md");
+    await fs.writeFile(workerPath, "This file belongs to a different agent.\n", "utf8");
+    const stats = await fs.stat(workerPath);
+
+    const storage = createAppStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const settingsRepository = createSettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Overwrite Guard Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+    settingsRepository.saveProjectSettings(project.id, {
+      agents: {
+        saveToProjectDirectory: false,
+      },
+    });
+    const worker = await syncService.createAgentPreset(project.id, {
+      name: "Worker",
+      instructionMarkdown: "Worker DB content.\n",
+    });
+    const reviewer = await syncService.createAgentPreset(project.id, {
+      name: "Reviewer",
+      instructionMarkdown: "Reviewer DB content.\n",
+    });
+    agentPresetRepository.linkAgentPresetToSource(reviewer.id, {
+      sourcePath: workerPath,
+      sourceScope: "project",
+      sourceUpdatedAt: stats.mtime.toISOString(),
+      sourceImportedAt: stats.mtime.toISOString(),
+    });
+    settingsRepository.saveProjectSettings(project.id, {
+      agents: {
+        saveToProjectDirectory: true,
+      },
+    });
+
+    await expect(syncService.exportAgentPresetToMarkdown(worker.id)).rejects.toThrow(
+      `Cannot export agent "Worker" to ${workerPath} because that markdown file belongs to agent "Reviewer".`,
+    );
+    expect(await fs.readFile(workerPath, "utf8")).toBe("This file belongs to a different agent.\n");
   });
 
   it("commits agent preset markdown without pushing when the repository has no origin", async () => {

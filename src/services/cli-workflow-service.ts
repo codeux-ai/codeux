@@ -46,9 +46,14 @@ import { SERVER_SHUTDOWN_STOP_REASON } from "./active-dispatch-registry.js";
 import { isRuntimeShutdownInProgress } from "./shutdown-state.js";
 import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import type { MemoryService } from "./memory-service.js";
+import type { TaskSelfReflectionRatingRepository } from "../repositories/task-self-reflection-rating-repository.js";
 import type { ProviderConcurrencyService } from "./provider-concurrency-service.js";
 import { ProviderQuotaError } from "../shared/providers/provider-error-classifier.js";
 import type { SprintRunLifecycleService } from "./sprint-run-lifecycle-service.js";
+import type { SkillService } from "./skill-service.js";
+import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
+import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
+import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
 
 interface CliWorkflowServiceDependencies {
   sessionTracking: SessionTrackingRepository;
@@ -56,11 +61,15 @@ interface CliWorkflowServiceDependencies {
   projectManagementRepository?: ProjectManagementRepository;
   activeDispatchRegistry?: ActiveDispatchRegistry;
   memoryService?: MemoryService;
+  taskSelfReflectionRatingRepository?: TaskSelfReflectionRatingRepository;
+  skillService?: SkillService;
+  agentPresetRepository?: AgentPresetRepository;
   providerConcurrencyService?: ProviderConcurrencyService;
   sprintRunLifecycleService?: Pick<SprintRunLifecycleService, "finalizeCancellationIfIdle">;
   getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings;
   agentPresetSyncService: AgentPresetSyncService;
   getGithubToken: () => string | undefined;
+  getMcpConnectionInfo?: () => McpConnectionInfo | null;
   logger?: Logger;
 }
 
@@ -262,11 +271,12 @@ export class CliWorkflowService {
         this.deps.logger?.warn("Failed to resolve optional worker agent template", { repoPath: args.repoPath, error: err instanceof Error ? err.message : String(err) });
         return null;
       });
+    const effectiveWorkflowSettings = this.applyAgentWorkflowSettings(workflowSettings, workerAgent);
 
     const ctx: PipelineContext = {
       ...args,
       settings,
-      workflowSettings,
+      workflowSettings: effectiveWorkflowSettings,
       worktreePath,
       workspaceSessionId,
       abortSignal: abortController.signal,
@@ -392,8 +402,15 @@ export class CliWorkflowService {
         ...(stats || {}),
         sourceEventKey: eventKey,
       }, eventKey);
-      
+
       const finishedAt = new Date().toISOString();
+      this.updateExecutionState(args, {
+        state: "COMPLETED",
+        finishedAt,
+        workerBranch: args.workerBranch,
+        dispatchStatus: "completed",
+      });
+
       const { prUrl } = await executePrFinalizeStage(ctx, { completionTimestamp: finishedAt });
       this.updateExecutionState(args, {
         state: "COMPLETED",
@@ -605,6 +622,19 @@ export class CliWorkflowService {
     const merged: CliWorkflowSettings = { ...DEFAULT_CLI_WORKFLOW_SETTINGS, ...(settings.cliWorkflow || {}) };
     merged.containerImage = merged.containerImage.trim() || DEFAULT_CLI_WORKFLOW_SETTINGS.containerImage;
     return merged;
+  }
+
+  private applyAgentWorkflowSettings(
+    workflowSettings: CliWorkflowSettings,
+    workerAgent: Pick<AgentPresetRecord, "containerRunAsRoot"> | null,
+  ): CliWorkflowSettings {
+    if (typeof workerAgent?.containerRunAsRoot !== "boolean") {
+      return { ...workflowSettings };
+    }
+    return {
+      ...workflowSettings,
+      containerRunAsRoot: workerAgent.containerRunAsRoot,
+    };
   }
 
   private async runCommand(

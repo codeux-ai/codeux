@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_TASK_PR_TITLE_SCHEME } from "../../../../src/domain/git/task-pr-title-template.js";
 import { validateSettingsPayload } from "../../../../src/domain/settings/settings-schema.js";
+import { sanitizeGit } from "../../../../src/domain/settings/settings-sanitizers/git-sanitizer.js";
+import { sanitizeSpeech } from "../../../../src/domain/settings/settings-sanitizers/speech-sanitizer.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../src/repositories/settings-defaults.js";
 import { cloneDefaults } from "../../../../src/repositories/settings-sanitizer.js";
 
 describe("validateSettingsPayload", () => {
@@ -32,15 +36,35 @@ describe("validateSettingsPayload", () => {
 
     expect(result.success).toBe(true);
     expect(result.issues).toEqual([]);
+    expect(result.data?.appearance.experienceMode).toBe("EXPERT");
     expect(result.data).toEqual(payload);
   });
 
+  it("validates dashboard experience mode values", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    payload.appearance.experienceMode = "EASY";
+
+    const validResult = validateSettingsPayload(payload);
+
+    expect(validResult.success).toBe(true);
+    expect(validResult.issues).toEqual([]);
+
+    payload.appearance.experienceMode = "standart" as any;
+    const invalidResult = validateSettingsPayload(payload);
+
+    expect(invalidResult.success).toBe(false);
+    expect(invalidResult.issues).toContainEqual({
+      path: "appearance.experienceMode",
+      message: "Expected one of: EASY, STANDARD, EXPERT",
+    });
+  });
+
   it("accepts CREATE_PR for featurePrAutoMergeMode", () => {
-    const payload = cloneDefaults({
+    const payload = structuredClone(cloneDefaults({
       env: {},
       settingsJson: {},
       resolved: {},
-    });
+    }));
 
     // Default clone includes `ciIntelligence` initialized by cloneDefaults, modify it
     payload.ciIntelligence.featurePrAutoMergeMode = "CREATE_PR";
@@ -50,6 +74,96 @@ describe("validateSettingsPayload", () => {
     expect(result.success).toBe(true);
     expect(result.issues).toEqual([]);
     expect(result.data.ciIntelligence.featurePrAutoMergeMode).toBe("CREATE_PR");
+  });
+
+  it("accepts provider-specific thinking modes and legacy aliases", () => {
+    const payload = structuredClone(cloneDefaults({
+      env: {},
+      settingsJson: {},
+      resolved: {},
+    }));
+    payload.aiProvider.providers.gemini.thinkingMode = "minimal";
+    payload.aiProvider.providers.codex.thinkingMode = "xhigh";
+    payload.aiProvider.providers["claude-code"].thinkingMode = "max";
+    payload.aiProvider.providers["qwen-code"].thinkingMode = "xhigh";
+    payload.aiProvider.providers.opencode.thinkingMode = "none";
+    payload.aiProvider.providers.antigravity.thinkingMode = "MEDIUM";
+    payload.aiProvider.invocationRouting.task_coding.providers.codex = {
+      thinkingMode: "HIGH",
+    };
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(true);
+    expect(result.issues).toEqual([]);
+  });
+
+  it("rejects thinking modes unsupported by a provider or route override", () => {
+    const payload = structuredClone(cloneDefaults({
+      env: {},
+      settingsJson: {},
+      resolved: {},
+    }));
+    payload.aiProvider.providers.codex.thinkingMode = "max" as any;
+    payload.aiProvider.providers.antigravity.thinkingMode = "medium" as any;
+    payload.aiProvider.invocationRouting.task_coding.providers.codex = {
+      thinkingMode: "minimal" as any,
+    };
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      {
+        path: "aiProvider.providers.codex.thinkingMode",
+        message: "Expected one of for codex: low, medium, high, xhigh",
+      },
+      {
+        path: "aiProvider.providers.antigravity.thinkingMode",
+        message: "Expected one of for antigravity: low, high",
+      },
+      {
+        path: "aiProvider.invocationRouting.task_coding.providers.codex.thinkingMode",
+        message: "Expected one of for codex: low, medium, high, xhigh",
+      },
+    ]));
+  });
+
+  it("accepts taskPrTitleScheme in git settings", () => {
+    const payload = cloneDefaults({
+      env: {},
+      settingsJson: {},
+      resolved: {},
+    });
+    payload.git.taskPrTitleScheme = "({sprint_tag}) {task_key}: {task_title} [{provider}]";
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(true);
+    expect(result.issues).toEqual([]);
+    expect(result.data?.git.taskPrTitleScheme).toBe("({sprint_tag}) {task_key}: {task_title} [{provider}]");
+  });
+
+  it("rejects non-string taskPrTitleScheme values", () => {
+    const payload = cloneDefaults({
+      env: {},
+      settingsJson: {},
+      resolved: {},
+    });
+    payload.git.taskPrTitleScheme = 42 as any;
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      { path: "git.taskPrTitleScheme", message: "Expected a string" },
+    ]));
+  });
+
+  it("defaults missing taskPrTitleScheme through the git sanitizer", () => {
+    const result = sanitizeGit({ git: { defaultBranch: "dev" } });
+
+    expect(result.taskPrTitleScheme).toBe(DEFAULT_TASK_PR_TITLE_SCHEME);
   });
 
   it("rejects invalid sprint preview container ports", () => {
@@ -69,6 +183,45 @@ describe("validateSettingsPayload", () => {
       { path: "sprintPreview.containerAppPorts.1", message: "Expected a port number between 1 and 65535" },
       { path: "sprintPreview.containerAppPorts.2", message: "Expected a port number between 1 and 65535" },
     ]));
+  });
+
+  it("rejects malformed external importer settings", () => {
+    const payload = cloneDefaults({
+      env: {},
+      settingsJson: {},
+      resolved: {},
+    });
+    payload.notion.enabled = "yes" as any;
+    payload.notion.apiToken = 42 as any;
+    payload.notion.defaultSearchLimit = 0;
+    payload.miro = "invalid" as any;
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      { path: "notion.enabled", message: "Expected a boolean" },
+      { path: "notion.apiToken", message: "Expected a string" },
+      { path: "notion.defaultSearchLimit", message: "Expected a finite number between 1 and 250" },
+      { path: "miro", message: "Expected an object" },
+    ]));
+  });
+
+  it("rejects Docker memory limits outside the supported MiB range", () => {
+    const payload = cloneDefaults({
+      env: {},
+      settingsJson: {},
+      resolved: {},
+    });
+    payload.cliWorkflow.containerMemoryLimitMb = 262145;
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(false);
+    expect(result.issues).toContainEqual({
+      path: "cliWorkflow.containerMemoryLimitMb",
+      message: "Expected an integer between 0 and 262144",
+    });
   });
 
   it("rejects non-object payloads early", () => {
@@ -196,8 +349,10 @@ describe("validateSettingsPayload", () => {
         executionMode: "bad",
         containerImage: 1,
         containerSetupScriptPath: 2,
+        containerMemoryLimitMb: "bad",
         containerCacheSetupScriptImage: "bad",
         containerInstallPlaywrightBrowsers: "bad",
+        containerRunAsRoot: "bad",
         containerMountGitConfig: "bad",
         containerGitUserName: 7,
         containerGitUserEmail: 8,
@@ -263,9 +418,11 @@ describe("validateSettingsPayload", () => {
     expect(paths).toContain("sprintLoopSteps.watchLoopOutputIntervalSeconds");
     expect(paths).toContain("cliWorkflow.executionMode");
     expect(paths).toContain("cliWorkflow.gitMode");
+    expect(paths).toContain("cliWorkflow.containerMemoryLimitMb");
     expect(paths).toContain("cliWorkflow.containerSetupScriptPath");
     expect(paths).toContain("cliWorkflow.containerCacheSetupScriptImage");
     expect(paths).toContain("cliWorkflow.containerInstallPlaywrightBrowsers");
+    expect(paths).toContain("cliWorkflow.containerRunAsRoot");
     expect(paths).toContain("cliWorkflow.containerClaudeCodeAuthPath");
     expect(paths).toContain("workers.executionMode");
     expect(paths).toContain("workers.virtualWorkerProvider");
@@ -327,6 +484,104 @@ describe("validateSettingsPayload", () => {
     expect(result.issues).toEqual(expect.arrayContaining([
       { path: "cliWorkflow.containerSetupScriptPath", message: "Expected a string" },
     ]));
+  });
+
+  it("requires Docker root execution to be boolean in full settings payloads", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    expect(payload.cliWorkflow.containerRunAsRoot).toBe(false);
+
+    payload.cliWorkflow.containerRunAsRoot = "yes" as any;
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      { path: "cliWorkflow.containerRunAsRoot", message: "Expected a boolean" },
+    ]));
+  });
+
+  it("accepts valid speech settings payloads", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    payload.speech = {
+      enabled: true,
+      providerMode: "external_api",
+      localModelId: "onnx-community/whisper-small.en",
+      maxAudioSeconds: 300,
+      externalTranscription: {
+        baseUrl: "https://transcription.example/v1/audio/transcriptions",
+        apiKey: "",
+        model: "custom-transcribe",
+        language: "en",
+      },
+    };
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(true);
+    expect(result.issues).toEqual([]);
+    expect(result.data?.speech.providerMode).toBe("external_api");
+  });
+
+  it("rejects malformed speech settings payloads", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    payload.speech = {
+      enabled: "yes",
+      providerMode: "remote",
+      localModelId: "",
+      maxAudioSeconds: 0,
+      externalTranscription: {
+        baseUrl: "",
+        apiKey: 42,
+        model: "",
+        language: 7,
+      },
+    } as any;
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      { path: "speech.enabled", message: "Expected a boolean" },
+      { path: "speech.providerMode", message: "Expected one of: auto, local_onnx, external_api" },
+      { path: "speech.localModelId", message: "Expected a non-empty string" },
+      { path: "speech.maxAudioSeconds", message: "Expected a finite number between 1 and 600" },
+      { path: "speech.externalTranscription.baseUrl", message: "Expected a non-empty string" },
+      { path: "speech.externalTranscription.apiKey", message: "Expected a string" },
+      { path: "speech.externalTranscription.model", message: "Expected a non-empty string" },
+      { path: "speech.externalTranscription.language", message: "Expected null or a string" },
+    ]));
+  });
+
+  it("defaults and sanitizes speech settings safely", () => {
+    expect(sanitizeSpeech(undefined)).toEqual(DEFAULT_DASHBOARD_SETTINGS.speech);
+
+    const result = sanitizeSpeech({
+      speech: {
+        enabled: true,
+        providerMode: "bad",
+        localModelId: " onnx-community/whisper-tiny.en ",
+        maxAudioSeconds: 999,
+        externalTranscription: {
+          baseUrl: " https://api.example/v1/audio/transcriptions ",
+          apiKey: " test-key ",
+          model: " custom-transcribe ",
+          language: "  ",
+        },
+      },
+    } as any);
+
+    expect(result).toEqual({
+      enabled: true,
+      providerMode: "auto",
+      localModelId: "onnx-community/whisper-tiny.en",
+      maxAudioSeconds: 600,
+      externalTranscription: {
+        baseUrl: "https://api.example/v1/audio/transcriptions",
+        apiKey: "test-key",
+        model: "custom-transcribe",
+        language: null,
+      },
+    });
   });
 });
 

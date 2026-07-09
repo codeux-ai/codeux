@@ -23,6 +23,7 @@ export interface TaskCardViewModel {
   optimisticSavingLabel?: string | null;
   dragStateLabel?: string;
   actions?: TaskCardActionDescriptor[];
+  selfReflectionRating?: Task["selfReflectionRating"];
   sessionId?: string;
   sessionState?: string;
   hasPullRequestMetadata?: boolean;
@@ -51,6 +52,7 @@ const EXECUTOR_LABEL: Record<TaskExecutorType, string> = {
   auto: "Auto",
   docker_cli: "CLI",
   jules: "Jules",
+  mcp_worker: "Worker",
 };
 
 export function formatTimeAgo(iso: string, now: number = Date.now()): string {
@@ -246,6 +248,7 @@ export function buildTaskCardViewModel(
       ? "Pointer drag disabled while task changes are saving; keyboard reordering is not supported"
       : "Pointer drag only; keyboard reordering is not supported",
     actions: buildTaskCardActions(task, prUrl, hasLiveRuntime, taskPullRequestsEnabled),
+    selfReflectionRating: task.selfReflectionRating,
     sessionId: liveEnrichment?.sessionId,
     sessionState: liveEnrichment?.sessionState,
     hasPullRequestMetadata,

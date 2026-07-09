@@ -1,5 +1,5 @@
 import express from "express";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AddressInfo } from "net";
 import type { Server } from "http";
 import { request as httpRequest } from "http";
@@ -17,6 +17,7 @@ import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-d
 import { DashboardRealtimeEventRepository } from "../../../src/repositories/dashboard-realtime-event-repository.js";
 import { DashboardRealtimeService } from "../../../src/services/dashboard-realtime-service.js";
 import { createLogger } from "../../../src/shared/logging/logger.js";
+import { ValidationError } from "../../../src/repositories/repository-utils.js";
 import type { DashboardRealtimeEventMessage, DashboardRealtimeServerMessage } from "../../../src/contracts/app-types.js";
 
 const serversToClose: Server[] = [];
@@ -249,6 +250,31 @@ function buildDashboardTestOptions(
       purposes: [],
       tokenSources: [],
     }),
+    getHeaderTokenThroughputSnapshot: () => ({
+      generatedAt: "2026-07-03T00:00:00.000Z",
+      window: "24h",
+      range: {
+        window: "24h",
+        label: "Last 24 hours",
+        resolution: "hour",
+        resolutionLabel: "Hourly telemetry buckets",
+        from: "2026-07-02T00:00:00.000Z",
+        to: "2026-07-03T00:00:00.000Z",
+        bucketCount: 24,
+        isCustom: false,
+      },
+      app: {
+        totalTokens: 0,
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        reasoningTokens: 0,
+        invocationCount: 0,
+        activeTimeMs: 0,
+        tokensPerMinute: 0,
+      },
+      project: null,
+    }),
     getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
     getLiveActivities: async () => ({}),
     getGitStatus: async () => ({ branch: "main" }) as any,
@@ -358,6 +384,152 @@ describe("setupDashboardServer", () => {
       const response = await httpRequestMock(app).get(testCase.path);
       expect(response.status, testCase.path).toBe(200);
       expect(response.body).toMatchObject(testCase.expectedBody);
+    }
+  });
+
+  it("returns sanitized validation errors for crafted instruction file ids", async () => {
+    const app = express();
+    const readInstructionFile = vi.fn((_projectId: string, fileId: string) => {
+      expect(fileId).toBe("../secrets");
+      throw new ValidationError("Invalid instruction file id.");
+    });
+    configureDashboardApp(buildDashboardTestOptions({ app, readInstructionFile }));
+
+    const response = await httpRequestMock(app).get("/api/projects/project-1/instruction-files/..%2Fsecrets");
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ error: "Invalid instruction file id." });
+    expect(JSON.stringify(response.body)).not.toContain("secrets");
+  });
+
+  it("returns sanitized validation errors for instruction file write failures", async () => {
+    const app = express();
+    const writeInstructionFile = vi.fn(() => {
+      throw new ValidationError("Invalid instruction file path: symlink target escapes the project directory.");
+    });
+    configureDashboardApp(buildDashboardTestOptions({ app, writeInstructionFile }));
+
+    const response = await httpRequestMock(app)
+      .put("/api/projects/project-1/instruction-files/agents")
+      .send({ content: "new" });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      error: "Invalid instruction file path: symlink target escapes the project directory.",
+    });
+    expect(JSON.stringify(response.body)).not.toContain("/tmp/");
+  });
+
+  it("logs dashboard request completion with correlation id but without request bodies", async () => {
+    const savedForcedLogLevel = process.env.CODEUX_FORCE_LOG_LEVEL;
+    delete process.env.CODEUX_FORCE_LOG_LEVEL;
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      const app = express();
+      const logger = createLogger({
+        environment: "production",
+        level: "debug",
+        consoleLogMode: "full",
+        bindings: { component: "dashboard-server-test" },
+      });
+      configureDashboardApp(buildDashboardTestOptions({ app, logger }));
+
+      const response = await httpRequestMock(app)
+        .post("/api/settings")
+        .set("x-correlation-id", "http-corr-1")
+        .send({
+          settings: {
+            integrations: {
+              julesApiKey: "secret-api-key",
+              githubToken: "ghp_secret",
+            },
+            largeBody: "x".repeat(4096),
+          },
+        });
+
+      expect(response.headers["x-correlation-id"]).toBe("http-corr-1");
+      const records = stderrSpy.mock.calls.map((call) => JSON.parse(String(call[0])));
+      const requestLog = records.find((record) => record.message === "Dashboard request completed");
+      expect(requestLog).toMatchObject({
+        purpose: "request",
+        correlationId: "http-corr-1",
+        metadata: {
+          method: "POST",
+          path: "/api/settings",
+          statusCode: response.status,
+        },
+      });
+      expect(JSON.stringify(requestLog)).not.toContain("secret-api-key");
+      expect(JSON.stringify(requestLog)).not.toContain("ghp_secret");
+      expect(JSON.stringify(requestLog)).not.toContain("largeBody");
+      expect(JSON.stringify(requestLog)).not.toContain("xxxx");
+    } finally {
+      stderrSpy.mockRestore();
+      if (savedForcedLogLevel === undefined) {
+        delete process.env.CODEUX_FORCE_LOG_LEVEL;
+      } else {
+        process.env.CODEUX_FORCE_LOG_LEVEL = savedForcedLogLevel;
+      }
+    }
+  });
+
+  it("returns sanitized JSON 400 responses for malformed dashboard request bodies with correlation logs", async () => {
+    const savedForcedLogLevel = process.env.CODEUX_FORCE_LOG_LEVEL;
+    delete process.env.CODEUX_FORCE_LOG_LEVEL;
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      const app = express();
+      const logger = createLogger({
+        environment: "production",
+        level: "debug",
+        consoleLogMode: "full",
+        bindings: { component: "dashboard-server-test" },
+      });
+      configureDashboardApp(buildDashboardTestOptions({ app, logger }));
+
+      const secretBody = "{\"settings\":{\"integrations\":{\"julesApiKey\":\"secret-api-key\"}},";
+      const response = await httpRequestMock(app)
+        .post("/api/settings")
+        .set("content-type", "application/json")
+        .set("x-correlation-id", "bad-json-corr-1")
+        .send(secretBody);
+
+      expect(response.status).toBe(400);
+      expect(response.headers["x-correlation-id"]).toBe("bad-json-corr-1");
+      expect(response.body).toEqual({ error: "Invalid JSON request body." });
+      expect(JSON.stringify(response.body)).not.toContain("secret-api-key");
+
+      const records = stderrSpy.mock.calls.map((call) => JSON.parse(String(call[0])));
+      const parseFailureLog = records.find((record) => record.message === "Rejected malformed dashboard JSON request body");
+      expect(parseFailureLog).toMatchObject({
+        purpose: "request",
+        correlationId: "bad-json-corr-1",
+        metadata: {
+          method: "POST",
+          path: "/api/settings",
+          statusCode: 400,
+          reason: "malformed_json",
+        },
+      });
+      const requestLog = records.find((record) => record.message === "Dashboard request completed");
+      expect(requestLog).toMatchObject({
+        purpose: "request",
+        correlationId: "bad-json-corr-1",
+        metadata: {
+          method: "POST",
+          path: "/api/settings",
+          statusCode: 400,
+        },
+      });
+      expect(JSON.stringify(records)).not.toContain("secret-api-key");
+      expect(JSON.stringify(records)).not.toContain(secretBody);
+    } finally {
+      stderrSpy.mockRestore();
+      if (savedForcedLogLevel === undefined) {
+        delete process.env.CODEUX_FORCE_LOG_LEVEL;
+      } else {
+        process.env.CODEUX_FORCE_LOG_LEVEL = savedForcedLogLevel;
+      }
     }
   });
 
@@ -530,6 +702,76 @@ describe("setupDashboardServer", () => {
     expect(response.status).not.toBe(403);
   });
 
+  it("rejects API requests with comma-separated forwarded hosts", async () => {
+    const app = express();
+    configureDashboardApp(buildDashboardTestOptions({ app }));
+
+    const response = await httpRequestMock(app)
+      .post("/api/settings")
+      .set("Host", "localhost:3000")
+      .set("X-Forwarded-Host", "localhost:3000, evil.com")
+      .set("Origin", "http://localhost:3000")
+      .send({ settings: {} });
+
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({ error: "Forbidden: Untrusted host." });
+  });
+
+  it("rejects runtime requests with non-local preview host spoofing", async () => {
+    const app = express();
+    configureDashboardApp(buildDashboardTestOptions({ app }));
+
+    const response = await httpRequestMock(app)
+      .post("/api/settings")
+      .set("Host", "preview-test-session.evil.example:3000")
+      .set("Origin", "http://preview-test-session.evil.example:3000")
+      .send({ settings: {} });
+
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({ error: "Forbidden: Untrusted host." });
+  });
+
+  it("rejects hostile browser origins on runtime probe routes", async () => {
+    const app = express();
+    configureDashboardApp(buildDashboardTestOptions({ app }));
+
+    const response = await httpRequestMock(app)
+      .post("/ready")
+      .set("Host", "localhost:3000")
+      .set("Origin", "https://evil.example")
+      .send({});
+
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({ error: "Forbidden: Cross-site requests are not allowed." });
+  });
+
+  it("rejects malformed referers on runtime probe routes", async () => {
+    const app = express();
+    configureDashboardApp(buildDashboardTestOptions({ app }));
+
+    const response = await httpRequestMock(app)
+      .post("/health")
+      .set("Host", "localhost:3000")
+      .set("Referer", "not a valid referer")
+      .send({});
+
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({ error: "Forbidden: Cross-site requests are not allowed." });
+  });
+
+  it("allows IPv6 loopback dashboard origins", async () => {
+    const app = express();
+    configureDashboardApp(buildDashboardTestOptions({ app }));
+
+    const response = await httpRequestMock(app)
+      .post("/api/settings")
+      .set("Host", "[::1]:4444")
+      .set("Origin", "http://[::1]:4444")
+      .send({ settings: {} });
+
+    expect(response.status).not.toBe(403);
+  });
+
   it("rejects cross-site POST requests with a 403 status", async () => {
     const app = express();
     const handle = await setupDashboardServer({
@@ -654,7 +896,7 @@ describe("setupDashboardServer", () => {
     expect(response.headers["x-content-type-options"]).toBe("nosniff");
     expect(response.headers["referrer-policy"]).toBe("no-referrer");
     expect(response.headers["x-frame-options"]).toBe("SAMEORIGIN");
-    expect(response.headers["permissions-policy"]).toBe("camera=(), microphone=(), geolocation=()");
+    expect(response.headers["permissions-policy"]).toBe("camera=(), microphone=(self), geolocation=()");
   });
 
   it("applies security headers to responses", async () => {
@@ -695,7 +937,7 @@ describe("setupDashboardServer", () => {
     expect(response.headers["x-content-type-options"]).toBe("nosniff");
     expect(response.headers["referrer-policy"]).toBe("no-referrer");
     expect(response.headers["x-frame-options"]).toBe("SAMEORIGIN");
-    expect(response.headers["permissions-policy"]).toBe("camera=(), microphone=(), geolocation=()");
+    expect(response.headers["permissions-policy"]).toBe("camera=(), microphone=(self), geolocation=()");
   });
 
   it("exposes /health endpoint", async () => {
@@ -1530,7 +1772,7 @@ describe("setupDashboardServer", () => {
         startCalls += 1;
         return {} as any;
       },
-      rebuildSprintPreviewSession: async () => {
+      rebuildSprintPreviewSessionForProjectSprint: async () => {
         rebuildCalls += 1;
         return {} as any;
       },
@@ -1638,13 +1880,13 @@ describe("setupDashboardServer", () => {
       retryTaskDispatch: async () => ({ ok: true }),
       improveSprintPrompt: async () => ({ ok: true }),
       planSprint: async () => ({ ok: true }),
-      removeSprintPreviewSession: async (sessionId: string) => {
+      removeSprintPreviewSessionForProjectSprint: async (_projectId: string, _sprintId: string, sessionId: string) => {
         removedSessionId = sessionId;
       },
     });
     serversToClose.push(handle.server);
 
-    const response = await fetch(`http://127.0.0.1:${handle.port}/api/browser/sessions/test-session`, {
+    const response = await fetch(`http://127.0.0.1:${handle.port}/api/projects/project-test/sprints/sprint-test/preview/sessions/test-session`, {
       method: "DELETE",
     });
 
@@ -1711,90 +1953,61 @@ describe("setupDashboardServer", () => {
     expect(await readyResponse.json()).toEqual(probeResponse);
   });
 
-  it("binds to DASHBOARD_HOST when provided", async () => {
+  it("rejects public DASHBOARD_HOST binding without explicit opt-in", async () => {
     const previousHost = process.env.DASHBOARD_HOST;
+    const previousAllowPublic = process.env.CODE_UX_ALLOW_PUBLIC_DASHBOARD;
     process.env.DASHBOARD_HOST = "0.0.0.0";
+    delete process.env.CODE_UX_ALLOW_PUBLIC_DASHBOARD;
 
     try {
       const app = express();
-      const handle = await setupDashboardServer({
-        app,
-        dashboardDir: "dashboard",
-        port: 0,
-        liveActivityCacheMs: 1000,
-        getStatus: () => ({ ok: true }),
-        getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
-        getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
-        getProjectLiveSnapshot: (projectId: string) => ({ projectId, selectedSprintId: null, status: { project_id: projectId, timestamp: null, subtasks: [] }, execution: { projectId, projectName: "Project 1", sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }, gitStatus: null, gitStatusError: null, updatedAt: null } as any),
-      getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
-        getProjectStatsSnapshot: () => ({
-          projectId: "project-test",
-          projectName: "Project Test",
-          window: "7d",
-          generatedAt: new Date().toISOString(),
-          usage: {
-            invocationCount: 0,
-            activeTimeMs: 0,
-            wallTimeMs: 0,
-            inputTokens: 0,
-            cachedInputTokens: 0,
-            outputTokens: 0,
-            reasoningOutputTokens: 0,
-            totalTokens: 0,
-            reportedInvocationCount: 0,
-            estimatedInvocationCount: 0,
-            unavailableInvocationCount: 0,
-            unsupportedInvocationCount: 0,
-          },
-          activeSprint: null,
-          buckets: [],
-          sprints: [],
-          tasks: [],
-          providers: [],
-          purposes: [],
-          tokenSources: [],
-        }),
-        getLiveActivities: async () => ({}),
-        getGitStatus: async () => ({
-          mode: "LOCAL",
-          available: true,
-          repositoryRoot: null,
-          branch: null,
-          hasRemote: false,
-          dirty: false,
-          openPullRequests: [],
-          ciRuns: [],
-          mergedPullRequests: [],
-          tracking: { scope: "REPOSITORY", label: "Repository", branch: null },
-          warnings: [],
-          lastUpdated: new Date().toISOString(),
-        }),
-        getExternalSettingsHints: () => ({
-          env: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
-          settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
-          resolved: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
-        }),
-        ...buildSettingsServerOptions(),
-        listAgentPresets: () => [],
-        createAgentPreset: () => ({ id: "agent-1" } as any),
-        updateAgentPreset: () => ({ id: "agent-1" } as any),
-        deleteAgentPreset: () => {},
-        rerunTask: async () => ({ ok: true }),
-        orchestrateSprint: async () => ({ ok: true }),
-        pauseSprintRun: async () => ({ ok: true }),
-        cancelSprintRun: async () => ({ ok: true }),
-        cancelTaskDispatch: async () => ({ ok: true }),
-        retryTaskDispatch: async () => ({ ok: true }),
-      improveSprintPrompt: async () => ({ ok: true }),
-      planSprint: async () => ({ ok: true }),
-      });
-
-      serversToClose.push(handle.server);
-      expect((handle.server.address() as AddressInfo).address).toBe("0.0.0.0");
+      await expect(setupDashboardServer(buildDashboardTestOptions({ app })))
+        .rejects.toThrow("CODE_UX_ALLOW_PUBLIC_DASHBOARD=1");
     } finally {
       if (typeof previousHost === "string") process.env.DASHBOARD_HOST = previousHost;
       else delete process.env.DASHBOARD_HOST;
+      if (typeof previousAllowPublic === "string") process.env.CODE_UX_ALLOW_PUBLIC_DASHBOARD = previousAllowPublic;
+      else delete process.env.CODE_UX_ALLOW_PUBLIC_DASHBOARD;
     }
+  });
+
+  it("binds to public DASHBOARD_HOST when explicitly opted in", async () => {
+    const previousHost = process.env.DASHBOARD_HOST;
+    const previousAllowPublic = process.env.CODE_UX_ALLOW_PUBLIC_DASHBOARD;
+    process.env.DASHBOARD_HOST = "0.0.0.0";
+    process.env.CODE_UX_ALLOW_PUBLIC_DASHBOARD = "1";
+
+    try {
+      const app = express();
+      const handle = await setupDashboardServer(buildDashboardTestOptions({ app }));
+
+      serversToClose.push(handle.server);
+      expect((handle.server.address() as AddressInfo).address).toBe("0.0.0.0");
+
+      const healthResponse = await fetch(`http://127.0.0.1:${handle.port}/health`);
+      expect(healthResponse.status).toBe(200);
+      const readyResponse = await fetch(`http://127.0.0.1:${handle.port}/ready`);
+      expect(readyResponse.status).toBe(200);
+    } finally {
+      if (typeof previousHost === "string") process.env.DASHBOARD_HOST = previousHost;
+      else delete process.env.DASHBOARD_HOST;
+      if (typeof previousAllowPublic === "string") process.env.CODE_UX_ALLOW_PUBLIC_DASHBOARD = previousAllowPublic;
+      else delete process.env.CODE_UX_ALLOW_PUBLIC_DASHBOARD;
+    }
+  });
+
+  it("continues falling back to the next port when the dashboard port is in use", async () => {
+    const blockingServer = express().listen(0, "127.0.0.1");
+    serversToClose.push(blockingServer);
+    await new Promise<void>((resolve) => blockingServer.on("listening", () => resolve()));
+    const blockedPort = (blockingServer.address() as AddressInfo).port;
+
+    const app = express();
+    const handle = await setupDashboardServer(buildDashboardTestOptions({ app, port: blockedPort }));
+    serversToClose.push(handle.server);
+
+    expect(handle.port).toBe(blockedPort + 1);
+    expect((handle.server.address() as AddressInfo).address).toBe("127.0.0.1");
   });
 
   it("returns 503 for /ready when server is not ready", async () => {

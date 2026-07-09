@@ -1,12 +1,14 @@
-import type { FunctionComponent } from "preact";
+import type { FunctionComponent, JSX, RefObject } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { Check, Compass, RefreshCw, Search, Settings, ShieldCheck, Zap } from "lucide-preact";
+import { Check, RefreshCw, Search, Settings, X, Zap } from "lucide-preact";
 import { ActionButton } from "./components/settings/SettingsSurface.js";
 import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
-import { useSettingsPageState } from "./hooks/use-settings-page-state.js";
+import { useSettingsPageState, type Category, type CategoryId } from "./hooks/use-settings-page-state.js";
 import { SettingsCategoryRail, CATEGORIES } from "./components/settings/SettingsCategoryRail.js";
 import { SettingsContentPanels } from "./components/settings/SettingsContentPanels.js";
+import { SettingsActivePanelStatus } from "./components/settings/SettingsActivePanelStatus.js";
+import { SettingsScopeControls } from "./components/settings/SettingsScopeControls.js";
 import { useReducedMotion } from "./hooks/use-reduced-motion.js";
 import { useGsapInteractionTokens } from "./lib/motion/constants.js";
 import { useInteractionTokens } from "./lib/motion/tokens.js";
@@ -15,7 +17,146 @@ import { PageHeader } from "./components/layout/PageHeader.js";
 import { ConfirmDialog } from "./components/ui/ConfirmDialog.js";
 import { UnsavedChangesModal } from "./components/ui/UnsavedChangesModal.js";
 import { useConfirmDialog } from "./hooks/use-confirm-dialog.js";
-import { getSettingsSearchMatchPreview } from "./lib/settings-search-index.js";
+import { getSettingsSearchMatchPreview, type SettingsSearchMatches } from "./lib/settings-search-index.js";
+
+interface SettingsSearchStatusDetails {
+  searchTerm: string;
+  resultCount: number;
+  matchingCategoryCount: number;
+  activeCategoryLabel: string;
+  activeMatchPreview: string[];
+  smartFindPreview: string[];
+}
+
+export function getSettingsSearchStatusText({
+  searchTerm,
+  resultCount,
+  matchingCategoryCount,
+  activeCategoryLabel,
+  activeMatchPreview,
+  smartFindPreview,
+}: SettingsSearchStatusDetails): string {
+  const categoryLabel = matchingCategoryCount === 1 ? "matching category" : "matching categories";
+  const resultLabel = resultCount === 1 ? "result" : "results";
+  const activePreviewText = activeMatchPreview.length
+    ? ` Active matches: ${activeMatchPreview.join(", ")}.`
+    : "";
+  const previewText = smartFindPreview.length
+    ? ` Match previews: ${smartFindPreview.join(", ")}.`
+    : " Match previews: none.";
+  const recoveryText = matchingCategoryCount === 0
+    ? " Clear the search or try routing, provider, auth, CI, agent, or memory."
+    : "";
+
+  return `${resultCount} ${resultLabel} across ${matchingCategoryCount} ${categoryLabel} for "${searchTerm}". Active category: ${activeCategoryLabel}.${activePreviewText}${previewText}${recoveryText}`;
+}
+
+export interface SettingsSmartFindSearchProps {
+  settingsSearch: string;
+  setSettingsSearch: (value: string) => void;
+  searchInputRef: RefObject<HTMLInputElement>;
+  filteredCategories: Category[];
+  settingsSearchMatches: SettingsSearchMatches;
+  activeCategory: CategoryId;
+  activeCategoryConfig: Category;
+  interactionStyle: JSX.CSSProperties;
+}
+
+export const SettingsSmartFindSearch: FunctionComponent<SettingsSmartFindSearchProps> = ({
+  settingsSearch,
+  setSettingsSearch,
+  searchInputRef,
+  filteredCategories,
+  settingsSearchMatches,
+  activeCategory,
+  activeCategoryConfig,
+  interactionStyle,
+}) => {
+  const normalizedSearch = settingsSearch.trim();
+  const isSearchActive = normalizedSearch.length > 0;
+  const smartFindPreview = useMemo(() => (
+    filteredCategories
+      .flatMap((category) => getSettingsSearchMatchPreview(settingsSearchMatches[category.id], 2))
+      .filter((match, index, matches) => matches.indexOf(match) === index)
+      .slice(0, 4)
+  ), [filteredCategories, settingsSearchMatches]);
+  const activeMatchPreview = getSettingsSearchMatchPreview(settingsSearchMatches[activeCategory], 3);
+  const smartFindMatchCount = useMemo(() => (
+    Object.values(settingsSearchMatches).reduce((count, match) => (
+      count + match.matchedLabels.length + match.matchedDescriptions.length + match.matchedTerms.length
+    ), 0)
+  ), [settingsSearchMatches]);
+  const activeSearchStatus = isSearchActive
+    ? getSettingsSearchStatusText({
+      searchTerm: normalizedSearch,
+      resultCount: smartFindMatchCount,
+      matchingCategoryCount: filteredCategories.length,
+      activeCategoryLabel: activeCategoryConfig.label,
+      activeMatchPreview,
+      smartFindPreview,
+    })
+    : null;
+  return (
+    <>
+      <label htmlFor="settings-search" className="sr-only">
+        Search settings categories
+      </label>
+      <div className="flex items-center gap-3 rounded-[1rem] border border-black/[0.06] bg-black/[0.03] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
+        <Search className="h-4 w-4 shrink-0 text-slate-400" strokeWidth={2.1} />
+        <input
+          id="settings-search"
+          ref={searchInputRef}
+          type="text"
+          value={settingsSearch}
+          onInput={(event) => setSettingsSearch((event.currentTarget as HTMLInputElement).value)}
+          placeholder="Search categories, providers, CI, auth, prompts"
+          aria-describedby="settings-search-results"
+          className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200"
+        />
+        {isSearchActive ? (
+          <button
+            type="button"
+            onClick={() => {
+              setSettingsSearch("");
+              searchInputRef.current?.focus({ preventScroll: true });
+            }}
+            aria-label="Clear settings search"
+            style={interactionStyle}
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-black/[0.06] bg-white/80 text-slate-400 transition-colors hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:text-slate-100 dark:focus-visible:ring-offset-void-900"
+          >
+            <X className="h-3.5 w-3.5" strokeWidth={2.4} />
+          </button>
+        ) : (
+          <div className="rounded-full border border-black/[0.06] bg-white/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.04]">
+            /
+          </div>
+        )}
+      </div>
+      <div
+        id="settings-search-results"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className={isSearchActive ? "mt-2 text-xs font-semibold text-slate-500 dark:text-slate-400" : "sr-only"}
+      >
+        {isSearchActive ? (
+          activeSearchStatus
+        ) : (
+          `${filteredCategories.length} settings categories available.`
+        )}
+      </div>
+      {isSearchActive && smartFindPreview.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Smart Find match previews">
+          {smartFindPreview.map((match) => (
+            <span key={match} className="max-w-full truncate rounded-full border border-signal-500/20 bg-signal-500/[0.06] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-700 dark:text-signal-200">
+              {match}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </>
+  );
+};
 
 export function focusFirstInvalidSettingsControl(root: ParentNode): string | null {
   const controls = Array.from(root.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
@@ -48,16 +189,29 @@ export function focusFirstInvalidSettingsControl(root: ParentNode): string | nul
     return null;
   }
 
-  const message = "validationMessage" in invalidControl && invalidControl.validationMessage
+  const errorMessageId = invalidControl.getAttribute("aria-errormessage");
+  const rootLookup = root as ParentNode & { getElementById?: (id: string) => HTMLElement | null };
+  const describedError = errorMessageId
+    ? errorMessageId
+      .split(/\s+/)
+      .map((id) => rootLookup.getElementById?.(id) ?? document.getElementById(id))
+      .find((element) => element?.textContent?.trim())
+      ?.textContent
+      ?.trim()
+    : null;
+  const message = describedError || ("validationMessage" in invalidControl && invalidControl.validationMessage
     ? invalidControl.validationMessage
-    : "Fix the highlighted setting before saving changes.";
+    : "Fix the highlighted setting before saving changes.");
   invalidControl.setAttribute("aria-invalid", "true");
+  if (typeof invalidControl.scrollIntoView === "function") {
+    invalidControl.scrollIntoView({ block: "center", inline: "nearest", behavior: "auto" });
+  }
   if ("reportValidity" in invalidControl && typeof invalidControl.reportValidity === "function") {
     invalidControl.reportValidity();
   }
-  invalidControl.focus();
+  invalidControl.focus({ preventScroll: true });
   window.setTimeout(() => {
-    invalidControl.focus();
+    invalidControl.focus({ preventScroll: true });
   }, 0);
   return message;
 }
@@ -73,6 +227,7 @@ export const SettingsPage: FunctionComponent = () => {
   const [pendingCategory, setPendingCategory] = useState<typeof CATEGORIES[number]["id"] | null>(null);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
   const resetProjectConfirm = useConfirmDialog();
+  const saveDisabledReasonId = "settings-save-disabled-reason";
 
   const state = useSettingsPageState(CATEGORIES);
   const {
@@ -101,27 +256,27 @@ export const SettingsPage: FunctionComponent = () => {
   } = state;
 
   const normalizedSearch = settingsSearch.trim();
-  const smartFindPreview = useMemo(() => (
-    filteredCategories
-      .flatMap((category) => getSettingsSearchMatchPreview(settingsSearchMatches[category.id], 2))
-      .filter((match, index, matches) => matches.indexOf(match) === index)
-      .slice(0, 4)
-  ), [filteredCategories, settingsSearchMatches]);
-  const activeMatchPreview = getSettingsSearchMatchPreview(settingsSearchMatches[activeCategory], 3);
-  const smartFindMatchCount = useMemo(() => (
-    Object.values(settingsSearchMatches).reduce((count, match) => (
-      count + match.matchedLabels.length + match.matchedDescriptions.length + match.matchedTerms.length
-    ), 0)
-  ), [settingsSearchMatches]);
-  const quickCategories = useMemo(() => (
-    (filteredCategories.length > 0 ? filteredCategories : CATEGORIES)
-      .filter((category) => !["general", "models", "sprint", "browser"].includes(category.id))
-      .slice(0, 4)
-  ), [filteredCategories]);
   const scopeControlStyle = {
     transitionDuration: interactionTokens.controlFeedback.duration,
     transitionTimingFunction: interactionTokens.controlFeedback.ease,
   };
+  const projectSourceSummary = useMemo(() => {
+    if (activeScope !== "project" || !selectedProject) {
+      return null;
+    }
+    const sources = Object.values(state.projectSources ?? {});
+    const overridden = sources.filter((source) => source === "project").length;
+    const inherited = sources.filter((source) => source === "system").length;
+    if (overridden === 0 && inherited === 0) {
+      return "Project settings are inheriting system defaults until an override is edited.";
+    }
+    return `${overridden} overridden ${overridden === 1 ? "setting" : "settings"} and ${inherited} inherited ${inherited === 1 ? "setting" : "settings"} in this project scope.`;
+  }, [activeScope, selectedProject, state.projectSources]);
+  const scopeStatusText = activeScope === "system"
+    ? "System scope selected. Editing live system defaults."
+    : selectedProject
+      ? `Project scope selected. Editing overrides for ${selectedProject.name}. ${projectSourceSummary ?? "Inherited and overridden badges identify each setting source."}`
+      : "Project scope is unavailable until a project is selected.";
   const saveDisabledReason = activeSaving
     ? "Settings are saving."
     : loading
@@ -223,14 +378,17 @@ export const SettingsPage: FunctionComponent = () => {
   }, []);
 
   const handleSaveRequest = useCallback(async (): Promise<void> => {
+    if (activeSaving || loading) {
+      return;
+    }
     if (focusFirstInvalidSetting()) {
       return;
     }
     await handleSave();
-  }, [focusFirstInvalidSetting, handleSave]);
+  }, [activeSaving, focusFirstInvalidSetting, handleSave, loading]);
 
   const handleResetProjectRequest = useCallback(async (): Promise<void> => {
-    if (!selectedProject) {
+    if (!selectedProject || resettingProject) {
       return;
     }
     const confirmed = await resetProjectConfirm.requestConfirm({
@@ -242,7 +400,7 @@ export const SettingsPage: FunctionComponent = () => {
     if (confirmed) {
       await handleResetProject();
     }
-  }, [handleResetProject, resetProjectConfirm, selectedProject]);
+  }, [handleResetProject, resetProjectConfirm, resettingProject, selectedProject]);
 
   return (
     <PageContainer aria-label="Settings" padding="settings" className="gap-10">
@@ -265,157 +423,55 @@ export const SettingsPage: FunctionComponent = () => {
             title="Settings & Integration"
             subtitle="Tune the system baseline, then shape project-level behavior with faster wayfinding, denser controls, and focused routing workspaces."
           />
-
-          <div className="flex flex-wrap items-center gap-3">
-            <div
-              role="radiogroup"
-              aria-label="Settings scope"
-              aria-describedby="settings-scope-context settings-project-scope-disabled"
-              className="rounded-2xl border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-1 backdrop-blur-2xl shadow-[var(--elevation-base)]"
-            >
-              <button
-                type="button"
-                role="radio"
-                aria-checked={activeScope === "system"}
-                onClick={() => setActiveScope("system")}
-                style={scopeControlStyle}
-                className={`h-8 rounded-[1rem] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
-                  activeScope === "system"
-                    ? "bg-signal-500/[0.12] text-signal-700 dark:text-signal-300"
-                    : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                }`}
-              >
-                System
-                {activeScope === "system" ? <span aria-hidden="true" className="ml-1 normal-case tracking-normal text-[10px]">(selected)</span> : null}
-              </button>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={activeScope === "project"}
-                aria-describedby={!selectedProject ? "settings-project-scope-disabled" : undefined}
-                onClick={() => selectedProject && setActiveScope("project")}
-                disabled={!selectedProject}
-                style={scopeControlStyle}
-                className={`h-8 rounded-[1rem] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-50 disabled:pointer-events-none dark:focus-visible:ring-offset-void-900 ${
-                  activeScope === "project"
-                    ? "bg-signal-500/[0.12] text-signal-700 dark:text-signal-300"
-                    : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                }`}
-              >
-                Project
-                {activeScope === "project" ? <span aria-hidden="true" className="ml-1 normal-case tracking-normal text-[10px]">(selected)</span> : null}
-              </button>
-            </div>
-
-            <div id="settings-scope-context" className="max-w-full break-words rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-xs font-semibold text-slate-500 backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:text-slate-300">
-              {activeScope === "system"
-                ? "Editing live system defaults"
-                : selectedProject
-                  ? `Editing overrides for ${selectedProject.name}`
-                  : "Select a project to edit overrides"}
-            </div>
-            {!selectedProject ? (
-              <div id="settings-project-scope-disabled" className="max-w-full break-words rounded-full border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-700 backdrop-blur-2xl dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-200">
-                Project scope unlocks after selecting a project.
-              </div>
-            ) : (
-              <div id="settings-project-scope-disabled" className="sr-only">
-                Project scope is available for the selected project.
-              </div>
-            )}
-
-            <div className="rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-xs font-semibold text-slate-500 backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:text-slate-300">
-              {filteredCategories.length} visible categor{filteredCategories.length === 1 ? "y" : "ies"}
-            </div>
-
-            {activeDirty ? (
-              <div className="rounded-full border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-700 backdrop-blur-2xl dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-200">
-                Unsaved edits
-              </div>
-            ) : null}
-            {!activeDirty && !activeSaving && saveMessage && !error ? (
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-status-green/20 bg-status-green/10 px-4 py-2 text-xs font-semibold text-status-green backdrop-blur-2xl">
-                <ShieldCheck className="h-3.5 w-3.5" strokeWidth={2.2} />
-                Saved
-              </div>
-            ) : null}
-          </div>
         </div>
 
         <div className="rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-4 backdrop-blur-2xl shadow-[var(--elevation-base)]">
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-            <Compass className="h-3.5 w-3.5" strokeWidth={2.2} />
-            Smart Find
-          </div>
-          <label htmlFor="settings-search" className="sr-only">
-            Search settings categories
-          </label>
-          <div className="mt-3 flex items-center gap-3 rounded-[1rem] border border-black/[0.06] bg-black/[0.03] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
-            <Search className="h-4 w-4 shrink-0 text-slate-400" strokeWidth={2.1} />
-            <input
-              id="settings-search"
-              ref={state.searchInputRef}
-              type="text"
-              value={settingsSearch}
-              onInput={(event) => setSettingsSearch((event.currentTarget as HTMLInputElement).value)}
-              placeholder="Search categories, providers, CI, auth, prompts"
-              aria-describedby="settings-search-results"
-              className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200"
-            />
-            <div className="rounded-full border border-black/[0.06] bg-white/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.04]">
-              /
-            </div>
-          </div>
-          <div
-            id="settings-search-results"
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-            className="mt-2 text-xs font-semibold text-slate-500 dark:text-slate-400"
-          >
-            {normalizedSearch
-              ? filteredCategories.length > 0
-                ? `${smartFindMatchCount} result${smartFindMatchCount === 1 ? "" : "s"} across ${filteredCategories.length} categor${filteredCategories.length === 1 ? "y" : "ies"} for ${normalizedSearch}. Active: ${activeCategoryConfig.label}${activeMatchPreview.length ? ` (${activeMatchPreview.join(", ")})` : ""}.`
-                : `No settings match ${normalizedSearch}. Clear the search or try routing, provider, auth, CI, agent, or memory.`
-              : `${filteredCategories.length} settings categories available. Press slash to search.`}
-          </div>
-          {normalizedSearch && smartFindPreview.length > 0 ? (
-            <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Smart Find match previews">
-              {smartFindPreview.map((match) => (
-                <span key={match} className="max-w-full truncate rounded-full border border-signal-500/20 bg-signal-500/[0.06] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-700 dark:text-signal-200">
-                  {match}
-                </span>
-              ))}
-            </div>
-          ) : null}
-          <div className="mt-3 flex flex-wrap gap-2">
-            {quickCategories.map((category) => (
-              <button
-                key={`quick-${category.id}`}
-                type="button"
-                onClick={() => switchCategory(category.id)}
-                aria-pressed={activeCategory === category.id}
-                aria-controls="settings-active-category-panel"
-                style={scopeControlStyle}
-                className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
-                  activeCategory === category.id
-                    ? "border-signal-500/25 bg-signal-500/[0.12] text-signal-700 dark:border-signal-400/25 dark:bg-signal-400/[0.12] dark:text-signal-200"
-                    : "border-black/[0.06] bg-white/80 text-slate-500 hover:text-slate-800 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:text-slate-200"
-                }`}
-              >
-                {category.label}
-              </button>
-            ))}
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
+          <SettingsSmartFindSearch
+            settingsSearch={settingsSearch}
+            setSettingsSearch={setSettingsSearch}
+            searchInputRef={state.searchInputRef}
+            filteredCategories={filteredCategories}
+            settingsSearchMatches={settingsSearchMatches}
+            activeCategory={activeCategory}
+            activeCategoryConfig={activeCategoryConfig}
+            interactionStyle={scopeControlStyle}
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 items-start gap-x-8 gap-y-6 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <div
+          data-settings-sticky="settings-command-status"
+          className="sticky top-16 z-30 -mx-2 flex min-w-0 max-w-full flex-wrap items-center gap-3 overflow-visible rounded-[1.75rem] border border-white/[0.08] bg-void-950 p-3 shadow-[0_20px_50px_rgba(2,6,23,0.32)] lg:col-start-2 lg:row-start-1"
+        >
+          <SettingsScopeControls
+            activeScope={activeScope}
+            setActiveScope={setActiveScope}
+            selectedProject={selectedProject}
+            scopeStatusText={scopeStatusText}
+            projectSourceSummary={projectSourceSummary}
+            filteredCategoryCount={filteredCategories.length}
+            isSearchActive={normalizedSearch.length > 0}
+            activeDirty={activeDirty}
+            activeSaving={activeSaving}
+            saveMessage={saveMessage}
+            error={error}
+            interactionStyle={scopeControlStyle}
+          />
+          <SettingsActivePanelStatus
+            state={state}
+            sticky={false}
+            className="mb-0"
+          />
+          <div className="ml-auto flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2">
             {activeScope === "project" ? (
               <ActionButton
                 label={resettingProject ? "Resetting Project" : "Reset Project"}
                 onClick={() => void handleResetProjectRequest()}
                 tone="danger"
                 busy={resettingProject}
-                disabled={!selectedProject}
-                disabledReason={!selectedProject ? "Select a project before resetting overrides." : undefined}
+                disabled={!selectedProject || resettingProject}
+                disabledReason={!selectedProject ? "Select a project before resetting overrides." : resettingProject ? "Project overrides are resetting." : undefined}
               />
             ) : null}
             <button
@@ -424,13 +480,13 @@ export const SettingsPage: FunctionComponent = () => {
               disabled={!activeDirty || activeSaving || loading || (activeScope === "project" && !selectedProject)}
               aria-busy={activeSaving ? "true" : undefined}
               aria-disabled={!activeDirty || activeSaving || loading || (activeScope === "project" && !selectedProject)}
-              aria-description={saveDisabledReason}
+              aria-describedby={saveDisabledReason ? saveDisabledReasonId : undefined}
               title={saveDisabledReason}
               data-motion-contract="controlFeedback"
-              className={`group inline-flex items-center gap-2.5 rounded-2xl px-5 py-3 text-sm font-bold transition-[background-color,box-shadow,transform] duration-300 hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`group inline-flex h-10 items-center gap-2.5 rounded-2xl px-4 text-sm font-bold transition-[background-color,box-shadow,transform] duration-300 hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${
                 saveMessage && !error
                   ? "bg-status-green text-white shadow-[var(--elevation-raised)]"
-                  : "bg-slate-900 text-white shadow-[var(--elevation-raised)] hover:bg-slate-700 dark:bg-white dark:text-void-900 dark:hover:bg-slate-100"
+                  : "bg-white text-void-900 shadow-[var(--elevation-raised)] hover:bg-slate-100"
               }`}
             >
               {activeSaving ? (
@@ -441,7 +497,7 @@ export const SettingsPage: FunctionComponent = () => {
               ) : saveMessage && !error ? (
                 <>
                   <Check className="h-4 w-4" strokeWidth={2.5} />
-                  Saved
+                  Save Changes
                 </>
               ) : (
                 <>
@@ -451,15 +507,13 @@ export const SettingsPage: FunctionComponent = () => {
               )}
             </button>
             {saveDisabledReason ? (
-              <div className="w-full text-xs font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
+              <span id={saveDisabledReasonId} className="sr-only">
                 {saveDisabledReason}
-              </div>
+              </span>
             ) : null}
           </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
         <SettingsCategoryRail
           activeCategory={activeCategory}
           filteredCategories={filteredCategories}
@@ -467,6 +521,7 @@ export const SettingsPage: FunctionComponent = () => {
           settingsSearchMatches={settingsSearchMatches}
           onSwitchCategory={switchCategory}
           pendingCategory={pendingCategory}
+          className="lg:col-start-1 lg:row-span-2 lg:row-start-1"
         />
 
         <div
@@ -476,7 +531,7 @@ export const SettingsPage: FunctionComponent = () => {
           aria-label="Settings category panel"
           aria-busy={activeSaving || loading || resettingProject ? "true" : undefined}
           data-motion-contract="enterExit"
-          className="flex min-w-0 flex-col gap-5"
+          className="flex min-w-0 flex-col gap-5 lg:col-start-2 lg:row-start-2"
         >
           <div className="mb-1 flex flex-wrap items-center gap-3">
             <activeCategoryConfig.icon
@@ -511,7 +566,7 @@ export const SettingsPage: FunctionComponent = () => {
             />
           </div>
 
-          <SettingsContentPanels state={state} />
+          <SettingsContentPanels state={state} showActivePanelStatus={false} />
         </div>
       </div>
 

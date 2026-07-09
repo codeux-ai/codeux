@@ -7,6 +7,20 @@ import { createMemory, deleteMemory, deleteMemories, type CreateMemoryInput, typ
 
 import { clearSelectedMemoryIds, memoryMutationsSignal, setSelectedMemoryIds } from "../components/memory/memoryState.js";
 
+export function buildMemoryDataContextKey(
+    activeScope: MemoryScope,
+    activeTier: string,
+    selectedSprintId?: string,
+    selectedAgentPresetId?: string,
+): string {
+    return JSON.stringify({
+        scope: activeScope,
+        tier: activeTier,
+        sprintId: selectedSprintId ?? null,
+        agentPresetId: selectedAgentPresetId ?? null,
+    });
+}
+
 export function useMemoryPageData(
     pid: string,
     activeScope: MemoryScope,
@@ -28,6 +42,8 @@ export function useMemoryPageData(
         staleEmbeddings: 0
     });
     const [graphData, setGraphData] = useState<{ graph: GraphMetadata; map: EmbeddingMapResult | null } | null>(null);
+    const [graphDataContextKey, setGraphDataContextKey] = useState<string | null>(null);
+    const requestedContextKey = buildMemoryDataContextKey(activeScope, activeTier, selectedSprintId, selectedAgentPresetId);
 
     const { feedback, setWarning, setSuccess, setError, clearFeedback, clearError, setPending } = useActionFeedback(5000);
     const removeTimers = useRef<Record<string, number>>({});
@@ -250,11 +266,12 @@ export function useMemoryPageData(
 
             const graph = prepareMemoryGraph(memoriesData, mapData);
             setGraphData({ graph, map: mapData });
+            setGraphDataContextKey(requestedContextKey);
         } catch (error) {
             setLoadError(error instanceof Error ? error.message : "Failed to load memories");
         }
         setLoading(false);
-    }, [pid, activeScope, activeTier, selectedSprintId, selectedAgentPresetId, enabled]);
+    }, [pid, activeScope, activeTier, selectedSprintId, selectedAgentPresetId, enabled, requestedContextKey]);
 
     useEffect(() => { loadData(); }, [loadData]);
 
@@ -267,6 +284,8 @@ export function useMemoryPageData(
         initialModels,
         initialStats,
         graphData,
+        graphDataContextKey,
+        requestedContextKey,
         loadData
     };
 }

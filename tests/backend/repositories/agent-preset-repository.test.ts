@@ -25,6 +25,26 @@ describe("AgentPresetRepository", () => {
       sourceType: "local",
       sourceRef: "/workspace/preset-project",
     });
+    const now = new Date().toISOString();
+    storage.getDatabase().prepare(`
+      INSERT INTO skill_storages (id, project_id, name, description, storage_kind, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "skills-core",
+      project.id,
+      "Core skills",
+      "Shared project skills.",
+      "project",
+      now,
+      now,
+      "skills-review",
+      project.id,
+      "Review skills",
+      "Review-specific skills.",
+      "project",
+      now,
+      now,
+    );
 
     const created = agentPresetRepository.createAgentPreset(project.id, {
       name: "Project Manager",
@@ -34,6 +54,7 @@ describe("AgentPresetRepository", () => {
       avatarConfig: { body: "alien", face: "happy" },
       providerConfigId: "opencode",
       model: "openai/gpt-5",
+      containerRunAsRoot: true,
       memoryTemplateOverrideEnabled: true,
       memoryTemplateMarkdown: "Memory format",
       memoryConfig: {
@@ -44,6 +65,8 @@ describe("AgentPresetRepository", () => {
         maxShortTerm: 3,
         maxLongTerm: 5,
       },
+      persistentSkillStorageIds: ["skills-core", "skills-core", "skills-review", ""],
+      persistentSkillStorage: { enabled: true },
     });
 
     expect(created).toMatchObject({
@@ -55,6 +78,7 @@ describe("AgentPresetRepository", () => {
       avatarConfig: { body: "alien", face: "happy" },
       providerConfigId: "opencode",
       model: "openai/gpt-5",
+      containerRunAsRoot: true,
       memoryTemplateOverrideEnabled: true,
       memoryTemplateMarkdown: "Memory format",
       memoryConfig: {
@@ -65,6 +89,8 @@ describe("AgentPresetRepository", () => {
         maxShortTerm: 3,
         maxLongTerm: 5,
       },
+      persistentSkillStorageIds: ["skills-core", "skills-review"],
+      persistentSkillStorage: { enabled: true },
     });
 
     const updated = agentPresetRepository.updateAgentPreset(created.id, {
@@ -75,7 +101,10 @@ describe("AgentPresetRepository", () => {
       avatarConfig: { body: "human" },
       providerConfigId: null,
       model: "gpt-5.4",
+      containerRunAsRoot: false,
       memoryTemplateOverrideEnabled: false,
+      persistentSkillStorageIds: ["skills-review"],
+      persistentSkillStorage: { enabled: false },
     });
     expect(updated).toMatchObject({
       name: "Worker",
@@ -85,6 +114,7 @@ describe("AgentPresetRepository", () => {
       avatarConfig: { body: "human" },
       providerConfigId: null,
       model: "gpt-5.4",
+      containerRunAsRoot: false,
       memoryTemplateOverrideEnabled: false,
       memoryTemplateMarkdown: "Memory format",
       memoryConfig: {
@@ -95,6 +125,8 @@ describe("AgentPresetRepository", () => {
         maxShortTerm: 3,
         maxLongTerm: 5,
       },
+      persistentSkillStorageIds: ["skills-review"],
+      persistentSkillStorage: { enabled: false },
     });
 
     const listed = agentPresetRepository.listAgentPresets(project.id);
@@ -103,6 +135,56 @@ describe("AgentPresetRepository", () => {
 
     agentPresetRepository.deleteAgentPreset(created.id);
     expect(agentPresetRepository.listAgentPresets(project.id)).toEqual([]);
+  });
+
+  it("round-trips nullable Docker root overrides while legacy presets inherit defaults", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-preset-root-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "Root Override Project",
+      sourceType: "local",
+      sourceRef: "/workspace/root-project",
+    });
+
+    const legacy = agentPresetRepository.createAgentPreset(project.id, {
+      name: "Legacy Worker",
+    });
+    expect(legacy.containerRunAsRoot).toBeNull();
+
+    const forcedRoot = agentPresetRepository.createAgentPreset(project.id, {
+      name: "Root Worker",
+      containerRunAsRoot: true,
+    });
+    expect(forcedRoot.containerRunAsRoot).toBe(true);
+
+    const forcedNonRoot = agentPresetRepository.updateAgentPreset(forcedRoot.id, {
+      containerRunAsRoot: false,
+    });
+    expect(forcedNonRoot.containerRunAsRoot).toBe(false);
+
+    const inheritedAgain = agentPresetRepository.updateAgentPreset(forcedRoot.id, {
+      containerRunAsRoot: null,
+    });
+    expect(inheritedAgain.containerRunAsRoot).toBeNull();
+
+    const imported = agentPresetRepository.importAgentPresetFromSource(project.id, {
+      name: "Imported Root Worker",
+      instructionMarkdown: "Run setup that requires root.",
+      sourcePath: "/workspace/root-project/.code-ux/agents/imported_root_worker.md",
+      sourceScope: "project",
+      sourceUpdatedAt: new Date().toISOString(),
+      containerRunAsRoot: true,
+    });
+    expect(imported.containerRunAsRoot).toBe(true);
+
+    const listed = agentPresetRepository.listAgentPresets(project.id);
+    expect(listed.find((preset) => preset.id === legacy.id)?.containerRunAsRoot).toBeNull();
+    expect(listed.find((preset) => preset.id === forcedRoot.id)?.containerRunAsRoot).toBeNull();
+    expect(listed.find((preset) => preset.id === imported.id)?.containerRunAsRoot).toBe(true);
   });
 
   it("saves memory config when importing a preset from markdown source", async () => {

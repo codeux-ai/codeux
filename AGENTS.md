@@ -3,7 +3,7 @@
 ## Project Overview
 **Code UX** (`@codeuxai/codeux`, bin `codeux`) is a local-first, MIT-licensed, **container-first agentic coding runtime**. It turns a feature/refactor/migration/QA/CI-repair goal into a managed **sprint**: planned into a dependency-aware DAG, routed to a provider, executed in isolated Docker workspaces, gated through Git/CI, and surfaced in a live Preact dashboard. It also runs as an **MCP server** (stdio + optional HTTPS worker gateway) and ships as an **Electron desktop app**.
 
-> Historical note: this began as a Jules MCP server. **Jules is now one (hosted) provider** among several local CLI providers (Gemini, Codex, Claude Code, Qwen, OpenCode, Antigravity). Do not treat the codebase as Jules-specific.
+> Historical note: this began as an MCP server. The **Code UX runtime** now supports several local CLI providers (Gemini, Codex, Claude Code, Qwen, OpenCode, Antigravity). Jules remains available as a hosted provider. Do not treat the codebase as Jules-specific.
 
 ### Core Intent
 - Coordinate the provider CLIs developers already use, each in an isolated Docker workspace.
@@ -28,7 +28,7 @@ Package manager is **pnpm** (`pnpm@10.33.0`), Node **22+**. Use `pnpm`, not `npm
 - `pnpm run typecheck` / `pnpm run lint`: strict `tsc --noEmit` (the two are the same command).
 - `pnpm run test`: full Vitest run. `pnpm run test:backend` / `pnpm run test:dashboard`: scoped suites.
 - `pnpm run test:watch`: watch mode. `pnpm run test:coverage`: coverage with threshold enforcement.
-- `pnpm run ci`: local CI equivalent (`lint` → `test:backend:coverage` → `test:dashboard` → `build`).
+- `pnpm run ci`: local CI equivalent (`quality:guardrails -> audit -> lint -> test:backend:coverage -> test:dashboard -> build`).
 - `pnpm run audit`: `pnpm audit --audit-level=high`.
 - `pnpm start`: run compiled `dist/index.js`. `node dist/index.js --help`: list CLI flags / env vars.
 - Electron: `pnpm run electron:dev`, `pnpm run electron:dist[:linux|:mac|:win]`.
@@ -57,7 +57,7 @@ Package manager is **pnpm** (`pnpm@10.33.0`), Node **22+**. Use `pnpm`, not `npm
 - For dashboard changes, also verify the dashboard loads at `http://localhost:4444`.
 - Default test env is Node; UI tests opt into jsdom via `@vitest-environment` pragmas. Tests use an in-memory DB (`VITEST_IN_MEMORY_DB=true`). Mock external boundaries (provider CLIs, Docker, FS, Jules API).
 - Prefer deterministic tests, clear fixtures, and minimal mocking.
-- Coverage thresholds (vitest.config.ts, ratchet-only — never lower): lines 73.2%, functions 67.5%, branches 61.13%, statements 72.0%; `src/server/activity-cache-service.ts` has an 80% line gate.
+- Coverage thresholds (vitest.config.ts, ratchet-only — never lower): lines 77.4%, functions 71.5%, branches 66.1%, statements 76.0%; `src/server/activity-cache-service.ts` has an 80% line gate.
 
 ## CI/CD & Quality Gates
 - All pull requests must pass automated CI before merge.
@@ -75,7 +75,7 @@ Package manager is **pnpm** (`pnpm@10.33.0`), Node **22+**. Use `pnpm`, not `npm
   - `dev` is the integration branch. Always create and work from a feature branch off `dev` (never commit directly to `dev` or `main`).
   - Use descriptive branch names such as `feat/<scope>`, `fix/<scope>`, or `chore/<scope>`.
   - Merge changes into `dev` only via pull requests after required CI checks pass (not into `main`).
-  - Push branches to `origin` (`codeux-ai/codeux`) and target it for PRs.
+  - Open pull requests against `codeux-ai/codeux` with base `dev`.
   - Use GitHub CLI (`gh`) for PR workflow when available (for example `gh pr create --base dev`, `gh pr view`, `gh pr merge`).
 - PRs should include:
   - What changed and why.
@@ -165,7 +165,7 @@ Release note rules:
 - Default working flow for our collaboration:
   - Start every change on a new feature branch off `dev`.
   - Implement and validate locally (`pnpm run build` minimum; `pnpm run ci` preferred).
-  - Open a PR into `dev` against `origin` (`codeux-ai/codeux`) using GitHub CLI.
+  - Open a PR into `codeux-ai/codeux:dev` using GitHub CLI.
   - Monitor CI continuously after opening the PR.
   - Merge only through PR after all required CI checks pass without errors.
   - Delete merged feature branches to keep the branch list clean.
@@ -182,9 +182,10 @@ Release note rules:
 
 ## Documentation Workflow (Mandatory)
 - Documentation source of truth lives in `docs/` with the main entrypoint at `docs/index.md`.
+- `docs-web/` holds the published user/developer/architecture docs. Update affected pages on behavior changes; add + link a new page for new subsystems.
 - The assistant must read relevant documentation at any time during task execution, especially before architectural or behavioral changes.
 - After each finished task, the assistant must extend or rewrite the affected documentation pages so docs remain current with code behavior.
-- If a new feature or subsystem is introduced, add a dedicated page under the correct `docs/` section and link it from both `docs/index.md` and `docs/SUMMARY.md`.
+- If a new feature or subsystem is introduced, add a dedicated page under the correct `docs/` section and link it from both `docs/index.md` and `docs/SUMMARY.md`. Update both canonical `docs/` and public `docs-web/` consistently. No `docs-release/` directory should be used.
 
 ## Frontend Design Quality
 - Treat dashboard UX as production-grade: polished, accessible, and visually distinctive.

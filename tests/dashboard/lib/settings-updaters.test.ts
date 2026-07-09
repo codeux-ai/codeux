@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildGitHubModeProjectSettingsOverride,
+  buildProjectCreationSettingsOverride,
   updateAiProvider,
   updateCiIntelligence,
   updateCliWorkflow,
@@ -96,6 +97,46 @@ describe("dashboard settings updater helpers", () => {
     expect(getSkillEnabled(override.skills || [], "git_manager")).toBe(true);
   });
 
+  it("builds a new local project override with local git mode and explicit techstack", () => {
+    const override = buildProjectCreationSettingsOverride({
+      githubMode: "LOCAL",
+      selectedTechstackId: "react-saas",
+      applicationKind: "web",
+    });
+
+    expect(override.git?.githubMode).toBe("LOCAL");
+    expect(override.techstack).toEqual({
+      selectedTechstackId: "react-saas",
+      applicationKind: "web",
+    });
+    expect(getSkillEnabled(override.skills || [], "git_manager_remote")).toBe(false);
+    expect(getSkillEnabled(override.skills || [], "git_manager_local")).toBe(true);
+    expect(getSkillEnabled(override.skills || [], "git_manager")).toBe(true);
+  });
+
+  it("builds a new remote project override with explicit techstack and no git mode override", () => {
+    const override = buildProjectCreationSettingsOverride({
+      selectedTechstackId: "code-ux-internal",
+      applicationKind: "desktop",
+    });
+
+    expect(override.git).toBeUndefined();
+    expect(override.skills).toBeUndefined();
+    expect(override.techstack).toEqual({
+      selectedTechstackId: "code-ux-internal",
+      applicationKind: "desktop",
+    });
+  });
+
+  it("builds an existing local import override without assigning a techstack", () => {
+    const override = buildProjectCreationSettingsOverride({ githubMode: "LOCAL" });
+
+    expect(override.git?.githubMode).toBe("LOCAL");
+    expect(override.techstack).toBeUndefined();
+    expect(getSkillEnabled(override.skills || [], "git_manager_remote")).toBe(false);
+    expect(getSkillEnabled(override.skills || [], "git_manager_local")).toBe(true);
+  });
+
   it("updates ci, sprint loop, and cli workflow sections immutably", () => {
     const settings = cloneDefaultSettings();
 
@@ -153,5 +194,40 @@ describe("dashboard settings updater helpers", () => {
     expect(apikey.aiProvider.providers.codex.mountAuth).toBe(false);
     expect(apikey.aiProvider.providers.codex.authPath).toBe("");
     expect(apikey.aiProvider.providers.codex.apiKey).toBe("valid-key");
+  });
+
+  it("updates provider config fields without mutating authentication fields", () => {
+    const settings = cloneDefaultSettings();
+    const localAuth = updateProviderConfig(settings, "codex", {
+      authType: "localAuth",
+      mountAuth: true,
+      authPath: "~/.codex",
+    });
+    const next = updateProviderConfig(localAuth, "codex", {
+      providerConfigMode: "file",
+      providerConfigPath: "~/configs/codex.toml",
+    });
+
+    expect(next.aiProvider.providers.codex).toMatchObject({
+      authType: "localAuth",
+      mountAuth: true,
+      authPath: "~/.codex",
+      apiKey: "",
+      providerConfigMode: "file",
+      providerConfigPath: "~/configs/codex.toml",
+    });
+    expect(localAuth.aiProvider.providers.codex.providerConfigMode).toBe("copyHost");
+  });
+
+  it("normalizes invalid provider config file mode to copy host", () => {
+    const settings = cloneDefaultSettings();
+
+    const next = updateProviderConfig(settings, "codex", {
+      providerConfigMode: "file",
+      providerConfigPath: " ",
+    });
+
+    expect(next.aiProvider.providers.codex.providerConfigMode).toBe("copyHost");
+    expect(next.aiProvider.providers.codex.providerConfigPath).toBe("~/.codex/config.toml");
   });
 });

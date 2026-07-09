@@ -1,8 +1,8 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute, toErrorResponse, syncRoute } from "./route-utils.js";
-import { requireTrimmedString, parseTrimmedString , parseCreateProjectInput , parseUpdateProjectInput } from "./request-parsers.js";
-import type { CreateProjectInput, ProjectSetupRequestInput, UpdateProjectInput } from "../contracts/project-management-types.js";
+import { requireTrimmedString, parseTrimmedString , parseCreateProjectInput , parseProjectSetupRequestInput , parseUpdateProjectInput } from "./request-parsers.js";
+import type { CreateProjectInput, UpdateProjectInput } from "../contracts/project-management-types.js";
 import type { ProjectSettingsOverride } from "../contracts/settings-scope-types.js";
 import { initializeProject } from "../domain/projects/project-initializer.js";
 
@@ -51,15 +51,16 @@ export function registerProjectRoutes(router: Express, deps: DashboardDependenci
         return;
       }
       const projectId = requireTrimmedString(req.params.projectId, "projectId");
+      const setupInput = parseProjectSetupRequestInput(req.body);
       if (req.body?.background === true) {
         if (!deps.startProjectSetup) {
           res.status(501).json({ error: "Background project setup is not enabled." });
           return;
         }
-        res.status(202).json(await deps.startProjectSetup(projectId, req.body as ProjectSetupRequestInput));
+        res.status(202).json(await deps.startProjectSetup(projectId, setupInput));
         return;
       }
-      res.json(await deps.setupProject(projectId, req.body as ProjectSetupRequestInput));
+      res.json(await deps.setupProject(projectId, setupInput));
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to setup project"));
     }

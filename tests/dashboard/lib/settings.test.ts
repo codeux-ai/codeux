@@ -17,7 +17,19 @@ describe("dashboard settings helpers", () => {
     first.cliWorkflow.executionMode = "DOCKER";
     first.cliWorkflow.containerImage = "custom:image";
     first.cliWorkflow.containerCacheSetupScriptImage = true;
+    first.cliWorkflow.containerRunAsRoot = true;
+    first.agents.selfReflection.planning.enabled = true;
+    first.agents.selfReflection.planning.criteria[0]!.threshold = 0.1;
+    first.notion.enabled = true;
+    first.notion.apiToken = "manual-token";
+    first.figma.fileKey = "figma-file";
+    first.mural.boardId = "mural-id";
     first.mcpTools[0].enabled = false;
+    first.techstackCatalog.defaultTechstackId = "custom-stack";
+    first.techstackCatalog.entries[0]!.label = "Mutated Stack";
+    first.techstackCatalog.entries[0]!.items[0]!.label = "Mutated Item";
+    first.techstack.selectedTechstackId = "custom-stack";
+    first.techstack.applicationKind = "web";
     expect(second.git.defaultBranch).toBe("main");
     expect(second.dashboardPort).toBe(4444);
     expect(second.aiProvider.providers.gemini.model).toBe("default");
@@ -30,7 +42,19 @@ describe("dashboard settings helpers", () => {
     expect(second.cliWorkflow.executionMode).toBe("DOCKER");
     expect(second.cliWorkflow.containerImage).toBe("node:24-bookworm");
     expect(second.cliWorkflow.containerCacheSetupScriptImage).toBe(true);
+    expect(second.cliWorkflow.containerRunAsRoot).toBe(false);
+    expect(second.agents.selfReflection.planning.enabled).toBe(false);
+    expect(second.agents.selfReflection.planning.criteria[0]!.threshold).toBe(0.85);
+    expect(second.notion.enabled).toBe(false);
+    expect(second.notion.apiToken).toBe("");
+    expect(second.figma.fileKey).toBe("");
+    expect(second.mural.boardId).toBe("");
     expect(second.mcpTools[0].enabled).toBe(true);
+    expect(second.techstackCatalog.defaultTechstackId).toBe("code-ux-internal");
+    expect(second.techstackCatalog.entries[0]!.label).toBe("Code UX Stack");
+    expect(second.techstackCatalog.entries[0]!.items[0]!.label).toBe("Preact");
+    expect(second.techstack.selectedTechstackId).toBe(null);
+    expect(second.techstack.applicationKind).toBe(null);
   });
 
   it("imports only missing external secrets", () => {

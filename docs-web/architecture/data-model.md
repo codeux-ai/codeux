@@ -17,11 +17,23 @@ Project
 │   │   └── ExecutionInvocation
 │   └── PreviewSession
 ├── AgentPreset
+│   ├── SkillStorageBinding
+│   └── NodeFlowSkillAttachment
+├── NodeFlow
+│   ├── NodeFlowVersion
+│   ├── NodeFlowRun
+│   │   └── NodeFlowNodeRun
+│   └── NodeFlowSkillAttachment
+├── SkillStorage
+│   ├── Skill
+│   └── SkillEmbedding
 ├── Memory
 │   ├── short-term (sprint-scoped)
 │   └── long-term (project-scoped)
 ├── ConversationThread
 │   └── ConversationMessage
+├── ConversationDraft
+├── ConversationMessageHistory
 ├── QuicksprintTemplate
 ├── AttentionItem
 └── WorkerEndpoint / Connection
@@ -43,6 +55,30 @@ Project
 | `createdAt`, `updatedAt` | datetime | – |
 
 Has-many: sprints, agent presets, memories, conversation threads, attention items, settings overrides.
+
+## ConversationDraft
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `userId` | string | Browser-scoped dashboard user key. |
+| `projectId` | string | FK. |
+| `contextKey` | string | `new-thread` or `thread:<thread-id>`. |
+| `bodyMarkdown` | text | Latest unsent composer draft. |
+| `createdAt`, `updatedAt` | datetime | – |
+
+Primary key: `(userId, projectId, contextKey)`. Blank drafts delete the row, and thread-scoped context keys are validated against the owning project.
+
+## ConversationMessageHistory
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | string | Primary key. |
+| `userId` | string | Browser-scoped dashboard user key. |
+| `projectId` | string | FK. |
+| `bodyMarkdown` | text | Submitted composer text. |
+| `createdAt`, `updatedAt` | datetime | `updatedAt` moves duplicate text to the recent end. |
+
+Unique key: `(userId, projectId, bodyMarkdown)`. The dashboard keeps only the newest capped set per user/project for ArrowUp/ArrowDown composer recall.
 
 ## Sprint
 
@@ -140,9 +176,52 @@ A granular event in a sprint run (cycle start, task transition, gate decision, M
 | `instructionMarkdown` | text | The persona prompt. |
 | `labels` | string[] | – |
 | `avatarConfig` | json | Procedural avatar seed. |
+| `containerRunAsRoot` | bool \| null | Optional local Docker root-mode override for resolved worker-agent CLI runs; `null` inherits `cliWorkflow.containerRunAsRoot`. |
 | `memoryTemplateOverrideEnabled` | bool | – |
 | `memoryTemplateMarkdown` | text | If override is on. |
+| `persistentSkillStorageIds` | string[] | Storage IDs attached through `agent_skill_storage_bindings`. |
+| `persistentSkillStorage.enabled` | bool | Default-off runtime opt-in for persistent skill retrieval. |
 | `createdAt`, `updatedAt` | datetime | – |
+
+## Persistent Skill Storage
+
+Persistent skills are stored separately from project workspaces, memories, knowledge documents, and model attachments.
+
+| Table | Purpose |
+| --- | --- |
+| `skill_storages` | Named, project-owned storage containers that multiple agents can attach to. |
+| `skills` | Individual reusable skill records under a storage container, with markdown body, tags, applies-to paths, version, source identity, and content hash. |
+| `skill_embeddings` | Embedding model, dimension, chunk index, content hash, and optional vector blob for skill search. |
+| `agent_skill_storage_bindings` | Normalized agent-to-storage attachments keyed by `(agent_preset_id, storage_id)`. |
+
+Skill markdown is imported from YAML-like frontmatter plus a body. Frontmatter maps to metadata; the body remains the authoritative agent instruction. Backend retrieval can search all project storages, one storage, or the storages attached to an agent preset. Enabled attached agents receive provider prompt guidance, retrieval-only `search_skills` MCP access where eligible, and writable persistent-skill mounts outside the project workspace.
+
+## NodeFlow
+
+Node flows are project-scoped repeatable workflow graphs managed from the Nodes dashboard and the `manage_node_flows` MCP tool.
+
+| Table | Purpose |
+| --- | --- |
+| `node_flows` | Current flow title, description, normalized graph JSON, project id, version, and timestamps. |
+| `node_flow_versions` | Immutable graph snapshots written on create and each update. |
+| `node_flow_agent_skills` | Attachments that expose a flow as a repeatable skill for an agent preset. |
+| `node_flow_runs` | Parent run rows with status, version, trigger type, redacted trigger payload, redacted input/output, error message, timestamps, and optional execution invocation link. |
+| `node_flow_node_runs` | Per-node run rows with status, node id, redacted input/output, error message, timestamps, and optional execution invocation link. |
+
+`node_flow_runs.execution_invocation_id` points at the parent `execution_invocations` row with `type = "node_flow"`. Provider and HTTP node rows may also set `node_flow_node_runs.execution_invocation_id` to invocation rows with `type = "node_flow_node"`. Deleting a node flow cascades its versions, attachments, run rows, and node-run rows.
+
+## Custom Dashboards
+
+Custom dashboards are project-scoped persisted manifests and generated file bundles for future dashboard-generation runtime work. They have no HTTP, MCP, or frontend surface yet.
+
+| Table | Purpose |
+| --- | --- |
+| `custom_dashboards` | Current mutable draft state with status, manifest JSON, file bundle JSON, source node graph JSON, styleguide JSON, runtime metadata JSON, and timestamps. |
+| `custom_dashboard_revisions` | Immutable revision snapshots with copied manifest, files, source graph, styleguide, runtime metadata, validation status/report, and validated timestamp. |
+| `custom_dashboard_validation_sessions` | Validation attempt history for a revision. |
+| `custom_dashboard_publications` | Active published revision pointer keyed by dashboard id, enforcing one published revision per dashboard. |
+
+`CustomDashboardRepository` validates required fields, JSON-safety, project ownership, revision ownership, and publish invariants. Publishing rejects unvalidated, failed, cancelled, or cross-dashboard revisions.
 
 ## Memory
 
@@ -208,7 +287,7 @@ Memories with mismatched `embeddingModelId` are excluded from search; trigger re
 | `id` | string | – |
 | `endpointKey` | string | Stable client-supplied ID. |
 | `displayName` | string | – |
-| `role` | enum | `project_manager`/`worker`/`listener`. |
+| `role` | enum | `project_manager`/`worker-host`. |
 | `transport` | enum | `stdio`/`http`/`internal`. |
 | `capabilities` | json | – |
 | `status` | enum | `connected`/`disconnected`. |
@@ -242,6 +321,9 @@ Primary indexes (besides PKs):
 - `subtasks.sprintId`
 - `subtasks.status` (for "currently RUNNING" queries)
 - `task_runs.taskId`
+- `task_runs.sessionId`, `task_runs.sessionName`, and `task_runs.prUrl` with owner columns for batched runtime artifact ownership checks
+- `provider_invocations.sessionId` with owner columns for provider-session ownership checks
+- `provider_invocations.taskRunId` for live sync and recovery lookups of the latest invocation backing a task run
 - `task_dispatches.taskRunId, startedAt`
 - `execution_invocations.projectId, sprintRunId, at`
 - `memories.projectId, embeddingModelId`

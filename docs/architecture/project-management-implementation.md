@@ -17,7 +17,7 @@ It includes:
 - DB-backed project-scoped Agents and Chat pages
 - first listen-loop MCP connection and conversation contracts
 - first DB-native sprint orchestration slice for project/sprint scope
-- `manage_code_ux` MCP tool handlers for projects and sprints domain actions
+- Domain MCP tool handlers (e.g. `manage_sprints`, `manage_projects`) for domain actions
 - the Projects page now renders source kind, repository details, local path, timestamps, and latest run activity directly from `GET /api/projects` without per-card follow-up requests
 
 It does not yet include:
@@ -101,6 +101,8 @@ The dashboard now has project-scoped CRUD endpoints:
 - `GET /api/execution/invocations/:invocationId/messages`
 
 `GET /api/projects` is the single data source for Projects page cards. The project summary payload includes the source kind, repository metadata, local base path, creation and update timestamps, and the latest project-scoped run activity derived from `sprint_runs` and `task_runs`.
+
+`GET /api/projects/:projectId/tasks` returns each task with optional `latestReview` and `selfReflectionRating` fields. `selfReflectionRating` is omitted for unrated tasks and, when present, is the latest persisted task-run self-reflection rating selected by captured timestamp and persisted row order.
 
 Legacy runtime endpoints still exist for the old live runtime/status surfaces:
 - `GET /api/status`

@@ -1,6 +1,6 @@
 import { useMemoryPageData } from "./hooks/use-memory-page-data.js";
 import { useEmbeddingModelStatus } from "./hooks/use-embedding-model-status.js";
-import { EmbeddingModelCatalog } from "./components/memory/EmbeddingModelCatalog.js";
+import { ModelBrowser } from "./components/memory/ModelBrowser.js";
 import { effect } from "@preact/signals";
 import { Inspector } from "./components/memory/Inspector.js";
 import { MemoryFilters, MemoryDetails, MemoryCard } from "./components/memory/index.js";
@@ -275,8 +275,11 @@ export const MemoryPage: FunctionComponent = () => {
         initialModels,
         initialStats,
         graphData,
+        graphDataContextKey,
+        requestedContextKey,
         loadData
     } = useMemoryPageData(pid, activeScope, activeTier, effectiveSelectedSprintId, selectedAgentPresetId, memoryDataEnabled);
+    const graphMatchesRequestedContext = graphDataContextKey === requestedContextKey;
 
     const {
         models,
@@ -970,10 +973,11 @@ export const MemoryPage: FunctionComponent = () => {
 
             {/* ── Model Management ────────────────────────────────────── */}
             {showModels && (
-                <EmbeddingModelCatalog
+                <ModelBrowser
                     models={models}
                     stats={stats}
                     reembed={reembed}
+                    onModelsChanged={setModels}
                     onDownload={handleDownloadModel}
                     onSelect={handleSelectModelWithStats}
                     onDelete={handleDeleteModel}
@@ -1121,7 +1125,7 @@ export const MemoryPage: FunctionComponent = () => {
                 </div>
 
                 <MemorySidebar
-                    nodes={S.current.graph.nodes}
+                    nodes={graphMatchesRequestedContext ? S.current.graph.nodes : []}
                     onSelectNode={onSelectNode}
                     refreshing={loading}
                     loadError={loadError}

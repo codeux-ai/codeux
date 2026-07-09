@@ -7,6 +7,7 @@ import { SprintStatsDeck, useLiveTaskTimingSummaries } from "./components/Sprint
 
 
 import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js";
+import { useSprints } from "../hooks/useSprints.js";
 import { useProjectGitStatus } from "./hooks/use-project-git-status.js";
 import { usePreviewSessions } from "./hooks/use-preview-sessions.js";
 import { useLiveSessionActions } from "./hooks/use-live-session-actions.js";
@@ -69,8 +70,46 @@ export const LiveSessionPage: FunctionComponent = () => {
     const contentRef = useRef<HTMLDivElement>(null);
     const prefersReducedMotion = useReducedMotion();
     const interactionTokens = useInteractionTokens();
-    const { selectedProjectId, loading: projectsLoading } = useProjectData();
-    const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProjectId);
+    const { selectedProjectId, selectProject, loading: projectsLoading } = useProjectData();
+    const routeSearch = typeof window === "undefined" ? "" : window.location.search;
+    const routeProjectId = useMemo(() => {
+        const params = new URLSearchParams(routeSearch);
+        return params.get("projectId")?.trim() || null;
+    }, [routeSearch]);
+    const routeSprintParam = useMemo(() => {
+        const params = new URLSearchParams(routeSearch);
+        return params.get("sprintId")?.trim() || params.get("sprint")?.trim() || null;
+    }, [routeSearch]);
+
+    useEffect(() => {
+        if (!routeProjectId || selectedProjectId === routeProjectId) {
+            return;
+        }
+        void selectProject(routeProjectId);
+    }, [routeProjectId, selectedProjectId, selectProject]);
+
+    const routeProjectReady = !routeProjectId || selectedProjectId === routeProjectId;
+    const liveProjectId = routeProjectReady ? selectedProjectId : null;
+    const {
+        data: liveProjectSprints,
+        selectedSprintId: selectedNavigationSprintId,
+        selectSprint,
+        loading: sprintsLoading,
+    } = useSprints(liveProjectId);
+    const routeSprintId = useMemo(() => {
+        if (!routeSprintParam) {
+            return null;
+        }
+        return liveProjectSprints.some((sprint) => sprint.id === routeSprintParam) ? routeSprintParam : null;
+    }, [liveProjectSprints, routeSprintParam]);
+    useEffect(() => {
+        if (!routeProjectReady || !routeSprintId || routeSprintId === selectedNavigationSprintId) {
+            return;
+        }
+        void selectSprint(routeSprintId);
+    }, [routeProjectReady, routeSprintId, selectedNavigationSprintId, selectSprint]);
+    const effectiveNavigationSprintId = routeSprintId ?? selectedNavigationSprintId;
+    const { data: effectiveSettings } = useProjectEffectiveSettings(liveProjectId);
     const sprintKeyPrefix = effectiveSettings?.settings?.git?.sprintKeyPrefix || "SPR";
     const {
         error,
@@ -83,15 +122,19 @@ export const LiveSessionPage: FunctionComponent = () => {
         selectedSprintId,
         status,
         tasksWithLiveActivities,
-    } = useDashboardRuntimeData(selectedProjectId, !projectsLoading && !!selectedProjectId);
+    } = useDashboardRuntimeData(
+        liveProjectId,
+        routeProjectReady && !projectsLoading && !sprintsLoading && !!liveProjectId,
+        { selectedSprintId: effectiveNavigationSprintId },
+    );
     // Git/CI/PR status lives on its own dedicated channel — it is large/slow and only rendered here,
     // so it no longer rides the shared live snapshot every page parses.
     const {
         data: gitStatus,
         error: gitStatusError,
         refresh: refreshGitStatus,
-    } = useProjectGitStatus(selectedProjectId, !projectsLoading && !!selectedProjectId);
-    const realtimeProjectId = selectedProjectId || execution.projectId || status.project_id || null;
+    } = useProjectGitStatus(liveProjectId, routeProjectReady && !projectsLoading && !!liveProjectId);
+    const realtimeProjectId = liveProjectId || execution.projectId || status.project_id || null;
     const sprintScopeId = selectedSprintId || status.sprint_id || null;
     const { selectedSession } = usePreviewSessions({
         projectId: realtimeProjectId,
@@ -101,13 +144,13 @@ export const LiveSessionPage: FunctionComponent = () => {
 
     const [agentPresetsMap, setAgentPresetsMap] = useState<Map<string, AgentPreset>>(new Map());
     useEffect(() => {
-        if (!selectedProjectId) return;
+        if (!liveProjectId) return;
         let cancelled = false;
-        fetchAgentPresets(selectedProjectId).then(presets => {
+        fetchAgentPresets(liveProjectId).then(presets => {
             if (!cancelled) setAgentPresetsMap(new Map(presets.map(p => [p.id, p])));
         }).catch(() => {});
         return () => { cancelled = true; };
-    }, [selectedProjectId]);
+    }, [liveProjectId]);
 
     const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
     const { feedback, setPending, setSuccess, setError, clearFeedback, clearError } = useActionFeedback();
@@ -287,6 +330,7 @@ export const LiveSessionPage: FunctionComponent = () => {
         if (!confirmed) {
             return;
         }
+        setPending(`Force completing task "${task.title || task.id}". The live runtime snapshot remains visible while the update is confirmed.`, { autoDismiss: false });
         setForceCompletePendingIds((prev) => new Set(prev).add(taskRuntimeId));
         setForceCompleteErrorByTaskId((prev) => {
             const next = new Map(prev);
@@ -298,7 +342,7 @@ export const LiveSessionPage: FunctionComponent = () => {
             await forceCompleteLiveTask(realtimeProjectId, taskRuntimeId);
             await refreshRuntimeStatus();
             await refreshGitStatus();
-            setSuccess("Task marked as completed.");
+            setSuccess(`Task "${task.title || task.id}" marked as completed.`);
         } catch (error) {
             setOptimisticallyCompletedTaskIds((prev) => {
                 const next = new Set(prev);
@@ -310,7 +354,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                 next.set(taskRuntimeId, error instanceof Error ? error.message : "Failed to force complete task.");
                 return next;
             });
-            setError("Failed to force complete task.");
+            setError(`Failed to force complete task "${task.title || task.id}".`);
         } finally {
             setForceCompletePendingIds((prev) => {
                 const next = new Set(prev);

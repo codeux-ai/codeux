@@ -25,8 +25,10 @@ interface AgentPresetRow {
   avatar_config_json: string | null;
   provider_config_id: string | null;
   model: string | null;
+  container_run_as_root: number | null;
   memory_template_override_enabled: number;
   memory_template_markdown: string | null;
+  persistent_skill_storage_enabled: number;
   mcp_access_json: string | null;
   memory_config_json: string | null;
   created_at: string;
@@ -103,6 +105,10 @@ function serializeMemoryConfig(value: AgentMemoryConfig | undefined): string | n
   return value ? JSON.stringify(value) : null;
 }
 
+function serializeNullableBoolean(value: boolean | null | undefined): number | null {
+  return typeof value === "boolean" ? (value ? 1 : 0) : null;
+}
+
 export class AgentPresetRepository {
   private readonly db: DatabaseAdapter;
 
@@ -166,13 +172,15 @@ export class AgentPresetRepository {
         avatar_config_json,
         provider_config_id,
         model,
+        container_run_as_root,
         memory_template_override_enabled,
         memory_template_markdown,
+        persistent_skill_storage_enabled,
         memory_config_json,
         mcp_access_json,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       projectId,
@@ -187,13 +195,16 @@ export class AgentPresetRepository {
       input.avatarConfig ? JSON.stringify(input.avatarConfig) : null,
       input.providerConfigId?.trim() || null,
       input.model?.trim() || null,
+      serializeNullableBoolean(input.containerRunAsRoot),
       input.memoryTemplateOverrideEnabled ? 1 : 0,
       input.memoryTemplateMarkdown || null,
+      input.persistentSkillStorage?.enabled ? 1 : 0,
       serializeMemoryConfig(input.memoryConfig),
       this.serializeMcpAccess(input.mcpAccess),
       now,
       now,
     );
+    this.replacePersistentSkillStorageBindings(id, projectId, input.persistentSkillStorageIds, now);
 
     return requireRecord(this.getAgentPreset(id), "Agent preset", id);
   }
@@ -219,13 +230,15 @@ export class AgentPresetRepository {
         avatar_config_json,
         provider_config_id,
         model,
+        container_run_as_root,
         memory_template_override_enabled,
         memory_template_markdown,
+        persistent_skill_storage_enabled,
         memory_config_json,
         mcp_access_json,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       projectId,
@@ -240,13 +253,16 @@ export class AgentPresetRepository {
       input.avatarConfig ? JSON.stringify(input.avatarConfig) : null,
       input.providerConfigId?.trim() || null,
       input.model?.trim() || null,
+      serializeNullableBoolean(input.containerRunAsRoot),
       input.memoryTemplateOverrideEnabled ? 1 : 0,
       input.memoryTemplateMarkdown || null,
+      input.persistentSkillStorage?.enabled ? 1 : 0,
       input.memoryConfig ? JSON.stringify(input.memoryConfig) : null,
       this.serializeMcpAccess(input.mcpAccess),
       now,
       now,
     );
+    this.replacePersistentSkillStorageBindings(id, projectId, input.persistentSkillStorageIds, now);
 
     return requireRecord(this.getAgentPreset(id), "Agent preset", id);
   }
@@ -256,7 +272,7 @@ export class AgentPresetRepository {
     const now = new Date().toISOString();
     this.db.prepare(`
       UPDATE agent_presets
-      SET name = ?, description = ?, instruction_markdown = ?, labels_json = ?, avatar_config_json = ?, provider_config_id = ?, model = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, memory_config_json = ?, mcp_access_json = ?, updated_at = ?
+      SET name = ?, description = ?, instruction_markdown = ?, labels_json = ?, avatar_config_json = ?, provider_config_id = ?, model = ?, container_run_as_root = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, persistent_skill_storage_enabled = ?, memory_config_json = ?, mcp_access_json = ?, updated_at = ?
       WHERE id = ?
     `).run(
       input.name?.trim() || current.name,
@@ -268,8 +284,10 @@ export class AgentPresetRepository {
         : (input.avatarConfig ? JSON.stringify(input.avatarConfig) : null),
       input.providerConfigId === undefined ? current.providerConfigId || null : input.providerConfigId?.trim() || null,
       input.model === undefined ? current.model || null : input.model?.trim() || null,
+      input.containerRunAsRoot === undefined ? serializeNullableBoolean(current.containerRunAsRoot) : serializeNullableBoolean(input.containerRunAsRoot),
       input.memoryTemplateOverrideEnabled === undefined ? (current.memoryTemplateOverrideEnabled ? 1 : 0) : (input.memoryTemplateOverrideEnabled ? 1 : 0),
       input.memoryTemplateMarkdown === undefined ? (current.memoryTemplateMarkdown || null) : (input.memoryTemplateMarkdown || null),
+      input.persistentSkillStorage === undefined ? (current.persistentSkillStorage?.enabled ? 1 : 0) : (input.persistentSkillStorage.enabled ? 1 : 0),
       input.memoryConfig === undefined
         ? (current.memoryConfig ? JSON.stringify(current.memoryConfig) : null)
         : (input.memoryConfig ? JSON.stringify(input.memoryConfig) : null),
@@ -277,6 +295,9 @@ export class AgentPresetRepository {
       now,
       agentPresetId,
     );
+    if (input.persistentSkillStorageIds !== undefined) {
+      this.replacePersistentSkillStorageBindings(agentPresetId, current.projectId, input.persistentSkillStorageIds, now);
+    }
 
     return requireRecord(this.getAgentPreset(agentPresetId), "Agent preset", agentPresetId);
   }
@@ -316,6 +337,7 @@ export class AgentPresetRepository {
     memoryTemplateOverrideEnabled?: boolean;
     memoryTemplateMarkdown?: string;
     memoryConfig?: AgentMemoryConfig;
+    containerRunAsRoot?: boolean | null;
   }): AgentPresetRecord {
     const current = requireRecord(this.getAgentPreset(agentPresetId), "Agent preset", agentPresetId);
     if (!current.sourcePath || !current.sourceScope) {
@@ -325,7 +347,7 @@ export class AgentPresetRepository {
 
     this.db.prepare(`
       UPDATE agent_presets
-      SET name = ?, description = ?, instruction_markdown = ?, source_updated_at = ?, source_imported_at = ?, avatar_config_json = ?, provider_config_id = ?, model = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, memory_config_json = ?, updated_at = ?
+      SET name = ?, description = ?, instruction_markdown = ?, source_updated_at = ?, source_imported_at = ?, avatar_config_json = ?, provider_config_id = ?, model = ?, container_run_as_root = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, memory_config_json = ?, updated_at = ?
       WHERE id = ?
     `).run(
       input.name.trim(),
@@ -336,6 +358,7 @@ export class AgentPresetRepository {
       input.avatarConfig ? JSON.stringify(input.avatarConfig) : null,
       input.providerConfigId === undefined ? current.providerConfigId || null : input.providerConfigId?.trim() || null,
       input.model === undefined ? current.model || null : input.model?.trim() || null,
+      input.containerRunAsRoot === undefined ? serializeNullableBoolean(current.containerRunAsRoot) : serializeNullableBoolean(input.containerRunAsRoot),
       input.memoryTemplateOverrideEnabled ? 1 : 0,
       input.memoryTemplateMarkdown || null,
       input.memoryConfig === undefined
@@ -429,10 +452,15 @@ export class AgentPresetRepository {
       avatarConfig: parseAvatarConfig(row.avatar_config_json),
       providerConfigId: row.provider_config_id || null,
       model: row.model || null,
+      containerRunAsRoot: row.container_run_as_root === null || row.container_run_as_root === undefined
+        ? null
+        : Boolean(row.container_run_as_root),
       memoryTemplateOverrideEnabled: Boolean(row.memory_template_override_enabled),
       memoryTemplateMarkdown: row.memory_template_markdown || undefined,
       memoryConfig: parseMemoryConfig(row.memory_config_json),
       mcpAccess: parseMcpAccess(row.mcp_access_json),
+      persistentSkillStorageIds: this.listPersistentSkillStorageIds(row.id),
+      persistentSkillStorage: { enabled: Boolean(row.persistent_skill_storage_enabled) },
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -456,6 +484,56 @@ export class AgentPresetRepository {
       normalized.push(trimmed);
     }
     return normalized;
+  }
+
+  private normalizeStorageIds(storageIds?: string[]): string[] {
+    const seen = new Set<string>();
+    const normalized: string[] = [];
+    for (const storageId of storageIds || []) {
+      const trimmed = String(storageId || "").trim();
+      if (!trimmed || seen.has(trimmed)) {
+        continue;
+      }
+      seen.add(trimmed);
+      normalized.push(trimmed);
+    }
+    return normalized;
+  }
+
+  private listPersistentSkillStorageIds(agentPresetId: string): string[] {
+    const rows = this.db.prepare(`
+      SELECT storage_id
+      FROM agent_skill_storage_bindings
+      WHERE agent_preset_id = ?
+        AND enabled = 1
+      ORDER BY created_at ASC, storage_id ASC
+    `).all(agentPresetId) as Array<{ storage_id: string }>;
+    return rows.map((row) => row.storage_id);
+  }
+
+  private replacePersistentSkillStorageBindings(
+    agentPresetId: string,
+    projectId: string,
+    storageIds: string[] | undefined,
+    now: string,
+  ): void {
+    const normalized = this.normalizeStorageIds(storageIds);
+    this.db.prepare(`
+      DELETE FROM agent_skill_storage_bindings
+      WHERE agent_preset_id = ?
+    `).run(agentPresetId);
+    for (const storageId of normalized) {
+      this.db.prepare(`
+        INSERT INTO agent_skill_storage_bindings (
+          agent_preset_id,
+          storage_id,
+          project_id,
+          enabled,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, 1, ?, ?)
+      `).run(agentPresetId, storageId, projectId, now, now);
+    }
   }
 
   private parseSourceScope(value: string | null): AgentSourceScope | null {

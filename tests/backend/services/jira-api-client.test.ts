@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildJiraSearchJql, searchIssues } from "../../../src/services/jira-api-client.js";
+import { buildJiraSearchJql, listProjectStatuses, searchIssues } from "../../../src/services/jira-api-client.js";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -23,10 +23,99 @@ describe("jira-api-client", () => {
     })).toBe('project = OPS AND key = OPS-123 AND statusCategory = "In Progress" AND assignee = "dev@example.com" AND reporter = currentUser() AND issuetype = "Bug" AND priority = "High" AND updated >= "2026-05-01" AND updated <= "2026-05-31" AND labels in ("customer escalation", "p0") ORDER BY priority ASC');
   });
 
+  it("keeps default in-work guided searches on the Jira status category", () => {
+    expect(buildJiraSearchJql({
+      projectKey: "ops",
+      status: "in_progress",
+    })).toBe('project = OPS AND statusCategory = "In Progress" ORDER BY updated DESC');
+  });
+
+  it("uses the configured in-work status name for guided in-progress searches", () => {
+    expect(buildJiraSearchJql({
+      projectKey: "ops",
+      status: "in_progress",
+      inProgressStatusName: 'Ready / "Build" \\ Work',
+    })).toBe('project = OPS AND status = "Ready / \\"Build\\" \\\\ Work" ORDER BY updated DESC');
+  });
+
+  it("lets custom JQL bypass guided status filters", () => {
+    expect(buildJiraSearchJql({
+      jql: "project = OPS AND labels in (security)",
+      projectKey: "ops",
+      status: "in_progress",
+      inProgressStatusName: "In Work",
+    })).toBe("project = OPS AND labels in (security)");
+  });
+
+  it("preserves open, done, and all status JQL output", () => {
+    expect(buildJiraSearchJql({
+      projectKey: "ops",
+      status: "open",
+    })).toBe("project = OPS AND statusCategory != Done ORDER BY updated DESC");
+    expect(buildJiraSearchJql({
+      projectKey: "ops",
+      status: "done",
+      inProgressStatusName: "In Work",
+    })).toBe("project = OPS AND statusCategory = Done ORDER BY updated DESC");
+    expect(buildJiraSearchJql({
+      projectKey: "ops",
+      status: "all",
+      inProgressStatusName: "In Work",
+    })).toBe("project = OPS ORDER BY updated DESC");
+  });
+
   it("keeps text assignee shortcuts for current user and unassigned issues", () => {
     expect(buildJiraSearchJql({ assigneeText: "me" })).toBe("statusCategory != Done AND assignee = currentUser() ORDER BY updated DESC");
     expect(buildJiraSearchJql({ assigneeText: "currentUser()" })).toBe("statusCategory != Done AND assignee = currentUser() ORDER BY updated DESC");
     expect(buildJiraSearchJql({ assigneeText: "unassigned" })).toBe("statusCategory != Done AND assignee is EMPTY ORDER BY updated DESC");
+  });
+
+  it("uses exact Jira status names instead of status category filters", () => {
+    expect(buildJiraSearchJql({
+      projectKey: "ops",
+      status: "done",
+      statusNames: [" Ready for QA ", "Blocked \"External\"", "Ready for QA"],
+    })).toBe('project = OPS AND status in ("Ready for QA", "Blocked \\"External\\"") ORDER BY updated DESC');
+  });
+
+  it("lists project statuses by flattening issue type groups and de-duplicating statuses", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(url).toBe("https://acme.atlassian.net/rest/api/3/project/OPS/statuses");
+      expect(init?.method).toBe("GET");
+      expect(init?.headers).toEqual(expect.objectContaining({
+        Authorization: "Bearer token",
+        Accept: "application/json",
+      }));
+      return new Response(JSON.stringify([
+        {
+          id: "10001",
+          name: "Story",
+          statuses: [
+            { id: "3", name: "Done" },
+            { id: "1", name: "To Do" },
+            { id: "2", name: "In Progress" },
+          ],
+        },
+        {
+          id: "10002",
+          name: "Bug",
+          statuses: [
+            { id: "2", name: "In Progress" },
+            { id: "4", name: " done " },
+            { name: "Blocked" },
+            { name: " blocked " },
+          ],
+        },
+      ]), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listProjectStatuses("https://acme.atlassian.net/", "", "token", "OPS")).resolves.toEqual([
+      { id: "blocked", name: "Blocked", issueTypes: ["Bug"] },
+      { id: "3", name: "Done", issueTypes: ["Bug", "Story"] },
+      { id: "2", name: "In Progress", issueTypes: ["Bug", "Story"] },
+      { id: "1", name: "To Do", issueTypes: ["Story"] },
+    ]);
   });
 
   it("searches Jira with the enhanced search endpoint and maps issue metadata", async () => {

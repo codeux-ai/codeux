@@ -2,6 +2,7 @@ import type {
   CreateSchedulerEntryInput,
   MemoryRemediationScheduleResponse,
   MemoryRemediationScheduleSettings,
+  ScheduleAnchor,
   SchedulerCollectionResponse,
   SchedulerEntryRecord,
   UpdateSchedulerEntryInput,
@@ -9,20 +10,33 @@ import type {
 import type { Logger } from "../shared/logging/logger.js";
 import { SchedulerRepository } from "../repositories/scheduler-repository.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
+import type { SprintRunRecord, TaskDispatchRecord, TaskRunRecord } from "../contracts/execution-types.js";
 import type { QuicksprintService } from "./quicksprint-service.js";
 import type { ChatThreadRuntimeService } from "./chat-thread-runtime-service.js";
 import type { ExecutionControlService } from "./execution-control-service.js";
 import type { MemoryRemediationService } from "./memory-remediation-service.js";
+import type { TaskRerunService } from "./task-rerun-service.js";
+import type { NodeFlowRuntimeService } from "./node-flow-runtime-service.js";
+import type { NodeFlowRepository } from "../repositories/node-flow-repository.js";
+import type { NodeFlowRunSummaryResponse } from "../contracts/node-flow-types.js";
 import { buildSchedulerOccurrences, computeNextRunAfterOccurrence } from "../domain/scheduler/schedule-time.js";
-import type { CreateDashboardConversationMessageInput } from "../contracts/connection-chat-types.js";
+import type { ConversationMessageMetadata, CreateDashboardConversationMessageInput } from "../contracts/connection-chat-types.js";
 
 export interface SchedulerServiceDeps {
   schedulerRepository: SchedulerRepository;
   projectManagementRepository: ProjectManagementRepository;
+  executionRepository?: {
+    listSprintRuns(projectId: string, sprintId?: string): SprintRunRecord[];
+    getLatestTaskRun?(taskId: string): TaskRunRecord | null;
+    listTaskDispatches?(args: { projectId: string; sprintId?: string; sprintRunId?: string; taskId?: string }): TaskDispatchRecord[];
+  };
   quicksprintService: QuicksprintService;
   chatThreadRuntimeService: ChatThreadRuntimeService;
   executionControlService: ExecutionControlService;
+  taskRerunService?: TaskRerunService;
   memoryRemediationService?: MemoryRemediationService;
+  nodeFlowRuntimeService?: NodeFlowRuntimeService;
+  nodeFlowRepository?: Pick<NodeFlowRepository, "getFlow">;
   logger: Logger;
   tickIntervalMs?: number;
 }
@@ -62,7 +76,13 @@ export class SchedulerService {
     const entries = this.deps.schedulerRepository.listEntries(projectId);
     return {
       entries,
-      occurrences: buildSchedulerOccurrences(entries, fromIso, toIso),
+      occurrences: buildSchedulerOccurrences(
+        entries,
+        fromIso,
+        toIso,
+        new Date().toISOString(),
+        (entry) => this.resolveAnchorOccurrenceStart(entry),
+      ),
       from: new Date(fromIso).toISOString(),
       to: new Date(toIso).toISOString(),
     };
@@ -70,7 +90,12 @@ export class SchedulerService {
 
   createEntry(projectId: string, input: CreateSchedulerEntryInput): SchedulerEntryRecord {
     this.validateInputTarget(projectId, input);
+    this.validateScheduleAnchor(projectId, input);
     return this.deps.schedulerRepository.createEntry(projectId, input);
+  }
+
+  getEntry(entryId: string): SchedulerEntryRecord | null {
+    return this.deps.schedulerRepository.getEntry(entryId);
   }
 
   getMemoryRemediationSchedule(projectId: string): MemoryRemediationScheduleResponse {
@@ -135,12 +160,29 @@ export class SchedulerService {
       return this.deps.schedulerRepository.updateEntry(entryId, input);
     }
     this.validateInputTarget(current.projectId, {
-      targetType: current.targetType,
+      targetType: input.targetType ?? current.targetType,
       scheduledFor: input.scheduledFor ?? current.scheduledFor,
+      scheduleAnchor: input.scheduleAnchor === undefined ? current.scheduleAnchor : input.scheduleAnchor,
       sprintTarget: input.sprintTarget ?? current.sprintTarget,
       quicksprintTarget: input.quicksprintTarget ?? current.quicksprintTarget,
       chatTarget: input.chatTarget ?? current.chatTarget,
+      agentWakeupTarget: input.agentWakeupTarget ?? current.agentWakeupTarget,
+      taskTarget: input.taskTarget ?? current.taskTarget,
       memoryRemediationTarget: input.memoryRemediationTarget ?? current.memoryRemediationTarget,
+      nodeFlowTarget: input.nodeFlowTarget ?? current.nodeFlowTarget,
+    });
+    this.validateScheduleAnchor(current.projectId, {
+      targetType: input.targetType ?? current.targetType,
+      scheduledFor: input.scheduledFor ?? current.scheduledFor,
+      scheduleAnchor: input.scheduleAnchor === undefined ? current.scheduleAnchor : input.scheduleAnchor,
+      sprintTarget: input.sprintTarget ?? current.sprintTarget,
+      quicksprintTarget: input.quicksprintTarget ?? current.quicksprintTarget,
+      chatTarget: input.chatTarget ?? current.chatTarget,
+      agentWakeupTarget: input.agentWakeupTarget ?? current.agentWakeupTarget,
+      taskTarget: input.taskTarget ?? current.taskTarget,
+      memoryRemediationTarget: input.memoryRemediationTarget ?? current.memoryRemediationTarget,
+      nodeFlowTarget: input.nodeFlowTarget ?? current.nodeFlowTarget,
+      recurrence: input.recurrence ? { ...current.recurrence, ...input.recurrence } : current.recurrence,
     });
     return this.deps.schedulerRepository.updateEntry(entryId, input);
   }
@@ -150,7 +192,10 @@ export class SchedulerService {
   }
 
   async runDueEntries(now = new Date()): Promise<void> {
-    const dueEntries = this.deps.schedulerRepository.listDueEntries(now.toISOString());
+    const dueEntries = [
+      ...this.deps.schedulerRepository.listDueEntries(now.toISOString()),
+      ...this.listDueAnchoredEntries(now),
+    ];
     for (const entry of dueEntries) {
       if (this.inFlightEntryIds.has(entry.id)) {
         continue;
@@ -159,34 +204,77 @@ export class SchedulerService {
       // Re-verify that the entry is still scheduled and due before proceeding.
       // This prevents running entries that were paused or modified during the current tick.
       const freshEntry = this.deps.schedulerRepository.getEntry(entry.id);
-      if (!freshEntry || freshEntry.status !== "scheduled" || !freshEntry.nextRunAt || new Date(freshEntry.nextRunAt).getTime() > now.getTime()) {
+      const occurrenceIso = this.resolveDueOccurrence(freshEntry, now);
+      if (!freshEntry || freshEntry.status !== "scheduled" || !occurrenceIso) {
         continue;
       }
 
       this.inFlightEntryIds.add(entry.id);
       
-      const occurrenceIso = entry.nextRunAt ?? entry.scheduledFor;
-      const nextRunAt = computeNextRunAfterOccurrence(occurrenceIso, entry.recurrence, entry.runCount + 1);
-      
-      // Immediately mark as succeeded to prevent double firing if app restarts during execution
-      this.deps.schedulerRepository.markRunSucceeded(entry.id, occurrenceIso, nextRunAt);
+      const nextRunAt = freshEntry.scheduleAnchor
+        ? null
+        : computeNextRunAfterOccurrence(occurrenceIso, freshEntry.recurrence, freshEntry.runCount + 1);
 
-      this.executeEntry(entry).catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        this.deps.logger.error("Scheduled entry execution failed", {
-          entryId: entry.id,
-          projectId: entry.projectId,
-          targetType: entry.targetType,
-          error: message,
+      if (freshEntry.targetType === "node_flow") {
+        const claimedEntry = this.claimDueOccurrence(freshEntry, occurrenceIso, nextRunAt);
+        if (!claimedEntry) {
+          this.inFlightEntryIds.delete(entry.id);
+          continue;
+        }
+
+        this.executeNodeFlowEntry(claimedEntry, occurrenceIso).then((result) => {
+          if (result.run.status === "succeeded") {
+            this.deps.schedulerRepository.markRunSucceeded(claimedEntry.id, occurrenceIso, nextRunAt);
+            return;
+          }
+          this.deps.schedulerRepository.markRunFailed(
+            claimedEntry.id,
+            result.run.errorMessage ?? `Node flow run ${result.run.status}.`,
+            occurrenceIso,
+          );
+        }).catch((error) => {
+          this.handleExecutionFailure(claimedEntry, error);
+        }).finally(() => {
+          this.inFlightEntryIds.delete(entry.id);
         });
-        this.deps.schedulerRepository.markRunFailed(entry.id, message);
+        continue;
+      }
+
+      // Existing scheduler targets are advanced before dispatch so an app restart does not double-fire them.
+      this.deps.schedulerRepository.markRunSucceeded(freshEntry.id, occurrenceIso, nextRunAt);
+
+      this.executeEntry(freshEntry, occurrenceIso).catch((error) => {
+        this.handleExecutionFailure(freshEntry, error);
       }).finally(() => {
         this.inFlightEntryIds.delete(entry.id);
       });
     }
   }
 
-  private async executeEntry(entry: SchedulerEntryRecord): Promise<void> {
+  private handleExecutionFailure(entry: SchedulerEntryRecord, error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error);
+    this.deps.logger.error("Scheduled entry execution failed", {
+      entryId: entry.id,
+      projectId: entry.projectId,
+      targetType: entry.targetType,
+      error: message,
+    });
+    this.deps.schedulerRepository.markRunFailed(entry.id, message);
+  }
+
+  private claimDueOccurrence(
+    entry: SchedulerEntryRecord,
+    occurrenceIso: string,
+    nextRunAt: string | null,
+  ): SchedulerEntryRecord | null {
+    const claimDueOccurrence = this.deps.schedulerRepository.claimDueOccurrence;
+    if (typeof claimDueOccurrence !== "function") {
+      return entry;
+    }
+    return claimDueOccurrence.call(this.deps.schedulerRepository, entry.id, occurrenceIso, nextRunAt);
+  }
+
+  private async executeEntry(entry: SchedulerEntryRecord, occurrenceIso: string): Promise<void> {
     if (entry.targetType === "sprint") {
       const sprintId = entry.sprintTarget?.sprintId;
       if (!sprintId) {
@@ -221,28 +309,137 @@ export class SchedulerService {
       return;
     }
 
-    const target = entry.chatTarget;
-    if (!target) {
-      throw new Error("Scheduled chat target is missing.");
+    if (entry.targetType === "task") {
+      const target = entry.taskTarget;
+      if (!target) {
+        throw new Error("Scheduled task target is missing.");
+      }
+      if (!this.deps.taskRerunService) {
+        throw new Error("Task rerun service is not enabled.");
+      }
+      await this.deps.taskRerunService.rerunTask(
+        target.taskId,
+        target.provider ? { provider: target.provider } : undefined,
+      );
+      return;
     }
-    const input: CreateDashboardConversationMessageInput = {
-      threadId: target.threadId || undefined,
-      title: target.title || entry.title,
-      connectionId: target.connectionId || undefined,
-      bodyMarkdown: target.bodyMarkdown,
-      metadata: {
-        source: "scheduler",
+
+    if (entry.targetType === "node_flow") {
+      await this.executeNodeFlowEntry(entry, occurrenceIso);
+      return;
+    }
+
+    if (entry.targetType === "agent_wakeup") {
+      const target = entry.agentWakeupTarget;
+      if (!target) {
+        throw new Error("Scheduled agent wakeup target is missing.");
+      }
+      const metadata: ConversationMessageMetadata = {
+        source: "agent_scheduler",
+        origin: "agent_scheduler",
         schedulerEntryId: entry.id,
         scheduledFor: entry.nextRunAt ?? entry.scheduledFor,
-      },
-    };
-    await this.deps.chatThreadRuntimeService.postMessage(entry.projectId, input);
+      };
+      if (target.createdByAgentId) {
+        metadata.createdByAgentId = target.createdByAgentId;
+      }
+      const input: CreateDashboardConversationMessageInput = {
+        threadId: target.threadId || undefined,
+        title: target.title || entry.title,
+        connectionId: target.connectionId || undefined,
+        bodyMarkdown: target.bodyMarkdown,
+        metadata,
+      };
+      await this.deps.chatThreadRuntimeService.postMessage(entry.projectId, input);
+      return;
+    }
+
+    if (entry.targetType === "chat") {
+      const target = entry.chatTarget;
+      if (!target) {
+        throw new Error("Scheduled chat target is missing.");
+      }
+      const input: CreateDashboardConversationMessageInput = {
+        threadId: target.threadId || undefined,
+        title: target.title || entry.title,
+        connectionId: target.connectionId || undefined,
+        bodyMarkdown: target.bodyMarkdown,
+        metadata: {
+          source: "scheduler",
+          schedulerEntryId: entry.id,
+          scheduledFor: entry.nextRunAt ?? entry.scheduledFor,
+        },
+      };
+      await this.deps.chatThreadRuntimeService.postMessage(entry.projectId, input);
+      return;
+    }
+
+    const exhaustive: never = entry.targetType;
+    throw new Error(`Unsupported scheduler target type: ${exhaustive}`);
   }
 
-  private validateInputTarget(projectId: string, input: CreateSchedulerEntryInput): void {
+  private async executeNodeFlowEntry(entry: SchedulerEntryRecord, occurrenceIso: string): Promise<NodeFlowRunSummaryResponse> {
+    if (entry.targetType !== "node_flow") {
+      throw new Error(`Unsupported node flow scheduler target type: ${entry.targetType}`);
+    }
+    const target = entry.nodeFlowTarget;
+    if (!target) {
+      throw new Error("Scheduled node flow target is missing.");
+    }
+    if (!this.deps.nodeFlowRuntimeService) {
+      throw new Error("Node flow runtime service is not enabled.");
+    }
+    this.validateNodeFlowTargetOwnership(entry.projectId, target.flowId);
+    return await this.deps.nodeFlowRuntimeService.runFlow(
+      entry.projectId,
+      target.flowId,
+      target.input ?? {},
+      {
+        triggerType: "scheduler",
+        triggerPayload: {
+          schedulerEntryId: entry.id,
+          scheduledFor: occurrenceIso,
+          targetType: entry.targetType,
+          ...(target.flowVersion !== undefined ? { flowVersion: target.flowVersion } : {}),
+        },
+      },
+    );
+  }
+
+  private validateInputTarget(projectId: string, input: CreateSchedulerEntryInput | UpdateSchedulerEntryInput): void {
+    if (input.targetType === "agent_wakeup") {
+      const bodyMarkdown = input.agentWakeupTarget?.bodyMarkdown?.trim();
+      if (!bodyMarkdown) {
+        throw new Error("agentWakeupTarget.bodyMarkdown is required.");
+      }
+      return;
+    }
+
+    if (input.targetType === "task") {
+      const taskId = input.taskTarget?.taskId?.trim();
+      if (!taskId) {
+        throw new Error("taskTarget.taskId is required.");
+      }
+      const task = this.deps.projectManagementRepository.getTask(taskId);
+      if (!task || task.projectId !== projectId) {
+        throw new Error("Only tasks in the selected project can be scheduled.");
+      }
+      return;
+    }
+
+    if (input.targetType === "node_flow") {
+      const flowId = input.nodeFlowTarget?.flowId?.trim();
+      if (!flowId) {
+        throw new Error("nodeFlowTarget.flowId is required.");
+      }
+      this.validateNodeFlowTargetOwnership(projectId, flowId);
+      return;
+    }
+
     if (input.targetType !== "sprint") {
       return;
     }
+
     const sprintId = input.sprintTarget?.sprintId;
     if (!sprintId) {
       return;
@@ -256,6 +453,174 @@ export class SchedulerService {
     }
   }
 
+  private validateNodeFlowTargetOwnership(projectId: string, flowId: string): void {
+    if (!this.deps.nodeFlowRepository) {
+      throw new Error("Node flow repository is not enabled.");
+    }
+    const flow = this.deps.nodeFlowRepository.getFlow(flowId);
+    if (!flow || flow.projectId !== projectId) {
+      throw new Error("Only node flows in the selected project can be scheduled.");
+    }
+  }
+
+  private validateScheduleAnchor(projectId: string, input: CreateSchedulerEntryInput | UpdateSchedulerEntryInput): void {
+    const anchor = input.scheduleAnchor ?? undefined;
+    if (!anchor) {
+      return;
+    }
+    if (anchor.mode !== "after_sprint_end" && anchor.mode !== "after_task_end") {
+      throw new Error("scheduleAnchor.mode must be after_sprint_end or after_task_end.");
+    }
+    const offsetMinutes = Number(anchor.offsetMinutes ?? 0);
+    if (!Number.isFinite(offsetMinutes) || offsetMinutes < 0) {
+      throw new Error("scheduleAnchor.offsetMinutes must be a non-negative number.");
+    }
+    if (anchor.mode === "after_task_end") {
+      const sourceTaskId = anchor.sourceTaskId?.trim();
+      if (!sourceTaskId) {
+        throw new Error("scheduleAnchor.sourceTaskId is required.");
+      }
+      const sourceTask = this.deps.projectManagementRepository.getTask(sourceTaskId);
+      if (!sourceTask || sourceTask.projectId !== projectId) {
+        throw new Error("Schedule anchors must reference a task in the selected project.");
+      }
+    } else {
+      const sourceSprintId = anchor.sourceSprintId?.trim();
+      if (!sourceSprintId) {
+        throw new Error("scheduleAnchor.sourceSprintId is required.");
+      }
+      const sourceSprint = this.deps.projectManagementRepository.getSprint(sourceSprintId);
+      if (!sourceSprint || sourceSprint.projectId !== projectId) {
+        throw new Error("Schedule anchors must reference a sprint in the selected project.");
+      }
+      if (input.targetType === "sprint" && input.sprintTarget?.sprintId === sourceSprintId) {
+        throw new Error("A scheduled sprint cannot be anchored to its own completion.");
+      }
+    }
+    if (input.recurrence && input.recurrence.frequency && input.recurrence.frequency !== "none") {
+      throw new Error("Scheduler anchors do not support recurrence.");
+    }
+  }
+
+  private listDueAnchoredEntries(now: Date): SchedulerEntryRecord[] {
+    const listAnchored = this.deps.schedulerRepository.listScheduledAnchoredEntries;
+    if (typeof listAnchored !== "function") {
+      return [];
+    }
+    return listAnchored.call(this.deps.schedulerRepository, 25)
+      .filter((entry) => Boolean(this.resolveDueOccurrence(entry, now)));
+  }
+
+  private resolveDueOccurrence(entry: SchedulerEntryRecord | null, now: Date): string | null {
+    if (!entry || entry.status !== "scheduled") {
+      return null;
+    }
+    if (!entry.scheduleAnchor) {
+      if (!entry.nextRunAt) {
+        return null;
+      }
+      return new Date(entry.nextRunAt).getTime() <= now.getTime() ? entry.nextRunAt : null;
+    }
+    const anchorTime = this.resolveAnchorCompletionTime(entry.projectId, entry.scheduleAnchor);
+    if (!anchorTime) {
+      return null;
+    }
+    const dueAt = new Date(anchorTime.getTime() + ((entry.scheduleAnchor.offsetMinutes ?? 0) * 60_000));
+    const dueIso = dueAt.toISOString();
+    if (entry.lastRunAt === dueIso) {
+      return null;
+    }
+    return dueAt.getTime() <= now.getTime() ? dueIso : null;
+  }
+
+  private resolveAnchorOccurrenceStart(entry: SchedulerEntryRecord): string | null {
+    if (!entry.scheduleAnchor) {
+      return entry.scheduledFor;
+    }
+    const anchorTime = this.resolveAnchorCompletionTime(entry.projectId, entry.scheduleAnchor);
+    if (!anchorTime) {
+      return null;
+    }
+    return new Date(anchorTime.getTime() + ((entry.scheduleAnchor.offsetMinutes ?? 0) * 60_000)).toISOString();
+  }
+
+  private resolveAnchorCompletionTime(projectId: string, anchor: ScheduleAnchor): Date | null {
+    if (anchor.mode === "after_task_end") {
+      return this.resolveAnchorTaskEndTime(projectId, anchor.sourceTaskId);
+    }
+    return this.resolveAnchorSprintEndTime(projectId, anchor);
+  }
+
+  private resolveAnchorSprintEndTime(projectId: string, anchor: ScheduleAnchor): Date | null {
+    if (anchor.mode !== "after_sprint_end") {
+      return null;
+    }
+    const sprint = this.deps.projectManagementRepository.getSprint(anchor.sourceSprintId);
+    if (!sprint || sprint.projectId !== projectId || !isTerminalSprintStatus(sprint.status)) {
+      return null;
+    }
+
+    const latestRunFinishedAt = this.deps.executionRepository
+      ? latestTerminalRunFinishedAt(this.deps.executionRepository.listSprintRuns(projectId, anchor.sourceSprintId))
+      : null;
+    if (latestRunFinishedAt) {
+      return latestRunFinishedAt;
+    }
+
+    if (!sprint.endDate) {
+      return null;
+    }
+    const parsed = new Date(sprint.endDate);
+    return Number.isFinite(parsed.getTime()) ? parsed : null;
+  }
+
+  private resolveAnchorTaskEndTime(projectId: string, taskId: string): Date | null {
+    const task = this.deps.projectManagementRepository.getTask(taskId);
+    if (!task || task.projectId !== projectId || !isTerminalProjectTaskStatus(task.status)) {
+      return null;
+    }
+
+    const latestRunFinishedAt = this.latestTerminalTaskRunFinishedAt(taskId);
+    if (latestRunFinishedAt) {
+      return latestRunFinishedAt;
+    }
+
+    const latestDispatchFinishedAt = this.latestTerminalTaskDispatchFinishedAt(projectId, taskId);
+    if (latestDispatchFinishedAt) {
+      return latestDispatchFinishedAt;
+    }
+
+    const parsed = new Date(task.updatedAt);
+    return Number.isFinite(parsed.getTime()) ? parsed : null;
+  }
+
+  private latestTerminalTaskRunFinishedAt(taskId: string): Date | null {
+    const run = this.deps.executionRepository?.getLatestTaskRun?.(taskId) ?? null;
+    if (!run || !isTerminalTaskRunState(run.state) || !run.finishedAt) {
+      return null;
+    }
+    const parsed = new Date(run.finishedAt);
+    return Number.isFinite(parsed.getTime()) ? parsed : null;
+  }
+
+  private latestTerminalTaskDispatchFinishedAt(projectId: string, taskId: string): Date | null {
+    const dispatches = this.deps.executionRepository?.listTaskDispatches?.({ projectId, taskId }) ?? [];
+    let latest: Date | null = null;
+    for (const dispatch of dispatches) {
+      if (!isTerminalTaskDispatchStatus(dispatch.status) || !dispatch.finishedAt) {
+        continue;
+      }
+      const finishedAt = new Date(dispatch.finishedAt);
+      if (!Number.isFinite(finishedAt.getTime())) {
+        continue;
+      }
+      if (!latest || finishedAt.getTime() > latest.getTime()) {
+        latest = finishedAt;
+      }
+    }
+    return latest;
+  }
+
   private findSettingsManagedMemoryRemediationEntry(projectId: string): SchedulerEntryRecord | null {
     const entries = this.deps.schedulerRepository.listEntries(projectId);
     return entries.find((entry) => (
@@ -264,6 +629,43 @@ export class SchedulerService {
       && entry.status !== "cancelled"
     )) ?? null;
   }
+}
+
+function isTerminalSprintStatus(status: string): boolean {
+  return status === "completed" || status === "failed" || status === "cancelled";
+}
+
+function isTerminalProjectTaskStatus(status: string): boolean {
+  return status === "completed" || status === "QA_REVIEW_FAILED";
+}
+
+function latestTerminalRunFinishedAt(runs: SprintRunRecord[]): Date | null {
+  let latest: Date | null = null;
+  for (const run of runs) {
+    if (!isTerminalSprintStatus(run.status) || !run.finishedAt) {
+      continue;
+    }
+    const finishedAt = new Date(run.finishedAt);
+    if (!Number.isFinite(finishedAt.getTime())) {
+      continue;
+    }
+    if (!latest || finishedAt.getTime() > latest.getTime()) {
+      latest = finishedAt;
+    }
+  }
+  return latest;
+}
+
+function isTerminalTaskRunState(state: TaskRunRecord["state"]): boolean {
+  return state === "COMPLETED" || state === "FAILED" || state === "BLOCKED" || state === "QUOTA";
+}
+
+function isTerminalTaskDispatchStatus(status: TaskDispatchRecord["status"]): boolean {
+  return status === "completed"
+    || status === "failed"
+    || status === "cancelled"
+    || status === "blocked"
+    || status === "quota";
 }
 
 function normalizeScheduleStart(value?: string): string {

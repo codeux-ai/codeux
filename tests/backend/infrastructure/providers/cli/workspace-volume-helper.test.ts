@@ -46,6 +46,16 @@ describe("WorkspaceVolumeHelperPool", () => {
     expect(createCalls).toHaveLength(1);
     expect(createCalls[0].args).toContain("alpine:3.20");
     expect(createCalls[0].args.join(" ")).toContain("code-ux.helper=volume");
+    expect(createCalls[0].args).toEqual(expect.arrayContaining([
+      "--network",
+      "none",
+      "--security-opt",
+      "no-new-privileges",
+      "--label",
+      "code-ux.managed=true",
+    ]));
+    expect(createCalls[0].args).not.toContain("-p");
+    expect(createCalls[0].args).not.toContain("--publish");
 
     // Both operations ran via `docker exec` into the same helper container id.
     const execCalls = calls.filter((c) => c.args[0] === "exec");
@@ -110,6 +120,18 @@ describe("WorkspaceVolumeHelperPool", () => {
     const fallbackCalls = calls.filter((c) => c.args[0] === "run" && c.args.includes("--rm"));
     expect(fallbackCalls).toHaveLength(1);
     expect(fallbackCalls[0].args).toEqual(expect.arrayContaining(["alpine:3.20", "cat", "x"]));
+    expect(fallbackCalls[0].args).toEqual(expect.arrayContaining([
+      "--network",
+      "none",
+      "--security-opt",
+      "no-new-privileges",
+      "--label",
+      "code-ux.managed=true",
+      "--label",
+      "code-ux.helper=volume",
+    ]));
+    expect(fallbackCalls[0].args).not.toContain("-p");
+    expect(fallbackCalls[0].args).not.toContain("--publish");
   });
 
   it("mounts the runtime volume when provided and releases helpers for the workspace", async () => {

@@ -12,6 +12,7 @@ import {
 } from "./sqlite-cleanup-test-helper.js";
 
 const tempDirs: string[] = [];
+const openStorages: AppDbStorage[] = [];
 
 function getIndexColumns(db: ReturnType<AppDbStorage["getDatabase"]>, indexName: string): string[] {
   return (db.prepare(`PRAGMA index_info('${indexName}')`).all() as Array<{ name: string }>)
@@ -25,13 +26,33 @@ async function createTempDbPath(): Promise<string> {
 }
 
 afterEach(async () => {
+  for (const storage of openStorages.splice(0).reverse()) {
+    try {
+      storage.close();
+    } catch {
+      // Already closed by the test.
+    }
+  }
   await Promise.all(tempDirs.splice(0).map((dir) => removeSqliteTempHome(dir)));
 });
+
+function trackStorage(storage: AppDbStorage): AppDbStorage {
+  openStorages.push(storage);
+  return storage;
+}
+
+function closeTrackedStorage(storage: AppDbStorage): void {
+  storage.close();
+  const index = openStorages.indexOf(storage);
+  if (index >= 0) {
+    openStorages.splice(index, 1);
+  }
+}
 
 describe("AppDbStorage", () => {
   it("creates the phase 1 foundation tables", async () => {
     const dbPath = await createTempDbPath();
-    const storage = new AppDbStorage(dbPath);
+    const storage = trackStorage(new AppDbStorage(dbPath));
 
     expect(storage.getPath()).toBe(dbPath);
     expect(storage.hasTable("schema_migrations")).toBe(true);
@@ -55,6 +76,10 @@ describe("AppDbStorage", () => {
     expect(storage.hasTable("conversation_threads")).toBe(true);
     expect(storage.hasTable("conversation_messages")).toBe(true);
     expect(storage.hasTable("agent_presets")).toBe(true);
+    expect(storage.hasTable("skill_storages")).toBe(true);
+    expect(storage.hasTable("skills")).toBe(true);
+    expect(storage.hasTable("skill_embeddings")).toBe(true);
+    expect(storage.hasTable("agent_skill_storage_bindings")).toBe(true);
 
     const db = storage.getDatabase();
     const taskDispatchesIndexes = db.prepare("PRAGMA index_list('task_dispatches')").all() as Array<{ name: string }>;
@@ -84,8 +109,25 @@ describe("AppDbStorage", () => {
     const providerInvocationIndexes = db.prepare("PRAGMA index_list('provider_invocations')").all() as Array<{ name: string }>;
     expect(providerInvocationIndexes.some((idx) => idx.name === "idx_provider_invocations_sprint_started")).toBe(true);
     expect(providerInvocationIndexes.some((idx) => idx.name === "idx_provider_invocations_sprint_run_started")).toBe(true);
+    expect(providerInvocationIndexes.some((idx) => idx.name === "idx_provider_invocations_task_run")).toBe(true);
+    expect(providerInvocationIndexes.some((idx) => idx.name === "idx_provider_invocations_session_owner")).toBe(true);
+    expect(getIndexColumns(db, "idx_provider_invocations_task_run")).toEqual(["task_run_id", "started_at"]);
     expect(getIndexColumns(db, "idx_provider_invocations_sprint_started")).toEqual(["sprint_id", "started_at"]);
     expect(getIndexColumns(db, "idx_provider_invocations_sprint_run_started")).toEqual(["sprint_run_id", "started_at"]);
+    expect(getIndexColumns(db, "idx_provider_invocations_session_owner")).toEqual(["session_id", "project_id", "sprint_id", "task_id"]);
+
+    const taskRunIndexes = db.prepare("PRAGMA index_list('task_runs')").all() as Array<{ name: string }>;
+    expect(taskRunIndexes.some((idx) => idx.name === "idx_task_runs_session_id_owner")).toBe(true);
+    expect(taskRunIndexes.some((idx) => idx.name === "idx_task_runs_session_name_owner")).toBe(true);
+    expect(taskRunIndexes.some((idx) => idx.name === "idx_task_runs_pr_url_owner")).toBe(true);
+    expect(getIndexColumns(db, "idx_task_runs_session_id_owner")).toEqual(["session_id", "project_id", "sprint_id", "task_id"]);
+    expect(getIndexColumns(db, "idx_task_runs_session_name_owner")).toEqual(["session_name", "project_id", "sprint_id", "task_id"]);
+    expect(getIndexColumns(db, "idx_task_runs_pr_url_owner")).toEqual(["pr_url", "project_id", "sprint_id", "task_id"]);
+
+    const skillStorageIndexes = db.prepare("PRAGMA index_list('skill_storages')").all() as Array<{ name: string }>;
+    expect(skillStorageIndexes.some((idx) => idx.name === "idx_skill_storages_project")).toBe(true);
+    expect(getIndexColumns(db, "idx_agent_skill_storage_bindings_agent")).toEqual(["agent_preset_id"]);
+    expect(getIndexColumns(db, "idx_agent_skill_storage_bindings_storage")).toEqual(["project_id", "storage_id"]);
 
     const taskRunEventIndexes = db.prepare("PRAGMA index_list('task_run_events')").all() as Array<{ name: string }>;
     expect(taskRunEventIndexes.some((idx) => idx.name === "idx_task_run_events_project_created")).toBe(true);
@@ -102,7 +144,7 @@ describe("AppDbStorage", () => {
 
   it("closes the underlying sqlite connection", async () => {
     const dbPath = await createTempDbPath();
-    const storage = new AppDbStorage(dbPath);
+    const storage = trackStorage(new AppDbStorage(dbPath));
 
     storage.close();
 
@@ -115,7 +157,7 @@ describe("AppDbStorage", () => {
     const dbPath = path.join(homeDir, ".code-ux", "app.db");
 
     for (let cycle = 0; cycle < 3; cycle += 1) {
-      const storage = new AppDbStorage(dbPath);
+      const storage = trackStorage(new AppDbStorage(dbPath));
       storage.getDatabase().exec(`
         CREATE TABLE IF NOT EXISTS cleanup_probe (
           id INTEGER PRIMARY KEY,
@@ -126,7 +168,7 @@ describe("AppDbStorage", () => {
 
       expect(await getExistingSqliteSidecars(dbPath)).toEqual(["app.db-wal", "app.db-shm"]);
 
-      storage.close();
+      closeTrackedStorage(storage);
       await expectSqliteSidecarsRemoved(dbPath);
     }
 
@@ -141,7 +183,7 @@ describe("AppDbStorage", () => {
 
   it("backfills estimated Docker CLI usage from persisted character counts", async () => {
     const dbPath = await createTempDbPath();
-    const storage = new AppDbStorage(dbPath);
+    const storage = trackStorage(new AppDbStorage(dbPath));
     const db = storage.getDatabase();
     const now = new Date().toISOString();
 
@@ -179,7 +221,7 @@ describe("AppDbStorage", () => {
     );
 
     // Re-opening the storage runs migrations against existing data.
-    new AppDbStorage(dbPath);
+    trackStorage(new AppDbStorage(dbPath));
 
     const row = db.prepare(`
       SELECT input_tokens, output_tokens, total_tokens, usage_source, raw_usage_json
@@ -206,7 +248,7 @@ describe("AppDbStorage", () => {
 
   it("normalizes legacy cached-token accounting rows once", async () => {
     const dbPath = await createTempDbPath();
-    const storage = new AppDbStorage(dbPath);
+    const storage = trackStorage(new AppDbStorage(dbPath));
     const db = storage.getDatabase();
     const now = new Date().toISOString();
 
@@ -269,8 +311,8 @@ describe("AppDbStorage", () => {
       now,
     );
 
-    new AppDbStorage(dbPath);
-    new AppDbStorage(dbPath);
+    trackStorage(new AppDbStorage(dbPath));
+    trackStorage(new AppDbStorage(dbPath));
 
     const rows = db.prepare(`
       SELECT id, input_tokens, cached_input_tokens, output_tokens, total_tokens, token_accounting_version
@@ -306,9 +348,87 @@ describe("AppDbStorage", () => {
     ]);
   });
 
+  it("preserves legacy guardrail ledger rows when startup migrations rebuild the table", async () => {
+    const dbPath = await createTempDbPath();
+    const storage = trackStorage(new AppDbStorage(dbPath));
+    const db = storage.getDatabase();
+    const now = new Date().toISOString();
+
+    db.prepare(`
+      INSERT INTO projects (id, slug, name, base_dir, repo_url, source_id, default_branch, feature_branch_prefix, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run("project-guardrail", "project-guardrail", "Project Guardrail", "/tmp/project-guardrail", null, null, "main", "feature/", "idle", now, now);
+    db.prepare(`
+      INSERT INTO sprints (id, project_id, slug, name, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run("sprint-guardrail", "project-guardrail", "sprint-guardrail", "Sprint Guardrail", "idle", now, now);
+    db.prepare(`
+      INSERT INTO tasks (
+        id, project_id, sprint_id, task_key, title, prompt_markdown, status, priority,
+        sort_order, is_independent, is_merged, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "task-guardrail",
+      "project-guardrail",
+      "sprint-guardrail",
+      "TASK-1",
+      "Task Guardrail",
+      "Prompt",
+      "pending",
+      "medium",
+      0,
+      0,
+      0,
+      now,
+      now,
+    );
+
+    db.exec("DROP TABLE guardrail_ledger");
+    db.exec(`
+      CREATE TABLE guardrail_ledger (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        purpose TEXT NOT NULL,
+        count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+      )
+    `);
+    db.prepare(`
+      INSERT INTO guardrail_ledger (id, project_id, task_id, purpose, count, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run("guardrail-1", "project-guardrail", "task-guardrail", "task_coding", 4, now, now);
+
+    closeTrackedStorage(storage);
+
+    const migrated = trackStorage(new AppDbStorage(dbPath));
+    const migratedDb = migrated.getDatabase();
+    const fks = migratedDb.prepare("PRAGMA foreign_key_list(guardrail_ledger)").all() as Array<{ table?: string }>;
+    const row = migratedDb.prepare(`
+      SELECT task_id, purpose, count
+      FROM guardrail_ledger
+      WHERE id = ?
+    `).get("guardrail-1") as { task_id: string; purpose: string; count: number };
+
+    expect(fks.some((fk) => fk.table === "tasks")).toBe(false);
+    expect(fks.some((fk) => fk.table === "projects")).toBe(true);
+    expect(row).toEqual({
+      task_id: "task-guardrail",
+      purpose: "task_coding",
+      count: 4,
+    });
+    expect(() => migratedDb.prepare(`
+      INSERT INTO guardrail_ledger (id, project_id, task_id, purpose, count, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run("guardrail-synthetic", "project-guardrail", "main-merge-ci-fix:sprint-run-1", "ci_fix", 1, now, now)).not.toThrow();
+  });
+
   it("resets all application tables while preserving the schema", async () => {
     const dbPath = await createTempDbPath();
-    const storage = new AppDbStorage(dbPath);
+    const storage = trackStorage(new AppDbStorage(dbPath));
     const db = storage.getDatabase();
     const now = new Date().toISOString();
 

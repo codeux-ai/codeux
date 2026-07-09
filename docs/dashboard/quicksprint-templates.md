@@ -68,6 +68,8 @@ This browse-slider treatment only changes how templates are discovered and selec
 
 The execution sidebar now lets operators raise the subtask count up to 30 or switch on `No limit`, which disables the slider and asks the planner to choose an appropriate task count for the run. The subtask control is backed by a native range input for keyboard and assistive-technology support, while preserving the custom visual track. The track, fill, notches, thumb, and static halo use the shared dashboard interaction tokens, so reduced-motion users get immediate state changes with the same visible count and disabled cues. Saved template defaults outside the visual 1-30 range are clamped when loaded into the dashboard composer or template editor so the thumb, fill, and submitted task count stay consistent.
 
+The configure view can schedule a quicksprint instead of launching it immediately. The schedule controls support an absolute date/time or an after-sprint-end anchor with a non-negative offset. The scheduled payload preserves the selected template, subtask count, `No limit` state, additional prompt, planning route/model override, and whether the future run should use `Plan & Start` or `Plan Only`. Schedule creation is a short scheduler request, so duplicate schedule clicks are blocked while it is pending without changing the existing planning cancellation or background-continuation behavior.
+
 The combined prompt preview is a real expandable region tied to its trigger with `aria-expanded` and `aria-controls`. It uses the shared `expansionCollapse` interaction token for its max-height/opacity reveal, keeps the prompt text selectable and scrollable when expanded, and shows a non-animation selected/open cue so reduced-motion users receive the same state information. Prompt expansion and collapse also publish visible status copy through the same polite feedback channel as other phase changes.
 
 Planning route changes, model override changes, run-specific prompt edits, subtask-count updates, and `No limit` toggles publish concise visible feedback in the configure sidebar. Route/model field reveals use the shared `listReveal` token so reduced-motion users keep the same static labels and availability cues without depending on animation.
@@ -81,6 +83,29 @@ Cancellation is treated as an operator-requested state transition. The minimized
 Destructive template removal must name the template in the confirmation title, body, and destructive action. The shared dialog supports Escape and Cancel, shows hold/progress feedback while the destructive action is pending, and restores focus to the original delete trigger when it still exists or to the template rail as a fallback after the item is removed. Inline editor deletion follows the same rule: the confirmation names the template, exposes Cancel/Escape, shows pending deletion text, and does not rely on color or motion alone.
 
 The template editor's icon and color pickers use the dashboard interaction tokens for open, selection, and control feedback. Picker triggers and options expose stable accessible names and selected state, close with Escape or outside click, and keep static selected cues when reduced motion is enabled.
+
+## Interaction State Contract
+
+Quicksprint status copy is part of the product contract, not incidental helper text. Template selection, purpose filter changes, editor entry, picker open/close, route/model changes, prompt edits, task-count changes, planning submission, cancellation, background continuation, completion handoff, failure, and destructive deletion all publish through the panel status region. Failures that block progress also publish through the assertive alert region.
+
+Configure controls share one busy contract. While a planning request is queued, running, or cancellation is settling, route/model selects, prompt editing, task controls, back navigation, and submit buttons are disabled and point to the visible blocked reason with `aria-describedby`. Submit labels stay stable as `Plan & Start` and `Plan Only`; pending state is communicated with `aria-busy`, elapsed/progress copy, and the status region instead of changing the button names.
+
+Editor validation must stay visible and durable. Saving is disabled until the template has a name and either agent instructions or an attached agent preset, and the disabled save action references the validation message. Icon and color picker triggers expose `aria-haspopup="dialog"`, `aria-expanded`, and `aria-controls`; picker options expose selected state, close on Escape or outside click, restore focus to the trigger, and retain visible selected cues when motion is reduced.
+
+Template deletion is always confirmed in UI that names the target template. Browse deletion uses the shared destructive confirmation dialog and restores focus to the original delete control or the template rail fallback after removal. Inline editor deletion uses a two-step confirmation with Cancel/Escape and pending deletion copy. Neither deletion path may rely on browser-native confirmation prompts, color alone, or animation-only cues.
+
+## API and Execution Contract
+
+The REST API and MCP `manage_quicksprints` tool expose these actions:
+- `list_templates`: List built-in and custom templates for a project.
+- `get_template`: Retrieve a specific template.
+- `create_template`: Create a custom template with `name`, `description`, `icon`, `category`, and `agentInstructionMarkdown`. Optional fields include `categoryColor`, and `defaultTaskCount`.
+- `update_template`: Update custom template fields.
+- `delete_template`: Remove a custom template or hide a built-in template for a project. Requires explicit approval via MCP.
+- `execute`: Plans a quicksprint. Payload supports `taskCount`, `noTaskLimit`, `submitMode`, `routeOverride`, and `modelOverride`. Defaults to `submitMode: "plan_only"`.
+- `start`: Alias for execution defaulting to `submitMode: "plan_and_start"`.
+
+`QuicksprintService.launchDetachedQuicksprint` is the internal primitive for chat quickactions that need a sprint record immediately while planning continues in the background. It creates the sprint synchronously, starts the same planning flow with the same prompt composition and override resolution as `execute`, and returns a planning request descriptor with `projectId`, `sprintId`, `templateId`, `submitMode`, `clientRequestId`, planner options for request tracking, and the detached planning promise. Chat create-app quickactions attach to that promise so the backend can update the app progress widget and append any queued thread follow-ups to the sprint goal after planning resolves, without frontend polling. The existing REST `/api/projects/:projectId/quicksprints/execute` route and MCP `execute` / `start` actions remain awaited: they return only after planning completes or fails.
 
 Current built-in purpose set:
 - `Fullstack JS App`

@@ -98,10 +98,27 @@ export class ProjectAttentionService {
     return this.projectAttentionRepository.listProjectIdsWithOpenWorkerAttention();
   }
 
+  listResolvedWorkerMergeConflictTaskIds(projectId: string, sprintId?: string | null): string[] {
+    return this.projectAttentionRepository.listResolvedWorkerMergeConflictTaskIds(projectId, sprintId);
+  }
+
+  listResolvedWorkerMergeConflicts(projectId: string, sprintId?: string | null): Array<{
+    itemId: string;
+    taskId: string;
+    sourceBranch: string | null;
+    targetBranch: string | null;
+  }> {
+    return this.projectAttentionRepository.listResolvedWorkerMergeConflicts(projectId, sprintId);
+  }
+
   listActiveProjectItems(projectId: string): ProjectAttentionItemRecord[] {
     return this.projectAttentionRepository.listProjectAttentionItems(projectId, {
       statuses: ["open", "claimed"],
-      limit: 50,
+      // High-concurrency DAG sprints can legitimately accumulate more than 50
+      // transient task attention rows in one cycle. Returning a partial set makes
+      // orchestration decisions non-deterministic, so keep this comfortably above
+      // the largest supported stress suites while still bounding dashboard work.
+      limit: 500,
     });
   }
 

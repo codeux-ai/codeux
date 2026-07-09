@@ -6,6 +6,22 @@ import { validateSettingsPayload } from "../../../../src/domain/settings/setting
  * Uses DEFAULT_DASHBOARD_SETTINGS as a structural reference.
  */
 function makeBasePayload() {
+  const createImporterSettings = () => ({
+    enabled: false,
+    apiToken: "",
+    apiSecret: "",
+    baseUrl: "",
+    workspaceId: "",
+    teamId: "",
+    teamKey: "",
+    projectId: "",
+    databaseId: "",
+    boardId: "",
+    documentId: "",
+    fileKey: "",
+    defaultSearchLimit: 25,
+  });
+
   return {
     dashboardPort: 4444,
     consoleLogLevel: "info",
@@ -14,6 +30,9 @@ function makeBasePayload() {
     dbAutoVacuumOnStartup: true,
     dbPruningEnabled: true,
     dbRetentionDays: 14,
+    appearance: {
+      experienceMode: "EXPERT",
+    },
     automationLevel: "SEMI_AUTO",
     automationInterventions: {
       autoApprovePlan: true,
@@ -107,15 +126,25 @@ function makeBasePayload() {
       featureBranchPrefix: "feat/",
       sprintBranchScheme: "sprint-{sprint_id}",
       sprintKeyPrefix: "SPRINT",
+      taskPrTitleScheme: "({sprint_tag}) {task_title}",
     },
     jira: {
       host: "jira.com",
       email: "a@b.com",
       apiToken: "...",
+      autoTransitionLinkedIssuesOnImport: true,
+      importTransitionName: "In Work",
       autoCloseLinkedIssues: true,
       defaultProject: "PROJ",
       closeTransitionName: "Done",
     },
+    notion: createImporterSettings(),
+    asana: createImporterSettings(),
+    linear: createImporterSettings(),
+    miro: createImporterSettings(),
+    lucid: createImporterSettings(),
+    figma: createImporterSettings(),
+    mural: createImporterSettings(),
     ciIntelligence: {
       enabled: true,
       enableLivePrMonitoring: true,
@@ -172,8 +201,10 @@ function makeBasePayload() {
       executionMode: "DOCKER",
       containerImage: "node:20",
       containerSetupScriptPath: "",
+      containerMemoryLimitMb: 6144,
       containerCacheSetupScriptImage: true,
       containerInstallPlaywrightBrowsers: true,
+      containerRunAsRoot: false,
       containerMountGitConfig: true,
       containerGitUserName: "Jules",
       containerGitUserEmail: "jules@example.com",
@@ -191,6 +222,8 @@ function makeBasePayload() {
       containerQwenCodeAuthPath: "",
       containerOpenCodeAuthPath: "",
       containerAntigravityAuthPath: "",
+      maxPlanningJsonRetries: 3,
+      maxQuotaRetriesWithoutTimer: 3,
     },
     sprintPreview: {
       enabled: false,
@@ -256,6 +289,7 @@ function makeBasePayload() {
       enabled: false,
       embeddingProvider: "in_app",
       embeddingModel: null,
+      customEmbeddingModels: [],
       externalEmbedding: {
         baseUrl: "https://api.openai.com/v1/embeddings",
         apiKey: "",
@@ -272,6 +306,18 @@ function makeBasePayload() {
       maxProjectMemories: 50,
       mapMaxEdgesPerNode: 3,
       workerLearningsInstruction: "",
+    },
+    speech: {
+      enabled: false,
+      providerMode: "auto",
+      localModelId: "onnx-community/whisper-base.en",
+      maxAudioSeconds: 120,
+      externalTranscription: {
+        baseUrl: "https://api.openai.com/v1/audio/transcriptions",
+        apiKey: "",
+        model: "whisper-1",
+        language: null,
+      },
     },
   };
 }

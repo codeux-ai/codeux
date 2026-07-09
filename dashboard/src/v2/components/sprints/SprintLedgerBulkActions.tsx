@@ -3,8 +3,8 @@ import type { JSX } from "preact";
 import { useEffect, useRef } from "preact/hooks";
 import { Heart, Loader2, Play, Trash2, X } from "lucide-preact";
 import gsap from "gsap";
-import { useGsapDurations, useGsapInteractionTokens } from "../../lib/motion/constants.js";
-import { getBulkActionMessage, getBulkPendingReason, type BulkLedgerAction } from "../../lib/sprint-ledger-state.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { getBulkActionButtonLabel, getBulkActionMessage, getBulkPendingReason, type BulkLedgerAction } from "../../lib/sprint-ledger-state.js";
 
 export interface SprintLedgerBulkActionsProps {
   selectedCount: number;
@@ -43,7 +43,6 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
   const prevSelectedCount = useRef(selectedCount);
   const { expansionCollapse } = useGsapInteractionTokens();
 
-  const durations = useGsapDurations();
   const effectivePendingAction: BulkLedgerAction = currentAction
     ?? (isStartPending ? "start" : isDeletePending ? "delete" : isPinPending ? "pin" : null);
   const feedbackMessage = getBulkActionMessage(effectivePendingAction ?? currentAction, selectedCount, Boolean(isAnyPending));
@@ -54,6 +53,10 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
   const feedbackId = "sprint-ledger-bulk-action-feedback";
   const pendingReasonId = "sprint-ledger-bulk-action-pending-reason";
   const disabledDescription = isAnyPending ? `${feedbackId} ${pendingReasonId}` : undefined;
+  const pinLabel = getBulkActionButtonLabel("pin", Boolean(isBulkPinning));
+  const unpinLabel = getBulkActionButtonLabel("unpin", Boolean(isBulkUnpinning));
+  const startLabel = getBulkActionButtonLabel("start", Boolean(isStartPending));
+  const deleteLabel = getBulkActionButtonLabel("delete", Boolean(isDeletePending));
   const handleBulkShowcaseEnable = () => {
     if (isAnyPending) return;
     onBulkShowcaseEnable();
@@ -79,7 +82,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
     const el = containerRef.current;
     if (!el) return;
 
-    const duration = durations.base;
+    const duration = expansionCollapse.duration;
 
     if (selectedCount > 0) {
       if (duration === 0) {
@@ -104,7 +107,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
         });
       }
     }
-  }, [selectedCount, durations, expansionCollapse.ease]);
+  }, [selectedCount, expansionCollapse.duration, expansionCollapse.ease]);
 
   useEffect(() => {
     prevSelectedCount.current = selectedCount;
@@ -115,13 +118,18 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
       ref={containerRef}
       className="overflow-hidden opacity-0"
       style={{ height: 0 }}
+      aria-hidden={selectedCount === 0 ? "true" : undefined}
     >
-      <div className="flex flex-col gap-3 border-b border-signal-500/20 bg-signal-500/[0.08] px-4 py-3 backdrop-blur-xl dark:bg-signal-500/[0.1] sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+      <div
+        role="region"
+        aria-label="Sprint ledger bulk actions"
+        className="flex flex-col gap-3 border-b border-signal-500/20 bg-signal-500/[0.08] px-4 py-3 backdrop-blur-xl dark:bg-signal-500/[0.1] sm:px-6 lg:flex-row lg:items-center lg:justify-between"
+      >
         <div className="flex min-w-0 items-center gap-3" aria-busy={isAnyPending ? "true" : undefined}>
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-signal-500/20 bg-signal-500/10 text-signal-700 dark:text-signal-300">
             {isAnyPending ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <Heart className="h-4 w-4" fill="currentColor" />}
           </div>
-          <div className="min-w-0" aria-live="polite" aria-atomic="true">
+          <div className="min-w-0">
             <div className="text-sm font-bold text-slate-900 dark:text-white">
               {selectedCount} of {totalCount} selected
             </div>
@@ -151,7 +159,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             <span className="inline-flex h-3 w-3 shrink-0 items-center justify-center">
               {isBulkPinning ? <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" /> : <Heart className="h-3 w-3" fill="currentColor" />}
             </span>
-            <span className="inline-flex min-w-[2.75rem] justify-center">Pin</span>
+            <span className="inline-flex min-w-[3.75rem] justify-center">{pinLabel}</span>
           </button>
           <button
             type="button"
@@ -168,7 +176,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             <span className="inline-flex h-3 w-3 shrink-0 items-center justify-center">
               {isBulkUnpinning ? <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" /> : <Heart className="h-3 w-3" />}
             </span>
-            <span className="inline-flex min-w-[2.75rem] justify-center">Unpin</span>
+            <span className="inline-flex min-w-[3.75rem] justify-center">{unpinLabel}</span>
           </button>
           <button
             type="button"
@@ -185,7 +193,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             <span className="inline-flex h-3 w-3 shrink-0 items-center justify-center">
               {isStartPending ? <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" /> : <Play className="h-3 w-3" fill="currentColor" />}
             </span>
-            <span className="inline-flex min-w-[2.75rem] justify-center">Start</span>
+            <span className="inline-flex min-w-[3.75rem] justify-center">{startLabel}</span>
           </button>
           <button
             ref={deleteButtonRef}
@@ -203,7 +211,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             <span className="inline-flex h-3 w-3 shrink-0 items-center justify-center">
               {isDeletePending ? <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" /> : <Trash2 className="h-3 w-3" />}
             </span>
-            <span className="inline-flex min-w-[2.75rem] justify-center">Delete</span>
+            <span className="inline-flex min-w-[3.75rem] justify-center">{deleteLabel}</span>
           </button>
           <button
             type="button"
@@ -221,7 +229,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
           </button>
         </div>
       </div>
-      <div className="sr-only" aria-live="polite" aria-atomic="true">
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {selectedCount === 0 && prevSelectedCount.current > 0 ? "Selection cleared" : feedbackMessage}
       </div>
     </div>

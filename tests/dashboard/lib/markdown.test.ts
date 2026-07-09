@@ -14,10 +14,28 @@ describe("renderMarkdown", () => {
     expect(rendered).toContain(" after");
   });
 
+  it("drops iframe html blocks", () => {
+    const rendered = renderMarkdown("before <iframe src=\"https://example.com\"></iframe> after");
+    expect(rendered).not.toContain("<iframe");
+    expect(rendered).not.toContain("src=");
+    expect(rendered).toContain("before ");
+    expect(rendered).toContain(" after");
+  });
+
   it("strips javascript URLs in links", () => {
     const rendered = renderMarkdown("[unsafe](javascript:alert(1))");
     expect(rendered).not.toContain("href");
     expect(rendered).toContain("unsafe");
+  });
+
+  it("strips mixed-case and entity-obfuscated javascript URLs in links", () => {
+    const rendered1 = renderMarkdown("[unsafe](JaVaScRiPt:alert(1))");
+    expect(rendered1).not.toContain("href");
+    expect(rendered1).toContain("unsafe");
+
+    const rendered2 = renderMarkdown("[unsafe](java&#x73;cript&#58;alert(1))");
+    expect(rendered2).not.toContain("href");
+    expect(rendered2).toContain("unsafe");
   });
 
   it("strips data URLs in links", () => {
@@ -38,6 +56,12 @@ describe("renderMarkdown", () => {
     expect(rendered).toContain("unsafe");
   });
 
+  it("strips newline-obfuscated javascript URLs", () => {
+    const rendered = renderMarkdown("[unsafe](java\nscript:alert(1))");
+    expect(rendered).not.toContain("href");
+    expect(rendered).toContain("unsafe");
+  });
+
   it("preserves relative links", () => {
     const rendered = renderMarkdown("[safe](/path/to/page)");
     expect(rendered).toContain('href="/path/to/page"');
@@ -49,10 +73,19 @@ describe("renderMarkdown", () => {
     expect(rendered).toContain('href="mailto:test@example.com"');
   });
 
+  it("preserves anchors and query-only links", () => {
+    const rendered1 = renderMarkdown("[safe](#section)");
+    expect(rendered1).toContain('href="#section"');
+
+    const rendered2 = renderMarkdown("[safe](?panel=settings)");
+    expect(rendered2).toContain('href="?panel=settings"');
+  });
+
   it("adds rel=noopener noreferrer to external links", () => {
     const rendered = renderMarkdown("[external](https://example.com)");
-    expect(rendered).toContain('href="https://example.com"');
+    expect(rendered).toContain('href="https://example.com/"');
     expect(rendered).toContain('rel="noopener noreferrer"');
+    expect(rendered).not.toContain('target="_blank"');
   });
 
   it("does not add rel=noopener noreferrer to relative links", () => {
@@ -73,6 +106,13 @@ describe("renderMarkdown", () => {
     expect(rendered).toContain('<img src="https://example.com/image.png" alt="safe image">');
   });
 
+  it("strips SVG data image URLs", () => {
+    const rendered = renderMarkdown("![unsafe](data:image/svg+xml,<svg onload=alert(1)>)");
+    expect(rendered).not.toContain("<img");
+    expect(rendered).not.toContain("src=");
+    expect(rendered).toContain("unsafe");
+  });
+
   it("strips obfuscated javascript URLs in links", () => {
     const rendered = renderMarkdown("[unsafe](java\\nscript:alert(1))");
     expect(rendered).not.toContain("href");
@@ -84,6 +124,8 @@ describe("renderMarkdown", () => {
     expect(rendered1).not.toContain("href");
     const rendered2 = renderMarkdown("[unsafe](\\\\\\google.com)");
     expect(rendered2).not.toContain("href");
+    const rendered3 = renderMarkdown("![unsafe](//google.com/image.png)");
+    expect(rendered3).not.toContain("src");
   });
 
   it("strips mailto in images", () => {
@@ -112,7 +154,7 @@ describe("renderMarkdown", () => {
 
   it("adds rel=noopener noreferrer to http external links", () => {
     const rendered = renderMarkdown("[external](http://example.com)");
-    expect(rendered).toContain('href="http://example.com"');
+    expect(rendered).toContain('href="http://example.com/"');
     expect(rendered).toContain('rel="noopener noreferrer"');
   });
 
@@ -120,5 +162,43 @@ describe("renderMarkdown", () => {
     const rendered = renderMarkdown("[internal](page.html)");
     expect(rendered).toContain('href="page.html"');
     expect(rendered).not.toContain('rel="noopener noreferrer"');
+  });
+
+  it("strips malformed absolute URLs and scheme-smuggled relatives", () => {
+    const rendered1 = renderMarkdown("[unsafe](https://[::1)");
+    expect(rendered1).not.toContain("href");
+
+    const rendered2 = renderMarkdown("[unsafe](javascript:alert(1)/safe)");
+    expect(rendered2).not.toContain("href");
+  });
+
+  it("escapes rendered attribute values", () => {
+    const rendered = renderMarkdown("[safe](https://example.com/?q=%22x%22 \"quote & <tag>\")");
+    expect(rendered).toContain('href="https://example.com/?q=%22x%22"');
+    expect(rendered).toContain('title="quote &amp; &lt;tag&gt;"');
+
+    const image = renderMarkdown("![safe & <image>](https://example.com/image.png \"quote & <tag>\")");
+    expect(image).toContain('alt="safe &amp; &lt;image&gt;"');
+    expect(image).toContain('title="quote &amp; &lt;tag&gt;"');
+  });
+
+  it("revalidates transformed link URLs", () => {
+    const rendered = renderMarkdown("[safe](https://example.com)", {
+      transformHref: () => "javascript:alert(1)",
+    });
+    expect(rendered).not.toContain("href");
+    expect(rendered).toContain("safe");
+  });
+
+  it("revalidates and escapes transformed image URLs", () => {
+    const unsafe = renderMarkdown("![safe](https://example.com/image.png)", {
+      transformHref: () => "data:image/svg+xml,<svg onload=alert(1)>",
+    });
+    expect(unsafe).not.toContain("<img");
+
+    const safe = renderMarkdown("![safe](https://example.com/image.png)", {
+      transformHref: () => "https://cdn.example.com/image.png?name=%22safe%22",
+    });
+    expect(safe).toContain('src="https://cdn.example.com/image.png?name=%22safe%22"');
   });
 });

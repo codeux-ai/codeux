@@ -7,8 +7,8 @@ workspaces, gated through Git/CI, and surfaced in a live Preact dashboard.
 
 ## 🚀 1. Project Mission & Identity
 Transform high-level natural-language goals into atomic, test-validated PRs by coordinating the
-provider CLIs developers already use (Gemini, Codex, Claude Code, Qwen, OpenCode, Antigravity) plus
-hosted Jules — each running in isolated Docker workspaces, with the repetitive operational work
+provider CLIs developers already use (Gemini, Codex, Claude Code, Qwen, OpenCode, Antigravity) —
+each running in isolated Docker workspaces, plus Jules (hosted) — with the repetitive operational work
 (branching, dependency ordering, CI polling, merge gates, conflict repair) moved into deterministic
 software instead of model reasoning.
 
@@ -112,17 +112,13 @@ All UI work must meet the quality gate in `STYLEGUIDE.md`:
 ### Testing Strategy
 - **Framework**: Vitest. Default env is Node; UI tests opt into jsdom via `@vitest-environment` pragmas.
   Tests use an in-memory DB (`VITEST_IN_MEMORY_DB=true`).
-- **Coverage thresholds** (vitest.config.ts, ratchet-only — never lower): lines 73.2%, functions
-  67.5%, branches 61.13%, statements 72.0%. `src/server/activity-cache-service.ts` has an 80% line gate.
+- **Coverage thresholds** (vitest.config.ts, ratchet-only — never lower): lines 77.4%, functions
+  71.5%, branches 66.1%, statements 76.0%. `src/server/activity-cache-service.ts` has an 80% line gate.
 - **Mocking**: `vi.mock()` for external boundaries (provider CLIs, Docker, FS, Jules API);
   `vi.spyOn()` for verification.
 
 ### Validation Workflow (`pnpm run ci`)
-Before a task is complete, all of these MUST pass (`ci` = lint → backend coverage → dashboard → build):
-1. `pnpm run lint` (alias of `typecheck`: strict `tsc --noEmit`).
-2. `pnpm run test:backend:coverage`.
-3. `pnpm run test:dashboard`.
-4. `pnpm run build` (server `tsc` + dashboard typecheck + `vite build`).
+Before a task is complete, all of these MUST pass (`ci` = quality:guardrails -> audit -> lint -> test:backend:coverage -> test:dashboard -> build).
 
 - Do not validate changes visually with Browser automation Tools unless explicitly told to
 ---

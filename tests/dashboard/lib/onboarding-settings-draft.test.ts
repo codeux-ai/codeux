@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
+  applyOnboardingExperienceModeDefaults,
   buildProviderConfigId,
+  getEasyRecommendedProvider,
   getProviderInitialSelection,
   getSystemProvidersByType,
   getFirstCliProviderConfigId,
@@ -73,6 +75,21 @@ describe("onboarding-settings-draft", () => {
       expect(result).toHaveLength(2);
       expect(result[0][0]).toBe("p1");
       expect(result[1][0]).toBe("p3");
+    });
+  });
+
+  describe("getEasyRecommendedProvider", () => {
+    it("prefers a detected CLI provider for Easy mode", () => {
+      const providers: OnboardingProviderCredentialStatus[] = [
+        { provider: "gemini", available: true, mountEnabled: false, authPath: "~/.gemini", detectedFiles: [] },
+        { provider: "codex", available: false, mountEnabled: false, authPath: "~/.codex", detectedFiles: [] }
+      ];
+
+      expect(getEasyRecommendedProvider(providers)).toBe("gemini");
+    });
+
+    it("falls back to Codex for Easy mode", () => {
+      expect(getEasyRecommendedProvider([])).toBe("codex");
     });
   });
 
@@ -206,6 +223,95 @@ describe("onboarding-settings-draft", () => {
       expect(result.aiProvider.invocationRouting["route-1"].provider).toBeNull();
       expect(result.aiProvider.invocationRouting["route-1"].allowedProviders).toEqual(["jules-1"]);
       expect(result.aiProvider.invocationRouting["route-1"].providers["qwen-1"]).toBeUndefined();
+    });
+  });
+
+  describe("applyOnboardingExperienceModeDefaults", () => {
+    it("persists selected Standard and Expert modes without changing the rest of settings", () => {
+      const settings = {
+        defaults: {
+          appearance: { experienceMode: "EXPERT", theme: "SYSTEM" },
+        }
+      } as unknown as SystemSettings;
+
+      const result = applyOnboardingExperienceModeDefaults(settings, "STANDARD");
+
+      expect(result.defaults.appearance.experienceMode).toBe("STANDARD");
+      expect(result.defaults.appearance.theme).toBe("SYSTEM");
+      expect(settings.defaults.appearance.experienceMode).toBe("EXPERT");
+    });
+
+    it("applies Easy defaults to provider routing, GitHub workflow, automation, and appearance", () => {
+      const settings = {
+        integrations: {
+          providers: {
+            codex: { provider: "codex", name: "Codex", apiKey: "", authPath: "~/.codex", mountAuth: false }
+          }
+        },
+        defaults: {
+          appearance: {
+            experienceMode: "EXPERT",
+            navigationMode: "DOCK",
+            theme: "DARK",
+            reducedMotion: "NONE",
+            backgroundMode: "STATIC",
+            backgroundPattern: "DOTS"
+          },
+          automationLevel: "ALWAYS_ASK",
+          automationInterventions: { autoApprovePlan: false, autoAnswerClarification: true, autoResumePaused: true },
+          memory: { enabled: false },
+          aiProvider: {
+            provider: null,
+            strategy: "WEIGHTED",
+            providers: {
+              codex: { provider: "codex", name: "Codex", enabled: false, maxConcurrentTasks: 5 },
+              jules: { provider: "jules", name: "Jules", enabled: true, maxConcurrentTasks: 15 }
+            },
+            invocationRouting: {
+              task_coding: { profile: "WORKER", strategy: "WEIGHTED", provider: null, allowedProviders: [], providers: {} }
+            }
+          },
+          workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "jules", maxConcurrency: 100 },
+          cliWorkflow: { executionMode: "DOCKER", gitMode: "remote", containerMountGithubAuth: true },
+          git: { githubMode: "REMOTE", autoCreatePr: true },
+          ciIntelligence: {
+            enableLivePrMonitoring: true,
+            resolveAllCommentsBeforeMainMerge: true,
+            resolveMainMergeConflicts: true,
+            resolveMainMergeFailedChecks: true,
+            resolveAllCommentsBeforeFeatureMerge: true,
+            resolveMergeConflicts: true,
+            featurePrAutoMergeMode: "ALWAYS",
+            mainBranchAutoMergeMode: "ALWAYS"
+          }
+        }
+      } as unknown as SystemSettings;
+
+      const result = applyOnboardingExperienceModeDefaults(settings, "EASY", {
+        recommendedProvider: "codex",
+        useGithub: false,
+        manageGithubPrWorkflow: false,
+      });
+
+      expect(result.defaults.appearance.experienceMode).toBe("EASY");
+      expect(result.defaults.appearance.navigationMode).toBe("SIDEBAR");
+      expect(result.defaults.aiProvider.provider).toBe("codex");
+      expect(result.integrations.providers.codex?.authType).toBe("dashboardAuth");
+      expect(result.integrations.providers.codex?.mountAuth).toBe(true);
+      expect(result.integrations.providers.codex?.authPath).toBe("~/.code-ux/credentials/codex");
+      expect(result.defaults.aiProvider.providers.codex.enabled).toBe(true);
+      expect(result.defaults.aiProvider.providers.jules).toBeUndefined();
+      expect(result.defaults.aiProvider.invocationRouting.task_coding.provider).toBe("codex");
+      expect(result.defaults.workers.virtualWorkerProvider).toBe("codex");
+      expect(result.defaults.workers.maxConcurrency).toBe(3);
+      expect(result.defaults.automationLevel).toBe("SEMI_AUTO");
+      expect(result.defaults.automationInterventions.autoApprovePlan).toBe(true);
+      expect(result.defaults.memory.enabled).toBe(true);
+      expect(result.defaults.cliWorkflow.executionMode).toBe("DOCKER");
+      expect(result.defaults.cliWorkflow.gitMode).toBe("local");
+      expect(result.defaults.git.githubMode).toBe("LOCAL");
+      expect(result.defaults.git.autoCreatePr).toBe(false);
+      expect(result.defaults.ciIntelligence.featurePrAutoMergeMode).toBe("OFF");
     });
   });
 });

@@ -172,10 +172,13 @@ export interface ExecutionInvocationRow {
   last_message_at: string | null;
   invocation_source?: string;
   agent_preset_id?: string | null;
+  execution_mode?: string | null;
   input_tokens?: number | string | null;
   cached_input_tokens?: number | string | null;
   output_tokens?: number | string | null;
   total_tokens?: number | string | null;
+  prompt_chars?: number | string | null;
+  transcript_chars?: number | string | null;
   cost_cents?: number | string | null;
   sprint_number?: number | string | null;
   sprint_name?: string | null;

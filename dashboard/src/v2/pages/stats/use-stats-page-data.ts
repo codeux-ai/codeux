@@ -7,7 +7,8 @@ import type {
   ProjectStatsWindow,
   SegmentDefinition,
 } from "../../types.js";
-import { createStatsSegments, createSeries, EMPTY_USAGE, isValidCustomRange } from "./stats-utils.js";
+import { isValidCustomRange } from "./stats-utils.js";
+import { deriveStatsPageViewModel } from "./stats-page-view-model.js";
 import { useUsageChartState } from "./use-usage-chart-state.js";
 
 export interface StatsPageData {
@@ -51,39 +52,8 @@ export function useStatsPageData(projectId: string | null): StatsPageData {
   
   const { stats, loading, error, refresh } = useProjectStats(projectId, activeQuery);
   const chartState = useUsageChartState(projectId, stats || null);
-
-  const usage = stats?.usage || EMPTY_USAGE;
   
-  const derivations = useMemo(() => {
-    const tokenSeries = createSeries(stats?.buckets || [], (bucket) => bucket.usage.totalTokens);
-    const activeTimeSeries = createSeries(stats?.buckets || [], (bucket) => bucket.usage.activeTimeMs / 1000);
-    const wallTimeSeries = createSeries(stats?.buckets || [], (bucket) => bucket.usage.wallTimeMs / 1000);
-    const planningUsage = stats?.purposes.find((purpose) => purpose.id === "planning") || null;
-
-    const { providerSegments, sourceSegments, tokenSegments } = createStatsSegments(stats, usage);
-
-    let completionConfidence = "Unavailable";
-    if (!stats) {
-      completionConfidence = "No telemetry";
-    } else if (usage.reportedInvocationCount > 0 && usage.estimatedInvocationCount === 0) {
-      completionConfidence = "Provider reported";
-    } else if (usage.reportedInvocationCount > 0 && usage.estimatedInvocationCount > 0) {
-      completionConfidence = "Mixed reported + fallback";
-    } else if (usage.estimatedInvocationCount > 0) {
-      completionConfidence = "Estimated fallback";
-    }
-
-    return {
-      tokenSeries,
-      activeTimeSeries,
-      wallTimeSeries,
-      planningUsage,
-      providerSegments,
-      sourceSegments,
-      tokenSegments,
-      completionConfidence,
-    };
-  }, [stats, usage]);
+  const viewModel = useMemo(() => deriveStatsPageViewModel(stats), [stats]);
 
   const applyPresetWindow = (window: Exclude<ProjectStatsWindow, "custom">) => {
     setActiveQuery({ window });
@@ -113,11 +83,11 @@ export function useStatsPageData(projectId: string | null): StatsPageData {
     loading,
     error,
     refresh,
-    usage,
-    tokenSeries: derivations.tokenSeries,
-    activeTimeSeries: derivations.activeTimeSeries,
-    wallTimeSeries: derivations.wallTimeSeries,
-    planningUsage: derivations.planningUsage,
+    usage: viewModel.usage,
+    tokenSeries: viewModel.tokenSeries,
+    activeTimeSeries: viewModel.activeTimeSeries,
+    wallTimeSeries: viewModel.wallTimeSeries,
+    planningUsage: viewModel.planningUsage,
     activeQuery,
     customFrom,
     setCustomFrom,
@@ -127,11 +97,11 @@ export function useStatsPageData(projectId: string | null): StatsPageData {
     visualMode: chartState.visualMode,
     setVisualMode: chartState.setVisualMode,
     chartState,
-    providerSegments: derivations.providerSegments,
-    sourceSegments: derivations.sourceSegments,
-    tokenSegments: derivations.tokenSegments,
+    providerSegments: viewModel.providerSegments,
+    sourceSegments: viewModel.sourceSegments,
+    tokenSegments: viewModel.tokenSegments,
     applyPresetWindow,
     applyCustomRange,
-    completionConfidence: derivations.completionConfidence,
+    completionConfidence: viewModel.completionConfidence,
   };
 }

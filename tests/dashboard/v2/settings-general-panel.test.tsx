@@ -3,7 +3,7 @@
 import { h } from "preact";
 import { useState } from "preact/hooks";
 import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { SettingsGeneralPanel } from "../../../dashboard/src/v2/components/settings/panels/SettingsGeneralPanel.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
@@ -56,6 +56,34 @@ describe("SettingsGeneralPanel", () => {
 
   afterEach(() => {
     cleanup();
+  });
+
+  it("updates dashboard experience mode from General settings", () => {
+    vi.mocked(useProjectData).mockReturnValue({ updateProject: vi.fn() } as any);
+    let capturedSettings = cloneSettings();
+    const updateEditableSettings = vi.fn((recipe: any) => {
+      capturedSettings = recipe(capturedSettings);
+    });
+
+    render(<SettingsGeneralPanel state={{
+      activeScope: "system",
+      systemSettings: { runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard", dbPruningEnabled: true, dbRetentionDays: 14, dbAutoVacuumOnStartup: true } },
+      projectSettings: null,
+      selectedProject: null,
+      updateSystem: vi.fn(),
+      editableSettings: capturedSettings,
+      updateEditableSettings,
+      projectSources: {},
+    } as any} />);
+
+    const modeGroup = screen.getByRole("radiogroup", { name: "Dashboard experience mode" });
+
+    expect(within(modeGroup).getByRole("radio", { name: /Expert/i })).toHaveAttribute("aria-checked", "true");
+
+    fireEvent.click(within(modeGroup).getByRole("radio", { name: /Standard/i }));
+
+    expect(updateEditableSettings).toHaveBeenCalled();
+    expect(capturedSettings.appearance.experienceMode).toBe("STANDARD");
   });
 
   it("updates the selected project name from project settings", async () => {
@@ -139,6 +167,50 @@ describe("SettingsGeneralPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "setup.sh" }));
 
     expect(screen.getByLabelText("Container setup script")).toHaveValue("/workspace/test-project/.code-ux/setup.sh");
+  });
+
+  it("updates the Docker root execution toggle with an accessible label", async () => {
+    vi.mocked(useProjectData).mockReturnValue({ updateProject: vi.fn() } as any);
+
+    const StatefulHarness = () => {
+      const [settings, setSettings] = useState(cloneSettings());
+      return <SettingsGeneralPanel state={{
+        activeScope: "system",
+        systemSettings: { runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard", dbPruningEnabled: true, dbRetentionDays: 14, dbAutoVacuumOnStartup: true } },
+        projectSettings: null,
+        selectedProject: null,
+        updateSystem: vi.fn(),
+        editableSettings: settings,
+        updateEditableSettings: (recipe: any) => setSettings((current: any) => recipe(current)),
+        projectSources: {},
+      } as any} />;
+    };
+
+    render(<StatefulHarness />);
+
+    const rootToggle = screen.getByRole("switch", { name: "Run Docker agents as root" });
+    expect(rootToggle).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByText("Non-root default")).toBeInTheDocument();
+
+    fireEvent.click(rootToggle);
+
+    expect(rootToggle).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByText("Root enabled")).toBeInTheDocument();
+  });
+
+  it("shows Docker runtime controls in project scope with override badges", () => {
+    vi.mocked(useProjectData).mockReturnValue({ updateProject: vi.fn() } as any);
+    const state = createProjectState();
+
+    render(<SettingsGeneralPanel state={{
+      ...state,
+      projectSources: {
+        "cliWorkflow.containerRunAsRoot": "project",
+      },
+    } as any} />);
+
+    expect(screen.getByRole("switch", { name: "Run Docker agents as root" })).toBeInTheDocument();
+    expect(screen.getByText("Project override")).toBeInTheDocument();
   });
 
   it("keeps manual container setup script text when file browsing fails", async () => {

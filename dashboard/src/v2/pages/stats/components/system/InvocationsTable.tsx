@@ -27,6 +27,7 @@ import {
   TRACK_CLASS,
   getProviderIcon,
   SUBPANEL_CLASS,
+  CONTROL_FOCUS_CLASS,
 } from "../StatsShared.js";
 import { InvocationMessagesPanel } from "./InvocationMessagesPanel.js";
 
@@ -426,7 +427,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                       aria-expanded={isExpanded}
                       aria-controls={`invocation-messages-${invocation.id}`}
                       aria-label={isExpanded ? `Collapse invocation ${invocation.id}` : `Expand invocation ${invocation.id}`}
-                      className={`rounded-full p-2 transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--stats-focus-ring)] ${
+                      className={`${CHIP_CLASS} p-2 transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] ${CONTROL_FOCUS_CLASS} ${
                         isExpanded ? "text-[color:var(--stats-signal-text)]" : "text-[color:var(--stats-label-color)]"
                       }`}
                     >
@@ -454,7 +455,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
             type="button"
             onClick={revealMore}
             aria-label={`Show more invocations, currently showing ${Math.min(visibleCount, invocations.length).toLocaleString()} of ${invocations.length.toLocaleString()}`}
-            className="rounded-full bg-[color:var(--stats-surface-chip)] px-4 py-2 text-xs font-bold text-[color:var(--stats-detail-color)] transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--stats-focus-ring)]"
+            className={`${CHIP_CLASS} px-4 py-2 text-xs font-bold text-[color:var(--stats-detail-color)] transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] ${CONTROL_FOCUS_CLASS}`}
           >
             Show more invocations
           </button>

@@ -3,6 +3,7 @@ import request from "supertest";
 import express from "express";
 import { EventEmitter } from "events";
 import { spawn } from "child_process";
+import * as fs from "fs/promises";
 import {
   registerTerminalRoutes,
   bootDashboardTerminalWebSocketServer,
@@ -38,6 +39,17 @@ const mockLoginImageState = vi.hoisted(() => ({
   buildCount: 0,
   buildExitCode: 0,
 }));
+
+function getDockerRunArgsForProvider(providerId: string): string[] {
+  const runCall = (spawn as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+    ([cmd, args]) => cmd === "docker"
+      && Array.isArray(args)
+      && args.includes("run")
+      && args.includes(`code-ux.provider-id=${providerId}`),
+  );
+  expect(runCall).toBeDefined();
+  return runCall![1] as string[];
+}
 
 vi.mock("child_process", () => {
   return {
@@ -116,6 +128,7 @@ describe("Terminal Routes", () => {
     mockStderr.removeAllListeners();
     mockLoginImageState.holdBuild = false;
     mockLoginImageState.finishBuild = null;
+    vi.restoreAllMocks();
   });
 
   it("should reject websocket upgrades from hostile origins", async () => {
@@ -154,21 +167,36 @@ describe("Terminal Routes", () => {
     // A directly-supplied (valid) providerId bypasses the providerConfigId
     // lookup, so without validation the traversal value would reach the
     // destructive credential fs.rm/mkdir/cp. The handler must 400 first.
+    const rmSpy = vi.spyOn(fs, "rm");
+    const mkdirSpy = vi.spyOn(fs, "mkdir");
+
     const response = await request(app)
       .post("/api/terminal/start")
       .send({ providerId: "codex", providerConfigId: "../../../../tmp/evil" });
 
     expect(response.status).toBe(400);
     expect(String(response.body.error)).toMatch(/providerConfigId/i);
+    expect(rmSpy).not.toHaveBeenCalled();
+    expect(mkdirSpy).not.toHaveBeenCalled();
   });
 
-  it("rejects a providerConfigId containing path separators", async () => {
+  it.each([
+    ["Unix separator", "codex/../../secrets"],
+    ["Windows separator", "codex\\..\\secrets"],
+    ["absolute path", "/tmp/secrets"],
+    ["encoded separator", "codex%2fsecrets"],
+  ])("rejects a providerConfigId containing %s", async (_label, providerConfigId) => {
+    const rmSpy = vi.spyOn(fs, "rm");
+    const mkdirSpy = vi.spyOn(fs, "mkdir");
+
     const response = await request(app)
       .post("/api/terminal/start")
-      .send({ providerId: "claude-code", providerConfigId: "codex/../../secrets" });
+      .send({ providerId: "claude-code", providerConfigId });
 
     expect(response.status).toBe(400);
     expect(String(response.body.error)).toMatch(/providerConfigId/i);
+    expect(rmSpy).not.toHaveBeenCalled();
+    expect(mkdirSpy).not.toHaveBeenCalled();
   });
 
   it("should close the socket when receiving oversized frames", async () => {
@@ -269,6 +297,40 @@ describe("Terminal Routes", () => {
     // installers resolve instead of failing with "ensure_curl: command not found".
     const containerCmd = runArgs[runArgs.length - 1];
     expect(containerCmd).toContain("ensure_curl()");
+  });
+
+  it.each([
+    ["codex", "codex"],
+    ["claude-code", "claude"],
+  ])("publishes %s login callback ports on host loopback only", async (providerId, providerConfigId) => {
+    const response = await request(app)
+      .post("/api/terminal/start")
+      .send({ providerConfigId });
+
+    expect(response.status).toBe(200);
+
+    const runArgs = getDockerRunArgsForProvider(providerId);
+    expect(runArgs).not.toContain("--network");
+    expect(runArgs).not.toContain("host");
+
+    const publishArgs = runArgs
+      .map((arg, index) => (runArgs[index - 1] === "-p" ? arg : null))
+      .filter((arg): arg is string => typeof arg === "string");
+    expect(publishArgs).toHaveLength(1);
+    expect(publishArgs[0]).toMatch(/^127\.0\.0\.1:(\d+):\1$/);
+  });
+
+  it("does not use host networking or public port publishing for login containers by default", async () => {
+    const response = await request(app)
+      .post("/api/terminal/start")
+      .send({ providerConfigId: "gemini" });
+
+    expect(response.status).toBe(200);
+
+    const runArgs = getDockerRunArgsForProvider("gemini");
+    expect(runArgs).not.toContain("--network");
+    expect(runArgs).not.toContain("host");
+    expect(runArgs).not.toContain("-p");
   });
 
   it("should bake only the apt prerequisites into the login image, not the providers", () => {
