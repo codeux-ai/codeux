@@ -31,12 +31,12 @@ const onboardingInstallResult = (): OnboardingDependencyInstallerResult => ({
   status: "success",
   commands: [
     {
-      id: "apt-install-docker-git",
+      id: "apt-install-docker",
       groupId: "linux-engine-packages",
-      label: "Install Docker Engine and Git packages",
+      label: "Install Docker Engine packages",
       command: "apt-get",
-      args: ["install", "-y", "docker.io", "docker-compose-plugin", "git"],
-      displayCommand: "apt-get install -y docker.io docker-compose-plugin git",
+      args: ["install", "-y", "docker.io", "docker-compose-plugin"],
+      displayCommand: "apt-get install -y docker.io docker-compose-plugin",
       status: "success",
       timeoutMs: 120_000,
       maxStdoutChars: 4_000,
@@ -378,7 +378,7 @@ describe("dashboard route handlers", () => {
       mode: "docker-engine-git",
       platform: "linux",
       outcome: "success",
-      commandLabels: ["Install Docker Engine and Git packages"],
+      commandLabels: ["Install Docker Engine packages"],
     }));
     expect(JSON.stringify(logger.info.mock.calls)).not.toContain("bounded output");
   });

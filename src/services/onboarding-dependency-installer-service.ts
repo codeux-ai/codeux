@@ -260,7 +260,7 @@ const platformLabel = (platform: OnboardingInstallerPlatform): string => {
 const option = (
   input: Omit<OnboardingDependencyInstallerOption, "dependencyIds"> & { dependencyIds?: string[] },
 ): OnboardingDependencyInstallerOption => ({
-  dependencyIds: ["docker-cli", "docker-daemon", "git-cli"],
+  dependencyIds: ["docker-cli", "docker-daemon"],
   ...input,
 });
 
@@ -279,25 +279,25 @@ export const planOnboardingDependencyInstallerOptions = (
       options: [
         option({
           mode: "docker-desktop-git",
-          label: "Docker Desktop and Git",
+          label: "Docker Desktop",
           platform,
           recommended: true,
           automation: homebrewAvailable ? "automated" : "manual",
-          description: "Installs Docker Desktop and Git with Homebrew.",
+          description: "Installs Docker Desktop with Homebrew.",
           requiresPrivilege: false,
           requiresManualDownload: !homebrewAvailable,
           available: homebrewAvailable,
           guidance: homebrewAvailable
             ? ["Open Docker Desktop after installation, then rerun readiness checks once the daemon starts."]
-            : ["Install Homebrew or install Docker Desktop and Git manually, then refresh the terminal PATH."],
+            : ["Install Homebrew or install Docker Desktop manually, then refresh the terminal PATH."],
         }),
         option({
           mode: "docker-engine-git",
-          label: "Docker Engine and Git",
+          label: "Docker Engine",
           platform,
           recommended: false,
           automation: homebrewAvailable ? "partial" : "manual",
-          description: "Installs Git when possible, but Docker Engine on macOS still needs a Linux VM.",
+          description: "Docker Engine on macOS still needs a Linux VM.",
           requiresPrivilege: false,
           requiresManualDownload: true,
           available: homebrewAvailable,
@@ -314,25 +314,25 @@ export const planOnboardingDependencyInstallerOptions = (
       options: [
         option({
           mode: "docker-desktop-git",
-          label: "Docker Desktop and Git",
+          label: "Docker Desktop",
           platform,
           recommended: true,
           automation: wingetAvailable ? "automated" : "manual",
-          description: "Installs Docker Desktop and Git with winget.",
+          description: "Installs Docker Desktop with winget.",
           requiresPrivilege: false,
           requiresManualDownload: !wingetAvailable,
           available: wingetAvailable,
           guidance: wingetAvailable
             ? ["Restart the terminal after installation and start Docker Desktop before rerunning readiness checks."]
-            : ["Install winget or install Docker Desktop and Git manually, then refresh the terminal PATH."],
+            : ["Install winget or install Docker Desktop manually, then refresh the terminal PATH."],
         }),
         option({
           mode: "docker-engine-git",
-          label: "Docker Engine and Git",
+          label: "Docker Engine",
           platform,
           recommended: false,
           automation: wingetAvailable ? "partial" : "manual",
-          description: "Installs Git when possible, but Docker Engine on Windows should run through WSL or Docker Desktop.",
+          description: "Docker Engine on Windows should run through WSL or Docker Desktop.",
           requiresPrivilege: false,
           requiresManualDownload: true,
           available: wingetAvailable,
@@ -349,25 +349,25 @@ export const planOnboardingDependencyInstallerOptions = (
       options: [
         option({
           mode: "docker-engine-git",
-          label: "Docker Engine and Git",
+          label: "Docker Engine",
           platform,
           recommended: true,
           automation: packageManager ? "automated" : "manual",
-          description: "Installs Docker Engine packages and Git through the detected Linux package manager.",
+          description: "Installs Docker Engine packages through the detected Linux package manager.",
           requiresPrivilege: true,
           requiresManualDownload: !packageManager,
           available: Boolean(packageManager),
           guidance: packageManager
             ? ["The Docker service may need to be started and the current user may need Docker group access after installation."]
-            : ["Install Docker Engine and Git manually because no supported Linux package manager was detected."],
+            : ["Install Docker Engine manually because no supported Linux package manager was detected."],
         }),
         option({
           mode: "docker-desktop-git",
-          label: "Docker Desktop and Git",
+          label: "Docker Desktop",
           platform,
           recommended: false,
           automation: packageManager ? "partial" : "manual",
-          description: "Installs Git automatically when possible and provides official Docker Desktop manual-download guidance.",
+          description: "Provides official Docker Desktop manual-download guidance.",
           requiresPrivilege: true,
           requiresManualDownload: true,
           available: Boolean(packageManager),
@@ -383,7 +383,7 @@ export const planOnboardingDependencyInstallerOptions = (
     options: [
       option({
         mode: "docker-desktop-git",
-        label: "Docker Desktop and Git",
+          label: "Docker Desktop",
         platform,
         recommended: false,
         automation: "unsupported",
@@ -391,11 +391,11 @@ export const planOnboardingDependencyInstallerOptions = (
         requiresPrivilege: false,
         requiresManualDownload: true,
         available: false,
-        guidance: ["Install Docker and Git manually for this platform, then rerun readiness checks."],
+          guidance: ["Install Docker manually for this platform, then rerun readiness checks."],
       }),
       option({
         mode: "docker-engine-git",
-        label: "Docker Engine and Git",
+          label: "Docker Engine",
         platform,
         recommended: false,
         automation: "unsupported",
@@ -403,7 +403,7 @@ export const planOnboardingDependencyInstallerOptions = (
         requiresPrivilege: false,
         requiresManualDownload: true,
         available: false,
-        guidance: ["Install Docker Engine and Git manually for this platform, then rerun readiness checks."],
+          guidance: ["Install Docker Engine manually for this platform, then rerun readiness checks."],
       }),
     ],
   };
@@ -415,22 +415,22 @@ const linuxEnginePackageCommands = (packageManager: OnboardingLinuxPackageManage
       {
         id: "apt-update",
         groupId: "linux-engine-packages",
-        groupLabel: "Docker Engine and Git packages",
+        groupLabel: "Docker Engine packages",
         label: "Refresh apt package metadata",
-        dependencyIds: ["docker-cli", "git-cli"],
+        dependencyIds: ["docker-cli"],
         command: "apt-get",
         args: ["update"],
         privileged: true,
         timeoutMs: PACKAGE_INDEX_TIMEOUT_MS,
       },
       {
-        id: "apt-install-docker-git",
+        id: "apt-install-docker",
         groupId: "linux-engine-packages",
-        groupLabel: "Docker Engine and Git packages",
-        label: "Install Docker Engine and Git packages",
-        dependencyIds: ["docker-cli", "git-cli"],
+        groupLabel: "Docker Engine packages",
+        label: "Install Docker Engine packages",
+        dependencyIds: ["docker-cli"],
         command: "apt-get",
-        args: ["install", "-y", "docker.io", "docker-compose-plugin", "git"],
+        args: ["install", "-y", "docker.io", "docker-compose-plugin"],
         privileged: true,
         timeoutMs: INSTALL_TIMEOUT_MS,
       },
@@ -439,13 +439,13 @@ const linuxEnginePackageCommands = (packageManager: OnboardingLinuxPackageManage
 
   if (packageManager === "dnf") {
     return [{
-      id: "dnf-install-docker-git",
+      id: "dnf-install-docker",
       groupId: "linux-engine-packages",
-      groupLabel: "Docker Engine and Git packages",
-      label: "Install Docker Engine and Git packages",
-      dependencyIds: ["docker-cli", "git-cli"],
+      groupLabel: "Docker Engine packages",
+      label: "Install Docker Engine packages",
+      dependencyIds: ["docker-cli"],
       command: "dnf",
-      args: ["install", "-y", "moby-engine", "docker-compose", "git"],
+      args: ["install", "-y", "moby-engine", "docker-compose"],
       privileged: true,
       timeoutMs: INSTALL_TIMEOUT_MS,
     }];
@@ -453,13 +453,13 @@ const linuxEnginePackageCommands = (packageManager: OnboardingLinuxPackageManage
 
   if (packageManager === "yum") {
     return [{
-      id: "yum-install-docker-git",
+      id: "yum-install-docker",
       groupId: "linux-engine-packages",
-      groupLabel: "Docker Engine and Git packages",
-      label: "Install Docker and Git packages",
-      dependencyIds: ["docker-cli", "git-cli"],
+      groupLabel: "Docker Engine packages",
+      label: "Install Docker packages",
+      dependencyIds: ["docker-cli"],
       command: "yum",
-      args: ["install", "-y", "docker", "git"],
+      args: ["install", "-y", "docker"],
       privileged: true,
       timeoutMs: INSTALL_TIMEOUT_MS,
     }];
@@ -467,109 +467,26 @@ const linuxEnginePackageCommands = (packageManager: OnboardingLinuxPackageManage
 
   if (packageManager === "zypper") {
     return [{
-      id: "zypper-install-docker-git",
+      id: "zypper-install-docker",
       groupId: "linux-engine-packages",
-      groupLabel: "Docker Engine and Git packages",
-      label: "Install Docker and Git packages",
-      dependencyIds: ["docker-cli", "git-cli"],
+      groupLabel: "Docker Engine packages",
+      label: "Install Docker packages",
+      dependencyIds: ["docker-cli"],
       command: "zypper",
-      args: ["--non-interactive", "install", "docker", "git"],
+      args: ["--non-interactive", "install", "docker"],
       privileged: true,
       timeoutMs: INSTALL_TIMEOUT_MS,
     }];
   }
 
   return [{
-    id: "pacman-install-docker-git",
+    id: "pacman-install-docker",
     groupId: "linux-engine-packages",
-    groupLabel: "Docker Engine and Git packages",
-    label: "Install Docker and Git packages",
-    dependencyIds: ["docker-cli", "git-cli"],
+    groupLabel: "Docker Engine packages",
+    label: "Install Docker packages",
+    dependencyIds: ["docker-cli"],
     command: "pacman",
-    args: ["-Sy", "--noconfirm", "docker", "git"],
-    privileged: true,
-    timeoutMs: INSTALL_TIMEOUT_MS,
-  }];
-};
-
-const linuxGitPackageCommands = (packageManager: OnboardingLinuxPackageManager): InstallerCommandSpec[] => {
-  if (packageManager === "apt") {
-    return [
-      {
-        id: "apt-update-for-git",
-        groupId: "linux-git-package",
-        groupLabel: "Git package",
-        label: "Refresh apt package metadata",
-        dependencyIds: ["git-cli"],
-        command: "apt-get",
-        args: ["update"],
-        privileged: true,
-        timeoutMs: PACKAGE_INDEX_TIMEOUT_MS,
-      },
-      {
-        id: "apt-install-git",
-        groupId: "linux-git-package",
-        groupLabel: "Git package",
-        label: "Install Git package",
-        dependencyIds: ["git-cli"],
-        command: "apt-get",
-        args: ["install", "-y", "git"],
-        privileged: true,
-        timeoutMs: INSTALL_TIMEOUT_MS,
-      },
-    ];
-  }
-
-  if (packageManager === "dnf") {
-    return [{
-      id: "dnf-install-git",
-      groupId: "linux-git-package",
-      groupLabel: "Git package",
-      label: "Install Git package",
-      dependencyIds: ["git-cli"],
-      command: "dnf",
-      args: ["install", "-y", "git"],
-      privileged: true,
-      timeoutMs: INSTALL_TIMEOUT_MS,
-    }];
-  }
-
-  if (packageManager === "yum") {
-    return [{
-      id: "yum-install-git",
-      groupId: "linux-git-package",
-      groupLabel: "Git package",
-      label: "Install Git package",
-      dependencyIds: ["git-cli"],
-      command: "yum",
-      args: ["install", "-y", "git"],
-      privileged: true,
-      timeoutMs: INSTALL_TIMEOUT_MS,
-    }];
-  }
-
-  if (packageManager === "zypper") {
-    return [{
-      id: "zypper-install-git",
-      groupId: "linux-git-package",
-      groupLabel: "Git package",
-      label: "Install Git package",
-      dependencyIds: ["git-cli"],
-      command: "zypper",
-      args: ["--non-interactive", "install", "git"],
-      privileged: true,
-      timeoutMs: INSTALL_TIMEOUT_MS,
-    }];
-  }
-
-  return [{
-    id: "pacman-install-git",
-    groupId: "linux-git-package",
-    groupLabel: "Git package",
-    label: "Install Git package",
-    dependencyIds: ["git-cli"],
-    command: "pacman",
-    args: ["-Sy", "--noconfirm", "git"],
+    args: ["-Sy", "--noconfirm", "docker"],
     privileged: true,
     timeoutMs: INSTALL_TIMEOUT_MS,
   }];
@@ -586,7 +503,7 @@ const commandGroupsForMode = (
     if (!environment.homebrewAvailable) {
       return {
         groups: [],
-        guidance: ["Homebrew was not detected. Install Homebrew or manually install Docker Desktop and Git, then refresh the terminal PATH."],
+        guidance: ["Homebrew was not detected. Install Homebrew or manually install Docker Desktop, then refresh the terminal PATH."],
         requiresManualDownload: true,
       };
     }
@@ -608,22 +525,6 @@ const commandGroupsForMode = (
             timeoutMs: INSTALL_TIMEOUT_MS,
           }],
         },
-        {
-          id: "macos-git",
-          label: "Git",
-          dependencyIds: ["git-cli"],
-          commands: [{
-            id: "brew-install-git",
-            groupId: "macos-git",
-            groupLabel: "Git",
-            label: "Install Git with Homebrew",
-            dependencyIds: ["git-cli"],
-            command: "brew",
-            args: ["install", "git"],
-            privileged: false,
-            timeoutMs: INSTALL_TIMEOUT_MS,
-          }],
-        },
       ],
       guidance: ["Open Docker Desktop after installation and rerun readiness checks after the daemon starts."],
       requiresManualDownload: false,
@@ -632,27 +533,9 @@ const commandGroupsForMode = (
 
   if (platform === "darwin" && mode === "docker-engine-git") {
     return {
-      groups: environment.homebrewAvailable
-        ? [{
-            id: "macos-git",
-            label: "Git",
-            dependencyIds: ["git-cli"],
-            commands: [{
-              id: "brew-install-git",
-              groupId: "macos-git",
-              groupLabel: "Git",
-              label: "Install Git with Homebrew",
-              dependencyIds: ["git-cli"],
-              command: "brew",
-              args: ["install", "git"],
-              privileged: false,
-              timeoutMs: INSTALL_TIMEOUT_MS,
-            }],
-          }]
-        : [],
+      groups: [],
       guidance: [
         "Standalone Docker Engine on macOS needs a Linux VM. Use Docker Desktop unless you manage that VM yourself.",
-        ...(environment.homebrewAvailable ? [] : ["Homebrew was not detected, so Git installation also requires manual setup."]),
       ],
       requiresManualDownload: true,
     };
@@ -662,7 +545,7 @@ const commandGroupsForMode = (
     if (!environment.wingetAvailable) {
       return {
         groups: [],
-        guidance: ["winget was not detected. Install winget or manually install Docker Desktop and Git, then refresh the terminal PATH."],
+        guidance: ["winget was not detected. Install winget or manually install Docker Desktop, then refresh the terminal PATH."],
         requiresManualDownload: true,
       };
     }
@@ -684,22 +567,6 @@ const commandGroupsForMode = (
             timeoutMs: INSTALL_TIMEOUT_MS,
           }],
         },
-        {
-          id: "windows-git",
-          label: "Git",
-          dependencyIds: ["git-cli"],
-          commands: [{
-            id: "winget-install-git",
-            groupId: "windows-git",
-            groupLabel: "Git",
-            label: "Install Git with winget",
-            dependencyIds: ["git-cli"],
-            command: "winget",
-            args: ["install", "--id", "Git.Git", "--exact", "--accept-package-agreements", "--accept-source-agreements"],
-            privileged: false,
-            timeoutMs: INSTALL_TIMEOUT_MS,
-          }],
-        },
       ],
       guidance: ["Restart the terminal after installation and start Docker Desktop before rerunning readiness checks."],
       requiresManualDownload: false,
@@ -708,27 +575,9 @@ const commandGroupsForMode = (
 
   if (platform === "win32" && mode === "docker-engine-git") {
     return {
-      groups: environment.wingetAvailable
-        ? [{
-            id: "windows-git",
-            label: "Git",
-            dependencyIds: ["git-cli"],
-            commands: [{
-              id: "winget-install-git",
-              groupId: "windows-git",
-              groupLabel: "Git",
-              label: "Install Git with winget",
-              dependencyIds: ["git-cli"],
-              command: "winget",
-              args: ["install", "--id", "Git.Git", "--exact", "--accept-package-agreements", "--accept-source-agreements"],
-              privileged: false,
-              timeoutMs: INSTALL_TIMEOUT_MS,
-            }],
-          }]
-        : [],
+      groups: [],
       guidance: [
         "Docker Engine on Windows should run through WSL or Docker Desktop. Use Docker Desktop with WSL integration unless you manage Docker Engine inside WSL.",
-        ...(environment.wingetAvailable ? [] : ["winget was not detected, so Git installation also requires manual setup."]),
       ],
       requiresManualDownload: true,
     };
@@ -738,7 +587,7 @@ const commandGroupsForMode = (
     if (!linuxPackageManager) {
       return {
         groups: [],
-        guidance: ["No supported Linux package manager was detected. Install Docker Engine and Git manually, then rerun readiness checks."],
+        guidance: ["No supported Linux package manager was detected. Install Docker Engine manually, then rerun readiness checks."],
         requiresManualDownload: true,
       };
     }
@@ -746,8 +595,8 @@ const commandGroupsForMode = (
       groups: [
         {
           id: "linux-engine-packages",
-          label: "Docker Engine and Git packages",
-          dependencyIds: ["docker-cli", "git-cli"],
+          label: "Docker Engine packages",
+          dependencyIds: ["docker-cli"],
           commands: linuxEnginePackageCommands(linuxPackageManager),
         },
         {
@@ -777,23 +626,8 @@ const commandGroupsForMode = (
   }
 
   if (platform === "linux" && mode === "docker-desktop-git") {
-    if (!linuxPackageManager) {
-      return {
-        groups: [],
-        guidance: [
-          "No supported Linux package manager was detected for automated Git installation.",
-          "Download Docker Desktop for Linux from Docker's official distro-specific packages and install Git manually.",
-        ],
-        requiresManualDownload: true,
-      };
-    }
     return {
-      groups: [{
-        id: "linux-git-package",
-        label: "Git package",
-        dependencyIds: ["git-cli"],
-        commands: linuxGitPackageCommands(linuxPackageManager),
-      }],
+      groups: [],
       guidance: ["Download Docker Desktop for Linux from Docker's official distro-specific packages, install it manually, then start the desktop app."],
       requiresManualDownload: true,
     };

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import { runCommandStrict, type CommandResult } from "../../services/cli-process-runner.js";
 import { CODE_UX_GIT_PATHSPEC_EXCLUDE, CODE_UX_REPO_DIR } from "./code-ux-gitignore.js";
@@ -12,12 +12,6 @@ import { CODE_UX_GIT_PATHSPEC_EXCLUDE, CODE_UX_REPO_DIR } from "./code-ux-gitign
 export type LocalMergeRunner = (command: string, args: string[], cwd: string) => Promise<CommandResult>;
 
 const defaultRunner: LocalMergeRunner = (command, args, cwd) => runCommandStrict(command, args, cwd);
-const defaultHostGitRunner: LocalMergeRunner = (command, args, cwd) => runCommandStrict(
-  command,
-  args,
-  cwd,
-  { ...process.env, CODE_UX_GIT_CONTAINER_MODE: "host" },
-);
 const CODE_UX_GIT_IDENTITY_ARGS = [
   "-c", "user.name=Code UX",
   "-c", "user.email=agents@codeux.ai",
@@ -592,7 +586,7 @@ export async function mergeBranchLocallyInTemporaryWorktree(args: {
   fallbackTargetBranches?: string[];
   runner?: LocalMergeRunner;
 }): Promise<LocalMergeResult> {
-  const runner = args.runner ?? defaultHostGitRunner;
+  const runner = args.runner ?? defaultRunner;
   const targetBranch = args.targetBranch.trim();
   const sourceBranch = args.sourceBranch.trim();
   if (!targetBranch) {
@@ -628,7 +622,14 @@ export async function mergeBranchLocallyInTemporaryWorktree(args: {
     }
   }
 
-  const worktreePath = await mkdtemp(path.join(tmpdir(), "code-ux-local-merge-"));
+  const worktreeRoot = path.join(args.repoPath, ".worktrees");
+  let worktreePath: string;
+  if (existsSync(args.repoPath)) {
+    await mkdir(worktreeRoot, { recursive: true });
+    worktreePath = await mkdtemp(path.join(worktreeRoot, "code-ux-local-merge-"));
+  } else {
+    worktreePath = path.join(worktreeRoot, `code-ux-local-merge-${randomUUID()}`);
+  }
   let worktreeCreated = false;
   try {
     await runner("git", ["worktree", "add", "--detach", worktreePath, targetBranch], args.repoPath);

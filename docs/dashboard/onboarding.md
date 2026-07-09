@@ -36,13 +36,12 @@ The readiness payload reports:
 - Required dependencies:
   - Docker CLI
   - Docker daemon
-  - Git CLI
-- Structured installer metadata for safe Docker/Git setup options:
+- Structured installer metadata for safe Docker setup options:
   - `docker-desktop-git`
   - `docker-engine-git`
 - Local provider auth detection for Gemini, Codex, Claude Code, Qwen Code, and OpenCode
 
-Docker is mandatory for the default containerized workflow. When Docker is missing or the daemon is stopped, the top-nav Docker control shows a red `Runtime not ready` alert badge with a static exclamation marker and motion-safe attention animation. The Docker status trigger also announces that the runtime is not ready, and its popover explains that provider CLIs cannot execute until Docker is reachable.
+Docker is mandatory for the default containerized workflow. Host Git is not a required dependency for the app runtime; backend Git operations use the `alpine/git` helper container. When Docker is missing or the daemon is stopped, the top-nav Docker control shows a red `Runtime not ready` alert badge with a static exclamation marker and motion-safe attention animation. The Docker status trigger also announces that the runtime is not ready, and its popover explains that provider CLIs cannot execute until Docker is reachable.
 
 The backend installer contract is intentionally constrained. It advertises platform-specific options in the readiness payload, then the installer service executes only hardcoded executable/argument arrays for the selected `docker-desktop-git` or `docker-engine-git` mode. The install route rejects unsupported modes and missing confirmation, does not mutate settings, and does not run shell snippets, downloaded remote scripts, or interactive password prompts.
 
@@ -50,15 +49,15 @@ Installer support matrix:
 
 | Platform | Recommended mode | Automated behavior | Degraded/manual behavior |
 | --- | --- | --- | --- |
-| macOS | `docker-desktop-git` | Homebrew installs Docker Desktop and Git when Homebrew is available. | `docker-engine-git` is degraded because standalone Docker Engine requires a Linux VM; it can only automate Git through Homebrew and shows Docker manual guidance. |
-| Windows | `docker-desktop-git` | winget installs Docker Desktop and Git with exact package IDs and package/source agreement flags. | `docker-engine-git` is degraded because Docker Engine is not installed directly on Windows desktops; it can only automate Git through winget and shows Docker Desktop or WSL guidance. |
-| Linux | `docker-engine-git` | `apt`, `dnf`, `yum`, `zypper`, or `pacman` install Docker Engine packages and Git, then systemd startup is attempted when `systemctl` exists. | Linux Docker Desktop is distro-artifact specific, so `docker-desktop-git` automates Git when possible and returns official Docker Desktop manual-download guidance. |
+| macOS | `docker-desktop-git` | Homebrew installs Docker Desktop when Homebrew is available. | `docker-engine-git` is degraded because standalone Docker Engine requires a Linux VM; use Docker Desktop unless you manage that VM yourself. |
+| Windows | `docker-desktop-git` | winget installs Docker Desktop with exact package IDs and package/source agreement flags. | `docker-engine-git` is degraded because Docker Engine is not installed directly on Windows desktops; use Docker Desktop or WSL guidance instead. |
+| Linux | `docker-engine-git` | `apt`, `dnf`, `yum`, `zypper`, or `pacman` install Docker Engine packages, then systemd startup is attempted when `systemctl` exists. | Linux Docker Desktop is distro-artifact specific, so `docker-desktop-git` returns official Docker Desktop manual-download guidance. |
 
 Linux Engine installation handles privileges noninteractively. Root runs package and service commands directly. Non-root runs use `sudo -n`; when passwordless sudo is unavailable, commands are returned as skipped display commands with `requiresPrivilege` guidance instead of hanging on a password prompt. Installer results include per-command status, bounded stdout/stderr summaries, short command messages, skipped dependency groups, manual-download flags, privilege flags, and post-install guidance such as starting Docker, refreshing PATH, or installing through a package manager manually. Raw command output is not repeated through per-command messages.
 
-The reusable Installation step component stays presentational. It receives readiness metadata, selected/running installer mode, latest installer result or error, and callback props from its parent instead of calling installer APIs directly. When required Docker/Git checks are missing and the recommended installer is available, it shows the primary `Auto Install dependencies` action with copy that explains Code UX will run the detected OS package manager only after the operator clicks. The advanced area exposes both `Docker Desktop + Git` and `Docker Engine + Git`, including availability, recommended state, degraded/manual-download guidance, privilege guidance, per-mode actions, preserved manual Docker/Git links, live progress, structured command results, retry, and readiness recheck paths. Onboarding presents local dependency setup only.
+The reusable Installation step component stays presentational. It receives readiness metadata, selected/running installer mode, latest installer result or error, and callback props from its parent instead of calling installer APIs directly. When required Docker checks are missing and the recommended installer is available, it shows the primary `Auto Install dependencies` action with copy that explains Code UX will run the detected OS package manager only after the operator clicks. The advanced area exposes both Docker Desktop and Docker Engine choices, including availability, recommended state, degraded/manual-download guidance, privilege guidance, per-mode actions, preserved manual Docker links, live progress, structured command results, retry, and readiness recheck paths. Onboarding presents local dependency setup only.
 
-Installer attempts never complete onboarding automatically. A resolved installer call, including `requiresPrivilege` or `requiresManualDownload` outcomes, is treated as a completed attempt: onboarding renders the structured result, keeps manual Docker/Git links available, and re-runs readiness checks so Docker CLI, Docker daemon, and Git status refresh. Operators may need to reopen the terminal so PATH changes are visible, start Docker Desktop or the Docker Engine daemon, add their user to the Docker group, or rerun the installer from an elevated shell. Permission failures are reported as installer results or safe route errors rather than exposing full command output.
+Installer attempts never complete onboarding automatically. A resolved installer call, including `requiresPrivilege` or `requiresManualDownload` outcomes, is treated as a completed attempt: onboarding renders the structured result, keeps manual Docker links available, and re-runs readiness checks so Docker CLI and Docker daemon status refresh. Operators may need to reopen the terminal so PATH changes are visible, start Docker Desktop or the Docker Engine daemon, add their user to the Docker group, or rerun the installer from an elevated shell. Permission failures are reported as installer results or safe route errors rather than exposing full command output.
 
 The top-nav notification center also consumes this readiness payload. Startup notifications are generated from real checks instead of placeholder messages:
 - `Cluster not ready` is a non-dismissible critical notification when required dependencies are missing.
@@ -94,11 +93,11 @@ The Standard and Expert flow contains the detailed setup sequence:
 1. Setup mode
    - Selects Easy, Standard, or Expert.
 2. Installation
-   - Checks Docker and Git availability.
-   - Shows `Auto Install dependencies` when the recommended Docker/Git installer can run.
-   - Offers advanced Docker Desktop + Git and Docker Engine + Git choices, including degraded/manual setup guidance.
+   - Checks Docker CLI and daemon availability.
+   - Shows `Auto Install dependencies` when the recommended Docker installer can run.
+   - Offers advanced Docker Desktop and Docker Engine choices, including degraded/manual setup guidance.
    - Gives Docker installation/start guidance and manual download links when required checks fail or installer results need follow-up.
-   - Mirrors failed required checks in the header Docker status control as the red runtime-not-ready warning, backed by the same Docker CLI, Docker daemon, and Git CLI readiness payload.
+   - Mirrors failed required checks in the header Docker status control as the red runtime-not-ready warning, backed by the same Docker CLI and Docker daemon readiness payload.
 3. Introduction
    - Opens with a short `Welcome to Code UX` overview of the containerized agentic workspace.
    - Explains the container-first runtime model.
