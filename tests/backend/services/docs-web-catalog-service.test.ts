@@ -1,8 +1,20 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import express from "express";
+import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { registerDocsWebRoutes } from "../../../src/server/docs-web-routes.js";
 import { DocsWebCatalogService } from "../../../src/services/docs-web-catalog-service.js";
+
+const repoDocsWebRoot = path.resolve(process.cwd(), "docs-web");
+const sampleDocIds = [
+  "docs-overview",
+  "user-dashboard-overview",
+  "user-quickstart",
+  "developer-mcp-tools",
+  "architecture-system-overview",
+] as const;
 
 describe("DocsWebCatalogService", () => {
   let tempDir: string;
@@ -39,6 +51,17 @@ describe("DocsWebCatalogService", () => {
     expect(collection.groupedDocs["Developer Reference"].map((doc) => doc.id)).toEqual(["developer-overview"]);
   });
 
+  it("lists the main repository docs-web samples", () => {
+    const service = new DocsWebCatalogService(repoDocsWebRoot);
+    const collection = service.getCollection();
+    const docIds = new Set(collection.docs.map((doc) => doc.id));
+
+    expect(collection.defaultDocId).toBe("docs-overview");
+    for (const docId of sampleDocIds) {
+      expect(docIds.has(docId)).toBe(true);
+    }
+  });
+
   it("returns individual documents with content and metadata", () => {
     const service = new DocsWebCatalogService(tempDir);
     const doc = service.getDocument("user-quickstart");
@@ -65,5 +88,33 @@ describe("DocsWebCatalogService", () => {
     const service = new DocsWebCatalogService(tempDir);
 
     expect(service.getDocument("missing")).toBeNull();
+  });
+
+  it("resolves the repository docs-web root by default", () => {
+    const service = new DocsWebCatalogService();
+    const collection = service.getCollection();
+
+    expect(collection.defaultDocId).toBe("docs-overview");
+    expect(collection.docs.some((doc) => doc.id === "docs-overview")).toBe(true);
+    expect(collection.groupedDocs["Getting Started"].some((doc) => doc.id === "docs-overview")).toBe(true);
+  });
+});
+
+describe("registerDocsWebRoutes", () => {
+  it("serves the repository docs-web collection and sample documents", async () => {
+    const app = express();
+    registerDocsWebRoutes(app, new DocsWebCatalogService(repoDocsWebRoot));
+
+    const collectionResponse = await request(app).get("/api/docs-web");
+    expect(collectionResponse.status).toBe(200);
+    expect(collectionResponse.body.defaultDocId).toBe("docs-overview");
+
+    for (const docId of sampleDocIds) {
+      const docResponse = await request(app).get(`/api/docs-web/${docId}`);
+
+      expect(docResponse.status).toBe(200);
+      expect(docResponse.body.doc.id).toBe(docId);
+      expect(docResponse.body.doc.contentMarkdown.trim().length).toBeGreaterThan(0);
+    }
   });
 });
