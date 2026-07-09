@@ -434,7 +434,15 @@ async function normalizeTemporaryWorktreeGitMetadata(repoPath: string, worktreeP
     return;
   }
 
-  const gitDirName = path.basename(match[1].trim());
+  const rawGitDir = match[1].trim();
+  const currentGitDir = path.isAbsolute(rawGitDir)
+    ? rawGitDir
+    : path.resolve(worktreePath, rawGitDir);
+  if (existsSync(currentGitDir)) {
+    return;
+  }
+
+  const gitDirName = path.basename(rawGitDir);
   if (!gitDirName || gitDirName === "." || gitDirName === path.sep) {
     return;
   }
