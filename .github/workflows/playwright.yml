@@ -180,6 +180,8 @@ jobs:
     name: Playwright E2E Tests (ubuntu-latest)
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     if: always()
     steps:
       - name: Verify split Linux Playwright shards
@@ -194,6 +196,8 @@ jobs:
     name: Playwright E2E Tests (macos-latest)
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     if: always()
     steps:
       - name: Verify split macOS Playwright shards
@@ -208,6 +212,8 @@ jobs:
     name: Playwright E2E Tests (windows-latest)
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     if: always()
     steps:
       - name: Verify split Windows Playwright shards
