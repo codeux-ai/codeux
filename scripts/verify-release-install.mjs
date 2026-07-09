@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -14,11 +15,40 @@ const installDir = path.join(tempRoot, "install");
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 
-async function runStep(label, command, args, options = {}) {
-  console.log(`\n==> ${label}`);
-  console.log(`$ ${[command, ...args].join(" ")}`);
+function existingPath(...parts) {
+  const candidate = path.resolve(...parts);
+  return existsSync(candidate) ? candidate : null;
+}
 
-  const child = spawn(command, args, {
+function resolveWindowsPackageManager(command, args) {
+  if (process.platform !== "win32") {
+    return { command, args };
+  }
+
+  if (command === "npm.cmd") {
+    const npmCliPath = existingPath(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
+    if (npmCliPath) {
+      return { command: process.execPath, args: [npmCliPath, ...args] };
+    }
+  }
+
+  if (command === "pnpm.cmd" && process.env.PNPM_HOME) {
+    const pnpmCliPath = existingPath(process.env.PNPM_HOME, "..", "pnpm", "bin", "pnpm.cjs");
+    if (pnpmCliPath) {
+      return { command: process.execPath, args: [pnpmCliPath, ...args] };
+    }
+  }
+
+  return { command, args };
+}
+
+async function runStep(label, command, args, options = {}) {
+  const invocation = resolveWindowsPackageManager(command, args);
+
+  console.log(`\n==> ${label}`);
+  console.log(`$ ${[invocation.command, ...invocation.args].join(" ")}`);
+
+  const child = spawn(invocation.command, invocation.args, {
     cwd: options.cwd ?? projectRoot,
     env: {
       ...process.env,
@@ -51,7 +81,7 @@ async function runStep(label, command, args, options = {}) {
   if (exitCode !== 0) {
     const detail = [
       `${label} failed with exit code ${exitCode}.`,
-      `Command: ${[command, ...args].join(" ")}`,
+      `Command: ${[invocation.command, ...invocation.args].join(" ")}`,
       `Working directory: ${options.cwd ?? projectRoot}`,
       stdout.trim().length > 0 ? `stdout:\n${stdout.trim()}` : undefined,
       stderr.trim().length > 0 ? `stderr:\n${stderr.trim()}` : undefined,
