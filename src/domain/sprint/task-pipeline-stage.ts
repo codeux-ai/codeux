@@ -121,6 +121,9 @@ export function normalizeTaskMergeIndicator(
   if (task.merge_indicator === "MERGE_CONFLICT") {
     return "MERGE_CONFLICT";
   }
+  if (task.merge_indicator === "MERGE_BLOCKED") {
+    return "MERGE_BLOCKED";
+  }
   return taskHasMergeEvidence(task, options) ? task.merge_indicator : undefined;
 }
 
@@ -213,6 +216,9 @@ function mapNonPipelineStage(status: SubtaskStatus): TaskPipelineStage {
 function isPipelineSettled(
   task: Pick<Subtask, "is_merged" | "merge_indicator" | "worker_branch" | "pr_url">,
 ): boolean {
+  if (task.merge_indicator === "MERGE_BLOCKED") {
+    return false;
+  }
   return isMergeSettled(task) || !taskHasMergeEvidence(task);
 }
 
@@ -234,6 +240,9 @@ function classifyPostCodingStage(input: {
   }
   if (input.mergeIndicator === "CI") {
     return "CI";
+  }
+  if (input.mergeIndicator === "MERGE_BLOCKED") {
+    return "MERGE";
   }
   // Has unmerged evidence and no blocking gate → awaiting merge.
   return input.hasEvidence ? "MERGE" : "COMPLETED";

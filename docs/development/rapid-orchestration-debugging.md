@@ -79,6 +79,8 @@ In GitHub Actions, the CI DAG and Electron DAG lanes run build, Electron binary 
 
 In LOCAL git mode, recovered worker-branch evidence is treated as dependency state: downstream DAG tasks stay blocked until the parent branch has merged into the sprint feature branch or the parent is proven to have no merge work.
 
+Local CLI git finalization is also branch-evidence state. If a `cli_git_pushed` task-run event records a `pushedBranch`, the merge gate backfills that worker branch before dependency derivation. If pushed git work is recorded but no worker branch can be recovered, the task fails closed in `MERGE_BLOCKED` instead of settling as no-output work, so downstream DAG tasks cannot start against an incomplete feature branch.
+
 Host-execution DAG tasks export their worker output through an isolated temporary Git index. The exporter discovers modified, deleted, and untracked paths with Git's ignore rules, stages that path list into the temporary index, and emits a cached binary diff against the task base. Host worktrees use an absolute temporary index path, while Docker workspaces keep a container-relative path, so Git for Windows and container Git both write the export index in the intended workspace. This prevents ignored runtime caches from entering worker branches while ensuring parent-created files are visible before dependent tasks unlock.
 
 The fast branch-only merge gate evaluates only completed candidate tasks, then reconciles the returned candidate projection back into the full DAG before dependency re-derivation. A gate result must never drop non-candidate tasks or discard recovered merge state.

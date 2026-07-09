@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CLI_GIT_FINALIZATION_EVENT_SCAN_LIMIT,
   hasCliGitFinalized,
+  hasCliGitNoChanges,
+  hasCliGitPushed,
   isCliTaskRunAwaitingGitFinalization,
+  resolveCliGitPushedWorkerBranch,
 } from "../../../../../src/domain/sprint/ci/cli-git-finalization.js";
 import type { TaskRunRecord } from "../../../../../src/contracts/execution-types.js";
 
@@ -46,5 +49,16 @@ describe("CLI git finalization helpers", () => {
 
     expect(hasCliGitFinalized(cliTaskRun(), listTaskRunEvents)).toBe(false);
     expect(isCliTaskRunAwaitingGitFinalization(cliTaskRun(), listTaskRunEvents)).toBe(true);
+  });
+
+  it("resolves pushed worker branch evidence from git finalization payloads", () => {
+    const listTaskRunEvents = vi.fn().mockReturnValue([
+      { eventType: "cli_git_pushed", payload: { pushedBranch: " task/feature-parent " } },
+    ]);
+
+    expect(hasCliGitPushed(cliTaskRun(), listTaskRunEvents)).toBe(true);
+    expect(hasCliGitNoChanges(cliTaskRun(), listTaskRunEvents)).toBe(false);
+    expect(resolveCliGitPushedWorkerBranch(cliTaskRun(), listTaskRunEvents)).toBe("task/feature-parent");
+    expect(listTaskRunEvents).toHaveBeenCalledWith("task-run-1", CLI_GIT_FINALIZATION_EVENT_SCAN_LIMIT);
   });
 });

@@ -118,6 +118,29 @@ describe("runStatusDerivationStep", () => {
     expect(result[1].status).toBe("PENDING");
   });
 
+  it("keeps local merge-blocked CLI tasks from unlocking dependents without branch evidence", () => {
+    const subtasks: Subtask[] = [
+      {
+        id: "task-1",
+        title: "Task 1",
+        prompt: "",
+        depends_on: [],
+        is_independent: true,
+        is_merged: false,
+        status: "CODING_COMPLETED",
+        merge_indicator: "MERGE_BLOCKED",
+        provider: "mockup-cli",
+      },
+      { id: "task-2", title: "Task 2", prompt: "", depends_on: ["task-1"], is_independent: false, is_merged: false, status: "BLOCKED" },
+    ];
+
+    const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState, githubMode: "LOCAL" });
+
+    expect(result[0].status).toBe("CODING_COMPLETED");
+    expect(result[0].merge_indicator).toBe("MERGE_BLOCKED");
+    expect(result[1].status).toBe("BLOCKED");
+  });
+
   it("blocks non-independent tasks with no dependencies", () => {
     const subtasks: Subtask[] = [
       { id: "task-1", title: "Task 1", prompt: "", depends_on: [], is_independent: false, is_merged: false, status: "PENDING" },
