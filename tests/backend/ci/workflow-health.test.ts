@@ -185,7 +185,7 @@ describe("GitHub workflow health", () => {
     expect(dagJob).toContain(".cache/e2e-mockup-sprint-pentest/");
   });
 
-  it("keeps E2E and release-candidate jobs bounded for a six-runner lane", async () => {
+  it("runs release-candidate packaging beside E2E while keeping each matrix bounded", async () => {
     const ci = await readRepoFile(WORKFLOWS.ci);
     const e2e = getJobBlock(ci, "e2e");
     const releaseCandidate = getJobBlock(ci, "release-candidate");
@@ -211,7 +211,9 @@ describe("GitHub workflow health", () => {
     expect(ci).not.toContain("E2E / ${{ matrix.os.label }} smoke");
     expect(ci).not.toContain("electron-dag:");
 
-    expect(releaseCandidate).toContain("needs: [package-smoke, ci-dag, e2e]");
+    expect(releaseCandidate).toContain("needs: package-smoke");
+    expect(releaseCandidate).not.toContain("ci-dag");
+    expect(releaseCandidate).not.toContain("e2e");
     expect(releaseCandidate).toContain("max-parallel: 2");
     expect(releaseCandidate).toContain("node node_modules/electron/install.js");
     expect(releaseCandidate).toContain("pnpm run electron:prepare-deps");

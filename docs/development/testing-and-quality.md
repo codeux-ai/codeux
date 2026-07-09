@@ -211,7 +211,7 @@ The lane is intentionally numbered and staged:
 - `07 Package` verifies the npm tarball install from that build artifact with `CODE_UX_SKIP_RELEASE_INSTALL_BUILD=1`.
 - `08 Orchestration` runs one shared OS matrix from the build artifact: Linux validates the Docker-backed mockup DAG, while macOS and Windows validate the same DAG through the Electron app.
 - `09 E2E` runs Playwright from the build artifact with one shared matrix template across Linux, macOS, and Windows. Every OS runs all six project groups (`navigation`, `settings`, `projects`, `tasks`, `agents`, and `config`) with `max-parallel: 3`.
-- `10 Release Candidate` builds unsigned Linux, macOS, and Windows desktop packages with `--publish never` and uploads workflow artifacts.
+- `10 Release Candidate` starts after `07 Package` verifies the artifact-backed npm install, then builds unsigned Linux, macOS, and Windows desktop packages with `--publish never` beside the active E2E and orchestration matrices.
 
 The former standalone `Playwright Tests`, `Release Checks`, and `Mockup Sprint Orchestration` workflows are now manual diagnostics only: `Playwright Diagnostics`, `Release Candidate Diagnostics`, and `Mockup Sprint Diagnostics`. They remain useful for focused reruns, but the automatic PR signal comes from the numbered `Code UX CI Pipeline`.
 
