@@ -91,7 +91,7 @@ async function resolveInstalledBin(binName) {
     throw new Error(`Installed ${binName} bin target is missing: ${binPath}`);
   }
 
-  return { command: process.execPath, args: [binPath], displayCommand: binShim };
+  return { command: process.execPath, args: [binPath], displayCommand: binShim, binPath };
 }
 
 async function runStep(label, command, args, options = {}) {
@@ -156,6 +156,29 @@ async function runInstalledBinStep(label, binName, args, options = {}) {
   });
 }
 
+async function runInstalledPackageE2e() {
+  const invocation = await resolveInstalledBin("codeux");
+  const runnerPath = path.join(projectRoot, "scripts", "e2e", "run-installed-package-e2e.mjs");
+
+  await runStep("Run installed package runtime E2E smoke", process.execPath, [
+    runnerPath,
+    "--bin-path",
+    invocation.binPath,
+    "--install-dir",
+    installDir,
+  ], {
+    cwd: installDir,
+    displayCommand: "node",
+    displayArgs: [
+      "scripts/e2e/run-installed-package-e2e.mjs",
+      "--bin-path",
+      invocation.displayCommand,
+      "--install-dir",
+      installDir,
+    ],
+  });
+}
+
 async function npmPack() {
   const { stdout } = await runStep("Create npm package tarball", npmCommand, [
     "pack",
@@ -210,6 +233,7 @@ try {
   ], { cwd: installDir });
 
   await runInstalledBinStep("Run installed codeux --help", "codeux", ["--help"], { cwd: installDir });
+  await runInstalledPackageE2e();
 
   console.log("\nRelease install verification passed.");
 } catch (error) {

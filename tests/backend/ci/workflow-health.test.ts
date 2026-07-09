@@ -14,6 +14,7 @@ const WORKFLOWS = {
 
 const PLAYWRIGHT_CONFIG = "playwright.config.ts";
 const RELEASE_INSTALL_VERIFIER = "scripts/verify-release-install.mjs";
+const INSTALLED_PACKAGE_E2E = "scripts/e2e/run-installed-package-e2e.mjs";
 const REQUIRED_INSTALL = "pnpm install --frozen-lockfile --ignore-scripts";
 const PACKAGE_MANAGER_VERSION = "10.33.0";
 const NODE_VERSION = "22";
@@ -82,6 +83,7 @@ describe("GitHub workflow health", () => {
     expect(packageJson.packageManager).toBe(`pnpm@${PACKAGE_MANAGER_VERSION}`);
     expect(packageJson.engines?.node).toBe(`>=${NODE_VERSION}`);
     expect(packageJson.scripts?.audit).toBe("pnpm audit --audit-level=high");
+    expect(packageJson.scripts?.["test:installed-package"]).toBe("node scripts/verify-release-install.mjs");
   });
 
   it("keeps security-relevant workflows on least-privilege permissions and pinned major actions", async () => {
@@ -345,14 +347,29 @@ describe("GitHub workflow health", () => {
 
   it("keeps the release install verifier pinned to the locally installed CLI bin and artifact reuse explicit", async () => {
     const verifier = await readRepoFile(RELEASE_INSTALL_VERIFIER);
+    const installedPackageE2e = await readRepoFile(INSTALLED_PACKAGE_E2E);
 
     expect(verifier).toContain('path.join(installDir, "node_modules", ".bin", binName)');
     expect(verifier).toContain('installedPackagePath("package.json")');
     expect(verifier).toContain("process.execPath");
+    expect(verifier).toContain("runInstalledBinStep");
+    expect(verifier).toContain("runInstalledPackageE2e");
+    expect(verifier).toContain("scripts/e2e/run-installed-package-e2e.mjs");
     expect(verifier).toContain('process.env.CODE_UX_SKIP_RELEASE_INSTALL_BUILD === "1"');
     expect(verifier).toContain("requireExistingBuildArtifacts");
     expect(verifier).toContain("Build artifacts are present; skipping pnpm run build.");
     expect(verifier).not.toContain('"exec"');
     expect(verifier).not.toContain("'exec'");
+
+    expect(installedPackageE2e).toContain('MCP_HTTP_PORT: String(mcpPort)');
+    expect(installedPackageE2e).toContain('CODE_UX_CONTAINERIZED_GIT: "0"');
+    expect(installedPackageE2e).toContain('CODE_UX_GIT_CONTAINER_MODE: "host"');
+    expect(installedPackageE2e).toContain('CODEUX_E2E_PROVIDER_CLI_SHIM: "1"');
+    expect(installedPackageE2e).toContain('httpRequest(baseUrl, "GET", "/health")');
+    expect(installedPackageE2e).toContain("verifyDashboardAssets");
+    expect(installedPackageE2e).toContain('"mockup-cli"');
+    expect(installedPackageE2e).toContain("installed-smoke-output.txt");
+    expect(installedPackageE2e).not.toContain("mock-provider-cli.mjs");
+    expect(installedPackageE2e).not.toContain("mockup-sprint-pentest-scenarios.mjs");
   });
 });
