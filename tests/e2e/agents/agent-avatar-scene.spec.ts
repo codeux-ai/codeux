@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { completeOnboarding, createE2EAgentPreset, ensureSelectedProject } from './helpers/prepare-app';
+import { completeOnboarding, createE2EAgentPreset, ensureSelectedProject } from '../helpers/prepare-app';
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

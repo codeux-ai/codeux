@@ -1,5 +1,5 @@
 import { expect, type ConsoleMessage, type Locator, type Page, test } from '@playwright/test';
-import { completeOnboarding, createDraftSprint, ensureSelectedProject } from './helpers/prepare-app';
+import { completeOnboarding, createDraftSprint, ensureSelectedProject } from '../helpers/prepare-app';
 
 type RouteSmokeCase = {
   path: string;
@@ -74,11 +74,17 @@ const benignConsoleErrorPatterns = [
   /The operation was aborted/i,
   /net::ERR_ABORTED/i,
 ];
+const genericResourceStatusConsolePattern = /Failed to load resource: the server responded with a status of \d+/i;
+const optionalSkillStorageRoutePattern = /\/api\/projects\/[^/]+\/skill-storages(?:[?#]|$)/;
 
 test.describe.configure({ mode: 'serial' });
 
 function isBenignConsoleError(message: string): boolean {
   return benignConsoleErrorPatterns.some((pattern) => pattern.test(message));
+}
+
+function isBenignHttpFailure(status: number, url: string): boolean {
+  return status === 404 && optionalSkillStorageRoutePattern.test(url);
 }
 
 function installErrorCapture(page: Page): string[] {
@@ -91,8 +97,18 @@ function installErrorCapture(page: Page): string[] {
   });
 
   page.on('console', (message: ConsoleMessage) => {
+    if (message.type() === 'error' && genericResourceStatusConsolePattern.test(message.text())) {
+      return;
+    }
     if (message.type() === 'error' && !isBenignConsoleError(message.text())) {
       errors.push(`console error: ${message.text()}`);
+    }
+  });
+
+  page.on('response', (response) => {
+    const status = response.status();
+    if (status >= 400 && !isBenignHttpFailure(status, response.url())) {
+      errors.push(`http ${status}: ${response.url()}`);
     }
   });
 

@@ -3,7 +3,7 @@ import {
   createSprintWithTasks,
   prepareSelectedLocalGitProject,
   type SeededCodeUxProject,
-} from './helpers/e2e-fixtures';
+} from '../helpers/e2e-fixtures';
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

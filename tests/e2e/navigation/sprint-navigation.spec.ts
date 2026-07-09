@@ -1,5 +1,5 @@
 import { expect, type APIRequestContext, type Page, test, type TestInfo } from '@playwright/test';
-import type { ProjectSummary, SprintRecord, TaskRecord } from '../../src/contracts/project-management-types.js';
+import type { ProjectSummary, SprintRecord, TaskRecord } from '../../../src/contracts/project-management-types.js';
 import {
   completeOnboarding,
   createDraftSprint,
@@ -10,7 +10,7 @@ import {
   fetchSprintsViaApi,
   selectProjectViaApi,
   selectSprintViaApi,
-} from './helpers/prepare-app';
+} from '../helpers/prepare-app';
 
 const DASHBOARD_TOUR_STORAGE_KEY = 'codeux:dashboard-tour-hidden:v1';
 

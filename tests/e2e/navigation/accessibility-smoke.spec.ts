@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { prepareSelectedLocalGitProject, type SeededCodeUxProject } from './helpers/e2e-fixtures';
+import { prepareSelectedLocalGitProject, type SeededCodeUxProject } from '../helpers/e2e-fixtures';
 
 let fixture: SeededCodeUxProject | null = null;
 

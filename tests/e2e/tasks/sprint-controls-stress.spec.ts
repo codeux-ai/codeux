@@ -1,7 +1,7 @@
 import { expect, type APIRequestContext, test } from '@playwright/test';
-import type { ExecutionDashboardSnapshot, ProjectLiveDashboardSnapshot } from '../../src/contracts/app-types.js';
-import type { TaskRecord } from '../../src/contracts/project-management-types.js';
-import { DEFAULT_DASHBOARD_SETTINGS } from '../../src/repositories/settings-defaults.js';
+import type { ExecutionDashboardSnapshot, ProjectLiveDashboardSnapshot } from '../../../src/contracts/app-types.js';
+import type { TaskRecord } from '../../../src/contracts/project-management-types.js';
+import { DEFAULT_DASHBOARD_SETTINGS } from '../../../src/repositories/settings-defaults.js';
 import {
   cleanupSprintFixture,
   configureProjectForLocalHostExecution,
@@ -12,7 +12,7 @@ import {
   seedSelectedCodeUxProject,
   updateTaskFields,
   type SeededCodeUxProject,
-} from './helpers/e2e-fixtures';
+} from '../helpers/e2e-fixtures';
 
 const ACTIVE_SPRINT_RUN_STATUSES = new Set(['queued', 'running', 'cancel_requested']);
 const CLEANUP_SPRINT_RUN_STATUSES = new Set(['queued', 'running', 'paused', 'cancel_requested']);

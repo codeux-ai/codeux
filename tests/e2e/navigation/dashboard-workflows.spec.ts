@@ -1,12 +1,12 @@
 import { expect, type APIRequestContext, type Locator, type Page, test, type TestInfo } from '@playwright/test';
-import type { ProjectSummary, SprintRecord, TaskRecord } from '../../src/contracts/project-management-types.js';
+import type { ProjectSummary, SprintRecord, TaskRecord } from '../../../src/contracts/project-management-types.js';
 import {
   createE2eFixturePrefix,
   fetchSprintsViaApi,
   fetchTasksViaApi,
   prepareSelectedLocalGitProject,
   type SeededCodeUxProject,
-} from './helpers/e2e-fixtures';
+} from '../helpers/e2e-fixtures';
 
 type RouteCase = {
   path: string;
