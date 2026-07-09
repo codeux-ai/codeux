@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { TOOL_DEFINITIONS } from '../../../src/contracts/mcp-tool-definitions.js';
 import type { McpToolToggle } from '../../../src/contracts/app-types.js';
+import type { ProjectSummary } from '../../../src/contracts/project-management-types.js';
 import {
   expectRowSwitch,
   fetchSystemSettings,
@@ -11,6 +12,18 @@ import {
   setRowSwitch,
   settingsPanel,
 } from './config-test-helpers';
+import {
+  deleteProjectSettingsOverride,
+  expectRowNumberValue,
+  expectRowTextValue,
+  fetchEffectiveProjectSettings,
+  fetchProjectSettings,
+  fillRowNumber,
+  fillRowText,
+  openSettingsCategory as openScopedSettingsCategory,
+  saveSettings as saveScopedSettings,
+  settingsRow,
+} from '../settings/settings-test-helpers';
 
 const advancedToolNames = TOOL_DEFINITIONS
   .filter((definition) => definition.category === 'advanced')
@@ -22,8 +35,17 @@ function areAdvancedMcpToolsEnabled(tools: McpToolToggle[]): boolean {
 }
 
 test.describe('advanced configuration persistence', () => {
+  let project: ProjectSummary | null = null;
+
   test.beforeEach(async ({ page, request }, testInfo) => {
-    await prepareConfigPage(page, request, testInfo, 'advanced-config');
+    project = await prepareConfigPage(page, request, testInfo, 'advanced-config');
+  });
+
+  test.afterEach(async ({ request }) => {
+    if (project) {
+      await deleteProjectSettingsOverride(request, project.id);
+      project = null;
+    }
   });
 
   test('persists MCP, integrations, memory, and automation settings across reloads', async ({ page, request }) => {
@@ -83,5 +105,60 @@ test.describe('advanced configuration persistence', () => {
 
     await openSettingsCategory(page, /General Scope, runtime, and automation posture/i, 'Automation');
     await expectRowSwitch(page, 'Auto-resume paused runs', targetAutoResumePaused);
+  });
+
+  test('persists project runtime overrides, inherited defaults, invalid inputs, and disabled provider controls', async ({ page, request }, testInfo) => {
+    if (!project) {
+      throw new Error('Advanced config project fixture was not initialized.');
+    }
+
+    const initialEffective = await fetchEffectiveProjectSettings(request, project.id);
+    expect(initialEffective.sources['cliWorkflow.containerImage']).toBe('system');
+    expect(initialEffective.sources['workers.maxConcurrency']).toBe('system');
+
+    const prefix = testInfo.title.replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase();
+    const containerImage = `node:22-e2e-${prefix.slice(0, 20)}`;
+    const maxConcurrency = 7;
+
+    await openScopedSettingsCategory(page, 'general', /General Scope, runtime, and automation posture/i, 'Project');
+    await fillRowText(page, 'Container image', containerImage);
+    await expectRowTextValue(page, 'Container image', containerImage);
+    await saveScopedSettings(page);
+
+    await expect.poll(async () => {
+      const effective = await fetchEffectiveProjectSettings(request, project.id);
+      return {
+        value: effective.settings.cliWorkflow.containerImage,
+        source: effective.sources['cliWorkflow.containerImage'],
+      };
+    }).toEqual({ value: containerImage, source: 'project' });
+
+    await openScopedSettingsCategory(page, 'models', /AI Models Provider routing, models, and weighting/i, 'Project');
+    const globalModelControl = settingsRow(page, 'Global default model').getByRole('button').first();
+    await expect(globalModelControl).toBeDisabled();
+
+    await fillRowNumber(page, 'Max concurrency', 0);
+    await expect(page.getByText('Use a value of at least 1.')).toBeVisible();
+    await fillRowNumber(page, 'Max concurrency', maxConcurrency);
+    await expectRowNumberValue(page, 'Max concurrency', maxConcurrency);
+    await saveScopedSettings(page);
+
+    await expect.poll(async () => {
+      const effective = await fetchEffectiveProjectSettings(request, project.id);
+      return {
+        value: effective.settings.workers.maxConcurrency,
+        source: effective.sources['workers.maxConcurrency'],
+      };
+    }).toEqual({ value: maxConcurrency, source: 'project' });
+
+    const savedProjectSettings = await fetchProjectSettings(request, project.id);
+    expect(savedProjectSettings.cliWorkflow?.containerImage).toBe(containerImage);
+    expect(savedProjectSettings.workers?.maxConcurrency).toBe(maxConcurrency);
+
+    await page.reload();
+    await openScopedSettingsCategory(page, 'general', /General Scope, runtime, and automation posture/i, 'Project');
+    await expectRowTextValue(page, 'Container image', containerImage);
+    await openScopedSettingsCategory(page, 'models', /AI Models Provider routing, models, and weighting/i, 'Project');
+    await expectRowNumberValue(page, 'Max concurrency', maxConcurrency);
   });
 });

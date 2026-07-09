@@ -1,7 +1,7 @@
 import { expect, test, type APIRequestContext, type Page, type TestInfo } from '@playwright/test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { AppearanceSettings, LocalDirectoryBrowserResponse } from '../../../src/contracts/app-types.js';
+import type { AppearanceSettings, LocalDirectoryBrowserResponse, LocalFileBrowserResponse } from '../../../src/contracts/app-types.js';
 import type { InstructionFileContent } from '../../../src/contracts/instruction-file-types.js';
 import type { SystemSettings } from '../../../src/contracts/settings-scope-types.js';
 import {
@@ -104,6 +104,7 @@ test.describe('filesystem persistence', () => {
     await seededProject.repository.writeFile('folder with spaces/alpha child/file.txt', 'alpha\n');
     await seededProject.repository.writeFile('folder with spaces/Zeta Child/file.txt', 'zeta\n');
     await seededProject.repository.writeFile('Beta Folder/nested file.txt', 'beta\n');
+    await seededProject.repository.writeFile(path.join('windows-compatible', 'nested', 'child.txt'), 'portable separators\n');
     await seededProject.repository.writeFile('gemini.md', '# Gemini alias\n');
 
     const projectId = seededProject.project.id;
@@ -168,6 +169,24 @@ test.describe('filesystem persistence', () => {
     expect(directoryNames).toEqual(expect.arrayContaining(['.git', '.github', 'Beta Folder', 'folder with spaces']));
     expect(directoryListing.directories.find((entry) => entry.name === 'folder with spaces')?.path).toBe(path.join(repoRoot, 'folder with spaces'));
 
+    const nestedFilesResponse = await request.get(
+      `/api/local-files?path=${encodeURIComponent(path.join(repoRoot, 'folder with spaces', 'alpha child'))}`,
+    );
+    expect(nestedFilesResponse.status(), await nestedFilesResponse.text()).toBe(200);
+    const nestedFiles = await nestedFilesResponse.json() as LocalFileBrowserResponse;
+    expect(nestedFiles.currentPath).toBe(path.join(repoRoot, 'folder with spaces', 'alpha child'));
+    expect(nestedFiles.files.map((entry) => entry.name)).toEqual(['file.txt']);
+
+    const portableSeparatorResponse = await request.get(
+      `/api/local-files?path=${encodeURIComponent(path.join(repoRoot, 'windows-compatible', 'nested'))}`,
+    );
+    expect(portableSeparatorResponse.status(), await portableSeparatorResponse.text()).toBe(200);
+    const portableSeparatorFiles = await portableSeparatorResponse.json() as LocalFileBrowserResponse;
+    expect(portableSeparatorFiles.currentPath).toBe(path.join(repoRoot, 'windows-compatible', 'nested'));
+    expect(portableSeparatorFiles.files).toEqual([
+      { name: 'child.txt', path: path.join(repoRoot, 'windows-compatible', 'nested', 'child.txt') },
+    ]);
+
     const traversalResponse = await request.get(
       `/api/local-directories?path=${encodeURIComponent(path.parse(repoRoot).root)}`,
     );
@@ -175,6 +194,14 @@ test.describe('filesystem persistence', () => {
     const traversalBody = await traversalResponse.json() as unknown;
     expect(traversalBody).toEqual({ error: 'Access denied' });
     await assertCleanClientError(traversalBody, [repoRoot, seededProject.repository.root]);
+
+    const escapedTraversalResponse = await request.get(
+      `/api/local-directories?path=${encodeURIComponent(path.join(repoRoot, '..', '..', '..', '..'))}`,
+    );
+    expect(escapedTraversalResponse.status()).toBe(403);
+    const escapedTraversalBody = await escapedTraversalResponse.json() as unknown;
+    expect(escapedTraversalBody).toEqual({ error: 'Access denied' });
+    await assertCleanClientError(escapedTraversalBody, [repoRoot, seededProject.repository.root]);
 
     const imagePath = await createTinyPngFixture(testInfo);
     const expectedDataUrl = `data:image/png;base64,${TINY_PNG.toString('base64')}`;
