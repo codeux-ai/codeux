@@ -2,9 +2,9 @@ import { expect, type ConsoleMessage, type Page, test } from '@playwright/test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import type { ProjectSummary } from '../../src/contracts/project-management-types.js';
-import { completeOnboarding, createE2eFixturePrefix, fetchProjectsViaApi } from './helpers/prepare-app';
-import { deleteProjectViaApi } from './helpers/e2e-api';
+import type { ProjectSummary } from '../../../src/contracts/project-management-types.js';
+import { completeOnboarding, createE2eFixturePrefix, fetchProjectsViaApi } from '../helpers/prepare-app';
+import { deleteProjectViaApi } from '../helpers/e2e-api';
 
 const benignConsoleErrorPatterns = [
   /Failed to fetch/i,
