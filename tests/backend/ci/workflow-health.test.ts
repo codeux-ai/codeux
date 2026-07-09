@@ -168,7 +168,7 @@ describe("GitHub workflow health", () => {
     expect(packageJob).toContain('CODE_UX_SKIP_RELEASE_INSTALL_BUILD: "1"');
     expect(dagJob).toContain("needs: [static, build, backend-tests, dashboard-tests, security-audit]");
     expect(dagJob).toContain("runs-on: ${{ matrix.os }}");
-    expect(dagJob).toContain("max-parallel: 2");
+    expect(dagJob).toContain("max-parallel: 3");
     expect(dagJob).toContain("name: Linux Docker");
     expect(dagJob).toContain("os: ubuntu-latest");
     expect(dagJob).toContain("runtime: docker");
@@ -192,7 +192,7 @@ describe("GitHub workflow health", () => {
 
     expect(e2e).toContain("name: 09 E2E / ${{ matrix.os.label }} full (${{ matrix.project }})");
     expect(e2e).toContain("runs-on: ${{ matrix.os.runner }}");
-    expect(e2e).toContain("max-parallel: 3");
+    expect(e2e).toContain("max-parallel: 10");
     expect(e2e).toContain("runner: ubuntu-latest");
     expect(e2e).toContain("label: Linux");
     expect(e2e).toContain("runner: macos-latest");
@@ -214,7 +214,7 @@ describe("GitHub workflow health", () => {
     expect(releaseCandidate).toContain("needs: package-smoke");
     expect(releaseCandidate).not.toContain("ci-dag");
     expect(releaseCandidate).not.toContain("e2e");
-    expect(releaseCandidate).toContain("max-parallel: 2");
+    expect(releaseCandidate).toContain("max-parallel: 3");
     expect(releaseCandidate).toContain("node node_modules/electron/install.js");
     expect(releaseCandidate).toContain("pnpm run electron:prepare-deps");
     expect(releaseCandidate).toContain("pnpm exec electron-builder --config electron-builder.config.cjs ${{ matrix.electron-target }} --publish never");
