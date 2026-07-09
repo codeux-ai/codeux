@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { runCommandStrict } from "../../../../../src/services/cli-process-runner.js";
 import { FeaturePrGateService, CiGateContext } from "../../../../../src/domain/sprint/ci/feature-pr-gate.js";
+import { buildWorkerBranchPrefix } from "../../../../../src/services/cli-workflow-utils.js";
 
 vi.mock("../../../../../src/services/cli-process-runner.js", () => ({
   runCommandStrict: vi.fn().mockResolvedValue({ stdout: "", stderr: "" }),
@@ -788,6 +789,9 @@ jobs:
     subtasks[0].is_merged = false;
 
     vi.mocked(runCommandStrict).mockImplementation((_cmd: string, args: string[]) => {
+      if (args[0] === "rev-parse") {
+        return Promise.resolve({ stdout: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", stderr: "" } as any);
+      }
       if (args[0] === "rev-list") {
         return Promise.resolve({ stdout: "1", stderr: "" } as any);
       }
@@ -833,6 +837,9 @@ jobs:
     } as any);
 
     vi.mocked(runCommandStrict).mockImplementation((_cmd: string, args: string[]) => {
+      if (args[0] === "rev-parse") {
+        return Promise.resolve({ stdout: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", stderr: "" } as any);
+      }
       if (args[0] === "rev-list") {
         return Promise.resolve({ stdout: "1", stderr: "" } as any);
       }
@@ -883,6 +890,9 @@ jobs:
     } as any);
 
     vi.mocked(runCommandStrict).mockImplementation((_cmd: string, args: string[]) => {
+      if (args[0] === "rev-parse") {
+        return Promise.resolve({ stdout: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", stderr: "" } as any);
+      }
       if (args[0] === "rev-list") {
         return Promise.resolve({ stdout: "1", stderr: "" } as any);
       }
@@ -921,6 +931,9 @@ jobs:
     } as any);
 
     vi.mocked(runCommandStrict).mockImplementation((_cmd: string, args: string[]) => {
+      if (args[0] === "rev-parse") {
+        return Promise.resolve({ stdout: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", stderr: "" } as any);
+      }
       if (args[0] === "push") {
         return Promise.reject(new Error("remote rejected"));
       }
@@ -949,6 +962,7 @@ jobs:
     subtasks[0].worker_branch = undefined; // evidence lost
     subtasks[0].record_id = "rec-1";
     subtasks[0].is_merged = false;
+    subtasks[0].provider = "qwen-code";
 
     const updateTaskRun = vi.fn();
     context.executionRepository = {
@@ -957,10 +971,11 @@ jobs:
       updateTaskRun,
     } as any;
 
-    const recovered = "task/feature-sprint1-t1-qwen-code-abcd";
+    const recovered = `${buildWorkerBranchPrefix("feature/sprint1", "T1", "qwen-code")}abcd`;
     vi.mocked(runCommandStrict).mockImplementation((_cmd: string, args: string[]) => {
       const a = (args || []).join(" ");
       if (a.includes("for-each-ref")) return Promise.resolve({ stdout: `${recovered}\nmain\nfeature/sprint1`, stderr: "" } as any);
+      if (a.startsWith("rev-parse")) return Promise.resolve({ stdout: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", stderr: "" } as any);
       if (a.startsWith("rev-list --count")) return Promise.resolve({ stdout: "2", stderr: "" } as any);
       if (a.startsWith("log -1")) return Promise.resolve({ stdout: "1700000000", stderr: "" } as any);
       if (a.startsWith("symbolic-ref")) return Promise.resolve({ stdout: "main", stderr: "" } as any);
@@ -1006,6 +1021,9 @@ jobs:
       updateTaskRun,
     } as any;
     vi.mocked(runCommandStrict).mockImplementation((_cmd: string, args: string[]) => {
+      if (args[0] === "rev-parse") {
+        return Promise.resolve({ stdout: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", stderr: "" } as any);
+      }
       if (args[0] === "rev-list") {
         return Promise.resolve({ stdout: "1", stderr: "" } as any);
       }
