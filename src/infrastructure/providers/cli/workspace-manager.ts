@@ -47,7 +47,7 @@ export interface WorkspaceCommandOptions {
  * Branch selection for a review snapshot workspace. `branch` is the preferred
  * branch to check out (the task's worker/feature branch, or the sprint base
  * branch); `fallbackBranch` is used when `branch` does not exist on origin or
- * locally. When omitted entirely the snapshot is checked out onto the
+ * locally, unless `remoteOnly` is true. When omitted entirely the snapshot is checked out onto the
  * repository's current HEAD branch so the working tree is never left empty on
  * the bootstrap branch.
  */
@@ -71,6 +71,10 @@ export interface SnapshotWorkspaceOptions {
   singleBranch?: boolean;
 }
 
+export interface PrepareWorktreeOptions {
+  remoteOnly?: boolean;
+}
+
 export interface IWorkspaceManager {
   buildWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): string;
   buildWorkspaceRef(repoPath: string, workspaceKey: string, executionMode: CliWorkflowSettings["executionMode"]): string;
@@ -78,7 +82,7 @@ export interface IWorkspaceManager {
   createOrReuseSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string>;
   resolveResumeWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): Promise<string | undefined>;
   resolveCurrentBranch(worktreePath: string): Promise<string | null>;
-  prepareWorktree(repoPath: string, worktreePath: string, workerBranch: string, featureBranch: string, resumeSessionId?: string, gitAuth?: GitHttpAuthOptions): Promise<{ worktreePath: string; resumed: boolean }>;
+  prepareWorktree(repoPath: string, worktreePath: string, workerBranch: string, featureBranch: string, resumeSessionId?: string, gitAuth?: GitHttpAuthOptions, options?: PrepareWorktreeOptions): Promise<{ worktreePath: string; resumed: boolean }>;
   fastForwardResumedWorkspace(worktreePath: string, workerBranch: string, repoPath: string, gitAuth?: GitHttpAuthOptions): Promise<boolean>;
   removeWorktree(repoPath: string, worktreePath: string): Promise<void>;
   buildWorkspaceGuidance(taskPrompt: string, worktreePath: string): Promise<string>;
@@ -258,6 +262,9 @@ export class WorkspaceManager implements IWorkspaceManager {
    * still covers the rare HEAD-detached / arbitrary-SHA case.
    */
   private async snapshotSeedBranches(repoPath: string, checkout?: SnapshotCheckout): Promise<Array<string | null | undefined>> {
+    if (checkout?.remoteOnly) {
+      return [checkout.branch, checkout.fallbackBranch];
+    }
     return [checkout?.branch, checkout?.fallbackBranch, await this.resolveRepoCurrentBranch(repoPath)];
   }
 
@@ -363,6 +370,7 @@ export class WorkspaceManager implements IWorkspaceManager {
     featureBranch: string,
     resumeSessionId?: string,
     gitAuth?: GitHttpAuthOptions,
+    options: PrepareWorktreeOptions = {},
   ): Promise<{ worktreePath: string; resumed: boolean }> {
     let resumed = false;
     const workspaceRef = worktreePath;
@@ -392,13 +400,21 @@ export class WorkspaceManager implements IWorkspaceManager {
         return;
       }
 
-      const startRef = await this.resolveWorktreeStartRef(repoPath, workerBranch, featureBranch, refLookup);
+      const startRef = await this.resolveWorktreeStartRef(repoPath, workerBranch, featureBranch, refLookup, options.remoteOnly === true);
       if (isWorkspaceHandle(workspaceRef)) {
         await this.removeWorktree(repoPath, workspaceRef).catch(() => undefined);
         await this.createVolume(workspaceRef);
         // Coding tasks only need the worker and feature branches to resolve the start ref; seed just
         // those instead of every accumulated branch (falls back to the full seed if a ref is missing).
-        await this.seedAndCheckoutBranchVolume(repoPath, workspaceRef, [workerBranch, featureBranch], workerBranch, startRef, refLookup);
+        await this.seedAndCheckoutBranchVolume(
+          repoPath,
+          workspaceRef,
+          [workerBranch, featureBranch],
+          workerBranch,
+          startRef,
+          refLookup,
+          options.remoteOnly === true,
+        );
         try {
           await this.assertWorkspaceHasHead(workspaceRef);
         } catch {
@@ -937,9 +953,10 @@ export class WorkspaceManager implements IWorkspaceManager {
     checkoutBranch: string,
     startRef: string,
     refLookup: RefLookup = this.createRefLookup(repoPath),
+    remoteOnly = false,
   ): Promise<void> {
     const checkout = { branch: checkoutBranch, startRef };
-    const seedRefs = await this.resolveExistingSeedRefs(repoPath, branches, refLookup);
+    const seedRefs = await this.resolveExistingSeedRefs(repoPath, branches, refLookup, remoteOnly);
     if (seedRefs.length === 0) {
       await this.seedWorkspaceFromBundle(repoPath, worktreePath, undefined, branches, checkout);
       return;
@@ -1181,9 +1198,21 @@ export class WorkspaceManager implements IWorkspaceManager {
     }
   }
 
-  private async resolveWorktreeStartRef(repoPath: string, workerBranch: string, featureBranch: string, refLookup: RefLookup = this.createRefLookup(repoPath)): Promise<string> {
+  private async resolveWorktreeStartRef(
+    repoPath: string,
+    workerBranch: string,
+    featureBranch: string,
+    refLookup: RefLookup = this.createRefLookup(repoPath),
+    remoteOnly = false,
+  ): Promise<string> {
     if (await refLookup(`refs/remotes/origin/${workerBranch}`)) {
       return `origin/${workerBranch}`;
+    }
+    if (remoteOnly) {
+      if (await refLookup(`refs/remotes/origin/${featureBranch}`)) {
+        return `origin/${featureBranch}`;
+      }
+      throw new Error(`Cannot prepare remote-only isolated workspace: neither origin/${workerBranch} nor origin/${featureBranch} exists.`);
     }
     if (await refLookup(`refs/heads/${workerBranch}`)) {
       return workerBranch;

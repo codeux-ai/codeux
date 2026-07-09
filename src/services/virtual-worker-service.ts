@@ -14,6 +14,7 @@ import { buildTaskRunKey } from "./task-run-key.js";
 import { buildProviderPrompt, DEFAULT_CLI_WORKFLOW_SETTINGS, sanitizeToken } from "./cli-workflow-utils.js";
 import { isReadFileNotFoundToolError, buildReadFileRetryPrompt } from "./cli-workflow-text-utils.js";
 import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
+import { buildInvocationGitPolicy, InvocationWorkspacePreparer } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import { WorkspaceArtifactService } from "../infrastructure/providers/cli/workspace-artifact-service.js";
 import { CODE_UX_GIT_PATHSPEC_EXCLUDE, CODE_UX_REPO_DIR } from "../infrastructure/git/code-ux-gitignore.js";
 import { ProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
@@ -178,6 +179,7 @@ export interface VirtualWorkerServiceDependencies {
 
 export class VirtualWorkerService {
   private readonly workspaceManager = new WorkspaceManager();
+  private readonly invocationWorkspacePreparer = new InvocationWorkspacePreparer(this.workspaceManager);
   private readonly workspaceArtifactService = new WorkspaceArtifactService(this.workspaceManager);
   private readonly dockerService = new DockerService();
   private readonly prService = new PrService();
@@ -797,14 +799,19 @@ export class VirtualWorkerService {
         repoPath,
         purpose: "merge_conflict",
       });
-      const prepared = await this.workspaceManager.prepareWorktree(
+      const prepared = await this.invocationWorkspacePreparer.prepareWorktree({
         repoPath,
-        this.workspaceManager.buildWorktreePath(repoPath, sessionId, effectiveWorkflowSettings.executionMode),
-        sourceBranch,
-        targetBranch,
-        undefined,
+        worktreePath: this.workspaceManager.buildWorktreePath(repoPath, sessionId, effectiveWorkflowSettings.executionMode),
+        workerBranch: sourceBranch,
+        featureBranch: targetBranch,
         gitAuth,
-      );
+        gitPolicy: buildInvocationGitPolicy({
+          githubMode: settings.git.githubMode,
+          defaultBranch: settings.git.defaultBranch,
+          githubToken: settings.git.githubToken,
+          gitlabToken: settings.git.gitlabToken,
+        }),
+      });
       const finalWorktreePath = prepared.worktreePath;
       worktreePath = finalWorktreePath;
       initialHead = (await this.runWorkspaceCommand(finalWorktreePath, "git", ["rev-parse", "HEAD"])).stdout.trim();
@@ -1177,14 +1184,20 @@ export class VirtualWorkerService {
         repoPath,
         purpose: "ci_fix",
       });
-      const prepared = await this.workspaceManager.prepareWorktree(
+      const prepared = await this.invocationWorkspacePreparer.prepareWorktree({
         repoPath,
-        this.workspaceManager.buildWorkspaceRef(repoPath, workspaceOwnerSessionId, effectiveWorkflowSettings.executionMode),
-        branchName,
-        branchName,
-        resumeTarget?.sessionId,
+        worktreePath: this.workspaceManager.buildWorkspaceRef(repoPath, workspaceOwnerSessionId, effectiveWorkflowSettings.executionMode),
+        workerBranch: branchName,
+        featureBranch: branchName,
+        resumeSessionId: resumeTarget?.sessionId,
         gitAuth,
-      );
+        gitPolicy: buildInvocationGitPolicy({
+          githubMode: settings.git.githubMode,
+          defaultBranch: settings.git.defaultBranch,
+          githubToken: settings.git.githubToken,
+          gitlabToken: settings.git.gitlabToken,
+        }),
+      });
       const finalWorktreePath = prepared.worktreePath;
       worktreePath = finalWorktreePath;
       initialHead = (await this.runWorkspaceCommand(finalWorktreePath, "git", ["rev-parse", "HEAD"])).stdout.trim();

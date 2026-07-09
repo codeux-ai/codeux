@@ -13,6 +13,11 @@ import { extractJsonFromText } from "../domain/llm/json-extraction.js";
 import { StructuredAgentRequestService } from "./structured-agent-request-service.js";
 import { StructuredProviderResponseService } from "./structured-provider-response-service.js";
 import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
+import {
+  buildInvocationGitPolicy,
+  buildProviderInvocationWorkspaceOptions,
+  InvocationWorkspacePreparer,
+} from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import { WorkspaceArtifactService } from "../infrastructure/providers/cli/workspace-artifact-service.js";
 import { PrService } from "../infrastructure/providers/cli/pr-service.js";
 import type { IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
@@ -101,6 +106,7 @@ interface QualityAssuranceServiceDependencies {
 
 export class QualityAssuranceService {
   private readonly workspaceManager = new WorkspaceManager();
+  private readonly invocationWorkspacePreparer = new InvocationWorkspacePreparer(this.workspaceManager);
   private readonly workspaceArtifactService = new WorkspaceArtifactService(this.workspaceManager);
 
   private readonly prService = new PrService();
@@ -928,22 +934,25 @@ export class QualityAssuranceService {
       let snapshotWorkspace = args.repoPath;
       let shouldCleanupSnapshot = false;
       if (workflowSettings.executionMode === "DOCKER") {
-        try {
-          snapshotWorkspace = await this.workspaceManager.createSnapshotWorkspace(
-            args.repoPath,
-            `qa-review-${provider}-${Date.now().toString(36)}`,
-            { branch: args.reviewBranch, fallbackBranch: args.baseBranch },
-          );
-          shouldCleanupSnapshot = true;
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          this.deps.logger?.warn("Failed to create QA snapshot workspace, falling back to repository path", {
-            projectId: args.scope.projectId,
-            sprintId: args.scope.sprintId,
-            repoPath: args.repoPath,
-            error: message,
-          });
-        }
+        const invocationWorkspace = buildProviderInvocationWorkspaceOptions({
+          workflowSettings,
+          gitPolicy: {
+            githubMode: settings.git.githubMode,
+            defaultBranch: settings.git.defaultBranch,
+            githubToken: settings.git.githubToken,
+            gitlabToken: settings.git.gitlabToken,
+          },
+          branch: args.reviewBranch,
+          fallbackBranch: args.baseBranch,
+          useDefaultBranch: false,
+        });
+        snapshotWorkspace = await this.invocationWorkspacePreparer.createSnapshotWorkspace({
+          repoPath: args.repoPath,
+          sessionId: `qa-review-${provider}-${Date.now().toString(36)}`,
+          checkout: invocationWorkspace.snapshotCheckout,
+          gitPolicy: invocationWorkspace.gitPolicy,
+        });
+        shouldCleanupSnapshot = true;
       }
 
       let result;
@@ -1392,17 +1401,21 @@ export class QualityAssuranceService {
       githubToken: settings.git.githubToken,
       gitlabToken: settings.git.gitlabToken,
     };
-    const resumeWorkspacePath = await this.workspaceManager.resolveResumeWorktreePath(
-      args.repoPath,
-      args.sessionId,
-      workflowSettings.executionMode,
-    );
-    const hasPreservedWorkspace = Boolean(resumeWorkspacePath);
-    const worktreePath = resumeWorkspacePath
-      || this.workspaceManager.buildWorktreePath(args.repoPath, args.sessionId, workflowSettings.executionMode);
-    const resolvedWorkspaceBranch = hasPreservedWorkspace
-      ? await this.workspaceManager.resolveCurrentBranch(worktreePath)
-      : null;
+    const gitPolicy = buildInvocationGitPolicy({
+      githubMode: settings.git.githubMode,
+      defaultBranch: settings.git.defaultBranch,
+      githubToken: settings.git.githubToken,
+      gitlabToken: settings.git.gitlabToken,
+    });
+    const {
+      worktreePath,
+      hasPreservedWorkspace,
+      currentBranch: resolvedWorkspaceBranch,
+    } = await this.invocationWorkspacePreparer.resolveContinuationWorkspace({
+      repoPath: args.repoPath,
+      sessionId: args.sessionId,
+      executionMode: workflowSettings.executionMode,
+    });
     let workerBranch = args.task.worker_branch?.trim()
       || args.taskRun?.workerBranch?.trim()
       || resolvedWorkspaceBranch
@@ -1523,7 +1536,14 @@ export class QualityAssuranceService {
       );
 
       if (!hasPreservedWorkspace) {
-        await this.workspaceManager.prepareWorktree(args.repoPath, worktreePath, workerBranch, args.featureBranch, undefined, gitAuth);
+        await this.invocationWorkspacePreparer.prepareWorktree({
+          repoPath: args.repoPath,
+          worktreePath,
+          workerBranch,
+          featureBranch: args.featureBranch,
+          gitAuth,
+          gitPolicy,
+        });
       } else {
         await this.syncExistingCliFollowUpWorkspace(worktreePath, workerBranch, args.repoPath, gitAuth);
       }

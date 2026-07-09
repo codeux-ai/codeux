@@ -21,6 +21,11 @@ import { buildReadFileRetryPrompt, isReadFileNotFoundToolError } from "./cli-wor
 import { ProviderRunner, type IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
 import { WorkspaceManager, type SnapshotCheckout } from "../infrastructure/providers/cli/workspace-manager.js";
+import {
+  buildInvocationGitPolicy,
+  buildInvocationSnapshotCheckout,
+  InvocationWorkspacePreparer,
+} from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import { resolveProviderForInvocation } from "./provider-routing.js";
 import { parsePlannedSprintReply, PlanningParseError } from "./planning-json-extractor.js";
@@ -34,7 +39,6 @@ import { ProviderInvocationCancelledError, StructuredProviderResponseService } f
 import { waitUntil } from "../shared/polling/wait-until.js";
 import { LEARNINGS_FILENAME } from "../contracts/memory-types.js";
 import * as PlanningPromptBuilder from "./planning-prompt-builder.js";
-import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
 
 interface PlanningAgentServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
@@ -136,6 +140,7 @@ export class PlanningAgentService {
   private readonly providerExecutionService: ProviderExecutionService;
   private readonly structuredAgentRequestService: StructuredAgentRequestService;
   private readonly workspaceManager = new WorkspaceManager();
+  private readonly invocationWorkspacePreparer = new InvocationWorkspacePreparer(this.workspaceManager);
 
   constructor(private readonly deps: PlanningAgentServiceDeps) {
     this.providerRunner = deps.providerRunner || new ProviderRunner(new DockerRunner());
@@ -705,16 +710,29 @@ export class PlanningAgentService {
         fallbackBranch: args.fallbackBranch,
       });
       const shouldReuseSnapshot = Boolean(args.continuation);
+      const gitPolicy = buildInvocationGitPolicy({
+        githubMode: args.settings.git.githubMode,
+        defaultBranch: args.settings.git.defaultBranch,
+        githubToken: args.settings.git.githubToken,
+        gitlabToken: args.settings.git.gitlabToken,
+      });
       snapshotWorkspace = shouldReuseSnapshot
-        ? await this.workspaceManager.createOrReuseSnapshotWorkspace(args.repoPath, workspaceSessionId)
-        : await this.workspaceManager.createSnapshotWorkspace(
-          args.repoPath,
-          workspaceSessionId,
-          snapshotCheckout,
+        ? await this.invocationWorkspacePreparer.createSnapshotWorkspace({
+          repoPath: args.repoPath,
+          sessionId: workspaceSessionId,
+          checkout: snapshotCheckout,
+          reuseExisting: true,
+          gitPolicy,
+        })
+        : await this.invocationWorkspacePreparer.createSnapshotWorkspace({
+          repoPath: args.repoPath,
+          sessionId: workspaceSessionId,
+          checkout: snapshotCheckout,
           // Planning only reads the current tree to draft tasks; it never needs the repo's other
           // (often thousands of) accumulated branches, so seed just the checkout branch.
-          { singleBranch: true },
-        );
+          workspaceOptions: { singleBranch: true },
+          gitPolicy,
+        });
       cleanupWorkspace = async () => {
         await this.workspaceManager.removeWorktree(args.repoPath, snapshotWorkspace).catch(() => undefined);
       };
@@ -865,26 +883,14 @@ export class PlanningAgentService {
       return undefined;
     }
 
-    const fallbackBranch = args.fallbackBranch?.trim() || args.settings.git.defaultBranch?.trim() || undefined;
-    const currentBranch = await this.workspaceManager.resolveCurrentBranch(args.repoPath).catch(() => null);
-    const branch = args.preferredBranch?.trim() || currentBranch?.trim() || fallbackBranch;
-
-    try {
-      await syncRemoteBranchIfAvailable(args.repoPath, branch, {
-        githubToken: args.settings.git.githubToken,
-        gitlabToken: args.settings.git.gitlabToken,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const branchLabel = branch || fallbackBranch || "the requested branch";
-      throw new Error(`Failed to refresh origin before planning from ${branchLabel}: ${message}`);
-    }
-
-    return {
-      branch,
-      fallbackBranch: fallbackBranch && fallbackBranch !== branch ? fallbackBranch : undefined,
-      remoteOnly: true,
-    };
+    return buildInvocationSnapshotCheckout(buildInvocationGitPolicy({
+      githubMode: args.settings.git.githubMode,
+      defaultBranch: args.fallbackBranch?.trim() || args.settings.git.defaultBranch,
+      githubToken: args.settings.git.githubToken,
+      gitlabToken: args.settings.git.gitlabToken,
+    }), {
+      branch: args.preferredBranch,
+    });
   }
 
   private buildMemoryContext(projectId: string, sprintId: string | null, agentPresetId: string): string | undefined {

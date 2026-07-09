@@ -2,6 +2,7 @@ import type { ProviderSettingsOverride } from "../../provider-settings-override.
 import type { CliWorkflowSettings, DashboardSettings, ProviderId, QwenModelProviderSettings, Subtask, ThinkingMode } from "../../../contracts/app-types.js";
 import type { AgentMemoryConfig, AgentMcpAccessConfig } from "../../../contracts/agent-preset-types.js";
 import type { IWorkspaceManager } from "../../../infrastructure/providers/cli/workspace-manager.js";
+import type { InvocationWorkspacePreparer } from "../../../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import type { IPrService } from "../../../infrastructure/providers/cli/pr-service.js";
 import type { IProviderRunner } from "../../../infrastructure/providers/cli/provider-runner.js";
 import type { WorkspaceArtifactService } from "../../../infrastructure/providers/cli/workspace-artifact-service.js";
@@ -65,6 +66,7 @@ export interface PipelineContext {
   memoryTemplateMarkdown?: string;
 
   workspaceManager: IWorkspaceManager;
+  invocationWorkspacePreparer: InvocationWorkspacePreparer;
   workspaceArtifactService: WorkspaceArtifactService;
   prService: IPrService;
   providerRunner: IProviderRunner;

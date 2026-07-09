@@ -129,7 +129,7 @@ This keeps the current Docker/worktree/CI flow intact for worker-owned local exe
 
 Worker workspace preparation uses targeted Git ref checks instead of branch enumeration. Before preparing an isolated Docker volume or host worktree, Code UX fetches only the known worker and sprint feature branch tips into exact `refs/remotes/origin/*` refs, then checks the small candidate set needed for that dispatch.
 
-Resolution prefers `refs/remotes/origin/<workerBranch>`, then local `refs/heads/<workerBranch>`, then the equivalent feature-branch refs. Snapshot workspaces use the requested checkout branch, fallback branch, and current repository branch as bounded hints. Each preparation memoizes exact `show-ref --verify --quiet` results so start-ref resolution, targeted bundle seeding, and checkout do not repeat the same ref probes.
+In `REMOTE` git mode, resolution uses only explicit `refs/remotes/origin/<branch>` refs for the worker branch and feature branch and fails rather than falling back to local refs or the host repo's current checkout. In `LOCAL` git mode, local branch refs remain eligible after remote refs. Snapshot workspaces use the requested checkout branch and fallback branch as bounded hints; remote-only snapshots do not use the current repository branch as a fallback. Each preparation memoizes exact `show-ref --verify --quiet` results so start-ref resolution, targeted bundle seeding, and checkout do not repeat the same ref probes.
 
 This keeps provider startup bounded in repositories that have accumulated thousands of sprint and worker branches while preserving the full-bundle retry path for recovered QA or follow-up workspaces that need refs outside the hints.
 
