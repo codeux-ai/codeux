@@ -85,6 +85,16 @@ share the OpenAI-style usage adapter, OpenCode keeps its raw cumulative export
 snapshot for resumed-session baselines, and Antigravity continues to document
 its internal protobuf mapping as inferred rather than official.
 
+When parsed provider conversations are persisted into `execution_invocation_messages`,
+Code UX maps every `ParsedConversationTurn` through `conversationTurnToMessage`
+instead of storing provider-native logs directly. User prompt turns remain
+unsanitized and untruncated, while assistant, reasoning, injected-context, and
+tool text is sanitized and capped for storage. Tool arguments and outputs are
+stored in the existing tool payload column with independent payload caps.
+Message metadata carries provider, model, tool call id, tool status, per-turn
+tokens, and provider timestamps when present, so live telemetry rewrites can be
+skipped only when the normalized persisted message payload is unchanged.
+
 ### Gemini
 
 Gemini CLI runs with structured JSON output enabled.
