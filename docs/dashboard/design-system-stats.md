@@ -41,13 +41,13 @@ The redesigned Stats page uses a stable top-to-bottom shell:
    - Mode-specific top cards are the single primary metric deck for the selected analysis surface. They use `StatsCard` and should put the most actionable metric first for the selected mode.
    - Cards expose title, value, and string description as the analytics article name. Long values must wrap inside stable card slots.
 4. Workspace body
-   - Mode content starts directly after the metric deck with one compact orientation row for the active mode, not a decorative studio header, readiness chip, duplicated KPI strip, summary-card deck, or duplicated project/range context card.
+   - Mode content starts directly after the metric deck with one compact orientation row for the active mode. A studio may then name its first analytical section, but it must not add a decorative hero, readiness chip, duplicated KPI strip, summary-card deck, or another project/range context card.
    - Workspace bodies may differ substantially, but each component must consume the shared Stats panel, chip, input, ledger row, status tone, chart track, focus, and motion tokens directly.
 5. Feedback states
    - No-project, first-load loading, first-load error, empty, refresh, and reduced-data states preserve the same flat shell rhythm without restating project, range, snapshot, and mode metadata already visible in the command band.
    - Loading states use polite status semantics. Error states use alert semantics and expose retry when recovery is available.
-- Refresh states keep existing analytics visible where cached data exists. Mark the affected chart, table, transcript, or page region with `aria-busy` and add visible/polite status text instead of using animation alone.
-- Background refresh states for mode workspaces and invocation ledgers keep cached rows/cards on screen. They add visible polite copy that says the data is updating from cache, while first-load states may still use skeleton or empty loading panels.
+   - Refresh states keep existing analytics visible where cached data exists. Mark the affected chart, table, transcript, or page region with `aria-busy` and add visible/polite status text instead of using animation alone.
+   - `AnalysisStudioSection` owns cached-refresh and cached-error feedback for every mode, including studios that do not fetch their own snapshot. Background refreshes keep current values on screen and say that cached data remains visible; first-load states may use loading or empty panels.
 
 ## Visual Modes
 
@@ -80,8 +80,8 @@ Composition explains where usage comes from.
 
 - Lead with provider share, token mix, cache rate, output/reasoning proportions, source mix, purpose lanes, and available Git-blocker context.
 - Token anatomy can show input, cached input, output, reasoning, cache-hit rate, output ratio, and total cost when `totalCostUsd` is greater than zero.
-- Provider and purpose donuts rank visible segments, handle long labels with wrapping, and render explicit empty states when segment data is absent.
-- Provider share, token anatomy, purpose lanes, token flight, cache efficiency, and provider activity use the same flat panel/subpanel grammar with compact neutral badges. Keep semantic data colors inside donut segments, token bars, and source-quality tracks rather than on decorative mode tags.
+- Provider Share and Token Anatomy are the two donut panels. They rank visible segments, handle long labels with wrapping, and render explicit empty states when segment data is absent; purpose activity is a ribbon/list rather than a third donut.
+- Provider share, token anatomy, purpose lanes, token flow, cache efficiency, and provider activity use the same flat panel/subpanel grammar with compact neutral badges. Keep semantic data colors inside donut segments, token bars, and source-quality tracks rather than on decorative mode tags.
 - Purpose lanes show invocation count, active time, token share, and dominant purpose without creating a second conflicting purpose summary.
 - Source-confidence cards distinguish reported, estimated, unavailable, unsupported, and defensive unknown buckets without inventing alternate totals.
 - Donuts, ribbons, and flow bars need nearby text or `role="img"` labels so color is never the only signal.
@@ -132,17 +132,19 @@ Ledgers contains operational records for tasks, sprints, and Git.
 System is the administrative invocation workbench. It is the place to inspect sprint state, invocation health, integration traffic, categorized failures, filtered records, and transcript detail without leaving the Stats workspace.
 
 - `useSystemViewData(projectId)` owns filters, sorting, summaries, pagination, request cancellation, and the legacy array fallback used by older tests.
+- The System workbench is project-scoped but is not passed the snapshot time-window query. The command band and page-level System metric deck remain snapshot-oriented; the body uses the invocation endpoint's own server-projected query. Do not claim that changing `1h` through `Custom` filters invocation records unless that contract is implemented.
 - Summary sections are named administrative regions: `Sprint State`, `Health Snapshot`, `External API Activity`, and `Error Categories`. Each region uses the same panel frame, compact eyebrow, section-level count, and subpanel metric cards so operators can scan state before entering the ledger.
 - System summary cards, filters, invocation table rows, sticky headers, loading rows, and transcript panels share the same flat Stats primitives as Ledgers. Keep the workbench compact and bordered, with semantic status fills only where the data state requires them.
 - Sprint State separates active sprint/task state from invocation health. Zero active sprint is neutral information, while running, blocked, failed, and completed signals use semantic status fills rather than decorative color.
 - Invocation Health owns invocation volume, token flow, success rate, average and p95 duration, cache-hit rate, running count, and status distribution. Empty or reduced health data is a polite status state and must not imply universal success.
-- External API Activity isolates classified Git, Code UX Agent, Jira, and other integration calls from model invocation records. Empty copy should say that no external API activity was classified, not that integrations never ran.
+- External API Activity isolates classified Git, Jules, Jira, and other integration calls from model invocation records. Empty copy should say that no external API activity was classified, not that integrations never ran.
 - Error Categories show classified timeout, rate-limit, API, model, cancelled, and other failures with semantic warning/negative/neutral fills. Empty copy should describe no classified errors in the current data set.
 - The record view control is a connected, non-sticky segmented button group mounted inside the records work area for `All`, `Errors`, and `System Msgs`. Count slots stay visually quiet and width-stable; visible badges can be hidden from assistive technology only when each button's accessible name includes the exact count and record pluralization.
 - `SystemFilterBar` presents search and status as the primary row, then groups purpose, provider, and error-category chips below inside one composed flat administrative control surface. Result count, active-filter count, clear-all, and invocation pagination metadata stay visible in the footer of that control surface.
 - Invocation tables are the System ledger. They preserve a semantic caption, sticky desktop header, `scope="col"` headers, explicit `aria-sort` values (`ascending`, `descending`, or `none`) on sortable columns, explicit sort button labels, and per-cell `headers` relationships. Mobile rows may collapse into block cards, but each cell keeps its visible label because the desktop header is hidden below large breakpoints.
 - Expand controls name the target invocation, set `aria-expanded`, point at the transcript panel with `aria-controls`, and remain keyboard-accessible.
 - Transcript detail surfaces invocation status, model, duration, token flow, cached tokens, message count, role, created time, optional message metadata, errors, and long content with safe wrapping. The expanded transcript panel uses shared flat Stats primitives for its header, compact invocation summary row, status chips, role records, copy control, loading, empty, and error states.
+- The inspection workflow is record view, filters, sortable invocation ledger, row expansion, then transcript detail. Transcript disclosure is isolated from the parent row: it initially renders a bounded message set, can reveal the remaining messages, and can retry its own request without collapsing or replacing the invocation record.
 - Transcript regions set `aria-busy` while messages load. Transcript loading and empty states use polite status semantics; transcript fetch failures use alert semantics and expose an in-place retry that restores the same transcript region without collapsing the row.
 - System feedback states use compact flat subpanels with semantic Lucide icons, short operational copy, and named `status` or `alert` regions. Loading and empty/reduced-data states are polite and include visible text beyond motion, while blocking invocation and transcript failures use alert semantics. Copy must distinguish no classified activity or unavailable metrics from proven zero usage.
 
@@ -186,7 +188,7 @@ The `StatsPage` uses the `useStatsPageData` hook to coordinate visual modes. The
 
 ## Responsive Behavior
 
-- The hero stacks title/context and command controls on phones, moves context beside the title at tablet widths, splits time and mode controls into two columns on desktop, and increases section rhythm at wide-desktop widths.
+- The hero uses explicit phone, small-screen, tablet, desktop, and wide-desktop steps. Phones use three-column, two-row preset and mode grids; small screens place all six controls in one row and align custom dates with Apply; tablets move project context beside the title; desktops split time and mode controls into adjacent regions; wide desktops increase padding and section rhythm without changing reading order.
 - Fixed or sticky header-adjacent navigation must wrap before it clips. Header preset and mode controls should use bounded grids that move from compact multi-row layouts to a single row only when the command column has enough width; use `min-w-0`, wrapping labels, and component-local overflow only when wrapping can no longer preserve button labels.
 - Metric grids collapse from desktop multi-column layouts to two-column and single-column layouts without changing order.
 - Trend places focused-bucket and series context below the chart on narrow screens.
@@ -222,6 +224,7 @@ See [Mobile Responsiveness](./mobile-responsiveness.md) for dashboard-wide const
 
 Motion is for orientation only: shell entrance, mode transitions, card detail refreshes, chart updates, hover feedback, and tab changes should be subtle. Respect `prefers-reduced-motion` by disabling nonessential GSAP, Tailwind entrance, card, chart, and tab animation. Never rely on motion to reveal validation errors, filter state, table content, or chart values, and never animate numeric text in a way that obscures exact values for assistive technology.
 
+- The initial command band, metric deck, workspace, and first-load state use `useGsapInteractionTokens`; workspace mode changes use `useInteractionTokens`. Both token sources must resolve duration to zero for reduced motion, with the CSS media query retained as a fallback.
 - Use `controlFeedback` for time presets, filters, sort buttons, series switches, pagination buttons, and expand controls.
 - Use `selectionMovement` for mode detail movement, active tab indicators, selected ledger views, metric-card detail refreshes, and small micrograph emphasis.
 - Use `listReveal` for progressive ledger and invocation row entrance.
