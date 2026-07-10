@@ -131,8 +131,8 @@ describe("collectProviderUsageTelemetry", () => {
       usageSource: "reported",
       transcriptText: "Applied the edit.",
     });
-    expect(result.conversation.map((t) => t.kind)).toEqual(["reasoning", "assistant"]);
-    expect(result.conversation[0]).toMatchObject({ kind: "reasoning", text: "I should inspect the change first." });
+    expect(result.conversation.map((t) => t.kind)).toEqual(["user", "reasoning", "assistant"]);
+    expect(result.conversation[1]).toMatchObject({ kind: "reasoning", text: "I should inspect the change first." });
   });
 
   it("does not synthesize Gemini reasoning turns from a plain response string", async () => {
@@ -199,14 +199,14 @@ describe("collectProviderUsageTelemetry", () => {
       usageSource: "reported",
       transcriptText: "I will inspect the file.\nDone.",
     });
-    expect(result.conversation.map((turn) => turn.kind)).toEqual(["assistant", "tool_call", "tool_result", "assistant"]);
-    expect(result.conversation[1]).toMatchObject({
+    expect(result.conversation.map((turn) => turn.kind)).toEqual(["user", "assistant", "tool_call", "tool_result", "assistant"]);
+    expect(result.conversation[2]).toMatchObject({
       kind: "tool_call",
       toolName: "read_file",
       toolCallId: "call_1",
       toolArguments: "{\"path\":\"README.md\"}",
     });
-    expect(result.conversation[2]).toMatchObject({
+    expect(result.conversation[3]).toMatchObject({
       kind: "tool_result",
       toolName: "read_file",
       toolCallId: "call_1",
@@ -277,6 +277,37 @@ describe("collectProviderUsageTelemetry", () => {
     expect(result.inputTokens).toBeGreaterThan(0);
     expect(result.outputTokens).toBeGreaterThan(0);
     expect(result.totalTokens).toBe(result.inputTokens + result.outputTokens);
+  });
+
+  it("retains structured Gemini turns while safely estimating missing usage", async () => {
+    const result = await collectProviderUsageTelemetry({
+      provider: "gemini",
+      model: "default",
+      prompt: "Summarize the diff.",
+      cwd: "/workspace/repo",
+      stdout: [
+        "provider bootstrap",
+        JSON.stringify({
+          response: {
+            candidates: [{
+              content: {
+                role: "model",
+                parts: [{ thought: true, text: "Check the patch." }, { text: "Looks good." }],
+              },
+            }],
+          },
+        }),
+      ].join("\n"),
+      stderr: "",
+    });
+
+    expect(result).toMatchObject({
+      usageSource: "estimated",
+      transcriptText: "Looks good.",
+    });
+    expect(result.conversation.map((turn) => turn.kind)).toEqual(["user", "reasoning", "assistant"]);
+    expect(result.inputTokens).toBeGreaterThan(0);
+    expect(result.outputTokens).toBeGreaterThan(0);
   });
 
   it("falls back to stdout and stderr text when Gemini stdout is invalid JSON", async () => {
