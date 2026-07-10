@@ -690,7 +690,7 @@ describe("OnboardingExperience integration", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("runs the short Easy onboarding flow, saves the selected mode, and lands on Chat", async () => {
+  it("runs the Easy onboarding flow, allows changing the recommended provider, and lands on Chat", async () => {
     const systemSettings = createSystemSettings();
     vi.mocked(settingsApi.fetchSystemSettings).mockResolvedValue(systemSettings);
     vi.mocked(settingsApi.saveSystemSettings).mockImplementation(async (nextSettings) => nextSettings);
@@ -720,6 +720,19 @@ describe("OnboardingExperience integration", () => {
     await userEvent.click(await screen.findByRole("radio", { name: /Easy/i }));
     await userEvent.click(screen.getByRole("button", { name: "Next" }));
 
+    expect(await screen.findByText("Healthy")).not.toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(await screen.findByText("Welcome to Code UX.")).not.toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    const codexProvider = await screen.findByRole("button", { name: "Deselect Codex provider" });
+    await userEvent.click(codexProvider);
+    expect(screen.getByRole("button", { name: "Select Codex provider" })).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(screen.getByRole("button", { name: "Select Gemini provider" }));
+    expect(screen.getByRole("button", { name: "Deselect Gemini provider" })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+
     expect(await screen.findByText("Choose one provider login")).not.toBeNull();
     for (const providerName of ["Gemini", "Antigravity", "Codex", "Claude Code", "Qwen Code", "OpenCode"]) {
       expect(screen.getByText(providerName)).not.toBeNull();
@@ -745,12 +758,12 @@ describe("OnboardingExperience integration", () => {
     const savedSettings = saveCalls[saveCalls.length - 1]![0] as SystemSettings;
     expect(savedSettings.defaults.appearance.experienceMode).toBe("EASY");
     expect(savedSettings.defaults.cliWorkflow.executionMode).toBe("DOCKER");
-    expect(savedSettings.defaults.aiProvider.provider).toBe("codex");
+    expect(savedSettings.defaults.aiProvider.provider).toBe("gemini");
     expect(savedSettings.defaults.cliWorkflow.gitMode).toBe("local");
     expect(savedSettings.defaults.git.githubMode).toBe("LOCAL");
     expect(savedSettings.defaults.git.autoCreatePr).toBe(false);
-    expect(savedSettings.integrations.providers.codex?.authType).toBe("dashboardAuth");
-    expect(savedSettings.integrations.providers.codex?.authPath).toBe("~/.code-ux/credentials/codex");
+    expect(savedSettings.integrations.providers.gemini?.authType).toBe("dashboardAuth");
+    expect(savedSettings.integrations.providers.gemini?.authPath).toBe("~/.code-ux/credentials/gemini");
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/user/onboarding/complete", expect.objectContaining({ method: "POST" })));
     await waitFor(() => expect(navigateMock).toHaveBeenCalledWith({ to: "/chat" }));
   });

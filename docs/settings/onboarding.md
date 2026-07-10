@@ -15,6 +15,8 @@ Use it when you are configuring a new project, auditing inherited settings, or d
 
 The action button launches onboarding so you can revisit provider, project, and setup prompts.
 
+Easy mode follows the same initial readiness and product-introduction steps as Expert mode before provider setup. It starts with a recommended available provider, but the **Select Providers** step lets you select or deselect providers before configuring their instances.
+
 | Control Surface | Runtime Effect | Review Before Saving |
 | --- | --- | --- |
 | Settings card fields | Updates the active Settings scope after you save the page. | Confirm whether you are editing System or Project scope. |

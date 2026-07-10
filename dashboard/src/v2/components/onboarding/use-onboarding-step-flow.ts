@@ -32,8 +32,11 @@ export const onboardingSteps: Array<{ id: StepId; label: string; icon: typeof Se
 
 export const easyOnboardingSteps: Array<{ id: StepId; label: string; icon: typeof Settings }> = [
   { id: "mode", label: "Setup mode", icon: SlidersHorizontal },
-  { id: "provider-setup", label: "Provider", icon: Cpu },
-  { id: "git", label: "GitHub", icon: GitBranch },
+  { id: "installation", label: "Installation", icon: Box },
+  { id: "introduction", label: "Introduction", icon: ShieldCheck },
+  { id: "providers", label: "Select Providers", icon: Cpu },
+  { id: "provider-setup", label: "Providers", icon: Settings },
+  { id: "git", label: "Git", icon: GitBranch },
 ];
 
 export const getOnboardingStepsForMode = (

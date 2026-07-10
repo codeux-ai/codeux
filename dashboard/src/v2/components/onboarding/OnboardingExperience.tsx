@@ -12,21 +12,16 @@ import {
   ClipboardList,
   Compass,
   Cpu,
-  BookOpen,
   FolderOpen,
   GitBranch,
   Github,
   Info,
   KeyRound,
   Layers,
-  Library,
   Monitor,
   Plus,
   RefreshCw,
   Settings,
-  ShieldCheck,
-  Sparkles,
-  Star,
   Terminal,
   X,
 } from "lucide-preact";
@@ -49,6 +44,8 @@ import { clearAppearancePreview, publishAppearancePreview } from "../../lib/appe
 import { SectionCard } from "../settings/panels/SharedPanelComponents.js";
 import { JiraIcon } from "../icons/JiraIcon.js";
 import { OnboardingInstallationStep } from "./OnboardingInstallationStep.js";
+import { OnboardingIntroductionStep } from "./OnboardingIntroductionStep.js";
+import { OnboardingProvidersStep } from "./OnboardingProvidersStep.js";
 import { OnboardingAppearanceStep } from "./OnboardingAppearanceStep.js";
 
 type IntroPhase = "intro" | "transitioning" | "onboarding";
@@ -87,8 +84,6 @@ import {
   useOnboardingStepFlow,
   type StepId,
 } from "./use-onboarding-step-flow.js";
-
-const CODEUX_REPO_URL = "https://github.com/codeux-ai/codeux";
 
 type OnboardingValidationResult = {
   valid: true;
@@ -603,8 +598,9 @@ export const OnboardingExperience: FunctionComponent = () => {
     options: { useGithub?: boolean; manageGithubPrWorkflow?: boolean } = {},
   ): void => {
     const easyUseGithubDefault = options.useGithub ?? false;
+    const isEnteringEasyMode = mode === "EASY" && experienceMode !== "EASY";
     dispatch({ type: "select-experience-mode", mode });
-    if (mode === "EASY") {
+    if (isEnteringEasyMode) {
       dispatch({ type: "set-selected-providers", providers: [easyRecommendedProvider] });
     }
     updateSettings((current) => applyOnboardingExperienceModeDefaults(current, mode, {
@@ -733,7 +729,7 @@ export const OnboardingExperience: FunctionComponent = () => {
     providerConfigId: ProviderConfigId,
     updates: Partial<SystemSettings["integrations"]["providers"][ProviderConfigId]>,
   ): void => {
-    dispatch({ type: "set-selected-providers", providers: [providerId] });
+    dispatch({ type: "select-provider", provider: providerId });
     updateSettings((current) => {
       const provider = current.integrations.providers[providerConfigId]
         ?? createEasyDashboardProviderDraft(providerId, providerConfigId);
@@ -1197,7 +1193,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                         <div className="mt-3 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{option.description}</div>
                         {option.value === "EASY" ? (
                           <div className="mt-4 rounded-2xl border border-signal-500/15 bg-signal-500/[0.07] px-3 py-2 text-xs font-semibold leading-relaxed text-signal-800 dark:text-signal-200">
-                            Short flow: provider, GitHub, then Chat.
+                            Guided flow: installation, introduction, providers, GitHub, then Chat.
                           </div>
                         ) : null}
                       </button>
@@ -1223,136 +1219,15 @@ export const OnboardingExperience: FunctionComponent = () => {
               />
             ) : null}
 
-            {active.id === "introduction" ? (
-              <div className="space-y-4">
-                <div data-onboarding-card className="relative overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/80 p-6 shadow-[0_18px_48px_rgba(15,23,42,0.055)] dark:border-white/[0.06] dark:bg-white/[0.045]">
-                  <div aria-hidden className="absolute -right-8 -top-10 font-display text-[7rem] font-black leading-none tracking-tight text-black/[0.025] dark:text-white/[0.025]">UX</div>
-                  <div className="relative z-10 max-w-3xl">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-signal-700 dark:text-signal-200">
-                      <Sparkles className="h-3.5 w-3.5" strokeWidth={2.4} />
-                      Agentic runtime
-                    </div>
-                    <h4 className="mt-4 font-display text-2xl font-semibold leading-none tracking-tight text-slate-950 dark:text-white">Welcome to Code UX.</h4>
-                    <p className="mt-3 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-300">
-                      Code UX is an advanced containerized agentic workspace for turning projects into guided sprints, executable tasks, live previews, and measurable delivery. It coordinates provider CLIs inside isolated Docker runtimes, keeps credentials inside the intended tools, and gives you one polished control surface for agents, memory, knowledge base, browser sessions, and automation.
-                    </p>
-                    <div className="mt-5 flex flex-wrap gap-2">
-                      {[
-                        [Github, "GitHub", CODEUX_REPO_URL],
-                        [Star, "Star on GitHub", CODEUX_REPO_URL],
-                        [BookOpen, "Documentation", `${CODEUX_REPO_URL}#readme`],
-                      ].map(([Icon, label, href]) => {
-                        const BadgeIcon = Icon as typeof Github;
-                        return (
-                          <a
-                            key={String(label)}
-                            href={getSafeUrl(String(href))}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 rounded-2xl border border-black/[0.06] bg-white/80 px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-slate-600 shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition-all hover:-translate-y-0.5 hover:border-signal-500/25 hover:text-slate-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-slate-300 dark:hover:text-white"
-                          >
-                            <BadgeIcon className="h-3.5 w-3.5 text-signal-600 dark:text-signal-300" strokeWidth={2.4} />
-                            {String(label)}
-                          </a>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  {[
-                    ["Container-first execution", "Provider CLIs run inside isolated Docker containers with a mounted workspace snapshot.", ShieldCheck],
-                    ["Credential boundary", "Local credentials are copied only into the intended CLI runtime and are not used as raw application secrets.", ShieldCheck],
-                    ["TOS-compliant workflow", "Authentication stays with each provider's supported CLI flow, so Code UX orchestrates tools instead of impersonating providers.", ShieldCheck],
-                    ["Knowledge Base", "Maintain a persistent technical knowledge base that agents use for deep architectural context.", Library],
-                  ].map(([title, description, Icon]) => {
-                    const CardIcon = Icon as typeof ShieldCheck;
-                    return (
-                      <div data-onboarding-card key={title as string} className="group rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.045)] transition-transform hover:-translate-y-1 dark:border-white/[0.06] dark:bg-white/[0.04]">
-                        <CardIcon className="h-6 w-6 text-signal-600 dark:text-signal-300" />
-                        <div className="mt-4 text-base font-black text-slate-900 dark:text-white">{title as string}</div>
-                        <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{description as string}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div data-onboarding-card className="relative overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/80 p-6 shadow-[0_18px_48px_rgba(15,23,42,0.055)] dark:border-white/[0.06] dark:bg-white/[0.045]">
-                  <div aria-hidden className="absolute -right-8 -top-10 font-display text-[7rem] font-black leading-none tracking-tight text-black/[0.025] dark:text-white/[0.025]">MIT</div>
-                  <div className="relative z-10">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <ShieldCheck className="h-4 w-4 text-signal-600 dark:text-signal-300" strokeWidth={2.4} />
-                        <div className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-700 dark:text-slate-200">License</div>
-                      </div>
-                      <a
-                        href={getSafeUrl(`${CODEUX_REPO_URL}/blob/main/LICENSE`)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[10px] font-black uppercase tracking-[0.14em] text-signal-600 hover:text-signal-700 dark:text-signal-300 dark:hover:text-signal-200"
-                      >
-                        View on GitHub
-                      </a>
-                    </div>
-                    <p className="mt-2 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
-                      Code UX is open source under the MIT License. By continuing you acknowledge the terms below.
-                    </p>
-                    <div className="dashboard-scrollbar mt-4 max-h-52 overflow-y-auto overscroll-contain rounded-[1.25rem] border border-black/[0.06] bg-black/[0.03] p-4 dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">{LICENSE_TEXT}</pre>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : null}
+            {active.id === "introduction" ? <OnboardingIntroductionStep /> : null}
 
             {active.id === "providers" ? (
-              <div className="space-y-4">
-                <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                  <div className="flex items-start gap-3">
-                    <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-signal-600 dark:text-signal-300" />
-                    <div>
-                      <div className="text-base font-black text-slate-900 dark:text-white">Choose every provider you want available</div>
-                      <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                        You can use local auth-copy, API keys, or both. The next step lets you add multiple named instances for each provider.
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {PROVIDER_TYPES.map((providerId) => {
-                    const provider = readinessByProvider[providerId];
-                    const selected = selectedProviders.includes(providerId);
-                    const instanceCount = getSystemProvidersByType(settings, providerId).length;
-                    return (
-                      <button
-                        data-onboarding-card
-	                        key={providerId}
-	                        type="button"
-	                        aria-pressed={selected}
-	                        aria-label={`${selected ? "Deselect" : "Select"} ${providerLabels[providerId]} provider`}
-	                        onClick={() => toggleProvider(providerId)}
-	                        className={`group relative overflow-hidden rounded-3xl border p-4 text-left shadow-[0_14px_34px_rgba(15,23,42,0.04)] transition-[border-color,background-color,transform,box-shadow] hover:-translate-y-1 ${selected ? "border-signal-500/30 bg-signal-500/10 shadow-[0_18px_46px_rgba(0,224,160,0.08)]" : "border-black/[0.06] bg-white/75 hover:border-black/[0.12] dark:border-white/[0.06] dark:bg-white/[0.04]"}`}
-	                        style={{ transitionDuration: "var(--onboarding-selection-duration)", transitionTimingFunction: "var(--onboarding-selection-ease)" }}
-	                      >
-                        <div aria-hidden className={`absolute left-0 top-4 bottom-4 w-1 rounded-r-full transition-opacity ${selected ? "bg-signal-500 opacity-100" : "bg-slate-300 opacity-0 group-hover:opacity-100 dark:bg-slate-600"}`} />
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <ProviderBrandIcon id={providerId} />
-                            <div>
-                              <div className="font-black text-slate-900 dark:text-white">{providerLabels[providerId]}</div>
-                              <div className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{instanceCount || 1} instance{(instanceCount || 1) === 1 ? "" : "s"}</div>
-                            </div>
-                          </div>
-                          <span className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${provider?.available ? "bg-signal-500/10 text-signal-700 dark:text-signal-300" : selected ? "bg-ember-500/10 text-ember-600 dark:text-ember-400" : "bg-slate-500/10 text-slate-500"}`}>
-                            {providerId === "jules" ? "API key" : provider?.available ? "Detected" : selected ? "Configure" : "Optional"}
-                          </span>
-                        </div>
-                        <div className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{provider?.description || providerDescriptions[providerId]}</div>
-                        <div className="mt-3 font-mono text-[11px] text-slate-400">{provider?.authPath || (providerId === "jules" ? "API key only" : "Auth path configurable")}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              <OnboardingProvidersStep
+                selectedProviders={selectedProviders}
+                toggleProvider={toggleProvider}
+                readinessByProvider={readinessByProvider}
+                settings={settings}
+              />
             ) : null}
 
             {active.id === "provider-setup" ? (
