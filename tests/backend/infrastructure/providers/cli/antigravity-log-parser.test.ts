@@ -212,6 +212,93 @@ describe("Antigravity Log Parser - parseAntigravityTranscript", () => {
     });
   });
 
+  it("parses transcript role/parts entries with reasoning, assistant text, tool calls, and tool results", () => {
+    const jsonl = [
+      JSON.stringify({
+        role: "user",
+        parts: [{ text: "<USER_REQUEST>Inspect the repo</USER_REQUEST>" }],
+        timestamp: "2026-06-01T10:00:00.000Z",
+      }),
+      JSON.stringify({
+        role: "model",
+        parts: [
+          { thought: true, text: "I should inspect the package scripts." },
+          { text: "I will check the test command." },
+          { functionCall: { name: "read_file", args: { path: "package.json" }, id: "call-parts" } },
+        ],
+        timestamp: "2026-06-01T10:00:01.000Z",
+      }),
+      JSON.stringify({
+        role: "user",
+        parts: [
+          { functionResponse: { name: "read_file", response: { output: "package contents" }, id: "call-parts" } },
+        ],
+        timestamp: "2026-06-01T10:00:02.000Z",
+      }),
+    ].join("\n");
+
+    const turns = parseAntigravityTranscript(jsonl);
+
+    expect(turns.map((turn) => turn.kind)).toEqual(["user", "reasoning", "assistant", "tool_call", "tool_result"]);
+    expect(turns[0]).toMatchObject({ kind: "user", text: "Inspect the repo" });
+    expect(turns[1]).toMatchObject({ kind: "reasoning", text: "I should inspect the package scripts." });
+    expect(turns[2]).toMatchObject({ kind: "assistant", text: "I will check the test command." });
+    expect(turns[3]).toMatchObject({
+      kind: "tool_call",
+      toolName: "read_file",
+      toolCallId: "call-parts",
+      toolArguments: JSON.stringify({ path: "package.json" }),
+    });
+    expect(turns[4]).toMatchObject({
+      kind: "tool_result",
+      toolName: "read_file",
+      toolCallId: "call-parts",
+      text: "{\"output\":\"package contents\"}",
+    });
+  });
+
+  it("parses overview-style nested entries without throwing on unrelated rows", () => {
+    const jsonl = [
+      JSON.stringify({
+        entries: [
+          { source: "USER", content: "Follow-up request", created_at: "2026-06-01T10:00:00.000Z" },
+          {
+            source: "AGENT",
+            thinking: [{ text: "Need to run validation." }],
+            content: { text: "Running validation now." },
+            toolCalls: [{ tool_name: "run_command", arguments: { command: "pnpm test" }, tool_call_id: "call-overview" }],
+            created_at: "2026-06-01T10:00:01.000Z",
+          },
+          {
+            type: "TOOL_RESULT",
+            content: "tests passed",
+            tool_call_id: "call-overview",
+            tool_name: "run_command",
+            created_at: "2026-06-01T10:00:02.000Z",
+          },
+          { type: "UNRELATED", content: { nested: true } },
+        ],
+      }),
+    ].join("\n");
+
+    const turns = parseAntigravityTranscript(jsonl);
+
+    expect(turns.map((turn) => turn.kind)).toEqual(["user", "reasoning", "assistant", "tool_call", "tool_result"]);
+    expect(turns[1]).toMatchObject({ kind: "reasoning", text: "Need to run validation." });
+    expect(turns[3]).toMatchObject({
+      kind: "tool_call",
+      toolName: "run_command",
+      toolCallId: "call-overview",
+      toolArguments: JSON.stringify({ command: "pnpm test" }),
+    });
+    expect(turns[4]).toMatchObject({
+      kind: "tool_result",
+      toolName: "run_command",
+      toolCallId: "call-overview",
+      text: "tests passed",
+    });
+  });
+
   it("filters turns based on sinceMs lower bound (with 2000ms grace)", () => {
     const jsonl = [
       JSON.stringify({
