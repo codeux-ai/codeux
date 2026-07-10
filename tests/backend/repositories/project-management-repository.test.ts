@@ -1367,6 +1367,132 @@ describe("ProjectManagementRepository", () => {
     ]);
   });
 
+  it("round-trips Jira linked issue prompt context through sprint reloads and updates", async () => {
+    const { repository, storage } = await createRepository();
+    const project = repository.createProject({
+      name: "Jira Context Project",
+      sourceType: "local",
+      sourceRef: "/workspace/jira-context-project",
+    });
+
+    const sprint = repository.createSprint(project.id, {
+      name: "Jira Context Sprint",
+      linkedIssues: [{
+        provider: "jira",
+        sourceProvider: "jira",
+        sourceKind: "issue",
+        externalId: "jira-10042",
+        hostDomain: "jira.example.test",
+        projectKey: "OPS",
+        repository: "OPS",
+        issueNumber: 42,
+        issueKey: "OPS-42",
+        title: "Preserve imported Jira context",
+        url: "https://jira.example.test/browse/OPS-42",
+        state: "In Progress",
+        labels: ["imports", "planning"],
+        assignees: ["casey"],
+        issueBodyMarkdown: "## Problem\n\nImported Jira description with acceptance criteria.",
+        issueConversationMarkdown: "- Morgan: Can we keep the existing labels?\n- Casey: Yes, keep them.",
+        includeConversation: true,
+        issueAuthor: "Morgan Reporter",
+        issueCreatedAt: "2026-05-17T10:00:00.000Z",
+        issueUpdatedAt: "2026-05-18T11:30:00.000Z",
+        metadata: {
+          issueType: "Bug",
+          priority: "High",
+          apiToken: "should-not-persist",
+          nested: {
+            safe: "visible",
+            authorization: "Bearer should-not-persist",
+          },
+        },
+      }],
+    });
+
+    const loadedIssue = repository.getSprint(sprint.id)?.linkedIssues[0];
+    expect(loadedIssue).toMatchObject({
+      provider: "jira",
+      sourceProvider: "jira",
+      sourceKind: "issue",
+      externalId: "jira-10042",
+      hostDomain: "jira.example.test",
+      projectKey: "OPS",
+      repository: "OPS",
+      issueNumber: 42,
+      issueKey: "OPS-42",
+      title: "Preserve imported Jira context",
+      state: "In Progress",
+      labels: ["imports", "planning"],
+      assignees: ["casey"],
+      issueBodyMarkdown: "## Problem\n\nImported Jira description with acceptance criteria.",
+      issueConversationMarkdown: "- Morgan: Can we keep the existing labels?\n- Casey: Yes, keep them.",
+      includeConversation: true,
+      issueAuthor: "Morgan Reporter",
+      issueCreatedAt: "2026-05-17T10:00:00.000Z",
+      issueUpdatedAt: "2026-05-18T11:30:00.000Z",
+      metadata: {
+        issueType: "Bug",
+        priority: "High",
+        nested: {
+          safe: "visible",
+        },
+      },
+    });
+
+    expect(loadedIssue?.metadata).not.toHaveProperty("apiToken");
+    expect(loadedIssue?.metadata?.nested).not.toHaveProperty("authorization");
+
+    repository.updateSprint(sprint.id, {
+      name: "Jira Context Sprint Updated",
+      linkedIssues: loadedIssue ? [loadedIssue] : [],
+    });
+
+    const updatedIssue = repository.getSprint(sprint.id)?.linkedIssues[0];
+    expect(updatedIssue).toMatchObject({
+      issueBodyMarkdown: "## Problem\n\nImported Jira description with acceptance criteria.",
+      issueConversationMarkdown: "- Morgan: Can we keep the existing labels?\n- Casey: Yes, keep them.",
+      includeConversation: true,
+      issueAuthor: "Morgan Reporter",
+      issueCreatedAt: "2026-05-17T10:00:00.000Z",
+      issueUpdatedAt: "2026-05-18T11:30:00.000Z",
+      metadata: {
+        issueType: "Bug",
+        priority: "High",
+        nested: {
+          safe: "visible",
+        },
+      },
+    });
+
+    const dbRow = storage.getDatabase().prepare(`
+      SELECT issue_body_markdown, issue_conversation_markdown, include_conversation, issue_author, issue_created_at, issue_updated_at, metadata_json
+      FROM sprint_linked_issues
+      WHERE sprint_id = ?
+    `).get(sprint.id) as {
+      issue_body_markdown: string | null;
+      issue_conversation_markdown: string | null;
+      include_conversation: number | null;
+      issue_author: string | null;
+      issue_created_at: string | null;
+      issue_updated_at: string | null;
+      metadata_json: string | null;
+    };
+    expect(dbRow.issue_body_markdown).toBe("## Problem\n\nImported Jira description with acceptance criteria.");
+    expect(dbRow.issue_conversation_markdown).toBe("- Morgan: Can we keep the existing labels?\n- Casey: Yes, keep them.");
+    expect(dbRow.include_conversation).toBe(1);
+    expect(dbRow.issue_author).toBe("Morgan Reporter");
+    expect(dbRow.issue_created_at).toBe("2026-05-17T10:00:00.000Z");
+    expect(dbRow.issue_updated_at).toBe("2026-05-18T11:30:00.000Z");
+    expect(JSON.parse(dbRow.metadata_json || "{}")).toEqual({
+      issueType: "Bug",
+      priority: "High",
+      nested: {
+        safe: "visible",
+      },
+    });
+  });
+
   it("keeps backward-compatible numeric linked issue storage", async () => {
     const { repository, storage } = await createRepository();
     const project = repository.createProject({
@@ -1502,13 +1628,26 @@ describe("ProjectManagementRepository", () => {
 
       const columns = db.prepare("PRAGMA table_info(sprint_linked_issues)").all() as Array<{ name: string; notnull: number }>;
       expect(columns.find((column) => column.name === "issue_number")?.notnull).toBe(0);
-      expect(columns.map((column) => column.name)).toEqual(expect.arrayContaining(["project_key", "external_id", "source_kind"]));
+      expect(columns.map((column) => column.name)).toEqual(expect.arrayContaining([
+        "project_key",
+        "external_id",
+        "source_kind",
+        "issue_body_markdown",
+        "issue_conversation_markdown",
+        "include_conversation",
+        "issue_author",
+        "issue_created_at",
+        "issue_updated_at",
+        "metadata_json",
+      ]));
 
       db.prepare(`
         INSERT INTO sprint_linked_issues (
           id, project_id, sprint_id, provider, host_domain, repository, issue_number, external_id,
-          source_kind, issue_key, title, url, state, labels_json, assignees_json, imported_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          source_kind, issue_key, title, url, state, labels_json, assignees_json, issue_body_markdown,
+          issue_conversation_markdown, include_conversation, issue_author, issue_created_at, issue_updated_at,
+          metadata_json, imported_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         "external-1",
         "project-1",
@@ -1525,14 +1664,50 @@ describe("ProjectManagementRepository", () => {
         "open",
         "[]",
         "[]",
+        "Persisted external body",
+        "Persisted external conversation",
+        1,
+        "Morgan Reporter",
+        "2026-05-16T00:00:00.000Z",
+        "2026-05-17T00:00:00.000Z",
+        JSON.stringify({ priority: "High" }),
         "2026-05-17T00:00:00.000Z",
         "2026-05-17T00:00:00.000Z",
       );
 
-      const rows = db.prepare("SELECT id, issue_number, external_id, source_kind FROM sprint_linked_issues ORDER BY id").all();
+      const rows = db.prepare(`
+        SELECT id, issue_number, external_id, source_kind, issue_body_markdown, issue_conversation_markdown,
+          include_conversation, issue_author, issue_created_at, issue_updated_at, metadata_json
+        FROM sprint_linked_issues
+        ORDER BY id
+      `).all();
       expect(rows).toEqual([
-        { id: "external-1", issue_number: null, external_id: "page-1", source_kind: "page" },
-        { id: "issue-1", issue_number: 42, external_id: null, source_kind: null },
+        {
+          id: "external-1",
+          issue_number: null,
+          external_id: "page-1",
+          source_kind: "page",
+          issue_body_markdown: "Persisted external body",
+          issue_conversation_markdown: "Persisted external conversation",
+          include_conversation: 1,
+          issue_author: "Morgan Reporter",
+          issue_created_at: "2026-05-16T00:00:00.000Z",
+          issue_updated_at: "2026-05-17T00:00:00.000Z",
+          metadata_json: JSON.stringify({ priority: "High" }),
+        },
+        {
+          id: "issue-1",
+          issue_number: 42,
+          external_id: null,
+          source_kind: null,
+          issue_body_markdown: null,
+          issue_conversation_markdown: null,
+          include_conversation: null,
+          issue_author: null,
+          issue_created_at: null,
+          issue_updated_at: null,
+          metadata_json: null,
+        },
       ]);
     } finally {
       db.close();

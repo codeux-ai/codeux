@@ -351,6 +351,13 @@ export function migrateSprintLinkedIssuesExternalSources(db: DatabaseAdapter): v
   ensureColumn(db, "sprint_linked_issues", "project_key", "TEXT");
   ensureColumn(db, "sprint_linked_issues", "external_id", "TEXT");
   ensureColumn(db, "sprint_linked_issues", "source_kind", "TEXT");
+  ensureColumn(db, "sprint_linked_issues", "issue_body_markdown", "TEXT");
+  ensureColumn(db, "sprint_linked_issues", "issue_conversation_markdown", "TEXT");
+  ensureColumn(db, "sprint_linked_issues", "include_conversation", "INTEGER");
+  ensureColumn(db, "sprint_linked_issues", "issue_author", "TEXT");
+  ensureColumn(db, "sprint_linked_issues", "issue_created_at", "TEXT");
+  ensureColumn(db, "sprint_linked_issues", "issue_updated_at", "TEXT");
+  ensureColumn(db, "sprint_linked_issues", "metadata_json", "TEXT");
 
   const columns = getTableColumns(db, "sprint_linked_issues");
   if (columns.get("issue_number")?.notnull !== 1) {
@@ -378,6 +385,13 @@ export function migrateSprintLinkedIssuesExternalSources(db: DatabaseAdapter): v
         state TEXT NOT NULL DEFAULT 'open',
         labels_json TEXT NOT NULL DEFAULT '[]',
         assignees_json TEXT NOT NULL DEFAULT '[]',
+        issue_body_markdown TEXT,
+        issue_conversation_markdown TEXT,
+        include_conversation INTEGER,
+        issue_author TEXT,
+        issue_created_at TEXT,
+        issue_updated_at TEXT,
+        metadata_json TEXT,
         imported_at TEXT NOT NULL,
         closed_at TEXT,
         close_state TEXT NOT NULL DEFAULT 'open',
@@ -391,7 +405,9 @@ export function migrateSprintLinkedIssuesExternalSources(db: DatabaseAdapter): v
       INSERT INTO sprint_linked_issues_new (
         id, project_id, sprint_id, provider, host_domain, project_key, repository,
         issue_number, external_id, source_kind, issue_key, title, url, state,
-        labels_json, assignees_json, imported_at, closed_at, close_state, close_error, updated_at
+        labels_json, assignees_json, issue_body_markdown, issue_conversation_markdown,
+        include_conversation, issue_author, issue_created_at, issue_updated_at, metadata_json,
+        imported_at, closed_at, close_state, close_error, updated_at
       )
       SELECT
         id,
@@ -410,6 +426,13 @@ export function migrateSprintLinkedIssuesExternalSources(db: DatabaseAdapter): v
         state,
         labels_json,
         assignees_json,
+        ${columnSelectExpression(columns, "issue_body_markdown", "NULL")},
+        ${columnSelectExpression(columns, "issue_conversation_markdown", "NULL")},
+        ${columnSelectExpression(columns, "include_conversation", "NULL")},
+        ${columnSelectExpression(columns, "issue_author", "NULL")},
+        ${columnSelectExpression(columns, "issue_created_at", "NULL")},
+        ${columnSelectExpression(columns, "issue_updated_at", "NULL")},
+        ${columnSelectExpression(columns, "metadata_json", "NULL")},
         imported_at,
         closed_at,
         close_state,
@@ -587,6 +610,13 @@ export function runMigrations(db: DatabaseAdapter): void {
       state TEXT NOT NULL DEFAULT 'open',
       labels_json TEXT NOT NULL DEFAULT '[]',
       assignees_json TEXT NOT NULL DEFAULT '[]',
+      issue_body_markdown TEXT,
+      issue_conversation_markdown TEXT,
+      include_conversation INTEGER,
+      issue_author TEXT,
+      issue_created_at TEXT,
+      issue_updated_at TEXT,
+      metadata_json TEXT,
       imported_at TEXT NOT NULL,
       closed_at TEXT,
       close_state TEXT NOT NULL DEFAULT 'open',

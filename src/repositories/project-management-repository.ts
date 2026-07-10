@@ -2,7 +2,7 @@ import * as path from "path";
 import os from "os";
 import { randomUUID } from "crypto";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
-import { ValidationError, EntityNotFoundError, RepositoryError } from "./repository-utils.js";
+import { ValidationError, EntityNotFoundError, RepositoryError, parsePayloadJson } from "./repository-utils.js";
 import { DatabaseAdapter } from "./db/database-adapter.js";
 import type {
   CreateProjectInput,
@@ -139,6 +139,13 @@ interface LinkedIssueRow {
   state: string;
   labels_json: string | null;
   assignees_json: string | null;
+  issue_body_markdown: string | null;
+  issue_conversation_markdown: string | null;
+  include_conversation: number | string | null;
+  issue_author: string | null;
+  issue_created_at: string | null;
+  issue_updated_at: string | null;
+  metadata_json: string | null;
   imported_at: string;
   closed_at: string | null;
   close_state: SprintLinkedIssueRecord["closeState"];
@@ -604,11 +611,13 @@ export class ProjectManagementRepository {
       const insert = this.db.prepare(`
         INSERT INTO sprint_linked_issues (
           id, project_id, sprint_id, provider, host_domain, project_key, repository, issue_number, external_id, source_kind, issue_key,
-          title, url, state, labels_json, assignees_json, imported_at, closed_at, close_state, close_error, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          title, url, state, labels_json, assignees_json, issue_body_markdown, issue_conversation_markdown, include_conversation,
+          issue_author, issue_created_at, issue_updated_at, metadata_json, imported_at, closed_at, close_state, close_error, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       for (const issue of normalized) {
+        const metadataJson = issue.metadata ? JSON.stringify(issue.metadata) : null;
         insert.run(
           randomUUID(),
           projectId,
@@ -626,6 +635,13 @@ export class ProjectManagementRepository {
           issue.state || "open",
           JSON.stringify(issue.labels || []),
           JSON.stringify(issue.assignees || []),
+          issue.issueBodyMarkdown ?? null,
+          issue.issueConversationMarkdown ?? null,
+          issue.includeConversation === undefined ? null : issue.includeConversation ? 1 : 0,
+          issue.issueAuthor ?? null,
+          issue.issueCreatedAt ?? null,
+          issue.issueUpdatedAt ?? null,
+          metadataJson,
           now,
           null,
           "open",
@@ -1373,6 +1389,15 @@ export class ProjectManagementRepository {
       state: row.state,
       labels: parseJsonStringArray(row.labels_json),
       assignees: parseJsonStringArray(row.assignees_json),
+      issueBodyMarkdown: row.issue_body_markdown ?? undefined,
+      issueConversationMarkdown: row.issue_conversation_markdown ?? undefined,
+      includeConversation: row.include_conversation === null || row.include_conversation === undefined
+        ? undefined
+        : toBoolean(row.include_conversation),
+      issueAuthor: row.issue_author,
+      issueCreatedAt: row.issue_created_at,
+      issueUpdatedAt: row.issue_updated_at,
+      metadata: parseJsonRecord(row.metadata_json),
       importedAt: row.imported_at,
       closedAt: row.closed_at,
       closeState: row.close_state,
@@ -1882,6 +1907,11 @@ function parseJsonStringArray(value: string | null | undefined): string[] {
   }
 }
 
+function parseJsonRecord(value: string | null | undefined): Record<string, unknown> | undefined {
+  const parsed = parsePayloadJson(value);
+  return parsed && !Array.isArray(parsed) ? parsed : undefined;
+}
+
 const LINKED_ISSUE_PROVIDERS = new Set<LinkedIssueProvider>([
   "github",
   "gitlab",
@@ -1923,6 +1953,59 @@ function defaultLinkedIssueKey(issue: Pick<SprintLinkedIssueInput, "provider" | 
   return issue.externalId || "external";
 }
 
+function normalizeOptionalText(value: string | null | undefined): string | undefined {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
+}
+
+function normalizeOptionalMarkdown(value: string | null | undefined): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+const LINKED_ISSUE_METADATA_SECRET_KEY_PATTERN = /(?:token|secret|authorization|password|api[-_]?key|credential)/i;
+
+function sanitizeLinkedIssueMetadataValue(value: unknown, depth: number): unknown {
+  if (depth > 8) {
+    return undefined;
+  }
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => sanitizeLinkedIssueMetadataValue(item, depth + 1))
+      .filter((item) => item !== undefined);
+  }
+  if (typeof value === "object") {
+    const output: Record<string, unknown> = {};
+    for (const [key, nestedValue] of Object.entries(value)) {
+      if (LINKED_ISSUE_METADATA_SECRET_KEY_PATTERN.test(key)) {
+        continue;
+      }
+      const sanitized = sanitizeLinkedIssueMetadataValue(nestedValue, depth + 1);
+      if (sanitized !== undefined) {
+        output[key] = sanitized;
+      }
+    }
+    return output;
+  }
+  return undefined;
+}
+
+function sanitizeLinkedIssueMetadata(metadata: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!metadata) {
+    return undefined;
+  }
+  const sanitized = sanitizeLinkedIssueMetadataValue(metadata, 0);
+  if (!sanitized || typeof sanitized !== "object" || Array.isArray(sanitized)) {
+    return undefined;
+  }
+  return Object.keys(sanitized).length > 0 ? sanitized as Record<string, unknown> : undefined;
+}
+
 function normalizeLinkedIssueInputs(issues: SprintLinkedIssueInput[]): SprintLinkedIssueInput[] {
   const seen = new Set<string>();
   const normalized: SprintLinkedIssueInput[] = [];
@@ -1940,6 +2023,7 @@ function normalizeLinkedIssueInputs(issues: SprintLinkedIssueInput[]): SprintLin
     const sourceKind = normalizeLinkedIssueSourceKind(issue.sourceKind);
     const title = issue.title.trim();
     const url = issue.url.trim();
+    const metadata = sanitizeLinkedIssueMetadata(issue.metadata);
     if (!hostDomain || !repository || !title || !url) {
       continue;
     }
@@ -1970,6 +2054,13 @@ function normalizeLinkedIssueInputs(issues: SprintLinkedIssueInput[]): SprintLin
       state: issue.state?.trim() || "open",
       labels: Array.from(new Set((issue.labels || []).map((label) => label.trim()).filter(Boolean))).slice(0, 12),
       assignees: Array.from(new Set((issue.assignees || []).map((assignee) => assignee.trim()).filter(Boolean))).slice(0, 12),
+      issueBodyMarkdown: normalizeOptionalMarkdown(issue.issueBodyMarkdown),
+      issueConversationMarkdown: normalizeOptionalMarkdown(issue.issueConversationMarkdown),
+      includeConversation: issue.includeConversation,
+      issueAuthor: normalizeOptionalText(issue.issueAuthor),
+      issueCreatedAt: normalizeOptionalText(issue.issueCreatedAt),
+      issueUpdatedAt: normalizeOptionalText(issue.issueUpdatedAt),
+      metadata,
     });
   }
   return normalized.slice(0, 50);
