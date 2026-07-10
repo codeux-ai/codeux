@@ -160,6 +160,7 @@ describe("Antigravity Log Parser - parseAntigravityTranscript", () => {
     expect(turns[3]).toEqual({
       kind: "tool_result",
       text: "ls /workspace",
+      toolOutput: "ls /workspace",
       toolName: "list_dir",
       toolCallId: "call-1",
       timestampMs: Date.parse("2026-06-01T10:00:01.000Z"),
@@ -194,6 +195,7 @@ describe("Antigravity Log Parser - parseAntigravityTranscript", () => {
     expect(turns[0]).toEqual({
       kind: "tool_result",
       text: "npm test output",
+      toolOutput: "npm test output",
       toolName: "run_command",
       toolCallId: "call-2",
       timestampMs: Date.parse("2026-06-01T10:00:00.000Z"),
@@ -201,6 +203,7 @@ describe("Antigravity Log Parser - parseAntigravityTranscript", () => {
     expect(turns[1]).toEqual({
       kind: "tool_result",
       text: "File written successfully",
+      toolOutput: "File written successfully",
       toolName: "write_file",
       toolCallId: "call-3",
       timestampMs: Date.parse("2026-06-01T10:00:01.000Z"),
@@ -359,6 +362,30 @@ describe("Antigravity Log Parser - parseAntigravityTranscript", () => {
     });
     expect(JSON.stringify(turns)).not.toContain("sk-test-secret");
   });
+
+  it("deduplicates repeated transcript rows while preserving tool status and timestamp", () => {
+    const timestamp = "2026-06-01T10:00:02.000Z";
+    const row = JSON.stringify({
+      type: "TOOL_RESPONSE",
+      content: "command output",
+      tool_call_id: "call-duplicate",
+      tool_name: "run_command",
+      status: "failed",
+      created_at: timestamp,
+    });
+
+    const turns = parseAntigravityTranscript(`${row}\n${row}\n`);
+
+    expect(turns).toEqual([{
+      kind: "tool_result",
+      text: "command output",
+      toolOutput: "command output",
+      toolName: "run_command",
+      toolCallId: "call-duplicate",
+      toolStatus: "failed",
+      timestampMs: Date.parse(timestamp),
+    }]);
+  });
 });
 
 describe("Antigravity Log Parser - parseAntigravityDatabase", () => {
@@ -404,6 +431,25 @@ describe("Antigravity Log Parser - parseAntigravityDatabase", () => {
 
     const result = parseAntigravityDatabase(tempDbPath);
     expect(result).toEqual({ usage: null, rawUsageJson: null, lastIdx: 3 });
+  });
+
+  it("skips malformed rows without discarding usage from later valid rows", () => {
+    const db = new DatabaseSync(tempDbPath);
+    db.exec("CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB);");
+    const insert = db.prepare("INSERT INTO gen_metadata (idx, data) VALUES (?, ?)");
+    insert.run(1, null);
+    insert.run(2, buildTestProto(40, 10, 2, 8));
+    db.close();
+
+    expect(parseAntigravityDatabase(tempDbPath)).toMatchObject({
+      usage: {
+        inputTokens: 40,
+        outputTokens: 10,
+        reasoningTokens: 2,
+        cachedInputTokens: 0,
+      },
+      lastIdx: 2,
+    });
   });
 
   it("sums token totals across every gen_metadata row, not just the latest", () => {

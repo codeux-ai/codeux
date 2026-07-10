@@ -36,7 +36,7 @@ When a provider or failure mode exposes only final text, Code UX uses a text-onl
 
 ## Live telemetry performance
 
-Live provider telemetry is metadata-first. `provider-telemetry-watcher.ts` checks provider/model identity, native session id, stdout/stderr fingerprints, and provider-specific metadata such as session file size/mtime, Qwen log metadata, and Antigravity transcript/database metadata before reading full transcripts or copying provider databases. Unchanged signatures skip full reads, and repeated read failures use bounded backoff until source metadata changes.
+Live provider telemetry is metadata-first. `provider-telemetry-watcher.ts` checks provider/model identity, native session id, stdout/stderr fingerprints, and provider-specific metadata such as session file size/mtime, Qwen log metadata, and Antigravity transcript/database metadata before reading full transcripts or copying provider databases. Unchanged signatures skip full reads, and repeated read failures use bounded backoff until source metadata changes. Antigravity live polls use the same pre-invocation database row cutoff as final collection, so resumed conversations report only current-run usage throughout execution.
 
 Final post-process usage collection remains authoritative. Live telemetry is best effort for dashboard freshness; final collection reconciles the persisted provider usage row when the provider finishes.
 
