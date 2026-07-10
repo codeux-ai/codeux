@@ -15,13 +15,20 @@ describe("ProviderToolManager", () => {
     await Promise.all(tempPaths.splice(0).map((target) => fs.rm(target, { recursive: true, force: true })));
   });
 
-  const createHarness = async () => {
+  const createHarness = async (options: { throwOnFirstMissingInspect?: boolean } = {}) => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "codeux-provider-tools-"));
     tempPaths.push(root);
     const volumes = new Set<string>();
     const installed = new Set<string>();
+    let missingInspectThrown = false;
     const run = vi.fn(async (_command: string, args: string[]) => {
-      if (args[0] === "volume" && args[1] === "inspect") return volumes.has(args[2]) ? ok() : fail("missing");
+      if (args[0] === "volume" && args[1] === "inspect") {
+        if (!volumes.has(args[2]) && options.throwOnFirstMissingInspect && !missingInspectThrown) {
+          missingInspectThrown = true;
+          throw new Error("missing volume");
+        }
+        return volumes.has(args[2]) ? ok() : fail("missing");
+      }
       if (args[0] === "volume" && args[1] === "create") {
         volumes.add(args.at(-1)!);
         return ok(args.at(-1));
@@ -80,6 +87,15 @@ describe("ProviderToolManager", () => {
     ]);
     expect(left.volumeName).toBe(right.volumeName);
     expect(stream).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats a thrown missing-volume probe as a first installation", async () => {
+    const { manager } = await createHarness({ throwOnFirstMissingInspect: true });
+
+    const prepared = await manager.prepare("codex", DEFAULT_DASHBOARD_SETTINGS.cliWorkflow);
+
+    expect(prepared.version).toBe("1.2.3");
+    expect(manager.getStatus("codex")?.state).toBe("ready");
   });
 
   it("installs Antigravity from the checksummed release archive", async () => {

@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
 import type { CliWorkflowSettings, ManagedRuntimeStatus } from "../contracts/app-types.js";
-import { runCommandStrict, runStreamingCommand, type CommandResult } from "./cli-process-runner.js";
+import { commandRunner, runStreamingCommand, type CommandResult } from "./cli-process-runner.js";
 import type { Logger } from "../shared/logging/logger.js";
 
 export type ManagedRuntimeRole = "base" | "browser";
@@ -24,7 +24,7 @@ const DEFAULT_RUNTIME_CHANNEL = "1";
 const FALLBACK_CUSTOM_IMAGE = "node:24-trixie-slim";
 
 const defaultCommandRunner: ManagedRuntimeCommandRunner = {
-  run: async (command, args) => await runCommandStrict(command, args, process.cwd()),
+  run: async (command, args) => await commandRunner.run(command, args, { cwd: process.cwd(), env: process.env }),
   stream: async (command, args, onLine) => await runStreamingCommand(command, args, process.cwd(), process.env, {
     onStdoutLine: onLine,
     onStderrLine: onLine,
@@ -205,8 +205,8 @@ export class ManagedRuntimeService {
   }
 
   private async imageExists(image: string): Promise<boolean> {
-    const result = await this.commands.run("docker", ["image", "inspect", image]);
-    return result.ok;
+    const result = await this.commands.run("docker", ["image", "inspect", image]).catch(() => null);
+    return result?.ok === true;
   }
 
   private async loadState(): Promise<void> {

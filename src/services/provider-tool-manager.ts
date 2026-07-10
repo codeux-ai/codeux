@@ -7,7 +7,7 @@ import type {
   ProviderId,
   ProviderToolStatus,
 } from "../contracts/app-types.js";
-import { runCommandStrict, runStreamingCommand, type CommandResult } from "./cli-process-runner.js";
+import { commandRunner, runStreamingCommand, type CommandResult } from "./cli-process-runner.js";
 import { managedRuntimeService, type ManagedRuntimeService } from "./managed-runtime-service.js";
 import type { Logger } from "../shared/logging/logger.js";
 
@@ -68,7 +68,7 @@ const PROVIDER_SPECS: Record<ProviderToolId, ProviderToolSpec> = {
 
 const ANTIGRAVITY_RELEASE_ORIGIN = "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app";
 const defaultCommands: ProviderToolCommandRunner = {
-  run: async (command, args) => await runCommandStrict(command, args, process.cwd()),
+  run: async (command, args) => await commandRunner.run(command, args, { cwd: process.cwd(), env: process.env }),
   stream: async (command, args, onLine) => await runStreamingCommand(command, args, process.cwd(), process.env, {
     onStdoutLine: onLine,
     onStderrLine: onLine,
@@ -400,8 +400,8 @@ export class ProviderToolManager {
     version: string,
     image: string,
   ): Promise<boolean> {
-    const inspect = await this.commands.run("docker", ["volume", "inspect", volumeName]);
-    if (!inspect.ok) return false;
+    const inspect = await this.commands.run("docker", ["volume", "inspect", volumeName]).catch(() => null);
+    if (!inspect?.ok) return false;
     const spec = PROVIDER_SPECS[provider];
     const verifyScript = [
       `const fs=require('fs')`,
