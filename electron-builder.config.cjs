@@ -43,6 +43,7 @@ module.exports = {
     "!dist/builder-effective-config.yaml",
     "dashboard/dist/**",
     "docs-web/**",
+    "assets/**",
     "build/icon*.png",
     "package.json",
     "!node_modules/**",

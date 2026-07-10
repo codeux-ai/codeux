@@ -166,6 +166,8 @@ pnpm run dev:server-only       # boot just the server from source
 
 Electron and npm package builds must include the `docs-web` runtime catalog. The dashboard Docs page fetches its collection and markdown through `/api/docs-web`, so installed desktop builds and npm-installed CLI/server runs need the same `docs-web` directory beside the compiled runtime root.
 
+Electron and npm package builds must also include `assets/models-dev/catalog.json`. The model catalog resolves it from normal runtime paths and Electron resources to provide file-backed token pricing; user-configured pricing overrides still take precedence.
+
 ## Contributing workflow
 
 1. **Branch** — create `feat/<scope>`, `fix/<scope>` or `chore/<scope>`. Never commit directly to `main`.

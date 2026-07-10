@@ -1,7 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { getModelCatalogProvider, getModelCatalogProviders } from "../../../../src/domain/model-catalog/model-catalog-loader.js";
+import {
+  getModelCatalogEntry,
+  getModelCatalogProvider,
+  getModelCatalogProviders,
+} from "../../../../src/domain/model-catalog/model-catalog-loader.js";
 
 describe("model catalog provider summaries", () => {
+  it("loads the published OpenAI GPT-5.5 token pricing", () => {
+    expect(getModelCatalogEntry("openai/gpt-5.5")?.cost).toEqual({
+      inputTokens: 5,
+      outputTokens: 30,
+      cachedInputTokens: 0.5,
+    });
+  });
+
   it("exposes a provider list with known base API endpoints where models.dev publishes one", () => {
     const providers = getModelCatalogProviders();
     expect(providers.length).toBeGreaterThan(50);

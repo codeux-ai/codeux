@@ -19,6 +19,15 @@ describe("electron-builder packaged defaults", () => {
     expect(fs.existsSync(path.join(process.cwd(), "docs-web", "index.md"))).toBe(true);
   });
 
+  it("packages the bundled model catalog used for automatic token pricing", () => {
+    const config = require("../../electron-builder.config.cjs") as {
+      files?: string[];
+    };
+
+    expect(config.files).toEqual(expect.arrayContaining(["assets/**"]));
+    expect(fs.existsSync(path.join(process.cwd(), "assets", "models-dev", "catalog.json"))).toBe(true);
+  });
+
   it("keeps renderer privileges constrained in the desktop BrowserWindow", () => {
     const mainProcessSource = fs.readFileSync(path.join(process.cwd(), "src/electron/main.ts"), "utf8");
 

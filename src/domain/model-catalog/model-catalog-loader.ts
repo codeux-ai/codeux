@@ -6,11 +6,15 @@ import type { ModelCatalogEntry, ModelCatalogProviderSummary, ModelCatalogRaw, M
 
 function resolveCatalogCandidates(): string[] {
   const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
   return [
     path.join(process.cwd(), "assets", "models-dev", "catalog.json"),
     path.resolve(moduleDir, "../../../assets/models-dev/catalog.json"),
     path.resolve(moduleDir, "../../../../assets/models-dev/catalog.json"),
-  ];
+    resourcesPath ? path.join(resourcesPath, "app.asar", "assets", "models-dev", "catalog.json") : "",
+    resourcesPath ? path.join(resourcesPath, "app", "assets", "models-dev", "catalog.json") : "",
+    resourcesPath ? path.join(resourcesPath, "assets", "models-dev", "catalog.json") : "",
+  ].filter(Boolean);
 }
 
 function toTokenPricing(cost: ModelCatalogRawCost | undefined): TokenPricing | undefined {
