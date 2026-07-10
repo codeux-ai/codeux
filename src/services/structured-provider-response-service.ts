@@ -18,6 +18,7 @@ export interface StructuredProviderResult<T> {
   parsed: T;
   nativeSessionId: string | null;
   bodyMarkdown: string;
+  hasStructuredConversation?: boolean;
   openCodeBaselineRawUsageJson?: Record<string, unknown> | null;
 }
 
@@ -154,6 +155,7 @@ export class StructuredProviderResponseService {
           parsed,
           nativeSessionId,
           bodyMarkdown,
+          hasStructuredConversation: (result.usageTelemetry?.conversation?.length ?? 0) > 0,
           openCodeBaselineRawUsageJson,
         };
       } catch (error) {
