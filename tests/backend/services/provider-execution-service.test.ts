@@ -230,6 +230,119 @@ describe("ProviderExecutionService", () => {
     expect(providerRunner.runProvider.mock.calls[0]![0].prompt).toContain("## PERSISTENT SKILL STORAGE");
   });
 
+  it("leaves enabled agents without attached storage unchanged", async () => {
+    providerRunner.runProvider.mockResolvedValue(mockResult);
+    const resolvePersistentSkillStorageRuntime = vi.fn().mockResolvedValue(null);
+    service = new ProviderExecutionService({
+      providerRunner,
+      executionRepository,
+      logger: logger as any,
+      getMcpConnectionInfo: vi.fn().mockReturnValue({ url: "http://127.0.0.1:4444/mcp", authToken: "token" }),
+      agentPresetRepository: {
+        getAgentPreset: vi.fn().mockReturnValue({
+          id: "agent-1",
+          projectId: "proj-1",
+          persistentSkillStorage: { enabled: true },
+          persistentSkillStorageIds: [],
+        }),
+      } as any,
+      skillService: { resolvePersistentSkillStorageRuntime } as any,
+    });
+
+    await service.executeProvider({
+      ...defaultArgs,
+      agentMcpAccess: { codeUxEnabled: false, codeUxToolToggles: [], linkedServerIds: [] },
+      mcpAgentId: "agent-1",
+    });
+
+    expect(resolvePersistentSkillStorageRuntime).toHaveBeenCalledOnce();
+    expect(providerRunner.runProvider).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: "test prompt",
+      mcpConnection: null,
+      persistentSkillStorageMounts: undefined,
+    }));
+  });
+
+  it("rejects persistent skill context from an agent owned by another project", async () => {
+    providerRunner.runProvider.mockResolvedValue(mockResult);
+    const resolvePersistentSkillStorageRuntime = vi.fn();
+    service = new ProviderExecutionService({
+      providerRunner,
+      executionRepository,
+      logger: logger as any,
+      getMcpConnectionInfo: vi.fn(),
+      agentPresetRepository: {
+        getAgentPreset: vi.fn().mockReturnValue({
+          id: "foreign-agent",
+          projectId: "proj-2",
+          persistentSkillStorage: { enabled: true },
+          persistentSkillStorageIds: ["storage-2"],
+        }),
+      } as any,
+      skillService: { resolvePersistentSkillStorageRuntime } as any,
+    });
+
+    await service.executeProvider({
+      ...defaultArgs,
+      agentMcpAccess: { codeUxEnabled: false, codeUxToolToggles: [], linkedServerIds: [] },
+      mcpAgentId: "foreign-agent",
+    });
+
+    expect(resolvePersistentSkillStorageRuntime).not.toHaveBeenCalled();
+    expect(providerRunner.runProvider).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: "test prompt",
+      mcpConnection: null,
+      persistentSkillStorageMounts: undefined,
+    }));
+  });
+
+  it("composes persistent skill guidance once for resumed prompts and retries", async () => {
+    const failedResult = { ...mockResult, ok: false };
+    providerRunner.runProvider
+      .mockResolvedValueOnce(failedResult)
+      .mockResolvedValueOnce(mockResult);
+    vi.mocked(isReadFileNotFoundToolError).mockReturnValueOnce(true);
+    vi.mocked(buildReadFileRetryPrompt).mockImplementationOnce((prompt) => `${prompt}\n\nDiscover files before retrying.`);
+    const instructionMarkdown = "## PERSISTENT SKILL STORAGE (Opt-in)\nUse search_skills.";
+    service = new ProviderExecutionService({
+      providerRunner,
+      executionRepository,
+      logger: logger as any,
+      agentPresetRepository: {
+        getAgentPreset: vi.fn().mockReturnValue({
+          id: "agent-1",
+          projectId: "proj-1",
+          persistentSkillStorage: { enabled: true },
+        }),
+      } as any,
+      skillService: {
+        resolvePersistentSkillStorageRuntime: vi.fn().mockResolvedValue({
+          projectId: "proj-1",
+          agentPresetId: "agent-1",
+          instructionMarkdown,
+          mounts: [{
+            storageId: "storage-1",
+            storageName: "Runtime Skills",
+            hostPath: "/home/test/.code-ux/persistent-skill-storages/proj-1/agent-1/storage-1",
+            containerPath: "/code-ux/persistent-skills/storage-1",
+          }],
+        }),
+      } as any,
+    });
+
+    await service.executeProvider({
+      ...defaultArgs,
+      prompt: `Resumed task.\n\n${instructionMarkdown}`,
+      agentMcpAccess: { codeUxEnabled: false, codeUxToolToggles: [], linkedServerIds: [] },
+      mcpAgentId: "agent-1",
+    });
+
+    expect(providerRunner.runProvider).toHaveBeenCalledTimes(2);
+    for (const [run] of providerRunner.runProvider.mock.calls) {
+      expect(run.prompt.match(/## PERSISTENT SKILL STORAGE/g)).toHaveLength(1);
+    }
+  });
+
   it("auto-attaches the Code UX MCP gateway for agents with Code UX access enabled", async () => {
     providerRunner.runProvider.mockResolvedValue(mockResult);
     service = new ProviderExecutionService({
