@@ -32,6 +32,44 @@ Provider telemetry uses the richest data the provider actually exposes. Readable
 
 CLI provider parsers share side-effect-free JSON helpers in `src/infrastructure/providers/cli/provider-logs/usage-parse-utils.ts`. The helpers provide strict JSON object/array parsing for JSONL records and balanced object/array extraction for noisy wrapper output, such as Docker bootstrap lines before a Qwen log array or incidental stdout around `opencode export` payloads. Gemini structured stdout is parsed in `provider-logs/gemini-log-parser.ts`; when the CLI exposes candidate parts, Code UX persists readable assistant, reasoning, tool-call, and tool-result turns, while plain response strings remain assistant transcript text without fabricated reasoning turns. Malformed records and wrong-shape payloads are non-fatal: parsers skip the bad record or return `null` for unavailable usage while preserving provider-specific normalization for valid records. Missing usage fields likewise produce `null` usage rather than zeroed reported telemetry, so Code UX does not convert absent provider data into authoritative token counts.
 
+## Provider Parser Contract
+
+All local CLI providers with agent transcripts have structured parser coverage in `src/infrastructure/providers/cli/provider-logs/`:
+
+| Provider | Parser source | Structured transcript sources | Usage isolation contract |
+| --- | --- | --- | --- |
+| Gemini CLI | `gemini-log-parser.ts` | Structured stdout candidate parts and stats. | Per invocation stdout is already scoped to the process; missing structured stats fall back to estimated telemetry. |
+| Codex | `codex-log-parser.ts` | Rollout JSONL session files first, then `codex exec --json` stdout as a fallback. | Rollout token snapshots are cumulative, so parser logic subtracts the last pre-window baseline from later in-window cumulative counts. |
+| Claude Code | `claude-code-log-parser.ts` | Session JSONL from the active native session. | Session reads are filtered by invocation start time; duplicate assistant message ids deduplicate usage while allowing richer later content to replace fragments. |
+| Qwen Code | `qwen-log-parser.ts` | OpenAI-compatible log records read from host-visible or Docker workspace log data. | Records are filtered by invocation start time when available; usage parsing accepts OpenAI and Anthropic-shaped token fields through shared helpers. |
+| OpenCode | `opencode-log-parser.ts` | `run --format json` stdout for conversation, `opencode export <sessionID>` for authoritative tokens. | Exports are cumulative for a resumed session, so Code UX subtracts the previous raw export snapshot before persisting current-run usage. |
+| Antigravity | `antigravity-log-parser.ts` | Transcript JSONL plus the resolved conversation database. | Database usage rows are cumulative, so `parseAntigravityDatabase` sums only rows with `idx > antigravitySinceIdx` for resumed runs. |
+
+The normalized boundary is `ParsedConversationTurn` from `provider-conversation-types.ts`. Provider parsers should emit only these turn kinds:
+
+- `user`: provider-visible user prompts, including recovered historical prompt records.
+- `assistant`: final or streaming assistant text.
+- `reasoning`: readable structured reasoning, thinking, or summary fields that the provider exposed as text.
+- `tool_call`: tool/function/shell/MCP/web-search calls with `toolName`, `toolCallId`, and `toolArguments` when available.
+- `tool_result`: tool/function/shell/MCP outputs with `toolCallId`, `toolName`, `toolOutput`, and provider status when available.
+- `injected_context`: harness-injected context such as system reminders that should remain visible without being treated as a user prompt.
+
+Readable reasoning must stay evidence-based. A parser may emit a `reasoning` turn only from provider fields that are explicitly reasoning/thinking/summary content. Plain assistant prose, final answer text, encrypted reasoning blobs, and token-only reasoning counts must not be converted into reasoning transcript turns. Token-level reasoning still belongs in `reasoningOutputTokens` when the provider reports it.
+
+`src/services/provider-conversation-message-mapper.ts` is the compatibility boundary from normalized turns into `execution_invocation_messages`. It preserves the existing role union by mapping reasoning to `role: "assistant"` with `metadata.kind = "reasoning"`, injected context to `role: "system"` with `metadata.kind = "injected_context"`, and tool calls/results to `role: "tool"` with `metadata.kind`, tool metadata, capped payload JSON, per-turn tokens, statuses, and timestamps when available. Parser changes must preserve those metadata fields because `ProviderExecutionService` uses the JSON representation of persisted messages as the live rewrite signature.
+
+Text-only fallback is intentionally narrower than structured parsing. When `ProviderUsageTelemetry.conversation` has turns, `ProviderExecutionService` clears and rewrites invocation messages from the normalized transcript. When no structured turns are available and only final text exists, it appends the sanitized assistant output at completion instead of clearing prior messages. That preserves retry prompts, system audit messages, and manually appended context for providers or failure modes that only expose plain text.
+
+Live telemetry follows a metadata-first performance contract in `src/infrastructure/providers/cli/provider-telemetry-watcher.ts`. The watcher checks provider/model identity, native session id, stdout/stderr fingerprints, and provider-specific metadata such as session file size/mtime, Qwen log metadata, and Antigravity transcript/database metadata before reading full transcripts or copying provider databases. Repeated unchanged signatures skip full reads; repeated read failures use bounded backoff until the cheap source signature changes.
+
+Focused verification for parser, telemetry, and persistence changes:
+
+```bash
+pnpm exec vitest run tests/backend/infrastructure/providers/cli/codex-log-parser.test.ts tests/backend/infrastructure/providers/cli/claude-code-log-parser.test.ts tests/backend/infrastructure/providers/cli/gemini-log-parser.test.ts tests/backend/infrastructure/providers/cli/qwen-log-parser.test.ts tests/backend/infrastructure/providers/cli/opencode-log-parser.test.ts tests/backend/infrastructure/providers/cli/antigravity-log-parser.test.ts
+pnpm exec vitest run tests/backend/infrastructure/providers/cli/provider-usage.test.ts tests/backend/infrastructure/providers/cli/provider-telemetry-watcher.test.ts
+pnpm exec vitest run tests/backend/services/provider-conversation-message-mapper.test.ts tests/backend/services/provider-execution-service.test.ts
+```
+
 Invocation persistence applies a narrow hygiene sanitizer for one known noisy bootstrap case: lines matching `fatal: your current branch 'code-ux-bootstrap-*' does not have any commits yet` are removed from provider-output message content before chat-facing invocation messages are written. User prompt content bypasses this sanitizer and is stored exactly. Other `fatal:` lines and unrelated stderr/stdout remain unchanged so real failures still surface.
 
 ## Chat Thread Usage

@@ -104,6 +104,7 @@ export type DocsSlug =
   | 'architecture-security'
   | 'user-dashboard-custom-dashboards'
   | 'architecture-custom-dashboard-foundation'
+  | 'architecture-execution-invocation-tracking'
   | 'architecture-managed-container-runtime'
   | 'architecture-speech-input'
 
@@ -823,6 +824,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Custom Dashboard Foundation",
     description: "Custom dashboards are a persisted domain model for project-scoped dashboard generation. The foundation stores manifests, generated file bundles, data-source node graphs, validation history, and publication state, and...",
   },
+  'architecture-execution-invocation-tracking': {
+    id: 'architecture-execution-invocation-tracking',
+    path: '/docs/architecture-execution-invocation-tracking',
+    section: 'Architecture',
+    title: "Execution invocation tracking",
+    description: "Code UX records provider work in execution_invocations and execution_invocation_messages so the dashboard can show prompt history, live agent transcripts, tool activity, token usage, and terminal status for each provi...",
+  },
   'architecture-managed-container-runtime': {
     id: 'architecture-managed-container-runtime',
     path: '/docs/architecture-managed-container-runtime',
@@ -941,6 +949,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-security'],
   docsRegistry['user-dashboard-custom-dashboards'],
   docsRegistry['architecture-custom-dashboard-foundation'],
+  docsRegistry['architecture-execution-invocation-tracking'],
   docsRegistry['architecture-managed-container-runtime'],
   docsRegistry['architecture-speech-input'],
 ]
