@@ -85,6 +85,16 @@ share the OpenAI-style usage adapter, OpenCode keeps its raw cumulative export
 snapshot for resumed-session baselines, and Antigravity continues to document
 its internal protobuf mapping as inferred rather than official.
 
+When parsed provider conversations are persisted into `execution_invocation_messages`,
+Code UX maps every `ParsedConversationTurn` through `conversationTurnToMessage`
+instead of storing provider-native logs directly. User prompt turns remain
+unsanitized and untruncated, while assistant, reasoning, injected-context, and
+tool text is sanitized and capped for storage. Tool arguments and outputs are
+stored in the existing tool payload column with independent payload caps.
+Message metadata carries provider, model, tool call id, tool status, per-turn
+tokens, and provider timestamps when present, so live telemetry rewrites can be
+skipped only when the normalized persisted message payload is unchanged.
+
 ### Gemini
 
 Gemini CLI runs with structured JSON output enabled.
@@ -100,8 +110,8 @@ If a historical or failed run lacks the structured stats envelope, Code UX can s
 
 Codex runs with `codex exec --json`.
 
-Code UX first looks for `token_count` JSONL events, then normalizes the usage payload via the same shared `prompt/completion/total` adapter used by other providers. Codex/OpenAI-style prompt counters can include cached tokens while also reporting `cached_input_tokens` or `*_token_details.cached_tokens`; Code UX subtracts those cached tokens from `inputTokens`, records them in `cachedInputTokens`, and keeps them inside `totalTokens`. This prevents cached context from being double-priced as full-rate input while preserving total token volume. If Codex omits completion counts but provides prompt and total tokens, the parser can infer output from either all prompt tokens or non-cached prompt tokens depending on whether the provider total includes cache. If JSONL usage is missing, Code UX falls back to session JSON usage, then token estimation using `js-tiktoken` over the prompt plus captured transcript.
-Visible Codex reasoning summaries are also preserved as `reasoning` turns when the rollout JSONL or exec stream exposes them, but encrypted or empty reasoning blobs are skipped.
+Code UX first looks for rollout JSONL usage, then `codex exec --json` stdout usage, then token estimation using `js-tiktoken` over the prompt plus captured transcript. The rollout parser handles session-cumulative `token_count` snapshots and direct `turn.completed` usage payloads; the exec parser handles current-invocation `turn.completed` payloads from stdout. Both paths normalize usage via the same shared `prompt/completion/total` adapter used by other providers. Codex/OpenAI-style prompt counters can include cached tokens while also reporting `cached_input_tokens` or `*_token_details.cached_tokens`; Code UX subtracts those cached tokens from `inputTokens`, records them in `cachedInputTokens`, and keeps them inside `totalTokens`. This prevents cached context from being double-priced as full-rate input while preserving total token volume. If Codex omits completion counts but provides prompt and total tokens, the parser can infer output from either all prompt tokens or non-cached prompt tokens depending on whether the provider total includes cache.
+Codex conversation reconstruction is shared across rollout `response_item` payloads and exec `item.*` payloads. It preserves user and assistant messages, visible reasoning summaries, function and custom tool calls, shell command execution, and paired tool outputs. Developer/system scaffolding and duplicate `event_msg` transcript rows are excluded from canonical conversations; `event_msg` user/assistant rows are used only as a fallback when no canonical item stream is available. Visible Codex reasoning summaries are preserved as `reasoning` turns when the rollout JSONL or exec stream exposes them, but encrypted or empty reasoning blobs are skipped.
 
 Codex token estimation keeps process-local caches bounded for long-running workers. Model encodings are cached with a small LRU cap, and estimated token counts are cached with a larger LRU cap keyed by model, text length, and a SHA-256 digest rather than the full prompt or transcript text. Repeated estimates for the same large text therefore avoid retokenizing without retaining the full content in memory. If a model-specific `js-tiktoken` encoding is unavailable, estimation falls back to the `gpt-4o` encoding; these estimates remain conservative fallback telemetry and never replace provider-native `reported` counts when Codex supplies usage events.
 
@@ -149,6 +159,7 @@ Code UX parses session data from two sources:
   - `reasoning`, `assistant`, and `tool_call` turns from `PLANNER_RESPONSE` entry types, keeping visible planner reasoning ahead of the response text and tool calls it produced.
   - `tool_result` turns from `RUN_COMMAND` or `TOOL_RESPONSE` entries, preserving any available correlation ids and tool names so the matching call/result pair stays traceable in the reconstructed transcript.
   - `reasoning` turns from `SYSTEM` source events.
+  - Role/parts transcript rows and overview-style nested entry rows, including Gemini-style `functionCall` and `functionResponse` parts, when Antigravity emits those instead of the older entry-type names.
 
 For Docker-backed Antigravity runs, the SQLite database is encoded to Base64 within the container first, and then decoded to a temporary file on the host before parsing to bypass Docker named volume permission issues.
 
@@ -181,6 +192,8 @@ If the Antigravity database is missing, malformed, missing `gen_metadata`, or ha
 OpenCode runs with `opencode run --format json`.
 
 Code UX reads the JSON event stream for the transcript, structured conversation turns, and native `ses_...` session id. Because recent OpenCode builds expose authoritative token and cost totals through `opencode export <sessionID>`, Code UX captures that export after the run and stores `info.tokens` plus `info.cost` in `raw_usage_json`, including `cache.read` as `cachedInputTokens`. The normalized numeric columns subtract `cache.read` from `inputTokens`, but the stored `raw_usage_json` keeps the provider's cumulative raw `tokens.input` value so the next resumed run can subtract an accurate baseline.
+
+The JSON stream parser accepts both flattened `run --format json` events and wrapped native event envelopes for `session.created`, text, reasoning, tool, step-finish, and assistant-message updates. The export parser still treats `opencode export` as authoritative when present, and also tolerates nested current payloads such as session data under `data.session` in noisy stdout.
 
 `opencode export` reports totals **cumulative for the whole session**, and resuming a session (follow-up task runs, QA-reopened runs, provider retries, and dashboard chat replies that continue an earlier turn) all pass `--session <id>` to keep using it. Without correction this means every resumed invocation would re-report all of the session's prior tokens on top of its own, inflating that invocation's persisted usage each time it happens (compounding further on longer follow-up chains). `subtractOpenCodeBaseline` (`opencode-log-parser.ts`) corrects for this: callers that resume a session look up the previous invocation's raw `{ tokens, cost }` export snapshot for that same session/purpose and pass it through `collectProviderUsageTelemetry`'s `opencodeBaselineUsage`, which is subtracted from the freshly exported cumulative totals so only the current run's own tokens are recorded. The stored `raw_usage_json` itself is left as the fresh, unadjusted snapshot so it can serve as the baseline for the *next* follow-up. This baseline is threaded through every known session-resuming call path: `execute-provider-stage.ts` (task coding), `quality-assurance-service.ts` (QA follow-up implementation passes), the in-process retry loops inside `ProviderExecutionService.executeProvider` and `StructuredProviderResponseService.executeAndParse`, and dashboard chat continuations (`chat-thread-runtime-service.ts` → `chat-management-action-service.ts`).
 

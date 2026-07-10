@@ -128,6 +128,41 @@ describe("parseClaudeCodeSessionJsonl", () => {
     expect(result.usage!.outputTokens).toBe(30);
   });
 
+  it("keeps the fuller duplicate assistant message while counting usage once", () => {
+    const lines = [
+      makeAssistantEntry({
+        sessionId: "native-from-entry",
+        messageId: "msg_stream",
+        content: [{ type: "text", text: "Partial" }],
+        usage: { input_tokens: 100, output_tokens: 30, cache_creation_input_tokens: 5, cache_read_input_tokens: 0 },
+      }),
+      makeAssistantEntry({
+        sessionId: "native-from-entry",
+        messageId: "msg_stream",
+        content: [
+          { type: "reasoning", text: "Now I have the full answer." },
+          { type: "text", text: "Complete answer." },
+          { type: "tool_use", id: "toolu_stream", name: "Read", input: { file_path: "src/file.ts" } },
+        ],
+        usage: { input_tokens: 100, output_tokens: 30, cache_creation_input_tokens: 5, cache_read_input_tokens: 0 },
+      }),
+    ].join("\n");
+
+    const result = parseClaudeCodeSessionJsonl(lines);
+
+    expect(result.nativeSessionId).toBe("native-from-entry");
+    expect(result.usage).toEqual({
+      inputTokens: 100,
+      outputTokens: 30,
+      cacheCreationTokens: 5,
+      cacheReadTokens: 0,
+    });
+    expect(result.conversation.map((turn) => turn.kind)).toEqual(["reasoning", "assistant", "tool_call"]);
+    expect(result.conversation[1]).toMatchObject({ kind: "assistant", text: "Complete answer." });
+    expect(result.conversation[2]).toMatchObject({ kind: "tool_call", toolName: "Read", toolCallId: "toolu_stream" });
+    expect(result.conversation.map((turn) => turn.text).join("\n")).not.toContain("Partial");
+  });
+
   it("extracts assistant text turns from content array", () => {
     const jsonl = makeAssistantEntry({
       messageId: "msg_text",
@@ -241,6 +276,30 @@ describe("parseClaudeCodeSessionJsonl", () => {
     expect(toolResultTurns[0].toolCallId).toBe("toolu_abc123");
     expect(toolResultTurns[0].toolOutput).toBe("stdout output here");
     expect(toolResultTurns[0].toolStatus).toBe("success");
+  });
+
+  it("extracts tool_result text from object content blocks", () => {
+    const jsonl = makeUserEntry({
+      content: [
+        {
+          type: "tool_result",
+          tool_use_id: "toolu_obj",
+          content: { type: "text", text: "object output" },
+          is_error: false,
+        },
+      ],
+    });
+
+    const result = parseClaudeCodeSessionJsonl(jsonl);
+
+    expect(result.conversation).toEqual([
+      expect.objectContaining({
+        kind: "tool_result",
+        toolCallId: "toolu_obj",
+        toolOutput: "object output",
+        toolStatus: "success",
+      }),
+    ]);
   });
 
   it("marks tool_result as error when is_error is true", () => {
@@ -471,6 +530,34 @@ describe("parseClaudeCodeSessionJsonl", () => {
       cache_read_input_tokens: 5,
     });
     expect(result.conversation).toEqual([]);
+  });
+
+  it("parses legacy bare message content arrays with reasoning and tool calls", () => {
+    const result = parseClaudeCodeSessionJsonl(JSON.stringify({
+      session_id: "legacy-session",
+      timestamp: "2026-06-01T10:00:00.000Z",
+      message: {
+        id: "legacy_msg",
+        role: "assistant",
+        usage: { input_tokens: 12, output_tokens: 6, cache_creation_input_tokens: 0, cache_read_input_tokens: 2 },
+        content: [
+          { type: "thinking", thinking: "Visible legacy reasoning." },
+          { type: "text", text: "Legacy answer." },
+          { type: "tool_use", id: "toolu_legacy", name: "Bash", input: { command: "pwd" } },
+        ],
+      },
+    }));
+
+    expect(result.nativeSessionId).toBe("legacy-session");
+    expect(result.usage).toEqual({
+      inputTokens: 12,
+      outputTokens: 6,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 2,
+    });
+    expect(result.conversation.map((turn) => turn.kind)).toEqual(["reasoning", "assistant", "tool_call"]);
+    expect(result.conversation[0]).toMatchObject({ kind: "reasoning", text: "Visible legacy reasoning." });
+    expect(result.conversation[2]).toMatchObject({ kind: "tool_call", toolName: "Bash", toolCallId: "toolu_legacy" });
   });
 
   it("skips partial JSON and unknown entries while preserving recoverable usage and partial tool results", () => {

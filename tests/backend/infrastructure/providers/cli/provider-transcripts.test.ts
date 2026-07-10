@@ -47,7 +47,7 @@ describe("readQwenLogData", () => {
     const result = await readQwenLogData("/cwd", "DOCKER" as Mode, "sess", 0, runner as never);
 
     expect(result).toEqual({ usage: { totalTokens: 5 }, conversation: [{ role: "user" }] });
-    expect(sumQwenOpenAiUsage).toHaveBeenCalledWith([{ a: 1 }]);
+    expect(sumQwenOpenAiUsage).toHaveBeenCalledWith([{ a: 1 }], 0);
   });
 
   it("tolerates noisy docker wrapper output around the JSON array", async () => {
@@ -58,7 +58,7 @@ describe("readQwenLogData", () => {
     const result = await readQwenLogData("/cwd", "DOCKER" as Mode, "sess", 0, runner as never);
 
     expect(result).toEqual({ usage: { totalTokens: 5 }, conversation: [] });
-    expect(sumQwenOpenAiUsage).toHaveBeenCalledWith([{ a: 1 }]);
+    expect(sumQwenOpenAiUsage).toHaveBeenCalledWith([{ a: 1 }], 0);
   });
 
   it("returns null when the docker read yields nothing", async () => {
