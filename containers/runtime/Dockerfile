@@ -1,12 +1,6 @@
 # syntax=docker/dockerfile:1.7
 FROM node:24-trixie-slim AS base
 
-ARG NPM_VERSION=12.0.0
-ARG PNPM_VERSION=10.34.4
-ARG YARN_VERSION=1.22.22
-ARG BUN_VERSION=1.3.14
-ARG SERVE_VERSION=14.2.6
-
 LABEL org.opencontainers.image.source="https://github.com/codeux-ai/codeux"
 LABEL org.opencontainers.image.title="Code UX managed runtime"
 LABEL ai.codeux.runtime-abi="1"
@@ -25,6 +19,12 @@ RUN apt-get update -qy \
       ripgrep rsync shellcheck sqlite3 sudo tar tree unzip wget xdg-utils xz-utils zip \
     && ln -sf /usr/bin/fdfind /usr/local/bin/fd \
     && rm -rf /var/lib/apt/lists/* /tmp/*
+
+ARG NPM_VERSION=12.0.0
+ARG PNPM_VERSION=11.11.0
+ARG YARN_VERSION=1.22.22
+ARG BUN_VERSION=1.3.14
+ARG SERVE_VERSION=14.2.6
 
 RUN npm install --global "npm@${NPM_VERSION}" \
     && npm install --global \
