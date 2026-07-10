@@ -1,66 +1,33 @@
-import type { ComponentType, FunctionComponent } from "preact";
+import type { FunctionComponent } from "preact";
 import {
-  ArrowDownRight,
-  ArrowUpRight,
-  Brain,
+  AlertTriangle,
   Database,
-  DollarSign,
-  PieChart,
-  TimerReset,
+  GitBranch,
+  ShieldCheck,
 } from "lucide-preact";
-import type {
-  ProjectExecutionStatsSnapshot,
-  SegmentDefinition,
-} from "../../../types.js";
-import {
-  formatCost,
-  formatPercent,
-  formatStatsDuration,
-  formatTokens,
-} from "../stats-utils.js";
+import type { ProjectExecutionStatsSnapshot, SegmentDefinition } from "../../../types.js";
+import { formatCost, formatPercent, formatStatsDuration, formatTokens } from "../stats-utils.js";
 import {
   CHIP_CLASS,
   DASHED_EMPTY_CLASS,
   DonutCard,
-  PANEL_CLASS,
   PurposeRibbon,
-  STATUS_TONE_CLASS,
-  SUBPANEL_CLASS,
   TEXT_DETAIL_CLASS,
   TEXT_LABEL_CLASS,
   TEXT_VALUE_CLASS,
-  TokenChip,
   TokenFlowBar,
   getProviderIcon,
 } from "./stats-ui-primitives.js";
 
-const FLAT_BADGE_CLASS = `inline-flex items-center gap-2 rounded-[var(--stats-chip-radius)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`;
-const SECTION_TITLE_CLASS = "text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]";
-const SECTION_COPY_CLASS = "mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]";
+const SECTION_TITLE_CLASS = `text-[10px] font-bold uppercase tracking-[0.2em] ${TEXT_LABEL_CLASS}`;
+const SECTION_COPY_CLASS = `mt-2 max-w-3xl text-sm leading-relaxed ${TEXT_DETAIL_CLASS}`;
 
-const StudioMetricTile: FunctionComponent<{
-  label: string;
-  value: string;
-  detail: string;
-  toneClass?: string;
-  icon?: ComponentType<any>;
-}> = ({ label, value, detail, toneClass = TEXT_DETAIL_CLASS, icon: Icon }) => (
-  <div className={`${SUBPANEL_CLASS} p-4`}>
-    <div className="flex items-center justify-between gap-3">
-      <div className={`text-[10px] font-bold uppercase tracking-[0.18em] ${toneClass}`}>{label}</div>
-      {Icon ? <Icon className={`h-3.5 w-3.5 ${toneClass}`} strokeWidth={2.2} aria-hidden="true" /> : null}
-    </div>
-    <div className={`mt-2 text-lg font-semibold ${TEXT_VALUE_CLASS}`}>{value}</div>
-    <div className={`mt-1 text-[10px] font-bold uppercase tracking-[0.14em] ${TEXT_LABEL_CLASS}`}>{detail}</div>
+const Metric: FunctionComponent<{ label: string; value: string; detail: string }> = ({ label, value, detail }) => (
+  <div className="min-w-0 py-2">
+    <dt className={`text-[10px] font-bold uppercase tracking-[0.16em] ${TEXT_LABEL_CLASS}`}>{label}</dt>
+    <dd className={`mt-1 break-words text-base font-semibold ${TEXT_VALUE_CLASS}`}>{value}</dd>
+    <dd className={`mt-1 break-words text-xs leading-relaxed ${TEXT_DETAIL_CLASS}`}>{detail}</dd>
   </div>
-);
-
-const getPercent = (value: number, total: number): number | null => (
-  total > 0 ? (value / total) * 100 : null
-);
-
-const formatPercentOrFallback = (value: number | null, fallback = "No token volume"): string => (
-  value === null ? fallback : formatPercent(value)
 );
 
 export const CompositionStudio: FunctionComponent<{
@@ -68,297 +35,160 @@ export const CompositionStudio: FunctionComponent<{
   providerSegments: SegmentDefinition[];
   tokenSegments: SegmentDefinition[];
 }> = ({ stats, providerSegments, tokenSegments }) => {
-  const providers = [...stats.providers].sort((left, right) => {
+  const providers = [...(stats.providers || [])].sort((left, right) => {
     const delta = right.usage.totalTokens - left.usage.totalTokens;
     return delta !== 0 ? delta : left.label.localeCompare(right.label);
   });
+  const purposes = stats.purposes || [];
   const cacheDenominator = stats.usage.inputTokens + stats.usage.cachedInputTokens;
   const cacheRate = cacheDenominator > 0 ? (stats.usage.cachedInputTokens / cacheDenominator) * 100 : null;
   const activeVsWallRate = stats.usage.wallTimeMs > 0 ? stats.usage.activeTimeMs / stats.usage.wallTimeMs : null;
-  const topProvider = providers[0] || null;
-  const topPurpose = [...stats.purposes].sort((left, right) => {
+  const topPurpose = [...purposes].sort((left, right) => {
     const delta = right.usage.totalTokens - left.usage.totalTokens;
     return delta !== 0 ? delta : left.label.localeCompare(right.label);
   })[0] || null;
-  const topProviderShare = topProvider ? getPercent(topProvider.usage.totalTokens, stats.usage.totalTokens) : null;
-  const inputShare = getPercent(stats.usage.inputTokens + stats.usage.cachedInputTokens, stats.usage.totalTokens);
-  const outputShare = getPercent(stats.usage.outputTokens, stats.usage.totalTokens);
-  const reasoningShare = getPercent(stats.usage.reasoningOutputTokens, stats.usage.totalTokens);
+  const sourceCounts = {
+    reported: stats.usage.reportedInvocationCount || 0,
+    estimated: stats.usage.estimatedInvocationCount || 0,
+    unavailable: stats.usage.unavailableInvocationCount || 0,
+    unsupported: stats.usage.unsupportedInvocationCount || 0,
+  };
+  const knownSourceCount = Object.values(sourceCounts).reduce((sum, count) => sum + count, 0);
+  const unknownSourceCount = Math.max(0, stats.usage.invocationCount - knownSourceCount);
+  const fallbackCount = sourceCounts.estimated + unknownSourceCount;
+  const sourceRiskCount = sourceCounts.unavailable + sourceCounts.unsupported;
+  const sourceConfidence = knownSourceCount + unknownSourceCount === 0
+    ? "No source signal"
+    : sourceCounts.reported === knownSourceCount + unknownSourceCount
+      ? "Provider reported"
+      : sourceRiskCount > 0 ? "Mixed confidence" : "Reported + fallback";
+  const git = stats.git?.totals;
+  const conflictCount = git?.mergeConflictCount ?? stats.mergeConflictCount ?? 0;
+  const hasGitSignal = Boolean(git && (git.insertions || git.deletions || git.filesChanged || git.prCount || git.mergedCount || conflictCount));
   const hasCost = Number.isFinite(stats.usage.totalCostUsd) && stats.usage.totalCostUsd > 0;
 
   return (
-    <section className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <StudioMetricTile
-          label="Provider Share"
-          value={topProvider ? topProvider.label : "No providers"}
-          detail={topProvider && topProviderShare !== null ? `${formatPercent(topProviderShare)} of token volume` : "Nothing reported yet"}
-        />
-        <StudioMetricTile
-          label="Token Mix"
-          value={formatTokens(stats.usage.totalTokens)}
-          detail={inputShare !== null ? `${formatPercent(inputShare)} input footprint` : "No token volume"}
-          icon={PieChart}
-        />
-        <StudioMetricTile
-          label="Cache Rate"
-          value={cacheRate !== null ? `${cacheRate.toFixed(1)}%` : "—"}
-          detail={cacheRate !== null ? `~${formatTokens(stats.usage.cachedInputTokens)} tokens saved` : "No cacheable input yet"}
-          icon={Database}
-        />
-        <StudioMetricTile
-          label="Output Ratio"
-          value={formatPercentOrFallback(outputShare, "—")}
-          detail={stats.usage.totalTokens > 0 ? `${formatTokens(stats.usage.outputTokens)} generated` : "No output tokens"}
-          icon={ArrowUpRight}
-        />
-        <StudioMetricTile
-          label="Reasoning Share"
-          value={formatPercentOrFallback(reasoningShare, "—")}
-          detail={stats.usage.reasoningOutputTokens > 0 ? `${formatTokens(stats.usage.reasoningOutputTokens)} reasoning` : "No reasoning tokens"}
-          icon={Brain}
-        />
+    <section className="min-w-0 space-y-7" aria-labelledby="composition-studio-title">
+      <div className="min-w-0 border-y border-[color:var(--stats-border-hairline)] py-4">
+        <div className={SECTION_TITLE_CLASS}>Composition</div>
+        <h2 id="composition-studio-title" className={`mt-1 break-words text-xl font-semibold tracking-tight ${TEXT_VALUE_CLASS}`}>Usage composition</h2>
+        <p className={SECTION_COPY_CLASS}>Provider share, token flow, source confidence, purpose activity, cache efficiency, and Git context for the selected window.</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1.02fr_0.98fr]">
+      <div className="grid min-w-0 grid-cols-1 gap-5 2xl:grid-cols-2">
         <DonutCard
           title="Provider Share"
-          eyebrow="Composition"
-          description="Provider token split grouped into visible lanes for faster reading at high volume."
-          centerValue={String(stats.providers.length)}
-          centerLabel={stats.providers.length === 1 ? "provider" : "providers"}
+          eyebrow="Token volume"
+          description="Provider token split ranked by visible volume."
+          centerValue={String(providers.length)}
+          centerLabel={providers.length === 1 ? "provider" : "providers"}
           segments={providerSegments}
         />
         <DonutCard
           title="Token Anatomy"
-          eyebrow="Flow Mix"
-          description="Input, cached, output, and reasoning balance across the selected telemetry window."
+          eyebrow="Token flow"
+          description="Input, cached input, output, and reasoning balance."
           centerValue={formatTokens(stats.usage.totalTokens)}
-          centerLabel="token mix"
+          centerLabel="total tokens"
           segments={tokenSegments}
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <div className={`${PANEL_CLASS} p-6`}>
-          <div className="flex items-center gap-3">
-            <TimerReset className="h-4 w-4 text-[color:var(--stats-detail-color)]" strokeWidth={2} />
-            <div className={SECTION_TITLE_CLASS}>Token Flight</div>
+      <div className="grid min-w-0 grid-cols-1 gap-x-8 gap-y-6 xl:grid-cols-3">
+        <section className="min-w-0 border-t border-[color:var(--stats-border-hairline)] pt-4" aria-labelledby="composition-source-title">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-[color:var(--stats-detail-color)]" aria-hidden="true" />
+            <h3 id="composition-source-title" className={SECTION_TITLE_CLASS}>Source Confidence</h3>
           </div>
-          <div className={SECTION_COPY_CLASS}>
-            End-to-end token movement across input, cached input, output, reasoning, and cost signals from the selected snapshot.
+          <dl className="mt-2 grid grid-cols-2 gap-x-4">
+            <Metric label="Confidence" value={sourceConfidence} detail={`${sourceCounts.reported.toLocaleString()} provider-reported calls`} />
+            <Metric label="Fallback" value={fallbackCount.toLocaleString()} detail={`${sourceCounts.estimated.toLocaleString()} estimated · ${unknownSourceCount.toLocaleString()} unknown`} />
+            <Metric label="Unavailable" value={sourceRiskCount.toLocaleString()} detail={`${sourceCounts.unavailable.toLocaleString()} unavailable · ${sourceCounts.unsupported.toLocaleString()} unsupported`} />
+          </dl>
+        </section>
+
+        <section className="min-w-0 border-t border-[color:var(--stats-border-hairline)] pt-4" aria-labelledby="composition-cache-title">
+          <div className="flex items-center gap-2">
+            <Database className="h-4 w-4 text-[color:var(--stats-accent-cyan)]" aria-hidden="true" />
+            <h3 id="composition-cache-title" className={SECTION_TITLE_CLASS}>Cache Efficiency</h3>
           </div>
-          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <StudioMetricTile
-              label="Input"
-              value={formatTokens(stats.usage.inputTokens)}
-              detail={stats.usage.totalTokens > 0 ? `${formatPercent((stats.usage.inputTokens / stats.usage.totalTokens) * 100)} of total` : "No total volume"}
-              icon={ArrowDownRight}
-            />
-            <StudioMetricTile
-              label="Cached Input"
-              value={formatTokens(stats.usage.cachedInputTokens)}
-              detail={cacheRate !== null ? `${cacheRate.toFixed(1)}% cache-hit rate` : "No cache signal"}
-              icon={Database}
-            />
-            <StudioMetricTile
-              label="Output"
-              value={formatTokens(stats.usage.outputTokens)}
-              detail={outputShare !== null ? `${formatPercent(outputShare)} output ratio` : "No total volume"}
-              icon={ArrowUpRight}
-            />
-            <StudioMetricTile
-              label="Reasoning"
-              value={formatTokens(stats.usage.reasoningOutputTokens)}
-              detail={reasoningShare !== null ? `${formatPercent(reasoningShare)} of total` : "No total volume"}
-              icon={Brain}
-            />
-            {hasCost ? (
-              <StudioMetricTile
-                label="Total Cost"
-                value={formatCost(stats.usage.totalCostUsd)}
-                detail="Snapshot cost rollup"
-                icon={DollarSign}
-              />
-            ) : null}
-            <div className={`${SUBPANEL_CLASS} sm:col-span-2 p-4`}>
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)]">Active Time</div>
-                  <div className="mt-2 text-base font-semibold text-[color:var(--stats-value-color)]">{formatStatsDuration(stats.usage.activeTimeMs)}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)]">Wall Time</div>
-                  <div className="mt-2 text-base font-semibold text-[color:var(--stats-value-color)]">{formatStatsDuration(stats.usage.wallTimeMs ?? 0)}</div>
-                </div>
-              </div>
-              <div className="mt-3 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
-                {activeVsWallRate !== null ? `${formatPercent(activeVsWallRate * 100)} active utilization` : "Wall time not tracked"}
-              </div>
-            </div>
+          <dl className="mt-2 grid grid-cols-2 gap-x-4">
+            <Metric label="Cache rate" value={cacheRate === null ? "—" : `${cacheRate.toFixed(1)}%`} detail={cacheRate === null ? "No cacheable input yet" : `${formatTokens(stats.usage.cachedInputTokens)} cached input`} />
+            <Metric label="Active time" value={formatStatsDuration(stats.usage.activeTimeMs)} detail={activeVsWallRate === null ? "Wall time not tracked" : `${formatPercent(activeVsWallRate * 100)} of wall time`} />
+            <Metric label="Cost" value={hasCost ? formatCost(stats.usage.totalCostUsd) : "—"} detail={hasCost ? "Configured snapshot pricing" : "No pricing signal"} />
+          </dl>
+        </section>
+
+        <section className="min-w-0 border-t border-[color:var(--stats-border-hairline)] pt-4" aria-labelledby="composition-git-title">
+          <div className="flex items-center gap-2">
+            {conflictCount > 0 ? <AlertTriangle className="h-4 w-4 text-[color:var(--stats-warning-text)]" aria-hidden="true" /> : <GitBranch className="h-4 w-4 text-[color:var(--stats-detail-color)]" aria-hidden="true" />}
+            <h3 id="composition-git-title" className={SECTION_TITLE_CLASS}>Git Context</h3>
           </div>
-          <div className={`${SUBPANEL_CLASS} mt-4 p-5`}>
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <div className={SECTION_TITLE_CLASS}>Cache Efficiency</div>
-                <div className="mt-2 text-xl font-semibold text-[color:var(--stats-value-color)]">{cacheRate !== null ? cacheRate.toFixed(1) : "—"}%</div>
-                <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
-                  {stats.usage.cachedInputTokens > 0 ? `~${formatTokens(stats.usage.cachedInputTokens)} cached input` : "No cache savings recorded"}
-                </div>
-              </div>
-              {hasCost ? (
-                <div className="text-right">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Cost</div>
-                  <div className="mt-2 text-base font-semibold text-[color:var(--stats-value-color)]">{formatCost(stats.usage.totalCostUsd)}</div>
-                </div>
-              ) : null}
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <TokenChip icon={ArrowDownRight} label="Input" value={stats.usage.inputTokens} tone={STATUS_TONE_CLASS.signal} />
-              <TokenChip icon={Database} label="Cached" value={stats.usage.cachedInputTokens} tone={STATUS_TONE_CLASS.cyan} />
-              <TokenChip icon={ArrowUpRight} label="Output" value={stats.usage.outputTokens} tone={STATUS_TONE_CLASS.warning} />
-              <TokenChip icon={Brain} label="Reasoning" value={stats.usage.reasoningOutputTokens} tone={STATUS_TONE_CLASS.negative} />
-              {hasCost ? (
-                <TokenChip icon={DollarSign} label="Cost" value={formatCost(stats.usage.totalCostUsd)} tone={STATUS_TONE_CLASS.positive} />
-              ) : null}
-            </div>
-            <div className="mt-4">
-              <TokenFlowBar
-                input={stats.usage.inputTokens}
-                cached={stats.usage.cachedInputTokens}
-                output={stats.usage.outputTokens}
-                reasoning={stats.usage.reasoningOutputTokens}
-                total={stats.usage.totalTokens}
-              />
-            </div>
-          </div>
-        </div>
-        <div className="space-y-4">
-          <div>
-            <div className={SECTION_TITLE_CLASS}>Purpose Lanes</div>
-            <div className={SECTION_COPY_CLASS}>
-              Invocation count, active time, and token share by purpose over the selected window.
-            </div>
-          </div>
-          <PurposeRibbon
-            purposes={stats.purposes}
-            totalTokens={stats.usage.totalTokens}
-            dominantPurposeId={topPurpose?.id ?? null}
-          />
-        </div>
+          {hasGitSignal ? (
+            <dl className="mt-2 grid grid-cols-2 gap-x-4">
+              <Metric label="Changed files" value={(git?.filesChanged ?? 0).toLocaleString()} detail={`${(git?.insertions ?? 0).toLocaleString()} additions · ${(git?.deletions ?? 0).toLocaleString()} deletions`} />
+              <Metric label="Pull requests" value={(git?.prCount ?? 0).toLocaleString()} detail={`${(git?.mergedCount ?? 0).toLocaleString()} merged`} />
+              <Metric label="Merge blockers" value={conflictCount.toLocaleString()} detail={conflictCount > 0 ? "Conflicts need review" : "No conflicts recorded"} />
+            </dl>
+          ) : <div role="status" className={`${DASHED_EMPTY_CLASS} mt-3 py-5`}>No Git activity was recorded in this window.</div>}
+        </section>
       </div>
 
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-end justify-between gap-4">
+      <section className="min-w-0" aria-labelledby="composition-purpose-title">
+        <h3 id="composition-purpose-title" className={SECTION_TITLE_CLASS}>Purpose Activity</h3>
+        <p className={SECTION_COPY_CLASS}>Invocation count, active time, and token share by purpose.</p>
+        <div className="mt-4">
+          <PurposeRibbon purposes={purposes} totalTokens={stats.usage.totalTokens} dominantPurposeId={topPurpose?.id ?? null} />
+        </div>
+      </section>
+
+      <section className="min-w-0" aria-labelledby="composition-provider-title">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <div className={SECTION_TITLE_CLASS}>Provider Activity</div>
-            <div className={SECTION_COPY_CLASS}>
-              Token output, invocations, active time, and wall-time efficiency per provider over the selected window.
-            </div>
+            <h3 id="composition-provider-title" className={SECTION_TITLE_CLASS}>Provider Activity</h3>
+            <p className={SECTION_COPY_CLASS}>Usage, cache behavior, time, pricing, and token flow ranked by token volume.</p>
           </div>
-          <div className={FLAT_BADGE_CLASS}>
-            {providers.length} providers
-          </div>
+          <span className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${CHIP_CLASS}`}>{providers.length} providers</span>
         </div>
         {providers.length === 0 ? (
-          <div className={DASHED_EMPTY_CLASS}>
-            No provider data for this window.
-          </div>
+          <div role="status" className={`${DASHED_EMPTY_CLASS} mt-4`}>No provider data for this window.</div>
         ) : (
-          <div className="space-y-4" data-testid="composition-provider-activity">
+          <div className="mt-4 divide-y divide-[color:var(--stats-border-hairline)] border-y border-[color:var(--stats-border-hairline)]" data-testid="composition-provider-activity">
             {providers.map((provider) => {
               const { icon: Icon, bg, text } = getProviderIcon(provider.provider);
-              const providerCacheDenominator = provider.usage.inputTokens + provider.usage.cachedInputTokens;
-              const providerCacheRate = providerCacheDenominator > 0
-                ? Math.round((provider.usage.cachedInputTokens / providerCacheDenominator) * 100)
-                : null;
-              const providerTokensPerCall = provider.usage.invocationCount > 0
-                ? Math.round(provider.usage.totalTokens / provider.usage.invocationCount)
-                : null;
-              const providerModelsCount = (stats.models || []).filter((m) => m.provider === provider.id).length;
-              const providerActiveVsWall = provider.usage.wallTimeMs > 0 ? provider.usage.activeTimeMs / provider.usage.wallTimeMs : null;
-
+              const denominator = provider.usage.inputTokens + provider.usage.cachedInputTokens;
+              const providerCacheRate = denominator > 0 ? (provider.usage.cachedInputTokens / denominator) * 100 : null;
+              const tokensPerCall = provider.usage.invocationCount > 0 ? provider.usage.totalTokens / provider.usage.invocationCount : null;
+              const linkedModels = (stats.models || []).filter((model) => model.provider === provider.id).length;
+              const utilization = provider.usage.wallTimeMs > 0 ? provider.usage.activeTimeMs / provider.usage.wallTimeMs : null;
               return (
-                <div key={provider.id} className={`${PANEL_CLASS} p-5`}>
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                    <div className="flex min-w-0 items-start gap-4">
-                      <div className={`rounded-xl p-2 ${bg} ${text}`}>
-                        <Icon className="h-4 w-4" strokeWidth={2.1} />
-                      </div>
+                <article key={provider.id} className="min-w-0 py-5" aria-label={`${provider.label} provider activity`}>
+                  <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(12rem,1.2fr)_minmax(0,2fr)] xl:items-start">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span className={`shrink-0 rounded-[var(--stats-chip-radius)] p-2 ${bg} ${text}`}><Icon className="h-4 w-4" aria-hidden="true" /></span>
                       <div className="min-w-0">
-                        <div className="break-words text-base font-semibold text-[color:var(--stats-value-color)]" title={provider.label}>{provider.label}</div>
-                        <div className="mt-1 text-sm text-[color:var(--stats-detail-color)]">{provider.secondaryLabel ?? "No secondary label"}</div>
+                        <h4 className={`break-words text-base font-semibold ${TEXT_VALUE_CLASS}`} title={provider.label}>{provider.label}</h4>
+                        <p className={`mt-1 break-words text-sm ${TEXT_DETAIL_CLASS}`}>{provider.secondaryLabel ?? "No secondary label"}</p>
                       </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className={FLAT_BADGE_CLASS}>
-                        <span className="text-base font-semibold normal-case tracking-tight text-[color:var(--stats-value-color)]">
-                          {provider.usage.totalCostUsd > 0 ? formatCost(provider.usage.totalCostUsd) : "—"}
-                        </span>
-                        <span className="text-[color:var(--stats-label-color)]">cost</span>
-                      </div>
-                      <div className={FLAT_BADGE_CLASS}>
-                        <span className="text-base font-semibold normal-case tracking-tight text-[color:var(--stats-value-color)]">
-                          {formatTokens(provider.usage.totalTokens)}
-                        </span>
-                        <span className="text-[color:var(--stats-label-color)]">tokens</span>
-                      </div>
+                    <div className="min-w-0">
+                      <dl className="grid grid-cols-2 gap-x-4 md:grid-cols-3 xl:grid-cols-6">
+                        <Metric label="Token share" value={formatTokens(provider.usage.totalTokens)} detail={stats.usage.totalTokens > 0 ? `${formatPercent((provider.usage.totalTokens / stats.usage.totalTokens) * 100)} of total` : "No total volume"} />
+                        <Metric label="Invocations" value={provider.usage.invocationCount.toLocaleString()} detail={`${linkedModels} linked models`} />
+                        <Metric label="Cache rate" value={providerCacheRate === null ? "—" : formatPercent(providerCacheRate)} detail={`${formatTokens(provider.usage.cachedInputTokens)} cached`} />
+                        <Metric label="Tokens / call" value={tokensPerCall === null ? "—" : formatTokens(Math.round(tokensPerCall))} detail={tokensPerCall === null ? "No calls yet" : "Average volume"} />
+                        <Metric label="Active time" value={formatStatsDuration(provider.usage.activeTimeMs)} detail={utilization === null ? "Wall time not tracked" : `${formatStatsDuration(provider.usage.wallTimeMs)} wall · ${formatPercent(utilization * 100)} utilization`} />
+                        <Metric label="Cost" value={provider.usage.totalCostUsd > 0 ? formatCost(provider.usage.totalCostUsd) : "—"} detail={provider.usage.totalCostUsd > 0 ? "Configured pricing" : "No pricing signal"} />
+                      </dl>
+                      <TokenFlowBar input={provider.usage.inputTokens} cached={provider.usage.cachedInputTokens} output={provider.usage.outputTokens} reasoning={provider.usage.reasoningOutputTokens} total={provider.usage.totalTokens} />
                     </div>
                   </div>
-
-                  <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    <StudioMetricTile
-                      label="Invocations"
-                      value={provider.usage.invocationCount.toLocaleString()}
-                      detail={provider.usage.invocationCount > 0 ? `${providerModelsCount} linked models` : "No calls yet"}
-                      toneClass="text-[color:var(--stats-detail-color)]"
-                    />
-                    <StudioMetricTile
-                      label="Active Time"
-                      value={formatStatsDuration(provider.usage.activeTimeMs)}
-                      detail={provider.usage.wallTimeMs > 0 ? `${formatPercent((provider.usage.activeTimeMs / provider.usage.wallTimeMs) * 100)} active` : "Wall time not tracked"}
-                      icon={TimerReset}
-                    />
-                    <StudioMetricTile
-                      label="Cache Hit Rate"
-                      value={providerCacheRate !== null ? `${providerCacheRate}%` : "—"}
-                      detail={providerCacheRate !== null ? `${formatTokens(provider.usage.cachedInputTokens)} cached` : "No cache signal"}
-                      icon={Database}
-                    />
-                    <StudioMetricTile
-                      label="Tokens / Call"
-                      value={providerTokensPerCall !== null ? formatTokens(providerTokensPerCall) : "—"}
-                      detail={provider.usage.invocationCount > 0 ? "Average per invocation" : "No calls yet"}
-                    />
-                  </div>
-
-                  <div className="mt-4">
-                    <TokenFlowBar
-                      input={provider.usage.inputTokens}
-                      cached={provider.usage.cachedInputTokens}
-                      output={provider.usage.outputTokens}
-                      reasoning={provider.usage.reasoningOutputTokens}
-                      total={provider.usage.totalTokens}
-                    />
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
-                    <span>{provider.usage.activeTimeMs > 0 ? formatStatsDuration(provider.usage.activeTimeMs) : "0s"} active</span>
-                    <span>•</span>
-                    <span>{provider.usage.wallTimeMs > 0 ? formatStatsDuration(provider.usage.wallTimeMs) : "No wall time"}</span>
-                    {providerActiveVsWall !== null ? (
-                      <>
-                        <span>•</span>
-                        <span>{formatPercent(providerActiveVsWall * 100)} utilization</span>
-                      </>
-                    ) : null}
-                  </div>
-                </div>
+                </article>
               );
             })}
           </div>
         )}
-      </div>
+      </section>
     </section>
   );
 };

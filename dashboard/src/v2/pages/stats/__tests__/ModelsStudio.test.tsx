@@ -80,7 +80,7 @@ describe("ModelsStudio", () => {
 
     expect(screen.getByText("Model performance & efficiency")).toBeTruthy();
     expect(screen.getByText("Model Leaderboard")).toBeTruthy();
-    expect(screen.getByText("Window Volume")).toBeTruthy();
+    expect(screen.getByText("Window Overview")).toBeTruthy();
     expect(screen.getByText("Sort: tokens desc")).toBeTruthy();
     expect(screen.getAllByText("claude-opus-4-8").length).toBeGreaterThan(0);
 
@@ -98,8 +98,11 @@ describe("ModelsStudio", () => {
     const modelCard = screen.getByLabelText("claude-opus-4-8 model leaderboard rank 1");
     expect(modelCard.className).toContain("stats-surface-panel");
     expect(modelCard.className).not.toMatch(/shadow|backdrop|hover:-?translate|hover:scale|rounded-\[2\.2rem\]/);
+    expect(modelCard.querySelectorAll(".stats-surface-subpanel")).toHaveLength(0);
+    expect(screen.getByRole("region", { name: "Model Share" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: /Input 4\.0k; cached 6\.0k; output 2\.4k; reasoning 600; total 13\.0k/i })).toBeTruthy();
 
-    const highlightTile = screen.getByText("Volume Leader").closest(".stats-surface-subpanel");
+    const highlightTile = screen.getByText("Volume Leader").closest(".border-t");
     expect(highlightTile).toBeTruthy();
     expect(highlightTile?.className).not.toMatch(/shadow|backdrop|hover:-?translate|hover:scale|rounded-\[2\.2rem\]/);
   });
@@ -150,6 +153,7 @@ describe("ModelsStudio", () => {
     );
 
     expect(screen.getAllByText(longLabel).length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: longLabel }).className).toContain("break-words");
     expect(container.textContent).toContain("Low sample");
     expect(container.textContent).toContain("Leaderboard placement is based on limited invocation telemetry.");
     expect(container.innerHTML).toContain("--stats-negative-text");
