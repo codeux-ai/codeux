@@ -17,11 +17,13 @@ Code UX now tracks CLI-provider execution usage in a DB-native form so the dashb
 This telemetry currently covers:
 
 - virtual planning runs
-- CLI task coding runs
-- virtual worker CI-fix runs
-- virtual worker merge-conflict runs
-- clarification runs (prompt rewrites or operator clarification)
-- QA coverage runs (automated verification sweeps)
+- QA coverage and QA follow-up implementation runs
+- dashboard chat and worker/clarification replies
+- project setup and memory-remediation runs
+- virtual worker CI and merge-conflict repair runs
+- task follow-up and ordinary CLI task-coding runs
+
+For these local CLI paths, `ProviderExecutionService` is the shared live persistence boundary: each telemetry poll can apply both normalized tokens and a structured transcript to the linked execution invocation. Jules does not use the local CLI parser or watcher path; its remote session synchronizer retains the separate character-based estimated-usage flow described below.
 
 ## Storage Model
 
