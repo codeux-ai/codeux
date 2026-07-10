@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1.7
 FROM node:24-trixie-slim AS base
 
-ARG PNPM_VERSION=10.33.0
+ARG NPM_VERSION=12.0.0
+ARG PNPM_VERSION=10.34.4
 ARG YARN_VERSION=1.22.22
 ARG BUN_VERSION=1.3.14
 ARG SERVE_VERSION=14.2.6
@@ -25,10 +26,12 @@ RUN apt-get update -qy \
     && ln -sf /usr/bin/fdfind /usr/local/bin/fd \
     && rm -rf /var/lib/apt/lists/* /tmp/*
 
-RUN npm install --global \
+RUN npm install --global "npm@${NPM_VERSION}" \
+    && npm install --global \
       "pnpm@${PNPM_VERSION}" \
       "bun@${BUN_VERSION}" \
       "serve@${SERVE_VERSION}" \
+      --allow-scripts=bun \
     && test "$(yarn --version)" = "${YARN_VERSION}" \
     && npm cache clean --force \
     && rm -rf /tmp/*
