@@ -70,8 +70,6 @@ export const StatsCard: FunctionComponent<StatsCardProps> = ({
       aria-label={accessibleLabel}
       className={`${styles.card} ${accentClass} ${densityClass} ${toneClass} ${isActive ? styles.active : ""} ${className} group`}
     >
-      <div className={styles.tint} aria-hidden="true" />
-
       {/* Header: Title and Trend */}
       <div className={styles.header}>
         <div className={styles.titleGroup}>

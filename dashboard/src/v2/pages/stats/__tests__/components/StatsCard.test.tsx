@@ -15,6 +15,7 @@ import {
   LEDGER_ROW_CLASS,
   LEDGER_ROW_MODERN_CLASS,
   PANEL_CLASS,
+  STATUS_TONE_CLASS,
   SUBPANEL_CLASS,
   SeriesLegendButton,
   SortButton,
@@ -174,7 +175,7 @@ describe("StatsCard", () => {
     expect(onToggle).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps shared stats surfaces on warm void tokens instead of blue flat cards", () => {
+  it("keeps shared stats surfaces flat, semantic, and reduced-motion safe", () => {
     const themeCss = readFileSync(resolve(statsRoot, "styles/stats-theme.css"), "utf8");
     const cardCss = readFileSync(resolve(statsRoot, "components/StatsCard.module.css"), "utf8");
     const primitiveClasses = [
@@ -188,12 +189,20 @@ describe("StatsCard", () => {
 
     expect(themeCss).toContain("--stats-surface-panel: #fffdfa");
     expect(themeCss).toContain("--stats-surface-chip: #f4ede4");
-    expect(themeCss).toContain("--stats-card-shadow: 0 1px 2px rgba(61, 49, 37, 0.05)");
-    expect(themeCss).toContain("--stats-panel-shadow: 0 1px 2px rgba(61, 49, 37, 0.05)");
+    expect(themeCss).toContain("--stats-card-shadow: none");
+    expect(themeCss).toContain("--stats-panel-shadow: none");
+    expect(themeCss).toContain("--stats-positive-text: var(--status-green)");
+    expect(themeCss).toContain("--stats-negative-text: var(--status-red)");
+    expect(themeCss).toContain("--stats-status-positive-border:");
+    expect(STATUS_TONE_CLASS.positive).toContain("--stats-status-positive-border");
+    expect(STATUS_TONE_CLASS.negative).toContain("--stats-status-negative-border");
+    expect(themeCss).toContain("--stats-focus-ring: var(--accent-focus-ring)");
     expect(themeCss).not.toContain("surface-glass");
     expect(`${themeCss}\n${cardCss}\n${primitiveClasses}`).not.toMatch(/backdrop-filter|-webkit-backdrop-filter|backdrop-blur|stats-card-flat/);
-    expect(cardCss).toContain("translateY(-1px)");
-    expect(cardCss).toContain("linear-gradient");
+    expect(`${themeCss}\n${cardCss}`).not.toMatch(/linear-gradient|translateY\(|drop-shadow/);
+    expect(cardCss).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(cardCss).toContain("outline: 2px solid var(--stats-focus-ring)");
+    expect(cardCss).toContain("border-top-color: var(--stats-card-accent)");
     expect(primitiveClasses).not.toContain("shadow-[var(--stats-control-shadow");
 
     render(<SeriesLegendButton series={CHART_SERIES[0]} active={false} currentValue={0} onToggle={vi.fn()} />);

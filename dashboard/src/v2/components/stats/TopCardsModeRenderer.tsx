@@ -586,7 +586,7 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
   return (
     <section
       ref={containerRef}
-      className="grid w-full gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,14.5rem),1fr))] [&>*]:min-w-0"
+      className="grid w-full min-w-0 max-w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:[grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr))] [&>*]:min-w-0 [&>*]:max-w-full"
       data-testid="top-cards-renderer"
     >
       {cardsContent}

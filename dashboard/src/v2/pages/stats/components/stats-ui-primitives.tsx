@@ -67,24 +67,24 @@ export interface ChartZoomRange {
   end: number;
 }
 
-export const PANEL_CLASS = "stats-surface-panel relative overflow-hidden rounded-[var(--stats-panel-radius)] p-6 transition-[background-color,border-color] duration-150 motion-reduce:transition-none";
-export const SUBPANEL_CLASS = "stats-surface-subpanel rounded-[var(--stats-subpanel-radius)] p-4 transition-[background-color,border-color] duration-150 motion-reduce:transition-none";
+export const PANEL_CLASS = "stats-surface-panel relative min-w-0 overflow-hidden rounded-[var(--stats-panel-radius)] p-5 transition-colors duration-150 motion-reduce:transition-none";
+export const SUBPANEL_CLASS = "stats-surface-subpanel min-w-0 rounded-[var(--stats-subpanel-radius)] p-4 transition-colors duration-150 motion-reduce:transition-none";
 export const CHIP_CLASS = "stats-surface-chip rounded-[var(--stats-chip-radius)] transition-[background-color,border-color,color] duration-150 motion-reduce:transition-none";
 export const CONTROL_FOCUS_CLASS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--stats-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--stats-focus-ring-offset)]";
 export const INPUT_CLASS = `stats-surface-input h-11 rounded-[var(--stats-control-radius)] px-4 text-sm text-[color:var(--stats-value-color)] outline-none transition-[background-color,border-color,color] duration-150 placeholder:text-[color:var(--stats-detail-color)] focus:border-[color:var(--stats-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`;
 export const LEDGER_ROW_CLASS = "stats-surface-subpanel group rounded-[var(--stats-subpanel-radius)] p-4 transition-[background-color,border-color] duration-150 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)] motion-reduce:transition-none";
-export const LEDGER_ROW_MODERN_CLASS = "stats-surface-panel group relative overflow-hidden rounded-[var(--stats-panel-radius)] p-6 transition-[background-color,border-color] duration-150 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-panel-hover)] motion-reduce:transition-none";
+export const LEDGER_ROW_MODERN_CLASS = "stats-surface-panel group relative min-w-0 overflow-hidden rounded-[var(--stats-panel-radius)] p-5 transition-colors duration-150 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-panel-hover)] motion-reduce:transition-none";
 export const TEXT_LABEL_CLASS = "text-[color:var(--stats-label-color)]";
 export const TEXT_DETAIL_CLASS = "text-[color:var(--stats-detail-color)]";
 export const TEXT_VALUE_CLASS = "text-[color:var(--stats-value-color)]";
 export const TRACK_CLASS = "bg-[color:var(--stats-quiet-track)]";
-export const DASHED_EMPTY_CLASS = "rounded-2xl border border-dashed border-[color:var(--stats-card-border)] px-4 py-8 text-center text-sm text-[color:var(--stats-label-color)]";
+export const DASHED_EMPTY_CLASS = "rounded-[var(--stats-subpanel-radius)] border border-dashed border-[color:var(--stats-card-border)] px-4 py-8 text-center text-sm text-[color:var(--stats-label-color)]";
 export const STATUS_TONE_CLASS = {
-  signal: "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-accent-signal-fill)] text-[color:var(--stats-signal-text)]",
-  positive: "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-accent-emerald-fill)] text-[color:var(--stats-positive-text)]",
-  warning: "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-accent-amber-fill)] text-[color:var(--stats-warning-text)]",
-  negative: "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-accent-rose-fill)] text-[color:var(--stats-negative-text)]",
-  cyan: "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-accent-cyan-fill)] text-[color:var(--stats-accent-cyan)]",
+  signal: "border-[color:var(--stats-status-signal-border)] bg-[color:var(--stats-accent-signal-fill)] text-[color:var(--stats-signal-text)]",
+  positive: "border-[color:var(--stats-status-positive-border)] bg-[color:var(--stats-accent-emerald-fill)] text-[color:var(--stats-positive-text)]",
+  warning: "border-[color:var(--stats-status-warning-border)] bg-[color:var(--stats-accent-amber-fill)] text-[color:var(--stats-warning-text)]",
+  negative: "border-[color:var(--stats-status-negative-border)] bg-[color:var(--stats-accent-rose-fill)] text-[color:var(--stats-negative-text)]",
+  cyan: "border-[color:var(--stats-status-cyan-border)] bg-[color:var(--stats-accent-cyan-fill)] text-[color:var(--stats-accent-cyan)]",
   neutral: "border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-chip)] text-[color:var(--stats-detail-color)]",
 } as const;
 export const TAB_ACTIVE_CLASS = "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active)] text-[color:var(--stats-control-text-active)]";
