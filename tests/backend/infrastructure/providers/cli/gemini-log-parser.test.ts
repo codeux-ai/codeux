@@ -40,6 +40,48 @@ describe("Gemini log parser", () => {
     expect(result.conversation).toEqual([]);
   });
 
+  it("extracts a valid plain-response record from noisy stdout", () => {
+    const result = parseGeminiLog([
+      "Starting Gemini CLI...",
+      JSON.stringify({ level: "debug", message: "bootstrap complete" }),
+      JSON.stringify({
+        response: "Applied the edit.",
+        session_id: "wrapped-session",
+        stats: { tokens: { input: 12, candidates: 4 } },
+      }),
+      "Container cleanup complete.",
+    ].join("\n"));
+
+    expect(result).toMatchObject({
+      usage: {
+        inputTokens: 12,
+        cachedInputTokens: 0,
+        outputTokens: 4,
+        reasoningOutputTokens: 0,
+        totalTokens: 16,
+      },
+      nativeSessionId: "wrapped-session",
+      transcriptText: "Applied the edit.",
+      conversation: [],
+    });
+  });
+
+  it("normalizes standard usage metadata without double-counting cached prompt tokens", () => {
+    expect(parseGeminiTokens({
+      promptTokenCount: 100,
+      cachedContentTokenCount: 20,
+      candidatesTokenCount: 30,
+      thoughtsTokenCount: 10,
+      totalTokenCount: 140,
+    })).toEqual({
+      inputTokens: 80,
+      cachedInputTokens: 20,
+      outputTokens: 30,
+      reasoningOutputTokens: 10,
+      totalTokens: 140,
+    });
+  });
+
   it("honors explicit total fields for direct stats", () => {
     expect(parseGeminiTokens({
       tokens: {
@@ -195,6 +237,78 @@ describe("Gemini log parser", () => {
     });
   });
 
+  it("preserves ordered roles, timestamps, per-turn tokens, and tool metadata", () => {
+    const result = parseGeminiLog(JSON.stringify({
+      request: {
+        contents: [{
+          role: "user",
+          timestamp: "2026-07-10T10:00:00.000Z",
+          parts: [{ text: "Inspect README.md" }],
+        }],
+      },
+      response: {
+        candidates: [{
+          timestamp_ms: 1_752_140_401_000,
+          content: {
+            role: "model",
+            parts: [
+              { thought: true, text: "I should read it.", tokens: { reasoning: 3 } },
+              { functionCall: { id: "call_1", name: "read_file", args: { path: "README.md" }, status: "running" } },
+              { functionResponse: { id: "call_1", name: "read_file", response: "contents", status: "completed" } },
+              { text: "The file is current.", usage: { outputTokens: 5, totalTokens: 5 } },
+            ],
+          },
+        }],
+        usageMetadata: {
+          promptTokenCount: 20,
+          cachedContentTokenCount: 4,
+          candidatesTokenCount: 8,
+          thoughtsTokenCount: 3,
+          totalTokenCount: 31,
+        },
+      },
+    }));
+
+    expect(result.usage).toEqual({
+      inputTokens: 16,
+      cachedInputTokens: 4,
+      outputTokens: 8,
+      reasoningOutputTokens: 3,
+      totalTokens: 31,
+    });
+    expect(result.conversation.map((turn) => turn.kind)).toEqual([
+      "user",
+      "reasoning",
+      "tool_call",
+      "tool_result",
+      "assistant",
+    ]);
+    expect(result.conversation[0]).toMatchObject({
+      text: "Inspect README.md",
+      timestampMs: Date.parse("2026-07-10T10:00:00.000Z"),
+    });
+    expect(result.conversation[1]).toMatchObject({ tokens: { reasoning: 3 }, timestampMs: 1_752_140_401_000 });
+    expect(result.conversation[2]).toMatchObject({
+      toolName: "read_file",
+      toolCallId: "call_1",
+      toolStatus: "running",
+      timestampMs: 1_752_140_401_000,
+    });
+    expect(result.conversation[3]).toMatchObject({ toolStatus: "completed" });
+    expect(result.conversation[4]).toMatchObject({ tokens: { output: 5, total: 5 } });
+  });
+
+  it("keeps structured conversation when usage is missing", () => {
+    const result = parseGeminiLog(JSON.stringify({
+      candidates: [{ content: { role: "model", parts: [{ text: "No stats available." }] } }],
+    }));
+
+    expect(result.usage).toBeNull();
+    expect(result.rawUsageJson).toBeNull();
+    expect(result.transcriptText).toBe("No stats available.");
+    expect(result.conversation).toEqual([{ kind: "assistant", text: "No stats available." }]);
+  });
+
   it("returns empty structured data for noisy or invalid stdout", () => {
     expect(parseGeminiLog("provider warning\nnot json")).toEqual({
       usage: null,
@@ -205,6 +319,13 @@ describe("Gemini log parser", () => {
     });
     expect(parseGeminiLog("{\"response\":{\"candidates\":[")).toMatchObject({
       usage: null,
+      transcriptText: "",
+      conversation: [],
+    });
+    expect(parseGeminiLog("[1,2,3]")).toEqual({
+      usage: null,
+      rawUsageJson: null,
+      nativeSessionId: null,
       transcriptText: "",
       conversation: [],
     });

@@ -385,6 +385,7 @@ export async function collectProviderUsageTelemetry(args: {
     const parsed = parseGeminiLog(args.stdout);
     const transcriptText = parsed.transcriptText || fallbackOutput;
     const nativeSessionId = parsed.nativeSessionId ?? args.nativeSessionId ?? null;
+    const conversation = withLeadingUserTurn(parsed.conversation, args.prompt);
     if (parsed.usage) {
       return {
         ...emptyTelemetry(),
@@ -397,7 +398,7 @@ export async function collectProviderUsageTelemetry(args: {
         rawUsageJson: parsed.rawUsageJson,
         transcriptText,
         nativeSessionId,
-        conversation: parsed.conversation,
+        conversation,
       };
     }
     const estimated = estimateTelemetry(
@@ -407,7 +408,7 @@ export async function collectProviderUsageTelemetry(args: {
       transcriptText,
     );
     estimated.nativeSessionId = nativeSessionId;
-    estimated.conversation = parsed.conversation;
+    estimated.conversation = conversation;
     return estimated;
   }
 

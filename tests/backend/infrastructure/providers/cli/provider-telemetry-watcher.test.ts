@@ -720,6 +720,45 @@ describe("ProviderTelemetryWatcher", () => {
     expect(opts.onTelemetry).not.toHaveBeenCalled();
   });
 
+  it("forwards the Antigravity invocation baseline to live telemetry collection", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const opts = {
+      provider: "antigravity" as const,
+      model: "test-model",
+      prompt: "test",
+      cwd: "/cwd",
+      startedMs: 123,
+      workflowSettings: { executionMode: "HOST" as const },
+      signal: controller.signal,
+      getAccumulatedRawStdout: () => "",
+      getAccumulatedStderr: () => "",
+      nativeSessionId: "native-1",
+      sessionId: "sess-1",
+      antigravityLogPath: "/log",
+      antigravitySinceIdx: 41,
+      initialPollDelayMs: 1,
+      pollIntervalMs: 10,
+      readClaudeSessionJsonl: vi.fn(),
+      readCodexLatestSessionJson: vi.fn(),
+      readQwenLogData: vi.fn(),
+      parseAntigravityConversationId: vi.fn(),
+      readAntigravityTranscript: vi.fn().mockResolvedValue("antigravity transcript"),
+      resolveAntigravityDatabase: vi.fn().mockResolvedValue(true),
+      onTelemetry: vi.fn(),
+    };
+    const watcher = new ProviderTelemetryWatcher(opts as any);
+    watcher.start();
+
+    await vi.advanceTimersByTimeAsync(2);
+    expect(collectProviderUsageTelemetry).toHaveBeenCalledWith(expect.objectContaining({
+      antigravitySinceIdx: 41,
+    }));
+
+    controller.abort();
+    await watcher.stop();
+  });
+
   it("forwards collected telemetry, including structured conversation turns, to the callback", async () => {
     vi.mocked(collectProviderUsageTelemetry).mockResolvedValue({
       inputTokens: 2,

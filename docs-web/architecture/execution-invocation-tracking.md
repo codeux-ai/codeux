@@ -30,6 +30,8 @@ Readable reasoning must be evidence-based. Parsers emit `reasoning` only from ex
 
 Codex item lifecycle records are keyed by their provider item or call id. Repeated `item.started`, `item.updated`, `item.completed`, and rollout `response_item` records replace the earlier state at its first-seen position, so live transcripts remain ordered without duplicating tools or messages. Item-level usage is normalized onto the resulting turn when Codex reports it; session-level cumulative snapshots remain the source for invocation totals.
 
+Gemini accepts both clean JSON stdout and a balanced response object surrounded by startup or cleanup text. Its parser normalizes Gemini CLI stats and standard `usageMetadata`, and preserves request/candidate roles, timestamps, per-turn token evidence, tool metadata, and statuses when those fields are present. Missing usage remains unavailable so the collector can estimate safely; plain response strings remain text-only and never become inferred reasoning.
+
 ## Persistence behavior
 
 `ProviderExecutionService` rewrites invocation messages from structured `ProviderUsageTelemetry.conversation` turns while the provider is running. It clears and rewrites only when structured turns exist, using the JSON representation of mapped persisted messages as the duplicate-skip signature. That means normalized metadata such as `toolName`, `toolCallId`, `toolArguments`, `toolOutput`, `toolStatus`, per-turn `tokens`, and `timestampMs` must be preserved by parser changes.
@@ -38,7 +40,7 @@ When a provider or failure mode exposes only final text, Code UX uses a text-onl
 
 ## Live telemetry performance
 
-Live provider telemetry is metadata-first. `provider-telemetry-watcher.ts` checks provider/model identity, native session id, stdout/stderr fingerprints, and provider-specific metadata such as session file size/mtime, Qwen log metadata, and Antigravity transcript/database metadata before reading full transcripts or copying provider databases. Unchanged signatures skip full reads, and repeated read failures use bounded backoff until source metadata changes.
+Live provider telemetry is metadata-first. `provider-telemetry-watcher.ts` checks provider/model identity, native session id, stdout/stderr fingerprints, and provider-specific metadata such as session file size/mtime, Qwen log metadata, and Antigravity transcript/database metadata before reading full transcripts or copying provider databases. Unchanged signatures skip full reads, and repeated read failures use bounded backoff until source metadata changes. Antigravity live polls use the same pre-invocation database row cutoff as final collection, so resumed conversations report only current-run usage throughout execution.
 
 Final post-process usage collection remains authoritative. Live telemetry is best effort for dashboard freshness; final collection reconciles the persisted provider usage row when the provider finishes.
 

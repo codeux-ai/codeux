@@ -434,6 +434,7 @@ export class ProviderRunner implements IProviderRunner {
         nativeSessionId,
         sessionId,
         antigravityLogPath,
+        antigravitySinceIdx: antigravityBaselineIdx,
         logger: this.logger,
         ...(workflowSettings.executionMode === "HOST"
           ? { getCodexLatestSessionJsonMetadata: async () => this.readCodexLatestSessionMetadata() }
