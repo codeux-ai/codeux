@@ -383,6 +383,13 @@ Focus on bugs, regressions, missing tests, and rollback risk.
 Search results return concise ranked summaries with skill IDs and metadata. Full content retrieval
 requires `manage_skills` via `export_markdown` or `get_skill` with `includeContent: true`.
 
+Agent-authenticated MCP connections do not trust these optional scope fields to widen access. Code UX
+requires the authenticated agent to belong to `projectId`, rejects a different caller-supplied
+`agentPresetId`, and searches only that agent's enabled project-owned storage attachments. A direct
+`storageId` must be one of those attachments. MCP connections without an agent identity preserve the
+project-manager behavior: they may search the project, a project-owned agent's attachments, or one
+project-owned storage.
+
 ## Error model
 
 Tool handlers return one of:
