@@ -12,6 +12,43 @@ afterEach(async () => {
 });
 
 describe("Code UX default assets service", () => {
+  it("keeps the bundled Project Manager operating manual comprehensive", async () => {
+    const instructions = await fs.readFile(
+      path.join(process.cwd(), ".code-ux", "agents", "project_manager.md"),
+      "utf8",
+    );
+
+    for (const requiredSection of [
+      "## MCP Capability Map",
+      "## Programming Work And Sprint Delegation",
+      "## Concise Manual Sprint-Planning Guide",
+      "## Scheduler Self-Wakeup Protocol",
+      "## Long-Term Memory Responsibility",
+      "## Persistent Skills And Volumes",
+      "## Custom Dashboard Workflow",
+      "## Node Flow Workflow",
+      "## Rich Response Design",
+    ]) {
+      expect(instructions).toContain(requiredSection);
+    }
+
+    for (const requiredCapability of [
+      "manage_sprints",
+      "scheduler_code_ux",
+      "manage_custom_dashboards",
+      "manage_node_flows",
+      "manage_skills",
+      "search_skills",
+      "add_long_term_memory",
+      "short-term memory",
+      "long-term memory",
+      "codeux:memory",
+      "codeux:actions",
+    ]) {
+      expect(instructions).toContain(requiredCapability);
+    }
+  });
+
   it("installs missing base agents and container setup into the user directory without overwriting existing files", async () => {
     vi.stubEnv("CODE_UX_ENABLE_DEFAULT_ASSET_INSTALL_IN_TESTS", "1");
 

@@ -34,6 +34,8 @@ The project-scope memory is a compatibility and retrieval layer. The claim row i
 
 Project-manager agents can maintain durable claims through `manage_memory` without waiting for sprint remediation. The canonical MCP action schema is documented in [MCP Tools and Contracts](../mcp/tools-and-contracts.md#manage_memory-claim-actions).
 
+Dashboard Project Manager replies also receive a dedicated `add_long_term_memory` MCP lane. It accepts one durable statement and writes through the same canonical claim + project-memory mirror path as `manage_memory.create_claim`, with `learning`, `0.9` confidence, and `0.9` durability defaults. This narrower tool is always enabled for the assigned dashboard reply agent even when that preset has an explicitly narrowed Code UX tool policy. Its response includes a `memory` rich-widget descriptor so the reply can visibly confirm exactly what was stored.
+
 The direct lifecycle is:
 
 1. `create_claim` requires `projectId` and a non-blank `claim`, then creates both the canonical `memory_claims` row and a project-scope mirror memory.
@@ -41,6 +43,8 @@ The direct lifecycle is:
 3. `update_claim` changes the canonical row and synchronizes mirror memory content, category, and strength.
 4. `add_claim_evidence` links additional project-scoped evidence memory to the claim.
 5. `deprecate_claim` is the destructive lifecycle action. It first returns `approvalRequired: true` and only changes state when the repeated request includes `approval.confirmed: true`.
+
+The dedicated lane does not replace short-term memory capture. Sprint evidence continues to enter `memories`, and remediation/promotion continues to curate that evidence. `add_long_term_memory` is for explicit remember/learn requests and stable knowledge the Project Manager judges valuable across future work.
 
 Example:
 

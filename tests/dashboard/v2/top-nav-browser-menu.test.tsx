@@ -143,6 +143,7 @@ vi.mock("@tanstack/react-router", () => ({
         </a>
     ),
     useRouterState: vi.fn(() => [{ pathname: "/" }]),
+    useNavigate: () => vi.fn().mockResolvedValue(undefined),
 }));
 
 const makeProject = (id: string, name: string) => ({

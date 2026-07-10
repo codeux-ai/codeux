@@ -247,6 +247,18 @@ export interface ManageMemoryArgs {
   approval?: ManagementApproval;
 }
 
+/** Dedicated Project manager lane for writing canonical long-term knowledge. */
+export interface AddLongTermMemoryArgs {
+  projectId: string;
+  memory: string;
+  category?: string;
+  confidence?: number;
+  durability?: number;
+  tags?: string[];
+  appliesToPaths?: string[];
+  sourceMemoryId?: string;
+}
+
 export interface ManageSkillsArgs {
   action:
     | "authoring_prompt"

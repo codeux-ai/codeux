@@ -36,6 +36,8 @@ The default managed path never runs `docker build`. Login, coding, QA, previews,
 
 Selecting a provider during onboarding starts preparation immediately, before Login. Login and invocations join the same preparation job, so a ready provider performs no download.
 
+Managed npm installs keep lifecycle scripts blocked by default. Code UX explicitly allows them only for the fixed `@anthropic-ai/claude-code` and `opencode-ai` provider packages, whose postinstall steps are required to materialize their runtime executable. The package installed into the volume is still pinned to the stable version returned by npm. Preparation failures identify that package and version, remove the incomplete volume, and remain retryable.
+
 Runtime, browser, and tool states are available from `GET /api/runtime-assets/status`. Retry browser or provider preparation with:
 
 ```http

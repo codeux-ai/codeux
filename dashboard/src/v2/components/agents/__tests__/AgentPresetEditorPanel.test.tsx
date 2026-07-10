@@ -359,7 +359,7 @@ describe("AgentPresetEditorPanel", () => {
       />
     );
 
-    const codeUxChip = screen.getByRole("button", { name: /Code UXDisabled/i });
+    const codeUxChip = screen.getByRole("button", { name: /Code UX\s+Disabled/i });
     expect(codeUxChip).toHaveAttribute("aria-pressed", "false");
 
     fireEvent.click(codeUxChip);
@@ -379,7 +379,7 @@ describe("AgentPresetEditorPanel", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Code UXDisabled/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Code UX\s+Disabled/i }));
 
     expect(await screen.findByText("Review Code UX MCP and scheduler access before enabling it for the dashboard reply agent.")).toBeInTheDocument();
     expect(await screen.findByTestId("mcp-manage-panel")).toHaveTextContent("Dashboard reply Code UX scheduler access");

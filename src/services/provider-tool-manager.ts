@@ -28,6 +28,7 @@ interface NpmProviderSpec {
   kind: "npm";
   packageName: string;
   binary: string;
+  allowInstallScripts?: true;
 }
 
 interface NativeProviderSpec {
@@ -60,9 +61,19 @@ interface ProviderToolCommandRunner {
 const PROVIDER_SPECS: Record<ProviderToolId, ProviderToolSpec> = {
   gemini: { kind: "npm", packageName: "@google/gemini-cli", binary: "gemini" },
   codex: { kind: "npm", packageName: "@openai/codex", binary: "codex" },
-  "claude-code": { kind: "npm", packageName: "@anthropic-ai/claude-code", binary: "claude" },
+  "claude-code": {
+    kind: "npm",
+    packageName: "@anthropic-ai/claude-code",
+    binary: "claude",
+    allowInstallScripts: true,
+  },
   "qwen-code": { kind: "npm", packageName: "@qwen-code/qwen-code", binary: "qwen" },
-  opencode: { kind: "npm", packageName: "opencode-ai", binary: "opencode" },
+  opencode: {
+    kind: "npm",
+    packageName: "opencode-ai",
+    binary: "opencode",
+    allowInstallScripts: true,
+  },
   antigravity: { kind: "antigravity", binary: "agy" },
 };
 
@@ -246,7 +257,7 @@ export class ProviderToolManager {
       const install = await this.installProvider(provider, release, image, volumeName);
       if (!install.ok) {
         await this.commands.run("docker", ["volume", "rm", "-f", volumeName]);
-        throw new Error((install.stderr || install.stdout || `Unable to install ${provider}.`).trim().slice(0, 700));
+        throw new Error(this.describeInstallFailure(provider, release, install));
       }
 
       this.updateStatus(provider, { state: "verifying", stepText: `Verifying ${provider} ${release.version}.`, progressPercent: 90 });
@@ -346,8 +357,11 @@ export class ProviderToolManager {
     volumeName: string,
   ): Promise<CommandResult> {
     const spec = PROVIDER_SPECS[provider];
+    const allowScripts = spec.kind === "npm" && spec.allowInstallScripts
+      ? ` --allow-scripts=${this.shellQuote(spec.packageName)}`
+      : "";
     const installCommand = spec.kind === "npm"
-      ? `npm install --global --prefix ${PROVIDER_TOOL_MOUNT} ${this.shellQuote(`${spec.packageName}@${release.version}`)} --no-audit --no-fund`
+      ? `npm install --global --prefix ${PROVIDER_TOOL_MOUNT}${allowScripts} ${this.shellQuote(`${spec.packageName}@${release.version}`)} --no-audit --no-fund`
       : this.buildAntigravityInstallCommand(release);
     const marker = JSON.stringify({
       schemaVersion: 1,
@@ -378,6 +392,19 @@ export class ProviderToolManager {
       const safe = line.trim().replace(/https?:\/\/\S+/g, "[provider source]").slice(0, 300);
       if (safe) this.updateStatus(provider, { state: "installing", stepText: safe, progressPercent: 60 });
     });
+  }
+
+  private describeInstallFailure(
+    provider: ProviderToolId,
+    release: ProviderRelease,
+    result: CommandResult,
+  ): string {
+    const spec = PROVIDER_SPECS[provider];
+    const source = spec.kind === "npm"
+      ? `${spec.packageName}@${release.version}`
+      : `Antigravity ${release.version}`;
+    const detail = (result.stderr || result.stdout || "The installer exited without diagnostic output.").trim();
+    return `Unable to install ${provider} from ${source}. ${detail}`.slice(0, 700);
   }
 
   private buildAntigravityInstallCommand(release: ProviderRelease): string {

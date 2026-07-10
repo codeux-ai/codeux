@@ -1,6 +1,7 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
 import {
   AlertTriangle,
+  Brain,
   ArrowDownRight,
   ArrowUpRight,
   Check,
@@ -36,7 +37,7 @@ import {
  *  color only marks identity; progress bars are thin, rounded, single-hue.
  * ════════════════════════════════════════════════════════════════════════ */
 
-export type StageWidgetType = "status" | "tasks" | "sprint" | "metrics" | "actions";
+export type StageWidgetType = "status" | "tasks" | "sprint" | "metrics" | "memory" | "actions";
 
 export interface StageWidget {
   type: StageWidgetType;
@@ -48,7 +49,7 @@ export type BubbleSegment =
   | { kind: "widget"; widget: StageWidget };
 
 const WIDGET_FENCE = /```codeux:([a-z]+)[ \t]*\n([\s\S]*?)```/g;
-const WIDGET_TYPES: StageWidgetType[] = ["status", "tasks", "sprint", "metrics", "actions"];
+const WIDGET_TYPES: StageWidgetType[] = ["status", "tasks", "sprint", "metrics", "memory", "actions"];
 
 /** Split reply markdown into ordinary markdown and codeux widget segments. */
 export function parseBubbleSegments(markdown: string): BubbleSegment[] {
@@ -98,7 +99,7 @@ const STATE_META: Record<StateId, { icon: typeof Check; label: string; text: str
 
 const toState = (value: unknown): StateId => {
   const v = String(value ?? "").toLowerCase();
-  if (v === "ok" || v === "success" || v === "done" || v === "passed" || v === "good") return "ok";
+  if (v === "ok" || v === "success" || v === "done" || v === "passed" || v === "good" || v === "stored" || v === "remembered") return "ok";
   if (v === "running" || v === "active" || v === "executing" || v === "in_progress") return "running";
   if (v === "warn" || v === "warning" || v === "blocked" || v === "degraded") return "warn";
   if (v === "error" || v === "failed" || v === "critical") return "error";
@@ -280,6 +281,24 @@ const MetricsWidget: FunctionComponent<{ data: Record<string, unknown> }> = ({ d
   );
 };
 
+/* ── codeux:memory — durable-learning confirmation ── */
+const MemoryWidget: FunctionComponent<{ data: Record<string, unknown> }> = ({ data }) => (
+  <WidgetShell>
+    <WidgetTitle
+      icon={Brain}
+      title={str(data.title) || "Long-term memory"}
+      trailing={<StateBadge state={toState(data.status || "ok")} label="Remembered" />}
+    />
+    <blockquote className="rounded-xl border border-signal-500/15 bg-signal-500/[0.05] px-3.5 py-3 text-[13.5px] leading-6 text-slate-800 dark:text-slate-100">
+      {str(data.memory) || "Durable project knowledge stored."}
+    </blockquote>
+    <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-400 dark:text-slate-500">
+      {str(data.category) && <span>{str(data.category)}</span>}
+      {str(data.claimId) && <span className="font-mono normal-case tracking-normal">Claim {str(data.claimId).slice(0, 8)}</span>}
+    </div>
+  </WidgetShell>
+);
+
 /* ── codeux:actions — suggested next steps that dispatch immediately ── */
 const ActionsWidget: FunctionComponent<{ data: Record<string, unknown>; onAction?: (prompt: string) => void }> = ({ data, onAction }) => {
   const items = arr(data.items);
@@ -310,6 +329,8 @@ export const StageWidgetRenderer: FunctionComponent<{ widget: StageWidget; onAct
       return <SprintWidget data={widget.data} />;
     case "metrics":
       return <MetricsWidget data={widget.data} />;
+    case "memory":
+      return <MemoryWidget data={widget.data} />;
     case "actions":
       return <ActionsWidget data={widget.data} onAction={onAction} />;
     default:

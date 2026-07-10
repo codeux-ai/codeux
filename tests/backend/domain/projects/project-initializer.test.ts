@@ -30,6 +30,49 @@ describe("initializeProject validation", () => {
     ).resolves.toBeTruthy();
   });
 
+  it("pins imported projects to the built-in Project manager dashboard reply fallback", async () => {
+    const createProject = vi.fn().mockResolvedValue({});
+    await initializeProject(
+      { sourceRef: path.resolve(process.cwd(), "imported-repo"), name: "imported", sourceType: "local" },
+      { createProject, getGithubToken: vi.fn() }
+    );
+
+    expect(createProject).toHaveBeenCalledWith(expect.objectContaining({
+      settingsOverrides: expect.objectContaining({
+        agents: expect.objectContaining({
+          routing: expect.objectContaining({
+            dashboardReply: { agentPresetId: null },
+          }),
+        }),
+      }),
+    }));
+  });
+
+  it("preserves an explicit create-time dashboard reply route", async () => {
+    const createProject = vi.fn().mockResolvedValue({});
+    await initializeProject(
+      {
+        sourceRef: path.resolve(process.cwd(), "imported-repo"),
+        name: "imported",
+        sourceType: "local",
+        settingsOverrides: {
+          agents: { routing: { dashboardReply: { agentPresetId: "custom-manager" } } },
+        },
+      },
+      { createProject, getGithubToken: vi.fn() }
+    );
+
+    expect(createProject).toHaveBeenCalledWith(expect.objectContaining({
+      settingsOverrides: expect.objectContaining({
+        agents: expect.objectContaining({
+          routing: expect.objectContaining({
+            dashboardReply: { agentPresetId: "custom-manager" },
+          }),
+        }),
+      }),
+    }));
+  });
+
   it("resolves relative new local repo paths from the home directory", async () => {
     const createProject = vi.fn().mockResolvedValue({});
     await initializeProject(

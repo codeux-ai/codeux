@@ -24,6 +24,7 @@ import type {
 import {
   createInitialOnboardingFlowState,
   defaultOnboardingReadiness,
+  easyOnboardingSteps,
   onboardingFlowReducer,
 } from "../../../dashboard/src/v2/components/onboarding/use-onboarding-step-flow.js";
 
@@ -239,6 +240,16 @@ const createTourTarget = (targetId: string): HTMLElement => {
 };
 
 describe("onboarding flow reducer", () => {
+  it("keeps the introduction in the short Easy path", () => {
+    expect(easyOnboardingSteps.map((step) => step.id)).toEqual([
+      "mode",
+      "installation",
+      "introduction",
+      "provider-setup",
+      "git",
+    ]);
+  });
+
   it("tracks provider selection and step navigation", () => {
     let state = createInitialOnboardingFlowState();
 
@@ -704,6 +715,12 @@ describe("OnboardingExperience integration", () => {
 
   it("runs the short Easy onboarding flow, saves the selected mode, and lands on Chat", async () => {
     const systemSettings = createSystemSettings();
+    systemSettings.integrations.providers.codex = {
+      ...systemSettings.integrations.providers.codex!,
+      authType: "localAuth",
+      mountAuth: true,
+      authPath: "~/.codex",
+    };
     vi.mocked(settingsApi.fetchSystemSettings).mockResolvedValue(systemSettings);
     vi.mocked(settingsApi.saveSystemSettings).mockImplementation(async (nextSettings) => nextSettings);
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
@@ -735,20 +752,29 @@ describe("OnboardingExperience integration", () => {
     expect(await screen.findByText("Runtime environment is ready.")).not.toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Next" }));
 
+    expect(await screen.findByText("Welcome to Code UX.")).not.toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+
     expect(await screen.findByText("Choose one provider login")).not.toBeNull();
-    for (const providerName of ["Gemini", "Antigravity", "Codex", "Claude Code", "Qwen Code", "OpenCode"]) {
+    for (const providerName of ["Antigravity", "Codex", "Claude Code", "Qwen Code", "OpenCode"]) {
       expect(screen.getByText(providerName)).not.toBeNull();
     }
-    expect(screen.getAllByRole("button", { name: /Connect and log in to/i })).toHaveLength(6);
+    expect(screen.queryByText("Gemini")).toBeNull();
+    expect(screen.getAllByRole("button", { name: /Connect and log in to/i })).toHaveLength(5);
+    const authModeSelects = screen.getAllByRole("button", { name: /authentication mode/i });
+    expect(authModeSelects).toHaveLength(5);
+    for (const authModeSelect of authModeSelects) {
+      expect(authModeSelect.textContent).toContain("Dashboard Login");
+    }
     expect(screen.queryByText("Add instance")).toBeNull();
     expect(screen.queryByText("API key")).toBeNull();
     expect(screen.queryByText(/~\/\.code-ux\/credentials/)).toBeNull();
     expect(screen.queryByText("Connect this provider through Code UX and save the login under the dashboard credentials directory.")).toBeNull();
     expect(screen.queryByText("Local auth path")).toBeNull();
-    expect(screen.getAllByText("Deprecated").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Deprecated")).toBeNull();
 
-    await userEvent.click(screen.getByRole("radio", { name: "Select Gemini" }));
-    expect(screen.getByRole("radio", { name: "Selected Gemini" }).getAttribute("aria-checked")).toBe("true");
+    await userEvent.click(screen.getByRole("radio", { name: "Select Claude Code" }));
+    expect(screen.getByRole("radio", { name: "Selected Claude Code" }).getAttribute("aria-checked")).toBe("true");
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/api/provider-tools/"), expect.objectContaining({ method: "POST" }));
     await userEvent.click(screen.getByRole("radio", { name: "Select Codex" }));
 

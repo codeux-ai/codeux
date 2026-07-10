@@ -126,7 +126,7 @@ policy. This prevents an unknown worker agent from inheriting broad project-mana
 Agent-scoped provider runs use the same default-deny posture for built-in Code UX tools. Default
 custom MCP links such as `playwright` are stored separately and do not imply `code_ux` access.
 Dashboard chat replies are the only route-local default exception: assigned reply agents receive
-the full built-in Code UX MCP surface, `scheduler_code_ux`, and the default Playwright MCP server by default,
+the full built-in Code UX MCP surface, `scheduler_code_ux`, `add_long_term_memory`, and the default Playwright MCP server by default,
 even when their saved preset access disables Code UX or has no MCP policy. This default is keyed to the dashboard
 reply route assignment, not the generic `project_manager` runtime role.
 

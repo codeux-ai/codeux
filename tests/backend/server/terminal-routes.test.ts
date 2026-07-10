@@ -304,6 +304,30 @@ describe("Terminal Routes", () => {
     expect(containerCmd).toContain("/opt/code-ux/provider-tool/bin");
   });
 
+  it("starts Qwen login from a bounded empty working directory with a dashboard-sized terminal", async () => {
+    const response = await request(app)
+      .post("/api/terminal/start")
+      .send({ providerConfigId: "qwen" });
+
+    expect(response.status).toBe(200);
+
+    const runArgs = getDockerRunArgsForProvider("qwen-code");
+    const workdirIndex = runArgs.indexOf("--workdir");
+    expect(workdirIndex).toBeGreaterThan(-1);
+    expect(runArgs[workdirIndex + 1]).toBe("/tmp");
+    expect(runArgs).toEqual(expect.arrayContaining([
+      "TERM=xterm-256color",
+      "COLORTERM=truecolor",
+    ]));
+
+    const containerCmd = runArgs.at(-1) ?? "";
+    expect(containerCmd).toContain("mkdir -p /tmp/code-ux-login");
+    expect(containerCmd).toContain("cd /tmp/code-ux-login");
+    expect(containerCmd).toContain("stty cols 100 rows 30");
+    expect(containerCmd).not.toContain("stty cols 80 rows 100");
+    expect(containerCmd.indexOf("cd /tmp/code-ux-login")).toBeLessThan(containerCmd.lastIndexOf("qwen"));
+  });
+
   it.each([
     ["codex", "codex"],
     ["claude-code", "claude"],

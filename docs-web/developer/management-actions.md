@@ -163,6 +163,8 @@ Manages agent presets per project.
 
 ## `memory`
 
+For direct Project Manager persistence, `add_long_term_memory` is a separate no-action tool requiring `projectId` and a non-blank `memory`. It accepts optional durable `category`, `confidence`, `durability`, `tags`, `appliesToPaths`, and `sourceMemoryId`; success creates the canonical claim and project-memory mirror and returns rich memory-widget data. The `manage_memory` matrix below remains the broader read, maintenance, evidence, and lifecycle surface.
+
 | Action | Destructive | Required payload | Description |
 | --- | --- | --- | --- |
 | `search` | – | `projectId`, `query`, optional `scope`, `sprintId`, `agentPresetId`, `limit`, `minSimilarity` | Vector search. |

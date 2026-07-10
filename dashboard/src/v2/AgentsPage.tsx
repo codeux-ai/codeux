@@ -508,7 +508,7 @@ export const AgentsPage: FunctionComponent = () => {
 
     addManualRoute(routing?.ciFix.agentPresetId, "CI Fix", "Worker");
     addManualRoute(routing?.mergeConflict.agentPresetId, "Merge Conflict", "Worker");
-    addManualRoute(routing?.dashboardReply.agentPresetId, "Dashboard Reply", "Worker");
+    addManualRoute(routing?.dashboardReply.agentPresetId, "Dashboard Reply", "Project manager");
     addManualRoute(routing?.clarificationReply.agentPresetId, "Clarification Reply", "Project manager");
 
     if (qa?.enabled) {

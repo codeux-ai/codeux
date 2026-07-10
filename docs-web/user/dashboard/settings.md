@@ -102,6 +102,12 @@ Each CLI provider instance in **AI providers** includes a **Provider Config** ch
 
 Jules and the internal test provider do not use provider config files. Switching Provider Config choices does not clear API keys, auth paths, custom endpoints, or dashboard-login credentials.
 
+### Dashboard Login terminal
+
+Dashboard Login opens the provider's real interactive CLI in the managed container. Each CLI starts as the normal non-root runtime user from a dedicated empty `/tmp/code-ux-login` directory instead of `/`, preventing discovery-oriented tools such as Qwen Code from warning about or scanning the container root. Credential storage and the read-only provider-tool volume are unchanged.
+
+The terminal interprets ANSI cursor and erase controls while removing non-display OSC/DCS strings such as Qwen window-title and terminal-color queries. Full-screen redraws stay within a bounded 100-column by 30-row layout, meaningful prompts and authentication links remain selectable, and output uses high-contrast white text. Click the console to focus it. Right-click exposes Paste without transferring focus away from the session, while Ctrl+V and Command+V continue to work normally. Arrow keys, Tab, Escape, Backspace, Ctrl+C, and Ctrl+D are sent directly to the provider CLI. Clipboard success or denial appears below the console instead of failing silently.
+
 ## Connections panel
 
 A separate **Connections** panel lists active MCP client connections to this project — display name, role, transport, capabilities, last activity. From here you can rename connections or set the *preferred worker* for the project.

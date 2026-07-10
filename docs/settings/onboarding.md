@@ -15,6 +15,8 @@ Use it when you are configuring a new project, auditing inherited settings, or d
 
 The action button launches onboarding so you can revisit provider, project, and setup prompts.
 
+Easy mode follows the short Setup mode, Installation, Introduction, Provider, and GitHub sequence. The Introduction presents the container-first runtime and credential boundary before provider setup. Easy provider selection offers Antigravity, Codex, Claude Code, Qwen Code, and OpenCode; deprecated Gemini CLI remains available in Standard, Expert, and Settings but is not shown in Easy. Every Easy provider card initially selects **Dashboard Login**. Operators can still explicitly switch the selected provider to **Local Copy** before finishing.
+
 | Control Surface | Runtime Effect | Review Before Saving |
 | --- | --- | --- |
 | Settings card fields | Updates the active Settings scope after you save the page. | Confirm whether you are editing System or Project scope. |

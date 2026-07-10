@@ -2,7 +2,7 @@ import type { FunctionComponent, RefObject } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { Bell, CalendarClock, Moon, Sun, ChevronDown, FolderOpen, ArrowRight, Code2, Palette, Plus, Target } from "lucide-preact";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { StatusDot } from "./ui/StatusDot.js";
 import type { DesignGuidanceSettings } from "../../types.js";
 
@@ -274,6 +274,7 @@ const ScheduledAgentIndicator: FunctionComponent<{ entries: AgentSchedulerSummar
 
 export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile, hideLogo, isMobileMenuOpen }) => {
     const navRef = useRef<HTMLElement>(null);
+    const navigate = useNavigate();
 
     const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -289,6 +290,19 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     const routeMatches = useRouterState({ select: (state) => state.matches });
     const currentPath = routeMatches.length > 0 ? routeMatches[routeMatches.length - 1]?.pathname || "/" : "/";
     const previousPathRef = useRef(currentPath);
+    const replaceWorkspaceScope = useCallback(async (nextProjectId: string, nextSprintId: string | null): Promise<void> => {
+        if (currentPath !== "/tasks" && currentPath !== "/live") {
+            return;
+        }
+        await navigate({
+            to: currentPath,
+            search: {
+                projectId: nextProjectId,
+                ...(nextSprintId ? { sprintId: nextSprintId } : {}),
+            } as any,
+            replace: true,
+        });
+    }, [currentPath, navigate]);
 
     // Notification Panel State
     const [notificationInteractionState, setNotificationInteractionState] = useState<'closed' | 'hover' | 'open'>('closed');
@@ -594,6 +608,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
             return;
         }
         await refetchSprints();
+        await replaceWorkspaceScope(projectId, created.id);
         await selectSprint(created.id);
         setNavAnnouncement(`Sprint ${created.name} created and selected.`);
     };
@@ -909,6 +924,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                         setProjectSwitchBusy(true);
                                         setNavAnnouncement(`Switching project to ${source.name}...`);
                                         try {
+                                            await replaceWorkspaceScope(source.id, null);
                                             await selectProject(source.id);
                                             setNavAnnouncement(`Project switched to ${source.name}`);
                                             setDropdownOpen(false);
@@ -1017,6 +1033,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                             setSprintSwitchBusy(true);
                                             setNavAnnouncement(`Switching sprint to ${sprint.name}...`);
                                             try {
+                                                await replaceWorkspaceScope(selectedProject.id, sprint.id);
                                                 await selectSprint(sprint.id);
                                                 setNavAnnouncement(`Sprint switched to ${sprint.name}`);
                                                 setSprintDropdownOpen(false);

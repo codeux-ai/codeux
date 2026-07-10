@@ -1,4 +1,4 @@
-import { useRouterState } from "@tanstack/react-router";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { RefObject } from "preact";
 import { useDashboardRuntimeData } from "../../hooks/use-dashboard-runtime-data.js";
@@ -75,12 +75,6 @@ export interface TaskBoardController {
   handleAddProject: (project: AddProjectModalSubmission) => Promise<void>;
 }
 
-function replaceTaskBoardSearch(params: URLSearchParams): void {
-  const nextSearch = params.toString();
-  const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
-  window.history.replaceState(window.history.state, "", nextUrl);
-}
-
 function buildOptimisticTask(args: {
   draft: TaskDraft;
   recordId: string;
@@ -126,7 +120,15 @@ function useStableArrayValue<T>(value: T[]): T[] {
 
 export function useTaskBoardController(): TaskBoardController {
   const { projects, selectedProject, selectProject, createProject } = useProjectData();
+  const navigate = useNavigate();
   const locationSearch = useRouterState({ select: (state) => state.location.searchStr });
+  const replaceTaskBoardSearch = useCallback((params: URLSearchParams): void => {
+    void navigate({
+      to: "/tasks",
+      search: Object.fromEntries(params.entries()) as any,
+      replace: true,
+    });
+  }, [navigate]);
   const routeProjectId = useMemo(() => {
     const params = new URLSearchParams(locationSearch);
     return params.get("projectId")?.trim() || null;
@@ -183,7 +185,7 @@ export function useTaskBoardController(): TaskBoardController {
     params.delete("sprintId");
     params.delete("sprint");
     replaceTaskBoardSearch(params);
-  }, [initialSprint, locationSearch, routeProjectReady, routeSprintId, sprintsLoading]);
+  }, [initialSprint, locationSearch, replaceTaskBoardSearch, routeProjectReady, routeSprintId, sprintsLoading]);
 
   useEffect(() => {
     if (!routeProjectReady || !routeSprintId || routeSprintId === selectedSprintId) {
@@ -260,7 +262,7 @@ export function useTaskBoardController(): TaskBoardController {
     setResolvedTaskId(targetTask.recordId);
     params.delete("taskId");
     replaceTaskBoardSearch(params);
-  }, [locationSearch, loading, tasks]);
+  }, [locationSearch, loading, replaceTaskBoardSearch, tasks]);
 
   const [showSkeletons, setShowSkeletons] = useState(false);
   useEffect(() => {
@@ -361,7 +363,7 @@ export function useTaskBoardController(): TaskBoardController {
     params.delete("sprint");
     replaceTaskBoardSearch(params);
     void selectSprint(nextSprintId);
-  }, [currentProjectSprints, locationSearch, selectSprint]);
+  }, [currentProjectSprints, locationSearch, replaceTaskBoardSearch, selectSprint]);
 
   const scrollComposerIntoView = useCallback(() => {
     setTimeout(() => {

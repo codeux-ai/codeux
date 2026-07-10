@@ -121,8 +121,9 @@ describe("GitHub workflow health", () => {
       ["dashboard-tests", "06 Test / dashboard suite"],
       ["package-smoke", "07 Package / npm install smoke"],
       ["ci-dag", "08 Orchestration / ${{ matrix.name }} DAG"],
-      ["e2e", "09 E2E /"],
-      ["release-candidate", "10 Release Candidate / desktop package"],
+      ["docs-page-smoke", "09 Docs / five-page smoke"],
+      ["e2e", "10 E2E /"],
+      ["release-candidate", "11 Release Candidate / desktop package"],
     ] as const) {
       expect(getJobBlock(ci, jobName)).toContain(`name: ${displayName}`);
     }
@@ -193,12 +194,21 @@ describe("GitHub workflow health", () => {
     expect(dagJob).toContain(".cache/e2e-mockup-sprint-pentest/");
   });
 
-  it("runs release-candidate packaging beside E2E while keeping each matrix bounded", async () => {
+  it("runs the focused Docs gate before the bounded E2E and release-candidate matrices", async () => {
     const ci = await readRepoFile(WORKFLOWS.ci);
+    const docsPageSmoke = getJobBlock(ci, "docs-page-smoke");
     const e2e = getJobBlock(ci, "e2e");
     const releaseCandidate = getJobBlock(ci, "release-candidate");
 
-    expect(e2e).toContain("name: 09 E2E / ${{ matrix.os.label }} full (${{ matrix.project }})");
+    expect(docsPageSmoke).toContain("name: 09 Docs / five-page smoke");
+    expect(docsPageSmoke).toContain("needs: [static, build, security-audit]");
+    expect(docsPageSmoke).toContain("runs-on: ubuntu-latest");
+    expect(docsPageSmoke).toContain("name: codeux-build-linux");
+    expect(docsPageSmoke).toContain("pnpm exec playwright test tests/e2e/navigation/docs-page.spec.ts --project=navigation");
+    expect(docsPageSmoke).toContain("name: docs-page-smoke");
+    expect(docsPageSmoke).not.toContain("if: ${{ github.event_name");
+
+    expect(e2e).toContain("name: 10 E2E / ${{ matrix.os.label }} full (${{ matrix.project }})");
     expect(e2e).toContain("needs: [static, build, security-audit]");
     expect(e2e).toContain("github.base_ref == 'main'");
     expect(e2e).toContain("runs-on: ${{ matrix.os.runner }}");
@@ -222,6 +232,7 @@ describe("GitHub workflow health", () => {
     expect(ci).not.toContain("electron-dag:");
 
     expect(releaseCandidate).toContain("needs: package-smoke");
+    expect(releaseCandidate).toContain("name: 11 Release Candidate / desktop package (${{ matrix.name }})");
     expect(releaseCandidate).toContain("github.base_ref == 'main'");
     expect(releaseCandidate).not.toContain("ci-dag");
     expect(releaseCandidate).not.toContain("e2e");
