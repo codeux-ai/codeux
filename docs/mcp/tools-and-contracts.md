@@ -599,6 +599,8 @@ Project isolation is enforced below the MCP handler by `SkillService` and `Skill
 
 `search_skills` is the retrieval-focused skill surface. It can be exposed to agents independently from `manage_skills` through per-agent MCP tool filtering. This lets an agent retrieve durable skill guidance without granting it storage creation, mutation, attachment management, export, delete, or reset capabilities.
 
+When the MCP connection is authenticated as an agent, Code UX derives retrieval scope from that identity. The requested project must own the authenticated agent, caller-supplied `agentPresetId` must match it, and search is limited to the agent's enabled storage attachments. A direct `storageId` is accepted only when it is in that attachment set. Context-free project-manager connections retain the existing project-wide and caller-selected search behavior.
+
 Persistent skill runtime behavior is documented with agent preset storage ownership in [Agent Preset Foundation](../architecture/agent-preset-foundation.md#data-model) and the Settings/Agents UI contract in [Agents Design System](../dashboard/design-system-agents.md#persistent-skills). The integration regression in `tests/backend/integration/persistent-skills-runtime.test.ts` covers the MCP retrieval contract together with repository attachments and provider runtime injection.
 
 Schema:
@@ -616,8 +618,8 @@ Schema:
 
 Fields:
 - `projectId` and non-blank `query` are required.
-- `agentPresetId` is optional. When supplied without `storageId`, only storages attached to that project-owned agent are searched.
-- `storageId` is optional. When supplied, search is limited to that project-owned storage.
+- `agentPresetId` is optional. For an authenticated agent connection it may be omitted and, when supplied, must match the authenticated identity. For an unscoped project-manager connection, supplying it without `storageId` searches that project-owned agent's attachments.
+- `storageId` is optional. Authenticated agents may select only one of their enabled project-owned attachments; unscoped project-manager connections may select any project-owned storage.
 - `limit` defaults to 10 and is capped by the handler.
 - `minSimilarity` is optional and must be between 0 and 1 when supplied.
 
