@@ -104,6 +104,14 @@ describe("parseCodexRolloutJsonl", () => {
       sessionMeta("sess-1"),
       userMessage("2026-06-01T10:00:00.000Z", "hello"),
       firstRunTokenCount,
+      JSON.stringify({
+        type: "response_item",
+        payload: { type: "message", role: "assistant", content: [{ type: "output_text", text: "unscoped history" }] },
+      }),
+      JSON.stringify({
+        type: "event_msg",
+        payload: { type: "token_count", info: { total_token_usage: usage(900, 400) } },
+      }),
       userMessage(followUpStart, "follow up please"),
       tokenCount("2026-06-01T10:05:10.000Z", usage(100 + 20, 50 + 10)),
     ].join("\n");
@@ -293,6 +301,80 @@ describe("parseCodexRolloutJsonl", () => {
     ]);
   });
 
+  it("replaces repeated rollout items in place and preserves per-turn token metadata", () => {
+    const jsonl = [
+      responseItem("2026-06-01T10:00:00.000Z", {
+        id: "msg_1",
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "Draft answer" }],
+      }),
+      responseItem("2026-06-01T10:00:01.000Z", {
+        id: "call_1",
+        type: "function_call",
+        name: "read_file",
+        call_id: "call_1",
+        arguments: "{\"path\":\"src/index.ts\"}",
+        status: "in_progress",
+      }),
+      responseItem("2026-06-01T10:00:02.000Z", {
+        id: "msg_1",
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "Final answer" }],
+        usage: {
+          input_tokens: 14,
+          input_token_details: { cached_tokens: 4 },
+          output_tokens: 6,
+          output_token_details: { reasoning_tokens: 2 },
+        },
+      }),
+    ].join("\n");
+
+    const result = parseCodexRolloutJsonl(jsonl);
+
+    expect(result.conversation).toHaveLength(2);
+    expect(result.conversation[0]).toEqual({
+      kind: "assistant",
+      text: "Final answer",
+      tokens: { input: 10, cached: 4, output: 6, reasoning: 2, total: 20 },
+      timestampMs: Date.parse("2026-06-01T10:00:02.000Z"),
+    });
+    expect(result.conversation[1]).toMatchObject({
+      kind: "tool_call",
+      toolName: "read_file",
+      toolStatus: "in_progress",
+    });
+  });
+
+  it("surfaces readable reasoning summaries but skips opaque reasoning payloads", () => {
+    const result = parseCodexRolloutJsonl([
+      responseItem("2026-06-01T10:00:00.000Z", {
+        id: "reasoning_opaque",
+        type: "reasoning",
+        reasoning: "opaque-provider-payload",
+        encrypted_content: "encrypted-provider-payload",
+        summary: [],
+      }),
+      responseItem("2026-06-01T10:00:01.000Z", {
+        id: "reasoning_visible",
+        type: "reasoning",
+        encrypted_content: "encrypted-provider-payload",
+        summary: [
+          { type: "summary_text", text: "Inspect the parser." },
+          { type: "summary_text", text: "Then run the focused test." },
+        ],
+      }),
+    ].join("\n"));
+
+    expect(result.conversation).toEqual([{
+      kind: "reasoning",
+      text: "Inspect the parser.\n\nThen run the focused test.",
+      timestampMs: Date.parse("2026-06-01T10:00:01.000Z"),
+    }]);
+    expect(JSON.stringify(result.conversation)).not.toContain("provider-payload");
+  });
+
   it("uses in-window turn.completed usage when a resumed rollout only has an older cumulative token snapshot", () => {
     const followUpStart = "2026-06-01T10:05:00.000Z";
     const jsonl = [
@@ -477,6 +559,53 @@ describe("parseCodexExecStdout", () => {
     expect(result.conversation[2]).toMatchObject({ kind: "tool_result", toolName: "shell", toolCallId: "cmd_1", toolOutput: "a.ts" });
     expect(result.conversation[4]).toMatchObject({ kind: "tool_result", toolName: "read_file", toolCallId: "call_read", toolOutput: "contents" });
     expect(result.conversation.map((turn) => turn.text).join("\n")).not.toContain("duplicate inspecting");
+  });
+
+  it("keeps updated live items at their first-seen position and emits only their latest state", () => {
+    const stdout = [
+      JSON.stringify({
+        type: "item.started",
+        timestamp: "2026-06-01T10:00:00.000Z",
+        item: { id: "cmd_live", type: "command_execution", command: "pnpm test", status: "in_progress" },
+      }),
+      JSON.stringify({
+        type: "item.completed",
+        timestamp: "2026-06-01T10:00:01.000Z",
+        item: { id: "msg_after", type: "agent_message", text: "Waiting for the test." },
+      }),
+      JSON.stringify({
+        type: "item.updated",
+        timestamp: "2026-06-01T10:00:02.000Z",
+        item: {
+          id: "cmd_live",
+          type: "command_execution",
+          command: "pnpm test",
+          aggregated_output: "still running",
+          status: "in_progress",
+          usage: { input_tokens: 5, output_tokens: 2 },
+        },
+      }),
+    ].join("\n");
+
+    const result = parseCodexExecStdout(stdout);
+
+    expect(result.conversation.map((turn) => turn.kind)).toEqual([
+      "tool_call",
+      "tool_result",
+      "assistant",
+    ]);
+    expect(result.conversation[0]).toMatchObject({
+      toolCallId: "cmd_live",
+      toolStatus: "in_progress",
+      timestampMs: Date.parse("2026-06-01T10:00:02.000Z"),
+    });
+    expect(result.conversation[1]).toMatchObject({
+      toolCallId: "cmd_live",
+      toolOutput: "still running",
+      toolStatus: "in_progress",
+      tokens: { input: 5, cached: 0, output: 2, reasoning: 0, total: 7 },
+    });
+    expect(result.conversation[2]).toMatchObject({ kind: "assistant", text: "Waiting for the test." });
   });
 
   it("falls back to exec event_msg transcript rows when no item stream is available", () => {

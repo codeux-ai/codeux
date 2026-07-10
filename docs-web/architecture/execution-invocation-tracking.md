@@ -28,6 +28,8 @@ The normalized turn kinds are:
 
 Readable reasoning must be evidence-based. Parsers emit `reasoning` only from explicit provider reasoning/thinking/summary fields. Plain assistant output, encrypted reasoning blobs, and token-only reasoning counts remain assistant text or token telemetry; Code UX does not fabricate reasoning transcript turns.
 
+Codex item lifecycle records are keyed by their provider item or call id. Repeated `item.started`, `item.updated`, `item.completed`, and rollout `response_item` records replace the earlier state at its first-seen position, so live transcripts remain ordered without duplicating tools or messages. Item-level usage is normalized onto the resulting turn when Codex reports it; session-level cumulative snapshots remain the source for invocation totals.
+
 ## Persistence behavior
 
 `ProviderExecutionService` rewrites invocation messages from structured `ProviderUsageTelemetry.conversation` turns while the provider is running. It clears and rewrites only when structured turns exist, using the JSON representation of mapped persisted messages as the duplicate-skip signature. That means normalized metadata such as `toolName`, `toolCallId`, `toolArguments`, `toolOutput`, `toolStatus`, per-turn `tokens`, and `timestampMs` must be preserved by parser changes.
