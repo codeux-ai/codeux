@@ -6,6 +6,10 @@ import type {
   UpdateAgentPresetInput,
 } from "../types.js";
 import type { PushAgentPresetsToMarkdownOptions } from "../../../../src/contracts/agent-preset-types.js";
+import type {
+  SkillStorageContentsResponse,
+  UpdateSkillStorageInput,
+} from "../../../../src/contracts/skill-types.js";
 import { fetchJson } from "../../lib/api/fetch-json.js";
 
 export const fetchAgentPresets = async (projectId: string): Promise<AgentPreset[]> => {
@@ -136,6 +140,30 @@ export const createSkillStorage = async (
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
+};
+
+export const updateSkillStorage = async (
+  projectId: string,
+  storageId: string,
+  input: UpdateSkillStorageInput,
+): Promise<SkillStorageRecord> => {
+  return fetchJson<SkillStorageRecord>(
+    `/api/projects/${encodeURIComponent(projectId)}/skill-storages/${encodeURIComponent(storageId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+};
+
+export const fetchSkillStorageContents = async (
+  projectId: string,
+  storageId: string,
+): Promise<SkillStorageContentsResponse> => {
+  return fetchJson<SkillStorageContentsResponse>(
+    `/api/projects/${encodeURIComponent(projectId)}/skill-storages/${encodeURIComponent(storageId)}/contents`,
+  );
 };
 
 export const deleteSkillStorage = async (projectId: string, storageId: string): Promise<void> => {

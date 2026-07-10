@@ -112,6 +112,8 @@ Create and delete project skill storages in **Settings → Agents**, then attach
 
 The agent detail panel shows attached storage names and whether persistent skills are enabled. Empty storage state means no persistent skills are available for that agent; it does not affect ordinary memory or knowledge subscriptions.
 
+When the dashboard loads a storage's contents, it receives only a bounded set of concise skill summaries and short content previews. Full markdown bodies and runtime filesystem or mount paths are not exposed by this project-scoped dashboard endpoint.
+
 ## MCP access
 
 Agent MCP access is default-deny. If a preset has no saved MCP access record, Code UX built-in tools display as disabled and the agent does not inherit broad project-manager tool access. Custom MCP server links, such as Playwright, are controlled separately and can remain linked without enabling Code UX built-in tools.
