@@ -1,13 +1,13 @@
 import type { FunctionComponent } from "preact";
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useEffect, useMemo, useState } from "preact/hooks";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import { Row, Toggle, SelectInput } from "../SettingsFormFields.js";
 import { OptionCardChoiceGroup, SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
-import { Database, FileText, Plus, Route, Sparkles, Trash2 } from "lucide-preact";
+import { Database, FileText, Route, Sparkles } from "lucide-preact";
 import type { ProjectSettings, SkillStorageRecord } from "../../../../types.js";
 import { AgentSelectAvatarIcon } from "../../agents/AgentSelectAvatarIcon.js";
-import { createSkillStorage, deleteSkillStorage, fetchSkillStorages, updateAgentPreset } from "../../../lib/agent-preset-api.js";
-import { ConfirmDialog } from "../../ui/ConfirmDialog.js";
+import { fetchSkillStorages, updateAgentPreset } from "../../../lib/agent-preset-api.js";
+import { PersistentSkillStorageManager } from "../PersistentSkillStorageManager.js";
 import { SelfReflectionControls } from "./QAPanel.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../lib/settings.js";
 
@@ -51,12 +51,8 @@ export const SettingsAgentsPanel: FunctionComponent<{ state: SettingsPageState }
     updateEditableSettings,
   } = state;
   const [skillStorages, setSkillStorages] = useState<SkillStorageRecord[]>([]);
-  const [storageName, setStorageName] = useState("");
-  const [storageDescription, setStorageDescription] = useState("");
   const [storageBusy, setStorageBusy] = useState<string | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<SkillStorageRecord | null>(null);
-  const deleteButtonRef = useRef<HTMLButtonElement>(null);
 
   const getBadge = (...prefixes: string[]) => getBadgeHelper(activeScope, projectSources, ...prefixes);
   const getFieldBadge = (path: string) => getFieldBadgeHelper(activeScope, projectSources, path);
@@ -124,50 +120,6 @@ export const SettingsAgentsPanel: FunctionComponent<{ state: SettingsPageState }
 
     return () => { cancelled = true; };
   }, [selectedProject?.id]);
-
-  const createStorage = async (): Promise<void> => {
-    if (!selectedProject || storageBusy) {
-      return;
-    }
-    const trimmedName = storageName.trim();
-    if (!trimmedName) {
-      setStorageError("Storage name is required.");
-      return;
-    }
-    setStorageBusy("create");
-    try {
-      const created = await createSkillStorage(selectedProject.id, {
-        name: trimmedName,
-        description: storageDescription.trim(),
-        storageKind: "project",
-      });
-      setSkillStorages((current) => [...current, created]);
-      setStorageName("");
-      setStorageDescription("");
-      setStorageError(null);
-    } catch (error) {
-      setStorageError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setStorageBusy(null);
-    }
-  };
-
-  const confirmDeleteStorage = async (): Promise<void> => {
-    if (!selectedProject || !deleteTarget || storageBusy) {
-      return;
-    }
-    setStorageBusy(`delete:${deleteTarget.id}`);
-    try {
-      await deleteSkillStorage(selectedProject.id, deleteTarget.id);
-      setSkillStorages((current) => current.filter((storage) => storage.id !== deleteTarget.id));
-      setDeleteTarget(null);
-      setStorageError(null);
-    } catch (error) {
-      setStorageError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setStorageBusy(null);
-    }
-  };
 
   const toggleAgentStorage = async (agentPresetId: string, storageId: string): Promise<void> => {
     const preset = projectAgentPresets.find((candidate) => candidate.id === agentPresetId);
@@ -412,75 +364,18 @@ export const SettingsAgentsPanel: FunctionComponent<{ state: SettingsPageState }
           </div>
         </Row>
 
-        <Row label="Create storage" description="Create a named container for durable skill markdown. Storage deletion is destructive and requires confirmation.">
-          <div className="grid w-full min-w-0 gap-3 lg:grid-cols-[minmax(160px,0.8fr)_minmax(220px,1.2fr)_auto]">
-            <label className="flex min-w-0 flex-col gap-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Storage name</span>
-              <input
-                type="text"
-                value={storageName}
-                disabled={!selectedProject || Boolean(storageBusy)}
-                onInput={(event) => setStorageName(event.currentTarget.value)}
-                className="rounded-xl border border-black/[0.08] bg-white/80 px-3 py-2 text-sm text-slate-800 outline-none focus:border-signal-500/40 focus:ring-2 focus:ring-signal-500/20 disabled:opacity-50 dark:border-white/[0.08] dark:bg-void-900/60 dark:text-slate-100"
-              />
-            </label>
-            <label className="flex min-w-0 flex-col gap-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Description</span>
-              <input
-                type="text"
-                value={storageDescription}
-                disabled={!selectedProject || Boolean(storageBusy)}
-                onInput={(event) => setStorageDescription(event.currentTarget.value)}
-                className="rounded-xl border border-black/[0.08] bg-white/80 px-3 py-2 text-sm text-slate-800 outline-none focus:border-signal-500/40 focus:ring-2 focus:ring-signal-500/20 disabled:opacity-50 dark:border-white/[0.08] dark:bg-void-900/60 dark:text-slate-100"
-              />
-            </label>
-            <div className="flex items-end">
-              <button
-                type="button"
-                onClick={() => void createStorage()}
-                disabled={!selectedProject || Boolean(storageBusy)}
-                className="inline-flex min-h-10 items-center gap-2 rounded-full border border-signal-500/25 bg-signal-500/[0.08] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-700 transition-colors hover:bg-signal-500/[0.14] disabled:cursor-not-allowed disabled:opacity-50 dark:text-signal-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
-              >
-                <Plus className="h-3.5 w-3.5" strokeWidth={2.4} />
-                Add storage
-              </button>
-            </div>
-          </div>
-        </Row>
-
         {storageError ? (
           <div role="alert" className="rounded-[1rem] border border-status-red/25 bg-status-red/[0.08] px-4 py-3 text-xs font-semibold text-status-red">
             {storageError}
           </div>
         ) : null}
 
-        <Row label="Project storages" description="List and remove project-owned skill stores. Deleting a store removes its skills, embeddings, and attachments.">
-          <div className="grid w-full gap-2">
-            {skillStorages.length === 0 ? (
-              <div className="rounded-[1rem] border border-dashed border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">
-                No persistent skill storages are configured for this project.
-              </div>
-            ) : skillStorages.map((storage) => (
-              <div key={storage.id} className="flex flex-col gap-3 rounded-[1rem] border border-black/[0.06] bg-white/65 p-3 dark:border-white/[0.06] dark:bg-white/[0.04] sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">{storage.name}</div>
-                  <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                    {storage.description || "No description"} · {storage.storageKind}
-                  </div>
-                </div>
-                <button
-                  ref={deleteButtonRef}
-                  type="button"
-                  onClick={() => setDeleteTarget(storage)}
-                  disabled={Boolean(storageBusy)}
-                  aria-label={`Delete ${storage.name}`}
-                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-status-red/20 bg-status-red/[0.06] text-status-red transition-colors hover:bg-status-red/[0.12] disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-status-red/30"
-                >
-                  <Trash2 className="h-4 w-4" strokeWidth={2.4} />
-                </button>
-              </div>
-            ))}
-          </div>
+        <Row label="Storage records" description="Manage project-owned storage records in a dedicated workspace. These actions save immediately and stay outside the Settings draft.">
+          <PersistentSkillStorageManager
+            project={selectedProject ?? null}
+            storages={skillStorages}
+            onStoragesChange={setSkillStorages}
+          />
         </Row>
 
         <Row label="Attach storage to agents" description="Attach one or more storages to each project agent. Runtime retrieval stays off until the agent opt-in is enabled." last>
@@ -561,23 +456,6 @@ export const SettingsAgentsPanel: FunctionComponent<{ state: SettingsPageState }
         />
       </SectionCard>
 
-      <ConfirmDialog
-        isOpen={Boolean(deleteTarget)}
-        options={{
-          title: "Delete persistent skill storage?",
-          body: deleteTarget
-            ? `Deleting ${deleteTarget.name} removes its skills, embeddings, and agent attachments. This cannot be undone from the dashboard.`
-            : "Deleting this storage removes its skills, embeddings, and agent attachments.",
-          confirmLabel: "Delete storage",
-          cancelLabel: "Keep storage",
-          destructive: true,
-        }}
-        onConfirm={() => void confirmDeleteStorage()}
-        onCancel={() => {
-          setDeleteTarget(null);
-          window.setTimeout(() => deleteButtonRef.current?.focus(), 0);
-        }}
-      />
     </div>
   );
 };

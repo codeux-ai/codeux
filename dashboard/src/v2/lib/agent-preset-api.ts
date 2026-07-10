@@ -1,12 +1,12 @@
 import type {
   AgentPreset,
   CreateAgentPresetInput,
-  SkillStorageKind,
   SkillStorageRecord,
   UpdateAgentPresetInput,
 } from "../types.js";
 import type { PushAgentPresetsToMarkdownOptions } from "../../../../src/contracts/agent-preset-types.js";
 import type {
+  CreateSkillStorageInput,
   SkillStorageContentsResponse,
   UpdateSkillStorageInput,
 } from "../../../../src/contracts/skill-types.js";
@@ -133,7 +133,7 @@ export const fetchSkillStorages = async (projectId: string): Promise<SkillStorag
 
 export const createSkillStorage = async (
   projectId: string,
-  input: { name: string; description?: string; storageKind?: SkillStorageKind },
+  input: CreateSkillStorageInput,
 ): Promise<SkillStorageRecord> => {
   return fetchJson<SkillStorageRecord>(`/api/projects/${encodeURIComponent(projectId)}/skill-storages`, {
     method: "POST",

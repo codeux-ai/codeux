@@ -26,12 +26,16 @@ function DestructiveConfirmButton({
   onConfirm,
   label,
   className,
-  isLoading
+  isLoading,
+  disabled,
+  disabledReason,
 }: {
   onConfirm: () => void;
   label: string;
   className?: string;
   isLoading?: boolean;
+  disabled?: boolean;
+  disabledReason?: string;
 }) {
   const [confirmState, setConfirmState] = useState<DestructiveConfirmState>("idle");
   const [progress, setProgress] = useState(0);
@@ -66,7 +70,7 @@ function DestructiveConfirmButton({
   }, []);
 
   const startHold = () => {
-    if (confirmState === "holding" || isLoading) return;
+    if (confirmState === "holding" || isLoading || disabled) return;
     clearTimers();
     setConfirmState("holding");
     setProgress(0);
@@ -199,8 +203,8 @@ function DestructiveConfirmButton({
       className={`relative overflow-hidden ${className}`}
       style={{ userSelect: 'none', WebkitUserSelect: 'none', transitionDuration: cssTokens.controlFeedback.duration, transitionTimingFunction: cssTokens.controlFeedback.ease }}
       aria-busy={isLoading ? "true" : undefined}
-      disabled={isLoading}
-      aria-label={isLoading ? `Completing ${label}` : `Hold to ${label}`}
+      disabled={isLoading || disabled}
+      aria-label={isLoading ? `Completing ${label}` : disabledReason || `Hold to ${label}`}
       aria-describedby={progressId}
     >
       {(confirmState === "holding" || confirmState === "complete") && (
@@ -259,6 +263,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFoc
   const [isClosing, setIsClosing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [confirmFlash, setConfirmFlash] = useState(false);
+  const [confirmationText, setConfirmationText] = useState("");
 
   const cardRef = useRef<HTMLDivElement>(null);
   const trapRef = useFocusTrap(shouldRender && !isClosing, { onClose: () => handleClose(onCancel), restoreFocus });
@@ -274,6 +279,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFoc
     if (isOpen) {
       setShouldRender(true);
       setIsClosing(false);
+      setConfirmationText("");
     } else if (shouldRender) {
       setIsClosing(true);
     }
@@ -335,6 +341,8 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFoc
   if (!shouldRender || !options) return null;
 
   const { title, body, confirmLabel = "Confirm", cancelLabel = "Cancel", destructive = false } = options;
+  const requiredConfirmationText = options.requiredConfirmationText;
+  const confirmationMatches = !requiredConfirmationText || confirmationText === requiredConfirmationText;
   const tone = destructive ? "danger" : options.tone || "default";
   const toneStyles = {
     default: {
@@ -418,6 +426,23 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFoc
               </p>
             </div>
           )}
+          {requiredConfirmationText ? (
+            <label className="mt-4 block">
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                Type <span className="font-mono font-bold">{requiredConfirmationText}</span> to continue
+              </span>
+              <input
+                type="text"
+                value={confirmationText}
+                onInput={(event) => setConfirmationText(event.currentTarget.value)}
+                disabled={isProcessing}
+                autoComplete="off"
+                spellcheck={false}
+                aria-label={`Type ${requiredConfirmationText} to confirm`}
+                className="mt-2 w-full rounded-xl border border-black/[0.1] bg-white px-3 py-2.5 text-sm text-void-900 outline-none focus:border-status-red/45 focus:ring-2 focus:ring-status-red/20 disabled:opacity-50 dark:border-white/[0.12] dark:bg-void-900 dark:text-slate-50"
+              />
+            </label>
+          ) : null}
         </div>
         <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-black/[0.06] bg-void-50/80 p-4 dark:border-white/[0.08] dark:bg-white/[0.04] sm:flex-row sm:items-center sm:justify-end sm:gap-3">
           <button
@@ -429,19 +454,22 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFoc
           >
             {cancelLabel}
           </button>
-          {destructive ? (
+          {destructive && !requiredConfirmationText ? (
             <DestructiveConfirmButton
               onConfirm={() => handleClose(onConfirm)}
               label={confirmLabel}
               isLoading={isProcessing}
+              disabled={!confirmationMatches}
+              disabledReason={requiredConfirmationText ? `Type ${requiredConfirmationText} to enable ${confirmLabel}` : undefined}
               className={`inline-flex min-h-10 items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-safe:active:scale-[0.98] motion-reduce:duration-0 motion-reduce:ease-none disabled:cursor-not-allowed disabled:opacity-50 ${toneStyles.confirm}`}
             />
           ) : (
             <button
               type="button"
               onClick={() => handleClose(onConfirm)}
-              disabled={isProcessing}
+              disabled={isProcessing || !confirmationMatches}
               aria-busy={isProcessing}
+              aria-label={!confirmationMatches && requiredConfirmationText ? `Type ${requiredConfirmationText} to enable ${confirmLabel}` : undefined}
               style={controlTransitionStyle}
               className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-safe:active:scale-[0.98] motion-reduce:duration-0 motion-reduce:ease-none disabled:cursor-not-allowed disabled:opacity-50 ${toneStyles.confirm} ${confirmFlash ? '!bg-status-green !text-white !border-transparent' : ''}`}
             >
