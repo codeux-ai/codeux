@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Database } from "lucide-preact";
 import type { SkillStorageRecord } from "../../../../types.js";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
@@ -20,6 +20,18 @@ export interface SettingsAgentPersistentSkillsPanelProps {
 const errorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
 const EMPTY_AGENT_PRESETS: NonNullable<SettingsPageState["projectAgentPresets"]> = [];
 
+const reconcileAgentSkillState = (
+  state: AgentSkillState,
+  validStorageIds: ReadonlySet<string> | null,
+): AgentSkillState => {
+  if (!validStorageIds) return state;
+  const storageIds = state.storageIds.filter((storageId) => validStorageIds.has(storageId));
+  return {
+    storageIds,
+    enabled: storageIds.length > 0 && state.enabled,
+  };
+};
+
 export const SettingsAgentPersistentSkillsPanel: FunctionComponent<SettingsAgentPersistentSkillsPanelProps> = ({ state }) => {
   const { selectedProject, projectAgentPresets = EMPTY_AGENT_PRESETS } = state;
   const [storages, setStorages] = useState<SkillStorageRecord[]>([]);
@@ -27,6 +39,17 @@ export const SettingsAgentPersistentSkillsPanel: FunctionComponent<SettingsAgent
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const validStorageIdsRef = useRef<ReadonlySet<string> | null>(null);
+
+  const handleStoragesChange = useCallback((records: SkillStorageRecord[]): void => {
+    const validStorageIds = new Set(records.map((storage) => storage.id));
+    validStorageIdsRef.current = validStorageIds;
+    setStorages(records);
+    setAgentState((current) => Object.fromEntries(Object.entries(current).map(([presetId, presetState]) => [
+      presetId,
+      reconcileAgentSkillState(presetState, validStorageIds),
+    ])));
+  }, []);
 
   useEffect(() => {
     setAgentState(Object.fromEntries(projectAgentPresets.map((preset) => [preset.id, {
@@ -37,6 +60,7 @@ export const SettingsAgentPersistentSkillsPanel: FunctionComponent<SettingsAgent
 
   useEffect(() => {
     let cancelled = false;
+    validStorageIdsRef.current = null;
     setStorages([]);
     setError(null);
     if (!selectedProject) {
@@ -47,7 +71,7 @@ export const SettingsAgentPersistentSkillsPanel: FunctionComponent<SettingsAgent
     setLoading(true);
     fetchSkillStorages(selectedProject.id)
       .then((records) => {
-        if (!cancelled) setStorages(records);
+        if (!cancelled) handleStoragesChange(records);
       })
       .catch((loadError) => {
         if (!cancelled) setError(`Could not load skill storages. ${errorMessage(loadError)}`);
@@ -57,14 +81,18 @@ export const SettingsAgentPersistentSkillsPanel: FunctionComponent<SettingsAgent
       });
 
     return () => { cancelled = true; };
-  }, [selectedProject?.id]);
+  }, [handleStoragesChange, selectedProject?.id]);
 
   const storageNames = useMemo(() => new Map(storages.map((storage) => [storage.id, storage.name])), [storages]);
 
-  const getPresetState = (presetId: string): AgentSkillState => agentState[presetId] ?? { storageIds: [], enabled: false };
+  const getPresetState = (presetId: string): AgentSkillState => reconcileAgentSkillState(
+    agentState[presetId] ?? { storageIds: [], enabled: false },
+    validStorageIdsRef.current,
+  );
 
   const toggleStorage = async (presetId: string, storageId: string): Promise<void> => {
     if (busy) return;
+    if (validStorageIdsRef.current && !validStorageIdsRef.current.has(storageId)) return;
     const current = getPresetState(presetId);
     const storageIds = current.storageIds.includes(storageId)
       ? current.storageIds.filter((id) => id !== storageId)
@@ -76,7 +104,10 @@ export const SettingsAgentPersistentSkillsPanel: FunctionComponent<SettingsAgent
         persistentSkillStorageIds: storageIds,
         persistentSkillStorage: { enabled },
       });
-      setAgentState((value) => ({ ...value, [presetId]: { storageIds, enabled } }));
+      setAgentState((value) => ({
+        ...value,
+        [presetId]: reconcileAgentSkillState({ storageIds, enabled }, validStorageIdsRef.current),
+      }));
       setError(null);
     } catch (updateError) {
       setError(`Could not update persistent skill attachments. ${errorMessage(updateError)}`);
@@ -95,7 +126,10 @@ export const SettingsAgentPersistentSkillsPanel: FunctionComponent<SettingsAgent
         persistentSkillStorageIds: current.storageIds,
         persistentSkillStorage: { enabled },
       });
-      setAgentState((value) => ({ ...value, [presetId]: { ...current, enabled } }));
+      setAgentState((value) => ({
+        ...value,
+        [presetId]: reconcileAgentSkillState({ ...current, enabled }, validStorageIdsRef.current),
+      }));
       setError(null);
     } catch (updateError) {
       setError(`Could not update persistent skill retrieval. ${errorMessage(updateError)}`);
@@ -121,7 +155,7 @@ export const SettingsAgentPersistentSkillsPanel: FunctionComponent<SettingsAgent
           <p role="status" aria-live="polite" className="mt-2 text-sm font-semibold leading-relaxed text-slate-800 dark:text-slate-100">{statusSummary}</p>
           <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">Storage is separate from memory. Creating a storage does not enable runtime retrieval.</p>
         </div>
-        <PersistentSkillStorageManager project={selectedProject ?? null} storages={storages} onStoragesChange={setStorages} />
+        <PersistentSkillStorageManager project={selectedProject ?? null} storages={storages} onStoragesChange={handleStoragesChange} />
       </div>
 
       {error ? (
