@@ -41,7 +41,7 @@ export async function readQwenLogData(
     if (records.length === 0) {
       return null;
     }
-    return { usage: sumQwenOpenAiUsage(records), conversation: buildQwenConversation(records) };
+    return { usage: sumQwenOpenAiUsage(records, startTimeMs), conversation: buildQwenConversation(records, startTimeMs) };
 }
 
 export async function readCodexLatestSessionJson(

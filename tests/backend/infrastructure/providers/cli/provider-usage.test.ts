@@ -1149,6 +1149,41 @@ describe("buildQwenConversation", () => {
     expect(conversation[5]).toMatchObject({ kind: "assistant", text: "Test added." });
   });
 
+  it("filters qwen usage and reconstructed turns to the invocation window", () => {
+    const records = [
+      {
+        timestamp: "2026-06-02T10:00:00.000Z",
+        request: { messages: [{ role: "user", content: "Old prompt." }] },
+        response: {
+          id: "old-response",
+          usage: { prompt_tokens: 100, completion_tokens: 20 },
+          choices: [{ message: { role: "assistant", content: "Old answer." } }],
+        },
+      },
+      {
+        timestamp: "2026-06-02T11:00:01.000Z",
+        request: { messages: [{ role: "user", content: "Latest follow-up." }] },
+        response: {
+          id: "new-response",
+          usage: { prompt_tokens: 25, completion_tokens: 7 },
+          choices: [{ message: { role: "assistant", content: "New answer." } }],
+        },
+      },
+    ];
+    const sinceMs = Date.parse("2026-06-02T11:00:00.000Z");
+
+    expect(sumQwenOpenAiUsage(records, sinceMs)).toEqual({
+      inputTokens: 25,
+      cachedInputTokens: 0,
+      outputTokens: 7,
+      reasoningOutputTokens: 0,
+    });
+    expect(buildQwenConversation(records, sinceMs).map((turn) => turn.text)).toEqual([
+      "Latest follow-up.",
+      "New answer.",
+    ]);
+  });
+
   it("threads qwen conversation through collectProviderUsageTelemetry", async () => {
     const result = await collectProviderUsageTelemetry({
       provider: "qwen-code",
