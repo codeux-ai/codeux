@@ -1280,6 +1280,8 @@ describe("SprintIssueService", () => {
   });
 
   it("searches Jira issues through the generic issue service and clamps limits", async () => {
+    const fullDescription = `${"Build a reusable issue lookup with acceptance criteria. ".repeat(8)}Keep this final planner detail.`;
+    const bodyPreview = `${fullDescription.replace(/\s+/g, " ").trim().slice(0, 217)}...`;
     const jiraApiClient = {
       searchIssues: vi.fn(async () => [{
         key: "OPS-42",
@@ -1291,7 +1293,8 @@ describe("SprintIssueService", () => {
         projectKey: "OPS",
         issueType: "Story",
         priority: "High",
-        bodyPreview: "Build a reusable issue lookup.",
+        bodyPreview,
+        issueBodyMarkdown: fullDescription,
         createdAt: "2026-05-19T10:00:00.000+0000",
         updatedAt: "2026-05-20T10:00:00.000+0000",
         issueAuthor: "Alice",
@@ -1352,7 +1355,10 @@ describe("SprintIssueService", () => {
         issueNumber: 42,
         issueKey: "OPS-42",
         issuePriority: "High",
-        bodyPreview: "Build a reusable issue lookup.",
+        bodyPreview,
+        issueBodyMarkdown: fullDescription,
+        issueCreatedAt: "2026-05-19T10:00:00.000+0000",
+        issueUpdatedAt: "2026-05-20T10:00:00.000+0000",
         updatedAt: "2026-05-20T10:00:00.000+0000",
       }),
     ]);
