@@ -158,6 +158,10 @@ function extractAntigravityUsageFromProto(fields: ProtoField[]): {
     cachedInputTokens,
   };
 
+  if (inputTokens <= 0 && usage.outputTokens <= 0 && reasoningTokens <= 0 && cachedInputTokens <= 0) {
+    return { usage: null, rawUsageJson: null };
+  }
+
   const rawUsageJson: Record<string, unknown> = {
     inputTokens,
     outputTokens: usage.outputTokens,
@@ -320,6 +324,8 @@ function buildToolCallTurn(value: unknown, timestampMs: number | null): ParsedCo
   if (toolCallId) {
     turn.toolCallId = toolCallId;
   }
+  const status = readFirstStringField(record, ["status", "state"]);
+  if (status) turn.toolStatus = status;
   return turn;
 }
 
@@ -329,9 +335,11 @@ function buildToolResultTurn(value: unknown, timestampMs: number | null): Parsed
   if (!record) return null;
   const toolName = extractToolName(record);
   const output = record.response ?? record.result ?? record.output ?? record.content ?? record.text ?? record.error;
+  const text = extractVisibleTranscriptText(output) || stringify(output);
   const turn: ParsedConversationTurn = {
     kind: "tool_result",
-    text: extractVisibleTranscriptText(output) || stringify(output),
+    text,
+    toolOutput: text,
     toolName,
     timestampMs,
   };
@@ -368,7 +376,7 @@ export function parseAntigravityDatabase(tempDbPath: string, sinceIdx?: number):
   try {
     db = new DatabaseSync(tempDbPath, { readOnly: true });
     const rows = db.prepare("SELECT idx, data FROM gen_metadata WHERE idx > ? ORDER BY idx ASC")
-      .all(typeof sinceIdx === "number" ? sinceIdx : -1) as { idx: number; data: Buffer }[];
+      .all(typeof sinceIdx === "number" ? sinceIdx : -1) as { idx: number; data: Uint8Array | null }[];
     if (rows.length === 0) {
       return { usage: null, rawUsageJson: null, lastIdx: null };
     }
@@ -378,7 +386,10 @@ export function parseAntigravityDatabase(tempDbPath: string, sinceIdx?: number):
     let lastIdx: number | null = null;
     for (const row of rows) {
       lastIdx = row.idx;
-      const fields = decodeProto(row.data);
+      if (!(row.data instanceof Uint8Array)) {
+        continue;
+      }
+      const fields = decodeProto(Buffer.from(row.data));
       const extracted = extractAntigravityUsageFromProto(fields);
       if (!extracted?.usage) {
         continue;
@@ -415,6 +426,7 @@ export function parseAntigravityTranscript(
 ): ParsedConversationTurn[] {
   const lines = transcriptContent.split("\n");
   const conversation: ParsedConversationTurn[] = [];
+  const seenEntries = new Set<string>();
   const minMs = typeof sinceMs === "number" ? sinceMs - 2000 : null;
 
   for (const rawLine of lines) {
@@ -424,7 +436,7 @@ export function parseAntigravityTranscript(
     const entry = parseJsonObject(trimmed);
     if (!entry) continue;
 
-    appendAntigravityEntryTurns(entry, conversation, minMs);
+    appendAntigravityEntryTurns(entry, conversation, minMs, seenEntries);
   }
 
   return conversation;
@@ -434,7 +446,11 @@ function appendAntigravityEntryTurns(
   entry: Record<string, unknown>,
   conversation: ParsedConversationTurn[],
   minMs: number | null,
+  seenEntries: Set<string>,
 ): void {
+  const entryKey = JSON.stringify(entry);
+  if (seenEntries.has(entryKey)) return;
+  seenEntries.add(entryKey);
   const timestampMs = readTimestampMs(entry);
   if (minMs !== null && timestampMs !== null && timestampMs < minMs) {
     return;
@@ -445,7 +461,7 @@ function appendAntigravityEntryTurns(
     for (const nested of nestedEntries) {
       const nestedRecord = asRecord(nested);
       if (nestedRecord) {
-        appendAntigravityEntryTurns(nestedRecord, conversation, minMs);
+        appendAntigravityEntryTurns(nestedRecord, conversation, minMs, seenEntries);
       }
     }
     return;
