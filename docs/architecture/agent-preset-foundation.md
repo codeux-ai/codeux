@@ -57,6 +57,8 @@ When enabled, the provider prompt receives an additional `PERSISTENT SKILL STORA
 
 The mounted filesystem paths are derived by Code UX, not by user settings. Host execution receives paths under `~/.code-ux/persistent-skill-storages/<project-id>/<agent-id>/<storage-id>/`. Docker execution bind-mounts those directories read/write under `/code-ux/persistent-skills/<storage-id>/`. Both roots are outside the project workspace (`/workspace` in Docker and repository worktrees on host), so persistent skills do not become uncommitted project files and workspace cleanup does not delete them.
 
+Dashboard storage management remains project-scoped. Storage updates require both the project ID and storage ID, and the storage contents endpoint verifies the same ownership pair before returning data. Contents responses include storage metadata and at most 100 concise skill summaries; markdown is reduced to a whitespace-normalized preview of at most 240 characters, and full skill bodies, filesystem paths, and host mount locations are never included.
+
 Provider MCP access is similarly scoped. Skill-enabled agents are eligible for the retrieval-only `search_skills` surface even when their broader Code UX management surface is disabled. This does not automatically grant unrelated management tools such as task, sprint, settings, or full skill-management mutation APIs. The end-to-end regression coverage in `tests/backend/integration/persistent-skills-runtime.test.ts` verifies that shared attached storage is visible to both attached agents through MCP search, stays hidden from unattached agents, and produces provider prompt and mount metadata only for enabled attached agents.
 
 The current markdown-sync and Planning agent extensions are documented in:

@@ -28,6 +28,23 @@ export interface SkillRecord {
   updatedAt: string;
 }
 
+export interface SkillStorageContentSummary {
+  id: string;
+  name: string;
+  description: string;
+  tags: string[];
+  appliesTo: string[];
+  version: string | null;
+  updatedAt: string;
+  contentPreview: string;
+}
+
+export interface SkillStorageContentsResponse {
+  storage: SkillStorageRecord;
+  skills: SkillStorageContentSummary[];
+  truncated: boolean;
+}
+
 export interface SkillEmbeddingMetadata {
   id: string;
   projectId: string;
