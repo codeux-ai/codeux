@@ -158,6 +158,11 @@ export class InvocationWorkspacePreparer {
     );
   }
 
+  async createHostSnapshotWorkspace(args: CreateSnapshotWorkspaceRequest): Promise<string> {
+    await this.refreshSnapshotRefs(args.repoPath, args.checkout, args.gitPolicy);
+    return await this.workspaceManager.createHostSnapshotWorkspace(args.repoPath, args.sessionId, args.checkout);
+  }
+
   async prepareWorktree(args: PrepareInvocationWorktreeRequest): Promise<{ worktreePath: string; resumed: boolean }> {
     return await this.workspaceManager.prepareWorktree(
       args.repoPath,

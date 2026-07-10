@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { WatchLoopRunner } from "../../../src/domain/sprint/orchestrator/watch-loop-runner.js";
+import { selectWatchLoopDelayMs, WatchLoopRunner } from "../../../src/domain/sprint/orchestrator/watch-loop-runner.js";
 
 vi.mock("../../../src/services/cli-process-runner.js", () => ({
   runCommandStrict: vi.fn().mockResolvedValue({ stdout: "", stderr: "" }),
@@ -137,6 +137,10 @@ describe("WatchLoopRunner", () => {
         awaitingMerge: [],
         manualMergeTasks: [],
         workerEscalatedMergeConflictTasks: [],
+        localCliGitEvidence: {
+          pushedTaskIds: new Set(["T1", "task-record-1"]),
+          settledTaskIds: new Set<string>(),
+        },
       })
       .mockResolvedValueOnce({
         subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true })],
@@ -146,6 +150,10 @@ describe("WatchLoopRunner", () => {
         awaitingMerge: [],
         manualMergeTasks: [],
         workerEscalatedMergeConflictTasks: [],
+        localCliGitEvidence: {
+          pushedTaskIds: new Set<string>(),
+          settledTaskIds: new Set<string>(),
+        },
       });
 
     const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn().mockResolvedValue({
@@ -185,6 +193,7 @@ describe("WatchLoopRunner", () => {
     });
 
     expect(cycleRunner.run).toHaveBeenCalledTimes(2);
+    expect(deps.executionRepository.listTaskRunEvents).not.toHaveBeenCalled();
     expect(result).toContain("Sprint Execution Finished");
     expect(result).toContain("REPORT_2");
     expect(deps.executionRepository.updateSprintRun).toHaveBeenCalledWith(
@@ -367,6 +376,10 @@ describe("WatchLoopRunner", () => {
         awaitingMerge: [],
         manualMergeTasks: [],
         workerEscalatedMergeConflictTasks: [],
+        localCliGitEvidence: {
+          pushedTaskIds: new Set(["T1", "task-record-1"]),
+          settledTaskIds: new Set<string>(),
+        },
       })
       .mockResolvedValueOnce({
         subtasks: [buildMockSubtask({
@@ -386,6 +399,10 @@ describe("WatchLoopRunner", () => {
         awaitingMerge: [],
         manualMergeTasks: [],
         workerEscalatedMergeConflictTasks: [],
+        localCliGitEvidence: {
+          pushedTaskIds: new Set<string>(),
+          settledTaskIds: new Set<string>(),
+        },
       });
 
     const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn().mockResolvedValue({
@@ -426,6 +443,7 @@ describe("WatchLoopRunner", () => {
     });
 
     expect(cycleRunner.run).toHaveBeenCalledTimes(2);
+    expect(deps.executionRepository.listTaskRunEvents).not.toHaveBeenCalled();
     expect(result).toContain("Sprint Execution Finished");
     nowSpy.mockRestore();
   });
@@ -2885,6 +2903,18 @@ describe("WatchLoopRunner", () => {
     expect(renderMainMergeFeedback).not.toHaveBeenCalled();
     expect(result.status).toBe("wait");
     expect(result.report).toContain("Sprint QA is still running");
+  });
+});
+
+describe("selectWatchLoopDelayMs", () => {
+  it("runs one bounded follow-up after a meaningful cycle change", () => {
+    expect(selectWatchLoopDelayMs(10_000, true)).toBe(250);
+    expect(selectWatchLoopDelayMs(1_000, true)).toBe(250);
+    expect(selectWatchLoopDelayMs(100, true)).toBe(100);
+  });
+
+  it("retains the configured poll interval while state is unchanged", () => {
+    expect(selectWatchLoopDelayMs(10_000, false)).toBe(10_000);
   });
 });
 

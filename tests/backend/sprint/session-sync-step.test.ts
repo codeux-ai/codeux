@@ -1446,6 +1446,89 @@ describe("runSessionSyncStep", () => {
     });
   });
 
+  it("does not rewrite unchanged active task runs before the heartbeat interval", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-09T10:00:30.000Z"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-steady-"));
+    tempDirs.push(dir);
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const project = projectRepository.createProject({ name: "Steady Session Sync", sourceType: "local", sourceRef: "/tmp/my-repo" });
+    const sprint = projectRepository.createSprint(project.id, { name: "Sprint 1", number: 1 });
+    const task = projectRepository.createTask(project.id, { sprintId: sprint.id, taskKey: "steady", title: "Steady task", status: "in_progress" });
+    const sprintRun = executionRepository.createSprintRun({ projectId: project.id, sprintId: sprint.id, status: "running" });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "jules",
+      status: "running",
+      startedAt: "2026-03-09T10:00:00.000Z",
+      lastHeartbeatAt: "2026-03-09T10:00:00.000Z",
+    });
+    executionRepository.updateTaskDispatch(dispatch.id, {
+      status: "running",
+      startedAt: "2026-03-09T10:00:00.000Z",
+      finishedAt: null,
+      lastHeartbeatAt: "2026-03-09T10:00:00.000Z",
+      errorMessage: null,
+    });
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "jules",
+      sessionId: "steady-session",
+      sessionName: "sessions/steady-session",
+      state: "RUNNING",
+      startedAt: "2026-03-09T10:00:00.000Z",
+    });
+    const updateTaskRun = vi.spyOn(executionRepository, "updateTaskRun");
+    const updateTaskDispatch = vi.spyOn(executionRepository, "updateTaskDispatch");
+    const updateTask = vi.spyOn(projectRepository, "updateTask");
+
+    await runSessionSyncStep([
+      {
+        id: task.taskKey,
+        record_id: task.id,
+        project_id: project.id,
+        sprint_id: sprint.id,
+        title: task.title,
+        prompt: task.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "RUNNING",
+      },
+    ], {
+      listSessions: vi.fn().mockResolvedValue({
+        sessions: [{
+          id: "steady-session",
+          name: "sessions/steady-session",
+          title: "Sprint 1: [run:my-repo/s1/steady] [steady] Steady task",
+          state: "RUNNING",
+          provider: "jules",
+        }],
+      }),
+      resolveSessionName: (session: { name?: string }) => session.name,
+      extractSessionId: (session: { id?: string }) => session.id,
+      fetchRecentActivities: vi.fn().mockResolvedValue([]),
+      isActionRequiredState: vi.fn().mockReturnValue(false),
+      executionRepository,
+      projectManagementRepository: projectRepository,
+      sprintRunId: sprintRun.id,
+      logger: { warn: vi.fn() },
+    } as any, false, { repoPath: "/tmp/my-repo", sprintNumber: 1 });
+
+    expect(updateTaskRun).not.toHaveBeenCalled();
+    expect(updateTaskDispatch).not.toHaveBeenCalled();
+    expect(updateTask).not.toHaveBeenCalled();
+  });
+
   it("fetches a recorded task session directly when it is missing from the bounded session snapshot", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-missing-snapshot-"));
     tempDirs.push(dir);
@@ -2113,7 +2196,7 @@ describe("runSessionSyncStep", () => {
     expect(result.subtasks.find(t => t.id === "task-running")?.status).toBe("CODING_COMPLETED");
 
     expect(updateTaskMock).not.toHaveBeenCalledWith("rec-c", { status: "coding_completed" });
-    expect(updateTaskMock).toHaveBeenCalledWith("rec-cc", { status: "coding_completed" });
+    expect(updateTaskMock).not.toHaveBeenCalledWith("rec-cc", { status: "coding_completed" });
     expect(updateTaskMock).toHaveBeenCalledWith("rec-r", { status: "coding_completed" });
   });
 

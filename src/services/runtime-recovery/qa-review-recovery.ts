@@ -103,9 +103,9 @@ export class QaReviewRecoveryService {
     const ageMs = Number.isFinite(referenceAt) ? Date.now() - referenceAt : 0;
 
     if (!invocation) {
-      if (ageMs < QA_RUN_START_TIMEOUT_MS) {
-        return null;
-      }
+      // Startup is a process boundary: a running review left without a backing
+      // invocation cannot still be making progress in this runtime. Recover it
+      // immediately instead of waiting the normal in-process start grace period.
       return `${RECOVERED_STALE_QA_SUMMARY_PREFIX} that never started its backing invocation. Code UX will retry the review.`;
     }
 

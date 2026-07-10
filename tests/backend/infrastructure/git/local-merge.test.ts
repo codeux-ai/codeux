@@ -8,6 +8,7 @@ import {
   restoreCheckedOutRef,
   preserveDirtyCheckout,
   restorePreservedDirtyCheckout,
+  createTemporaryWorktreeBranchMerger,
   mergeBranchLocally,
   mergeBranchLocallyInTemporaryWorktree,
   findRecoverableWorkerBranch,
@@ -106,6 +107,35 @@ describe("local-merge helpers", () => {
     expect(await currentBranch()).toBe("main");
     const files = (await git(repo, "ls-tree", "--name-only", "main")).stdout;
     expect(files).toContain("work.txt");
+  });
+
+  it("reuses one temporary worktree for a batch of clean worker merges", async () => {
+    await git(repo, "checkout", "feature");
+    await git(repo, "checkout", "-b", "worker-one");
+    await commitFile(repo, "one.txt", "one\n", "feat: one");
+    await git(repo, "checkout", "feature");
+    await git(repo, "checkout", "-b", "worker-two");
+    await commitFile(repo, "two.txt", "two\n", "feat: two");
+    await git(repo, "checkout", "main");
+
+    const runner = vi.fn((command: string, args: string[], cwd: string) => runCommandStrict(command, args, cwd));
+    const merger = createTemporaryWorktreeBranchMerger({
+      repoPath: repo,
+      targetBranch: "feature",
+      runner,
+    });
+    try {
+      await expect(merger.merge("worker-one", "Merge branch 'worker-one' into feature")).resolves.toMatchObject({ ok: true });
+      await expect(merger.merge("worker-two", "Merge branch 'worker-two' into feature")).resolves.toMatchObject({ ok: true });
+    } finally {
+      await merger.close();
+    }
+
+    const files = (await git(repo, "ls-tree", "--name-only", "feature")).stdout;
+    expect(files).toContain("one.txt");
+    expect(files).toContain("two.txt");
+    expect(runner.mock.calls.filter(([, args]) => args[0] === "worktree" && args[1] === "add")).toHaveLength(1);
+    expect(runner.mock.calls.filter(([, args]) => args[0] === "worktree" && args[1] === "remove")).toHaveLength(1);
   });
 
   it("keeps temporary local merges on host git when containerized git is globally enabled", async () => {

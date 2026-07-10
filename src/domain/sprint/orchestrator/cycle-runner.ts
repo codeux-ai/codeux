@@ -68,7 +68,7 @@ export interface CycleRunnerArgs {
   planningAgentPresetId?: string;
 }
 
-interface LocalCliGitEvidence {
+export interface LocalCliGitEvidence {
   pushedTaskIds: Set<string>;
   settledTaskIds: Set<string>;
 }
@@ -90,6 +90,7 @@ export class CycleRunner {
     manualMergeTasks: Subtask[];
     workerEscalatedMergeConflictTasks: Subtask[];
     activeProjectAttentionItems: ProjectAttentionItemRecord[];
+    localCliGitEvidence: LocalCliGitEvidence;
   }> {
     const dashboardSettings = this.deps.getDashboardSettings({
       projectId: args.executionContext.project.id,
@@ -470,6 +471,11 @@ export class CycleRunner {
       resolvedWorkerMergeConflictSuppressionKeys,
       activeProjectAttentionItems,
     );
+    const reconciledActiveProjectAttentionItems = typeof this.deps.projectAttentionService?.listActiveProjectItems === "function"
+      ? this.deps.projectAttentionService.listActiveProjectItems(args.executionContext.project.id).filter((item) => (
+        item.status === "open" || item.status === "claimed"
+      ))
+      : activeProjectAttentionItems;
     const statusTable = args.loopSteps.statusTable ? runStatusTableStep(subtasks) : "";
 
     return {
@@ -480,7 +486,8 @@ export class CycleRunner {
       awaitingMerge: protocolResult.awaitingMerge,
       manualMergeTasks: protocolResult.manualMergeTasks,
       workerEscalatedMergeConflictTasks: protocolResult.workerEscalatedMergeConflictTasks,
-      activeProjectAttentionItems,
+      activeProjectAttentionItems: reconciledActiveProjectAttentionItems,
+      localCliGitEvidence,
     };
   }
 

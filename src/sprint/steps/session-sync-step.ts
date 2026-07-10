@@ -41,6 +41,27 @@ const TERMINAL_DISPATCH_STATUSES = new Set([
   "quota",
 ]);
 
+const DISPATCH_HEARTBEAT_INTERVAL_MS = 60_000;
+
+const shouldRefreshDispatchHeartbeat = (lastHeartbeatAt: string | null, now: string): boolean => {
+  if (!lastHeartbeatAt) {
+    return true;
+  }
+  const lastHeartbeatMs = new Date(lastHeartbeatAt).getTime();
+  const nowMs = new Date(now).getTime();
+  return !Number.isFinite(lastHeartbeatMs) || !Number.isFinite(nowMs)
+    || nowMs - lastHeartbeatMs >= DISPATCH_HEARTBEAT_INTERVAL_MS;
+};
+
+const taskAlreadyHasPlanningStatus = (
+  taskStatus: Subtask["status"],
+  planningStatus: ReturnType<typeof mapTaskRunStateToPlanningStatus>,
+): boolean => (
+  (taskStatus === "RUNNING" && planningStatus === "in_progress")
+  || (taskStatus === "CODING_COMPLETED" && planningStatus === "coding_completed")
+  || (taskStatus !== "RUNNING" && taskStatus !== "CODING_COMPLETED" && planningStatus === "pending")
+);
+
 const isLocalCliSessionProvider = (provider: string | null | undefined): boolean => (
   LOCAL_CLI_SESSION_PROVIDERS.has(String(provider || ""))
 );
@@ -594,27 +615,50 @@ const syncExecutionRunState = async (
   const nextDurationMs = nextRunState === "RUNNING" || !taskRun.startedAt
     ? null
     : Math.max(0, new Date(nextFinishedAt || now).getTime() - new Date(taskRun.startedAt).getTime());
+  const nextStartedAt = taskRun.startedAt || now;
 
-  deps.executionRepository.updateTaskRun(taskRun.id, {
-    sessionId,
-    sessionName,
-    provider,
-    workerBranch,
-    prUrl,
-    state: nextRunState,
-    startedAt: taskRun.startedAt || now,
-    finishedAt: nextFinishedAt,
-    durationMs: nextDurationMs,
-  });
+  const taskRunChanged = taskRun.sessionId !== sessionId
+    || taskRun.sessionName !== sessionName
+    || taskRun.provider !== provider
+    || taskRun.workerBranch !== workerBranch
+    || taskRun.prUrl !== prUrl
+    || taskRun.state !== nextRunState
+    || taskRun.startedAt !== nextStartedAt
+    || taskRun.finishedAt !== nextFinishedAt
+    || taskRun.durationMs !== nextDurationMs;
+  if (taskRunChanged) {
+    deps.executionRepository.updateTaskRun(taskRun.id, {
+      sessionId,
+      sessionName,
+      provider,
+      workerBranch,
+      prUrl,
+      state: nextRunState,
+      startedAt: nextStartedAt,
+      finishedAt: nextFinishedAt,
+      durationMs: nextDurationMs,
+    });
+  }
 
   if (taskRun.dispatchId) {
-    deps.executionRepository.updateTaskDispatch(taskRun.dispatchId, {
-      status: mergeDispatchStatus(currentDispatch?.status || null, nextRunState, session.state),
-      startedAt: taskRun.startedAt || now,
-      finishedAt: nextRunState === "RUNNING" ? null : (currentDispatch?.finishedAt || nextFinishedAt),
-      lastHeartbeatAt: now,
-      errorMessage: resolveDispatchErrorMessage(currentDispatch?.errorMessage, nextRunState, session.state),
-    });
+    const nextDispatchStatus = mergeDispatchStatus(currentDispatch?.status || null, nextRunState, session.state);
+    const nextDispatchFinishedAt = nextRunState === "RUNNING" ? null : (currentDispatch?.finishedAt || nextFinishedAt);
+    const nextDispatchErrorMessage = resolveDispatchErrorMessage(currentDispatch?.errorMessage, nextRunState, session.state);
+    const dispatchChanged = !currentDispatch
+      || currentDispatch.status !== nextDispatchStatus
+      || currentDispatch.startedAt !== nextStartedAt
+      || currentDispatch.finishedAt !== nextDispatchFinishedAt
+      || currentDispatch.errorMessage !== nextDispatchErrorMessage;
+    const refreshHeartbeat = dispatchChanged || shouldRefreshDispatchHeartbeat(currentDispatch?.lastHeartbeatAt || null, now);
+    if (dispatchChanged || refreshHeartbeat) {
+      deps.executionRepository.updateTaskDispatch(taskRun.dispatchId, {
+        status: nextDispatchStatus,
+        startedAt: nextStartedAt,
+        finishedAt: nextDispatchFinishedAt,
+        lastHeartbeatAt: refreshHeartbeat ? now : currentDispatch?.lastHeartbeatAt || now,
+        errorMessage: nextDispatchErrorMessage,
+      });
+    }
     if (nextRunState !== "RUNNING" && taskRun.sprintRunId) {
       deps.sprintRunLifecycleService?.finalizeCancellationIfIdle(taskRun.sprintRunId);
     }
@@ -629,7 +673,7 @@ const syncExecutionRunState = async (
   const skipStatusUpdate = task.status === "QA_REVIEW_FAILED"
     || (task.status === "COMPLETED" && !sessionReactivated && (nextPlanningStatus as string) !== "completed");
 
-  if (!skipStatusUpdate) {
+  if (!skipStatusUpdate && (!taskAlreadyHasPlanningStatus(task.status, nextPlanningStatus) || task.is_merged)) {
     const updatePayload: Record<string, any> = {
       status: nextPlanningStatus,
     };

@@ -1394,8 +1394,6 @@ export class ExecutionRepository {
     options?: { createdAt?: string; sourceEventKey?: string | null },
   ): boolean {
     const taskRun = requireTaskRun((id) => this.getTaskRun(id), taskRunId);
-    if (taskRun.taskId) this.wallTimeQuery.invalidateTask(taskRun.projectId, taskRun.taskId);
-    if (taskRun.sprintRunId) this.wallTimeQuery.invalidateSprintRun(taskRun.projectId, taskRun.sprintRunId);
     const result = this.db.prepare(`
       INSERT OR IGNORE INTO task_run_events (id, task_run_id, project_id, event_type, originator, payload_json, source_event_key, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -1411,6 +1409,8 @@ export class ExecutionRepository {
     );
     const inserted = Number((result as { changes?: number }).changes || 0) > 0;
     if (inserted) {
+      if (taskRun.taskId) this.wallTimeQuery.invalidateTask(taskRun.projectId, taskRun.taskId);
+      if (taskRun.sprintRunId) this.wallTimeQuery.invalidateSprintRun(taskRun.projectId, taskRun.sprintRunId);
       this.notifyRealtime(taskRun.projectId, false);
     }
     return inserted;

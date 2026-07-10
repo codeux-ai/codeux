@@ -822,6 +822,39 @@ jobs:
     expect(result.reportText).toContain("Merged locally");
   });
 
+  it("reuses one temporary worktree when multiple LOCAL worker branches are ready", async () => {
+    context.githubMode = "LOCAL";
+    subtasks = [
+      { ...subtasks[0], status: "CODING_COMPLETED", worker_branch: "feat/T1", is_merged: false },
+      {
+        ...subtasks[0],
+        id: "T2",
+        record_id: "task-record-2",
+        title: "Task 2",
+        worker_branch: "feat/T2",
+        status: "CODING_COMPLETED",
+        is_merged: false,
+      },
+    ];
+    vi.mocked(runCommandStrict).mockImplementation((_cmd: string, args: string[]) => {
+      if (args[0] === "rev-parse") {
+        return Promise.resolve({ stdout: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", stderr: "" } as any);
+      }
+      if (args[0] === "rev-list") {
+        return Promise.resolve({ stdout: "1", stderr: "" } as any);
+      }
+      return Promise.resolve({ stdout: "", stderr: "" } as any);
+    });
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "T1", status: "COMPLETED", merge_indicator: "MERGED" }),
+      expect.objectContaining({ id: "T2", status: "COMPLETED", merge_indicator: "MERGED" }),
+    ]));
+    expect(vi.mocked(runCommandStrict).mock.calls.filter(([, args]) => args[0] === "worktree" && args[1] === "add")).toHaveLength(1);
+  });
+
   it("merges and pushes remote branch-only tasks when no PR exists", async () => {
     context.githubMode = "REMOTE";
     context.gitStatus.openPullRequests = [];
@@ -1034,6 +1067,7 @@ jobs:
 
     expect(updateTaskRun).toHaveBeenCalledWith("run-1", { workerBranch: recovered });
     expect(updateTaskRun).toHaveBeenCalledWith("run-1", { workerBranch: null });
+    expect(context.executionRepository?.listTaskRunEvents).toHaveBeenCalledTimes(1);
     expect(result.subtasks[0].status).toBe("COMPLETED");
     expect(result.subtasks[0].is_merged).toBe(true);
     expect(result.subtasks[0].merge_indicator).toBe("MERGED");

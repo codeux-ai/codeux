@@ -181,6 +181,7 @@ export class WatchLoopRunner {
     const planningAgentPresetId = await this.deps.resolvePlanningAgentPresetId?.(scopedExecutionContext.project.id);
 
     let allFinished = false;
+    let previousCycleProgressFingerprint: string | null = null;
     let checkpointWindowStartedAt = Date.now();
     let fullReport = await this.deps.renderInstruction(
       "watchHeader",
@@ -243,13 +244,20 @@ export class WatchLoopRunner {
         manualMergeTasks,
         workerEscalatedMergeConflictTasks,
       } = cycleResult;
+      const cycleProgressFingerprint = buildCycleProgressFingerprint(subtasks, manualMergeTasks);
+      const madeCycleProgress = previousCycleProgressFingerprint !== null
+        && previousCycleProgressFingerprint !== cycleProgressFingerprint;
+      previousCycleProgressFingerprint = cycleProgressFingerprint;
 
       const activeProjectAttentionItems = typeof this.deps.projectAttentionService?.listActiveProjectItems === "function"
         ? (cycleResult.activeProjectAttentionItems ?? this.deps.projectAttentionService.listActiveProjectItems(scopedExecutionContext.project.id)).filter((item) => (
           item.status === "open" || item.status === "claimed"
         ))
         : [];
-      const localCliGitEvidence = this.collectLocalCliGitEvidence({
+      // CycleRunner already loaded this evidence after its final merge drain.
+      // Reusing that snapshot avoids a second getLatestTaskRun/event scan per
+      // task while preserving the direct-read fallback for older test doubles.
+      const localCliGitEvidence = cycleResult.localCliGitEvidence ?? this.collectLocalCliGitEvidence({
         githubMode,
         sprintRunId,
         subtasks,
@@ -348,12 +356,12 @@ export class WatchLoopRunner {
 
         case WatchLoopState.CHECKPOINT: {
           checkpointWindowStartedAt = Date.now();
-          await this.sleep(watchLoopIntervalMs);
+          await this.sleep(selectWatchLoopDelayMs(watchLoopIntervalMs, madeCycleProgress));
           break;
         }
 
         case WatchLoopState.RUNNING: {
-          await this.sleep(watchLoopIntervalMs);
+          await this.sleep(selectWatchLoopDelayMs(watchLoopIntervalMs, madeCycleProgress));
           break;
         }
       }
@@ -1091,6 +1099,17 @@ export class WatchLoopRunner {
           break;
         }
         case "paused_awaiting_merge": {
+          const retryableLocalWorkerMerge = githubMode === "LOCAL"
+            && manualMergeTasks.length > 0
+            && manualMergeTasks.every((task) => Boolean(task.worker_branch)
+              && task.merge_indicator !== "MERGE_BLOCKED"
+              && task.merge_indicator !== "MERGE_CONFLICT");
+          if (retryableLocalWorkerMerge) {
+            // A branch-only merge drain can miss a worker that completes while the
+            // drain is running. Keep LOCAL runs alive for the next drain instead
+            // of pausing a clean, retryable worker branch indefinitely.
+            break;
+          }
           this.deps.sprintRunLifecycleService.transition({
             sprintRunId,
             status: "paused",
@@ -1291,6 +1310,26 @@ export class WatchLoopRunner {
     }
     return undefined;
   }
+}
+
+const FAST_FOLLOW_UP_DELAY_MS = 250;
+
+export function selectWatchLoopDelayMs(watchLoopIntervalMs: number, madeCycleProgress: boolean): number {
+  return madeCycleProgress
+    ? Math.min(watchLoopIntervalMs, FAST_FOLLOW_UP_DELAY_MS)
+    : watchLoopIntervalMs;
+}
+
+function buildCycleProgressFingerprint(subtasks: Subtask[], manualMergeTasks: Subtask[]): string {
+  const taskState = subtasks.map((task) => [
+    task.id,
+    task.status,
+    Boolean(task.is_merged),
+    task.merge_indicator || "",
+    task.worker_branch || "",
+  ].join(":"));
+  const manualMergeTaskIds = manualMergeTasks.map((task) => task.id).sort();
+  return `${taskState.join("|")}#${manualMergeTaskIds.join(",")}`;
 }
 /**
  * Classifies a main-merge attention item by the blocker it addresses, looking through

@@ -142,7 +142,7 @@ describe("testing and operations documentation", () => {
     expect(scripts.ci).toContain("pnpm run build");
 
     expect(scripts.audit).toBe("pnpm audit --audit-level=high");
-    expect(ciWorkflow).toContain("name: 06 Security / dependency audit");
+    expect(ciWorkflow).toContain("name: 04 Security / dependency audit");
     expect(ciWorkflow).toContain("run: pnpm run audit");
     const ciBuildJob = expectRegexMatch(ciWorkflow, /  build:\n[\s\S]*?\n  backend-tests:/, "CI build job")[0];
     expect(ciBuildJob).not.toContain("pnpm run audit");
@@ -163,7 +163,7 @@ describe("testing and operations documentation", () => {
     expect(packageJson.devDependencies).toHaveProperty("@playwright/test");
 
     expectContainsAll(testingGuide, [
-      "06 Security / dependency audit",
+      "04 Security / dependency audit",
       "pnpm run audit",
       "pnpm run quality:guardrails",
       "global coverage threshold",
@@ -232,7 +232,7 @@ describe("testing and operations documentation", () => {
       "80% line threshold",
       "runtime.debugLogFileLevel",
       "file logging defaults to `error`",
-      "06 Security / dependency audit",
+      "04 Security / dependency audit",
       "pnpm run audit",
       "pnpm audit --audit-level=high",
       "pnpm exec playwright test",

@@ -108,7 +108,7 @@ describe("GitHub workflow health", () => {
 
     expect(ci).toContain("name: Code UX CI Pipeline");
     expect(ci).toMatch(/push:\n    branches: \[main, dev\]/);
-    expect(ci).toMatch(/pull_request:\n    branches: \[\"\*\*\"\]/);
+    expect(ci).toMatch(/pull_request:\n    branches: \[main, dev\]/);
     expect(ci).toContain("workflow_dispatch:");
     expectConcurrencyCancellation(ci, "CI");
 
@@ -116,9 +116,9 @@ describe("GitHub workflow health", () => {
       ["preflight", "01 Preflight / release policy"],
       ["static", "02 Static / typecheck and guardrails"],
       ["build", "03 Build / server and dashboard artifact"],
-      ["backend-tests", "04 Test / backend coverage"],
-      ["dashboard-tests", "05 Test / dashboard suite"],
-      ["security-audit", "06 Security / dependency audit"],
+      ["security-audit", "04 Security / dependency audit"],
+      ["backend-tests", "05 Test / backend coverage"],
+      ["dashboard-tests", "06 Test / dashboard suite"],
       ["package-smoke", "07 Package / npm install smoke"],
       ["ci-dag", "08 Orchestration / ${{ matrix.name }} DAG"],
       ["e2e", "09 E2E /"],
@@ -143,8 +143,16 @@ describe("GitHub workflow health", () => {
     const packageJob = getJobBlock(ci, "package-smoke");
     const dagJob = getJobBlock(ci, "ci-dag");
 
-    for (const job of [staticJob, buildJob, backendJob, dashboardJob, securityJob]) {
+    for (const job of [staticJob, buildJob, securityJob]) {
       expect(job).toContain("needs: preflight");
+      expect(job).toContain(REQUIRED_INSTALL);
+      expect(job).toContain("node-version: ${{ env.NODE_VERSION }}");
+      expect(job).toContain("version: ${{ env.PNPM_VERSION }}");
+      expect(job).toContain("run_install: false");
+    }
+
+    for (const job of [backendJob, dashboardJob]) {
+      expect(job).toContain("needs: [static, build, security-audit]");
       expect(job).toContain(REQUIRED_INSTALL);
       expect(job).toContain("node-version: ${{ env.NODE_VERSION }}");
       expect(job).toContain("version: ${{ env.PNPM_VERSION }}");
@@ -162,13 +170,13 @@ describe("GitHub workflow health", () => {
     expect(dashboardJob).toContain("pnpm run test:dashboard");
     expect(securityJob).toContain("pnpm run audit");
 
-    expect(packageJob).toContain("needs: [static, build, backend-tests, dashboard-tests, security-audit]");
+    expect(packageJob).toContain("needs: [static, build, security-audit]");
     expect(packageJob).toContain("name: codeux-build-linux");
     expect(packageJob).toContain("node scripts/verify-release-install.mjs");
     expect(packageJob).toContain('CODE_UX_SKIP_RELEASE_INSTALL_BUILD: "1"');
-    expect(dagJob).toContain("needs: [static, build, backend-tests, dashboard-tests, security-audit]");
+    expect(dagJob).toContain("needs: [static, build, security-audit]");
     expect(dagJob).toContain("runs-on: ${{ matrix.os }}");
-    expect(dagJob).toContain("max-parallel: 2");
+    expect(dagJob).toContain("max-parallel: 3");
     expect(dagJob).toContain("name: Linux Docker");
     expect(dagJob).toContain("os: ubuntu-latest");
     expect(dagJob).toContain("runtime: docker");
@@ -191,8 +199,10 @@ describe("GitHub workflow health", () => {
     const releaseCandidate = getJobBlock(ci, "release-candidate");
 
     expect(e2e).toContain("name: 09 E2E / ${{ matrix.os.label }} full (${{ matrix.project }})");
+    expect(e2e).toContain("needs: [static, build, security-audit]");
+    expect(e2e).toContain("github.base_ref == 'main'");
     expect(e2e).toContain("runs-on: ${{ matrix.os.runner }}");
-    expect(e2e).toContain("max-parallel: 3");
+    expect(e2e).toContain("max-parallel: 10");
     expect(e2e).toContain("runner: ubuntu-latest");
     expect(e2e).toContain("label: Linux");
     expect(e2e).toContain("runner: macos-latest");
@@ -212,9 +222,10 @@ describe("GitHub workflow health", () => {
     expect(ci).not.toContain("electron-dag:");
 
     expect(releaseCandidate).toContain("needs: package-smoke");
+    expect(releaseCandidate).toContain("github.base_ref == 'main'");
     expect(releaseCandidate).not.toContain("ci-dag");
     expect(releaseCandidate).not.toContain("e2e");
-    expect(releaseCandidate).toContain("max-parallel: 2");
+    expect(releaseCandidate).toContain("max-parallel: 3");
     expect(releaseCandidate).toContain("node node_modules/electron/install.js");
     expect(releaseCandidate).toContain("pnpm run electron:prepare-deps");
     expect(releaseCandidate).toContain("pnpm exec electron-builder --config electron-builder.config.cjs ${{ matrix.electron-target }} --publish never");
@@ -291,6 +302,8 @@ describe("GitHub workflow health", () => {
     expect(config).toContain("url: `${dashboardBaseUrl}/health`");
     expect(config).toContain("CODE_UX_DIRECTORY_BROWSER_ROOTS: os.tmpdir()");
     expect(config).toContain("CODEUX_E2E_PROVIDER_CLI_SHIM: mockProviderCliPath");
+    expect(config).toContain("CODE_UX_DISABLE_MCP_STDIO: '1'");
+    expect(config).toContain("MCP_HTTP_ENABLED: 'false'");
     expect(config).toContain("CODE_UX_CONTAINERIZED_GIT: '0'");
     expect(config).toContain("CODE_UX_GIT_CONTAINER_MODE: 'host'");
     expect(config).toContain("reuseExistingServer: false");
@@ -319,11 +332,13 @@ describe("GitHub workflow health", () => {
     const electronDagRunScript = packageJson.scripts?.["test:orchestration:ci-dag:electron:run"] ?? "";
 
     expect(ciDagRunScript).toContain("--execution-mode docker");
-    expect(ciDagRunScript).toContain("--scenario ci-small-dag");
+    expect(ciDagRunScript).toContain("--scenario ci-qa-dag");
     expect(ciDagRunScript).toContain("--stall-timeout-ms 180000");
+    expect(ciDagRunScript).toContain("--restart-every-ms 5000");
+    expect(ciDagRunScript).toContain("--restart-count 2");
     expect(electronDagRunScript).toContain("--runtime electron");
     expect(electronDagRunScript).toContain("--execution-mode fixture");
-    expect(electronDagRunScript).toContain("--scenario ci-small-dag-electron");
+    expect(electronDagRunScript).toContain("--scenario ci-qa-dag-electron");
     expect(electronDagRunScript).toContain("--stall-timeout-ms 180000");
 
     expect(runnerScript).toContain("const DEFAULT_STALL_TIMEOUT_MS = 3 * 60 * 1000");
@@ -333,13 +348,21 @@ describe("GitHub workflow health", () => {
     expect(runnerScript).toContain("findMockupDagDependencyMergeViolations(expectedProjectRun, latestTasks)");
     expect(runnerScript).toContain("DAG dependency merge invariant failed");
     expect(runnerScript).toContain("writeRuntimeLogToConsole");
+    expect(runnerScript).toContain("function assertQaHistory(homeDir, records, projectRun)");
+    expect(runnerScript).toContain("expected QA follow-up for");
+    expect(runnerScript).toContain("expected sprint QA outcomes");
+    expect(runnerScript).toContain("expected command ${commandExpectation.command} to exit");
 
-    const ciDagValidationTask = scenarioScript.slice(
-      scenarioScript.indexOf('key: "ci-dag-validation"'),
-      scenarioScript.indexOf("return tasks;", scenarioScript.indexOf('key: "ci-dag-validation"')),
+    const qaDagValidationTask = scenarioScript.slice(
+      scenarioScript.indexOf('key: "qa-dag-validation"'),
+      scenarioScript.indexOf("return tasks;", scenarioScript.indexOf('key: "qa-dag-validation"')),
     );
-    expect(ciDagValidationTask).toContain('dependsOn: ["ci-dag-batch-01", "ci-dag-batch-02"]');
-    expect(ciDagValidationTask).toContain('"test/run-validation.mjs"');
+    expect(qaDagValidationTask).toContain('dependsOn: ["qa-dag-pass", "qa-dag-follow-up"]');
+    expect(qaDagValidationTask).toContain('"test/run-validation.mjs"');
+    expect(scenarioScript).toContain('"mockup-qa:fix-write src/qa-dag/follow-up-final.js');
+    expect(scenarioScript).toContain('"mockup-sprint-qa:require-file src/qa-dag/final.js');
+    expect(scenarioScript).toContain('outcomes: ["changes_requested", "pass"]');
+    expect(scenarioScript).toContain("requireSameWorkerBranch: true");
     expect(scenarioScript).toContain('commands: [{ command: "node test/run-validation.mjs", exitCode: 0 }]');
   });
 

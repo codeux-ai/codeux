@@ -2,24 +2,31 @@ import type { CommandResult } from "./cli-process-runner.js";
 
 const looksLikeRelativePath = (value: string): boolean => {
   if (!value || value.length > 180) return false;
-  if (value.startsWith("/") || value.startsWith("~")) return false;
+  if (value.startsWith("/") || value.startsWith("~") || /^[A-Za-z]:[\\/]/.test(value) || value.startsWith("\\\\")) return false;
   if (value.includes("..")) return false;
-  const cleaned = value.replace(/[.,;:!?]+$/g, "");
+  const cleaned = normalizePathHint(value);
   return /[a-zA-Z0-9_-]+\//.test(cleaned) || /\.[a-zA-Z0-9]{1,6}$/.test(cleaned);
 };
+
+export const normalizePathHint = (value: string): string =>
+  value
+    .trim()
+    .replace(/[.,;:!?]+$/g, "")
+    .replace(/\\/g, "/")
+    .replace(/\/+/g, "/");
 
 export const extractPathHints = (text: string): string[] => {
   const candidates = new Set<string>();
   const backtickMatches = text.match(/`[^`\n]+`/g) || [];
   for (const token of backtickMatches) {
-    const normalized = token.slice(1, -1).trim();
+    const normalized = normalizePathHint(token.slice(1, -1));
     if (looksLikeRelativePath(normalized)) {
       candidates.add(normalized);
     }
   }
   const lineMatches = text.match(/(?:^|\n)\s*-\s+([^\n]+)/g) || [];
   for (const rawLine of lineMatches) {
-    const normalized = rawLine.replace(/^\s*-\s+/, "").trim();
+    const normalized = normalizePathHint(rawLine.replace(/^\s*-\s+/, ""));
     if (looksLikeRelativePath(normalized)) {
       candidates.add(normalized);
     }
