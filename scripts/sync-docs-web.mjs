@@ -105,6 +105,7 @@ const pinnedOrder = new Map([
   ["architecture-ci-integration", 550],
   ["architecture-dashboard-architecture", 560],
   ["architecture-data-model", 570],
+  ["architecture-execution-invocation-tracking", 575],
   ["architecture-external-chat-providers", 580],
   ["architecture-configuration-resolution", 590],
   ["architecture-security", 600],

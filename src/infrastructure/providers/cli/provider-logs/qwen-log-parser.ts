@@ -11,7 +11,9 @@ export interface QwenUsageTotals {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" ? value as Record<string, unknown> : null;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }
 
 function recordTimestampMs(record: unknown): number | null {
@@ -23,7 +25,12 @@ function isWithinInvocationWindow(record: unknown, sinceMs?: number): boolean {
     return true;
   }
   const timestampMs = recordTimestampMs(record);
-  return timestampMs === null || timestampMs >= sinceMs - 2000;
+  return timestampMs === null || timestampMs >= sinceMs;
+}
+
+function qwenResponsePayload(record: Record<string, unknown>): Record<string, unknown> | null {
+  const response = asRecord(record.response);
+  return asRecord(response?.body) ?? asRecord(response?.data) ?? response;
 }
 
 function qwenUsageObject(record: Record<string, unknown>): Record<string, unknown> | null {
@@ -36,7 +43,8 @@ function qwenUsageObject(record: Record<string, unknown>): Record<string, unknow
 
 function qwenUsageDedupeKey(record: Record<string, unknown>): string | null {
   const response = asRecord(record.response);
-  const responseId = response?.id ?? record.id;
+  const responsePayload = qwenResponsePayload(record);
+  const responseId = response?.id ?? responsePayload?.id ?? record.id;
   if (typeof responseId === "string" && responseId.trim()) {
     return `response:${responseId}`;
   }
@@ -123,7 +131,8 @@ function flattenOpenAiContent(content: unknown): string {
   const parts: string[] = [];
   for (const item of content) {
     const rec = asRecord(item);
-    if (rec && typeof rec.text === "string") {
+    const type = typeof rec?.type === "string" ? rec.type : null;
+    if (rec && typeof rec.text === "string" && (type === null || type === "text" || type === "input_text" || type === "output_text")) {
       parts.push(rec.text);
     } else if (rec && typeof rec.input_text === "string") {
       parts.push(rec.input_text);
@@ -139,13 +148,15 @@ function flattenOpenAiContent(content: unknown): string {
 /** Extracts the assistant response message from a single log record. */
 function responseMessageFromRecord(record: unknown): Record<string, unknown> | null {
   const root = asRecord(record);
-  const response = asRecord(root?.response);
+  if (!root) return null;
+  const response = qwenResponsePayload(root);
   if (!response) return null;
   const choices = Array.isArray(response.choices) ? response.choices : [];
   const firstChoice = asRecord(choices[0]);
   return asRecord(firstChoice?.message)
     ?? asRecord(firstChoice?.delta)
-    ?? asRecord(response.message);
+    ?? asRecord(response.message)
+    ?? (typeof response.role === "string" && response.content !== undefined ? response : null);
 }
 
 /** Pulls the chain-of-thought text from a message's `reasoning_content`/`reasoning` field. */
@@ -165,7 +176,14 @@ function reasoningFromMessage(message: Record<string, unknown>): string {
     return "";
   }
   if (!Array.isArray(reasoningContent)) {
-    return "";
+    if (!Array.isArray(message.content)) return "";
+    return message.content
+      .map(asRecord)
+      .filter((block): block is Record<string, unknown> => block?.type === "thinking" || block?.type === "reasoning")
+      .map((block) => flattenOpenAiContent(block.thinking ?? block.reasoning ?? block.text ?? block.content))
+      .filter(Boolean)
+      .join("")
+      .trim();
   }
   const parts: string[] = [];
   for (const item of reasoningContent) {
@@ -191,6 +209,16 @@ function reasoningFromMessage(message: Record<string, unknown>): string {
   return parts.join("").trim();
 }
 
+function stringifyToolArguments(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
 /** Reads the id of an OpenAI tool-call entry. */
 function toolCallId(call: unknown): string | undefined {
   const id = asRecord(call)?.id;
@@ -207,6 +235,14 @@ function openAiToolCalls(message: Record<string, unknown>): Record<string, unkno
   const toolCall = asRecord(message.tool_call);
   if (toolCall) {
     records.push(toolCall);
+  }
+  if (Array.isArray(message.content)) {
+    for (const item of message.content) {
+      const block = asRecord(item);
+      if (block?.type === "tool_use") {
+        records.push(block);
+      }
+    }
   }
   return records;
 }
@@ -276,16 +312,39 @@ export function turnsFromOpenAiMessage(
   tokensByCallId?: Map<string, ParsedConversationTurn["tokens"]>,
 ): ParsedConversationTurn[] {
   const role = typeof message.role === "string" ? message.role : "";
-  const text = flattenOpenAiContent(message.content);
   const turns: ParsedConversationTurn[] = [];
 
-  if (role === "user") {
+  const pushUserText = (text: string): void => {
     const { injected, prompt } = splitLeadingSystemReminders(text);
     if (injected) turns.push({ kind: "injected_context", text: injected });
     if (prompt) turns.push({ kind: "user", text: prompt });
+  };
+
+  if (role === "user") {
+    if (Array.isArray(message.content)) {
+      for (const item of message.content) {
+        const block = asRecord(item);
+        if (block?.type === "tool_result") {
+          turns.push({
+            kind: "tool_result",
+            text: "",
+            toolCallId: typeof block.tool_use_id === "string" ? block.tool_use_id : undefined,
+            toolOutput: flattenOpenAiContent(block.content),
+            toolStatus: block.is_error === true ? "error" : "success",
+          });
+        } else {
+          const blockText = flattenOpenAiContent(item);
+          if (blockText) pushUserText(blockText);
+        }
+      }
+    } else {
+      const text = flattenOpenAiContent(message.content);
+      if (text) pushUserText(text);
+    }
     return turns;
   }
   if (role === "tool" || role === "function") {
+    const text = flattenOpenAiContent(message.content);
     turns.push({
       kind: "tool_result",
       text: "",
@@ -311,13 +370,49 @@ export function turnsFromOpenAiMessage(
       const firstId = toolCalls.map(toolCallId).find((id): id is string => Boolean(id));
       if (firstId) turnTokens = tokensByCallId.get(firstId);
     }
-    if (reasoning) {
+    const contentHasStructuredBlocks = Array.isArray(message.content) && message.content.some((item) => {
+      const type = asRecord(item)?.type;
+      return type === "thinking" || type === "reasoning" || type === "redacted_thinking" || type === "tool_use";
+    });
+    let tokensAttached = false;
+
+    if (reasoning && !contentHasStructuredBlocks) {
       turns.push({ kind: "reasoning", text: reasoning });
     }
-    if (text) {
-      turns.push({ kind: "assistant", text, tokens: turnTokens });
+    if (contentHasStructuredBlocks && Array.isArray(message.content)) {
+      for (const item of message.content) {
+        const block = asRecord(item);
+        if (!block) continue;
+        if (block.type === "thinking" || block.type === "reasoning") {
+          const blockReasoning = flattenOpenAiContent(block.thinking ?? block.reasoning ?? block.text ?? block.content);
+          if (blockReasoning) turns.push({ kind: "reasoning", text: blockReasoning });
+        } else if (block.type === "text" || block.type === "output_text") {
+          const blockText = flattenOpenAiContent(block);
+          if (blockText) {
+            turns.push({ kind: "assistant", text: blockText, tokens: tokensAttached ? undefined : turnTokens });
+            tokensAttached = true;
+          }
+        } else if (block.type === "tool_use") {
+          turns.push({
+            kind: "tool_call",
+            text: "",
+            toolName: typeof block.name === "string" ? block.name : undefined,
+            toolCallId: typeof block.id === "string" ? block.id : undefined,
+            toolArguments: stringifyToolArguments(block.input),
+            tokens: tokensAttached ? undefined : turnTokens,
+          });
+          tokensAttached = true;
+        }
+        // Redacted/opaque thinking blocks are deliberately not readable turns.
+      }
+    } else {
+      const text = flattenOpenAiContent(message.content);
+      if (text) {
+        turns.push({ kind: "assistant", text, tokens: turnTokens });
+        tokensAttached = true;
+      }
     }
-    for (const call of toolCalls) {
+    for (const call of toolCalls.filter((candidate) => asRecord(candidate)?.type !== "tool_use")) {
       const callRec = asRecord(call);
       const fn = asRecord(callRec?.function);
       const callId = typeof callRec?.id === "string" ? callRec.id : undefined;
@@ -328,15 +423,12 @@ export function turnsFromOpenAiMessage(
           ? fn.name
           : (typeof callRec?.name === "string" ? callRec.name : undefined),
         toolCallId: callId,
-        toolArguments: typeof fn?.arguments === "string"
-          ? fn.arguments
-          : (typeof callRec?.arguments === "string" ? callRec.arguments : undefined),
-        tokens: !text && callId && tokensByCallId ? tokensByCallId.get(callId) : undefined,
+        toolArguments: stringifyToolArguments(fn?.arguments ?? callRec?.arguments),
+        tokens: tokensAttached
+          ? undefined
+          : (callId && tokensByCallId ? tokensByCallId.get(callId) : turnTokens),
       });
-    }
-    // Attach turn tokens to the tool_call when there was no assistant text.
-    if (!text && turns.length > 0 && turnTokens) {
-      turns[turns.length - 1].tokens = turnTokens;
+      tokensAttached = true;
     }
     return turns;
   }
@@ -344,21 +436,52 @@ export function turnsFromOpenAiMessage(
   return turns;
 }
 
-/**
- * Builds the conversation from qwen-code OpenAI request/response logs. The
- * newest record's `request.messages` carries the full prior history
- * (system/user/assistant/tool), and its `response` holds the final assistant
- * turn that is not yet present in any request. We therefore take the newest
- * record's request history and append its response message.
- */
-export function buildQwenConversation(records: unknown[], sinceMs?: number): ParsedConversationTurn[] {
-  const sorted = records.filter((record) => isWithinInvocationWindow(record, sinceMs)).sort((a, b) => {
-    const ta = recordTimestampMs(a) ?? 0;
-    const tb = recordTimestampMs(b) ?? 0;
-    return ta - tb;
+function conversationTurnSignature(turn: ParsedConversationTurn): string {
+  return JSON.stringify({
+    kind: turn.kind,
+    text: turn.text,
+    toolName: turn.toolName,
+    toolCallId: turn.toolCallId,
+    toolArguments: turn.toolArguments,
+    toolOutput: turn.toolOutput,
+    toolStatus: turn.toolStatus,
   });
-  const newest = asRecord(sorted[sorted.length - 1]);
-  if (!newest) {
+}
+
+function commonConversationPrefix(
+  existing: ParsedConversationTurn[],
+  candidate: ParsedConversationTurn[],
+): number {
+  const limit = Math.min(existing.length, candidate.length);
+  let index = 0;
+  while (index < limit && conversationTurnSignature(existing[index]) === conversationTurnSignature(candidate[index])) {
+    index += 1;
+  }
+  return index;
+}
+
+function containsTurnSequence(
+  conversation: ParsedConversationTurn[],
+  candidate: ParsedConversationTurn[],
+): boolean {
+  if (candidate.length === 0 || candidate.length > conversation.length) return false;
+  for (let start = 0; start <= conversation.length - candidate.length; start += 1) {
+    if (candidate.every((turn, index) => (
+      conversationTurnSignature(turn) === conversationTurnSignature(conversation[start + index])
+    ))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Builds an ordered conversation across cumulative or per-call Qwen logs. */
+export function buildQwenConversation(records: unknown[], sinceMs?: number): ParsedConversationTurn[] {
+  const eligible = records.filter((record) => isWithinInvocationWindow(record, sinceMs));
+  const sorted = eligible.every((record) => recordTimestampMs(record) !== null)
+    ? [...eligible].sort((a, b) => recordTimestampMs(a)! - recordTimestampMs(b)!)
+    : eligible;
+  if (sorted.length === 0) {
     return [];
   }
 
@@ -367,6 +490,7 @@ export function buildQwenConversation(records: unknown[], sinceMs?: number): Par
   // ids that step emitted, so we can re-attach it during reconstruction.
   const reasoningByCallId = new Map<string, string>();
   const tokensByCallId = new Map<string, ParsedConversationTurn["tokens"]>();
+  const lastResponseIndexById = new Map<string, number>();
   for (const record of sorted) {
     const responseMsg = responseMessageFromRecord(record);
     if (!responseMsg) continue;
@@ -381,23 +505,58 @@ export function buildQwenConversation(records: unknown[], sinceMs?: number): Par
       if (tokens) tokensByCallId.set(id, tokens);
     }
   }
+  sorted.forEach((record, index) => {
+    const root = asRecord(record);
+    if (!root) return;
+    const key = qwenUsageDedupeKey(root);
+    if (key) lastResponseIndexById.set(key, index);
+  });
 
   const conversation: ParsedConversationTurn[] = [];
-  const messages = requestMessagesFromRecord(newest);
-  for (const message of messages) {
-    const rec = asRecord(message);
-    if (rec) {
-      conversation.push(...turnsFromOpenAiMessage(rec, undefined, reasoningByCallId, tokensByCallId));
+  const messageLists = sorted.map((record) => requestMessagesFromRecord(asRecord(record) ?? {}));
+  const richestHistoryIndex = messageLists.reduce((richest, messages, index) => (
+    messages.length >= messageLists[richest].length ? index : richest
+  ), 0);
+  const hasCumulativeHistory = messageLists[richestHistoryIndex].length > 1;
+
+  if (hasCumulativeHistory) {
+    const root = asRecord(sorted[richestHistoryIndex]) ?? {};
+    const timestampMs = recordTimestampMs(root);
+    for (const message of messageLists[richestHistoryIndex]) {
+      const rec = asRecord(message);
+      if (!rec) continue;
+      conversation.push(...turnsFromOpenAiMessage(rec, undefined, reasoningByCallId, tokensByCallId)
+        .map((turn) => ({ ...turn, timestampMs: turn.timestampMs ?? timestampMs })));
     }
   }
 
-  const response = asRecord(newest.response);
-  const tokens = tokensFromUsage(qwenUsageObject(newest));
-  const choices = Array.isArray(response?.choices) ? response!.choices : [];
-  const responseMessage = asRecord(asRecord(choices[0])?.message) ?? asRecord(response?.message);
-  if (responseMessage) {
-    conversation.push(...turnsFromOpenAiMessage(responseMessage, tokens));
-  }
+  sorted.forEach((record, recordIndex) => {
+    const root = asRecord(record);
+    if (!root) return;
+    const timestampMs = recordTimestampMs(root);
+    if (!hasCumulativeHistory) {
+      const historyTurns: ParsedConversationTurn[] = [];
+      for (const message of messageLists[recordIndex]) {
+        const rec = asRecord(message);
+        if (rec) {
+          historyTurns.push(...turnsFromOpenAiMessage(rec, undefined, reasoningByCallId, tokensByCallId));
+        }
+      }
+      const commonPrefix = commonConversationPrefix(conversation, historyTurns);
+      const historyToAppend = commonPrefix > 0 ? historyTurns.slice(commonPrefix) : historyTurns;
+      conversation.push(...historyToAppend.map((turn) => ({ ...turn, timestampMs: turn.timestampMs ?? timestampMs })));
+    }
+
+    const responseKey = qwenUsageDedupeKey(root);
+    if (responseKey && lastResponseIndexById.get(responseKey) !== recordIndex) return;
+    const responseMessage = responseMessageFromRecord(root);
+    if (!responseMessage) return;
+    const responseTurns = turnsFromOpenAiMessage(responseMessage, tokensFromUsage(qwenUsageObject(root)))
+      .map((turn) => ({ ...turn, timestampMs: turn.timestampMs ?? timestampMs }));
+    if (!containsTurnSequence(conversation, responseTurns)) {
+      conversation.push(...responseTurns);
+    }
+  });
 
   return conversation;
 }
@@ -416,16 +575,22 @@ export async function readQwenOpenAiLogRecords(
     const jsonFiles = files.filter(f => f.endsWith(".json"));
     if (jsonFiles.length === 0) return [];
 
-    const records: unknown[] = [];
-    for (const file of jsonFiles) {
+    const candidates = (await Promise.all(jsonFiles.map(async (file) => {
       const filePath = path.join(logDir, file);
       const stat = await fs.stat(filePath).catch(() => null);
-      if (stat && stat.mtimeMs >= startTimeMs - 2000) {
-        const content = await fs.readFile(filePath, "utf8").catch(() => "");
-        const parsed = extractJsonContainer<Record<string, unknown>>(content, "object");
-        if (parsed.ok) {
-          records.push(parsed.value);
-        }
+      return stat && stat.mtimeMs >= startTimeMs - 2000
+        ? { file, filePath, mtimeMs: stat.mtimeMs }
+        : null;
+    })))
+      .filter((candidate): candidate is { file: string; filePath: string; mtimeMs: number } => Boolean(candidate))
+      .sort((a, b) => a.mtimeMs - b.mtimeMs || a.file.localeCompare(b.file));
+
+    const records: unknown[] = [];
+    for (const candidate of candidates) {
+      const content = await fs.readFile(candidate.filePath, "utf8").catch(() => "");
+      const parsed = extractJsonContainer<Record<string, unknown>>(content, "object");
+      if (parsed.ok) {
+        records.push(parsed.value);
       }
     }
     return records;

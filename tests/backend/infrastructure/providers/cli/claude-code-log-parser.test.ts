@@ -218,6 +218,27 @@ describe("parseClaudeCodeSessionJsonl", () => {
     expect(result.conversation[0]).toMatchObject({ kind: "reasoning", text: "I should inspect the failing test first." });
   });
 
+  it("preserves structured assistant content block order and skips redacted thinking", () => {
+    const result = parseClaudeCodeSessionJsonl(makeAssistantEntry({
+      messageId: "msg_ordered",
+      content: [
+        { type: "text", text: "First." },
+        { type: "tool_use", id: "toolu_ordered", name: "Read", input: { file_path: "a.ts" } },
+        { type: "redacted_thinking", data: "opaque-ciphertext" },
+        { type: "thinking", thinking: "Now inspect the result." },
+        { type: "text", text: "Second." },
+      ],
+    }));
+
+    expect(result.conversation.map((turn) => turn.kind)).toEqual([
+      "assistant",
+      "tool_call",
+      "reasoning",
+      "assistant",
+    ]);
+    expect(result.conversation.map((turn) => turn.text).join(" ")).not.toContain("opaque-ciphertext");
+  });
+
   it("skips encrypted (empty) thinking blocks", () => {
     const jsonl = makeAssistantEntry({
       messageId: "msg_enc",
@@ -302,6 +323,22 @@ describe("parseClaudeCodeSessionJsonl", () => {
     ]);
   });
 
+  it("extracts tool_result text from structured content arrays", () => {
+    const result = parseClaudeCodeSessionJsonl(makeUserEntry({
+      content: [{
+        type: "tool_result",
+        tool_use_id: "toolu_array",
+        content: [{ type: "text", text: "first line" }, "second line"],
+      }],
+    }));
+
+    expect(result.conversation[0]).toMatchObject({
+      kind: "tool_result",
+      toolCallId: "toolu_array",
+      toolOutput: "first line\nsecond line",
+    });
+  });
+
   it("marks tool_result as error when is_error is true", () => {
     const jsonl = makeUserEntry({
       content: [
@@ -351,12 +388,14 @@ describe("parseClaudeCodeSessionJsonl", () => {
 
   it("filters entries before the sinceMs window", () => {
     const oldEntry = makeAssistantEntry({
+      sessionId: "old-session",
       messageId: "msg_old",
       timestamp: "2026-06-01T08:00:00.000Z", // 2 hours before
       content: [{ type: "text", text: "Old response" }],
       usage: { input_tokens: 999, output_tokens: 999, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
     });
     const newEntry = makeAssistantEntry({
+      sessionId: "current-session",
       messageId: "msg_new",
       timestamp: "2026-06-01T10:01:00.000Z", // 1 min after sinceMs
       content: [{ type: "text", text: "New response" }],
@@ -368,6 +407,7 @@ describe("parseClaudeCodeSessionJsonl", () => {
 
     // Only new entry should be included (old is 2 hours before sinceMs - 2s grace)
     expect(result.usage!.inputTokens).toBe(10);
+    expect(result.nativeSessionId).toBe("current-session");
     expect(result.conversation.filter((t) => t.kind === "assistant")).toHaveLength(1);
     expect(result.conversation.find((t) => t.kind === "assistant")!.text).toBe("New response");
   });
@@ -558,6 +598,44 @@ describe("parseClaudeCodeSessionJsonl", () => {
     expect(result.conversation.map((turn) => turn.kind)).toEqual(["reasoning", "assistant", "tool_call"]);
     expect(result.conversation[0]).toMatchObject({ kind: "reasoning", text: "Visible legacy reasoning." });
     expect(result.conversation[2]).toMatchObject({ kind: "tool_call", toolName: "Bash", toolCallId: "toolu_legacy" });
+  });
+
+  it("replaces updated message usage and legacy content instead of double-counting", () => {
+    const result = parseClaudeCodeSessionJsonl([
+      JSON.stringify({
+        timestamp: "2026-06-01T10:00:00.000Z",
+        message: {
+          id: "legacy_updated",
+          role: "assistant",
+          content: [{ type: "text", text: "Partial" }],
+          usage: { input_tokens: 10, output_tokens: 2 },
+        },
+      }),
+      JSON.stringify({
+        timestamp: "2026-06-01T10:00:01.000Z",
+        message: {
+          id: "legacy_updated",
+          role: "assistant",
+          content: [{ type: "text", text: "Complete" }],
+          usage: {
+            input_tokens: 12,
+            output_tokens: 5,
+            cache_creation_input_tokens: 3,
+            cache_read_input_tokens: 4,
+          },
+        },
+      }),
+    ].join("\n"));
+
+    expect(result.usage).toEqual({
+      inputTokens: 12,
+      outputTokens: 5,
+      cacheCreationTokens: 3,
+      cacheReadTokens: 4,
+    });
+    expect(result.conversation).toEqual([
+      expect.objectContaining({ kind: "assistant", text: "Complete" }),
+    ]);
   });
 
   it("skips partial JSON and unknown entries while preserving recoverable usage and partial tool results", () => {

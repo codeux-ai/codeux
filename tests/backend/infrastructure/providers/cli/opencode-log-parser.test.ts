@@ -200,6 +200,36 @@ describe("parseOpenCodeJsonLines", () => {
     expect(toolCalls[0].toolOutput).toBe("file.txt");
   });
 
+  it("preserves timestamps and ignores duplicate identified stream events", () => {
+    const timestamp = "2026-06-01T10:00:00.000Z";
+    const stream = ndjson([
+      { type: "reasoning", part: { id: "reason-1", type: "reasoning", text: "initial", createdAt: timestamp } },
+      { type: "reasoning", part: { id: "reason-1", type: "reasoning", text: "final", createdAt: timestamp } },
+      { type: "text", part: { id: "text-1", type: "text", text: "answer", createdAt: timestamp } },
+      { type: "tool", part: { id: "tool-part", type: "tool", tool: "bash", callID: "call-1", state: { status: "running", input: { command: "pwd" } }, createdAt: timestamp } },
+      { type: "tool", part: { id: "tool-part", type: "tool", tool: "bash", callID: "call-1", state: { status: "completed", output: "/workspace" }, createdAt: timestamp } },
+      { type: "step-finish", part: { id: "step-1", type: "step-finish", tokens: { input: 20, output: 5 } } },
+      { type: "step-finish", part: { id: "step-1", type: "step-finish", tokens: { input: 20, output: 5 } } },
+    ]);
+
+    const result = parseOpenCodeJsonLines(stream);
+
+    expect(result.conversation.map((turn) => turn.kind)).toEqual(["reasoning", "assistant", "tool_call"]);
+    expect(result.conversation[0]).toEqual({
+      kind: "reasoning",
+      text: "final",
+      timestampMs: Date.parse(timestamp),
+    });
+    expect(result.conversation[2]).toMatchObject({
+      toolCallId: "call-1",
+      toolStatus: "completed",
+      toolOutput: "/workspace",
+      timestampMs: Date.parse(timestamp),
+    });
+    expect(result.inputTokens).toBe(20);
+    expect(result.outputTokens).toBe(5);
+  });
+
   it("falls back to assistant-message usage when no step-finish parts are present", () => {
     const stream = ndjson([
       { type: "text", part: { type: "text", text: "hi" } },
@@ -328,9 +358,21 @@ describe("parseOpenCodeExport", () => {
     expect(usage.outputTokens).toBe(10284);
   });
 
+  it("skips an unrelated JSON wrapper before the authoritative export", () => {
+    const noisy = `${JSON.stringify({ wrapper: { status: "ready" } })}\n${realExport}\n`;
+    expect(parseOpenCodeExport(noisy)?.outputTokens).toBe(10284);
+  });
+
   it("returns null when the export carries no usable token counts", () => {
     const empty = JSON.stringify({ info: { tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } }, messages: [] });
     expect(parseOpenCodeExport(empty)).toBeNull();
+  });
+
+  it("preserves cached-only usage instead of treating it as absent", () => {
+    const usage = parseOpenCodeExport(JSON.stringify({
+      info: { tokens: { input: 25, output: 0, reasoning: 0, cache: { read: 25, write: 0 } } },
+    }));
+    expect(usage).toMatchObject({ inputTokens: 0, cachedInputTokens: 25, outputTokens: 0 });
   });
 
   it("returns null for truncated exports without leaking raw fragments", () => {

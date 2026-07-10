@@ -31,6 +31,8 @@ export interface TelemetryWatcherOptions {
   nativeSessionId: string | null;
   sessionId: string;
   antigravityLogPath: string | null;
+  /** Highest Antigravity generation row present before this invocation. */
+  antigravitySinceIdx?: number | null;
   initialPollDelayMs?: number;
   pollIntervalMs?: number;
   getClaudeSessionJsonlMetadata?: (nativeSessionId: string) => Promise<string | null>;
@@ -297,6 +299,7 @@ export class ProviderTelemetryWatcher {
           startTimeMs: this.opts.startedMs,
           executionMode: this.opts.workflowSettings.executionMode,
           antigravitySessionDbPath: this.tempDbPath,
+          antigravitySinceIdx: this.opts.antigravitySinceIdx,
           antigravityTranscriptJsonl,
         });
 

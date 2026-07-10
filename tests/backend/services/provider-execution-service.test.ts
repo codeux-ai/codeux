@@ -399,6 +399,25 @@ describe("ProviderExecutionService", () => {
     );
   });
 
+  it("does not overwrite an externally cancelled provider invocation when the runner exits late", async () => {
+    executionRepository.getProviderInvocationUsage.mockReturnValue({
+      id: "prov-inv-1",
+      status: "cancelled",
+    } as any);
+    providerRunner.runProvider.mockRejectedValue(new Error("late provider exit"));
+
+    await expect(service.executeProvider(defaultArgs)).rejects.toThrow("late provider exit");
+
+    expect(executionRepository.updateProviderInvocationUsage).not.toHaveBeenCalledWith(
+      "prov-inv-1",
+      expect.objectContaining({ status: "failed" }),
+    );
+    expect(executionRepository.updateProviderInvocationUsage).not.toHaveBeenCalledWith(
+      "prov-inv-1",
+      expect.objectContaining({ status: "cancelled" }),
+    );
+  });
+
   it("preserves Docker provider usage for startup recovery when restart interrupts the spawner", async () => {
     providerRunner.runProviderForText.mockRejectedValue(
       new Error("Command spawner host exited (code=null, signal=SIGINT)"),
@@ -738,9 +757,15 @@ describe("ProviderExecutionService", () => {
         },
       } as ProviderRunResult & { text: string };
       if (providerCase.expectTextOutput) {
-        providerRunner.runProviderForText.mockResolvedValue(result);
+        providerRunner.runProviderForText.mockImplementation(async (opts: any) => {
+          opts.onTelemetry(result.usageTelemetry);
+          return result;
+        });
       } else {
-        providerRunner.runProvider.mockResolvedValue(result);
+        providerRunner.runProvider.mockImplementation(async (opts: any) => {
+          opts.onTelemetry(result.usageTelemetry);
+          return result;
+        });
       }
 
       await service.executeProvider({
@@ -754,6 +779,16 @@ describe("ProviderExecutionService", () => {
       });
 
       expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledWith("exec-inv-1");
+      expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledTimes(1);
+      expect(executionRepository.updateProviderInvocationUsage).toHaveBeenCalledWith(
+        "prov-inv-1",
+        expect.objectContaining({
+          status: "running",
+          inputTokens: 10,
+          outputTokens: 20,
+          totalTokens: 30,
+        }),
+      );
       expect(persistedMessages.map((message) => message.role)).toEqual(providerCase.expectedRoles);
       const userMessages = persistedMessages.filter((message) => message.role === "user");
       expect(userMessages).toHaveLength(1);
@@ -1002,6 +1037,63 @@ describe("ProviderExecutionService", () => {
         }),
       }),
     );
+  });
+
+  it("preserves caller-owned prompts and audit messages when prompt tracking is disabled", async () => {
+    const persistedMessages: AppendExecutionInvocationMessageInput[] = [
+      { role: "system", contentMarkdown: "Routed through the dashboard worker.", metadata: { routeKind: "virtual" } },
+      { role: "user", contentMarkdown: "Caller-owned prompt" },
+    ];
+    executionRepository.listExecutionInvocationMessages = vi.fn(() => persistedMessages.map((message, index) => ({
+      id: `message-${index}`,
+      invocationId: "exec-inv-1",
+      role: message.role,
+      contentMarkdown: message.contentMarkdown,
+      toolCallsJson: message.toolCallsJson ?? null,
+      metadata: message.metadata ?? null,
+      createdAt: "2026-07-10T00:00:00.000Z",
+    }))) as any;
+    executionRepository.clearExecutionInvocationMessages.mockImplementation(() => {
+      persistedMessages.length = 0;
+    });
+    executionRepository.appendExecutionInvocationMessage.mockImplementation((_id, message) => {
+      persistedMessages.push(message);
+      return {} as any;
+    });
+    providerRunner.runProviderForText.mockImplementation(async (opts: any) => {
+      const usageTelemetry = {
+        ...mockResult.usageTelemetry,
+        transcriptText: "structured dashboard reply",
+        conversation: [
+          { kind: "user", text: "Parser-supplied prompt" },
+          { kind: "reasoning", text: "Inspecting the requested action." },
+          { kind: "assistant", text: "Dashboard reply" },
+        ],
+      };
+      opts.onTelemetry(usageTelemetry);
+      return { ...mockResult, text: "Dashboard reply", usageTelemetry } as ProviderRunResult & { text: string };
+    });
+
+    await service.executeProvider({
+      ...defaultArgs,
+      purpose: "dashboard_reply",
+      type: "worker_reply",
+      expectTextOutput: true,
+      invocationId: "exec-inv-1",
+      trackPromptInInvocation: false,
+      finalizeExecutionInvocation: false,
+    });
+
+    expect(persistedMessages.map((message) => [message.role, message.contentMarkdown])).toEqual([
+      ["system", "Routed through the dashboard worker."],
+      ["user", "Caller-owned prompt"],
+      ["assistant", "Inspecting the requested action."],
+      ["assistant", "Dashboard reply"],
+    ]);
+    expect(persistedMessages).not.toContainEqual(expect.objectContaining({
+      contentMarkdown: "Parser-supplied prompt",
+    }));
+    expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledTimes(1);
   });
 
   it("skips the message rewrite when a telemetry tick repeats the same conversation", async () => {

@@ -17,11 +17,13 @@ Code UX now tracks CLI-provider execution usage in a DB-native form so the dashb
 This telemetry currently covers:
 
 - virtual planning runs
-- CLI task coding runs
-- virtual worker CI-fix runs
-- virtual worker merge-conflict runs
-- clarification runs (prompt rewrites or operator clarification)
-- QA coverage runs (automated verification sweeps)
+- QA coverage and QA follow-up implementation runs
+- dashboard chat and worker/clarification replies
+- project setup and memory-remediation runs
+- virtual worker CI and merge-conflict repair runs
+- task follow-up and ordinary CLI task-coding runs
+
+For these local CLI paths, `ProviderExecutionService` is the shared live persistence boundary: each telemetry poll can apply both normalized tokens and a structured transcript to the linked execution invocation. Jules does not use the local CLI parser or watcher path; its remote session synchronizer retains the separate character-based estimated-usage flow described below.
 
 ## Storage Model
 
@@ -121,7 +123,7 @@ Codex's rollout file (`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`) is cumulat
 
 Qwen Code runs via its OpenAI-compatible request/response logging (`enableOpenAILoggingDir`), written to a directory that is reset at the start of every run so usage aggregation only ever sums the current invocation's own log files — unlike Codex/OpenCode, there is no cross-run cumulative counter to isolate.
 
-`src/infrastructure/providers/cli/provider-logs/qwen-log-parser.ts` sums `response.usage` (falling back to a bare top-level `usage` for older loggers) across every logged call in the run. Cached and reasoning token extraction delegates to the shared `parseUsageObject` adapter (also used by Codex), which checks OpenAI-style `prompt_tokens_details.cached_tokens` / `completion_tokens_details.reasoning_tokens` first, then falls back to Anthropic-style `cache_read_input_tokens` + `cache_creation_input_tokens` — relevant because Qwen Code can be configured with `qwenProtocol: "anthropic"` against an Anthropic-compatible backend, whose usage payload doesn't carry OpenAI's `*_details` shape. OpenAI-style cached tokens are subtracted from `inputTokens`; Anthropic-style cache counters are already separate and are not subtracted from `input_tokens`.
+`src/infrastructure/providers/cli/provider-logs/qwen-log-parser.ts` sums `response.usage` (including `response.body` / `response.data` wrappers and a bare top-level fallback) across every logged call in the run. Cached and reasoning token extraction delegates to the shared `parseUsageObject` adapter (also used by Codex), which checks OpenAI-style `prompt_tokens_details.cached_tokens` / `completion_tokens_details.reasoning_tokens` first, then falls back to Anthropic-style `cache_read_input_tokens` + `cache_creation_input_tokens`. The transcript parser accepts both OpenAI message/tool-call fields and Anthropic content blocks for readable reasoning, assistant text, tool use, and tool results. Timestamped records proven to predate the invocation are excluded, while valid records without timestamps remain eligible. Host files are read deterministically and malformed neighboring Docker records do not suppress recoverable records.
 
 ### Claude Code
 
@@ -130,8 +132,8 @@ Claude Code runs with a generated native `--session-id`.
 Code UX now uses a dedicated parser (`src/infrastructure/providers/cli/provider-logs/claude-code-log-parser.ts`) to read the Claude session JSONL artifacts stored at `~/.claude/projects/<cwd-slug>/<sessionId>.jsonl`.
 
 The parser handles:
-- **Token usage**: accumulates `input_tokens`, `output_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens` across all unique assistant messages (deduplicated by `message.id` to avoid double-counting streaming fragments).
-- **Full conversation transcript**: extracts ordered turns of all kinds:
+- **Token usage**: accumulates `input_tokens`, `output_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens` across assistant messages. When Claude re-emits a `message.id`, the newest usage snapshot replaces the earlier fragment instead of being counted twice.
+- **Full conversation transcript**: extracts turns in native content-block order:
   - `assistant` turns from `type: "text"` content blocks.
   - `reasoning` turns from `type: "thinking"` blocks and other visible thinking fields on assistant messages (only when non-empty; encrypted thinking blocks are silently skipped).
   - `tool_call` turns from `type: "tool_use"` blocks with tool name, id, and JSON-serialized input.
@@ -142,7 +144,7 @@ The parser handles:
 
 If usage is absent or totals are zero, Code UX falls back to token estimation using `@anthropic-ai/tokenizer` over the prompt plus recovered transcript text.
 
-For Docker-backed Claude Code runs, Code UX reads the same session JSONL from the paired provider runtime volume mounted at `/code-ux-runtime-home` before the Docker workspace and runtime volumes are cleaned up.
+Host runs read the active session under `~/.claude/projects`; Docker-backed runs read the same JSONL contract from the paired provider runtime volume mounted at `/code-ux-runtime-home` before the Docker workspace and runtime volumes are cleaned up.
 
 ### Antigravity
 

@@ -48,6 +48,28 @@ function readFirstStringField(value: unknown, fieldNames: string[]): string | un
   return undefined;
 }
 
+function readTimestampMs(...values: unknown[]): number | null {
+  for (const value of values) {
+    const record = asRecord(value);
+    const raw = record
+      ? record.timestamp ?? record.createdAt ?? record.created_at ?? record.time
+      : value;
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      return raw > 10_000_000_000 ? raw : raw * 1000;
+    }
+    if (typeof raw === "string" && raw.trim()) {
+      const parsed = Date.parse(raw);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    const time = asRecord(record?.time);
+    const nested = time?.completed ?? time?.end ?? time?.start ?? time?.created;
+    if (typeof nested === "number" && Number.isFinite(nested)) {
+      return nested > 10_000_000_000 ? nested : nested * 1000;
+    }
+  }
+  return null;
+}
+
 function extractVisibleText(value: unknown): string {
   if (typeof value === "string") {
     return value.trim();
@@ -152,16 +174,16 @@ export function parseOpenCodeExport(exportStdout: string): OpenCodeExportUsage |
   // happens to contain braces can't be mistaken for the payload.
   const infoIndex = exportStdout.search(/\{\s*"info"\s*:/);
   const searchText = infoIndex >= 0 ? exportStdout.slice(infoIndex) : exportStdout;
-  const extracted = extractJsonContainer<Record<string, unknown> | unknown[]>(searchText, "object-or-array");
-  if (!extracted.ok) return null;
-  const root = extracted.value;
+  const root = findOpenCodeExportRoot(searchText)
+    ?? (searchText === exportStdout ? null : findOpenCodeExportRoot(exportStdout));
+  if (!root) return null;
   const info = findOpenCodeExportInfo(root);
   const tokens = asRecord(info?.tokens) ?? asRecord(info?.usage);
   if (!tokens) {
     return null;
   }
   const t = readOpenCodeTokens(tokens);
-  if (t.input <= 0 && t.output <= 0) {
+  if (t.rawInput <= 0 && t.output <= 0 && t.reasoning <= 0 && t.cacheRead <= 0) {
     return null;
   }
   const cost = toNumber(info?.cost ?? 0);
@@ -176,6 +198,21 @@ export function parseOpenCodeExport(exportStdout: string): OpenCodeExportUsage |
       cost,
     },
   };
+}
+
+function findOpenCodeExportRoot(text: string): Record<string, unknown> | unknown[] | null {
+  let offset = 0;
+  while (offset < text.length) {
+    const extracted = extractJsonContainer<Record<string, unknown> | unknown[]>(text.slice(offset), "object-or-array");
+    if (extracted.ok) {
+      if (findOpenCodeExportInfo(extracted.value)) return extracted.value;
+      offset += extracted.endIndex;
+      continue;
+    }
+    const relativeStart = extracted.startIndex ?? 0;
+    offset += Math.max(relativeStart + 1, 1);
+  }
+  return null;
 }
 
 function findOpenCodeExportInfo(root: unknown): Record<string, unknown> | null {
@@ -284,6 +321,8 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult {
   const textPartTextIndexes = new Map<string, number>();
   const assistantMessageIndexes = new Map<string, number>();
   const assistantMessageTextIndexes = new Map<string, number>();
+  const reasoningPartIndexes = new Map<string, number>();
+  const stepFinishTotals = new Map<string, { tokens: OpenCodeTokens; cost: number }>();
   let nativeSessionId: string | null = null;
   let foundEvent = false;
 
@@ -347,6 +386,7 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult {
     }
 
     const partType = typeof part?.type === "string" ? part.type : null;
+    const timestampMs = readTimestampMs(part, info, event, properties, parsed);
 
     if (partType === "text" && part) {
       const text = extractVisibleText(part.text ?? part.content ?? part.delta);
@@ -359,10 +399,17 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult {
           textParts.push(text);
         }
         if (partId && textPartIndexes.has(partId)) {
-          conversation[textPartIndexes.get(partId)!] = { kind: "assistant", text };
+          const existing = conversation[textPartIndexes.get(partId)!];
+          conversation[textPartIndexes.get(partId)!] = {
+            kind: "assistant",
+            text,
+            ...(timestampMs != null || existing.timestampMs != null
+              ? { timestampMs: timestampMs ?? existing.timestampMs }
+              : {}),
+          };
         } else {
           if (partId) textPartIndexes.set(partId, conversation.length);
-          conversation.push({ kind: "assistant", text });
+          conversation.push({ kind: "assistant", text, ...(timestampMs != null ? { timestampMs } : {}) });
         }
       }
       continue;
@@ -371,7 +418,21 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult {
     if (partType === "reasoning" && part) {
       const visibleReasoning = extractOpenCodeReasoning(part);
       if (visibleReasoning) {
-        conversation.push({ kind: "reasoning", text: visibleReasoning });
+        const partId = readFirstStringField(part, ["id", "partID", "partId", "part_id"]);
+        if (partId && reasoningPartIndexes.has(partId)) {
+          const index = reasoningPartIndexes.get(partId)!;
+          const existing = conversation[index];
+          conversation[index] = {
+            kind: "reasoning",
+            text: visibleReasoning,
+            ...(timestampMs != null || existing.timestampMs != null
+              ? { timestampMs: timestampMs ?? existing.timestampMs }
+              : {}),
+          };
+        } else {
+          if (partId) reasoningPartIndexes.set(partId, conversation.length);
+          conversation.push({ kind: "reasoning", text: visibleReasoning, ...(timestampMs != null ? { timestampMs } : {}) });
+        }
       }
       continue;
     }
@@ -396,15 +457,17 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult {
         if (args !== undefined) existing.toolArguments = args;
         if (output !== undefined) existing.toolOutput = output;
         if (status) existing.toolStatus = status;
+        if (existing.timestampMs == null && timestampMs != null) existing.timestampMs = timestampMs;
       } else {
         conversation.push({
           kind: "tool_call",
-          text: "",
+          text: toolName ? `Calling tool ${toolName}` : "Calling tool",
           toolName,
           toolCallId,
           toolArguments: args,
           toolOutput: output,
           toolStatus: status,
+          ...(timestampMs != null ? { timestampMs } : {}),
         });
       }
       continue;
@@ -416,16 +479,30 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult {
     const isStepFinish = partType === "step-finish" || partType === "step_finish"
       || eventType === "step-finish" || eventType === "step_finish";
     if (isStepFinish) {
+      const stepId = readFirstStringField(part, ["id", "partID", "partId", "part_id"])
+        ?? readFirstStringField(event, ["id", "eventID", "eventId", "event_id"]);
       const tokens = asRecord(part?.tokens) ?? asRecord(part?.usage) ?? asRecord(event.tokens) ?? asRecord(event.usage) ?? asRecord(properties?.tokens) ?? asRecord(properties?.usage);
       if (tokens) {
         const t = readOpenCodeTokens(tokens);
+        const cost = toNumber(part?.cost ?? event.cost ?? properties?.cost ?? 0);
+        const prior = stepId ? stepFinishTotals.get(stepId) : undefined;
+        if (prior) {
+          stepTotals.input -= prior.tokens.input;
+          stepTotals.rawInput -= prior.tokens.rawInput;
+          stepTotals.output -= prior.tokens.output;
+          stepTotals.reasoning -= prior.tokens.reasoning;
+          stepTotals.cacheRead -= prior.tokens.cacheRead;
+          stepTotals.cacheWrite -= prior.tokens.cacheWrite;
+          stepCost -= prior.cost;
+        }
         stepTotals.input += t.input;
         stepTotals.rawInput += t.rawInput;
         stepTotals.output += t.output;
         stepTotals.reasoning += t.reasoning;
         stepTotals.cacheRead += t.cacheRead;
         stepTotals.cacheWrite += t.cacheWrite;
-        stepCost += toNumber(part?.cost ?? event.cost ?? properties?.cost ?? 0);
+        stepCost += cost;
+        if (stepId) stepFinishTotals.set(stepId, { tokens: t, cost });
         sawStepFinish = true;
       }
       continue;
@@ -449,10 +526,17 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult {
           textParts.push(text);
         }
         if (messageId && assistantMessageIndexes.has(messageId)) {
-          conversation[assistantMessageIndexes.get(messageId)!] = { kind: "assistant", text };
+          const existing = conversation[assistantMessageIndexes.get(messageId)!];
+          conversation[assistantMessageIndexes.get(messageId)!] = {
+            kind: "assistant",
+            text,
+            ...(timestampMs != null || existing.timestampMs != null
+              ? { timestampMs: timestampMs ?? existing.timestampMs }
+              : {}),
+          };
         } else {
           if (messageId) assistantMessageIndexes.set(messageId, conversation.length);
-          conversation.push({ kind: "assistant", text });
+          conversation.push({ kind: "assistant", text, ...(timestampMs != null ? { timestampMs } : {}) });
         }
       }
     }
@@ -479,7 +563,7 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult {
     }
   }
 
-  const hasUsage = usage.input > 0 || usage.output > 0;
+  const hasUsage = usage.rawInput > 0 || usage.output > 0 || usage.reasoning > 0 || usage.cacheRead > 0;
   const rawUsageJson = hasUsage
     ? {
       tokens: {
