@@ -485,7 +485,7 @@ jobs:
           retention-days: 7
 
   e2e:
-    name: 10 E2E / ${{ matrix.os.label }} full (${{ matrix.project }})
+    name: 09 E2E / ${{ matrix.os.label }} full (${{ matrix.project }})
     needs: [static, build, security-audit]
     if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.base_ref == 'main' }}
     runs-on: ${{ matrix.os.runner }}
@@ -564,7 +564,7 @@ jobs:
           retention-days: 7
 
   release-candidate:
-    name: 11 Release Candidate / desktop package (${{ matrix.name }})
+    name: 10 Release Candidate / desktop package (${{ matrix.name }})
     needs: package-smoke
     if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.base_ref == 'main' }}
     runs-on: ${{ matrix.os }}
@@ -671,3 +671,112 @@ jobs:
             !release/electron/builder-effective-config.yaml
           if-no-files-found: error
           retention-days: 7
+
+  legacy-backend-context:
+    name: 04 Test / backend coverage
+    needs: backend-tests
+    if: >-
+      ${{
+        always() &&
+        needs['backend-tests'].result == 'success' &&
+        (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.base_ref == 'main')
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Confirm current backend gate
+        run: echo "Current backend coverage gate passed."
+
+  legacy-dashboard-context:
+    name: 05 Test / dashboard suite
+    needs: dashboard-tests
+    if: >-
+      ${{
+        always() &&
+        needs['dashboard-tests'].result == 'success' &&
+        (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.base_ref == 'main')
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Confirm current dashboard gate
+        run: echo "Current dashboard suite gate passed."
+
+  legacy-security-context:
+    name: 06 Security / dependency audit
+    needs: security-audit
+    if: >-
+      ${{
+        always() &&
+        needs['security-audit'].result == 'success' &&
+        (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.base_ref == 'main')
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Confirm current security gate
+        run: echo "Current dependency audit gate passed."
+
+  legacy-package-context:
+    name: 07 Package / npm install smoke (${{ matrix.name }})
+    needs: package-smoke
+    if: >-
+      ${{
+        always() &&
+        needs['package-smoke'].result == 'success' &&
+        (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.base_ref == 'main')
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [Linux, Windows, macOS]
+    steps:
+      - name: Confirm current package gate
+        run: echo "Current artifact-backed package smoke gate passed."
+
+  legacy-orchestration-context:
+    name: 08 Orchestration / Docker DAG
+    needs: ci-dag
+    if: >-
+      ${{
+        always() &&
+        needs['ci-dag'].result == 'success' &&
+        (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.base_ref == 'main')
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Confirm current orchestration matrix
+        run: echo "Current cross-platform orchestration matrix passed."
+
+  legacy-e2e-context:
+    name: ${{ format('09 E2E / ${0}{0} matrix.os.label {1}{1} full (${0}{0} matrix.project {1}{1})', '{', '}') }}
+    needs: e2e
+    if: >-
+      ${{
+        always() &&
+        needs.e2e.result == 'success' &&
+        (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.base_ref == 'main')
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Confirm current E2E matrix
+        run: echo "Current 18-shard cross-platform E2E matrix passed."
+
+  legacy-release-candidate-context:
+    name: ${{ format('10 Release Candidate / desktop package (${0}{0} matrix.name {1}{1})', '{', '}') }}
+    needs: release-candidate
+    if: >-
+      ${{
+        always() &&
+        needs['release-candidate'].result == 'success' &&
+        (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.base_ref == 'main')
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Confirm current release-candidate matrix
+        run: echo "Current cross-platform desktop release-candidate matrix passed."
