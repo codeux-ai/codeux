@@ -421,6 +421,70 @@ jobs:
           include-hidden-files: true
           retention-days: 7
 
+  docs-e2e:
+    name: 09 E2E / docs smoke
+    needs: [static, build, security-audit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Restore node_modules cache
+        uses: actions/cache@v5
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Download compiled app artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: codeux-build-linux
+          path: .
+
+      - name: Cache Playwright browser binaries
+        uses: actions/cache@v5
+        with:
+          path: .cache/ms-playwright
+          key: ${{ runner.os }}-node22-pnpm10.33.0-playwright-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-node22-pnpm10.33.0-playwright-
+
+      - name: Install Playwright OS dependencies
+        run: pnpm exec playwright install-deps chromium
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install chromium
+
+      - name: Run docs page smoke test
+        run: pnpm exec playwright test tests/e2e/navigation/docs-page.spec.ts --project=navigation
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-docs-smoke
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
+
   e2e:
     name: 09 E2E / ${{ matrix.os.label }} full (${{ matrix.project }})
     needs: [static, build, security-audit]

@@ -8,7 +8,30 @@ import type {
   DocsWebSection,
 } from "../contracts/docs-web-types.js";
 
-const DEFAULT_DOCS_WEB_ROOT = fileURLToPath(new URL("../../docs-web", import.meta.url));
+function getDefaultDocsWebRootCandidates(): string[] {
+  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+  const resourcesPath = typeof process.resourcesPath === "string" ? process.resourcesPath : null;
+
+  return [
+    path.join(process.cwd(), "docs-web"),
+    // Resolves to the repository root in source and dist builds, including
+    // <resources>/app.asar/docs-web in the standard Electron package layout.
+    path.resolve(moduleDir, "../../docs-web"),
+    // Supports desktop layouts where the compiled runtime is nested one level
+    // farther below the packaged application root.
+    path.resolve(moduleDir, "../../../docs-web"),
+    ...(resourcesPath ? [
+      path.join(resourcesPath, "app.asar", "docs-web"),
+      path.join(resourcesPath, "docs-web"),
+    ] : []),
+  ];
+}
+
+export function resolveDocsWebRoot(candidates = getDefaultDocsWebRootCandidates()): string {
+  return candidates.find((candidate) => fs.existsSync(path.join(candidate, "index.md"))) ?? candidates[0];
+}
+
+const DEFAULT_DOCS_WEB_ROOT = resolveDocsWebRoot();
 const SECTION_ORDER: DocsWebSection[] = ["Getting Started", "User Guide", "Developer Reference", "Architecture"];
 
 const PINNED_ORDER = new Map<string, number>([

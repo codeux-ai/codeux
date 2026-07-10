@@ -43,6 +43,8 @@ describe("Electron dashboard network policy", () => {
     const origin = "http://127.0.0.1:4444";
 
     expect(isSafeInternalUrl("http://127.0.0.1:4444/projects", origin)).toBe(true);
+    expect(isSafeInternalUrl("http://127.0.0.1:4444/docs", origin)).toBe(true);
+    expect(isSafeInternalUrl("http://127.0.0.1:4444/docs/developer-mcp-tools", origin)).toBe(true);
     expect(isSafeInternalUrl("http://preview-session-123.localhost:4444/", origin)).toBe(true);
     expect(isSafeInternalUrl("http://PREVIEW-SESSION-123.localhost:4444/", origin)).toBe(true);
 
@@ -58,6 +60,7 @@ describe("Electron dashboard network policy", () => {
     const origin = "http://127.0.0.1:4444";
 
     expect(classifyNavigationTarget("http://127.0.0.1:4444/tasks", origin)).toBe("allow-internal");
+    expect(classifyNavigationTarget("http://127.0.0.1:4444/docs/user-quickstart", origin)).toBe("allow-internal");
     expect(classifyNavigationTarget("http://example.test/docs", origin)).toBe("open-external");
     expect(classifyNavigationTarget("https://example.test/docs", origin)).toBe("open-external");
     expect(classifyNavigationTarget("https://github.com/codeux-ai/codeux/releases/tag/v1.2.0", origin)).toBe(

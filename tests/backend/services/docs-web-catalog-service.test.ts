@@ -5,7 +5,7 @@ import express from "express";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { registerDocsWebRoutes } from "../../../src/server/docs-web-routes.js";
-import { DocsWebCatalogService } from "../../../src/services/docs-web-catalog-service.js";
+import { DocsWebCatalogService, resolveDocsWebRoot } from "../../../src/services/docs-web-catalog-service.js";
 
 const repoDocsWebRoot = path.resolve(process.cwd(), "docs-web");
 const sampleDocIds = [
@@ -97,6 +97,12 @@ describe("DocsWebCatalogService", () => {
     expect(collection.defaultDocId).toBe("docs-overview");
     expect(collection.docs.some((doc) => doc.id === "docs-overview")).toBe(true);
     expect(collection.groupedDocs["Getting Started"].some((doc) => doc.id === "docs-overview")).toBe(true);
+  });
+
+  it("falls back to an available packaged docs root when an earlier candidate is absent", () => {
+    const missingRoot = path.join(tempDir, "missing-docs-web");
+
+    expect(resolveDocsWebRoot([missingRoot, tempDir])).toBe(tempDir);
   });
 });
 
