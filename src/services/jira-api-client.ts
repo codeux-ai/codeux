@@ -283,6 +283,7 @@ export async function searchIssues(
   return (data.issues || []).map((issue: JiraIssueRaw) => {
     const assigneeName = issue.fields?.assignee?.displayName || issue.fields?.assignee?.accountId || issue.fields?.assignee?.name || '';
     const reporterName = issue.fields?.reporter?.displayName || issue.fields?.reporter?.accountId || issue.fields?.reporter?.name || null;
+    const descriptionMarkdown = extractAdfText(issue.fields?.description) || '';
     return {
       key: issue.key,
       title: issue.fields?.summary || '',
@@ -293,7 +294,8 @@ export async function searchIssues(
       projectKey: issue.fields?.project?.key || '',
       issueType: issue.fields?.issuetype?.name || null,
       priority: issue.fields?.priority?.name || null,
-      bodyPreview: truncatePreview(extractAdfText(issue.fields?.description) || ''),
+      bodyPreview: truncatePreview(descriptionMarkdown),
+      issueBodyMarkdown: descriptionMarkdown,
       createdAt: issue.fields?.created || null,
       updatedAt: issue.fields?.updated || null,
       issueAuthor: reporterName,
@@ -322,6 +324,7 @@ export async function getIssue(
 
   const assigneeName = data.fields?.assignee?.displayName || data.fields?.assignee?.accountId || data.fields?.assignee?.name || '';
   const reporterName = data.fields?.reporter?.displayName || data.fields?.reporter?.accountId || data.fields?.reporter?.name || null;
+  const descriptionMarkdown = extractAdfText(data.fields?.description) || '';
   const searchResult: JiraIssueSearchResult = {
     key: data.key,
     title: data.fields?.summary || '',
@@ -332,7 +335,8 @@ export async function getIssue(
     projectKey: data.fields?.project?.key || '',
     issueType: data.fields?.issuetype?.name || null,
     priority: data.fields?.priority?.name || null,
-    bodyPreview: truncatePreview(extractAdfText(data.fields?.description) || ''),
+    bodyPreview: truncatePreview(descriptionMarkdown),
+    issueBodyMarkdown: descriptionMarkdown,
     createdAt: data.fields?.created || null,
     updatedAt: data.fields?.updated || null,
     issueAuthor: reporterName,
@@ -359,7 +363,7 @@ export async function getIssue(
 
   return {
     ...searchResult,
-    descriptionMarkdown: extractAdfText(data.fields?.description),
+    descriptionMarkdown: descriptionMarkdown || null,
     commentsMarkdown,
   };
 }

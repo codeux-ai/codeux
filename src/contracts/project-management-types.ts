@@ -233,6 +233,7 @@ export interface JiraIssueSearchResult {
   issueType: string | null;
   priority: string | null;
   bodyPreview: string;
+  issueBodyMarkdown: string;
   createdAt: string | null;
   updatedAt: string | null;
   issueAuthor: string | null;
