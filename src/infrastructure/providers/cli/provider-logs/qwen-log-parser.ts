@@ -1,7 +1,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import type { ParsedConversationTurn } from "./provider-conversation-types.js";
-import { extractJsonContainer, parseUsageObject } from "./usage-parse-utils.js";
+import { extractJsonContainer, parseTimestampMs, parseUsageObject, toNumber } from "./usage-parse-utils.js";
 
 export interface QwenUsageTotals {
   inputTokens: number;
@@ -12,6 +12,35 @@ export interface QwenUsageTotals {
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" ? value as Record<string, unknown> : null;
+}
+
+function recordTimestampMs(record: unknown): number | null {
+  return parseTimestampMs(asRecord(record)?.timestamp);
+}
+
+function isWithinInvocationWindow(record: unknown, sinceMs?: number): boolean {
+  if (typeof sinceMs !== "number") {
+    return true;
+  }
+  const timestampMs = recordTimestampMs(record);
+  return timestampMs === null || timestampMs >= sinceMs - 2000;
+}
+
+function qwenUsageObject(record: Record<string, unknown>): Record<string, unknown> | null {
+  const response = asRecord(record.response);
+  const responseBody = asRecord(response?.body) ?? asRecord(response?.data);
+  return asRecord(response?.usage)
+    ?? asRecord(responseBody?.usage)
+    ?? asRecord(record.usage);
+}
+
+function qwenUsageDedupeKey(record: Record<string, unknown>): string | null {
+  const response = asRecord(record.response);
+  const responseId = response?.id ?? record.id;
+  if (typeof responseId === "string" && responseId.trim()) {
+    return `response:${responseId}`;
+  }
+  return null;
 }
 
 /**
@@ -30,8 +59,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 export function extractQwenUsageRecord(record: unknown): QwenUsageTotals | null {
   const root = asRecord(record);
   if (!root) return null;
-  const response = asRecord(root.response);
-  const usage = asRecord(response?.usage) ?? asRecord(root.usage);
+  const usage = qwenUsageObject(root);
   if (!usage) return null;
 
   const parsed = parseUsageObject(usage);
@@ -44,12 +72,27 @@ export function extractQwenUsageRecord(record: unknown): QwenUsageTotals | null 
 }
 
 /** Sums usage across many qwen-code log records. Returns null when none report usage. */
-export function sumQwenOpenAiUsage(records: unknown[]): QwenUsageTotals | null {
+export function sumQwenOpenAiUsage(records: unknown[], sinceMs?: number): QwenUsageTotals | null {
   const totals: QwenUsageTotals = { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 };
   let found = false;
+  const seenKeys = new Set<string>();
   for (const record of records) {
+    if (!isWithinInvocationWindow(record, sinceMs)) {
+      continue;
+    }
+    const root = asRecord(record);
+    if (!root) {
+      continue;
+    }
+    const dedupeKey = qwenUsageDedupeKey(root);
+    if (dedupeKey && seenKeys.has(dedupeKey)) {
+      continue;
+    }
     const usage = extractQwenUsageRecord(record);
     if (usage) {
+      if (dedupeKey) {
+        seenKeys.add(dedupeKey);
+      }
       totals.inputTokens += usage.inputTokens;
       totals.cachedInputTokens += usage.cachedInputTokens;
       totals.outputTokens += usage.outputTokens;
@@ -65,6 +108,15 @@ function flattenOpenAiContent(content: unknown): string {
   if (typeof content === "string") {
     return content.trim();
   }
+  const rec = asRecord(content);
+  if (rec && !Array.isArray(content)) {
+    if (typeof rec.text === "string") {
+      return rec.text.trim();
+    }
+    if (typeof rec.content === "string" || Array.isArray(rec.content)) {
+      return flattenOpenAiContent(rec.content);
+    }
+  }
   if (!Array.isArray(content)) {
     return "";
   }
@@ -73,6 +125,10 @@ function flattenOpenAiContent(content: unknown): string {
     const rec = asRecord(item);
     if (rec && typeof rec.text === "string") {
       parts.push(rec.text);
+    } else if (rec && typeof rec.input_text === "string") {
+      parts.push(rec.input_text);
+    } else if (rec && typeof rec.output_text === "string") {
+      parts.push(rec.output_text);
     } else if (typeof item === "string") {
       parts.push(item);
     }
@@ -86,7 +142,10 @@ function responseMessageFromRecord(record: unknown): Record<string, unknown> | n
   const response = asRecord(root?.response);
   if (!response) return null;
   const choices = Array.isArray(response.choices) ? response.choices : [];
-  return asRecord(asRecord(choices[0])?.message) ?? asRecord(response.message);
+  const firstChoice = asRecord(choices[0]);
+  return asRecord(firstChoice?.message)
+    ?? asRecord(firstChoice?.delta)
+    ?? asRecord(response.message);
 }
 
 /** Pulls the chain-of-thought text from a message's `reasoning_content`/`reasoning` field. */
@@ -94,6 +153,16 @@ function reasoningFromMessage(message: Record<string, unknown>): string {
   const reasoningContent = message.reasoning_content ?? message.reasoning ?? message.thinking ?? message.summary;
   if (typeof reasoningContent === "string") {
     return reasoningContent.trim();
+  }
+  const reasoningRecord = asRecord(reasoningContent);
+  if (reasoningRecord && !Array.isArray(reasoningContent)) {
+    for (const key of ["text", "summary_text", "summary", "reasoning", "thinking", "content"]) {
+      const text = flattenOpenAiContent(reasoningRecord[key]);
+      if (text) {
+        return text;
+      }
+    }
+    return "";
   }
   if (!Array.isArray(reasoningContent)) {
     return "";
@@ -128,6 +197,54 @@ function toolCallId(call: unknown): string | undefined {
   return typeof id === "string" ? id : undefined;
 }
 
+function openAiToolCalls(message: Record<string, unknown>): Record<string, unknown>[] {
+  const calls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+  const records = calls.map(asRecord).filter((call): call is Record<string, unknown> => Boolean(call));
+  const functionCall = asRecord(message.function_call);
+  if (functionCall) {
+    records.push({ type: "function", function: functionCall });
+  }
+  const toolCall = asRecord(message.tool_call);
+  if (toolCall) {
+    records.push(toolCall);
+  }
+  return records;
+}
+
+function requestMessagesFromRecord(record: Record<string, unknown>): unknown[] {
+  const request = asRecord(record.request);
+  const requestBody = asRecord(request?.body) ?? asRecord(request?.data);
+  const sources = [
+    request?.messages,
+    requestBody?.messages,
+    request?.history,
+    requestBody?.history,
+    record.history,
+    record.requestHistory,
+  ];
+  for (const source of sources) {
+    if (Array.isArray(source)) {
+      return source;
+    }
+  }
+  return [];
+}
+
+function tokensFromUsage(usage: Record<string, unknown> | null): ParsedConversationTurn["tokens"] | undefined {
+  if (!usage) {
+    return undefined;
+  }
+  const parsed = parseUsageObject(usage);
+  const total = toNumber(usage.total_tokens ?? usage.totalTokens ?? usage.total);
+  return {
+    input: parsed.inputTokens,
+    cached: parsed.cachedInputTokens,
+    output: parsed.outputTokens,
+    reasoning: parsed.reasoningOutputTokens,
+    ...(total > 0 ? { total } : {}),
+  };
+}
+
 /**
  * qwen-code's CLI harness prepends its own ephemeral `<system-reminder>` blocks
  * (the deferred tool-search registry, available skills, etc.) directly into the
@@ -152,10 +269,11 @@ function splitLeadingSystemReminders(text: string): { injected: string; prompt: 
  * each call's own response still carries it, keyed here by the tool-call ids
  * that step produced. We prepend a reasoning turn before the matching step.
  */
-function turnsFromOpenAiMessage(
+export function turnsFromOpenAiMessage(
   message: Record<string, unknown>,
   tokens?: ParsedConversationTurn["tokens"],
   reasoningByCallId?: Map<string, string>,
+  tokensByCallId?: Map<string, ParsedConversationTurn["tokens"]>,
 ): ParsedConversationTurn[] {
   const role = typeof message.role === "string" ? message.role : "";
   const text = flattenOpenAiContent(message.content);
@@ -167,17 +285,18 @@ function turnsFromOpenAiMessage(
     if (prompt) turns.push({ kind: "user", text: prompt });
     return turns;
   }
-  if (role === "tool") {
+  if (role === "tool" || role === "function") {
     turns.push({
       kind: "tool_result",
       text: "",
       toolCallId: typeof message.tool_call_id === "string" ? message.tool_call_id : undefined,
+      toolName: typeof message.name === "string" ? message.name : undefined,
       toolOutput: text,
     });
     return turns;
   }
   if (role === "assistant") {
-    const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+    const toolCalls = openAiToolCalls(message);
     // Thinking models (qwen3-thinking, deepseek-reasoner, …) carry their
     // chain-of-thought in a separate `reasoning_content` / `reasoning` field
     // rather than in `content`. Surface it as a reasoning turn so the
@@ -187,26 +306,37 @@ function turnsFromOpenAiMessage(
       const firstId = toolCalls.map(toolCallId).find((id): id is string => Boolean(id));
       if (firstId) reasoning = reasoningByCallId.get(firstId) ?? "";
     }
+    let turnTokens = tokens;
+    if (!turnTokens && tokensByCallId) {
+      const firstId = toolCalls.map(toolCallId).find((id): id is string => Boolean(id));
+      if (firstId) turnTokens = tokensByCallId.get(firstId);
+    }
     if (reasoning) {
       turns.push({ kind: "reasoning", text: reasoning });
     }
     if (text) {
-      turns.push({ kind: "assistant", text, tokens });
+      turns.push({ kind: "assistant", text, tokens: turnTokens });
     }
     for (const call of toolCalls) {
       const callRec = asRecord(call);
       const fn = asRecord(callRec?.function);
+      const callId = typeof callRec?.id === "string" ? callRec.id : undefined;
       turns.push({
         kind: "tool_call",
         text: "",
-        toolName: typeof fn?.name === "string" ? fn.name : undefined,
-        toolCallId: typeof callRec?.id === "string" ? callRec.id : undefined,
-        toolArguments: typeof fn?.arguments === "string" ? fn.arguments : undefined,
+        toolName: typeof fn?.name === "string"
+          ? fn.name
+          : (typeof callRec?.name === "string" ? callRec.name : undefined),
+        toolCallId: callId,
+        toolArguments: typeof fn?.arguments === "string"
+          ? fn.arguments
+          : (typeof callRec?.arguments === "string" ? callRec.arguments : undefined),
+        tokens: !text && callId && tokensByCallId ? tokensByCallId.get(callId) : undefined,
       });
     }
     // Attach turn tokens to the tool_call when there was no assistant text.
-    if (!text && turns.length > 0 && tokens) {
-      turns[turns.length - 1].tokens = tokens;
+    if (!text && turns.length > 0 && turnTokens) {
+      turns[turns.length - 1].tokens = turnTokens;
     }
     return turns;
   }
@@ -221,11 +351,11 @@ function turnsFromOpenAiMessage(
  * turn that is not yet present in any request. We therefore take the newest
  * record's request history and append its response message.
  */
-export function buildQwenConversation(records: unknown[]): ParsedConversationTurn[] {
-  const sorted = [...records].sort((a, b) => {
-    const ta = typeof asRecord(a)?.timestamp === "string" ? Date.parse(asRecord(a)!.timestamp as string) : 0;
-    const tb = typeof asRecord(b)?.timestamp === "string" ? Date.parse(asRecord(b)!.timestamp as string) : 0;
-    return (Number.isFinite(ta) ? ta : 0) - (Number.isFinite(tb) ? tb : 0);
+export function buildQwenConversation(records: unknown[], sinceMs?: number): ParsedConversationTurn[] {
+  const sorted = records.filter((record) => isWithinInvocationWindow(record, sinceMs)).sort((a, b) => {
+    const ta = recordTimestampMs(a) ?? 0;
+    const tb = recordTimestampMs(b) ?? 0;
+    return ta - tb;
   });
   const newest = asRecord(sorted[sorted.length - 1]);
   if (!newest) {
@@ -236,41 +366,33 @@ export function buildQwenConversation(records: unknown[]): ParsedConversationTur
   // record's own response keeps its `reasoning_content`, keyed by the tool-call
   // ids that step emitted, so we can re-attach it during reconstruction.
   const reasoningByCallId = new Map<string, string>();
+  const tokensByCallId = new Map<string, ParsedConversationTurn["tokens"]>();
   for (const record of sorted) {
     const responseMsg = responseMessageFromRecord(record);
     if (!responseMsg) continue;
     const reasoning = reasoningFromMessage(responseMsg);
-    if (!reasoning) continue;
-    const calls = Array.isArray(responseMsg.tool_calls) ? responseMsg.tool_calls : [];
+    const usage = qwenUsageObject(asRecord(record) ?? {});
+    const tokens = tokensFromUsage(usage);
+    const calls = openAiToolCalls(responseMsg);
     for (const call of calls) {
       const id = toolCallId(call);
-      if (id) reasoningByCallId.set(id, reasoning);
+      if (!id) continue;
+      if (reasoning) reasoningByCallId.set(id, reasoning);
+      if (tokens) tokensByCallId.set(id, tokens);
     }
   }
 
   const conversation: ParsedConversationTurn[] = [];
-  const request = asRecord(newest.request);
-  const messages = Array.isArray(request?.messages) ? request!.messages : [];
+  const messages = requestMessagesFromRecord(newest);
   for (const message of messages) {
     const rec = asRecord(message);
     if (rec) {
-      conversation.push(...turnsFromOpenAiMessage(rec, undefined, reasoningByCallId));
+      conversation.push(...turnsFromOpenAiMessage(rec, undefined, reasoningByCallId, tokensByCallId));
     }
   }
 
   const response = asRecord(newest.response);
-  const usage = asRecord(response?.usage);
-  const tokens = usage
-    ? (() => {
-        const parsed = parseUsageObject(usage);
-        return {
-          input: parsed.inputTokens,
-          cached: parsed.cachedInputTokens,
-          output: parsed.outputTokens,
-          reasoning: parsed.reasoningOutputTokens,
-        };
-      })()
-    : undefined;
+  const tokens = tokensFromUsage(qwenUsageObject(newest));
   const choices = Array.isArray(response?.choices) ? response!.choices : [];
   const responseMessage = asRecord(asRecord(choices[0])?.message) ?? asRecord(response?.message);
   if (responseMessage) {
@@ -318,5 +440,5 @@ export async function parseQwenOpenAiLogs(
   startTimeMs: number,
 ): Promise<QwenUsageTotals | null> {
   const records = await readQwenOpenAiLogRecords(logDir, startTimeMs);
-  return records.length > 0 ? sumQwenOpenAiUsage(records) : null;
+  return records.length > 0 ? sumQwenOpenAiUsage(records, startTimeMs) : null;
 }
