@@ -106,7 +106,7 @@ Linux `electron:pack` benchmark on WSL/Linux after the first installer optimizat
 
 ## GitHub Release Builds
 
-Desktop release artifacts are built by `.github/workflows/desktop-release.yml` when a GitHub Release is published. The workflow can also be started manually from GitHub Actions with an optional tag input.
+Published desktop artifacts are built by `.github/workflows/release.yml` when a GitHub Release is published. `.github/workflows/desktop-release.yml` is the separate manual `Desktop Release Diagnostics` workflow; it accepts an optional tag/ref and uploads artifact-only rebuilds without modifying a release.
 
 The workflow builds on native runners:
 
@@ -114,13 +114,13 @@ The workflow builds on native runners:
 - `windows-latest` runs `pnpm run electron:dist:win`
 - `macos-latest` runs `pnpm run electron:dist:mac`
 
-Each job uploads its generated files as a workflow artifact. For published GitHub Releases, the same generated files are also attached to the release.
+Each release job uploads its generated files as a workflow artifact and attaches the same files to the published GitHub Release. Diagnostic rebuilds only upload workflow artifacts.
 
 Release builds set `CSC_IDENTITY_AUTO_DISCOVERY=false`, so the default workflow produces unsigned desktop artifacts unless signing secrets and Electron Builder signing configuration are added later.
 
 The release workflow caches pnpm downloads, TypeScript/Vite caches, Electron downloads, Electron Builder caches, and `.cache/electron-runtime` to reduce repeated desktop build time on native runners.
 
-Use this workflow for published desktop releases. It is the lane that attaches generated installers/packages to a GitHub Release when the release event is published.
+Use `.github/workflows/release.yml` for published desktop releases. It is the lane that also validates the release tag, publishes the npm package through trusted publishing, and attaches generated installers/packages to the GitHub Release.
 
 ## CI Release Candidate Packages
 

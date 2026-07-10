@@ -485,7 +485,7 @@ jobs:
           retention-days: 7
 
   e2e:
-    name: 10 E2E / ${{ matrix.os.label }} full (${{ matrix.project }})
+    name: 09 E2E / ${{ matrix.os.label }} full (${{ matrix.project }})
     needs: [static, build, security-audit]
     if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.base_ref == 'main' }}
     runs-on: ${{ matrix.os.runner }}
@@ -564,7 +564,7 @@ jobs:
           retention-days: 7
 
   release-candidate:
-    name: 11 Release Candidate / desktop package (${{ matrix.name }})
+    name: 10 Release Candidate / desktop package (${{ matrix.name }})
     needs: package-smoke
     if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.base_ref == 'main' }}
     runs-on: ${{ matrix.os }}

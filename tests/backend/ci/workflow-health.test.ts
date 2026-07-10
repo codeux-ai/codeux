@@ -122,8 +122,8 @@ describe("GitHub workflow health", () => {
       ["package-smoke", "07 Package / npm install smoke"],
       ["ci-dag", "08 Orchestration / ${{ matrix.name }} DAG"],
       ["docs-page-smoke", "09 Docs / five-page smoke"],
-      ["e2e", "10 E2E /"],
-      ["release-candidate", "11 Release Candidate / desktop package"],
+      ["e2e", "09 E2E /"],
+      ["release-candidate", "10 Release Candidate / desktop package"],
     ] as const) {
       expect(getJobBlock(ci, jobName)).toContain(`name: ${displayName}`);
     }
@@ -208,7 +208,7 @@ describe("GitHub workflow health", () => {
     expect(docsPageSmoke).toContain("name: docs-page-smoke");
     expect(docsPageSmoke).not.toContain("if: ${{ github.event_name");
 
-    expect(e2e).toContain("name: 10 E2E / ${{ matrix.os.label }} full (${{ matrix.project }})");
+    expect(e2e).toContain("name: 09 E2E / ${{ matrix.os.label }} full (${{ matrix.project }})");
     expect(e2e).toContain("needs: [static, build, security-audit]");
     expect(e2e).toContain("github.base_ref == 'main'");
     expect(e2e).toContain("runs-on: ${{ matrix.os.runner }}");
@@ -232,7 +232,7 @@ describe("GitHub workflow health", () => {
     expect(ci).not.toContain("electron-dag:");
 
     expect(releaseCandidate).toContain("needs: package-smoke");
-    expect(releaseCandidate).toContain("name: 11 Release Candidate / desktop package (${{ matrix.name }})");
+    expect(releaseCandidate).toContain("name: 10 Release Candidate / desktop package (${{ matrix.name }})");
     expect(releaseCandidate).toContain("github.base_ref == 'main'");
     expect(releaseCandidate).not.toContain("ci-dag");
     expect(releaseCandidate).not.toContain("e2e");
