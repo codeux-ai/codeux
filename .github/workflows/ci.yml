@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, dev]
   pull_request:
-    branches: ["**"]
+    branches: [main, dev]
   workflow_dispatch:
 
 concurrency:
@@ -177,8 +177,8 @@ jobs:
           retention-days: 1
 
   backend-tests:
-    name: 04 Test / backend coverage
-    needs: preflight
+    name: 05 Test / backend coverage
+    needs: [static, build, security-audit]
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -216,8 +216,8 @@ jobs:
         run: pnpm run test:backend:coverage
 
   dashboard-tests:
-    name: 05 Test / dashboard suite
-    needs: preflight
+    name: 06 Test / dashboard suite
+    needs: [static, build, security-audit]
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -255,7 +255,7 @@ jobs:
         run: pnpm run test:dashboard
 
   security-audit:
-    name: 06 Security / dependency audit
+    name: 04 Security / dependency audit
     needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 8
@@ -289,7 +289,7 @@ jobs:
 
   package-smoke:
     name: 07 Package / npm install smoke
-    needs: [static, build, backend-tests, dashboard-tests, security-audit]
+    needs: [static, build, security-audit]
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -330,7 +330,7 @@ jobs:
 
   ci-dag:
     name: 08 Orchestration / ${{ matrix.name }} DAG
-    needs: [static, build, backend-tests, dashboard-tests, security-audit]
+    needs: [static, build, security-audit]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     strategy:
@@ -423,7 +423,8 @@ jobs:
 
   e2e:
     name: 09 E2E / ${{ matrix.os.label }} full (${{ matrix.project }})
-    needs: [static, build, backend-tests, dashboard-tests, security-audit]
+    needs: [static, build, security-audit]
+    if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.base_ref == 'main' }}
     runs-on: ${{ matrix.os.runner }}
     timeout-minutes: 15
     strategy:
@@ -502,6 +503,7 @@ jobs:
   release-candidate:
     name: 10 Release Candidate / desktop package (${{ matrix.name }})
     needs: package-smoke
+    if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.base_ref == 'main' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:

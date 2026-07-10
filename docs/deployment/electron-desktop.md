@@ -120,7 +120,7 @@ Use this workflow for published desktop releases. It is the lane that attaches g
 
 ## CI Release Candidate Packages
 
-The no-secret release-candidate package lane is part of `.github/workflows/ci.yml`, named `Code UX CI Pipeline`. During the dev-first rollout it runs on `dev` and `main` validation so the full desktop package proof can stabilize before the final trigger shape is tightened.
+The no-secret release-candidate package lane is part of `.github/workflows/ci.yml`, named `Code UX CI Pipeline`. It runs for `main` validation and manual dispatches after package smoke, keeping the full desktop package proof out of the routine `dev` lane.
 
 The `10 Release Candidate / desktop package` matrix starts as soon as the package smoke job passes, so desktop packaging can run beside the E2E and orchestration matrices instead of waiting for them to finish. It downloads the shared `codeux-build-linux` artifact, installs the cached Electron binary, rebuilds Electron native dependencies, prepares runtime assets, and runs Electron Builder directly with `--linux`, `--mac`, or `--win` plus `--publish never`. The package smoke job that precedes it runs `node scripts/verify-release-install.mjs` with `CODE_UX_SKIP_RELEASE_INSTALL_BUILD=1`, so the npm tarball install check uses the same compiled artifact instead of rebuilding.
 

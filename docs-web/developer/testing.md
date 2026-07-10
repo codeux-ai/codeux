@@ -108,16 +108,15 @@ If `pnpm run ci` is green, GitHub CI will be too (modulo platform-specific diffe
 
 ## CI pipeline (GitHub Actions)
 
-The canonical automatic lane is `.github/workflows/ci.yml`, named `Code UX CI Pipeline`. During the CI refactor rollout it runs against `dev` and `main` so the main-grade lane can stabilize before the final trigger shape is tightened.
+The canonical automatic lane is `.github/workflows/ci.yml`, named `Code UX CI Pipeline`. It runs jobs `01` through `08` for pushes and pull requests targeting `dev` or `main`; the full browser and release matrices run only for `main` validation and manual dispatches.
 
 It is staged as:
 
 1. `01 Preflight / release policy`: strict version bump gate for pull requests targeting `main`.
-2. `02` through `06`: type/guardrail validation, build, backend coverage, dashboard tests, and security audit.
-3. `07 Package`: npm tarball install smoke from the shared build artifact.
-4. `08 Orchestration`: one shared OS matrix from the build artifact, with Linux Docker DAG validation and macOS/Windows Electron DAG validation.
-5. `09`: full Playwright on Linux, macOS, and Windows from one shared matrix template.
-6. `10`: unsigned desktop release-candidate packages with `--publish never`, started after package smoke so packaging can run beside E2E and orchestration.
+2. `02 Static`, `03 Build`, and `04 Security`: prerequisite type/guardrail, build, and audit checks.
+3. `05 Backend`, `06 Dashboard`, `07 Package`, and `08 Orchestration`: run in parallel after those prerequisites. The orchestration matrix includes Linux Docker and macOS/Windows Electron on both `dev` and `main`.
+4. `09`: full Playwright on Linux, macOS, and Windows only for `main` validation and manual dispatches.
+5. `10`: unsigned desktop release-candidate packages with `--publish never`, only for `main` validation and manual dispatches.
 
 `Playwright Diagnostics`, `Release Candidate Diagnostics`, and `Mockup Sprint Diagnostics` are manual-only rerun workflows. A PR cannot be merged with red CI.
 

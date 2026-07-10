@@ -729,7 +729,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/developer-orchestration-debugging',
     section: 'Developer Reference',
     title: "Rapid orchestration debugging suite",
-    description: "Use this suite when a sprint stalls, local merges fail, worker-owned attention items churn, or memory usage needs extended observation after a fix. CI uses the compiled QA DAG lane by default; its Linux Docker run wai...",
+    description: "Use this suite when a sprint stalls, local merges fail, worker-owned attention items churn, or memory usage needs extended observation after a fix. CI runs the Linux Docker and macOS/Windows Electron QA DAG rows on bo...",
   },
   'architecture-overview': {
     id: 'architecture-overview',

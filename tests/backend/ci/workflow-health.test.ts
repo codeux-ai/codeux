@@ -108,7 +108,7 @@ describe("GitHub workflow health", () => {
 
     expect(ci).toContain("name: Code UX CI Pipeline");
     expect(ci).toMatch(/push:\n    branches: \[main, dev\]/);
-    expect(ci).toMatch(/pull_request:\n    branches: \[\"\*\*\"\]/);
+    expect(ci).toMatch(/pull_request:\n    branches: \[main, dev\]/);
     expect(ci).toContain("workflow_dispatch:");
     expectConcurrencyCancellation(ci, "CI");
 
@@ -116,9 +116,9 @@ describe("GitHub workflow health", () => {
       ["preflight", "01 Preflight / release policy"],
       ["static", "02 Static / typecheck and guardrails"],
       ["build", "03 Build / server and dashboard artifact"],
-      ["backend-tests", "04 Test / backend coverage"],
-      ["dashboard-tests", "05 Test / dashboard suite"],
-      ["security-audit", "06 Security / dependency audit"],
+      ["security-audit", "04 Security / dependency audit"],
+      ["backend-tests", "05 Test / backend coverage"],
+      ["dashboard-tests", "06 Test / dashboard suite"],
       ["package-smoke", "07 Package / npm install smoke"],
       ["ci-dag", "08 Orchestration / ${{ matrix.name }} DAG"],
       ["e2e", "09 E2E /"],
@@ -143,8 +143,16 @@ describe("GitHub workflow health", () => {
     const packageJob = getJobBlock(ci, "package-smoke");
     const dagJob = getJobBlock(ci, "ci-dag");
 
-    for (const job of [staticJob, buildJob, backendJob, dashboardJob, securityJob]) {
+    for (const job of [staticJob, buildJob, securityJob]) {
       expect(job).toContain("needs: preflight");
+      expect(job).toContain(REQUIRED_INSTALL);
+      expect(job).toContain("node-version: ${{ env.NODE_VERSION }}");
+      expect(job).toContain("version: ${{ env.PNPM_VERSION }}");
+      expect(job).toContain("run_install: false");
+    }
+
+    for (const job of [backendJob, dashboardJob]) {
+      expect(job).toContain("needs: [static, build, security-audit]");
       expect(job).toContain(REQUIRED_INSTALL);
       expect(job).toContain("node-version: ${{ env.NODE_VERSION }}");
       expect(job).toContain("version: ${{ env.PNPM_VERSION }}");
@@ -162,11 +170,11 @@ describe("GitHub workflow health", () => {
     expect(dashboardJob).toContain("pnpm run test:dashboard");
     expect(securityJob).toContain("pnpm run audit");
 
-    expect(packageJob).toContain("needs: [static, build, backend-tests, dashboard-tests, security-audit]");
+    expect(packageJob).toContain("needs: [static, build, security-audit]");
     expect(packageJob).toContain("name: codeux-build-linux");
     expect(packageJob).toContain("node scripts/verify-release-install.mjs");
     expect(packageJob).toContain('CODE_UX_SKIP_RELEASE_INSTALL_BUILD: "1"');
-    expect(dagJob).toContain("needs: [static, build, backend-tests, dashboard-tests, security-audit]");
+    expect(dagJob).toContain("needs: [static, build, security-audit]");
     expect(dagJob).toContain("runs-on: ${{ matrix.os }}");
     expect(dagJob).toContain("max-parallel: 3");
     expect(dagJob).toContain("name: Linux Docker");
@@ -191,6 +199,8 @@ describe("GitHub workflow health", () => {
     const releaseCandidate = getJobBlock(ci, "release-candidate");
 
     expect(e2e).toContain("name: 09 E2E / ${{ matrix.os.label }} full (${{ matrix.project }})");
+    expect(e2e).toContain("needs: [static, build, security-audit]");
+    expect(e2e).toContain("github.base_ref == 'main'");
     expect(e2e).toContain("runs-on: ${{ matrix.os.runner }}");
     expect(e2e).toContain("max-parallel: 10");
     expect(e2e).toContain("runner: ubuntu-latest");
@@ -212,6 +222,7 @@ describe("GitHub workflow health", () => {
     expect(ci).not.toContain("electron-dag:");
 
     expect(releaseCandidate).toContain("needs: package-smoke");
+    expect(releaseCandidate).toContain("github.base_ref == 'main'");
     expect(releaseCandidate).not.toContain("ci-dag");
     expect(releaseCandidate).not.toContain("e2e");
     expect(releaseCandidate).toContain("max-parallel: 3");

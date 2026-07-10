@@ -2,7 +2,7 @@
 
 This suite is the escalation ladder for sprint orchestration failures. Use it when a sprint stalls, local merges fail, worker-owned attention items churn, or memory usage needs extended observation after a fix.
 
-The suite is intentionally split into fast deterministic lanes and slower compiled-runtime lanes. CI uses a compiled QA DAG by default so pull requests exercise task QA, follow-up branch recovery, sprint QA, and Docker-backed orchestration without running the full catalog. The Linux Docker lane also restarts the isolated runtime twice during the active QA DAG to cover startup reconciliation; macOS and Windows run the matching Electron QA DAG because Electron restart stress is not supported by this harness. Start with the smallest lane that can reproduce the issue, then broaden only after it passes.
+The suite is intentionally split into fast deterministic lanes and slower compiled-runtime lanes. CI runs the three-row compiled QA DAG on both `dev` and `main`, so pull requests exercise task QA, follow-up branch recovery, sprint QA, Docker-backed orchestration, and native Electron orchestration without running the full browser or release matrices. The Linux Docker lane also restarts the isolated runtime twice during the active QA DAG to cover startup reconciliation; macOS and Windows run the matching Electron QA DAG because Electron restart stress is not supported by this harness. Start with the smallest lane that can reproduce the issue, then broaden only after it passes.
 
 ## Lane Summary
 
