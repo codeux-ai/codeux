@@ -119,6 +119,7 @@ Manual route selection is authoritative for that route. Code UX never falls back
 9. If a persisted task already has a concrete provider assignment, such as `gemini` on retry, Code UX resolves the matching provider instance settings for that provider instead of reusing settings from a newly resolved fallback route. This keeps model and auth-copy settings aligned with the actual CLI being launched.
 10. Legacy provider-id keyed payloads are normalized into the instance model so older settings rows and tests continue to resolve through the new routing engine.
 11. If the resolved invocation is associated with an agent preset that has persistent skill storage enabled and attached, Code UX augments the prompt and runtime mounts after routing is resolved. This applies to task coding, planning, QA review and follow-up, dashboard replies, clarification replies, CI fix, merge-conflict repair, and memory remediation flows whenever the agent preset is known.
+12. The `ci_fix.continueTaskSession` option defaults to `true`. For task-scoped CI failures with a resumable CLI coding run, Code UX uses that run's logical/native provider session, provider family, effective model, coding agent instructions, and preserved workspace. Disable **Continue from same session and model as coding task** under Settings → AI Models → CI fix to force task repairs through the standalone CI Fix provider route. Sprint-level final-merge repairs have no originating task session and always use the standalone route.
 
 ## Credential Mutual Exclusion
 
@@ -144,7 +145,7 @@ To prevent conflicting generated runtime configuration and credential leakage, C
 - `dashboard_reply` uses `WORKER`
 - `clarification_reply` uses `WORKER`
 - `qa_review` uses `WORKER`
-- `ci_fix` uses `WORKER`
+- `ci_fix` continues the task coding session/model by default when the failure belongs to one task; otherwise it uses `WORKER`
 - `merge_conflict` uses `WORKER`
 - `remediation` uses `WORKER`
 

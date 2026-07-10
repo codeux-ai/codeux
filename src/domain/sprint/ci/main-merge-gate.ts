@@ -2,12 +2,14 @@ import {
   deriveChecksFromCiRuns,
   isCiFailure,
   isCiPending,
+  selectFailedCiRuns,
 } from "../../../sprint/ci-status-utils.js";
 import type {
   AutoMergeFeaturePrResult,
   CiIntelligenceSettings,
   FeaturePrAutoMergeMode,
   GitTrackingStatus,
+  GitCiRunStatus,
 } from "../../../contracts/app-types.js";
 import type { MergeConflictDebouncer } from "./merge-conflict-debouncer.js";
 
@@ -51,6 +53,7 @@ export interface MergeFeedbackResult {
   hasPendingChecks: boolean;
   hasReviewBlockers: boolean;
   failedChecks: string[];
+  failedRuns?: GitCiRunStatus[];
 }
 
 /**
@@ -173,6 +176,9 @@ export class MainMergeGateService {
     const hasPendingChecks = waitForMainCi && (checks.length === 0 || checks.some((check) => isCiPending(check.status, check.conclusion)));
     const hasReviewBlockers = resolveAllCommentsBeforeMainMerge
       && (mainMergePr.reviewDecision === "CHANGES_REQUESTED" || mainMergePr.comments > 0);
+    const failedRuns = hasFailedChecks
+      ? selectFailedCiRuns(gitStatus, mainMergePr.headRefName || featureBranch)
+      : [];
     const checkStatusLabel = hasMergeConflict
       ? "DIRTY"
       : hasFailedChecks
@@ -229,6 +235,7 @@ export class MainMergeGateService {
       hasPendingChecks,
       hasReviewBlockers,
       failedChecks,
+      failedRuns,
     };
   }
 

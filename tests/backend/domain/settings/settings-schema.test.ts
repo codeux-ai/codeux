@@ -40,6 +40,19 @@ describe("validateSettingsPayload", () => {
     expect(result.data).toEqual(payload);
   });
 
+  it("validates the CI-fix same-session routing option", () => {
+    const payload = structuredClone(cloneDefaults({ env: {}, settingsJson: {}, resolved: {} }));
+    payload.aiProvider.invocationRouting.ci_fix.continueTaskSession = "yes" as any;
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(false);
+    expect(result.issues).toContainEqual({
+      path: "aiProvider.invocationRouting.ci_fix.continueTaskSession",
+      message: "Expected a boolean",
+    });
+  });
+
   it("validates dashboard experience mode values", () => {
     const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
     payload.appearance.experienceMode = "EASY";

@@ -24,6 +24,7 @@ import userEvent from "@testing-library/user-event";
 import { SettingsActivePanelStatus } from "../SettingsActivePanelStatus";
 import { SettingsContentPanels } from "../SettingsContentPanels";
 import { SettingsSprintPanel } from "../panels/SettingsSprintPanel";
+import { SettingsModelsPanel } from "../panels/SettingsModelsPanel";
 import { UnsavedChangesModal } from "../../ui/UnsavedChangesModal";
 import { ProviderInstanceCard } from "../ProviderInstanceCard";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../lib/settings";
@@ -108,7 +109,7 @@ const createCatalogEntries = (): TechstackCatalogEntrySettings[] => [
 
 const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings => ({
   runtime: {} as SystemSettings["runtime"],
-  integrations: {} as SystemSettings["integrations"],
+  integrations: { providers: {} } as SystemSettings["integrations"],
   defaults: projectSettings,
   techstackCatalog: {
     defaultTechstackId: DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.defaultTechstackId,
@@ -793,6 +794,53 @@ describe("SettingsControls Accessibility", () => {
 
     expect(updateEditableSettings).toHaveBeenCalled();
     expect(screen.getByRole("textbox", { name: "Task PR title scheme" })).toHaveValue("{task_key}: {task_title} - {provider}");
+  });
+
+  it("SettingsModelsPanel defaults CI fixes to the coding session and allows opting out", async () => {
+    const user = userEvent.setup();
+    const Harness = () => {
+      const [settings, setSettings] = useState(() => createProjectSettings());
+      return (
+        <SettingsModelsPanel
+          state={{
+            activeScope: "project",
+            editableSettings: settings,
+            projectSources: {},
+            systemSettings: createSystemSettings(settings),
+            externalHints: {
+              env: {},
+              settingsJson: {},
+              resolved: {
+                julesApiKey: "",
+                geminiApiKey: "",
+                codexApiKey: "",
+                claudeCodeApiKey: "",
+                githubToken: "",
+              },
+            },
+            activeInvocationRoute: "ci_fix",
+            setActiveInvocationRoute: () => {},
+            invocationRouteDefinitions: [
+              { id: "ci_fix", label: "CI fix", description: "Worker-owned CI repair loops and retry work." },
+            ],
+            routingProfileOptions: [
+              { value: "GLOBAL", label: "Global defaults" },
+              { value: "WORKER", label: "Worker defaults" },
+            ],
+            updateEditableSettings: (recipe: (current: ProjectSettings) => ProjectSettings) => setSettings(recipe),
+          } as any}
+        />
+      );
+    };
+
+    render(<Harness />);
+
+    const toggle = screen.getByRole("switch", { name: "Continue from same session and model as coding task" });
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByText(/resume the exact coding session and model/i)).toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-checked", "false");
   });
 
   it("SprintKeyEditor passes aria-label and aria-description", () => {

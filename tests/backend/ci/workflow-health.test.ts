@@ -387,8 +387,10 @@ describe("GitHub workflow health", () => {
     expect(runnerScript).toContain("DAG dependency merge invariant failed");
     expect(runnerScript).toContain("writeRuntimeLogToConsole");
     expect(runnerScript).toContain("function assertQaHistory(homeDir, records, projectRun)");
+    expect(runnerScript).toContain("resolveExpectedQaOutcomes(reviews, expectation.outcomes, taskKey)");
+    expect(runnerScript).toContain("to be superseded by a later completed expected outcome");
     expect(runnerScript).toContain("expected QA follow-up for");
-    expect(runnerScript).toContain("expected sprint QA outcomes");
+    expect(runnerScript).toContain('resolveExpectedQaOutcomes(sprintReviews, expected.sprintOutcomes || [], "sprint completion")');
     expect(runnerScript).toContain("expected command ${commandExpectation.command} to exit");
 
     const qaDagValidationTask = scenarioScript.slice(
@@ -401,6 +403,12 @@ describe("GitHub workflow health", () => {
     expect(scenarioScript).toContain('"mockup-sprint-qa:require-file src/qa-dag/final.js');
     expect(scenarioScript).toContain('outcomes: ["changes_requested", "pass"]');
     expect(scenarioScript).toContain("requireSameWorkerBranch: true");
+    expect(scenarioScript.match(/injectMainCiFix:/g)).toHaveLength(2);
+    expect(scenarioScript).toContain("minimumCompletedCiFixes: 1");
+    expect(scenarioScript).toContain("requireSprintLevelCiFix: true");
+    expect(scenarioScript).toContain('"qa-dag-follow-up": 2');
+    expect(scenarioScript).toContain('path: "src/ci-fix/main-finalization.js"');
+    expect(runnerScript).toContain("function assertInvocationHistory(homeDir, records, projectRun)");
     expect(scenarioScript).toContain('commands: [{ command: "node test/run-validation.mjs", exitCode: 0 }]');
   });
 

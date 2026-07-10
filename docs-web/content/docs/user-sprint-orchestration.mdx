@@ -117,6 +117,8 @@ When a worker resolves a merge conflict, Code UX clears the task's stale `MERGE_
 
 CLI tasks that complete with a worker branch but no PR use a branch-only merge path in both LOCAL and REMOTE git modes; REMOTE mode then pushes the sprint feature branch. If the task snapshot lost the worker branch, Code UX recovers it from the completed task run before checking merge readiness. For CLI-backed runs, branch-only classification and protocol merge-required attention wait for the git-finalize event (`cli_git_pushed` or `cli_git_no_changes`) so provider/session completion cannot race ahead of branch materialization. Task QA reviews run from an isolated snapshot of that selected branch in both Docker and host execution, so a visible default-branch checkout cannot create a false missing-file rejection. That merge runs in a temporary worktree through the containerized Git helper so the visible checkout and `.code-ux/` runtime files do not interfere with task settlement. When several clean LOCAL worker branches are ready in one cycle, they share that worktree while each successful merge is committed and published to the feature branch independently. Code UX normalizes temporary worktree gitdir metadata after creation so later helper-container Git calls resolve the same repository. Once the task is settled as merged, stale task-run worker branch evidence is suppressed from live status so old branches do not keep re-entering merge scans.
 
+Sprint-completion QA stays fail-closed. If its provider terminates without a verdict and the sprint has not changed, or the non-passing review cycle reaches its retry cap, Code UX raises one sprint-scoped human handoff with the attempt count and latest provider error instead of leaving the sprint silently running. After the provider or review result is corrected, resolving that handoff resets only sprint-completion QA and permits one fresh review cycle.
+
 Worker-owned merge-conflict repair and LOCAL task-branch merges resolve `.code-ux/**` conflicts to the target branch side before deciding whether a provider is needed. A conflict only in Code UX runtime artifacts does not dispatch a provider, and invalid Docker repair workspaces are reseeded before provider execution. Real source conflicts outside `.code-ux/` still fail closed and remain visible as merge-conflict work.
 
 ## Emergency stop
@@ -134,7 +136,7 @@ Override via `maxFailures` in settings or `JULES_API_MAX_FAILS` in the environme
 Two distinct retry surfaces:
 
 1. **Task-level retry** — `retryFailed: true` (default). Failed sessions get a fresh worker session next cycle. The original failure stays attached for diagnosis.
-2. **CI autofix retry** — If a PR's CI is failing and `waitForJulesCiAutofix: true`, Code UX dispatches a CI fix worker. Up to `julesCiAutofixMaxRetries` (default `3`, max `20`) attempts before escalating to attention items.
+2. **CI autofix retry** — If a PR's CI is failing and `waitForJulesCiAutofix: true`, Code UX dispatches a CI fix worker. Up to `julesCiAutofixMaxRetries` (legacy mirror default `5`, max `20`) attempts before creating a human handoff.
 
 ## Action-required automation
 

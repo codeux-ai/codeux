@@ -79,6 +79,19 @@ describe("sanitizeAiProvider", () => {
     expect(result.invocationRouting.planning.profile).toBeDefined();
   });
 
+  it("defaults CI repair to the originating task session and preserves an explicit opt-out", () => {
+    expect(sanitizeAiProvider({} as any).invocationRouting.ci_fix.continueTaskSession).toBe(true);
+
+    const explicitRoute = sanitizeAiProvider({
+      aiProvider: {
+        invocationRouting: {
+          ci_fix: { continueTaskSession: false },
+        },
+      },
+    } as any);
+    expect(explicitRoute.invocationRouting.ci_fix.continueTaskSession).toBe(false);
+  });
+
   it("preserves explicit mockup-cli integration and project provider settings", () => {
     const integrationProviders = normalizeSystemIntegrationProviders({
       providers: {

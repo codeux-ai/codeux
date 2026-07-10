@@ -36,6 +36,7 @@ import { LiveSessionRuntimeSidebar } from "./components/live-session/LiveSession
 import { useProjectData } from "./context/project-data.js";
 import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import { useReducedMotion } from "./hooks/use-reduced-motion.js";
+import { useRouteProjectSelection } from "./hooks/use-route-project-selection.js";
 import { useInteractionTokens } from "./lib/motion/tokens.js";
 import { fetchAgentPresets } from "./lib/agent-preset-api.js";
 import type { AgentPreset } from "./types.js";
@@ -81,14 +82,11 @@ export const LiveSessionPage: FunctionComponent = () => {
         return params.get("sprintId")?.trim() || params.get("sprint")?.trim() || null;
     }, [routeSearch]);
 
-    useEffect(() => {
-        if (!routeProjectId || selectedProjectId === routeProjectId) {
-            return;
-        }
-        void selectProject(routeProjectId);
-    }, [routeProjectId, selectedProjectId, selectProject]);
-
-    const routeProjectReady = !routeProjectId || selectedProjectId === routeProjectId;
+    const { routeProjectReady } = useRouteProjectSelection(
+        routeProjectId,
+        selectedProjectId,
+        selectProject,
+    );
     const liveProjectId = routeProjectReady ? selectedProjectId : null;
     const {
         data: liveProjectSprints,

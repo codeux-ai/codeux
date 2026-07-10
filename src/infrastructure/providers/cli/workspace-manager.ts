@@ -756,7 +756,14 @@ export class WorkspaceManager implements IWorkspaceManager {
     await this.ensureRuntimeVolume(worktreePath, { initializeOwnership: false });
   }
 
-  async ensureRuntimeVolume(worktreePath: string, options: { initializeOwnership?: boolean } = {}): Promise<void> {
+  async ensureRuntimeVolume(
+    worktreePath: string,
+    options: {
+      initializeOwnership?: boolean;
+      ownerSpec?: string;
+      forceOwnershipInitialization?: boolean;
+    } = {},
+  ): Promise<void> {
     const { volumeName } = parseWorkspaceHandle(worktreePath);
     const runtimeVolumeName = buildRuntimeVolumeName(volumeName);
     const sessionKey = volumeName.match(/^code-ux-.+-([a-f0-9]{12})-(.+)$/)?.[2] || volumeName;
@@ -773,10 +780,16 @@ export class WorkspaceManager implements IWorkspaceManager {
       ],
       process.cwd(),
     );
-    if (options.initializeOwnership === false || this.runtimeVolumesWithInitializedOwnership.has(runtimeVolumeName)) {
+    if (
+      options.initializeOwnership === false
+      || (
+        !options.forceOwnershipInitialization
+        && this.runtimeVolumesWithInitializedOwnership.has(runtimeVolumeName)
+      )
+    ) {
       return;
     }
-    await this.initializeRuntimeVolumeOwnership(runtimeVolumeName);
+    await this.initializeRuntimeVolumeOwnership(runtimeVolumeName, options.ownerSpec);
     this.runtimeVolumesWithInitializedOwnership.add(runtimeVolumeName);
   }
 
@@ -797,8 +810,8 @@ export class WorkspaceManager implements IWorkspaceManager {
     );
   }
 
-  private async initializeRuntimeVolumeOwnership(runtimeVolumeName: string): Promise<void> {
-    const ownerSpec = getWorkspaceOwnerSpec();
+  private async initializeRuntimeVolumeOwnership(runtimeVolumeName: string, requestedOwnerSpec?: string): Promise<void> {
+    const ownerSpec = requestedOwnerSpec || getWorkspaceOwnerSpec();
     if (!ownerSpec) {
       return;
     }
@@ -814,10 +827,10 @@ export class WorkspaceManager implements IWorkspaceManager {
         "sh",
         WORKSPACE_HELPER_IMAGE,
         "-lc",
-        `chown ${shellQuote(ownerSpec)} ${shellQuote(CONTAINER_RUNTIME_HOME)}`,
+        `chown -R ${shellQuote(ownerSpec)} ${shellQuote(CONTAINER_RUNTIME_HOME)}`,
       ],
       process.cwd(),
-    ).catch(() => undefined);
+    );
   }
 
   private async isCodeUxManagedVolume(volumeName: string): Promise<boolean> {

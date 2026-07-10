@@ -96,6 +96,11 @@ describe("QaReviewRepository", () => {
     expect(storedSprintRun?.triggerType).toBe("sprint_completion");
     expect(storedSprintRun?.payload).toEqual({ summary: "sprint review" });
     expect(repository.getLatestSprintRun(sprint.id)?.id).toBe(sprintRun.id);
+
+    expect(repository.resetSprintReviewRuns(sprint.id)).toBe(1);
+    expect(repository.getLatestSprintRun(sprint.id)).toBeNull();
+    expect(repository.hasSprintReviewRun(sprint.id)).toBe(false);
+    expect(repository.getLatestTaskRun(task.id)?.id).toBe(completedTaskRun.id);
   });
 
   it("counts only decisive (completed) runs toward the verdict budget", async () => {

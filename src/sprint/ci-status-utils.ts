@@ -58,10 +58,21 @@ export const selectFailedCiRuns = (gitStatus: GitTrackingStatus, branchName: str
   const runs = Array.isArray(gitStatus.ciRuns) ? gitStatus.ciRuns : [];
   const failedRuns = runs.filter((run) => isCiFailure(run.status, run.conclusion));
   const branchMatched = failedRuns.filter((run) => run.headBranch === branchName);
-  if (branchMatched.length > 0) {
-    return branchMatched.slice(0, 2);
+  const candidates = branchMatched.length > 0 ? branchMatched : failedRuns;
+  const selected: GitCiRunStatus[] = [];
+  const seenHeadWorkflows = new Set<string>();
+  for (const run of candidates) {
+    const workflow = run.workflowName || run.name;
+    const key = run.headSha ? `${run.headSha}\0${workflow}` : null;
+    if (key && seenHeadWorkflows.has(key)) {
+      continue;
+    }
+    if (key) {
+      seenHeadWorkflows.add(key);
+    }
+    selected.push(run);
   }
-  return failedRuns.slice(0, 2);
+  return selected;
 };
 
 export const getFailedJobLabels = (failedRuns: GitCiRunStatus[]): string[] => {

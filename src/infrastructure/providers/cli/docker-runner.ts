@@ -163,7 +163,17 @@ export class DockerRunner implements IDockerRunner {
       onActivity(sanitizeInvocationOutputText(desc), originator);
     };
     const workspace = this.resolveWorkspace(cwd);
-    await this.workspaceManager.ensureRuntimeVolume(cwd);
+    const runAsRoot = workflowSettings.containerRunAsRoot === true;
+    const userSpec = runAsRoot ? "" : await this.resolveDockerUserSpec(repoPath);
+    await this.workspaceManager.ensureRuntimeVolume(cwd, {
+      initializeOwnership: !runAsRoot,
+      ownerSpec: userSpec || undefined,
+      // Workspace preparation and provider execution use different manager
+      // instances. Reassert ownership at the provider boundary so a silently
+      // root-owned or externally recreated runtime volume cannot prevent the
+      // CLI from creating its HOME/config directories.
+      forceOwnershipInitialization: !runAsRoot,
+    });
     const runtimeHome = CONTAINER_RUNTIME_HOME;
     const runtimeNpmPrefix = pathPosix.join(runtimeHome, ".npm-global");
     const runtimeNpmCache = pathPosix.join(runtimeHome, ".npm-cache");
@@ -267,8 +277,6 @@ export class DockerRunner implements IDockerRunner {
         dockerArgs.push(...DOCKER_HOST_GATEWAY_ARGS);
       }
 
-      const runAsRoot = workflowSettings.containerRunAsRoot === true;
-      const userSpec = runAsRoot ? "" : await this.resolveDockerUserSpec(repoPath);
       if (!runAsRoot && userSpec) {
         dockerArgs.push("--user", userSpec);
         const passwdPath = path.join(tempRoot, "passwd");

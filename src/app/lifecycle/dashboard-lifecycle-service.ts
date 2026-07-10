@@ -268,12 +268,32 @@ function resetGuardrailForResolvedHumanAttention(
   if (
     item.ownerType !== "human"
     || (item.attentionType !== "human_escalation_required" && item.attentionType !== "dashboard_reply_required")
-    || !item.taskId
   ) {
     return;
   }
 
   const sourceAttentionType = item.payload?.sourceAttentionType;
+  if (
+    sourceAttentionType === "qa_review"
+    && item.payload?.qaScope === "sprint"
+    && item.sprintId
+    && !item.taskId
+  ) {
+    const clearedRuns = deps.qaReviewRepository.resetSprintReviewRuns(item.sprintId);
+    deps.logger.info("Reset sprint QA review state after human attention resolution", {
+      projectId: item.projectId,
+      sprintId: item.sprintId,
+      sprintRunId: item.sprintRunId ?? item.payload?.sprintRunId,
+      attentionItemId: item.id,
+      clearedRuns,
+    });
+    return;
+  }
+
+  if (!item.taskId) {
+    return;
+  }
+
   if (sourceAttentionType === "qa_review" || isQaReviewHumanEscalation(item)) {
     const clearedRuns = deps.qaReviewRepository.resetTaskReviewRuns(item.taskId);
     deps.guardrailService.resetPurpose(item.taskId, "qa_review");

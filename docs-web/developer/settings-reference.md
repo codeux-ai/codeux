@@ -197,7 +197,7 @@ Default `virtualWorkerProvider`: `codex`.
   "resolveMergeConflicts": true,
   "resolveMainMergeConflicts": true,
   "waitForJulesCiAutofix": false,
-  "julesCiAutofixMaxRetries": 3,           // min 0, max 20
+  "julesCiAutofixMaxRetries": 5,           // legacy mirror; min 0, max 20
   "featurePrAutoMergeMode": "OFF" | "CREATE_PR" | "WHEN_GREEN" | "ALWAYS",
   "mainBranchAutoMergeMode": "OFF" | "CREATE_PR" | "WHEN_GREEN" | "ALWAYS"
 }

@@ -744,6 +744,22 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
               </div>
             </div>
 
+            {activeRouteDefinition.id === "ci_fix" ? (
+              <div className="mb-5 rounded-[1.35rem] border border-signal-500/20 bg-signal-500/[0.045] px-4 dark:border-signal-400/20 dark:bg-signal-400/[0.055]">
+                <Row
+                  label="Continue from same session and model as coding task"
+                  description="For a task-level CI failure, resume the exact coding session and model so the repair keeps the task's context. Final-merge repairs without a task use the CI Fix route below."
+                  last
+                >
+                  <Toggle
+                    aria-label="Continue from same session and model as coding task"
+                    value={activeRoute.continueTaskSession !== false}
+                    onChange={(continueTaskSession) => updateRouteSettings(activeRouteDefinition.id, { continueTaskSession })}
+                  />
+                </Row>
+              </div>
+            ) : null}
+
             <div className="mb-5 grid gap-3 md:grid-cols-4">
               <RouteFlowStep
                 icon={<Route className="h-4 w-4" />}

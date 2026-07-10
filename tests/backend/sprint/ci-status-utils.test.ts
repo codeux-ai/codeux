@@ -33,6 +33,19 @@ describe("ci-status-utils", () => {
     expect(runs[0].id).toBe(1);
   });
 
+  it("deduplicates push and pull-request failures for the same head and workflow", () => {
+    const status = {
+      ciRuns: [
+        { id: 3, name: "CI", workflowName: "CI", status: "completed", conclusion: "failure", event: "pull_request", headBranch: "task/x", headSha: "abc", url: "u3", updatedAt: "2026-01-01T00:00:03Z" },
+        { id: 2, name: "CI", workflowName: "CI", status: "completed", conclusion: "failure", event: "push", headBranch: "task/x", headSha: "abc", url: "u2", updatedAt: "2026-01-01T00:00:02Z" },
+        { id: 1, name: "Lint", workflowName: "Lint", status: "completed", conclusion: "failure", event: "push", headBranch: "task/x", headSha: "abc", url: "u1", updatedAt: "2026-01-01T00:00:01Z" },
+        { id: 4, name: "E2E", workflowName: "E2E", status: "completed", conclusion: "failure", event: "push", headBranch: "task/x", headSha: "abc", url: "u4", updatedAt: "2026-01-01T00:00:00Z" },
+      ],
+    } as GitTrackingStatus;
+
+    expect(selectFailedCiRuns(status, "task/x").map((run) => run.id)).toEqual([3, 1, 4]);
+  });
+
   it("derives check entries from the newest workflow run per workflow on the branch", () => {
     const status: GitTrackingStatus = {
       available: true,

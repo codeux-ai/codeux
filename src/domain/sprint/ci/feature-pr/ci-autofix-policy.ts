@@ -130,6 +130,14 @@ export interface CiAutofixEscalationArgs {
   defaultBranch: string;
   allowJulesSessionNotification?: boolean;
   hasActiveWorkerCiFixAttempt?: (task: Subtask, prNumber: number) => boolean;
+  onGuardrailExhausted?: (handoff: CiFixGuardrailHandoff) => void;
+}
+
+export interface CiFixGuardrailHandoff {
+  task: Subtask;
+  payload: WorkerCiFixPayload;
+  attempts: number;
+  cap: number;
 }
 
 export interface CiAutofixEscalationResult {
@@ -160,7 +168,11 @@ export async function handleCiAutofixEscalation(args: CiAutofixEscalationArgs): 
   }
 
   if (!evaluation.allowed) {
-    const owner = resolveCiEscalationOwner(args.automationLevel);
+    // A hard CI-repair cap is a terminal automation boundary. Even in FULL
+    // automation mode it must become an explicit human handoff; leaving the
+    // intervention assigned to an agent lets the protocol reopen ordinary
+    // coding work and defeats the guardrail.
+    const owner = "HUMAN";
     args.task.status = "BLOCKED";
     args.task.intervention_owner = owner;
     args.task.intervention_hint = `CI autofix guardrail reached (${currentRetries}/${capLabel}) for task ${
@@ -172,6 +184,22 @@ export async function handleCiAutofixEscalation(args: CiAutofixEscalationArgs): 
     reportTextAddition += `   - Escalation (${owner}): Task \`${args.task.id}\` has failing CI and cannot be merged yet.\n`;
     reportTextAddition += `   - PR Link: ${args.prUrl}\n`;
     reportTextAddition += `   - Required next action: fix failing checks, then continue merge flow.\n`;
+    args.onGuardrailExhausted?.({
+      task: args.task,
+      payload: buildWorkerCiFixPayload({
+        task: args.task,
+        prNumber: args.prNumber,
+        prUrl: args.prUrl,
+        branchName: args.branchName,
+        failedChecks: args.failedChecks,
+        failedRuns: args.failedRuns,
+        repoPath: args.repoPath,
+        featureBranch: args.featureBranch,
+        defaultBranch: args.defaultBranch,
+      }),
+      attempts: currentRetries,
+      cap,
+    });
     return { reportTextAddition, workerCiFixRequired: false, workerCiFixPayload: null };
   }
 

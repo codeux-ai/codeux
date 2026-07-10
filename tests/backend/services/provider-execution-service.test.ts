@@ -144,6 +144,31 @@ describe("ProviderExecutionService", () => {
     );
   });
 
+  it("bounds provider concurrency waits when the caller supplies a timeout", async () => {
+    providerRunner.runProvider.mockResolvedValue(mockResult);
+    const waitForSlotAndClaim = vi.fn().mockResolvedValue({ id: "prov-inv-bounded" });
+    service = new ProviderExecutionService({
+      providerRunner,
+      executionRepository,
+      logger: logger as any,
+      getGithubToken: vi.fn(),
+      providerConcurrencyService: { waitForSlotAndClaim } as any,
+    });
+
+    await service.executeProvider({
+      ...defaultArgs,
+      concurrencyWaitTimeoutMs: 30_000,
+    });
+
+    expect(waitForSlotAndClaim).toHaveBeenCalledWith(
+      "claude-code",
+      expect.any(Number),
+      expect.objectContaining({ purpose: "test-purpose", sessionId: "session-1" }),
+      undefined,
+      30_000,
+    );
+  });
+
   it("does not append persistent skill instructions or mounts for disabled agents", async () => {
     providerRunner.runProvider.mockResolvedValue(mockResult);
     const skillService = {

@@ -27,7 +27,7 @@ Sprint ledger rows and showcase sprint cards expose separate **Tasks** and **Liv
 - `/tasks?projectId=<projectId>&sprintId=<sprintId>`
 - `/live?projectId=<projectId>&sprintId=<sprintId>`
 
-Destination pages must switch the selected project first, then apply the sprint scope through the selected project's sprint API. The Tasks page still accepts legacy same-project links such as `/tasks?sprint=<sprintId>` and `/tasks?sprintId=<sprintId>`, but project-aware links are required when navigation originates from sprint rows or cards so a sprint is never applied to the previously selected project.
+Destination pages consume a new route project once, switch the selected project first, then apply the sprint scope through the selected project's sprint API. After that initial deep-link handoff, later shared project-selection updates remain authoritative: a mounted Tasks or Live tab does not continuously re-apply its retained query value. The Tasks page still accepts legacy same-project links such as `/tasks?sprint=<sprintId>` and `/tasks?sprintId=<sprintId>`, but project-aware links are required when navigation originates from sprint rows or cards so a sprint is never applied to the previously selected project.
 
 ## API Endpoints
 

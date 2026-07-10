@@ -495,6 +495,7 @@ describe("executeProviderStage", () => {
         purpose: "task_coding",
       }),
       undefined,
+      undefined,
     );
   });
 

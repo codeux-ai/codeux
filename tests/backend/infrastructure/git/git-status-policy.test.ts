@@ -8,6 +8,7 @@ import {
   sortCiRunsNewestFirst,
   isRunFailed,
   trimLogExcerpt,
+  extractFailedJobLogExcerpt,
   filterMergedPrs,
 } from "../../../../src/infrastructure/git/git-status-policy.js";
 import { GitTrackingRequest, GitPullRequestStatus, GitCiRunStatus, GitMergeStatus } from "../../../../src/contracts/app-types.js";
@@ -202,11 +203,38 @@ describe("git-status-policy", () => {
   it("trimLogExcerpt", () => {
     const short = "hello";
     expect(trimLogExcerpt(short)).toBe(short);
-    const long = "A".repeat(2001);
+    const long = "A".repeat(12_001);
     const trimmed = trimLogExcerpt(long);
     expect(trimmed.startsWith("A")).toBe(true);
     expect(trimmed).toContain("trimmed 1 chars from middle");
     expect(trimmed.endsWith("A")).toBe(true);
+  });
+
+  it("extracts failed assertions from the middle of noisy runner logs", () => {
+    const runnerNoise = Array.from({ length: 400 }, (_, index) => `Runner Image metadata ${index}`).join("\n");
+    const cleanupNoise = Array.from({ length: 400 }, (_, index) => `Post-job cleanup ${index}`).join("\n");
+    const log = [
+      runnerNoise,
+      "##[group]Run pnpm test",
+      "FAIL tests/network-budget.test.ts",
+      "AssertionError: expected topology to become healthy",
+      "Expected: 3 healthy services",
+      "Received: 2 healthy services",
+      "at tests/network-budget.test.ts:81:17",
+      "##[error]Process completed with exit code 1.",
+      "##[endgroup]",
+      cleanupNoise,
+    ].join("\n");
+
+    const excerpt = extractFailedJobLogExcerpt(log, ["Start real service topology"]);
+
+    expect(excerpt).toContain("Failed steps reported by GitHub: Start real service topology");
+    expect(excerpt).toContain("AssertionError: expected topology to become healthy");
+    expect(excerpt).toContain("Expected: 3 healthy services");
+    expect(excerpt).toContain("Received: 2 healthy services");
+    expect(excerpt).toContain("tests/network-budget.test.ts:81:17");
+    expect(excerpt).not.toContain("Runner Image metadata 0");
+    expect(excerpt).not.toContain("Post-job cleanup 399");
   });
 
   describe("filterMergedPrs", () => {

@@ -1,7 +1,7 @@
 import { buildProviderSettingsOverride } from "./provider-settings-override.js";
 import { randomUUID } from "crypto";
-import type { CliWorkflowSettings, DashboardSettings, GitCiRunStatus, JulesSession, ProviderId, QwenModelProviderSettings, ThinkingMode, WorkerExecutionMode, Subtask } from "../contracts/app-types.js";
-import type { WorkerTaskDispatchClaim } from "../contracts/execution-types.js";
+import type { CliWorkflowSettings, DashboardSettings, GitCiRunStatus, JulesSession, ProviderId, ProviderSettings, QwenModelProviderSettings, ThinkingMode, WorkerExecutionMode, Subtask } from "../contracts/app-types.js";
+import type { ProviderInvocationUsageRecord, WorkerTaskDispatchClaim } from "../contracts/execution-types.js";
 import type { ProjectAttentionItemRecord } from "../contracts/project-attention-types.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
 import type { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
@@ -39,6 +39,7 @@ import type { SkillService } from "./skill-service.js";
 import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
+import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
 import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import { LEARNINGS_FILENAME } from "../contracts/memory-types.js";
@@ -56,6 +57,7 @@ import { planVirtualWorkerCycle } from "../domain/workers/virtual-worker-cycle-p
 
 const VIRTUAL_WORKER_RECONCILE_MS = 3_000;
 const VIRTUAL_WORKER_SESSION_POLL_MS = 2_000;
+const VIRTUAL_WORKER_PROVIDER_SLOT_WAIT_MS = 30_000;
 const VIRTUAL_WORKER_CLI_PROVIDER_POOL: ProviderId[] = [
   "gemini",
   "codex",
@@ -65,6 +67,17 @@ const VIRTUAL_WORKER_CLI_PROVIDER_POOL: ProviderId[] = [
   "antigravity",
   "mockup-cli",
 ];
+
+interface TaskCiFixContinuation {
+  provider: Exclude<ProviderId, "jules">;
+  providerSettings: ProviderSettings;
+  sessionId: string;
+  resumeSessionId: string;
+  continueSessionId: string | null;
+  taskRunId: string | null;
+  previousInvocation: ProviderInvocationUsageRecord | null;
+  workerAgent: AgentPresetRecord | null;
+}
 
 function sleep(ms: number): Promise<void> {
   if (ms <= 0) {
@@ -105,9 +118,9 @@ function formatCiFixFailureDetails(failedRuns: GitCiRunStatus[], fallbackLogSnip
         lines.push(`     - Conclusion: ${job.conclusion ?? "unknown"}`);
         lines.push(`     - Failed steps: ${job.failedSteps.length > 0 ? job.failedSteps.join(", ") : "not reported"}`);
         lines.push(`     - Log command: ${job.logCommand ?? "not available"}`);
-        lines.push("     - Failed log excerpt:");
+        lines.push("     - Failed-step error and assertion evidence:");
         lines.push("```text");
-        lines.push(job.logExcerpt?.trim() || "No failed-job log excerpt was available.");
+        lines.push(job.logExcerpt?.trim() || "No failed-step error evidence was available.");
         lines.push("```");
       });
     }
@@ -361,11 +374,16 @@ export class VirtualWorkerService {
 
     try {
       const attentionItem = this.peekNextWorkerAttention(projectId, resolver);
-      const dispatchClaim = this.deps.workerTaskDispatchService.claimNextDispatchForWorker({
-        projectId,
-        workerEndpointId: endpoint.id,
-        executionMode: "VIRTUAL"
-      });
+      // Do not lease ordinary coding work while a CI/merge repair is waiting.
+      // A leased dispatch is durable, so claiming it and then prioritizing the
+      // attention item would strand the dispatch until lease recovery.
+      const dispatchClaim = attentionItem
+        ? null
+        : this.deps.workerTaskDispatchService.claimNextDispatchForWorker({
+          projectId,
+          workerEndpointId: endpoint.id,
+          executionMode: "VIRTUAL"
+        });
 
       const plan = await planVirtualWorkerCycle({
         projectId,
@@ -373,7 +391,10 @@ export class VirtualWorkerService {
         attentionItem,
         dispatchClaim,
         isProviderConcurrencyAvailable: async (pId, limit) => await this.deps.providerConcurrencyService.hasAvailableCapacity(pId, limit),
-        resolveSettings: effectiveResolver
+        resolveSettings: effectiveResolver,
+        resolveAttentionProviderCapacity: async (item, attentionRoute, settings) => (
+          await this.resolveAttentionProviderCapacity(item, attentionRoute, settings)
+        ),
       });
 
       if (plan.type === "HANDLE_ATTENTION") {
@@ -386,6 +407,12 @@ export class VirtualWorkerService {
         );
       } else if (plan.type === "DISPATCH_READY") {
         await this.handleTaskDispatch(endpoint.id, plan.dispatchClaim);
+      } else if (plan.type === "PROVIDER_CONCURRENCY_UNAVAILABLE") {
+        this.deps.logger?.info("Virtual worker deferred until the routed provider has capacity", {
+          projectId,
+          attentionItemId: attentionItem?.id ?? null,
+          attentionType: attentionItem?.attentionType ?? null,
+        });
       }
     } finally {
       this.deps.projectWorkerAssignmentService.releaseWorkerAssignment(projectId, endpoint.id, "virtual_worker_cycle_complete");
@@ -520,6 +547,167 @@ export class VirtualWorkerService {
     }
 
     return effectiveResolver(projectId);
+  }
+
+  private async resolveAttentionProviderCapacity(
+    item: ProjectAttentionItemRecord,
+    attentionRoute: Exclude<VirtualWorkerAttentionRoute, "skip_orchestrator_handled">,
+    settings: DashboardSettings,
+  ): Promise<{ provider: ProviderId; limit: number }> {
+    if (attentionRoute === "ci_fix") {
+      const continuation = await this.resolveTaskCiFixContinuation(item, settings);
+      if (continuation) {
+        return {
+          provider: continuation.provider,
+          limit: continuation.providerSettings.maxConcurrentTasks,
+        };
+      }
+    }
+
+    const invocation = attentionRoute === "ci_fix"
+      ? "ci_fix"
+      : attentionRoute === "merge_conflict"
+        ? "merge_conflict"
+        : null;
+    if (!invocation) {
+      const providerConfigId = settings.workers.virtualWorkerProvider;
+      const providerSettings = settings.aiProvider.providers[providerConfigId];
+      return {
+        provider: providerSettings?.provider || "codex",
+        limit: settings.workers.maxConcurrency,
+      };
+    }
+
+    const agentPresetId = invocation === "ci_fix"
+      ? settings.agents?.routing?.ciFix?.agentPresetId
+      : settings.agents?.routing?.mergeConflict?.agentPresetId;
+    const workerAgent = await this.deps.agentPresetSyncService?.resolveTargetedCodingAgent(
+      item.projectId,
+      agentPresetId ?? null,
+    ).catch(() => null);
+    const route = resolveProviderForInvocation(settings, {
+      invocation,
+      task: {
+        id: item.taskId || item.id,
+        title: item.title,
+        prompt: item.summaryMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "PENDING",
+      },
+      providerPool: VIRTUAL_WORKER_CLI_PROVIDER_POOL,
+      agentProvider: workerAgent
+        ? {
+          providerConfigId: workerAgent.providerConfigId,
+          model: workerAgent.model,
+        }
+        : null,
+    });
+    const providerConfigId = route.providerConfigId || route.provider;
+    const routedSettings = route.providers[providerConfigId];
+    return {
+      provider: route.provider,
+      limit: routedSettings?.maxConcurrentTasks ?? 0,
+    };
+  }
+
+  private async resolveTaskCiFixContinuation(
+    item: ProjectAttentionItemRecord,
+    settings: DashboardSettings,
+  ): Promise<TaskCiFixContinuation | null> {
+    if (!item.taskId || settings.aiProvider.invocationRouting.ci_fix?.continueTaskSession === false) {
+      return null;
+    }
+
+    const taskRun = this.deps.executionRepository.getLatestTaskRun(
+      item.taskId,
+      item.sprintRunId || undefined,
+    );
+    const workspaceTarget = this.deps.executionRepository.getLatestTaskWorkspaceResumeTarget(
+      item.taskId,
+      item.sprintRunId || undefined,
+    );
+    const workspaceTaskRun = workspaceTarget?.taskRunId
+      ? this.deps.executionRepository.getTaskRun(workspaceTarget.taskRunId)
+      : null;
+    const sessionId = taskRun?.sessionId?.trim()
+      || taskRun?.sessionName?.replace(/^sessions\//, "").trim()
+      || workspaceTaskRun?.sessionId?.trim()
+      || workspaceTaskRun?.sessionName?.replace(/^sessions\//, "").trim()
+      || workspaceTarget?.sessionId?.trim()
+      || "";
+    if (!sessionId) {
+      return null;
+    }
+
+    const codingInvocation = this.deps.executionRepository.getLatestProviderInvocationUsageBySession(
+      sessionId,
+      "task_coding",
+    );
+    const previousInvocation = this.deps.executionRepository.getLatestProviderInvocationUsageBySession(sessionId);
+    const trackedSession = this.deps.sessionTracking.getSession(sessionId);
+    const providerValue = codingInvocation?.provider
+      || taskRun?.provider
+      || workspaceTaskRun?.provider
+      || workspaceTarget?.provider
+      || trackedSession?.provider;
+    if (!providerValue || providerValue === "jules" || !VIRTUAL_WORKER_CLI_PROVIDER_POOL.includes(providerValue as ProviderId)) {
+      return null;
+    }
+    const provider = providerValue as Exclude<ProviderId, "jules">;
+
+    const taskRecord = this.deps.projectManagementRepository.getTask(item.taskId);
+    if (!taskRecord) {
+      return null;
+    }
+    const workerAgent = await this.deps.agentPresetSyncService?.resolveTargetedCodingAgent(
+      item.projectId,
+      taskRecord.agentPresetId || settings.agents.routing.taskCoding.agentPresetId,
+    ).catch(() => null) ?? null;
+    const taskRoute = settings.aiProvider.invocationRouting.task_coding;
+    const inheritedProviderConfigId = taskRoute.profile === "WORKER"
+      ? settings.workers.virtualWorkerProvider
+      : settings.aiProvider.provider;
+    const providerConfigId = [
+      workerAgent?.providerConfigId,
+      taskRoute.provider,
+      inheritedProviderConfigId,
+      ...Object.keys(taskRoute.providers),
+      ...Object.keys(settings.aiProvider.providers),
+    ].find((candidate): candidate is string => Boolean(
+      candidate && settings.aiProvider.providers[candidate]?.provider === provider,
+    ));
+    const baseProviderSettings = providerConfigId ? settings.aiProvider.providers[providerConfigId] : null;
+    if (!baseProviderSettings) {
+      return null;
+    }
+    const routeOverrides = taskRoute.providers[providerConfigId!];
+    const agentModel = workerAgent && workerAgent.providerConfigId === providerConfigId
+      ? workerAgent.model?.trim() || null
+      : null;
+    const configured: ProviderSettings = {
+      ...baseProviderSettings,
+      ...(typeof routeOverrides?.enabled === "boolean" ? { enabled: routeOverrides.enabled } : {}),
+      ...(typeof routeOverrides?.model === "string" ? { model: routeOverrides.model } : {}),
+      ...(typeof routeOverrides?.weight === "number" ? { weight: routeOverrides.weight } : {}),
+      ...(typeof routeOverrides?.thinkingMode === "string" ? { thinkingMode: routeOverrides.thinkingMode } : {}),
+      ...(agentModel ? { model: agentModel } : {}),
+    };
+
+    return {
+      provider,
+      providerSettings: {
+        ...configured,
+        model: codingInvocation?.model?.trim() || taskRecord.model?.trim() || configured.model,
+      },
+      sessionId,
+      resumeSessionId: workspaceTarget?.sessionId || sessionId,
+      continueSessionId: previousInvocation?.nativeSessionId
+        || (provider === "claude-code" ? null : sessionId),
+      taskRunId: taskRun?.sessionId ? taskRun.id : workspaceTarget?.taskRunId || taskRun?.id || null,
+      previousInvocation,
+      workerAgent,
+    };
   }
 
   private async handleAttentionItem(
@@ -983,7 +1171,7 @@ export class VirtualWorkerService {
       const retryEval = this.evaluateMergeConflictGuardrail(settings, guardrailScope, item);
       if (!retryEval || retryEval.allowed || retryEval.action === "WARN_ONLY") {
         const now = new Date().toISOString();
-        this.deps.projectAttentionService.patchItemPayload(item.id, {
+        this.deps.projectAttentionService.requeueItem(item.id, {
           lastVirtualWorkerError: message,
           lastVirtualWorkerFailedAt: now,
           lastVirtualWorkerProvider: provider,
@@ -1077,11 +1265,14 @@ export class VirtualWorkerService {
 
   private async resolveCiFixAttention(workerEndpointId: string, item: ProjectAttentionItemRecord): Promise<void> {
     const settings = this.resolveDashboardSettings(item.projectId, item.sprintId);
-    const workerAgent = await this.deps.agentPresetSyncService?.resolveTargetedCodingAgent(
-      item.projectId,
-      settings.agents?.routing?.ciFix?.agentPresetId ?? null,
-    ).catch(() => null);
-    const route = resolveProviderForInvocation(settings, {
+    const taskContinuation = await this.resolveTaskCiFixContinuation(item, settings);
+    const workerAgent = taskContinuation?.workerAgent
+      || await this.deps.agentPresetSyncService?.resolveTargetedCodingAgent(
+        item.projectId,
+        settings.agents?.routing?.ciFix?.agentPresetId ?? null,
+      ).catch(() => null)
+      || null;
+    const ciFixRoute = taskContinuation ? null : resolveProviderForInvocation(settings, {
       invocation: "ci_fix",
       task: {
         id: item.taskId || item.id,
@@ -1099,9 +1290,10 @@ export class VirtualWorkerService {
         }
         : null,
     });
-    const provider = route.provider as Exclude<ProviderId, "jules">;
-    const providerConfigId = route.providerConfigId || route.provider;
-    const providerSettings = route.providers[providerConfigId];
+    const provider = taskContinuation?.provider
+      || ciFixRoute!.provider as Exclude<ProviderId, "jules">;
+    const providerConfigId = ciFixRoute?.providerConfigId || ciFixRoute?.provider || provider;
+    const providerSettings = taskContinuation?.providerSettings || ciFixRoute!.providers[providerConfigId];
     const workflowSettings = {
       ...DEFAULT_CLI_WORKFLOW_SETTINGS,
       ...settings.cliWorkflow,
@@ -1138,12 +1330,15 @@ export class VirtualWorkerService {
     // provider API limit instead of escalating after `cap` attempts.
     this.deps.guardrailService?.record(guardrailScope, guardrailKey, "ci_fix");
 
-    const sessionId = `virtual-cifix-${provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
-    const resumeTarget = this.deps.sessionTracking.findLatestCliSessionForBranch({
-      repoPath,
-      workerBranch: branchName,
-      providers: [provider],
-    });
+    const sessionId = taskContinuation?.sessionId
+      || `virtual-cifix-${provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+    const resumeTarget = taskContinuation
+      ? { sessionId: taskContinuation.resumeSessionId }
+      : this.deps.sessionTracking.findLatestCliSessionForBranch({
+        repoPath,
+        workerBranch: branchName,
+        providers: [provider],
+      });
     const workspaceOwnerSessionId = resumeTarget?.sessionId || sessionId;
     let worktreePath = this.workspaceManager.buildWorkspaceRef(repoPath, workspaceOwnerSessionId, workflowSettings.executionMode);
     const title = item.title;
@@ -1156,20 +1351,24 @@ export class VirtualWorkerService {
       ? resolveAgentMemoryInstructions(workerAgent || {}, settings.memory?.workerLearningsInstruction)
       : "";
 
-    this.deps.sessionTracking.createSession({
-      id: sessionId,
-      provider,
-      taskId: buildTaskRunKey(repoPath, 0, `attention-${item.id}`),
-      title,
-      prompt: item.summaryMarkdown,
-      state: "RUNNING",
-      featureBranch: branchName,
-      workerBranch: branchName,
-      repoPath,
-    });
+    if (taskContinuation) {
+      this.deps.sessionTracking.updateSession(sessionId, { state: "RUNNING" });
+    } else {
+      this.deps.sessionTracking.createSession({
+        id: sessionId,
+        provider,
+        taskId: buildTaskRunKey(repoPath, 0, `attention-${item.id}`),
+        title,
+        prompt: item.summaryMarkdown,
+        state: "RUNNING",
+        featureBranch: branchName,
+        workerBranch: branchName,
+        repoPath,
+      });
+    }
     this.deps.sessionTracking.appendActivity(sessionId, {
       originator: "system",
-      description: `Virtual worker claimed CI fix for branch ${branchName} (Attempt ${retryCount + 1}/${maxRetries}).`,
+      description: `${taskContinuation ? "Continued the task coding session for" : "Virtual worker claimed"} CI fix on branch ${branchName} (Attempt ${retryCount + 1}/${capLabel}).`,
     });
 
     let cleanedUp = false;
@@ -1248,6 +1447,11 @@ export class VirtualWorkerService {
         providerConfigPath: providerSettings.providerConfigPath,
         customBaseUrl: providerSettings.customBaseUrl,
         customModel: providerSettings.customModel,
+        taskRunId: taskContinuation?.taskRunId || undefined,
+        continueSessionId: taskContinuation?.continueSessionId,
+        openCodeBaselineRawUsageJson: provider === "opencode"
+          ? taskContinuation?.previousInvocation?.rawUsageJson ?? null
+          : null,
         githubToken: settings.git.githubToken,
         agentMcpAccess: workerAgent?.mcpAccess ?? null,
         mcpAgentId: workerAgent?.id ?? null,
@@ -1339,17 +1543,45 @@ export class VirtualWorkerService {
         originator: "system",
         description: `Virtual worker failed to fix CI issues: ${message}`,
       });
+      const retryEval = this.deps.guardrailService?.evaluate(guardrailScope, guardrailKey, "ci_fix") ?? null;
+      if (retryEval && (retryEval.allowed || retryEval.action === "WARN_ONLY")) {
+        const now = new Date().toISOString();
+        this.deps.projectAttentionService.requeueItem(item.id, {
+          lastVirtualWorkerError: message,
+          lastVirtualWorkerFailedAt: now,
+          lastVirtualWorkerProvider: provider,
+          lastVirtualWorkerSessionId: sessionId,
+          ciFixRetryCount: retryEval.count,
+          ciFixRetryCap: retryEval.cap,
+        });
+        this.deps.logger?.warn("Virtual worker CI-fix attempt failed; leaving attention retryable", {
+          projectId: item.projectId,
+          sprintId: item.sprintId,
+          taskId: item.taskId,
+          attentionItemId: item.id,
+          sessionId,
+          provider,
+          retryCount: retryEval.count,
+          retryCap: retryEval.cap,
+          error,
+        });
+        return;
+      }
       this.escalateAttentionToHuman(workerEndpointId, item, [
         `Virtual ${this.getProviderLabel(provider)} worker failed to fix CI issues automatically.`,
+        "",
+        `Attempts: ${retryEval?.count ?? retryCount + 1}/${(retryEval?.cap ?? maxRetries) > 0 ? retryEval?.cap ?? maxRetries : "∞"}`,
         "",
         `Error: ${message}`,
         "",
         item.summaryMarkdown.trim(),
       ].join("\n"));
     } finally {
-      const shouldCleanup = succeeded
-        ? workflowSettings.cleanupWorktreeOnSuccess
-        : true;
+      const shouldCleanup = taskContinuation
+        ? false
+        : succeeded
+          ? workflowSettings.cleanupWorktreeOnSuccess
+          : true;
       if (shouldCleanup) {
         await this.workspaceManager.removeWorktree(repoPath, worktreePath).catch(() => undefined);
         cleanedUp = true;
@@ -1456,6 +1688,9 @@ export class VirtualWorkerService {
     const taskPrompt = typeof payload.taskPrompt === "string" ? payload.taskPrompt.trim() : "";
     const featureBranch = typeof payload.featureBranch === "string" ? payload.featureBranch : "";
     const defaultBranch = typeof payload.defaultBranch === "string" ? payload.defaultBranch : "";
+    const previousAttemptError = typeof payload.lastVirtualWorkerError === "string"
+      ? payload.lastVirtualWorkerError.trim()
+      : "";
     const failureDetails = formatCiFixFailureDetails(failedRuns, failedLogSnippets);
 
     return [
@@ -1481,6 +1716,10 @@ export class VirtualWorkerService {
       "",
       "## Failed CI Details",
       failureDetails,
+      "",
+      previousAttemptError
+        ? `## Previous CI Fix Attempt\nThe prior repair invocation failed. Continue from its session/workspace when available and correct this exact failure:\n\n${previousAttemptError}`
+        : null,
       "",
       workerInstruction?.trim() ? `## General Coding Agent Instructions\n\n${workerInstruction.trim()}` : null,
       prUrl ? `PR URL: ${prUrl}` : null,
@@ -1562,6 +1801,9 @@ export class VirtualWorkerService {
     providerConfigPath?: string;
     customBaseUrl?: string;
     customModel?: string;
+    taskRunId?: string;
+    continueSessionId?: string | null;
+    openCodeBaselineRawUsageJson?: Record<string, unknown> | null;
     githubToken: string;
     agentMcpAccess?: AgentMcpAccessConfig | null;
     mcpAgentId?: string | null;
@@ -1582,6 +1824,7 @@ export class VirtualWorkerService {
       projectId: args.attentionItem.projectId,
       sprintId: args.attentionItem.sprintId,
       taskId: args.attentionItem.taskId,
+      taskRunId: args.taskRunId,
       sprintRunId: args.attentionItem.sprintRunId,
       dispatchId: args.attentionItem.dispatchId,
       attentionItemId: args.attentionItem.id,
@@ -1614,11 +1857,14 @@ export class VirtualWorkerService {
       customBaseUrl: args.customBaseUrl,
       customModel: args.customModel,
       sessionId: args.sessionId,
+      continueSessionId: args.continueSessionId,
+      openCodeBaselineRawUsageJson: args.openCodeBaselineRawUsageJson,
       workflowSettings: args.workflowSettings,
       repoPath: args.repoPath,
       githubToken: args.githubToken,
       agentMcpAccess: args.agentMcpAccess,
       mcpAgentId: args.mcpAgentId,
+      concurrencyWaitTimeoutMs: VIRTUAL_WORKER_PROVIDER_SLOT_WAIT_MS,
     });
 
     if (!result.ok) {

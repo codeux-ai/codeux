@@ -2300,6 +2300,26 @@ describe("WatchLoopRunner", () => {
       hasPendingChecks: false,
       hasReviewBlockers: false,
       failedChecks: ["build"],
+      failedRuns: [{
+        id: 9001,
+        name: "CI",
+        workflowName: "CI",
+        status: "completed",
+        conclusion: "failure",
+        event: "pull_request",
+        headBranch: "feature/sprint104-implementation",
+        headSha: "abc123",
+        url: "https://github.com/example/repo/actions/runs/9001",
+        updatedAt: "2026-07-10T20:07:39Z",
+        failedJobs: [{
+          id: 42,
+          name: "build",
+          conclusion: "failure",
+          failedSteps: ["Run tests"],
+          logExcerpt: "FAIL src/example.test.ts\nExpected: true\nReceived: false",
+          logCommand: "gh run view 9001 --job 42 --log-failed",
+        }],
+      }],
     });
 
     const runner = new WatchLoopRunner(deps as any, cycleRunner as any, renderMergeFeedbackMock);
@@ -2320,7 +2340,11 @@ describe("WatchLoopRunner", () => {
       githubMode: "REMOTE",
       retryFailed: false,
       loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
-      ciIntelligence: { mainBranchAutoMergeMode: "WHEN_GREEN", resolveMainMergeConflicts: true } as any,
+      ciIntelligence: {
+        mainBranchAutoMergeMode: "WHEN_GREEN",
+        resolveMainMergeConflicts: true,
+        resolveMainMergeFailedChecks: true,
+      } as any,
       automationLevel: "SEMI_AUTO",
       automationInterventions: {} as any,
       dashboardPort: 4444,
@@ -2336,6 +2360,17 @@ describe("WatchLoopRunner", () => {
       expect.anything(),
       expect.anything(),
     );
+    expect(deps.projectAttentionService.openItems).toHaveBeenCalledWith([
+      expect.objectContaining({
+        attentionType: "ci_fix_required",
+        ownerType: "worker",
+        payload: expect.objectContaining({
+          failedJobLabels: ["CI/build"],
+          failedLogSnippets: [expect.stringContaining("FAIL src/example.test.ts\nExpected: true\nReceived: false")],
+          failedRuns: [expect.objectContaining({ id: 9001 })],
+        }),
+      }),
+    ]);
     nowSpy.mockRestore();
   });
 

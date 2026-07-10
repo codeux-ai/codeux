@@ -75,6 +75,7 @@ export function parseCiRuns(stdout: string): { data: GitCiRunStatus[]; warning?:
     conclusion: toStr(item.conclusion),
     event: toStr(item.event),
     headBranch: toStr(item.headBranch),
+    headSha: toStr(item.headSha),
     url: toStr(item.url) ?? "",
     updatedAt: toStr(item.updatedAt),
   }));

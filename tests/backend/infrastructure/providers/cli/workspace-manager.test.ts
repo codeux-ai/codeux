@@ -210,6 +210,30 @@ describe("WorkspaceManager", () => {
     }
   });
 
+  it("reasserts recursive runtime-volume ownership when provider execution forces it", async () => {
+    vi.mocked(runCommandStrict).mockResolvedValue({ ok: true, stdout: "", stderr: "", code: 0, signal: null } as any);
+
+    await manager.ensureRuntimeVolume("docker-volume://workspace-1", {
+      initializeOwnership: true,
+      ownerSpec: "1001:1002",
+      forceOwnershipInitialization: true,
+    });
+    await manager.ensureRuntimeVolume("docker-volume://workspace-1", {
+      initializeOwnership: true,
+      ownerSpec: "1001:1002",
+      forceOwnershipInitialization: true,
+    });
+
+    const ownershipCalls = vi.mocked(runCommandStrict).mock.calls.filter((call) => (
+      call[0] === "docker"
+      && call[1].some((arg) => String(arg).includes("workspace-1-runtime"))
+      && String(call[1].at(-1)).includes("chown -R")
+    ));
+    expect(ownershipCalls).toHaveLength(2);
+    expect(ownershipCalls[0]?.[1].at(-1)).toContain("1001:1002");
+    expect(ownershipCalls[0]?.[1].at(-1)).toContain("/code-ux-runtime-home");
+  });
+
   it("checks out the requested branch in a snapshot workspace", async () => {
     vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
       if (args[0] === "rev-parse" && args[1] === "--show-toplevel") {

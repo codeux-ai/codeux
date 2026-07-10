@@ -6,6 +6,8 @@ describe("sanitizeGuardrails", () => {
   it("returns defaults when no input is provided", () => {
     const result = sanitizeGuardrails(undefined);
     expect(result).toEqual(DEFAULT_DASHBOARD_SETTINGS.guardrails);
+    expect(result.jobs.task_coding.cap).toBe(5);
+    expect(result.jobs.ci_fix.cap).toBe(5);
   });
 
   it("clamps caps to the allowed range and falls back to valid actions", () => {
