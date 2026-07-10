@@ -406,4 +406,38 @@ describe("ReliabilityStudio", () => {
     expect(getProviderIcon("antigravity").icon).toBe(Zap);
     expect(getProviderIcon("unknown-provider").icon).toBe(Bot);
   });
+
+  it("contains long provider content and preserves unavailable health as low data", () => {
+    const longName = "provider-family-preview-2026-with-an-extremely-long-operational-routing-name";
+    const provider = {
+      ...baseStats.providers[0],
+      id: "provider-long",
+      label: longName,
+      secondaryLabel: `${longName}-secondary-model-channel`,
+      usage: { ...baseStats.providers[0].usage, totalCostUsd: 0 },
+    };
+    const { container } = render(
+      <ReliabilityStudio
+        stats={{
+          ...baseStats,
+          providers: [provider],
+          models: [],
+          duration: { sampleCount: 0, avgMs: 0, p50Ms: 0, p95Ms: 0, maxMs: 0 },
+        } as any}
+        providerSegments={[]}
+        sourceSegments={[]}
+      />,
+    );
+
+    const row = screen.getByRole("article", { name: `${longName} provider reliability` });
+    expect(within(row).getByTitle(longName)).toHaveClass("break-words");
+    expect(row.className).toContain("min-w-0");
+    expect(within(row).getByText("No finished model runs")).toBeInTheDocument();
+    expect(within(row).getByText("No duration samples")).toBeInTheDocument();
+    expect(within(row).getAllByText("—").length).toBeGreaterThan(0);
+    expect(within(row).getByRole("img", { name: /Input 450; cached 75; output 300; reasoning 75; total 900/i })).toBeInTheDocument();
+    expect(row.querySelectorAll(".stats-surface-subpanel")).toHaveLength(0);
+    expect(container.textContent).not.toContain("Reliability Mode");
+    expect(container.innerHTML).not.toMatch(/shadow|backdrop-blur|hover:-?translate|hover:scale/);
+  });
 });

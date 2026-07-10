@@ -1,4 +1,4 @@
-import type { ComponentType, FunctionComponent } from "preact";
+import type { FunctionComponent } from "preact";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   Sparkles,
   TimerReset,
+  type LucideIcon,
 } from "lucide-preact";
 import type {
   ExecutionDurationStats,
@@ -28,7 +29,6 @@ import {
   DonutCard,
   PANEL_CLASS,
   STATUS_TONE_CLASS,
-  SUBPANEL_CLASS,
   TRACK_CLASS,
   TokenFlowBar,
   getProviderIcon,
@@ -49,7 +49,7 @@ interface SourceRow {
   share: number | null;
   tone: SourceTone;
   detail: string;
-  icon: ComponentType<any>;
+  icon: LucideIcon;
 }
 
 interface ProviderReliabilityRow {
@@ -72,7 +72,7 @@ const SOURCE_META: Record<ReliabilitySource, {
   label: string;
   tone: SourceTone;
   detail: string;
-  icon: ComponentType<any>;
+  icon: LucideIcon;
 }> = {
   reported: {
     label: "Reported",
@@ -116,6 +116,13 @@ const SOURCE_TEXT_CLASS: Record<SourceTone, string> = {
 const SUCCESS_TONE_CLASS: Record<ReturnType<typeof getSuccessTone>, string> = {
   strong: STATUS_TONE_CLASS.positive,
   warn: STATUS_TONE_CLASS.warning,
+  critical: STATUS_TONE_CLASS.negative,
+  neutral: STATUS_TONE_CLASS.neutral,
+};
+
+const SOURCE_STATUS_CLASS: Record<SourceTone, string> = {
+  strong: STATUS_TONE_CLASS.positive,
+  fallback: STATUS_TONE_CLASS.warning,
   critical: STATUS_TONE_CLASS.negative,
   neutral: STATUS_TONE_CLASS.neutral,
 };
@@ -303,9 +310,9 @@ const StudioMetricTile: FunctionComponent<{
   value: string;
   detail: string;
   toneClass?: string;
-  icon?: ComponentType<any>;
+  icon?: LucideIcon;
 }> = ({ label, value, detail, toneClass = "text-[color:var(--stats-detail-color)]", icon: Icon }) => (
-  <div className={`${SUBPANEL_CLASS} p-4`}>
+  <div className="min-w-0 py-2">
     <div className="flex items-center justify-between gap-3">
       <div className={`text-[10px] font-bold uppercase tracking-[0.18em] ${toneClass}`}>{label}</div>
       {Icon ? <Icon className={`h-3.5 w-3.5 ${toneClass}`} strokeWidth={2.2} aria-hidden="true" /> : null}
@@ -319,7 +326,7 @@ const EmptyTelemetryPanel: FunctionComponent<{
   title: string;
   detail: string;
 }> = ({ title, detail }) => (
-  <div className={`${SUBPANEL_CLASS} border-dashed px-4 py-10 text-center`}>
+  <div role="status" className="rounded-[var(--stats-subpanel-radius)] border border-dashed border-[color:var(--stats-card-border)] px-4 py-8 text-center">
     <div className="text-sm font-semibold text-[color:var(--stats-value-color)]">{title}</div>
     <div className="mx-auto mt-2 max-w-2xl text-sm leading-relaxed text-[color:var(--stats-detail-color)]">{detail}</div>
   </div>
@@ -330,7 +337,7 @@ const SourceCountCard: FunctionComponent<{
 }> = ({ row }) => {
   const Icon = row.icon;
   return (
-    <div className={`${SUBPANEL_CLASS} p-4`}>
+    <div className="min-w-0 border-t border-[color:var(--stats-border-hairline)] py-3">
       <div className="flex items-center justify-between gap-3">
         <div className={`inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] ${SOURCE_TEXT_CLASS[row.tone]}`}>
           <Icon className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden="true" />
@@ -365,6 +372,13 @@ const ProviderReliabilityCard: FunctionComponent<{
   const { icon: Icon, bg, text } = getProviderIcon(provider.provider);
   const successTone = getSuccessTone(row.successRate);
   const riskLevel = row.riskScore >= 55 ? "high" : row.riskScore >= 25 ? "medium" : "low";
+  const riskTone = riskLevel === "high"
+    ? STATUS_TONE_CLASS.negative
+    : riskLevel === "medium"
+      ? STATUS_TONE_CLASS.warning
+      : row.successRate === null || row.sourceTone === "neutral"
+        ? STATUS_TONE_CLASS.neutral
+        : STATUS_TONE_CLASS.positive;
   const providerActiveVsWall = provider.usage.wallTimeMs > 0 ? provider.usage.activeTimeMs / provider.usage.wallTimeMs : null;
   const hasCost = Number.isFinite(provider.usage.totalCostUsd) && provider.usage.totalCostUsd > 0;
   const costPerCall = hasCost && provider.usage.invocationCount > 0
@@ -375,7 +389,7 @@ const ProviderReliabilityCard: FunctionComponent<{
     : null;
 
   return (
-    <div className={`${PANEL_CLASS} p-5`}>
+    <article className={`${PANEL_CLASS} p-5`} aria-label={`${provider.label} provider reliability`}>
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="flex min-w-0 items-start gap-3">
           <div className={`rounded-xl p-2 ${bg} ${text}`}>
@@ -385,10 +399,10 @@ const ProviderReliabilityCard: FunctionComponent<{
             <div className="break-words text-base font-semibold text-[color:var(--stats-value-color)]" title={provider.label}>{provider.label}</div>
             <div className="mt-1 break-words text-sm text-[color:var(--stats-detail-color)]">{provider.secondaryLabel ?? "No secondary label"}</div>
             <div className="mt-2 flex flex-wrap gap-2">
-              <div className={FLAT_BADGE_CLASS}>
+              <div className={`inline-flex items-center rounded-[var(--stats-chip-radius)] border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${SOURCE_STATUS_CLASS[row.sourceTone]}`}>
                 {row.sourceSummaryLabel}
               </div>
-              <div className={FLAT_BADGE_CLASS}>
+              <div className={`inline-flex items-center rounded-[var(--stats-chip-radius)] border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${riskTone}`}>
                 {riskLevel} risk
               </div>
             </div>
@@ -417,7 +431,7 @@ const ProviderReliabilityCard: FunctionComponent<{
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <dl className="mt-5 grid grid-cols-2 gap-x-5 border-y border-[color:var(--stats-border-hairline)] md:grid-cols-3 xl:grid-cols-4">
         <StudioMetricTile
           label="Failures"
           value={row.failedCount.toLocaleString()}
@@ -425,7 +439,7 @@ const ProviderReliabilityCard: FunctionComponent<{
           toneClass={row.failedCount > 0 ? "text-[color:var(--stats-negative-text)]" : "text-[color:var(--stats-positive-text)]"}
           icon={row.failedCount > 0 ? AlertTriangle : CheckCircle2}
         />
-        <div className={`${SUBPANEL_CLASS} p-4`}>
+        <div className="min-w-0 py-2">
           <div className="flex items-center justify-between gap-3">
             <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">Success Rate</div>
             <ShieldCheck className="h-3.5 w-3.5 text-[color:var(--stats-label-color)]" strokeWidth={2.2} aria-hidden="true" />
@@ -478,7 +492,7 @@ const ProviderReliabilityCard: FunctionComponent<{
           detail={row.sourceSummaryDetail}
           toneClass={SOURCE_TEXT_CLASS[row.sourceTone]}
         />
-      </div>
+      </dl>
 
       <div className="mt-5 grid grid-cols-2 gap-2 lg:grid-cols-5">
         {row.sourceRows.map((sourceRow) => (
@@ -498,7 +512,7 @@ const ProviderReliabilityCard: FunctionComponent<{
           total={provider.usage.totalTokens}
         />
       </div>
-    </div>
+    </article>
   );
 };
 
@@ -528,32 +542,15 @@ export const ReliabilityStudio: FunctionComponent<{
   }, null);
 
   return (
-    <section className="space-y-6">
-      <div className={`${PANEL_CLASS} p-6`}>
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
-          <div className="flex max-w-4xl items-start gap-4">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--stats-control-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-chip)] text-[color:var(--stats-detail-color)]">
-              <ShieldCheck className="h-5 w-5" strokeWidth={2.2} aria-hidden="true" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">Reliability Mode</div>
-              <div className="mt-1 break-words text-xl font-semibold tracking-tight text-[color:var(--stats-value-color)]">Provider confidence & failure risk</div>
-              <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
-                Telemetry confidence, source mix, provider health, fallback usage, and failure pressure for the selected Stats window.
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <div className={FLAT_BADGE_CLASS}>
-              {sourceSummary.label} confidence
-            </div>
-            <div className={FLAT_BADGE_CLASS}>
-              {formatSuccessRate(successRate)} success
-            </div>
-          </div>
-        </div>
+    <section className="min-w-0 space-y-7" aria-labelledby="providers-studio-title">
+      <div className="min-w-0 border-y border-[color:var(--stats-border-hairline)] py-4">
+        <div className={SECTION_TITLE_CLASS}>Providers</div>
+        <h2 id="providers-studio-title" className="mt-1 break-words text-xl font-semibold tracking-tight text-[color:var(--stats-value-color)]">Provider confidence & failure risk</h2>
+        <p className={`${SECTION_COPY_CLASS} max-w-3xl`}>Confidence, fallback usage, failures, coverage, risk, duration, pricing, and audit context for the selected window.</p>
+      </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className={`${PANEL_CLASS} p-5 md:p-6`} aria-label="Provider reliability overview">
+        <dl className="grid grid-cols-1 gap-x-5 sm:grid-cols-2 xl:grid-cols-5">
           <StudioMetricTile
             label="Telemetry Confidence"
             value={sourceSummary.label}
@@ -588,7 +585,7 @@ export const ReliabilityStudio: FunctionComponent<{
             toneClass="text-[color:var(--stats-positive-text)]"
             icon={DollarSign}
           />
-        </div>
+        </dl>
       </div>
 
       <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1.02fr_0.98fr]">
@@ -642,10 +639,10 @@ export const ReliabilityStudio: FunctionComponent<{
         )}
       </div>
 
-      <div className={`${PANEL_CLASS} p-6`}>
+      <section className="min-w-0" aria-labelledby="confidence-board-title">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className={SECTION_TITLE_CLASS}>Confidence Board</div>
+            <h3 id="confidence-board-title" className={SECTION_TITLE_CLASS}>Confidence Board</h3>
             <div className={SECTION_COPY_CLASS}>
               Invocation-source counts are separated so estimated and unknown data are clear without treating fallback estimates as failures.
             </div>
@@ -654,10 +651,10 @@ export const ReliabilityStudio: FunctionComponent<{
             {sourceAudit.total.toLocaleString()} counted
           </div>
         </div>
-        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5" data-testid="reliability-confidence-board">
+        <div className="mt-4 grid grid-cols-1 gap-x-5 sm:grid-cols-2 xl:grid-cols-5" data-testid="reliability-confidence-board">
           {sourceRows.map((row) => <SourceCountCard key={row.source} row={row} />)}
         </div>
-      </div>
+      </section>
 
       <div className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-4">
@@ -677,19 +674,19 @@ export const ReliabilityStudio: FunctionComponent<{
             detail="Provider reliability appears after tracked invocations record provider usage or status summaries."
           />
         ) : (
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-4">
             {providerRows.map((row) => <ProviderReliabilityCard key={row.provider.id} row={row} />)}
           </div>
         )}
       </div>
 
-      <div className={`${PANEL_CLASS} p-6`}>
+      <section className="min-w-0 border-t border-[color:var(--stats-border-hairline)] pt-4" aria-labelledby="audit-notes-title">
         <div className="flex items-center gap-3">
           <AlertTriangle className="h-4 w-4 text-[color:var(--stats-detail-color)]" strokeWidth={2} aria-hidden="true" />
-          <div className={SECTION_TITLE_CLASS}>Audit Notes</div>
+          <h3 id="audit-notes-title" className={SECTION_TITLE_CLASS}>Audit Notes</h3>
         </div>
-        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div className={SUBPANEL_CLASS}>
+        <div className="mt-3 grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-3">
+          <div className="min-w-0 border-t border-[color:var(--stats-border-hairline)] pt-3">
             <div className="text-sm font-semibold text-[color:var(--stats-value-color)]">Fallback mix</div>
             <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
               {fallbackCount > 0
@@ -697,7 +694,7 @@ export const ReliabilityStudio: FunctionComponent<{
                 : "No estimated or unknown invocation-source counts were recorded in this window."}
             </div>
           </div>
-          <div className={SUBPANEL_CLASS}>
+          <div className="min-w-0 border-t border-[color:var(--stats-border-hairline)] pt-3">
             <div className="text-sm font-semibold text-[color:var(--stats-value-color)]">Failure risk</div>
             <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
               {stats.statusCounts.failed > 0 || failureRiskCount > 0
@@ -705,7 +702,7 @@ export const ReliabilityStudio: FunctionComponent<{
                 : "No failed invocations or unavailable source counts were recorded in this window."}
             </div>
           </div>
-          <div className={SUBPANEL_CLASS}>
+          <div className="min-w-0 border-t border-[color:var(--stats-border-hairline)] pt-3">
             <div className="text-sm font-semibold text-[color:var(--stats-value-color)]">Duration coverage</div>
             <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
               {stats.duration.sampleCount > 0
@@ -714,7 +711,7 @@ export const ReliabilityStudio: FunctionComponent<{
             </div>
           </div>
         </div>
-      </div>
+      </section>
     </section>
   );
 };

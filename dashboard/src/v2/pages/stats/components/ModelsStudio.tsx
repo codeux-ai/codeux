@@ -1,7 +1,6 @@
 import type { FunctionComponent } from "preact";
 import {
   Brain,
-  Activity,
   BarChart3,
   Clock3,
   Cpu,
@@ -17,7 +16,6 @@ import type { ExecutionModelStatsSummary, ProjectExecutionStatsSnapshot } from "
 import { formatStatsDuration, formatTokens, formatDateTime, formatPercent, formatCost } from "../stats-utils.js";
 import {
   PANEL_CLASS,
-  SUBPANEL_CLASS,
   CHIP_CLASS,
   DASHED_EMPTY_CLASS,
   DonutCard,
@@ -82,7 +80,7 @@ export const HighlightTile: FunctionComponent<{
   highlight: ModelHighlight | null;
   tone: string;
 }> = ({ icon: Icon, label, highlight, tone }) => (
-  <div className={`${SUBPANEL_CLASS} min-w-0 p-3`}>
+  <div className="min-w-0 border-t border-[color:var(--stats-border-hairline)] py-3">
     <div className="flex min-w-0 items-center justify-between gap-3">
       <div className={`min-w-0 break-words text-[10px] font-bold uppercase tracking-[0.16em] ${TEXT_LABEL_CLASS}`}>
         {label}
@@ -104,7 +102,7 @@ export const ModelMetric: FunctionComponent<{
   value: string;
   detail?: string;
 }> = ({ label, value, detail }) => (
-  <div className={`${SUBPANEL_CLASS} min-w-0 p-3`}>
+  <div className="min-w-0 py-2">
     <div className={`break-words text-[10px] font-bold uppercase tracking-[0.14em] ${TEXT_LABEL_CLASS}`}>{label}</div>
     <div className={`mt-2 break-words text-sm font-semibold ${value === "—" ? TEXT_DETAIL_CLASS : TEXT_VALUE_CLASS}`}>{value}</div>
     {detail ? <div className={`mt-1 text-[10px] font-bold uppercase tracking-[0.14em] ${TEXT_LABEL_CLASS}`}>{detail}</div> : null}
@@ -186,7 +184,7 @@ export const ModelCard: FunctionComponent<{
         </div>
       ) : null}
 
-      <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-5">
+      <dl className="mt-4 grid grid-cols-2 gap-x-5 border-y border-[color:var(--stats-border-hairline)] md:grid-cols-3 xl:grid-cols-5">
         <ModelMetric
           label="Invocations"
           value={model.usage.invocationCount.toLocaleString()}
@@ -237,17 +235,17 @@ export const ModelCard: FunctionComponent<{
           value={efficiency.outputInputRatio !== null ? efficiency.outputInputRatio.toFixed(2) : "—"}
           detail="generation ratio"
         />
-      </div>
+      </dl>
 
-      <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[0.85fr_1.15fr]">
-        <div className={`${SUBPANEL_CLASS} p-3`}>
+      <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[0.8fr_1.2fr]">
+        <div className="min-w-0 border-t border-[color:var(--stats-border-hairline)] pt-3">
           <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Outcome Mix</div>
           <div className="mt-2 text-sm font-semibold text-[color:var(--stats-value-color)]">{statusSummary}</div>
           <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">
             Last active {formatDateTime(model.lastActivityAt)}
           </div>
         </div>
-        <div className={`${SUBPANEL_CLASS} p-3`}>
+        <div className="min-w-0 border-t border-[color:var(--stats-border-hairline)] pt-3">
           <div className="flex items-center justify-between gap-3">
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Token-Flow Anatomy</div>
             <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">{formatTokens(model.usage.totalTokens)} total</div>
@@ -292,20 +290,11 @@ export const ModelsStudio: FunctionComponent<{
   });
 
   return (
-    <section className="space-y-6">
-      <div className={`${PANEL_CLASS} p-5 md:p-6`}>
-        <div className="flex max-w-4xl items-start gap-4">
-          <div className={`flex h-10 w-10 shrink-0 items-center justify-center border px-2 ${CHIP_CLASS} text-[color:var(--stats-signal-text)]`}>
-            <Cpu className="h-4 w-4" strokeWidth={2.2} aria-hidden="true" />
-          </div>
-          <div className="min-w-0">
-            <div className={`text-[10px] font-bold uppercase tracking-[0.18em] ${TEXT_LABEL_CLASS}`}>Model Intelligence</div>
-            <div className={`mt-1 break-words text-xl font-semibold ${TEXT_VALUE_CLASS}`}>Model performance & efficiency</div>
-            <div className={`mt-2 max-w-3xl text-sm leading-relaxed ${TEXT_DETAIL_CLASS}`}>
-              Per-model telemetry across the selected window — token volume, reliability, latency distribution, cache efficiency, and output velocity for every model that participated.
-            </div>
-          </div>
-        </div>
+    <section className="min-w-0 space-y-7" aria-labelledby="models-studio-title">
+      <div className="min-w-0 border-y border-[color:var(--stats-border-hairline)] py-4">
+        <div className={`text-[10px] font-bold uppercase tracking-[0.2em] ${TEXT_LABEL_CLASS}`}>Models</div>
+        <h2 id="models-studio-title" className={`mt-1 break-words text-xl font-semibold tracking-tight ${TEXT_VALUE_CLASS}`}>Model performance & efficiency</h2>
+        <p className={`mt-2 max-w-3xl text-sm leading-relaxed ${TEXT_DETAIL_CLASS}`}>Usage share, reliability, latency, cache behavior, pricing, and token flow for every model active in the selected window.</p>
       </div>
 
       {models.length === 0 ? (
@@ -320,7 +309,7 @@ export const ModelsStudio: FunctionComponent<{
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[0.95fr_1.05fr_0.8fr]">
+          <div className="grid min-w-0 grid-cols-1 gap-5 2xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
             <DonutCard
               title="Model Share"
               eyebrow="Distribution"
@@ -329,12 +318,27 @@ export const ModelsStudio: FunctionComponent<{
               centerLabel={models.length === 1 ? "model" : "models"}
               segments={segments}
             />
-            <div className={`${PANEL_CLASS} p-6`}>
-              <div className="flex items-center gap-3">
-                <Gauge className="h-4 w-4 text-[color:var(--stats-signal-text)]" strokeWidth={2} />
-                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Efficiency Highlights</div>
+            <div className={`${PANEL_CLASS} min-w-0 p-5 md:p-6`}>
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <Gauge className="h-4 w-4 text-[color:var(--stats-signal-text)]" strokeWidth={2} />
+                    <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Window Overview</div>
+                  </div>
+                  <div className="mt-2 break-words text-xl font-semibold text-[color:var(--stats-value-color)]">{formatTokens(totalTokens)}</div>
+                  <div className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">tokens across {models.length.toLocaleString()} models</div>
+                </div>
               </div>
-              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <dl className="mt-4 grid grid-cols-2 gap-x-5 border-y border-[color:var(--stats-border-hairline)] sm:grid-cols-3">
+                <ModelMetric label="Calls" value={totalCalls.toLocaleString()} detail={totalCalls < LOW_SAMPLE_THRESHOLD ? "sparse sample" : "invocations"} />
+                <ModelMetric label="Output" value={formatTokens(totalOutput)} detail="generated" />
+                <ModelMetric label="Cached" value={formatTokens(totalCached)} detail="input reuse" />
+                <ModelMetric label="Reasoning" value={formatTokens(totalReasoning)} detail="thinking tokens" />
+                <ModelMetric label="Cost" value={formatPricingValue(totalCost)} detail={totalCost > 0 ? "priced usage" : "no pricing signal"} />
+                <ModelMetric label="Latency coverage" value={`${sampledModels}/${models.length}`} detail="models sampled" />
+              </dl>
+              <div className="mt-5 text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Efficiency Highlights</div>
+              <div className="mt-2 grid min-w-0 grid-cols-1 gap-x-5 sm:grid-cols-2 xl:grid-cols-3">
                 <HighlightTile
                   icon={TrendingUp}
                   label="Volume Leader"
@@ -372,21 +376,6 @@ export const ModelsStudio: FunctionComponent<{
                   tone="text-[color:var(--stats-negative-text)]"
                 />
               </div>
-            </div>
-            <div className={`${PANEL_CLASS} p-6`}>
-              <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">
-                <Activity className="h-3.5 w-3.5 text-[color:var(--stats-signal-text)]" strokeWidth={2.2} />
-                Window Volume
-              </div>
-              <div className="mt-4 break-words text-xl font-semibold text-[color:var(--stats-value-color)]">{formatTokens(totalTokens)}</div>
-              <div className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">tokens ranked by model volume</div>
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                <ModelMetric label="Calls" value={totalCalls.toLocaleString()} detail={totalCalls < LOW_SAMPLE_THRESHOLD ? "sparse sample" : "invocations"} />
-                <ModelMetric label="Output" value={formatTokens(totalOutput)} detail="generated" />
-                <ModelMetric label="Cached" value={formatTokens(totalCached)} detail="input reuse" />
-                <ModelMetric label="Reasoning" value={formatTokens(totalReasoning)} detail="thinking tokens" />
-                <ModelMetric label="Cost" value={formatPricingValue(totalCost)} detail={totalCost > 0 ? "priced usage" : "no pricing signal"} />
-              </div>
               <div className={`${DASHED_EMPTY_CLASS} mt-4 py-3 text-left text-xs leading-relaxed ${TEXT_DETAIL_CLASS}`}>
                 {sampledModels === 0
                   ? "No model has duration samples yet; latency highlights and p50/p95 cells stay intentionally empty."
@@ -412,7 +401,7 @@ export const ModelsStudio: FunctionComponent<{
                 Models are present, but none reported token volume in this window. Ranking falls back to labels until usage totals arrive.
               </div>
             ) : null}
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <div className="grid min-w-0 grid-cols-1 gap-4">
               {sorted.map((model, index) => (
                 <ModelCard
                   key={model.id}

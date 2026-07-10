@@ -35,7 +35,7 @@ A full-width interactive **Usage Graph** displays usage over time for the series
 - Hourly views reduce visible axis labels while preserving individual bucket inspection.
 
 ### Composition
-Explains where usage comes from with provider share, token anatomy, cache behavior, source quality, purpose lanes, Git-blocker context, and low-data fallbacks.
+Explains where usage comes from with provider share, token anatomy, cache behavior, source quality, purpose activity, Git-blocker context, and low-data fallbacks. The flat workspace keeps chart labels accessible and presents provider details as wrapping-safe comparison rows.
 
 Interactive donut charts slice by:
 - Token anatomy
@@ -45,10 +45,10 @@ Interactive donut charts slice by:
 Charts keep data accent colors inside segments and token bars while compact badges remain neutral.
 
 ### Models
-Ranks model activity by token volume and tracks invocation volume, latency, reliability, cache efficiency, reasoning share, pricing signals, output velocity, and low-data states for each model used during the active timeframe.
+Pairs a concise window overview with model-share and efficiency highlights, then ranks model activity by token volume. Full-width comparison rows keep invocation volume, latency, reliability, cache efficiency, reasoning share, pricing signals, output velocity, and token flow aligned without hiding low-data states.
 
 ### Providers
-Focuses on provider reliability, telemetry confidence, fallback usage, failure pressure, provider coverage, duration coverage, latency signals, pricing, provider-specific risk, and audit notes when the selected snapshot includes those fields.
+Presents an operational reliability board for telemetry confidence, fallback usage, failure pressure, provider coverage, duration coverage, latency signals, pricing, provider-specific risk, and audit notes. Semantic source and risk statuses remain distinct from neutral structural surfaces, and missing health data stays unavailable rather than appearing successful.
 
 ### Ledgers
 Provides tabbed telemetry tables for **Task Telemetry**, **Sprint Telemetry**, and **Git Telemetry**.

@@ -85,6 +85,7 @@ Composition explains where usage comes from.
 - Purpose lanes show invocation count, active time, token share, and dominant purpose without creating a second conflicting purpose summary.
 - Source-confidence cards distinguish reported, estimated, unavailable, unsupported, and defensive unknown buckets without inventing alternate totals.
 - Donuts, ribbons, and flow bars need nearby text or `role="img"` labels so color is never the only signal.
+- The workspace uses one compact metadata strip, two chart panels, then unframed source, cache, Git, purpose, and provider sections. Provider comparisons use divided rows with flat definition-list metrics; do not restore a duplicated summary deck or nested metric tiles.
 
 ### Models
 
@@ -96,6 +97,7 @@ Models compares model activity, latency, reliability, and efficiency.
 - Model pricing stats use `usage.totalCostUsd` and should show total cost, cost per invocation, and blended cost per million tokens only when a positive cost signal exists.
 - Missing model arrays, zero model usage, zero duration samples, and low invocation counts render as explicit low-data states.
 - Long model and provider names must wrap within stable cards and rows; chips and metrics cannot force horizontal page overflow.
+- The concise overview pairs model-share distribution with one window summary and highlight panel. Leaderboard entries use one full-width comparison row each, with aligned definition-list metrics and unframed outcome/token-flow details.
 
 ### Providers
 
@@ -108,6 +110,7 @@ Providers is the reliability studio.
 - Provider cards sort by computed risk first and token volume second, then show failure count, success-rate tone, token volume, pricing stats, active time, duration coverage, and source confidence.
 - Provider pricing stats use `usage.totalCostUsd` and should show total cost, cost per invocation, and blended cost per million tokens only when a positive cost signal exists.
 - Provider status and latency details may be derived from matching model summaries, but health must not be fabricated when model/status telemetry is absent.
+- The reliability board uses a compact metadata strip, a single overview, chart context, an unframed confidence board, full-width provider rows, and divided audit notes. Source and risk chips use semantic status tones; low risk remains neutral when outcome or source telemetry is unavailable.
 - Empty provider or source segments use shared Stats panels and explain what data is missing.
 
 ### Ledgers
