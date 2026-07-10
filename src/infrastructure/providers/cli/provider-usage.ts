@@ -25,6 +25,13 @@ import {
   parseAntigravityTranscript,
   type AntigravityUsageTotals,
 } from "./provider-logs/antigravity-log-parser.js";
+import {
+  parseGeminiLog,
+  parseGeminiConversation,
+  parseGeminiTokens,
+  type GeminiUsageTotals,
+} from "./provider-logs/gemini-log-parser.js";
+import { parseJsonObject } from "./provider-logs/usage-parse-utils.js";
 import type { CliProviderId } from "./provider-command-specs.js";
 
 // Re-export the qwen log helpers so existing importers (provider-runner, tests)
@@ -41,6 +48,9 @@ export type { ParsedConversationTurn };
 // Re-export the Claude Code parser so callers can use it directly.
 export { parseClaudeCodeSessionJsonl };
 export type { ClaudeCodeLogResult };
+// Re-export Gemini parser helpers during the provider-log module migration.
+export { parseGeminiLog, parseGeminiConversation, parseGeminiTokens };
+export type { GeminiUsageTotals };
 
 export interface ProviderUsageTelemetry {
   inputTokens: number;
@@ -52,9 +62,9 @@ export interface ProviderUsageTelemetry {
   rawUsageJson: Record<string, unknown> | null;
   transcriptText: string;
   nativeSessionId: string | null;
-  /** Ordered conversation parsed from the provider's JSON logs (codex / qwen /
-   *  opencode). Empty when the provider does not support structured parsing or
-   *  the logs were unavailable (estimated usage). */
+  /** Ordered conversation parsed from provider JSON logs/stdout (codex, gemini,
+   *  qwen, opencode, etc.). Empty when the provider does not support structured
+   *  parsing or the logs were unavailable (estimated usage). */
   conversation: ParsedConversationTurn[];
 }
 
@@ -97,26 +107,6 @@ function withLeadingUserTurn(conversation: ParsedConversationTurn[], prompt: str
   ];
 }
 
-function toNumber(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === "string" && value.trim().length > 0) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  return 0;
-}
-
-function parseJsonObject(value: string): Record<string, unknown> | null {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : null;
-  } catch {
-    return null;
-  }
-}
-
 function parseLastJsonObjectLine(value: string): Record<string, unknown> | null {
   const lines = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).reverse();
   for (const line of lines) {
@@ -126,12 +116,6 @@ function parseLastJsonObjectLine(value: string): Record<string, unknown> | null 
     }
   }
   return null;
-}
-
-interface NormalizedUsageCounts {
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
 }
 
 type TiktokenEncoding = ReturnType<typeof encodingForModel>;
@@ -212,25 +196,6 @@ export const codexTokenEstimationCacheTestHooks = {
   },
 };
 
-function normalizeUsageCounts(
-  usage: Record<string, unknown>,
-  args?: {
-    promptKeys?: string[];
-    completionKeys?: string[];
-    totalKeys?: string[];
-  },
-): NormalizedUsageCounts {
-  const promptKeys = args?.promptKeys ?? ["input_tokens", "prompt_tokens", "inputTokens", "promptTokens", "input"];
-  const completionKeys = args?.completionKeys ?? ["output_tokens", "completion_tokens", "outputTokens", "completionTokens", "candidates"];
-  const totalKeys = args?.totalKeys ?? ["total_tokens", "totalTokens", "totalTokenCount", "total"];
-
-  const promptTokens = promptKeys.reduce((value, key) => value || toNumber(usage[key]), 0);
-  const completionTokens = completionKeys.reduce((value, key) => value || toNumber(usage[key]), 0);
-  const explicitTotal = totalKeys.reduce((value, key) => value || toNumber(usage[key]), 0);
-  const totalTokens = explicitTotal > 0 ? explicitTotal : promptTokens + completionTokens;
-  return { promptTokens, completionTokens, totalTokens };
-}
-
 function tokenizeWithCodexModel(model: string | null | undefined, text: string): number {
   const normalized = typeof model === "string" && model.trim().length > 0 ? model.trim() : "gpt-4o";
   const cacheKey = buildCodexTokenCountCacheKey(normalized, text);
@@ -285,204 +250,6 @@ function estimateTelemetry(provider: CliProviderId, model: string | null | undef
 
 function totalTrackedTokens(inputTokens: number, cachedInputTokens: number, outputTokens: number): number {
   return inputTokens + cachedInputTokens + outputTokens;
-}
-
-function parseGeminiTokens(stats: Record<string, unknown> | null): ProviderUsageTelemetry | null {
-  if (!stats) {
-    return null;
-  }
-
-  const directTokens = stats.tokens && typeof stats.tokens === "object" ? stats.tokens as Record<string, unknown> : null;
-  if (directTokens) {
-    const normalized = normalizeUsageCounts(directTokens, {
-      promptKeys: ["input", "input_tokens", "inputTokens", "prompt_tokens", "promptTokens"],
-      completionKeys: ["candidates", "output", "output_tokens", "outputTokens", "completion_tokens", "completionTokens"],
-      totalKeys: ["total", "total_tokens", "totalTokens", "totalTokenCount"],
-    });
-    const inputTokens = normalized.promptTokens;
-    const cachedInputTokens = toNumber(directTokens.cached);
-    const outputTokens = normalized.completionTokens;
-    const reasoningOutputTokens = toNumber(directTokens.thoughts);
-    const totalTokens = Math.max(normalized.totalTokens, inputTokens + cachedInputTokens + outputTokens + reasoningOutputTokens);
-    if (totalTokens > 0) {
-      return {
-        ...emptyTelemetry(),
-        inputTokens,
-        cachedInputTokens,
-        outputTokens,
-        reasoningOutputTokens,
-        totalTokens,
-        usageSource: "reported",
-        rawUsageJson: stats,
-      };
-    }
-  }
-
-  const models = stats.models && typeof stats.models === "object" ? Object.values(stats.models as Record<string, unknown>) : [];
-  if (models.length > 0) {
-    let inputTokens = 0;
-    let cachedInputTokens = 0;
-    let outputTokens = 0;
-    let reasoningOutputTokens = 0;
-    for (const entry of models) {
-      const tokens = entry && typeof entry === "object" ? (entry as Record<string, unknown>).tokens : null;
-      if (!tokens || typeof tokens !== "object") {
-        continue;
-      }
-      const normalized = normalizeUsageCounts(tokens as Record<string, unknown>, {
-        promptKeys: ["input", "input_tokens", "inputTokens", "prompt_tokens", "promptTokens"],
-        completionKeys: ["candidates", "output", "output_tokens", "outputTokens", "completion_tokens", "completionTokens"],
-        totalKeys: ["total", "total_tokens", "totalTokens", "totalTokenCount"],
-      });
-      inputTokens += normalized.promptTokens;
-      cachedInputTokens += toNumber((tokens as Record<string, unknown>).cached);
-      outputTokens += normalized.completionTokens;
-      reasoningOutputTokens += toNumber((tokens as Record<string, unknown>).thoughts);
-    }
-    const totalTokens = inputTokens + cachedInputTokens + outputTokens + reasoningOutputTokens;
-    if (totalTokens > 0) {
-      return {
-        ...emptyTelemetry(),
-        inputTokens,
-        cachedInputTokens,
-        outputTokens,
-        reasoningOutputTokens,
-        totalTokens,
-        usageSource: "reported",
-        rawUsageJson: stats,
-      };
-    }
-  }
-
-  return null;
-}
-
-function flattenGeminiText(value: unknown): string {
-  if (typeof value === "string") {
-    return value.trim();
-  }
-  if (Array.isArray(value)) {
-    const parts: string[] = [];
-    for (const item of value) {
-      const rec = item && typeof item === "object" ? item as Record<string, unknown> : null;
-      if (rec && typeof rec.text === "string") {
-        parts.push(rec.text);
-      } else if (rec && typeof rec.output_text === "string") {
-        parts.push(rec.output_text);
-      } else if (typeof item === "string") {
-        parts.push(item);
-      }
-    }
-    return parts.join("").trim();
-  }
-  return "";
-}
-
-function geminiPartIsReasoning(part: Record<string, unknown>): boolean {
-  const partType = typeof part.type === "string" ? part.type : null;
-  return partType === "thinking"
-    || partType === "reasoning"
-    || partType === "thought"
-    || part.thought === true
-    || part.thought === "true"
-    || part.reasoning != null
-    || part.reasoning_content != null
-    || part.thinking != null
-    || part.summary != null
-    || part.summary_text != null;
-}
-
-function geminiPartReasoningText(part: Record<string, unknown>): string {
-  return flattenGeminiText(
-    part.reasoning_content ?? part.reasoning ?? part.thinking ?? part.summary ?? part.summary_text ?? part.text,
-  );
-}
-
-function geminiPartAssistantText(part: Record<string, unknown>): string {
-  const partType = typeof part.type === "string" ? part.type : null;
-  if (partType === "text" || partType === "output_text" || partType === "message") {
-    return flattenGeminiText(part.text ?? part.output_text ?? part.content);
-  }
-  if (typeof part.text === "string" && !geminiPartIsReasoning(part)) {
-    return part.text.trim();
-  }
-  return "";
-}
-
-function parseGeminiConversation(parsed: Record<string, unknown>): ParsedConversationTurn[] {
-  const response = parsed.response && typeof parsed.response === "object" ? parsed.response as Record<string, unknown> : null;
-  const candidates = Array.isArray(response?.candidates)
-    ? response!.candidates
-    : Array.isArray(parsed.candidates)
-      ? parsed.candidates
-      : [];
-  const conversation: ParsedConversationTurn[] = [];
-
-  for (const candidate of candidates) {
-    const candidateRec = candidate && typeof candidate === "object" ? candidate as Record<string, unknown> : null;
-    const content = candidateRec?.content && typeof candidateRec.content === "object"
-      ? candidateRec.content as Record<string, unknown>
-      : null;
-    const parts = Array.isArray(content?.parts)
-      ? content!.parts
-      : Array.isArray(candidateRec?.parts)
-        ? candidateRec!.parts
-        : [];
-    if (parts.length === 0) {
-      continue;
-    }
-
-    let assistantText = "";
-    for (const part of parts) {
-      const rec = part && typeof part === "object" ? part as Record<string, unknown> : null;
-      if (!rec) {
-        continue;
-      }
-      const reasoningText = geminiPartReasoningText(rec);
-      if (geminiPartIsReasoning(rec) && reasoningText) {
-        conversation.push({ kind: "reasoning", text: reasoningText });
-        continue;
-      }
-      const assistantPartText = geminiPartAssistantText(rec);
-      if (assistantPartText) {
-        assistantText += assistantPartText;
-      }
-    }
-
-    if (assistantText.trim()) {
-      conversation.push({ kind: "assistant", text: assistantText.trim() });
-    }
-  }
-
-  if (conversation.length > 0) {
-    return conversation;
-  }
-
-  const fallbackContent = response?.content && typeof response.content === "object" ? response.content as Record<string, unknown> : null;
-  const fallbackParts = Array.isArray(fallbackContent?.parts) ? fallbackContent!.parts : [];
-  if (fallbackParts.length === 0) {
-    return conversation;
-  }
-
-  let assistantText = "";
-  for (const part of fallbackParts) {
-    const rec = part && typeof part === "object" ? part as Record<string, unknown> : null;
-    if (!rec) continue;
-    const reasoningText = geminiPartReasoningText(rec);
-    if (geminiPartIsReasoning(rec) && reasoningText) {
-      conversation.push({ kind: "reasoning", text: reasoningText });
-      continue;
-    }
-    const assistantPartText = geminiPartAssistantText(rec);
-    if (assistantPartText) {
-      assistantText += assistantPartText;
-    }
-  }
-  if (assistantText.trim()) {
-    conversation.push({ kind: "assistant", text: assistantText.trim() });
-  }
-
-  return conversation;
 }
 
 /**
@@ -615,38 +382,32 @@ export async function collectProviderUsageTelemetry(args: {
   }
 
   if (args.provider === "gemini") {
-    const parsed = parseJsonObject(args.stdout);
-    const stats = parsed?.stats && typeof parsed.stats === "object" ? parsed.stats as Record<string, unknown> : null;
-    const usage = parseGeminiTokens(stats);
-    const structuredConversation = parsed ? parseGeminiConversation(parsed) : [];
-    const transcriptFromStructuredConversation = structuredConversation
-      .filter((turn) => turn.kind === "assistant")
-      .map((turn) => turn.text)
-      .filter(Boolean)
-      .join("\n")
-      .trim();
-    if (usage) {
-      usage.transcriptText = typeof parsed?.response === "string"
-        ? parsed.response
-        : transcriptFromStructuredConversation || fallbackOutput;
-      usage.nativeSessionId = typeof parsed?.session_id === "string" ? parsed.session_id : null;
-      if (structuredConversation.length > 0) {
-        usage.conversation = structuredConversation;
-      }
-      return usage;
+    const parsed = parseGeminiLog(args.stdout);
+    const transcriptText = parsed.transcriptText || fallbackOutput;
+    const nativeSessionId = parsed.nativeSessionId ?? args.nativeSessionId ?? null;
+    if (parsed.usage) {
+      return {
+        ...emptyTelemetry(),
+        inputTokens: parsed.usage.inputTokens,
+        cachedInputTokens: parsed.usage.cachedInputTokens,
+        outputTokens: parsed.usage.outputTokens,
+        reasoningOutputTokens: parsed.usage.reasoningOutputTokens,
+        totalTokens: parsed.usage.totalTokens,
+        usageSource: "reported",
+        rawUsageJson: parsed.rawUsageJson,
+        transcriptText,
+        nativeSessionId,
+        conversation: parsed.conversation,
+      };
     }
     const estimated = estimateTelemetry(
       "gemini",
       args.model,
       args.prompt,
-      typeof parsed?.response === "string"
-        ? parsed.response
-        : transcriptFromStructuredConversation || fallbackOutput,
+      transcriptText,
     );
-    estimated.nativeSessionId = typeof parsed?.session_id === "string" ? parsed.session_id : null;
-    if (structuredConversation.length > 0) {
-      estimated.conversation = structuredConversation;
-    }
+    estimated.nativeSessionId = nativeSessionId;
+    estimated.conversation = parsed.conversation;
     return estimated;
   }
 

@@ -159,6 +159,62 @@ describe("collectProviderUsageTelemetry", () => {
     expect(result.reasoningOutputTokens).toBe(3);
   });
 
+  it("persists Gemini tool calls and results from structured response parts", async () => {
+    const result = await collectProviderUsageTelemetry({
+      provider: "gemini",
+      model: "gemini-2.5-pro",
+      prompt: "Inspect the README.",
+      cwd: "/workspace/repo",
+      stdout: JSON.stringify({
+        response: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  { text: "I will inspect the file." },
+                  { functionCall: { id: "call_1", name: "read_file", args: { path: "README.md" } } },
+                  { functionResponse: { id: "call_1", name: "read_file", response: { content: "hello" }, status: "completed" } },
+                  { text: "Done." },
+                ],
+              },
+            },
+          ],
+        },
+        stats: {
+          tokens: {
+            input: 100,
+            cached: 5,
+            candidates: 25,
+          },
+        },
+      }),
+      stderr: "",
+    });
+
+    expect(result).toMatchObject({
+      inputTokens: 100,
+      cachedInputTokens: 5,
+      outputTokens: 25,
+      totalTokens: 130,
+      usageSource: "reported",
+      transcriptText: "I will inspect the file.\nDone.",
+    });
+    expect(result.conversation.map((turn) => turn.kind)).toEqual(["assistant", "tool_call", "tool_result", "assistant"]);
+    expect(result.conversation[1]).toMatchObject({
+      kind: "tool_call",
+      toolName: "read_file",
+      toolCallId: "call_1",
+      toolArguments: "{\"path\":\"README.md\"}",
+    });
+    expect(result.conversation[2]).toMatchObject({
+      kind: "tool_result",
+      toolName: "read_file",
+      toolCallId: "call_1",
+      toolOutput: "{\"content\":\"hello\"}",
+      toolStatus: "completed",
+    });
+  });
+
   it("parses provider-reported Gemini usage across model stats", async () => {
     const result = await collectProviderUsageTelemetry({
       provider: "gemini",
@@ -221,6 +277,28 @@ describe("collectProviderUsageTelemetry", () => {
     expect(result.inputTokens).toBeGreaterThan(0);
     expect(result.outputTokens).toBeGreaterThan(0);
     expect(result.totalTokens).toBe(result.inputTokens + result.outputTokens);
+  });
+
+  it("falls back to stdout and stderr text when Gemini stdout is invalid JSON", async () => {
+    const result = await collectProviderUsageTelemetry({
+      provider: "gemini",
+      model: "default",
+      prompt: "Summarize the diff.",
+      cwd: "/workspace/repo",
+      stdout: "provider warning\n{\"response\":",
+      stderr: "Applied the edit after warning.",
+    });
+
+    expect(result).toMatchObject({
+      cachedInputTokens: 0,
+      reasoningOutputTokens: 0,
+      usageSource: "estimated",
+      transcriptText: "provider warning\n{\"response\":\nApplied the edit after warning.",
+      nativeSessionId: null,
+      conversation: [],
+    });
+    expect(result.inputTokens).toBeGreaterThan(0);
+    expect(result.outputTokens).toBeGreaterThan(0);
   });
 
   it("parses provider-reported Codex token usage from JSONL output", async () => {
