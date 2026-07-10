@@ -1,4 +1,3 @@
-import { ENSURE_CURL_SHELL_FUNCTION, getProviderFallbackInstallCommand } from "../../../services/cli-docker-utils.js";
 import { CONTAINER_SETUP_SCRIPT } from "../../../services/cli-workflow-utils.js";
 
 export const CODEX_CREDENTIALS_MOUNT = "/opt/credentials/codex";
@@ -25,7 +24,6 @@ export const ANTIGRAVITY_HOST_CONFIG_MOUNT = "/opt/provider-config/host-antigrav
 export interface DockerBootstrapOptions {
   runtimeNpmPrefix: string;
   runtimeNpmCache: string;
-  fallbackProviders?: string[];
   runSetupScript?: boolean;
 }
 
@@ -43,7 +41,6 @@ export class DockerBootstrapBuilder {
       this.credentialSync(),
       this.npmConfig(options.runtimeNpmPrefix, options.runtimeNpmCache),
       this.setupScript(options.runSetupScript !== false),
-      this.fallbackInstall(options.fallbackProviders || ["gemini", "codex", "claude", "qwen", "opencode", "agy"]),
       this.claudeAuth(),
       this.execution(),
     ];
@@ -63,7 +60,6 @@ export class DockerBootstrapBuilder {
       "remove_codex_mcp_servers() { local destination=\"$1\"; local label=\"$2\"; if [ ! -f \"$destination\" ]; then return 0; fi; if ! node -e 'const fs=require(\"fs\"); const [destination]=process.argv.slice(1); let content=\"\"; try { content=fs.readFileSync(destination,\"utf8\"); } catch { process.exit(0); } let skipping=false; const kept=[]; for (const line of content.split(/\\r?\\n/)) { const trimmed=line.trim(); if (/^\\[mcp_servers\\.[^\\]]+\\]$/.test(trimmed)) { skipping=true; continue; } if (/^\\[.+\\]$/.test(trimmed)) skipping=false; if (!skipping) kept.push(line); } fs.writeFileSync(destination, `${kept.join(\"\\n\").trimEnd()}\\n`);' \"$destination\"; then echo \"provider-runner: warning: failed to update $label\" >&2; fi; }",
       "append_if_missing_literal() { local source=\"$1\"; local destination=\"$2\"; local literal=\"$3\"; local label=\"$4\"; if [ ! -e \"$source\" ]; then return 0; fi; mkdir -p \"$(dirname \"$destination\")\"; if [ -f \"$destination\" ] && grep -Fq \"$literal\" \"$destination\"; then return 0; fi; if [ -s \"$destination\" ]; then printf '\\n' >> \"$destination\"; fi; if ! cat \"$source\" >> \"$destination\"; then echo \"provider-runner: warning: failed to append $label\" >&2; fi; }",
       "ensure_json_file() { local destination=\"$1\"; local content=\"$2\"; mkdir -p \"$(dirname \"$destination\")\"; if [ ! -f \"$destination\" ]; then printf '%s\\n' \"$content\" > \"$destination\"; fi; }",
-      ENSURE_CURL_SHELL_FUNCTION,
       "configure_git_identity() { if ! command -v git >/dev/null 2>&1; then echo \"provider-runner: warning: git is unavailable; skipped git identity configuration\" >&2; return 0; fi; git config --global user.name \"${CODE_UX_GIT_USER_NAME:-Code UX}\" || echo \"provider-runner: warning: failed to configure git user.name\" >&2; git config --global user.email \"${CODE_UX_GIT_USER_EMAIL:-agents@codeux.ai}\" || echo \"provider-runner: warning: failed to configure git user.email\" >&2; }",
       "materialize_opencode_config() { local destination=\"$HOME/.config/opencode/opencode.json\"; if [ -z \"${OPENCODE_CONFIG_CONTENT:-}\" ]; then export OPENCODE_CONFIG=\"$destination\"; return 0; fi; mkdir -p \"$(dirname \"$destination\")\"; remove_json_key \"$destination\" \"mcp\" \"opencode local mcp servers\"; merge_json_content \"$OPENCODE_CONFIG_CONTENT\" \"$destination\" \"opencode runtime config\"; export OPENCODE_CONFIG=\"$destination\"; }",
     ].join("\n");
@@ -86,6 +82,7 @@ export class DockerBootstrapBuilder {
       "export pnpm_config_store_dir=\"$PNPM_STORE_DIR\"",
       "mkdir -p \"$NPM_CONFIG_PREFIX\" \"$NPM_CONFIG_CACHE\" \"$PNPM_STORE_DIR\"",
       "export PATH=\"$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH\"",
+      "if [ -n \"${CODE_UX_PROVIDER_TOOL_BIN:-}\" ]; then export PATH=\"$CODE_UX_PROVIDER_TOOL_BIN:$PATH\"; fi",
     ].join("\n");
   }
 
@@ -94,17 +91,6 @@ export class DockerBootstrapBuilder {
       return "";
     }
     return `if [ -f "${CONTAINER_SETUP_SCRIPT}" ]; then bash <(sed 's/\\r//' "${CONTAINER_SETUP_SCRIPT}") || echo "provider-runner: setup script failed" >&2; fi`;
-  }
-
-  private fallbackInstall(fallbackProviders: string[]): string {
-    const fallbackInstallCases = fallbackProviders.flatMap((providerCommand) => {
-      const installCommand = getProviderFallbackInstallCommand(providerCommand);
-      return installCommand ? [`    ${providerCommand}) ${installCommand} ;;`] : [];
-    });
-
-    if (fallbackInstallCases.length === 0) return "";
-
-    return `if ! command -v "$1" >/dev/null 2>&1; then case "$1" in ${fallbackInstallCases.join(" ")} esac; fi`;
   }
 
   private claudeAuth(): string {

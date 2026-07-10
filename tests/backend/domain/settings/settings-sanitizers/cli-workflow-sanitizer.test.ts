@@ -127,6 +127,8 @@ describe("sanitizeCliWorkflow", () => {
   });
 
   it("keeps default container setup behavior enabled for dashboard settings", () => {
+    expect(DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerImageMode).toBe("managed");
+    expect(DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerImage).toBe("node:24-trixie-slim");
     expect(DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerSetupScriptPath).toBe("");
     expect(DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerCacheSetupScriptImage).toBe(true);
     expect(DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerInstallPlaywrightBrowsers).toBe(true);
@@ -137,6 +139,26 @@ describe("sanitizeCliWorkflow", () => {
     expect(defaults.containerCacheSetupScriptImage).toBe(true);
     expect(defaults.containerInstallPlaywrightBrowsers).toBe(true);
     expect(defaults.containerRunAsRoot).toBe(false);
+  });
+
+  it("migrates the untouched Bookworm default while preserving custom images", () => {
+    expect(sanitizeCliWorkflow({
+      cliWorkflow: { containerImage: "node:24-bookworm" },
+    }).containerImageMode).toBe("managed");
+
+    const custom = sanitizeCliWorkflow({
+      cliWorkflow: { containerImage: "registry.example/agent:custom" },
+    });
+    expect(custom.containerImageMode).toBe("custom");
+    expect(custom.containerImage).toBe("registry.example/agent:custom");
+
+    const explicit = sanitizeCliWorkflow({
+      cliWorkflow: {
+        containerImageMode: "custom",
+        containerImage: "node:24-bookworm",
+      },
+    });
+    expect(explicit.containerImageMode).toBe("custom");
   });
 
   it("trims custom container setup script paths without requiring the file to exist", () => {

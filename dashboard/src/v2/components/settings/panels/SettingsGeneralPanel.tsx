@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import { ActionButton, NoticePanel } from "../SettingsSurface.js";
 import { ActionFeedbackRegion } from "../../ui/ActionFeedbackRegion.js";
-import { NumberInput, Row, Toggle, TextInput, PillChoiceGroup } from "../SettingsFormFields.js";
+import { NumberInput, Row, Toggle, TextInput, PillChoiceGroup, SelectInput } from "../SettingsFormFields.js";
 import { LocalFilePickerField } from "../LocalFilePickerField.js";
 import type { ProjectSettings } from "../../../../../../src/contracts/settings-scope-types.js";
 import type { DashboardExperienceMode } from "../../../../types.js";
@@ -229,9 +229,27 @@ const DockerRuntimeCard: FunctionComponent<{
   getFieldBadge: (path: string) => string | undefined;
 }> = ({ settings, update, getBadge, getFieldBadge }) => (
   <SectionCard title="Docker Runtime" watermark="DKR" badge={getBadge("cliWorkflow")} icon={<Cog strokeWidth={2.4} />}>
-    <Row label="Container image" description="Default container image used for the task execution runtime." badge={getFieldBadge("cliWorkflow.containerImage")}>
+    <Row label="Runtime image mode" description="Managed mode automatically pulls the verified Code UX Linux runtime and provider updates." badge={getFieldBadge("cliWorkflow.containerImageMode")}>
+      <SelectInput
+        aria-label="Runtime image mode"
+        value={settings.cliWorkflow.containerImageMode}
+        onChange={(value) => update((current) => ({
+          ...current,
+          cliWorkflow: {
+            ...current.cliWorkflow,
+            containerImageMode: value === "custom" ? "custom" : "managed",
+          },
+        }))}
+        options={[
+          { value: "managed", label: "Managed runtime (recommended)" },
+          { value: "custom", label: "Custom image" },
+        ]}
+      />
+    </Row>
+    <Row label="Custom container image" description="Used only in custom mode. Managed mode follows verified immutable runtime digests." badge={getFieldBadge("cliWorkflow.containerImage")}>
       <TextInput
         value={settings.cliWorkflow.containerImage}
+        disabled={settings.cliWorkflow.containerImageMode !== "custom"}
         onChange={(value) => update((current) => ({
           ...current,
           cliWorkflow: {
@@ -297,7 +315,7 @@ const DockerRuntimeCard: FunctionComponent<{
         </span>
       </div>
     </Row>
-    <Row label="Cache setup as image" description="Build and reuse a derived Docker image from the base image plus setup script contents." badge={getFieldBadge("cliWorkflow.containerCacheSetupScriptImage")}>
+    <Row label="Cache custom setup extension" description="Build and reuse an extension image only when a custom setup script is configured." badge={getFieldBadge("cliWorkflow.containerCacheSetupScriptImage")}>
       <Toggle aria-label="Toggle setting" value={settings.cliWorkflow.containerCacheSetupScriptImage} onChange={() => update((current) => ({
         ...current,
         cliWorkflow: {

@@ -78,8 +78,8 @@ Install behavior:
 - preview containers now reuse the shared Docker runtime package caches instead of mounting host `node_modules`, and pnpm is pinned to a persistent store under that runtime cache so exported workspaces do not trigger cold installs on every rebuild
 - preview docker arguments and runtime path layouts are deterministically constructed via the helper in `sprint-preview-docker-plan.ts`
 - preview fallback now prefers the base image plus app-level install/build commands over re-running the worker-oriented setup script, which avoids unrelated provider/Playwright bootstrap work from blocking app previews
-- provider setup-cache images can preinstall Playwright Chromium under `/ms-playwright` when `cliWorkflow.containerInstallPlaywrightBrowsers` and `cliWorkflow.containerCacheSetupScriptImage` are enabled, but preview image resolution keeps that Playwright bootstrap disabled by default so ordinary app previews do not download browser binaries
-- preview scripts that run Playwright themselves should install the browser explicitly in the preview startup path or use a custom image/script that provides Chromium; cache-disabled provider workflows likewise need their custom setup script to honor `CODE_UX_INSTALL_PLAYWRIGHT=1` because the runtime only bakes Chromium automatically during setup-cache image builds
+- managed provider invocations select the browser runtime when `cliWorkflow.containerInstallPlaywrightBrowsers` is enabled; ordinary previews select the smaller managed base runtime
+- preview scripts that run Playwright themselves should use an explicit custom browser image/script or run through the provider browser runtime rather than relying on setup-cache side effects
 - before the preview container is created, Code UX repairs the per-sprint Docker volume by creating the expected workspace, `HOME`, npm cache, and pnpm store directories as root, then applying ownership and writable directory permissions so the non-root preview bootstrap can start reliably
 
 Runtime command preference:

@@ -748,7 +748,7 @@ describe("SettingsIntegrationsPanel", () => {
       expect(updatedSystem.integrations.providers.gemini.authType).toBe("localAuth");
       expect(updatedSystem.integrations.providers.gemini.mountAuth).toBe(true);
       expect(updatedSystem.integrations.providers.gemini.apiKey).toBe("");
-      expect(screen.getByRole("status").textContent).toContain("Gemini Primary authentication mode changed locally");
+      expect(screen.getAllByRole("status").some((status) => status.textContent?.includes("Gemini Primary authentication mode changed locally"))).toBe(true);
     });
 
     it("exposes dashboard login as a dialog-launching busy control when dashboard auth is selected", async () => {

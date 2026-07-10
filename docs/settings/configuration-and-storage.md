@@ -413,17 +413,21 @@ QA merge-gate notes:
 - Runtime mode:
   - `executionMode` (`HOST|DOCKER`)
 - Docker runtime config:
-  - `containerImage`
+  - `containerImageMode` (`managed|custom`, default `managed`)
+    - managed mode checks the Code UX base/browser channels on every startup, verifies pulled images, and executes immutable digests
+    - custom mode preserves the explicit `containerImage`; legacy non-default image values migrate to custom mode
+  - `containerImage` (default custom-image fallback `node:24-trixie-slim`; ignored in managed mode)
   - `containerSetupScriptPath` (optional; saved as a string and not required to exist when settings are saved)
     - the dashboard picker is a convenience for selecting local absolute paths from allowed host roots
     - manually entered relative paths remain supported; Docker runtime resolves them later against the sprint repo root and current server working directory
-    - if empty, Code UX first seeds missing bundled defaults into `~/.code-ux`, then falls back to `.code-ux/container/setup.sh` in repo root, then home directory, then the bundled Code UX default script
+    - in managed mode an empty value performs no setup build; project-specific setup requires an explicitly configured path
+    - custom mode retains the default script resolution chain for compatibility
   - `containerMemoryLimitMb` (default `6144`): memory ceiling in MiB applied to all Docker-backed CLI provider containers. `0` disables Docker memory flags. Positive values are passed as both `--memory` and `--memory-swap`, so the configured value is a hard ceiling rather than silent swap overcommit.
   - `containerCacheSetupScriptImage` (default `true`)
-    - when enabled, Docker runtime builds and reuses a derived image keyed by the base image plus setup script contents
+    - when enabled, Docker runtime builds and reuses a derived extension image only for an explicit/custom setup path
     - cache misses fall back to the current per-run setup script path if the image build fails
   - `containerRunAsRoot` (default `false`): opt-in runtime mode for Docker provider containers that must run as root. Invalid or missing values sanitize back to `false`; unless this is explicitly `true`, provider containers run with the resolved host workspace UID/GID and receive a matching mounted `/etc/passwd` worker entry. Because `cliWorkflow` is scoped, project and sprint overrides inherit the resolved system value when they omit this field. The Settings > General > Docker Runtime card exposes this as **Run containers as root** for system defaults and project-scoped overrides. A resolved worker agent preset can override this value for local CLI task execution with its nullable `containerRunAsRoot` field; the agent editor stores **Inherit** as `null`, **Force non-root** as `false`, and **Force root** as `true`. Hosted Jules sessions ignore the per-agent field because they do not run in local Docker provider containers. Root mode is privileged and should be enabled only for trusted repositories and tools that require OS-level writes inside the provider container.
-  - `containerInstallPlaywrightBrowsers` (default `true`): provider coding containers set `CODE_UX_INSTALL_PLAYWRIGHT=1`, so the bundled setup script installs Playwright Chromium plus OS dependencies for agent browser checks. With setup-image caching enabled, the setup-cache build also exports `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`, bakes Chromium into that image after the setup script runs, and leaves the directory readable for non-root provider runs. Cache-disabled workflows and custom setup scripts that replace the bundled script must opt into the same behavior themselves by checking `CODE_UX_INSTALL_PLAYWRIGHT=1` and running an appropriate browser install such as `npx -y playwright@latest install --with-deps chromium` when the base image supports it. Disable this setting to skip the browser download during setup; preview containers keep it disabled unless they opt into the provider setup path explicitly.
+  - `containerInstallPlaywrightBrowsers` (default `true`): managed provider invocations select the prebuilt browser image with pinned Playwright, Playwright MCP, Chromium, and OS dependencies. Disabling it selects the smaller managed base image. Custom images retain setup-extension behavior.
   - `containerMountGitConfig` (default `false`): copy the host `.gitconfig` into Docker. When disabled, Docker provider runs configure Git with `containerGitUserName` and `containerGitUserEmail` instead.
   - `containerGitUserName` (default `Code UX`)
   - `containerGitUserEmail` (default `agents@codeux.ai`)
@@ -542,7 +546,7 @@ Repository demo script:
 - Packaged desktop installs also ship this script as a default asset. On first use, Code UX copies it to `~/.code-ux/container/setup.sh` when that file does not already exist, so Docker can mount a normal user-directory script instead of relying on a repo checkout.
 - It verifies `npm`, ensures `git` + `gh`, installs `pnpm` when needed, and leaves provider CLI installation to the runtime's provider-specific fallback.
 - `npm` refresh is now opt-in via `CODE_UX_REFRESH_NPM=1` instead of happening on every container start.
-- Playwright bootstrap is controlled by the Docker Runtime `containerInstallPlaywrightBrowsers` setting. Provider coding containers enable it by default through `CODE_UX_INSTALL_PLAYWRIGHT=1`, while preview containers keep it disabled by default. Cached setup images install Chromium and OS dependencies once during image build under `/ms-playwright`; later provider containers inherit `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright` and skip browser installation unless the cache is disabled or rebuilt. If setup-image caching is disabled, the runtime does not inject a separate browser-install step after the mounted setup script runs, so custom setup scripts must honor `CODE_UX_INSTALL_PLAYWRIGHT` when operators expect Playwright availability.
+- Playwright availability is controlled by `containerInstallPlaywrightBrowsers`. Managed provider invocations select the browser image; previews use the base image. Custom-image setups remain responsible for their own browser dependencies.
 - Docker CLI execution now uses isolated Docker volumes as the workspace backing store instead of repo-local worktrees or persistent host-side runtime homes.
   - container `/workspace` contains only the Git checkout used for the coding task
   - provider `HOME` lives in a sibling runtime volume mounted at `/code-ux-runtime-home`, so CLI auth/config/cache/session state does not appear inside the Git worktree
@@ -552,15 +556,14 @@ Repository demo script:
   - patch export preserves raw `git diff --binary` output byte-for-byte so whitespace-only EOF hunks and `\ No newline at end of file` markers still apply cleanly on the host branch
   - patch export still excludes legacy `/workspace/.code-ux-home` paths and root `/workspace/.pnpm-store` package-cache paths as a defense-in-depth guard for older preserved volumes, and untracked export staging asks Git to discover paths internally so large file sets do not exceed Docker command-line limits; fresh Docker workspaces should not contain provider home/cache state
   - the remaining persistent Docker-side cache is the optional setup-image cache, not per-session provider home directories under `~/.code-ux/runtime/docker`
-- If setup script is missing or does not provide the requested provider CLI, the runner attempts a provider-specific fallback install (`gemini`, `codex`, or `claude`) before failing.
+- Provider CLIs are never installed by setup scripts or per-workspace fallback logic. Activated providers are prepared from fixed official sources into versioned Docker volumes, mounted read-only at `/opt/code-ux/provider-tool`, and checked for stable updates on every startup.
   - CLI model settings continue to flow into Docker-backed providers:
     - Gemini: `GEMINI_MODEL`
     - Codex: `CODEX_MODEL` plus `--model` when applicable
     - Claude Code: `--model` when applicable
-  - When `containerCacheSetupScriptImage` is enabled and a setup script is present, runtime first tries to reuse a prebuilt image named like `code-ux-setup-cache-node-24-bookworm:<hash>` instead of rerunning the setup script on every container launch. The hash covers the base image, setup script content, Playwright browser install setting, and setup-cache Dockerfile content. Build contexts and lock directories live under the repo-scoped Docker runtime root, so cache hits survive dashboard restarts and concurrent launches wait for one build instead of triggering duplicate builds.
+  - When `containerCacheSetupScriptImage` is enabled and an explicit setup script is present, runtime reuses a content-addressed extension image. The default managed path never runs `docker build`.
   - Docker-backed CLI provider containers honor `containerMemoryLimitMb`. A positive value becomes `--memory=<value>m --memory-swap=<value>m` for every provider runtime launched through `DockerRunner`, including task coding, QA, planning, CI-fix, merge-conflict, remediation, and dashboard-chat paths that use CLI providers. Set it to `0` only when the host should manage provider memory without a Docker hard limit.
-  - An empty `containerSetupScriptPath` still participates in caching because runtime resolves the default script chain automatically, including the bundled Code UX setup script.
-  - `claude` fallback uses the official installer: `curl -fsSL https://claude.ai/install.sh | bash`
+  - An empty `containerSetupScriptPath` does not participate in managed-mode setup caching.
   - Claude runner uses explicit headless prompt mode (`claude -p "<prompt>"`) with `--dangerously-skip-permissions`.
   - When Claude credential mounts are enabled, runtime mounts `~/.claude` and also the sibling `~/.claude.json` when present.
   - When Gemini credential mounts are enabled, runtime now syncs only stable top-level auth/config files into container home (`settings.json`, `oauth_creds.json`, `google_accounts.json`, `installation_id`, `state.json`, `trustedFolders.json`) instead of recursively copying mutable `.gemini/tmp` and history state.

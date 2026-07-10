@@ -146,35 +146,3 @@ export const isDockerWorkspaceMountError = (result: CommandResult): boolean => {
     || (combined.includes("permission denied") && combined.includes("mount"));
   return bindSourceMissing || mountPermission;
 };
-
-/**
- * Shell definition of the `ensure_curl` helper used by the provider fallback
- * install commands. curl is installed lazily (via apt-get) only when missing.
- *
- * The provider-runner bootstrap script defines this helper inline, but any
- * other context that inlines a `getProviderFallbackInstallCommand` result
- * (e.g. the interactive login container) must prepend this definition so the
- * `if ensure_curl; then ...` branch resolves to a real function instead of an
- * "ensure_curl: command not found" failure.
- */
-export const ENSURE_CURL_SHELL_FUNCTION =
-  "ensure_curl() { if command -v curl >/dev/null 2>&1; then return 0; fi; echo \"provider-runner: curl not found; installing...\" >&2; if command -v apt-get >/dev/null 2>&1; then (apt-get update -qy && apt-get install -qy curl ca-certificates) >/dev/null 2>&1 || true; fi; command -v curl >/dev/null 2>&1; }";
-
-export const getProviderFallbackInstallCommand = (providerCommand: string): string | undefined => {
-  switch (providerCommand) {
-    case "gemini":
-      return "npm install -g @google/gemini-cli";
-    case "codex":
-      return "npm install -g @openai/codex";
-    case "claude":
-      return "if ensure_curl; then curl -fsSL https://claude.ai/install.sh | bash && export PATH=\"$HOME/.local/bin:$PATH\"; else echo \"provider-runner: curl unavailable; cannot install claude\" >&2; fi";
-    case "qwen":
-      return "npm install -g @qwen-code/qwen-code";
-    case "opencode":
-      return "if ensure_curl; then curl -fsSL https://opencode.ai/install | bash && export PATH=\"$HOME/.opencode/bin:$HOME/.local/bin:$PATH\"; else echo \"provider-runner: curl unavailable; cannot install opencode\" >&2; fi";
-    case "agy":
-      return 'if ensure_curl; then curl -fsSL https://antigravity.google/cli/install.sh | bash && export PATH="$HOME/.local/bin:$PATH"; else echo "provider-runner: curl unavailable; cannot install antigravity" >&2; fi';
-    default:
-      return undefined;
-  }
-};

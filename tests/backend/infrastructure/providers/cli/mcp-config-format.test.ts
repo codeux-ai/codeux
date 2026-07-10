@@ -46,8 +46,8 @@ describe("mcp-config-format injection prevention", () => {
     const artifact = buildProviderMcpConfigArtifact("codex", null, [DEFAULT_PLAYWRIGHT_MCP_SERVER]);
 
     expect(artifact?.content).toContain("[mcp_servers.playwright]");
-    expect(artifact?.content).toContain('command = "npx"');
-    expect(artifact?.content).toContain('args = ["@playwright/mcp@latest"]');
+    expect(artifact?.content).toContain('command = "playwright-mcp"');
+    expect(artifact?.content).not.toContain("@playwright/mcp@latest");
   });
 
   it("serializes stdio command, args, and env without shell interpretation across provider artifacts", () => {

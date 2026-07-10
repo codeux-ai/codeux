@@ -47,6 +47,7 @@ import type {
   DashboardChatProviderConnectionRecord,
   DashboardChatProviderSetupDefinition,
 } from "../../../lib/chat-provider-api.js";
+import { isDeprecatedProvider, providerLifecycle } from "../../../lib/provider-lifecycle.js";
 
 type PublicProviderId = Exclude<ProviderId, "mockup-cli">;
 
@@ -1676,6 +1677,11 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
         {backButton}
         {providerId === "jules" ? renderJulesAutomationSettings() : null}
         <SectionCard title={`${getProviderTypeLabel(providerId)} Credentials`} watermark={getProviderWatermark(providerId)} icon={<Key strokeWidth={2.4} />}>
+          {isDeprecatedProvider(providerId) ? (
+            <NoticePanel title="Deprecated provider">
+              {providerLifecycle[providerId].message} Existing and new instances remain usable during the migration period.
+            </NoticePanel>
+          ) : null}
           <div className="relative overflow-hidden rounded-[1.45rem] border border-black/[0.06] bg-[linear-gradient(135deg,rgba(255,255,255,0.9),rgba(248,250,252,0.62))] px-5 py-4 shadow-[0_14px_34px_rgba(15,23,42,0.045)] dark:border-white/[0.06] dark:bg-[linear-gradient(135deg,rgba(255,255,255,0.065),rgba(255,255,255,0.025))]">
             <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-signal-500/35 to-transparent" />
             <div className="relative z-10 flex flex-wrap items-center justify-between gap-4">

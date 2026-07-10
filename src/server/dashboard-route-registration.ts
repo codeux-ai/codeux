@@ -12,6 +12,7 @@ import { registerPlanningRoutes } from "./planning-routes.js";
 import { registerPreviewRoutes } from "./preview-routes.js";
 import { registerFileBrowserRoutes } from "./file-browser-routes.js";
 import { registerRuntimeRoutes } from "./runtime-routes.js";
+import { registerRuntimeAssetsRoutes } from "./runtime-assets-routes.js";
 import { registerExecutionControlRoutes } from "./execution-control-routes.js";
 import { registerSettingsRoutes } from "./settings-routes.js";
 import { registerConnectionRoutes } from "./connection-routes.js";
@@ -93,6 +94,7 @@ const registerSprintRouteGroup = (app: Express, deps: DashboardDependencies): vo
 
 const registerRuntimeRouteGroup = (app: Express, deps: DashboardDependencies): void => {
   registerRuntimeRoutes(app, deps);
+  registerRuntimeAssetsRoutes(app, deps);
   registerLocalDirectoryRoutes(app);
   registerExecutionControlRoutes(app, deps);
 };

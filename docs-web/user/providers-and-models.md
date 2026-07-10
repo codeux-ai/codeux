@@ -7,14 +7,16 @@ Code UX dispatches work across **seven providers**, each accepting one or more *
 | Provider | Type | Auth detection path | Default `maxConcurrentTasks` |
 | --- | --- | --- | --- |
 | `jules` | Hosted Jules Agent API | `JULES_API_KEY` env | `15` |
-| `gemini` | Local Gemini CLI | `~/.gemini/` | `0` (unlimited) |
+| `gemini` | Local Gemini CLI (deprecated) | `~/.gemini/` | `0` (unlimited) |
 | `codex` | Local Codex CLI (OpenAI) | `~/.codex/` | `0` (unlimited) |
 | `claude-code` | Local Claude Code CLI | `~/.claude/` | `0` (unlimited) |
 | `qwen-code` | Local Qwen Code CLI | `~/.qwen/` | `0` (unlimited) |
 | `opencode` | Local OpenCode CLI (multi-model) | `~/.local/share/opencode/` or `~/.config/opencode/` | `0` (unlimited) |
 | `antigravity` | Local Antigravity CLI | `~/.antigravity/` | `0` (unlimited) |
 
-All non-Jules providers are *virtual workers* — Code UX shells out to the provider's CLI, optionally inside a Docker container. Authentication is provided by the host CLI's normal login flow; Code UX merely detects and references it.
+All non-Jules providers are *virtual workers*. In the default Docker workflow, Code UX downloads only activated provider CLIs into versioned local Docker volumes, mounts them read-only, and checks their stable channels for updates on every startup. Selecting a provider in onboarding starts preparation before Login. Authentication still uses each provider's normal login flow and is stored separately from the tool volume.
+
+Gemini CLI remains supported for existing and new configurations but is deprecated in the UI, excluded from fresh Easy recommendations, and accompanied by a migration action toward Antigravity. Code UX does not silently change Gemini credentials, defaults, or routing.
 
 ## External chat connectors
 
@@ -176,7 +178,7 @@ A common high-quality setup:
 | --- | --- | --- | --- |
 | `task_coding` | Codex | `gpt-5.5` | Strong code generation. |
 | `planning` | Claude Code | `opus` | Best at structured decomposition. |
-| `dashboard_reply` | Gemini | `flash` | Cheap, fast, conversational. |
+| `dashboard_reply` | Antigravity | `gemini-3-flash` | Supported Google-powered local CLI path. |
 | `clarification_reply` | Claude Code | `sonnet` | Strong reasoning, lower cost than opus. |
 | `qa_review` | Claude Code | `opus` | Thorough review. |
 | `ci_fix` | Codex | `gpt-5.5` | Iterative debugging. |
@@ -184,7 +186,7 @@ A common high-quality setup:
 
 ## Choosing a virtual worker provider
 
-The dashboard exposes a single *virtual worker provider* (`workers.virtualWorkerProvider`) used when the engine spins up an ephemeral worker (e.g. to handle a CI fix attention item). Defaults to `codex`; pick the provider whose CLI is reliably installed and authenticated on the host.
+The dashboard exposes a single *virtual worker provider* (`workers.virtualWorkerProvider`) used when the engine spins up an ephemeral worker (e.g. to handle a CI fix attention item). Defaults to `codex`; pick an activated and authenticated provider. Code UX prepares its CLI automatically in Docker mode.
 
 ## Execution modes
 

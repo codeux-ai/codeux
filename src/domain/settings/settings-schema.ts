@@ -548,6 +548,9 @@ const validateCliWorkflow = (
   if (typeof value.executionMode !== "string" || !CLI_EXECUTION_MODES.includes(value.executionMode as CliExecutionMode)) {
     issues.push({ path: `${path}.executionMode`, message: `Expected one of: ${CLI_EXECUTION_MODES.join(", ")}` });
   }
+  if (value.containerImageMode !== undefined && value.containerImageMode !== "managed" && value.containerImageMode !== "custom") {
+    issues.push({ path: `${path}.containerImageMode`, message: "Expected one of: managed, custom" });
+  }
   if (typeof value.containerImage !== "string") issues.push({ path: `${path}.containerImage`, message: "Expected a string" });
   if (typeof value.containerSetupScriptPath !== "string") issues.push({ path: `${path}.containerSetupScriptPath`, message: "Expected a string" });
   if (

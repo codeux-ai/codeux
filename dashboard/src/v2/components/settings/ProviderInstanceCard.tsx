@@ -24,6 +24,7 @@ import {
   sanitizeSystemProviderConfig,
   supportsProviderConfigFile,
 } from "../../lib/provider-runtime-preview.js";
+import { isDeprecatedProvider, providerLifecycle } from "../../lib/provider-lifecycle.js";
 
 const getProviderConfigHelperText = (providerType: SystemProviderConfig["provider"]): string => {
   switch (providerType) {
@@ -75,6 +76,7 @@ export const ProviderInstanceCard: FunctionComponent<{
   const feedbackId = `${headingId}-feedback`;
   const customEndpointDisabledReasonId = `${headingId}-custom-endpoint-disabled`;
   const enabledValue = enabled ?? true;
+  const deprecated = isDeprecatedProvider(provider.provider);
   const customEndpointDisabled = currentAuthType !== "apiKey";
   const providerConfigSupported = supportsProviderConfigFile(provider.provider);
   const standardProviderConfigPath = getProviderStandardConfigPath(provider.provider);
@@ -232,6 +234,9 @@ export const ProviderInstanceCard: FunctionComponent<{
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {deprecated ? (
+            <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-amber-700 dark:text-amber-300">Deprecated</span>
+          ) : null}
 
           {onToggleEnabled ? (
             <label className="flex items-center gap-2 rounded-full border border-black/[0.06] bg-black/[0.02] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500  dark:text-slate-300">
@@ -277,6 +282,11 @@ export const ProviderInstanceCard: FunctionComponent<{
           ) : null}
         </div>
       </div>
+      {deprecated ? (
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs font-semibold leading-relaxed text-amber-800 dark:text-amber-200">
+          {providerLifecycle[provider.provider].message}
+        </div>
+      ) : null}
 
       {feedback ? (
         <div id={feedbackId}>

@@ -1,0 +1,113 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
+import { ProviderToolManager } from "../../../src/services/provider-tool-manager.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
+
+const ok = (stdout = "") => ({ ok: true, stdout, stderr: "", code: 0, signal: null }) as any;
+const fail = (stderr: string) => ({ ok: false, stdout: "", stderr, code: 1, signal: null }) as any;
+
+describe("ProviderToolManager", () => {
+  const tempPaths: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(tempPaths.splice(0).map((target) => fs.rm(target, { recursive: true, force: true })));
+  });
+
+  const createHarness = async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "codeux-provider-tools-"));
+    tempPaths.push(root);
+    const volumes = new Set<string>();
+    const installed = new Set<string>();
+    const run = vi.fn(async (_command: string, args: string[]) => {
+      if (args[0] === "volume" && args[1] === "inspect") return volumes.has(args[2]) ? ok() : fail("missing");
+      if (args[0] === "volume" && args[1] === "create") {
+        volumes.add(args.at(-1)!);
+        return ok(args.at(-1));
+      }
+      if (args[0] === "volume" && args[1] === "rm") {
+        volumes.delete(args.at(-1)!);
+        installed.delete(args.at(-1)!);
+        return ok();
+      }
+      if (args[0] === "run") {
+        const mount = args.find((arg) => arg.startsWith("type=volume,source=")) || "";
+        const volume = mount.split(",")[1]?.split("=")[1];
+        return volume && installed.has(volume) ? ok("1.2.3") : fail("unverified");
+      }
+      return ok();
+    });
+    const stream = vi.fn(async (_command: string, args: string[]) => {
+      const mount = args.find((arg) => arg.startsWith("type=volume,source=")) || "";
+      const volume = mount.split(",")[1]?.split("=")[1];
+      if (volume) installed.add(volume);
+      return ok("installed");
+    });
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      version: "1.2.3",
+      dist: { integrity: "sha512-test" },
+    }), { status: 200, headers: { "content-type": "application/json" } })) as any;
+    const runtime = {
+      resolveImage: vi.fn(async () => "example/runtime@sha256:base"),
+      getCompatibilityKey: vi.fn(() => "runtime-abi-1"),
+    } as any;
+    return {
+      manager: new ProviderToolManager(runtime, { run, stream }, fetchImpl, { statePath: path.join(root, "state.json") }),
+      run,
+      stream,
+      fetchImpl,
+    };
+  };
+
+  it("installs a stable npm provider once and reuses its verified read-only volume", async () => {
+    const { manager, stream, fetchImpl } = await createHarness();
+    const first = await manager.prepare("codex", DEFAULT_DASHBOARD_SETTINGS.cliWorkflow);
+    const second = await manager.prepare("codex", DEFAULT_DASHBOARD_SETTINGS.cliWorkflow);
+
+    expect(first).toEqual(second);
+    expect(first.volumeName).toContain("code-ux-provider-tool-codex-1.2.3");
+    expect(stream).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(manager.getStatus("codex")).toMatchObject({ state: "ready", installedVersion: "1.2.3" });
+  });
+
+  it("deduplicates concurrent preparation requests", async () => {
+    const { manager, stream } = await createHarness();
+    const [left, right] = await Promise.all([
+      manager.prepare("gemini", DEFAULT_DASHBOARD_SETTINGS.cliWorkflow),
+      manager.prepare("gemini", DEFAULT_DASHBOARD_SETTINGS.cliWorkflow),
+    ]);
+    expect(left.volumeName).toBe(right.volumeName);
+    expect(stream).toHaveBeenCalledTimes(1);
+  });
+
+  it("installs Antigravity from the checksummed release archive", async () => {
+    const { manager, stream, fetchImpl } = await createHarness();
+    fetchImpl.mockResolvedValueOnce(new Response(JSON.stringify({
+      version: "1.2.3",
+      url: "https://storage.googleapis.com/antigravity-public/release.tar.gz",
+      sha512: "a".repeat(128),
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+
+    await manager.prepare("antigravity", DEFAULT_DASHBOARD_SETTINGS.cliWorkflow);
+
+    const installArgs = stream.mock.calls[0]?.[1] as string[];
+    const shell = installArgs.at(-1) || "";
+    expect(shell).toContain("sha512sum -c -");
+    expect(shell).toContain("release.tar.gz");
+    expect(shell).not.toContain("install.sh");
+  });
+
+  it("rejects hosted and unknown providers", async () => {
+    const { manager } = await createHarness();
+    await expect(manager.prepare("jules", DEFAULT_DASHBOARD_SETTINGS.cliWorkflow)).rejects.toThrow(/does not use/);
+  });
+
+  it("checks only active managed provider families", async () => {
+    const { manager, fetchImpl } = await createHarness();
+    await manager.checkActiveProviders(["codex", "jules", "codex"], DEFAULT_DASHBOARD_SETTINGS.cliWorkflow);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(manager.getStatus("gemini")?.state).toBe("not_installed");
+  });
+});

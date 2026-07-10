@@ -75,15 +75,20 @@ Mode choices:
 - **Standard**: balanced setup path that follows the detailed flow and uses the public `Standard` label in the dashboard.
 - **Expert**: full provider/setup/defaults/automation/appearance flow.
 
-The Easy path contains three steps:
+The Easy path contains four steps:
 1. Setup mode
    - Selects Easy, Standard, or Expert.
    - Persists the selected mode to `defaults.appearance.experienceMode`.
-2. Provider
+2. Installation
+   - Uses the same Docker CLI and daemon readiness checks as Standard and Expert mode.
+   - Keeps runtime failures visible before a provider is selected.
+3. Provider
    - Shows all local CLI providers: Gemini, Antigravity, Codex, Claude Code, Qwen Code, and OpenCode.
-   - Keeps routing to one provider; the provider whose auth mode or login action is used becomes the Easy provider for Chat and worker routing.
+   - Uses an accessible radio selection, so selecting the card—not merely changing auth or opening Login—updates the Easy default.
+   - Begins downloading or updating the selected provider CLI immediately. Login joins that preparation job instead of downloading again.
+   - Marks Gemini CLI Deprecated, excludes it from fresh recommendations, and offers Antigravity as the replacement while preserving existing Gemini defaults.
    - Shows only the authentication mode selector, with Dashboard Login preselected, plus the Connect and Login action. Credential directories and local auth paths stay hidden in Easy mode. Multi-instance provider configuration stays in Standard, Expert, and Settings.
-3. GitHub
+4. GitHub
    - Shows exactly two checkboxes: whether to use GitHub and whether Code UX should create/manage GitHub PR workflow defaults.
    - Leaves both GitHub checkboxes deselected by default; selecting GitHub opts into the remote PR/CI path.
    - Keeps Docker execution enabled and applies safe defaults for automation, routing, navigation, and appearance.
@@ -148,6 +153,8 @@ Provider choices update:
 - Legacy container auth-copy fields under `defaults.cliWorkflow` for compatibility
 - Git onboarding mode under `defaults.cliWorkflow.gitMode`, which toggles the remote GitHub/GitLab setup cards and keeps git identity controls available in both modes
 
+Provider selection also calls `POST /api/provider-tools/:provider/prepare` before settings are persisted. This request contains only a supported provider ID. Runtime/package URLs and versions are owned by the backend provider catalog.
+
 Appearance choices update the onboarding draft under `defaults.appearance`, which is also used by the Settings page. While onboarding is open, the draft appearance is published through the shared `codeux:appearance-preview` event so the root dashboard shell reapplies Theme, Reduced Motion, Navigation Mode, Background Mode, Static Color, and Zoom Level without waiting for final save. The preview is cleared when onboarding closes, is canceled, completes, or unmounts. Final persistence still uses the same `PUT /api/system-settings` path as Settings. New installs start with sidebar navigation and the pattern overlay set to `None`.
 
 Easy onboarding applies a small settings recipe before save: one selected CLI provider is enabled for default and worker routing, Dashboard Login is the default auth mode for that provider when no API key is already configured, Docker execution stays enabled, automation remains semi-automatic with plan approval enabled, memory stays enabled, navigation stays in sidebar mode, and GitHub remains local/off unless the operator selects the GitHub checkbox. These defaults are saved only when the operator finishes the flow. No provider secrets are stored outside the existing system settings provider catalog.
@@ -174,8 +181,9 @@ Onboarding settings state is managed purely without component side effects by he
 
 Dashboard-guided provider login sessions now use an explicit lifecycle protocol to prevent orphaned Docker login containers after browser interruptions.
 
-- On dashboard startup, Code UX starts a best-effort background prewarm for the pinned login base image (`node:24-bookworm-slim` plus curl and keyring prerequisites). Startup does not wait for this image build, and provider login still retries image preparation on demand if Docker is unavailable or the prewarm fails.
-- The first interactive login after a fresh install may still wait while Docker builds or verifies the login base image. When the terminal start contract or WebSocket stream includes the structured container build progress object (`kind`, `imageTag`, `baseImage`, `message`, optional `progressPercent`, and optional `stepText`), the login modal shows a persistent build status infobox before the terminal becomes active. The copy explains that the container needs to be built, the first build can take time, and future login sessions reuse the cached image unless the Dockerfile content changes.
+- Login uses the same managed/custom runtime resolver and versioned provider-tool volume as normal invocations. It never builds a separate login image and never installs a provider CLI inside the credential session.
+- Selecting a provider in onboarding begins preparation before Login is pressed. Terminal start joins the same singleflight job and mounts the verified provider volume read-only.
+- Managed runtime and provider updates run during application startup. Update failures retain the previous verified digest/version; only a provider with no compatible verified tool is blocked.
 - The client sends periodic terminal session heartbeats while the login modal is active.
 - The client emits a termination signal on `beforeunload`, `pagehide`, and hidden visibility transitions to handle refresh, tab close, and window close.
 - The server finalizes sessions idempotently when it receives explicit finalize requests.

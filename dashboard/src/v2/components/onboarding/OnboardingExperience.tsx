@@ -50,6 +50,8 @@ import { SectionCard } from "../settings/panels/SharedPanelComponents.js";
 import { JiraIcon } from "../icons/JiraIcon.js";
 import { OnboardingInstallationStep } from "./OnboardingInstallationStep.js";
 import { OnboardingAppearanceStep } from "./OnboardingAppearanceStep.js";
+import { fetchRuntimeAssetsStatus, prepareProviderTool } from "../../lib/runtime-assets-api.js";
+import { isDeprecatedProvider, providerLifecycle } from "../../lib/provider-lifecycle.js";
 
 type IntroPhase = "intro" | "transitioning" | "onboarding";
 import type {
@@ -60,6 +62,8 @@ import type {
   OnboardingRuntimeReadiness,
   ProviderConfigId,
   ProviderId,
+  ProviderToolStatus,
+  RuntimeAssetsStatus,
   ProjectSettings,
   SystemSettings,
 } from "../../../types.js";
@@ -216,11 +220,15 @@ const EasyProviderAuthCard: FunctionComponent<{
   provider: SystemSettings["integrations"]["providers"][ProviderConfigId];
   selected: boolean;
   readinessStatus?: OnboardingProviderCredentialStatus;
+  toolStatus?: ProviderToolStatus;
+  onSelect: () => void;
+  onUseReplacement?: () => void;
   onUpdate: (updates: Partial<SystemSettings["integrations"]["providers"][ProviderConfigId]>) => void;
-}> = ({ providerConfigId, provider, selected, readinessStatus, onUpdate }) => {
+}> = ({ providerConfigId, provider, selected, readinessStatus, toolStatus, onSelect, onUseReplacement, onUpdate }) => {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const authMode = getEasyAuthMode(provider);
   const providerLabel = providerLabels[provider.provider];
+  const deprecated = isDeprecatedProvider(provider.provider);
 
   const applyAuthMode = (value: string): void => {
     const nextAuthMode = value === "localAuth" ? "localAuth" : "dashboardAuth";
@@ -228,6 +236,7 @@ const EasyProviderAuthCard: FunctionComponent<{
   };
 
   const openLogin = (): void => {
+    onSelect();
     onUpdate(getEasyAuthUpdates(providerConfigId, provider.provider, "dashboardAuth", provider.authPath));
     setShowLoginModal(true);
   };
@@ -247,12 +256,35 @@ const EasyProviderAuthCard: FunctionComponent<{
             </div>
           </div>
         </div>
-        <span className={`rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] ${selected ? "border border-signal-500/20 bg-signal-500/10 text-signal-700 dark:text-signal-200" : "border border-black/[0.06] bg-white/60 text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300"}`}>
-          {selected ? "Selected" : "Available"}
-        </span>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={selected}
+          aria-label={`${selected ? "Selected" : "Select"} ${providerLabel}`}
+          onClick={onSelect}
+          className={`rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 ${selected ? "border border-signal-500/20 bg-signal-500/10 text-signal-700 dark:text-signal-200" : "border border-black/[0.06] bg-white/60 text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300"}`}
+        >
+          {selected ? "Selected" : "Select"}
+        </button>
       </div>
 
       <div className="relative z-10 mt-4 space-y-3">
+        {deprecated ? (
+          <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-xs font-semibold leading-relaxed text-amber-800 dark:text-amber-200">
+            <div className="font-black uppercase tracking-[0.14em]">Deprecated</div>
+            <div className="mt-1">{providerLifecycle[provider.provider].message}</div>
+            {onUseReplacement ? (
+              <button type="button" onClick={onUseReplacement} className="mt-2 font-black text-amber-900 underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:text-amber-100">
+                Use Antigravity instead
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {toolStatus ? (
+          <div className={`rounded-xl border px-3 py-2 text-xs font-semibold ${toolStatus.state === "failed" ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-300" : toolStatus.state === "ready" ? "border-signal-500/20 bg-signal-500/10 text-signal-700 dark:text-signal-300" : "border-black/[0.06] bg-black/[0.025] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300"}`}>
+            {toolStatus.stepText}
+          </div>
+        ) : null}
         <Row label="Authentication mode">
           <SelectInput
             value={authMode}
@@ -390,6 +422,7 @@ export const OnboardingExperience: FunctionComponent = () => {
   const [lastInstallResult, setLastInstallResult] = useState<OnboardingDependencyInstallerResult | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
+  const [runtimeAssets, setRuntimeAssets] = useState<RuntimeAssetsStatus | null>(null);
   const reducedMotion = useReducedMotion();
   const gsapTokens = useGsapInteractionTokens();
   const interactionTokens = useInteractionTokens();
@@ -407,6 +440,29 @@ export const OnboardingExperience: FunctionComponent = () => {
   useEffect(() => {
     openRef.current = open;
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    const refresh = async (): Promise<void> => {
+      const next = await fetchRuntimeAssetsStatus().catch(() => null);
+      if (!cancelled && next) setRuntimeAssets(next);
+    };
+    void refresh();
+    const interval = window.setInterval(() => void refresh(), 2_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [open]);
+
+  const beginProviderPreparation = (provider: ProviderId): void => {
+    if (provider === "jules" || provider === "mockup-cli") return;
+    void prepareProviderTool(provider)
+      .then(() => fetchRuntimeAssetsStatus())
+      .then((next) => setRuntimeAssets(next))
+      .catch(() => undefined);
+  };
 
   useEffect(() => {
     if (!open) {
@@ -593,6 +649,10 @@ export const OnboardingExperience: FunctionComponent = () => {
     () => Object.fromEntries(readiness.providers.map((provider) => [provider.provider, provider])) as Partial<Record<ProviderId, OnboardingProviderCredentialStatus>>,
     [readiness.providers],
   );
+  const toolStatusByProvider = useMemo(
+    () => Object.fromEntries((runtimeAssets?.providers ?? []).map((status) => [status.provider, status])) as Partial<Record<ProviderId, ProviderToolStatus>>,
+    [runtimeAssets],
+  );
   const easyRecommendedProvider = useMemo(
     () => getEasyRecommendedProvider(readiness.providers, settings),
     [readiness.providers, settings],
@@ -606,6 +666,7 @@ export const OnboardingExperience: FunctionComponent = () => {
     dispatch({ type: "select-experience-mode", mode });
     if (mode === "EASY") {
       dispatch({ type: "set-selected-providers", providers: [easyRecommendedProvider] });
+      beginProviderPreparation(easyRecommendedProvider);
     }
     updateSettings((current) => applyOnboardingExperienceModeDefaults(current, mode, {
       recommendedProvider: easyRecommendedProvider,
@@ -635,6 +696,7 @@ export const OnboardingExperience: FunctionComponent = () => {
   const toggleProvider = (provider: ProviderId) => {
     if (!selectedProviders.includes(provider)) {
       ensureProviderInstance(provider);
+      beginProviderPreparation(provider);
     }
     dispatch({ type: "toggle-provider", provider });
   };
@@ -734,6 +796,7 @@ export const OnboardingExperience: FunctionComponent = () => {
     updates: Partial<SystemSettings["integrations"]["providers"][ProviderConfigId]>,
   ): void => {
     dispatch({ type: "set-selected-providers", providers: [providerId] });
+    beginProviderPreparation(providerId);
     updateSettings((current) => {
       const provider = current.integrations.providers[providerConfigId]
         ?? createEasyDashboardProviderDraft(providerId, providerConfigId);
@@ -1342,11 +1405,17 @@ export const OnboardingExperience: FunctionComponent = () => {
                               <div className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{instanceCount || 1} instance{(instanceCount || 1) === 1 ? "" : "s"}</div>
                             </div>
                           </div>
-                          <span className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${provider?.available ? "bg-signal-500/10 text-signal-700 dark:text-signal-300" : selected ? "bg-ember-500/10 text-ember-600 dark:text-ember-400" : "bg-slate-500/10 text-slate-500"}`}>
-                            {providerId === "jules" ? "API key" : provider?.available ? "Detected" : selected ? "Configure" : "Optional"}
+                          <span className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${isDeprecatedProvider(providerId) ? "bg-amber-500/10 text-amber-700 dark:text-amber-300" : provider?.available ? "bg-signal-500/10 text-signal-700 dark:text-signal-300" : selected ? "bg-ember-500/10 text-ember-600 dark:text-ember-400" : "bg-slate-500/10 text-slate-500"}`}>
+                            {isDeprecatedProvider(providerId) ? "Deprecated" : providerId === "jules" ? "API key" : provider?.available ? "Detected" : selected ? "Configure" : "Optional"}
                           </span>
                         </div>
                         <div className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{provider?.description || providerDescriptions[providerId]}</div>
+                        {isDeprecatedProvider(providerId) ? (
+                          <div className="mt-2 text-xs font-semibold text-amber-700 dark:text-amber-300">{providerLifecycle[providerId].message}</div>
+                        ) : null}
+                        {selected && toolStatusByProvider[providerId] ? (
+                          <div className="mt-2 text-xs font-semibold text-slate-500 dark:text-slate-300">{toolStatusByProvider[providerId]?.stepText}</div>
+                        ) : null}
                         <div className="mt-3 font-mono text-[11px] text-slate-400">{provider?.authPath || (providerId === "jules" ? "API key only" : "Auth path configurable")}</div>
                       </button>
                     );
@@ -1370,7 +1439,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                     </div>
                   </div>
                   {settings ? (
-                    <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="grid gap-4 lg:grid-cols-2" role="radiogroup" aria-label="Primary provider">
                       {EASY_PROVIDER_TYPES.map((providerId) => {
                         const existingEntry = getSystemProvidersByType(settings, providerId)[0];
                         const providerConfigId = existingEntry?.[0] ?? providerId;
@@ -1382,6 +1451,12 @@ export const OnboardingExperience: FunctionComponent = () => {
                             provider={integrationProvider}
                             selected={easySelectedProvider === providerId}
                             readinessStatus={readinessByProvider[providerId]}
+                            toolStatus={toolStatusByProvider[providerId]}
+                            onSelect={() => configureEasyProviderInstance(providerId, providerConfigId, {})}
+                            onUseReplacement={providerId === "gemini" ? () => {
+                              const antigravityEntry = getSystemProvidersByType(settings, "antigravity")[0];
+                              configureEasyProviderInstance("antigravity", antigravityEntry?.[0] ?? "antigravity", {});
+                            } : undefined}
                             onUpdate={(updates) => configureEasyProviderInstance(providerId, providerConfigId, updates)}
                           />
                         );

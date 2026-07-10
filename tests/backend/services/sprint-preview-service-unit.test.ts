@@ -222,6 +222,9 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
       warn: vi.fn(),
       error: vi.fn(),
     },
+    managedRuntimeService: {
+      resolveImage: vi.fn(async () => "node:24-bookworm"),
+    },
     ...overrides,
   };
 }

@@ -1,0 +1,97 @@
+name: Managed Runtime Image
+
+on:
+  pull_request:
+    paths:
+      - "containers/runtime/**"
+      - ".github/workflows/runtime-image.yml"
+  push:
+    branches: [dev]
+    paths:
+      - "containers/runtime/**"
+      - ".github/workflows/runtime-image.yml"
+  schedule:
+    - cron: "23 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: codeux-ai/codeux-runtime
+  RUNTIME_CHANNEL: "1"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [base, browser]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: containers/runtime/Dockerfile
+          target: ${{ matrix.target }}
+          load: true
+          no-cache: ${{ github.event_name == 'schedule' }}
+          tags: codeux-runtime-smoke:${{ matrix.target }}
+          cache-from: type=gha,scope=runtime-${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=runtime-${{ matrix.target }}
+      - name: Smoke test runtime
+        run: |
+          docker run --rm --network none codeux-runtime-smoke:${{ matrix.target }} node --version | grep '^v24\.'
+          docker run --rm --network none codeux-runtime-smoke:${{ matrix.target }} bash -lc 'command -v git && command -v gh && command -v python3 && command -v pnpm && command -v bun && command -v rg && command -v fd'
+          if [ "${{ matrix.target }}" = "browser" ]; then
+            docker run --rm --network none codeux-runtime-smoke:browser bash -lc 'command -v playwright && command -v playwright-mcp && test -d /ms-playwright'
+          fi
+      - name: Scan runtime image
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: codeux-runtime-smoke:${{ matrix.target }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+
+  publish:
+    if: github.event_name != 'pull_request'
+    needs: smoke
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [base, browser]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: sigstore/cosign-installer@v3.10.0
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: containers/runtime/Dockerfile
+          target: ${{ matrix.target }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          no-cache: ${{ github.event_name == 'schedule' }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.RUNTIME_CHANNEL }}-${{ matrix.target }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=runtime-${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=runtime-${{ matrix.target }}
+      - name: Sign immutable digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
