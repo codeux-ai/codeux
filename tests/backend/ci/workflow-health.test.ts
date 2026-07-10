@@ -14,6 +14,7 @@ const WORKFLOWS = {
 
 const PLAYWRIGHT_CONFIG = "playwright.config.ts";
 const RELEASE_INSTALL_VERIFIER = "scripts/verify-release-install.mjs";
+const RUNTIME_IMAGE_WORKFLOW = ".github/workflows/runtime-image.yml";
 const REQUIRED_INSTALL = "pnpm install --frozen-lockfile --ignore-scripts";
 const PACKAGE_MANAGER_VERSION = "10.33.0";
 const NODE_VERSION = "22";
@@ -291,6 +292,39 @@ describe("GitHub workflow health", () => {
     expect(desktopRelease).toContain("permissions:\n  contents: read");
     expect(desktopRelease).toContain('GH_TOKEN: ""');
     expect(desktopRelease).not.toContain("softprops/action-gh-release");
+  });
+
+  it("publishes managed runtime images only from published releases", async () => {
+    const runtimeImage = await readRepoFile(RUNTIME_IMAGE_WORKFLOW);
+    const releasePreflight = getJobBlock(runtimeImage, "release-preflight");
+    const smoke = getJobBlock(runtimeImage, "smoke");
+    const publish = getJobBlock(runtimeImage, "publish");
+
+    expect(runtimeImage).toMatch(/release:\n    types: \[published\]/);
+    expect(runtimeImage).toMatch(/pull_request:\n    paths:/);
+    expect(runtimeImage).not.toMatch(/\n  push:/);
+    expect(runtimeImage).not.toMatch(/\n  schedule:/);
+    expect(runtimeImage).not.toContain("workflow_dispatch:");
+    expect(runtimeImage).toMatch(/permissions:\n  contents: read\n/);
+    expect(runtimeImage).toContain("cancel-in-progress: ${{ github.event_name == 'pull_request' }}");
+
+    expect(releasePreflight).toContain("github.event_name == 'release'");
+    expect(releasePreflight).toContain("github.event.action == 'published'");
+    expect(releasePreflight).toContain("ref: ${{ github.event.release.tag_name }}");
+    expect(releasePreflight).toContain("does not match package.json version");
+    expect(releasePreflight).toContain("is not reachable from origin/main");
+
+    expect(smoke).not.toContain("packages: write");
+    expect(smoke).toContain("no-cache: ${{ github.event_name == 'release' }}");
+
+    expect(publish).toContain("github.event_name == 'release'");
+    expect(publish).toContain("github.event.action == 'published'");
+    expect(publish).toContain("needs: [release-preflight, smoke]");
+    expect(publish).toContain("packages: write");
+    expect(publish).toContain("id-token: write");
+    expect(publish).toContain("attestations: write");
+    expect(publish).toContain("no-cache: true");
+    expect(runtimeImage).not.toContain("github.event_name != 'pull_request'");
   });
 
   it("keeps Playwright config isolated, serialized, and failure-artifact friendly", async () => {

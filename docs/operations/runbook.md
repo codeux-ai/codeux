@@ -359,6 +359,7 @@ curl http://localhost:4444/api/git-status
 
 GitHub validation is split by signal:
 - `Code UX CI Pipeline` is the canonical automatic lane. It runs on pushes to `dev` and `main`, pull requests targeting those branches, and manual dispatches. `dev` runs jobs `01` through `08`, including all three orchestration DAG rows; `main` and manual dispatches additionally run full Playwright and release-candidate matrices.
+- `Managed Runtime Image` smoke-tests and vulnerability-scans runtime definition changes on pull requests, but it does not run on dev pushes and its smoke job has no package-write permission. Only a published GitHub Release can pass the tag/version/main-ancestry preflight and start the multi-architecture GHCR publish/sign jobs. There is no scheduled or manual publication path.
 - Static, build, and security are the prerequisite stage. The build job uploads `codeux-build-linux` for all downstream jobs.
 - Backend coverage, dashboard tests, npm install smoke, and the cross-OS orchestration DAG matrix reuse that build artifact and run in parallel after the prerequisite stage. Release-candidate packaging starts after package smoke and can run beside the main-only E2E matrix. Matrix bounds are `08 Orchestration` at three shards, `09 E2E` at ten shards, and `10 Release Candidate` at three shards; GitHub's runner quota queues any excess work across the parallel lanes.
 - `Playwright Diagnostics`, `Release Candidate Diagnostics`, and `Mockup Sprint Diagnostics` are manual-only workflows for focused reruns. They no longer run automatically on every PR.

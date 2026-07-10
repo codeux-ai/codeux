@@ -13,5 +13,7 @@ embedded browser artifact or Widevine binary.
 The application follows the `1-base` and `1-browser` channel tags at startup,
 pulls them, resolves their repository digests, verifies Node 24, and executes
 only the immutable digest. The workflow signs published digests and emits OCI
-provenance and SBOM attestations. A weekly uncached rebuild picks up patched
-base-image and Debian packages even when the runtime definition is unchanged.
+provenance and SBOM attestations. GHCR publication occurs only when a GitHub
+Release is published; dev pushes, schedules, and manual workflow runs cannot
+publish these tags. Runtime pull requests retain build, smoke, and vulnerability
+checks with a read-only workflow token.

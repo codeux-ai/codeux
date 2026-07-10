@@ -5,20 +5,15 @@ on:
     paths:
       - "containers/runtime/**"
       - ".github/workflows/runtime-image.yml"
-  push:
-    branches: [dev]
-    paths:
-      - "containers/runtime/**"
-      - ".github/workflows/runtime-image.yml"
-  schedule:
-    - cron: "23 3 * * 1"
-  workflow_dispatch:
+  release:
+    types: [published]
 
 permissions:
   contents: read
-  packages: write
-  id-token: write
-  attestations: write
+
+concurrency:
+  group: runtime-image-${{ github.event.release.tag_name || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   REGISTRY: ghcr.io
@@ -26,6 +21,30 @@ env:
   RUNTIME_CHANNEL: "1"
 
 jobs:
+  release-preflight:
+    if: github.event_name == 'release' && github.event.action == 'published'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+      - name: Verify release tag and main ancestry
+        run: |
+          EXPECTED_TAG="v$(node -p "require('./package.json').version")"
+          RELEASE_TAG="${{ github.event.release.tag_name }}"
+          if [ "$EXPECTED_TAG" != "$RELEASE_TAG" ]; then
+            echo "::error::Release tag ($RELEASE_TAG) does not match package.json version ($EXPECTED_TAG)."
+            exit 1
+          fi
+          git fetch origin main --depth=1
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Release tag commit $GITHUB_SHA is not reachable from origin/main."
+            exit 1
+          fi
+
   smoke:
     runs-on: ubuntu-latest
     strategy:
@@ -41,7 +60,7 @@ jobs:
           file: containers/runtime/Dockerfile
           target: ${{ matrix.target }}
           load: true
-          no-cache: ${{ github.event_name == 'schedule' }}
+          no-cache: ${{ github.event_name == 'release' }}
           tags: codeux-runtime-smoke:${{ matrix.target }}
           cache-from: type=gha,scope=runtime-${{ matrix.target }}
           cache-to: type=gha,mode=max,scope=runtime-${{ matrix.target }}
@@ -62,9 +81,14 @@ jobs:
           severity: CRITICAL,HIGH
 
   publish:
-    if: github.event_name != 'pull_request'
-    needs: smoke
+    if: github.event_name == 'release' && github.event.action == 'published'
+    needs: [release-preflight, smoke]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
     strategy:
       matrix:
         target: [base, browser]
@@ -86,7 +110,7 @@ jobs:
           target: ${{ matrix.target }}
           platforms: linux/amd64,linux/arm64
           push: true
-          no-cache: ${{ github.event_name == 'schedule' }}
+          no-cache: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.RUNTIME_CHANNEL }}-${{ matrix.target }}
           provenance: mode=max
           sbom: true
