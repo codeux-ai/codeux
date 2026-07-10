@@ -5,7 +5,7 @@ import { Check, RefreshCw, Search, Settings, X, Zap } from "lucide-preact";
 import { ActionButton } from "./components/settings/SettingsSurface.js";
 import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 import { useSettingsPageState, type Category, type CategoryId } from "./hooks/use-settings-page-state.js";
-import { SettingsCategoryRail, CATEGORIES } from "./components/settings/SettingsCategoryRail.js";
+import { SettingsCategoryRail, CATEGORIES, EASY_MODE_CATEGORY_IDS } from "./components/settings/SettingsCategoryRail.js";
 import { SettingsContentPanels } from "./components/settings/SettingsContentPanels.js";
 import { SettingsActivePanelStatus } from "./components/settings/SettingsActivePanelStatus.js";
 import { SettingsScopeControls } from "./components/settings/SettingsScopeControls.js";
@@ -18,6 +18,9 @@ import { ConfirmDialog } from "./components/ui/ConfirmDialog.js";
 import { UnsavedChangesModal } from "./components/ui/UnsavedChangesModal.js";
 import { useConfirmDialog } from "./hooks/use-confirm-dialog.js";
 import { getSettingsSearchMatchPreview, type SettingsSearchMatches } from "./lib/settings-search-index.js";
+import { useProjectData } from "./context/project-data.js";
+import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
+import { isEasyExperienceMode } from "./lib/experience-mode.js";
 
 interface SettingsSearchStatusDetails {
   searchTerm: string;
@@ -27,6 +30,14 @@ interface SettingsSearchStatusDetails {
   activeMatchPreview: string[];
   smartFindPreview: string[];
 }
+
+export const getVisibleSettingsCategories = (easyExperienceMode: boolean): Category[] => (
+  easyExperienceMode
+    ? CATEGORIES
+      .filter((category) => EASY_MODE_CATEGORY_IDS.includes(category.id))
+      .sort((left, right) => EASY_MODE_CATEGORY_IDS.indexOf(left.id) - EASY_MODE_CATEGORY_IDS.indexOf(right.id))
+    : CATEGORIES
+);
 
 export function getSettingsSearchStatusText({
   searchTerm,
@@ -228,8 +239,15 @@ export const SettingsPage: FunctionComponent = () => {
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
   const resetProjectConfirm = useConfirmDialog();
   const saveDisabledReasonId = "settings-save-disabled-reason";
+  const { selectedProject: projectForExperienceMode } = useProjectData();
+  const { data: effectiveSettings } = useProjectEffectiveSettings(projectForExperienceMode?.id ?? null);
+  const easyExperienceMode = isEasyExperienceMode(effectiveSettings?.settings.appearance?.experienceMode);
+  const visibleCategories = useMemo(
+    () => getVisibleSettingsCategories(easyExperienceMode),
+    [easyExperienceMode],
+  );
 
-  const state = useSettingsPageState(CATEGORIES);
+  const state = useSettingsPageState(visibleCategories, easyExperienceMode);
   const {
     clearFeedback,
     activeCategory,

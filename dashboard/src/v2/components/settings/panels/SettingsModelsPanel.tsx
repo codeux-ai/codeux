@@ -138,6 +138,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
     invocationRouteDefinitions,
     routingProfileOptions,
     updateEditableSettings,
+    easyExperienceMode,
   } = state;
 
   const getBadge = (...prefixes: string[]) => getBadgeHelper(activeScope, projectSources, ...prefixes);
@@ -393,6 +394,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
 
   return (
     <div className="flex flex-col gap-5">
+      {!easyExperienceMode ? (
       <section className="relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
         <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent" />
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -453,6 +455,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
           </div>
         </div>
       </section>
+      ) : null}
 
       <SectionCard title="Default Routing Anchors" watermark="DEF" badge={getBadge("aiProvider", "workers")} icon={<Anchor strokeWidth={2.4} />}>
         {providerEntries.length === 0 ? (
@@ -514,7 +517,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
             }))}
           />
         </Row>
-        <Row label="Worker default model" description="Model used by inherited worker-profile routes. Default uses the selected worker instance’s base model." badge={getFieldBadge("workers.model")}>
+        <Row label="Worker default model" description="Model used by inherited worker-profile routes. Default uses the selected worker instance’s base model." badge={getFieldBadge("workers.model")} last={easyExperienceMode}>
           <SelectInput
             value={editableSettings.workers.model || "default"}
             onChange={(value) => updateEditableSettings((current) => ({
@@ -530,20 +533,25 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
             ]}
           />
         </Row>
-        <Row label="Max concurrency" description="Maximum number of worker-dispatched tasks running at once." badge={getFieldBadge("workers.maxConcurrency")}>
-          <NumberInput value={editableSettings.workers.maxConcurrency} min={1} max={100} onChange={(value) => updateEditableSettings((current) => ({
-            ...current,
-            workers: { ...current.workers, maxConcurrency: value },
-          }))} />
-        </Row>
-        <Row label="Dispatch timeout" description="Seconds before a worker-dispatched task is considered timed out." badge={getFieldBadge("workers.timeoutSeconds")} last>
-          <NumberInput value={editableSettings.workers.timeoutSeconds} min={60} max={3600} onChange={(value) => updateEditableSettings((current) => ({
-            ...current,
-            workers: { ...current.workers, timeoutSeconds: value },
-          }))} />
-        </Row>
+        {!easyExperienceMode ? (
+          <>
+            <Row label="Max concurrency" description="Maximum number of worker-dispatched tasks running at once." badge={getFieldBadge("workers.maxConcurrency")}>
+              <NumberInput value={editableSettings.workers.maxConcurrency} min={1} max={100} onChange={(value) => updateEditableSettings((current) => ({
+                ...current,
+                workers: { ...current.workers, maxConcurrency: value },
+              }))} />
+            </Row>
+            <Row label="Dispatch timeout" description="Seconds before a worker-dispatched task is considered timed out." badge={getFieldBadge("workers.timeoutSeconds")} last>
+              <NumberInput value={editableSettings.workers.timeoutSeconds} min={60} max={3600} onChange={(value) => updateEditableSettings((current) => ({
+                ...current,
+                workers: { ...current.workers, timeoutSeconds: value },
+              }))} />
+            </Row>
+          </>
+        ) : null}
       </SectionCard>
 
+      {!easyExperienceMode ? (
       <SectionCard title="Base Provider Configuration" watermark="BASE" badge={getBadge("aiProvider.providers")} icon={<Layers strokeWidth={2.4} />}>
         <div className="mb-4 rounded-[1.25rem] border border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
           These values are the inheritance baseline for every route. Route mapping owns manual, weighted, or agent-based selection; this section defines each provider instance’s default model, reasoning depth, weight, and capacity.
@@ -653,6 +661,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
           })}
         </div>
       </SectionCard>
+      ) : null}
 
       <SectionCard title="Route Mapping" watermark="MAP" badge={getBadge("aiProvider.invocationRouting")} icon={<GitBranch strokeWidth={2.4} />}>
         <div className="grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
@@ -768,7 +777,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
               />
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className={`grid gap-4 ${easyExperienceMode ? "" : "md:grid-cols-2"}`}>
               <div>
                 <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Profile</div>
                 <PillChoiceGroup
@@ -780,6 +789,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                   options={routingProfileOptions}
                 />
               </div>
+              {!easyExperienceMode ? (
               <div>
                 <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Strategy</div>
                 <PillChoiceGroup
@@ -794,6 +804,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                   ]}
                 />
               </div>
+              ) : null}
             </div>
 
             <div className="mt-4">
@@ -829,6 +840,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
               />
             </div>
 
+            {!easyExperienceMode ? (
             <div className="mt-5 rounded-[1.35rem] border border-black/[0.06] bg-[linear-gradient(180deg,rgba(15,23,42,0.025),rgba(15,23,42,0.01))] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
@@ -879,7 +891,9 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                 })}
               </div>
             </div>
+            ) : null}
 
+            {!easyExperienceMode ? (
             <div className="mt-5 grid gap-3 lg:grid-cols-2">
               {routePool.map((providerConfigId) => {
                 const provider = editableSettings.aiProvider.providers[providerConfigId];
@@ -1026,11 +1040,12 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                 );
               })}
             </div>
+            ) : null}
 
           </div>
         </div>
       </SectionCard>
-      <SettingsModelPricingPanel state={state} />
+      {!easyExperienceMode ? <SettingsModelPricingPanel state={state} /> : null}
     </div>
   );
 };

@@ -205,6 +205,7 @@ const sortAgentPresetOptions = (
 
 export const useSettingsPageState = (
   categories: Category[],
+  easyExperienceMode = false,
 ) => {
   const { deleteProject, projects, selectedProject, selectedProjectId } = useProjectData();
 
@@ -508,7 +509,11 @@ export const useSettingsPageState = (
   }, [activeScope, selectedProject, setPersistedActiveScope]);
 
   const editableSettings = activeScope === "system" ? systemSettings?.defaults ?? null : projectSettings;
+  // Categories may change when the effective experience mode changes. Resolve the
+  // rendered category from the visible list immediately, while the effect below
+  // synchronizes the stored selection for subsequent interactions.
   const activeCategoryConfig = categories.find((category) => category.id === activeCategory) ?? categories[0]!;
+  const visibleActiveCategory = activeCategoryConfig.id;
 
   useEffect(() => {
     publishAppearancePreview(editableSettings?.appearance ?? null);
@@ -949,7 +954,7 @@ export const useSettingsPageState = (
 
   return {
     clearFeedback,
-    activeCategory, setActiveCategory,
+    activeCategory: visibleActiveCategory, setActiveCategory,
     activeScope, setActiveScope: setPersistedActiveScope,
     selectedIntegration, setSelectedIntegration,
     selectedAgentTemplate, setSelectedAgentTemplate,
@@ -965,6 +970,7 @@ export const useSettingsPageState = (
     resettingProject, deletingProject, resettingDatabase, memoryClearBusy, importingHints,
     externalHints,
     activeCategoryConfig, filteredCategories, settingsSearchMatches,
+    easyExperienceMode,
     categories: categories,
     providerLabels,
     thinkingModeOptions,

@@ -25,7 +25,7 @@ This document defines the visual patterns and rules for the Settings workspace. 
     *   Planning self-reflection copy must make the autostart gate clear: when enabled, `autoStart` starts orchestration only after the final planning reflection decision passes. If reflection does not pass, the planned tasks remain saved and the user can manually start the sprint after review.
     *   MCP custom server transport selection keeps radiogroup semantics. HTTP / SSE setup must expose the URL field and auth headers JSON editor with durable accessible names, keep the generated config preview in a labelled region, and state that saved changes apply on the next CLI run.
     *   Docker Runtime root execution controls must keep the default-off posture visible. The `cliWorkflow.containerRunAsRoot` toggle should show a neutral non-root state by default, switch to a danger/accent state only when enabled, and keep scoped override badges distinct from agent preset inheritance. Agent preset root-mode choices use radio semantics for Inherit (`null`), Force non-root (`false`), and Force root (`true`).
-    *   Experience Mode lives in General and uses the user-facing labels **Easy**, **Standard**, and **Expert** for the persisted `EASY`, `STANDARD`, and `EXPERT` values. Expert is the default and exposes the full settings surface. Easy and Standard filter visible categories and advanced cards; they do not delete hidden values or save changes without the operator using the normal Save action.
+    *   Experience Mode uses the user-facing labels **Easy**, **Standard**, and **Expert** for the persisted `EASY`, `STANDARD`, and `EXPERT` values. Expert is the default and exposes the full settings surface. Easy filters visible categories and advanced cards; it does not delete hidden values or save changes without the operator using the normal Save action.
 
 3.  **High-Risk Actions**:
     *   Destructive actions in the Danger Zone (`Wipe Project`, `Wipe Database`) use the `danger` tone, yielding clear semantic `bg-status-red text-white` presentation. Panels themselves hint at danger via red-tinted borders and backgrounds.
@@ -53,8 +53,8 @@ This document defines the visual patterns and rules for the Settings workspace. 
 
 ## Experience Mode Rules
 
-*   **Easy** shows the essential settings categories: General, Appearance, Integrations, and Danger Zone. Keep onboarding, provider credentials, dashboard appearance, and destructive recovery reachable, but hide low-level routing, runtime, memory, MCP, and capacity internals.
-*   **Standard** shows the common project-operation surface: General, Appearance, AI Models, Sprint & Git, Browser Preview, Techstacks, Agents, Memory, Integrations, and Danger Zone. It hides MCP and expert-only cards such as model pricing, route mapping internals, low-level guardrails, Docker/runtime internals, database maintenance, and worker capacity limits.
+*   **Easy** shows only Appearance, Guidance, and AI Models. Its AI Models panel keeps Default Routing Anchors and Route Mapping for provider/model selection, while hiding the provider summary, base provider configuration, model pricing, weighting, and other advanced controls.
+*   **Standard** shows every settings category and card, matching Expert mode.
 *   **Expert** shows every category and advanced card. It is the default for new installs and for missing or unrecognized stored values, preserving the historical full-control dashboard.
 *   Mode changes are presentation filters. They should preserve the underlying settings object, dirty tracking, reset behavior, project/system inheritance, and saved hidden values so the full data reappears when the user returns to Expert.
 

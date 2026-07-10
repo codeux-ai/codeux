@@ -26,6 +26,8 @@ export const CATEGORIES: Category[] = [
   { id: "danger", num: "12", label: "Danger Zone", icon: AlertTriangle, description: "Reset project overrides only when needed", danger: true },
 ];
 
+export const EASY_MODE_CATEGORY_IDS: readonly CategoryId[] = ["appearance", "guidance", "models"];
+
 export interface SettingsCategoryRailProps {
   filteredCategories: Category[];
   activeCategory: CategoryId;

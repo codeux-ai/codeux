@@ -47,8 +47,8 @@ Each category opens one or more **content panels** with grouped fields. Inputs a
 
 Experience mode is controlled from **Settings -> General** with three user-facing choices:
 
-- **Easy** — shows the essentials: General, Appearance, Integrations, and Danger Zone. Primary navigation shows Chat, Browser Preview, Stats, Live, Settings/Config, and Docs.
-- **Standard** — the balanced project-operation surface: General, Appearance, AI Models, Sprint & Git, Browser Preview, Techstacks, Agents, Memory, Integrations, and Danger Zone. Primary navigation shows Chat, Overview, Sprints, Tasks, Agents, Stats, Browser Preview, Docs, and Settings/Config.
+- **Easy** — shows only Appearance, Guidance, and AI Models. AI Models keeps provider/model selection, Default Routing Anchors, and Route Mapping, while hiding provider baseline, pricing, weighting, and other advanced controls. Primary navigation shows Chat, Browser Preview, Stats, Live, Settings/Config, and Docs.
+- **Standard** — shows every settings category and card, matching Expert mode. Primary navigation shows Chat, Overview, Sprints, Tasks, Agents, Stats, Browser Preview, Docs, and Settings/Config.
 - **Expert** — shows all settings categories and advanced cards, and is the default for new or legacy settings.
 
 Changing mode filters what is visible. It does not delete hidden values, mutate project overrides, or save anything until you use the normal Save action.
