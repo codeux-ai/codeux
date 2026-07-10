@@ -76,6 +76,10 @@ describe("ProviderToolManager", () => {
     expect(first.volumeName).toContain("code-ux-provider-tool-codex-1.2.3");
     expect(stream).toHaveBeenCalledTimes(1);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://registry.npmjs.org/%40openai%2Fcodex/latest",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
     expect(manager.getStatus("codex")).toMatchObject({ state: "ready", installedVersion: "1.2.3" });
   });
 

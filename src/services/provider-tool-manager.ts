@@ -307,7 +307,7 @@ export class ProviderToolManager {
     const timeout = setTimeout(() => controller.abort(), 12_000);
     try {
       if (spec.kind === "npm") {
-        const packagePath = spec.packageName.replace("/", "%2f");
+        const packagePath = encodeURIComponent(spec.packageName);
         const response = await this.fetchImpl(`https://registry.npmjs.org/${packagePath}/latest`, {
           signal: controller.signal,
           headers: { Accept: "application/json" },

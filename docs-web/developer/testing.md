@@ -116,8 +116,10 @@ It is staged as:
 2. `02 Static`, `03 Build`, and `04 Security`: prerequisite type/guardrail, build, and audit checks.
 3. `05 Backend`, `06 Dashboard`, `07 Package`, and `08 Orchestration`: run in parallel after those prerequisites. The orchestration matrix includes Linux Docker and macOS/Windows Electron on both `dev` and `main`.
 4. `09 Docs / five-page smoke`: loads the Docs index, its overview route, and three representative pages on Linux for every target branch. It fails on HTTP, console, or page errors without crawling all subpages.
-5. `10`: full Playwright on Linux, macOS, and Windows only for `main` validation and manual dispatches.
-6. `11`: unsigned desktop release-candidate packages with `--publish never`, only for `main` validation and manual dispatches.
+5. `09 E2E`: full Playwright on Linux, macOS, and Windows only for `main` validation and manual dispatches.
+6. `10 Release Candidate`: unsigned desktop release-candidate packages with `--publish never`, only for `main` validation and manual dispatches.
+
+The main branch ruleset still includes historical context names from older CI numbering and matrix definitions. Compatibility aggregate jobs emit those names only after the corresponding current backend, dashboard, audit, package, orchestration, 18-shard E2E, or desktop release-candidate gate succeeds. They preserve branch-protection compatibility without replacing any current validation job and can be removed once a repository administrator cleans up the obsolete ruleset entries.
 
 `Playwright Diagnostics`, `Release Candidate Diagnostics`, and `Mockup Sprint Diagnostics` are manual-only rerun workflows. A PR cannot be merged with red CI.
 

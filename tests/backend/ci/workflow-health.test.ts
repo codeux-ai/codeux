@@ -122,8 +122,8 @@ describe("GitHub workflow health", () => {
       ["package-smoke", "07 Package / npm install smoke"],
       ["ci-dag", "08 Orchestration / ${{ matrix.name }} DAG"],
       ["docs-page-smoke", "09 Docs / five-page smoke"],
-      ["e2e", "10 E2E /"],
-      ["release-candidate", "11 Release Candidate / desktop package"],
+      ["e2e", "09 E2E /"],
+      ["release-candidate", "10 Release Candidate / desktop package"],
     ] as const) {
       expect(getJobBlock(ci, jobName)).toContain(`name: ${displayName}`);
     }
@@ -208,7 +208,7 @@ describe("GitHub workflow health", () => {
     expect(docsPageSmoke).toContain("name: docs-page-smoke");
     expect(docsPageSmoke).not.toContain("if: ${{ github.event_name");
 
-    expect(e2e).toContain("name: 10 E2E / ${{ matrix.os.label }} full (${{ matrix.project }})");
+    expect(e2e).toContain("name: 09 E2E / ${{ matrix.os.label }} full (${{ matrix.project }})");
     expect(e2e).toContain("needs: [static, build, security-audit]");
     expect(e2e).toContain("github.base_ref == 'main'");
     expect(e2e).toContain("runs-on: ${{ matrix.os.runner }}");
@@ -232,7 +232,7 @@ describe("GitHub workflow health", () => {
     expect(ci).not.toContain("electron-dag:");
 
     expect(releaseCandidate).toContain("needs: package-smoke");
-    expect(releaseCandidate).toContain("name: 11 Release Candidate / desktop package (${{ matrix.name }})");
+    expect(releaseCandidate).toContain("name: 10 Release Candidate / desktop package (${{ matrix.name }})");
     expect(releaseCandidate).toContain("github.base_ref == 'main'");
     expect(releaseCandidate).not.toContain("ci-dag");
     expect(releaseCandidate).not.toContain("e2e");
@@ -243,6 +243,33 @@ describe("GitHub workflow health", () => {
     expect(releaseCandidate).toContain("if-no-files-found: error");
     expect(releaseCandidate).not.toContain("pnpm run audit");
     expect(releaseCandidate).not.toContain("pnpm run build");
+  });
+
+  it("keeps legacy main ruleset contexts coupled to their current validation gates", async () => {
+    const ci = await readRepoFile(WORKFLOWS.ci);
+    const compatibilityJobs = [
+      ["legacy-backend-context", "name: 04 Test / backend coverage", "needs: backend-tests"],
+      ["legacy-dashboard-context", "name: 05 Test / dashboard suite", "needs: dashboard-tests"],
+      ["legacy-security-context", "name: 06 Security / dependency audit", "needs: security-audit"],
+      ["legacy-package-context", "name: 07 Package / npm install smoke (${{ matrix.name }})", "needs: package-smoke"],
+      ["legacy-orchestration-context", "name: 08 Orchestration / Docker DAG", "needs: ci-dag"],
+      ["legacy-e2e-context", "name: ${{ format('09 E2E / ${0}{0} matrix.os.label {1}{1} full", "needs: e2e"],
+      ["legacy-release-candidate-context", "name: ${{ format('10 Release Candidate / desktop package (${0}{0} matrix.name {1}{1})", "needs: release-candidate"],
+    ] as const;
+
+    for (const [jobName, displayName, dependency] of compatibilityJobs) {
+      const job = getJobBlock(ci, jobName);
+      expect(job).toContain(displayName);
+      expect(job).toContain(dependency);
+      expect(job).toContain("always()");
+      expect(job).toContain("github.base_ref == 'main'");
+    }
+
+    const packageCompatibility = getJobBlock(ci, "legacy-package-context");
+    expect(packageCompatibility).toContain("name: [Linux, Windows, macOS]");
+    expect(packageCompatibility).toContain("needs['package-smoke'].result == 'success'");
+    expect(getJobBlock(ci, "legacy-e2e-context")).toContain("needs.e2e.result == 'success'");
+    expect(getJobBlock(ci, "legacy-release-candidate-context")).toContain("needs['release-candidate'].result == 'success'");
   });
 
   it("keeps former duplicate lanes as manual diagnostics only", async () => {
