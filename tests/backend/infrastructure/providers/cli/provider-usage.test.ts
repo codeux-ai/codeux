@@ -577,7 +577,11 @@ describe("collectProviderUsageTelemetry", () => {
       model: "gpt-4o-codex",
       prompt: "Fix the bug.",
       cwd: "/workspace/repo",
-      stdout: JSON.stringify({ type: "turn.completed", usage: { input_tokens: 9999, cached_input_tokens: 9999, output_tokens: 9999 } }),
+      stdout: [
+        JSON.stringify({ type: "thread.started", thread_id: "stdout-thread" }),
+        JSON.stringify({ type: "item.completed", item: { id: "stdout-msg", type: "agent_message", text: "Stdout-only answer." } }),
+        JSON.stringify({ type: "turn.completed", usage: { input_tokens: 9999, cached_input_tokens: 9999, output_tokens: 9999 } }),
+      ].join("\n"),
       stderr: "",
       capturedText: "Bug fixed.",
       codexSessionJson: realisticCodexRollout,
@@ -589,6 +593,9 @@ describe("collectProviderUsageTelemetry", () => {
       outputTokens: 120,
       usageSource: "reported",
     });
+    expect(result.nativeSessionId).toBe("0199codex-uuid");
+    expect(result.conversation.map((turn) => turn.text).join("\n")).toContain("Tests written.");
+    expect(result.conversation.map((turn) => turn.text).join("\n")).not.toContain("Stdout-only answer.");
   });
 
   it("falls back to the exec stdout turn.completed usage when no rollout file is available", async () => {
