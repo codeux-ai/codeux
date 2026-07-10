@@ -110,7 +110,7 @@ The dashboard can attach an agent to one or more named persistent skill storage 
 
 Create and delete project skill storages in **Settings → Agents**, then attach them from either the settings attachment matrix or the agent editor. Persistent skill retrieval stays **off by default**: an agent must have at least one storage attached and the explicit persistent skills toggle enabled before runtime retrieval can use it.
 
-The agent detail panel shows attached storage names and whether persistent skills are enabled. Empty storage state means no persistent skills are available for that agent; it does not affect ordinary memory or knowledge subscriptions.
+The agent detail and editor panels show attached storage names and whether persistent skills are **Default off** or **Enabled**. Hover an attached storage chip, or focus it with the keyboard, to lazily inspect its description, bounded skill count, names, tags, and short content previews. The disclosure identifies loading, empty, retryable error, and truncated-preview states; detached storages are not inspected. Empty storage state means no persistent skills are available for that agent, and does not affect ordinary memory or knowledge subscriptions.
 
 When the dashboard loads a storage's contents, it receives only a bounded set of concise skill summaries and short content previews. Full markdown bodies and runtime filesystem or mount paths are not exposed by this project-scoped dashboard endpoint.
 

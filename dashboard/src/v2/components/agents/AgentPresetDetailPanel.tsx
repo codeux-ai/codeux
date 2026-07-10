@@ -25,6 +25,7 @@ import { ConfirmDialog } from "../ui/ConfirmDialog.js";
 import { MARKDOWN_PROSE_CLASS } from "../ui/MarkdownEditorField.js";
 import { estimateTokens, formatTokenCount } from "../../lib/token-estimate.js";
 import { renderMarkdown } from "../../../lib/markdown.js";
+import { PersistentSkillStorageChip } from "./PersistentSkillStorageChip.js";
 
 const INSTRUCTION_EXCERPT_CHARS = 320;
 const INSTRUCTION_EXCERPT_LINES = 6;
@@ -441,13 +442,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
                   No storage attached
                 </span>
               ) : attachedSkillStorages.map((storage) => (
-                <span
-                  key={storage.id}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-2.5 py-1 text-[11px] font-bold text-signal-700 dark:text-signal-200"
-                >
-                  <Library className="h-3 w-3" strokeWidth={2.4} />
-                  {storage.name}
-                </span>
+                <PersistentSkillStorageChip key={storage.id} storage={storage} />
               ))}
             </div>
           </div>

@@ -40,6 +40,7 @@ import { MarkdownEditorField } from "../ui/MarkdownEditorField.js";
 import { getAccentHex, generateRandomAgentAvatar } from "../../lib/agent-avatar.js";
 import { defaultAgentMcpAccess, normalizeAgentMcpAccess } from "../../lib/agent-mcp-display.js";
 import { estimateTokens, formatTokenCount } from "../../lib/token-estimate.js";
+import { PersistentSkillStorageChip } from "./PersistentSkillStorageChip.js";
 
 /* ─────────────────────────────────────────────────────────
  * Validation rules
@@ -931,28 +932,46 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                   </div>
                 ) : availableSkillStorages.map((storage) => {
                   const checked = persistentSkillStorageIds.includes(storage.id);
+                  const toggleStorageAttachment = (): void => {
+                    if (saving) return;
+                    const nextIds = checked
+                      ? persistentSkillStorageIds.filter((id) => id !== storage.id)
+                      : [...persistentSkillStorageIds, storage.id];
+                    setPersistentSkillStorageIds(nextIds);
+                    if (nextIds.length === 0) {
+                      setPersistentSkillsEnabled(false);
+                    }
+                  };
                   return (
-                    <label
+                    <div
                       key={storage.id}
                       className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-[11px] font-semibold transition-colors ${checked ? "border-signal-500/30 bg-signal-500/[0.1] text-signal-800 dark:text-signal-100" : "border-black/[0.06] bg-black/[0.02] text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300"}`}
                     >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={saving}
-                        onChange={() => {
-                          const nextIds = checked
-                            ? persistentSkillStorageIds.filter((id) => id !== storage.id)
-                            : [...persistentSkillStorageIds, storage.id];
-                          setPersistentSkillStorageIds(nextIds);
-                          if (nextIds.length === 0) {
-                            setPersistentSkillsEnabled(false);
-                          }
-                        }}
-                        className="h-4 w-4 rounded border-black/20 text-signal-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-focus-ring)]"
-                      />
-                      {storage.name}
-                    </label>
+                      <label className="inline-flex cursor-pointer items-center">
+                        <input
+                          type="checkbox"
+                          aria-label={storage.name}
+                          checked={checked}
+                          disabled={saving}
+                          onChange={toggleStorageAttachment}
+                          className="h-4 w-4 rounded border-black/20 text-signal-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-focus-ring)]"
+                        />
+                        {!checked ? (
+                          <PersistentSkillStorageChip
+                            storage={storage}
+                            attached={false}
+                            className="border-0 bg-transparent px-0 text-slate-600 dark:bg-transparent dark:text-slate-300"
+                          />
+                        ) : null}
+                      </label>
+                      {checked ? (
+                        <PersistentSkillStorageChip
+                          storage={storage}
+                          className="border-0 bg-transparent px-0 dark:bg-transparent"
+                          onActivate={toggleStorageAttachment}
+                        />
+                      ) : null}
+                    </div>
                   );
                 })}
               </div>
