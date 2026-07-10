@@ -176,6 +176,10 @@ describe("InvocationsTable", () => {
     expect(table.querySelector('td[headers="invocations-expand"] button[aria-controls="invocation-messages-inv-headers"]')).toBeTruthy();
     expect(table.querySelector('td[headers="invocations-model"]')?.className).toContain("break-words");
     expect(table.querySelector('td[headers="invocations-model"]')?.className).toContain("[overflow-wrap:anywhere]");
+    for (const label of ["Time", "Status", "Type", "Model", "In", "Out", "Cached", "Total", "Duration", "Context", "Messages"]) {
+      const mobileLabel = Array.from(table.querySelectorAll("td > div")).find((node) => node.textContent === label);
+      expect(mobileLabel?.className).toContain("lg:hidden");
+    }
   });
 
   it("keeps long provider, model, error, and task identifiers visible inside wrapping cells", () => {
@@ -273,7 +277,7 @@ describe("InvocationsTable", () => {
   });
 
   it("keeps cached invocation rows visible during background refresh", () => {
-    render(
+    const { container } = render(
       <InvocationsTable
         invocations={[createInvocation({ id: "inv-cached" })]}
         sort={{ key: "startedAt", dir: "desc" }}
@@ -287,6 +291,9 @@ describe("InvocationsTable", () => {
     expect(screen.getByText("Updating invocation records. Showing cached rows while the latest ledger loads.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Expand invocation inv-cached" })).toBeTruthy();
     expect(screen.getByText("Showing 1 of 1 invocation records.")).toBeTruthy();
+    expect((container.firstElementChild as HTMLElement).getAttribute("aria-busy")).toBe("true");
+    expect(container.querySelector('[class~="animate-spin"]')).toBeNull();
+    expect(container.querySelector('[class*="motion-safe:animate-spin"]')).toBeTruthy();
   });
 
   it("renders blocking load failures as named alerts", () => {

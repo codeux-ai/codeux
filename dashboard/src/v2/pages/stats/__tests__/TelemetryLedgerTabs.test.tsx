@@ -151,7 +151,7 @@ describe("TelemetryLedgerTabs", () => {
   });
 
   it("renders tab counts and handles roving keyboard navigation", () => {
-    render(<TelemetryLedgerTabs stats={mockStats} />);
+    const { container } = render(<TelemetryLedgerTabs stats={mockStats} />);
 
     const tablist = screen.getByRole("tablist", { name: "Telemetry ledgers" });
     const tabs = screen.getAllByRole("tab");
@@ -164,6 +164,10 @@ describe("TelemetryLedgerTabs", () => {
     expect(tabs[0]).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "tab-tasks");
     expect(screen.getByText("Task Telemetry selected, 2 entries.")).toBeInTheDocument();
+    expect(container.querySelector('[class*="backdrop-blur"]')).toBeNull();
+    expect(container.querySelector('[class*="shadow-"]')).toBeNull();
+    expect(tablist.className).toContain("sticky");
+    expect(tabs[0].className).toContain("motion-reduce:transition-none");
 
     tabs[0].focus();
     fireEvent.keyDown(tablist, { key: "ArrowRight" });
@@ -231,6 +235,16 @@ describe("TelemetryLedgerTabs", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: "Clear search" })[0]);
     expect(screen.getByLabelText("Alpha migration tasks telemetry row")).toBeInTheDocument();
+  });
+
+  it("keeps long ledger labels inside wrapping-safe flat rows", () => {
+    const longLabel = "feature/operational-ledger-with-an-extremely-long-branch-and-model-routing-identifier";
+    render(<TelemetryLedgerTabs stats={{ ...mockStats, tasks: [entity("long-task", longLabel, { secondaryLabel: longLabel })] }} />);
+
+    const row = screen.getByLabelText(`${longLabel} tasks telemetry row`);
+    expect(row.className).toContain("min-w-0");
+    expect(row.className).not.toContain("shadow");
+    expect(within(row).getAllByText(longLabel)[0].className).toContain("break-words");
   });
 
   it("sorts task rows by name and token volume", () => {

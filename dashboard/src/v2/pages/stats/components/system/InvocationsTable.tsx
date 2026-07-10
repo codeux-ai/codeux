@@ -20,7 +20,6 @@ import type { SystemSort, SystemSortKey } from "../../hooks/use-system-view-data
 import { formatTokens, formatStatsDuration, formatDateTime } from "../../stats-utils.js";
 import { DEFAULT_LIST_WINDOW, resolveListWindow } from "../../../../lib/list-window.js";
 import {
-  LEDGER_ROW_MODERN_CLASS,
   CHIP_CLASS,
   STATUS_TONE_CLASS,
   TAB_IDLE_CLASS,
@@ -122,9 +121,9 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
     }
   };
 
-  const getAriaSort = (key: SystemSortKey): "ascending" | "descending" | undefined => {
+  const getAriaSort = (key: SystemSortKey): "ascending" | "descending" | "none" => {
     if (sort.key !== key) {
-      return undefined;
+      return "none";
     }
 
     return sort.dir === "asc" ? "ascending" : "descending";
@@ -153,7 +152,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
         return (
           <div className={`${CHIP_CLASS} flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${STATUS_TONE_CLASS.signal}`}>
             <div className="h-2 w-2 rounded-full bg-[color:var(--stats-signal-text)]" />
-            <Loader2 className="h-3 w-3 animate-spin" />
+            <Loader2 className="h-3 w-3 motion-safe:animate-spin" />
             Running
           </div>
         );
@@ -252,7 +251,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
   }
 
   return (
-    <div className="min-w-0 overflow-visible">
+    <div className="min-w-0 overflow-visible" aria-busy={loading ? "true" : "false"}>
       {loading ? (
         <div role="status" aria-live="polite" aria-atomic="true" className={`${SUBPANEL_CLASS} mb-3 flex items-center gap-2 p-3 text-[11px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-detail-color)]`}>
           <Loader2 className="h-3.5 w-3.5 text-[color:var(--stats-signal-text)] motion-safe:animate-spin" aria-hidden="true" />
@@ -262,7 +261,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         Showing {Math.min(visibleCount, invocations.length).toLocaleString()} of {invocations.length.toLocaleString()} invocation records.
       </div>
-      <table className="block w-full border-separate border-spacing-y-2 lg:table">
+      <table className="block w-full border-collapse lg:table">
         <caption className="sr-only">
           Invocation ledger with sortable time, token, and duration columns. Rows include status, type, model, token counts, context, and transcript expansion controls.
         </caption>
@@ -273,7 +272,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                 type="button"
                 onClick={() => handleSort("startedAt")}
                 aria-label={getSortButtonLabel("time", "startedAt")}
-                className={`flex items-center ${TAB_IDLE_CLASS}`}
+                className={`flex items-center ${TAB_IDLE_CLASS} ${CONTROL_FOCUS_CLASS}`}
               >
                 Time {renderSortIcon("startedAt")}
               </button>
@@ -286,7 +285,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                 type="button"
                 onClick={() => handleSort("inputTokens")}
                 aria-label={getSortButtonLabel("input tokens", "inputTokens")}
-                className={`flex items-center ${TAB_IDLE_CLASS}`}
+                className={`flex items-center ${TAB_IDLE_CLASS} ${CONTROL_FOCUS_CLASS}`}
               >
                 In {renderSortIcon("inputTokens")}
               </button>
@@ -296,7 +295,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                 type="button"
                 onClick={() => handleSort("outputTokens")}
                 aria-label={getSortButtonLabel("output tokens", "outputTokens")}
-                className={`flex items-center ${TAB_IDLE_CLASS}`}
+                className={`flex items-center ${TAB_IDLE_CLASS} ${CONTROL_FOCUS_CLASS}`}
               >
                 Out {renderSortIcon("outputTokens")}
               </button>
@@ -307,7 +306,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                 type="button"
                 onClick={() => handleSort("totalTokens")}
                 aria-label={getSortButtonLabel("total tokens", "totalTokens")}
-                className={`flex items-center ${TAB_IDLE_CLASS}`}
+                className={`flex items-center ${TAB_IDLE_CLASS} ${CONTROL_FOCUS_CLASS}`}
               >
                 Total {renderSortIcon("totalTokens")}
               </button>
@@ -317,7 +316,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                 type="button"
                 onClick={() => handleSort("durationMs")}
                 aria-label={getSortButtonLabel("average duration", "durationMs")}
-                className={`flex items-center ${TAB_IDLE_CLASS}`}
+                className={`flex items-center ${TAB_IDLE_CLASS} ${CONTROL_FOCUS_CLASS}`}
               >
                 Avg Duration {renderSortIcon("durationMs")}
               </button>
@@ -338,7 +337,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               <Fragment key={invocation.id}>
                 <tr
                   key={invocation.id}
-                  className={`${LEDGER_ROW_MODERN_CLASS} block overflow-hidden lg:table-row ${
+                  className={`block min-w-0 border-b border-[color:var(--stats-border-hairline)] transition-colors hover:bg-[color:var(--stats-surface-subpanel-hover)] motion-reduce:transition-none lg:table-row ${
                     invocation.status === "running"
                       ? "border-l-2 border-l-[color:var(--stats-signal-text)]"
                       : invocation.status === "failed"

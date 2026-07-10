@@ -87,7 +87,7 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
   const activeTabDetails = tabs.find((tab) => tab.id === activeTab);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex min-w-0 flex-col gap-3">
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {activeTabDetails
           ? `${activeTabDetails.label} selected, ${activeTabDetails.count.toLocaleString()} ${activeTabDetails.count === 1 ? "entry" : "entries"}.`
@@ -97,7 +97,7 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
         role="tablist"
         aria-orientation="horizontal"
         aria-label="Telemetry ledgers"
-        className={`${SUBPANEL_CLASS} sticky top-3 z-20 grid w-full max-w-full min-w-0 grid-cols-1 gap-1 !p-1 sm:grid-cols-2 xl:grid-cols-3`}
+        className={`${SUBPANEL_CLASS} sticky top-3 z-30 grid w-full max-w-full min-w-0 grid-cols-1 gap-px !overflow-hidden !p-0 sm:grid-cols-2 xl:grid-cols-3`}
         onKeyDown={(e) => {
           if (tabs.length === 0) {
             return;
@@ -140,7 +140,7 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
               tabIndex={isActive ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
               aria-label={`${tab.label}, ${tab.count.toLocaleString()} ${tab.count === 1 ? "entry" : "entries"}`}
-              className={`grid min-h-16 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--stats-control-radius)] px-3 py-2 text-left transition-[background-color,border-color,color] motion-reduce:transition-none ${CONTROL_FOCUS_CLASS} ${
+              className={`grid min-h-12 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 text-left transition-[background-color,border-color,color] motion-reduce:transition-none ${CONTROL_FOCUS_CLASS} ${
                 isActive ? TAB_ACTIVE_CLASS : TAB_IDLE_CLASS
               }`}
               style={{ transitionDuration: interactionTokens.selectionMovement.duration, transitionTimingFunction: interactionTokens.selectionMovement.ease }}

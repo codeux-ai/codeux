@@ -157,6 +157,25 @@ describe("InvocationMessagesPanel", () => {
       expect(alert.textContent).toContain("Failed to load invocation messages");
       expect(alert.textContent).toContain("network down");
     });
+    expect(screen.getByRole("button", { name: "Retry transcript" })).toBeTruthy();
+  });
+
+  it("recovers in place when a failed transcript request is retried", async () => {
+    mockedFetchInvocationMessages
+      .mockRejectedValueOnce(new Error("temporary gateway error"))
+      .mockResolvedValueOnce([createMessage({ contentMarkdown: "Recovered transcript content" })]);
+
+    render(<InvocationMessagesPanel invocation={createInvocation()} />);
+
+    const retry = await screen.findByRole("button", { name: "Retry transcript" });
+    fireEvent.click(retry);
+
+    expect(screen.getByRole("region", { name: "Invocation inv-1 message transcript" }).getAttribute("aria-busy")).toBe("true");
+    await waitFor(() => {
+      expect(screen.getByText("Recovered transcript content")).toBeTruthy();
+    });
+    expect(screen.queryByRole("alert", { name: "Transcript messages failed to load" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Invocation inv-1 message transcript" }).getAttribute("aria-busy")).toBe("false");
   });
 
   it("renders empty transcript and invocation error summary states", async () => {

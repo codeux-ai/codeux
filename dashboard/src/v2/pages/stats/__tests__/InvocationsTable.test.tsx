@@ -153,7 +153,7 @@ describe("InvocationsTable", () => {
 
     expect(screen.getByText(/Invocation ledger with sortable time/i)).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: /Time/i })).toHaveAttribute("aria-sort", "descending");
-    expect(screen.getByRole("columnheader", { name: /In/i })).not.toHaveAttribute("aria-sort");
+    expect(screen.getByRole("columnheader", { name: /In/i })).toHaveAttribute("aria-sort", "none");
   });
 
   it("handles row expansion and renders transcript details", async () => {

@@ -1,6 +1,6 @@
 import type { FunctionComponent } from "preact";
 import { ChevronLeft, ChevronRight, Search, SlidersHorizontal, X } from "lucide-preact";
-import { CHIP_CLASS, CONTROL_FOCUS_CLASS, INPUT_CLASS, PANEL_CLASS, STATUS_TONE_CLASS, SUBPANEL_CLASS } from "../StatsShared.js";
+import { CHIP_CLASS, CONTROL_FOCUS_CLASS, INPUT_CLASS, STATUS_TONE_CLASS, SUBPANEL_CLASS } from "../StatsShared.js";
 import type { SystemFilters } from "../../hooks/use-system-view-data.js";
 
 export interface SystemFilterBarProps {
@@ -88,7 +88,10 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
   const activeFilterCount = filters.status.length + filters.purpose.length + filters.provider.length + (filters.errorCategories?.length ?? 0) + (search !== "" ? 1 : 0);
 
   return (
-    <div className={`${PANEL_CLASS} flex min-w-0 max-w-full flex-col gap-4 p-4 md:p-5`}>
+    <div className={`${SUBPANEL_CLASS} sticky top-3 z-20 flex min-w-0 max-w-full flex-col gap-3 p-3`}>
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        Showing {shownCount} of {totalShown} invocation records with {activeFilterCount.toLocaleString()} active filters{page !== undefined ? ` on page ${page + 1}` : ""}.
+      </div>
       <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(16rem,0.9fr)_minmax(0,1.35fr)] xl:items-stretch">
         <div className={`${SUBPANEL_CLASS} flex min-w-0 flex-col justify-center gap-2 p-3`}>
           <label htmlFor="system-filter-search" className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">
@@ -194,7 +197,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
       </div>
 
       <div className="grid min-w-0 gap-3 border-t border-[color:var(--stats-card-border)] pt-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-        <div className="flex min-w-0 flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)]" aria-live="polite" aria-atomic="true">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)]">
           {hasActiveFilters ? (
             <button
               type="button"
