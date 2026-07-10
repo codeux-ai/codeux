@@ -258,8 +258,13 @@ Behavior:
 
 1. Code UX syncs/imports the `Worker` preset from markdown if a linked project/default/home file exists
 2. task execution prompt assembly loads the `Worker` instructions from sqlite
-3. dashboard inbox reply generation also loads the `Worker` instructions from sqlite
-4. when the dashboard edits `Worker`, the DB record is updated and optionally mirrored back into `<project>/.code-ux/agents/worker.md`
+3. when the dashboard edits `Worker`, the DB record is updated and optionally mirrored back into `<project>/.code-ux/agents/worker.md`
+
+## Project Manager Flow
+
+Dashboard inbox reply generation resolves the configured dashboard reply preset and defaults to the `Project manager` instructions from sqlite. New and imported projects store the unset Project manager fallback at project scope. When the dashboard edits `Project manager`, the DB record is updated and optionally mirrored back into `<project>/.code-ux/agents/project_manager.md`.
+
+Dashboard reply execution grants the assigned Project Manager the normal reply management surface plus the restricted self-wakeup and direct long-term-memory lanes. The bundled `project_manager.md` is the comprehensive operating manual for orchestration, manual planning fallback, scheduler continuation, custom dashboards, node flows, persistent skills, rich widgets, and durable-memory judgment.
 
 This replaces the old `worker.md` and `listener.md` guide-loading path.
 

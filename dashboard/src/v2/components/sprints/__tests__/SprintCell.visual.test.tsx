@@ -10,6 +10,12 @@ import { SprintCell } from "../SprintCell.js";
 
 expect.extend(matchers);
 
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({ children, search, to, ...props }: any) => (
+    <a href={`${to}?${new URLSearchParams(search).toString()}`} {...props}>{children}</a>
+  ),
+}));
+
 vi.mock("gsap", () => ({
   default: {
     fromTo: vi.fn(),
@@ -85,6 +91,10 @@ describe("SprintCell visuals", () => {
 
     const actionCluster = container.querySelector(".group-focus-within\\:opacity-100");
     expect(actionCluster).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open tasks for sprint Dashboard polish" }))
+      .toHaveAttribute("href", "/tasks?projectId=project-1&sprintId=sprint-1");
+    expect(screen.getByRole("link", { name: "Open live session for sprint Dashboard polish" }))
+      .toHaveAttribute("href", "/live?projectId=project-1&sprintId=sprint-1");
   });
 
   it("shows target-specific busy state for the primary sprint action", () => {

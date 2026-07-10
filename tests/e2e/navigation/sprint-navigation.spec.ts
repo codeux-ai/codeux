@@ -69,6 +69,12 @@ async function loadSprintPageForProject(page: Page, project: ProjectSummary, spr
   await expect(page.getByRole('row', { name: new RegExp(sprint.name) })).toBeVisible();
 }
 
+async function selectProjectFromTopNav(page: Page, project: ProjectSummary): Promise<void> {
+  await page.locator('[data-tour-id="project-selector"]').click();
+  await page.locator(`[id="project-option-${project.id}"]`).click();
+  await expect(page.locator('[data-tour-id="project-selector"]')).toContainText(project.name);
+}
+
 test.describe('sprint page project-aware navigation', () => {
   test('opens Tasks and Live for the clicked sprint project even when another project is selected', async ({ page, request }, testInfo) => {
     await completeOnboarding(request);
@@ -98,6 +104,11 @@ test.describe('sprint page project-aware navigation', () => {
     await expect(page.getByText(first.task.title).first()).toBeHidden();
     await expectSelectedProjectAndSprint(request, second.project.id, second.sprint.id);
 
+    await selectProjectFromTopNav(page, first.project);
+    await expect.poll(() => new URL(page.url()).searchParams.get('projectId')).toBe(first.project.id);
+    await expect.poll(() => new URL(page.url()).searchParams.get('sprintId')).toBeNull();
+    await expectSelectedProjectAndSprint(request, first.project.id, first.sprint.id);
+
     await selectProjectViaApi(request, first.project.id);
     await selectSprintViaApi(request, first.project.id, first.sprint.id);
     await page.goto('/sprints');
@@ -116,5 +127,10 @@ test.describe('sprint page project-aware navigation', () => {
     await expect(page.locator('[data-tour-id="project-selector"]')).toContainText(second.project.name);
     await expect(page.getByRole('button', { name: new RegExp(`Sprint selector, selected sprint: .*${second.sprint.name}`) })).toBeVisible();
     await expectSelectedProjectAndSprint(request, second.project.id, second.sprint.id);
+
+    await selectProjectFromTopNav(page, first.project);
+    await expect.poll(() => new URL(page.url()).searchParams.get('projectId')).toBe(first.project.id);
+    await expect.poll(() => new URL(page.url()).searchParams.get('sprintId')).toBeNull();
+    await expectSelectedProjectAndSprint(request, first.project.id, first.sprint.id);
   });
 });

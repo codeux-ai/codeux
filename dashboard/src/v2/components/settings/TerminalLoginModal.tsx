@@ -1,9 +1,11 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { createPortal } from "preact/compat";
-import { AlertCircle, Check, RefreshCw, Terminal, X } from "lucide-preact";
+import { AlertCircle, Check, ClipboardPaste, RefreshCw, Terminal, X } from "lucide-preact";
 import { useInteractiveLoginSession } from "../../hooks/useInteractiveLoginSession.js";
+import { restoreFocusSafely } from "../../hooks/use-focus-trap.js";
 import { getSafeUrl } from "../../lib/safe-url.js";
+import { TerminalOutputBuffer } from "../../lib/terminal-output-buffer.js";
 import type { ContainerBuildProgress } from "../../../lib/activity.js";
 import { ContainerBuildStatusInfobox } from "../live-session/ContainerBuildStatusInfobox.js";
 
@@ -18,9 +20,9 @@ interface TerminalLoginModalProps {
 const renderTerminalContentWithLinks = (text: string) => {
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const parts = text.split(urlRegex);
-  
+
   return parts.map((part, index) => {
-    if (urlRegex.test(part)) {
+    if (/^https?:\/\//u.test(part)) {
       let cleanUrl = part;
       let trailing = "";
       const match = part.match(/([),."';]+)$/);
@@ -31,10 +33,10 @@ const renderTerminalContentWithLinks = (text: string) => {
       return (
         <span key={index}>
           <a 
-            href={cleanUrl} 
+            href={getSafeUrl(cleanUrl)}
             target="_blank" 
             rel="noopener noreferrer" 
-            className="underline text-signal-300 hover:text-signal-200 cursor-pointer select-text font-bold"
+            className="cursor-pointer select-text font-semibold text-white underline decoration-signal-300 underline-offset-2 hover:text-signal-100"
             onClick={(e) => e.stopPropagation()}
           >
             {cleanUrl}
@@ -59,13 +61,16 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
   const [terminalOutput, setTerminalOutput] = useState<string>("");
   const [exitCode, setExitCode] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [pasteFeedback, setPasteFeedback] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [detectedLoginUrl, setDetectedLoginUrl] = useState<string | null>(null);
   const [containerBuildProgress, setContainerBuildProgress] = useState<ContainerBuildProgress | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const hiddenInputRef = useRef<HTMLTextAreaElement>(null);
+  const terminalBufferRef = useRef<TerminalOutputBuffer | null>(null);
   const hasOpenedUrlRef = useRef<string | null>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
   const dialogTitleId = `terminal-login-title-${providerConfigId.replace(/\W/g, "-")}`;
   const terminalRegionLabel = `${providerName} terminal login output for ${providerConfigId}`;
 
@@ -76,211 +81,39 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
     return () => window.removeEventListener("click", closeMenu);
   }, []);
 
-  const handleContextMenu = (e: MouseEvent) => {
-    e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY });
+  useEffect(() => {
+    triggerRef.current = document.activeElement as HTMLElement | null;
+    return () => restoreFocusSafely(triggerRef.current);
+  }, []);
+
+  if (!terminalBufferRef.current) {
+    terminalBufferRef.current = new TerminalOutputBuffer();
+  }
+
+  const focusTerminal = () => {
+    hiddenInputRef.current?.focus({ preventScroll: true });
   };
 
-  // Simulated infinite scrollback terminal buffer state
-  const linesRef = useRef<string[]>([""]);
-  const cursorRef = useRef<{ row: number; col: number }>({ row: 0, col: 0 });
-  const savedCursorRef = useRef<{ row: number; col: number }>({ row: 0, col: 0 });
+  const handleContextMenu = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    focusTerminal();
+    setPasteFeedback(null);
+    setContextMenu({
+      x: Math.max(8, Math.min(e.clientX, window.innerWidth - 216)),
+      y: Math.max(8, Math.min(e.clientY, window.innerHeight - 64)),
+    });
+  };
 
   const processChunk = (chunk: string) => {
-    let lines = [...linesRef.current];
-    let cursor = { ...cursorRef.current };
-    
-    let i = 0;
-    while (i < chunk.length) {
-      const char = chunk[i];
-      
-      if (char === "\n") {
-        cursor.row++;
-        if (cursor.row >= lines.length) {
-          lines.push("");
-        }
-        cursor.col = 0;
-        i++;
-      } else if (char === "\r") {
-        cursor.col = 0;
-        i++;
-      } else if (char === "\x08" || char === "\x7f") {
-        cursor.col = Math.max(0, cursor.col - 1);
-        const currentLine = lines[cursor.row] || "";
-        lines[cursor.row] = currentLine.slice(0, cursor.col) + currentLine.slice(cursor.col + 1);
-        i++;
-      } else if (char === "\t") {
-        const spaces = "        ";
-        const currentLine = lines[cursor.row] || "";
-        lines[cursor.row] = currentLine.slice(0, cursor.col) + spaces + currentLine.slice(cursor.col);
-        cursor.col += 8;
-        i++;
-      } else if (char === "\x1b") {
-        if (chunk[i + 1] === "[") {
-          let j = i + 2;
-          let command = "";
-          while (j < chunk.length && !/[a-zA-Z]/.test(chunk[j])) {
-            command += chunk[j];
-            j++;
-          }
-          if (j >= chunk.length) {
-            break;
-          }
-          const action = chunk[j];
-          const params = command.split(";").map(Number);
-          
-          if (action === "J") {
-            const mode = params[0] || 0;
-            if (mode === 0) {
-              // Clear from cursor to end of screen
-              lines[cursor.row] = (lines[cursor.row] || "").slice(0, cursor.col);
-              for (let r = cursor.row + 1; r < lines.length; r++) {
-                lines[r] = "";
-              }
-            } else if (mode === 1) {
-              // Clear from start of screen to cursor
-              lines[cursor.row] = " ".repeat(cursor.col) + (lines[cursor.row] || "").slice(cursor.col);
-              for (let r = 0; r < cursor.row; r++) {
-                lines[r] = "";
-              }
-            } else if (mode === 2 || mode === 3) {
-              // Clear entire screen
-              lines = [""];
-              cursor.row = 0;
-              cursor.col = 0;
-            }
-          } else if (action === "H" || action === "f") {
-            const r = (params[0] || 1) - 1;
-            const c = (params[1] || 1) - 1;
-            cursor.row = r;
-            while (cursor.row >= lines.length) {
-              lines.push("");
-            }
-            cursor.col = c;
-          } else if (action === "K") {
-            const mode = params[0] || 0;
-            const currentLine = lines[cursor.row] || "";
-            if (mode === 0) {
-              lines[cursor.row] = currentLine.slice(0, cursor.col);
-            } else if (mode === 1) {
-              lines[cursor.row] = " ".repeat(cursor.col) + currentLine.slice(cursor.col);
-            } else if (mode === 2) {
-              lines[cursor.row] = "";
-            }
-          } else if (action === "A") {
-            const count = params[0] || 1;
-            cursor.row = Math.max(0, cursor.row - count);
-          } else if (action === "B") {
-            const count = params[0] || 1;
-            cursor.row = cursor.row + count;
-            while (cursor.row >= lines.length) {
-              lines.push("");
-            }
-          } else if (action === "C") {
-            const count = params[0] || 1;
-            cursor.col = cursor.col + count;
-          } else if (action === "D") {
-            const count = params[0] || 1;
-            cursor.col = Math.max(0, cursor.col - count);
-          } else if (action === "G") {
-            // Cursor Horizontal Absolute (CHA)
-            const col = (params[0] || 1) - 1;
-            cursor.col = Math.max(0, col);
-          } else if (action === "d") {
-            // Vertical Line Position Absolute (VPA)
-            const row = (params[0] || 1) - 1;
-            cursor.row = Math.max(0, row);
-            while (cursor.row >= lines.length) {
-              lines.push("");
-            }
-          } else if (action === "E") {
-            // Cursor Next Line (CNL)
-            const count = params[0] || 1;
-            cursor.row += count;
-            cursor.col = 0;
-            while (cursor.row >= lines.length) {
-              lines.push("");
-            }
-          } else if (action === "F") {
-            // Cursor Previous Line (CPL)
-            const count = params[0] || 1;
-            cursor.row = Math.max(0, cursor.row - count);
-            cursor.col = 0;
-          } else if (action === "s") {
-            // Save cursor position (ANSI.SYS)
-            savedCursorRef.current = { row: cursor.row, col: cursor.col };
-          } else if (action === "u") {
-            // Restore cursor position (ANSI.SYS)
-            cursor.row = savedCursorRef.current.row;
-            cursor.col = savedCursorRef.current.col;
-            while (cursor.row >= lines.length) {
-              lines.push("");
-            }
-          }
-          
-          i = j + 1;
-        } else if (chunk[i + 1] === "7") {
-          // Save cursor (DEC)
-          savedCursorRef.current = { row: cursor.row, col: cursor.col };
-          i += 2;
-        } else if (chunk[i + 1] === "8") {
-          // Restore cursor (DEC)
-          cursor.row = savedCursorRef.current.row;
-          cursor.col = savedCursorRef.current.col;
-          while (cursor.row >= lines.length) {
-            lines.push("");
-          }
-          i += 2;
-        } else {
-          i++;
-        }
-      } else {
-        const code = char.charCodeAt(0);
-        if (code >= 32) {
-          const currentLine = lines[cursor.row] || "";
-          let paddedLine = currentLine;
-          if (cursor.col > currentLine.length) {
-            paddedLine += " ".repeat(cursor.col - currentLine.length);
-          }
-          lines[cursor.row] = paddedLine.slice(0, cursor.col) + char + paddedLine.slice(cursor.col + 1);
-          cursor.col++;
-        }
-        i++;
-      }
-    }
-
-    // Limit scrollback buffer to 1000 lines to optimize performance
-    if (lines.length > 1000) {
-      const diff = lines.length - 1000;
-      lines = lines.slice(diff);
-      cursor.row = Math.max(0, cursor.row - diff);
-    }
-    
-    linesRef.current = lines;
-    cursorRef.current = cursor;
-    
-    // Format screen grid as clean lines and add cursor character ▊
-    const renderedLines = lines.map((line, rIdx) => {
-      const safeLine = line || "";
-      if (rIdx === cursor.row) {
-        const left = safeLine.slice(0, cursor.col);
-        const cursorChar = "▊";
-        const right = safeLine.slice(cursor.col + 1);
-        return left + cursorChar + right;
-      }
-      return safeLine;
-    });
-    
-    const outputText = renderedLines.join("\n");
+    const outputText = terminalBufferRef.current?.write(chunk) ?? "";
     setTerminalOutput(outputText);
 
     // Scan for container browser redirect URL
     const match = outputText.match(/\[CONTAINER_OPEN_URL\]:\s*(https?:\/\/[^\s\]]+)/);
     if (match && match[1]) {
       let url = match[1].trim();
-      // Remove any ANSI escape/color sequences
-      url = url.replace(/\x1b\[[0-9;]*m/g, "");
-      url = url.replace(/[)\s\x1b]+$/, ""); // strip trailing spaces, parens, or ESC chars
+      url = url.replace(/[)\s\x1b]+$/u, "");
       
       setDetectedLoginUrl(url);
       
@@ -293,6 +126,14 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
         }
       }
     }
+  };
+
+  const sendTerminalInput = (data: string): boolean => {
+    if (!data || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+    wsRef.current.send(JSON.stringify({ type: "input", data }));
+    return true;
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -322,30 +163,46 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
     } else if (e.key === "ArrowLeft") {
       e.preventDefault();
       rawKey = "\x1b[D";
-    } else if (e.ctrlKey && e.key === "c") {
+    } else if (e.ctrlKey && e.key.toLowerCase() === "c") {
+      e.preventDefault();
       rawKey = "\x03";
-    } else if (e.ctrlKey && e.key === "d") {
+    } else if (e.ctrlKey && e.key.toLowerCase() === "d") {
+      e.preventDefault();
       rawKey = "\x04";
     }
 
     if (rawKey) {
-      wsRef.current.send(JSON.stringify({ type: "input", data: rawKey }));
+      sendTerminalInput(rawKey);
       if (hiddenInputRef.current) {
         hiddenInputRef.current.value = "";
       }
     }
   };
 
-  const handleTextAreaInput = (e: any) => {
-    const value = e.currentTarget.value;
-    if (value && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: "input", data: value }));
-    }
-    e.currentTarget.value = "";
+  const handleTextAreaInput = (e: Event) => {
+    const input = e.currentTarget as HTMLTextAreaElement;
+    sendTerminalInput(input.value);
+    input.value = "";
   };
 
-  const focusTerminal = () => {
-    hiddenInputRef.current?.focus();
+  const pasteClipboardText = async (): Promise<void> => {
+    setContextMenu(null);
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text) {
+        setPasteFeedback({ kind: "error", message: "Clipboard is empty. Copy the login value, then try Paste again." });
+        return;
+      }
+      if (!sendTerminalInput(text)) {
+        setPasteFeedback({ kind: "error", message: "The terminal is not ready yet. Wait for Active session, then paste again." });
+        return;
+      }
+      setPasteFeedback({ kind: "success", message: "Clipboard text pasted into the active terminal session." });
+    } catch {
+      setPasteFeedback({ kind: "error", message: "Clipboard access was blocked. Focus the terminal and use Ctrl+V or Command+V." });
+    } finally {
+      focusTerminal();
+    }
   };
 
   const interactiveSession = useInteractiveLoginSession({
@@ -384,32 +241,37 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
     wsRef.current = interactiveSession.websocket;
     setStatus(interactiveSession.status);
     if (interactiveSession.status === "active") {
-      setTimeout(focusTerminal, 200);
+      const focusTimer = window.setTimeout(focusTerminal, 200);
+      return () => window.clearTimeout(focusTimer);
     }
+    return undefined;
   }, [interactiveSession.status, interactiveSession.websocket]);
 
   // Scroll to bottom on output update
   useEffect(() => {
-    terminalEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    terminalEndRef.current?.scrollIntoView({ block: "end" });
   }, [terminalOutput]);
 
   const modalContent = (
-    <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+    <div className="fixed inset-0 z-[250] flex items-center justify-center bg-void-900/70 p-3 backdrop-blur-sm sm:p-4">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby={dialogTitleId}
-        aria-describedby="terminal-login-status"
-        className="relative flex h-[600px] w-[800px] max-w-full flex-col overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-[var(--elevation-floating)] dark:border-white/[0.08] dark:bg-void-800"
+        aria-describedby="terminal-login-status terminal-login-help"
+        className="relative flex h-[min(680px,calc(100dvh-1.5rem))] w-[min(920px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-white/[0.1] bg-void-950 shadow-[var(--elevation-floating)] outline-none"
       >
+        <p id="terminal-login-help" className="sr-only">
+          Interactive provider login terminal. Terminal control sequences are rendered as a clean text screen. Use the close button to leave because Escape is forwarded to the provider.
+        </p>
         {/* Glow Effects */}
         <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-signal-500/30 to-transparent" />
 
         {/* Modal Header */}
-        <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] bg-void-900/60 px-6 py-4 backdrop-blur-md text-slate-100">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.08] bg-void-900/90 px-4 py-3.5 text-slate-100 backdrop-blur-md sm:px-6 sm:py-4">
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-signal-500/10 text-signal-400">
-              <Terminal className="h-4 w-4" />
+              <Terminal aria-hidden="true" className="h-4 w-4" />
             </div>
             <div>
               <h3 id={dialogTitleId} className="text-sm font-semibold text-white">Login to {providerName}</h3>
@@ -420,13 +282,13 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
           <div className="flex items-center gap-3">
             {status === "connecting" && (
               <div id="terminal-login-status" role="status" aria-live="polite" className="flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/5 px-2.5 py-1 text-[10px] font-semibold text-amber-300">
-                <RefreshCw className="h-3 w-3 animate-spin" />
+                <RefreshCw aria-hidden="true" className="h-3 w-3 motion-safe:animate-spin" />
                 BOOTING CONTAINER
               </div>
             )}
             {status === "active" && (
               <div id="terminal-login-status" role="status" aria-live="polite" className="flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-2.5 py-1 text-[10px] font-semibold text-signal-300">
-                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-signal-400" />
+                <div aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-signal-400 motion-safe:animate-pulse" />
                 ACTIVE SESSION
               </div>
             )}
@@ -436,13 +298,13 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
                   ? "border-status-green/20 bg-status-green/10 text-status-green" 
                   : "border-status-red/20 bg-status-red/10 text-status-red"
               }`}>
-                {exitCode === 0 ? <Check className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+                {exitCode === 0 ? <Check aria-hidden="true" className="h-3 w-3" /> : <AlertCircle aria-hidden="true" className="h-3 w-3" />}
                 {exitCode === 0 ? "SUCCESSFUL" : `EXITED (${exitCode})`}
               </div>
             )}
             {status === "error" && (
               <div id="terminal-login-status" role="alert" aria-live="assertive" className="flex items-center gap-1.5 rounded-full border border-status-red/20 bg-status-red/10 px-2.5 py-1 text-[10px] font-semibold text-status-red">
-                <AlertCircle className="h-3 w-3" />
+                <AlertCircle aria-hidden="true" className="h-3 w-3" />
                 CONNECTION ERROR
               </div>
             )}
@@ -451,20 +313,20 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
               type="button"
               onClick={onClose}
               aria-label={`Close ${providerName} terminal login`}
-              className="rounded-full p-1.5 text-slate-400 hover:bg-white/5 hover:text-white transition-colors"
+              className="rounded-full p-2 text-slate-300 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-400 focus-visible:ring-offset-2 focus-visible:ring-offset-void-900"
             >
-              <X className="h-4 w-4" />
+              <X aria-hidden="true" className="h-4 w-4" />
             </button>
           </div>
         </div>
 
         {/* Modal Content - The Terminal Screen */}
-        <div className="relative flex flex-1 flex-col overflow-hidden bg-void-950 p-6 font-mono text-sm leading-relaxed text-slate-300">
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-void-950 p-4 font-mono text-sm leading-relaxed text-white sm:p-6">
           <ContainerBuildStatusInfobox progress={containerBuildProgress} className="mb-4 shrink-0" />
 
           {status === "connecting" && (
             <div role="status" aria-live="polite" className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-void-950/80 p-6">
-              <RefreshCw className="h-8 w-8 animate-spin text-signal-400" />
+              <RefreshCw aria-hidden="true" className="h-8 w-8 text-signal-400 motion-safe:animate-spin" />
               <div className="text-center">
                 <p className="text-sm font-semibold text-white">Starting Docker Environment</p>
                 <p className="mt-1 text-xs text-slate-500">
@@ -480,7 +342,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
           {status === "error" && (
             <div role="alert" aria-live="assertive" className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-void-950/80 p-8">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-status-red/10 text-status-red">
-                <AlertCircle className="h-6 w-6" />
+                <AlertCircle aria-hidden="true" className="h-6 w-6" />
               </div>
               <div className="text-center">
                 <p className="text-sm font-semibold text-white">Failed to connect to container</p>
@@ -500,10 +362,14 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
           <div 
             role="log"
             aria-label={terminalRegionLabel}
+            aria-describedby="terminal-login-help"
             aria-live="polite"
+            aria-relevant="additions text"
+            tabIndex={0}
             onClick={focusTerminal}
+            onFocus={focusTerminal}
             onContextMenu={handleContextMenu}
-            className="flex-1 overflow-y-auto rounded-xl border border-white/5 bg-black/40 p-4 scrollbar-thin scrollbar-thumb-white/10 cursor-text select-text focus-within:border-signal-500/50"
+            className="relative min-h-0 flex-1 cursor-text select-text overflow-auto rounded-xl border border-white/[0.12] bg-black/80 p-4 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] outline-none scrollbar-thin scrollbar-thumb-white/15 focus-within:border-signal-400/70 focus-within:ring-2 focus-within:ring-signal-400/35 focus-within:ring-offset-2 focus-within:ring-offset-void-950"
           >
             {/* Hidden textarea to capture keystrokes and paste operations */}
             <textarea
@@ -511,7 +377,8 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
               aria-label={`${providerName} terminal input for ${providerConfigId}`}
               onKeyDown={handleKeyDown}
               onInput={handleTextAreaInput}
-              className="absolute h-0 w-0 opacity-0 pointer-events-none"
+              tabIndex={-1}
+              className="pointer-events-none absolute h-px w-px opacity-0"
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="off"
@@ -519,7 +386,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
             />
 
             {terminalOutput ? (
-              <pre className="whitespace-pre-wrap break-all text-xs text-emerald-400 font-mono select-text">
+              <pre data-testid="terminal-login-output" className="min-w-max whitespace-pre font-mono text-xs leading-5 text-white selection:bg-signal-400/30 selection:text-white">
                 {renderTerminalContentWithLinks(terminalOutput)}
               </pre>
             ) : (
@@ -530,12 +397,26 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
             <div ref={terminalEndRef} />
           </div>
 
+          {pasteFeedback && (
+            <div
+              role={pasteFeedback.kind === "error" ? "alert" : "status"}
+              aria-live={pasteFeedback.kind === "error" ? "assertive" : "polite"}
+              className={`mt-3 shrink-0 rounded-xl border px-3 py-2 text-[11px] font-semibold ${
+                pasteFeedback.kind === "error"
+                  ? "border-status-red/25 bg-status-red/[0.08] text-red-200"
+                  : "border-signal-400/25 bg-signal-400/[0.08] text-signal-100"
+              }`}
+            >
+              {pasteFeedback.message}
+            </div>
+          )}
+
           {detectedLoginUrl && status === "active" && (
             <div role="status" aria-live="polite" className="mt-4 shrink-0 rounded-2xl border border-signal-500/30 bg-signal-500/5 p-4 backdrop-blur-sm transition-all duration-300">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-start gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-signal-500/10 text-signal-400">
-                    <Terminal className="h-5 w-5 animate-pulse" />
+                    <Terminal aria-hidden="true" className="h-5 w-5 motion-safe:animate-pulse" />
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-white">Browser Authentication Requested</h4>
@@ -558,9 +439,9 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
 
           {/* Sleek status hint */}
           {status === "active" && (
-            <div className="mt-3 flex shrink-0 items-center justify-between text-[10px] text-slate-500 font-mono select-none">
-              <span>⌨ Click console to focus & type directly (supports arrow keys, Tab, backspaces, pasting tokens)</span>
-              <span className="text-signal-400/80 animate-pulse font-semibold">● LIVE INTERACTIVE</span>
+            <div className="mt-3 flex shrink-0 flex-col gap-1 text-[10px] font-mono text-slate-400 select-none sm:flex-row sm:items-center sm:justify-between">
+              <span>Click to type. Right-click for Paste; Ctrl+V or Command+V also works. Arrow keys, Tab, Escape, and Backspace are sent to the provider.</span>
+              <span className="shrink-0 font-semibold text-signal-300"><span aria-hidden="true">●</span> Interactive input ready</span>
             </div>
           )}
 
@@ -568,8 +449,8 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
             <div role={exitCode === 0 ? "status" : "alert"} aria-live={exitCode === 0 ? "polite" : "assertive"} className="mt-4 shrink-0 rounded-xl border border-white/5 bg-white/[0.02] p-4 text-center">
               <p className="text-xs text-slate-400 font-semibold">
                 {exitCode === 0 
-                  ? "🎉 Login process finished successfully! Credentials saved directly to your ~/.code-ux/credentials folder." 
-                  : `⚠️ Login process exited with code ${exitCode}. Please try again.`
+                  ? "Login finished successfully. Credentials were saved to the selected provider instance."
+                  : `Login exited with code ${exitCode}. Review the terminal output, then try again.`
                 }
               </p>
               <button
@@ -582,6 +463,27 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
             </div>
           )}
         </div>
+
+        {contextMenu && (
+          <div
+            role="menu"
+            aria-label={`${providerName} terminal actions`}
+            style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
+            className="fixed z-[9999] min-w-[200px] overflow-hidden rounded-xl border border-white/[0.12] bg-void-900 p-1.5 shadow-[0_16px_36px_rgba(0,0,0,0.5)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => void pasteClipboardText()}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-white transition-colors hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-400"
+            >
+              <ClipboardPaste aria-hidden="true" className="h-4 w-4 text-signal-300" />
+              Paste clipboard text
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -590,34 +492,5 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
     return null;
   }
 
-  return createPortal(
-    <>
-      {modalContent}
-      {contextMenu && (
-        <div 
-          style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
-          className="fixed z-[9999] min-w-[160px] overflow-hidden rounded-xl border border-white/[0.08] bg-void-900 p-1.5 shadow-[0_12px_30px_rgba(0,0,0,0.5)] backdrop-blur-md"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={async () => {
-              setContextMenu(null);
-              try {
-                const text = await navigator.clipboard.readText();
-                if (text && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                  wsRef.current.send(JSON.stringify({ type: "input", data: text }));
-                }
-              } catch (err) {
-                // Fallback / ignore if blocked
-              }
-            }}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-200 hover:bg-white/5 hover:text-white transition-colors"
-          >
-            📋 Paste Clipboard Text
-          </button>
-        </div>
-      )}
-    </>,
-    document.body
-  );
+  return createPortal(modalContent, document.body);
 };

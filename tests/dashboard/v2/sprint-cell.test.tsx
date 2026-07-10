@@ -8,6 +8,12 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/preact";
 import { SprintCell } from "../../../dashboard/src/v2/components/sprints/SprintCell";
 
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({ children, search, to, ...props }: any) => (
+    <a href={`${to}?${new URLSearchParams(search).toString()}`} {...props}>{children}</a>
+  ),
+}));
+
 describe("SprintCell", () => {
   const defaultSprint = {
     id: "sprint-1",

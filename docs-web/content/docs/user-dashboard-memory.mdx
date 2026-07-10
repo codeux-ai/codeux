@@ -72,6 +72,12 @@ The memory is embedded immediately using the active embedding model.
 
 Worker `.task-learnings.md` files still create short-term memories from `## Category:` bullets. They may also include an optional `## Self Reflection Rating` section with `Overall: N/5` and per-section bullets such as `- Implementation: 4/5 - note`. Ratings are stored as task-run self-reflection records, separate from semantic memories, and malformed rating sections are ignored.
 
+## Project Manager direct memory
+
+The dashboard reply route defaults to the **Project manager**. It keeps the normal short-term and long-term context, and it also receives `add_long_term_memory`, a dedicated direct-write lane for explicit remember/learn requests and stable knowledge it judges valuable.
+
+A successful direct write creates a canonical long-term claim plus a searchable project-memory mirror. The Project Manager then re-emits the exact returned statement, category, claim id, and mirror-memory id in a `codeux:memory` block, which the dashboard renders as a rich confirmation widget. Short-term sprint evidence and normal remediation/promotion remain unchanged.
+
 ## Editing & deleting
 
 Sidebar memory cards use their own guarded delete flow. Graph and inspector single-memory deletion is immediate only while Danger Delete is armed.
@@ -140,4 +146,4 @@ The footer shows aggregate memory statistics: total counts per scope/category, a
 
 ## Programmatic access
 
-The Memory MCP tool (`manage_memory`) exposes search, list, get, create, update, delete, promote, start_reembed, get_map, count, and model_status actions, as well as durable claim actions. Destructive actions require approval confirmation. See [Management actions → memory](/docs/developer-management-actions#memory).
+The Memory MCP tool (`manage_memory`) exposes search, list, get, create, update, delete, promote, start_reembed, get_map, count, and model_status actions, as well as durable claim actions. The dedicated `add_long_term_memory` tool writes one canonical durable memory and returns confirmation-widget data. Destructive actions require approval confirmation. See [Management actions → memory](/docs/developer-management-actions#memory).

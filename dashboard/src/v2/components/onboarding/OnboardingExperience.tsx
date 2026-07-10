@@ -161,7 +161,7 @@ const providerLabels: Record<ProviderId, string> = {
 };
 
 const PROVIDER_TYPES = onboardingProviderTypes;
-const EASY_PROVIDER_TYPES: ProviderId[] = ["gemini", "antigravity", "codex", "claude-code", "qwen-code", "opencode"];
+const EASY_PROVIDER_TYPES: ProviderId[] = ["antigravity", "codex", "claude-code", "qwen-code", "opencode"];
 
 const providerDescriptions: Record<ProviderId, string> = {
   jules: "Google Jules API service for agent session and workspace orchestration.",
@@ -194,12 +194,6 @@ const createEasyDashboardProviderDraft = (
   authPath: `~/.code-ux/credentials/${providerConfigId}`,
 });
 
-const getEasyAuthMode = (
-  provider: SystemSettings["integrations"]["providers"][ProviderConfigId],
-): "dashboardAuth" | "localAuth" => (
-  provider.authType === "localAuth" ? "localAuth" : "dashboardAuth"
-);
-
 const getEasyAuthUpdates = (
   providerConfigId: ProviderConfigId,
   providerId: ProviderId,
@@ -218,26 +212,26 @@ const getEasyAuthUpdates = (
 const EasyProviderAuthCard: FunctionComponent<{
   providerConfigId: ProviderConfigId;
   provider: SystemSettings["integrations"]["providers"][ProviderConfigId];
+  authMode: "dashboardAuth" | "localAuth";
   selected: boolean;
   readinessStatus?: OnboardingProviderCredentialStatus;
   toolStatus?: ProviderToolStatus;
   onSelect: () => void;
-  onUseReplacement?: () => void;
+  onAuthModeChange: (authMode: "dashboardAuth" | "localAuth") => void;
   onUpdate: (updates: Partial<SystemSettings["integrations"]["providers"][ProviderConfigId]>) => void;
-}> = ({ providerConfigId, provider, selected, readinessStatus, toolStatus, onSelect, onUseReplacement, onUpdate }) => {
+}> = ({ providerConfigId, provider, authMode, selected, readinessStatus, toolStatus, onSelect, onAuthModeChange, onUpdate }) => {
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const authMode = getEasyAuthMode(provider);
   const providerLabel = providerLabels[provider.provider];
   const deprecated = isDeprecatedProvider(provider.provider);
 
   const applyAuthMode = (value: string): void => {
     const nextAuthMode = value === "localAuth" ? "localAuth" : "dashboardAuth";
-    onUpdate(getEasyAuthUpdates(providerConfigId, provider.provider, nextAuthMode, provider.authPath));
+    onAuthModeChange(nextAuthMode);
   };
 
   const openLogin = (): void => {
     onSelect();
-    onUpdate(getEasyAuthUpdates(providerConfigId, provider.provider, "dashboardAuth", provider.authPath));
+    onAuthModeChange("dashboardAuth");
     setShowLoginModal(true);
   };
 
@@ -273,11 +267,6 @@ const EasyProviderAuthCard: FunctionComponent<{
           <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-xs font-semibold leading-relaxed text-amber-800 dark:text-amber-200">
             <div className="font-black uppercase tracking-[0.14em]">Deprecated</div>
             <div className="mt-1">{providerLifecycle[provider.provider].message}</div>
-            {onUseReplacement ? (
-              <button type="button" onClick={onUseReplacement} className="mt-2 font-black text-amber-900 underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:text-amber-100">
-                Use Antigravity instead
-              </button>
-            ) : null}
           </div>
         ) : null}
         {toolStatus ? (
@@ -423,6 +412,7 @@ export const OnboardingExperience: FunctionComponent = () => {
   const [installError, setInstallError] = useState<string | null>(null);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
   const [runtimeAssets, setRuntimeAssets] = useState<RuntimeAssetsStatus | null>(null);
+  const [easyProviderAuthModes, setEasyProviderAuthModes] = useState<Partial<Record<ProviderId, "dashboardAuth" | "localAuth">>>({});
   const reducedMotion = useReducedMotion();
   const gsapTokens = useGsapInteractionTokens();
   const interactionTokens = useInteractionTokens();
@@ -665,11 +655,13 @@ export const OnboardingExperience: FunctionComponent = () => {
     const easyUseGithubDefault = options.useGithub ?? false;
     dispatch({ type: "select-experience-mode", mode });
     if (mode === "EASY") {
+      setEasyProviderAuthModes({});
       dispatch({ type: "set-selected-providers", providers: [easyRecommendedProvider] });
       beginProviderPreparation(easyRecommendedProvider);
     }
     updateSettings((current) => applyOnboardingExperienceModeDefaults(current, mode, {
       recommendedProvider: easyRecommendedProvider,
+      providerAuthMode: "dashboardAuth",
       useGithub: mode === "EASY" ? easyUseGithubDefault : options.useGithub,
       manageGithubPrWorkflow: mode === "EASY" ? options.manageGithubPrWorkflow ?? false : options.manageGithubPrWorkflow,
     }));
@@ -954,6 +946,7 @@ export const OnboardingExperience: FunctionComponent = () => {
     try {
       let nextSettings = applyOnboardingExperienceModeDefaults(cloneSystemSettings(settings), experienceMode, {
         recommendedProvider: easySelectedProvider,
+        providerAuthMode: easyProviderAuthModes[easySelectedProvider] ?? "dashboardAuth",
         useGithub: settings.defaults.cliWorkflow.gitMode !== "local",
         manageGithubPrWorkflow: settings.defaults.git.autoCreatePr,
       });
@@ -1260,7 +1253,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                         <div className="mt-3 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{option.description}</div>
                         {option.value === "EASY" ? (
                           <div className="mt-4 rounded-2xl border border-signal-500/15 bg-signal-500/[0.07] px-3 py-2 text-xs font-semibold leading-relaxed text-signal-800 dark:text-signal-200">
-                            Short flow: provider, GitHub, then Chat.
+                            Short flow: installation, introduction, provider, GitHub, then Chat.
                           </div>
                         ) : null}
                       </button>
@@ -1444,19 +1437,29 @@ export const OnboardingExperience: FunctionComponent = () => {
                         const existingEntry = getSystemProvidersByType(settings, providerId)[0];
                         const providerConfigId = existingEntry?.[0] ?? providerId;
                         const integrationProvider = existingEntry?.[1] ?? createEasyDashboardProviderDraft(providerId, providerConfigId);
+                        const authMode = easyProviderAuthModes[providerId] ?? "dashboardAuth";
                         return (
                           <EasyProviderAuthCard
                             key={providerId}
                             providerConfigId={providerConfigId}
                             provider={integrationProvider}
+                            authMode={authMode}
                             selected={easySelectedProvider === providerId}
                             readinessStatus={readinessByProvider[providerId]}
                             toolStatus={toolStatusByProvider[providerId]}
-                            onSelect={() => configureEasyProviderInstance(providerId, providerConfigId, {})}
-                            onUseReplacement={providerId === "gemini" ? () => {
-                              const antigravityEntry = getSystemProvidersByType(settings, "antigravity")[0];
-                              configureEasyProviderInstance("antigravity", antigravityEntry?.[0] ?? "antigravity", {});
-                            } : undefined}
+                            onSelect={() => configureEasyProviderInstance(
+                              providerId,
+                              providerConfigId,
+                              getEasyAuthUpdates(providerConfigId, providerId, authMode, integrationProvider.authPath),
+                            )}
+                            onAuthModeChange={(nextAuthMode) => {
+                              setEasyProviderAuthModes((current) => ({ ...current, [providerId]: nextAuthMode }));
+                              configureEasyProviderInstance(
+                                providerId,
+                                providerConfigId,
+                                getEasyAuthUpdates(providerConfigId, providerId, nextAuthMode, integrationProvider.authPath),
+                              );
+                            }}
                             onUpdate={(updates) => configureEasyProviderInstance(providerId, providerConfigId, updates)}
                           />
                         );

@@ -114,6 +114,7 @@ function buildMcpNativeOutputInstructions(): string {
     "You have the `manage_code_ux` MCP tool available. Use it directly to perform management actions.",
     "You also have dedicated Code UX management tools when listed by MCP, including `manage_custom_dashboards` for custom dashboard management.",
     "You also have the `scheduler_code_ux` MCP tool available for agent-owned follow-up wakeups.",
+    "You also have `add_long_term_memory`, the dedicated Project manager lane for explicit remember/learn requests and stable project knowledge worth retaining.",
     "",
     "The tool accepts: `{ domain, action, payload }` where:",
     "- **projects**: `list` (projectId), `get` (projectId), `create` (projectId, name, baseDir), `update` (projectId, ...), `select` (projectId), `delete` (projectId)",
@@ -128,6 +129,8 @@ function buildMcpNativeOutputInstructions(): string {
     "",
     "**Important rules:**",
     "- Call the tool directly when the user requests a management action.",
+    "- When the user asks you to remember or learn durable project knowledge, call `add_long_term_memory`; do not merely promise to remember.",
+    "- After `add_long_term_memory` succeeds, re-emit the tool result's exact memory, category, claimId, and memoryId in one `codeux:memory` fenced block so the dashboard renders confirmation. Never invent or alter the returned IDs.",
     "- If the tool returns `approvalRequired: true`, inform the user what action needs approval and ask them to confirm. DO NOT re-call the tool with `approval.confirmed: true` unless the user explicitly confirms.",
     "- Settings mutations are one-use approval gated: the first call always queues the exact action/payload for up to 15 minutes, and only the same action/payload can execute after user confirmation.",
     "- Respond with plain markdown text. Do NOT wrap your response in JSON.",
@@ -177,6 +180,7 @@ export function buildStageWidgetInstructions(): string {
     "- ```codeux:tasks — checklist with progress bar: { \"title\"?: string, \"items\": [{ \"title\": string, \"status\": \"done\"|\"active\"|\"todo\"|\"blocked\", \"meta\"?: string }] }",
     "- ```codeux:sprint — sprint summary card: { \"key\": string, \"name\": string, \"status\": string, \"done\": number, \"total\": number, \"branch\"?: string, \"pr\"?: string }",
     "- ```codeux:metrics — stat tile row: { \"title\"?: string, \"items\": [{ \"label\": string, \"value\": string, \"delta\"?: string, \"tone\"?: \"up\"|\"down\"|\"flat\" }] }",
+    "- ```codeux:memory — durable-memory confirmation: { \"title\"?: string, \"memory\": string, \"category\": string, \"claimId\": string, \"memoryId\"?: string, \"status\": \"stored\" }. Emit this after `add_long_term_memory` succeeds, using only ids and values returned by the tool.",
     "- ```codeux:actions — 2-3 suggested next steps: { \"items\": [{ \"label\": string, \"prompt\": string }] } where `prompt` is the literal message the user would send next.",
     "Mix widgets with short markdown prose. Only put truthful, known data in widgets — never invent numbers.",
     "For status/summary style answers, prefer widgets over long prose and end the reply with one codeux:actions block.",
@@ -325,7 +329,7 @@ export function buildChatContinuationPrompt(
     "If asked about earlier user messages, use only prior dashboard chat entries marked `### User`; ignore provider/system setup text and this wrapper.",
     suppressRichWidgets
       ? "Respond with readable markdown prose only. Do not include dashboard-only `codeux:*` fenced widget blocks."
-      : "Remember: the dashboard renders ```codeux:status / codeux:tasks / codeux:sprint / codeux:metrics / codeux:actions fenced JSON blocks in your reply as rich UI widgets — use them for status, summaries, and next steps.",
+      : "Remember: the dashboard renders ```codeux:status / codeux:tasks / codeux:sprint / codeux:metrics / codeux:memory / codeux:actions fenced JSON blocks in your reply as rich UI widgets — use them for status, summaries, durable-memory confirmations, and next steps.",
     "",
     "### User",
     message.bodyMarkdown.trim(),
@@ -346,11 +350,20 @@ function downgradeWidgetFence(widgetType: string, rawJson: string): string {
       return downgradeSprintWidget(data);
     case "metrics":
       return downgradeMetricsWidget(data);
+    case "memory":
+      return downgradeMemoryWidget(data);
     case "actions":
       return downgradeActionsWidget(data);
     default:
       return "";
   }
+}
+
+function downgradeMemoryWidget(data: Record<string, unknown>): string {
+  const memory = stringValue(data.memory);
+  const category = stringValue(data.category);
+  if (!memory) return "";
+  return `Remembered${category ? ` (${category})` : ""}: ${memory}`;
 }
 
 function parseWidgetJson(rawJson: string): Record<string, unknown> | null {

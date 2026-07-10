@@ -79,6 +79,48 @@ describe("ProviderToolManager", () => {
     expect(manager.getStatus("codex")).toMatchObject({ state: "ready", installedVersion: "1.2.3" });
   });
 
+  it.each([
+    ["claude-code", "@anthropic-ai/claude-code"],
+    ["opencode", "opencode-ai"],
+  ] as const)("allows only the trusted %s package lifecycle scripts", async (provider, packageName) => {
+    const { manager, stream } = await createHarness();
+
+    await manager.prepare(provider, DEFAULT_DASHBOARD_SETTINGS.cliWorkflow);
+
+    const shell = (stream.mock.calls[0]?.[1] as string[]).at(-1) || "";
+    expect(shell).toContain(`--allow-scripts='${packageName}'`);
+    expect(shell).toContain(`'${packageName}@1.2.3'`);
+    expect(shell).not.toContain(`--allow-scripts='${packageName}@1.2.3'`);
+  });
+
+  it.each([
+    ["gemini", "@google/gemini-cli"],
+    ["codex", "@openai/codex"],
+    ["qwen-code", "@qwen-code/qwen-code"],
+  ] as const)("does not grant lifecycle-script permission to %s", async (provider, packageName) => {
+    const { manager, stream } = await createHarness();
+
+    await manager.prepare(provider, DEFAULT_DASHBOARD_SETTINGS.cliWorkflow);
+
+    const shell = (stream.mock.calls[0]?.[1] as string[]).at(-1) || "";
+    expect(shell).toContain(`'${packageName}@1.2.3'`);
+    expect(shell).not.toContain("--allow-scripts=");
+  });
+
+  it("reports the provider package and resolved version when installation fails", async () => {
+    const { manager, stream, run } = await createHarness();
+    stream.mockResolvedValueOnce(fail("postinstall failed for current platform"));
+
+    await expect(manager.prepare("claude-code", DEFAULT_DASHBOARD_SETTINGS.cliWorkflow)).rejects.toThrow(
+      "Unable to install claude-code from @anthropic-ai/claude-code@1.2.3. postinstall failed for current platform",
+    );
+    expect(manager.getStatus("claude-code")).toMatchObject({
+      state: "failed",
+      error: expect.stringContaining("@anthropic-ai/claude-code@1.2.3"),
+    });
+    expect(run).toHaveBeenCalledWith("docker", expect.arrayContaining(["volume", "rm", "-f"]));
+  });
+
   it("deduplicates concurrent preparation requests", async () => {
     const { manager, stream } = await createHarness();
     const [left, right] = await Promise.all([

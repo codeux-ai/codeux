@@ -240,6 +240,23 @@ describe("chat-reply-prompt", () => {
       expect(prompt).not.toContain("manage_code_ux");
     });
 
+    it("instructs the Project manager to persist and visibly confirm durable memory", () => {
+      const prompt = buildChatReplayPrompt({
+        projectId: "p1",
+        repoPath: "/repo",
+        projectName: "Proj",
+        thread,
+        messages: [{ authorType: "dashboard_user", bodyMarkdown: "Remember our service convention" } as any],
+        workerInstructions: "Act as Project manager.",
+        mcpAvailable: true,
+      });
+
+      expect(prompt).toContain("call `add_long_term_memory`; do not merely promise to remember");
+      expect(prompt).toContain("re-emit the tool result's exact memory, category, claimId, and memoryId");
+      expect(prompt).toContain("```codeux:memory");
+      expect(prompt).toContain("Emit this after `add_long_term_memory` succeeds");
+    });
+
     it("omits dashboard widget instructions for chat-provider-sourced replies", () => {
       const prompt = buildChatReplayPrompt({
         projectId: "p1",
@@ -377,6 +394,26 @@ describe("chat-reply-prompt", () => {
       ].join("\n");
 
       expect(stripDashboardOnlyWidgets(markdown)).toContain("Suggested next steps:\n- Start sprint: Start the queued sprint");
+    });
+
+    it("downgrades long-term-memory confirmation to readable prose", () => {
+      const markdown = [
+        "Saved.",
+        "```codeux:memory",
+        JSON.stringify({
+          memory: "Use dependency-aware sprint tasks.",
+          category: "patterns",
+          claimId: "claim-1",
+          memoryId: "memory-1",
+          status: "stored",
+        }),
+        "```",
+      ].join("\n");
+
+      expect(stripDashboardOnlyWidgets(markdown)).toBe([
+        "Saved.",
+        "Remembered (patterns): Use dependency-aware sprint tasks.",
+      ].join("\n"));
     });
   });
 

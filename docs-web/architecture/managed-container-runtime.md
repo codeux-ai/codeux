@@ -24,6 +24,8 @@ Onboarding selection, settings saves, Login, and invocation all join this single
 
 Stable sources are fixed in backend code: npm for Gemini, Codex, Claude Code, Qwen Code, and OpenCode; Antigravity uses its official platform manifest and checksum-verifying installer. Jules and Mockup CLI need no volume.
 
+Current npm releases block unreviewed lifecycle scripts during global installs. Code UX narrowly grants `--allow-scripts` to the fixed `@anthropic-ai/claude-code` and `opencode-ai` catalog entries because their trusted postinstall steps materialize the platform executable. The approval uses the unversioned package identity while the install target remains pinned to the stable registry version. Gemini, Codex, and Qwen Code receive no lifecycle-script exception. Installation runs inside the Linux runtime, so the package selects the matching `linux/amd64` or `linux/arm64` artifact regardless of the host desktop platform.
+
 Credentials stay in isolated credential/runtime mounts. Provider-native auto-updaters are disabled during execution; Code UX stages updates and switches future containers only after verification.
 
 ## Failure And Rollback

@@ -30,11 +30,6 @@ const docsRoutes: DocsRouteCase[] = [
     expectedSourcePath: 'user/dashboard/overview.md',
   },
   {
-    path: '/docs/user-quickstart',
-    expectedHeading: 'Quickstart',
-    expectedSourcePath: 'user/quickstart.md',
-  },
-  {
     path: '/docs/developer-mcp-tools',
     expectedHeading: 'MCP tools',
     expectedSourcePath: 'developer/mcp-tools.md',

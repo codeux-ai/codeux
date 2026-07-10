@@ -416,6 +416,27 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: "add_long_term_memory",
+    runtimeRoles: ["project_manager"],
+    category: "agents_memory",
+    description: "Store one durable project fact, decision, preference, pattern, or learning directly in canonical long-term memory. This is the Project manager's dedicated remember/learn lane: use it when the user asks you to remember something or when stable project knowledge will materially improve future work. The write creates a canonical claim plus its searchable project-memory mirror and returns data for a rich confirmation widget.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        projectId: { type: "string", minLength: 1, description: "Project that owns the durable memory." },
+        memory: { type: "string", minLength: 1, description: "A concise, self-contained durable statement. Record the reusable fact or decision, not the surrounding conversation." },
+        category: { type: "string", enum: ["architecture", "codebase", "context", "preferences", "patterns", "decision", "learning"], description: "Durable knowledge category. Defaults to learning." },
+        confidence: { type: "number", minimum: 0, maximum: 1, description: "Confidence in the statement. Defaults to 0.9." },
+        durability: { type: "number", minimum: 0, maximum: 1, description: "Expected long-term relevance. Defaults to 0.9." },
+        tags: { type: "array", maxItems: 20, items: { type: "string" }, description: "Optional concise retrieval tags." },
+        appliesToPaths: { type: "array", maxItems: 50, items: { type: "string" }, description: "Optional repository paths where this knowledge applies." },
+        sourceMemoryId: { type: "string", description: "Optional short-term memory to link as supporting evidence." },
+      },
+      required: ["projectId", "memory"],
+    },
+  },
+  {
     name: "manage_skills",
     runtimeRoles: ["project_manager"],
     category: "agents_memory",

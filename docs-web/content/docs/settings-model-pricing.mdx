@@ -15,6 +15,8 @@ Use it when you are configuring a new project, auditing inherited settings, or d
 
 Pricing rows define per-model input and output token costs where the dashboard can estimate usage.
 
+Published base prices come from the bundled `assets/models-dev/catalog.json` snapshot. npm and Electron packages both ship that same snapshot, so automatic estimates use identical catalogue rates in server and desktop installs; for example, a recorded `gpt-5.5` invocation resolves to the `openai/gpt-5.5` base price when no override exists.
+
 | Control Surface | Runtime Effect | Review Before Saving |
 | --- | --- | --- |
 | Settings card fields | Updates the active Settings scope after you save the page. | Confirm whether you are editing System or Project scope. |
@@ -34,6 +36,8 @@ A practical review flow is:
 ## Risks And Gotchas
 
 Outdated prices affect estimates only; they do not change provider billing.
+
+If an installed build shows no price for a catalogue model, verify that its package contains `assets/models-dev/catalog.json`. A missing runtime catalogue is a packaging failure, not a zero-price override.
 
 Before applying changes, check:
 

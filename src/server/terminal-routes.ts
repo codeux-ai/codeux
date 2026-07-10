@@ -476,6 +476,8 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
 
       const containerCmd = [
         "set -e",
+        "mkdir -p /tmp/code-ux-login",
+        "cd /tmp/code-ux-login",
         "mkdir -p /tmp/.local/share /tmp/.config",
         "ln -sf /tmp/.credentials /tmp/.gemini",
         "ln -sf /tmp/.credentials /tmp/.codex",
@@ -566,7 +568,7 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         "ln -sf /tmp/.npm-global/bin/xdg-open /tmp/.npm-global/bin/x-www-browser",
         "ln -sf /tmp/.npm-global/bin/xdg-open /tmp/.npm-global/bin/open",
         proxyCmd,
-        `script -q -c "export PATH=${PROVIDER_TOOL_MOUNT}/bin:/tmp/.npm-global/bin:/tmp/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin && export BROWSER=xdg-open && stty cols 80 rows 100 && ${loginCmd}" /dev/null`,
+        `script -q -c "export PATH=${PROVIDER_TOOL_MOUNT}/bin:/tmp/.npm-global/bin:/tmp/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin && export BROWSER=xdg-open && export TERM=xterm-256color && stty cols 100 rows 30 && ${loginCmd}" /dev/null`,
       ].filter(Boolean).join("\n");
 
       const userSpec = getDockerUserSpec();
@@ -582,6 +584,8 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         "--rm",
         "-i",
         ...networkArgs,
+        "--workdir",
+        "/tmp",
         "--name",
         `code-ux-login-${providerId}-${sessionId}`,
         "--label",
@@ -604,6 +608,10 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         "OPENCODE_DISABLE_AUTOUPDATE=true",
         "-e",
         "AGY_CLI_DISABLE_AUTO_UPDATE=true",
+        "-e",
+        "TERM=xterm-256color",
+        "-e",
+        "COLORTERM=truecolor",
         "--user",
         userSpec,
         "-v",

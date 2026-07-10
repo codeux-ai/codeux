@@ -1,5 +1,6 @@
 import type { FunctionComponent } from "preact";
 import { useRef, useState } from "preact/hooks";
+import { Link } from "@tanstack/react-router";
 import gsap from "gsap";
 import {
   Activity,
@@ -82,13 +83,6 @@ const formatSprintKey = (sprint: Sprint, prefix: string = "SPR"): string => (
 );
 
 const formatCardDate = (value: string): string => CARD_DATE_FORMATTER.format(new Date(value));
-const buildSprintRouteHref = (path: "/tasks" | "/live", sprint: Sprint): string => {
-  const params = new URLSearchParams();
-  params.set("projectId", sprint.projectId);
-  params.set("sprintId", sprint.id);
-  return `${path}?${params.toString()}`;
-};
-
 const BUBBLE_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
   hour: "2-digit",
   minute: "2-digit",
@@ -214,8 +208,8 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   const primaryAriaLabel = primaryBusy
     ? `${primaryActionLabel} sprint ${sprint.name} is pending`
     : `${primaryActionLabel} sprint ${sprint.name}`;
-  const tasksHref = buildSprintRouteHref("/tasks", sprint);
-  const liveHref = buildSprintRouteHref("/live", sprint);
+  const routeSearch = { projectId: sprint.projectId, sprintId: sprint.id } as any;
+  const tasksHref = `/tasks?${new URLSearchParams(routeSearch).toString()}`;
 
   return (
     <div
@@ -369,8 +363,9 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
                 ? <Square className="h-3.5 w-3.5" fill="currentColor" />
                 : <Play className="h-3.5 w-3.5" fill="currentColor" />}
           </button>
-          <a
-            href={tasksHref}
+          <Link
+            to="/tasks"
+            search={routeSearch}
             onClick={(event: MouseEvent) => event.stopPropagation()}
             aria-label={`Open tasks for sprint ${sprint.name}`}
             className="touch-target inline-flex h-9 items-center gap-1.5 rounded-full bg-slate-900 px-4 text-[10px] font-bold uppercase tracking-[0.14em] text-white shadow-[0_4px_12px_rgba(0,0,0,0.15)] transition-all hover:opacity-85 dark:bg-white dark:text-void-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
@@ -378,9 +373,10 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
           >
             Tasks
             <Maximize2 className="h-2.5 w-2.5" />
-          </a>
-          <a
-            href={liveHref}
+          </Link>
+          <Link
+            to="/live"
+            search={routeSearch}
             onClick={(event: MouseEvent) => event.stopPropagation()}
             aria-label={`Open live session for sprint ${sprint.name}`}
             className="touch-target inline-flex h-9 items-center gap-1.5 rounded-full border border-signal-500/25 bg-signal-500/[0.12] px-4 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-700 shadow-[0_4px_12px_rgba(0,224,160,0.12)] transition-all hover:bg-signal-500/[0.18] dark:text-signal-300 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
@@ -388,7 +384,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
           >
             Live
             <Maximize2 className="h-2.5 w-2.5" />
-          </a>
+          </Link>
           <DropdownMenu
             isOpen={menuOpen}
             onOpenChange={setMenuOpen}

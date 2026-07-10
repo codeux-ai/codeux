@@ -1,4 +1,5 @@
 import type { ManageCodeUxArgs, ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
+import type { AddLongTermMemoryArgs } from "../../contracts/internal-management-types.js";
 import type { MemoryService } from "../../services/memory-service.js";
 import type { MemoryPromotionService } from "../../services/memory-promotion-service.js";
 import type { EmbeddingModelManager } from "../../services/embedding-model-manager.js";
@@ -73,6 +74,45 @@ export class MemoryActions {
       default:
         throw new Error(`Unknown memory action: ${args.action}`);
     }
+  }
+
+  async addLongTermMemory(args: AddLongTermMemoryArgs): Promise<ManagementResponseEnvelope> {
+    const projectId = parseRequiredString(args as unknown as Record<string, unknown>, "projectId");
+    const memory = parseRequiredString(args as unknown as Record<string, unknown>, "memory");
+    const category = parseOptionalEnumStrict<MemoryCategory>(
+      args as unknown as Record<string, unknown>,
+      "category",
+      MEMORY_CATEGORIES.filter((candidate) => candidate !== "error"),
+    ) ?? "learning";
+    const sourceMemoryId = parseOptionalString(args as unknown as Record<string, unknown>, "sourceMemoryId");
+
+    const result = await this.memoryService.createProjectMemoryClaim(projectId, {
+      claim: memory,
+      category,
+      confidence: parseOptionalClaimScore(args as unknown as Record<string, unknown>, "confidence") ?? 0.9,
+      durability: parseOptionalClaimScore(args as unknown as Record<string, unknown>, "durability") ?? 0.9,
+      tags: parseOptionalStringArray(args as unknown as Record<string, unknown>, "tags"),
+      appliesToPaths: parseOptionalStringArray(args as unknown as Record<string, unknown>, "appliesToPaths"),
+      sourceType: "manual",
+      sourceMemoryId,
+    }, sourceMemoryId ? { memoryId: sourceMemoryId, supportType: "supports", weight: 1 } : undefined);
+
+    return {
+      result: {
+        ...result,
+        richWidget: {
+          type: "memory",
+          data: {
+            title: "Added to long-term memory",
+            memory,
+            category,
+            claimId: result.claim.id,
+            memoryId: result.mirrorMemory.id,
+            status: "stored",
+          },
+        },
+      },
+    };
   }
 
   private async searchMemories(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {

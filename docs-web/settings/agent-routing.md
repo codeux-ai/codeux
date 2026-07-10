@@ -25,6 +25,8 @@ Coding can be manual or orchestrator-selected; each route can use a project pres
 
 Use built-ins first, then assign specialists where project-specific instructions materially improve outcomes.
 
+The dashboard reply fallback is **Project manager**. New and imported projects pin that fallback at project scope so the primary user conversation does not inherit an unrelated Worker route. Select another preset only when that agent is intentionally responsible for the project's user-facing conversation.
+
 A practical review flow is:
 
 1. Start from the inherited default and change only the fields that solve a concrete operational problem.
