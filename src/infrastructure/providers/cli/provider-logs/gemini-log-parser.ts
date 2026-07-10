@@ -1,5 +1,11 @@
 import type { ParsedConversationTurn, ParsedProviderLogResult } from "./provider-conversation-types.js";
-import { normalizeUsageCounts, parseJsonObject, toNumber } from "./usage-parse-utils.js";
+import {
+  extractJsonContainer,
+  normalizeUsageCounts,
+  parseJsonObject,
+  parseTimestampMs,
+  toNumber,
+} from "./usage-parse-utils.js";
 
 export interface GeminiUsageTotals {
   inputTokens: number;
@@ -44,6 +50,79 @@ function firstString(...values: unknown[]): string | undefined {
     }
   }
   return undefined;
+}
+
+function firstDefined(...values: unknown[]): unknown {
+  return values.find((value) => value !== undefined && value !== null);
+}
+
+function timestampFrom(...records: Array<Record<string, unknown> | null>): number | null {
+  for (const record of records) {
+    if (!record) continue;
+    const timestampMs = parseTimestampMs(firstDefined(
+      record.timestampMs,
+      record.timestamp_ms,
+      record.timestamp,
+      record.createdAt,
+      record.created_at,
+      record.time,
+    ));
+    if (timestampMs !== null) return timestampMs;
+  }
+  return null;
+}
+
+function hasOwn(record: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
+function firstReportedNumber(record: Record<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    if (hasOwn(record, key)) return toNumber(record[key]);
+  }
+  return undefined;
+}
+
+function geminiTurnTokens(value: unknown): ParsedConversationTurn["tokens"] {
+  const record = asRecord(value);
+  if (!record) return undefined;
+  const input = firstReportedNumber(record, ["input", "inputTokens", "input_tokens", "promptTokenCount", "prompt_tokens"]);
+  const cached = firstReportedNumber(record, ["cached", "cachedInputTokens", "cached_input_tokens", "cachedContentTokenCount"]);
+  const output = firstReportedNumber(record, ["output", "outputTokens", "output_tokens", "candidates", "candidatesTokenCount"]);
+  const reasoning = firstReportedNumber(record, ["reasoning", "reasoningOutputTokens", "reasoning_output_tokens", "thoughts", "thoughtsTokenCount"]);
+  const total = firstReportedNumber(record, ["total", "totalTokens", "total_tokens", "totalTokenCount"]);
+  if (input === undefined && cached === undefined && output === undefined && reasoning === undefined && total === undefined) {
+    return undefined;
+  }
+  return {
+    ...(input !== undefined ? { input } : {}),
+    ...(cached !== undefined ? { cached } : {}),
+    ...(output !== undefined ? { output } : {}),
+    ...(reasoning !== undefined ? { reasoning } : {}),
+    ...(total !== undefined ? { total } : {}),
+  };
+}
+
+function tokensFrom(...records: Array<Record<string, unknown> | null>): ParsedConversationTurn["tokens"] {
+  for (const record of records) {
+    if (!record) continue;
+    const tokens = geminiTurnTokens(record.tokens)
+      ?? geminiTurnTokens(record.usageMetadata)
+      ?? geminiTurnTokens(record.usage_metadata)
+      ?? geminiTurnTokens(record.usage);
+    if (tokens) return tokens;
+  }
+  return undefined;
+}
+
+function turnEvidence(
+  tokens: ParsedConversationTurn["tokens"],
+  timestampMs: number | null,
+): Pick<ParsedConversationTurn, "tokens" | "timestampMs"> {
+  return {
+    ...(tokens ? { tokens } : {}),
+    ...(timestampMs !== null ? { timestampMs } : {}),
+  };
 }
 
 function flattenGeminiText(value: unknown): string {
@@ -103,7 +182,14 @@ function geminiPartReasoningText(part: Record<string, unknown>): string {
 
 function geminiPartAssistantText(part: Record<string, unknown>): string {
   const partType = typeof part.type === "string" ? part.type : null;
-  if (part.functionCall || part.function_call || part.toolCall || part.tool_call || part.functionResponse || part.function_response) {
+  if (
+    asRecord(part.functionCall)
+    || asRecord(part.function_call)
+    || asRecord(part.toolCall)
+    || asRecord(part.tool_call)
+    || asRecord(part.functionResponse)
+    || asRecord(part.function_response)
+  ) {
     return "";
   }
   if (partType === "function_call" || partType === "tool_call" || partType === "function_response" || partType === "tool_result") {
@@ -136,7 +222,10 @@ function functionResponseRecord(part: Record<string, unknown>): Record<string, u
   return partType === "function_response" || partType === "tool_result" ? part : null;
 }
 
-function toolCallTurn(part: Record<string, unknown>): ParsedConversationTurn | null {
+function toolCallTurn(
+  part: Record<string, unknown>,
+  context: Record<string, unknown>[],
+): ParsedConversationTurn | null {
   const call = functionCallRecord(part);
   if (!call) {
     return null;
@@ -154,10 +243,15 @@ function toolCallTurn(part: Record<string, unknown>): ParsedConversationTurn | n
     toolName: firstString(call.name, call.toolName, call.tool, part.name, part.toolName, part.tool),
     toolCallId: firstString(call.id, call.call_id, call.callId, call.tool_call_id, part.id, part.call_id, part.callId, part.tool_call_id),
     toolArguments,
+    toolStatus: firstString(call.status, part.status),
+    ...turnEvidence(tokensFrom(part, call), timestampFrom(part, call, ...context)),
   };
 }
 
-function toolResultTurn(part: Record<string, unknown>): ParsedConversationTurn | null {
+function toolResultTurn(
+  part: Record<string, unknown>,
+  context: Record<string, unknown>[],
+): ParsedConversationTurn | null {
   const response = functionResponseRecord(part);
   if (!response) {
     return null;
@@ -170,6 +264,7 @@ function toolResultTurn(part: Record<string, unknown>): ParsedConversationTurn |
     toolCallId: firstString(response.id, response.call_id, response.callId, response.tool_call_id, part.id, part.call_id, part.callId, part.tool_call_id),
     toolOutput: outputValue !== undefined ? stringify(outputValue) : undefined,
     toolStatus: firstString(response.status, part.status),
+    ...turnEvidence(tokensFrom(part, response), timestampFrom(part, response, ...context)),
   };
 }
 
@@ -188,15 +283,28 @@ function partsFromCandidate(candidate: unknown): unknown[] {
   return [];
 }
 
-function parseGeminiParts(parts: unknown[]): ParsedConversationTurn[] {
+function parseGeminiParts(
+  parts: unknown[],
+  role: unknown,
+  context: Record<string, unknown>[],
+): ParsedConversationTurn[] {
   const conversation: ParsedConversationTurn[] = [];
-  const assistantParts: string[] = [];
+  const textKind = role === "user" ? "user" : "assistant";
+  let textParts: string[] = [];
+  let textTimestampMs: number | null = null;
+  let textTokens: ParsedConversationTurn["tokens"];
   const flushAssistant = (): void => {
-    const text = assistantParts.join("").trim();
-    assistantParts.length = 0;
+    const text = textParts.join("").trim();
+    textParts = [];
     if (text) {
-      conversation.push({ kind: "assistant", text });
+      conversation.push({
+        kind: textKind,
+        text,
+        ...turnEvidence(textTokens, textTimestampMs),
+      });
     }
+    textTimestampMs = null;
+    textTokens = undefined;
   };
 
   for (const part of parts) {
@@ -208,18 +316,22 @@ function parseGeminiParts(parts: unknown[]): ParsedConversationTurn[] {
     const reasoningText = geminiPartReasoningText(rec);
     if (geminiPartIsReasoning(rec) && reasoningText) {
       flushAssistant();
-      conversation.push({ kind: "reasoning", text: reasoningText });
+      conversation.push({
+        kind: "reasoning",
+        text: reasoningText,
+        ...turnEvidence(tokensFrom(rec), timestampFrom(rec, ...context)),
+      });
       continue;
     }
 
-    const callTurn = toolCallTurn(rec);
+    const callTurn = toolCallTurn(rec, context);
     if (callTurn) {
       flushAssistant();
       conversation.push(callTurn);
       continue;
     }
 
-    const resultTurn = toolResultTurn(rec);
+    const resultTurn = toolResultTurn(rec, context);
     if (resultTurn) {
       flushAssistant();
       conversation.push(resultTurn);
@@ -228,11 +340,32 @@ function parseGeminiParts(parts: unknown[]): ParsedConversationTurn[] {
 
     const assistantText = geminiPartAssistantText(rec);
     if (assistantText) {
-      assistantParts.push(assistantText);
+      const partTimestampMs = timestampFrom(rec, ...context);
+      const partTokens = tokensFrom(rec);
+      if (textParts.length > 0 && (partTimestampMs !== textTimestampMs || partTokens !== undefined)) {
+        flushAssistant();
+      }
+      textTimestampMs = partTimestampMs;
+      textTokens = partTokens;
+      textParts.push(assistantText);
     }
   }
 
   flushAssistant();
+  const contextualTokens = tokensFrom(...context);
+  if (contextualTokens) {
+    let preferredIndex = -1;
+    for (let index = conversation.length - 1; index >= 0; index -= 1) {
+      if (conversation[index]?.kind === textKind) {
+        preferredIndex = index;
+        break;
+      }
+    }
+    const index = preferredIndex >= 0 ? preferredIndex : conversation.length - 1;
+    if (index >= 0 && !conversation[index]?.tokens) {
+      conversation[index] = { ...conversation[index], tokens: contextualTokens };
+    }
+  }
   return conversation;
 }
 
@@ -240,14 +373,14 @@ function responseRecord(parsed: Record<string, unknown>): Record<string, unknown
   return asRecord(parsed.response);
 }
 
-function candidateParts(parsed: Record<string, unknown>): unknown[][] {
-  const response = responseRecord(parsed);
-  const candidates = Array.isArray(response?.candidates)
-    ? response.candidates
-    : Array.isArray(parsed.candidates)
-      ? parsed.candidates
+function contentEntries(parsed: Record<string, unknown>): Record<string, unknown>[] {
+  const request = asRecord(parsed.request);
+  const values = Array.isArray(request?.contents)
+    ? request.contents
+    : Array.isArray(parsed.contents)
+      ? parsed.contents
       : [];
-  return candidates.map(partsFromCandidate).filter((parts) => parts.length > 0);
+  return values.map(asRecord).filter((value): value is Record<string, unknown> => value !== null);
 }
 
 function fallbackResponseParts(parsed: Record<string, unknown>): unknown[] {
@@ -258,8 +391,30 @@ function fallbackResponseParts(parsed: Record<string, unknown>): unknown[] {
 
 export function parseGeminiConversation(parsed: Record<string, unknown>): ParsedConversationTurn[] {
   const conversation: ParsedConversationTurn[] = [];
-  for (const parts of candidateParts(parsed)) {
-    conversation.push(...parseGeminiParts(parts));
+  for (const content of contentEntries(parsed)) {
+    if (Array.isArray(content.parts)) {
+      conversation.push(...parseGeminiParts(content.parts, content.role, [content]));
+    }
+  }
+
+  const response = responseRecord(parsed);
+  const candidates = Array.isArray(response?.candidates)
+    ? response.candidates
+    : Array.isArray(parsed.candidates)
+      ? parsed.candidates
+      : [];
+  for (const candidate of candidates) {
+    const candidateRecord = asRecord(candidate);
+    if (!candidateRecord) continue;
+    const content = asRecord(candidateRecord.content);
+    const parts = partsFromCandidate(candidateRecord);
+    if (parts.length > 0) {
+      conversation.push(...parseGeminiParts(
+        parts,
+        content?.role ?? candidateRecord.role ?? "assistant",
+        [content, candidateRecord, response, parsed].filter((record): record is Record<string, unknown> => record !== null),
+      ));
+    }
   }
 
   if (conversation.length > 0) {
@@ -267,7 +422,9 @@ export function parseGeminiConversation(parsed: Record<string, unknown>): Parsed
   }
 
   const fallbackParts = fallbackResponseParts(parsed);
-  return fallbackParts.length > 0 ? parseGeminiParts(fallbackParts) : [];
+  return fallbackParts.length > 0
+    ? parseGeminiParts(fallbackParts, asRecord(response?.content)?.role ?? "assistant", [response, parsed].filter((record): record is Record<string, unknown> => record !== null))
+    : [];
 }
 
 export function parseGeminiTokens(stats: Record<string, unknown> | null): GeminiUsageTotals | null {
@@ -295,6 +452,22 @@ export function parseGeminiTokens(stats: Record<string, unknown> | null): Gemini
         reasoningOutputTokens,
         totalTokens,
       };
+    }
+  }
+
+  const usageMetadata = asRecord(stats.usageMetadata)
+    ?? asRecord(stats.usage_metadata)
+    ?? (hasOwn(stats, "promptTokenCount") || hasOwn(stats, "totalTokenCount") ? stats : null);
+  if (usageMetadata) {
+    const promptTokens = toNumber(usageMetadata.promptTokenCount ?? usageMetadata.inputTokens ?? usageMetadata.input_tokens);
+    const cachedInputTokens = toNumber(usageMetadata.cachedContentTokenCount ?? usageMetadata.cachedInputTokens ?? usageMetadata.cached_input_tokens);
+    const inputTokens = Math.max(0, promptTokens - cachedInputTokens);
+    const outputTokens = toNumber(usageMetadata.candidatesTokenCount ?? usageMetadata.outputTokens ?? usageMetadata.output_tokens);
+    const reasoningOutputTokens = toNumber(usageMetadata.thoughtsTokenCount ?? usageMetadata.reasoningOutputTokens ?? usageMetadata.reasoning_output_tokens);
+    const reportedTotal = toNumber(usageMetadata.totalTokenCount ?? usageMetadata.totalTokens ?? usageMetadata.total_tokens);
+    const totalTokens = Math.max(reportedTotal, inputTokens + cachedInputTokens + outputTokens + reasoningOutputTokens);
+    if (totalTokens > 0) {
+      return { inputTokens, cachedInputTokens, outputTokens, reasoningOutputTokens, totalTokens };
     }
   }
 
@@ -353,20 +526,59 @@ function geminiTranscriptText(parsed: Record<string, unknown>, conversation: Par
   return flattenGeminiText(response?.content).trim();
 }
 
+function isGeminiLogRecord(value: Record<string, unknown>): boolean {
+  return typeof value.response === "string"
+    || asRecord(value.response) !== null
+    || Array.isArray(value.candidates)
+    || asRecord(value.stats) !== null
+    || asRecord(value.usageMetadata) !== null
+    || asRecord(value.usage_metadata) !== null;
+}
+
+function parseGeminiStdoutRecord(stdout: string): Record<string, unknown> | null {
+  const direct = parseJsonObject(stdout);
+  if (direct) {
+    return isGeminiLogRecord(direct) ? direct : null;
+  }
+
+  let offset = 0;
+  while (offset < stdout.length) {
+    const extracted = extractJsonContainer<Record<string, unknown>>(stdout.slice(offset), "object");
+    if (!extracted.ok) return null;
+    if (isGeminiLogRecord(extracted.value)) return extracted.value;
+    offset += extracted.endIndex;
+  }
+  return null;
+}
+
 export function parseGeminiLog(stdout: string): GeminiLogResult {
-  const parsed = parseJsonObject(stdout);
+  const parsed = parseGeminiStdoutRecord(stdout);
   if (!parsed) {
     return emptyGeminiLogResult();
   }
 
-  const stats = asRecord(parsed.stats);
-  const usage = parseGeminiTokens(stats);
+  const response = responseRecord(parsed);
+  const usageCandidates = [
+    asRecord(parsed.stats),
+    asRecord(parsed.usageMetadata) || asRecord(parsed.usage_metadata) ? parsed : null,
+    asRecord(response?.usageMetadata) || asRecord(response?.usage_metadata) ? response : null,
+  ];
+  let usageRecord: Record<string, unknown> | null = null;
+  let usage: GeminiUsageTotals | null = null;
+  for (const candidate of usageCandidates) {
+    const parsedUsage = parseGeminiTokens(candidate);
+    if (parsedUsage) {
+      usageRecord = candidate;
+      usage = parsedUsage;
+      break;
+    }
+  }
   const conversation = parseGeminiConversation(parsed);
   const nativeSessionId = firstString(parsed.session_id, parsed.sessionId, parsed.nativeSessionId) ?? null;
 
   return {
     usage,
-    rawUsageJson: usage ? stats : null,
+    rawUsageJson: usage ? usageRecord : null,
     nativeSessionId,
     transcriptText: geminiTranscriptText(parsed, conversation),
     conversation,

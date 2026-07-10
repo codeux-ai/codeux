@@ -242,10 +242,17 @@ export function subtractUsageCounts(final: ParsedUsageCounts, baseline: ParsedUs
   };
 }
 
-/** Parses an ISO timestamp string into epoch ms, or null when absent/invalid. */
+/** Parses an ISO timestamp or numeric epoch seconds/milliseconds into epoch ms. */
 export function parseTimestampMs(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value < 1_000_000_000_000 ? Math.round(value * 1000) : Math.round(value);
+  }
   if (typeof value !== "string" || value.trim().length === 0) {
     return null;
+  }
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) {
+    return numeric < 1_000_000_000_000 ? Math.round(numeric * 1000) : Math.round(numeric);
   }
   const ms = Date.parse(value);
   return Number.isFinite(ms) ? ms : null;

@@ -28,6 +28,8 @@ The normalized turn kinds are:
 
 Readable reasoning must be evidence-based. Parsers emit `reasoning` only from explicit provider reasoning/thinking/summary fields. Plain assistant output, encrypted reasoning blobs, and token-only reasoning counts remain assistant text or token telemetry; Code UX does not fabricate reasoning transcript turns.
 
+Gemini accepts both clean JSON stdout and a balanced response object surrounded by startup or cleanup text. Its parser normalizes Gemini CLI stats and standard `usageMetadata`, and preserves request/candidate roles, timestamps, per-turn token evidence, tool metadata, and statuses when those fields are present. Missing usage remains unavailable so the collector can estimate safely; plain response strings remain text-only and never become inferred reasoning.
+
 ## Persistence behavior
 
 `ProviderExecutionService` rewrites invocation messages from structured `ProviderUsageTelemetry.conversation` turns while the provider is running. It clears and rewrites only when structured turns exist, using the JSON representation of mapped persisted messages as the duplicate-skip signature. That means normalized metadata such as `toolName`, `toolCallId`, `toolArguments`, `toolOutput`, `toolStatus`, per-turn `tokens`, and `timestampMs` must be preserved by parser changes.
