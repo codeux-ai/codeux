@@ -21,6 +21,14 @@ Site URL, account email, API token, project key, transition names, and move/clos
 | Inherited values | Values can flow from system defaults into project and sprint behavior. | Check the source badge before assuming a value is project-specific. |
 | Related runtime paths | The affected service reads the saved settings during planning, dispatch, dashboard rendering, or maintenance work. | Re-run the affected workflow after changing operational settings. |
 
+## Import Behavior
+
+Jira issue imports use the saved site URL, account email, API token, and default project key when operators search from the dashboard or call MCP `manage_sprints import_issues`. Guided Jira searches, assigned-work searches, and explicit issue-key imports all attach the selected issue descriptions to the sprint as linked issue context. When conversation import is enabled, Jira comments are appended to the imported description.
+
+Search result cards show concise description previews, but selected Jira issues contribute the full description markdown to planner scope. Imported linked issue context is stored with the sprint issue record, so reloads, prompt edits, and replanning keep the Jira description available to planning without requiring the original search results to be present again.
+
+The import transition controls only the optional move that happens after a Jira issue is imported as linked sprint scope. It is separate from the sprint-completion close transition and from the importer's `Hide in Work` visibility filter. Code UX does not write comments or otherwise mutate Jira issues during import beyond the configured import transition.
+
 ## Recommended Configuration
 
 Use a dedicated API token and test transition names against the target Jira workflow.
