@@ -15,7 +15,9 @@ expect.extend(matchers);
 
 vi.mock("../../../dashboard/src/v2/lib/agent-preset-api.js", () => ({
   fetchSkillStorages: vi.fn(),
+  fetchSkillStorageContents: vi.fn(),
   createSkillStorage: vi.fn(),
+  updateSkillStorage: vi.fn(),
   deleteSkillStorage: vi.fn(),
   updateAgentPreset: vi.fn(),
 }));
@@ -122,6 +124,12 @@ describe("SettingsAgentsPanel persistent skills and self-reflection", () => {
     await waitFor(() => {
       expect(screen.getAllByText("Shared Skills").length).toBeGreaterThan(0);
     });
+    expect(screen.getByRole("button", { name: "Manage storages" })).toHaveAttribute("aria-haspopup", "dialog");
+    expect(screen.getByText("Default off")).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Enable persistent skills for Settings Agent" })).toBeDisabled();
+    expect(screen.getByRole("switch", { name: "Enable persistent skills for Settings Agent" })).toHaveAccessibleDescription(
+      "Attach at least one storage before enabling persistent skills.",
+    );
 
     fireEvent.click(screen.getByLabelText("Shared Skills"));
     await waitFor(() => {
@@ -130,6 +138,7 @@ describe("SettingsAgentsPanel persistent skills and self-reflection", () => {
         persistentSkillStorage: { enabled: false },
       });
     });
+    expect(screen.getByRole("switch", { name: "Enable persistent skills for Settings Agent" })).toBeEnabled();
 
     fireEvent.click(screen.getByRole("switch", { name: "Enable persistent skills for Settings Agent" }));
     await waitFor(() => {
@@ -138,6 +147,7 @@ describe("SettingsAgentsPanel persistent skills and self-reflection", () => {
         persistentSkillStorage: { enabled: true },
       });
     });
+    expect(screen.getByText("Enabled")).toBeInTheDocument();
 
     fireEvent.input(screen.getByDisplayValue("Planning contract"), {
       target: { value: "Planning contract improved" },

@@ -51,6 +51,10 @@ describe("SettingsAgentsPanel", () => {
     expect(screen.queryByText("Quality Assurance")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Task completion QA agent preset" })).not.toBeInTheDocument();
     expect(screen.getByText("Agent Routing")).toBeInTheDocument();
+    expect(screen.getByText("Project Markdown Mirror")).toBeInTheDocument();
+    expect(screen.getByText("Persistent Skill Storage")).toBeInTheDocument();
+    expect(screen.getByText("Self-Reflection")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Manage storages" })).toHaveAttribute("aria-haspopup", "dialog");
     expect(screen.queryByText("Instruction Templates")).not.toBeInTheDocument();
     expect(screen.queryByText("Agent sync behavior")).not.toBeInTheDocument();
     expect(screen.queryByText("Quality assurance behavior")).not.toBeInTheDocument();
@@ -140,6 +144,9 @@ describe("SettingsAgentsPanel", () => {
     const planningSelect = screen.getByRole("button", { name: "Planning agent preset" });
     expect(planningSelect).toBeDisabled();
     expect(planningSelect).toHaveAccessibleDescription("Select a project to choose custom project agents. Built-in routing remains available.");
+    expect(screen.getByText("Project only")).toBeInTheDocument();
+    expect(screen.getByText("Project storage unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Select a project to attach persistent skill storage to project agents.")).toBeInTheDocument();
   });
 
   it("renders QA trigger selectors with accessible names and preserves project-scope updates", async () => {
