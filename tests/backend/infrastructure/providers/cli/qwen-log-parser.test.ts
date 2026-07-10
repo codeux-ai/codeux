@@ -39,6 +39,19 @@ describe("qwen-code OpenAI log parser", () => {
     });
   });
 
+  it("deduplicates repeated body-wrapped response ids", () => {
+    const record = {
+      response: { body: { id: "body_dup", usage: { input_tokens: 9, output_tokens: 3 } } },
+    };
+
+    expect(sumQwenOpenAiUsage([record, record])).toEqual({
+      inputTokens: 9,
+      cachedInputTokens: 0,
+      outputTokens: 3,
+      reasoningOutputTokens: 0,
+    });
+  });
+
   it("returns an empty conversation for empty or malformed record lists", () => {
     expect(buildQwenConversation([])).toEqual([]);
     expect(buildQwenConversation([{ response: { usage: { prompt_tokens: 10, completion_tokens: 2 } } }])).toEqual([]);
@@ -265,6 +278,63 @@ describe("qwen-code OpenAI log parser", () => {
     });
   });
 
+  it("maps Anthropic-shaped messages, reasoning, tools, and wrapped usage", () => {
+    const records = [{
+      request: {
+        body: {
+          messages: [{
+            role: "user",
+            content: [
+              { type: "text", text: "Inspect it." },
+              { type: "tool_result", tool_use_id: "tool_old", content: [{ type: "text", text: "old output" }] },
+            ],
+          }],
+        },
+      },
+      response: {
+        body: {
+          id: "anthropic_response",
+          role: "assistant",
+          usage: {
+            input_tokens: 20,
+            output_tokens: 6,
+            cache_read_input_tokens: 5,
+            cache_creation_input_tokens: 2,
+          },
+          content: [
+            { type: "thinking", thinking: "Need a file read." },
+            { type: "redacted_thinking", data: "opaque" },
+            { type: "tool_use", id: "tool_new", name: "read_file", input: { path: "a.ts" } },
+            { type: "text", text: "Inspected." },
+          ],
+        },
+      },
+    }];
+
+    expect(sumQwenOpenAiUsage(records)).toEqual({
+      inputTokens: 20,
+      cachedInputTokens: 7,
+      outputTokens: 6,
+      reasoningOutputTokens: 0,
+    });
+    const conversation = buildQwenConversation(records);
+    expect(conversation.map((turn) => turn.kind)).toEqual([
+      "user",
+      "tool_result",
+      "reasoning",
+      "tool_call",
+      "assistant",
+    ]);
+    expect(conversation[1]).toMatchObject({ toolCallId: "tool_old", toolOutput: "old output" });
+    expect(conversation[3]).toMatchObject({
+      toolCallId: "tool_new",
+      toolName: "read_file",
+      toolArguments: "{\"path\":\"a.ts\"}",
+      tokens: { input: 20, cached: 7, output: 6, reasoning: 0 },
+    });
+    expect(JSON.stringify(conversation)).not.toContain("opaque");
+  });
+
   it("filters usage and conversation records outside the invocation window", () => {
     const records = [
       {
@@ -295,6 +365,47 @@ describe("qwen-code OpenAI log parser", () => {
       reasoningOutputTokens: 0,
     });
     expect(buildQwenConversation(records, sinceMs).map((turn) => turn.text)).toEqual(["New prompt", "New answer"]);
+  });
+
+  it("excludes proven pre-start records but keeps valid untimestamped records", () => {
+    const sinceMs = Date.parse("2026-07-03T00:01:00.000Z");
+    const records = [
+      {
+        timestamp: "2026-07-03T00:00:59.999Z",
+        request: { messages: [{ role: "user", content: "Too old" }] },
+        response: { id: "old", usage: { prompt_tokens: 99 }, message: { role: "assistant", content: "Old" } },
+      },
+      {
+        request: { messages: [{ role: "user", content: "Untimestamped prompt" }] },
+        response: { id: "current", usage: { prompt_tokens: 4, completion_tokens: 1 }, message: { role: "assistant", content: "Current" } },
+      },
+    ];
+
+    expect(sumQwenOpenAiUsage(records, sinceMs)).toEqual({
+      inputTokens: 4,
+      cachedInputTokens: 0,
+      outputTokens: 1,
+      reasoningOutputTokens: 0,
+    });
+    expect(buildQwenConversation(records, sinceMs).map((turn) => turn.text)).toEqual([
+      "Untimestamped prompt",
+      "Current",
+    ]);
+  });
+
+  it("keeps only the final update for a repeated response id", () => {
+    const records = [
+      {
+        request: { messages: [{ role: "user", content: "Question" }] },
+        response: { id: "updated", choices: [{ message: { role: "assistant", content: "Part" } }] },
+      },
+      {
+        request: { messages: [{ role: "user", content: "Question" }] },
+        response: { id: "updated", choices: [{ message: { role: "assistant", content: "Complete" } }] },
+      },
+    ];
+
+    expect(buildQwenConversation(records).map((turn) => turn.text)).toEqual(["Question", "Complete"]);
   });
 
   it("maps standalone OpenAI function call and result messages into tool turns", () => {
