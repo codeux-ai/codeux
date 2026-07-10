@@ -14,6 +14,7 @@ Use it when you are configuring a new project, auditing inherited settings, or d
 ## Controls And Runtime Effect
 
 Coding can be manual or orchestrator-selected; each route can use a project preset or built-in fallback.
+When `agents.routing.dashboardReply.agentPresetId` is unset (`null`), dashboard chat replies use the built-in `Project manager` preset. A valid selected preset overrides that default.
 
 | Control Surface | Runtime Effect | Review Before Saving |
 | --- | --- | --- |

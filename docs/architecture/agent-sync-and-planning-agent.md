@@ -35,6 +35,7 @@ These agents are used as follows:
   - provide the editable reply prompt for connected worker/listener inbox responses
 - `Project manager`
   - provide the editable instruction source for worker-routed clarification auto-answer
+  - answer dashboard chat when no dashboard-reply routing preset is selected
 - `Quality assurance agent`
   - review completed tasks and sprint completion with full sprint context
   - continue existing Jules or CLI task sessions with concrete fix instructions when QA requests changes

@@ -368,7 +368,7 @@ export const SettingsAgentsPanel: FunctionComponent<{ state: SettingsPageState }
                   : []),
                 ["ciFix", "CI fix", "Used for automated CI repair loops.", "Built-in Worker agent"],
                 ["mergeConflict", "Merge conflict", "Used for automated conflict resolution.", "Built-in Worker agent"],
-                ["dashboardReply", "Dashboard reply", "Used for generated dashboard chat replies.", "Built-in Worker agent"],
+                ["dashboardReply", "Dashboard reply", "Used for generated dashboard chat replies.", "Built-in Project manager agent"],
                 ["clarificationReply", "Clarification reply", "Used for automatic worker clarification replies.", "Built-in Project manager agent"],
               ] as const).map(([key, label, description, builtInLabel]) => (
                 <div

@@ -39,7 +39,7 @@ describe("WorkerInboxReplyService", () => {
     vi.mocked(syncRemoteBranchIfAvailable).mockResolvedValue(true);
   });
 
-  it("generates a markdown reply with worker agent context", async () => {
+  it("uses the Project manager fallback for dashboard replies", async () => {
     mockRunProviderForText.mockResolvedValue({ text: "Current status: one task is running." });
 
     const service = new WorkerInboxReplyService({
@@ -98,6 +98,8 @@ describe("WorkerInboxReplyService", () => {
       contentMarkdown: "Current status: one task is running.",
     });
     expect(result.provider).toBe("gemini");
+    expect((service as any).deps.agentPresetSyncService.getProjectManagerAgent).toHaveBeenCalledWith("project-1");
+    expect((service as any).deps.agentPresetSyncService.getWorkerAgent).not.toHaveBeenCalled();
     expect(mockRunProviderForText).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: "gemini",
@@ -140,8 +142,8 @@ describe("WorkerInboxReplyService", () => {
         resolveInvocationProvider: vi.fn().mockReturnValue(geminiRoute),
       } as any,
       agentPresetSyncService: {
-        getWorkerAgent: vi.fn().mockResolvedValue({
-          instructionMarkdown: "Always answer with operational clarity.",
+        getProjectManagerAgent: vi.fn().mockResolvedValue({
+          instructionMarkdown: "Coordinate the sprint and answer directly.",
         }),
       } as any,
       executionRepository: {

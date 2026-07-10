@@ -43,12 +43,16 @@ export const DashboardAssistantWidget: FunctionComponent = () => {
 
   const dashboardReplyAgent = useMemo(() => {
     const agentPresetId = effectiveSettings?.settings.agents.routing.dashboardReply.agentPresetId;
-    if (!agentPresetId) return null;
-    return agentPresets.find((preset) => preset.id === agentPresetId) ?? null;
+    const configuredAgent = agentPresetId
+      ? agentPresets.find((preset) => preset.id === agentPresetId)
+      : null;
+    return configuredAgent
+      ?? agentPresets.find((preset) => preset.name.trim().toLowerCase() === "project manager")
+      ?? null;
   }, [agentPresets, effectiveSettings?.settings.agents.routing.dashboardReply.agentPresetId]);
 
   const avatarConfig: AgentAvatarConfig = dashboardReplyAgent?.avatarConfig ?? fallbackAvatar;
-  const assistantLabel = dashboardReplyAgent?.name ?? "Code UX assistant";
+  const assistantLabel = dashboardReplyAgent?.name ?? "Project manager";
 
   if (pathname === "/chat") {
     return null;

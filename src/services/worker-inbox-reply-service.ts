@@ -117,7 +117,7 @@ export class WorkerInboxReplyService {
       const dashboardReplyAgentPresetId = settings.agents?.routing?.dashboardReply?.agentPresetId ?? null;
       const dashboardReplyAgent = typeof this.deps.agentPresetSyncService.resolveDashboardReplyAgent === "function"
         ? await this.deps.agentPresetSyncService.resolveDashboardReplyAgent(input.projectId, dashboardReplyAgentPresetId)
-        : await this.deps.agentPresetSyncService.getWorkerAgent(input.projectId);
+        : await this.deps.agentPresetSyncService.getProjectManagerAgent(input.projectId);
       agentProvider = {
         providerConfigId: dashboardReplyAgent.providerConfigId,
         model: dashboardReplyAgent.model,

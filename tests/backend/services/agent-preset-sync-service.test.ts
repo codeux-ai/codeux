@@ -288,7 +288,7 @@ describe("AgentPresetSyncService", () => {
     await expect(fs.stat(path.join(homeDir, ".code-ux", "agents", "worker.md"))).resolves.toBeTruthy();
   });
 
-  it("normalizes project manager sources and resolves the project manager agent", async () => {
+  it("uses the Project manager for dashboard replies without an override and honors an explicit preset", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-project-manager-agent-"));
     tempDirs.push(dir);
 
@@ -328,6 +328,19 @@ describe("AgentPresetSyncService", () => {
     expect(resolved.instructionMarkdown).toContain("Answer Jules clarification requests.");
     expect(resolved.mcpAccess?.linkedServerIds).toEqual([DEFAULT_PLAYWRIGHT_MCP_SERVER_ID]);
     expect(resolved.mcpAccess?.codeUxEnabled).toBe(false);
+
+    const defaultDashboardReplyAgent = await syncService.resolveDashboardReplyAgent(project.id, null);
+    expect(defaultDashboardReplyAgent.name).toBe("Project manager");
+
+    const customDashboardReplyAgent = agentPresetRepository.createAgentPreset(project.id, {
+      name: "Dashboard specialist",
+      instructionMarkdown: "Handle dashboard chat.",
+    });
+    const explicitDashboardReplyAgent = await syncService.resolveDashboardReplyAgent(
+      project.id,
+      customDashboardReplyAgent.id,
+    );
+    expect(explicitDashboardReplyAgent.id).toBe(customDashboardReplyAgent.id);
   });
 
   it("preserves existing explicit MCP access when syncing markdown agents", async () => {
