@@ -206,6 +206,55 @@ describe("AgentPresetEditorPanel", () => {
     vi.clearAllMocks();
   });
 
+  it("keeps attached storage names and default-off or enabled status visible", () => {
+    const availableSkillStorages = [{
+      id: "skills-shared",
+      projectId: "project_1",
+      name: "Shared Skills",
+      description: "Reusable instructions",
+      storageKind: "project" as const,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    }];
+    const view = render(
+      <AgentPresetEditorPanel
+        preset={makePreset({
+          persistentSkillStorageIds: ["skills-shared"],
+          persistentSkillStorage: { enabled: false },
+        })}
+        saving={false}
+        availableSkillStorages={availableSkillStorages}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Default off")).toBeInTheDocument();
+    const attachedStorageChip = screen.getByRole("button", { name: "Inspect attached skill storage Shared Skills" });
+    expect(attachedStorageChip).toBeInTheDocument();
+    expect(screen.getByLabelText("Shared Skills")).toBeChecked();
+
+    fireEvent.click(attachedStorageChip);
+    expect(screen.getByLabelText("Shared Skills")).not.toBeChecked();
+
+    view.rerender(
+      <AgentPresetEditorPanel
+        preset={makePreset({
+          id: "preset_2",
+          persistentSkillStorageIds: ["skills-shared"],
+          persistentSkillStorage: { enabled: true },
+        })}
+        saving={false}
+        availableSkillStorages={availableSkillStorages}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Enabled")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Inspect attached skill storage Shared Skills" })).toBeInTheDocument();
+  });
+
   it("renders disabled reasons on the save button and verifies validation updates", async () => {
     const onSave = vi.fn();
     render(<AgentPresetEditorPanel preset={makePreset()} saving={false} onSave={onSave} onCancel={vi.fn()} />);

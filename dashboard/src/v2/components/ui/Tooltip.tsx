@@ -48,13 +48,9 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
         }
     };
 
-    const handleFocus = (e: FocusEvent) => {
-        // Only trigger on keyboard focus (focus-visible) to maintain parity
-        try {
-            if (!(e.target as Element).matches(":focus-visible")) return;
-        } catch {
-            // fallback for older browsers or test environments
-        }
+    const handleFocus = (_e: FocusEvent) => {
+        // Focus must expose the same description as pointer hover. Browsers still
+        // decide whether to draw the trigger's focus-visible ring.
         if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
         hoverTimeout.current = window.setTimeout(() => {
             if (typeof document === "undefined") return;
