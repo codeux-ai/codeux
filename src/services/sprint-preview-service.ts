@@ -22,6 +22,7 @@ import { EntityNotFoundError } from "../repositories/repository-utils.js";
 import { DockerBootstrapBuilder } from "../infrastructure/providers/cli/docker-bootstrap-builder.js";
 import { DockerCredentialMountBuilder } from "../infrastructure/providers/cli/docker-credential-mount-builder.js";
 import { DockerSetupImageCache, type DockerSetupImageCacheProgress } from "../infrastructure/providers/cli/docker-setup-image-cache.js";
+import { managedRuntimeService, type ManagedRuntimeService } from "./managed-runtime-service.js";
 import { resolveDockerRuntimeRoot } from "../infrastructure/providers/cli/docker-runtime-paths.js";
 import { formatSprintBranch } from "../domain/sprint/branch-name-generator.js";
 import { runCommandStrict } from "./cli-process-runner.js";
@@ -70,6 +71,7 @@ interface SprintPreviewServiceDeps {
   executionRepository: ExecutionRepository;
   settingsRepository: SettingsRepository;
   logger?: Logger;
+  managedRuntimeService?: ManagedRuntimeService;
 }
 
 interface PreparedStartupScript {
@@ -234,8 +236,11 @@ export class SprintPreviewService {
         // build. Build artifacts persist across restarts in the per-sprint Docker volume.
         const sourceCommit = await this.resolvePreviewSourceCommit(project.baseDir, previewSourceRef);
 
-        const setupScriptPath = await this.resolveContainerSetupScriptPath(project.baseDir, effectiveSettings.cliWorkflow);
-        const baseImage = effectiveSettings.cliWorkflow.containerImage.trim() || "node:24-bookworm";
+        const setupScriptPath = effectiveSettings.cliWorkflow.containerImageMode === "managed"
+          && !effectiveSettings.cliWorkflow.containerSetupScriptPath.trim()
+          ? undefined
+          : await this.resolveContainerSetupScriptPath(project.baseDir, effectiveSettings.cliWorkflow);
+        const baseImage = await (this.deps.managedRuntimeService ?? managedRuntimeService).resolveImage(effectiveSettings.cliWorkflow, "base");
         const resolvedImage = await new DockerSetupImageCache().resolveImage({
           baseImage,
           setupScriptPath,
@@ -270,7 +275,6 @@ export class SprintPreviewService {
         const bootstrapScript = new DockerBootstrapBuilder().build({
           runtimeNpmPrefix: containerNpmPrefix,
           runtimeNpmCache: containerNpmCache,
-          fallbackProviders: [],
           runSetupScript: shouldRunSetupScriptAtRuntime,
         });
 

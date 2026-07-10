@@ -1,58 +1,70 @@
 # Docker Runtime
 
-Defines the default container environment used by Docker-backed provider CLIs.
+Code UX defaults to a managed, auto-updating Linux runtime instead of building an agent image on each user's machine.
 
 > Settings area: `docker-runtime`
 > Dashboard documentation route: `/docs/settings-docker-runtime`
 
-## What This Area Is For
+## Managed Mode
 
-Defines the default container environment used by Docker-backed provider CLIs. This page expands the short Settings-page help text into an operator reference for deciding when to change this area, what behavior the controls affect, and what to verify after saving.
+Managed mode pulls the public `ghcr.io/codeux-ai/codeux-runtime` image family:
 
-Use it when you are configuring a new project, auditing inherited settings, or debugging behavior that changed after a system, project, or sprint override was saved.
+- `base` includes Node 24 on Debian Trixie, JavaScript package managers, Python, Git/GitHub CLI, compilers, keyring support, preview utilities, and common Linux tools.
+- `browser` adds pinned Playwright, Playwright MCP, Chromium, and its OS dependencies.
 
-## Controls And Runtime Effect
+Code UX checks for runtime updates on every startup. It pulls the stable channel in the background, resolves the immutable repository digest, verifies Node 24 in the image, and routes only future containers to the verified digest. Running containers are not interrupted. Registry or verification failure retains the previous working digest and does not block the dashboard.
 
-Image, setup script, memory limit, setup image caching, and Playwright browser preinstall shape each worker container.
+Provider CLIs are not baked into either image. Activated providers are downloaded from fixed official sources into versioned Docker volumes and mounted read-only. Code UX checks every activated provider for a stable update on every startup.
 
-| Control Surface | Runtime Effect | Review Before Saving |
-| --- | --- | --- |
-| Settings card fields | Updates the active Settings scope after you save the page. | Confirm whether you are editing System or Project scope. |
-| Inherited values | Values can flow from system defaults into project and sprint behavior. | Check the source badge before assuming a value is project-specific. |
-| Related runtime paths | The affected service reads the saved settings during planning, dispatch, dashboard rendering, or maintenance work. | Re-run the affected workflow after changing operational settings. |
+## Controls
 
-## Recommended Configuration
+| Control | Behavior |
+| --- | --- |
+| Runtime image mode | `Managed` follows the Code UX runtime channel; `Custom` uses the image field below. |
+| Custom container image | Used only in Custom mode. Existing non-default legacy images remain custom during migration. |
+| Container setup script | Optional project-specific extension. An empty value performs no build in Managed mode. |
+| Cache custom setup extension | Builds a content-addressed extension image only for an explicit setup script. |
+| Memory limit | Applies a hard Docker memory and memory-swap ceiling; `0` disables the cap. |
+| Preinstall Playwright browsers | Selects the managed browser image. Disable it to use the smaller base image. |
+| Run as root | Privileged compatibility escape hatch; leave disabled unless a trusted project requires it. |
 
-Keep the default image unless your repo needs a custom toolchain; enable Playwright preinstall for browser-heavy QA.
+The default managed path never runs `docker build`. Login, coding, QA, previews, and custom dashboard validation share the same resolver instead of building separate base images.
 
-A practical review flow is:
+## Provider Preparation
 
-1. Start from the inherited default and change only the fields that solve a concrete operational problem.
-2. Save the smallest scope that should own the change. Use System for defaults that every project should inherit, and Project for repository-specific behavior.
-3. Reopen the Settings page after saving when the value controls startup behavior, provider routing, preview runtime, or destructive maintenance.
+Selecting a provider during onboarding starts preparation immediately, before Login. Login and invocations join the same preparation job, so a ready provider performs no download.
 
-## Risks And Gotchas
+Tool states are available from `GET /api/runtime-assets/status`. Retry a supported provider with:
 
-Broken setup scripts or overly tight memory limits can fail every provider invocation in the scope.
+```http
+POST /api/provider-tools/codex/prepare
+```
 
-Before applying changes, check:
+If an update fails, Code UX keeps the previous verified provider volume. If no verified compatible version exists, only that provider's Login or invocation is blocked with a retryable error.
 
-- Whether the value affects provider credentials, Docker runtime behavior, Git automation, memory retention, or destructive cleanup.
-- Whether a project override is masking the system value you expected to change.
-- Whether a running sprint needs to be paused, restarted, or allowed to finish before the new value can be observed.
+Provider credentials are never written into tool volumes. Provider-owned self-updaters are disabled inside invocations so mounted binaries remain immutable.
 
-## Troubleshooting
+## Custom Images
 
-If the saved setting does not appear to take effect:
+Custom mode preserves operator-controlled images and explicit setup scripts. Provider tools receive a compatibility key derived from the custom image, so a volume prepared for the managed Debian runtime is not silently reused in an incompatible image.
 
-- Verify the active Settings scope in the sticky command bar.
-- Check for a project or sprint override that takes precedence over the system value.
-- Refresh the affected dashboard page if the setting controls a rendered surface.
-- Restart the local runtime only when the setting explicitly controls startup, listener, or process-level behavior.
+Custom images must supply Node, Bash, and the installer dependencies required by the selected CLI. Setup-extension builds remain available, but provider installation no longer falls back into each workspace.
+
+## Cleanup And Recovery
+
+Runtime state is stored under `~/.code-ux/runtime/`. Code UX retains the current and previous managed digests and current provider volume pointers. Unreferenced provider volumes older than 30 days are pruned while the newest two versions per provider are preserved.
+
+For failures:
+
+1. Confirm Docker is ready in onboarding or the top navigation status.
+2. Inspect `GET /api/runtime-assets/status`.
+3. Retry the affected provider preparation.
+4. Verify GHCR and npm/vendor release endpoints are reachable.
+5. Switch to Custom mode only when a repository needs a genuinely different base image.
 
 ## Related Documentation
 
-- [Settings overview](/docs/settings-overview)
+- [Managed Container Runtime](/docs/architecture-managed-container-runtime)
+- [Providers and models](/docs/user-providers-and-models)
 - [Dashboard Settings](/docs/user-dashboard-settings)
-- [Configuration and Storage](/docs/developer-settings-reference)
-- [Security Hardening](/docs/user-troubleshooting)
+- [Troubleshooting](/docs/user-troubleshooting)

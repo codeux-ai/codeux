@@ -145,27 +145,20 @@ Checks:
 - After a restart, active Jules dispatches that never reached `session_created` are treated as interrupted pre-session dispatches and moved back to a retryable task state. Jules dispatches with a persisted session remain attached for normal sprint recovery.
 - If the dispatch fails with an auth error, fix the dashboard GitHub token or remote URL, then rerun the task.
 
-### 4. Gemini/Codex task sessions fail immediately
+### 4. Local provider task sessions fail immediately
 Checks:
-- Is the CLI installed and executable (`gemini`, `codex`)?
+- Check `GET /api/runtime-assets/status` for managed image and provider-tool preparation state.
+- Confirm Docker can anonymously pull `ghcr.io/codeux-ai/codeux-runtime:1-base` and `:1-browser`.
+- If update discovery failed, verify the previous immutable runtime digest and provider volume are still present locally.
 - Is auth available system-wide or via provider API key settings?
 - Did child task branch creation succeed from feature branch?
 - Are `git` and `gh` available in PATH for commit/push/PR steps?
 - If `Settings -> CLI Workflow -> Execution Mode` is `Docker`:
   - Is Docker daemon available (`docker ps`)?
-  - Is the configured image pullable/runnable?
-  - If provider tools are not in the image, is a setup script configured, present at `.code-ux/container/setup.sh`, or available through the bundled Code UX default script?
-  - If `Cache setup as image` is enabled, check session activity for cache hits or image-build failures before the worker command starts.
-  - Check session activity for setup resolution details:
-    - `Configured container setup script not found: ...`
-    - `Using cached Docker setup image ...`
-    - `Waiting for cached Docker setup image ... to finish building.`
-    - `Building cached Docker setup image ...`
-    - `Cached Docker setup image build failed ... Falling back to runtime setup script.`
-  - Provider runner now falls back to installing missing provider CLI in-container before failing:
-    - `gemini`: `npm install -g @google/gemini-cli`
-    - `codex`: `npm install -g @openai/codex`
-    - `claude`: `curl -fsSL https://claude.ai/install.sh | bash`
+  - In managed mode, verify the resolved base/browser digest is present. The default path must not run a local Docker build.
+  - In custom mode, verify the configured image has Node, Bash, curl, and any native dependencies required by the selected provider.
+  - Provider tools are stored in `code-ux-provider-tool-*` volumes and mounted read-only. A missing tool must be repaired through `POST /api/provider-tools/:provider/prepare`; there is no in-container fallback installer.
+  - Inspect `~/.code-ux/runtime/provider-tools.json` and the volume's `.codeux-provider-tool.json` marker when a verified tool is not selected after restart.
   - Claude runner executes headless using `claude -p "<prompt>" --dangerously-skip-permissions`.
   - For Claude auth mounts, ensure host has `~/.claude/.credentials.json`; if auth still stalls, also verify the sibling `~/.claude.json` exists when your local Claude login created it.
   - Runtime now syncs only those Claude auth files before launch, avoiding recursive copy of all `.claude` state.

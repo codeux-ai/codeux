@@ -7,10 +7,7 @@ import * as fs from "fs/promises";
 import {
   registerTerminalRoutes,
   bootDashboardTerminalWebSocketServer,
-  buildLoginDockerfile,
   parseAndValidateLoginUrl,
-  prewarmLoginBaseImage,
-  resetLoginBaseImageStateForTests,
 } from "../../../src/server/terminal-routes.js";
 import type { DashboardDependencies } from "../../../src/server/dashboard-server.js";
 
@@ -86,7 +83,6 @@ describe("Terminal Routes", () => {
   let systemSettings: any;
 
   beforeEach(() => {
-    resetLoginBaseImageStateForTests();
     mockLoginImageState.inspectExitCode = 0;
     mockLoginImageState.holdBuild = false;
     mockLoginImageState.finishBuild = null;
@@ -98,7 +94,8 @@ describe("Terminal Routes", () => {
     systemSettings = {
       defaults: {
         cliWorkflow: {
-          containerImage: "node:24-bookworm",
+          containerImageMode: "managed",
+          containerImage: "node:24-trixie-slim",
         },
       },
       integrations: {
@@ -116,6 +113,19 @@ describe("Terminal Routes", () => {
 
     mockDeps = {
       getSystemSettings: () => systemSettings,
+      managedRuntimeService: {
+        resolveImage: vi.fn().mockResolvedValue("ghcr.io/codeux-ai/codeux-runtime@sha256:managed"),
+      } as any,
+      providerToolManager: {
+        getStatus: vi.fn((provider: string) => provider === "generic-cli" ? null : { provider, state: "ready" }),
+        prepare: vi.fn(async (provider: string) => ({
+          provider,
+          volumeName: `code-ux-provider-tool-${provider}-test`,
+          version: "1.0.0",
+          binary: provider,
+          mountPath: "/opt/code-ux/provider-tool",
+        })),
+      } as any,
     };
 
     registerTerminalRoutes(app, mockDeps as DashboardDependencies);
@@ -275,9 +285,7 @@ describe("Terminal Routes", () => {
     }
   });
 
-  it("should run the login container on the pinned login image, not the configured image", async () => {
-    systemSettings.defaults.cliWorkflow.containerImage = "some/custom-image:latest";
-
+  it("uses the shared managed runtime and prepared provider volume without installing in the login container", async () => {
     const response = await request(app)
       .post("/api/terminal/start")
       .send({ providerConfigId: "claude" });
@@ -289,14 +297,11 @@ describe("Terminal Routes", () => {
     );
     expect(runCall).toBeDefined();
     const runArgs = runCall![1] as string[];
-    expect(runArgs).not.toContain("some/custom-image:latest");
-    expect(runArgs).not.toContain("node:24-bookworm");
-    expect(runArgs.some((arg) => arg.startsWith("code-ux-login-base-node-24-bookworm-slim:") || arg === "node:24-bookworm-slim")).toBe(true);
-
-    // The login container command defines ensure_curl so the curl-based provider
-    // installers resolve instead of failing with "ensure_curl: command not found".
+    expect(runArgs).toContain("ghcr.io/codeux-ai/codeux-runtime@sha256:managed");
+    expect(runArgs).toContain("type=volume,source=code-ux-provider-tool-claude-code-test,target=/opt/code-ux/provider-tool,readonly");
     const containerCmd = runArgs[runArgs.length - 1];
-    expect(containerCmd).toContain("ensure_curl()");
+    expect(containerCmd).not.toContain("Installing provider CLI fallback");
+    expect(containerCmd).toContain("/opt/code-ux/provider-tool/bin");
   });
 
   it.each([
@@ -331,55 +336,6 @@ describe("Terminal Routes", () => {
     expect(runArgs).not.toContain("--network");
     expect(runArgs).not.toContain("host");
     expect(runArgs).not.toContain("-p");
-  });
-
-  it("should bake only the apt prerequisites into the login image, not the providers", () => {
-    const dockerfile = buildLoginDockerfile();
-    expect(dockerfile).toContain("FROM node:24-bookworm-slim");
-    expect(dockerfile).toContain('LABEL org.opencontainers.image.title="Code UX login base"');
-    expect(dockerfile).toContain('LABEL ai.codeux.role="login-base"');
-    // curl + keyring stack are baked in (can't be installed at runtime non-root)
-    expect(dockerfile).toContain("curl");
-    expect(dockerfile).toContain("gnome-keyring");
-    // Provider CLIs are NOT baked in — they install at runtime for faster feedback
-    expect(dockerfile).not.toContain("@google/gemini-cli");
-    expect(dockerfile).not.toContain("claude.ai/install.sh");
-    expect(dockerfile).not.toContain("opencode.ai/install");
-  });
-
-  it("prewarms the login image in the background and deduplicates concurrent builds", async () => {
-    mockLoginImageState.inspectExitCode = 1;
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), child: vi.fn() } as any;
-
-    prewarmLoginBaseImage(logger);
-    prewarmLoginBaseImage(logger);
-
-    await vi.waitFor(() => {
-      expect(logger.info).toHaveBeenCalledWith("Login base image prewarm completed.", {
-        image: expect.stringMatching(/^code-ux-login-base-node-24-bookworm-slim:/),
-      });
-    });
-    const buildLogCount = logger.info.mock.calls.filter(([message]: [unknown]) =>
-      typeof message === "string" && message.startsWith("Building login base image")
-    ).length;
-    expect(buildLogCount).toBe(1);
-  });
-
-  it("keeps terminal start fallback available when login image prewarm build fails", async () => {
-    mockLoginImageState.inspectExitCode = 1;
-    mockLoginImageState.buildExitCode = 1;
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), child: vi.fn() } as any;
-
-    prewarmLoginBaseImage(logger);
-
-    await vi.waitFor(() => {
-      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("fell back to the raw base image"));
-    });
-    mockLoginImageState.buildExitCode = 0;
-    const response = await request(app)
-      .post("/api/terminal/start")
-      .send({ providerConfigId: "gemini" });
-    expect(response.status).toBe(200);
   });
 
   it("should return 400 if providerConfigId is missing", async () => {

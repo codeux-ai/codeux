@@ -13,7 +13,7 @@ import {
   sortProviderConfigEntries
 } from "./settings-view-models.js";
 
-const EASY_PROVIDER_PRIORITY: ProviderId[] = ["codex", "gemini", "claude-code", "qwen-code", "opencode", "antigravity"];
+const EASY_PROVIDER_PRIORITY: ProviderId[] = ["codex", "antigravity", "claude-code", "qwen-code", "opencode"];
 
 export const buildProviderConfigId = (providerId: ProviderId): ProviderConfigId => (
   `${providerId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`

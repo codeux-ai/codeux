@@ -467,6 +467,18 @@ describe("OnboardingExperience integration", () => {
           dependencies: [], providers: [],
         }), { status: 200, headers: { "Content-Type": "application/json" } });
       }
+      if (url.endsWith("/api/runtime-assets/status")) {
+        return new Response(JSON.stringify({
+          managedRuntime: { state: "ready", stepText: "Managed runtime is ready." },
+          providers: [
+            { provider: "codex", state: "ready", installedVersion: "1.0.0", targetVersion: "1.0.0", progressPercent: 100, stepText: "codex 1.0.0 is ready.", error: null, retryable: true, updatedAt: new Date().toISOString() },
+          ],
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.includes("/api/provider-tools/") && url.endsWith("/prepare")) {
+        const provider = url.split("/api/provider-tools/")[1].split("/")[0];
+        return new Response(JSON.stringify({ provider, state: "queued", stepText: `Preparing ${provider}.` }), { status: 202, headers: { "Content-Type": "application/json" } });
+      }
       return new Response(JSON.stringify({}), { status: 404 });
     });
 
@@ -720,6 +732,9 @@ describe("OnboardingExperience integration", () => {
     await userEvent.click(await screen.findByRole("radio", { name: /Easy/i }));
     await userEvent.click(screen.getByRole("button", { name: "Next" }));
 
+    expect(await screen.findByText("Runtime environment is ready.")).not.toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+
     expect(await screen.findByText("Choose one provider login")).not.toBeNull();
     for (const providerName of ["Gemini", "Antigravity", "Codex", "Claude Code", "Qwen Code", "OpenCode"]) {
       expect(screen.getByText(providerName)).not.toBeNull();
@@ -730,6 +745,12 @@ describe("OnboardingExperience integration", () => {
     expect(screen.queryByText(/~\/\.code-ux\/credentials/)).toBeNull();
     expect(screen.queryByText("Connect this provider through Code UX and save the login under the dashboard credentials directory.")).toBeNull();
     expect(screen.queryByText("Local auth path")).toBeNull();
+    expect(screen.getAllByText("Deprecated").length).toBeGreaterThan(0);
+
+    await userEvent.click(screen.getByRole("radio", { name: "Select Gemini" }));
+    expect(screen.getByRole("radio", { name: "Selected Gemini" }).getAttribute("aria-checked")).toBe("true");
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/api/provider-tools/"), expect.objectContaining({ method: "POST" }));
+    await userEvent.click(screen.getByRole("radio", { name: "Select Codex" }));
 
     await userEvent.click(screen.getByRole("button", { name: "Next" }));
 

@@ -79,13 +79,21 @@ describe("onboarding-settings-draft", () => {
   });
 
   describe("getEasyRecommendedProvider", () => {
-    it("prefers a detected CLI provider for Easy mode", () => {
+    it("excludes deprecated Gemini from Easy recommendations", () => {
       const providers: OnboardingProviderCredentialStatus[] = [
         { provider: "gemini", available: true, mountEnabled: false, authPath: "~/.gemini", detectedFiles: [] },
         { provider: "codex", available: false, mountEnabled: false, authPath: "~/.codex", detectedFiles: [] }
       ];
 
-      expect(getEasyRecommendedProvider(providers)).toBe("gemini");
+      expect(getEasyRecommendedProvider(providers)).toBe("codex");
+    });
+
+    it("recommends detected Antigravity as the supported Google CLI", () => {
+      const providers: OnboardingProviderCredentialStatus[] = [
+        { provider: "gemini", available: true, mountEnabled: false, authPath: "~/.gemini", detectedFiles: [] },
+        { provider: "antigravity", available: true, mountEnabled: false, authPath: "~/.antigravity", detectedFiles: [] },
+      ];
+      expect(getEasyRecommendedProvider(providers)).toBe("antigravity");
     });
 
     it("falls back to Codex for Easy mode", () => {

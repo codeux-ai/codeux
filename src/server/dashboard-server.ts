@@ -116,8 +116,10 @@ import { applyDashboardPreRouteMiddleware, applyDashboardPostRouteMiddleware } f
 
 
 import { bootDashboardRealtimeWebSocketServer } from "./dashboard-realtime-websocket-server.js";
-import { bootDashboardTerminalWebSocketServer, prewarmLoginBaseImage } from "./terminal-routes.js";
+import { bootDashboardTerminalWebSocketServer } from "./terminal-routes.js";
 import type { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
+import { managedRuntimeService } from "../services/managed-runtime-service.js";
+import { getActiveProviderTypes, providerToolManager } from "../services/provider-tool-manager.js";
 import type { MemoryService } from "../services/memory-service.js";
 import type { MemoryPromotionService } from "../services/memory-promotion-service.js";
 import type { EmbeddingModelManager } from "../services/embedding-model-manager.js";
@@ -132,6 +134,8 @@ import type { NodeFlowService } from "../services/node-flow-service.js";
 import type { CustomDashboardRepository } from "../repositories/custom-dashboard-repository.js";
 import type { CustomDashboardValidationService } from "../services/custom-dashboard-validation-service.js";
 import type { SkillService } from "../services/skill-service.js";
+import type { ManagedRuntimeService } from "../services/managed-runtime-service.js";
+import type { ProviderToolManager } from "../services/provider-tool-manager.js";
 import {
   parsePreviewSessionIdFromHost,
   parseSelectedPreviewPortFromRequest,
@@ -174,6 +178,8 @@ export interface DashboardServerOptions {
   customDashboardRepository?: CustomDashboardRepository;
   customDashboardValidationService?: CustomDashboardValidationService;
   skillService?: SkillService;
+  managedRuntimeService?: ManagedRuntimeService;
+  providerToolManager?: ProviderToolManager;
   projectManagementRepository?: ProjectManagementRepository;
   executionRepository?: ExecutionRepository;
   getStatus: () => unknown;
@@ -500,7 +506,24 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
   } = options;
   const dashboardLogger = configureDashboardApp(options);
   if (process.env.NODE_ENV !== "test") {
-    prewarmLoginBaseImage(dashboardLogger.child({ component: "login-base-image-prewarm" }));
+    const runtime = options.managedRuntimeService ?? managedRuntimeService;
+    const tools = options.providerToolManager ?? providerToolManager;
+    const settings = options.getSystemSettings();
+    const runtimeLogger = dashboardLogger.child({ component: "managed-runtime-prewarm" });
+    void (async () => {
+      if (settings.defaults.cliWorkflow.containerImageMode !== "custom") {
+        await runtime.checkForUpdates(runtimeLogger);
+      }
+      await tools.checkActiveProviders(
+        getActiveProviderTypes(settings),
+        settings.defaults.cliWorkflow,
+        runtimeLogger,
+      );
+    })().catch((error: unknown) => {
+      runtimeLogger.warn("Managed runtime startup preparation failed.", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
   }
   const handle = await bindDashboardServer(app, port, dashboardLogger);
 

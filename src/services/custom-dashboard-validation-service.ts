@@ -39,6 +39,7 @@ import {
 import { DockerSessionLifecycle, sanitizeContainerNameComponent } from "./docker-session-lifecycle.js";
 import { DockerBootstrapBuilder } from "../infrastructure/providers/cli/docker-bootstrap-builder.js";
 import { assertSafePathSegment, isPathInside } from "../utils/path-validator.js";
+import { managedRuntimeService, type ManagedRuntimeService } from "./managed-runtime-service.js";
 
 const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -60,6 +61,7 @@ export interface CustomDashboardValidationServiceDeps {
   fetchImpl?: typeof fetch;
   readinessTimeoutMs?: number;
   readinessPollMs?: number;
+  managedRuntimeService?: ManagedRuntimeService;
 }
 
 type RuntimeMetadataPatch = CustomDashboardJsonObject;
@@ -143,8 +145,10 @@ export class CustomDashboardValidationService {
       try {
         const settings = this.deps.settingsRepository.resolveProjectDashboardSettings(projectId).settings;
         const cliWorkflow = settings.cliWorkflow;
-        const resolvedImage = cliWorkflow.containerImage.trim() || "node:24-bookworm";
-        const setupScriptPath = await this.resolveContainerSetupScriptPath(project.baseDir, cliWorkflow.containerSetupScriptPath);
+        const resolvedImage = await (this.deps.managedRuntimeService ?? managedRuntimeService).resolveImage(cliWorkflow, "base");
+        const setupScriptPath = cliWorkflow.containerImageMode === "managed" && !cliWorkflow.containerSetupScriptPath.trim()
+          ? undefined
+          : await this.resolveContainerSetupScriptPath(project.baseDir, cliWorkflow.containerSetupScriptPath);
 
         this.deps.customDashboardRepository.updateValidationSession(session.id, {
           status: "building",
@@ -174,7 +178,6 @@ export class CustomDashboardValidationService {
         const bootstrapScript = new DockerBootstrapBuilder().build({
           runtimeNpmPrefix: CUSTOM_DASHBOARD_VALIDATION_CONTAINER_NPM_PREFIX,
           runtimeNpmCache: CUSTOM_DASHBOARD_VALIDATION_CONTAINER_NPM_CACHE,
-          fallbackProviders: [],
           runSetupScript: Boolean(setupScriptPath),
         });
         const userSpec = cliWorkflow.containerRunAsRoot ? null : await this.resolveDockerUserSpec(workspacePath);

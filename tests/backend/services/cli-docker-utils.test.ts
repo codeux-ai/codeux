@@ -7,7 +7,6 @@ import {
   writeDockerEnvFile,
   mapPathPrefix,
   isDockerWorkspaceMountError,
-  getProviderFallbackInstallCommand
 } from "../../../src/services/cli-docker-utils.js";
 import fs from "fs/promises";
 import os from "os";
@@ -99,12 +98,4 @@ describe("cli-docker-utils", () => {
         expect(isDockerWorkspaceMountError({ stdout: "ok", stderr: "", exitCode: 0 } as any)).toBe(false);
     });
 
-    it("getProviderFallbackInstallCommand", () => {
-        expect(getProviderFallbackInstallCommand("gemini")).toBe("npm install -g @google/gemini-cli");
-        expect(getProviderFallbackInstallCommand("codex")).toBe("npm install -g @openai/codex");
-        expect(getProviderFallbackInstallCommand("qwen")).toBe("npm install -g @qwen-code/qwen-code");
-        expect(getProviderFallbackInstallCommand("opencode")).toContain("https://opencode.ai/install");
-        expect(getProviderFallbackInstallCommand("claude")).toContain("curl -fsSL");
-        expect(getProviderFallbackInstallCommand("unknown")).toBeUndefined();
-    });
 });

@@ -109,6 +109,8 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 | `GET` | `/api/projects/:projectId/sprints/:sprintId/settings/effective` | Merged effective. |
 | `GET` | `/api/settings/import-sources` | External settings hints (env, gh CLI). |
 | `GET` | `/api/onboarding/readiness` | First-run Docker readiness checks and installer metadata. |
+| `GET` | `/api/runtime-assets/status` | Managed runtime and provider CLI preparation/update status. |
+| `POST` | `/api/provider-tools/:provider/prepare` | Idempotently begin or join preparation for a supported local CLI provider. |
 | `POST` | `/api/onboarding/dependencies/install` | Body: `{ mode: "docker-desktop-git" \| "docker-engine-git", confirmInstall: true }`. Runs the constrained Docker dependency installer and returns bounded command summaries. Mode ids are retained for API compatibility. |
 | `POST` | `/api/system/reset-database` | **Destructive.** Wipe all state. |
 

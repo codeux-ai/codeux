@@ -275,7 +275,7 @@ describe("ProjectSetupService", () => {
     expect(fullSetupPrompt).toContain("## Base Quicksprint Templates To Adapt");
     expect(fullSetupPrompt).toContain("Code Quality & Performance Audit");
     expect(fullSetupPrompt).toContain("## Container Setup Script Template");
-    expect(fullSetupPrompt).toContain("Force rebuild version");
+    expect(fullSetupPrompt).toContain("managed Code UX runtime");
     expect(fullSetupPrompt).toContain("## Project Guidance");
     expect(fullSetupPrompt).toContain("Name: Setup Service Stack");
     expect(fullSetupPrompt).toContain("Use the repository package manager, strict TypeScript, and Vitest commands.");

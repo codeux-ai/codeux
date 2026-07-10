@@ -40,11 +40,27 @@ vi.mock("../../../../../src/infrastructure/providers/cli/docker-runtime-paths.js
 import { runCommandStrict, runStreamingCommand } from "../../../../../src/services/cli-process-runner.js";
 import { DockerSetupImageCache } from "../../../../../src/infrastructure/providers/cli/docker-setup-image-cache.js";
 
+const createRunner = (): DockerRunner => new DockerRunner(
+  {
+    resolveImage: vi.fn(async () => "node:24"),
+    getCompatibilityKey: vi.fn(() => "test-runtime"),
+  } as any,
+  {
+    prepare: vi.fn(async (provider: string) => ({
+      provider,
+      volumeName: `code-ux-provider-tool-${provider}-test`,
+      version: "1.0.0",
+      binary: provider,
+      mountPath: "/opt/code-ux/provider-tool",
+    })),
+  } as any,
+);
+
 describe("DockerRunner", () => {
   let runner: DockerRunner;
 
   beforeEach(() => {
-    runner = new DockerRunner();
+    runner = createRunner();
     vi.clearAllMocks();
     vi.mocked(fs.mkdtemp).mockResolvedValue("/tmp/code-ux-docker-123");
     vi.mocked(fs.rm).mockResolvedValue(undefined);
@@ -193,7 +209,7 @@ describe("DockerRunner", () => {
     expect(dockerArgs).not.toContain("HOME=/workspace/.code-ux-home");
     const cacheInstance = vi.mocked(DockerSetupImageCache).mock.results[0]?.value as any;
     expect(cacheInstance.resolveImage).toHaveBeenCalledWith(expect.objectContaining({
-      installPlaywrightBrowsers: true,
+      installPlaywrightBrowsers: false,
       runtimeRoot: "/runtime-root",
       onProgress: onSetupImageProgress,
     }));
@@ -784,7 +800,7 @@ describe("DockerRunner custom MCP server injection", () => {
     (runner as any).buildProviderConfigMounts(conn, provider, "/tmp/cfg", env, customServers, { executionMode: "DOCKER" });
 
   beforeEach(() => {
-    runner = new DockerRunner();
+    runner = createRunner();
     vi.clearAllMocks();
     vi.mocked(fs.writeFile).mockResolvedValue(undefined);
   });

@@ -40,7 +40,8 @@ describe("dashboard settings helpers", () => {
     expect(second.cliWorkflow.cleanupWorktreeOnFailure).toBe(false);
     expect(second.cliWorkflow.resumeFailedTaskInSameWorkspace).toBe(true);
     expect(second.cliWorkflow.executionMode).toBe("DOCKER");
-    expect(second.cliWorkflow.containerImage).toBe("node:24-bookworm");
+    expect(second.cliWorkflow.containerImageMode).toBe("managed");
+    expect(second.cliWorkflow.containerImage).toBe("node:24-trixie-slim");
     expect(second.cliWorkflow.containerCacheSetupScriptImage).toBe(true);
     expect(second.cliWorkflow.containerRunAsRoot).toBe(false);
     expect(second.agents.selfReflection.planning.enabled).toBe(false);

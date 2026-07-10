@@ -979,6 +979,8 @@ export interface CliWorkflowSettings {
   resumeFailedTaskInSameWorkspace: boolean;
   gitMode: "remote" | "local";
   executionMode: CliExecutionMode;
+  /** Managed images are pulled and resolved to immutable digests by Code UX. */
+  containerImageMode: "managed" | "custom";
   containerImage: string;
   containerSetupScriptPath: string;
   /** Docker memory limit in MiB for provider CLI containers. 0 disables Docker memory flags. */
@@ -1006,6 +1008,55 @@ export interface CliWorkflowSettings {
   containerAntigravityAuthPath: string;
   maxPlanningJsonRetries: number;
   maxQuotaRetriesWithoutTimer: number;
+}
+
+export type ProviderToolPreparationState =
+  | "not_installed"
+  | "waiting_for_docker"
+  | "checking_update"
+  | "queued"
+  | "downloading"
+  | "installing"
+  | "verifying"
+  | "ready"
+  | "failed";
+
+export interface ProviderToolStatus {
+  provider: ProviderId;
+  state: ProviderToolPreparationState;
+  installedVersion: string | null;
+  targetVersion: string | null;
+  progressPercent: number | null;
+  stepText: string;
+  error: string | null;
+  retryable: boolean;
+  updatedAt: string;
+}
+
+export type ManagedRuntimePreparationState =
+  | "idle"
+  | "checking_update"
+  | "pulling"
+  | "verifying"
+  | "ready"
+  | "update_failed";
+
+export interface ManagedRuntimeStatus {
+  state: ManagedRuntimePreparationState;
+  activeVersion: string | null;
+  targetVersion: string | null;
+  baseImage: string | null;
+  browserImage: string | null;
+  progressPercent: number | null;
+  stepText: string;
+  error: string | null;
+  rollbackAvailable: boolean;
+  checkedAt: string | null;
+}
+
+export interface RuntimeAssetsStatus {
+  managedRuntime: ManagedRuntimeStatus;
+  providers: ProviderToolStatus[];
 }
 
 export interface SprintPreviewSettings {

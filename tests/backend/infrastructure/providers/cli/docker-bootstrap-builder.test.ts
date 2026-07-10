@@ -39,16 +39,11 @@ describe("DockerBootstrapBuilder", () => {
     expect(script).toMatchSnapshot();
   });
 
-  it("should include fallback install cases for specified providers", () => {
-    const options = {
-      runtimeNpmPrefix: "/runtime/npm-global",
-      runtimeNpmCache: "/runtime/npm-cache",
-      fallbackProviders: ["gemini"],
-    };
-
-    const script = builder.build(options);
-
-    expect(script).toMatchSnapshot();
+  it("uses the prepared provider tool path without runtime installers", () => {
+    const script = builder.build({ runtimeNpmPrefix: "/runtime/npm-global", runtimeNpmCache: "/runtime/npm-cache" });
+    expect(script).toContain("CODE_UX_PROVIDER_TOOL_BIN");
+    expect(script).not.toContain("npm install -g @google/gemini-cli");
+    expect(script).not.toContain("claude.ai/install.sh");
   });
 
   it("should handle claude specific auth", () => {
@@ -136,16 +131,6 @@ describe("DockerBootstrapBuilder", () => {
     expect(script).toContain("exec \"$1\" \"${CODE_UX_PROVIDER_ARGS[@]}\"");
   });
 
-  it("should not include fallback install if no providers specified", () => {
-    const options = {
-      runtimeNpmPrefix: "/runtime/npm-global",
-      runtimeNpmCache: "/runtime/npm-cache",
-      fallbackProviders: [],
-    };
-
-    const script = builder.build(options);
-    expect(script).toMatchSnapshot();
-  });
 });
 
 vi.mock("fs/promises");
