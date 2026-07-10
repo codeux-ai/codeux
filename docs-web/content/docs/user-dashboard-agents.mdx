@@ -110,9 +110,13 @@ The dashboard can attach an agent to one or more named persistent skill storage 
 
 Create and delete project skill storages in **Settings → Agents**, then attach them from either the settings attachment matrix or the agent editor. Persistent skill retrieval stays **off by default**: an agent must have at least one storage attached and the explicit persistent skills toggle enabled before runtime retrieval can use it.
 
+On supported task coding, planning, QA and follow-up, CI repair, merge repair, remediation, dashboard reply, and clarification reply invocations, an opted-in agent with attached storage receives exactly one persistent-skill prompt context, retrieval limited to its project-scoped attachments, and isolated storage mounts. Disabled agents, agents without attachments, cross-project preset mismatches, and invocations without a scoped agent receive no persistent-skill prompt context, retrieval grant, or mounts.
+
 The agent detail and editor panels show attached storage names and whether persistent skills are **Default off** or **Enabled**. Hover an attached storage chip, or focus it with the keyboard, to lazily inspect its description, bounded skill count, names, tags, and short content previews. The disclosure identifies loading, empty, retryable error, and truncated-preview states; detached storages are not inspected. Empty storage state means no persistent skills are available for that agent, and does not affect ordinary memory or knowledge subscriptions.
 
-When the dashboard loads a storage's contents, it receives only a bounded set of concise skill summaries and short content previews. Full markdown bodies and runtime filesystem or mount paths are not exposed by this project-scoped dashboard endpoint.
+When the dashboard loads a storage's contents, it receives only a bounded set of concise skill summaries and short content previews. The disclosure shows at most four skills, three tags per skill, and 180 preview characters. Full markdown bodies and runtime filesystem or mount paths are not exposed by this project-scoped endpoint, so opening the Agents page never triggers a full-body storage fetch.
+
+Persistent skills remain separate from memory templates, knowledge document subscriptions, and MCP access. The narrow `search_skills` retrieval grant can be available to an opted-in agent without enabling the broader Code UX MCP management tools described below.
 
 ## MCP access
 
