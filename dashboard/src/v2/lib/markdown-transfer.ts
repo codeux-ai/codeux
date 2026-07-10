@@ -1,6 +1,10 @@
 import type { SprintLinkedIssueInput, SprintMarkdownExportBundle, SprintMarkdownImportTask } from "../types.js";
 
 const FILE_MARKER = /^---\s*FILE:\s*(.+?)\s*---$/gm;
+const LINKED_ISSUES_HEADING = "## Linked Issues";
+const MAX_LINKED_ISSUES = 50;
+const MAX_LABELS = 8;
+const MAX_ASSIGNEES = 5;
 
 export function buildTaskBundle(bundle: SprintMarkdownExportBundle["tasks"]): string {
   return bundle.map((entry) => (
@@ -31,15 +35,13 @@ export function parseTaskBundle(text: string): SprintMarkdownImportTask[] {
 }
 
 export function buildLinkedIssuePromptBlock(issues: SprintLinkedIssueInput[]): string {
-  const normalized = issues
-    .filter((issue) => issue.title.trim() && issue.url.trim())
-    .slice(0, 50);
+  const normalized = normalizeLinkedIssuePromptInputs(issues);
   if (normalized.length === 0) {
     return "";
   }
 
   const lines = [
-    "## Linked Issues",
+    LINKED_ISSUES_HEADING,
     "",
     "Use these imported issue details as sprint scope. Preserve acceptance criteria, constraints, and user-reported context. Close linked issues only after the sprint is finished and merged.",
     "",
@@ -50,21 +52,36 @@ export function buildLinkedIssuePromptBlock(issues: SprintLinkedIssueInput[]): s
 }
 
 export function mergePromptWithLinkedIssues(goal: string, issues: SprintLinkedIssueInput[]): string {
-  const block = buildLinkedIssuePromptBlock(issues);
-  const trimmedGoal = goal.trim();
+  if (hasLinkedIssueSection(goal) && hasBodylessLinkedIssueList(issues)) {
+    return goal;
+  }
+
+  const normalizedIssues = normalizeLinkedIssuePromptInputs(issues);
+  const block = buildLinkedIssuePromptBlock(normalizedIssues);
+  const trimmedGoal = normalizeImportedMarkdown(goal);
   if (!block) {
-    return trimmedGoal;
+    return removeLinkedIssueSections(trimmedGoal).trim();
   }
-  if (trimmedGoal.includes("## Linked Issues")) {
-    return trimmedGoal;
-  }
-  return `${trimmedGoal}\n\n${block}`.trim();
+  return `${removeLinkedIssueSections(trimmedGoal).trim()}\n\n${block}`.trim();
+}
+
+function normalizeLinkedIssuePromptInputs(issues: SprintLinkedIssueInput[]): SprintLinkedIssueInput[] {
+  return issues
+    .filter((issue) => issue.title.trim() && issue.url.trim())
+    .slice(0, MAX_LINKED_ISSUES);
+}
+
+function hasBodylessLinkedIssueList(issues: SprintLinkedIssueInput[]): boolean {
+  return issues.length > 0 && issues.every((issue) => (
+    !normalizeImportedMarkdown(issue.issueBodyMarkdown)
+      && !normalizeImportedMarkdown(issue.issueConversationMarkdown)
+  ));
 }
 
 function formatLinkedIssuePromptSection(issue: SprintLinkedIssueInput): string {
   const issueRef = `${issue.provider.toUpperCase()} ${issue.repository}${issue.issueKey || `#${issue.issueNumber}`}`;
-  const labels = (issue.labels || []).slice(0, 8).map((label) => `\`${label}\``).join(", ");
-  const assignees = (issue.assignees || []).slice(0, 5).map((assignee) => `@${assignee}`).join(", ");
+  const labels = (issue.labels || []).slice(0, MAX_LABELS).map((label) => `\`${label}\``).join(", ");
+  const assignees = (issue.assignees || []).slice(0, MAX_ASSIGNEES).map((assignee) => `@${assignee}`).join(", ");
   const metadata = [
     `- Source: [${issueRef}](${issue.url})`,
     issue.state ? `- State: ${issue.state}` : "",
@@ -95,4 +112,32 @@ function formatLinkedIssuePromptSection(issue: SprintLinkedIssueInput): string {
 
 function normalizeImportedMarkdown(value: string | null | undefined): string {
   return (value || "").replace(/\r\n/g, "\n").trim();
+}
+
+function removeLinkedIssueSections(markdown: string): string {
+  const lines = markdown.split("\n");
+  const retained: string[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (lines[index]?.trim() !== LINKED_ISSUES_HEADING) {
+      retained.push(lines[index] || "");
+      continue;
+    }
+
+    index += 1;
+    while (index < lines.length && !isTopLevelSection(lines[index] || "")) {
+      index += 1;
+    }
+    index -= 1;
+  }
+
+  return retained.join("\n").trim();
+}
+
+function hasLinkedIssueSection(markdown: string): boolean {
+  return markdown.split("\n").some((line) => line.trim() === LINKED_ISSUES_HEADING);
+}
+
+function isTopLevelSection(line: string): boolean {
+  return /^##\s+[^#]/.test(line);
 }
