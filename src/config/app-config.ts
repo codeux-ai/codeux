@@ -306,6 +306,19 @@ export const dashboardPortLoader = (projectRoot: string): number => {
 };
 
 const mcpHttpPortLoader = (argv: string[], projectRoot: string, dashboardPort: number): number | null => {
+  const explicitDisable = hasFlag(argv, "--no-mcp") ||
+    hasFlag(argv, "--no-mcp-https") ||
+    hasFlag(argv, "--no-mcp-http") ||
+    parseBooleanEnv(process.env.MCP_HTTPS_ENABLED) === false ||
+    parseBooleanEnv(process.env.MCP_HTTP_ENABLED) === false;
+
+  // An explicit opt-out must take precedence over a retained port setting.
+  // This lets callers disable the transport without first clearing persisted
+  // or inherited MCP_HTTP_PORT values.
+  if (explicitDisable) {
+    return null;
+  }
+
   const cliPort = readPort(parseStringFlag(argv, "--mcp-https-port") ?? parseStringFlag(argv, "--mcp-http-port"), -1);
   if (cliPort !== -1) {
     return cliPort;
@@ -342,13 +355,7 @@ const mcpHttpPortLoader = (argv: string[], projectRoot: string, dashboardPort: n
     }
   }
 
-  const explicitDisable = hasFlag(argv, "--no-mcp") ||
-    hasFlag(argv, "--no-mcp-https") ||
-    hasFlag(argv, "--no-mcp-http") ||
-    parseBooleanEnv(process.env.MCP_HTTPS_ENABLED) === false ||
-    parseBooleanEnv(process.env.MCP_HTTP_ENABLED) === false;
-
-  return explicitDisable ? null : dashboardPort + 1;
+  return dashboardPort + 1;
 };
 
 const readProjectConfig = (projectRoot: string): Record<string, unknown> | null => {

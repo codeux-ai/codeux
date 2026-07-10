@@ -291,6 +291,8 @@ describe("GitHub workflow health", () => {
     expect(config).toContain("url: `${dashboardBaseUrl}/health`");
     expect(config).toContain("CODE_UX_DIRECTORY_BROWSER_ROOTS: os.tmpdir()");
     expect(config).toContain("CODEUX_E2E_PROVIDER_CLI_SHIM: mockProviderCliPath");
+    expect(config).toContain("CODE_UX_DISABLE_MCP_STDIO: '1'");
+    expect(config).toContain("MCP_HTTP_ENABLED: 'false'");
     expect(config).toContain("CODE_UX_CONTAINERIZED_GIT: '0'");
     expect(config).toContain("CODE_UX_GIT_CONTAINER_MODE: 'host'");
     expect(config).toContain("reuseExistingServer: false");
@@ -321,6 +323,8 @@ describe("GitHub workflow health", () => {
     expect(ciDagRunScript).toContain("--execution-mode docker");
     expect(ciDagRunScript).toContain("--scenario ci-qa-dag");
     expect(ciDagRunScript).toContain("--stall-timeout-ms 180000");
+    expect(ciDagRunScript).toContain("--restart-every-ms 5000");
+    expect(ciDagRunScript).toContain("--restart-count 2");
     expect(electronDagRunScript).toContain("--runtime electron");
     expect(electronDagRunScript).toContain("--execution-mode fixture");
     expect(electronDagRunScript).toContain("--scenario ci-qa-dag-electron");

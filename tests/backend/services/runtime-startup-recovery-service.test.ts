@@ -525,6 +525,48 @@ describe("RuntimeStartupRecoveryService", () => {
     });
   });
 
+  it("immediately cancels a fresh QA review row with no backing invocation after restart", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      qaReviewRepository,
+      service,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Fresh QA Startup Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/fresh-qa-startup-recovery-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Fresh QA Startup Recovery Sprint",
+      number: 8,
+      status: "running",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "docker_cli",
+      status: "running",
+    });
+    const qaRun = qaReviewRepository.createRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      triggerType: "sprint_completion",
+      runIndex: 1,
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledQaReviewRunIds).toEqual(expect.arrayContaining([qaRun.id]));
+    expect(qaReviewRepository.getRun(qaRun.id)).toMatchObject({
+      status: "cancelled",
+      outcome: null,
+      summaryMarkdown: expect.stringContaining("never started its backing invocation"),
+    });
+  });
+
   it("fails stale running planning invocation audit rows without provider runtime linkage on startup", async () => {
     const {
       projectRepository,
