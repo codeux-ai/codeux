@@ -12,8 +12,8 @@ All local CLI providers with agent transcripts have structured parser coverage:
 | --- | --- | --- | --- |
 | Gemini CLI | `gemini-log-parser.ts` | Structured stdout candidate parts and stats. | Per invocation stdout is process-scoped; missing structured stats fall back to estimated telemetry. |
 | Codex | `codex-log-parser.ts` | Rollout JSONL session files first, then `codex exec --json` stdout as a fallback. | Rollout token snapshots are cumulative, so Code UX subtracts the last pre-window baseline before reporting current-run usage. |
-| Claude Code | `claude-code-log-parser.ts` | Session JSONL from the active native session. | Session reads are filtered by invocation start time, and duplicate assistant message ids deduplicate usage while preserving richer later content. |
-| Qwen Code | `qwen-log-parser.ts` | OpenAI-compatible log records from host-visible or Docker workspace log data. | Records are filtered by invocation start time when available, and usage parsing accepts OpenAI and Anthropic-shaped token fields. |
+| Claude Code | `claude-code-log-parser.ts` | Session JSONL from the active native session on the host or paired Docker runtime volume. | Session reads are filtered by invocation start time, and duplicate assistant message ids replace earlier content and usage snapshots so streamed updates are counted once. |
+| Qwen Code | `qwen-log-parser.ts` | OpenAI- or Anthropic-shaped log records from host-visible or Docker workspace log data. | Timestamped records proven to predate the invocation are excluded, valid untimestamped records remain eligible, and usage parsing accepts both provider token shapes. |
 | OpenCode | `opencode-log-parser.ts` | `run --format json` stdout for conversation, `opencode export <sessionID>` for authoritative tokens. | Exported usage is cumulative for a resumed session, so Code UX subtracts the previous raw export snapshot. |
 | Antigravity | `antigravity-log-parser.ts` | Transcript JSONL plus the resolved conversation database. | Database usage rows are cumulative, so resumed runs sum only rows with `idx` greater than the stored baseline. |
 

@@ -25,7 +25,9 @@ export interface ClaudeCodeLogResult extends ParsedProviderLogResult<ClaudeUsage
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 /** Flatten a Claude message `content` array into plain text. */
@@ -54,22 +56,6 @@ function flattenClaudeContent(content: unknown): string {
     }
   }
   return parts.join("\n").trim();
-}
-
-/**
- * Extracts all `content` items of a given type from a Claude message content
- * array. Used to pull `tool_use` and `thinking` blocks separately.
- */
-function contentItemsOfType(content: unknown, type: string): Record<string, unknown>[] {
-  if (!Array.isArray(content)) return [];
-  const result: Record<string, unknown>[] = [];
-  for (const item of content) {
-    const rec = asRecord(item);
-    if (rec && rec.type === type) {
-      result.push(rec);
-    }
-  }
-  return result;
 }
 
 function extractVisibleClaudeText(value: unknown): string {
@@ -106,10 +92,6 @@ function stringifyInput(input: unknown): string | undefined {
 /** Extract tool-result text from a `tool_result` content block. */
 function extractToolResultText(content: unknown): string {
   if (typeof content === "string") return content;
-  const rec = asRecord(content);
-  if (rec) {
-    return extractVisibleClaudeText(rec);
-  }
   if (Array.isArray(content)) {
     const parts: string[] = [];
     for (const item of content) {
@@ -121,6 +103,10 @@ function extractToolResultText(content: unknown): string {
       }
     }
     return parts.join("\n").trim();
+  }
+  const rec = asRecord(content);
+  if (rec) {
+    return extractVisibleClaudeText(rec);
   }
   return "";
 }
@@ -145,43 +131,44 @@ function claudeAssistantTurns(message: Record<string, unknown>, timestampMs: num
   const content = message.content;
   const turns: ParsedConversationTurn[] = [];
 
-  // Thinking/reasoning blocks -> reasoning turns. Redacted/opaque blocks are
-  // intentionally skipped because they do not expose readable text.
-  for (const block of [
-    ...contentItemsOfType(content, "thinking"),
-    ...contentItemsOfType(content, "reasoning"),
-  ]) {
-    const text = extractVisibleClaudeText(block.thinking ?? block.reasoning ?? block.summary ?? block.content ?? block.text);
-    if (text) {
-      turns.push({ kind: "reasoning", text, timestampMs });
-    }
-  }
-
   const directThinking = extractVisibleClaudeText(
     message.thinking ?? message.reasoning ?? message.reasoning_content ?? message.summary,
   );
-  if (directThinking && !turns.some((turn) => turn.kind === "reasoning" && turn.text === directThinking)) {
+  if (directThinking) {
     turns.push({ kind: "reasoning", text: directThinking, timestampMs });
   }
 
-  const textContent = flattenClaudeContent(
-    Array.isArray(content)
-      ? content.filter((item) => asRecord(item)?.type === "text")
-      : content,
-  );
-  if (textContent) {
-    turns.push({ kind: "assistant", text: textContent, timestampMs });
-  }
+  if (Array.isArray(content)) {
+    for (const item of content) {
+      const block = asRecord(item);
+      if (!block) continue;
 
-  for (const block of contentItemsOfType(content, "tool_use")) {
-    turns.push({
-      kind: "tool_call",
-      text: "",
-      toolName: typeof block.name === "string" ? block.name : undefined,
-      toolCallId: typeof block.id === "string" ? block.id : undefined,
-      toolArguments: stringifyInput(block.input),
-      timestampMs,
-    });
+      if (block.type === "thinking" || block.type === "reasoning") {
+        const text = extractVisibleClaudeText(
+          block.thinking ?? block.reasoning ?? block.summary ?? block.content ?? block.text,
+        );
+        if (text && !turns.some((turn) => turn.kind === "reasoning" && turn.text === text)) {
+          turns.push({ kind: "reasoning", text, timestampMs });
+        }
+      } else if (block.type === "text" && typeof block.text === "string" && block.text.trim()) {
+        turns.push({ kind: "assistant", text: block.text.trim(), timestampMs });
+      } else if (block.type === "tool_use") {
+        turns.push({
+          kind: "tool_call",
+          text: "",
+          toolName: typeof block.name === "string" ? block.name : undefined,
+          toolCallId: typeof block.id === "string" ? block.id : undefined,
+          toolArguments: stringifyInput(block.input),
+          timestampMs,
+        });
+      }
+      // `redacted_thinking` and other opaque blocks are intentionally ignored.
+    }
+  } else {
+    const textContent = flattenClaudeContent(content);
+    if (textContent) {
+      turns.push({ kind: "assistant", text: textContent, timestampMs });
+    }
   }
 
   return turns;
@@ -264,7 +251,7 @@ export function parseClaudeCodeSessionJsonl(
   sinceMs?: number,
 ): ClaudeCodeLogResult {
   const lines = jsonl.split("\n");
-  const usageCountedMessageIds = new Set<string>();
+  const usageByMessageId = new Map<string, ClaudeUsageTotals>();
   const assistantMessageRanges = new Map<string, { start: number; count: number; signature: string }>();
   const conversation: ParsedConversationTurn[] = [];
 
@@ -275,6 +262,47 @@ export function parseClaudeCodeSessionJsonl(
   let latestRawUsage: Record<string, unknown> | null = null;
   let nativeSessionId: string | null = null;
   let hasUsage = false;
+
+  const applyUsage = (messageId: string | null, usage: Record<string, unknown> | null): void => {
+    if (!usage || !claudeUsageHasTokens(usage)) return;
+    const next = {
+      inputTokens: toNumber(usage.input_tokens),
+      outputTokens: toNumber(usage.output_tokens),
+      cacheCreationTokens: toNumber(usage.cache_creation_input_tokens),
+      cacheReadTokens: toNumber(usage.cache_read_input_tokens),
+    };
+    const previous = messageId ? usageByMessageId.get(messageId) : undefined;
+    totalInputTokens += next.inputTokens - (previous?.inputTokens ?? 0);
+    totalOutputTokens += next.outputTokens - (previous?.outputTokens ?? 0);
+    totalCacheCreation += next.cacheCreationTokens - (previous?.cacheCreationTokens ?? 0);
+    totalCacheRead += next.cacheReadTokens - (previous?.cacheReadTokens ?? 0);
+    if (messageId) usageByMessageId.set(messageId, next);
+    latestRawUsage = usage;
+    hasUsage = true;
+  };
+
+  const upsertAssistantTurns = (messageId: string | null, turns: ParsedConversationTurn[]): void => {
+    if (!messageId || turns.length === 0) {
+      conversation.push(...turns);
+      return;
+    }
+    const signature = turnSignature(turns);
+    const existing = assistantMessageRanges.get(messageId);
+    if (!existing) {
+      assistantMessageRanges.set(messageId, { start: conversation.length, count: turns.length, signature });
+      conversation.push(...turns);
+      return;
+    }
+    if (existing.signature === signature) return;
+    conversation.splice(existing.start, existing.count, ...turns);
+    const delta = turns.length - existing.count;
+    for (const [id, range] of assistantMessageRanges.entries()) {
+      if (id !== messageId && range.start > existing.start) {
+        assistantMessageRanges.set(id, { ...range, start: range.start + delta });
+      }
+    }
+    assistantMessageRanges.set(messageId, { start: existing.start, count: turns.length, signature });
+  };
 
   // 2-second grace window, same as codex / qwen parsers.
   const minMs = typeof sinceMs === "number" ? sinceMs - 2000 : null;
@@ -288,15 +316,15 @@ export function parseClaudeCodeSessionJsonl(
 
     const entryType = typeof entry.type === "string" ? entry.type : null;
 
-    // Capture the session id from any entry that carries it.
-    if (!nativeSessionId) {
-      nativeSessionId = claudeSessionId(entry);
-    }
-
     // Timestamp extraction and filtering (applied to all entry types).
     const timestampMs = parseTimestampMs(entry.timestamp);
     if (minMs !== null && timestampMs !== null && timestampMs < minMs) {
       continue;
+    }
+
+    // Capture the session id only from records eligible for this invocation.
+    if (!nativeSessionId) {
+      nativeSessionId = claudeSessionId(entry);
     }
 
     // ── Legacy bare-message format ───────────────────────────────────────────
@@ -306,26 +334,13 @@ export function parseClaudeCodeSessionJsonl(
     if (!entryType && asRecord(entry.message)) {
       const legacyMessage = asRecord(entry.message)!;
       const messageId = typeof legacyMessage.id === "string" ? legacyMessage.id : null;
-      const usage = claudeMessageUsage(legacyMessage);
-      if (usage && (!messageId || !usageCountedMessageIds.has(messageId))) {
-        const inp = toNumber(usage.input_tokens);
-        const out = toNumber(usage.output_tokens);
-        const cacheCreate = toNumber(usage.cache_creation_input_tokens);
-        const cacheRead = toNumber(usage.cache_read_input_tokens);
-        if (claudeUsageHasTokens(usage)) {
-          totalInputTokens += inp;
-          totalOutputTokens += out;
-          totalCacheCreation += cacheCreate;
-          totalCacheRead += cacheRead;
-          latestRawUsage = usage;
-          hasUsage = true;
-          if (messageId) usageCountedMessageIds.add(messageId);
-        }
-      }
+      applyUsage(messageId, claudeMessageUsage(legacyMessage));
       const role = typeof legacyMessage.role === "string" ? legacyMessage.role : "assistant";
-      conversation.push(...(role === "user"
-        ? claudeUserTurns(legacyMessage, timestampMs)
-        : claudeAssistantTurns(legacyMessage, timestampMs)));
+      if (role === "user") {
+        conversation.push(...claudeUserTurns(legacyMessage, timestampMs));
+      } else {
+        upsertAssistantTurns(messageId, claudeAssistantTurns(legacyMessage, timestampMs));
+      }
       continue;
     }
 
@@ -337,44 +352,11 @@ export function parseClaudeCodeSessionJsonl(
       const messageId = typeof message.id === "string" ? message.id : null;
 
       // ── Token usage ─────────────────────────────────────────────────────
-      const usage = claudeMessageUsage(message);
-      if (usage && (!messageId || !usageCountedMessageIds.has(messageId))) {
-        const inp = toNumber(usage.input_tokens);
-        const out = toNumber(usage.output_tokens);
-        const cacheCreate = toNumber(usage.cache_creation_input_tokens);
-        const cacheRead = toNumber(usage.cache_read_input_tokens);
-        if (claudeUsageHasTokens(usage)) {
-          totalInputTokens += inp;
-          totalOutputTokens += out;
-          totalCacheCreation += cacheCreate;
-          totalCacheRead += cacheRead;
-          latestRawUsage = usage;
-          hasUsage = true;
-          if (messageId) usageCountedMessageIds.add(messageId);
-        }
-      }
+      applyUsage(messageId, claudeMessageUsage(message));
 
       // ── Conversation turns ───────────────────────────────────────────────
       const turns = claudeAssistantTurns(message, timestampMs);
-      if (messageId && turns.length > 0) {
-        const signature = turnSignature(turns);
-        const existing = assistantMessageRanges.get(messageId);
-        if (!existing) {
-          assistantMessageRanges.set(messageId, { start: conversation.length, count: turns.length, signature });
-          conversation.push(...turns);
-        } else if (existing.signature !== signature) {
-          conversation.splice(existing.start, existing.count, ...turns);
-          const delta = turns.length - existing.count;
-          for (const [id, range] of assistantMessageRanges.entries()) {
-            if (id !== messageId && range.start > existing.start) {
-              assistantMessageRanges.set(id, { ...range, start: range.start + delta });
-            }
-          }
-          assistantMessageRanges.set(messageId, { start: existing.start, count: turns.length, signature });
-        }
-      } else if (turns.length > 0) {
-        conversation.push(...turns);
-      }
+      upsertAssistantTurns(messageId, turns);
       continue;
     }
 
