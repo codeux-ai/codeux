@@ -121,6 +121,9 @@ describe("AppDbSchema", () => {
         return (adapter.prepare(`PRAGMA index_info('${name}')`).all() as Array<{ name: string }>)
           .map((row) => row.name);
       };
+      const getColumnNames = (tableName: string) => (
+        adapter.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>
+      ).map((row) => row.name);
 
       expect(getIndex("idx_provider_invocations_provider_status")).toBeDefined();
       expect(getIndex("idx_task_dispatches_project_executor_status_priority")).toBeDefined();
@@ -134,6 +137,15 @@ describe("AppDbSchema", () => {
         expect(getIndex(indexName)).toBeDefined();
         expect(getIndexColumns(indexName)).toEqual(liveSnapshotIndexColumns[indexName]);
       }
+      expect(getColumnNames("sprint_linked_issues")).toEqual(expect.arrayContaining([
+        "issue_body_markdown",
+        "issue_conversation_markdown",
+        "include_conversation",
+        "issue_author",
+        "issue_created_at",
+        "issue_updated_at",
+        "metadata_json",
+      ]));
     } finally {
       adapter.close();
       await fs.rm(dir, { recursive: true, force: true });
@@ -196,6 +208,15 @@ describe("AppDbSchema", () => {
       expect(getTable("node_flow_node_runs")).toBeDefined();
       expect(getColumnNames("node_flow_runs")).toContain("execution_invocation_id");
       expect(getColumnNames("node_flow_node_runs")).toContain("execution_invocation_id");
+      expect(getColumnNames("sprint_linked_issues")).toEqual(expect.arrayContaining([
+        "issue_body_markdown",
+        "issue_conversation_markdown",
+        "include_conversation",
+        "issue_author",
+        "issue_created_at",
+        "issue_updated_at",
+        "metadata_json",
+      ]));
       expect(getColumnNames("provider_invocations")).toEqual(expect.arrayContaining([
         "tool_call_count",
         "execution_mode",

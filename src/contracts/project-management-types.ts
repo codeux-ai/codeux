@@ -135,6 +135,13 @@ export interface SprintLinkedIssueRecord {
   state: string;
   labels: string[];
   assignees: string[];
+  issueBodyMarkdown?: string;
+  issueConversationMarkdown?: string;
+  includeConversation?: boolean;
+  issueAuthor?: string | null;
+  issueCreatedAt?: string | null;
+  issueUpdatedAt?: string | null;
+  metadata?: Record<string, unknown>;
   importedAt: string;
   closedAt: string | null;
   closeState: LinkedIssueCloseState;
