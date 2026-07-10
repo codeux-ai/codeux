@@ -215,6 +215,8 @@ The lane is intentionally numbered and staged:
 - `09 E2E` runs Playwright from the build artifact with one shared matrix template across Linux, macOS, and Windows. Every OS runs all six project groups (`navigation`, `settings`, `projects`, `tasks`, `agents`, and `config`) with `max-parallel: 10`; it runs only for `main` validation and manual dispatches.
 - `10 Release Candidate` starts after `07 Package` verifies the artifact-backed npm install, then builds unsigned Linux, macOS, and Windows desktop packages with `--publish never`. It runs only for `main` validation and manual dispatches.
 
+The main ruleset still contains nine historical context names from earlier CI numbering and matrix configuration. The workflow emits explicit compatibility aggregate jobs for those names only after their current backend, dashboard, audit, package, orchestration, 18-shard E2E, or release-candidate dependency has passed. These jobs do not replace or bypass validation; they bridge branch-protection naming until a repository administrator removes the obsolete contexts from ruleset `Protect main`.
+
 The former standalone `Playwright Tests`, `Release Checks`, and `Mockup Sprint Orchestration` workflows are now manual diagnostics only: `Playwright Diagnostics`, `Release Candidate Diagnostics`, and `Mockup Sprint Diagnostics`. They remain useful for focused reruns, but the automatic PR signal comes from the numbered `Code UX CI Pipeline`.
 
 ### Main Release Version Gate

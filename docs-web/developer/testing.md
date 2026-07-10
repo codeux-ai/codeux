@@ -119,6 +119,8 @@ It is staged as:
 5. `09 E2E`: full Playwright on Linux, macOS, and Windows only for `main` validation and manual dispatches.
 6. `10 Release Candidate`: unsigned desktop release-candidate packages with `--publish never`, only for `main` validation and manual dispatches.
 
+The main branch ruleset still includes historical context names from older CI numbering and matrix definitions. Compatibility aggregate jobs emit those names only after the corresponding current backend, dashboard, audit, package, orchestration, 18-shard E2E, or desktop release-candidate gate succeeds. They preserve branch-protection compatibility without replacing any current validation job and can be removed once a repository administrator cleans up the obsolete ruleset entries.
+
 `Playwright Diagnostics`, `Release Candidate Diagnostics`, and `Mockup Sprint Diagnostics` are manual-only rerun workflows. A PR cannot be merged with red CI.
 
 ## Smoke test

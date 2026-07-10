@@ -245,6 +245,33 @@ describe("GitHub workflow health", () => {
     expect(releaseCandidate).not.toContain("pnpm run build");
   });
 
+  it("keeps legacy main ruleset contexts coupled to their current validation gates", async () => {
+    const ci = await readRepoFile(WORKFLOWS.ci);
+    const compatibilityJobs = [
+      ["legacy-backend-context", "name: 04 Test / backend coverage", "needs: backend-tests"],
+      ["legacy-dashboard-context", "name: 05 Test / dashboard suite", "needs: dashboard-tests"],
+      ["legacy-security-context", "name: 06 Security / dependency audit", "needs: security-audit"],
+      ["legacy-package-context", "name: 07 Package / npm install smoke (${{ matrix.name }})", "needs: package-smoke"],
+      ["legacy-orchestration-context", "name: 08 Orchestration / Docker DAG", "needs: ci-dag"],
+      ["legacy-e2e-context", "name: ${{ format('09 E2E / ${0}{0} matrix.os.label {1}{1} full", "needs: e2e"],
+      ["legacy-release-candidate-context", "name: ${{ format('10 Release Candidate / desktop package (${0}{0} matrix.name {1}{1})", "needs: release-candidate"],
+    ] as const;
+
+    for (const [jobName, displayName, dependency] of compatibilityJobs) {
+      const job = getJobBlock(ci, jobName);
+      expect(job).toContain(displayName);
+      expect(job).toContain(dependency);
+      expect(job).toContain("always()");
+      expect(job).toContain("github.base_ref == 'main'");
+    }
+
+    const packageCompatibility = getJobBlock(ci, "legacy-package-context");
+    expect(packageCompatibility).toContain("name: [Linux, Windows, macOS]");
+    expect(packageCompatibility).toContain("needs['package-smoke'].result == 'success'");
+    expect(getJobBlock(ci, "legacy-e2e-context")).toContain("needs.e2e.result == 'success'");
+    expect(getJobBlock(ci, "legacy-release-candidate-context")).toContain("needs['release-candidate'].result == 'success'");
+  });
+
   it("keeps former duplicate lanes as manual diagnostics only", async () => {
     const [playwright, releaseChecks, mockup] = await Promise.all([
       readRepoFile(WORKFLOWS.playwright),
