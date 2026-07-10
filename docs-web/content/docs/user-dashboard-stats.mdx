@@ -2,7 +2,7 @@
 
 The **Stats** page (`/stats`) is the analytics surface for the active project. It shows project execution, usage, cost, Git, provider/model, ledger, and invocation telemetry in one flat Analysis Studio with responsive layouts and light/dark mode support.
 
-Stats metric cards, chips, filters, tables, and ledger rows use warm void surfaces, hairline borders, compact typography, subtle depth, and quiet selected states. Data colors are reserved for telemetry meaning such as chart series, status, source confidence, and token/churn breakdowns.
+Stats metric cards, chips, filters, tables, and ledger rows use flat warm void surfaces, hairline borders, compact typography, and quiet selected states. Shared containers avoid gradients, glass blur, heavy shadows, and hover lift. Data colors are reserved for telemetry meaning such as chart series, status, source confidence, and token/churn breakdowns.
 
 The top command band shows the selected project, generated snapshot time, sprint lens, time-window controls, and analysis mode controls before the mode-specific metric deck and workspace.
 
@@ -31,6 +31,7 @@ A full-width interactive **Usage Graph** displays usage over time for the series
 - **Reset** restores the snapshot defaults. **Enable defaults** turns the default series back on without hiding other series you selected.
 - At least one series stays enabled. If you try to turn off the last visible series, the switch remains on and the page explains why.
 - Hover, focus, or select a bucket to inspect exact values. Drag-to-zoom changes the visible graph range; it does not change the selected Stats time window.
+- The latest visible bucket remains readable before you hover or focus the graph. Pointer focus, keyboard focus, slider pinning, drag zoom, minimap selection, and reset all feed the same inspection area.
 - The graph frame, filter flyout, focused-bucket panel, tooltip, minimap, and series switches use neutral Stats surfaces; series colors remain reserved for chart lines and data markers.
 - Hourly views reduce visible axis labels while preserving individual bucket inspection.
 

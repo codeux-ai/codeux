@@ -172,6 +172,56 @@ describe('UsageFilterMenu', () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it('restores trigger focus when the explicit close control is used', () => {
+    const Wrapper = () => {
+      const [open, setOpen] = useState(false);
+      return (
+        <div>
+          <button type="button" onClick={() => setOpen(true)}>Open filters</button>
+          <UsageFilterMenu {...mockProps} isOpen={open} onClose={() => setOpen(false)} />
+        </div>
+      );
+    };
+
+    render(<Wrapper />);
+    const trigger = screen.getByRole('button', { name: 'Open filters' });
+    trigger.focus();
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole('button', { name: 'Close graph filters' }));
+
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('keeps long series labels wrapped inside the flyout', () => {
+    const longLabel = 'Extremely long provider and model telemetry label that must stay within the available filter width';
+    render(<UsageFilterMenu
+      {...mockProps}
+      stats={{ chartSeries: [{ id: 'long', label: longLabel }] } as any}
+      enabledSeries={{ long: true }}
+      activeSeriesCount={1}
+      seriesGroups={groupChartSeries([
+        { id: 'long', label: longLabel, grouping: 'Providers', color: '#00E0A0', defaultEnabled: true, data: [] },
+      ], { long: true })}
+    />);
+
+    const label = screen.getByText(longLabel);
+    expect(label.classList.contains('break-words')).toBe(true);
+    expect(label.closest('button')?.classList.contains('max-w-full')).toBe(true);
+  });
+
+  it('uses static flyout geometry for reduced motion', () => {
+    vi.mocked(gsap.matchMedia).mockReturnValueOnce({
+      add: vi.fn().mockImplementation((query, callback) => {
+        if (query.includes('reduce')) callback();
+      }),
+      revert: vi.fn(),
+    } as any);
+
+    render(<UsageFilterMenu {...mockProps} />);
+
+    expect(gsap.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ opacity: 1, scale: 1, y: 0 }));
+  });
+
   it('announces filter reset feedback', () => {
     const onStatusChange = vi.fn();
     render(<UsageFilterMenu {...mockProps} onStatusChange={onStatusChange} />);

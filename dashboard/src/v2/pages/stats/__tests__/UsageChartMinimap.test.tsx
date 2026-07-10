@@ -160,4 +160,13 @@ describe("UsageChartMinimap", () => {
       expect(container.textContent).toContain(label);
     }
   });
+
+  it("contains dense bucket sets without rendering a wide visible label grid", () => {
+    const { getByTestId, container } = render(
+      <UsageChartMinimap buckets={createBuckets(40)} zoomRange={null} onZoomChange={vi.fn()} />,
+    );
+
+    expect(getByTestId("usage-chart-minimap").classList.contains("overflow-hidden")).toBe(true);
+    expect(container.querySelector('[style*="grid-template-columns"]')).toBeNull();
+  });
 });

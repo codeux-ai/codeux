@@ -147,6 +147,31 @@ describe("UsageChartAccessibility", () => {
     expect(screen.getByText("Pinned Jan 2.")).toBeInTheDocument();
   });
 
+  it("keeps slider pinning aligned with the absolute bucket inside a zoom", () => {
+    const OffsetZoomWrapper = () => {
+      const chartState = useUsageChartState("offset-zoom", mockStats as any);
+      chartState.zoomRange = { start: 1, end: 2 };
+      return <InteractiveUsageChart stats={mockStats as any} loading={false} error={null} refresh={async () => {}} chartState={chartState} />;
+    };
+
+    render(<OffsetZoomWrapper />);
+    const slider = screen.getByLabelText(/Explore chart data across time/i);
+    fireEvent.input(slider, { target: { value: "1" } });
+    fireEvent.keyDown(slider, { key: "Enter" });
+
+    expect(screen.getByText("Pinned Jan 3.")).toBeInTheDocument();
+  });
+
+  it("announces keyboard focus without requiring a pin", async () => {
+    const { container } = render(<Wrapper />);
+    await vi.waitFor(() => expect(container.querySelectorAll('rect[tabIndex="0"]').length).toBe(3));
+
+    fireEvent.focus(container.querySelectorAll('rect[tabIndex="0"]')[0]!);
+
+    expect(screen.getByText("Focused Jan 1. Press Enter to pin this bucket.")).toBeInTheDocument();
+    expect(screen.getByText("Focused bucket")).toBeInTheDocument();
+  });
+
   it("announces completed drag zoom changes without per-frame status", async () => {
     const { container } = render(<Wrapper />);
 
@@ -248,13 +273,24 @@ describe("UsageChartAccessibility", () => {
     expect(screen.getByRole("alert")).toBeInTheDocument();
   });
 
+  it("keeps the chart controls and recovery copy available for an empty window", () => {
+    render(<EmptyWrapper />);
+
+    expect(screen.getByRole("toolbar", { name: /Usage graph controls/i })).toBeInTheDocument();
+    expect(screen.getByText(/No telemetry buckets are available for this window yet/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reset window" })).toBeInTheDocument();
+  });
+
   it("keeps chart geometry static for reduced motion", () => {
-    vi.mocked(gsap.matchMedia).mockReturnValueOnce({
+    const reducedMotionMedia = {
       add: vi.fn().mockImplementation((_query, cb) => {
         if (_query.includes("reduce")) cb();
       }),
       revert: vi.fn(),
-    } as any);
+    } as any;
+    vi.mocked(gsap.matchMedia)
+      .mockReturnValueOnce(reducedMotionMedia)
+      .mockReturnValueOnce(reducedMotionMedia);
 
     render(<Wrapper />);
 
