@@ -1,4 +1,8 @@
-import type { ParsedConversationTurn, ParsedProviderLogResult } from "./provider-conversation-types.js";
+import type {
+  ParsedConversationTurn,
+  ParsedProviderLogResult,
+  ParsedTurnTokens,
+} from "./provider-conversation-types.js";
 import {
   parseJsonObject,
   parseTimestampMs,
@@ -59,11 +63,14 @@ function flattenReasoningSummary(summary: unknown): string {
   return parts.join("\n\n").trim();
 }
 
-function extractVisibleReasoningText(value: unknown): string {
-  if (typeof value === "string") {
-    return value.trim();
-  }
-  return flattenReasoningSummary(value) || flattenContent(value);
+function extractVisibleReasoningText(item: Record<string, unknown>): string {
+  // Codex rollout reasoning records may also carry `encrypted_content` or
+  // provider-internal opaque payloads. Only fields explicitly intended for
+  // readable display are eligible for transcript reconstruction.
+  return flattenReasoningSummary(item.summary)
+    || (typeof item.summary_text === "string" ? item.summary_text.trim() : "")
+    || (typeof item.text === "string" ? item.text.trim() : "")
+    || flattenContent(item.content);
 }
 
 function stringifyOutput(value: unknown): string {
@@ -132,6 +139,21 @@ function emptyUsageCounts(): ParsedUsageCounts {
   };
 }
 
+function extractTurnTokens(item: Record<string, unknown>): ParsedTurnTokens | undefined {
+  const raw = asRecord(item.tokens) ?? asRecord(item.usage) ?? asRecord(item.token_usage);
+  if (!raw) {
+    return undefined;
+  }
+  const parsed = parseUsageObject(raw);
+  return {
+    input: parsed.inputTokens,
+    cached: parsed.cachedInputTokens,
+    output: parsed.outputTokens,
+    reasoning: parsed.reasoningOutputTokens,
+    total: parsed.inputTokens + parsed.cachedInputTokens + parsed.outputTokens,
+  };
+}
+
 function extractToolArguments(item: Record<string, unknown>): string | undefined {
   const action = asRecord(item.action);
   const command = item.command ?? action?.command;
@@ -192,6 +214,54 @@ function appendWithToolNames(
   }
 }
 
+interface ConversationTurnGroup {
+  key: string | null;
+  turns: ParsedConversationTurn[];
+}
+
+function conversationItemKey(item: Record<string, unknown>): string | null {
+  const type = typeof item.type === "string" ? item.type : "unknown";
+  const id = typeof item.id === "string"
+    ? item.id
+    : typeof item.call_id === "string"
+      ? item.call_id
+      : typeof item.callId === "string"
+        ? item.callId
+        : null;
+  return id ? `${type}:${id}` : null;
+}
+
+/** Replaces repeated lifecycle records in place, preserving first-seen order. */
+function upsertConversationGroup(
+  groups: ConversationTurnGroup[],
+  groupIndexes: Map<string, number>,
+  item: Record<string, unknown>,
+  turns: ParsedConversationTurn[],
+): void {
+  if (turns.length === 0) {
+    return;
+  }
+  const key = conversationItemKey(item);
+  if (key) {
+    const existingIndex = groupIndexes.get(key);
+    if (existingIndex !== undefined) {
+      groups[existingIndex] = { key, turns };
+      return;
+    }
+    groupIndexes.set(key, groups.length);
+  }
+  groups.push({ key, turns });
+}
+
+function flattenConversationGroups(groups: ConversationTurnGroup[]): ParsedConversationTurn[] {
+  const conversation: ParsedConversationTurn[] = [];
+  const toolNamesById = new Map<string, string>();
+  for (const group of groups) {
+    appendWithToolNames(conversation, group.turns, toolNamesById);
+  }
+  return conversation;
+}
+
 function eventMsgToTurns(payload: Record<string, unknown>, timestampMs: number | null): ParsedConversationTurn[] {
   const type = typeof payload.type === "string" ? payload.type : null;
   if (type !== "agent_message" && type !== "assistant_message" && type !== "user_message") {
@@ -222,6 +292,7 @@ export function turnsFromCodexItem(item: Record<string, unknown>, timestampMs: n
     : typeof item.callId === "string"
       ? item.callId
       : id;
+  const tokens = extractTurnTokens(item);
 
   if (type === "message") {
     const role = typeof item.role === "string" ? item.role : "";
@@ -230,22 +301,22 @@ export function turnsFromCodexItem(item: Record<string, unknown>, timestampMs: n
       return [];
     }
     const text = flattenContent(item.content);
-    return text ? [{ kind: role === "user" ? "user" : "assistant", text, timestampMs }] : [];
+    return text ? [{ kind: role === "user" ? "user" : "assistant", text, tokens, timestampMs }] : [];
   }
 
   if (type === "agent_message" || type === "assistant_message") {
     const text = flattenContent(item.content) || (typeof item.text === "string" ? item.text.trim() : "");
-    return text ? [{ kind: "assistant", text, timestampMs }] : [];
+    return text ? [{ kind: "assistant", text, tokens, timestampMs }] : [];
   }
 
   if (type === "user_message") {
     const text = flattenContent(item.content) || (typeof item.text === "string" ? item.text.trim() : "");
-    return text ? [{ kind: "user", text, timestampMs }] : [];
+    return text ? [{ kind: "user", text, tokens, timestampMs }] : [];
   }
 
   if (type === "reasoning") {
-    const text = extractVisibleReasoningText(item.text ?? item.summary ?? item.summary_text ?? item.reasoning ?? item.content);
-    return text ? [{ kind: "reasoning", text, timestampMs }] : [];
+    const text = extractVisibleReasoningText(item);
+    return text ? [{ kind: "reasoning", text, tokens, timestampMs }] : [];
   }
 
   if (type === "function_call" || type === "custom_tool_call") {
@@ -261,6 +332,7 @@ export function turnsFromCodexItem(item: Record<string, unknown>, timestampMs: n
       toolCallId: callId,
       toolArguments: extractToolArguments(item),
       toolStatus: typeof item.status === "string" ? item.status : undefined,
+      tokens,
       timestampMs,
     }];
   }
@@ -277,6 +349,7 @@ export function turnsFromCodexItem(item: Record<string, unknown>, timestampMs: n
       toolCallId: callId,
       toolOutput: extractToolOutput(item),
       toolStatus: typeof item.status === "string" ? item.status : undefined,
+      tokens,
       timestampMs,
     }];
   }
@@ -308,8 +381,11 @@ export function turnsFromCodexItem(item: Record<string, unknown>, timestampMs: n
         toolName: "shell",
         toolOutput: output,
         toolStatus: status ?? (exitCode === 0 ? "completed" : "failed"),
+        tokens,
         timestampMs,
       });
+    } else if (tokens) {
+      turns[0].tokens = tokens;
     }
     return turns;
   }
@@ -322,6 +398,7 @@ export function turnsFromCodexItem(item: Record<string, unknown>, timestampMs: n
       toolName: "shell",
       toolOutput: extractToolOutput(item),
       toolStatus: typeof item.status === "string" ? item.status : undefined,
+      tokens,
       timestampMs,
     }];
   }
@@ -334,6 +411,8 @@ export function turnsFromCodexItem(item: Record<string, unknown>, timestampMs: n
       toolName: "apply_patch",
       toolCallId: callId,
       toolArguments: stringifyOutput(changes),
+      toolStatus: typeof item.status === "string" ? item.status : undefined,
+      tokens,
       timestampMs,
     }];
   }
@@ -348,6 +427,7 @@ export function turnsFromCodexItem(item: Record<string, unknown>, timestampMs: n
       toolName: name,
       toolCallId: callId,
       toolArguments: extractToolArguments(item),
+      toolStatus: typeof item.status === "string" ? item.status : undefined,
       timestampMs,
     }];
     if (item.result !== undefined || item.output !== undefined) {
@@ -357,15 +437,28 @@ export function turnsFromCodexItem(item: Record<string, unknown>, timestampMs: n
         toolCallId: callId,
         toolName: name,
         toolOutput: extractToolOutput(item),
+        toolStatus: typeof item.status === "string" ? item.status : undefined,
+        tokens,
         timestampMs,
       });
+    } else if (tokens) {
+      turns[0].tokens = tokens;
     }
     return turns;
   }
 
   if (type === "web_search") {
     const query = typeof item.query === "string" ? item.query : "";
-    return [{ kind: "tool_call", text: "", toolName: "web_search", toolCallId: callId, toolArguments: query, timestampMs }];
+    return [{
+      kind: "tool_call",
+      text: "",
+      toolName: "web_search",
+      toolCallId: callId,
+      toolArguments: query,
+      toolStatus: typeof item.status === "string" ? item.status : undefined,
+      tokens,
+      timestampMs,
+    }];
   }
 
   return [];
@@ -399,10 +492,12 @@ export function parseCodexRolloutJsonl(jsonl: string, sinceMs?: number): CodexLo
   let latestDirectUsageJson: Record<string, unknown> | null = null;
   let hasCumulativeUsageInWindow = false;
   let nativeSessionId: string | null = null;
-  const conversation: ParsedConversationTurn[] = [];
+  const conversationGroups: ConversationTurnGroup[] = [];
   const fallbackEventConversation: ParsedConversationTurn[] = [];
-  const toolNamesById = new Map<string, string>();
+  const conversationGroupIndexes = new Map<string, number>();
   const minMs = typeof sinceMs === "number" ? sinceMs - 2000 : null;
+  const isInWindow = (timestampMs: number | null): boolean =>
+    minMs === null || (timestampMs !== null && timestampMs >= minMs);
 
   for (const rawLine of lines) {
     const trimmed = rawLine.trim();
@@ -425,12 +520,23 @@ export function parseCodexRolloutJsonl(jsonl: string, sinceMs?: number): CodexLo
     if ((type === "event_msg" && payload && payload.type === "token_count") || type === "token_count") {
       const totalUsage = getUsagePayload(line, payload);
       if (totalUsage) {
-        latestCumulativeUsage = totalUsage;
-        // Keep the latest snapshot seen strictly before this run's window as
-        // the baseline to subtract out below.
-        if (minMs !== null && timestampMs !== null && timestampMs < minMs) {
+        if (minMs === null) {
+          latestCumulativeUsage = totalUsage;
+          hasCumulativeUsageInWindow = true;
+        } else if (timestampMs === null) {
+          // A cumulative snapshot with no timestamp cannot safely be assigned
+          // to either side of a resumed invocation boundary.
+          continue;
+        } else if (timestampMs < minMs) {
+          // Keep the latest snapshot seen strictly before this run's window as
+          // the baseline to subtract out below. Retain it as the latest value
+          // only until a later in-window snapshot is observed.
           baselineUsage = totalUsage;
+          if (!hasCumulativeUsageInWindow) {
+            latestCumulativeUsage = totalUsage;
+          }
         } else {
+          latestCumulativeUsage = totalUsage;
           hasCumulativeUsageInWindow = true;
         }
       }
@@ -439,7 +545,7 @@ export function parseCodexRolloutJsonl(jsonl: string, sinceMs?: number): CodexLo
 
     if (type === "turn.completed") {
       const usagePayload = getUsagePayload(line, payload);
-      if (usagePayload && (minMs === null || timestampMs === null || timestampMs >= minMs)) {
+      if (usagePayload && isInWindow(timestampMs)) {
         directUsage = addUsageCounts(directUsage ?? emptyUsageCounts(), parseUsageObject(usagePayload));
         latestDirectUsageJson = usagePayload;
       }
@@ -448,7 +554,7 @@ export function parseCodexRolloutJsonl(jsonl: string, sinceMs?: number): CodexLo
 
     if (type === "event_msg" && payload) {
       const turns = eventMsgToTurns(payload, timestampMs);
-      if (turns.length > 0 && (minMs === null || timestampMs === null || timestampMs >= minMs)) {
+      if (turns.length > 0 && isInWindow(timestampMs)) {
         fallbackEventConversation.push(...turns);
       }
       continue;
@@ -459,11 +565,16 @@ export function parseCodexRolloutJsonl(jsonl: string, sinceMs?: number): CodexLo
     }
 
     // Beyond this point we build the conversation. Honour the run-isolation window.
-    if (minMs !== null && timestampMs !== null && timestampMs < minMs) {
+    if (!isInWindow(timestampMs)) {
       continue;
     }
 
-    appendWithToolNames(conversation, turnsFromCodexItem(payload, timestampMs), toolNamesById);
+    upsertConversationGroup(
+      conversationGroups,
+      conversationGroupIndexes,
+      payload,
+      turnsFromCodexItem(payload, timestampMs),
+    );
   }
 
   let usage: ParsedUsageCounts | null = null;
@@ -481,6 +592,7 @@ export function parseCodexRolloutJsonl(jsonl: string, sinceMs?: number): CodexLo
   if (usage && rawUsageJson === latestCumulativeUsage && baselineUsage) {
     usage = subtractUsageCounts(usage, parseUsageObject(baselineUsage));
   }
+  const conversation = flattenConversationGroups(conversationGroups);
   return {
     usage,
     rawUsageJson,
@@ -511,13 +623,9 @@ export function parseCodexExecStdout(stdout: string): CodexLogResult {
   let legacyUsage: ParsedUsageCounts | null = null;
   let latestLegacyUsageJson: Record<string, unknown> | null = null;
   let nativeSessionId: string | null = null;
-  const conversation: ParsedConversationTurn[] = [];
+  const conversationGroups: ConversationTurnGroup[] = [];
   const fallbackEventConversation: ParsedConversationTurn[] = [];
-  const toolNamesById = new Map<string, string>();
-  // Track which item ids have been fully emitted (on item.completed) so a
-  // trailing item.started for the same id isn't surfaced as a duplicate.
-  const completedItemIds = new Set<string>();
-  const startedOnlyTurns = new Map<string, ParsedConversationTurn[]>();
+  const conversationGroupIndexes = new Map<string, number>();
 
   for (const rawLine of stdout.split("\n")) {
     const trimmed = rawLine.trim();
@@ -565,7 +673,12 @@ export function parseCodexExecStdout(stdout: string): CodexLogResult {
     if (type === "response_item") {
       const item = asRecord(payload) ?? asRecord(parsed.item);
       if (item) {
-        appendWithToolNames(conversation, turnsFromCodexItem(item, timestampMs), toolNamesById);
+        upsertConversationGroup(
+          conversationGroups,
+          conversationGroupIndexes,
+          item,
+          turnsFromCodexItem(item, timestampMs),
+        );
       }
       continue;
     }
@@ -575,34 +688,18 @@ export function parseCodexExecStdout(stdout: string): CodexLogResult {
       if (!item) {
         continue;
       }
-      const itemId = typeof item.id === "string" ? item.id : null;
-      const turns = turnsFromCodexItem(item, timestampMs);
-      if (type === "item.completed") {
-        if (itemId && completedItemIds.has(itemId)) {
-          continue;
-        }
-        if (itemId) {
-          completedItemIds.add(itemId);
-          startedOnlyTurns.delete(itemId);
-        }
-        appendWithToolNames(conversation, turns, toolNamesById);
-      } else if (itemId && !completedItemIds.has(itemId)) {
-        // Remember the latest started/updated state so an item that never
-        // completes (e.g. the process is killed mid-run) is still represented.
-        startedOnlyTurns.set(itemId, turns);
-      } else if (!itemId) {
-        appendWithToolNames(conversation, turns, toolNamesById);
-      }
+      upsertConversationGroup(
+        conversationGroups,
+        conversationGroupIndexes,
+        item,
+        turnsFromCodexItem(item, timestampMs),
+      );
     }
-  }
-
-  // Append any items that started/updated but never completed, in insertion order.
-  for (const turns of startedOnlyTurns.values()) {
-    appendWithToolNames(conversation, turns, toolNamesById);
   }
 
   const usage = directUsage ?? legacyUsage;
   const rawUsageJson = latestDirectUsageJson ?? latestLegacyUsageJson;
+  const conversation = flattenConversationGroups(conversationGroups);
   return {
     usage,
     rawUsageJson,
