@@ -96,4 +96,77 @@ describe("markdown-transfer", () => {
     expect(merged.match(/## Linked Issues/g)).toHaveLength(1);
     expect(mergePromptWithLinkedIssues(merged, [issue]).match(/## Linked Issues/g)).toHaveLength(1);
   });
+
+  it("preserves existing linked issue bodies when resubmitted linked issues only include metadata", () => {
+    const existing = `${[
+      "Plan the sprint.",
+      "",
+      "## Linked Issues",
+      "",
+      "### GITHUB openai/example#42: Fix import UX",
+      "",
+      "- Source: [GITHUB openai/example#42](https://github.com/openai/example/issues/42)",
+      "",
+      "#### Issue Body",
+      "",
+      "Existing body that should stay attached to the sprint.",
+    ].join("\n")}\n`;
+
+    const merged = mergePromptWithLinkedIssues(existing, [
+      {
+        provider: "github",
+        hostDomain: "github.com",
+        repository: "openai/example",
+        issueNumber: 42,
+        issueKey: "#42",
+        title: "Fix import UX",
+        url: "https://github.com/openai/example/issues/42",
+        state: "open",
+        labels: ["ux"],
+        issueBodyMarkdown: " ",
+        issueConversationMarkdown: "\n",
+      },
+    ]);
+
+    expect(merged).toBe(existing);
+    expect(merged).toContain("Existing body that should stay attached to the sprint.");
+    expect(merged).not.toContain("_No issue body was provided._");
+  });
+
+  it("refreshes existing linked issue context when resubmitted linked issues include body text", () => {
+    const existing = [
+      "Plan the sprint.",
+      "",
+      "## Linked Issues",
+      "",
+      "### GITHUB openai/example#42: Fix import UX",
+      "",
+      "#### Issue Body",
+      "",
+      "Stale body.",
+    ].join("\n");
+
+    const merged = mergePromptWithLinkedIssues(existing, [
+      {
+        provider: "github",
+        hostDomain: "github.com",
+        repository: "openai/example",
+        issueNumber: 42,
+        issueKey: "#42",
+        title: "Fix import UX",
+        url: "https://github.com/openai/example/issues/42",
+        issueBodyMarkdown: "Fresh imported body.",
+      },
+    ]);
+
+    expect(merged.match(/## Linked Issues/g)).toHaveLength(1);
+    expect(merged).toContain("Fresh imported body.");
+    expect(merged).not.toContain("Stale body.");
+  });
+
+  it("removes stale linked issue context when all linked issues are removed", () => {
+    const merged = mergePromptWithLinkedIssues("Goal\n\n## Linked Issues\n\nStale issue context", []);
+
+    expect(merged).toBe("Goal");
+  });
 });
