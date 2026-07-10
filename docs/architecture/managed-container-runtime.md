@@ -7,13 +7,21 @@ Code UX uses a shared, auto-updating Linux runtime for Docker-backed provider in
 The runtime is published from `containers/runtime/Dockerfile` to `ghcr.io/codeux-ai/codeux-runtime` for `linux/amd64` and `linux/arm64`.
 
 - `1-base` is based on `node:24-trixie-slim` and includes the shared development toolchain: JavaScript package managers, Python, Git/GitHub CLI, compilers, keyring support, preview utilities, and common Unix diagnostics.
-- `1-browser` extends the base target with pinned Playwright, Playwright MCP, Chromium, and browser dependencies.
+- `1-browser` extends the base target with pinned open-source Playwright, Playwright MCP, and Linux browser dependencies. It intentionally contains no browser binary.
 
 The publish workflow builds both targets, smoke-tests their tool inventory, emits SBOM and provenance attestations, and signs each published digest with Sigstore. Channel tags are discovery pointers only. `ManagedRuntimeService` pulls the channel, resolves the local `RepoDigest`, verifies Node 24 in a network-isolated smoke container, and stores only immutable digests as the active runtime.
 
 At application startup, managed-mode installations check both image targets for updates in the background. Running containers are not replaced. A new digest becomes active only after pull and verification; the previous digest is retained for rollback. Registry or Docker failures leave the last verified digest active and are exposed through runtime status instead of blocking dashboard readiness.
 
 State is stored atomically under `~/.code-ux/runtime/managed-runtime.json`. Set `CODE_UX_MANAGED_RUNTIME_REPOSITORY`, `CODE_UX_MANAGED_RUNTIME_CHANNEL`, `CODE_UX_MANAGED_BASE_IMAGE`, or `CODE_UX_MANAGED_BROWSER_IMAGE` only for controlled development or registry mirrors.
+
+## Playwright Browser Volume
+
+When browser support is enabled, `PlaywrightBrowserManager` reads the pinned Playwright version from the verified browser image and downloads that version's browser artifacts directly on the user's Docker host. The download is written to a versioned `code-ux-playwright-browser-*` volume; Code UX then launches the browser with networking disabled to verify the completed volume and writes an atomic completion marker.
+
+Provider containers mount the verified volume at `/ms-playwright` read-only. The complete browser supports headed and headless Playwright launches; Code UX does not force either launch mode. In-process singleflight and cross-process locks prevent duplicate downloads. Startup and settings saves preload the volume when `containerInstallPlaywrightBrowsers` is enabled, so provider invocations normally only attach an existing volume. A new runtime Playwright version receives a new volume, while cleanup retains the active volume and two recent rollback candidates before pruning unreferenced versions after 30 days.
+
+The GHCR image does not redistribute Chrome, Chromium, Widevine, or other browser payloads. Its workflow smoke gate requires `/ms-playwright` to be empty and rejects `libwidevinecdm.so`. Browser artifacts therefore travel from Playwright's configured download service to the user who enabled browser support, rather than through the Code UX registry.
 
 ## Provider Tool Volumes
 
@@ -49,17 +57,16 @@ The active provider-volume index lives at `~/.code-ux/runtime/provider-tools.jso
 
 Settings without `containerImageMode` are migrated during sanitization. An untouched `node:24-bookworm` value becomes managed mode. Other legacy image values remain custom, so existing operator images are never silently replaced.
 
-Managed provider invocations use the browser target when `containerInstallPlaywrightBrowsers` is enabled and the base target otherwise. Previews and custom dashboard validation use the base target. The bundled `.code-ux/container/setup.sh` is intentionally a no-op notice; project-specific bootstrap requires an explicitly configured script.
+Managed provider invocations use the browser target plus the verified browser volume when `containerInstallPlaywrightBrowsers` is enabled and the base target otherwise. Previews and custom dashboard validation use the base target. Custom images retain their explicit setup-extension behavior. The bundled `.code-ux/container/setup.sh` is intentionally a no-op notice; project-specific bootstrap requires an explicitly configured script.
 
 ## Status And Failure Semantics
 
-`GET /api/runtime-assets/status` returns managed-runtime status plus every provider tool state. `POST /api/provider-tools/:provider/prepare` idempotently begins or joins preparation for a supported local CLI provider.
+`GET /api/runtime-assets/status` returns managed-runtime, Playwright-browser, and provider-tool state. `POST /api/playwright-browser/prepare` and `POST /api/provider-tools/:provider/prepare` idempotently begin or join preparation.
 
 Provider states are `not_installed`, `waiting_for_docker`, `checking_update`, `queued`, `downloading`, `installing`, `verifying`, `ready`, and `failed`. Responses contain bounded progress text and versions, never raw installer URLs, credentials, or arbitrary output.
 
-When update discovery fails and a verified volume exists, the old volume remains usable and status reports the update error. Without any verified compatible volume, only that provider's Login or invocation fails with a retryable preparation error. There is no per-workspace fallback installation.
+When update discovery fails and a verified compatible volume exists, the old volume remains usable and status reports the update error. Without any verified compatible provider or browser volume, only the invocation needing that asset fails with a retryable preparation error. There is no per-workspace fallback installation in managed mode.
 
 ## Gemini Deprecation
 
 Gemini CLI remains executable and receives the same startup update checks while it is activated. The dashboard marks it Deprecated, excludes it from new Easy recommendations, and offers Antigravity as the supported replacement. Existing Gemini defaults are preserved and no credentials or routing configuration are migrated automatically.
-

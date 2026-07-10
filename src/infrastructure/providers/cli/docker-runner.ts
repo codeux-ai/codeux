@@ -41,6 +41,11 @@ import {
   providerToolManager,
   type ProviderToolManager,
 } from "../../../services/provider-tool-manager.js";
+import {
+  PLAYWRIGHT_BROWSERS_MOUNT,
+  playwrightBrowserManager,
+  type PlaywrightBrowserManager,
+} from "../../../services/playwright-browser-manager.js";
 
 
 const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
@@ -96,6 +101,7 @@ export class DockerRunner implements IDockerRunner {
   constructor(
     private readonly runtimeService: ManagedRuntimeService = managedRuntimeService,
     private readonly toolManager: ProviderToolManager = providerToolManager,
+    private readonly browserManager: PlaywrightBrowserManager = playwrightBrowserManager,
   ) {}
 
   async ensureWorkspace(args: {
@@ -172,9 +178,14 @@ export class DockerRunner implements IDockerRunner {
       workflowSettings,
       installPlaywrightBrowsers ? "browser" : "base",
     );
-    const preparedTool = providerLabel === "mockup-cli"
-      ? null
-      : await this.toolManager.prepare(providerLabel, workflowSettings);
+    const [preparedTool, preparedBrowser] = await Promise.all([
+      providerLabel === "mockup-cli"
+        ? Promise.resolve(null)
+        : this.toolManager.prepare(providerLabel, workflowSettings),
+      installPlaywrightBrowsers && workflowSettings.containerImageMode !== "custom"
+        ? this.browserManager.prepare(workflowSettings)
+        : Promise.resolve(null),
+    ]);
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-docker-"));
 
     try {
@@ -293,6 +304,20 @@ export class DockerRunner implements IDockerRunner {
           }),
           "-e",
           `CODE_UX_PROVIDER_TOOL_BIN=${PROVIDER_TOOL_MOUNT}/bin`,
+        );
+      }
+
+      if (preparedBrowser) {
+        dockerArgs.push(
+          "--mount",
+          toDockerMountArg({
+            source: preparedBrowser.volumeName,
+            destination: PLAYWRIGHT_BROWSERS_MOUNT,
+            readonly: true,
+            type: "volume",
+          }),
+          "-e",
+          `PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_MOUNT}`,
         );
       }
 

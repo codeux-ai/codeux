@@ -111,6 +111,7 @@ import type {
   TechstackCatalogSettings,
   TechstackSelectionSettings,
   ProviderToolStatus,
+  PlaywrightBrowserStatus,
   RuntimeAssetsStatus,
   ManagedRuntimeStatus,
 } from "../../src/contracts/app-types.js";
@@ -302,6 +303,7 @@ export type {
   TechstackCatalogSettings,
   TechstackSelectionSettings,
   ProviderToolStatus,
+  PlaywrightBrowserStatus,
   RuntimeAssetsStatus,
   ManagedRuntimeStatus,
   EffectiveSettingsResponse,

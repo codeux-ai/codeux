@@ -1033,6 +1033,17 @@ export interface ProviderToolStatus {
   updatedAt: string;
 }
 
+export interface PlaywrightBrowserStatus {
+  state: ProviderToolPreparationState;
+  installedVersion: string | null;
+  targetVersion: string | null;
+  progressPercent: number | null;
+  stepText: string;
+  error: string | null;
+  retryable: boolean;
+  updatedAt: string;
+}
+
 export type ManagedRuntimePreparationState =
   | "idle"
   | "checking_update"
@@ -1056,6 +1067,7 @@ export interface ManagedRuntimeStatus {
 
 export interface RuntimeAssetsStatus {
   managedRuntime: ManagedRuntimeStatus;
+  playwrightBrowser: PlaywrightBrowserStatus;
   providers: ProviderToolStatus[];
 }
 

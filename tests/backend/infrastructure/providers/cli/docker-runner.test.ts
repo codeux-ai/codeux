@@ -54,6 +54,13 @@ const createRunner = (): DockerRunner => new DockerRunner(
       mountPath: "/opt/code-ux/provider-tool",
     })),
   } as any,
+  {
+    prepare: vi.fn(async () => ({
+      volumeName: "code-ux-playwright-browser-test",
+      version: "1.61.1",
+      mountPath: "/ms-playwright",
+    })),
+  } as any,
 );
 
 describe("DockerRunner", () => {
@@ -189,6 +196,8 @@ describe("DockerRunner", () => {
     expect(dockerArgs).toContain("--env-file");
     expect(dockerArgs[dockerArgs.indexOf("--env-file") + 1]).toBe("/tmp/code-ux-docker-123/provider.env");
     expect(dockerArgs).toContain("CODE_UX_INSTALL_PLAYWRIGHT=1");
+    expect(dockerArgs).toContain("PLAYWRIGHT_BROWSERS_PATH=/ms-playwright");
+    expect(dockerArgs).toContain("type=volume,source=code-ux-playwright-browser-test,target=/ms-playwright,readonly");
     expect(dockerArgs).toEqual(expect.arrayContaining([
       "--network",
       "bridge",

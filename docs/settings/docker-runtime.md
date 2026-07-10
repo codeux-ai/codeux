@@ -23,7 +23,7 @@ Image, setup script, memory limit, setup image caching, and Playwright browser p
 
 ## Recommended Configuration
 
-Keep the default image unless your repo needs a custom toolchain; enable Playwright preinstall for browser-heavy QA.
+Keep the default image unless your repo needs a custom toolchain; enable Playwright browser preload for browser-heavy QA.
 
 A practical review flow is:
 

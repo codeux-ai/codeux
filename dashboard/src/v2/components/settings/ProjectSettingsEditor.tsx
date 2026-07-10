@@ -400,8 +400,8 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               })}
             />
           </Row>
-          <Row label="Preinstall Playwright browsers" description="Install Chromium and OS dependencies for browser checks inside coding containers." badge={getBadge("cliWorkflow.containerInstallPlaywrightBrowsers")}>
-            <Toggle aria-label="Preinstall Playwright browsers" aria-description="Install Chromium and OS dependencies for browser checks inside coding containers." value={settings.cliWorkflow.containerInstallPlaywrightBrowsers}
+          <Row label="Preload Playwright browser" description="Download the matched browser into a reusable local Docker volume for coding containers." badge={getBadge("cliWorkflow.containerInstallPlaywrightBrowsers")}>
+            <Toggle aria-label="Preload Playwright browser" aria-description="Download the matched browser into a reusable local Docker volume for coding containers." value={settings.cliWorkflow.containerInstallPlaywrightBrowsers}
               onChange={(value) => update({
                 cliWorkflow: {
                   ...settings.cliWorkflow,

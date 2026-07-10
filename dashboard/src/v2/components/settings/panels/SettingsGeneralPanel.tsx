@@ -324,7 +324,7 @@ const DockerRuntimeCard: FunctionComponent<{
         },
       }))} />
     </Row>
-    <Row label="Preinstall Playwright browsers" description="Install Chromium and OS dependencies for browser checks inside coding containers." badge={getFieldBadge("cliWorkflow.containerInstallPlaywrightBrowsers")} last>
+    <Row label="Preload Playwright browser" description="Download the matched browser into a reusable local Docker volume for coding containers." badge={getFieldBadge("cliWorkflow.containerInstallPlaywrightBrowsers")} last>
       <Toggle aria-label="Toggle setting" value={settings.cliWorkflow.containerInstallPlaywrightBrowsers} onChange={() => update((current) => ({
         ...current,
         cliWorkflow: {
