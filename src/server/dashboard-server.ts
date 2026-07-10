@@ -120,6 +120,7 @@ import { bootDashboardTerminalWebSocketServer } from "./terminal-routes.js";
 import type { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
 import { managedRuntimeService } from "../services/managed-runtime-service.js";
 import { getActiveProviderTypes, providerToolManager } from "../services/provider-tool-manager.js";
+import { playwrightBrowserManager, type PlaywrightBrowserManager } from "../services/playwright-browser-manager.js";
 import type { MemoryService } from "../services/memory-service.js";
 import type { MemoryPromotionService } from "../services/memory-promotion-service.js";
 import type { EmbeddingModelManager } from "../services/embedding-model-manager.js";
@@ -180,6 +181,7 @@ export interface DashboardServerOptions {
   skillService?: SkillService;
   managedRuntimeService?: ManagedRuntimeService;
   providerToolManager?: ProviderToolManager;
+  playwrightBrowserManager?: PlaywrightBrowserManager;
   projectManagementRepository?: ProjectManagementRepository;
   executionRepository?: ExecutionRepository;
   getStatus: () => unknown;
@@ -508,17 +510,29 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
   if (process.env.NODE_ENV !== "test") {
     const runtime = options.managedRuntimeService ?? managedRuntimeService;
     const tools = options.providerToolManager ?? providerToolManager;
+    const browser = options.playwrightBrowserManager ?? playwrightBrowserManager;
     const settings = options.getSystemSettings();
     const runtimeLogger = dashboardLogger.child({ component: "managed-runtime-prewarm" });
     void (async () => {
+      let browserPreload: Promise<unknown> = Promise.resolve();
       if (settings.defaults.cliWorkflow.containerImageMode !== "custom") {
         await runtime.checkForUpdates(runtimeLogger);
+        if (settings.defaults.cliWorkflow.containerInstallPlaywrightBrowsers !== false) {
+          browserPreload = browser.prepare(settings.defaults.cliWorkflow, { logger: runtimeLogger }).catch((error: unknown) => {
+            runtimeLogger.warn("Playwright browser preload failed; provider CLI preparation will continue.", {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
+        }
       }
-      await tools.checkActiveProviders(
-        getActiveProviderTypes(settings),
-        settings.defaults.cliWorkflow,
-        runtimeLogger,
-      );
+      await Promise.all([
+        browserPreload,
+        tools.checkActiveProviders(
+          getActiveProviderTypes(settings),
+          settings.defaults.cliWorkflow,
+          runtimeLogger,
+        ),
+      ]);
     })().catch((error: unknown) => {
       runtimeLogger.warn("Managed runtime startup preparation failed.", {
         error: error instanceof Error ? error.message : String(error),

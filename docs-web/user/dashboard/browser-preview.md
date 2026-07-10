@@ -25,7 +25,7 @@ This is invaluable for visually verifying changes a sprint has made (UI work, AP
    - Maps the configured container ports to explicit local host ports under `127.0.0.1`.
 6. The browser pane appears. Logs stream in a side panel and are retained even if the container is stopped.
 
-Preview startup does not install Playwright browsers by default. Provider coding containers can get Chromium from setup-cache images at `/ms-playwright`, but preview scripts that use Playwright should install Chromium in the preview startup path or use a custom image/script that already provides it.
+Preview startup does not install Playwright browsers by default. Managed provider coding containers mount the verified Playwright browser volume at `/ms-playwright`; preview scripts that use Playwright should install a browser in the preview startup path or use a custom image/script that already provides it.
 
 Preview containers can also receive custom environment variables:
 - Set project-wide defaults from the Browser page right sidebar or **Settings → Browser Preview → Preview Environment**.

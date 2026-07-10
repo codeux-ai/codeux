@@ -7,6 +7,7 @@ import { registerUserOnboardingRoutes } from "./routes/user/onboarding.js";
 import { getModelCatalog, getModelCatalogProviders } from "../domain/model-catalog/model-catalog-loader.js";
 import type { LocalMcpCliProvider } from "../services/local-mcp-cli-config-service.js";
 import { getActiveProviderTypes, providerToolManager } from "../services/provider-tool-manager.js";
+import { playwrightBrowserManager } from "../services/playwright-browser-manager.js";
 
 const LOCAL_MCP_PROVIDERS = new Set<LocalMcpCliProvider>([
   "claude-code",
@@ -72,6 +73,13 @@ export function registerSettingsRoutes(router: Express, deps: DashboardDependenc
       saved.defaults.cliWorkflow,
       deps.logger,
     );
+    if (
+      saved.defaults.cliWorkflow.containerImageMode !== "custom"
+      && saved.defaults.cliWorkflow.containerInstallPlaywrightBrowsers !== false
+    ) {
+      const browser = deps.playwrightBrowserManager ?? playwrightBrowserManager;
+      void browser.prepare(saved.defaults.cliWorkflow, { logger: deps.logger }).catch(() => undefined);
+    }
     res.json(saved);
   }));
 

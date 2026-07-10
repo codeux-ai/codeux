@@ -1,4 +1,4 @@
-import type { ProviderId, ProviderToolStatus, RuntimeAssetsStatus } from "../../types.js";
+import type { PlaywrightBrowserStatus, ProviderId, ProviderToolStatus, RuntimeAssetsStatus } from "../../types.js";
 import { fetchJson } from "../../lib/api/fetch-json.js";
 
 export const fetchRuntimeAssetsStatus = async (): Promise<RuntimeAssetsStatus> => (
@@ -11,3 +11,6 @@ export const prepareProviderTool = async (provider: ProviderId): Promise<Provide
   })
 );
 
+export const preparePlaywrightBrowser = async (): Promise<PlaywrightBrowserStatus> => (
+  await fetchJson<PlaywrightBrowserStatus>("/api/playwright-browser/prepare", { method: "POST" })
+);

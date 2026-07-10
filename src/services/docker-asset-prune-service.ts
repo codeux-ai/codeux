@@ -12,6 +12,7 @@ export interface DockerAssetPruneResult {
   prunedHelperContainers?: string[];
   prunedTempCredentialsDirs?: string[];
   prunedProviderToolVolumes?: string[];
+  prunedPlaywrightBrowserVolumes?: string[];
 }
 
 const WORKSPACE_VOLUME_PREFIX = "code-ux-";
@@ -49,6 +50,7 @@ export class DockerAssetPruneService {
     // mounted, which would otherwise block the volume removal below.
     const prunedWorkspaceVolumes = await this.pruneWorkspaceVolumes(trackedSessionIds);
     const prunedProviderToolVolumes = await this.pruneProviderToolVolumes();
+    const prunedPlaywrightBrowserVolumes = await this.prunePlaywrightBrowserVolumes();
     const prunedSetupImages: string[] = [];
 
     if (
@@ -57,7 +59,8 @@ export class DockerAssetPruneService {
       prunedLoginContainers.length > 0 ||
       prunedHelperContainers.length > 0 ||
       prunedTempCredentialsDirs.length > 0 ||
-      prunedProviderToolVolumes.length > 0
+      prunedProviderToolVolumes.length > 0 ||
+      prunedPlaywrightBrowserVolumes.length > 0
     ) {
       this.logger?.info("Pruned stale Docker and credential assets on startup", {
         prunedWorkspaceVolumes: prunedWorkspaceVolumes.length,
@@ -66,6 +69,7 @@ export class DockerAssetPruneService {
         prunedHelperContainers: prunedHelperContainers.length,
         prunedTempCredentialsDirs: prunedTempCredentialsDirs.length,
         prunedProviderToolVolumes: prunedProviderToolVolumes.length,
+        prunedPlaywrightBrowserVolumes: prunedPlaywrightBrowserVolumes.length,
       });
     }
 
@@ -76,6 +80,7 @@ export class DockerAssetPruneService {
       prunedHelperContainers,
       prunedTempCredentialsDirs,
       prunedProviderToolVolumes,
+      prunedPlaywrightBrowserVolumes,
     };
   }
 
@@ -151,6 +156,48 @@ export class DockerAssetPruneService {
   private async readActiveProviderToolVolumes(): Promise<Set<string>> {
     try {
       const statePath = path.join(os.homedir(), ".code-ux", "runtime", "provider-tools.json");
+      const parsed = JSON.parse(await fs.readFile(statePath, "utf8")) as Record<string, { volumeName?: unknown }>;
+      return new Set(Object.values(parsed)
+        .map((entry) => typeof entry?.volumeName === "string" ? entry.volumeName : "")
+        .filter(Boolean));
+    } catch {
+      return new Set();
+    }
+  }
+
+  private async prunePlaywrightBrowserVolumes(): Promise<string[]> {
+    const listed = await this.runDocker(["volume", "ls", "-q", "--filter", "label=ai.codeux.asset=playwright-browser"]);
+    const names = this.parseLines(listed?.stdout);
+    if (names.length === 0) return [];
+    const active = await this.readActivePlaywrightBrowserVolumes();
+    const inspected: Array<{ name: string; createdAt: number }> = [];
+    for (const name of names) {
+      const result = await this.runDocker(["volume", "inspect", name]);
+      if (!result?.ok) continue;
+      try {
+        const entry = (JSON.parse(result.stdout) as Array<{ CreatedAt?: string }>)[0];
+        inspected.push({ name, createdAt: Date.parse(entry?.CreatedAt || "") || 0 });
+      } catch {
+        // Ignore malformed Docker inspection responses.
+      }
+    }
+    const newest = new Set(
+      [...inspected]
+        .sort((left, right) => right.createdAt - left.createdAt)
+        .slice(0, 2)
+        .map((item) => item.name),
+    );
+    const cutoff = Date.now() - PROVIDER_TOOL_RETENTION_MS;
+    const stale = inspected
+      .filter((item) => item.createdAt > 0 && item.createdAt < cutoff)
+      .filter((item) => !active.has(item.name) && !newest.has(item.name))
+      .map((item) => item.name);
+    return await this.removeDockerItems(["volume", "rm", "-f"], stale);
+  }
+
+  private async readActivePlaywrightBrowserVolumes(): Promise<Set<string>> {
+    try {
+      const statePath = path.join(os.homedir(), ".code-ux", "runtime", "playwright-browser.json");
       const parsed = JSON.parse(await fs.readFile(statePath, "utf8")) as Record<string, { volumeName?: unknown }>;
       return new Set(Object.values(parsed)
         .map((entry) => typeof entry?.volumeName === "string" ? entry.volumeName : "")

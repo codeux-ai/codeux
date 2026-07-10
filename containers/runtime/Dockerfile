@@ -41,7 +41,8 @@ FROM base AS browser
 ARG PLAYWRIGHT_VERSION=1.61.1
 ARG PLAYWRIGHT_MCP_VERSION=0.0.78
 
-LABEL ai.codeux.role="browser"
+LABEL ai.codeux.role="browser" \
+      ai.codeux.playwright-version="${PLAYWRIGHT_VERSION}"
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
@@ -49,7 +50,8 @@ RUN npm install --global \
       "playwright@${PLAYWRIGHT_VERSION}" \
       "@playwright/mcp@${PLAYWRIGHT_MCP_VERSION}" \
     && mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}" \
-    && playwright install --with-deps chromium \
+    && playwright install-deps chromium \
+    && apt-get install -qy --no-install-recommends xauth \
     && chmod -R a+rX "${PLAYWRIGHT_BROWSERS_PATH}" \
     && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/* /tmp/*

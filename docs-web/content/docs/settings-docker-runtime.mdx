@@ -10,11 +10,13 @@ Code UX defaults to a managed, auto-updating Linux runtime instead of building a
 Managed mode pulls the public `ghcr.io/codeux-ai/codeux-runtime` image family:
 
 - `base` includes Node 24 on Debian Trixie, JavaScript package managers, Python, Git/GitHub CLI, compilers, keyring support, preview utilities, and common Linux tools.
-- `browser` adds pinned Playwright, Playwright MCP, Chromium, and its OS dependencies.
+- `browser` adds pinned Playwright, Playwright MCP, and browser OS dependencies, but no browser payload.
 
 Code UX checks for runtime updates on every startup. It pulls the stable channel in the background, resolves the immutable repository digest, verifies Node 24 in the image, and routes only future containers to the verified digest. Running containers are not interrupted. Registry or verification failure retains the previous working digest and does not block the dashboard.
 
 Provider CLIs are not baked into either image. Activated providers are downloaded from fixed official sources into versioned Docker volumes and mounted read-only. Code UX checks every activated provider for a stable update on every startup.
+
+The browser payload follows the same pattern. When enabled, Code UX downloads the browser matched to the pinned Playwright version directly into a user-local versioned volume, verifies it offline, and mounts it read-only. Code UX does not redistribute the browser through GHCR.
 
 ## Controls
 
@@ -25,7 +27,7 @@ Provider CLIs are not baked into either image. Activated providers are downloade
 | Container setup script | Optional project-specific extension. An empty value performs no build in Managed mode. |
 | Cache custom setup extension | Builds a content-addressed extension image only for an explicit setup script. |
 | Memory limit | Applies a hard Docker memory and memory-swap ceiling; `0` disables the cap. |
-| Preinstall Playwright browsers | Selects the managed browser image. Disable it to use the smaller base image. |
+| Preload Playwright browser | Selects the managed browser-dependency image and preloads its matched browser into a reusable local volume. Disable it to use the smaller base image. |
 | Run as root | Privileged compatibility escape hatch; leave disabled unless a trusted project requires it. |
 
 The default managed path never runs `docker build`. Login, coding, QA, previews, and custom dashboard validation share the same resolver instead of building separate base images.
@@ -34,10 +36,11 @@ The default managed path never runs `docker build`. Login, coding, QA, previews,
 
 Selecting a provider during onboarding starts preparation immediately, before Login. Login and invocations join the same preparation job, so a ready provider performs no download.
 
-Tool states are available from `GET /api/runtime-assets/status`. Retry a supported provider with:
+Runtime, browser, and tool states are available from `GET /api/runtime-assets/status`. Retry browser or provider preparation with:
 
 ```http
 POST /api/provider-tools/codex/prepare
+POST /api/playwright-browser/prepare
 ```
 
 If an update fails, Code UX keeps the previous verified provider volume. If no verified compatible version exists, only that provider's Login or invocation is blocked with a retryable error.
@@ -52,7 +55,7 @@ Custom images must supply Node, Bash, and the installer dependencies required by
 
 ## Cleanup And Recovery
 
-Runtime state is stored under `~/.code-ux/runtime/`. Code UX retains the current and previous managed digests and current provider volume pointers. Unreferenced provider volumes older than 30 days are pruned while the newest two versions per provider are preserved.
+Runtime state is stored under `~/.code-ux/runtime/`. Code UX retains the current and previous managed digests plus active browser/provider volume pointers. Unreferenced volumes older than 30 days are pruned while recent rollback candidates are preserved.
 
 For failures:
 
