@@ -141,7 +141,32 @@ describe("conversationTurnToMessage", () => {
         toolCallId: "call_123",
         kind: "tool_result",
         toolName: "fetch_data",
+        toolStatus: null,
       },
+    });
+  });
+
+  it("preserves result status, timestamp, and tokens in metadata for live rewrite signatures", () => {
+    const turn: ParsedConversationTurn = {
+      kind: "tool_result",
+      text: "Data fetched",
+      toolCallId: "call_123",
+      toolName: "fetch_data",
+      toolOutput: "Success data",
+      toolStatus: "failed",
+      timestampMs: 123456,
+      tokens: { input: 10, output: 2 },
+    };
+    const result = conversationTurnToMessage(turn, "opencode", "anthropic/claude-sonnet");
+    expect(result.metadata).toEqual({
+      provider: "opencode",
+      model: "anthropic/claude-sonnet",
+      toolCallId: "call_123",
+      timestampMs: 123456,
+      tokens: { input: 10, output: 2 },
+      kind: "tool_result",
+      toolName: "fetch_data",
+      toolStatus: "failed",
     });
   });
 

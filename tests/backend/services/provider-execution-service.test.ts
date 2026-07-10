@@ -3,8 +3,13 @@ import { ProviderExecutionService } from "../../../src/services/provider-executi
 import { ProviderQuotaError } from "../../../src/shared/providers/provider-error-classifier.js";
 import { runWithCorrelationId } from "../../../src/shared/logging/correlation-id.js";
 import type { IProviderRunner, ProviderRunResult } from "../../../src/infrastructure/providers/cli/provider-runner.js";
+import type { CliProviderId } from "../../../src/infrastructure/providers/cli/provider-command-specs.js";
+import type { ParsedConversationTurn } from "../../../src/infrastructure/providers/cli/provider-usage.js";
 import type { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
 import type { DashboardSettings } from "../../../src/contracts/app-types.js";
+import type { ProviderInvocationPurpose } from "../../../src/contracts/execution-types.js";
+import type { AppendExecutionInvocationMessageInput } from "../../../src/contracts/invocation-types.js";
+import { MAX_TOOL_PAYLOAD_CHARS } from "../../../src/services/invocation-message-limits.js";
 import { SERVER_SHUTDOWN_STOP_REASON } from "../../../src/services/active-dispatch-registry.js";
 
 // Mock dependencies
@@ -576,6 +581,259 @@ describe("ProviderExecutionService", () => {
       })
     );
   });
+
+  type ProviderPersistenceCase = {
+    provider: CliProviderId;
+    purpose: ProviderInvocationPurpose;
+    type: string;
+    expectTextOutput: boolean;
+    conversation: (prompt: string) => ParsedConversationTurn[];
+    expectedRoles: AppendExecutionInvocationMessageInput["role"][];
+  };
+
+  const standardConversation = (provider: CliProviderId, prompt: string): ParsedConversationTurn[] => {
+    const callId = `${provider}-call-1`;
+    return [
+      { kind: "user", text: prompt },
+      {
+        kind: "reasoning",
+        text: `${provider} reasoning`,
+        tokens: { input: 3, output: 2 },
+        timestampMs: 1001,
+      },
+      {
+        kind: "tool_call",
+        text: "",
+        toolName: "read_file",
+        toolCallId: callId,
+        toolArguments: "{\"path\":\"src/index.ts\"}",
+        toolStatus: "completed",
+        timestampMs: 1002,
+      },
+      {
+        kind: "tool_result",
+        text: "",
+        toolName: "read_file",
+        toolCallId: callId,
+        toolOutput: `${provider} file contents`,
+        toolStatus: "completed",
+        timestampMs: 1003,
+      },
+      {
+        kind: "assistant",
+        text: `${provider} answer`,
+        timestampMs: 1004,
+      },
+    ];
+  };
+
+  const providerPersistenceCases: ProviderPersistenceCase[] = [
+    {
+      provider: "gemini",
+      purpose: "planning",
+      type: "planning",
+      expectTextOutput: true,
+      conversation: (prompt) => standardConversation("gemini", prompt).map((turn) =>
+        turn.kind === "assistant"
+          ? {
+            ...turn,
+            text: [
+              "Gemini kept answer",
+              "fatal: your current branch 'code-ux-bootstrap-123' does not have any commits yet",
+              "Gemini kept tail",
+            ].join("\n"),
+          }
+          : turn
+      ),
+      expectedRoles: ["user", "assistant", "tool", "tool", "assistant"],
+    },
+    {
+      provider: "codex",
+      purpose: "task_coding",
+      type: "task_coding",
+      expectTextOutput: false,
+      conversation: (prompt) => standardConversation("codex", prompt).map((turn) =>
+        turn.kind === "tool_call"
+          ? {
+            ...turn,
+            toolArguments: `{"query":"${"x".repeat(MAX_TOOL_PAYLOAD_CHARS + 128)}"}`,
+          }
+          : turn
+      ),
+      expectedRoles: ["user", "assistant", "tool", "tool", "assistant"],
+    },
+    {
+      provider: "claude-code",
+      purpose: "qa_review",
+      type: "qa_review",
+      expectTextOutput: true,
+      conversation: (prompt) => standardConversation("claude-code", prompt),
+      expectedRoles: ["user", "assistant", "tool", "tool", "assistant"],
+    },
+    {
+      provider: "qwen-code",
+      purpose: "planning",
+      type: "project_setup",
+      expectTextOutput: true,
+      conversation: (prompt) => [
+        { kind: "injected_context", text: "<system-reminder>Use local setup guidance.</system-reminder>" },
+        ...standardConversation("qwen-code", prompt),
+      ],
+      expectedRoles: ["system", "user", "assistant", "tool", "tool", "assistant"],
+    },
+    {
+      provider: "opencode",
+      purpose: "dashboard_reply",
+      type: "node_flow_provider_prompt",
+      expectTextOutput: false,
+      conversation: (prompt) => standardConversation("opencode", prompt),
+      expectedRoles: ["user", "assistant", "tool", "tool", "assistant"],
+    },
+    {
+      provider: "antigravity",
+      purpose: "remediation",
+      type: "memory_remediation",
+      expectTextOutput: true,
+      conversation: (prompt) => standardConversation("antigravity", prompt),
+      expectedRoles: ["user", "assistant", "tool", "tool", "assistant"],
+    },
+    {
+      provider: "mockup-cli",
+      purpose: "worker_reply",
+      type: "chat",
+      expectTextOutput: true,
+      conversation: (prompt) => [
+        { kind: "user", text: prompt },
+        { kind: "assistant", text: "Mockup normalized reply", timestampMs: 2001 },
+      ],
+      expectedRoles: ["user", "assistant"],
+    },
+  ];
+
+  it.each(providerPersistenceCases)(
+    "persists parsed $provider conversations through the normalized final path",
+    async (providerCase) => {
+      const persistedMessages: AppendExecutionInvocationMessageInput[] = [];
+      executionRepository.clearExecutionInvocationMessages.mockImplementation(() => {
+        persistedMessages.length = 0;
+      });
+      executionRepository.appendExecutionInvocationMessage.mockImplementation((_id, message) => {
+        persistedMessages.push(message);
+      });
+
+      const prompt = [
+        `Prompt for ${providerCase.provider}`,
+        "fatal: your current branch 'code-ux-bootstrap-123' does not have any commits yet",
+      ].join("\n");
+      const result = {
+        ...mockResult,
+        text: `${providerCase.provider} fallback text`,
+        nativeSessionId: `${providerCase.provider}-native`,
+        usageTelemetry: {
+          ...mockResult.usageTelemetry,
+          transcriptText: `${providerCase.provider} transcript`,
+          nativeSessionId: `${providerCase.provider}-native`,
+          rawUsageJson: { provider: providerCase.provider },
+          conversation: providerCase.conversation(prompt),
+        },
+      } as ProviderRunResult & { text: string };
+      if (providerCase.expectTextOutput) {
+        providerRunner.runProviderForText.mockResolvedValue(result);
+      } else {
+        providerRunner.runProvider.mockResolvedValue(result);
+      }
+
+      await service.executeProvider({
+        ...defaultArgs,
+        provider: providerCase.provider,
+        model: "matrix-model",
+        prompt,
+        purpose: providerCase.purpose,
+        type: providerCase.type,
+        expectTextOutput: providerCase.expectTextOutput,
+      });
+
+      expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledWith("exec-inv-1");
+      expect(persistedMessages.map((message) => message.role)).toEqual(providerCase.expectedRoles);
+      const userMessages = persistedMessages.filter((message) => message.role === "user");
+      expect(userMessages).toHaveLength(1);
+      expect(userMessages[0]?.contentMarkdown).toBe(prompt);
+      expect(userMessages[0]?.contentMarkdown).toContain("fatal: your current branch");
+
+      for (const message of persistedMessages) {
+        expect(message.metadata).toEqual(expect.objectContaining({
+          provider: providerCase.provider,
+          model: "matrix-model",
+        }));
+      }
+
+      const reasoningMessage = persistedMessages.find((message) =>
+        (message.metadata as Record<string, unknown> | undefined)?.kind === "reasoning"
+      );
+      if (providerCase.provider !== "mockup-cli") {
+        expect(reasoningMessage).toEqual(expect.objectContaining({
+          role: "assistant",
+          metadata: expect.objectContaining({
+            kind: "reasoning",
+            tokens: { input: 3, output: 2 },
+            timestampMs: 1001,
+          }),
+        }));
+      }
+
+      const toolCall = persistedMessages.find((message) =>
+        (message.metadata as Record<string, unknown> | undefined)?.kind === "tool_call"
+      );
+      const toolResult = persistedMessages.find((message) =>
+        (message.metadata as Record<string, unknown> | undefined)?.kind === "tool_result"
+      );
+      if (providerCase.provider !== "mockup-cli") {
+        expect(toolCall).toEqual(expect.objectContaining({
+          role: "tool",
+          metadata: expect.objectContaining({
+            kind: "tool_call",
+            toolName: "read_file",
+            toolStatus: "completed",
+            timestampMs: 1002,
+          }),
+        }));
+        expect(toolResult).toEqual(expect.objectContaining({
+          role: "tool",
+          metadata: expect.objectContaining({
+            kind: "tool_result",
+            toolName: "read_file",
+            toolStatus: "completed",
+            timestampMs: 1003,
+          }),
+        }));
+        expect(toolResult?.toolCallsJson).toEqual(expect.objectContaining({
+          output: expect.stringContaining(`${providerCase.provider} file contents`),
+        }));
+      }
+
+      if (providerCase.provider === "codex") {
+        expect(toolCall?.toolCallsJson).toEqual(expect.objectContaining({
+          arguments: expect.stringContaining("characters truncated"),
+        }));
+      }
+
+      if (providerCase.provider === "gemini") {
+        const assistantMessage = persistedMessages.find((message) =>
+          message.role === "assistant"
+          && !(message.metadata as Record<string, unknown> | undefined)?.kind
+        );
+        expect(assistantMessage?.contentMarkdown).toContain("Gemini kept answer");
+        expect(assistantMessage?.contentMarkdown).toContain("Gemini kept tail");
+        expect(assistantMessage?.contentMarkdown).not.toContain("fatal: your current branch");
+      }
+
+      if (providerCase.expectTextOutput) {
+        expect(providerRunner.runProviderForText).toHaveBeenCalled();
+      } else {
+        expect(providerRunner.runProvider).toHaveBeenCalled();
+      }
+    },
+  );
 
   it("persists parsed planning text-output telemetry live before completion and skips duplicate ticks", async () => {
     const liveConversation = [
