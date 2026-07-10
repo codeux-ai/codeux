@@ -366,6 +366,89 @@ describe("SprintActions", () => {
     });
   });
 
+  it("uses full Jira search result body when attaching and planning after import", async () => {
+    const fullJiraBody = [
+      "## Problem",
+      "",
+      "The login flow fails for SSO users after token refresh.",
+      "",
+      "### Acceptance Criteria",
+      "",
+      "- Keep this exact Jira acceptance criterion in the sprint goal.",
+    ].join("\n");
+    const searchedIssues = [{
+      provider: "jira",
+      sourceProvider: "jira",
+      hostDomain: "acme.atlassian.net",
+      projectKey: "OPS",
+      repository: "OPS",
+      issueNumber: 42,
+      issueKey: "OPS-42",
+      title: "SSO login refresh failure",
+      url: "https://acme.atlassian.net/browse/OPS-42",
+      state: "In Progress",
+      labels: ["sso", "bug"],
+      assignees: ["alice"],
+      bodyPreview: "The login flow fails for SSO users...",
+      issueBodyMarkdown: fullJiraBody,
+      issueConversationMarkdown: "",
+      includeConversation: false,
+      createdAt: "2026-05-19T10:00:00.000+0000",
+      updatedAt: "2026-05-20T10:00:00.000+0000",
+      issueAuthor: "Morgan Reporter",
+      issueCreatedAt: "2026-05-19T10:00:00.000+0000",
+      issueUpdatedAt: "2026-05-20T10:00:00.000+0000",
+      issueReporter: "Morgan Reporter",
+      issueMilestone: "v1",
+      issueType: "Bug",
+      issuePriority: "High",
+      issueCommentCount: 3,
+      metadata: { issueType: "Bug", priority: "High" },
+    }];
+    const linkedRecords = [{ id: "link-1", issueKey: "OPS-42" }];
+    const planResult = { createdTasksCount: 1 };
+    vi.mocked(sprintIssueService.searchIssues).mockResolvedValue(searchedIssues as any);
+    vi.mocked(projectRepo.getSprint).mockReturnValue({ id: "s1", projectId: "p1", goal: "Existing goal" } as any);
+    vi.mocked(projectRepo.replaceSprintLinkedIssues).mockReturnValue(linkedRecords as any);
+    vi.mocked(projectRepo.updateSprint).mockReturnValue({ id: "s1", projectId: "p1", goal: "updated goal" } as any);
+    vi.mocked(planningAgentService.planSprint).mockResolvedValue(planResult as any);
+
+    const result = await sprintActions.handleSprintAction(makeArgs("import_issues", {
+      projectId: "p1",
+      sprintId: "s1",
+      provider: "jira",
+      search: "SSO login",
+      planAfterImport: true,
+    }));
+
+    expect(sprintIssueService.searchIssues).toHaveBeenCalledWith("p1", expect.objectContaining({
+      provider: "jira",
+      search: "SSO login",
+    }));
+    expect(sprintIssueService.getIssuePromptContextsForReferences).not.toHaveBeenCalled();
+    expect(sprintIssueService.importLinkedIssues).toHaveBeenCalledWith("s1", "p1", [expect.objectContaining({
+      provider: "jira",
+      issueKey: "OPS-42",
+      issueBodyMarkdown: fullJiraBody,
+      includeConversation: false,
+      issueAuthor: "Morgan Reporter",
+      issueCreatedAt: "2026-05-19T10:00:00.000+0000",
+      issueUpdatedAt: "2026-05-20T10:00:00.000+0000",
+      metadata: { issueType: "Bug", priority: "High" },
+    })]);
+    const updatedGoal = vi.mocked(projectRepo.updateSprint).mock.calls[0]?.[1].goal;
+    expect(updatedGoal).toContain("Keep this exact Jira acceptance criterion in the sprint goal.");
+    expect(updatedGoal).not.toContain("_No issue body was provided._");
+    expect(projectRepo.updateSprint).toHaveBeenCalledBefore(planningAgentService.planSprint as any);
+    expect(result.result).toMatchObject({
+      mode: "search",
+      provider: "jira",
+      searchedIssues,
+      linkedIssues: linkedRecords,
+      planning: planResult,
+    });
+  });
+
   it("searches Linear issues without requiring a sprint", async () => {
     const mockIssues = [{
       provider: "linear",
@@ -444,6 +527,7 @@ describe("SprintActions", () => {
       issueAuthor: "bob",
       issueCreatedAt: "2026-05-01T00:00:00.000Z",
       issueUpdatedAt: "2026-05-02T00:00:00.000Z",
+      metadata: { issueType: "Story", priority: "High" },
     }];
     const linkedRecords = [{ id: "link-1", issueKey: "OPS-42" }];
     vi.mocked(sprintIssueService.getIssuePromptContextsForReferences).mockResolvedValue(contexts as any);
@@ -462,9 +546,14 @@ describe("SprintActions", () => {
       provider: "jira",
       issueKeys: ["OPS-42"],
     }));
-    expect(projectRepo.replaceSprintLinkedIssues).toHaveBeenCalledWith("p1", "s1", [expect.not.objectContaining({
-      issueBodyMarkdown: expect.any(String),
-      issueConversationMarkdown: expect.any(String),
+    expect(projectRepo.replaceSprintLinkedIssues).toHaveBeenCalledWith("p1", "s1", [expect.objectContaining({
+      issueBodyMarkdown: "Full Jira body",
+      issueConversationMarkdown: "Jira comments",
+      includeConversation: true,
+      issueAuthor: "bob",
+      issueCreatedAt: "2026-05-01T00:00:00.000Z",
+      issueUpdatedAt: "2026-05-02T00:00:00.000Z",
+      metadata: { issueType: "Story", priority: "High" },
     })]);
     expect(projectRepo.updateSprint).toHaveBeenCalledWith("s1", {
       goal: expect.stringContaining("Full Jira body"),
