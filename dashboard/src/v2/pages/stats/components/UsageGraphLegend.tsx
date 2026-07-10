@@ -1,6 +1,6 @@
 import type { FunctionComponent } from 'preact';
 import type { GroupedChartSeriesSection } from '../chart-view-models.js';
-import { CHIP_CLASS, CONTROL_FOCUS_CLASS, SUBPANEL_CLASS, TAB_ACTIVE_CLASS } from './stats-ui-primitives.js';
+import { CHIP_CLASS, CONTROL_FOCUS_CLASS } from './stats-ui-primitives.js';
 
 const FALLBACK_COLORS = ['#F43F5E', '#8B5CF6', '#10B981', '#F59E0B', '#3B82F6', '#EC4899', '#14B8A6'];
 
@@ -62,16 +62,16 @@ export const UsageGraphLegend: FunctionComponent<UsageGraphLegendProps> = ({
                   aria-describedby={disabled ? disabledReasonId : undefined}
                   aria-label={`${s.label} ${signalLabel} series, ${active ? 'enabled' : 'disabled'}${disabled ? ', required because it is the last active series' : ''}`}
                   onClick={() => onToggleSeries(s.id)}
-                  className={`grid min-h-[4.4rem] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-3 text-left ${CONTROL_FOCUS_CLASS} ${SUBPANEL_CLASS} ${
+                  className={`grid min-h-[3.75rem] min-w-0 max-w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[var(--stats-control-radius)] border p-3 text-left transition-colors motion-reduce:transition-none ${CONTROL_FOCUS_CLASS} ${
                     active
-                      ? `${TAB_ACTIVE_CLASS} text-[var(--stats-value-color)]`
-                      : 'text-[var(--stats-detail-color)] hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)]'
+                      ? 'border-[color:var(--stats-border-strong)] bg-[color:var(--stats-surface-chip)] text-[var(--stats-value-color)]'
+                      : 'border-[color:var(--stats-border-hairline)] bg-transparent text-[var(--stats-detail-color)] hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-chip-hover)]'
                   } ${disabled ? 'cursor-not-allowed opacity-55' : ''}`}
                   title={disabled ? 'Keep one series enabled to preserve the chart.' : `${s.label} is ${activeCountLabel}`}
                 >
                   <span className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
                     <span
-                      className="h-3.5 w-3.5 shrink-0 rounded-full ring-2 ring-[color:var(--stats-surface-subpanel)]"
+                      className="h-3.5 w-3.5 shrink-0 rounded-full border border-[color:var(--stats-surface-panel)]"
                       style={{ backgroundColor: accentHex }}
                     />
                     <span className="min-w-0">
@@ -89,13 +89,13 @@ export const UsageGraphLegend: FunctionComponent<UsageGraphLegendProps> = ({
                       aria-hidden="true"
                       className={`relative h-5 w-9 rounded-full border transition-colors motion-reduce:transition-none ${
                         active
-                          ? 'border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active-strong)]'
+                          ? 'border-[color:var(--stats-border-strong)] bg-[color:var(--stats-value-color)]'
                           : 'border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-chip)]'
                       }`}
                     >
                       <span
                         className={`absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full transition-transform motion-reduce:transition-none ${
-                          active ? 'translate-x-[1.15rem] bg-[color:var(--stats-value-color)]' : 'translate-x-0.5 bg-[var(--stats-detail-color)]/55'
+                          active ? 'translate-x-[1.15rem] bg-[color:var(--stats-surface-panel)]' : 'translate-x-0.5 bg-[var(--stats-detail-color)]/55'
                         }`}
                       />
                     </span>

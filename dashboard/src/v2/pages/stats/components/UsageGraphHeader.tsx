@@ -4,7 +4,6 @@ import {
   CHIP_CLASS,
   CONTROL_FOCUS_CLASS,
   STATUS_TONE_CLASS,
-  SUBPANEL_CLASS,
   TAB_ACTIVE_CLASS,
   TAB_IDLE_CLASS,
 } from './stats-ui-primitives.js';
@@ -35,21 +34,21 @@ export const UsageGraphHeader: FunctionComponent<{
   onResetZoom,
 }) => {
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+    <div className="flex flex-col gap-3">
+      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
         <div className="min-w-0">
-          <div className={`${CHIP_CLASS} inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)]`}>
-            <Activity className="h-3.5 w-3.5 text-[color:var(--stats-signal-text)]" strokeWidth={2.2} />
+          <div className="flex min-w-0 items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">
+            <Activity className="h-3.5 w-3.5" strokeWidth={2.2} />
             Usage Graph
           </div>
-          <div className="mt-3 text-xl font-semibold leading-tight text-[var(--stats-value-color)] md:text-2xl">
+          <h2 className="mt-1 text-lg font-semibold leading-tight text-[var(--stats-value-color)] md:text-xl">
             {title}
-          </div>
-          <div className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--stats-detail-color)]">
+          </h2>
+          <div className="mt-1 max-w-3xl text-xs leading-relaxed text-[var(--stats-detail-color)] sm:text-sm">
             {description}
           </div>
         </div>
-        <div className="flex flex-wrap gap-2 lg:justify-end">
+        <div className="flex min-w-0 flex-wrap gap-2 md:justify-end">
           <button
             type="button"
             onClick={onToggleFilters}
@@ -86,22 +85,25 @@ export const UsageGraphHeader: FunctionComponent<{
       <div
         role="toolbar"
         aria-label="Usage graph controls"
-        className={`${SUBPANEL_CLASS} relative z-40 flex flex-col gap-3 p-3 sm:flex-row sm:flex-wrap sm:items-center`}
+        className="relative z-40 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 border-y border-[color:var(--stats-border-hairline)] py-2"
       >
-        <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 sm:grid-cols-none sm:auto-cols-max sm:grid-flow-col">
-          <div className={`${CHIP_CLASS} min-w-0 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]`}>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]">
+          <div className="min-w-0 max-w-full">
             <span className="sr-only">Selected range: </span>
-            <span className="block truncate">{rangeLabel}</span>
+            <span className="block break-words">{rangeLabel}</span>
           </div>
-          <div className={`${CHIP_CLASS} px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]`}>
+          <span aria-hidden="true" className="text-[color:var(--stats-border-strong)]">/</span>
+          <div>
             {bucketCount.toLocaleString()} buckets
           </div>
-          <div className={`${CHIP_CLASS} px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]`}>
+          <span aria-hidden="true" className="text-[color:var(--stats-border-strong)]">/</span>
+          <div>
             {resolutionLabel}
           </div>
-          <div className={`${CHIP_CLASS} min-w-0 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]`}>
+          <span aria-hidden="true" className="text-[color:var(--stats-border-strong)]">/</span>
+          <div className="min-w-0 max-w-full">
             <span className="sr-only">Active zoom: </span>
-            <span className="block truncate">{isZoomed ? zoomLabel : 'Full range'}</span>
+            <span className="block break-words">{isZoomed ? zoomLabel : 'Full range'}</span>
           </div>
         </div>
       </div>

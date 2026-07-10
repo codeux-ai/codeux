@@ -309,8 +309,8 @@ The page focuses on:
 
 - the hero keeps project, sprint, snapshot freshness, range resolution, and active-mode context visible, with wrap-first preset chips and explicit custom date inputs above the mode toggle
 - the mode toggle exposes trend, composition, models, reliability, ledgers, and system as primary analysis surfaces
-- trend mode uses a compact metric strip, an interactive usage chart, a persistent side rail, and a graph filter menu that only controls series visibility
-- chart controls keep hover, keyboard focus, and drag zoom synchronized so the accessible summary and the plot always describe the same bucket
+- trend mode leads with the interactive usage chart, then presents compact secondary signals and purpose activity; its graph filter menu only controls series visibility
+- chart controls keep pointer inspection, keyboard focus, slider pinning, minimap selection, drag zoom, and reset synchronized against absolute bucket indexes so the inspection rail, accessible summary, and plot describe the same bucket
 - composition mode emphasizes provider share, token anatomy, cache efficiency, purpose activity, and provider activity ledgers as grouped modules
 - models mode emphasizes ranked model cards with consistent metric grids, provider identity, throughput, success rate, latency, cache efficiency, and model highlights
 - reliability mode emphasizes provider health, telemetry confidence, reported/estimated/unavailable mix, and data-integrity notes before the provider breakdown

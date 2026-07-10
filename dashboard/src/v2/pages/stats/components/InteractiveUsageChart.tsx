@@ -66,8 +66,8 @@ export const InteractiveUsageChart: FunctionComponent<{
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       if (hoveredIndex !== null) {
-        // Zoom into current bucket
-        applyZoomRange({ start: hoveredIndex, end: hoveredIndex }, describeZoomRange(hoveredIndex, hoveredIndex));
+        const absoluteIndex = viewStart + hoveredIndex;
+        applyZoomRange({ start: absoluteIndex, end: absoluteIndex }, describeZoomRange(absoluteIndex, absoluteIndex));
       }
     }
   };
@@ -94,7 +94,7 @@ export const InteractiveUsageChart: FunctionComponent<{
   const viewStartRef = useRef(zoomRange?.start ?? 0);
   viewStartRef.current = zoomRange?.start ?? 0;
 
-  const padding = 34;
+  const padding = 42;
   const viewStart = viewStartRef.current;
   const viewEnd = zoomRange?.end ?? Math.max(0, buckets.length - 1);
   const visibleBuckets = useMemo(() => getVisibleBuckets(buckets, viewStart, viewEnd), [buckets, viewStart, viewEnd]);
@@ -145,9 +145,11 @@ export const InteractiveUsageChart: FunctionComponent<{
   const { activeIndex, activeBucket, tooltipLeft, xPositions } = useMemo(() => getTooltipState(
     visibleBuckets, chartData, hoveredIndex, padding, width
   ), [visibleBuckets, chartData, hoveredIndex, padding, width]);
-  const tooltipInspectionState = activeBucket
-    ? zoomRange && zoomRange.start === zoomRange.end ? 'pinned' : 'focused'
-    : 'idle';
+  const tooltipInspectionState = zoomRange && zoomRange.start === zoomRange.end
+    ? 'pinned'
+    : hoveredIndex !== null
+      ? 'focused'
+      : 'idle';
 
   const selectionBounds = dragStartIndex !== null && dragCurrentIndex !== null
     ? {
@@ -192,7 +194,23 @@ export const InteractiveUsageChart: FunctionComponent<{
       : `Zoomed to ${startLabel} through ${endLabel}, ${end - start + 1} buckets.`;
   };
 
+  const reconcileFocusedBucket = (range: { start: number; end: number } | null) => {
+    if (hoveredIndex === null) {
+      return;
+    }
+    const absoluteFocusedIndex = viewStart + hoveredIndex;
+    const nextStart = range?.start ?? 0;
+    const nextEnd = range?.end ?? Math.max(0, buckets.length - 1);
+    setHoveredIndex(Math.max(0, Math.min(nextEnd - nextStart, absoluteFocusedIndex - nextStart)));
+  };
+
+  const setChartZoomRange = (range: { start: number; end: number } | null) => {
+    reconcileFocusedBucket(range);
+    setZoomRange(range);
+  };
+
   const applyZoomRange = (range: { start: number; end: number } | null, status: string) => {
+    reconcileFocusedBucket(range);
     setZoomRange(range);
     setChartStatus(status);
   };
@@ -308,14 +326,16 @@ export const InteractiveUsageChart: FunctionComponent<{
   };
 
   return (
-    <div ref={panelRef} className={`${PANEL_CLASS} p-3 md:p-4`}>
-      <div className="relative flex flex-col gap-4">
+    <div ref={panelRef} className={`${PANEL_CLASS} max-w-full p-3 md:p-4`}>
+      <div className="relative flex min-w-0 flex-col gap-3">
         {/* Screen reader summary */}
         <div className="sr-only" aria-live="polite" aria-atomic="true">
           <h2 id="chart-summary-heading" className="sr-only">Data Visualization for {zoomRange ? "zoomed timeframe" : stats.range.label}</h2>
           <p>
             {chartSummaryText}
-            {activeBucket ? `Focused bucket: ${activeBucket.label}. Tokens: ${activeBucket.usage.totalTokens}` : "No bucket focused."}
+            {activeBucket
+              ? `${tooltipInspectionState === "pinned" ? "Pinned" : tooltipInspectionState === "focused" ? "Focused" : "Latest visible"} bucket: ${activeBucket.label}. Tokens: ${activeBucket.usage.totalTokens}`
+              : "No bucket available."}
           </p>
           <table className="sr-only">
             <caption>Usage chart data for {zoomLabel}</caption>
@@ -341,7 +361,7 @@ export const InteractiveUsageChart: FunctionComponent<{
         </div>
         <UsageGraphHeader
           title={zoomRange ? "Zoomed telemetry window" : stats.range.label}
-          description="Normalized telemetry lines reveal shape instead of forcing tokens, duration, and invocation counts into one scale. Drag across the plot or the overview strip to zoom a timeframe, hover for exact bucket values, and use filters to focus the graph."
+          description="Compare normalized telemetry shapes, inspect exact bucket values, and narrow the visible window without changing the selected Stats range."
           rangeLabel={stats.range.label}
           bucketCount={visibleBuckets.length}
           resolutionLabel={stats.range.resolutionLabel}
@@ -370,9 +390,9 @@ export const InteractiveUsageChart: FunctionComponent<{
           {chartStatus}
         </div>
 
-        <div className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="grid min-w-0 grid-cols-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(17rem,21rem)]">
           <div className="flex min-w-0 flex-col gap-3">
-            <div id="usage-chart-instructions" className={`${SUBPANEL_CLASS} flex flex-wrap items-center justify-between gap-3 px-3 py-2.5`}>
+            <div id="usage-chart-instructions" className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-1">
               <div className="min-w-0">
                 <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Interactive plot</div>
                 <div className="mt-1 text-xs leading-relaxed text-[var(--stats-detail-color)]">
@@ -384,8 +404,8 @@ export const InteractiveUsageChart: FunctionComponent<{
               </div>
             </div>
 
-            <div className={`${SUBPANEL_CLASS} p-2.5 md:p-3`}>
-              <div ref={svgContainerRef} className="relative h-[clamp(32rem,62vh,52rem)] w-full">
+            <div className={`${SUBPANEL_CLASS} max-w-full p-2.5 md:p-3`}>
+              <div ref={svgContainerRef} className="relative h-[clamp(22rem,58vh,46rem)] min-h-0 w-full max-w-full">
                 {error ? (
                   <div className="absolute inset-0 z-20 flex items-center justify-center rounded-[var(--stats-subpanel-radius)] bg-[color:var(--stats-surface-panel)]">
                     <UsageGraphError message={error} onRetry={() => { refresh().catch(() => {}); }} />
@@ -421,9 +441,13 @@ export const InteractiveUsageChart: FunctionComponent<{
                         y1={padding + ((height - padding * 2) / 4) * index}
                         y2={padding + ((height - padding * 2) / 4) * index}
                         stroke="currentColor"
-                        strokeOpacity="0.045"
+                        strokeOpacity="0.08"
                       />
                     ))}
+                    <line x1={padding} x2={padding} y1={padding} y2={height - padding} stroke="currentColor" strokeOpacity="0.14" />
+                    <line x1={padding} x2={width - padding} y1={height - padding} y2={height - padding} stroke="currentColor" strokeOpacity="0.14" />
+                    <text x={padding - 8} y={padding + 3} textAnchor="end" className="fill-[var(--stats-detail-color)] text-[9px] font-bold uppercase tracking-[0.12em]">High</text>
+                    <text x={padding - 8} y={height - padding + 3} textAnchor="end" className="fill-[var(--stats-detail-color)] text-[9px] font-bold uppercase tracking-[0.12em]">Low</text>
                     {selectionBounds && xPositions.length > 0 ? (
                       <rect
                         x={Math.max(padding, xPositions[Math.max(0, selectionBounds.start - viewStart)] ?? padding)}
@@ -507,7 +531,13 @@ export const InteractiveUsageChart: FunctionComponent<{
                             setDragCurrentIndex(absoluteIndex);
                           }}
                           onMouseEnter={() => setHoveredIndex(index)}
-                          onFocus={() => setHoveredIndex(index)}
+                          onFocus={() => {
+                            setHoveredIndex(index);
+                            const bucket = buckets[absoluteIndex];
+                            if (bucket) {
+                              setChartStatus(`Focused ${bucket.label}. Press Enter to pin this bucket.`);
+                            }
+                          }}
                           onBlur={() => setHoveredIndex(null)}
                           onKeyDown={(event) => {
                             if (event.key !== "Enter" && event.key !== " ") {
@@ -563,26 +593,15 @@ export const InteractiveUsageChart: FunctionComponent<{
                 <UsageChartMinimap
                   buckets={buckets}
                   zoomRange={zoomRange}
-                  onZoomChange={setZoomRange}
+                  onZoomChange={setChartZoomRange}
                   onStatusChange={setChartStatus}
                 />
               ) : null}
             </div>
           </div>
 
-          <aside className="flex h-full min-w-0 flex-col gap-3 xl:sticky xl:top-6 xl:max-h-[clamp(32rem,62vh,52rem)] xl:overflow-y-auto xl:pr-1">
-            <div className={`${SUBPANEL_CLASS} flex h-full min-h-full flex-col overflow-y-auto p-3`}>
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Focused bucket</div>
-                  <div className="mt-1 text-sm font-semibold text-[var(--stats-value-color)]">
-                    {activeBucket ? activeBucket.label : "No bucket focused"}
-                  </div>
-                </div>
-                <div className={`${CHIP_CLASS} px-3 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]`}>
-                  {visibleSeries.length} visible
-                </div>
-              </div>
+          <aside className="flex min-w-0 flex-col xl:sticky xl:top-6 xl:max-h-[clamp(22rem,58vh,46rem)]">
+            <div className={`${SUBPANEL_CLASS} flex min-h-0 flex-1 flex-col overflow-y-auto p-3 sm:p-4`}>
               <UsageGraphTooltip
                 visible={!!activeBucket}
                 left={tooltipLeft}
@@ -597,7 +616,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                   value: s.formatter(s.values[activeIndex] ?? 0)
                 }))}
               />
-              <div className={`${SUBPANEL_CLASS} mt-4 p-4`}>
+              <div className="mt-4 border-t border-[color:var(--stats-border-hairline)] pt-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">Range focus</div>
                   <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]">
@@ -630,7 +649,7 @@ export const InteractiveUsageChart: FunctionComponent<{
           </aside>
         </div>
 
-        <div className={`${SUBPANEL_CLASS} p-3`}>
+        <div className="border-t border-[color:var(--stats-border-hairline)] pt-3">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Series switches</div>

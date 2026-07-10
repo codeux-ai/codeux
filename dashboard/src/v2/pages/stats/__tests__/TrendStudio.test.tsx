@@ -13,7 +13,7 @@ vi.mock("../components/InteractiveUsageChart.js", () => ({
 }));
 
 describe("TrendStudio", () => {
-  it("renders the compact signal cards, chart, and purpose breakdown without duplicate trend KPI cards", () => {
+  it("leads with the chart and keeps secondary signals and purpose activity flat", () => {
     const { container } = render(
       <TrendStudio
         stats={
@@ -55,15 +55,17 @@ describe("TrendStudio", () => {
       />,
     );
 
-    const median = screen.getByText("Median");
     const chart = screen.getByTestId("interactive-usage-chart");
+    const signals = screen.getByLabelText("Secondary trend signals");
     const purposeActivity = screen.getByText("Purpose Activity");
 
-    expect(median.compareDocumentPosition(chart) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(chart.compareDocumentPosition(signals) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(signals.compareDocumentPosition(purposeActivity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(chart.compareDocumentPosition(purposeActivity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    expect(container.textContent).toContain("Velocity");
-    expect(container.textContent).toContain("Success");
+    expect(container.textContent).toContain("Median duration");
+    expect(container.textContent).toContain("Output velocity");
+    expect(container.textContent).toContain("Completion success");
     expect(container.textContent).not.toContain("vs first half of window");
     expect(container.textContent).not.toContain("Token trend");
     expect(container.textContent).not.toContain("Invocation trend");

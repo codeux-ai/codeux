@@ -31,6 +31,7 @@ A full-width interactive **Usage Graph** displays usage over time for the series
 - **Reset** restores the snapshot defaults. **Enable defaults** turns the default series back on without hiding other series you selected.
 - At least one series stays enabled. If you try to turn off the last visible series, the switch remains on and the page explains why.
 - Hover, focus, or select a bucket to inspect exact values. Drag-to-zoom changes the visible graph range; it does not change the selected Stats time window.
+- The latest visible bucket remains readable before you hover or focus the graph. Pointer focus, keyboard focus, slider pinning, drag zoom, minimap selection, and reset all feed the same inspection area.
 - The graph frame, filter flyout, focused-bucket panel, tooltip, minimap, and series switches use neutral Stats surfaces; series colors remain reserved for chart lines and data markers.
 - Hourly views reduce visible axis labels while preserving individual bucket inspection.
 

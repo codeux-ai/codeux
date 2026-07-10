@@ -17,7 +17,7 @@ import {
 import type { UsageChartState } from "../use-usage-chart-state.js";
 import {
   CHIP_CLASS,
-  LEDGER_ROW_MODERN_CLASS,
+  PANEL_CLASS,
   SUBPANEL_CLASS,
 } from "./stats-ui-primitives.js";
 import { InteractiveUsageChart } from "./InteractiveUsageChart.js";
@@ -27,8 +27,8 @@ const TrendSignalCard: FunctionComponent<{
   label: string;
   value: string;
 }> = ({ icon: Icon, label, value }) => (
-  <div className={`${SUBPANEL_CLASS} flex min-h-[4.75rem] min-w-0 items-center gap-3 p-3`}>
-    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--stats-control-radius)] border border-[var(--stats-card-border)] bg-[color:var(--stats-accent-signal-fill)] text-[color:var(--stats-signal-text)]">
+  <div className="flex min-h-[4rem] min-w-0 items-center gap-3 px-3 py-2.5 sm:px-4">
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--stats-control-radius)] border border-[var(--stats-card-border)] bg-[color:var(--stats-surface-chip)] text-[color:var(--stats-detail-color)]">
       <Icon className="h-4 w-4" strokeWidth={2.2} />
     </div>
     <div className="min-w-0">
@@ -67,23 +67,6 @@ export const TrendStudio: FunctionComponent<{
 
   return (
   <section className="space-y-3">
-    <div className="grid gap-3 sm:grid-cols-3">
-      <TrendSignalCard
-        icon={TimerReset}
-        label="Median"
-        value={stats.duration && stats.duration.sampleCount > 0 ? formatStatsDuration(stats.duration.p50Ms) : "No samples"}
-      />
-      <TrendSignalCard
-        icon={Hash}
-        label="Velocity"
-        value={outputVelocity}
-      />
-      <TrendSignalCard
-        icon={Clock3}
-        label="Success"
-        value={finishedCount > 0 ? formatPercent((statusCounts!.completed / finishedCount) * 100) : "No runs"}
-      />
-    </div>
     <InteractiveUsageChart
       stats={stats}
       loading={loading}
@@ -91,7 +74,26 @@ export const TrendStudio: FunctionComponent<{
       refresh={refresh}
       chartState={chartState}
     />
-    <div className={`${SUBPANEL_CLASS} p-3`}>
+    <div className={`${PANEL_CLASS} p-3`} aria-label="Secondary trend signals">
+      <div className="grid min-w-0 divide-y divide-[color:var(--stats-border-hairline)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        <TrendSignalCard
+          icon={TimerReset}
+          label="Median duration"
+          value={stats.duration && stats.duration.sampleCount > 0 ? formatStatsDuration(stats.duration.p50Ms) : "No samples"}
+        />
+        <TrendSignalCard
+          icon={Hash}
+          label="Output velocity"
+          value={outputVelocity}
+        />
+        <TrendSignalCard
+          icon={Clock3}
+          label="Completion success"
+          value={finishedCount > 0 ? formatPercent((statusCounts!.completed / finishedCount) * 100) : "No runs"}
+        />
+      </div>
+    </div>
+    <div className={`${PANEL_CLASS} p-3`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">Purpose Activity</div>
@@ -105,7 +107,7 @@ export const TrendStudio: FunctionComponent<{
       </div>
       <div className="mt-3 grid gap-2">
         {purposeRows.length > 0 ? purposeRows.map((purpose) => (
-          <div key={purpose.id} className={`${LEDGER_ROW_MODERN_CLASS} grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center`}>
+          <div key={purpose.id} className={`${SUBPANEL_CLASS} grid gap-3 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,18rem)] sm:items-center`}>
             <div className="min-w-0">
               <div className="break-words text-sm font-bold capitalize text-[color:var(--stats-value-color)]">
                 {purpose.label.replace(/_/g, " ")}

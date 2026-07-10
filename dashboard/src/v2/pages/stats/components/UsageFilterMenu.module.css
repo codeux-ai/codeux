@@ -4,7 +4,8 @@
   right: 0;
   z-index: 50;
   margin-top: 0.65rem;
-  width: min(30rem, calc(100vw - 2rem));
+  width: min(32rem, 100%);
+  max-width: calc(100vw - 2rem);
   max-height: min(42rem, calc(100dvh - 6rem));
   transform-origin: top right;
 }
@@ -14,10 +15,10 @@
   flex-direction: column;
   overflow: hidden;
   max-height: inherit;
-  border-radius: var(--stats-panel-radius);
+  border-radius: var(--stats-subpanel-radius);
   border: 1px solid var(--stats-border-hairline);
   background-color: var(--stats-surface-panel);
-  box-shadow: var(--stats-panel-shadow);
+  box-shadow: none;
 }
 
 :global(.dark) .content {
@@ -105,7 +106,8 @@
   .menu {
     left: 0;
     right: auto;
-    width: min(100%, calc(100vw - 1rem));
+    width: 100%;
+    max-width: calc(100vw - 1rem);
     max-height: calc(100dvh - 4rem);
     transform-origin: top left;
   }
