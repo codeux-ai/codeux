@@ -60,6 +60,93 @@ describe("parseOpenCodeJsonLines", () => {
     expect(result.conversation.map((t) => t.kind)).toEqual(["reasoning", "assistant"]);
   });
 
+  it("parses current native streaming envelopes for session, text, reasoning, tools, and top-level step usage", () => {
+    const stream = ndjson([
+      {
+        type: "event",
+        event: {
+          type: "session.created",
+          properties: {
+            session: { id: "ses_native1" },
+          },
+        },
+      },
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "part_reason",
+            type: "reasoning",
+            content: [{ type: "summary_text", text: "Need the current files." }],
+          },
+        },
+      },
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "part_text",
+            type: "text",
+            content: [{ text: "Initial response" }],
+          },
+        },
+      },
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "part_text",
+            type: "text",
+            content: [{ text: "Final response" }],
+          },
+        },
+      },
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            type: "tool",
+            toolName: "shell",
+            callId: "call-native",
+            status: "completed",
+            input: { command: "pnpm test" },
+            result: "ok",
+          },
+        },
+      },
+      {
+        type: "step_finish",
+        usage: {
+          promptTokens: 120,
+          completionTokens: 30,
+          reasoningTokens: 4,
+          cachedInputTokens: 20,
+        },
+        cost: 0.05,
+      },
+    ]);
+
+    const result = parseOpenCodeJsonLines(stream);
+
+    expect(result.nativeSessionId).toBe("ses_native1");
+    expect(result.transcriptText).toBe("Final response");
+    expect(result.inputTokens).toBe(100);
+    expect(result.cachedInputTokens).toBe(20);
+    expect(result.outputTokens).toBe(30);
+    expect(result.reasoningOutputTokens).toBe(4);
+    expect(result.cost).toBeCloseTo(0.05);
+    expect(result.conversation.map((turn) => turn.kind)).toEqual(["reasoning", "assistant", "tool_call"]);
+    expect(result.conversation[1]).toMatchObject({ kind: "assistant", text: "Final response" });
+    expect(result.conversation[2]).toMatchObject({
+      kind: "tool_call",
+      toolName: "shell",
+      toolCallId: "call-native",
+      toolArguments: JSON.stringify({ command: "pnpm test" }),
+      toolOutput: "ok",
+      toolStatus: "completed",
+    });
+  });
+
   it("skips malformed JSON lines and preserves partial records", () => {
     const stream = [
       "{\"type\":\"text\",",
@@ -250,6 +337,39 @@ describe("parseOpenCodeExport", () => {
     const usage = parseOpenCodeExport("prefix {\"info\":{\"tokens\":{\"input\":99},\"api_key\":\"sk-test-secret\"");
     expect(usage).toBeNull();
   });
+
+  it("extracts usage from nested current export payloads wrapped in noisy stdout", () => {
+    const noisy = [
+      "bootstrap log line",
+      JSON.stringify({
+        data: {
+          session: {
+            id: "ses_nested_export",
+            cost: 0.09,
+            tokens: {
+              input: 700,
+              output: 80,
+              reasoning: 12,
+              cache: { read: 200, write: 10 },
+            },
+          },
+        },
+      }),
+    ].join("\n");
+
+    const usage = parseOpenCodeExport(noisy)!;
+    expect(usage).toEqual({
+      inputTokens: 500,
+      cachedInputTokens: 200,
+      outputTokens: 80,
+      reasoningOutputTokens: 12,
+      cost: 0.09,
+      rawUsageJson: {
+        tokens: { input: 700, output: 80, reasoning: 12, cache: { read: 200, write: 10 } },
+        cost: 0.09,
+      },
+    });
+  });
 });
 
 describe("subtractOpenCodeBaseline", () => {
@@ -305,5 +425,34 @@ describe("subtractOpenCodeBaseline", () => {
     expect(result).toMatchObject({
       inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, cost: 0,
     });
+  });
+
+  it("subtracts baseline snapshots that use OpenAI-style token aliases", () => {
+    const current = {
+      inputTokens: 250,
+      cachedInputTokens: 50,
+      outputTokens: 90,
+      reasoningOutputTokens: 10,
+      cost: 0.12,
+      rawUsageJson: { tokens: { input: 300, output: 90, reasoning: 10, cache: { read: 50, write: 0 } }, cost: 0.12 },
+    };
+    const baseline = {
+      tokens: {
+        promptTokens: 120,
+        completionTokens: 40,
+        reasoningTokens: 3,
+        cachedInputTokens: 20,
+      },
+      cost: 0.05,
+    };
+
+    const result = subtractOpenCodeBaseline(current, baseline);
+
+    expect(result.inputTokens).toBe(150);
+    expect(result.cachedInputTokens).toBe(30);
+    expect(result.outputTokens).toBe(50);
+    expect(result.reasoningOutputTokens).toBe(7);
+    expect(result.cost).toBeCloseTo(0.07);
+    expect(result.rawUsageJson).toEqual(current.rawUsageJson);
   });
 });
