@@ -52,7 +52,7 @@ jobs:
             docker run --rm --network none codeux-runtime-smoke:browser bash -lc 'command -v playwright && command -v playwright-mcp && test -d /ms-playwright'
           fi
       - name: Scan runtime image
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
           image-ref: codeux-runtime-smoke:${{ matrix.target }}
           format: table
