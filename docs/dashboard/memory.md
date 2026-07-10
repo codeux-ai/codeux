@@ -169,6 +169,12 @@ If deterministic prefiltering finds no cleanup candidates, Code UX records a com
 
 The Memory settings panel also manages one project-scoped scheduler entry for long-term remediation. Users can set it to Off, Every day, or Every week without leaving Settings. Entries created this way are marked as `memoryRemediationTarget.source = "memory_settings"` so manually created Scheduler page entries are not overwritten.
 
+## Project Manager Direct Memory
+
+The dashboard's default Project Manager has `add_long_term_memory`, a narrow direct-write MCP lane for explicit remember/learn requests and stable knowledge it judges valuable. A successful call creates a canonical long-term claim plus its searchable project-memory mirror; chat can render a `codeux:memory` confirmation widget with the exact statement, category, claim id, and mirror-memory id returned by the tool.
+
+This does not replace the two-tier capture flow. Short-term sprint observations remain evidence, and remediation/promotion still curate that evidence into durable claims. The direct lane is for stable preferences, decisions, architecture, patterns, codebase conventions, context, and learnings that should guide future work.
+
 ## UI Updates and Accessibility
 - The Memory page model catalog is presented as a compact model browser with grouped sections for memory embedding models, custom Hugging Face embedding entry, and TTS/speech-adjacent Hugging Face models. Speech-only rows are informational and do not expose embedding download, activation, deletion, or re-embedding actions.
 - Embedding model rows distinguish active, downloaded, downloading, stale, custom, and unavailable states without using legacy violet action styling. Primary actions use Signal Jade for download and activation, stale re-embedding warnings use Ember, and destructive/error states use status red. The downloaded-model delete action is icon-only with an accessible label and is disabled while the model is active.

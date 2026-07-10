@@ -12,6 +12,12 @@ import type { Sprint } from "../../../types.js";
 
 expect.extend(matchers);
 
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({ children, search, to, ...props }: any) => (
+    <a href={`${to}?${new URLSearchParams(search).toString()}`} {...props}>{children}</a>
+  ),
+}));
+
 afterEach(() => {
   cleanup();
 });

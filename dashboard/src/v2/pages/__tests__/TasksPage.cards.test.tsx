@@ -18,6 +18,7 @@ expect.extend(matchers);
 
 const routerState = vi.hoisted(() => ({
   searchStr: "",
+  navigate: vi.fn(),
 }));
 
 // Mock react-router
@@ -27,6 +28,7 @@ vi.mock("@tanstack/react-router", () => ({
     const state = { location: { searchStr: routerState.searchStr } };
     return options?.select ? options.select(state) : state;
   }),
+  useNavigate: () => routerState.navigate,
 }));
 
 // Mock GSAP
@@ -99,6 +101,8 @@ const agentPresets = [
 describe("TasksPage.cards Integration", () => {
   beforeEach(() => {
     routerState.searchStr = "";
+    routerState.navigate.mockReset();
+    routerState.navigate.mockResolvedValue(undefined);
     (fetchAgentPresets as unknown as any).mockResolvedValue(agentPresets);
     (createTask as unknown as any).mockResolvedValue({ id: "created_task_1" });
     (updateTask as unknown as any).mockResolvedValue({ id: "updated_task_1" });
@@ -516,6 +520,11 @@ describe("TasksPage.cards Integration", () => {
 
     await user.keyboard("{End}{Enter}");
     expect(selectSprint).toHaveBeenCalledWith("sprint_2");
+    expect(routerState.navigate).toHaveBeenCalledWith({
+      to: "/tasks",
+      search: { sprintId: "sprint_2" },
+      replace: true,
+    });
     await waitFor(() => expect(trigger).toHaveFocus());
   });
 

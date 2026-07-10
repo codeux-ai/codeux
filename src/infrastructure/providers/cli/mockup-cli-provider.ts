@@ -8,7 +8,9 @@ const path = require("path");
 const crypto = require("crypto");
 const { spawnSync } = require("child_process");
 
-const prompt = process.argv[1] || "";
+// Read the prompt from stdin when invoked by the host runner. Passing a full
+// QA prompt as argv exceeds the Windows CreateProcess command-line limit.
+const prompt = process.argv[1] || fs.readFileSync(0, "utf8");
 const cwd = process.cwd();
 const sessionId = process.env.CODE_UX_MOCKUP_SESSION_ID || "mockup-session";
 const model = process.env.CODE_UX_MOCKUP_MODEL || "default";
@@ -296,6 +298,99 @@ function parseOperations() {
   return { operations, validations };
 }
 
+function isQaReviewPrompt() {
+  return prompt.includes("## QUALITY ASSURANCE AGENT INSTRUCTIONS")
+    && prompt.includes('"verdict": "pass" | "changes_requested"');
+}
+
+function resolveQaReviewTrigger() {
+  return prompt.match(/^Trigger:\s*([a-z_]+)/m)?.[1] || "task_completion";
+}
+
+function resolveQaReviewSource(triggerType) {
+  if (triggerType === "sprint_completion") {
+    return prompt;
+  }
+  const currentTaskIndex = prompt.indexOf("## CURRENT TASK UNDER REVIEW");
+  const requiredOutputIndex = prompt.indexOf("## REQUIRED OUTPUT", currentTaskIndex);
+  if (currentTaskIndex < 0) {
+    return prompt;
+  }
+  return prompt.slice(currentTaskIndex, requiredOutputIndex >= 0 ? requiredOutputIndex : undefined);
+}
+
+function parseQaDirectives(source, directive) {
+  const directives = [];
+  const expression = new RegExp("^\\s*" + directive + "\\s+([^\\n:]+?)\\s*::\\s*(.+?)\\s*$", "gmi");
+  for (const match of source.matchAll(expression)) {
+    directives.push({ filePath: match[1].trim(), content: normalizeContent(match[2]) });
+  }
+  return directives;
+}
+
+function resolveQaTaskKey(source) {
+  return source.match(/^Task key:\s*(.+)$/m)?.[1]?.trim() || null;
+}
+
+function currentGitBranch() {
+  const result = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    cwd,
+    encoding: "utf8",
+  });
+  return result.status === 0 ? String(result.stdout || "").trim() || "HEAD" : "unknown";
+}
+
+async function buildQaReviewPayload() {
+  const triggerType = resolveQaReviewTrigger();
+  const source = resolveQaReviewSource(triggerType);
+  const requiredDirective = triggerType === "sprint_completion"
+    ? "mockup-sprint-qa:require-file"
+    : "mockup-qa:require-file";
+  const requiredFiles = parseQaDirectives(source, requiredDirective);
+  const missing = [];
+  for (const required of requiredFiles) {
+    let content = null;
+    try {
+      content = await fsp.readFile(resolveWorkspacePath(required.filePath), "utf8");
+    } catch {
+      // Missing and out-of-workspace paths are both review failures.
+    }
+    if (content === null || !content.includes(required.content)) {
+      missing.push(required);
+    }
+  }
+
+  const branch = currentGitBranch();
+  if (missing.length === 0) {
+    return {
+      verdict: "pass",
+      summary: "Mockup QA verified required files on branch " + branch + ".",
+      findings: [],
+      fixInstructions: null,
+      targetTaskKey: null,
+      shouldHavePr: null,
+      followUpTasks: [],
+    };
+  }
+
+  const fixes = triggerType === "sprint_completion"
+    ? []
+    : parseQaDirectives(source, "mockup-qa:fix-write");
+  const fixInstructions = fixes.length > 0
+    ? fixes.map((fix) => "mockup-cli:write " + fix.filePath + " :: " + fix.content).join("\\n")
+    : "Review the missing required files and complete the task requirements.";
+  const findingText = missing.map((required) => required.filePath + " must contain " + required.content);
+  return {
+    verdict: "changes_requested",
+    summary: "Mockup QA found missing required files on branch " + branch + ": " + missing.map((required) => required.filePath).join(", ") + ".",
+    findings: findingText,
+    fixInstructions,
+    targetTaskKey: resolveQaTaskKey(source),
+    shouldHavePr: null,
+    followUpTasks: [],
+  };
+}
+
 async function applyOperation(operation) {
   if (operation.type === "resolve-conflicts") {
     const resolved = await resolveActiveConflicts();
@@ -373,6 +468,11 @@ async function main() {
     process.exit(1);
   }
 
+  if (isQaReviewPrompt()) {
+    console.log(JSON.stringify(await buildQaReviewPayload()));
+    return;
+  }
+
   const { operations, validations } = parseOperations();
   const actions = [];
   for (const operation of operations) {
@@ -428,14 +528,14 @@ export async function runMockupCliProvider(input: {
 }): Promise<CommandResult> {
   return new Promise((resolve) => {
     const nodeExecutable = input.env.CODEUX_E2E_NODE_EXECUTABLE?.trim() || process.execPath;
-    const child = spawn(nodeExecutable, ["-e", MOCKUP_CLI_NODE_SCRIPT, input.prompt], {
+    const child = spawn(nodeExecutable, ["-e", MOCKUP_CLI_NODE_SCRIPT], {
       cwd: input.cwd,
       env: {
         ...input.env,
         CODE_UX_MOCKUP_MODEL: input.model || "default",
         CODE_UX_MOCKUP_SESSION_ID: input.sessionId,
       },
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
 
     let stdout = "";
@@ -470,6 +570,11 @@ export async function runMockupCliProvider(input: {
 
     child.stdout.on("data", (chunk: Buffer) => emitLines(chunk, "stdout"));
     child.stderr.on("data", (chunk: Buffer) => emitLines(chunk, "stderr"));
+    child.stdin.on("error", () => {
+      // A failed spawn closes stdin before the prompt can be written. The
+      // child `error` handler below returns that failure to the caller.
+    });
+    child.stdin.end(input.prompt, "utf8");
     child.on("close", (code) => {
       if (input.signal) {
         input.signal.removeEventListener("abort", killOnAbort);

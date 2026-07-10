@@ -18,6 +18,7 @@ These cover:
 - `manage_agents`
 - `manage_node_flows`
 - `manage_memory`
+- `add_long_term_memory`
 - `manage_skills`
 - `search_knowledge`
 - `search_skills`
@@ -57,6 +58,7 @@ These cover:
 - `manage_agents`
 - `manage_node_flows`
 - `manage_memory`
+- `add_long_term_memory`
 - `manage_skills`
 - `search_knowledge`
 - `search_skills`
@@ -104,7 +106,7 @@ For a resolved agent policy:
 - Runtime-role filtering still applies after system and agent policy checks.
 - Custom external MCP servers remain limited to the agent's linked server ids and are not broadened by Code UX tool availability.
 
-The dashboard chat reply route is the only route-local default exception. The agent assigned to that route receives full built-in Code UX MCP access, `scheduler_code_ux`, and the default Playwright MCP server for dashboard reply turns even when its saved preset has Code UX disabled or no MCP policy. This default is keyed to the dashboard reply route assignment, not to the generic `project_manager` runtime role.
+The dashboard chat reply route is the only route-local default exception. The agent assigned to that route receives full built-in Code UX MCP access, `scheduler_code_ux`, `add_long_term_memory`, and the default Playwright MCP server for dashboard reply turns even when its saved preset has Code UX disabled or no MCP policy. An explicitly narrowed dashboard reply policy still has both dedicated lanes forced on. This default is keyed to the dashboard reply route assignment, not to the generic `project_manager` runtime role.
 
 ## Common Response Shape
 
@@ -683,6 +685,31 @@ Available claim actions:
 
 Claim reads and writes remain project-scoped. A claim ID or evidence memory outside the provided project is rejected instead of being linked across project boundaries.
 
+### `add_long_term_memory` Project Manager lane
+
+`add_long_term_memory` is the dedicated direct-write tool for the user-facing Project Manager. It is separate from the broad `manage_memory` lifecycle surface so an explicitly narrowed dashboard reply policy can still grant one safe, recognizable remember/learn operation.
+
+```json
+{
+  "projectId": "project-123",
+  "memory": "Use dependency factory composition for service wiring.",
+  "category": "patterns",
+  "confidence": 0.95,
+  "durability": 0.9,
+  "tags": ["architecture"],
+  "appliesToPaths": ["src/services"]
+}
+```
+
+- `projectId` and non-blank `memory` are required.
+- `category` accepts durable categories only: `architecture`, `codebase`, `context`, `preferences`, `patterns`, `decision`, or `learning`; it defaults to `learning`.
+- `confidence` and `durability` are optional `0..1` values and default to `0.9`.
+- `tags`, `appliesToPaths`, and a project-owned `sourceMemoryId` are optional. A source memory is linked as supporting evidence with weight `1`.
+- Success returns the canonical `claim`, searchable `mirrorMemory`, optional evidence, and `richWidget = { type: "memory", data: ... }`. The Project Manager must re-emit those exact returned values in a `codeux:memory` fenced block for the chat UI to render the confirmation; it must not invent IDs.
+- Validation and persistence errors use the normal structured MCP error envelope and do not claim success.
+
+The tool is not a replacement for short-term sprint evidence. It is intended for explicit user persistence requests and Project Manager judgments that a stable fact, preference, decision, convention, or lesson should guide future work.
+
 Destructive claim lifecycle example:
 
 ```json
@@ -1101,7 +1128,7 @@ Settings patch and replacement calls still require the stateful human-confirmati
 - New dashboard threads should remain unassigned by default until explicitly targeted or claimed by a real listener.
 
 ### Agent reply behavior
-- `generate_dashboard_reply` generates a reply-only markdown response for a dashboard inbox message using the editable `Worker` agent plus the project repo context.
+- `generate_dashboard_reply` generates a reply-only markdown response for a dashboard inbox message using the configured dashboard reply agent plus project context; the unset/default route resolves to the editable `Project manager` preset.
 - `generate_dashboard_reply` also accepts `mode = compact_thread`, which treats the supplied markdown as a prepared compaction prompt and records the run as a `chat_compaction` invocation.
 - `post_listen_reply` accepts optional `metadata`, which Code UX uses for hidden control-plane replies such as connected-worker thread compaction.
 

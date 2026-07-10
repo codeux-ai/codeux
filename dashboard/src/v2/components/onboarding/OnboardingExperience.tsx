@@ -50,6 +50,8 @@ import { SectionCard } from "../settings/panels/SharedPanelComponents.js";
 import { JiraIcon } from "../icons/JiraIcon.js";
 import { OnboardingInstallationStep } from "./OnboardingInstallationStep.js";
 import { OnboardingAppearanceStep } from "./OnboardingAppearanceStep.js";
+import { fetchRuntimeAssetsStatus, prepareProviderTool } from "../../lib/runtime-assets-api.js";
+import { isDeprecatedProvider, providerLifecycle } from "../../lib/provider-lifecycle.js";
 
 type IntroPhase = "intro" | "transitioning" | "onboarding";
 import type {
@@ -60,6 +62,8 @@ import type {
   OnboardingRuntimeReadiness,
   ProviderConfigId,
   ProviderId,
+  ProviderToolStatus,
+  RuntimeAssetsStatus,
   ProjectSettings,
   SystemSettings,
 } from "../../../types.js";
@@ -157,7 +161,7 @@ const providerLabels: Record<ProviderId, string> = {
 };
 
 const PROVIDER_TYPES = onboardingProviderTypes;
-const EASY_PROVIDER_TYPES: ProviderId[] = ["gemini", "antigravity", "codex", "claude-code", "qwen-code", "opencode"];
+const EASY_PROVIDER_TYPES: ProviderId[] = ["antigravity", "codex", "claude-code", "qwen-code", "opencode"];
 
 const providerDescriptions: Record<ProviderId, string> = {
   jules: "Google Jules API service for agent session and workspace orchestration.",
@@ -190,12 +194,6 @@ const createEasyDashboardProviderDraft = (
   authPath: `~/.code-ux/credentials/${providerConfigId}`,
 });
 
-const getEasyAuthMode = (
-  provider: SystemSettings["integrations"]["providers"][ProviderConfigId],
-): "dashboardAuth" | "localAuth" => (
-  provider.authType === "localAuth" ? "localAuth" : "dashboardAuth"
-);
-
 const getEasyAuthUpdates = (
   providerConfigId: ProviderConfigId,
   providerId: ProviderId,
@@ -214,21 +212,26 @@ const getEasyAuthUpdates = (
 const EasyProviderAuthCard: FunctionComponent<{
   providerConfigId: ProviderConfigId;
   provider: SystemSettings["integrations"]["providers"][ProviderConfigId];
+  authMode: "dashboardAuth" | "localAuth";
   selected: boolean;
   readinessStatus?: OnboardingProviderCredentialStatus;
+  toolStatus?: ProviderToolStatus;
+  onSelect: () => void;
+  onAuthModeChange: (authMode: "dashboardAuth" | "localAuth") => void;
   onUpdate: (updates: Partial<SystemSettings["integrations"]["providers"][ProviderConfigId]>) => void;
-}> = ({ providerConfigId, provider, selected, readinessStatus, onUpdate }) => {
+}> = ({ providerConfigId, provider, authMode, selected, readinessStatus, toolStatus, onSelect, onAuthModeChange, onUpdate }) => {
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const authMode = getEasyAuthMode(provider);
   const providerLabel = providerLabels[provider.provider];
+  const deprecated = isDeprecatedProvider(provider.provider);
 
   const applyAuthMode = (value: string): void => {
     const nextAuthMode = value === "localAuth" ? "localAuth" : "dashboardAuth";
-    onUpdate(getEasyAuthUpdates(providerConfigId, provider.provider, nextAuthMode, provider.authPath));
+    onAuthModeChange(nextAuthMode);
   };
 
   const openLogin = (): void => {
-    onUpdate(getEasyAuthUpdates(providerConfigId, provider.provider, "dashboardAuth", provider.authPath));
+    onSelect();
+    onAuthModeChange("dashboardAuth");
     setShowLoginModal(true);
   };
 
@@ -247,12 +250,30 @@ const EasyProviderAuthCard: FunctionComponent<{
             </div>
           </div>
         </div>
-        <span className={`rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] ${selected ? "border border-signal-500/20 bg-signal-500/10 text-signal-700 dark:text-signal-200" : "border border-black/[0.06] bg-white/60 text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300"}`}>
-          {selected ? "Selected" : "Available"}
-        </span>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={selected}
+          aria-label={`${selected ? "Selected" : "Select"} ${providerLabel}`}
+          onClick={onSelect}
+          className={`rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 ${selected ? "border border-signal-500/20 bg-signal-500/10 text-signal-700 dark:text-signal-200" : "border border-black/[0.06] bg-white/60 text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300"}`}
+        >
+          {selected ? "Selected" : "Select"}
+        </button>
       </div>
 
       <div className="relative z-10 mt-4 space-y-3">
+        {deprecated ? (
+          <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-xs font-semibold leading-relaxed text-amber-800 dark:text-amber-200">
+            <div className="font-black uppercase tracking-[0.14em]">Deprecated</div>
+            <div className="mt-1">{providerLifecycle[provider.provider].message}</div>
+          </div>
+        ) : null}
+        {toolStatus ? (
+          <div className={`rounded-xl border px-3 py-2 text-xs font-semibold ${toolStatus.state === "failed" ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-300" : toolStatus.state === "ready" ? "border-signal-500/20 bg-signal-500/10 text-signal-700 dark:text-signal-300" : "border-black/[0.06] bg-black/[0.025] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300"}`}>
+            {toolStatus.stepText}
+          </div>
+        ) : null}
         <Row label="Authentication mode">
           <SelectInput
             value={authMode}
@@ -390,6 +411,8 @@ export const OnboardingExperience: FunctionComponent = () => {
   const [lastInstallResult, setLastInstallResult] = useState<OnboardingDependencyInstallerResult | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
+  const [runtimeAssets, setRuntimeAssets] = useState<RuntimeAssetsStatus | null>(null);
+  const [easyProviderAuthModes, setEasyProviderAuthModes] = useState<Partial<Record<ProviderId, "dashboardAuth" | "localAuth">>>({});
   const reducedMotion = useReducedMotion();
   const gsapTokens = useGsapInteractionTokens();
   const interactionTokens = useInteractionTokens();
@@ -407,6 +430,29 @@ export const OnboardingExperience: FunctionComponent = () => {
   useEffect(() => {
     openRef.current = open;
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    const refresh = async (): Promise<void> => {
+      const next = await fetchRuntimeAssetsStatus().catch(() => null);
+      if (!cancelled && next) setRuntimeAssets(next);
+    };
+    void refresh();
+    const interval = window.setInterval(() => void refresh(), 2_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [open]);
+
+  const beginProviderPreparation = (provider: ProviderId): void => {
+    if (provider === "jules" || provider === "mockup-cli") return;
+    void prepareProviderTool(provider)
+      .then(() => fetchRuntimeAssetsStatus())
+      .then((next) => setRuntimeAssets(next))
+      .catch(() => undefined);
+  };
 
   useEffect(() => {
     if (!open) {
@@ -593,6 +639,10 @@ export const OnboardingExperience: FunctionComponent = () => {
     () => Object.fromEntries(readiness.providers.map((provider) => [provider.provider, provider])) as Partial<Record<ProviderId, OnboardingProviderCredentialStatus>>,
     [readiness.providers],
   );
+  const toolStatusByProvider = useMemo(
+    () => Object.fromEntries((runtimeAssets?.providers ?? []).map((status) => [status.provider, status])) as Partial<Record<ProviderId, ProviderToolStatus>>,
+    [runtimeAssets],
+  );
   const easyRecommendedProvider = useMemo(
     () => getEasyRecommendedProvider(readiness.providers, settings),
     [readiness.providers, settings],
@@ -605,10 +655,13 @@ export const OnboardingExperience: FunctionComponent = () => {
     const easyUseGithubDefault = options.useGithub ?? false;
     dispatch({ type: "select-experience-mode", mode });
     if (mode === "EASY") {
+      setEasyProviderAuthModes({});
       dispatch({ type: "set-selected-providers", providers: [easyRecommendedProvider] });
+      beginProviderPreparation(easyRecommendedProvider);
     }
     updateSettings((current) => applyOnboardingExperienceModeDefaults(current, mode, {
       recommendedProvider: easyRecommendedProvider,
+      providerAuthMode: "dashboardAuth",
       useGithub: mode === "EASY" ? easyUseGithubDefault : options.useGithub,
       manageGithubPrWorkflow: mode === "EASY" ? options.manageGithubPrWorkflow ?? false : options.manageGithubPrWorkflow,
     }));
@@ -635,6 +688,7 @@ export const OnboardingExperience: FunctionComponent = () => {
   const toggleProvider = (provider: ProviderId) => {
     if (!selectedProviders.includes(provider)) {
       ensureProviderInstance(provider);
+      beginProviderPreparation(provider);
     }
     dispatch({ type: "toggle-provider", provider });
   };
@@ -734,6 +788,7 @@ export const OnboardingExperience: FunctionComponent = () => {
     updates: Partial<SystemSettings["integrations"]["providers"][ProviderConfigId]>,
   ): void => {
     dispatch({ type: "set-selected-providers", providers: [providerId] });
+    beginProviderPreparation(providerId);
     updateSettings((current) => {
       const provider = current.integrations.providers[providerConfigId]
         ?? createEasyDashboardProviderDraft(providerId, providerConfigId);
@@ -891,6 +946,7 @@ export const OnboardingExperience: FunctionComponent = () => {
     try {
       let nextSettings = applyOnboardingExperienceModeDefaults(cloneSystemSettings(settings), experienceMode, {
         recommendedProvider: easySelectedProvider,
+        providerAuthMode: easyProviderAuthModes[easySelectedProvider] ?? "dashboardAuth",
         useGithub: settings.defaults.cliWorkflow.gitMode !== "local",
         manageGithubPrWorkflow: settings.defaults.git.autoCreatePr,
       });
@@ -1197,7 +1253,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                         <div className="mt-3 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{option.description}</div>
                         {option.value === "EASY" ? (
                           <div className="mt-4 rounded-2xl border border-signal-500/15 bg-signal-500/[0.07] px-3 py-2 text-xs font-semibold leading-relaxed text-signal-800 dark:text-signal-200">
-                            Short flow: provider, GitHub, then Chat.
+                            Short flow: installation, introduction, provider, GitHub, then Chat.
                           </div>
                         ) : null}
                       </button>
@@ -1342,11 +1398,17 @@ export const OnboardingExperience: FunctionComponent = () => {
                               <div className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{instanceCount || 1} instance{(instanceCount || 1) === 1 ? "" : "s"}</div>
                             </div>
                           </div>
-                          <span className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${provider?.available ? "bg-signal-500/10 text-signal-700 dark:text-signal-300" : selected ? "bg-ember-500/10 text-ember-600 dark:text-ember-400" : "bg-slate-500/10 text-slate-500"}`}>
-                            {providerId === "jules" ? "API key" : provider?.available ? "Detected" : selected ? "Configure" : "Optional"}
+                          <span className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${isDeprecatedProvider(providerId) ? "bg-amber-500/10 text-amber-700 dark:text-amber-300" : provider?.available ? "bg-signal-500/10 text-signal-700 dark:text-signal-300" : selected ? "bg-ember-500/10 text-ember-600 dark:text-ember-400" : "bg-slate-500/10 text-slate-500"}`}>
+                            {isDeprecatedProvider(providerId) ? "Deprecated" : providerId === "jules" ? "API key" : provider?.available ? "Detected" : selected ? "Configure" : "Optional"}
                           </span>
                         </div>
                         <div className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{provider?.description || providerDescriptions[providerId]}</div>
+                        {isDeprecatedProvider(providerId) ? (
+                          <div className="mt-2 text-xs font-semibold text-amber-700 dark:text-amber-300">{providerLifecycle[providerId].message}</div>
+                        ) : null}
+                        {selected && toolStatusByProvider[providerId] ? (
+                          <div className="mt-2 text-xs font-semibold text-slate-500 dark:text-slate-300">{toolStatusByProvider[providerId]?.stepText}</div>
+                        ) : null}
                         <div className="mt-3 font-mono text-[11px] text-slate-400">{provider?.authPath || (providerId === "jules" ? "API key only" : "Auth path configurable")}</div>
                       </button>
                     );
@@ -1370,18 +1432,34 @@ export const OnboardingExperience: FunctionComponent = () => {
                     </div>
                   </div>
                   {settings ? (
-                    <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="grid gap-4 lg:grid-cols-2" role="radiogroup" aria-label="Primary provider">
                       {EASY_PROVIDER_TYPES.map((providerId) => {
                         const existingEntry = getSystemProvidersByType(settings, providerId)[0];
                         const providerConfigId = existingEntry?.[0] ?? providerId;
                         const integrationProvider = existingEntry?.[1] ?? createEasyDashboardProviderDraft(providerId, providerConfigId);
+                        const authMode = easyProviderAuthModes[providerId] ?? "dashboardAuth";
                         return (
                           <EasyProviderAuthCard
                             key={providerId}
                             providerConfigId={providerConfigId}
                             provider={integrationProvider}
+                            authMode={authMode}
                             selected={easySelectedProvider === providerId}
                             readinessStatus={readinessByProvider[providerId]}
+                            toolStatus={toolStatusByProvider[providerId]}
+                            onSelect={() => configureEasyProviderInstance(
+                              providerId,
+                              providerConfigId,
+                              getEasyAuthUpdates(providerConfigId, providerId, authMode, integrationProvider.authPath),
+                            )}
+                            onAuthModeChange={(nextAuthMode) => {
+                              setEasyProviderAuthModes((current) => ({ ...current, [providerId]: nextAuthMode }));
+                              configureEasyProviderInstance(
+                                providerId,
+                                providerConfigId,
+                                getEasyAuthUpdates(providerConfigId, providerId, nextAuthMode, integrationProvider.authPath),
+                              );
+                            }}
                             onUpdate={(updates) => configureEasyProviderInstance(providerId, providerConfigId, updates)}
                           />
                         );

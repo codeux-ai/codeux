@@ -68,7 +68,7 @@ export interface CycleRunnerArgs {
   planningAgentPresetId?: string;
 }
 
-interface LocalCliGitEvidence {
+export interface LocalCliGitEvidence {
   pushedTaskIds: Set<string>;
   settledTaskIds: Set<string>;
 }
@@ -90,6 +90,7 @@ export class CycleRunner {
     manualMergeTasks: Subtask[];
     workerEscalatedMergeConflictTasks: Subtask[];
     activeProjectAttentionItems: ProjectAttentionItemRecord[];
+    localCliGitEvidence: LocalCliGitEvidence;
   }> {
     const dashboardSettings = this.deps.getDashboardSettings({
       projectId: args.executionContext.project.id,
@@ -385,6 +386,45 @@ export class CycleRunner {
       }
     }
 
+    if (
+      subtasks.length > 0
+      && args.action === "orchestrate"
+      && args.loopSteps.loadSubtasks
+      && args.loopSteps.mergeProtocol
+    ) {
+      // Fast local providers can finalize git work after the earlier branch gate
+      // snapshots but before protocol renders manual merge instructions. Drain
+      // branch-only LOCAL work one final time so protocol only pauses truly
+      // unresolved merges.
+      subtasks = await this.deps.sprintExecutionStateService.loadSubtasks(
+        args.executionContext.project.id,
+        args.executionContext.sprint.id,
+        args.sprintRunId,
+      );
+      const taskStateBeforeProtocolFastBranchGate = snapshotTaskState(subtasks);
+      const protocolFastBranchOnlyResult = await this.runFastBranchOnlyMergeGate(
+        subtasks,
+        args,
+        dashboardSettings,
+        activeProjectAttentionItems,
+        qaFinishedTaskIds,
+      );
+      subtasks = protocolFastBranchOnlyResult.subtasks;
+      reportText += protocolFastBranchOnlyResult.reportText;
+      this.stateCoordinator.persistCiGateTaskStateChanges(taskStateBeforeProtocolFastBranchGate, subtasks);
+
+      if (hasTaskStateChanges(taskStateBeforeProtocolFastBranchGate, subtasks) && args.loopSteps.statusDerivation) {
+        localCliGitEvidence = this.collectLocalCliGitEvidence(subtasks, args);
+        subtasks = runStatusDerivationStep(subtasks, {
+          retryFailed: args.retryFailed,
+          isActionRequiredState: this.deps.isActionRequiredState,
+          githubMode: args.githubMode,
+          localCliPushedTaskIds: localCliGitEvidence.pushedTaskIds,
+          localCliSettledTaskIds: localCliGitEvidence.settledTaskIds,
+        });
+      }
+    }
+
     const activeWorkerMergeConflictTaskIds = collectActiveWorkerMergeConflictTaskIds(activeProjectAttentionItems);
     const activeWorkerCiFixTaskIds = collectActiveWorkerCiFixTaskIds(activeProjectAttentionItems);
     const activeHumanMergeConflictEscalationTaskIds = collectActiveHumanMergeConflictEscalationTaskIds(activeProjectAttentionItems);
@@ -431,6 +471,11 @@ export class CycleRunner {
       resolvedWorkerMergeConflictSuppressionKeys,
       activeProjectAttentionItems,
     );
+    const reconciledActiveProjectAttentionItems = typeof this.deps.projectAttentionService?.listActiveProjectItems === "function"
+      ? this.deps.projectAttentionService.listActiveProjectItems(args.executionContext.project.id).filter((item) => (
+        item.status === "open" || item.status === "claimed"
+      ))
+      : activeProjectAttentionItems;
     const statusTable = args.loopSteps.statusTable ? runStatusTableStep(subtasks) : "";
 
     return {
@@ -441,7 +486,8 @@ export class CycleRunner {
       awaitingMerge: protocolResult.awaitingMerge,
       manualMergeTasks: protocolResult.manualMergeTasks,
       workerEscalatedMergeConflictTasks: protocolResult.workerEscalatedMergeConflictTasks,
-      activeProjectAttentionItems,
+      activeProjectAttentionItems: reconciledActiveProjectAttentionItems,
+      localCliGitEvidence,
     };
   }
 

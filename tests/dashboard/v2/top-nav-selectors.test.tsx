@@ -17,6 +17,11 @@ import {
 
 expect.extend(matchers);
 
+const routerMocks = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  pathname: "/",
+}));
+
 vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
   useProjectData: vi.fn(),
 }));
@@ -103,7 +108,8 @@ vi.mock("@tanstack/react-router", () => ({
       {children}
     </a>
   ),
-  useRouterState: ({ select }: any) => select({ matches: [{ pathname: "/" }] }),
+  useRouterState: ({ select }: any) => select({ matches: [{ pathname: routerMocks.pathname }] }),
+  useNavigate: () => routerMocks.navigate,
 }));
 
 const project = {
@@ -114,6 +120,13 @@ const project = {
   sourceRef: "/tmp/proj-1",
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
+};
+
+const secondProject = {
+  ...project,
+  id: "proj-2",
+  name: "Beta",
+  sourceRef: "/tmp/proj-2",
 };
 
 const customGuidance = {
@@ -155,19 +168,21 @@ const refetchSprints = vi.fn().mockResolvedValue(undefined);
 
 const renderTopNav = ({
   selectedProject = project as any,
+  projects = selectedProject ? [selectedProject] : [],
+  selectProject = vi.fn().mockResolvedValue(undefined),
   guidance = customGuidance,
   sprints = [sprintOne],
   selectedSprintId = "sprint-1",
   effectiveLoading = false,
 } = {}) => {
   vi.mocked(useProjectData).mockReturnValue({
-    projects: selectedProject ? [selectedProject] : [],
+    projects,
     selectedProject,
     selectedProjectId: selectedProject?.id ?? null,
     loading: false,
     error: null,
     refreshProjects: vi.fn(),
-    selectProject: vi.fn(),
+    selectProject,
     createProject: vi.fn(),
     updateProject: vi.fn(),
     deleteProject: vi.fn(),
@@ -205,6 +220,8 @@ const renderTopNav = ({
 describe("TopNav guidance and sprint selectors", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    routerMocks.pathname = "/";
+    routerMocks.navigate.mockResolvedValue(undefined);
     vi.mocked(saveProjectDesignGuidanceSettings).mockResolvedValue(undefined);
     refreshEffectiveSettings.mockResolvedValue(undefined);
     selectSprint.mockResolvedValue(undefined);
@@ -336,7 +353,6 @@ describe("TopNav guidance and sprint selectors", () => {
   });
 
   it("creates an idle sprint from the selector modal, refreshes, selects it, and announces success", async () => {
-    const user = userEvent.setup();
     renderTopNav({ sprints: [], selectedSprintId: null });
 
     fireEvent.click(screen.getByRole("button", { name: /Sprint selector/i }));
@@ -344,9 +360,9 @@ describe("TopNav guidance and sprint selectors", () => {
 
     expect(await screen.findByRole("dialog", { name: "Add Sprint" })).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText("Sprint name"), "Release prep");
-    await user.type(screen.getByLabelText("Goal"), "Prepare release notes and verification.");
-    await user.click(screen.getByRole("button", { name: "Create Sprint" }));
+    fireEvent.input(screen.getByLabelText("Sprint name"), { target: { value: "Release prep" } });
+    fireEvent.input(screen.getByLabelText("Goal"), { target: { value: "Prepare release notes and verification." } });
+    fireEvent.click(screen.getByRole("button", { name: "Create Sprint" }));
 
     await waitFor(() => {
       expect(createSprint).toHaveBeenCalledWith({
@@ -361,6 +377,44 @@ describe("TopNav guidance and sprint selectors", () => {
     });
     expect(refetchSprints).toHaveBeenCalledTimes(1);
     expect(selectSprint).toHaveBeenCalledWith("sprint-2");
-    expect(screen.getByRole("status")).toHaveTextContent("Sprint Release prep created and selected.");
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent("Sprint Release prep created and selected.");
+    });
+  });
+
+  it.each(["/tasks", "/live"] as const)("keeps %s project and sprint selectors synchronized with router scope", async (pathname) => {
+    const user = userEvent.setup();
+    const selectProject = vi.fn().mockResolvedValue(undefined);
+    routerMocks.pathname = pathname;
+    renderTopNav({
+      projects: [project, secondProject] as any,
+      selectProject,
+    });
+
+    await user.click(screen.getByRole("button", { name: /Project selector, selected project: Alpha/i }));
+    await user.click(await screen.findByRole("option", { name: /Beta/i }));
+
+    await waitFor(() => {
+      expect(routerMocks.navigate).toHaveBeenCalledWith({
+        to: pathname,
+        search: { projectId: "proj-2" },
+        replace: true,
+      });
+      expect(selectProject).toHaveBeenCalledWith("proj-2");
+      expect(screen.getByRole("status")).toHaveTextContent("Project switched to Beta");
+    });
+
+    await user.click(screen.getByRole("button", { name: /Sprint selector/i }));
+    await user.click(await screen.findByRole("option", { name: /Build shell/i }));
+
+    await waitFor(() => {
+      expect(routerMocks.navigate).toHaveBeenCalledWith({
+        to: pathname,
+        search: { projectId: "proj-1", sprintId: "sprint-1" },
+        replace: true,
+      });
+      expect(selectSprint).toHaveBeenCalledWith("sprint-1");
+      expect(screen.getByRole("status")).toHaveTextContent("Sprint switched to Build shell");
+    });
   });
 });

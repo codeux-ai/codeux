@@ -11,8 +11,10 @@ import type { Express } from "express";
 import type { Logger } from "../shared/logging/logger.js";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute, syncRoute, toErrorResponse } from "./route-utils.js";
-import { ENSURE_CURL_SHELL_FUNCTION, getDockerUserSpec, getProviderFallbackInstallCommand } from "../services/cli-docker-utils.js";
+import { getDockerUserSpec } from "../services/cli-docker-utils.js";
 import { assertSafePathSegment } from "../utils/path-validator.js";
+import { managedRuntimeService } from "../services/managed-runtime-service.js";
+import { PROVIDER_TOOL_MOUNT, providerToolManager } from "../services/provider-tool-manager.js";
 
 interface TerminalSession {
   sessionId: string;
@@ -85,20 +87,6 @@ async function getFreePort(): Promise<number> {
 }
 
 const activeTerminalSessions = new Map<string, TerminalSession>();
-
-// Login containers always run on a fixed, known base image regardless of the
-// user's configured CLI workflow container image. The configured image may be
-// missing tools the login flow depends on (curl, keyring daemons) or be unable
-// to install them under a non-root user, so we pin a predictable Debian image.
-const LOGIN_BASE_IMAGE = "node:24-bookworm-slim";
-// Packages the login flow needs but node:24-bookworm-slim does not ship: curl
-// (for the claude/opencode/antigravity install scripts) and the keyring stack
-// antigravity requires. These must be baked in at build time because the login
-// container runs as a non-root user and cannot apt-get install at runtime.
-const LOGIN_IMAGE_PACKAGES = "curl ca-certificates dbus gnome-keyring libsecret-1-0 xdg-utils";
-// Memoized tag of the most recently verified/built login base image.
-let cachedLoginImageTag: string | null = null;
-let pendingLoginImageBuild: Promise<string> | null = null;
 
 const LOGIN_SESSION_MAX_AGE_MS = 30 * 60 * 1000;
 const LOGIN_SESSION_HEARTBEAT_TTL_MS = 20 * 1000;
@@ -268,17 +256,6 @@ function getBinaryName(providerId: string): string {
   }
 }
 
-function getFallbackInstallKey(providerId: string): string {
-  switch (providerId) {
-    case "claude-code":
-      return "claude";
-    case "antigravity":
-      return "agy";
-    default:
-      return providerId;
-  }
-}
-
 function terminateSession(sessionId: string, reason: string): void {
   const session = activeTerminalSessions.get(sessionId);
   if (!session || session.finalized) {
@@ -383,120 +360,6 @@ async function cleanupAllRunningLoginSessions(logger?: Logger): Promise<void> {
   }
 }
 
-export function buildLoginDockerfile(): string {
-  // Keep this image cheap to build: only the apt packages the login flow can't
-  // install at runtime under a non-root user (curl + the keyring stack). The
-  // provider CLIs themselves are installed at runtime inside the login
-  // container — that path now works because curl is baked in here, and it gives
-  // the user live, faster feedback about what's being installed.
-  return [
-    `FROM ${LOGIN_BASE_IMAGE}`,
-    `LABEL org.opencontainers.image.title="Code UX login base"`,
-    `LABEL org.opencontainers.image.description="Prebuilt Code UX interactive provider login prerequisites"`,
-    `LABEL ai.codeux.role="login-base"`,
-    `LABEL ai.codeux.base-image="${LOGIN_BASE_IMAGE}"`,
-    "USER root",
-    `RUN if command -v apt-get >/dev/null 2>&1; then apt-get update -qy && apt-get install -qy --no-install-recommends ${LOGIN_IMAGE_PACKAGES} && rm -rf /var/lib/apt/lists/*; fi`,
-  ].join("\n");
-}
-
-/**
- * Resolves the image used for interactive login containers. Login containers run
- * as a non-root user, so they cannot install curl / keyring packages at runtime.
- * We bake those into a tiny image derived from {@link LOGIN_BASE_IMAGE} (built
- * once, then cached by content hash) and run the login container against it.
- *
- * Falls back to the raw base image if the build is unavailable so login is never
- * hard-blocked, even though the runtime install path will be degraded.
- */
-async function ensureLoginBaseImage(logger?: Logger): Promise<string> {
-  const dockerfile = buildLoginDockerfile();
-  const cacheKey = createHash("sha1").update(dockerfile).digest("hex").slice(0, 24);
-  const imageTag = `code-ux-login-base-node-24-bookworm-slim:${cacheKey}`;
-
-  if (cachedLoginImageTag === imageTag) {
-    return imageTag;
-  }
-
-  const exists = await new Promise<boolean>((resolve) => {
-    const proc = spawn("docker", ["image", "inspect", imageTag], { stdio: "ignore" });
-    proc.on("error", () => resolve(false));
-    proc.on("close", (code) => resolve(code === 0));
-  });
-
-  if (exists) {
-    cachedLoginImageTag = imageTag;
-    return imageTag;
-  }
-
-  if (pendingLoginImageBuild) {
-    return pendingLoginImageBuild;
-  }
-
-  pendingLoginImageBuild = buildLoginBaseImage(imageTag, dockerfile, logger);
-  try {
-    return await pendingLoginImageBuild;
-  } finally {
-    pendingLoginImageBuild = null;
-  }
-}
-
-export function prewarmLoginBaseImage(logger?: Logger): void {
-  logger?.info("Prewarming Code UX login base image in the background.");
-  void ensureLoginBaseImage(logger).then((image) => {
-    if (image === LOGIN_BASE_IMAGE) {
-      logger?.warn("Login base image prewarm fell back to the raw base image. Provider login can still retry image preparation on demand.");
-      return;
-    }
-    logger?.info("Login base image prewarm completed.", { image });
-  }).catch((error: unknown) => {
-    logger?.warn("Login base image prewarm failed. Provider login will retry image preparation on demand.", {
-      error: error instanceof Error ? error.message : String(error),
-    });
-  });
-}
-
-export function resetLoginBaseImageStateForTests(): void {
-  cachedLoginImageTag = null;
-  pendingLoginImageBuild = null;
-}
-
-async function buildLoginBaseImage(imageTag: string, dockerfile: string, logger?: Logger): Promise<string> {
-  logger?.info(`Building login base image ${imageTag} from ${LOGIN_BASE_IMAGE}...`);
-  const built = await new Promise<boolean>((resolve) => {
-    const proc = spawn("docker", ["build", "-t", imageTag, "-"], { stdio: ["pipe", "pipe", "pipe"] });
-    let stderr = "";
-    const logChunk = (chunk: Buffer): void => {
-      const text = chunk.toString("utf8");
-      for (const line of text.split(/\r?\n/)) {
-        const trimmed = line.trim();
-        if (trimmed) {
-          logger?.info("Login base image build progress", { image: imageTag, line: trimmed });
-        }
-      }
-    };
-    proc.stdout?.on("data", logChunk);
-    proc.stderr?.on("data", (chunk) => { stderr += String(chunk); });
-    proc.stderr?.on("data", logChunk);
-    proc.on("error", () => resolve(false));
-    proc.on("close", (code) => {
-      if (code !== 0) {
-        logger?.error(`Failed to build login base image ${imageTag}: ${stderr.trim()}`);
-      }
-      resolve(code === 0);
-    });
-    proc.stdin?.write(dockerfile);
-    proc.stdin?.end();
-  });
-
-  if (built) {
-    cachedLoginImageTag = imageTag;
-    return imageTag;
-  }
-
-  return LOGIN_BASE_IMAGE;
-}
-
 export function registerTerminalRoutes(app: Express, options: DashboardDependencies): void {
   maybeStartLoginSessionSweeper();
   app.post("/api/terminal/start", asyncRoute(async (req, res) => {
@@ -548,9 +411,13 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         res.status(400).json({ error: "Unable to resolve a valid provider type from the request." });
         return;
       }
-      // Login containers always run on a pinned image (with curl/keyring baked
-      // in), independent of the user's configured CLI workflow container image.
-      const baseImage = await ensureLoginBaseImage(options.logger);
+      const workflowSettings = systemSettings.defaults.cliWorkflow;
+      const runtime = options.managedRuntimeService ?? managedRuntimeService;
+      const tools = options.providerToolManager ?? providerToolManager;
+      const baseImage = await runtime.resolveImage(workflowSettings, "base");
+      const preparedTool = tools.getStatus(providerId)
+        ? await tools.prepare(providerId, workflowSettings, { logger: options.logger })
+        : null;
 
       let targetPort = 0;
       if (providerId === "codex" || providerId === "claude-code") {
@@ -605,13 +472,12 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         loginCmd = "claude auth login";
       }
 
-      const fallbackKey = getFallbackInstallKey(providerId);
-      const installCmd = getProviderFallbackInstallCommand(fallbackKey);
-
       const proxyCmd = "";
 
       const containerCmd = [
         "set -e",
+        "mkdir -p /tmp/code-ux-login",
+        "cd /tmp/code-ux-login",
         "mkdir -p /tmp/.local/share /tmp/.config",
         "ln -sf /tmp/.credentials /tmp/.gemini",
         "ln -sf /tmp/.credentials /tmp/.codex",
@@ -701,15 +567,8 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         "ln -sf /tmp/.npm-global/bin/xdg-open /tmp/.npm-global/bin/sensible-browser",
         "ln -sf /tmp/.npm-global/bin/xdg-open /tmp/.npm-global/bin/x-www-browser",
         "ln -sf /tmp/.npm-global/bin/xdg-open /tmp/.npm-global/bin/open",
-        // ensure_curl is referenced by the claude/opencode/antigravity fallback
-        // install commands; define it here so the install block can resolve it.
-        ENSURE_CURL_SHELL_FUNCTION,
-        `if ! command -v ${binaryName} >/dev/null 2>&1; then`,
-        `  echo 'Installing provider CLI fallback in container...'`,
-        `  ${installCmd || "echo 'No installation command configured'"};`,
-        "fi",
         proxyCmd,
-        `script -q -c "export NPM_CONFIG_PREFIX=/tmp/.npm-global && export PATH=/tmp/.npm-global/bin:/tmp/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin && export BROWSER=xdg-open && stty cols 80 rows 100 && ${loginCmd}" /dev/null`,
+        `script -q -c "export PATH=${PROVIDER_TOOL_MOUNT}/bin:/tmp/.npm-global/bin:/tmp/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin && export BROWSER=xdg-open && export TERM=xterm-256color && stty cols 100 rows 30 && ${loginCmd}" /dev/null`,
       ].filter(Boolean).join("\n");
 
       const userSpec = getDockerUserSpec();
@@ -725,6 +584,8 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         "--rm",
         "-i",
         ...networkArgs,
+        "--workdir",
+        "/tmp",
         "--name",
         `code-ux-login-${providerId}-${sessionId}`,
         "--label",
@@ -741,10 +602,24 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         `PROVIDER_ID=${providerId}`,
         "-e",
         `TARGET_PORT=${targetPort}`,
+        "-e",
+        "DISABLE_AUTOUPDATER=1",
+        "-e",
+        "OPENCODE_DISABLE_AUTOUPDATE=true",
+        "-e",
+        "AGY_CLI_DISABLE_AUTO_UPDATE=true",
+        "-e",
+        "TERM=xterm-256color",
+        "-e",
+        "COLORTERM=truecolor",
         "--user",
         userSpec,
         "-v",
         `${tempCredsDir}:/tmp/.credentials`,
+        ...(preparedTool ? [
+          "--mount",
+          `type=volume,source=${preparedTool.volumeName},target=${PROVIDER_TOOL_MOUNT},readonly`,
+        ] : []),
         baseImage,
         "bash",
         "-c",

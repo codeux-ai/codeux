@@ -33,14 +33,15 @@ describe("dashboard settings helpers", () => {
     expect(second.git.defaultBranch).toBe("main");
     expect(second.dashboardPort).toBe(4444);
     expect(second.aiProvider.providers.gemini.model).toBe("default");
-    expect(second.sprintLoopSteps.watchLoopIntervalSeconds).toBe(10);
+    expect(second.sprintLoopSteps.watchLoopIntervalSeconds).toBe(1);
     expect(second.sprintLoopSteps.watchLoopOutputIntervalSeconds).toBe(300);
     expect(second.automationInterventions.autoAnswerClarification).toBe(false);
     expect(second.ciIntelligence.julesCiAutofixMaxRetries).toBe(3);
     expect(second.cliWorkflow.cleanupWorktreeOnFailure).toBe(false);
     expect(second.cliWorkflow.resumeFailedTaskInSameWorkspace).toBe(true);
     expect(second.cliWorkflow.executionMode).toBe("DOCKER");
-    expect(second.cliWorkflow.containerImage).toBe("node:24-bookworm");
+    expect(second.cliWorkflow.containerImageMode).toBe("managed");
+    expect(second.cliWorkflow.containerImage).toBe("node:24-trixie-slim");
     expect(second.cliWorkflow.containerCacheSetupScriptImage).toBe(true);
     expect(second.cliWorkflow.containerRunAsRoot).toBe(false);
     expect(second.agents.selfReflection.planning.enabled).toBe(false);

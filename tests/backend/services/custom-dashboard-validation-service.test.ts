@@ -62,6 +62,9 @@ async function createFixture(): Promise<{
     fetchImpl: vi.fn().mockResolvedValue(new Response("ok", { status: 200 })),
     readinessTimeoutMs: 50,
     readinessPollMs: 1,
+    managedRuntimeService: {
+      resolveImage: vi.fn(async () => "node:24-bookworm"),
+    } as any,
   });
 
   return {

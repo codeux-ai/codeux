@@ -624,6 +624,7 @@ export class CliWorkflowService {
 
   private resolveWorkflowSettings(settings: DashboardSettings): CliWorkflowSettings {
     const merged: CliWorkflowSettings = { ...DEFAULT_CLI_WORKFLOW_SETTINGS, ...(settings.cliWorkflow || {}) };
+    merged.containerImageMode = merged.containerImageMode === "custom" ? "custom" : "managed";
     merged.containerImage = merged.containerImage.trim() || DEFAULT_CLI_WORKFLOW_SETTINGS.containerImage;
     return merged;
   }

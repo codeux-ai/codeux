@@ -109,7 +109,11 @@ import type {
   TechstackItemSettings,
   TechstackCatalogEntrySettings,
   TechstackCatalogSettings,
-  TechstackSelectionSettings
+  TechstackSelectionSettings,
+  ProviderToolStatus,
+  PlaywrightBrowserStatus,
+  RuntimeAssetsStatus,
+  ManagedRuntimeStatus,
 } from "../../src/contracts/app-types.js";
 import type {
   EffectiveSettingsResponse,
@@ -298,6 +302,10 @@ export type {
   TechstackCatalogEntrySettings,
   TechstackCatalogSettings,
   TechstackSelectionSettings,
+  ProviderToolStatus,
+  PlaywrightBrowserStatus,
+  RuntimeAssetsStatus,
+  ManagedRuntimeStatus,
   EffectiveSettingsResponse,
   ProjectProviderSettings,
   ProjectSettings,

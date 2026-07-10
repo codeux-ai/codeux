@@ -3,6 +3,7 @@ import gsap from "gsap";
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
 import type { JSX } from "preact";
+import { Link } from "@tanstack/react-router";
 import {
   AlertTriangle,
   Calendar,
@@ -88,13 +89,6 @@ const formatMetaDate = (value: string): string => TABLE_META_DATE_FORMATTER.form
 const formatTableTime = (value: string): string => TABLE_TIME_FORMATTER.format(new Date(value));
 
 const isSprintActionable = (status: SprintStatus): boolean => status === "running" || status === "paused";
-const buildSprintRouteHref = (path: "/tasks" | "/live", sprint: Sprint): string => {
-  const params = new URLSearchParams();
-  params.set("projectId", sprint.projectId);
-  params.set("sprintId", sprint.id);
-  return `${path}?${params.toString()}`;
-};
-
 export interface SprintLedgerRowProps {
   sprint: Sprint;
   isSelected: boolean;
@@ -206,8 +200,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       ? "lg:border-black/[0.06] lg:bg-white/80 dark:lg:border-white/[0.07] dark:lg:bg-white/[0.045]"
       : "lg:border-black/[0.06] lg:bg-slate-50/80 dark:lg:border-white/[0.07] dark:lg:bg-white/[0.03]";
   const progressTone = PROGRESS_TONES[sprint.status];
-  const tasksHref = buildSprintRouteHref("/tasks", sprint);
-  const liveHref = buildSprintRouteHref("/live", sprint);
+  const routeSearch = { projectId: sprint.projectId, sprintId: sprint.id } as any;
 
   const attentionOverride = humanIntervention?.attentionType
     ? ATTENTION_BADGE_OVERRIDES[humanIntervention.attentionType]
@@ -501,24 +494,26 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
               sprintName={sprint.name}
             />
           )}
-          <a
-            href={tasksHref}
+          <Link
+            to="/tasks"
+            search={routeSearch}
             aria-label={`Open tasks for sprint ${sprint.name}`}
             className="inline-flex min-h-10 min-w-[4.5rem] flex-1 flex-wrap items-center justify-center gap-1.5 rounded-xl border border-black/[0.06] bg-white/80 px-3 py-1.5 text-xs font-bold leading-tight text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white sm:flex-none"
             style={controlTransitionStyle}
           >
             Tasks
             <Maximize2 className="h-3.5 w-3.5" />
-          </a>
-          <a
-            href={liveHref}
+          </Link>
+          <Link
+            to="/live"
+            search={routeSearch}
             aria-label={`Open live session for sprint ${sprint.name}`}
             className="inline-flex min-h-10 min-w-[4.5rem] flex-1 flex-wrap items-center justify-center gap-1.5 rounded-xl border border-signal-500/20 bg-signal-500/[0.08] px-3 py-1.5 text-xs font-bold leading-tight text-signal-700 transition-colors hover:bg-signal-500/[0.12] hover:text-signal-800 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-signal-500/20 dark:bg-signal-500/[0.10] dark:text-signal-300 dark:hover:bg-signal-500/[0.16] dark:hover:text-signal-200 sm:flex-none"
             style={controlTransitionStyle}
           >
             Live
             <Maximize2 className="h-3.5 w-3.5" />
-          </a>
+          </Link>
           {onOpenRowMenu ? (
             <button
               type="button"

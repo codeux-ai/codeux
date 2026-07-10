@@ -923,6 +923,12 @@ To prevent credential and runtime config conflicts, provider configurations enfo
 - **Local Copy mode / Dashboard Login mode**: Local auth paths (e.g., host paths like `~/.qwen` or `~/.config/gcloud`) or Dashboard Login paths (`~/.code-ux/credentials/{providerConfigId}`) are rendered only in the full settings provider editor, not in Easy onboarding. Switching to local copy or dashboard-guided login automatically clears runtime API keys, custom base URLs, and custom models to prevent coexistence conflicts.
 - **Mode-Incompatible Controls**: Any mode-incompatible inputs (such as Claude/Codex custom base URLs and custom models) that remain visible in local copy mode are clearly disabled to reflect the active configuration state.
 
+### Dashboard Login Terminal
+
+Dashboard Login uses the provider's real interactive CLI inside the managed container. Login CLIs run as the normal non-root container user from an empty `/tmp/code-ux-login` directory, not from `/`, so repository-discovery behavior cannot scan the container root. Credential mounts and the read-only prepared provider-tool volume keep their existing locations.
+
+The login modal renders ANSI cursor/erase behavior while removing non-display OSC/DCS control strings, including chunk-split Qwen title and color queries. Output remains selectable, preserves meaningful prompts and safe links, uses white terminal text on a near-black surface, and bounds cursor positions plus empty rows so full-screen CLI redraws remain stable. Click the console to focus it. Right-click offers Paste without moving focus away from the terminal; Ctrl+V and Command+V continue to use normal browser paste. Arrow keys, Tab, Escape, Backspace, Ctrl+C, and Ctrl+D are forwarded to the provider session.
+
 ## Security Notes
 
 - API keys are masked in UI inputs.

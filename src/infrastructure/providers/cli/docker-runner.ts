@@ -32,8 +32,20 @@ import { CONTAINER_RUNTIME_HOME, CONTAINER_WORKSPACE_ROOT } from "./provider-run
 import type { CliProviderId } from "./provider-command-specs.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../../../shared/config/code-ux-paths.js";
 import { ensureDefaultCodeUxAssetsInstalled } from "../../../services/code-ux-default-assets-service.js";
+import { DEFAULT_PLAYWRIGHT_MCP_SERVER_ID } from "../../../repositories/settings-defaults.js";
 import { sanitizeInvocationOutputText } from "../../../services/invocation-output-sanitizer.js";
 import type { PersistentSkillStorageRuntimeMount } from "../../../services/skill-service.js";
+import { managedRuntimeService, type ManagedRuntimeService } from "../../../services/managed-runtime-service.js";
+import {
+  PROVIDER_TOOL_MOUNT,
+  providerToolManager,
+  type ProviderToolManager,
+} from "../../../services/provider-tool-manager.js";
+import {
+  PLAYWRIGHT_BROWSERS_MOUNT,
+  playwrightBrowserManager,
+  type PlaywrightBrowserManager,
+} from "../../../services/playwright-browser-manager.js";
 
 
 const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
@@ -85,6 +97,12 @@ export class DockerRunner implements IDockerRunner {
   private readonly workspaceManager = new WorkspaceManager();
   private readonly invocationWorkspacePreparer = new InvocationWorkspacePreparer(this.workspaceManager);
   private readonly volumeHelperPool: WorkspaceVolumeHelperPool = workspaceVolumeHelperPool;
+
+  constructor(
+    private readonly runtimeService: ManagedRuntimeService = managedRuntimeService,
+    private readonly toolManager: ProviderToolManager = providerToolManager,
+    private readonly browserManager: PlaywrightBrowserManager = playwrightBrowserManager,
+  ) {}
 
   async ensureWorkspace(args: {
     cwd: string;
@@ -155,16 +173,27 @@ export class DockerRunner implements IDockerRunner {
     await this.maybeLogDockerPathMappingHint(sessionId, repoPath, emitActivity);
 
     const setupScriptPath = await this.resolveContainerSetupScriptPath(workflowSettings, repoPath, emitActivity);
-    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-docker-"));
     const runtimeRoot = resolveDockerRuntimeRoot(repoPath);
-    const baseImage = workflowSettings.containerImage.trim() || "node:24-bookworm";
+    const baseImage = await this.runtimeService.resolveImage(
+      workflowSettings,
+      installPlaywrightBrowsers ? "browser" : "base",
+    );
+    const [preparedTool, preparedBrowser] = await Promise.all([
+      providerLabel === "mockup-cli"
+        ? Promise.resolve(null)
+        : this.toolManager.prepare(providerLabel, workflowSettings),
+      installPlaywrightBrowsers && workflowSettings.containerImageMode !== "custom"
+        ? this.browserManager.prepare(workflowSettings)
+        : Promise.resolve(null),
+    ]);
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-docker-"));
 
     try {
       const resolvedImage = await new DockerSetupImageCache().resolveImage({
         baseImage,
         setupScriptPath,
         cacheEnabled: workflowSettings.containerCacheSetupScriptImage,
-        installPlaywrightBrowsers,
+        installPlaywrightBrowsers: workflowSettings.containerImageMode === "custom" && installPlaywrightBrowsers,
         runtimeRoot,
         repoPath,
         signal,
@@ -229,7 +258,8 @@ export class DockerRunner implements IDockerRunner {
         }),
       ];
 
-      const applicableCustomMcpServers = this.customServersForProvider(input.customMcpServers || [], providerLabel);
+      const applicableCustomMcpServers = this.customServersForProvider(input.customMcpServers || [], providerLabel)
+        .filter((server) => installPlaywrightBrowsers || server.id !== DEFAULT_PLAYWRIGHT_MCP_SERVER_ID);
       if (
         this.shouldAddDockerHostGateway(workflowSettings, input.mcpConnection || null, applicableCustomMcpServers)
         || this.providerEnvUsesDockerHostGateway(workflowSettings, providerEnv)
@@ -258,7 +288,38 @@ export class DockerRunner implements IDockerRunner {
         "-e", `CODE_UX_GIT_USER_NAME=${workflowSettings.containerGitUserName}`,
         "-e", `CODE_UX_GIT_USER_EMAIL=${workflowSettings.containerGitUserEmail}`,
         "-e", `CODE_UX_INSTALL_PLAYWRIGHT=${installPlaywrightBrowsers ? "1" : "0"}`,
+        "-e", "DISABLE_AUTOUPDATER=1",
+        "-e", "OPENCODE_DISABLE_AUTOUPDATE=true",
+        "-e", "AGY_CLI_DISABLE_AUTO_UPDATE=true",
       );
+
+      if (preparedTool) {
+        dockerArgs.push(
+          "--mount",
+          toDockerMountArg({
+            source: preparedTool.volumeName,
+            destination: PROVIDER_TOOL_MOUNT,
+            readonly: true,
+            type: "volume",
+          }),
+          "-e",
+          `CODE_UX_PROVIDER_TOOL_BIN=${PROVIDER_TOOL_MOUNT}/bin`,
+        );
+      }
+
+      if (preparedBrowser) {
+        dockerArgs.push(
+          "--mount",
+          toDockerMountArg({
+            source: preparedBrowser.volumeName,
+            destination: PLAYWRIGHT_BROWSERS_MOUNT,
+            readonly: true,
+            type: "volume",
+          }),
+          "-e",
+          `PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_MOUNT}`,
+        );
+      }
 
       const memoryLimitMb = this.resolveContainerMemoryLimitMb(workflowSettings.containerMemoryLimitMb);
       if (memoryLimitMb > 0) {
@@ -534,6 +595,12 @@ export class DockerRunner implements IDockerRunner {
         onActivity(`Configured container setup script not found: ${resolved}`);
         return undefined;
       }
+    }
+
+    // Managed images already contain the Code UX baseline. Only an explicitly
+    // configured script is allowed to create a local extension image.
+    if (workflowSettings.containerImageMode !== "custom") {
+      return undefined;
     }
 
     await ensureDefaultCodeUxAssetsInstalled();

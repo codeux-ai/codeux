@@ -87,6 +87,7 @@ vi.mock("gsap", () => ({
 // Mock Router link
 vi.mock("@tanstack/react-router", () => ({
     Link: ({ children }: any) => <a href="#">{children}</a>,
+    useNavigate: () => vi.fn().mockResolvedValue(undefined),
     useRouterState: ({ select }: any) => select({ matches: [{ pathname: "/" }] })
 }));
 

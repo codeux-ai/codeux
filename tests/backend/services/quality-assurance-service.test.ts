@@ -126,6 +126,75 @@ describe("QualityAssuranceService", () => {
     expect(removeWorktree).toHaveBeenCalledWith("/repo/project", "docker-volume://qa-snapshot");
   });
 
+  it("runs HOST-mode QA against a detached review-branch snapshot", async () => {
+    const settings = structuredClone(DEFAULT_DASHBOARD_SETTINGS);
+    settings.cliWorkflow.executionMode = "HOST";
+    const executeRequest = vi.fn().mockResolvedValue({
+      parsed: {
+        verdict: "pass",
+        summary: "Looks good.",
+        findings: [],
+        fixInstructions: null,
+        targetTaskKey: null,
+        shouldHavePr: true,
+        followUpTasks: [],
+        raw: {},
+      },
+      sessionId: "qa-session-1",
+      invocationId: "inv-1",
+    });
+    const service = new QualityAssuranceService({
+      projectManagementRepository: {} as any,
+      executionRepository: {} as any,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {} as any,
+      qaReviewRepository: {} as any,
+      taskService: {
+        resolveInvocationProvider: () => ({
+          provider: "codex",
+          providerConfigId: "codex",
+          providers: { codex: { model: "gpt-5.3-codex", apiKey: "key", thinkingMode: "HIGH" } },
+        }),
+      } as any,
+      agentPresetSyncService: {} as any,
+      providerRunner: {} as any,
+      structuredAgentRequestService: { executeRequest } as any,
+      getDashboardSettings: () => settings,
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+    const createHostSnapshotWorkspace = vi.spyOn((service as any).workspaceManager, "createHostSnapshotWorkspace")
+      .mockResolvedValue("/repo/project/.worktrees/qa-review-snapshot");
+    const removeWorktree = vi.spyOn((service as any).workspaceManager, "removeWorktree")
+      .mockResolvedValue(undefined);
+
+    await (service as any).runReview({
+      triggerType: "task_completion",
+      scope: { projectId: "project-1", sprintId: "sprint-1" },
+      projectName: "QA Project",
+      sprintGoal: "Ship safely",
+      repoPath: "/repo/project",
+      agentInstructions: "Review carefully.",
+      subtasks: [],
+      currentTask: { id: "task-1", title: "Task", prompt: "Prompt", depends_on: [], status: "COMPLETED", is_independent: true },
+      taskRun: { id: "run-1", taskId: "task-1" },
+      sprintRunId: null,
+      agentPresetId: null,
+      reviewBranch: "task/feature-task-1",
+      baseBranch: "feature/sprint-1",
+    });
+
+    expect(createHostSnapshotWorkspace).toHaveBeenCalledWith(
+      "/repo/project",
+      expect.stringMatching(/^qa-review-codex-/),
+      expect.objectContaining({ branch: "task/feature-task-1", fallbackBranch: "feature/sprint-1" }),
+    );
+    expect(executeRequest).toHaveBeenCalledWith(expect.objectContaining({
+      cwd: "/repo/project/.worktrees/qa-review-snapshot",
+    }));
+    expect(removeWorktree).toHaveBeenCalledWith("/repo/project", "/repo/project/.worktrees/qa-review-snapshot");
+  });
+
   it("builds sprint review prompts with the full task instructions", async () => {
     const service = new QualityAssuranceService({
       projectManagementRepository: {} as any,

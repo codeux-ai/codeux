@@ -16,6 +16,7 @@ expect.extend(matchers);
 
 const routerState = vi.hoisted(() => ({
   searchStr: "?sprintId=sprint-a",
+  navigate: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -23,6 +24,7 @@ vi.mock("@tanstack/react-router", () => ({
     const state = { location: { searchStr: routerState.searchStr } };
     return options?.select ? options.select(state) : state;
   }),
+  useNavigate: () => routerState.navigate,
 }));
 
 vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
@@ -164,6 +166,11 @@ describe("useTaskBoardController project and sprint scope", () => {
     sprintsLoading = false;
     routerState.searchStr = "?sprintId=sprint-a";
     window.history.replaceState(null, "", "/tasks?sprintId=sprint-a");
+    routerState.navigate.mockImplementation(async ({ search, to }: { search?: Record<string, string>; to: string }) => {
+      const query = new URLSearchParams(search).toString();
+      routerState.searchStr = query ? `?${query}` : "";
+      window.history.replaceState(null, "", `${to}${routerState.searchStr}`);
+    });
     vi.mocked(useDashboardRuntimeData).mockReturnValue(runtimeData);
     vi.mocked(useProjectEffectiveSettings).mockReturnValue(settingsData);
     vi.mocked(useProjectTasks).mockReturnValue(projectTasks);

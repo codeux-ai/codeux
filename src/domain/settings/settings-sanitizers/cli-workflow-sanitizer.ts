@@ -26,6 +26,15 @@ export const sanitizeCliWorkflow = (
     cliInput.containerImage,
     DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerImage
   ).trim() || DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerImage;
+  const rawContainerImageMode = readString(cliInput.containerImageMode, "");
+  const containerImageMode: DashboardSettings["cliWorkflow"]["containerImageMode"] =
+    rawContainerImageMode === "managed" || rawContainerImageMode === "custom"
+      ? rawContainerImageMode
+      : typeof cliInput.containerImage !== "string"
+        || cliInput.containerImage.trim() === "node:24-bookworm"
+        || cliInput.containerImage.trim() === DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerImage
+        ? "managed"
+        : "custom";
 
   return {
     cleanupWorktreeOnSuccess: readBoolean(
@@ -69,6 +78,7 @@ export const sanitizeCliWorkflow = (
       return gitMode === "local" ? "local" : "remote";
     })(),
     executionMode: normalizedExecutionMode,
+    containerImageMode,
     containerImage,
     containerSetupScriptPath: readString(
       cliInput.containerSetupScriptPath,

@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const keepTemp = process.env.CODE_UX_KEEP_RELEASE_INSTALL_TEMP === "1";
+const skipBuild = process.env.CODE_UX_SKIP_RELEASE_INSTALL_BUILD === "1";
 const tempRoot = await mkdtemp(path.join(tmpdir(), "codeux-release-install-"));
 const packDir = path.join(tempRoot, "pack");
 const installDir = path.join(tempRoot, "install");
@@ -44,6 +45,23 @@ function resolveWindowsPackageManager(command, args) {
 
 function installedPackagePath(...parts) {
   return path.join(installDir, "node_modules", "@codeuxai", "codeux", ...parts);
+}
+
+function requireExistingBuildArtifacts() {
+  const requiredPaths = [
+    path.join(projectRoot, "dist", "index.js"),
+    path.join(projectRoot, "dist", "worker", "index.js"),
+    path.join(projectRoot, "dashboard", "dist"),
+  ];
+  const missingPaths = requiredPaths.filter((candidate) => !existsSync(candidate));
+
+  if (missingPaths.length > 0) {
+    throw new Error([
+      "CODE_UX_SKIP_RELEASE_INSTALL_BUILD=1 was set, but required build artifacts are missing.",
+      ...missingPaths.map((candidate) => `Missing: ${candidate}`),
+      "Run pnpm run build first, or unset CODE_UX_SKIP_RELEASE_INSTALL_BUILD.",
+    ].join("\n"));
+  }
 }
 
 async function resolveInstalledBin(binName) {
@@ -170,7 +188,13 @@ async function prepareInstallDir() {
 try {
   console.log(`Using temporary release install workspace: ${tempRoot}`);
 
-  await runStep("Build project", pnpmCommand, ["run", "build"]);
+  if (skipBuild) {
+    console.log("\n==> Reuse existing build artifacts");
+    requireExistingBuildArtifacts();
+    console.log("Build artifacts are present; skipping pnpm run build.");
+  } else {
+    await runStep("Build project", pnpmCommand, ["run", "build"]);
+  }
 
   await mkdir(packDir, { recursive: true });
   await prepareInstallDir();

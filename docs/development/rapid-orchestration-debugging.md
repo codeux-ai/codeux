@@ -2,14 +2,14 @@
 
 This suite is the escalation ladder for sprint orchestration failures. Use it when a sprint stalls, local merges fail, worker-owned attention items churn, or memory usage needs extended observation after a fix.
 
-The suite is intentionally split into fast deterministic lanes and slower compiled-runtime lanes. CI uses the compiled 10-task DAG lane by default so pull requests exercise Docker-backed orchestration without running the full catalog. Start with the smallest lane that can reproduce the issue, then broaden only after it passes.
+The suite is intentionally split into fast deterministic lanes and slower compiled-runtime lanes. CI runs the three-row compiled QA DAG on both `dev` and `main`, so pull requests exercise task QA, follow-up branch recovery, sprint QA, Docker-backed orchestration, and native Electron orchestration without running the full browser or release matrices. The Linux Docker lane also restarts the isolated runtime twice during the active QA DAG to cover startup reconciliation; macOS and Windows run the matching Electron QA DAG because Electron restart stress is not supported by this harness. Start with the smallest lane that can reproduce the issue, then broaden only after it passes.
 
 ## Lane Summary
 
 | Lane | Command | Purpose | Expected runtime |
 | --- | --- | --- | --- |
 | Fast regressions | `pnpm run test:orchestration:rapid` | Watch-loop, feature merge, and local final-merge regressions without Docker or provider CLIs. | Seconds to a few minutes |
-| CI DAG E2E | `pnpm run test:orchestration:ci-dag` | Compiled runtime plus `mockup-cli` through a 10-task dependency graph with parallel leaves and layered joins. | Up to 20 minutes |
+| CI DAG E2E | `pnpm run test:orchestration:ci-dag` | Compiled runtime plus `mockup-cli` through task QA pass, QA decline/follow-up on the worker branch, sprint QA, and a final DAG join. | Up to 20 minutes |
 | Mockup merge E2E | `pnpm run test:orchestration:merge-e2e` | Compiled runtime plus `mockup-cli` through a deterministic local merge-conflict DAG. | Up to 15 minutes |
 | Completion conflict E2E | `pnpm run test:orchestration:completion-conflict` | Compiled runtime final LOCAL merge conflict repair after default-branch mutation during orchestration. | Up to 20 minutes |
 | Full mockup pentest | `pnpm run test:orchestration:full` | Manual escalation for all deterministic mockup scenarios: smoke, CI repair, merge conflict, parallel DAG, multi-project overrides. | Longer-running |
@@ -58,24 +58,28 @@ Run:
 pnpm run test:orchestration:ci-dag
 ```
 
-This builds the compiled runtime and executes `ci-small-dag`, a deterministic 10-task sprint:
+This builds the compiled runtime and executes `ci-qa-dag`, a deterministic four-task QA sprint:
 
-- 1 root setup task.
-- 6 parallel leaf tasks.
-- 2 batch aggregation tasks.
-- 1 final validation task.
+- 1 root task that passes task-level QA.
+- 1 dependent task that passes task-level QA.
+- 1 dependent task that intentionally fails QA, receives a follow-up, and must pass QA on the same worker branch.
+- 1 final join task plus a sprint-level QA gate and repository validation.
 
-This is the default no-secret GitHub Actions orchestration lane for pushes and pull requests targeting `dev` or `main`. It is intentionally smaller than the heavy DAG stress lane but still validates Docker-backed task dispatch, dependency unlocks, provider concurrency, feature-branch merging, final repository assertions, and compiled-runtime startup.
+This is the Linux entry of the default no-secret GitHub Actions orchestration matrix for pushes and pull requests targeting `dev` or `main`. It is intentionally smaller than the heavy DAG stress lane but validates Docker-backed task dispatch, dependency unlocks, provider concurrency, task and sprint QA, worker-branch follow-up visibility, feature-branch merging, final repository assertions, and compiled-runtime startup. Its two restart checks wait until a task reaches `coding_completed` or `completed`, then require both runtime restarts to finish; this exercises recovery during active orchestration without repeatedly interrupting a cold Docker setup before it has persisted any work. If a restart finds a QA row without its backing invocation, startup recovery cancels and retries it immediately; only completed review verdicts count toward QA pass/fail history.
 
-Pushes to `main`, pull requests targeting `main`, and manual workflow dispatches add native Windows and macOS Electron DAG coverage:
+The same `08 Orchestration` matrix adds native Windows and macOS Electron DAG coverage:
 
 ```bash
 pnpm run test:orchestration:ci-dag:electron
 ```
 
-That lane launches the Electron app, waits for the embedded Code UX server, and runs the same 10-task DAG shape through a host-execution mockup fixture. It runs directly on the hosted OS because GitHub-hosted Windows and macOS runners do not provide Docker job containers.
+That lane launches the Electron app, waits for the embedded Code UX server, and runs the same QA DAG shape through a host-execution mockup fixture. It runs directly on the hosted OS because GitHub-hosted Windows and macOS runners do not provide Docker job containers.
 
-In GitHub Actions, the CI DAG and Electron DAG lanes run build, Electron binary install, native dependency rebuild, and orchestration as separate steps so a stall is visible at the step boundary. Each DAG job has a 25-minute workflow timeout, and the mockup runner bounds individual HTTP calls at 60 seconds plus the full project run at the configured `--timeout-ms`. The runner streams redacted runtime stdout/stderr and emits `mockup_pentest_progress` records whenever sprint or task state changes, plus heartbeat progress every 15 seconds. CI passes `--stall-timeout-ms 180000`; if no sprint, task status, merge, or expected-output progress is observed for three minutes after polling starts, the runner fails early with the last sprint/task snapshot and writes the final table to `GITHUB_STEP_SUMMARY`.
+In GitHub Actions, `08 Orchestration` runs build-artifact download, Electron binary install, native dependency rebuild, and orchestration as separate steps where applicable so a stall is visible at the step boundary. Each DAG job has a 25-minute workflow timeout, and the mockup runner bounds individual HTTP calls at 60 seconds plus the full project run at the configured `--timeout-ms`. The runner streams redacted runtime stdout/stderr and emits `mockup_pentest_progress` records whenever sprint or task state changes, plus heartbeat progress every 15 seconds. CI passes `--stall-timeout-ms 180000`; if no sprint, task status, merge, or expected-output progress is observed for three minutes after polling starts, the runner fails early with the last sprint/task snapshot and writes the final table to `GITHUB_STEP_SUMMARY`.
+
+For high-throughput diagnosis, distinguish a real state transition from a steady poll. Session sync writes task-run and dispatch rows only when provider-derived state changes; an otherwise unchanged active dispatch emits a liveness heartbeat no more than once per minute. The cycle runner owns the LOCAL Git-finalization evidence snapshot for the cycle and passes it into watch-loop terminal evaluation, while the feature gate reads each task's event history once per evaluation. Repeated source-keyed events that SQLite ignores do not invalidate wall-time caches or publish a dashboard refresh.
+
+The default watch-loop interval is one second. This improves local task completion, merge-drain, and dependency-unlock latency; remote Git/CI refreshes retain their ten-second cache floor and provider-specific session clients keep their own throttling. Existing explicit project or sprint interval overrides are not migrated automatically.
 
 The compact DAG's final validation command runs as a scenario-level assertion after all task branches have merged, not inside the final worker worktree. During polling, the runner also enforces the declared DAG: a task with dependencies may not leave `pending` until each dependency is marked merged. If a future task starts early, the runner emits `mockup_pentest_dependency_merge_violation` and fails the test run immediately. The runner does not treat a completed sprint as terminal for these scenarios until expected repository files are visible in the project checkout; while it waits, it emits `mockup_pentest_waiting_for_expected_output`, but only an actual expected-output readiness change refreshes the stall watchdog. This keeps native Electron runners from validating against a dependency branch before Windows has made the parent merge visible, while still failing within the configured stall timeout if a completed sprint never exposes the merged files.
 
@@ -153,7 +157,7 @@ This builds the runtime and runs every `mockup-cli` scenario through `scripts/e2
 Run this lane manually when a merge/orchestration incident needs broader compiled-runtime evidence beyond the rapid lane or a targeted E2E lane. It covers:
 
 - `smoke-completion`: dependency-chain completion and final local repository assertions.
-- `ci-small-dag`: the CI-sized 10-task DAG used by the default no-secret workflow.
+- `ci-qa-dag`: the CI-sized QA DAG used by the default no-secret workflow.
 - `ci-repair`: deterministic failing validation repaired by a worker.
 - `merge-conflict-dag`: sibling edit conflict plus resolved join output.
 - `parallel-independent`: fan-out/fan-in scheduling.
@@ -343,6 +347,10 @@ done
 ```
 
 For leak-focused diagnostics, collect heap snapshots around stable checkpoints with Node inspector or `SIGUSR2` if the active runtime was started with heap-snapshot support. Compare memory after startup, after first task completion, after final merge, and after cleanup. A passing profile returns near its post-start steady state after Docker worktrees, provider watchers, preview sessions, and memory-promotion jobs settle.
+
+## Local Branch Merge Drain
+
+The orchestrator performs a final branch-only merge drain immediately before rendering merge protocol instructions during an `orchestrate` cycle. This handles fast local CLI tasks that finish and push a worker branch after the earlier merge-gate snapshot but before protocol handling. If the CI DAG artifact shows a task stuck at `coding_completed` with `mergeIndicator: null`, a `cli_git_pushed` event, and a later `protocol_merge_required` event, inspect this final drain before increasing stall timeouts or rerunning blindly.
 
 ## Exit Criteria
 

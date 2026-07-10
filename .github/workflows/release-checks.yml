@@ -1,13 +1,10 @@
-name: Release Checks
+name: Release Candidate Diagnostics
 
 on:
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 concurrency:
-  group: release-checks-${{ github.event.pull_request.number || github.ref }}
+  group: release-candidate-diagnostics-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:

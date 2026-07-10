@@ -11,7 +11,6 @@ remove_json_key() { local destination="$1"; local key="$2"; local label="$3"; if
 remove_codex_mcp_servers() { local destination="$1"; local label="$2"; if [ ! -f "$destination" ]; then return 0; fi; if ! node -e 'const fs=require("fs"); const [destination]=process.argv.slice(1); let content=""; try { content=fs.readFileSync(destination,"utf8"); } catch { process.exit(0); } let skipping=false; const kept=[]; for (const line of content.split(/\\r?\\n/)) { const trimmed=line.trim(); if (/^\\[mcp_servers\\.[^\\]]+\\]$/.test(trimmed)) { skipping=true; continue; } if (/^\\[.+\\]$/.test(trimmed)) skipping=false; if (!skipping) kept.push(line); } fs.writeFileSync(destination, \`\${kept.join("\\n").trimEnd()}\\n\`);' "$destination"; then echo "provider-runner: warning: failed to update $label" >&2; fi; }
 append_if_missing_literal() { local source="$1"; local destination="$2"; local literal="$3"; local label="$4"; if [ ! -e "$source" ]; then return 0; fi; mkdir -p "$(dirname "$destination")"; if [ -f "$destination" ] && grep -Fq "$literal" "$destination"; then return 0; fi; if [ -s "$destination" ]; then printf '\\n' >> "$destination"; fi; if ! cat "$source" >> "$destination"; then echo "provider-runner: warning: failed to append $label" >&2; fi; }
 ensure_json_file() { local destination="$1"; local content="$2"; mkdir -p "$(dirname "$destination")"; if [ ! -f "$destination" ]; then printf '%s\\n' "$content" > "$destination"; fi; }
-ensure_curl() { if command -v curl >/dev/null 2>&1; then return 0; fi; echo "provider-runner: curl not found; installing..." >&2; if command -v apt-get >/dev/null 2>&1; then (apt-get update -qy && apt-get install -qy curl ca-certificates) >/dev/null 2>&1 || true; fi; command -v curl >/dev/null 2>&1; }
 configure_git_identity() { if ! command -v git >/dev/null 2>&1; then echo "provider-runner: warning: git is unavailable; skipped git identity configuration" >&2; return 0; fi; git config --global user.name "\${CODE_UX_GIT_USER_NAME:-Code UX}" || echo "provider-runner: warning: failed to configure git user.name" >&2; git config --global user.email "\${CODE_UX_GIT_USER_EMAIL:-agents@codeux.ai}" || echo "provider-runner: warning: failed to configure git user.email" >&2; }
 materialize_opencode_config() { local destination="$HOME/.config/opencode/opencode.json"; if [ -z "\${OPENCODE_CONFIG_CONTENT:-}" ]; then export OPENCODE_CONFIG="$destination"; return 0; fi; mkdir -p "$(dirname "$destination")"; remove_json_key "$destination" "mcp" "opencode local mcp servers"; merge_json_content "$OPENCODE_CONFIG_CONTENT" "$destination" "opencode runtime config"; export OPENCODE_CONFIG="$destination"; }
 if [ -e "/opt/credentials/gitconfig" ]; then cp -f "/opt/credentials/gitconfig" "$HOME/.gitconfig" || echo "provider-runner: warning: failed to copy .gitconfig" >&2; else configure_git_identity; fi
@@ -24,8 +23,8 @@ export PNPM_STORE_DIR="$NPM_CONFIG_CACHE/pnpm-store"
 export pnpm_config_store_dir="$PNPM_STORE_DIR"
 mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE" "$PNPM_STORE_DIR"
 export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
+if [ -n "\${CODE_UX_PROVIDER_TOOL_BIN:-}" ]; then export PATH="$CODE_UX_PROVIDER_TOOL_BIN:$PATH"; fi
 if [ -f "/opt/jules/setup.sh" ]; then bash <(sed 's/\\r//' "/opt/jules/setup.sh") || echo "provider-runner: setup script failed" >&2; fi
-if ! command -v "$1" >/dev/null 2>&1; then case "$1" in     gemini) npm install -g @google/gemini-cli ;;     codex) npm install -g @openai/codex ;;     claude) if ensure_curl; then curl -fsSL https://claude.ai/install.sh | bash && export PATH="$HOME/.local/bin:$PATH"; else echo "provider-runner: curl unavailable; cannot install claude" >&2; fi ;;     qwen) npm install -g @qwen-code/qwen-code ;;     opencode) if ensure_curl; then curl -fsSL https://opencode.ai/install | bash && export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"; else echo "provider-runner: curl unavailable; cannot install opencode" >&2; fi ;;     agy) if ensure_curl; then curl -fsSL https://antigravity.google/cli/install.sh | bash && export PATH="$HOME/.local/bin:$PATH"; else echo "provider-runner: curl unavailable; cannot install antigravity" >&2; fi ;; esac; fi
 if [ "$1" = "gemini" ]; then
   mkdir -p "$HOME/.gemini/tmp" "$HOME/.gemini/history" "$HOME/.gemini/memory"
   ensure_json_file "$HOME/.gemini/projects.json" '{"projects":{}}'
@@ -109,7 +108,6 @@ remove_json_key() { local destination="$1"; local key="$2"; local label="$3"; if
 remove_codex_mcp_servers() { local destination="$1"; local label="$2"; if [ ! -f "$destination" ]; then return 0; fi; if ! node -e 'const fs=require("fs"); const [destination]=process.argv.slice(1); let content=""; try { content=fs.readFileSync(destination,"utf8"); } catch { process.exit(0); } let skipping=false; const kept=[]; for (const line of content.split(/\\r?\\n/)) { const trimmed=line.trim(); if (/^\\[mcp_servers\\.[^\\]]+\\]$/.test(trimmed)) { skipping=true; continue; } if (/^\\[.+\\]$/.test(trimmed)) skipping=false; if (!skipping) kept.push(line); } fs.writeFileSync(destination, \`\${kept.join("\\n").trimEnd()}\\n\`);' "$destination"; then echo "provider-runner: warning: failed to update $label" >&2; fi; }
 append_if_missing_literal() { local source="$1"; local destination="$2"; local literal="$3"; local label="$4"; if [ ! -e "$source" ]; then return 0; fi; mkdir -p "$(dirname "$destination")"; if [ -f "$destination" ] && grep -Fq "$literal" "$destination"; then return 0; fi; if [ -s "$destination" ]; then printf '\\n' >> "$destination"; fi; if ! cat "$source" >> "$destination"; then echo "provider-runner: warning: failed to append $label" >&2; fi; }
 ensure_json_file() { local destination="$1"; local content="$2"; mkdir -p "$(dirname "$destination")"; if [ ! -f "$destination" ]; then printf '%s\\n' "$content" > "$destination"; fi; }
-ensure_curl() { if command -v curl >/dev/null 2>&1; then return 0; fi; echo "provider-runner: curl not found; installing..." >&2; if command -v apt-get >/dev/null 2>&1; then (apt-get update -qy && apt-get install -qy curl ca-certificates) >/dev/null 2>&1 || true; fi; command -v curl >/dev/null 2>&1; }
 configure_git_identity() { if ! command -v git >/dev/null 2>&1; then echo "provider-runner: warning: git is unavailable; skipped git identity configuration" >&2; return 0; fi; git config --global user.name "\${CODE_UX_GIT_USER_NAME:-Code UX}" || echo "provider-runner: warning: failed to configure git user.name" >&2; git config --global user.email "\${CODE_UX_GIT_USER_EMAIL:-agents@codeux.ai}" || echo "provider-runner: warning: failed to configure git user.email" >&2; }
 materialize_opencode_config() { local destination="$HOME/.config/opencode/opencode.json"; if [ -z "\${OPENCODE_CONFIG_CONTENT:-}" ]; then export OPENCODE_CONFIG="$destination"; return 0; fi; mkdir -p "$(dirname "$destination")"; remove_json_key "$destination" "mcp" "opencode local mcp servers"; merge_json_content "$OPENCODE_CONFIG_CONTENT" "$destination" "opencode runtime config"; export OPENCODE_CONFIG="$destination"; }
 if [ -e "/opt/credentials/gitconfig" ]; then cp -f "/opt/credentials/gitconfig" "$HOME/.gitconfig" || echo "provider-runner: warning: failed to copy .gitconfig" >&2; else configure_git_identity; fi
@@ -122,202 +120,7 @@ export PNPM_STORE_DIR="$NPM_CONFIG_CACHE/pnpm-store"
 export pnpm_config_store_dir="$PNPM_STORE_DIR"
 mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE" "$PNPM_STORE_DIR"
 export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
-if [ -f "/opt/jules/setup.sh" ]; then bash <(sed 's/\\r//' "/opt/jules/setup.sh") || echo "provider-runner: setup script failed" >&2; fi
-if ! command -v "$1" >/dev/null 2>&1; then case "$1" in     gemini) npm install -g @google/gemini-cli ;;     codex) npm install -g @openai/codex ;;     claude) if ensure_curl; then curl -fsSL https://claude.ai/install.sh | bash && export PATH="$HOME/.local/bin:$PATH"; else echo "provider-runner: curl unavailable; cannot install claude" >&2; fi ;;     qwen) npm install -g @qwen-code/qwen-code ;;     opencode) if ensure_curl; then curl -fsSL https://opencode.ai/install | bash && export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"; else echo "provider-runner: curl unavailable; cannot install opencode" >&2; fi ;;     agy) if ensure_curl; then curl -fsSL https://antigravity.google/cli/install.sh | bash && export PATH="$HOME/.local/bin:$PATH"; else echo "provider-runner: curl unavailable; cannot install antigravity" >&2; fi ;; esac; fi
-if [ "$1" = "gemini" ]; then
-  mkdir -p "$HOME/.gemini/tmp" "$HOME/.gemini/history" "$HOME/.gemini/memory"
-  ensure_json_file "$HOME/.gemini/projects.json" '{"projects":{}}'
-  copy_if_present "/opt/credentials/gemini/settings.json" "$HOME/.gemini/settings.json" "gemini settings.json"
-  copy_if_present "/opt/credentials/gemini/oauth_creds.json" "$HOME/.gemini/oauth_creds.json" "gemini oauth_creds.json"
-  copy_if_present "/opt/credentials/gemini/google_accounts.json" "$HOME/.gemini/google_accounts.json" "gemini google_accounts.json"
-  copy_if_present "/opt/credentials/gemini/installation_id" "$HOME/.gemini/installation_id" "gemini installation_id"
-  copy_if_present "/opt/credentials/gemini/state.json" "$HOME/.gemini/state.json" "gemini state.json"
-  copy_if_present "/opt/credentials/gemini/trustedFolders.json" "$HOME/.gemini/trustedFolders.json" "gemini trustedFolders.json"
-  copy_if_present "/opt/provider-config/host-gemini-settings.json" "$HOME/.gemini/settings.json" "gemini config file"
-  remove_json_key "$HOME/.gemini/settings.json" "mcpServers" "gemini local mcp servers"
-  merge_json_file "/opt/provider-config/gemini-settings.json" "$HOME/.gemini/settings.json" "gemini mcp settings.json"
-fi
-if [ "$1" = "claude" ]; then
-  if [ -f "/opt/credentials/claude-code/.credentials.json" ]; then cp -f "/opt/credentials/claude-code/.credentials.json" "$HOME/.claude/.credentials.json"; fi
-  if [ -f "/opt/credentials/claude-code-auth.json" ]; then cp -f "/opt/credentials/claude-code-auth.json" "$HOME/.claude.json"; fi
-  copy_if_present "/opt/provider-config/host-claude.json" "$HOME/.claude.json" "claude config file"
-  remove_json_key "$HOME/.claude.json" "mcpServers" "claude local mcp servers"
-  merge_json_file "/opt/provider-config/claude-mcp.json" "$HOME/.claude.json" "claude mcp config"
-fi
-if [ "$1" = "qwen" ]; then
-  if [ -d "/opt/credentials/qwen-code" ]; then sync_dir_contents "/opt/credentials/qwen-code" "$HOME/.qwen" "qwen"; fi
-  copy_if_present "/opt/provider-config/host-qwen-settings.json" "$HOME/.qwen/settings.json" "qwen config file"
-  remove_json_key "$HOME/.qwen/settings.json" "mcpServers" "qwen local mcp servers"
-  merge_json_file "/opt/provider-config/qwen-settings.json" "$HOME/.qwen/settings.json" "qwen settings.json"
-  remove_json_key "$HOME/.qwen/settings.json" "enableOpenAILogging" "qwen legacy enableOpenAILogging"
-fi
-if [ "$1" = "codex" ]; then
-  copy_if_present "/opt/provider-config/host-codex-config.toml" "$HOME/.codex/config.toml" "codex config file"
-  remove_codex_mcp_servers "$HOME/.codex/config.toml" "codex local mcp servers"
-  append_if_missing_literal "/opt/provider-config/codex-config.toml" "$HOME/.codex/config.toml" "[mcp_servers.code-ux]" "codex mcp config"
-fi
-if [ "$1" = "opencode" ]; then
-  if [ -d "/opt/credentials/opencode" ]; then sync_dir_contents "/opt/credentials/opencode" "$HOME/.local/share/opencode" "opencode"; fi
-  copy_if_present "/opt/provider-config/host-opencode.json" "$HOME/.config/opencode/opencode.json" "opencode config file"
-  materialize_opencode_config
-fi
-if [ "$1" = "antigravity" ] || [ "$1" = "agy" ]; then
-  if [ -d "/opt/credentials/antigravity" ]; then
-    mkdir -p "$HOME/.local/share/keyrings" "$HOME/.gemini"
-    sync_dir_contents "/opt/credentials/antigravity" "$HOME/.local/share/keyrings" "antigravity-keyrings"
-    sync_dir_contents "/opt/credentials/antigravity" "$HOME/.antigravity" "antigravity"
-    sync_dir_contents "/opt/credentials/antigravity" "$HOME/.gemini" "antigravity-gemini"
-  fi
-  mkdir -p "$HOME/.gemini/antigravity-cli"
-  copy_if_present "/opt/provider-config/host-antigravity-mcp.json" "$HOME/.gemini/antigravity-cli/mcp_config.json" "antigravity config file"
-  remove_json_key "$HOME/.gemini/antigravity-cli/mcp_config.json" "mcpServers" "antigravity local mcp servers"
-  merge_json_file "/opt/provider-config/antigravity-mcp.json" "$HOME/.gemini/antigravity-cli/mcp_config.json" "antigravity mcp config"
-  if ! command -v dbus-daemon >/dev/null 2>&1 || ! command -v gnome-keyring-daemon >/dev/null 2>&1; then
-    echo "provider-runner: installing keyring dependencies in container..."
-    if command -v apt-get >/dev/null 2>&1; then
-      (apt-get update -qy && apt-get install -qy dbus gnome-keyring libsecret-1-0 xdg-utils) || true
-    fi
-  fi
-  if command -v dbus-daemon >/dev/null 2>&1 && command -v gnome-keyring-daemon >/dev/null 2>&1; then
-    echo "provider-runner: starting D-Bus session and gnome-keyring-daemon for antigravity..." >&2
-    export DBUS_SESSION_BUS_ADDRESS=$(dbus-daemon --session --print-address --fork || echo "")
-    if [ -n "$DBUS_SESSION_BUS_ADDRESS" ]; then
-      export $(echo -n "dummy" | gnome-keyring-daemon --unlock 2>/dev/null || echo "") >/dev/null 2>&1 || true
-      export $(gnome-keyring-daemon --start --components=secrets 2>/dev/null || echo "") >/dev/null 2>&1 || true
-    fi
-  fi
-fi
-if [ -n "\${CODE_UX_PROVIDER_ARGV_FILE:-}" ] && [ -f "$CODE_UX_PROVIDER_ARGV_FILE" ]; then
-  CODE_UX_PROVIDER_ARGS=()
-  # shellcheck source=/dev/null
-  source "$CODE_UX_PROVIDER_ARGV_FILE"
-  exec "$1" "\${CODE_UX_PROVIDER_ARGS[@]}"
-fi
-exec "$@""
-`;
-
-exports[`DockerBootstrapBuilder > should include fallback install cases for specified providers 1`] = `
-"set -euo pipefail
-mkdir -p "$HOME/.config" "$HOME/.codex" "$HOME/.claude" "$HOME/.gemini" "$HOME/.qwen" "$HOME/.local/share/opencode" "$HOME/.config/opencode" "$HOME/.antigravity"
-sync_dir_contents() { local source="$1"; local destination="$2"; local label="$3"; mkdir -p "$destination"; if ! cp -r "$source/." "$destination/"; then echo "provider-runner: warning: failed to copy $label credentials" >&2; fi; }
-copy_if_present() { local source="$1"; local destination="$2"; local label="$3"; if [ -e "$source" ]; then mkdir -p "$(dirname "$destination")"; if ! cp -f "$source" "$destination"; then echo "provider-runner: warning: failed to copy $label" >&2; fi; fi; }
-merge_json_file() { local source="$1"; local destination="$2"; local label="$3"; if [ ! -e "$source" ]; then return 0; fi; mkdir -p "$(dirname "$destination")"; if ! node -e 'const fs=require("fs"); const [source,destination]=process.argv.slice(1); const read=(file)=>{ try { return JSON.parse(fs.readFileSync(file,"utf8")); } catch { return {}; } }; const sourceJson=read(source); const destinationJson=read(destination); const merged={...destinationJson,...sourceJson}; if (destinationJson.mcpServers || sourceJson.mcpServers) merged.mcpServers={...(destinationJson.mcpServers||{}), ...(sourceJson.mcpServers||{})}; if (destinationJson.memory || sourceJson.memory) merged.memory={...(destinationJson.memory||{}), ...(sourceJson.memory||{})}; fs.writeFileSync(destination, \`\${JSON.stringify(merged, null, 2)}\\n\`);' "$source" "$destination"; then echo "provider-runner: warning: failed to merge $label" >&2; fi; }
-merge_json_content() { local content="$1"; local destination="$2"; local label="$3"; if [ -z "$content" ]; then return 0; fi; local source; source=$(mktemp); printf '%s\\n' "$content" > "$source"; merge_json_file "$source" "$destination" "$label"; rm -f "$source"; }
-remove_json_key() { local destination="$1"; local key="$2"; local label="$3"; if [ ! -f "$destination" ]; then return 0; fi; if ! node -e 'const fs=require("fs"); const [destination,key]=process.argv.slice(1); let parsed={}; try { parsed=JSON.parse(fs.readFileSync(destination,"utf8")); } catch { process.exit(0); } if (Object.prototype.hasOwnProperty.call(parsed,key)) { delete parsed[key]; fs.writeFileSync(destination, \`\${JSON.stringify(parsed, null, 2)}\\n\`); }' "$destination" "$key"; then echo "provider-runner: warning: failed to update $label" >&2; fi; }
-remove_codex_mcp_servers() { local destination="$1"; local label="$2"; if [ ! -f "$destination" ]; then return 0; fi; if ! node -e 'const fs=require("fs"); const [destination]=process.argv.slice(1); let content=""; try { content=fs.readFileSync(destination,"utf8"); } catch { process.exit(0); } let skipping=false; const kept=[]; for (const line of content.split(/\\r?\\n/)) { const trimmed=line.trim(); if (/^\\[mcp_servers\\.[^\\]]+\\]$/.test(trimmed)) { skipping=true; continue; } if (/^\\[.+\\]$/.test(trimmed)) skipping=false; if (!skipping) kept.push(line); } fs.writeFileSync(destination, \`\${kept.join("\\n").trimEnd()}\\n\`);' "$destination"; then echo "provider-runner: warning: failed to update $label" >&2; fi; }
-append_if_missing_literal() { local source="$1"; local destination="$2"; local literal="$3"; local label="$4"; if [ ! -e "$source" ]; then return 0; fi; mkdir -p "$(dirname "$destination")"; if [ -f "$destination" ] && grep -Fq "$literal" "$destination"; then return 0; fi; if [ -s "$destination" ]; then printf '\\n' >> "$destination"; fi; if ! cat "$source" >> "$destination"; then echo "provider-runner: warning: failed to append $label" >&2; fi; }
-ensure_json_file() { local destination="$1"; local content="$2"; mkdir -p "$(dirname "$destination")"; if [ ! -f "$destination" ]; then printf '%s\\n' "$content" > "$destination"; fi; }
-ensure_curl() { if command -v curl >/dev/null 2>&1; then return 0; fi; echo "provider-runner: curl not found; installing..." >&2; if command -v apt-get >/dev/null 2>&1; then (apt-get update -qy && apt-get install -qy curl ca-certificates) >/dev/null 2>&1 || true; fi; command -v curl >/dev/null 2>&1; }
-configure_git_identity() { if ! command -v git >/dev/null 2>&1; then echo "provider-runner: warning: git is unavailable; skipped git identity configuration" >&2; return 0; fi; git config --global user.name "\${CODE_UX_GIT_USER_NAME:-Code UX}" || echo "provider-runner: warning: failed to configure git user.name" >&2; git config --global user.email "\${CODE_UX_GIT_USER_EMAIL:-agents@codeux.ai}" || echo "provider-runner: warning: failed to configure git user.email" >&2; }
-materialize_opencode_config() { local destination="$HOME/.config/opencode/opencode.json"; if [ -z "\${OPENCODE_CONFIG_CONTENT:-}" ]; then export OPENCODE_CONFIG="$destination"; return 0; fi; mkdir -p "$(dirname "$destination")"; remove_json_key "$destination" "mcp" "opencode local mcp servers"; merge_json_content "$OPENCODE_CONFIG_CONTENT" "$destination" "opencode runtime config"; export OPENCODE_CONFIG="$destination"; }
-if [ -e "/opt/credentials/gitconfig" ]; then cp -f "/opt/credentials/gitconfig" "$HOME/.gitconfig" || echo "provider-runner: warning: failed to copy .gitconfig" >&2; else configure_git_identity; fi
-if [ -d "/opt/credentials/codex" ]; then [ -f "/opt/credentials/codex/auth.json" ] && cp -f "/opt/credentials/codex/auth.json" "$HOME/.codex/auth.json"; fi
-if [ -d "/opt/credentials/gh" ]; then sync_dir_contents "/opt/credentials/gh" "$HOME/.config/gh" "gh"; fi
-export NPM_CONFIG_PREFIX="/runtime/npm-global"
-export NPM_CONFIG_CACHE="/runtime/npm-cache"
-export npm_config_cache="$NPM_CONFIG_CACHE"
-export PNPM_STORE_DIR="$NPM_CONFIG_CACHE/pnpm-store"
-export pnpm_config_store_dir="$PNPM_STORE_DIR"
-mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE" "$PNPM_STORE_DIR"
-export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
-if [ -f "/opt/jules/setup.sh" ]; then bash <(sed 's/\\r//' "/opt/jules/setup.sh") || echo "provider-runner: setup script failed" >&2; fi
-if ! command -v "$1" >/dev/null 2>&1; then case "$1" in     gemini) npm install -g @google/gemini-cli ;; esac; fi
-if [ "$1" = "gemini" ]; then
-  mkdir -p "$HOME/.gemini/tmp" "$HOME/.gemini/history" "$HOME/.gemini/memory"
-  ensure_json_file "$HOME/.gemini/projects.json" '{"projects":{}}'
-  copy_if_present "/opt/credentials/gemini/settings.json" "$HOME/.gemini/settings.json" "gemini settings.json"
-  copy_if_present "/opt/credentials/gemini/oauth_creds.json" "$HOME/.gemini/oauth_creds.json" "gemini oauth_creds.json"
-  copy_if_present "/opt/credentials/gemini/google_accounts.json" "$HOME/.gemini/google_accounts.json" "gemini google_accounts.json"
-  copy_if_present "/opt/credentials/gemini/installation_id" "$HOME/.gemini/installation_id" "gemini installation_id"
-  copy_if_present "/opt/credentials/gemini/state.json" "$HOME/.gemini/state.json" "gemini state.json"
-  copy_if_present "/opt/credentials/gemini/trustedFolders.json" "$HOME/.gemini/trustedFolders.json" "gemini trustedFolders.json"
-  copy_if_present "/opt/provider-config/host-gemini-settings.json" "$HOME/.gemini/settings.json" "gemini config file"
-  remove_json_key "$HOME/.gemini/settings.json" "mcpServers" "gemini local mcp servers"
-  merge_json_file "/opt/provider-config/gemini-settings.json" "$HOME/.gemini/settings.json" "gemini mcp settings.json"
-fi
-if [ "$1" = "claude" ]; then
-  if [ -f "/opt/credentials/claude-code/.credentials.json" ]; then cp -f "/opt/credentials/claude-code/.credentials.json" "$HOME/.claude/.credentials.json"; fi
-  if [ -f "/opt/credentials/claude-code-auth.json" ]; then cp -f "/opt/credentials/claude-code-auth.json" "$HOME/.claude.json"; fi
-  copy_if_present "/opt/provider-config/host-claude.json" "$HOME/.claude.json" "claude config file"
-  remove_json_key "$HOME/.claude.json" "mcpServers" "claude local mcp servers"
-  merge_json_file "/opt/provider-config/claude-mcp.json" "$HOME/.claude.json" "claude mcp config"
-fi
-if [ "$1" = "qwen" ]; then
-  if [ -d "/opt/credentials/qwen-code" ]; then sync_dir_contents "/opt/credentials/qwen-code" "$HOME/.qwen" "qwen"; fi
-  copy_if_present "/opt/provider-config/host-qwen-settings.json" "$HOME/.qwen/settings.json" "qwen config file"
-  remove_json_key "$HOME/.qwen/settings.json" "mcpServers" "qwen local mcp servers"
-  merge_json_file "/opt/provider-config/qwen-settings.json" "$HOME/.qwen/settings.json" "qwen settings.json"
-  remove_json_key "$HOME/.qwen/settings.json" "enableOpenAILogging" "qwen legacy enableOpenAILogging"
-fi
-if [ "$1" = "codex" ]; then
-  copy_if_present "/opt/provider-config/host-codex-config.toml" "$HOME/.codex/config.toml" "codex config file"
-  remove_codex_mcp_servers "$HOME/.codex/config.toml" "codex local mcp servers"
-  append_if_missing_literal "/opt/provider-config/codex-config.toml" "$HOME/.codex/config.toml" "[mcp_servers.code-ux]" "codex mcp config"
-fi
-if [ "$1" = "opencode" ]; then
-  if [ -d "/opt/credentials/opencode" ]; then sync_dir_contents "/opt/credentials/opencode" "$HOME/.local/share/opencode" "opencode"; fi
-  copy_if_present "/opt/provider-config/host-opencode.json" "$HOME/.config/opencode/opencode.json" "opencode config file"
-  materialize_opencode_config
-fi
-if [ "$1" = "antigravity" ] || [ "$1" = "agy" ]; then
-  if [ -d "/opt/credentials/antigravity" ]; then
-    mkdir -p "$HOME/.local/share/keyrings" "$HOME/.gemini"
-    sync_dir_contents "/opt/credentials/antigravity" "$HOME/.local/share/keyrings" "antigravity-keyrings"
-    sync_dir_contents "/opt/credentials/antigravity" "$HOME/.antigravity" "antigravity"
-    sync_dir_contents "/opt/credentials/antigravity" "$HOME/.gemini" "antigravity-gemini"
-  fi
-  mkdir -p "$HOME/.gemini/antigravity-cli"
-  copy_if_present "/opt/provider-config/host-antigravity-mcp.json" "$HOME/.gemini/antigravity-cli/mcp_config.json" "antigravity config file"
-  remove_json_key "$HOME/.gemini/antigravity-cli/mcp_config.json" "mcpServers" "antigravity local mcp servers"
-  merge_json_file "/opt/provider-config/antigravity-mcp.json" "$HOME/.gemini/antigravity-cli/mcp_config.json" "antigravity mcp config"
-  if ! command -v dbus-daemon >/dev/null 2>&1 || ! command -v gnome-keyring-daemon >/dev/null 2>&1; then
-    echo "provider-runner: installing keyring dependencies in container..."
-    if command -v apt-get >/dev/null 2>&1; then
-      (apt-get update -qy && apt-get install -qy dbus gnome-keyring libsecret-1-0 xdg-utils) || true
-    fi
-  fi
-  if command -v dbus-daemon >/dev/null 2>&1 && command -v gnome-keyring-daemon >/dev/null 2>&1; then
-    echo "provider-runner: starting D-Bus session and gnome-keyring-daemon for antigravity..." >&2
-    export DBUS_SESSION_BUS_ADDRESS=$(dbus-daemon --session --print-address --fork || echo "")
-    if [ -n "$DBUS_SESSION_BUS_ADDRESS" ]; then
-      export $(echo -n "dummy" | gnome-keyring-daemon --unlock 2>/dev/null || echo "") >/dev/null 2>&1 || true
-      export $(gnome-keyring-daemon --start --components=secrets 2>/dev/null || echo "") >/dev/null 2>&1 || true
-    fi
-  fi
-fi
-if [ -n "\${CODE_UX_PROVIDER_ARGV_FILE:-}" ] && [ -f "$CODE_UX_PROVIDER_ARGV_FILE" ]; then
-  CODE_UX_PROVIDER_ARGS=()
-  # shellcheck source=/dev/null
-  source "$CODE_UX_PROVIDER_ARGV_FILE"
-  exec "$1" "\${CODE_UX_PROVIDER_ARGS[@]}"
-fi
-exec "$@""
-`;
-
-exports[`DockerBootstrapBuilder > should not include fallback install if no providers specified 1`] = `
-"set -euo pipefail
-mkdir -p "$HOME/.config" "$HOME/.codex" "$HOME/.claude" "$HOME/.gemini" "$HOME/.qwen" "$HOME/.local/share/opencode" "$HOME/.config/opencode" "$HOME/.antigravity"
-sync_dir_contents() { local source="$1"; local destination="$2"; local label="$3"; mkdir -p "$destination"; if ! cp -r "$source/." "$destination/"; then echo "provider-runner: warning: failed to copy $label credentials" >&2; fi; }
-copy_if_present() { local source="$1"; local destination="$2"; local label="$3"; if [ -e "$source" ]; then mkdir -p "$(dirname "$destination")"; if ! cp -f "$source" "$destination"; then echo "provider-runner: warning: failed to copy $label" >&2; fi; fi; }
-merge_json_file() { local source="$1"; local destination="$2"; local label="$3"; if [ ! -e "$source" ]; then return 0; fi; mkdir -p "$(dirname "$destination")"; if ! node -e 'const fs=require("fs"); const [source,destination]=process.argv.slice(1); const read=(file)=>{ try { return JSON.parse(fs.readFileSync(file,"utf8")); } catch { return {}; } }; const sourceJson=read(source); const destinationJson=read(destination); const merged={...destinationJson,...sourceJson}; if (destinationJson.mcpServers || sourceJson.mcpServers) merged.mcpServers={...(destinationJson.mcpServers||{}), ...(sourceJson.mcpServers||{})}; if (destinationJson.memory || sourceJson.memory) merged.memory={...(destinationJson.memory||{}), ...(sourceJson.memory||{})}; fs.writeFileSync(destination, \`\${JSON.stringify(merged, null, 2)}\\n\`);' "$source" "$destination"; then echo "provider-runner: warning: failed to merge $label" >&2; fi; }
-merge_json_content() { local content="$1"; local destination="$2"; local label="$3"; if [ -z "$content" ]; then return 0; fi; local source; source=$(mktemp); printf '%s\\n' "$content" > "$source"; merge_json_file "$source" "$destination" "$label"; rm -f "$source"; }
-remove_json_key() { local destination="$1"; local key="$2"; local label="$3"; if [ ! -f "$destination" ]; then return 0; fi; if ! node -e 'const fs=require("fs"); const [destination,key]=process.argv.slice(1); let parsed={}; try { parsed=JSON.parse(fs.readFileSync(destination,"utf8")); } catch { process.exit(0); } if (Object.prototype.hasOwnProperty.call(parsed,key)) { delete parsed[key]; fs.writeFileSync(destination, \`\${JSON.stringify(parsed, null, 2)}\\n\`); }' "$destination" "$key"; then echo "provider-runner: warning: failed to update $label" >&2; fi; }
-remove_codex_mcp_servers() { local destination="$1"; local label="$2"; if [ ! -f "$destination" ]; then return 0; fi; if ! node -e 'const fs=require("fs"); const [destination]=process.argv.slice(1); let content=""; try { content=fs.readFileSync(destination,"utf8"); } catch { process.exit(0); } let skipping=false; const kept=[]; for (const line of content.split(/\\r?\\n/)) { const trimmed=line.trim(); if (/^\\[mcp_servers\\.[^\\]]+\\]$/.test(trimmed)) { skipping=true; continue; } if (/^\\[.+\\]$/.test(trimmed)) skipping=false; if (!skipping) kept.push(line); } fs.writeFileSync(destination, \`\${kept.join("\\n").trimEnd()}\\n\`);' "$destination"; then echo "provider-runner: warning: failed to update $label" >&2; fi; }
-append_if_missing_literal() { local source="$1"; local destination="$2"; local literal="$3"; local label="$4"; if [ ! -e "$source" ]; then return 0; fi; mkdir -p "$(dirname "$destination")"; if [ -f "$destination" ] && grep -Fq "$literal" "$destination"; then return 0; fi; if [ -s "$destination" ]; then printf '\\n' >> "$destination"; fi; if ! cat "$source" >> "$destination"; then echo "provider-runner: warning: failed to append $label" >&2; fi; }
-ensure_json_file() { local destination="$1"; local content="$2"; mkdir -p "$(dirname "$destination")"; if [ ! -f "$destination" ]; then printf '%s\\n' "$content" > "$destination"; fi; }
-ensure_curl() { if command -v curl >/dev/null 2>&1; then return 0; fi; echo "provider-runner: curl not found; installing..." >&2; if command -v apt-get >/dev/null 2>&1; then (apt-get update -qy && apt-get install -qy curl ca-certificates) >/dev/null 2>&1 || true; fi; command -v curl >/dev/null 2>&1; }
-configure_git_identity() { if ! command -v git >/dev/null 2>&1; then echo "provider-runner: warning: git is unavailable; skipped git identity configuration" >&2; return 0; fi; git config --global user.name "\${CODE_UX_GIT_USER_NAME:-Code UX}" || echo "provider-runner: warning: failed to configure git user.name" >&2; git config --global user.email "\${CODE_UX_GIT_USER_EMAIL:-agents@codeux.ai}" || echo "provider-runner: warning: failed to configure git user.email" >&2; }
-materialize_opencode_config() { local destination="$HOME/.config/opencode/opencode.json"; if [ -z "\${OPENCODE_CONFIG_CONTENT:-}" ]; then export OPENCODE_CONFIG="$destination"; return 0; fi; mkdir -p "$(dirname "$destination")"; remove_json_key "$destination" "mcp" "opencode local mcp servers"; merge_json_content "$OPENCODE_CONFIG_CONTENT" "$destination" "opencode runtime config"; export OPENCODE_CONFIG="$destination"; }
-if [ -e "/opt/credentials/gitconfig" ]; then cp -f "/opt/credentials/gitconfig" "$HOME/.gitconfig" || echo "provider-runner: warning: failed to copy .gitconfig" >&2; else configure_git_identity; fi
-if [ -d "/opt/credentials/codex" ]; then [ -f "/opt/credentials/codex/auth.json" ] && cp -f "/opt/credentials/codex/auth.json" "$HOME/.codex/auth.json"; fi
-if [ -d "/opt/credentials/gh" ]; then sync_dir_contents "/opt/credentials/gh" "$HOME/.config/gh" "gh"; fi
-export NPM_CONFIG_PREFIX="/runtime/npm-global"
-export NPM_CONFIG_CACHE="/runtime/npm-cache"
-export npm_config_cache="$NPM_CONFIG_CACHE"
-export PNPM_STORE_DIR="$NPM_CONFIG_CACHE/pnpm-store"
-export pnpm_config_store_dir="$PNPM_STORE_DIR"
-mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE" "$PNPM_STORE_DIR"
-export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
+if [ -n "\${CODE_UX_PROVIDER_TOOL_BIN:-}" ]; then export PATH="$CODE_UX_PROVIDER_TOOL_BIN:$PATH"; fi
 if [ -f "/opt/jules/setup.sh" ]; then bash <(sed 's/\\r//' "/opt/jules/setup.sh") || echo "provider-runner: setup script failed" >&2; fi
 if [ "$1" = "gemini" ]; then
   mkdir -p "$HOME/.gemini/tmp" "$HOME/.gemini/history" "$HOME/.gemini/memory"

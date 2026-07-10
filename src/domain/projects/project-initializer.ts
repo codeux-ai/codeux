@@ -57,6 +57,33 @@ function withNewProjectDesignGuidance(input: CreateProjectInput): CreateProjectI
   };
 }
 
+/**
+ * Keep dashboard conversation ownership project-local. A null route is the
+ * intentional built-in Project manager fallback, and prevents a system-level
+ * Worker override from silently becoming the first contact for a newly added
+ * project. Explicit create-time routing still wins.
+ */
+function withProjectManagerDashboardDefault(input: CreateProjectInput): CreateProjectInput {
+  const existingRouting = input.settingsOverrides?.agents?.routing;
+  return {
+    ...input,
+    settingsOverrides: {
+      ...input.settingsOverrides,
+      agents: {
+        ...input.settingsOverrides?.agents,
+        routing: {
+          ...existingRouting,
+          dashboardReply: existingRouting?.dashboardReply ?? { agentPresetId: null },
+        },
+      },
+    },
+  };
+}
+
+function withNewProjectDefaults(input: CreateProjectInput): CreateProjectInput {
+  return withProjectManagerDashboardDefault(withNewProjectDesignGuidance(input));
+}
+
 export async function initializeProject(
   input: CreateProjectInput,
   deps: {
@@ -74,7 +101,7 @@ export async function initializeProject(
     const safeSourceRef = validateSafeClonePath(targetDir, allowedRoot);
     validateNonEmptyDir(safeSourceRef, allowedRoot);
     await initLocalRepo(safeSourceRef, input.defaultBranch ?? "main", input.name);
-    return deps.createProject(withNewProjectDesignGuidance({
+    return deps.createProject(withNewProjectDefaults({
       ...input,
       sourceType: "local",
       sourceRef: safeSourceRef,
@@ -109,7 +136,7 @@ export async function initializeProject(
         defaultBranch: input.defaultBranch,
       });
     }
-    return deps.createProject(withNewProjectDesignGuidance({
+    return deps.createProject(withNewProjectDefaults({
       ...input,
       sourceType: "git",
       sourceRef: result.remoteUrl,
@@ -119,5 +146,5 @@ export async function initializeProject(
   }
 
   // "existing" or absent — original behavior
-  return deps.createProject(input);
+  return deps.createProject(withProjectManagerDashboardDefault(input));
 }

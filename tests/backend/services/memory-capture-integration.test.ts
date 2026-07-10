@@ -41,6 +41,8 @@ describe("Memory Capture Integration", () => {
     }).id;
     vi.spyOn(WorkspaceManager.prototype, "createSnapshotWorkspace")
       .mockResolvedValue("docker-volume://planning-test");
+    vi.spyOn(WorkspaceManager.prototype, "createHostSnapshotWorkspace")
+      .mockResolvedValue(tmpDir);
     vi.spyOn(WorkspaceManager.prototype, "createOrReuseSnapshotWorkspace")
       .mockResolvedValue("docker-volume://planning-test");
     vi.spyOn(WorkspaceManager.prototype, "removeWorktree")
@@ -305,6 +307,7 @@ describe("Memory Capture Integration", () => {
       resolveResumeWorktreePath: vi.fn().mockResolvedValue(projectRepo.getProject(projectId)!.baseDir),
       buildWorktreePath: vi.fn().mockReturnValue(projectRepo.getProject(projectId)!.baseDir),
       prepareWorktree: vi.fn(),
+      removeWorktree: vi.fn().mockResolvedValue(undefined),
     };
     (qaService as any).workspacePathExists = vi.fn().mockResolvedValue(true);
 

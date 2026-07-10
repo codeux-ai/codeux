@@ -44,7 +44,9 @@ Routes:
 - `dashboardReply.agentPresetId`
 - `clarificationReply.agentPresetId`
 
-Unset manual routes fall back to the existing built-in preset for that route. Planning uses `Planning agent`; coding, CI fix, merge conflict, and dashboard replies use `Worker`; clarification replies use `Project manager`.
+Unset manual routes fall back to the existing built-in preset for that route. Planning uses `Planning agent`; coding, CI fix, and merge conflict use `Worker`; dashboard and clarification replies use `Project manager`.
+
+New and imported projects persist an unset project-level dashboard-reply route intentionally. In that route, `null` means the built-in `Project manager` fallback and prevents a system-level Worker selection from becoming the first-contact agent for a newly added project. An explicit create-time route remains supported.
 
 ## Planning Flow
 
@@ -80,6 +82,6 @@ Virtual CI-fix and merge-conflict workers use their dedicated manual agent route
 
 The sprint composer defaults to the effective project planning agent and task-coding routing mode. It can override coding routing for one sprint with a Manual/Orchestrator select. In Manual mode, the composer shows a Worker Agent select that can pin that sprint's generated tasks to a specific worker preset; leaving it on the built-in worker keeps the project fallback behavior.
 
-The Agents page shows route assignment tags on each preset card and in the detail panel. These tags are computed from the current effective project settings, so they reflect planning defaults, manual routes, the coding orchestrator roster, and enabled QA routes instead of user-authored labels. Built-in route selections are shown on the synced fallback presets as well: Planning agent for planning; Worker for coding, CI fix, merge conflict, and dashboard reply; Project manager for clarification reply; and Quality assurance agent for QA routes.
+The Agents page shows route assignment tags on each preset card and in the detail panel. These tags are computed from the current effective project settings, so they reflect planning defaults, manual routes, the coding orchestrator roster, and enabled QA routes instead of user-authored labels. Built-in route selections are shown on the synced fallback presets as well: Planning agent for planning; Worker for coding, CI fix, and merge conflict; Project manager for dashboard and clarification replies; and Quality assurance agent for QA routes.
 
 The Agents editor includes a short description field for every preset. That field is the Planning agent's primary signal when choosing among frontend, backend, prototype, or other custom coding specialists. Custom label editing is intentionally not exposed in the dashboard; labels remain internal metadata for markdown sync and built-in convention handling.

@@ -24,10 +24,12 @@ Tools are filtered before being advertised on `ListTools`:
 
 Agent-scoped provider runs are also default-deny for built-in Code UX tools. Newly synced Worker,
 Project manager, and generated coding agents may link the default `playwright` custom MCP server,
-but that custom-server link does not imply `code_ux` access. The dashboard chat reply route is the
-only default exception: when the reply agent has no explicit MCP access, Code UX enables the full
-built-in management surface, the restricted `scheduler_code_ux` tool, and the default Playwright MCP
-server for that dashboard chat turn.
+but that custom-server link does not imply `code_ux` access. The dashboard chat reply route defaults
+to the Project manager and is the only default exception: when the reply agent has no explicit MCP
+access, Code UX enables the full built-in management surface, the restricted `scheduler_code_ux`
+self-wakeup tool, the dedicated `add_long_term_memory` lane, and the default Playwright MCP server
+for that dashboard chat turn. Explicitly narrowed dashboard reply policies still have both dedicated
+lanes forced on.
 
 All inputs are validated against their declared JSON Schema (AJV) before dispatch; validation
 failures return `InvalidParams` with the failing JSON path.
@@ -49,6 +51,7 @@ action-specific fields, and an optional `approval` object for destructive action
 | `manage_agents` | agents & memory | Manage agent presets and sync them to project markdown. |
 | `manage_node_flows` | agents & memory | Manage reusable node workflows, run them, and attach them as agent skills. |
 | `manage_memory` | agents & memory | Inspect, search, promote, and re-embed short/long-term memory. |
+| `add_long_term_memory` | agents & memory | Store one canonical durable project memory and return rich confirmation-widget data. |
 | `manage_skills` | agents & memory | Manage persistent skill storages, skill markdown, and agent storage attachments. |
 | `search_knowledge` | agents & memory | Semantic search over the knowledge base subscribed to the caller. |
 | `search_skills` | agents & memory | Semantic retrieval over persistent project skills, optionally scoped to an agent or storage. |
@@ -83,6 +86,24 @@ Every tool requires `runtimeRoles: ["project_manager"]` and is enabled by defaul
 For `manage_projects` setup, clients may send setup options either as `setup.options` or as top-level `options`. `options.docs: true` is opt-in and embeds discovered repository documentation into the Knowledge docs library.
 
 For the full per-action payloads and return shapes, see [Management actions](/docs/developer-management-actions).
+
+## `add_long_term_memory`
+
+`add_long_term_memory` is the user-facing Project Manager's direct remember/learn lane. It is intentionally separate from the broad `manage_memory` lifecycle actions.
+
+```jsonc
+{
+  "projectId": "project-123",
+  "memory": "Use dependency factory composition for service wiring.",
+  "category": "patterns",
+  "confidence": 0.95,
+  "durability": 0.9,
+  "tags": ["architecture"],
+  "appliesToPaths": ["src/services"]
+}
+```
+
+`projectId` and non-blank `memory` are required. Category defaults to `learning`; confidence and durability default to `0.9`. Optional `sourceMemoryId` links project-owned short-term evidence. Success writes a canonical claim and searchable project-memory mirror, then returns `richWidget.type = "memory"`. The Project Manager re-emits those exact returned values in a `codeux:memory` fenced block for the dashboard to render; it must not invent the IDs.
 
 ## `scheduler_code_ux`
 

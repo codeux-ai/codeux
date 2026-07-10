@@ -6,6 +6,8 @@ import type { SystemSettings } from "../contracts/settings-scope-types.js";
 import { registerUserOnboardingRoutes } from "./routes/user/onboarding.js";
 import { getModelCatalog, getModelCatalogProviders } from "../domain/model-catalog/model-catalog-loader.js";
 import type { LocalMcpCliProvider } from "../services/local-mcp-cli-config-service.js";
+import { getActiveProviderTypes, providerToolManager } from "../services/provider-tool-manager.js";
+import { playwrightBrowserManager } from "../services/playwright-browser-manager.js";
 
 const LOCAL_MCP_PROVIDERS = new Set<LocalMcpCliProvider>([
   "claude-code",
@@ -64,7 +66,21 @@ export function registerSettingsRoutes(router: Express, deps: DashboardDependenc
   }));
 
   router.put("/api/system-settings", syncRoute((req, res) => {
-    res.json(deps.saveSystemSettings(req.body as SystemSettings));
+    const saved = deps.saveSystemSettings(req.body as SystemSettings);
+    const tools = deps.providerToolManager ?? providerToolManager;
+    void tools.checkActiveProviders(
+      getActiveProviderTypes(saved),
+      saved.defaults.cliWorkflow,
+      deps.logger,
+    );
+    if (
+      saved.defaults.cliWorkflow.containerImageMode !== "custom"
+      && saved.defaults.cliWorkflow.containerInstallPlaywrightBrowsers !== false
+    ) {
+      const browser = deps.playwrightBrowserManager ?? playwrightBrowserManager;
+      void browser.prepare(saved.defaults.cliWorkflow, { logger: deps.logger }).catch(() => undefined);
+    }
+    res.json(saved);
   }));
 
   router.post("/api/system/reset-database", asyncRoute(async (req, res) => {

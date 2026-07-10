@@ -12,6 +12,7 @@ import {
 vi.mock("fs/promises");
 vi.mock("../../../../../src/services/cli-workflow-text-utils.js", () => ({
   extractPathHints: vi.fn(() => ["src/index.ts", "../outside"]),
+  normalizePathHint: vi.fn((value: string) => value.replace(/\\/g, "/")),
 }));
 vi.mock("../../../../../src/services/cli-process-runner.js", () => ({
   runCommandStrict: vi.fn(),
@@ -39,6 +40,29 @@ describe("WorkspaceManager", () => {
   it("builds host worktree paths when host execution mode is selected", () => {
     const result = manager.buildWorktreePath("/repo/project", "session-1", "HOST");
     expect(result).toBe(path.join(path.resolve("/repo/project"), ".worktrees", "session-1"));
+  });
+
+  it("creates host QA snapshots under the short OS temp root", async () => {
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
+      if (args[0] === "rev-parse" && args.includes("--show-toplevel")) {
+        return { ok: true, stdout: "/repo/project\n", stderr: "", code: 0, signal: null } as any;
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0, signal: null } as any;
+    });
+
+    const workspace = await manager.createHostSnapshotWorkspace("/repo/project", "qa-review-long-session-id", {
+      branch: "task/feature-task-1",
+      fallbackBranch: "feature/sprint-1",
+    });
+
+    expect(workspace).toMatch(new RegExp(`^${os.tmpdir().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    expect(workspace).toMatch(/code-ux-qa-[a-f0-9]{16}$/);
+    expect(workspace).not.toContain(`${path.sep}repo${path.sep}project${path.sep}.worktrees`);
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "git",
+      ["worktree", "add", "--detach", workspace, "refs/heads/task/feature-task-1"],
+      "/repo/project",
+    );
   });
 
   it("derives persistent skill storage roots outside project workspaces with safe path segments", () => {
@@ -927,6 +951,22 @@ describe("WorkspaceManager", () => {
     expect(guidance).toContain("Repository root: /workspace");
     expect(guidance).toContain("- src/index.ts: exists");
     expect(guidance).toContain("- ../outside: outside-workspace");
+  });
+
+  it("normalizes Windows-relative paths before reading from a host workspace", async () => {
+    vi.mocked(fs.readFile).mockResolvedValue("workspace content");
+
+    const result = await manager.readWorkspaceFile("/repo/project", "src\\nested\\file.ts");
+
+    expect(result).toBe("workspace content");
+    expect(fs.readFile).toHaveBeenCalledWith("/repo/project/src/nested/file.ts", "utf8");
+  });
+
+  it("rejects absolute Windows paths when reading workspace files", async () => {
+    const result = await manager.readWorkspaceFile("/repo/project", "C:\\outside\\file.ts");
+
+    expect(result).toBeNull();
+    expect(fs.readFile).not.toHaveBeenCalled();
   });
 
   it("runs workspace commands with an explicit container entrypoint", async () => {

@@ -13,7 +13,7 @@ import {
   sortProviderConfigEntries
 } from "./settings-view-models.js";
 
-const EASY_PROVIDER_PRIORITY: ProviderId[] = ["codex", "gemini", "claude-code", "qwen-code", "opencode", "antigravity"];
+const EASY_PROVIDER_PRIORITY: ProviderId[] = ["codex", "antigravity", "claude-code", "qwen-code", "opencode"];
 
 export const buildProviderConfigId = (providerId: ProviderId): ProviderConfigId => (
   `${providerId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
@@ -121,6 +121,7 @@ export const applyOnboardingExperienceModeDefaults = (
   mode: DashboardExperienceMode,
   options: {
     recommendedProvider?: ProviderId;
+    providerAuthMode?: "dashboardAuth" | "localAuth";
     useGithub?: boolean;
     manageGithubPrWorkflow?: boolean;
   } = {},
@@ -136,6 +137,7 @@ export const applyOnboardingExperienceModeDefaults = (
   }
 
   const recommendedProvider = options.recommendedProvider ?? "codex";
+  const providerAuthMode = options.providerAuthMode ?? "dashboardAuth";
   const useGithub = options.useGithub ?? nextSettings.defaults.cliWorkflow.gitMode !== "local";
   const manageGithubPrWorkflow = options.manageGithubPrWorkflow ?? nextSettings.defaults.git.autoCreatePr;
   const providerConfigId = Object.entries(nextSettings.integrations.providers)
@@ -149,16 +151,20 @@ export const applyOnboardingExperienceModeDefaults = (
     );
   }
   const recommendedIntegration = nextSettings.integrations.providers[providerConfigId];
-  if (
-    recommendedIntegration
-    && recommendedIntegration.provider !== "jules"
-    && (!recommendedIntegration.authType || (recommendedIntegration.authType === "apiKey" && !recommendedIntegration.apiKey.trim()))
-  ) {
+  if (recommendedIntegration && recommendedIntegration.provider !== "jules") {
+    const defaultAuthPath = createSystemProviderDraft(
+      recommendedProvider,
+      getProviderTypeLabel(recommendedProvider),
+    ).authPath;
     nextSettings.integrations.providers[providerConfigId] = {
       ...recommendedIntegration,
-      authType: "dashboardAuth",
+      authType: providerAuthMode,
       mountAuth: true,
-      authPath: `~/.code-ux/credentials/${providerConfigId}`,
+      authPath: providerAuthMode === "dashboardAuth"
+        ? `~/.code-ux/credentials/${providerConfigId}`
+        : (recommendedIntegration.authPath && !recommendedIntegration.authPath.includes(".code-ux/credentials/")
+          ? recommendedIntegration.authPath
+          : defaultAuthPath),
     };
   }
 

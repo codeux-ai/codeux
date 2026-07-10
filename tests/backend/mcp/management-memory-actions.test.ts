@@ -200,6 +200,66 @@ describe("MemoryActions", () => {
     );
   });
 
+  it("adds long-term memory through the dedicated Project manager lane", async () => {
+    const res = await actions.addLongTermMemory({
+      projectId: "proj-1",
+      memory: "Use dependency-aware sprint tasks.",
+      category: "patterns",
+      confidence: 0.95,
+      durability: 0.9,
+      tags: [" planning "],
+      appliesToPaths: ["src/sprint"],
+      sourceMemoryId: "mem-1",
+    });
+
+    expect(memoryService.createProjectMemoryClaim).toHaveBeenCalledWith(
+      "proj-1",
+      {
+        claim: "Use dependency-aware sprint tasks.",
+        category: "patterns",
+        confidence: 0.95,
+        durability: 0.9,
+        tags: ["planning"],
+        appliesToPaths: ["src/sprint"],
+        sourceType: "manual",
+        sourceMemoryId: "mem-1",
+      },
+      { memoryId: "mem-1", supportType: "supports", weight: 1 },
+    );
+    expect(res.result).toMatchObject({
+      claim: { id: "claim-1" },
+      mirrorMemory: { id: "mem-claim-1" },
+      richWidget: {
+        type: "memory",
+        data: {
+          memory: "Use dependency-aware sprint tasks.",
+          category: "patterns",
+          claimId: "claim-1",
+          memoryId: "mem-claim-1",
+          status: "stored",
+        },
+      },
+    });
+  });
+
+  it("rejects blank dedicated long-term memories", async () => {
+    await expect(actions.addLongTermMemory({
+      projectId: "proj-1",
+      memory: "   ",
+    })).rejects.toThrow("memory is required");
+    expect(memoryService.createProjectMemoryClaim).not.toHaveBeenCalled();
+  });
+
+  it("propagates durable-memory persistence failures", async () => {
+    vi.mocked((memoryService as Pick<MemoryService, "createProjectMemoryClaim">).createProjectMemoryClaim)
+      .mockRejectedValueOnce(new Error("memory persistence unavailable"));
+
+    await expect(actions.addLongTermMemory({
+      projectId: "proj-1",
+      memory: "Keep this durable.",
+    })).rejects.toThrow("memory persistence unavailable");
+  });
+
   it("rejects blank memory claims with a management validation error", async () => {
     await expect(actions.handleMemoryAction({
       domain: "memory",

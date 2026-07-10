@@ -6,7 +6,7 @@ import { createHash } from "crypto";
 import { sanitizeToken } from "../../../services/cli-workflow-utils.js";
 import { CliWorkflowSettings } from "../../../contracts/app-types.js";
 import { CommandResult, runCommandStrict } from "../../../services/cli-process-runner.js";
-import { extractPathHints } from "../../../services/cli-workflow-text-utils.js";
+import { extractPathHints, normalizePathHint } from "../../../services/cli-workflow-text-utils.js";
 import { workspaceVolumeHelperPool } from "./workspace-volume-helper.js";
 import { CONTAINER_RUNTIME_HOME } from "./provider-runtime-artifacts.js";
 import { getHomeCodeUxPath } from "../../../shared/config/code-ux-paths.js";
@@ -79,6 +79,7 @@ export interface IWorkspaceManager {
   buildWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): string;
   buildWorkspaceRef(repoPath: string, workspaceKey: string, executionMode: CliWorkflowSettings["executionMode"]): string;
   createSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout, options?: SnapshotWorkspaceOptions): Promise<string>;
+  createHostSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string>;
   createOrReuseSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string>;
   resolveResumeWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): Promise<string | undefined>;
   resolveCurrentBranch(worktreePath: string): Promise<string | null>;
@@ -234,6 +235,49 @@ export class WorkspaceManager implements IWorkspaceManager {
       checkout?.remoteOnly === true,
     );
     return workspaceRef;
+  }
+
+  /**
+   * Creates a detached host worktree for read-only provider work such as QA.
+   * HOST-mode callers must never review from the visible repository checkout,
+   * because it may still be on the default branch while task work lives on a
+   * worker or sprint feature branch.
+   */
+  async createHostSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string> {
+    await this.assertExactGitWorktreeRoot(repoPath);
+    // QA snapshot paths are also used as the spawned CLI cwd. Keeping them under
+    // a deeply nested project `.worktrees` directory exceeds Windows' process
+    // path limit in CI, so place the detached read-only snapshot under the OS
+    // temp root with a short deterministic token instead.
+    const snapshotToken = createHash("sha256")
+      .update(`${path.resolve(repoPath)}:${sessionId}`)
+      .digest("hex")
+      .slice(0, 16);
+    const workspacePath = path.join(os.tmpdir(), `code-ux-qa-${snapshotToken}`);
+    await this.withWorkspaceLock(workspacePath, async () => {
+      await this.removeWorktree(repoPath, workspacePath).catch(() => undefined);
+      await fs.mkdir(path.dirname(workspacePath), { recursive: true });
+
+      const candidates = [checkout?.branch, checkout?.fallbackBranch]
+        .map((branch) => branch?.trim())
+        .filter((branch): branch is string => Boolean(branch));
+      for (const branch of candidates) {
+        const refs = checkout?.remoteOnly
+          ? [`refs/remotes/origin/${branch}`]
+          : [`refs/heads/${branch}`, `refs/remotes/origin/${branch}`];
+        for (const ref of refs) {
+          try {
+            await runCommandStrict("git", ["rev-parse", "--verify", "--quiet", ref], repoPath);
+            await runCommandStrict("git", ["worktree", "add", "--detach", workspacePath, ref], repoPath);
+            return;
+          } catch {
+            // Try the next local/remote ref before falling back to the current HEAD.
+          }
+        }
+      }
+      await runCommandStrict("git", ["worktree", "add", "--detach", workspacePath, "HEAD"], repoPath);
+    });
+    return workspacePath;
   }
 
   async createOrReuseSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string> {
@@ -561,28 +605,29 @@ export class WorkspaceManager implements IWorkspaceManager {
     const isDockerWorkspace = isWorkspaceHandle(worktreePath);
     const workspaceRoot = isDockerWorkspace ? CONTAINER_WORKSPACE_ROOT : path.resolve(worktreePath);
     const hintStatuses = await Promise.all(hints.map(async (hint) => {
+      const normalizedHint = normalizePathHint(hint);
       if (isDockerWorkspace) {
-        const safePath = pathPosix.normalize(pathPosix.join(CONTAINER_WORKSPACE_ROOT, hint));
+        const safePath = pathPosix.normalize(pathPosix.join(CONTAINER_WORKSPACE_ROOT, normalizedHint));
         if (!safePath.startsWith(`${CONTAINER_WORKSPACE_ROOT}/`) && safePath !== CONTAINER_WORKSPACE_ROOT) {
-          return `- ${hint}: outside-workspace`;
+          return `- ${normalizedHint}: outside-workspace`;
         }
         const probe = await this.runWorkspaceCommand(
           worktreePath,
           "sh",
           ["-lc", `if [ -e ${shellQuote(safePath)} ]; then echo exists; else echo not-found; fi`],
         );
-        return `- ${hint}: ${probe.stdout.trim() || "not-found"}`;
+        return `- ${normalizedHint}: ${probe.stdout.trim() || "not-found"}`;
       }
 
-      const safePath = path.resolve(worktreePath, hint);
+      const safePath = path.resolve(worktreePath, normalizedHint);
       if (!safePath.startsWith(`${workspaceRoot}${path.sep}`) && safePath !== workspaceRoot) {
-        return `- ${hint}: outside-workspace`;
+        return `- ${normalizedHint}: outside-workspace`;
       }
       try {
         await fs.access(safePath);
-        return `- ${hint}: exists`;
+        return `- ${normalizedHint}: exists`;
       } catch {
-        return `- ${hint}: not-found`;
+        return `- ${normalizedHint}: not-found`;
       }
     }));
 
@@ -651,9 +696,17 @@ export class WorkspaceManager implements IWorkspaceManager {
   }
 
   async readWorkspaceFile(worktreePath: string, relativePath: string): Promise<string | null> {
+    const normalizedRelativePath = normalizePathHint(relativePath);
+    if (
+      normalizedRelativePath.startsWith("/")
+      || normalizedRelativePath.startsWith("//")
+      || /^[A-Za-z]:\//.test(normalizedRelativePath)
+    ) {
+      return null;
+    }
     if (!isWorkspaceHandle(worktreePath)) {
       const workspaceRoot = path.resolve(worktreePath);
-      const resolved = path.resolve(worktreePath, relativePath);
+      const resolved = path.resolve(worktreePath, normalizedRelativePath);
       if (!resolved.startsWith(`${workspaceRoot}${path.sep}`) && resolved !== workspaceRoot) {
         return null;
       }
@@ -663,7 +716,7 @@ export class WorkspaceManager implements IWorkspaceManager {
         return null;
       }
     }
-    const normalized = pathPosix.normalize(pathPosix.join(CONTAINER_WORKSPACE_ROOT, relativePath));
+    const normalized = pathPosix.normalize(pathPosix.join(CONTAINER_WORKSPACE_ROOT, normalizedRelativePath));
     if (!normalized.startsWith(`${CONTAINER_WORKSPACE_ROOT}/`)) {
       return null;
     }

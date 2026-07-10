@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import request from "supertest";
 import express from "express";
 import { EventEmitter } from "events";
-import { registerTerminalRoutes, bootDashboardTerminalWebSocketServer, resetLoginBaseImageStateForTests } from "../../../src/server/terminal-routes.js";
+import { registerTerminalRoutes, bootDashboardTerminalWebSocketServer } from "../../../src/server/terminal-routes.js";
 import type { DashboardDependencies } from "../../../src/server/dashboard-server.js";
 
 const mockSpawnEvents = new EventEmitter();
@@ -45,15 +45,27 @@ describe("Login container cleanup", () => {
   let app: express.Express;
 
   beforeEach(() => {
-    resetLoginBaseImageStateForTests();
     app = express();
     app.use(express.json());
 
     const deps: Partial<DashboardDependencies> = {
       getSystemSettings: () => ({
-        defaults: { cliWorkflow: { containerImage: "node:24-bookworm" } },
+        defaults: { cliWorkflow: { containerImageMode: "managed", containerImage: "node:24-trixie-slim" } },
         integrations: { providers: { gemini: { provider: "gemini", authType: "dashboardAuth" } } },
       }),
+      managedRuntimeService: {
+        resolveImage: vi.fn(async () => "ghcr.io/codeux-ai/codeux-runtime@sha256:test"),
+      } as any,
+      providerToolManager: {
+        getStatus: vi.fn(() => ({ provider: "gemini", state: "ready" })),
+        prepare: vi.fn(async () => ({
+          provider: "gemini",
+          volumeName: "code-ux-provider-tool-gemini-test",
+          version: "1.0.0",
+          binary: "gemini",
+          mountPath: "/opt/code-ux/provider-tool",
+        })),
+      } as any,
     };
 
     registerTerminalRoutes(app, deps as DashboardDependencies);

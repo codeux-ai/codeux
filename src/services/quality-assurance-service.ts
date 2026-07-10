@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { buildProviderSettingsOverride } from "./provider-settings-override.js";
 import {
   buildProviderPrompt,
@@ -15,6 +16,7 @@ import { StructuredProviderResponseService } from "./structured-provider-respons
 import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
 import {
   buildInvocationGitPolicy,
+  buildInvocationSnapshotCheckout,
   buildProviderInvocationWorkspaceOptions,
   InvocationWorkspacePreparer,
 } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
@@ -931,26 +933,43 @@ export class QualityAssuranceService {
         ...DEFAULT_CLI_WORKFLOW_SETTINGS,
         ...settings.cliWorkflow,
       };
+      const gitPolicy = buildInvocationGitPolicy({
+        githubMode: settings.git.githubMode,
+        defaultBranch: settings.git.defaultBranch,
+        githubToken: settings.git.githubToken,
+        gitlabToken: settings.git.gitlabToken,
+      });
+      const snapshotSessionId = `qa-review-${provider}-${randomUUID()}`;
       let snapshotWorkspace = args.repoPath;
       let shouldCleanupSnapshot = false;
       if (workflowSettings.executionMode === "DOCKER") {
         const invocationWorkspace = buildProviderInvocationWorkspaceOptions({
           workflowSettings,
-          gitPolicy: {
-            githubMode: settings.git.githubMode,
-            defaultBranch: settings.git.defaultBranch,
-            githubToken: settings.git.githubToken,
-            gitlabToken: settings.git.gitlabToken,
-          },
+          gitPolicy,
           branch: args.reviewBranch,
           fallbackBranch: args.baseBranch,
           useDefaultBranch: false,
         });
         snapshotWorkspace = await this.invocationWorkspacePreparer.createSnapshotWorkspace({
           repoPath: args.repoPath,
-          sessionId: `qa-review-${provider}-${Date.now().toString(36)}`,
+          sessionId: snapshotSessionId,
           checkout: invocationWorkspace.snapshotCheckout,
           gitPolicy: invocationWorkspace.gitPolicy,
+        });
+        shouldCleanupSnapshot = true;
+      } else if (args.reviewBranch) {
+        // QA must inspect the requested worker/feature branch in HOST mode too.
+        // The visible repository normally remains on the default branch, which
+        // otherwise turns every QA check into a false missing-file rejection.
+        snapshotWorkspace = await this.invocationWorkspacePreparer.createHostSnapshotWorkspace({
+          repoPath: args.repoPath,
+          sessionId: snapshotSessionId,
+          checkout: buildInvocationSnapshotCheckout(gitPolicy, {
+            branch: args.reviewBranch,
+            fallbackBranch: args.baseBranch,
+            useDefaultBranch: false,
+          }),
+          gitPolicy,
         });
         shouldCleanupSnapshot = true;
       }

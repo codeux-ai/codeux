@@ -35,9 +35,9 @@ pnpm run build
 pnpm exec playwright test --project=navigation
 ```
 
-`pnpm run test:e2e` is a wrapper around `pnpm exec playwright test`; it chooses an isolated dashboard/MCP port pair and exports `CODEUX_E2E_DASHBOARD_PORT` before Playwright starts `node dist/index.js`. The Playwright config starts the compiled server, waits on the local `/health` liveness probe, and runs against a temporary HOME/USERPROFILE/XDG home so the suite does not depend on a developer's browser cache, onboarding state, selected project, or real Code UX database. The compiled server receives the resolved value as `DASHBOARD_PORT` and `MCP_HTTP_PORT`, plus `CODEUX_E2E_PROVIDER_CLI_SHIM`, which points at `scripts/e2e/mock-provider-cli.mjs`; provider command specs only use that fake provider when the explicit env var is present. The E2E suite is local-only: tests must navigate through `baseURL` routes or local API probes, not external websites. Failure artifacts are retained under `test-results/`, and the HTML report is written to `playwright-report/`; CI uploads both paths per OS and purpose group so traces, videos, screenshots, and reports are available when failures occur.
+`pnpm run test:e2e` is a wrapper around `pnpm exec playwright test`; it chooses an isolated dashboard/MCP port pair and exports `CODEUX_E2E_DASHBOARD_PORT` before Playwright starts `node dist/index.js`. The Playwright config starts the compiled server, waits on the local `/health` liveness probe, and runs against a temporary HOME/USERPROFILE/XDG home so the suite does not depend on a developer's browser cache, onboarding state, selected project, or real Code UX database. The compiled server receives the resolved value as `DASHBOARD_PORT` and `MCP_HTTP_PORT`, plus `CODEUX_E2E_PROVIDER_CLI_SHIM`, which points at `scripts/e2e/mock-provider-cli.mjs`. It disables MCP stdio and the MCP HTTP gateway, so the inherited Playwright stdin pipe cannot become an MCP transport during browser-only tests. Provider command specs only use that fake provider when the explicit shim env var is present. The E2E suite is local-only: tests must navigate through `baseURL` routes or local API probes, not external websites. Failure artifacts are retained under `test-results/`, and the HTML report is written to `playwright-report/`; CI uploads both paths per OS and purpose group so traces, videos, screenshots, and reports are available when failures occur.
 
-`playwright.config.ts` keeps `testDir: './tests/e2e'` and defines purpose projects selected by directory glob: `navigation`, `settings`, `projects`, `tasks`, `agents`, and `config`. Add new E2E specs under `tests/e2e/<purpose>/` so suites can grow without editing the config. Use `pnpm exec playwright test --list` to confirm discovery, or `pnpm exec playwright test --project=tasks` to run one group.
+`playwright.config.ts` keeps `testDir: './tests/e2e'` and defines purpose projects selected by directory glob: `navigation`, `settings`, `projects`, `tasks`, `agents`, and `config`. Add new E2E specs under `tests/e2e/<purpose>/` so suites can grow without editing the config. Use `pnpm exec playwright test --list` to confirm discovery, or `pnpm exec playwright test --project=tasks` to run one group. The `navigation` project includes Docs page smoke coverage for exactly five routes: `/docs`, the docs overview, and three representative user/developer/architecture pages.
 
 In GitHub Actions, `.github/workflows/playwright.yml` builds once per OS, uploads `dist/`, `dashboard/dist/`, and `.cache/tsc/` together as an OS-scoped artifact, then runs each purpose project in parallel against the restored build. A separate npm-package job packs the package, installs the tarball into a clean project, and runs the installed CLI help command independently of the source checkout.
 
@@ -108,16 +108,20 @@ If `pnpm run ci` is green, GitHub CI will be too (modulo platform-specific diffe
 
 ## CI pipeline (GitHub Actions)
 
-CI runs on Node 22 in `.github/workflows/`:
+The canonical automatic lane is `.github/workflows/ci.yml`, named `Code UX CI Pipeline`. It runs jobs `01` through `09` for pushes and pull requests targeting `dev` or `main`; the full browser and release matrices run only for `main` validation and manual dispatches.
 
-1. Release Version Bump
-2. Typecheck & Lint
-3. Backend Tests & Coverage
-4. Dashboard Tests
-5. Build
-6. Security Audit
+It is staged as:
 
-A PR cannot be merged with red CI.
+1. `01 Preflight / release policy`: strict version bump gate for pull requests targeting `main`.
+2. `02 Static`, `03 Build`, and `04 Security`: prerequisite type/guardrail, build, and audit checks.
+3. `05 Backend`, `06 Dashboard`, `07 Package`, and `08 Orchestration`: run in parallel after those prerequisites. The orchestration matrix includes Linux Docker and macOS/Windows Electron on both `dev` and `main`.
+4. `09 Docs / five-page smoke`: loads the Docs index, its overview route, and three representative pages on Linux for every target branch. It fails on HTTP, console, or page errors without crawling all subpages.
+5. `09 E2E`: full Playwright on Linux, macOS, and Windows only for `main` validation and manual dispatches.
+6. `10 Release Candidate`: unsigned desktop release-candidate packages with `--publish never`, only for `main` validation and manual dispatches.
+
+The main branch ruleset still includes historical context names from older CI numbering and matrix definitions. Compatibility aggregate jobs emit those names only after the corresponding current backend, dashboard, audit, package, orchestration, 18-shard E2E, or desktop release-candidate gate succeeds. They preserve branch-protection compatibility without replacing any current validation job and can be removed once a repository administrator cleans up the obsolete ruleset entries.
+
+`Playwright Diagnostics`, `Release Candidate Diagnostics`, and `Mockup Sprint Diagnostics` are manual-only rerun workflows. A PR cannot be merged with red CI.
 
 ## Smoke test
 

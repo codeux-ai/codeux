@@ -40,11 +40,34 @@ vi.mock("../../../../../src/infrastructure/providers/cli/docker-runtime-paths.js
 import { runCommandStrict, runStreamingCommand } from "../../../../../src/services/cli-process-runner.js";
 import { DockerSetupImageCache } from "../../../../../src/infrastructure/providers/cli/docker-setup-image-cache.js";
 
+const createRunner = (): DockerRunner => new DockerRunner(
+  {
+    resolveImage: vi.fn(async () => "node:24"),
+    getCompatibilityKey: vi.fn(() => "test-runtime"),
+  } as any,
+  {
+    prepare: vi.fn(async (provider: string) => ({
+      provider,
+      volumeName: `code-ux-provider-tool-${provider}-test`,
+      version: "1.0.0",
+      binary: provider,
+      mountPath: "/opt/code-ux/provider-tool",
+    })),
+  } as any,
+  {
+    prepare: vi.fn(async () => ({
+      volumeName: "code-ux-playwright-browser-test",
+      version: "1.61.1",
+      mountPath: "/ms-playwright",
+    })),
+  } as any,
+);
+
 describe("DockerRunner", () => {
   let runner: DockerRunner;
 
   beforeEach(() => {
-    runner = new DockerRunner();
+    runner = createRunner();
     vi.clearAllMocks();
     vi.mocked(fs.mkdtemp).mockResolvedValue("/tmp/code-ux-docker-123");
     vi.mocked(fs.rm).mockResolvedValue(undefined);
@@ -173,6 +196,8 @@ describe("DockerRunner", () => {
     expect(dockerArgs).toContain("--env-file");
     expect(dockerArgs[dockerArgs.indexOf("--env-file") + 1]).toBe("/tmp/code-ux-docker-123/provider.env");
     expect(dockerArgs).toContain("CODE_UX_INSTALL_PLAYWRIGHT=1");
+    expect(dockerArgs).toContain("PLAYWRIGHT_BROWSERS_PATH=/ms-playwright");
+    expect(dockerArgs).toContain("type=volume,source=code-ux-playwright-browser-test,target=/ms-playwright,readonly");
     expect(dockerArgs).toEqual(expect.arrayContaining([
       "--network",
       "bridge",
@@ -193,7 +218,7 @@ describe("DockerRunner", () => {
     expect(dockerArgs).not.toContain("HOME=/workspace/.code-ux-home");
     const cacheInstance = vi.mocked(DockerSetupImageCache).mock.results[0]?.value as any;
     expect(cacheInstance.resolveImage).toHaveBeenCalledWith(expect.objectContaining({
-      installPlaywrightBrowsers: true,
+      installPlaywrightBrowsers: false,
       runtimeRoot: "/runtime-root",
       onProgress: onSetupImageProgress,
     }));
@@ -784,7 +809,7 @@ describe("DockerRunner custom MCP server injection", () => {
     (runner as any).buildProviderConfigMounts(conn, provider, "/tmp/cfg", env, customServers, { executionMode: "DOCKER" });
 
   beforeEach(() => {
-    runner = new DockerRunner();
+    runner = createRunner();
     vi.clearAllMocks();
     vi.mocked(fs.writeFile).mockResolvedValue(undefined);
   });

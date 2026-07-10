@@ -79,13 +79,21 @@ describe("onboarding-settings-draft", () => {
   });
 
   describe("getEasyRecommendedProvider", () => {
-    it("prefers a detected CLI provider for Easy mode", () => {
+    it("excludes deprecated Gemini from Easy recommendations", () => {
       const providers: OnboardingProviderCredentialStatus[] = [
         { provider: "gemini", available: true, mountEnabled: false, authPath: "~/.gemini", detectedFiles: [] },
         { provider: "codex", available: false, mountEnabled: false, authPath: "~/.codex", detectedFiles: [] }
       ];
 
-      expect(getEasyRecommendedProvider(providers)).toBe("gemini");
+      expect(getEasyRecommendedProvider(providers)).toBe("codex");
+    });
+
+    it("recommends detected Antigravity as the supported Google CLI", () => {
+      const providers: OnboardingProviderCredentialStatus[] = [
+        { provider: "gemini", available: true, mountEnabled: false, authPath: "~/.gemini", detectedFiles: [] },
+        { provider: "antigravity", available: true, mountEnabled: false, authPath: "~/.antigravity", detectedFiles: [] },
+      ];
+      expect(getEasyRecommendedProvider(providers)).toBe("antigravity");
     });
 
     it("falls back to Codex for Easy mode", () => {
@@ -245,7 +253,7 @@ describe("onboarding-settings-draft", () => {
       const settings = {
         integrations: {
           providers: {
-            codex: { provider: "codex", name: "Codex", apiKey: "", authPath: "~/.codex", mountAuth: false }
+            codex: { provider: "codex", name: "Codex", apiKey: "", authType: "localAuth", authPath: "~/.codex", mountAuth: true }
           }
         },
         defaults: {
@@ -312,6 +320,41 @@ describe("onboarding-settings-draft", () => {
       expect(result.defaults.git.githubMode).toBe("LOCAL");
       expect(result.defaults.git.autoCreatePr).toBe(false);
       expect(result.defaults.ciIntelligence.featurePrAutoMergeMode).toBe("OFF");
+    });
+
+    it("preserves an explicit Local Copy choice after Easy mode initially defaults to Dashboard Login", () => {
+      const settings = {
+        integrations: {
+          providers: {
+            codex: { provider: "codex", name: "Codex", apiKey: "", authType: "localAuth", authPath: "~/.codex", mountAuth: true }
+          }
+        },
+        defaults: {
+          appearance: { experienceMode: "EXPERT" },
+          automationInterventions: {},
+          memory: {},
+          aiProvider: {
+            provider: "codex",
+            strategy: "MANUAL",
+            providers: { codex: { provider: "codex", name: "Codex", enabled: true, maxConcurrentTasks: 1 } },
+            invocationRouting: {},
+          },
+          workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "codex", maxConcurrency: 1 },
+          cliWorkflow: { executionMode: "DOCKER", gitMode: "local", containerMountGithubAuth: false },
+          git: { githubMode: "LOCAL", autoCreatePr: false },
+          ciIntelligence: {},
+        },
+      } as unknown as SystemSettings;
+
+      const result = applyOnboardingExperienceModeDefaults(settings, "EASY", {
+        recommendedProvider: "codex",
+        providerAuthMode: "localAuth",
+        useGithub: false,
+        manageGithubPrWorkflow: false,
+      });
+
+      expect(result.integrations.providers.codex?.authType).toBe("localAuth");
+      expect(result.integrations.providers.codex?.authPath).toBe("~/.codex");
     });
   });
 });

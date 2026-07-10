@@ -81,6 +81,7 @@ describe("ManagementToolHandler", () => {
       },
       memoryService: {
         searchMemory: vi.fn(),
+        createProjectMemoryClaim: vi.fn(),
       },
       memoryPromotionService: {
         promoteMemory: vi.fn(),
@@ -482,6 +483,49 @@ describe("ManagementToolHandler", () => {
     expect(properties.skillAlias).toMatchObject({ type: "string" });
     expect(tool?.description).toContain("Code UX-adapted flows");
     expect(tool?.description).toContain("dynamic widget schemas");
+  });
+
+  it("exposes the dedicated long-term-memory MCP schema", () => {
+    const tool = TOOL_DEFINITIONS.find((definition) => definition.name === "add_long_term_memory");
+    expect(tool).toBeDefined();
+
+    const schema = tool?.inputSchema as { required?: readonly string[]; properties: Record<string, JsonSchemaProperty> } | undefined;
+    expect(schema?.required).toEqual(["projectId", "memory"]);
+    expect(schema?.properties.projectId).toMatchObject({ type: "string" });
+    expect(schema?.properties.memory).toMatchObject({ type: "string" });
+    expect(schema?.properties.category?.enum).toContain("learning");
+    expect(tool?.description).toContain("canonical claim");
+  });
+
+  it("returns success, validation, and runtime error envelopes for direct long-term memory writes", async () => {
+    deps.memoryService.createProjectMemoryClaim.mockResolvedValueOnce({
+      claim: { id: "claim-1", claim: "Remember this", category: "learning" },
+      mirrorMemory: { id: "memory-1" },
+    });
+    const success = await handler.handleAddLongTermMemory({ projectId: "p1", memory: "Remember this" });
+    expect(JSON.parse(success.content[0].text).result).toMatchObject({
+      claim: { id: "claim-1" },
+      richWidget: { type: "memory" },
+    });
+
+    const invalid = await handler.handleAddLongTermMemory({ projectId: "p1", memory: "   " });
+    expect(invalid.isError).toBe(true);
+    expect(JSON.parse(invalid.content[0].text).result).toMatchObject({
+      status: "error",
+      action: "add_long_term_memory",
+      errorType: "validation",
+      field: "memory",
+    });
+
+    deps.memoryService.createProjectMemoryClaim.mockRejectedValueOnce(new Error("database offline"));
+    const failed = await handler.handleAddLongTermMemory({ projectId: "p1", memory: "Remember this too" });
+    expect(failed.isError).toBe(true);
+    expect(JSON.parse(failed.content[0].text).result).toMatchObject({
+      status: "error",
+      action: "add_long_term_memory",
+      errorType: "runtime",
+      message: "database offline",
+    });
   });
 
   it("exposes the expanded import_issues MCP schema on manage_sprints", () => {

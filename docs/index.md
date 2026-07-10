@@ -118,6 +118,7 @@ Use this page as the main entrypoint.
 
 - [Quickstart](./getting-started/quickstart.md)
 - [System Overview](./architecture/system-overview.md)
+- [Managed Container Runtime](./architecture/managed-container-runtime.md)
 - [Repository Map](./architecture/repository-map.md)
 - [Sprint 2 Gap Closure and Migration Contract](./architecture/sprint-2-gap-closure.md)
 - [Sprint 4 Project Management Foundation and Tool Surface Migration](./architecture/sprint-4-project-management-foundation.md)

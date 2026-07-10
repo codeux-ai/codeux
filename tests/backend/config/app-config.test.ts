@@ -246,6 +246,17 @@ describe("loadAppConfig", () => {
     await expect(fs.stat(path.join(tempHome, ".code-ux", "security.json"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("lets an explicit MCP HTTP disable override an inherited MCP HTTP port", () => {
+    process.env.MCP_HTTP_ENABLED = "false";
+    process.env.MCP_HTTP_PORT = "7777";
+
+    const config = loadAppConfig(["node", "index.js"], tempDir);
+
+    expect(config.mcpHttpEnabled).toBe(false);
+    expect(config.mcpHttpPort).toBeNull();
+    expect(config.mcpHttpAuthToken).toBeNull();
+  });
+
   it("uses a loopback default MCP bind on non-Docker Desktop platforms", () => {
     const needsContainerReachableDefault = process.platform === "win32"
       || process.platform === "darwin"

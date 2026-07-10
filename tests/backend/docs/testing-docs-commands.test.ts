@@ -142,25 +142,28 @@ describe("testing and operations documentation", () => {
     expect(scripts.ci).toContain("pnpm run build");
 
     expect(scripts.audit).toBe("pnpm audit --audit-level=high");
-    expect(ciWorkflow).toContain("name: Security Audit");
+    expect(ciWorkflow).toContain("name: 04 Security / dependency audit");
     expect(ciWorkflow).toContain("run: pnpm run audit");
-    const ciBuildJob = expectRegexMatch(ciWorkflow, /  build:\n[\s\S]*?\n  security-audit:/, "CI build job")[0];
+    const ciBuildJob = expectRegexMatch(ciWorkflow, /  build:\n[\s\S]*?\n  backend-tests:/, "CI build job")[0];
     expect(ciBuildJob).not.toContain("pnpm run audit");
     expect(playwrightWorkflow).not.toContain("pnpm run audit");
+    expect(ciWorkflow).toContain("name: codeux-build-linux");
 
     expect(playwrightConfig).toContain("outputDir: 'test-results'");
     expect(playwrightConfig).toContain("outputFolder: 'playwright-report'");
-    expect(playwrightWorkflow).toContain("name: playwright-artifacts");
+    expect(ciWorkflow).toContain("name: playwright-${{ matrix.os.runner }}-${{ matrix.project }}");
+    expect(playwrightWorkflow).toContain("name: playwright-diagnostic-${{ matrix.os.runner }}-${{ matrix.project }}");
     expect(playwrightWorkflow).toContain("test-results/");
     expect(playwrightWorkflow).toContain("playwright-report/");
     expect(testingGuide).toContain("test-results/");
     expect(testingGuide).toContain("playwright-report/");
-    expect(testingGuide).toContain("playwright-artifacts");
+    expect(testingGuide).toContain("playwright-<runner>-<purpose>");
+    expect(testingGuide).toContain("playwright-diagnostic-<runner>-<purpose>");
 
     expect(packageJson.devDependencies).toHaveProperty("@playwright/test");
 
     expectContainsAll(testingGuide, [
-      "Security Audit",
+      "04 Security / dependency audit",
       "pnpm run audit",
       "pnpm run quality:guardrails",
       "global coverage threshold",
@@ -229,11 +232,12 @@ describe("testing and operations documentation", () => {
       "80% line threshold",
       "runtime.debugLogFileLevel",
       "file logging defaults to `error`",
-      "Security Audit",
+      "04 Security / dependency audit",
       "pnpm run audit",
       "pnpm audit --audit-level=high",
       "pnpm exec playwright test",
-      "playwright-artifacts",
+      "playwright-<runner>-<purpose>",
+      "playwright-diagnostic-<runner>-<purpose>",
       "test-results/",
       "playwright-report/",
       "artifact retention window is seven days",

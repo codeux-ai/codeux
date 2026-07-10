@@ -46,7 +46,7 @@ export const SETTINGS_SUBCATEGORY_DOCS = {
     docsHref: settingsDocsPath("docker-runtime"),
     summary: "Defines the default container environment used by Docker-backed provider CLIs.",
     controls: "Image, setup script, memory limit, setup image caching, and Playwright browser preinstall shape each worker container.",
-    recommended: "Keep the default image unless your repo needs a custom toolchain; enable Playwright preinstall for browser-heavy QA.",
+    recommended: "Keep the default image unless your repo needs a custom toolchain; enable Playwright browser preload for browser-heavy QA.",
     risks: "Broken setup scripts or overly tight memory limits can fail every provider invocation in the scope.",
     relatedDocs: ["Configuration and Storage", "Security Hardening"],
   },

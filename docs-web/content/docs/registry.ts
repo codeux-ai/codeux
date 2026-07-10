@@ -104,6 +104,7 @@ export type DocsSlug =
   | 'architecture-security'
   | 'user-dashboard-custom-dashboards'
   | 'architecture-custom-dashboard-foundation'
+  | 'architecture-managed-container-runtime'
   | 'architecture-speech-input'
 
 export interface DocsRegistryEntry extends Partial<Omit<PageMeta, 'title' | 'description'>> {
@@ -344,7 +345,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/settings-docker-runtime',
     section: 'User Guide',
     title: "Docker Runtime",
-    description: "Defines the default container environment used by Docker-backed provider CLIs.",
+    description: "Code UX defaults to a managed, auto-updating Linux runtime instead of building an agent image on each user's machine.",
   },
   'settings-system-runtime': {
     id: 'settings-system-runtime',
@@ -729,7 +730,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/developer-orchestration-debugging',
     section: 'Developer Reference',
     title: "Rapid orchestration debugging suite",
-    description: "Use this suite when a sprint stalls, local merges fail, worker-owned attention items churn, or memory usage needs extended observation after a fix. CI uses the compiled 10-task DAG lane by default; full mockup pentest...",
+    description: "Use this suite when a sprint stalls, local merges fail, worker-owned attention items churn, or memory usage needs extended observation after a fix. CI runs the Linux Docker and macOS/Windows Electron QA DAG rows on bo...",
   },
   'architecture-overview': {
     id: 'architecture-overview',
@@ -821,6 +822,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     section: 'Architecture',
     title: "Custom Dashboard Foundation",
     description: "Custom dashboards are a persisted domain model for project-scoped dashboard generation. The foundation stores manifests, generated file bundles, data-source node graphs, validation history, and publication state, and...",
+  },
+  'architecture-managed-container-runtime': {
+    id: 'architecture-managed-container-runtime',
+    path: '/docs/architecture-managed-container-runtime',
+    section: 'Architecture',
+    title: "Managed Container Runtime",
+    description: "The managed container runtime removes first-invocation Docker builds while keeping provider binaries local to each user's Docker host.",
   },
   'architecture-speech-input': {
     id: 'architecture-speech-input',
@@ -933,6 +941,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-security'],
   docsRegistry['user-dashboard-custom-dashboards'],
   docsRegistry['architecture-custom-dashboard-foundation'],
+  docsRegistry['architecture-managed-container-runtime'],
   docsRegistry['architecture-speech-input'],
 ]
 

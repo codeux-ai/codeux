@@ -237,12 +237,7 @@ describe("CycleRunner attention sync", () => {
       ownerType: "worker",
       summaryMarkdown: "No session id available for automatic intervention.",
     })]));
-    expect(deps.projectAttentionService.resolveItems).toHaveBeenCalledWith(expect.arrayContaining([
-      { filter: { projectId: "project-1", taskId: "task-3", attentionTypes: ["merge_required", "merge_conflict"] }, resolution: { status: "resolved", reason: "merge_attention_cleared" } }
-    ]));
-    expect(deps.projectAttentionService.resolveItems).toHaveBeenCalledWith(expect.arrayContaining([
-      { filter: { projectId: "project-1", taskId: "task-3", attentionTypes: ["action_required"] }, resolution: { status: "resolved", reason: "action_required_cleared" } }
-    ]));
+    expect(deps.projectAttentionService.resolveItems).not.toHaveBeenCalled();
   });
 
   it("settles branch-only completed tasks before feature PR polling and starts newly unblocked dependents", async () => {
@@ -340,6 +335,118 @@ describe("CycleRunner attention sync", () => {
     expect(result.subtasks.find((task) => task.id === "T2")?.status).toBe("RUNNING");
   });
 
+  it("settles local branch-only work that completes during start-ready before protocol opens manual merge", async () => {
+    const deps = buildDeps();
+    deps.getCiStatusForScope = vi.fn().mockResolvedValue(null) as any;
+    deps.startTask = vi.fn().mockResolvedValue({
+      id: "session-1",
+      name: "sessions/session-1",
+      provider: "mockup-cli",
+      runtimeLabel: "MOCKUP",
+    }) as any;
+    const gateInputs: Array<Array<{ id: string; status: string; workerBranch?: string }>> = [];
+    const evaluateCiGate = vi.fn().mockImplementation(async (subtasks, context) => {
+      gateInputs.push(subtasks.map((task: any) => ({
+        id: task.id,
+        status: task.status,
+        workerBranch: task.worker_branch,
+      })));
+      for (const task of subtasks) {
+        task.status = "COMPLETED";
+        task.is_merged = true;
+        task.merge_indicator = "MERGED";
+        task.worker_branch = "task/feature-fast";
+        await context.persistMergedTask(task);
+      }
+      return { subtasks, reportText: "post-start branch-only settled\n" };
+    });
+    const runner = new CycleRunner(deps);
+    (runner as any).featurePrGate = { evaluateCiGate };
+
+    vi.mocked(deps.sprintExecutionStateService.loadSubtasks)
+      .mockResolvedValueOnce([
+        {
+          id: "T1",
+          record_id: "task-1",
+          title: "Fast local task",
+          prompt: "complete during start-ready",
+          depends_on: [],
+          status: "PENDING",
+          provider: "mockup-cli",
+          is_merged: false,
+        },
+      ] as any)
+      .mockResolvedValueOnce([
+        {
+          id: "T1",
+          record_id: "task-1",
+          title: "Fast local task",
+          prompt: "complete during start-ready",
+          depends_on: [],
+          status: "CODING_COMPLETED",
+          session_state: "COMPLETED",
+          provider: "mockup-cli",
+          worker_branch: "task/feature-fast",
+          is_merged: false,
+        },
+      ] as any);
+
+    const result = await runner.run({
+      action: "orchestrate",
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
+      executionContext: {
+        project: { id: "project-1", name: "Project 1" } as any,
+        sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+        sprintNumber: 1,
+        repoPath: "/repo/project-1",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/repo/project-1",
+      defaultFeatureBranch: "feature/sprint-1",
+      retryFailed: false,
+      loopSteps: {
+        loadSubtasks: true,
+        sessionSync: false,
+        statusDerivation: false,
+        startReadyTasks: true,
+        statusTable: false,
+        mergeProtocol: true,
+        actionRequiredProtocol: false,
+      } as any,
+      ciIntelligence: {
+        enabled: false,
+      } as any,
+      githubMode: "LOCAL",
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      sprintRunId: "run-1",
+    });
+
+    expect(deps.sprintExecutionStateService.loadSubtasks).toHaveBeenCalledTimes(2);
+    expect(deps.startTask).toHaveBeenCalledWith(expect.objectContaining({ id: "T1" }), expect.anything());
+    expect(evaluateCiGate).toHaveBeenCalled();
+    expect(gateInputs).toContainEqual([
+      { id: "T1", status: "CODING_COMPLETED", workerBranch: "task/feature-fast" },
+    ]);
+    expect(result.subtasks.find((task) => task.id === "T1")).toMatchObject({
+      status: "COMPLETED",
+      is_merged: true,
+      merge_indicator: "MERGED",
+    });
+    expect(result.manualMergeTasks).toEqual([]);
+    expect(result.awaitingMerge).toEqual([]);
+    expect(result.instructions).not.toContain("MERGE HEADER");
+    expect(deps.executionRepository.appendTaskRunEvent).not.toHaveBeenCalledWith(
+      expect.anything(),
+      "protocol_merge_required",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
   it("does not open merge-required protocol while a CLI branch is still finalizing", async () => {
     const deps = buildDeps();
     deps.getCiStatusForScope = vi.fn().mockResolvedValue(null) as any;
@@ -370,20 +477,21 @@ describe("CycleRunner attention sync", () => {
       evaluateCiGate: vi.fn().mockImplementation(async (subtasks) => ({ subtasks, reportText: "" })),
     };
 
-    vi.mocked(deps.sprintExecutionStateService.loadSubtasks).mockResolvedValue([
-      {
-        id: "T1",
-        record_id: "task-1",
-        title: "Finished parent",
-        prompt: "parent",
-        depends_on: [],
-        status: "CODING_COMPLETED",
-        session_state: "COMPLETED",
-        provider: "mockup-cli",
-        worker_branch: "task/feature-parent",
-        is_merged: false,
-      },
-    ] as any);
+    vi.mocked(deps.sprintExecutionStateService.loadSubtasks)
+      .mockResolvedValueOnce([
+        {
+          id: "T1",
+          record_id: "task-1",
+          title: "Finished parent",
+          prompt: "parent",
+          depends_on: [],
+          status: "CODING_COMPLETED",
+          session_state: "COMPLETED",
+          provider: "mockup-cli",
+          worker_branch: "task/feature-parent",
+          is_merged: false,
+        },
+      ] as any);
 
     const result = await runner.run({
       action: "orchestrate",
@@ -557,28 +665,56 @@ describe("CycleRunner attention sync", () => {
     });
     (runner as any).featurePrGate = { evaluateCiGate };
 
-    vi.mocked(deps.sprintExecutionStateService.loadSubtasks).mockResolvedValue([
-      {
-        id: "T1",
-        record_id: "task-1",
-        title: "Finished parent",
-        prompt: "parent",
-        depends_on: [],
-        status: "CODING_COMPLETED",
-        session_state: "COMPLETED",
-        provider: "mockup-cli",
-        is_merged: false,
-      },
-      {
-        id: "T2",
-        record_id: "task-2",
-        title: "Dependent",
-        prompt: "dependent",
-        depends_on: ["T1"],
-        status: "PENDING",
-        is_merged: false,
-      },
-    ] as any);
+    vi.mocked(deps.sprintExecutionStateService.loadSubtasks)
+      .mockResolvedValueOnce([
+        {
+          id: "T1",
+          record_id: "task-1",
+          title: "Finished parent",
+          prompt: "parent",
+          depends_on: [],
+          status: "CODING_COMPLETED",
+          session_state: "COMPLETED",
+          provider: "mockup-cli",
+          is_merged: false,
+        },
+        {
+          id: "T2",
+          record_id: "task-2",
+          title: "Dependent",
+          prompt: "dependent",
+          depends_on: ["T1"],
+          status: "PENDING",
+          is_merged: false,
+        },
+      ] as any)
+      .mockResolvedValueOnce([
+        {
+          id: "T1",
+          record_id: "task-1",
+          title: "Finished parent",
+          prompt: "parent",
+          depends_on: [],
+          status: "COMPLETED",
+          session_state: "COMPLETED",
+          provider: "mockup-cli",
+          worker_branch: "task/feature-parent",
+          is_merged: true,
+          merge_indicator: "MERGED",
+        },
+        {
+          id: "T2",
+          record_id: "task-2",
+          title: "Dependent",
+          prompt: "dependent",
+          depends_on: ["T1"],
+          status: "RUNNING",
+          session_id: "session-2",
+          session_name: "sessions/session-2",
+          provider: "mockup-cli",
+          is_merged: false,
+        },
+      ] as any);
 
     const result = await runner.run({
       action: "orchestrate",
@@ -833,9 +969,7 @@ describe("CycleRunner attention sync", () => {
       }),
       summaryMarkdown: expect.stringContaining("Merged task prompts already on the feature branch"),
     })]));
-    expect(deps.projectAttentionService.resolveItems).toHaveBeenCalledWith(expect.arrayContaining([
-      { filter: { projectId: "project-1", taskId: "task-1", attentionTypes: ["merge_required"] }, resolution: { status: "resolved", reason: "merge_conflict_attention_replaced" } }
-    ]));
+    expect(deps.projectAttentionService.resolveItems).not.toHaveBeenCalled();
   });
 
   it("keeps an existing worker-owned merge_conflict sticky when a later PR snapshot is incomplete", async () => {
@@ -941,9 +1075,7 @@ describe("CycleRunner attention sync", () => {
       attentionType: "merge_conflict",
       taskId: "task-1",
     })]));
-    expect(deps.projectAttentionService.resolveItems).toHaveBeenCalledWith(expect.arrayContaining([
-      { filter: { projectId: "project-1", taskId: "task-1", attentionTypes: ["merge_required"] }, resolution: { status: "resolved", reason: "merge_conflict_attention_replaced" } }
-    ]));
+    expect(deps.projectAttentionService.resolveItems).not.toHaveBeenCalled();
   });
 
   it("does not reopen worker merge_conflict attention while a human escalation is active", async () => {
@@ -1036,12 +1168,7 @@ describe("CycleRunner attention sync", () => {
     expect(deps.projectAttentionService.openItems).not.toHaveBeenCalledWith(
       expect.arrayContaining([expect.objectContaining({ attentionType: "merge_conflict" })]),
     );
-    expect(deps.projectAttentionService.resolveItems).toHaveBeenCalledWith(expect.arrayContaining([
-      {
-        filter: { projectId: "project-1", taskId: "task-1", attentionTypes: ["merge_required", "merge_conflict"] },
-        resolution: { status: "resolved", reason: "merge_conflict_human_escalation_active" },
-      },
-    ]));
+    expect(deps.projectAttentionService.resolveItems).not.toHaveBeenCalled();
   });
 
   it("dismisses stale worker merge_conflict attention once the task conflict marker is cleared", async () => {

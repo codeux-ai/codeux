@@ -268,7 +268,15 @@ export const sanitizeCustomMcpServersWithDefaults = (
     byId.set(server.id, server);
   }
 
-  for (const server of sanitizedInput) {
+  for (const inputServer of sanitizedInput) {
+    const matchingDefault = sanitizedDefaults.find((candidate) => candidate.id === inputServer.id || candidate.name === inputServer.name);
+    const server = matchingDefault
+      && inputServer.transport === "stdio"
+      && inputServer.command === "npx"
+      && inputServer.args?.length === 1
+      && inputServer.args[0] === "@playwright/mcp@latest"
+      ? { ...inputServer, command: matchingDefault.command, args: [...(matchingDefault.args || [])] }
+      : inputServer;
     const defaultWithSameName = sanitizedDefaults.find((candidate) => candidate.name === server.name);
     if (defaultWithSameName && defaultWithSameName.id !== server.id) {
       byId.delete(defaultWithSameName.id);

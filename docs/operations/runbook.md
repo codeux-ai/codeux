@@ -145,27 +145,20 @@ Checks:
 - After a restart, active Jules dispatches that never reached `session_created` are treated as interrupted pre-session dispatches and moved back to a retryable task state. Jules dispatches with a persisted session remain attached for normal sprint recovery.
 - If the dispatch fails with an auth error, fix the dashboard GitHub token or remote URL, then rerun the task.
 
-### 4. Gemini/Codex task sessions fail immediately
+### 4. Local provider task sessions fail immediately
 Checks:
-- Is the CLI installed and executable (`gemini`, `codex`)?
+- Check `GET /api/runtime-assets/status` for managed image and provider-tool preparation state.
+- Confirm Docker can anonymously pull `ghcr.io/codeux-ai/codeux-runtime:1-base` and `:1-browser`.
+- If update discovery failed, verify the previous immutable runtime digest and provider volume are still present locally.
 - Is auth available system-wide or via provider API key settings?
 - Did child task branch creation succeed from feature branch?
 - Are `git` and `gh` available in PATH for commit/push/PR steps?
 - If `Settings -> CLI Workflow -> Execution Mode` is `Docker`:
   - Is Docker daemon available (`docker ps`)?
-  - Is the configured image pullable/runnable?
-  - If provider tools are not in the image, is a setup script configured, present at `.code-ux/container/setup.sh`, or available through the bundled Code UX default script?
-  - If `Cache setup as image` is enabled, check session activity for cache hits or image-build failures before the worker command starts.
-  - Check session activity for setup resolution details:
-    - `Configured container setup script not found: ...`
-    - `Using cached Docker setup image ...`
-    - `Waiting for cached Docker setup image ... to finish building.`
-    - `Building cached Docker setup image ...`
-    - `Cached Docker setup image build failed ... Falling back to runtime setup script.`
-  - Provider runner now falls back to installing missing provider CLI in-container before failing:
-    - `gemini`: `npm install -g @google/gemini-cli`
-    - `codex`: `npm install -g @openai/codex`
-    - `claude`: `curl -fsSL https://claude.ai/install.sh | bash`
+  - In managed mode, verify the resolved base/browser digest is present. The default path must not run a local Docker build.
+  - In custom mode, verify the configured image has Node, Bash, curl, and any native dependencies required by the selected provider.
+  - Provider tools are stored in `code-ux-provider-tool-*` volumes and mounted read-only. A missing tool must be repaired through `POST /api/provider-tools/:provider/prepare`; there is no in-container fallback installer.
+  - Inspect `~/.code-ux/runtime/provider-tools.json` and the volume's `.codeux-provider-tool.json` marker when a verified tool is not selected after restart.
   - Claude runner executes headless using `claude -p "<prompt>" --dangerously-skip-permissions`.
   - For Claude auth mounts, ensure host has `~/.claude/.credentials.json`; if auth still stalls, also verify the sibling `~/.claude.json` exists when your local Claude login created it.
   - Runtime now syncs only those Claude auth files before launch, avoiding recursive copy of all `.claude` state.
@@ -188,7 +181,7 @@ Checks:
   - `RuntimeCleanupService` performs a periodic sweep for stale/offline connections, expired leases, terminal dispatch reconciliation, stale sprint runs, and runtime artifacts.
 - During shutdown, Code UX disposes the command-spawner host before Docker cleanup (`DockerRuntimePruneService` and `DockerAssetPruneService`). `DockerRuntimePruneService` safely prunes stale per-runtime paths and shared temp paths after their age threshold while preserving active roots/Codex homes. `DockerAssetPruneService` cleans up orphaned workspace volumes, login containers, helper containers, and temporary credential directories on startup. Workspace volume helpers use `code-ux.managed=true` and `code-ux.helper=volume` on both persistent helpers and `docker run --rm` fallback helpers. Do not instruct operators to run broad manual `docker system prune` commands.
 - Docker provider launches use readable container names such as `code-ux-codex-<session>` and mount provider arguments through a generated argv file instead of passing the full prompt through the host `docker run` command line. Secret-bearing provider environment variables are written to temporary `0600` env-files and supplied with `--env-file`, so `ps`/process-list inspection should show only the env-file path and not API key values. If Docker reports that the deterministic provider container name is already in use, Code UX force-removes that named container with volumes and retries the launch once; repeated conflicts usually mean an external Docker daemon or another runtime is recreating the same session container. Packaged Windows Electron builds that fail with `spawn ENAMETOOLONG` during provider launch are using an older build or a non-provider launch path that still embeds a large payload in command arguments.
-- When setup-image caching is enabled, the first Docker provider or preview run for a base image/setup-script combination may spend several minutes building a content-addressed `code-ux-setup-cache-*` image. Activity logs now call out the cache miss, stream Docker build steps, and report bounded progress; later runs reuse the cached image until the base image, setup script content, Dockerfile template, or Playwright-browser setting changes. If Playwright preinstall is enabled, the cached image stores Chromium under `/ms-playwright` and exposes `PLAYWRIGHT_BROWSERS_PATH` so non-root provider runs can use the baked browser without rerunning setup. If the build fails, Code UX logs the fallback and runs the setup script at container runtime instead.
+- In custom-image mode, setup-image caching may spend several minutes building a content-addressed `code-ux-setup-cache-*` image for the first base-image/setup-script combination. Activity logs call out the cache miss, stream Docker build steps, and report bounded progress; later runs reuse it until the base image, setup script, Dockerfile template, or Playwright setting changes. Managed mode performs no setup build: it preloads the Playwright-matched browser into a versioned local Docker volume and mounts `/ms-playwright` read-only. If a custom setup build fails, Code UX logs the fallback and runs the explicit setup script at container runtime instead.
 - Provider login uses a separate content-addressed `code-ux-login-base-node-24-bookworm-slim:*` image with curl and keyring prerequisites baked in. The image is prewarmed after dashboard logging is available, but this is best-effort: failures should be treated as startup warnings, not as a reason to block the dashboard or provider login.
 - Backend Git commands and snapshot workspace bootstrap use public helper images such as `alpine/git`. Snapshot bootstrap verifies or pulls these helpers automatically, and if Docker reports a broken host credential helper while pulling a public helper image, Code UX retries that helper pull with an isolated empty Docker client config; provider/container images still use the normal Docker configuration. Local-mode temporary worktree merges are the host-side exception because they update host refs and checked-out worktrees directly. Persistent helper containers are removed with `docker rm -f -v` so image-declared anonymous volumes are cleaned with the container. Startup Docker pruning is scheduled in the background and only queries Code UX labels, so a large Docker daemon does not delay dashboard boot with full volume/container scans.
 - Snapshot workspace bootstrap creates the temporary Git bundle through the containerized Git helper using a portable `/mnt/code-ux/git-paths/*` target, then streams the bundle directly into `docker run` stdin. Packaged Windows Electron builds should not route `C:\...AppData\Local\Temp\code-ux-bundle-*` paths through `bash -lc` or use those paths as Docker mount targets; seeing `cat: 'C:\...\repo.bundle': No such file or directory` or `invalid mount path: 'C:/Users/.../code-ux-bundle-*'` indicates an older build.
@@ -365,11 +358,12 @@ curl http://localhost:4444/api/git-status
 ## CI And E2E Operations
 
 GitHub validation is split by signal:
-- `CI` runs `Typecheck & Lint`, `Backend Tests & Coverage`, `Dashboard Tests`, `Build`, and `Security Audit` on Node 22 with pnpm 10.33.0. It runs on pushes to `main` and `dev`, and on pull requests targeting any branch.
-- `Playwright Tests` runs browser E2E validation on pushes and pull requests targeting `main`. This keeps the heavyweight OS-matrix lane on the release path while `dev` remains gated by core CI. Release and publish workflows remain separate from CI/E2E validation.
-- `Release Checks` runs no-secret release validation on pull requests targeting `main` and manual dispatches. It remains separate from core CI and Playwright so desktop packaging or release-install failures do not hide test, audit, or browser failures.
+- `Code UX CI Pipeline` is the canonical automatic lane. It runs on pushes to `dev` and `main`, pull requests targeting those branches, and manual dispatches. `dev` runs jobs `01` through `08`, including all three orchestration DAG rows; `main` and manual dispatches additionally run full Playwright and release-candidate matrices.
+- Static, build, and security are the prerequisite stage. The build job uploads `codeux-build-linux` for all downstream jobs.
+- Backend coverage, dashboard tests, npm install smoke, and the cross-OS orchestration DAG matrix reuse that build artifact and run in parallel after the prerequisite stage. Release-candidate packaging starts after package smoke and can run beside the main-only E2E matrix. Matrix bounds are `08 Orchestration` at three shards, `09 E2E` at ten shards, and `10 Release Candidate` at three shards; GitHub's runner quota queues any excess work across the parallel lanes.
+- `Playwright Diagnostics`, `Release Candidate Diagnostics`, and `Mockup Sprint Diagnostics` are manual-only workflows for focused reruns. They no longer run automatically on every PR.
 - Superseded runs for the same branch or pull request are cancelled by workflow concurrency groups.
-- Security validation is intentionally separated from build and Playwright lanes. The `Security Audit` job runs `pnpm run audit`, which is `pnpm audit --audit-level=high`; high-severity dependency findings fail that job without preventing typecheck, tests, build, or Playwright artifacts from reporting their own status.
+- Security validation is intentionally separated from build and Playwright lanes. The `04 Security / dependency audit` job runs `pnpm run audit`, which is `pnpm audit --audit-level=high`; high-severity dependency findings fail that job without preventing typecheck, tests, build, or Playwright artifacts from reporting their own status.
 
 Local equivalents:
 - `pnpm run lint` mirrors the TypeScript validation portion of `Typecheck & Lint`.
@@ -378,17 +372,17 @@ Local equivalents:
 - `pnpm run audit` mirrors the independent security audit job.
 - `pnpm run build` validates the compiled server and dashboard bundle.
 - `pnpm run build` followed by `pnpm run test:e2e` runs the browser E2E suite locally against the compiled app after dependencies and Playwright browsers are installed. The wrapper delegates to `pnpm exec playwright test` after choosing isolated local ports.
-- `node scripts/verify-release-install.mjs` mirrors the release install smoke check before Electron packaging.
+- `node scripts/verify-release-install.mjs` mirrors the release install smoke check before Electron packaging. CI sets `CODE_UX_SKIP_RELEASE_INSTALL_BUILD=1` only after downloading `codeux-build-linux`, which makes the verifier reuse `dist/` and `dashboard/dist/` instead of rebuilding.
 
 Dependency and cache behavior:
 - CI restores `node_modules` only as a speed hint and still runs `pnpm install --frozen-lockfile --ignore-scripts` in every job.
-- Vitest, Vite, TypeScript, Playwright browser, and release-check caches are keyed to the runner OS, Node 22, pnpm 10.33.0, and dependency/config files that affect the cached output.
+- Vitest, Vite, TypeScript, Playwright browser, Electron binary, Electron Builder, and release-candidate caches are keyed to the runner OS, Node 22, pnpm 10.33.0, and dependency/config files that affect the cached output.
 - Playwright restores the browser cache before running `pnpm exec playwright install chromium`; Linux runners also run `pnpm exec playwright install-deps chromium` so cached browser binaries cannot hide missing OS dependencies.
-- The Build and Playwright jobs do not cache `.cache/tsc`; those jobs must emit a fresh `dist/` tree for package output and the E2E web server.
-- `tests/backend/ci/workflow-health.test.ts` audits these workflow invariants so accidental drift in package manager version, Node version, install mode, cache keys, audit separation, concurrency cancellation, Playwright artifacts, or release-lane separation fails a focused backend test.
+- The build artifact, not repeated source builds, feeds package smoke, orchestration, Playwright, and release-candidate jobs.
+- `tests/backend/ci/workflow-health.test.ts` audits these workflow invariants so accidental drift in package manager version, Node version, install mode, artifact reuse, audit separation, concurrency cancellation, Playwright artifacts, manual diagnostics, or release-lane separation fails a focused backend test.
 
 Artifacts:
-- On Playwright failure, download the `playwright-artifacts` artifact from the workflow run. It contains `test-results/` traces/screenshots/videos when produced and `playwright-report/` for the HTML report.
+- On Playwright failure, download the matching `playwright-<runner>-<purpose>` artifact from the workflow run. Manual diagnostics use `playwright-diagnostic-<runner>-<purpose>`. These artifacts contain `test-results/` traces/screenshots/videos when produced and `playwright-report/` for the HTML report. On orchestration failure, download the matching `orchestration-dag-<runner>-<runtime>` artifact; Linux uses the Docker runtime, while macOS and Windows use the Electron runtime.
 - The artifact retention window is seven days. If no files were produced, artifact upload is allowed to continue without masking the original test failure.
 
 ## Escalation Notes

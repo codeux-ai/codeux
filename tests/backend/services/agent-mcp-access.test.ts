@@ -100,7 +100,7 @@ describe("agent MCP defaults", () => {
     expect(access).toEqual(codeUxAgentMcpAccess(["playwright"]));
   });
 
-  it("preserves explicit dashboard reply Code UX access while forcing scheduler and Playwright on", () => {
+  it("preserves explicit dashboard reply Code UX access while forcing scheduler, durable memory, and Playwright on", () => {
     const access = dashboardReplyAgentMcpAccess({
       codeUxEnabled: true,
       codeUxToolToggles: [{ name: "scheduler_code_ux", enabled: false, isInternal: true }],
@@ -109,7 +109,10 @@ describe("agent MCP defaults", () => {
 
     expect(access.codeUxEnabled).toBe(true);
     expect(access.linkedServerIds).toEqual(["playwright", "docs"]);
-    expect(access.codeUxToolToggles).toEqual([{ name: "scheduler_code_ux", enabled: true, isInternal: true }]);
+    expect(access.codeUxToolToggles).toEqual([
+      { name: "scheduler_code_ux", enabled: true, isInternal: true },
+      { name: "add_long_term_memory", enabled: true, isInternal: true },
+    ]);
   });
 
   it("builds non-dashboard Code UX defaults with scheduler disabled", () => {

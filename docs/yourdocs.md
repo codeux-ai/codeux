@@ -381,7 +381,7 @@ Related files:
 - `dashboard/src/lib/settings.ts`
 - `dashboard/src/components/SettingsPage.tsx`
 
-## Incremental Update: Optional Docker Runtime For Gemini/Codex
+## Managed Docker Runtime
 
 ### Goal
 
@@ -389,9 +389,10 @@ Allow background Gemini/Codex runs to execute in isolated containers while prese
 
 ### Settings Added
 
-`cliWorkflow` now includes:
-- `executionMode` (`HOST|DOCKER`, default `HOST`)
-- `containerImage` (default `node:24-bookworm`)
+`cliWorkflow` includes:
+- `executionMode` (`DOCKER` in production)
+- `containerImageMode` (`managed|custom`, default `managed`)
+- `containerImage` (custom-mode fallback `node:24-trixie-slim`)
 - `containerSetupScriptPath` (optional)
 - Credential mount toggles and paths:
   - `containerMountGitConfig`
@@ -402,11 +403,12 @@ Allow background Gemini/Codex runs to execute in isolated containers while prese
 
 ### Runtime Behavior
 
-- In `HOST` mode, behavior is unchanged.
-- In `DOCKER` mode, workflow runs provider commands through `docker run` with:
+- In managed mode Code UX checks the shared base/browser runtime and activated provider CLIs for updates on startup.
+- Workflow runs provider commands through `docker run` with:
   - worktree bind mount at `/workspace`
   - optional read-only auth/config mounts from host paths
-  - optional setup script execution before provider command
+  - an optional explicit setup extension before the provider command
+  - a versioned provider-tool volume mounted read-only
 - Setup script resolution order:
   1. `containerSetupScriptPath` (if set)
   2. `<repo>/.code-ux/container/setup.sh`

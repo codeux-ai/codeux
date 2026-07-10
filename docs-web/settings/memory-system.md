@@ -25,6 +25,8 @@ Enablement, sprint capture, agent capture, auto-promotion, and remediation mode 
 
 Enable memory with deterministic remediation unless you need AI-assisted cleanup.
 
+The dashboard Project Manager keeps normal short-term memory context and also has a dedicated direct long-term-memory lane. Explicit remember/learn requests and stable preferences, decisions, patterns, or conventions can be written immediately as canonical claims without waiting for sprint remediation.
+
 A practical review flow is:
 
 1. Start from the inherited default and change only the fields that solve a concrete operational problem.

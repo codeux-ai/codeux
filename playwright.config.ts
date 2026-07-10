@@ -129,6 +129,10 @@ export default defineConfig({
       CODEUX_E2E_PROVIDER_CLI_SHIM: mockProviderCliPath,
       DASHBOARD_PORT: String(resolvedDashboardPort),
       MCP_HTTP_PORT: String(resolvedDashboardPort + 1),
+      // Browser E2E only needs the dashboard HTTP server. In particular, do not
+      // let Playwright's inherited stdin pipe activate the MCP stdio lifecycle.
+      CODE_UX_DISABLE_MCP_STDIO: '1',
+      MCP_HTTP_ENABLED: 'false',
       CODE_UX_CONTAINERIZED_GIT: '0',
       CODE_UX_GIT_CONTAINER_MODE: 'host',
     },

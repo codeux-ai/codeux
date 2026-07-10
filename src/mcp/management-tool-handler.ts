@@ -10,6 +10,7 @@ import type {
   ManageAgentsArgs,
   ManageNodeFlowsArgs,
   ManageMemoryArgs,
+  AddLongTermMemoryArgs,
   ManageSkillsArgs,
   ManageSettingsArgs,
   ManagePreviewArgs,
@@ -453,6 +454,15 @@ export class ManagementToolHandler {
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("memory", args.action, error);
+    }
+  }
+
+  async handleAddLongTermMemory(args: AddLongTermMemoryArgs): Promise<{ content: Array<{ type: string; text: string }>; isError?: true }> {
+    try {
+      const envelope = await this.memoryActions.addLongTermMemory(args);
+      return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
+    } catch (error) {
+      return this.formatError("memory", "add_long_term_memory", error);
     }
   }
 

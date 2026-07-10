@@ -38,6 +38,28 @@ describe("parseBubbleSegments", () => {
   it("returns a single markdown segment for plain replies", () => {
     expect(parseBubbleSegments("just text")).toEqual([{ kind: "markdown", markdown: "just text" }]);
   });
+
+  it("parses the memory fence as a rich widget", () => {
+    const segments = parseBubbleSegments([
+      "Stored for future work.",
+      "```codeux:memory",
+      JSON.stringify({
+        title: "Added to long-term memory",
+        memory: "Use dependency-aware sprint tasks.",
+        category: "patterns",
+        claimId: "claim-12345678",
+        memoryId: "memory-1",
+        status: "stored",
+      }),
+      "```",
+    ].join("\n"));
+
+    expect(segments).toHaveLength(2);
+    expect(segments[1]).toMatchObject({
+      kind: "widget",
+      widget: { type: "memory", data: { claimId: "claim-12345678" } },
+    });
+  });
 });
 
 describe("StageWidgetRenderer", () => {
@@ -150,5 +172,22 @@ describe("StageWidgetRenderer", () => {
     expect(screen.getByText("Running")).toBeInTheDocument();
     expect(screen.getByText("OK")).toBeInTheDocument();
     expect(screen.getByText("Failed")).toBeInTheDocument();
+  });
+
+  it("renders an accessible durable-memory confirmation", () => {
+    render(<StageWidgetRenderer widget={{
+      type: "memory",
+      data: {
+        memory: "Use dependency-aware sprint tasks.",
+        category: "patterns",
+        claimId: "claim-12345678",
+        status: "stored",
+      },
+    }} />);
+
+    expect(screen.getByText("Long-term memory")).toBeInTheDocument();
+    expect(screen.getByText("Remembered")).toBeInTheDocument();
+    expect(screen.getByText("Use dependency-aware sprint tasks.")).toBeInTheDocument();
+    expect(screen.getByText("Claim claim-12")).toBeInTheDocument();
   });
 });

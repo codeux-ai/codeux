@@ -15,6 +15,8 @@ Use it when you are configuring a new project, auditing inherited settings, or d
 
 Image, setup script, memory limit, setup image caching, and Playwright browser preinstall shape each worker container.
 
+Managed provider preparation installs registry-resolved CLI versions into isolated Docker volumes. npm lifecycle scripts remain blocked unless a fixed provider catalog entry explicitly requires them: only Claude Code's `@anthropic-ai/claude-code` package and OpenCode's `opencode-ai` package receive that narrow permission. A failed preparation reports the provider package and resolved version, removes the incomplete volume, and remains retryable.
+
 | Control Surface | Runtime Effect | Review Before Saving |
 | --- | --- | --- |
 | Settings card fields | Updates the active Settings scope after you save the page. | Confirm whether you are editing System or Project scope. |
@@ -23,7 +25,7 @@ Image, setup script, memory limit, setup image caching, and Playwright browser p
 
 ## Recommended Configuration
 
-Keep the default image unless your repo needs a custom toolchain; enable Playwright preinstall for browser-heavy QA.
+Keep the default image unless your repo needs a custom toolchain; enable Playwright browser preload for browser-heavy QA.
 
 A practical review flow is:
 

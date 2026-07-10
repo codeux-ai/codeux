@@ -68,6 +68,7 @@ export const dashboardReplyAgentMcpAccess = (access: AgentMcpAccessConfig | null
   }
   const byName = new Map(access.codeUxToolToggles.map((toggle) => [toggle.name, toggle]));
   byName.set("scheduler_code_ux", { name: "scheduler_code_ux", enabled: true, isInternal: true });
+  byName.set("add_long_term_memory", { name: "add_long_term_memory", enabled: true, isInternal: true });
   return {
     ...access,
     codeUxEnabled: true,

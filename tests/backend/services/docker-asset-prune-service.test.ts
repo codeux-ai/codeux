@@ -11,12 +11,14 @@ vi.mock("../../../src/services/cli-process-runner.js", () => ({
 
 vi.mock("fs/promises", () => ({
   readdir: vi.fn().mockResolvedValue([]),
+  readFile: vi.fn().mockRejectedValue(new Error("missing")),
   rm: vi.fn().mockResolvedValue(undefined),
 }));
 
 describe("DockerAssetPruneService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(fs.readFile).mockRejectedValue(new Error("missing"));
   });
 
   it("prunes stale workspace volumes while preserving cached setup images on startup", async () => {
@@ -254,6 +256,46 @@ describe("DockerAssetPruneService", () => {
     expect(fs.rm).toHaveBeenCalledWith(
       expect.stringContaining("gemini-temp-session123"),
       { recursive: true, force: true }
+    );
+  });
+
+  it("prunes stale Playwright browser volumes while preserving the active and newest versions", async () => {
+    const sessionTracking = {
+      listTrackedCliSessions: vi.fn(() => []),
+    } as unknown as SessionTrackingRepository;
+    const createdAt = (daysAgo: number) => new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString();
+    const browserVolumes = ["browser-active", "browser-newest", "browser-previous", "browser-stale"];
+    const dates: Record<string, string> = {
+      "browser-active": createdAt(120),
+      "browser-newest": createdAt(1),
+      "browser-previous": createdAt(2),
+      "browser-stale": createdAt(90),
+    };
+    vi.mocked(fs.readFile).mockImplementation(async (target) => {
+      if (String(target).endsWith("playwright-browser.json")) {
+        return JSON.stringify({ runtime: { volumeName: "browser-active" } });
+      }
+      throw new Error("missing");
+    });
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
+      if (args[0] === "volume" && args[1] === "ls" && args.includes("label=ai.codeux.asset=playwright-browser")) {
+        return { ok: true, stdout: browserVolumes.join("\n"), stderr: "", code: 0 } as any;
+      }
+      if (args[0] === "volume" && args[1] === "inspect") {
+        return { ok: true, stdout: JSON.stringify([{ CreatedAt: dates[args[2]] }]), stderr: "", code: 0 } as any;
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0 } as any;
+    });
+
+    const result = await new DockerAssetPruneService(sessionTracking).cleanupOnStartup();
+
+    expect(result.prunedPlaywrightBrowserVolumes).toEqual(["browser-stale"]);
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      ["volume", "rm", "-f", "browser-stale"],
+      expect.any(String),
+      process.env,
+      { timeout: 10_000 },
     );
   });
 });
