@@ -100,7 +100,10 @@ describe("ChatManagementActionService", () => {
     expect(structuredProviderResponseService.executeAndParse).toHaveBeenCalledWith(expect.objectContaining({
       providerMountAuth: true,
       providerAuthPath: "~/.claude",
+      trackPromptInInvocation: false,
+      finalizeExecutionInvocation: false,
     }));
+    expect(structuredProviderResponseService.executeAndParse.mock.calls[0]?.[0].trackAssistantInInvocation).toBeUndefined();
 
     // Verify full conversation is tracked: user prompt, assistant response, action proposed, action result
     const calls = executionRepository.appendExecutionInvocationMessage.mock.calls;
@@ -232,6 +235,7 @@ describe("ChatManagementActionService", () => {
       },
       nativeSessionId: "sess1",
       bodyMarkdown: "",
+      hasStructuredConversation: true,
     });
 
     const result = await service.processManagementAction({
@@ -250,10 +254,11 @@ describe("ChatManagementActionService", () => {
     expect(result.approvalRequired).toBe(false);
     expect(managementToolHandler.handleManageCodeUx).not.toHaveBeenCalled();
 
-    // Verify prompt and response are tracked even without an action
+    // The caller-owned prompt remains, while the shared provider path owns the
+    // already-persisted structured assistant transcript.
     const calls = executionRepository.appendExecutionInvocationMessage.mock.calls;
     expect(calls[0]).toEqual(["exec-123", { role: "user", contentMarkdown: "Say hello" }]);
-    expect(calls[1]).toEqual(["exec-123", { role: "assistant", contentMarkdown: "Hello world" }]);
+    expect(calls).toHaveLength(1);
   });
 
   it("should pass sanitized prompt suggestions through reply-only results", async () => {
@@ -441,8 +446,11 @@ describe("ChatManagementActionService", () => {
           providerMountAuth: true,
           providerAuthPath: "~/.gemini",
           continueSessionId: "sess1",
+          trackPromptInInvocation: false,
+          finalizeExecutionInvocation: false,
         })
       );
+      expect(providerExecutionService.executeProvider.mock.calls[0]?.[0].trackAssistantInInvocation).toBeUndefined();
 
       // Verify tracking
       const calls = executionRepository.appendExecutionInvocationMessage.mock.calls;

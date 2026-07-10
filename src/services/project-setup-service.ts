@@ -335,7 +335,7 @@ export class ProjectSetupService {
       const applied = await this.applyArtifacts(projectId, project.baseDir, options, payload);
       const embeddedDocs = await this.embedRequestedDocs(projectId, project.baseDir, options);
 
-      if (invocationId) {
+      if (invocationId && this.isExecutionInvocationActiveForFinalize(invocationId)) {
         this.deps.executionRepository?.updateExecutionInvocation(invocationId, {
           status: "completed",
           finishedAt: new Date().toISOString(),
@@ -354,15 +354,23 @@ export class ProjectSetupService {
         ...embeddedDocs,
       };
     } catch (error) {
-      if (invocationId) {
+      if (invocationId && this.isExecutionInvocationActiveForFinalize(invocationId)) {
         this.deps.executionRepository?.updateExecutionInvocation(invocationId, {
-          status: "failed",
+          status: signal?.aborted ? "cancelled" : "failed",
           errorMessage: error instanceof Error ? error.message : String(error),
           finishedAt: new Date().toISOString(),
         });
       }
       throw error;
     }
+  }
+
+  private isExecutionInvocationActiveForFinalize(invocationId: string): boolean {
+    if (typeof this.deps.executionRepository?.getExecutionInvocation !== "function") {
+      return true;
+    }
+    const invocation = this.deps.executionRepository.getExecutionInvocation(invocationId);
+    return !invocation || invocation.status === "running" || invocation.status === "paused";
   }
 
   private normalizeOptions(options?: Partial<ProjectSetupOptions>): ProjectSetupOptions {

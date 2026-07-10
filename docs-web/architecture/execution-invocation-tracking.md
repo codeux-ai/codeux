@@ -34,7 +34,9 @@ Gemini accepts both clean JSON stdout and a balanced response object surrounded 
 
 ## Persistence behavior
 
-`ProviderExecutionService` rewrites invocation messages from structured `ProviderUsageTelemetry.conversation` turns while the provider is running. It clears and rewrites only when structured turns exist, using the JSON representation of mapped persisted messages as the duplicate-skip signature. That means normalized metadata such as `toolName`, `toolCallId`, `toolArguments`, `toolOutput`, `toolStatus`, per-turn `tokens`, and `timestampMs` must be preserved by parser changes.
+`ProviderExecutionService` rewrites invocation messages from structured `ProviderUsageTelemetry.conversation` turns while the provider is running for planning, QA, dashboard/worker replies, setup, remediation, CI and merge repair, task follow-up, and task coding. It clears and rewrites only when structured turns exist, using the JSON representation of the complete mapped message payload as the duplicate-skip signature. Changes to reasoning or assistant text, tool arguments or output, status, timestamps, tokens, or other metadata therefore refresh the transcript even when message counts stay constant, while an identical final payload does not repeat the last live rewrite.
+
+Structured rewrites honor `trackPromptInInvocation` and `trackAssistantInInvocation`. When prompt tracking is disabled, parser-supplied user turns are omitted and caller-owned user messages remain in place. Caller-owned system routing, retry, and audit messages also survive transcript refreshes, while parsed injected context is replaced with the current provider payload. This lets dashboard worker replies stream structured activity without duplicating their pre-seeded prompt.
 
 When a provider or failure mode exposes only final text, Code UX uses a text-only fallback: it appends the sanitized assistant output at completion instead of clearing prior messages. This keeps retry prompts, system audit messages, and manually appended context intact.
 
