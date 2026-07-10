@@ -42,6 +42,7 @@ class FakeEmbeddingProvider implements SkillEmbeddingProvider {
 
 async function createFixture(): Promise<{
   projectId: string;
+  projectRepository: ProjectManagementRepository;
   agentPresetRepository: AgentPresetRepository;
   skillService: SkillService;
 }> {
@@ -60,6 +61,7 @@ async function createFixture(): Promise<{
 
   return {
     projectId: project.id,
+    projectRepository,
     agentPresetRepository,
     skillService,
   };
@@ -133,7 +135,7 @@ Review pull requests for regressions, missing tests, and rollback risk.
   });
 
   it("injects persistent skill prompt guidance and isolated mounts only for enabled attached agents", async () => {
-    const { projectId, agentPresetRepository, skillService } = await createFixture();
+    const { projectId, projectRepository, agentPresetRepository, skillService } = await createFixture();
     const storage = skillService.createStorage(projectId, {
       id: "runtime-review-skills",
       name: "Runtime Review Skills",
@@ -155,6 +157,21 @@ Review pull requests for regressions, missing tests, and rollback risk.
       name: "Runtime Unattached Agent",
       persistentSkillStorage: { enabled: true },
       persistentSkillStorageIds: [],
+    });
+    const otherProject = projectRepository.createProject({
+      name: "Other Persistent Skills Project",
+      sourceType: "local",
+      sourceRef: "/workspace/other-persistent-skills-integration",
+    });
+    const foreignStorage = skillService.createStorage(otherProject.id, {
+      id: "foreign-runtime-skills",
+      name: "Foreign Runtime Skills",
+    });
+    const foreignAgent = agentPresetRepository.createAgentPreset(otherProject.id, {
+      id: "runtime-foreign-agent",
+      name: "Foreign Runtime Agent",
+      persistentSkillStorage: { enabled: true },
+      persistentSkillStorageIds: [foreignStorage.id],
     });
     const providerResult: ProviderRunResult = {
       ok: true,
@@ -215,6 +232,7 @@ Review pull requests for regressions, missing tests, and rollback risk.
     await service.executeProvider({ ...baseArgs, mcpAgentId: enabledAgent.id });
     await service.executeProvider({ ...baseArgs, mcpAgentId: disabledAgent.id });
     await service.executeProvider({ ...baseArgs, mcpAgentId: unattachedAgent.id });
+    await service.executeProvider({ ...baseArgs, mcpAgentId: foreignAgent.id });
     await service.executeProvider({ ...baseArgs, mcpAgentId: null });
 
     const enabledRun = providerRunner.runProvider.mock.calls[0]![0];
