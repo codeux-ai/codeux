@@ -52,12 +52,13 @@ export function buildLinkedIssuePromptBlock(issues: SprintLinkedIssueInput[]): s
 }
 
 export function mergePromptWithLinkedIssues(goal: string, issues: SprintLinkedIssueInput[]): string {
+  if (hasLinkedIssueSection(goal) && hasBodylessLinkedIssueList(issues)) {
+    return goal;
+  }
+
   const normalizedIssues = normalizeLinkedIssuePromptInputs(issues);
   const block = buildLinkedIssuePromptBlock(normalizedIssues);
   const trimmedGoal = normalizeImportedMarkdown(goal);
-  if (block && hasLinkedIssueSection(trimmedGoal) && !hasIncludedIssuePromptContext(normalizedIssues)) {
-    return trimmedGoal;
-  }
   if (!block) {
     return removeLinkedIssueSections(trimmedGoal).trim();
   }
@@ -70,14 +71,11 @@ function normalizeLinkedIssuePromptInputs(issues: SprintLinkedIssueInput[]): Spr
     .slice(0, MAX_LINKED_ISSUES);
 }
 
-function hasIncludedIssuePromptContext(issues: SprintLinkedIssueInput[]): boolean {
-  return issues.some((issue) => {
-    if (normalizeImportedMarkdown(issue.issueBodyMarkdown)) {
-      return true;
-    }
-
-    return issue.includeConversation === true && Boolean(normalizeImportedMarkdown(issue.issueConversationMarkdown));
-  });
+function hasBodylessLinkedIssueList(issues: SprintLinkedIssueInput[]): boolean {
+  return issues.length > 0 && issues.every((issue) => (
+    !normalizeImportedMarkdown(issue.issueBodyMarkdown)
+      && !normalizeImportedMarkdown(issue.issueConversationMarkdown)
+  ));
 }
 
 function formatLinkedIssuePromptSection(issue: SprintLinkedIssueInput): string {

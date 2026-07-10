@@ -24,14 +24,13 @@ export function buildLinkedIssuePromptBlock(issues: readonly LinkedIssuePromptIn
 }
 
 export function mergePromptWithLinkedIssues(goal: string, issues: readonly LinkedIssuePromptInput[]): string {
+  if (hasLinkedIssueSection(goal) && hasBodylessLinkedIssueList(issues)) {
+    return goal;
+  }
+
   const normalizedIssues = normalizeLinkedIssuePromptInputs(issues);
   const block = buildLinkedIssuePromptBlock(normalizedIssues);
   const trimmedGoal = normalizeImportedMarkdown(goal);
-
-  if (block && hasLinkedIssueSection(trimmedGoal) && !hasIncludedIssuePromptContext(normalizedIssues)) {
-    return trimmedGoal;
-  }
-
   const goalWithoutLinkedIssues = removeLinkedIssueSections(trimmedGoal);
 
   if (!block) {
@@ -47,14 +46,11 @@ function normalizeLinkedIssuePromptInputs(issues: readonly LinkedIssuePromptInpu
     .slice(0, MAX_LINKED_ISSUES);
 }
 
-function hasIncludedIssuePromptContext(issues: readonly LinkedIssuePromptInput[]): boolean {
-  return issues.some((issue) => {
-    if (normalizeImportedMarkdown(issue.issueBodyMarkdown)) {
-      return true;
-    }
-
-    return issue.includeConversation !== false && Boolean(normalizeImportedMarkdown(issue.issueConversationMarkdown));
-  });
+function hasBodylessLinkedIssueList(issues: readonly LinkedIssuePromptInput[]): boolean {
+  return issues.length > 0 && issues.every((issue) => (
+    !normalizeImportedMarkdown(issue.issueBodyMarkdown)
+      && !normalizeImportedMarkdown(issue.issueConversationMarkdown)
+  ));
 }
 
 function formatLinkedIssuePromptSection(issue: LinkedIssuePromptInput): string {

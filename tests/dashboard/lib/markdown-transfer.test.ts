@@ -98,7 +98,7 @@ describe("markdown-transfer", () => {
   });
 
   it("preserves existing linked issue bodies when resubmitted linked issues only include metadata", () => {
-    const existing = [
+    const existing = `${[
       "Plan the sprint.",
       "",
       "## Linked Issues",
@@ -110,7 +110,7 @@ describe("markdown-transfer", () => {
       "#### Issue Body",
       "",
       "Existing body that should stay attached to the sprint.",
-    ].join("\n");
+    ].join("\n")}\n`;
 
     const merged = mergePromptWithLinkedIssues(existing, [
       {
@@ -123,6 +123,8 @@ describe("markdown-transfer", () => {
         url: "https://github.com/openai/example/issues/42",
         state: "open",
         labels: ["ux"],
+        issueBodyMarkdown: " ",
+        issueConversationMarkdown: "\n",
       },
     ]);
 
