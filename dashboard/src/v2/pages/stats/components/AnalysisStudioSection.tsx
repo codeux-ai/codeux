@@ -1,7 +1,7 @@
 import type { ProjectExecutionStatsSnapshot, ExecutionStatsEntitySummary, SegmentDefinition } from "../../../types.js";
 import type { UsageChartState } from "../use-usage-chart-state.js";
 import type { FunctionComponent } from "preact";
-import { Layers3 } from "lucide-preact";
+import { AlertTriangle, Layers3, Loader2 } from "lucide-preact";
 import { TrendStudio } from "./TrendStudio.js";
 import { CompositionStudio } from "./CompositionStudio.js";
 import { ReliabilityStudio } from "./ReliabilityStudio.js";
@@ -10,6 +10,9 @@ import {
   PANEL_CLASS,
   type StatsVisualMode,
 } from "./stats-ui-primitives.js";
+import { Button } from "../../../components/ui/Button.js";
+import { useInteractionTokens } from "../../../lib/motion/tokens.js";
+import styles from "../StatsPage.module.css";
 import { SystemStudio } from "./system/SystemStudio.js";
 import { ModelsStudio } from "./ModelsStudio.js";
 import { TelemetryLedgerTabs } from "./TelemetryLedgerTabs.js";
@@ -88,27 +91,24 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
   visualMode,
   chartState,
 }) => {
+  const motionTokens = useInteractionTokens();
   const activeMetadata = STUDIO_METADATA[visualMode];
   const metadataDescriptionId = `stats-analysis-${visualMode}-description`;
 
   const renderSectionMetadata = (metadata: StudioMetadata) => (
-    <div className={`mb-3 flex min-w-0 flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between ${CHIP_CLASS}`}>
-      <div className="min-w-0">
-        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
-          {metadata.eyebrow}
-        </div>
-        <div className="mt-1 break-words text-sm font-semibold text-[color:var(--stats-value-color)]">
-          {metadata.label}
-        </div>
+    <header className={styles.workspaceHeader}>
+      <div className={styles.workspaceTitleBlock}>
+        <div className={styles.workspaceEyebrow}>{metadata.eyebrow}</div>
+        <h2 className={styles.workspaceTitle}>{metadata.label}</h2>
       </div>
-      <p id={metadataDescriptionId} className="m-0 max-w-3xl text-xs leading-relaxed text-[color:var(--stats-detail-color)]">
+      <p id={metadataDescriptionId} className={styles.workspaceDescription}>
         {metadata.description}
       </p>
-    </div>
+    </header>
   );
 
   const renderEmptyState = (metadata: StudioMetadata) => (
-    <div role="status" aria-live="polite" className={`${PANEL_CLASS} flex flex-col items-center justify-center py-16 text-center`}>
+    <div role="status" aria-live="polite" className={`${PANEL_CLASS} ${styles.emptyWorkspace}`}>
       <div className={`mx-auto mb-4 flex h-12 w-12 items-center justify-center border border-[color:var(--stats-border-hairline)] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
         <Layers3 className="h-5 w-5" strokeWidth={2} aria-hidden="true" />
       </div>
@@ -125,12 +125,24 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
       aria-label="Stats analysis panel"
       aria-describedby={metadataDescriptionId}
       aria-busy={loading ? "true" : undefined}
-      className="animate-in fade-in duration-200 motion-reduce:animate-none"
+      className={styles.workspaceSection}
+      style={{
+        animationDuration: motionTokens.selectionMovement.duration,
+        animationTimingFunction: motionTokens.selectionMovement.ease,
+      }}
     >
       {renderSectionMetadata(activeMetadata)}
       {loading && stats ? (
-        <div role="status" aria-live="polite" aria-atomic="true" className={`mb-3 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
-          Updating analytics from cached data. Current values remain visible while the latest snapshot loads.
+        <div role="status" aria-live="polite" aria-atomic="true" className={styles.workspaceFeedback}>
+          <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+          <span>Updating from cached data. Current values remain visible.</span>
+        </div>
+      ) : null}
+      {error && stats ? (
+        <div role="alert" className={`${styles.workspaceFeedback} ${styles.workspaceFeedbackError}`}>
+          <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+          <span className={styles.workspaceFeedbackText}>{error} Cached values remain visible.</span>
+          <Button variant="danger" size="sm" onClick={() => refresh()}>Retry</Button>
         </div>
       ) : null}
       {visualMode === "trend" ? (
@@ -138,7 +150,7 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
           <TrendStudio
             stats={stats}
             loading={loading}
-            error={error}
+            error={null}
             refresh={refresh}
             planningUsage={planningUsage}
             chartState={chartState}

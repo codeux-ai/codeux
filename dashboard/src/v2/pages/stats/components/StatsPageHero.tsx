@@ -1,9 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import {
-  BarChart3,
   CalendarDays,
-  CheckCircle2,
   Clock3,
   Layers3,
   type LucideIcon,
@@ -19,7 +17,6 @@ import {
   PANEL_CLASS,
   CHIP_CLASS,
   INPUT_CLASS,
-  SUBPANEL_CLASS,
   ViewToggle,
   type StatsVisualMode,
 } from "./StatsShared.js";
@@ -98,6 +95,7 @@ function getCustomRangeMessage(from: string, to: string): string {
 export interface StatsPageHeroProps {
   selectedProject: Source | null;
   stats: ProjectExecutionStatsSnapshot | null;
+  loading?: boolean;
   activeQuery: ProjectStatsQuery;
   customFrom: string;
   customTo: string;
@@ -113,6 +111,7 @@ export interface StatsPageHeroProps {
 export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
   selectedProject,
   stats,
+  loading = false,
   activeQuery,
   customFrom,
   customTo,
@@ -140,10 +139,9 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
     : "stats-custom-range-help stats-custom-range-status";
   const canApplyCustomRange = isValidCustomRange(customFrom, customTo);
   const selectedProjectLabel = selectedProject?.name || "No project selected";
-  const generatedLabel = stats?.generatedAt ? formatDateTime(stats.generatedAt) : "No snapshot";
+  const generatedLabel = stats?.generatedAt ? formatDateTime(stats.generatedAt) : loading ? "Loading snapshot" : "No snapshot";
   const rangeScopeLabel = stats?.range?.label || formatWindowLabel(activeQuery);
   const activeModeLabel = MODE_LABELS[visualMode];
-  const activeModeDescription = MODE_DESCRIPTIONS[visualMode];
 
   useEffect(() => {
     if (activeQuery.window === "custom") {
@@ -190,53 +188,26 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
   return (
     <section className={`${HERO_PANEL_CLASS} ${styles.heroPanel}`} aria-labelledby="stats-hero-title">
       <div className={styles.heroGrid}>
-        <div className={styles.heroIntro}>
+        <header className={styles.heroHeader}>
           <div className={styles.heroTitleBlock}>
-            <div className={styles.heroHeader}>
-              <div className={`${CHIP_CLASS} ${styles.heroKicker}`}>
-                <span className={styles.heroKickerIcon} aria-hidden="true">
-                  <BarChart3 strokeWidth={2.2} />
-                </span>
-                <span>Project Analytics</span>
-              </div>
-              <div className={styles.heroTitleRow}>
-                <h1 id="stats-hero-title" className={styles.heroTitle}>Stats</h1>
-                <span className={`${CHIP_CLASS} ${styles.heroStatusPill}`}>
-                  <span className={styles.heroStatusDot} aria-hidden="true" />
-                  Current
-                </span>
-              </div>
-              <p className={styles.heroSubtitle}>
-                Telemetry, usage movement, and operational ledgers for the selected project.
-              </p>
-            </div>
-
-            <div className={styles.heroSignalRow} aria-label="Stats active lens">
-              <div className={`${CHIP_CLASS} ${styles.heroSignalBadge}`}>
-                <CalendarDays className={styles.heroSignalIcon} strokeWidth={2.1} aria-hidden="true" />
-                <span>Window</span>
-                <strong>{rangeScopeLabel}</strong>
-              </div>
-              <div className={`${CHIP_CLASS} ${styles.heroSignalBadge}`}>
-                <CheckCircle2 className={styles.heroSignalIcon} strokeWidth={2.1} aria-hidden="true" />
-                <span>Mode</span>
-                <strong>{activeModeLabel}</strong>
-              </div>
-            </div>
-
-            <div className={styles.heroContextGrid} aria-label="Stats project context">
-              <ContextBadge icon={Layers3} label="Project" value={selectedProjectLabel} />
-              <ContextBadge icon={Clock3} label="Generated" value={generatedLabel} />
-              <ContextBadge
-                icon={CalendarDays}
-                label="Sprint"
-                value={stats?.activeSprint ? `#${stats.activeSprint.sprintNumber ?? "?"}` : "Historical lens"}
-              />
-            </div>
+            <p className={styles.heroEyebrow}>Project analytics</p>
+            <h1 id="stats-hero-title" className={styles.heroTitle}>Stats</h1>
+            <p className={styles.heroSubtitle}>
+              Usage, reliability, and operational telemetry in one project workspace.
+            </p>
           </div>
-        </div>
+          <div className={styles.heroContextGrid} aria-label="Stats project context">
+            <ContextBadge icon={Layers3} label="Project" value={selectedProjectLabel} />
+            <ContextBadge icon={Clock3} label="Snapshot" value={generatedLabel} />
+            <ContextBadge
+              icon={CalendarDays}
+              label="Sprint"
+              value={stats?.activeSprint ? `#${stats.activeSprint.sprintNumber ?? "?"}` : "Historical"}
+            />
+          </div>
+        </header>
 
-        <div className={`${SUBPANEL_CLASS} ${styles.heroControls}`} aria-label="Stats command controls">
+        <div className={styles.heroControls}>
           <div className={styles.heroControlSection}>
             <div className={styles.heroControlHeader}>
               <div className={styles.heroControlHeaderText}>
@@ -244,14 +215,9 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                   Time window
                 </div>
                 <div className={styles.heroControlDescription}>
-                  Select the telemetry range for every analysis mode.
+                  {rangeScopeLabel}
                 </div>
               </div>
-              <div className={`${CHIP_CLASS} ${styles.heroControlSummary}`} aria-label={`Current time window ${rangeScopeLabel}`}>
-                <span>Current</span>
-                <strong>{rangeScopeLabel}</strong>
-              </div>
-              <CalendarDays className={styles.heroControlIcon} strokeWidth={2.2} aria-hidden="true" />
             </div>
 
             <div role="group" aria-label="Time window presets" className={`${CHIP_CLASS} flex-wrap ${styles.heroPresetGroup}`}>
@@ -349,15 +315,10 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                 <div className={styles.heroControlEyebrow}>
                   Analysis mode
                 </div>
-                <div className={styles.heroControlDescription}>
-                  {activeModeDescription}
+                <div className={styles.heroControlDescription} aria-label="Stats active lens">
+                  <strong>{activeModeLabel}</strong> · Selected workspace
                 </div>
               </div>
-              <div className={`${CHIP_CLASS} ${styles.heroControlSummary}`} aria-label={`Active analysis mode ${activeModeLabel}`}>
-                <span>Mode</span>
-                <strong>{activeModeLabel}</strong>
-              </div>
-              <CheckCircle2 className={styles.heroModeIcon} strokeWidth={2.2} aria-hidden="true" />
             </div>
             <ViewToggle
               value={visualMode}
