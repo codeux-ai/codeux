@@ -20,7 +20,6 @@ import {
   CONTROL_FOCUS_CLASS,
   DASHED_EMPTY_CLASS,
   INPUT_CLASS,
-  LEDGER_ROW_MODERN_CLASS,
   PANEL_CLASS,
   STATUS_TONE_CLASS,
   SUBPANEL_CLASS,
@@ -60,13 +59,13 @@ export const LedgerSummaryTile: FunctionComponent<{
   detail: string;
   tone?: string;
 }> = ({ icon: Icon, label, value, detail, tone = "text-[color:var(--stats-signal-text)]" }) => (
-  <div className={`${SUBPANEL_CLASS} p-4`}>
+  <div className="min-w-0 border-l border-[color:var(--stats-border-hairline)] px-3 py-2 first:border-l-0">
     <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">
       <Icon className={`h-3.5 w-3.5 ${tone}`} strokeWidth={2.2} />
       {label}
     </div>
-    <div className="mt-2 text-lg font-semibold tracking-tight text-[color:var(--stats-value-color)]">{value}</div>
-    <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">{detail}</div>
+    <div className="mt-1 break-words text-base font-semibold tracking-tight text-[color:var(--stats-value-color)] [overflow-wrap:anywhere]">{value}</div>
+    <div className="mt-0.5 break-words text-[10px] text-[color:var(--stats-detail-color)] [overflow-wrap:anywhere]">{detail}</div>
   </div>
 );
 
@@ -85,7 +84,7 @@ const LedgerComparisonCard: FunctionComponent<{
   const topItem = filteredItems[0] ?? null;
 
   return (
-    <div className={`${SUBPANEL_CLASS} p-4 lg:col-span-2`}>
+    <div className="min-w-0 border-y border-[color:var(--stats-border-hairline)] py-3 lg:col-span-2">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">Token Flow Comparison</div>
@@ -286,8 +285,8 @@ export const TelemetryLedger: FunctionComponent<{
     : `Showing ${filteredItems.length.toLocaleString()} of ${items.length.toLocaleString()} ${kindLabel}, sorted by ${sortLabelByKey[sortKey]} ${sortDir === "desc" ? "descending" : "ascending"}.`;
 
   return (
-    <div className={`${PANEL_CLASS} p-6 md:p-7`}>
-      <div className="flex flex-col gap-6">
+    <div className={`${PANEL_CLASS} !overflow-visible p-4 md:p-5`}>
+      <div className="flex min-w-0 flex-col gap-4">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">{eyebrow}</div>
@@ -306,7 +305,7 @@ export const TelemetryLedger: FunctionComponent<{
         </div>
 
         {items.length > 0 ? (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          <div className="grid min-w-0 overflow-hidden rounded-[var(--stats-subpanel-radius)] border border-[color:var(--stats-border-hairline)] sm:grid-cols-2 xl:grid-cols-6">
             <LedgerSummaryTile
               icon={Hash}
               label="Entities"
@@ -352,7 +351,7 @@ export const TelemetryLedger: FunctionComponent<{
           </div>
         )}
 
-        <div className={`${SUBPANEL_CLASS} sticky top-3 z-20 grid gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center`}>
+        <div className={`${SUBPANEL_CLASS} sticky top-[4.25rem] z-20 grid gap-2 p-2 lg:grid-cols-[minmax(14rem,0.75fr)_minmax(0,1.25fr)] lg:items-center`}>
           <div className="relative">
             <label htmlFor={`${kindLabel}-ledger-search`} className="sr-only">
               Search {kindLabel}
@@ -401,7 +400,7 @@ export const TelemetryLedger: FunctionComponent<{
 
         {items.length > 0 ? (
           searchHasResults ? (
-            <div className="grid gap-3 xl:grid-cols-[1.05fr_0.95fr]">
+            <div className="grid min-w-0 gap-3 xl:grid-cols-[1.05fr_0.95fr]">
               <LedgerComparisonCard
                 kindLabel={kindLabel}
                 filteredItems={filteredItems}
@@ -414,7 +413,7 @@ export const TelemetryLedger: FunctionComponent<{
                   totalTokens: overallTotals.totalTokens,
                 }}
               />
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid min-w-0 overflow-hidden rounded-[var(--stats-subpanel-radius)] border border-[color:var(--stats-border-hairline)] sm:grid-cols-3">
                 <LedgerSummaryTile
                   icon={Activity}
                   label="Search Results"
@@ -442,8 +441,8 @@ export const TelemetryLedger: FunctionComponent<{
         ) : null}
 
         {searchHasResults ? (
-          <div ref={scrollContainerRef} className="max-h-[42rem] overflow-y-auto pr-2 dashboard-scrollbar">
-            <div className="space-y-3">
+          <div ref={scrollContainerRef} className="max-h-[42rem] min-w-0 overflow-y-auto rounded-[var(--stats-subpanel-radius)] border border-[color:var(--stats-border-hairline)] dashboard-scrollbar">
+            <div className="divide-y divide-[color:var(--stats-border-hairline)]">
               {visibleItems.map((item, index) => {
                 const shareOfTotal = totals.totalTokens > 0 ? (item.usage.totalTokens / totals.totalTokens) * 100 : 0;
                 const shareOfLeader = totals.leaderTokens > 0 ? (item.usage.totalTokens / totals.leaderTokens) * 100 : 0;
@@ -458,7 +457,7 @@ export const TelemetryLedger: FunctionComponent<{
                   : "No percentiles";
 
                 return (
-                  <div key={item.id} role="article" className={`${LEDGER_ROW_MODERN_CLASS} !p-4`} aria-label={`${item.label} ${kindLabel} telemetry row`}>
+                  <div key={item.id} role="article" className="group min-w-0 p-3 transition-colors hover:bg-[color:var(--stats-surface-subpanel-hover)] motion-reduce:transition-none" aria-label={`${item.label} ${kindLabel} telemetry row`}>
                     <div className="flex flex-col gap-4">
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
@@ -483,25 +482,25 @@ export const TelemetryLedger: FunctionComponent<{
                                 );
                               })() : null}
                               {item.purpose ? (
-                                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${STATUS_TONE_CLASS.positive} ${CHIP_CLASS}`}>
+                                <span className={`inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${STATUS_TONE_CLASS.positive} ${CHIP_CLASS}`}>
                                   <Activity className="h-3 w-3" strokeWidth={2.5} />
-                                  {item.purpose.replace(/_/g, " ")}
+                                  <span className="break-words [overflow-wrap:anywhere]">{item.purpose.replace(/_/g, " ")}</span>
                                 </span>
                               ) : null}
                               {item.secondaryLabel ? (
-                                <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
+                                <span className={`max-w-full break-words px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-detail-color)] [overflow-wrap:anywhere] ${CHIP_CLASS}`}>
                                   {item.secondaryLabel}
                                 </span>
                               ) : null}
                               {item.status ? (
-                                <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${getStatusChipTone(item.status)} ${CHIP_CLASS}`}>
+                                <span className={`max-w-full break-words px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] [overflow-wrap:anywhere] ${getStatusChipTone(item.status)} ${CHIP_CLASS}`}>
                                   {item.status.replace(/_/g, " ")}
                                 </span>
                               ) : null}
                             </div>
                           </div>
                         </div>
-                        <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-3 xl:w-auto xl:min-w-[46rem] xl:grid-cols-6 xl:text-right">
+                        <div className="grid w-full min-w-0 max-w-full grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6 xl:text-right">
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Tokens</div>
                             <div className="mt-1 text-base font-semibold tracking-tight text-[color:var(--stats-value-color)]">{formatTokens(item.usage.totalTokens)}</div>
@@ -557,7 +556,7 @@ export const TelemetryLedger: FunctionComponent<{
                             <TokenChip icon={Clock3} label="p50" value={duration?.p50Ms != null ? formatStatsDuration(duration.p50Ms) : "—"} tone={STATUS_TONE_CLASS.neutral} />
                             <TokenChip icon={Activity} label="p95" value={duration?.p95Ms != null ? formatStatsDuration(duration.p95Ms) : "—"} tone={STATUS_TONE_CLASS.neutral} />
                           </div>
-                          <div className="max-w-full text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">
+                          <div className="max-w-full break-words text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)] [overflow-wrap:anywhere]">
                             {providerLabel} · {purposeLabel} · {statusLabel} · {percentileSummary}
                           </div>
                         </div>
@@ -567,7 +566,7 @@ export const TelemetryLedger: FunctionComponent<{
                 );
               })}
               {visibleItems.length < filteredItems.length ? (
-                <div ref={sentinelRef} className={`${DASHED_EMPTY_CLASS} py-4 text-[11px] font-bold uppercase tracking-[0.16em]`}>
+                <div ref={sentinelRef} role="status" aria-live="polite" className={`${DASHED_EMPTY_CLASS} py-4 text-[11px] font-bold uppercase tracking-[0.16em]`}>
                   Loading more telemetry lanes...
                 </div>
               ) : null}

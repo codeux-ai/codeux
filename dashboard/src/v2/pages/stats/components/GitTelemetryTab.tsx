@@ -9,7 +9,6 @@ import {
   CONTROL_FOCUS_CLASS,
   DASHED_EMPTY_CLASS,
   INPUT_CLASS,
-  LEDGER_ROW_MODERN_CLASS,
   PANEL_CLASS,
   STATUS_TONE_CLASS,
   SUBPANEL_CLASS,
@@ -114,8 +113,8 @@ export const GitTelemetryLedger: FunctionComponent<{
   const filteredShare = (totalInsertions + totalDeletions) > 0 ? (totals.churn / (totalInsertions + totalDeletions)) * 100 : 0;
 
   return (
-    <div className={`${PANEL_CLASS} p-6`}>
-      <div className="flex flex-col gap-5">
+    <div className={`${PANEL_CLASS} !overflow-visible p-4 md:p-5`}>
+      <div className="flex min-w-0 flex-col gap-4">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">{eyebrow}</div>
@@ -129,7 +128,7 @@ export const GitTelemetryLedger: FunctionComponent<{
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <div className="grid min-w-0 overflow-hidden rounded-[var(--stats-subpanel-radius)] border border-[color:var(--stats-border-hairline)] sm:grid-cols-2 xl:grid-cols-6 [&>div]:!rounded-none [&>div]:!border-0 [&>div]:border-l [&>div]:border-[color:var(--stats-border-hairline)]">
           <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center text-center !p-4`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Insertions</div>
             <div className="mt-1 text-lg font-semibold tracking-tight text-[color:var(--stats-value-color)]">+{totalInsertions.toLocaleString()}</div>
@@ -162,7 +161,7 @@ export const GitTelemetryLedger: FunctionComponent<{
           </div>
         </div>
 
-        <div className={`${SUBPANEL_CLASS} sticky top-3 z-20 grid gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center`}>
+        <div className={`${SUBPANEL_CLASS} sticky top-[4.25rem] z-20 grid gap-2 p-2 xl:grid-cols-[minmax(14rem,0.75fr)_minmax(0,1.25fr)] xl:items-center`}>
           <div className="relative">
             <label htmlFor={`${kindLabel}-git-ledger-search`} className="sr-only">
               Search {kindLabel} git telemetry
@@ -223,15 +222,15 @@ export const GitTelemetryLedger: FunctionComponent<{
             ) : emptyLabel}
           </div>
         ) : (
-          <div ref={scrollContainerRef} className="max-h-[42rem] overflow-y-auto pr-2 dashboard-scrollbar">
-            <div className="space-y-3">
+          <div ref={scrollContainerRef} className="max-h-[42rem] min-w-0 overflow-y-auto rounded-[var(--stats-subpanel-radius)] border border-[color:var(--stats-border-hairline)] dashboard-scrollbar">
+            <div className="divide-y divide-[color:var(--stats-border-hairline)]">
               {visibleItems.map((item, index) => {
                 const itemChurn = item.metrics.insertions + item.metrics.deletions;
                 const shareOfTotal = totals.churn > 0 ? (itemChurn / totals.churn) * 100 : 0;
                 const shareOfLeader = totals.leaderChurn > 0 ? (itemChurn / totals.leaderChurn) * 100 : 0;
 
                 return (
-                  <div key={item.id} className={`${LEDGER_ROW_MODERN_CLASS} !p-4`} aria-label={`${item.label} git telemetry row`}>
+                  <div key={item.id} className="group min-w-0 p-3 transition-colors hover:bg-[color:var(--stats-surface-subpanel-hover)] motion-reduce:transition-none" aria-label={`${item.label} git telemetry row`}>
                     <div className="flex flex-col gap-4">
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
@@ -242,7 +241,7 @@ export const GitTelemetryLedger: FunctionComponent<{
                             <div className="break-words text-base font-semibold tracking-tight text-[color:var(--stats-value-color)] [overflow-wrap:anywhere]">{item.label}</div>
                             <div className="mt-1.5 flex flex-wrap items-center gap-2">
                               {item.secondaryLabel ? (
-                                <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
+                                <span className={`max-w-full break-words px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-detail-color)] [overflow-wrap:anywhere] ${CHIP_CLASS}`}>
                                   {item.secondaryLabel}
                                 </span>
                               ) : null}
@@ -252,7 +251,7 @@ export const GitTelemetryLedger: FunctionComponent<{
                             </div>
                           </div>
                         </div>
-                        <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-3 xl:w-auto xl:min-w-[46rem] xl:grid-cols-6 xl:text-right">
+                        <div className="grid w-full min-w-0 max-w-full grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6 xl:text-right">
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Code Churn</div>
                             <div className="mt-1 flex items-center gap-3 text-base font-semibold tracking-tight text-[color:var(--stats-value-color)] xl:justify-end text-[color:var(--stats-value-color)]">
@@ -296,7 +295,7 @@ export const GitTelemetryLedger: FunctionComponent<{
                         />
                         <div className={`h-1 rounded-full ${TRACK_CLASS}`}>
                           <div
-                            className="h-1 rounded-full bg-[color:var(--stats-positive-text)] transition-[width] duration-500"
+                            className="h-1 rounded-full bg-[color:var(--stats-positive-text)] transition-[width] duration-500 motion-reduce:transition-none"
                             style={{ width: `${Math.min(100, Math.max(shareOfLeader > 0 ? 3 : 0, shareOfLeader))}%` }}
                           />
                         </div>
@@ -319,7 +318,7 @@ export const GitTelemetryLedger: FunctionComponent<{
                 );
               })}
               {visibleItems.length < filteredItems.length ? (
-                <div ref={sentinelRef} className={`${DASHED_EMPTY_CLASS} py-4 text-[11px] font-bold uppercase tracking-[0.16em]`}>
+                <div ref={sentinelRef} role="status" aria-live="polite" className={`${DASHED_EMPTY_CLASS} py-4 text-[11px] font-bold uppercase tracking-[0.16em]`}>
                   Loading more telemetry lanes...
                 </div>
               ) : null}

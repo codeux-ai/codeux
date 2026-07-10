@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { GitTelemetryTab } from "../components/GitTelemetryTab.js";
 
@@ -10,6 +10,14 @@ expect.extend(matchers);
 
 afterEach(() => {
   cleanup();
+});
+
+beforeEach(() => {
+  window.IntersectionObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof IntersectionObserver;
 });
 
 const mockGitStats = {
@@ -96,7 +104,7 @@ const mockGitStats = {
 
 describe("GitTelemetryTab", () => {
   it("renders summary cards, rankings, and leaderboard tabs", () => {
-    render(<GitTelemetryTab gitStats={mockGitStats} />);
+    const { container } = render(<GitTelemetryTab gitStats={mockGitStats} />);
 
     expect(screen.getAllByText("Insertions").length).toBeGreaterThan(0);
     expect(screen.getByText("Merge Conflicts")).toBeTruthy();
@@ -105,8 +113,29 @@ describe("GitTelemetryTab", () => {
     expect(screen.getAllByText("TASK-1").length).toBeGreaterThan(0);
 
     expect(screen.getByRole("tab", { name: /Task Leaderboard/i })).toHaveAttribute("aria-selected", "true");
+    expect(container.querySelector('[class*="backdrop-blur"]')).toBeNull();
+    expect(container.querySelector('[class*="shadow-"]')).toBeNull();
     fireEvent.click(screen.getByRole("tab", { name: /Sprint Leaderboard/i }));
     expect(screen.getByRole("tab", { name: /Sprint Leaderboard/i })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Sprint Git Telemetry")).toBeTruthy();
+  });
+
+  it("supports roving keyboard navigation across leaderboard tabs", () => {
+    render(<GitTelemetryTab gitStats={mockGitStats} />);
+
+    const tablist = screen.getByRole("tablist", { name: "Git telemetry leaderboards" });
+    const taskTab = screen.getByRole("tab", { name: "Task Leaderboard" });
+    const sprintTab = screen.getByRole("tab", { name: "Sprint Leaderboard" });
+    taskTab.focus();
+
+    fireEvent.keyDown(tablist, { key: "ArrowRight" });
+    expect(sprintTab).toHaveFocus();
+    expect(sprintTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "git-tab-sprints");
+
+    fireEvent.keyDown(tablist, { key: "Home" });
+    expect(taskTab).toHaveFocus();
+    fireEvent.keyDown(tablist, { key: "End" });
+    expect(sprintTab).toHaveFocus();
   });
 });

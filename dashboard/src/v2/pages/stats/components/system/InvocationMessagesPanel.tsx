@@ -38,7 +38,7 @@ const ROLE_ICON_CLASS: Record<ExecutionInvocationMessageRecord["role"], string> 
 
 const SUMMARY_ITEM_CLASS = `${CHIP_CLASS} flex min-w-0 items-center gap-2 px-3 py-2`;
 const SUMMARY_LABEL_CLASS = "shrink-0 text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]";
-const SUMMARY_VALUE_CLASS = "min-w-0 truncate text-xs font-semibold text-[color:var(--stats-value-color)]";
+const SUMMARY_VALUE_CLASS = "min-w-0 break-words text-xs font-semibold text-[color:var(--stats-value-color)] [overflow-wrap:anywhere]";
 
 const SystemFeedbackState: FunctionComponent<{
   icon: LucideIcon;
@@ -48,7 +48,8 @@ const SystemFeedbackState: FunctionComponent<{
   ariaLabel: string;
   tone?: keyof typeof STATUS_TONE_CLASS;
   busy?: boolean;
-}> = ({ icon: Icon, title, detail, role, ariaLabel, tone = "neutral", busy }) => (
+  children?: import("preact").ComponentChildren;
+}> = ({ icon: Icon, title, detail, role, ariaLabel, tone = "neutral", busy, children }) => (
   <div
     role={role}
     aria-label={ariaLabel}
@@ -62,6 +63,7 @@ const SystemFeedbackState: FunctionComponent<{
     <div className="min-w-0">
       <div className="font-bold text-[color:var(--stats-value-color)]">{title}</div>
       <div className="mt-1 break-words leading-relaxed text-[color:var(--stats-detail-color)] [overflow-wrap:anywhere]">{detail}</div>
+      {children ? <div className="mt-3">{children}</div> : null}
     </div>
   </div>
 );
@@ -180,6 +182,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
   const [error, setError] = useState<string | null>(null);
   const [showAllMessages, setShowAllMessages] = useState(false);
   const [expandedSystemMessages, setExpandedSystemMessages] = useState<Record<string, boolean>>({});
+  const [retrySequence, setRetrySequence] = useState(0);
   const messageCount = invocation.messageCount ?? 0;
 
   useEffect(() => {
@@ -213,7 +216,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
     return () => {
       active = false;
     };
-  }, [invocation.id]);
+  }, [invocation.id, retrySequence]);
 
   const visibleMessages = useMemo(
     () => (showAllMessages ? messages : messages.slice(0, 20)),
@@ -319,7 +322,15 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
           role="alert"
           ariaLabel="Transcript messages failed to load"
           tone="negative"
-        />
+        >
+          <button
+            type="button"
+            onClick={() => setRetrySequence((current) => current + 1)}
+            className={`${CHIP_CLASS} inline-flex min-h-9 items-center px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-negative-text)] transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] ${CONTROL_FOCUS_CLASS}`}
+          >
+            Retry transcript
+          </button>
+        </SystemFeedbackState>
       ) : messages.length === 0 ? (
         <SystemFeedbackState
           icon={Inbox}
@@ -361,7 +372,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
                       {message.role === "tool" ? <Code2 className="h-3.5 w-3.5" /> : null}
                     </span>
                     <div className="min-w-0">
-                      <div className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">
+                      <div className="break-words text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)] [overflow-wrap:anywhere]">
                         {roleLabel}
                       </div>
                       <div className="mt-1 text-[10px] text-[color:var(--stats-detail-color)]">{formatDateTime(message.createdAt)}</div>
@@ -371,8 +382,8 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
                   {metadataLabels.length > 0 ? (
                     <div className="flex min-w-0 flex-wrap justify-end gap-1.5">
                       {metadataLabels.map((label) => (
-                        <span key={label} className={`${CHIP_CLASS} max-w-full px-2 py-0.5 text-[10px] text-[color:var(--stats-label-color)]`}>
-                          <span className="block truncate">{label}</span>
+                        <span key={label} className={`${CHIP_CLASS} max-w-full min-w-0 px-2 py-0.5 text-[10px] text-[color:var(--stats-label-color)]`}>
+                          <span className="block break-words [overflow-wrap:anywhere]">{label}</span>
                         </span>
                       ))}
                     </div>

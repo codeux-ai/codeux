@@ -56,9 +56,12 @@ describe("SystemFilterBar", () => {
       <Harness initialFilters={{ status: [], purpose: [], provider: [] }} initialSearch="alpha" />
     );
 
-    expect(container.querySelector(".stats-surface-panel")).toBeTruthy();
+    expect(container.querySelector(".stats-surface-subpanel")).toBeTruthy();
     expect(container.querySelector('[class*="backdrop-blur"]')).toBeNull();
     expect(getByLabelText("Search")).toBe(getByPlaceholderText("Search system stats"));
+    expect(getByRole("status")).toHaveTextContent("Showing 7 of 24 invocation records with 1 active filters");
+    expect(getByRole("status")).toHaveAttribute("aria-live", "polite");
+    expect(getByRole("status")).toHaveAttribute("aria-atomic", "true");
 
     const runningButton = getByRole("button", { name: "Running" });
     expect(runningButton).toHaveAttribute("aria-pressed", "false");

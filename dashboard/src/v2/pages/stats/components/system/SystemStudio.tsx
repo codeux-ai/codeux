@@ -40,16 +40,16 @@ const SystemMetricCard: FunctionComponent<{
   circleClassName: string;
   valueClassName?: string;
 }> = ({ icon: Icon, label, value, detail, circleClassName, valueClassName }) => (
-  <div className={`${SUBPANEL_CLASS} flex min-h-[7.5rem] flex-col justify-between p-4`}>
+  <div className="min-w-0 border-l border-[color:var(--stats-border-hairline)] px-3 py-2 first:border-l-0">
     <div className="flex items-start justify-between gap-3">
-      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--stats-chip-radius)] ${circleClassName}`}>
+      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--stats-chip-radius)] ${circleClassName}`}>
         <Icon className="h-4 w-4" strokeWidth={2.25} />
       </div>
       <div className="text-right text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">
         {label}
       </div>
     </div>
-    <div className={`mt-4 break-words text-xl font-semibold tracking-tight tabular-nums md:text-2xl ${valueClassName || "text-[color:var(--stats-value-color)]"}`}>
+    <div className={`mt-2 break-words text-lg font-semibold tracking-tight tabular-nums [overflow-wrap:anywhere] ${valueClassName || "text-[color:var(--stats-value-color)]"}`}>
       {value}
     </div>
     <div className="mt-1 text-[11px] font-semibold leading-snug text-[color:var(--stats-detail-color)]">
@@ -98,7 +98,7 @@ const StatusDistributionBar: FunctionComponent<{ metrics: SystemSummaryMetrics }
           return (
             <div
               key={segment.key}
-              className={`h-full ${segment.barClassName} transition-[width] duration-500`}
+              className={`h-full ${segment.barClassName} transition-[width] duration-500 motion-reduce:transition-none`}
               style={{ width: `${(count / total) * 100}%` }}
               title={`${segment.label}: ${count}`}
             />
@@ -314,8 +314,8 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
   };
 
   return (
-    <div className="space-y-6">
-      <section className={`${PANEL_CLASS} p-6 md:p-7`}>
+    <div className="min-w-0 space-y-4">
+      <section className={`${SUBPANEL_CLASS} p-4 md:p-5`}>
         <StudioHeader
           icon={Terminal}
           eyebrow="System Telemetry"
@@ -330,7 +330,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
         description="Current sprint and task state stays separate from invocation metrics so active work, blocked work, and settled work can be scanned first."
         action={<SectionCount label="Tasks" value={sprintData.totalTasks} />}
       >
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
+        <div className="grid min-w-0 grid-cols-2 overflow-hidden rounded-[var(--stats-subpanel-radius)] border border-[color:var(--stats-border-hairline)] xl:grid-cols-5">
           <SystemMetricCard
             icon={Activity}
             label="Sprints"
@@ -387,7 +387,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             />
           </div>
         ) : null}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <div className="grid min-w-0 grid-cols-2 overflow-hidden rounded-[var(--stats-subpanel-radius)] border border-[color:var(--stats-border-hairline)] md:grid-cols-3 xl:grid-cols-6">
           <SystemMetricCard
             icon={Activity}
             label="Invocations"
@@ -455,7 +455,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             />
           </div>
         ) : null}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="grid min-w-0 grid-cols-2 overflow-hidden rounded-[var(--stats-subpanel-radius)] border border-[color:var(--stats-border-hairline)] md:grid-cols-4">
           {Object.entries(apiData).map(([key, metrics]) => (
             <SystemMetricCard
               key={key}

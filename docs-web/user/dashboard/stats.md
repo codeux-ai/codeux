@@ -63,7 +63,7 @@ Exposes administrative invocation telemetry without leaving Stats:
 - Classified external API activity.
 - Error categories for recorded invocation failures.
 - Search, status, purpose, provider, error-category, record-view, sort, and pagination controls.
-- Filtered invocation records with expandable transcript details, sortable headers, loading states, and transcript recovery states.
+- Filtered invocation records with expandable transcript details, sortable headers, loading states, and in-place transcript retry after a fetch error.
 
 ## Cost Metrics and Pricing
 

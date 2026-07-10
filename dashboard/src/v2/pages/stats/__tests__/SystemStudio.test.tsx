@@ -99,6 +99,7 @@ describe("SystemStudio", () => {
     });
 
     expect(container.querySelector('[class*="backdrop-blur"]')).toBeNull();
+    expect(container.querySelector('[class*="shadow-"]')).toBeNull();
     expect(screen.getByRole("button", { name: /^All/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Errors/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^System Msgs/ })).toBeTruthy();
