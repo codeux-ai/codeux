@@ -4,6 +4,8 @@ Code UX records provider work in `execution_invocations` and `execution_invocati
 
 Provider transcript parsing is intentionally provider-specific at the edge and normalized before persistence. The shared boundary is `ParsedConversationTurn` from `src/infrastructure/providers/cli/provider-logs/provider-conversation-types.ts`, and persistence maps those turns through `src/services/provider-conversation-message-mapper.ts`.
 
+That mapper keeps the existing message-role contract: readable reasoning becomes an assistant message marked with `metadata.kind = "reasoning"`, injected context becomes a system message, and tool calls/results become tool messages with capped payloads. Provider/model identity, call ids, status, timestamps, and per-turn token evidence remain in message metadata when available.
+
 ## Structured provider parsers
 
 All local CLI providers with agent transcripts have structured parser coverage:
@@ -32,6 +34,8 @@ Codex item lifecycle records are keyed by their provider item or call id. Repeat
 
 Gemini accepts both clean JSON stdout and a balanced response object surrounded by startup or cleanup text. Its parser normalizes Gemini CLI stats and standard `usageMetadata`, and preserves request/candidate roles, timestamps, per-turn token evidence, tool metadata, and statuses when those fields are present. Missing usage remains unavailable so the collector can estimate safely; plain response strings remain text-only and never become inferred reasoning.
 
+Across all six parsers, malformed records are isolated: a bad JSON fragment, wrong-shaped payload, unreadable artifact, or malformed database row does not suppress neighboring valid turns or usage. If reported usage is absent, parsing returns unavailable usage rather than authoritative zeroes so the collector can select an estimate where supported. Parsers do not expose raw malformed fragments in diagnostics and never manufacture transcript content from opaque data.
+
 ## Persistence behavior
 
 `ProviderExecutionService` rewrites invocation messages from structured `ProviderUsageTelemetry.conversation` turns while the provider is running for planning, QA, dashboard/worker replies, setup, remediation, CI and merge repair, task follow-up, and task coding. It clears and rewrites only when structured turns exist, using the JSON representation of the complete mapped message payload as the duplicate-skip signature. Changes to reasoning or assistant text, tool arguments or output, status, timestamps, tokens, or other metadata therefore refresh the transcript even when message counts stay constant, while an identical final payload does not repeat the last live rewrite.
@@ -45,6 +49,8 @@ When a provider or failure mode exposes only final text, Code UX uses a text-onl
 Live provider telemetry is metadata-first. `provider-telemetry-watcher.ts` checks provider/model identity, native session id, stdout/stderr fingerprints, and provider-specific metadata such as session file size/mtime, Qwen log metadata, and Antigravity transcript/database metadata before reading full transcripts or copying provider databases. Unchanged signatures skip full reads, and repeated read failures use bounded backoff until source metadata changes. Antigravity live polls use the same pre-invocation database row cutoff as final collection, so resumed conversations report only current-run usage throughout execution.
 
 Final post-process usage collection remains authoritative. Live telemetry is best effort for dashboard freshness; final collection reconciles the persisted provider usage row when the provider finishes.
+
+Jules remains outside this local CLI parser and watcher path. Its remote session synchronizer records its transcript separately and derives estimated usage from accumulated input/output characters; Code UX does not describe those estimates as provider-native token telemetry.
 
 ## Focused verification
 

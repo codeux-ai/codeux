@@ -17,7 +17,7 @@ Execution invocations span various purposes:
 
 Failed invocations can be explicitly preserved with `preserved_at`. Preservation is used for high-value transcripts such as quota-expensive planning runs that should remain available for operator review. Preserved sprint-scoped invocation rows block sprint deletion through the repository boundary so their transcripts are not removed by a foreign-key cascade.
 
-For supported models, tracking relies on provider-reported usage. For Jules integrations, we compute **estimated** tokens by accumulating input and output characters divided by 4 (the characters-per-token heuristic), keeping it accounted for without inventing authoritative native counts.
+For supported local CLI models, tracking prefers provider-reported usage. Jules retains a separate remote-session synchronization path that computes **estimated** tokens by accumulating input and output characters divided by 4 (the characters-per-token heuristic), keeping it accounted for without inventing authoritative native counts.
 
 ### `execution_invocation_messages`
 This table records each granular interaction loop in an invocation, preserving the exact sequence of `system`, `user`, `assistant`, and `tool` messages. It persists markdown content and parsed JSON arguments for tool calls, serving as a replayable log of an agent's reasoning process.
