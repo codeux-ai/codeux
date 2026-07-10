@@ -27,7 +27,7 @@ expect.extend(matchers);
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/preact';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/preact';
 import { StatsPage } from '../StatsPage.js';
 import { AnalysisStudioSection } from '../components/AnalysisStudioSection.js';
 import { calculateChartMetrics, groupChartSeries } from '../chart-view-models.js';
@@ -167,7 +167,10 @@ function makeChartState(stats = makeStats()) {
   };
 }
 
-function mockStatsPageData(visualMode: 'trend' | 'composition' | 'models' | 'reliability' | 'ledgers' | 'system') {
+function mockStatsPageData(
+  visualMode: 'trend' | 'composition' | 'models' | 'reliability' | 'ledgers' | 'system',
+  overrides: Record<string, unknown> = {},
+) {
   const stats = makeStats();
 
   vi.spyOn(useStatsPageDataModule, 'useStatsPageData').mockReturnValue({
@@ -194,8 +197,9 @@ function mockStatsPageData(visualMode: 'trend' | 'composition' | 'models' | 'rel
     tokenSegments: [{ label: 'Input', value: usage.inputTokens, color: '#00E0A0', textClassName: 'text-signal-600' }],
     applyPresetWindow: vi.fn(),
     applyCustomRange: vi.fn(),
-    completionConfidence: '83%'
-  });
+    completionConfidence: '83%',
+    ...overrides,
+  } as any);
 }
 
 describe('StatsPage visual tests', () => {
@@ -249,6 +253,30 @@ describe('StatsPage visual tests', () => {
     expect(within(analysisPanel).getByText('Usage mix')).toBeTruthy();
     expect(within(analysisPanel).getAllByText('Composition').length).toBeGreaterThan(0);
     expect(within(analysisPanel).getByText('Provider, token, purpose, and source mix for the current telemetry window.')).toBeTruthy();
+  });
+
+  it('keeps cached metrics and workspace content visible during refresh', () => {
+    mockStatsPageData('composition', { loading: true });
+
+    render(<StatsPage />);
+
+    const analysisPanel = screen.getByRole('region', { name: 'Stats analysis panel' });
+    expect(analysisPanel).toHaveAttribute('aria-busy', 'true');
+    expect(within(analysisPanel).getByRole('status')).toHaveTextContent('Updating from cached data');
+    expect(screen.getByRole('region', { name: 'Composition metrics' })).toHaveTextContent('Provider Share');
+    expect(within(analysisPanel).getAllByText('Provider Share').length).toBeGreaterThan(0);
+  });
+
+  it('announces cached refresh failures and preserves a retry action', () => {
+    const refresh = vi.fn();
+    mockStatsPageData('composition', { error: 'Snapshot refresh failed.', refresh });
+
+    render(<StatsPage />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Snapshot refresh failed. Cached values remain visible.');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('region', { name: 'Composition metrics' })).toBeTruthy();
   });
 
   it('renders the Waiting for Telemetry empty state as a flat status panel', () => {
@@ -319,7 +347,7 @@ describe('StatsPage visual tests', () => {
     expect(screen.getByRole('status')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'No project selected' })).toBeTruthy();
     expect(getByText('Stats panel idle')).toBeTruthy();
-    expect(getByText('Project · No project selected')).toBeTruthy();
+    expect(screen.getByLabelText('Stats project context')).toHaveTextContent('No project selected');
     expect(queryByText('Time-series and throughput analysis')).toBeNull();
   });
 
@@ -352,9 +380,9 @@ describe('StatsPage visual tests', () => {
 
     render(<StatsPage />);
 
-    expect(screen.getByText(/^Generated · Loading snapshot$/i)).toBeTruthy();
+    expect(screen.getByLabelText('Stats project context')).toHaveTextContent('Loading snapshot');
     expect(screen.queryByLabelText('Stats workspace context')).toBeNull();
-    expect(screen.getByRole('status')).toHaveTextContent('Loading telemetry field');
+    expect(screen.getByRole('status')).toHaveTextContent('Loading project telemetry');
     expect(screen.getByRole('status')).toHaveTextContent('Stats panel refreshing');
     expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite');
   });
@@ -391,9 +419,10 @@ describe('StatsPage visual tests', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent('Stats panel unavailable');
     expect(screen.getByRole('alert')).toHaveTextContent('Stats fetch failed.');
-    expect(screen.getByRole('alert')).toHaveTextContent('Project · Project 1');
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
-    expect(screen.getByText(/^Generated · No snapshot$/i)).toBeTruthy();
+    expect(screen.getByLabelText('Stats project context')).toHaveTextContent('Project 1');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText('Stats project context')).toHaveTextContent('No snapshot');
   });
 
   it('renders the system studio without crashing', () => {
@@ -410,7 +439,8 @@ describe('StatsPage visual tests', () => {
 
     render(<StatsPage />);
 
-    expect(screen.getAllByLabelText('Stats command controls').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByLabelText('Stats command controls')).toHaveLength(1);
+    expect(screen.getByLabelText('Stats command controls').querySelector('.stats-surface-subpanel')).toBeNull();
     expect(screen.getByLabelText('Stats active lens')).toHaveTextContent('Composition');
     expect(screen.getByLabelText('Stats project context')).toHaveTextContent('Project');
     expect(screen.getByRole('group', { name: 'Time window presets' })).toBeTruthy();
@@ -440,17 +470,32 @@ describe('StatsPage visual tests', () => {
 
     expect(heroPanelRule).toContain('background: var(--stats-surface-panel)');
     expect(heroPanelRule).not.toContain('box-shadow');
-    expect(heroControlsRule).toContain('background: var(--stats-surface-subpanel)');
+    expect(heroControlsRule).toContain('background: var(--stats-surface-panel)');
     expect(heroPresetButtonActiveRule).toContain('background: var(--stats-surface-control-active-strong)');
     expect(stateMessageIconRule).toContain('background: var(--stats-surface-chip)');
     expect(heroPanelRule).toContain('background: var(--stats-surface-panel)');
-    expect(heroControlsRule).toContain('background: var(--stats-surface-subpanel)');
+    expect(heroControlsRule).toContain('background: var(--stats-surface-panel)');
     expect(heroControlSectionRule).not.toMatch(/border:\s*1px/);
     expect(heroControlSectionRule).not.toMatch(/background:/);
     expect(css).not.toContain('backdrop-blur');
     expect(css).not.toContain('var(--surface-glass)');
     expect(css).not.toContain('var(--elevation-base)');
     expect(css).not.toContain('translateY(-1px)');
+    expect(css).toContain('@media (min-width: 640px)');
+    expect(css).toContain('@media (min-width: 768px)');
+    expect(css).toContain('@media (min-width: 1024px)');
+    expect(css).toContain('@media (min-width: 1440px)');
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.workspaceSection\s*\{[\s\S]*animation: none/);
+  });
+
+  it('uses shared motion contracts for shell entrance and mode changes', () => {
+    const pageSource = readFileSync(join(process.cwd(), 'dashboard/src/v2/pages/stats/StatsPage.tsx'), 'utf8');
+    const workspaceSource = readFileSync(join(process.cwd(), 'dashboard/src/v2/pages/stats/components/AnalysisStudioSection.tsx'), 'utf8');
+
+    expect(pageSource).toContain('useGsapInteractionTokens');
+    expect(pageSource).not.toContain('duration: 0.45');
+    expect(workspaceSource).toContain('useInteractionTokens');
+    expect(workspaceSource).toContain('motionTokens.selectionMovement.duration');
   });
 
   it('keeps shared stats shell sources free of old glass and lift tokens', () => {

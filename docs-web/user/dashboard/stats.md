@@ -4,7 +4,9 @@ The **Stats** page (`/stats`) is the analytics surface for the active project. I
 
 Stats metric cards, chips, filters, tables, and ledger rows use flat warm void surfaces, hairline borders, compact typography, and quiet selected states. Shared containers avoid gradients, glass blur, heavy shadows, and hover lift. Data colors are reserved for telemetry meaning such as chart series, status, source confidence, and token/churn breakdowns.
 
-The top command band shows the selected project, generated snapshot time, sprint lens, time-window controls, and analysis mode controls before the mode-specific metric deck and workspace.
+The top command band uses one clear title and a compact context row for the selected project, generated snapshot state, and sprint lens. Time-window and analysis-mode controls sit directly below it in the same flat band, followed by the mode-specific metric deck and active workspace.
+
+On phones the command controls wrap into compact rows. Tablet layouts place project context beside the title, desktop layouts place time and mode controls side by side, and wide layouts add breathing room without changing the reading order.
 
 The top dashboard header also shows a compact app-wide token-throughput summary alongside running and queued task counts near the runtime controls. It uses a rolling 20-second live activity window, updates once per second, and renders a 20-point stats-card-style sparkline that rises on increases, slopes down on decreases, stabilizes near the 90% band while throughput remains nonzero, and drops to baseline when throughput reaches zero. Use it for a live pulse check; use the Stats page for detailed analysis.
 

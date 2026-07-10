@@ -23,8 +23,8 @@ Do not document or render speculative metrics. Missing telemetry is a first-clas
 The redesigned Stats page uses a stable top-to-bottom shell:
 
 1. Header command band
-   - The hero names the Stats workspace with a Stats-native command masthead rather than the generic dashboard page header. It uses warm void panel, subpanel, chip, and input primitives, a compact current-state pill, active lens chips for the selected time window and mode, and context chips for selected project, generated snapshot time, and sprint lens.
-   - The command controls are flat administrative rows inside the subpanel surface. Avoid nested framed material panels, decorative gradients, or extra wrappers around the preset, custom range, and mode controls.
+   - The hero names the Stats workspace with one dominant page title and a compact project-analytics description rather than the generic dashboard page header. A single context row carries the selected project, generated snapshot state, and sprint lens; labels wrap instead of widening the page.
+   - Time-window and mode controls share the same flat command band beneath that context. They are divided by hairline rules rather than nested panels, active-lens cards, current-state pills, decorative gradients, or extra wrappers.
    - Keep only selected project, generated snapshot time, sprint lens, time window, and active visual mode controls visible in the command band.
    - Time presets are `1h`, `24h`, `7d`, `30d`, `All time`, and `Custom`.
    - Choosing `Custom` opens start and end date fields. The selected range changes only after `Apply` succeeds.
@@ -41,10 +41,10 @@ The redesigned Stats page uses a stable top-to-bottom shell:
    - Mode-specific top cards are the single primary metric deck for the selected analysis surface. They use `StatsCard` and should put the most actionable metric first for the selected mode.
    - Cards expose title, value, and string description as the analytics article name. Long values must wrap inside stable card slots.
 4. Workspace body
-   - Mode content starts directly after the metric deck with a compact flat metadata strip for the active mode, not a decorative studio header, readiness chip, duplicated KPI strip, summary-card deck, or duplicated workspace context card.
+   - Mode content starts directly after the metric deck with one compact orientation row for the active mode, not a decorative studio header, readiness chip, duplicated KPI strip, summary-card deck, or duplicated project/range context card.
    - Workspace bodies may differ substantially, but each component must consume the shared Stats panel, chip, input, ledger row, status tone, chart track, focus, and motion tokens directly.
 5. Feedback states
-   - No-project, first-load loading, first-load error, empty, refresh, and reduced-data states preserve the shell rhythm.
+   - No-project, first-load loading, first-load error, empty, refresh, and reduced-data states preserve the same flat shell rhythm without restating project, range, snapshot, and mode metadata already visible in the command band.
    - Loading states use polite status semantics. Error states use alert semantics and expose retry when recovery is available.
 - Refresh states keep existing analytics visible where cached data exists. Mark the affected chart, table, transcript, or page region with `aria-busy` and add visible/polite status text instead of using animation alone.
 - Background refresh states for mode workspaces and invocation ledgers keep cached rows/cards on screen. They add visible polite copy that says the data is updating from cache, while first-load states may still use skeleton or empty loading panels.
@@ -183,7 +183,7 @@ The `StatsPage` uses the `useStatsPageData` hook to coordinate visual modes. The
 
 ## Responsive Behavior
 
-- The hero uses a two-zone command band on wide screens and stacks project context, time controls, and mode navigation on narrow screens.
+- The hero stacks title/context and command controls on phones, moves context beside the title at tablet widths, splits time and mode controls into two columns on desktop, and increases section rhythm at wide-desktop widths.
 - Fixed or sticky header-adjacent navigation must wrap before it clips. Header preset and mode controls should use bounded grids that move from compact multi-row layouts to a single row only when the command column has enough width; use `min-w-0`, wrapping labels, and component-local overflow only when wrapping can no longer preserve button labels.
 - Metric grids collapse from desktop multi-column layouts to two-column and single-column layouts without changing order.
 - Trend places focused-bucket and series context below the chart on narrow screens.
