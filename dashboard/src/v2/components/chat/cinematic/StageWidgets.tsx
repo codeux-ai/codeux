@@ -15,6 +15,8 @@ import {
   Sparkles,
   XCircle,
 } from "lucide-preact";
+import type { AgentResponseEffect } from "../../../../../../src/contracts/connection-chat-types.js";
+import { parseAgentResponseEffectJson } from "../../../lib/agent-response-effects.js";
 
 /* ════════════════════════════════════════════════════════════════════════
  *  Stage widgets — the rich vocabulary agents embed in ordinary markdown.
@@ -46,7 +48,8 @@ export interface StageWidget {
 
 export type BubbleSegment =
   | { kind: "markdown"; markdown: string }
-  | { kind: "widget"; widget: StageWidget };
+  | { kind: "widget"; widget: StageWidget }
+  | { kind: "agent"; effect: AgentResponseEffect };
 
 const WIDGET_FENCE = /```codeux:([a-z]+)[ \t]*\n([\s\S]*?)```/g;
 const WIDGET_TYPES: StageWidgetType[] = ["status", "tasks", "sprint", "metrics", "memory", "actions"];
@@ -59,6 +62,7 @@ export function parseBubbleSegments(markdown: string): BubbleSegment[] {
   for (let match = WIDGET_FENCE.exec(markdown); match; match = WIDGET_FENCE.exec(markdown)) {
     const [raw, type, body] = match;
     let widget: StageWidget | null = null;
+    const agentEffect = type === "agent" ? parseAgentResponseEffectJson(body) : undefined;
     if ((WIDGET_TYPES as string[]).includes(type)) {
       try {
         const data = JSON.parse(body);
@@ -69,11 +73,23 @@ export function parseBubbleSegments(markdown: string): BubbleSegment[] {
         widget = null;
       }
     }
-    if (!widget) continue; // leave the fence inside the surrounding markdown
+    if (!widget && !agentEffect) {
+      if (type !== "agent") continue; // leave unknown/malformed widget fences untouched
+      if (match.index > cursor) {
+        segments.push({ kind: "markdown", markdown: markdown.slice(cursor, match.index) });
+      }
+      segments.push({ kind: "markdown", markdown: raw.replace(/^```codeux:agent[^\n]*/, "```json") });
+      cursor = match.index + raw.length;
+      continue;
+    }
     if (match.index > cursor) {
       segments.push({ kind: "markdown", markdown: markdown.slice(cursor, match.index) });
     }
-    segments.push({ kind: "widget", widget });
+    if (agentEffect) {
+      segments.push({ kind: "agent", effect: agentEffect });
+    } else if (widget) {
+      segments.push({ kind: "widget", widget });
+    }
     cursor = match.index + raw.length;
   }
   if (cursor < markdown.length) {
