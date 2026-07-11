@@ -813,6 +813,14 @@ export interface DesignGuidanceSettings {
   customStyleguides: DesignGuidanceEntrySettings[];
 }
 
+export type GoogleDriveAccessMode = "read-only" | "read-write";
+
+export interface GoogleDriveSettings {
+  enabled: boolean;
+  hostPath: string;
+  accessMode: GoogleDriveAccessMode;
+}
+
 /** Toggles for what appears in an automated Task PR description. See src/domain/sprint/composer/pr-description-composer.ts. */
 export interface TaskPrTemplateSections {
   summary: boolean;
@@ -1330,6 +1338,7 @@ export interface DashboardSettings {
   techstackCatalog: TechstackCatalogSettings;
   techstack: TechstackSelectionSettings;
   designGuidance: DesignGuidanceSettings;
+  googleDrive: GoogleDriveSettings;
   git: GitSettings;
   jira: JiraSettings;
   notion: ExternalImporterSettings;

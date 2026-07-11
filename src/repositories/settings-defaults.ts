@@ -777,6 +777,11 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   },
   techstack: { ...DEFAULT_PROJECT_TECHSTACK },
   designGuidance: cloneDesignGuidanceSettings(DEFAULT_PROJECT_DESIGN_GUIDANCE),
+  googleDrive: {
+    enabled: false,
+    hostPath: "",
+    accessMode: "read-only",
+  },
   git: {
     githubMode: "REMOTE",
     githubToken: "",
