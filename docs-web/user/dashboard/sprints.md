@@ -25,7 +25,7 @@ The progress percentage is a weighted view of every task's lifecycle, not the co
 - After coding, a task contributes 75% while CI, QA, merge, or another post-coding gate is still settling.
 - A task contributes 100% only after final settlement.
 
-The sprint percentage is the average of its task contributions, rounded to the nearest whole percentage point. The completed / total task counter remains a separate raw count, so it does not need to match the weighted percentage. When CI is disabled, a task jumps directly from its final coding contribution to 100% at completion; it does not pause at the 75% CI/post-coding stage.
+The sprint percentage is the average of its task contributions, rounded to one decimal percentage point. The completed / total task counter remains a separate raw count, so it does not need to match the weighted percentage. When CI is disabled, a task jumps directly from its final coding contribution to 100% at completion; it does not pause at the 75% CI/post-coding stage.
 
 Sprint summaries refresh on both project-structure changes and execution-telemetry updates. This means progress can move as coding tool-call telemetry arrives during an active provider run, before the task changes lifecycle stage.
 

@@ -97,6 +97,8 @@ Unique key: `(userId, projectId, bodyMarkdown)`. The dashboard keeps only the ne
 
 Has-many: subtasks, sprint runs, preview sessions, settings overrides.
 
+Sprint progress can be derived without storing another column. The pure domain weighting gives pending tasks `0`, active coding tasks `0.005` per task-coding provider tool call up to `0.5`, code-complete tasks `0.5`, CI/QA/merge-gated tasks `0.75`, and completed or settled tasks `1.0`; the sprint percentage is the average rounded to one decimal place.
+
 ## Subtask (Task)
 
 | Field | Type | Notes |
