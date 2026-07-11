@@ -91,6 +91,58 @@ function buildDeps(): SprintOrchestratorDependencies {
 }
 
 describe("CycleRunner attention sync", () => {
+  it("opens a resettable human handoff when the coding guardrail is exhausted", () => {
+    const deps = buildDeps();
+    vi.mocked(deps.guardrailService!.evaluate).mockReturnValue({
+      allowed: false,
+      count: 5,
+      cap: 5,
+      action: "STOP_AND_WAIT",
+      blockedByTotalCeiling: false,
+    } as any);
+    const runner = new CycleRunner(deps);
+    const task = {
+      id: "T10",
+      record_id: "task-10",
+      title: "Finish release gate",
+      status: "PENDING",
+      session_id: "session-10",
+      provider: "codex",
+    } as any;
+
+    const blocked = (runner as any).applyTaskCodingGuardrail(task, {
+      executionContext: {
+        project: { id: "project-1" },
+        sprint: { id: "sprint-1" },
+      },
+      sprintRunId: "run-1",
+      automationLevel: "SUPERVISED",
+    });
+
+    expect(blocked).toBe(true);
+    expect(task).toMatchObject({
+      status: "BLOCKED",
+      intervention_owner: "HUMAN",
+    });
+    expect(deps.projectAttentionService!.openItems).toHaveBeenCalledWith([
+      expect.objectContaining({
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        taskId: "task-10",
+        sprintRunId: "run-1",
+        attentionType: "human_escalation_required",
+        ownerType: "human",
+        title: "Coding guardrail reached for T10",
+        payload: expect.objectContaining({
+          sourceAttentionType: "task_coding",
+          guardrailAttempts: 5,
+          guardrailCap: 5,
+          sessionId: "session-10",
+        }),
+      }),
+    ]);
+  });
+
   it("consumes duplicate resolved worker conflict signals that no longer have merge work", async () => {
     const deps = buildDeps();
     deps.projectAttentionService = {

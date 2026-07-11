@@ -784,6 +784,35 @@ export class CycleRunner {
     task.intervention_hint = evaluation.blockedByTotalCeiling
       ? `Per-task invocation ceiling reached for task ${task.id} (${evaluation.reason ?? ""}).`
       : `Coding guardrail reached for task ${task.id}: ${evaluation.count}/${evaluation.cap} coding attempts.`;
+    this.deps.projectAttentionService?.openItems?.([{
+      projectId: args.executionContext.project.id,
+      sprintId: args.executionContext.sprint.id,
+      taskId,
+      sprintRunId: args.sprintRunId,
+      attentionType: "human_escalation_required",
+      severity: "high",
+      ownerType: "human" as ProjectAttentionOwnerType,
+      title: `Coding guardrail reached for ${task.id}`,
+      summaryMarkdown: [
+        `Task \`${task.id}\` (${task.title || "untitled"}) exhausted its automated coding budget.`,
+        `Attempts: ${evaluation.count}/${evaluation.cap > 0 ? evaluation.cap : "∞"}.`,
+        task.intervention_hint,
+        "",
+        "Automation is stopped. Resolve this handoff to clear the coding guardrail and allow one fresh dispatch cycle.",
+      ].join("\n"),
+      payload: {
+        sourceAttentionType: "task_coding",
+        guardrailPurpose: "task_coding",
+        guardrailAttempts: evaluation.count,
+        guardrailCap: evaluation.cap,
+        guardrailAction: "human_handoff",
+        taskKey: task.id,
+        taskTitle: task.title,
+        sessionId: task.session_id || null,
+        sessionName: task.session_name || null,
+        provider: task.provider || null,
+      },
+    }]);
     this.deps.logger.info("Task blocked: coding guardrail reached", {
       taskId: task.id,
       count: evaluation.count,
