@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import type { SpeechSettings } from "../../../src/contracts/speech-types.js";
 import {
+  formatLocalTranscript,
+  normalizeWaveformForCtc,
   SpeechTranscriptionService,
   type LocalOnnxSpeechRuntime,
 } from "../../../src/services/speech-transcription-service.js";
@@ -71,10 +73,24 @@ function createLocalRuntime(overrides: Partial<LocalOnnxSpeechRuntime> = {}): Lo
 }
 
 describe("SpeechTranscriptionService", () => {
+  it("normalizes Wav2Vec2 input to zero mean and unit variance", () => {
+    const normalized = normalizeWaveformForCtc(Float32Array.of(1, 2, 3, 4));
+    const mean = Array.from(normalized).reduce((total, value) => total + value, 0) / normalized.length;
+    const variance = Array.from(normalized).reduce((total, value) => total + (value - mean) ** 2, 0) / normalized.length;
+
+    expect(mean).toBeCloseTo(0, 6);
+    expect(variance).toBeCloseTo(1, 5);
+  });
+
+  it("returns legacy uppercase CTC vocabulary output as readable lowercase", () => {
+    expect(formatLocalTranscript("  HALLO   WOMUST BE  ", "waveform_ctc")).toBe("hallo womust be");
+    expect(formatLocalTranscript(" Hello, world. ", "whisper")).toBe("Hello, world.");
+  });
+
   it("returns missing_local_model for explicit local mode when the model is absent", async () => {
     const fetchImpl = vi.fn();
     const service = new SpeechTranscriptionService({
-      resolveSpeechSettings: () => speechSettings({ providerMode: "local_onnx" }),
+      resolveSpeechSettings: () => speechSettings({ providerMode: "local_onnx", localModelId: "Xenova/wav2vec2-base-960h" }),
       localRuntime: createLocalRuntime(),
       fetchImpl,
     });
@@ -104,7 +120,7 @@ describe("SpeechTranscriptionService", () => {
       }),
     });
     const service = new SpeechTranscriptionService({
-      resolveSpeechSettings: () => speechSettings({ providerMode: "local_onnx" }),
+      resolveSpeechSettings: () => speechSettings({ providerMode: "local_onnx", localModelId: "Xenova/wav2vec2-base-960h" }),
       localRuntime,
     });
 
@@ -185,6 +201,7 @@ describe("SpeechTranscriptionService", () => {
     const service = new SpeechTranscriptionService({
       resolveSpeechSettings: () => speechSettings({
         providerMode: "local_onnx",
+        localModelId: "Xenova/wav2vec2-base-960h",
         externalTranscription: {
           baseUrl: "https://transcribe.example.test/v1/audio/transcriptions",
           apiKey: "configured-but-unused",

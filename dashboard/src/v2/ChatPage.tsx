@@ -44,6 +44,7 @@ import {
 import { clearChatDraftFromUrl, readChatDraftFromLocation } from "./lib/no-project-chat-assistant.js";
 import { resolveChatLiveEntities, type ChatLiveEntityWidget } from "./lib/chat-live-entities.js";
 import { STATUS_MESSAGE_MIN_INTERVAL_MS } from "./lib/agent-humor-messages.js";
+import { useSpeechPlayback } from "./hooks/use-speech-playback.js";
 
 
 const EMPTY_LIVE_ENTITIES: readonly ChatLiveEntityWidget[] = [];
@@ -232,6 +233,7 @@ export const ChatPage: FunctionComponent = () => {
     typeof window === "undefined" ? null : readChatDraftFromLocation(window.location)
   ));
   const invocationFeedback = useActionFeedback();
+  const transcriptSpeech = useSpeechPlayback();
 
   const {
     chatMode,
@@ -296,6 +298,10 @@ export const ChatPage: FunctionComponent = () => {
     sprintKeyPrefix,
     liveEntityContext,
   } = useChatPageData({ composerRef, messagesRef });
+
+  useEffect(() => {
+    transcriptSpeech.stop();
+  }, [chatMode, selectedInvocationId, selectedThreadId, transcriptSpeech.stop]);
 
   useEffect(() => {
     if (typeof window === "undefined" || selectedProject) {
@@ -786,6 +792,12 @@ export const ChatPage: FunctionComponent = () => {
                       widgetLiveData={widgetLiveData}
                       liveEntities={threadLiveEntitiesByMessageId.get(message.id) ?? EMPTY_LIVE_ENTITIES}
                       onPromptSuggestionSelect={handlePromptSuggestionSelect}
+                      onReplay={(replayMessage) => void transcriptSpeech.play({
+                        markdown: replayMessage.bodyMarkdown,
+                        messageId: replayMessage.id,
+                        projectId: selectedProject?.id ?? null,
+                      })}
+                      replaying={transcriptSpeech.activeMessageId === message.id}
                     />
                   );
                 })}
@@ -1190,6 +1202,12 @@ export const ChatPage: FunctionComponent = () => {
                       agentName={message.role === "assistant" ? (selectedAgentPreset?.name ?? null) : null}
                       widgetLiveData={widgetLiveData}
                       liveEntities={invocationLiveEntitiesByMessageId.get(message.id) ?? EMPTY_LIVE_ENTITIES}
+                      onReplay={(replayMessage) => void transcriptSpeech.play({
+                        markdown: replayMessage.contentMarkdown,
+                        messageId: replayMessage.id,
+                        projectId: selectedProject?.id ?? null,
+                      })}
+                      replaying={transcriptSpeech.activeMessageId === message.id}
                     />
                   );
                 })

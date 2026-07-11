@@ -23,6 +23,7 @@ import {
   resolveSpeechModelEntry,
   type SpeechModelCatalogEntry,
 } from "./speech-model-catalog.js";
+import { transcribeWhisperOnnx } from "./whisper-onnx-runtime.js";
 
 export interface SpeechTranscriptionInput {
   audio: Buffer;
@@ -178,6 +179,22 @@ function resampleLinear(samples: Float32Array, sourceRate: number, targetRate: n
   return output;
 }
 
+export function normalizeWaveformForCtc(samples: Float32Array): Float32Array {
+  if (samples.length === 0) return samples;
+  let sum = 0;
+  for (const sample of samples) sum += sample;
+  const mean = sum / samples.length;
+  let variance = 0;
+  for (const sample of samples) variance += (sample - mean) ** 2;
+  const scale = Math.sqrt(variance / samples.length + 1e-7);
+  return Float32Array.from(samples, (sample) => (sample - mean) / scale);
+}
+
+export function formatLocalTranscript(text: string, adapter: SpeechModelCatalogEntry["adapter"]): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  return adapter === "waveform_ctc" ? normalized.toLocaleLowerCase("en-US") : normalized;
+}
+
 function decodeCtcLogits(data: Iterable<number | bigint>, dims: readonly number[], labels: string[]): string {
   const vocabularySize = dims.at(-1) ?? labels.length;
   if (!vocabularySize || vocabularySize <= 1) throw new Error("CTC model returned invalid logits.");
@@ -230,53 +247,67 @@ export class DefaultLocalOnnxSpeechRuntime implements LocalOnnxSpeechRuntime {
       throw new Error("ONNX Runtime is unavailable.");
     }
 
-    const paths = getSpeechModelPaths(args.model.id, args.dataDir ?? this.dataDir);
-    const session = await ort.InferenceSession.create(paths.modelPath);
-    const inputName = session.inputNames[0];
-    if (!inputName) {
-      throw new Error("Local ONNX model does not declare an input tensor.");
-    }
-
+    const resampled = resampleLinear(args.audio, args.sampleRate, args.model.sampleRateHz);
     if (args.model.adapter === "whisper") {
-      throw new Error("This Whisper ONNX bundle requires encoder-decoder generation; choose Wav2Vec2 for direct local waveform transcription or use the external Whisper API.");
-    }
-    const samples = resampleLinear(args.audio, args.sampleRate, args.model.sampleRateHz);
-    const outputs = await session.run({
-      [inputName]: new ort.Tensor("float32", samples, [1, samples.length]),
-    });
-    const output = Object.values(outputs)[0];
-    if (!output) {
-      throw new Error("Local ONNX model did not return an output tensor.");
-    }
-
-    if (Array.isArray(output.data) && output.data.every((entry) => typeof entry === "string")) {
       return {
-        text: output.data.join(" ").trim(),
-        language: args.language,
+        text: await transcribeWhisperOnnx({
+          ort,
+          audio: resampled,
+          model: args.model,
+          dataDir: args.dataDir ?? this.dataDir,
+          durationSeconds: args.durationSeconds,
+        }),
+        language: args.language ?? "en",
         durationSeconds: args.durationSeconds,
       };
     }
+    const paths = getSpeechModelPaths(args.model.id, args.dataDir ?? this.dataDir);
+    const session = await ort.InferenceSession.create(paths.modelPath);
+    try {
+      const inputName = session.inputNames[0];
+      if (!inputName) {
+        throw new Error("Local ONNX model does not declare an input tensor.");
+      }
+      const samples = normalizeWaveformForCtc(resampled);
+      const outputs = await session.run({
+        [inputName]: new ort.Tensor("float32", samples, [1, samples.length]),
+      });
+      const output = Object.values(outputs)[0];
+      if (!output) {
+        throw new Error("Local ONNX model did not return an output tensor.");
+      }
 
-    const labels = await readLabels(paths.labelsPath);
-    if (labels) {
-      if (output.dims.length >= 3) {
+      if (Array.isArray(output.data) && output.data.every((entry) => typeof entry === "string")) {
         return {
-          text: decodeCtcLogits(output.data as Iterable<number | bigint>, output.dims, labels),
+          text: output.data.join(" ").trim(),
           language: args.language,
           durationSeconds: args.durationSeconds,
         };
       }
-      const tokenIds = Array.from(output.data as Iterable<number | bigint>)
-        .map((value) => Number(value))
-        .filter((value) => Number.isInteger(value) && value >= 0 && value < labels.length);
-      return {
-        text: tokenIds.map((tokenId) => labels[tokenId]).join("").trim(),
-        language: args.language,
-        durationSeconds: args.durationSeconds,
-      };
-    }
 
-    throw new Error("Local ONNX model did not return decodable text output.");
+      const labels = await readLabels(paths.labelsPath);
+      if (labels) {
+        if (output.dims.length >= 3) {
+          return {
+            text: decodeCtcLogits(output.data as Iterable<number | bigint>, output.dims, labels),
+            language: args.language,
+            durationSeconds: args.durationSeconds,
+          };
+        }
+        const tokenIds = Array.from(output.data as Iterable<number | bigint>)
+          .map((value) => Number(value))
+          .filter((value) => Number.isInteger(value) && value >= 0 && value < labels.length);
+        return {
+          text: tokenIds.map((tokenId) => labels[tokenId]).join("").trim(),
+          language: args.language,
+          durationSeconds: args.durationSeconds,
+        };
+      }
+
+      throw new Error("Local ONNX model did not return decodable text output.");
+    } finally {
+      await session.release();
+    }
   }
 }
 
@@ -362,7 +393,7 @@ export class SpeechTranscriptionService {
       });
       return {
         ok: true,
-        text: result.text,
+        text: formatLocalTranscript(result.text, model.adapter),
         provider: "local_onnx",
         model: model.id,
         language: result.language,

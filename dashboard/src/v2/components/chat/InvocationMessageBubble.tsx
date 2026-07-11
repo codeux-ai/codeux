@@ -21,6 +21,7 @@ import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
 import type { ChatWidgetLiveData, RichWidgetDescriptor } from "../../lib/chat-widget-view-models.js";
 import type { ChatLiveEntityWidget } from "../../lib/chat-live-entities.js";
 import type { AgentAvatarConfig } from "../../types.js";
+import { SpeechReplayButton } from "../speech/SpeechReplayButton.js";
 
 const asString = (value: unknown): string | null => (typeof value === "string" ? value : null);
 
@@ -47,6 +48,8 @@ export interface InvocationMessageBubbleProps {
   agentName?: string | null;
   widgetLiveData?: ChatWidgetLiveData;
   liveEntities?: readonly ChatLiveEntityWidget[];
+  onReplay?: (message: ExecutionInvocationMessageRecord) => void;
+  replaying?: boolean;
 }
 
 export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleProps> = ({
@@ -55,6 +58,8 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
   agentName,
   widgetLiveData,
   liveEntities = [],
+  onReplay,
+  replaying = false,
 }) => {
   const fromUser = message.role === "user";
   const fromTool = message.role === "tool";
@@ -191,6 +196,13 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
               </span>
             )}
             {createdAtLabel && <span>{createdAtLabel}</span>}
+            {message.role === "assistant" && onReplay && !widgetData.suppressBodyMarkdown && message.contentMarkdown.trim() && (
+              <SpeechReplayButton
+                busy={replaying}
+                label={`Replay message from ${senderName}`}
+                onReplay={() => onReplay(message)}
+              />
+            )}
           </div>
 
           {/* Message Body */}

@@ -76,17 +76,18 @@ Local speech transcription does not require an external API key, but it does req
 ONNX speech model files in your Code UX home cache:
 
 ```text
-~/.code-ux/models/speech/<sanitized-model-id>/model.onnx
-~/.code-ux/models/speech/<sanitized-model-id>/labels.json  # optional
+~/.code-ux/models/speech/<sanitized-model-id>/
 ```
 
 For the default model, the directory is:
 
 ```text
-~/.code-ux/models/speech/xenova--wav2vec2-base-960h/
+~/.code-ux/models/speech/onnx-community--whisper-base.en/
 ```
 
-Local is the default speech provider mode. If the model is missing, the dashboard shows a setup error
+Install and activate Whisper Base English under Settings -> AI Models. Whisper Tiny is faster, while
+the legacy Wav2Vec2 Base model remains available for lower-latency transcription. Local is the default
+speech provider mode. If the selected model is missing, the dashboard shows a setup error
 without sending audio elsewhere. To use an OpenAI-compatible transcription endpoint, select API in
 Settings -> AI Models and configure its base URL, API key, and model.
 

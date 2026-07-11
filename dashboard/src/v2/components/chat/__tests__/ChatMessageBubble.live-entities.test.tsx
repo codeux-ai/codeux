@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, render, screen, within } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatMessageBubble } from "../ChatMessageBubble.js";
@@ -104,5 +104,39 @@ describe("ChatMessageBubble live entities", () => {
     expect(container.textContent).toContain("Plain thread message.");
     expect(screen.queryByText("Live sprint context")).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: /Widget:/ })).not.toBeInTheDocument();
+  });
+
+  it("offers a compact accessible replay action only for agent messages", () => {
+    const onReplay = vi.fn();
+    const { rerender } = render(
+      <ChatMessageBubble message={createMessage()} agentName="Planner" onReplay={onReplay} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Replay message from Planner" }));
+    expect(onReplay).toHaveBeenCalledWith(expect.objectContaining({ id: "msg-1" }));
+
+    rerender(
+      <ChatMessageBubble
+        message={createMessage({ direction: "dashboard_to_connection" })}
+        onReplay={onReplay}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /Replay message/ })).not.toBeInTheDocument();
+  });
+
+  it("does not offer replay when a rich widget suppresses its raw JSON body", () => {
+    const bodyMarkdown = JSON.stringify({
+      provider: "github",
+      kind: "issue",
+      number: 108,
+      title: "Track dashboard widget polish",
+      state: "open",
+      url: "https://github.com/codeux-ai/codeux/issues/108",
+      repositoryPath: "codeux-ai/codeux",
+    });
+
+    render(<ChatMessageBubble message={createMessage({ bodyMarkdown })} onReplay={vi.fn()} />);
+
+    expect(screen.queryByRole("button", { name: /Replay message/ })).not.toBeInTheDocument();
   });
 });

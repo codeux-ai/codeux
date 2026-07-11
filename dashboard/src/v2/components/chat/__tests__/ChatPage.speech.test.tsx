@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,6 +13,10 @@ const speechButtonMock = vi.hoisted(() => ({
   lastDisabled: false,
   lastProjectId: null as string | null,
   lastSprintId: null as string | null,
+}));
+
+const synthesisMock = vi.hoisted(() => ({
+  synthesizeSpeech: vi.fn<() => Promise<Blob>>(),
 }));
 
 const mocks = vi.hoisted(() => {
@@ -135,6 +139,10 @@ vi.mock("../../../components/speech/SpeechInputButton.js", () => ({
   },
 }));
 
+vi.mock("../../../lib/speech-api.js", () => ({
+  synthesizeSpeech: synthesisMock.synthesizeSpeech,
+}));
+
 const renderChatPage = () => render(
   <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: mocks.data.selectedProject } as any}>
     <ChatPage />
@@ -149,6 +157,8 @@ describe("ChatPage speech input", () => {
     speechButtonMock.lastProjectId = null;
     speechButtonMock.lastSprintId = null;
     window.localStorage.clear();
+    synthesisMock.synthesizeSpeech.mockReset();
+    synthesisMock.synthesizeSpeech.mockReturnValue(new Promise(() => {}));
     mocks.data = {
       ...mocks.baseData,
       setChatMode: vi.fn(),
@@ -281,5 +291,184 @@ describe("ChatPage speech input", () => {
 
     fireEvent.click(microphone);
     expect(mocks.data.setInput).toHaveBeenCalledWith("Dictated task");
+  });
+
+  it("seeds loaded 3D history without speaking it, then auto-plays one newly appended agent reply", async () => {
+    const historicalReply = {
+      id: "reply-historical",
+      threadId: "thread1",
+      direction: "connection_to_dashboard",
+      authorType: "connection",
+      authorConnectionId: "connection-1",
+      bodyMarkdown: "Historical reply",
+      deliveryStatus: "delivered",
+      createdAt: "2026-03-10T12:00:00.000Z",
+      metadata: null,
+    };
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "stage",
+      messages: [historicalReply],
+    };
+
+    const view = renderChatPage();
+    await screen.findByRole("button", { name: "Mute project manager" });
+    expect(synthesisMock.synthesizeSpeech).not.toHaveBeenCalled();
+
+    const freshReply = {
+      ...historicalReply,
+      id: "reply-fresh",
+      bodyMarkdown: "Fresh **agent** reply",
+      createdAt: "2026-03-10T12:01:00.000Z",
+    };
+    mocks.data = { ...mocks.data, messages: [historicalReply, freshReply] };
+    view.rerender(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: mocks.data.selectedProject } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>,
+    );
+
+    await waitFor(() => expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledTimes(1));
+    expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledWith("Fresh agent reply", "p1");
+  });
+
+  it("replays the staged agent message only after its explicit replay control is clicked", async () => {
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "stage",
+      messages: [{
+        id: "reply-1",
+        threadId: "thread1",
+        direction: "connection_to_dashboard",
+        authorType: "connection",
+        authorConnectionId: "connection-1",
+        bodyMarkdown: "Replay this reply",
+        deliveryStatus: "delivered",
+        createdAt: "2026-03-10T12:00:00.000Z",
+        metadata: null,
+      }],
+    };
+
+    renderChatPage();
+    const replay = await screen.findByRole("button", { name: "Replay message from Project Manager" });
+    expect(synthesisMock.synthesizeSpeech).not.toHaveBeenCalled();
+    fireEvent.click(replay);
+
+    await waitFor(() => expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledWith("Replay this reply", "p1"));
+  });
+
+  it("auto-plays the first reply after sending in a brand-new empty 3D thread", async () => {
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "stage",
+      input: "First question",
+      selectedThread: null,
+      selectedThreadId: null,
+      threads: [],
+      messages: [],
+      handleSend: vi.fn(() => Promise.resolve()),
+    };
+
+    const view = renderChatPage();
+    await screen.findByRole("button", { name: "Mute project manager" });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    const createdThread = {
+      ...mocks.baseData.selectedThread,
+      id: "thread-created-after-send",
+      title: "New thread",
+    };
+    const userMessage = {
+      id: "first-user-message",
+      threadId: createdThread.id,
+      direction: "dashboard_to_connection",
+      authorType: "user",
+      authorConnectionId: null,
+      bodyMarkdown: "First question",
+      deliveryStatus: "processed",
+      createdAt: "2026-03-10T12:00:00.000Z",
+      metadata: null,
+    };
+    const firstReply = {
+      ...userMessage,
+      id: "first-agent-reply",
+      direction: "connection_to_dashboard",
+      authorType: "connection",
+      authorConnectionId: "connection-1",
+      bodyMarkdown: "First answer",
+      createdAt: "2026-03-10T12:00:01.000Z",
+    };
+    mocks.data = {
+      ...mocks.data,
+      input: "",
+      selectedThread: createdThread,
+      selectedThreadId: createdThread.id,
+      threads: [createdThread],
+      messages: [userMessage, firstReply],
+    };
+    view.rerender(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: mocks.data.selectedProject } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>,
+    );
+
+    await waitFor(() => expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledTimes(1));
+    expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledWith("First answer", "p1");
+  });
+
+  it("keeps loaded thread and invocation transcripts silent until replay is requested", async () => {
+    const threadReply = {
+      id: "thread-agent-reply",
+      threadId: "thread1",
+      direction: "connection_to_dashboard",
+      authorType: "connection",
+      authorConnectionId: "connection-1",
+      bodyMarkdown: "Loaded thread reply",
+      deliveryStatus: "delivered",
+      createdAt: "2026-03-10T12:00:00.000Z",
+      metadata: null,
+    };
+    mocks.data = { ...mocks.data, chatMode: "threads", messages: [threadReply] };
+    const view = renderChatPage();
+
+    expect(await screen.findByRole("button", { name: "Replay message from Assistant" })).toBeInTheDocument();
+    expect(synthesisMock.synthesizeSpeech).not.toHaveBeenCalled();
+
+    const invocation = {
+      id: "inv-1",
+      projectId: "p1",
+      type: "planning",
+      status: "completed",
+      provider: "codex",
+      model: "gpt",
+      startedAt: "2026-03-10T12:00:00.000Z",
+      finishedAt: "2026-03-10T12:02:00.000Z",
+      createdAt: "2026-03-10T12:00:00.000Z",
+      updatedAt: "2026-03-10T12:02:00.000Z",
+      messageCount: 1,
+    };
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "invocations",
+      selectedInvocation: invocation,
+      selectedInvocationId: invocation.id,
+      invocationMessages: [{
+        id: "invocation-agent-reply",
+        invocationId: invocation.id,
+        role: "assistant",
+        contentMarkdown: "Loaded invocation reply",
+        toolCallsJson: null,
+        createdAt: "2026-03-10T12:01:00.000Z",
+        metadata: null,
+      }],
+    };
+    view.rerender(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: mocks.data.selectedProject } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>,
+    );
+
+    expect(await screen.findByRole("button", { name: "Replay message from Assistant" })).toBeInTheDocument();
+    expect(synthesisMock.synthesizeSpeech).not.toHaveBeenCalled();
   });
 });
