@@ -1,18 +1,22 @@
 import type { AppDbStorage } from "../app-db-storage.js";
 import type { SprintReviewSummary, SprintRecord } from "../../contracts/project-management-types.js";
+import type { SprintProgressTask } from "../../domain/sprint/sprint-progress.js";
 import { toNumber } from "../repository-utils.js";
 
 export interface SprintSummaryAggregation {
   tasksCount: number;
   completedTasks: number;
+  progressTasks: SprintProgressTask[];
   latestRunStatus: string | null;
   latestReview?: SprintReviewSummary;
 }
 
-interface SprintTaskCountRow {
+interface SprintTaskProgressRow {
   sprint_id: string;
-  tasks_count: number | string | null;
-  completed_tasks: number | string | null;
+  status: SprintProgressTask["status"];
+  is_merged: number | string | null;
+  merge_indicator: SprintProgressTask["mergeIndicator"];
+  coding_tool_call_count: number | string | null;
 }
 
 interface SprintLatestRunRow {
@@ -60,6 +64,7 @@ export function loadSprintSummaryAggregationMap(
     map.set(sprintId, {
       tasksCount: 0,
       completedTasks: 0,
+      progressTasks: [],
       latestRunStatus: null,
     });
   }
@@ -68,23 +73,36 @@ export function loadSprintSummaryAggregationMap(
     return map;
   }
 
-  for (const row of storage.executeChunkedInQuery<SprintTaskCountRow>({
+  for (const row of storage.executeChunkedInQuery<SprintTaskProgressRow>({
     sqlPrefix: `
       SELECT
-        sprint_id,
-        COUNT(*) AS tasks_count,
-        COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS completed_tasks
-      FROM tasks
-      WHERE sprint_id`,
+        t.sprint_id,
+        t.status,
+        t.is_merged,
+        t.merge_indicator,
+        COALESCE(SUM(pi.tool_call_count), 0) AS coding_tool_call_count
+      FROM tasks t
+      LEFT JOIN provider_invocations pi
+        ON pi.task_id = t.id
+        AND pi.purpose = 'task_coding'
+      WHERE t.sprint_id`,
     sqlSuffix: `
-      GROUP BY sprint_id
+      GROUP BY t.sprint_id, t.id, t.status, t.is_merged, t.merge_indicator
     `,
     items: uniqueSprintIds,
   })) {
     const aggregate = map.get(row.sprint_id);
     if (aggregate) {
-      aggregate.tasksCount = toNumber(row.tasks_count);
-      aggregate.completedTasks = toNumber(row.completed_tasks);
+      aggregate.tasksCount += 1;
+      if (row.status === "completed") {
+        aggregate.completedTasks += 1;
+      }
+      aggregate.progressTasks.push({
+        status: row.status,
+        isMerged: Boolean(toNumber(row.is_merged)),
+        mergeIndicator: row.merge_indicator,
+        toolCallCount: toNumber(row.coding_tool_call_count),
+      });
     }
   }
 

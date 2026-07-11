@@ -21,7 +21,7 @@ Each sprint row and showcase card has separate **Tasks** and **Live** actions. T
 
 The progress percentage is a weighted view of every task's lifecycle, not the completed-task counter:
 
-- A task begins at 0% and can advance through the first 50% while coding is active. Code UX uses coding `provider_invocations.tool_call_count` telemetry for this band: each tool call adds 0.5 percentage points, up to a 100-call cap. Calls after the first 100 do not increase the coding contribution beyond 50%.
+- A task begins at 0% and can advance through the first 50% while coding is active. Code UX uses coding `provider_invocations.tool_call_count` telemetry for this band: each tool call adds 0.5 percentage points, up to a 100-call cap. Calls after the first 100 do not increase the coding contribution beyond 50%. Planning, CI-fix, QA, and other non-coding invocation telemetry do not count toward this band.
 - After coding, a task contributes 75% while CI, QA, merge, or another post-coding gate is still settling.
 - A task contributes 100% only after final settlement.
 
