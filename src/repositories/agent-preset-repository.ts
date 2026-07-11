@@ -2,11 +2,13 @@ import { DatabaseAdapter } from "./db/database-adapter.js";
 import { AppDbStorage } from "./app-db-storage.js";
 import { requireRecord } from "./repository-utils.js";
 import { sanitizeAgentMcpAccess } from "../services/agent-mcp-access.js";
+import { parseBaseAgentInstructionStates } from "../services/base-agent-update-state.js";
 import type {
   AgentMcpAccessConfig,
   AgentMemoryConfig,
   AgentSourceScope,
   AgentPresetRecord,
+  BaseAgentInstructionStates,
   CreateAgentPresetInput,
   UpdateAgentPresetInput,
 } from "../contracts/agent-preset-types.js";
@@ -31,6 +33,7 @@ interface AgentPresetRow {
   persistent_skill_storage_enabled: number;
   mcp_access_json: string | null;
   memory_config_json: string | null;
+  base_instruction_state_json: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -103,6 +106,20 @@ function parseMemoryConfig(value: string | null): AgentMemoryConfig | undefined 
 
 function serializeMemoryConfig(value: AgentMemoryConfig | undefined): string | null {
   return value ? JSON.stringify(value) : null;
+}
+
+function parseBaseInstructionStates(value: string | null): BaseAgentInstructionStates | undefined {
+  if (!value) return undefined;
+  try {
+    return parseBaseAgentInstructionStates(JSON.parse(value));
+  } catch {
+    return undefined;
+  }
+}
+
+function serializeBaseInstructionStates(value: BaseAgentInstructionStates | undefined): string | null {
+  const parsed = parseBaseAgentInstructionStates(value);
+  return parsed ? JSON.stringify(parsed) : null;
 }
 
 function serializeNullableBoolean(value: boolean | null | undefined): number | null {
@@ -178,9 +195,10 @@ export class AgentPresetRepository {
         persistent_skill_storage_enabled,
         memory_config_json,
         mcp_access_json,
+        base_instruction_state_json,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       projectId,
@@ -201,6 +219,7 @@ export class AgentPresetRepository {
       input.persistentSkillStorage?.enabled ? 1 : 0,
       serializeMemoryConfig(input.memoryConfig),
       this.serializeMcpAccess(input.mcpAccess),
+      serializeBaseInstructionStates(input.baseInstructionStates),
       now,
       now,
     );
@@ -236,9 +255,10 @@ export class AgentPresetRepository {
         persistent_skill_storage_enabled,
         memory_config_json,
         mcp_access_json,
+        base_instruction_state_json,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       projectId,
@@ -259,6 +279,7 @@ export class AgentPresetRepository {
       input.persistentSkillStorage?.enabled ? 1 : 0,
       input.memoryConfig ? JSON.stringify(input.memoryConfig) : null,
       this.serializeMcpAccess(input.mcpAccess),
+      serializeBaseInstructionStates(input.baseInstructionStates),
       now,
       now,
     );
@@ -272,7 +293,7 @@ export class AgentPresetRepository {
     const now = new Date().toISOString();
     this.db.prepare(`
       UPDATE agent_presets
-      SET name = ?, description = ?, instruction_markdown = ?, labels_json = ?, avatar_config_json = ?, provider_config_id = ?, model = ?, container_run_as_root = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, persistent_skill_storage_enabled = ?, memory_config_json = ?, mcp_access_json = ?, updated_at = ?
+      SET name = ?, description = ?, instruction_markdown = ?, labels_json = ?, avatar_config_json = ?, provider_config_id = ?, model = ?, container_run_as_root = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, persistent_skill_storage_enabled = ?, memory_config_json = ?, mcp_access_json = ?, base_instruction_state_json = ?, updated_at = ?
       WHERE id = ?
     `).run(
       input.name?.trim() || current.name,
@@ -292,6 +313,9 @@ export class AgentPresetRepository {
         ? (current.memoryConfig ? JSON.stringify(current.memoryConfig) : null)
         : (input.memoryConfig ? JSON.stringify(input.memoryConfig) : null),
       input.mcpAccess === undefined ? this.serializeMcpAccess(current.mcpAccess) : this.serializeMcpAccess(input.mcpAccess),
+      input.baseInstructionStates === undefined
+        ? serializeBaseInstructionStates(current.baseInstructionStates)
+        : serializeBaseInstructionStates(input.baseInstructionStates),
       now,
       agentPresetId,
     );
@@ -461,6 +485,7 @@ export class AgentPresetRepository {
       mcpAccess: parseMcpAccess(row.mcp_access_json),
       persistentSkillStorageIds: this.listPersistentSkillStorageIds(row.id),
       persistentSkillStorage: { enabled: Boolean(row.persistent_skill_storage_enabled) },
+      baseInstructionStates: parseBaseInstructionStates(row.base_instruction_state_json),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
