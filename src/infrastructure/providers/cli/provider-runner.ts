@@ -52,6 +52,7 @@ import {
 } from "./provider-usage.js";
 import { buildQwenRuntimeConfig, buildOpenCodeRuntimeConfig, type QwenRuntimeSettings, type OpenCodeRuntimeSettings } from "./provider-runtime-config.js";
 import type { PersistentSkillStorageRuntimeMount } from "../../../services/skill-service.js";
+import type { GoogleDriveRuntimeMount } from "../../../services/google-drive-mount-service.js";
 
 export interface ProviderRunResult extends CommandResult {
   usageTelemetry: ProviderUsageTelemetry;
@@ -125,6 +126,8 @@ export interface ProviderRunInput {
   customMcpServers?: CustomMcpServer[];
   /** Writable persistent skill storage mounts available outside the project workspace. */
   persistentSkillStorageMounts?: PersistentSkillStorageRuntimeMount[];
+  /** Validated Google Drive bind mount available to Docker-backed provider runs. */
+  googleDriveMount?: GoogleDriveRuntimeMount;
 }
 
 export interface IProviderRunner {
@@ -258,6 +261,7 @@ export class ProviderRunner implements IProviderRunner {
     mcpConnection?: McpConnectionInfo | null;
     customMcpServers?: CustomMcpServer[];
     persistentSkillStorageMounts?: PersistentSkillStorageRuntimeMount[];
+    googleDriveMount?: GoogleDriveRuntimeMount;
   }): Promise<ProviderRunResult> {
     const { provider, cwd, model, apiKey, providerMountAuth, providerAuthPath, sessionId, workflowSettings, repoPath, githubToken, gitlabToken, signal, onActivity, onTelemetry } = input;
     const prompt = this.resolveNativeSessionOperationPrompt(provider, input.prompt, input.nativeSessionOperation, input.continueSessionId);
@@ -380,6 +384,7 @@ export class ProviderRunner implements IProviderRunner {
           mcpConnection: input.mcpConnection,
           customMcpServers: input.customMcpServers,
           persistentSkillStorageMounts: input.persistentSkillStorageMounts,
+          googleDriveMount: input.googleDriveMount,
         });
         if (!result.ok && isDockerWorkspaceMountError(result)) {
           try { await fs.access(cwd); trackingOnActivity(`Docker could not mount workspace path (${cwd}) even though it exists locally. Path visibility mismatch.`, "provider"); } catch { /* ignore */ }
@@ -566,6 +571,7 @@ export class ProviderRunner implements IProviderRunner {
               providerConfigPath: input.providerConfigPath,
               mcpConnection: input.mcpConnection,
               customMcpServers: input.customMcpServers,
+              googleDriveMount: input.googleDriveMount,
               signal,
             },
           );
@@ -761,6 +767,7 @@ export class ProviderRunner implements IProviderRunner {
       providerConfigPath?: string;
       mcpConnection?: McpConnectionInfo | null;
       customMcpServers?: CustomMcpServer[];
+      googleDriveMount?: GoogleDriveRuntimeMount;
       signal?: AbortSignal;
     },
   ): Promise<string | null> {
@@ -784,6 +791,7 @@ export class ProviderRunner implements IProviderRunner {
           providerConfigPath: opts.providerConfigPath,
           mcpConnection: opts.mcpConnection,
           customMcpServers: opts.customMcpServers,
+          googleDriveMount: opts.googleDriveMount,
         });
         return result.stdout || null;
       }
