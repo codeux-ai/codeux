@@ -18,6 +18,40 @@ describe("sprint progress", () => {
     expect(calculateSprintProgress([])).toBe(0);
   });
 
+  it.each(["pending", "PENDING"] as const)(
+    "keeps %s tasks at zero despite stale merge and coding metadata",
+    (status) => {
+      expect(calculateTaskProgress(task({
+        status,
+        isMerged: true,
+        mergeIndicator: "CI",
+        toolCallCount: 100,
+      }))).toBe(0);
+      expect(calculateTaskProgress(task({
+        status,
+        mergeIndicator: "MERGED",
+        toolCallCount: 100,
+      }))).toBe(0);
+    },
+  );
+
+  it.each(["in_progress", "RUNNING"] as const)(
+    "uses only coding telemetry for %s tasks with stale merge metadata",
+    (status) => {
+      expect(calculateTaskProgress(task({
+        status,
+        isMerged: true,
+        mergeIndicator: "CI",
+        toolCallCount: 13,
+      }))).toBe(0.065);
+      expect(calculateTaskProgress(task({
+        status,
+        mergeIndicator: "MERGED",
+        toolCallCount: 13,
+      }))).toBe(0.065);
+    },
+  );
+
   it("caps unfinished coding progress at 100 tool calls", () => {
     expect(calculateTaskProgress(task({ status: "in_progress", toolCallCount: 100 }))).toBe(0.5);
     expect(calculateTaskProgress(task({ status: "RUNNING", toolCallCount: 150 }))).toBe(0.5);
@@ -54,8 +88,8 @@ describe("sprint progress", () => {
     },
   );
 
-  it("treats an explicit merged state as full progress", () => {
-    expect(calculateTaskProgress(task({ status: "in_progress", isMerged: true }))).toBe(1);
+  it("treats an explicit merged state as full progress after coding", () => {
+    expect(calculateTaskProgress(task({ status: "coding_completed", isMerged: true }))).toBe(1);
   });
 
   it("averages mixed task weights and rounds to one decimal percentage point", () => {

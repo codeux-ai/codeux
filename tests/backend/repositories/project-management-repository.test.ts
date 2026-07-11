@@ -872,7 +872,7 @@ describe("ProjectManagementRepository", () => {
       isMerged: true,
       mergeIndicator: null,
     });
-    expect(repository.listSprints(project.id).sprints[0].completion).toBe(10);
+    expect(repository.listSprints(project.id).sprints[0].completion).toBe(0.8);
     expect(repository.listProjects().projects[0].completedTasks).toBe(0);
 
     repository.updateTask(activeTask.id, {
