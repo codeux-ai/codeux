@@ -99,6 +99,14 @@ Project management:
   - Pushes sqlite presets to project markdown files when `agents.saveToProjectDirectory` is enabled, exporting manual, missing-source, out-of-sync, home-backed, and default-backed agents as project-local files
 - `POST /api/projects/:projectId/agent-presets/push`
   - Commits `.code-ux/agents/*.md` changes from the selected project, optionally pushes the branch, and can open a pull request against the default branch when repository remotes are available
+- `GET /api/projects/:projectId/agent-presets/base-updates`
+  - Synchronizes agent sources and returns pending bundled compatibility notices for only the independently routed Planning agent and Project manager roles; untouched selected built-ins are updated automatically and omitted from the response
+  - Each remaining notice identifies the actual routed target with `selectedAgentPresetId` and `selectedAgentName`, and uses reason `customized_instructions` or `alternate_route`; this read does not invoke a provider
+- `POST /api/projects/:projectId/agent-presets/base-updates/:baseAgentRole/apply`
+  - Consumes no request body; `baseAgentRole` must be `planning_agent` or `project_manager`, and a current notice must exist
+  - Explicitly invokes the configured supported local provider through the `planning` route and records execution type `agent_base_update`; the provider must return raw JSON containing only a non-empty `instructionMarkdown`
+  - Validation preserves every line of the selected preset in order and allows only compatibility-critical system-instruction additions. `AgentPresetSyncService` applies the markdown after rechecking the routed preset, while prompts, custom behavior, avatar, labels, routing, provider/model, memory, MCP access, persistent skills, and source metadata remain unchanged
+  - Invalid roles, missing or stale notices, unsupported providers, provider failures, invalid output, and concurrent route changes fail without changing the preset or advancing its stored bundled revision
 - `POST /api/projects/:projectId/planning/improve-sprint-prompt`
   - Sends a draft sprint prompt to the Planning agent through the configured virtual worker provider and returns the improved prompt
   - Planning overrides may explicitly target a specific `planningAgentPresetId`, as well as a virtual CLI provider/model for that one request. The composer defaults to the project Agent Routing planning preset.
@@ -560,6 +568,8 @@ Legacy runtime:
 - The agent editor shows a compact memory summary chip under the filter trigger so operators can see the active memory scope without opening the popover.
 - Worker prompt preparation honors that memory config at runtime by filtering injected memories after retrieval, so the prompt only includes the configured tier(s), categories, strength thresholds, and per-tier caps.
 - Agents page is DB-backed and manages project-scoped agents (`name`, `short routing description`, `instruction markdown`, `memory template markdown`)
+- Agents page checks for bundled Planning agent and Project manager compatibility notices without invoking a provider. Untouched selected built-ins update automatically; customized presets and alternate Planning/dashboard-reply route targets receive an amber notice naming the actual selected preset and an explicit **Update with AI** action.
+- The notice explains that the agent compares both base files and applies only important system-compatibility instructions while preserving the main prompt, custom instructions, and behavior. The guarded merge cannot change agent metadata, and failure leaves the notice available for retry.
 - Agents are auto-imported from project and home `.code-ux/agents/*.md` when first discovered
 - Project-local markdown mirroring is enabled by default through project settings, so dashboard edits create/update `.code-ux/agents/*.md` in the selected repo without touching shipped defaults
 - Markdown-backed agents now show sync state and support single-agent `Import`, roster-level `Pull from files`, roster-level `Push to files`, and single-agent `Push to file`; sqlite remains the live authority, pull copies file content into sqlite, and push exports sqlite presets to project files
