@@ -277,6 +277,9 @@ export class CliWorkflowService {
         return null;
       });
     const effectiveWorkflowSettings = this.applyAgentWorkflowSettings(workflowSettings, workerAgent);
+    const taskRun = args.taskRunId && this.deps.executionRepository
+      ? this.deps.executionRepository.getTaskRun(args.taskRunId)
+      : null;
 
     const ctx: PipelineContext = {
       ...args,
@@ -292,6 +295,15 @@ export class CliWorkflowService {
       agentPresetId: workerAgent?.id,
       agentMemoryConfig: workerAgent?.memoryConfig,
       agentMcpAccess: workerAgent ? workerClarificationAgentMcpAccess(workerAgent.mcpAccess) : undefined,
+      taskClarificationContext: {
+        projectId: taskRun?.projectId || args.settingsScope?.projectId,
+        sprintId: taskRun?.sprintId || args.settingsScope?.sprintId,
+        taskId: taskRun?.taskId || args.taskRecordId || args.task.record_id || args.task.id,
+        sprintRunId: taskRun?.sprintRunId,
+        dispatchId: taskRun?.dispatchId || args.dispatchId,
+        taskRunId: taskRun?.id || args.taskRunId,
+        sessionId: args.sessionId,
+      },
       memoryTemplateOverrideEnabled: workerAgent?.memoryTemplateOverrideEnabled,
       memoryTemplateMarkdown: workerAgent?.memoryTemplateMarkdown,
       workspaceManager: this.workspaceManager,

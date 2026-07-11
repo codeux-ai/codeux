@@ -26,6 +26,8 @@ The project-manager MCP gateway carries two audience-scoped tools; no additional
 
 Listing and invocation use the same checks. Unknown or ineligible agents, cross-project calls, and cross-audience calls return `MethodNotFound`. These narrow grants still honor system toggles and explicit agent disables and do not grant other management tools or custom MCP servers. Dashboard-reply and persistent-skill access continue to use their existing policies.
 
+Task-coding runs add the narrow worker clarification gateway even when the selected coding agent has built-in Code UX disabled. Saved tool restrictions and linked custom-server filtering remain intact, and coding agents never receive `reply_to_clarification`. Fresh, resumed, and QA-requested coding prompts include the available project, task, and runtime identifiers and require one concise, evidence-based `request_clarification` question before ambiguity or a project-manager decision is reported as a terminal blocker.
+
 ## Idempotency and events
 
 A project-scoped deduplication key makes repeated identical submissions return the existing clarification. Reusing the key for different request content or runtime scope is rejected.

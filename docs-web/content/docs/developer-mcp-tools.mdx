@@ -21,6 +21,9 @@ Tools are filtered before being advertised on `ListTools`:
    malformed, or unconfigured agent identities fail closed and receive no built-in Code UX tools.
    Known agents can receive tool-specific overrides; for example, `search_skills` can stay enabled
    while `manage_skills` is disabled.
+4. **Agent audience** — clarification tools have an additional fail-closed audience grant. Coding-task
+   agents can request clarification only for their eligible project/task scope; project-manager reply
+   agents can answer. The same check runs for listing and calls.
 
 Agent-scoped provider runs are also default-deny for built-in Code UX tools. Newly synced Worker,
 Project manager, and generated coding agents may link the default `playwright` custom MCP server,
@@ -42,6 +45,8 @@ action-specific fields, and an optional `approval` object for destructive action
 
 | Tool | Category | Purpose |
 | --- | --- | --- |
+| `request_clarification` | orchestration | Raise an idempotent, project-owned Markdown question from an eligible coding agent. |
+| `reply_to_clarification` | orchestration | Answer a pending clarification as the eligible project-manager agent or an unscoped project-manager client. |
 | `manage_projects` | orchestration | List, get, create, update, select, set up, and delete projects. |
 | `manage_sprints` | orchestration | Plan, start, pause, cancel, inspect, import issues into, and edit sprints. |
 | `manage_tasks` | orchestration | Create, edit, start, stop, pause, and inspect tasks. |
@@ -61,7 +66,7 @@ action-specific fields, and an optional `approval` object for destructive action
 | `manage_chat_providers` | platform | Manage external chat provider setup definitions, connections, bindings, and outbound delivery state. |
 | `manage_telemetry` | platform | Read execution snapshots, invocations, sprint runs, and dispatches. |
 
-Every tool requires `runtimeRoles: ["project_manager"]` and is enabled by default.
+Every tool uses the existing `project_manager` gateway runtime role and is enabled by default. Clarification tools additionally require their worker or project-manager audience grant; unknown, cross-project, and unauthorized agent calls return `MethodNotFound`.
 
 ### Action enums
 
