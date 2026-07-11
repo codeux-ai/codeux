@@ -107,20 +107,30 @@ The REST API and MCP `manage_quicksprints` tool expose these actions:
 
 `QuicksprintService.launchDetachedQuicksprint` is the internal primitive for chat quickactions that need a sprint record immediately while planning continues in the background. It creates the sprint synchronously, starts the same planning flow with the same prompt composition and override resolution as `execute`, and returns a planning request descriptor with `projectId`, `sprintId`, `templateId`, `submitMode`, `clientRequestId`, planner options for request tracking, and the detached planning promise. Chat create-app quickactions attach to that promise so the backend can update the app progress widget and append any queued thread follow-ups to the sprint goal after planning resolves, without frontend polling. The existing REST `/api/projects/:projectId/quicksprints/execute` route and MCP `execute` / `start` actions remain awaited: they return only after planning completes or fails.
 
-Current built-in purpose set:
+Current built-in purpose sets:
 - `Fullstack JS App`
+- `Create App`
 
 That purpose selector is intentionally future-facing. Additional built-in sets can be added later for other language and product families without redesigning the Quicksprint browse flow.
 
 ## Built-In Templates
 
-The current `Fullstack JS App` purpose set ships with six built-ins:
+The `Fullstack JS App` purpose set ships with six built-ins:
 - `Code Quality & Performance Audit`
 - `Security Vulnerability Scan`
 - `UI Usability & Accessibility Audit`
 - `UI - Design Improvements`
 - `UI - Responsive Layout Improvements`
 - `UI - Interactions & Design Improvements`
+
+The `Create App` purpose set ships with five repository-aware product templates:
+- `Create Web App`
+- `Create Desktop App`
+- `Create Onlineshop`
+- `Create Portfolio`
+- `Create Game`
+
+Chat quickactions resolve their display label, app-kind label, stable template id, and transient design-guidance selection from `src/domain/chat/create-app-quickaction-catalog.ts`. The backend validates the kind/template pair and adds the selected guidance to that planning request; it does not save those selections to project settings. Each create-app prompt inspects the repository, avoids generic stack assumptions and confirmation steps, and asks for an implementation-ready dependency DAG.
 
 These templates are designed to produce strong planning subtasks without assuming any repository-specific file layout.
 

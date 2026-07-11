@@ -17,6 +17,11 @@ const DEFAULT_TEMPLATE_ORDER = [
   "qs-ui-design",
   "qs-ui-responsive",
   "qs-ui-interactions",
+  "qs-create-web-app",
+  "qs-create-desktop-app",
+  "qs-create-online-shop",
+  "qs-create-portfolio",
+  "qs-create-game",
 ] as const;
 
 function resolveTemplateDirectories(): string[] {
