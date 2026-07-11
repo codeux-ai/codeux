@@ -27,6 +27,7 @@ import { h } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import * as THREE from "../../../lib/three-lite.js";
 import type { AgentAvatarConfig } from "../../types.js";
+import type { AgentResponseAnimation } from "../../../../../src/contracts/connection-chat-types.js";
 import {
   DEFAULT_AGENT_AVATAR_CONFIG,
   getAccentHex,
@@ -55,9 +56,11 @@ import {
 import { extrudeLogoPath, type LogoShapeFrame } from "../../lib/logo-shapes.js";
 import { AgentAvatarSvg } from "./AgentAvatarSvg.js";
 
-interface AgentAvatarSceneProps {
+export interface AgentAvatarSceneProps {
   config?: AgentAvatarConfig;
   expression?: AgentAvatarExpression;
+  /** A validated, short-lived choreography layered over the semantic expression. */
+  animation?: AgentResponseAnimation;
   className?: string;
   fallbackMode?: boolean;
   /**
@@ -78,6 +81,15 @@ export type AgentSceneTool = "screwdriver" | "jackhammer" | "wrench" | "hammer" 
 
 /** Resting scale of the tool group once its entrance pop finishes. */
 const TOOL_SCALE = 0.5;
+
+const RESPONSE_ANIMATION_EXPRESSION: Record<AgentResponseAnimation, AgentAvatarExpression> = {
+  hyped: "hyped",
+  shake_head: "shake_head",
+  nod: "nod",
+  laughing: "laughing",
+  wink: "wink",
+  dance: "dance",
+};
 
 /* ── Hex string → THREE.Color int ── */
 function hexInt(hex: string, fallback = 0x000000): number {
@@ -1025,6 +1037,7 @@ function disposeSubtree(
 export function AgentAvatarScene({
   config = DEFAULT_AGENT_AVATAR_CONFIG,
   expression = "happy",
+  animation,
   className = "",
   fallbackMode = false,
   pointerTracking = "hover",
@@ -1037,6 +1050,9 @@ export function AgentAvatarScene({
     return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   });
   const configKey = `${config.chassis}-${config.eyes}-${config.antenna}-${config.wings}-${config.headphones}-${config.accent}-${config.baseColor}-${config.visorColor}`;
+  const choreographyExpression = animation
+    ? RESPONSE_ANIMATION_EXPRESSION[animation]
+    : expression;
 
   /** Persistent across config changes. Created once on mount. */
   const rendererRef = useRef<{
@@ -1295,7 +1311,7 @@ export function AgentAvatarScene({
     let eyeScaleY = 1.0;
     let jewelIntensity = 0.95;
 
-    switch (expression) {
+    switch (choreographyExpression) {
       case "happy":
         bounceAmp = 0.06; bounceSpeed = 1.8;
         jewelIntensity = 1.0;
@@ -1430,18 +1446,18 @@ export function AgentAvatarScene({
 
       // Head pose — pointer parallax wins over idle drift when hovering
       const ptr = pointerRef.current;
-      if (expression === "shake_head") {
+      if (choreographyExpression === "shake_head") {
         // Slow, deliberate "no" — a fast shake reads as glitching
         p.headGroup.rotation.y = Math.sin(t * 1.8) * 0.22;
-      } else if (expression === "nod") {
+      } else if (choreographyExpression === "nod") {
         // Calm, reassuring "yes"
         p.headGroup.rotation.x = Math.sin(t * 1.6) * 0.14;
-      } else if (expression === "dance") {
+      } else if (choreographyExpression === "dance") {
         // Groove — side-to-side sway, alternating lean, little hip shift
         p.headGroup.rotation.z = Math.sin(t * 3.2) * 0.16;
         p.headGroup.rotation.y = Math.sin(t * 1.6) * 0.22;
         p.headGroup.position.x = Math.sin(t * 3.2) * 0.08;
-      } else if (expression === "laughing") {
+      } else if (choreographyExpression === "laughing") {
         // Soft chuckle — gentle pitch wobble thrown back
         p.headGroup.rotation.x = -0.1 + Math.sin(t * 5) * 0.04;
         p.headGroup.rotation.z = Math.sin(t * 2.5) * 0.03;
@@ -1452,7 +1468,7 @@ export function AgentAvatarScene({
         p.headGroup.rotation.x = THREE.MathUtils.lerp(p.headGroup.rotation.x, targetPitch, 0.08);
         p.headGroup.rotation.z = THREE.MathUtils.lerp(p.headGroup.rotation.z, headTiltZ, 0.06);
       }
-      if (expression !== "dance") {
+      if (choreographyExpression !== "dance") {
         // Damp out any leftover dance hip-shift when the mood changes
         p.headGroup.position.x = THREE.MathUtils.lerp(p.headGroup.position.x, 0, 0.1);
       }
@@ -1471,7 +1487,7 @@ export function AgentAvatarScene({
       // Wink — the left eye drops on a lazy cycle while the right stays open
       let leftBlink = blinkFactor;
       const rightBlink = blinkFactor;
-      if (expression === "wink") {
+      if (choreographyExpression === "wink") {
         const winkPhase = t % 2.8;
         if (winkPhase < 0.45) leftBlink = 0.1;
       }
@@ -1559,7 +1575,7 @@ export function AgentAvatarScene({
       const r2 = rendererRef.current;
       if (r2) cancelAnimationFrame(r2.animationId);
     };
-  }, [expression, shouldUseFallback, webglError]);
+  }, [choreographyExpression, shouldUseFallback, webglError]);
 
   if (shouldUseFallback || webglError) {
     return (

@@ -35,6 +35,29 @@ describe("parseBubbleSegments", () => {
     expect(parseBubbleSegments(unknown)).toEqual([{ kind: "markdown", markdown: unknown }]);
   });
 
+  it("extracts valid agent cues as non-markdown segments", () => {
+    const segments = parseBubbleSegments([
+      "Reply stays visible.",
+      "```codeux:agent",
+      '{ "emotion": "excited", "animation": "dance", "caption": "Done!", "durationMs": 2200 }',
+      "```",
+    ].join("\n"));
+
+    expect(segments).toHaveLength(2);
+    expect(segments[0]).toEqual({ kind: "markdown", markdown: "Reply stays visible.\n" });
+    expect(segments[1]).toEqual({
+      kind: "agent",
+      effect: { emotion: "excited", animation: "dance", caption: "Done!", durationMs: 2200 },
+    });
+  });
+
+  it("downgrades malformed agent cues to ordinary JSON markdown", () => {
+    expect(parseBubbleSegments("```codeux:agent\n{not json}\n```")).toEqual([{
+      kind: "markdown",
+      markdown: "```json\n{not json}\n```",
+    }]);
+  });
+
   it("returns a single markdown segment for plain replies", () => {
     expect(parseBubbleSegments("just text")).toEqual([{ kind: "markdown", markdown: "just text" }]);
   });

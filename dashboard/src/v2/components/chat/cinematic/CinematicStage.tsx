@@ -20,6 +20,11 @@ import { buildCinematicQuickActions } from "../../../lib/cinematic-quick-actions
 import { useProjectEffectiveSettings } from "../../../hooks/use-project-effective-settings.js";
 import { synthesizeSpeech } from "../../../lib/speech-api.js";
 import { SpeechInputButton } from "../../speech/SpeechInputButton.js";
+import type { AgentResponseEffect } from "../../../../../../src/contracts/connection-chat-types.js";
+import {
+  getAgentResponseEffectCaption,
+  resolveAgentResponseEffect,
+} from "../../../lib/agent-response-effects.js";
 
 /* ════════════════════════════════════════════════════════════════════════
  *  CinematicStage — the default "3D Chat" view of the chat page.
@@ -184,7 +189,7 @@ const AgentSpeechBubble: FunctionComponent<{
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
           {segments.map((segment, index) =>
-            segment.kind === "widget" ? (
+            segment.kind === "agent" ? null : segment.kind === "widget" ? (
               <StageWidgetRenderer key={index} widget={segment.widget} onAction={onAction} />
             ) : (
               !widgetData.suppressBodyMarkdown && (
@@ -358,6 +363,22 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     }
   }
   const latestAgentMessage = latestAgentIndex >= 0 ? visibleMessages[latestAgentIndex] : null;
+  const latestResponseEffect = latestAgentMessage
+    ? resolveAgentResponseEffect(latestAgentMessage.metadata, latestAgentMessage.bodyMarkdown || "")
+    : undefined;
+  const latestResponseEffectKey = latestAgentMessage && latestResponseEffect
+    ? `${latestAgentMessage.id}:${latestResponseEffect.emotion}:${latestResponseEffect.animation}:${latestResponseEffect.durationMs}:${latestResponseEffect.caption ?? ""}`
+    : null;
+  const [activeResponseEffect, setActiveResponseEffect] = useState<AgentResponseEffect | null>(null);
+  useEffect(() => {
+    if (!latestResponseEffect || !latestResponseEffectKey) {
+      setActiveResponseEffect(null);
+      return;
+    }
+    setActiveResponseEffect(latestResponseEffect);
+    const timer = window.setTimeout(() => setActiveResponseEffect(null), latestResponseEffect.durationMs);
+    return () => window.clearTimeout(timer);
+  }, [latestResponseEffectKey]);
   const pendingUserMessages = visibleMessages
     .slice(latestAgentIndex + 1)
     .filter((message) => message.direction === "dashboard_to_connection")
@@ -465,6 +486,12 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     userEngaged: composerFocused || input.trim().length > 0,
     agentName,
   });
+  // Runtime truth always wins. A validated reply effect may only replace the
+  // otherwise idle/listening micro-expression for its bounded lifetime.
+  const responseEffect = !error && !sending && !runtimeBusy ? activeResponseEffect : null;
+  const stageExpression = responseEffect?.emotion ?? mood.expression;
+  const stageAnimation = reducedMotion ? undefined : responseEffect?.animation;
+  const stageCaption = responseEffect ? getAgentResponseEffectCaption(responseEffect) : mood.caption;
 
   /* Cinematic drift — the whole bot slowly floats, leans, and wanders a few
      pixels on top of the scene's own idle bob, so it never reads as parked. */
@@ -572,9 +599,17 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
             ref={floatRef}
             className="pointer-events-auto h-[28vh] w-[28vh] max-w-full will-change-transform md:h-[min(48vh,520px)] md:w-[min(48vh,520px)]"
             role="img"
-            aria-label={`${agentName}, animated project manager. ${mood.caption}`}
+            aria-label={`${agentName}, project manager. ${stageCaption}`}
           >
-            <LazyAgentAvatarScene eager pointerTracking="window" tool={activeTool} config={avatarConfig} expression={mood.expression} className="h-full w-full" />
+            <LazyAgentAvatarScene
+              eager
+              pointerTracking="window"
+              tool={activeTool}
+              config={avatarConfig}
+              expression={stageExpression}
+              animation={stageAnimation}
+              className="h-full w-full"
+            />
           </div>
 
           {/* Name plate + truthful mood caption — tucked up into the canvas's
@@ -584,7 +619,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
               {agentName}
             </div>
             <div aria-live="polite" className="mt-0.5 text-[12px] font-medium text-slate-500 dark:text-slate-400">
-              {mood.caption}
+              {stageCaption}
             </div>
             <div className="mt-1.5 flex items-center justify-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
               <span className={`h-1 w-1 rounded-full ${activeConnection ? "bg-signal-500" : "bg-slate-300 dark:bg-slate-600"}`} aria-hidden="true" />

@@ -3,6 +3,7 @@ import { lazy, Suspense } from "preact/compat";
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { AgentAvatarConfig } from "../../types.js";
 import type { AgentAvatarExpression } from "../../lib/agent-avatar.js";
+import type { AgentResponseAnimation } from "../../../../../src/contracts/connection-chat-types.js";
 import type { AgentSceneTool } from "./AgentAvatarScene.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { AgentAvatarSvg } from "./AgentAvatarSvg.js";
@@ -11,9 +12,10 @@ const AgentAvatarScene = lazy(() => import("./AgentAvatarScene.js").then((module
   default: module.AgentAvatarScene,
 })));
 
-interface LazyAgentAvatarSceneProps {
+export interface LazyAgentAvatarSceneProps {
   config?: AgentAvatarConfig;
   expression?: AgentAvatarExpression;
+  animation?: AgentResponseAnimation;
   className?: string;
   fallbackMode?: boolean;
   eager?: boolean;
