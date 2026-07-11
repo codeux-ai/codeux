@@ -314,7 +314,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-settings',
     section: 'User Guide',
     title: "Settings",
-    description: "The Settings page (/config) is the unified configuration surface. It exposes every tunable in the engine, organised into category navigation and content panels.",
+    description: "The Settings page (/config) is the unified configuration surface. It exposes every tunable in the engine, organised into a category rail and content panels.",
   },
   'user-dashboard-styleguides-and-tech-stacks': {
     id: 'user-dashboard-styleguides-and-tech-stacks',

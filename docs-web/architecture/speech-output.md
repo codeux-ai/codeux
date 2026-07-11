@@ -27,9 +27,11 @@ The catalog excludes non-commercial and research-only models. Piper LJSpeech and
 
 The external variant uses an OpenAI-compatible `/audio/speech` endpoint. Configure the base URL, API key, model, voice, and output format under Text to speech. Code UX sends `model`, `input`, `voice`, `response_format`, and `speed`, and never caches the returned audio.
 
+Local model and voice settings resolve as a compatible pair across system, project, and sprint scopes. If an older child-scope voice override does not exist on a newly selected inherited model, Code UX uses that model's default voice and verifies the pair again before inference.
+
 ## 3D Chat voice
 
-When TTS is active, the volume icon in the avatar nameplate control dock starts enabled. New project-manager replies are synthesized and played once; refreshing, opening existing history, or changing threads does not replay them. Before synthesis, Code UX silently removes dashboard-only rich-widget fences and fenced code while preserving the surrounding visible prose, so widget payloads and artificial omission notices are never spoken. Click the icon to mute or unmute. The adjacent microphone dictates into the 3D Chat draft. Both controls remain outside the composer. Muting stops current playback and is remembered per project in that browser without disabling the saved TTS runtime for other clients.
+When TTS is active, the volume icon in the avatar nameplate control dock starts enabled. New project-manager replies are synthesized and played once; refreshing, opening existing history, or changing threads does not replay them. Before synthesis, Code UX silently removes dashboard-only rich-widget fences and fenced code while preserving the surrounding visible prose, so widget payloads and artificial omission notices are never spoken. Click the icon to mute or unmute. The adjacent microphone dictates into the 3D Chat draft. Both controls remain outside the composer. Muting stops current playback and is remembered per project in that browser without disabling the saved TTS runtime for other clients. Synthesis or browser playback failures appear as an accessible inline voice error instead of being silently ignored.
 
 Assistant prose messages include a small accessible replay control in 3D Chat, Threads, and invocation transcripts. Replay is explicit in Threads and Invocations: transcript loading and live updates never start speech. Long replies play as sequential requests within the synthesis request limit, and starting another clip stops the previous clip on that surface.
 

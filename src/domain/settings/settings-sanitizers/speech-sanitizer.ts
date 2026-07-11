@@ -5,6 +5,7 @@ import {
   SPEECH_PROVIDER_MODES,
 } from "../../../contracts/speech-types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../repositories/settings-defaults.js";
+import { resolveCompatibleSynthesisVoice } from "../../../services/speech-model-catalog.js";
 import { readBoolean, readInteger, readString } from "../../../shared/config/value-readers.js";
 
 export const MIN_SPEECH_AUDIO_SECONDS = 1;
@@ -61,6 +62,16 @@ export const sanitizeSpeech = (
     : defaults.localModelId;
   const requestedSynthesisModelId = readRequiredTrimmedString(synthesisInput.localModelId, defaults.synthesis.localModelId);
   const legacySynthesis = LEGACY_TTS_MODELS[requestedSynthesisModelId];
+  const synthesisModelId = legacySynthesis?.modelId ?? requestedSynthesisModelId;
+  const requestedSynthesisVoice = legacySynthesis?.voice
+    ?? readRequiredTrimmedString(synthesisInput.voice, defaults.synthesis.voice);
+  let synthesisVoice = requestedSynthesisVoice;
+  try {
+    synthesisVoice = resolveCompatibleSynthesisVoice(synthesisModelId, requestedSynthesisVoice);
+  } catch {
+    // Preserve unknown model ids so the synthesis endpoint can return its
+    // existing structured configuration error.
+  }
 
   return {
     enabled: readBoolean(speechInput.enabled, defaults.enabled),
@@ -80,8 +91,8 @@ export const sanitizeSpeech = (
     synthesis: {
       enabled: readBoolean(synthesisInput.enabled, defaults.synthesis.enabled),
       providerMode: readSpeechProviderMode(synthesisInput.providerMode, defaults.synthesis.providerMode),
-      localModelId: legacySynthesis?.modelId ?? requestedSynthesisModelId,
-      voice: legacySynthesis?.voice ?? readRequiredTrimmedString(synthesisInput.voice, defaults.synthesis.voice),
+      localModelId: synthesisModelId,
+      voice: synthesisVoice,
       speed: Math.max(0.5, Math.min(2, typeof synthesisInput.speed === "number" && Number.isFinite(synthesisInput.speed)
         ? synthesisInput.speed
         : defaults.synthesis.speed)),

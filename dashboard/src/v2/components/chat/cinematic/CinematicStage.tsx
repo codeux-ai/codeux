@@ -698,6 +698,11 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
                 {voiceEnabled ? <Volume2 className={`h-5 w-5 ${speechPlayback.activeMessageId ? "animate-pulse motion-reduce:animate-none" : ""}`} aria-hidden="true" /> : <VolumeX className="h-5 w-5" aria-hidden="true" />}
               </button>
             </div>
+            {speechPlayback.error ? (
+              <div role="status" className="mx-auto mt-2 max-w-xs rounded-xl border border-rose-500/20 bg-rose-500/[0.08] px-3 py-2 text-[11px] font-medium text-rose-700 shadow-sm dark:text-rose-200">
+                Voice error: {speechPlayback.error}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>

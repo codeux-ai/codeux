@@ -617,6 +617,22 @@ describe("validateSettingsPayload", () => {
     expect(sanitized.synthesis.voice).toBe("ljspeech");
   });
 
+  it("replaces an inherited voice that is incompatible with the selected synthesis model", () => {
+    const sanitized = sanitizeSpeech({
+      speech: {
+        ...DEFAULT_DASHBOARD_SETTINGS.speech,
+        synthesis: {
+          ...DEFAULT_DASHBOARD_SETTINGS.speech.synthesis,
+          localModelId: "piper-de-de-mls-medium",
+          voice: "am_michael",
+        },
+      },
+    });
+
+    expect(sanitized.synthesis.localModelId).toBe("piper-de-de-mls-medium");
+    expect(sanitized.synthesis.voice).toBe("mls-de-default");
+  });
+
   it("migrates removed or unknown local transcription models to Whisper Base", () => {
     const sanitized = sanitizeSpeech({
       speech: {

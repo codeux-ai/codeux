@@ -504,6 +504,25 @@ describe("Settings Resolution Service", () => {
       expect(settings.automationLevel).toBe("FULL");
     });
 
+    it("repairs a stale project voice override after the inherited TTS model changes", () => {
+      const systemSettings = sanitizeSystemSettings({});
+      systemSettings.defaults.speech.synthesis = {
+        ...systemSettings.defaults.speech.synthesis,
+        enabled: true,
+        localModelId: "piper-de-de-mls-medium",
+        voice: "mls-de-default",
+      };
+
+      const settings = resolveProjectSettings(systemSettings, {
+        speech: { synthesis: { voice: "am_michael" } },
+      });
+
+      expect(settings.speech.synthesis).toMatchObject({
+        localModelId: "piper-de-de-mls-medium",
+        voice: "mls-de-default",
+      });
+    });
+
     it("should preserve custom integrations from systemSettings", () => {
       const baseProject = buildDefaultProjectSettings();
       const customProviderId = "codex-custom-2";

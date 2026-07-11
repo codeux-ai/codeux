@@ -384,6 +384,18 @@ export function resolveSpeechModelEntry(modelId: string): SpeechModelCatalogEntr
   return model;
 }
 
+/** Keeps persisted local voice selections compatible when an inherited model
+ * changes. Project and sprint scopes may override only the voice field, so a
+ * previously valid child override must not make a newly selected parent model
+ * unusable. */
+export function resolveCompatibleSynthesisVoice(modelId: string, voiceId: string): string {
+  const model = resolveSpeechModelEntry(modelId);
+  const requestedVoice = voiceId.trim();
+  if (model.kind !== "synthesis") return requestedVoice;
+  if (model.voices.some((voice) => voice.id === requestedVoice)) return requestedVoice;
+  return model.defaultVoice ?? model.voices[0]?.id ?? requestedVoice;
+}
+
 export function getSpeechModelCacheRoot(dataDir?: string): string {
   return dataDir || getHomeCodeUxPath("models", "speech");
 }
