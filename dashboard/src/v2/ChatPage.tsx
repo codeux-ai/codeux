@@ -278,6 +278,8 @@ export const ChatPage: FunctionComponent = () => {
     threadIndex,
     invocationIndex,
     selectedProject,
+    projectInitializationStateLoading,
+    canCreateInitialAppQuickactions,
     agentPresets,
     feedback,
     clearFeedback,
@@ -308,6 +310,7 @@ export const ChatPage: FunctionComponent = () => {
     () => invocations.filter((invocation) => invocation.status === "running").length,
     [invocations],
   );
+  const showInitialCreateActions = !projectInitializationStateLoading && canCreateInitialAppQuickactions;
   const widgetLiveData = useMemo(() => ({
     projectId: selectedProject?.id ?? null,
     projectTasks,
@@ -716,6 +719,9 @@ export const ChatPage: FunctionComponent = () => {
               input={input}
               setInput={setInput}
               handleSend={handleSend}
+              handleCreateAppQuickaction={handleCreateAppQuickaction}
+              initialEligibilityLoaded={!projectInitializationStateLoading}
+              canCreateInitialAppQuickactions={canCreateInitialAppQuickactions}
               navigateHistory={navigateHistory}
               composerRef={composerRef}
               activeConnection={activeConnection}
@@ -797,13 +803,15 @@ export const ChatPage: FunctionComponent = () => {
           </div>
 
           <div className="shrink-0 border-t border-black/[0.05] p-5 dark:border-white/[0.05]">
-            <div className="mb-3">
-              <ChatCreateAppQuickActions
-                hasProject={Boolean(selectedProject)}
-                sending={sending}
-                onSelect={(kind) => void handleCreateAppQuickaction(kind)}
-              />
-            </div>
+            {selectedProject && !hasWorkingReply && runningInvocationCount === 0 && !sending && !error && (
+              <div className="mb-3">
+                <ChatCreateAppQuickActions
+                  hasProject
+                  showInitialCreateActions={showInitialCreateActions}
+                  onSelect={(kind) => void handleCreateAppQuickaction(kind)}
+                />
+              </div>
+            )}
             <div className={`rounded-2xl border bg-black/[0.03] p-3 focus-within:border-signal-500/30 dark:bg-white/[0.03] ${error ? 'border-status-red/50 dark:border-status-red/50' : 'border-black/[0.06] dark:border-white/[0.06]'}`}>
               <label htmlFor="message-composer" className="sr-only">Message</label>
               <textarea
