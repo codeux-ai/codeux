@@ -470,11 +470,35 @@ html.is-electron.is-fullscreen .app-shell {
     animation: stage-quick-float 5.5s ease-in-out infinite;
   }
 
+  @keyframes stage-cue-rise {
+    from { transform: translateY(6px) scale(0.94); opacity: 0; }
+    20%, 75% { opacity: 1; }
+    to { transform: translateY(-18px) scale(1.04); opacity: 0; }
+  }
+
+  @keyframes stage-cue-label {
+    from { transform: translate(-50%, 6px) scale(0.96); opacity: 0; }
+    18%, 82% { transform: translate(-50%, 0) scale(1); opacity: 1; }
+    to { transform: translate(-50%, -4px) scale(0.98); opacity: 0; }
+  }
+
+  .stage-cue-label {
+    animation: stage-cue-label 2.8s ease-in-out both;
+  }
+
+  .stage-cue-spark,
+  .stage-music-note {
+    animation: stage-cue-rise 2.4s ease-out both;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .stage-aurora,
     .stage-aurora-slow,
     .stage-thinking-dot,
-    .stage-quick-float {
+    .stage-quick-float,
+    .stage-cue-label,
+    .stage-cue-spark,
+    .stage-music-note {
       animation: none;
     }
   }

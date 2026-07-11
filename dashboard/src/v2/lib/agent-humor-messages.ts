@@ -3,6 +3,10 @@ export const STATUS_MESSAGE_MIN_INTERVAL_MS = 5_000;
 export const AGENT_HUMOR_CATEGORIES = [
   "starting",
   "working",
+  "planning",
+  "qa_handoff",
+  "completion",
+  "error",
   "thinking",
   "tool_exec",
   "tool_edit",
@@ -74,6 +78,66 @@ export const AGENT_HUMOR_MESSAGES: Record<AgentHumorCategory, readonly string[]>
       "one well-labeled checkbox at a time.",
       "while the standup timer looks impressed.",
       "and reserving a conference room for the edge cases.",
+    ],
+  ),
+  planning: buildMessages(
+    [
+      "Mapping the work into sensible steps",
+      "Giving the plan a careful first pass",
+      "Lining up the dependencies",
+      "Turning the goal into an execution map",
+      "Checking the route before work begins",
+    ],
+    [
+      "with the provider at the planning desk.",
+      "while the scope stays in view.",
+      "before the first task leaves the queue.",
+      "and keeping every dependency explicit.",
+    ],
+  ),
+  qa_handoff: buildMessages(
+    [
+      "Passing the current work to QA",
+      "Putting the change under the review light",
+      "Handing the evidence to the quality desk",
+      "Checking the result against its criteria",
+      "Giving the verification pass a clear runway",
+    ],
+    [
+      "with the provider still on the record.",
+      "while the checks read the fine print.",
+      "before anyone calls the work finished.",
+      "and keeping the verdict with the reviewer.",
+    ],
+  ),
+  completion: buildMessages(
+    [
+      "Closing the recorded runtime step",
+      "Putting a completed run in the ledger",
+      "Marking the provider turn complete",
+      "Finishing the known execution step",
+      "Filing the completed activity",
+    ],
+    [
+      "without adding claims beyond the record.",
+      "with its result preserved in the transcript.",
+      "while the next action remains undecided.",
+      "and leaving the evidence easy to inspect.",
+    ],
+  ),
+  error: buildMessages(
+    [
+      "Flagging a runtime problem",
+      "Bringing the failed step into view",
+      "Keeping the provider error visible",
+      "Marking the execution issue clearly",
+      "Stopping at the recorded failure",
+    ],
+    [
+      "without guessing at the outcome.",
+      "while the details remain available for review.",
+      "before another action is attempted.",
+      "and keeping the status unambiguous.",
     ],
   ),
   thinking: buildMessages(

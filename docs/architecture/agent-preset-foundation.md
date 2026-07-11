@@ -147,7 +147,9 @@ Agent preset avatars have two rendering tiers:
 
 `LazyAgentAvatarScene` is the required boundary for dashboard surfaces that want the 3D avatar. It renders the SVG fallback until an `IntersectionObserver` reports the stage visible, and it keeps reduced-motion users on the static SVG path so ordinary Agents page interactions do not import or initialize the heavy scene. Surfaces that need immediate rendering can opt in explicitly with the wrapper's `eager` prop.
 
-The 3D scene owns WebGL lifecycle cleanup. On unmount, fallback transition, WebGL failure, or reduced-motion changes, it cancels animation frames, removes event listeners, disposes avatar geometries, materials, textures, particle resources, and the renderer, and forces context loss when supported.
+Working-avatar props are defined by the pure typed catalog in `dashboard/src/v2/lib/agent-scene-tools.ts`. It preserves the public screwdriver, jackhammer, wrench, hammer, and torch identifiers plus the `?stageTool=` design-review override while keeping anchors, palettes, geometry blueprints, animation references, and elapsed-time motion functions testable without WebGL. Tool selection, expression, and avatar configuration remain independent of the renderer lifecycle.
+
+The 3D scene owns WebGL lifecycle cleanup. Tool changes overlap a short deterministic exit and entrance, then remove and dispose every reachable geometry, material, and texture in the outgoing subtree. On unmount, fallback transition, WebGL failure, or reduced-motion changes, the scene cancels animation frames, removes event listeners, disposes avatar and tool geometries, materials, textures, particle resources, and the renderer, and forces context loss when supported. Reduced-motion and WebGL fallback paths keep the SVG avatar and add a static active-tool label rather than relying on animation to communicate the work state.
 
 Provider and model preferences are intentionally nullable. They only take effect when a provider invocation route uses the `AGENT` strategy; otherwise the agent inherits the configured route, worker, or global defaults.
 

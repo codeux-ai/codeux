@@ -8,7 +8,15 @@ import type { StructuredProviderResponseService } from "./structured-provider-re
 import type { ProviderExecutionService } from "./provider-execution-service.js";
 import type { SnapshotCheckout } from "../infrastructure/providers/cli/workspace-manager.js";
 import type { InvocationWorkspaceGitPolicy } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
-import type { PromptSuggestion } from "../contracts/connection-chat-types.js";
+import {
+  AGENT_RESPONSE_ANIMATIONS,
+  AGENT_RESPONSE_EFFECT_MAX_CAPTION_LENGTH,
+  AGENT_RESPONSE_EFFECT_MAX_DURATION_MS,
+  AGENT_RESPONSE_EFFECT_MIN_DURATION_MS,
+  AGENT_RESPONSE_EMOTIONS,
+  type AgentResponseEffect,
+  type PromptSuggestion,
+} from "../contracts/connection-chat-types.js";
 import { findAllJsonCandidates } from "../domain/llm/json-extraction.js";
 
 export interface ChatManagementActionServiceDeps {
@@ -26,12 +34,14 @@ export interface ManagementActionProposedResult {
   result?: unknown;
   nativeSessionId?: string | null;
   promptSuggestions?: PromptSuggestion[];
+  agentEffect?: AgentResponseEffect;
 }
 
 interface ParsedProviderManagementJSON {
   replyMarkdown: string;
   action: ManageCodeUxArgs | null;
   promptSuggestions?: PromptSuggestion[];
+  agentEffect?: AgentResponseEffect;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
@@ -80,6 +90,70 @@ function sanitizePromptSuggestions(value: unknown): PromptSuggestion[] {
   return suggestions;
 }
 
+const supportedAgentEmotions = new Set<string>(AGENT_RESPONSE_EMOTIONS);
+const supportedAgentAnimations = new Set<string>(AGENT_RESPONSE_ANIMATIONS);
+
+export function sanitizeAgentResponseEffect(value: unknown): AgentResponseEffect | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const emotion = value.emotion;
+  const animation = value.animation;
+  const durationMs = value.durationMs;
+  if (
+    typeof emotion !== "string"
+    || !supportedAgentEmotions.has(emotion)
+    || typeof animation !== "string"
+    || !supportedAgentAnimations.has(animation)
+    || typeof durationMs !== "number"
+    || !Number.isSafeInteger(durationMs)
+    || durationMs < AGENT_RESPONSE_EFFECT_MIN_DURATION_MS
+    || durationMs > AGENT_RESPONSE_EFFECT_MAX_DURATION_MS
+  ) {
+    return undefined;
+  }
+
+  const effect: AgentResponseEffect = {
+    emotion: emotion as AgentResponseEffect["emotion"],
+    animation: animation as AgentResponseEffect["animation"],
+    durationMs,
+  };
+  if (value.caption !== undefined) {
+    if (typeof value.caption !== "string") {
+      return undefined;
+    }
+    const caption = value.caption.trim();
+    if (!caption || caption.length > AGENT_RESPONSE_EFFECT_MAX_CAPTION_LENGTH) {
+      return undefined;
+    }
+    effect.caption = caption;
+  }
+  return effect;
+}
+
+function parseNativeAgentEffect(markdown: string): { replyMarkdown: string; agentEffect?: AgentResponseEffect } {
+  let agentEffect: AgentResponseEffect | undefined;
+  const replyMarkdown = markdown.replace(
+    /^```codeux:agent[^\n]*\n([\s\S]*?)^```[ \t]*$/gm,
+    (fence, rawJson: string) => {
+      try {
+        const parsed = JSON.parse(rawJson) as unknown;
+        const sanitized = sanitizeAgentResponseEffect(parsed);
+        if (sanitized) {
+          agentEffect ??= sanitized;
+          return "";
+        }
+      } catch {
+        // Preserve malformed effect payloads below as readable JSON markdown.
+      }
+      return fence.replace(/^```codeux:agent[^\n]*/, "```json");
+    },
+  ).replace(/\n{3,}/g, "\n\n").trim();
+
+  return { replyMarkdown, ...(agentEffect ? { agentEffect } : {}) };
+}
+
 export const parseProviderManagementJson = (bodyMarkdown: string, depth = 0): ParsedProviderManagementJSON => {
   if (depth > 2) {
     throw new Error("Missing or invalid 'replyMarkdown'");
@@ -94,10 +168,12 @@ export const parseProviderManagementJson = (bodyMarkdown: string, depth = 0): Pa
           ? parsed.promptSuggestions
           : parsed.suggestions;
         const promptSuggestions = sanitizePromptSuggestions(rawSuggestions);
+        const agentEffect = sanitizeAgentResponseEffect(parsed.agentEffect);
         return {
           replyMarkdown: parsed.replyMarkdown,
           action: isRecord(parsed.action) ? parsed.action as unknown as ManageCodeUxArgs : null,
           ...(promptSuggestions.length > 0 ? { promptSuggestions } : {}),
+          ...(agentEffect ? { agentEffect } : {}),
         };
       }
 
@@ -299,6 +375,7 @@ export class ChatManagementActionService {
       });
 
       const replyText = (result.text?.trim() || result.stdout || "").trim();
+      const parsedReply = parseNativeAgentEffect(replyText || "_No response._");
 
       if ((result.usageTelemetry.conversation?.length ?? 0) === 0) {
         this.deps.executionRepository.appendExecutionInvocationMessage(execInvocationId, {
@@ -319,10 +396,11 @@ export class ChatManagementActionService {
       }
 
       return {
-        replyMarkdown: replyText || "_No response._",
+        replyMarkdown: parsedReply.replyMarkdown || "_No response._",
         action: null,
         approvalRequired: false,
         nativeSessionId: result.nativeSessionId,
+        ...(parsedReply.agentEffect ? { agentEffect: parsedReply.agentEffect } : {}),
       };
     } catch (err: unknown) {
       const errMessage = err instanceof Error ? err.message : String(err);
@@ -439,6 +517,7 @@ export class ChatManagementActionService {
           approvalRequired: false,
           nativeSessionId: response.nativeSessionId,
           ...(parsed.promptSuggestions?.length ? { promptSuggestions: parsed.promptSuggestions } : {}),
+          ...(parsed.agentEffect ? { agentEffect: parsed.agentEffect } : {}),
         };
       }
 
@@ -472,6 +551,7 @@ export class ChatManagementActionService {
         result: envelope.result,
         nativeSessionId: response.nativeSessionId,
         ...(parsed.promptSuggestions?.length ? { promptSuggestions: parsed.promptSuggestions } : {}),
+        ...(parsed.agentEffect ? { agentEffect: parsed.agentEffect } : {}),
       };
 
     } catch (err: unknown) {

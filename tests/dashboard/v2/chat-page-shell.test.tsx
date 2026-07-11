@@ -17,9 +17,27 @@ vi.mock("gsap", () => ({
     },
   },
 }));
+vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../../dashboard/src/v2/hooks/use-reduced-motion.js")>(),
+  useReducedMotion: () => true,
+}));
+vi.mock("../../../dashboard/src/v2/hooks/use-project-effective-settings.js", () => ({
+  useProjectEffectiveSettings: () => ({ data: null }),
+}));
+vi.mock("../../../dashboard/src/v2/components/agents/LazyAgentAvatarScene.js", () => ({
+  LazyAgentAvatarScene: (props: { expression: string; tool: string | null }) => (
+    <div
+      data-testid="agent-avatar-scene"
+      data-expression={props.expression}
+      data-tool={props.tool ?? ""}
+    />
+  ),
+}));
 import { ChatPageShell } from "../../../dashboard/src/v2/components/chat/ChatPageShell.js";
 import { ChatRail } from "../../../dashboard/src/v2/components/chat/ChatRail.js";
 import { ChatCreateAppQuickActions } from "../../../dashboard/src/v2/components/chat/ChatCreateAppQuickActions.js";
+import { CinematicStage } from "../../../dashboard/src/v2/components/chat/cinematic/CinematicStage.js";
+import type { AgentPresetRecord, ExecutionInvocationRecord, Source } from "../../../dashboard/src/v2/types.js";
 
 const mockProject = {
   id: "proj-1",
@@ -27,6 +45,49 @@ const mockProject = {
   description: "Test description",
   createdAt: "2024-01-01T00:00:00Z",
   updatedAt: "2024-01-01T00:00:00Z",
+};
+
+const projectManagerPreset = {
+  id: "pm-agent",
+  name: "Project Manager",
+} as AgentPresetRecord;
+
+const renderStageForInvocation = (
+  invocation: Pick<ExecutionInvocationRecord, "agentPresetId" | "status" | "type">,
+) => {
+  const activityInvocation = {
+    id: "invocation-1",
+    messageCount: 0,
+    provider: "codex",
+    providerInvocationId: null,
+    startedAt: "2026-07-11T10:00:00.000Z",
+    ...invocation,
+  } as ExecutionInvocationRecord;
+
+  return render(
+    <CinematicStage
+      selectedProject={mockProject as Source}
+      selectedThread={null}
+      messages={[]}
+      threadMessagesLoading={false}
+      hasAwaitedReply={false}
+      invocations={[activityInvocation]}
+      sending={false}
+      error={null}
+      input=""
+      setInput={vi.fn()}
+      onSpeechTranscript={vi.fn()}
+      handleSend={vi.fn(async () => undefined)}
+      handleCreateAppQuickaction={vi.fn(async () => undefined)}
+      initialEligibilityLoaded
+      canCreateInitialAppQuickactions={false}
+      navigateHistory={vi.fn(() => false)}
+      composerRef={{ current: null }}
+      activeConnection={null}
+      agentPreset={projectManagerPreset}
+      onOpenThreads={vi.fn()}
+    />,
+  );
 };
 
 describe("ChatPageShell", () => {
@@ -198,5 +259,33 @@ describe("ChatPageShell", () => {
     expect(getByRole("button", { name: "Create Onlineshop" })).toBeEnabled();
     expect(getByRole("button", { name: "Create Portfolio" })).toBeEnabled();
     expect(getByRole("button", { name: "Create Game" })).toBeEnabled();
+  });
+
+  it("keeps the Project Manager idle while another agent has a running invocation", () => {
+    const { getByTestId, queryByText } = renderStageForInvocation({
+      agentPresetId: "worker-agent",
+      status: "running",
+      type: "worker_reply",
+    });
+
+    expect(getByTestId("cinematic-stage")).toHaveAttribute("data-background-activity-count", "1");
+    expect(getByTestId("agent-avatar-scene")).not.toHaveAttribute("data-expression", "thinking");
+    expect(getByTestId("agent-avatar-scene")).toHaveAttribute("data-tool", "");
+    expect(queryByText(/Background.*Container starting/)).toBeInTheDocument();
+  });
+
+  it("activates the Project Manager for its matching dashboard-reply invocation", () => {
+    const { container, getByTestId, getByText } = renderStageForInvocation({
+      agentPresetId: "pm-agent",
+      status: "running",
+      type: "dashboard_reply",
+    });
+
+    expect(getByTestId("cinematic-stage")).toHaveAttribute("data-background-activity-count", "0");
+    expect(getByTestId("agent-avatar-scene")).toHaveAttribute("data-expression", "thinking");
+    const activityLabel = getByText(/Container starting/);
+    expect(activityLabel).toBeInTheDocument();
+    expect(activityLabel.closest('[role="status"]')).toHaveAttribute("aria-atomic", "true");
+    expect(container.querySelector(".stage-thinking-dot")).toHaveClass("motion-reduce:animate-none");
   });
 });

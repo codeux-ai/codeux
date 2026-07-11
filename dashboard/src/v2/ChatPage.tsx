@@ -686,12 +686,13 @@ export const ChatPage: FunctionComponent = () => {
 
   const renderDetail = () => {
     if (chatMode === "stage") {
-      // Prefer the preset of the most recent agent reply; fall back to the
-      // thread/connection-linked preset (getLinkedAgentPreset handles both).
+      // Prefer the preset of the most recent agent reply; runtime replies may
+      // use authorType "system", so direction is the authoritative boundary.
+      // Fall back to the thread/connection-linked preset.
       let stagePreset;
       for (let i = messages.length - 1; i >= 0 && !stagePreset; i--) {
         const message = messages[i];
-        if (message.direction !== "dashboard_to_connection" && message.authorType !== "system") {
+        if (message.direction !== "dashboard_to_connection") {
           stagePreset = getLinkedAgentPreset(message);
         }
       }
@@ -712,8 +713,8 @@ export const ChatPage: FunctionComponent = () => {
               selectedThread={selectedThread}
               messages={messages}
               threadMessagesLoading={threadsLoading || threadMessagesLoading}
-              hasWorkingReply={hasWorkingReply}
-              runningInvocationCount={runningInvocationCount}
+              hasAwaitedReply={hasWorkingReply}
+              invocations={invocations}
               sending={sending}
               error={error}
               input={input}

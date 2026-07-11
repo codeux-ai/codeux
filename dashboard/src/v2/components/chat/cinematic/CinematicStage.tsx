@@ -2,24 +2,37 @@ import type { FunctionComponent, RefObject } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { AlertTriangle, ArrowUp, BriefcaseBusiness, Gauge, Gamepad2, GitBranch, Globe2, History, LayoutDashboard, ListTodo, Monitor, Radar, RefreshCw, Rocket, ShoppingCart, Sparkles, Volume2, VolumeX, WandSparkles, Wrench } from "lucide-preact";
-import type { AgentPresetRecord, ChatMessageRecord, ChatThread, DashboardCreateAppQuickactionKind, Source } from "../../../types.js";
+import type { AgentPresetRecord, ChatMessageRecord, ChatThread, DashboardCreateAppQuickactionKind, ExecutionInvocationRecord, Source } from "../../../types.js";
 import { renderMarkdown } from "../../../../lib/markdown.js";
 import { formatChatTime } from "../../../lib/chat-time.js";
 import { getChatWidgetData } from "../../../lib/chat-widget-view-models.js";
 import { PlanningRequestWidget } from "../widgets/PlanningRequestWidget.js";
 import { ExternalReferenceWidget } from "../widgets/ExternalReferenceWidget.js";
 import { LazyAgentAvatarScene } from "../../agents/LazyAgentAvatarScene.js";
-import type { AgentSceneTool } from "../../agents/AgentAvatarScene.js";
+import {
+  AGENT_SCENE_TOOL_IDS,
+  isAgentSceneTool,
+  type AgentSceneTool,
+} from "../../../lib/agent-scene-tools.js";
 import { DEFAULT_AGENT_AVATAR_CONFIG } from "../../../lib/agent-avatar.js";
 import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
 import { resolveDisplayDeliveryStatus } from "../../../hooks/use-chat-thread-data.js";
 import { useAgentMood, type AgentMoodState } from "./use-agent-mood.js";
+import { AgentAmbientEffects } from "./AgentAmbientEffects.js";
 import { parseBubbleSegments, StageWidgetRenderer } from "./StageWidgets.js";
 import { isAgentScheduledWakeup, ScheduledWakeupWidget } from "../widgets/ScheduledWakeupWidget.js";
 import { buildCinematicQuickActions } from "../../../lib/cinematic-quick-actions.js";
 import { useProjectEffectiveSettings } from "../../../hooks/use-project-effective-settings.js";
 import { synthesizeSpeech } from "../../../lib/speech-api.js";
 import { SpeechInputButton } from "../../speech/SpeechInputButton.js";
+import type { AgentResponseEffect } from "../../../../../../src/contracts/connection-chat-types.js";
+import {
+  getAgentResponseEffectCaption,
+  resolveAgentResponseEffect,
+} from "../../../lib/agent-response-effects.js";
+import { STATUS_MESSAGE_MIN_INTERVAL_MS } from "../../../lib/agent-humor-messages.js";
+import { resolveCinematicActivityDisplayState } from "../../../lib/cinematic-activity.js";
+import { StageActivityStrip } from "./StageActivityStrip.js";
 
 /* ════════════════════════════════════════════════════════════════════════
  *  CinematicStage — the default "3D Chat" view of the chat page.
@@ -47,11 +60,8 @@ export interface CinematicStageProps {
   selectedThread: ChatThread | null;
   messages: ChatMessageRecord[];
   threadMessagesLoading: boolean;
-  hasWorkingReply: boolean;
-  /** Running (or optimistic) execution invocations for this project — the
-   *  truthful "the agent is actually working / calling tools" signal on the
-   *  virtual-worker path, where thread messages stay `pending` during work. */
-  runningInvocationCount: number;
+  hasAwaitedReply: boolean;
+  invocations: ExecutionInvocationRecord[];
   sending: boolean;
   error: string | null;
   input: string;
@@ -69,7 +79,7 @@ export interface CinematicStageProps {
 }
 
 /** The bot cycles through its toolbox while the runtime is executing. */
-const WORK_TOOLS: AgentSceneTool[] = ["screwdriver", "jackhammer", "wrench", "hammer", "torch"];
+const WORK_TOOLS: readonly AgentSceneTool[] = AGENT_SCENE_TOOL_IDS;
 const TOOL_SWAP_MS = 7_000;
 
 const CREATE_APP_ACTION_ICONS: Record<DashboardCreateAppQuickactionKind, typeof Monitor> = {
@@ -95,7 +105,7 @@ const PROMPT_ACTION_ICONS: Record<string, typeof Monitor> = {
 const readForcedTool = (): AgentSceneTool | null => {
   if (typeof window === "undefined") return null;
   const value = new URLSearchParams(window.location.search).get("stageTool");
-  return (WORK_TOOLS as string[]).includes(value ?? "") ? (value as AgentSceneTool) : null;
+  return isAgentSceneTool(value) ? value : null;
 };
 
 const speechTextFromMarkdown = (markdown: string): string => markdown
@@ -119,30 +129,6 @@ function useBubbleEnter(ref: RefObject<HTMLElement>, reducedMotion: boolean) {
     );
   }, []);
 }
-
-/* ── Thought bubble — internal state, cloud-shaped, above the antenna ── */
-const ThoughtBubble: FunctionComponent<{ text: string }> = ({ text }) => {
-  const ref = useRef<HTMLDivElement>(null);
-  const reducedMotion = useReducedMotion();
-  useBubbleEnter(ref, reducedMotion);
-  return (
-    <div ref={ref} className="pointer-events-none absolute left-1/2 top-0 z-20 w-max max-w-[240px] -translate-x-[12%]">
-      <div role="status" aria-live="polite" className="rounded-[1.75rem] border border-black/[0.06] bg-white/90 px-4 py-2.5 shadow-[0_8px_32px_rgba(0,0,0,0.10)] backdrop-blur-md dark:border-white/10 dark:bg-void-800/90">
-        <span className="flex items-center gap-2 text-[12px] font-medium text-slate-600 dark:text-slate-300">
-          {text}
-          <span aria-hidden="true" className="flex items-end gap-0.5 pb-0.5">
-            <span className="stage-thinking-dot h-1 w-1 rounded-full bg-signal-500" />
-            <span className="stage-thinking-dot h-1 w-1 rounded-full bg-signal-500 [animation-delay:150ms]" />
-            <span className="stage-thinking-dot h-1 w-1 rounded-full bg-signal-500 [animation-delay:300ms]" />
-          </span>
-        </span>
-      </div>
-      {/* Trailing cloud puffs pointing down toward the bot's head */}
-      <div aria-hidden="true" className="ml-6 mt-1 h-2.5 w-2.5 rounded-full border border-black/[0.05] bg-white/90 dark:border-white/10 dark:bg-void-800/90" />
-      <div aria-hidden="true" className="ml-4 mt-0.5 h-1.5 w-1.5 rounded-full border border-black/[0.05] bg-white/85 dark:border-white/10 dark:bg-void-800/85" />
-    </div>
-  );
-};
 
 /** Markdown container classes shared by agent bubbles — includes glass table
  *  styling for GFM tables (agents report sprints/status as tables today). */
@@ -184,7 +170,7 @@ const AgentSpeechBubble: FunctionComponent<{
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
           {segments.map((segment, index) =>
-            segment.kind === "widget" ? (
+            segment.kind === "agent" ? null : segment.kind === "widget" ? (
               <StageWidgetRenderer key={index} widget={segment.widget} onAction={onAction} />
             ) : (
               !widgetData.suppressBodyMarkdown && (
@@ -312,8 +298,8 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   selectedThread,
   messages,
   threadMessagesLoading,
-  hasWorkingReply,
-  runningInvocationCount,
+  hasAwaitedReply,
+  invocations,
   sending,
   error,
   input,
@@ -332,7 +318,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   const floatRef = useRef<HTMLDivElement>(null);
   const reducedMotion = useReducedMotion();
   const [composerFocused, setComposerFocused] = useState(false);
-  const [workingPhase, setWorkingPhase] = useState<"starting" | "working" | null>(null);
+  const [activityNowMs, setActivityNowMs] = useState(Date.now);
   const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
   const voiceAvailable = Boolean(effectiveSettings?.settings.speech?.synthesis?.enabled);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
@@ -343,6 +329,19 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
 
   const agentName = agentPreset?.name || activeConnection?.displayName || "Project Manager";
   const avatarConfig = agentPreset?.avatarConfig || DEFAULT_AGENT_AVATAR_CONFIG;
+  useEffect(() => {
+    const timer = window.setInterval(() => setActivityNowMs(Date.now()), STATUS_MESSAGE_MIN_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, []);
+  const activityState = resolveCinematicActivityDisplayState({
+    agentId: agentPreset?.id,
+    error,
+    hasAwaitedReply,
+    invocations,
+    nowMs: activityNowMs,
+    projectManagerAgentPresetId: agentPreset?.id,
+    selectedThread,
+  });
   // The runtime stores agent replies with authorType "system", so speech vs.
   // user bubbles are decided by direction alone — never filter on authorType.
   const visibleMessages = messages;
@@ -358,16 +357,34 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     }
   }
   const latestAgentMessage = latestAgentIndex >= 0 ? visibleMessages[latestAgentIndex] : null;
+  const latestResponseEffect = latestAgentMessage
+    ? resolveAgentResponseEffect(latestAgentMessage.metadata, latestAgentMessage.bodyMarkdown || "")
+    : undefined;
+  const latestResponseEffectKey = latestAgentMessage && latestResponseEffect
+    ? `${latestAgentMessage.id}:${latestResponseEffect.emotion}:${latestResponseEffect.animation}:${latestResponseEffect.durationMs}:${latestResponseEffect.caption ?? ""}`
+    : null;
+  const [activeResponseEffect, setActiveResponseEffect] = useState<AgentResponseEffect | null>(null);
+  useEffect(() => {
+    if (!latestResponseEffect || !latestResponseEffectKey) {
+      setActiveResponseEffect(null);
+      return;
+    }
+    setActiveResponseEffect(latestResponseEffect);
+    const timer = window.setTimeout(() => setActiveResponseEffect(null), latestResponseEffect.durationMs);
+    return () => window.clearTimeout(timer);
+  }, [latestResponseEffectKey]);
   const pendingUserMessages = visibleMessages
     .slice(latestAgentIndex + 1)
     .filter((message) => message.direction === "dashboard_to_connection")
     .slice(-2); // at most two queued sends staged at once
   const earlierMessageCount = Math.max(0, visibleMessages.length - (latestAgentMessage ? 1 : 0) - pendingUserMessages.length);
 
-  /* "Busy" is either an awaited listener reply (delivered, unanswered) or a
-     running invocation — the latter is what actually fires on the
-     virtual-worker path, where thread messages stay `pending` during work. */
-  const runtimeBusy = hasWorkingReply || runningInvocationCount > 0;
+  // Background execution remains observable, but never selects the Project
+  // Manager's thinking expression, thought bubble, or work tool.
+  const runtimeBusy = activityState.projectManagerActive;
+  const workingPhase: "starting" | "working" | null = runtimeBusy
+    ? (activityState.foregroundCue?.phase === "container_startup" ? "starting" : "working")
+    : null;
   const quickActions = buildCinematicQuickActions({
     hasProject: Boolean(selectedProject),
     initialEligibilityLoaded,
@@ -429,16 +446,6 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     }
   };
 
-  useEffect(() => {
-    if (!runtimeBusy) {
-      setWorkingPhase(null);
-      return;
-    }
-    setWorkingPhase("starting");
-    const timer = window.setTimeout(() => setWorkingPhase("working"), 4000);
-    return () => window.clearTimeout(timer);
-  }, [runtimeBusy]);
-
   /* Work tools — while the runtime is executing, the bot pulls a tool from
      its toolbox and swaps to a fresh one every few seconds. */
   const [activeTool, setActiveTool] = useState<AgentSceneTool | null>(readForcedTool);
@@ -465,13 +472,23 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     messages: visibleMessages,
     userEngaged: composerFocused || input.trim().length > 0,
     agentName,
+    reducedMotion,
+    ambientPaused: Boolean(activeResponseEffect),
   });
+  // Runtime truth always wins. A validated reply effect may only replace the
+  // otherwise idle/listening micro-expression for its bounded lifetime.
+  const responseEffect = !error && !sending && !runtimeBusy ? activeResponseEffect : null;
+  const stageExpression = responseEffect?.emotion ?? mood.expression;
+  const stageAnimation = reducedMotion
+    ? undefined
+    : responseEffect?.animation ?? (mood.ambientMotionEnabled ? mood.ambientCue?.animation : undefined);
+  const stageCaption = responseEffect ? getAgentResponseEffectCaption(responseEffect) : mood.caption;
 
   /* Cinematic drift — the whole bot slowly floats, leans, and wanders a few
      pixels on top of the scene's own idle bob, so it never reads as parked. */
   useLayoutEffect(() => {
     const el = floatRef.current;
-    if (!el || reducedMotion) return;
+    if (!el || !mood.ambientMotionEnabled) return;
     const tl = gsap.timeline({ repeat: -1, yoyo: true, defaults: { ease: "sine.inOut" } });
     tl.to(el, { y: -16, x: 6, rotation: 1.4, duration: 3.4 })
       .to(el, { y: 4, x: -8, rotation: -1.1, duration: 3.0 })
@@ -480,7 +497,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
       tl.kill();
       gsap.set(el, { x: 0, y: 0, rotation: 0 });
     };
-  }, [reducedMotion]);
+  }, [mood.ambientMotionEnabled]);
 
   const applySuggestion = (prompt: string): void => {
     void handleSend(prompt).finally(() => {
@@ -493,11 +510,15 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   const showGreeting = !threadMessagesLoading && visibleMessages.length === 0;
 
   return (
-    <div className="relative flex-1 min-h-0 overflow-hidden" data-testid="cinematic-stage">
+    <div
+      className="relative flex-1 min-h-0 overflow-hidden"
+      data-testid="cinematic-stage"
+      data-background-activity-count={activityState.backgroundActivityCount}
+    >
       {/* ── Ambient backdrop — aurora glow, pure CSS, zero extra GPU cost ── */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-        <div className="stage-aurora absolute left-1/2 top-[16%] h-[52vh] w-[52vh] -translate-x-1/2 rounded-full bg-signal-500/[0.06] blur-3xl dark:bg-signal-500/[0.05]" />
-        <div className="stage-aurora-slow absolute -right-[12%] bottom-[4%] h-[50%] w-[40%] rounded-full bg-purple-500/[0.04] blur-3xl dark:bg-purple-500/[0.04]" />
+        <div className={`${mood.ambientMotionEnabled ? "stage-aurora" : ""} absolute left-1/2 top-[16%] h-[52vh] w-[52vh] -translate-x-1/2 rounded-full bg-signal-500/[0.06] blur-3xl dark:bg-signal-500/[0.05]`} />
+        <div className={`${mood.ambientMotionEnabled ? "stage-aurora-slow" : ""} absolute -right-[12%] bottom-[4%] h-[50%] w-[40%] rounded-full bg-purple-500/[0.04] blur-3xl dark:bg-purple-500/[0.04]`} />
       </div>
 
       {/* ── Context strip — thread identity + escape hatch to Threads ── */}
@@ -550,7 +571,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
                     void handleSend(action.prompt);
                   }}
                   style={{ animationDelay: action.animationDelay }}
-                  className="stage-quick-float inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-2xl border border-black/[0.07] bg-white/85 px-3 py-2 text-center text-[11px] font-semibold leading-4 text-slate-600 shadow-[0_4px_20px_rgba(0,0,0,0.08)] backdrop-blur-md transition-colors hover:border-signal-500/40 hover:text-signal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-2 dark:border-white/[0.09] dark:bg-void-800/85 dark:text-slate-300 dark:shadow-[0_4px_24px_rgba(0,0,0,0.35)] dark:hover:text-signal-400 dark:focus-visible:ring-offset-void-900"
+                  className={`${mood.ambientMotionEnabled ? "stage-quick-float" : ""} inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-2xl border border-black/[0.07] bg-white/85 px-3 py-2 text-center text-[11px] font-semibold leading-4 text-slate-600 shadow-[0_4px_20px_rgba(0,0,0,0.08)] backdrop-blur-md transition-colors hover:border-signal-500/40 hover:text-signal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-2 dark:border-white/[0.09] dark:bg-void-800/85 dark:text-slate-300 dark:shadow-[0_4px_24px_rgba(0,0,0,0.35)] dark:hover:text-signal-400 dark:focus-visible:ring-offset-void-900`}
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0 text-signal-500" aria-hidden="true" />
                   <span className="min-w-0 whitespace-normal break-words">{action.label}</span>
@@ -560,18 +581,29 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
           </div>
         )}
         <div className={`relative flex w-full flex-col items-center px-6 ${!runtimeBusy && !sending && !error && quickActions.length > 0 ? "pt-28 md:pt-0" : ""}`}>
-          {runtimeBusy && (
-            <ThoughtBubble text={workingPhase === "starting" ? "Spinning up a workspace" : "Working on it"} />
-          )}
+          <StageActivityStrip
+            foregroundCue={activityState.foregroundCue}
+            backgroundCue={activityState.backgroundCue}
+            backgroundActivityCount={activityState.backgroundActivityCount}
+          />
+          <AgentAmbientEffects cue={mood.ambientCue} motionEnabled={mood.ambientMotionEnabled} />
           {/* Generous square canvas so antenna, ears, and aura never clip,
               even at the extremes of the float/lean drift. */}
           <div
             ref={floatRef}
             className="pointer-events-auto h-[28vh] w-[28vh] max-w-full will-change-transform md:h-[min(48vh,520px)] md:w-[min(48vh,520px)]"
             role="img"
-            aria-label={`${agentName}, animated project manager. ${mood.caption}`}
+            aria-label={`${agentName}, project manager. ${stageCaption}`}
           >
-            <LazyAgentAvatarScene eager pointerTracking="window" tool={activeTool} config={avatarConfig} expression={mood.expression} className="h-full w-full" />
+            <LazyAgentAvatarScene
+              eager
+              pointerTracking="window"
+              tool={activeTool}
+              config={avatarConfig}
+              expression={stageExpression}
+              animation={stageAnimation}
+              className="h-full w-full"
+            />
           </div>
 
           {/* Name plate + truthful mood caption — tucked up into the canvas's
@@ -581,7 +613,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
               {agentName}
             </div>
             <div aria-live="polite" className="mt-0.5 text-[12px] font-medium text-slate-500 dark:text-slate-400">
-              {mood.caption}
+              {stageCaption}
             </div>
             <div className="mt-1.5 flex items-center justify-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
               <span className={`h-1 w-1 rounded-full ${activeConnection ? "bg-signal-500" : "bg-slate-300 dark:bg-slate-600"}`} aria-hidden="true" />

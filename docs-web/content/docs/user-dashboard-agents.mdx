@@ -26,9 +26,13 @@ Each preset is a card with avatar, name, label tags, and a one-line description.
 
 ## Avatar preview behavior
 
-The 3D avatar preview uses lightweight WebGL presentation effects only. It relies on studio lighting, material finish, and avatar/tool animation rather than flashlight beams, target glows, or post-processing.
+The 3D avatar preview uses lightweight WebGL presentation effects only. Its shared SVG/WebGL expression vocabulary is `happy`, `sad`, `angry`, `sleepy`, `bored`, `hyped`, `shake_head`, `nod`, `curious`, `thinking`, `excited`, `laughing`, `surprised`, `wink`, `dance`, and `proud`.
 
-When motion is allowed, the avatar head can track pointer hover and runtime tool props animate beside the bot. Reduced-motion settings and WebGL fallback mode use the static SVG avatar instead, so the Agents page remains usable without animation or a WebGL context.
+The work tool catalog uses the exact identifiers `screwdriver`, `jackhammer`, `wrench`, `hammer`, and `torch`, displayed as **Power screwdriver**, **Jackhammer**, **Open-end wrench**, **Claw hammer**, and **Welding torch**. Their motion kinds are spin, piston, ratchet, tap, and flicker. Tool changes animate the old prop out and the new prop in without restarting the WebGL renderer.
+
+The renderer, scene, camera, and persistent lights are created once per mount. Avatar configuration changes rebuild only avatar geometry, particles, and the environment map; tool changes use an independent lifecycle; and the animation loop reads the current refs. Removed or unmounted resources are disposed exactly once, animation frames and listeners are cancelled, the canvas is removed, and the WebGL context is explicitly released when supported.
+
+When motion is allowed, the avatar head can track pointer hover and runtime tool props animate beside the bot. Reduced-motion settings, explicit fallback mode, and WebGL construction failure use the static SVG avatar without a WebGL context. An active work tool remains visible as text and in the accessible image label, so motion and color are never the only state signals. Offscreen previews lazy-load near the viewport; an eager preview loads immediately.
 
 ## Creating an agent
 
