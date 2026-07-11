@@ -6,6 +6,8 @@ You'll automatically be redirected here when you click **Orchestrate** on a spri
 
 Sprint links can open Live directly with `/live?projectId=<projectId>&sprintId=<sprintId>`. Live consumes a new route project once before selecting the route sprint, while later shared project selection and top-nav scope changes remain authoritative. This keeps selectors and runtime filters aligned without letting an older mounted Live tab repeatedly force its retained deep-link project back into view.
 
+Overlapping selection requests are fenced by request order and project ownership. A late response for the project or sprint you just left cannot switch Live back or place that sprint in the newly selected project's runtime scope.
+
 ## Layout
 
 The page is composed of stacked panels:

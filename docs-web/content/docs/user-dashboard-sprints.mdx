@@ -23,6 +23,8 @@ Sprints can be **showcase-pinned** to surface them on the Overview page; toggle 
 
 Each sprint row and showcase card has separate **Tasks** and **Live** actions. These are in-app router links carrying both `projectId` and `sprintId`, so opening a sprint switches the dashboard to that sprint's project before loading the task board or live view without reloading the dashboard shell.
 
+Selection is project-scoped even when requests overlap. If you choose a different project or sprint before an earlier selection finishes, the newer choice stays active and the earlier response cannot attach its sprint to the newly active project.
+
 ## How sprint progress is calculated
 
 The progress percentage is a weighted view of every task's lifecycle, not the completed-task counter:

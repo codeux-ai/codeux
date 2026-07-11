@@ -10,6 +10,8 @@ The global project selector in the navbar owns the active project. Changing proj
 
 The sprint selector inside the Tasks page only scopes the board for the current project. Choosing a sprint updates router search state and stores that sprint selection for the active project. Sprint links from the Sprints page use `/tasks?projectId=<projectId>&sprintId=<sprintId>`; the Tasks page switches to the route project first, then stores and loads the route sprint after that project is active. Legacy same-project links such as `/tasks?sprint=<id>` and `/tasks?sprintId=<id>` remain supported.
 
+If project or sprint selection requests overlap, only the newest response may update the active scope. Responses for a project you have already left remain confined to that project's cached sprint collection and cannot change the current board.
+
 ## Board workflow
 
 The board keeps the current sprint scope and filters visible while you work:
