@@ -6,6 +6,46 @@ import { useActionFeedback } from "./use-action-feedback.js";
 import { createMemory, deleteMemory, deleteMemories, type CreateMemoryInput, type MemoryDeleteResult } from "../lib/memory-api.js";
 
 import { clearSelectedMemoryIds, memoryMutationsSignal, setSelectedMemoryIds } from "../components/memory/memoryState.js";
+import { fetchSkillCatalog } from "../lib/agent-preset-api.js";
+import type { SkillCatalogEntry } from "../../../../src/contracts/skill-types.js";
+import type { MemoryCategory } from "../memory-types.js";
+
+const SKILL_CATEGORY_KEYWORDS: Array<[MemoryCategory, string[]]> = [
+    ["architecture", ["architecture", "design", "system"]],
+    ["codebase", ["code", "repository", "typescript", "frontend", "backend"]],
+    ["patterns", ["workflow", "pattern", "practice", "testing"]],
+    ["error", ["debug", "repair", "incident", "error"]],
+    ["learning", ["research", "learn", "guide", "documentation"]],
+];
+
+export function skillCatalogEntryToMemoryRecord(entry: SkillCatalogEntry): MemoryRecord {
+    const searchable = [entry.name, entry.description, ...entry.tags, ...entry.appliesTo].join(" ").toLowerCase();
+    const category = SKILL_CATEGORY_KEYWORDS.find(([, keywords]) => keywords.some((keyword) => searchable.includes(keyword)))?.[0] ?? "context";
+    const metadata = [
+        entry.description,
+        entry.storageName ? `Storage: ${entry.storageName}` : "",
+        entry.tags.length > 0 ? `Tags: ${entry.tags.join(", ")}` : "",
+        entry.appliesTo.length > 0 ? `Applies to: ${entry.appliesTo.join(", ")}` : "",
+    ].filter(Boolean).join(" · ");
+    return {
+        id: entry.id,
+        projectId: entry.projectId,
+        scope: "project",
+        sprintId: null,
+        agentPresetId: null,
+        content: `${entry.name}${metadata ? `\n${metadata}` : ""}`,
+        category,
+        strength: Math.min(0.95, 0.68 + Math.min(entry.tags.length + entry.appliesTo.length, 6) * 0.04),
+        source: { type: "manual", originType: "skill", originId: entry.storageId },
+        embeddingModel: null,
+        embeddingDimension: null,
+        embeddingBlob: null,
+        promotedFromId: null,
+        promotionReason: entry.contentPreview || null,
+        createdAt: entry.updatedAt,
+        updatedAt: entry.updatedAt,
+    };
+}
 
 export function buildMemoryDataContextKey(
     activeScope: MemoryScope,
@@ -33,6 +73,7 @@ export function useMemoryPageData(
     const [loadError, setLoadError] = useState<string | null>(null);
     const [records, setRecords] = useState<MemoryRecord[]>([]);
     const [memoryCount, setMemoryCount] = useState(0);
+    const [skillCount, setSkillCount] = useState(0);
     const [initialModels, setInitialModels] = useState<EmbeddingModelWithStatus[]>([]);
     const [initialStats, setInitialStats] = useState<MemoryStats>({
         sprint: 0,
@@ -240,6 +281,17 @@ export function useMemoryPageData(
         setLoading(true);
         setLoadError(null);
         try {
+            if (activeTier === "skills") {
+                const skills = await fetchSkillCatalog(pid, selectedAgentPresetId);
+                if (requestId !== latestLoadRequestId.current) return;
+                const skillRecords = skills.map(skillCatalogEntryToMemoryRecord);
+                setSkillCount(skillRecords.length);
+                setRecords(skillRecords);
+                setMemoryCount(skillRecords.length);
+                setGraphData({ graph: prepareMemoryGraph(skillRecords, null), map: null });
+                setGraphDataContextKey(requestedContextKey);
+                return;
+            }
             const memoryParams: { projectId: string; scope: MemoryScope; sprintId?: string; agentPresetId?: string; limit: number } = {
                 projectId: pid, scope: activeScope, limit: 200,
             };
@@ -250,7 +302,7 @@ export function useMemoryPageData(
                 memoryParams.agentPresetId = selectedAgentPresetId;
             }
 
-            const [memoriesData, modelsData, statsData, mapData] = await Promise.all([
+            const [memoriesData, modelsData, statsData, mapData, skillCatalog] = await Promise.all([
                 listMemories(memoryParams),
                 listEmbeddingModels(),
                 getMemoryStats(pid),
@@ -260,6 +312,7 @@ export function useMemoryPageData(
                     activeTier === "short_term" ? selectedSprintId : undefined,
                     selectedAgentPresetId,
                 ).catch(() => null),
+                fetchSkillCatalog(pid, selectedAgentPresetId).catch(() => []),
             ]);
 
             if (requestId !== latestLoadRequestId.current) {
@@ -270,6 +323,7 @@ export function useMemoryPageData(
             setInitialModels(modelsData);
             setInitialStats(statsData);
             setMemoryCount(memoriesData.length);
+            setSkillCount(skillCatalog.length);
 
             const graph = prepareMemoryGraph(memoriesData, mapData);
             setGraphData({ graph, map: mapData });
@@ -293,6 +347,7 @@ export function useMemoryPageData(
         loadError,
         records,
         memoryCount,
+        skillCount,
         setMemoryCount,
         initialModels,
         initialStats,

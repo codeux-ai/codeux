@@ -114,6 +114,7 @@ describe("MemoryFilters Accessibility", () => {
 
         const shortTermTab = getByRole("tab", { name: /Short Term/ });
         const longTermTab = getByRole("tab", { name: /Long Term/ });
+        const skillsTab = getByRole("tab", { name: /Skills/ });
 
         shortTermTab.focus();
         await fireEvent.keyDown(shortTermTab, { key: "ArrowRight", code: "ArrowRight" });
@@ -125,10 +126,10 @@ describe("MemoryFilters Accessibility", () => {
         expect(document.activeElement).toBe(shortTermTab);
 
         await fireEvent.keyDown(shortTermTab, { key: "End", code: "End" });
-        expect(activeTierSignal.value).toBe("long_term");
-        expect(document.activeElement).toBe(longTermTab);
+        expect(activeTierSignal.value).toBe("skills");
+        expect(document.activeElement).toBe(skillsTab);
 
-        await fireEvent.keyDown(longTermTab, { key: "Home", code: "Home" });
+        await fireEvent.keyDown(skillsTab, { key: "Home", code: "Home" });
         expect(activeTierSignal.value).toBe("short_term");
         expect(document.activeElement).toBe(shortTermTab);
     });
