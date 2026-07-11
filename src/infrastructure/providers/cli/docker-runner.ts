@@ -371,7 +371,7 @@ export class DockerRunner implements IDockerRunner {
         dockerArgs.push("--mount", toDockerMountArg({
           source,
           destination: mount.containerPath,
-          readonly: false,
+          readonly: true,
         }));
       }
 

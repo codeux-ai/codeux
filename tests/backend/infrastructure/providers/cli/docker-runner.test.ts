@@ -176,6 +176,13 @@ describe("DockerRunner", () => {
         repoPath: "/repo/project",
         onActivity: vi.fn(),
         onSetupImageProgress,
+        persistentSkillStorageMounts: [{
+          storageId: "skill-storage-1",
+          storageName: "Runtime skills",
+          hostPath: "/home/test/.code-ux/skill-storages/project-1/skill-storage-1/repo",
+          containerPath: "/code-ux/persistent-skills/skill-storage-1",
+          revision: "0123456789abcdef0123456789abcdef01234567",
+        }],
       });
       expect(ensureRuntimeVolume).toHaveBeenCalledWith("docker-volume://workspace-1", {
         initializeOwnership: true,
@@ -218,6 +225,7 @@ describe("DockerRunner", () => {
     expect(dockerArgs).toContain("CODE_UX_INSTALL_PLAYWRIGHT=1");
     expect(dockerArgs).toContain("PLAYWRIGHT_BROWSERS_PATH=/ms-playwright");
     expect(dockerArgs).toContain("type=volume,source=code-ux-playwright-browser-test,target=/ms-playwright,readonly");
+    expect(dockerArgs).toContain("type=bind,source=/home/test/.code-ux/skill-storages/project-1/skill-storage-1/repo,target=/code-ux/persistent-skills/skill-storage-1,readonly");
     expect(dockerArgs).toEqual(expect.arrayContaining([
       "--network",
       "bridge",

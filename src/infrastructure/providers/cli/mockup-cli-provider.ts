@@ -333,11 +333,22 @@ function resolveQaTaskKey(source) {
 }
 
 function currentGitBranch() {
-  const result = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
-    cwd,
-    encoding: "utf8",
-  });
-  return result.status === 0 ? String(result.stdout || "").trim() || "HEAD" : "unknown";
+  try {
+    const dotGitPath = path.join(cwd, ".git");
+    const dotGitStat = fs.statSync(dotGitPath);
+    let gitDirectory = dotGitPath;
+    if (dotGitStat.isFile()) {
+      const pointer = fs.readFileSync(dotGitPath, "utf8").trim();
+      const match = /^gitdir:\s*(.+)$/i.exec(pointer);
+      if (!match) return "unknown";
+      gitDirectory = path.resolve(cwd, match[1]);
+    }
+    const head = fs.readFileSync(path.join(gitDirectory, "HEAD"), "utf8").trim();
+    const branch = /^ref:\s+refs\/heads\/(.+)$/i.exec(head)?.[1]?.trim();
+    return branch || "HEAD";
+  } catch {
+    return "unknown";
+  }
 }
 
 async function buildQaReviewPayload() {

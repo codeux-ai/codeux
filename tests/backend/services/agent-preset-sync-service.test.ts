@@ -5,9 +5,10 @@ import * as path from "path";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { AgentPresetRepository } from "../../../src/repositories/agent-preset-repository.js";
+import { SkillRepository } from "../../../src/repositories/skill-repository.js";
 import { KnowledgeRepository } from "../../../src/repositories/knowledge-repository.js";
 import { SettingsRepository } from "../../../src/repositories/settings-repository.js";
-import { AgentPresetSyncService } from "../../../src/services/agent-preset-sync-service.js";
+import { AgentPresetSyncService, PROJECT_MANAGER_DEFAULT_SKILL_STORAGE_NAME } from "../../../src/services/agent-preset-sync-service.js";
 import { runCommandStrict } from "../../../src/services/cli-process-runner.js";
 import { KnowledgeIngestionService } from "../../../src/services/knowledge-ingestion-service.js";
 import { KnowledgeService } from "../../../src/services/knowledge-service.js";
@@ -426,6 +427,57 @@ describe("AgentPresetSyncService", () => {
     knowledgeService.setSubscriptions(projectManager!.id, project.id, []);
     await syncService.syncProjectAgents(project.id);
     expect(knowledgeService.listSubscriptions(projectManager!.id)).toEqual([]);
+  });
+
+  it("seeds one enabled persistent skill storage for the Project manager without overriding later opt-out", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-project-manager-default-skills-"));
+    tempDirs.push(dir);
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+    await fs.writeFile(path.join(repoPath, ".code-ux", "agents", "project_manager.md"), "Manage the project.\n", "utf8");
+
+    const storage = createAppStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const skillRepository = new SkillRepository(storage);
+    const settingsRepository = createSettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+      skillService: {
+        listStorages: (projectId) => skillRepository.listStorages(projectId),
+        createStorage: (projectId, input) => skillRepository.createStorage(projectId, input),
+      },
+    });
+    const project = projectRepository.createProject({
+      name: "Project Manager Default Skills",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+
+    const presets = await syncService.listAgentPresets(project.id);
+    const projectManager = presets.find((preset) => preset.name === "Project manager");
+    expect(projectManager).toMatchObject({ persistentSkillStorage: { enabled: true } });
+    expect(projectManager?.persistentSkillStorageIds).toHaveLength(1);
+    expect(skillRepository.listStorages(project.id)).toEqual([
+      expect.objectContaining({
+        id: projectManager?.persistentSkillStorageIds[0],
+        name: PROJECT_MANAGER_DEFAULT_SKILL_STORAGE_NAME,
+        storageKind: "project",
+      }),
+    ]);
+
+    agentPresetRepository.updateAgentPreset(projectManager!.id, {
+      persistentSkillStorage: { enabled: false },
+    });
+    await syncService.syncProjectAgents(project.id);
+    expect(agentPresetRepository.getAgentPreset(projectManager!.id)).toMatchObject({
+      persistentSkillStorage: { enabled: false },
+      persistentSkillStorageIds: projectManager?.persistentSkillStorageIds,
+    });
+    expect(skillRepository.listStorages(project.id)).toHaveLength(1);
   });
 
   it("repairs stale DB content when source metadata already matches", async () => {

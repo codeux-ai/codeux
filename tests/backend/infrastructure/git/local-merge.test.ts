@@ -138,7 +138,7 @@ describe("local-merge helpers", () => {
     expect(runner.mock.calls.filter(([, args]) => args[0] === "worktree" && args[1] === "remove")).toHaveLength(1);
   });
 
-  it("keeps temporary local merges on host git when containerized git is globally enabled", async () => {
+  it("runs temporary local merges through containerized git when enabled", async () => {
     const previousContainerizedGit = process.env.CODE_UX_CONTAINERIZED_GIT;
     const previousGitContainerMode = process.env.CODE_UX_GIT_CONTAINER_MODE;
     process.env.CODE_UX_CONTAINERIZED_GIT = "1";

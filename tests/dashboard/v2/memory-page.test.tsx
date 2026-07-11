@@ -26,6 +26,7 @@ vi.mock("../../../dashboard/src/v2/lib/project-api.js", () => ({
 }));
 vi.mock("../../../dashboard/src/v2/lib/agent-preset-api.js", () => ({
     fetchAgentPresets: vi.fn().mockResolvedValue([]),
+    fetchSkillCatalog: vi.fn().mockResolvedValue([]),
 }));
 vi.mock("../../../dashboard/src/v2/lib/api/fetch-json.js", () => ({
     fetchJson: vi.fn()

@@ -14,6 +14,8 @@ interface MemoryCardProps {
     strength: number;
     scope?: MemoryScope | string;
     onClick: () => void;
+    readOnly?: boolean;
+    entityLabel?: "memory" | "skill";
 }
 
 const CAT: Record<string, { label: string; hex: string }> = {
@@ -34,6 +36,8 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
     strength,
     scope,
     onClick,
+    readOnly = false,
+    entityLabel = "memory",
 }) => {
     const cat = CAT[category] || CAT.context;
     const isSelected = useComputed(() => activeMemoryIdSignal.value === id);
@@ -86,7 +90,7 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
             role="option"
             tabIndex={0}
             aria-selected={isSelected.value}
-            aria-label={`${cat.label} memory, scope ${scopeLabel}, strength ${strengthPercent}%. ${selectedState} ${content}`}
+            aria-label={`${cat.label} ${entityLabel}, scope ${scopeLabel}, strength ${strengthPercent}%. ${selectedState} ${content}`}
             onClick={onClick}
             onMouseEnter={() => { hoveredMemoryIdSignal.value = id; }}
             onMouseLeave={() => { hoveredMemoryIdSignal.value = null; }}
@@ -149,7 +153,7 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
                     {content}
                 </p>
 
-                {lobotomizeModeSignal.value && (
+                {!readOnly && lobotomizeModeSignal.value && (
                     <div
                         id={`danger-delete-${id}`}
                         className={`flex min-w-0 items-start gap-2 rounded-lg border px-2.5 py-2 text-[11px] font-semibold leading-4 ${
@@ -169,7 +173,7 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
                 )}
 
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t border-black/[0.05] pt-2 dark:border-white/[0.06]">
-                    <button
+                    {!readOnly && <button
                         type="button"
                         aria-pressed={isBatchSelected.value}
                         aria-label={isBatchSelected.value ? `Deselect ${cat.label} memory` : `Select ${cat.label} memory`}
@@ -191,7 +195,7 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
                     >
                         <Check size={13} strokeWidth={3} aria-hidden="true" className={isBatchSelected.value ? "opacity-100" : "opacity-45"} />
                         <span className="truncate">{isBatchSelected.value ? "Selected" : "Select"}</span>
-                    </button>
+                    </button>}
                     <div className="flex shrink-0 items-center gap-1.5">
                         <button
                             type="button"
@@ -203,7 +207,7 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
                             <span>Open</span>
                             <ArrowUpRight size={13} strokeWidth={2.5} aria-hidden="true" />
                         </button>
-                        {lobotomizeModeSignal.value && (
+                        {!readOnly && lobotomizeModeSignal.value && (
                             <div className="flex shrink-0 items-center gap-1.5">
                                 {deleteArmed && (
                                     <button

@@ -486,14 +486,19 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   const selectedProvider = providerOptions.find((option) => option.value === providerConfigId) || null;
 
   const mcpItems = useMemo(() => ([
-    { id: "code_ux", label: "Code UX", active: mcpAccess.codeUxEnabled, kind: "code_ux" as const },
+    {
+      id: "code_ux",
+      label: isDashboardReplyAgent && !mcpAccess.codeUxEnabled ? "Code UX · Runtime" : "Code UX",
+      active: isDashboardReplyAgent || mcpAccess.codeUxEnabled,
+      kind: "code_ux" as const,
+    },
     ...availableMcpServers.map((server) => ({
       id: server.id,
       label: server.label || server.name,
       active: mcpAccess.linkedServerIds.includes(server.id),
       kind: "custom" as const,
     })),
-  ]), [mcpAccess, availableMcpServers]);
+  ]), [mcpAccess, availableMcpServers, isDashboardReplyAgent]);
   const visibleMcpItems = mcpItems.slice(0, 5);
   const hiddenMcpCount = mcpItems.length - visibleMcpItems.length;
   const activeMcpCount = mcpItems.filter((item) => item.active).length;

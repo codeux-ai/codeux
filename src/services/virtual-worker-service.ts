@@ -42,6 +42,7 @@ import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
 import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
+import { buildRelevantMemoryInjectionContext } from "./memory-injection-context.js";
 import { LEARNINGS_FILENAME } from "../contracts/memory-types.js";
 import { DockerService } from "./docker-service.js";
 import {
@@ -958,7 +959,7 @@ export class VirtualWorkerService {
     let succeeded = false;
     let initialHead = "";
     const memoryContext = workerAgent?.id
-      ? this.buildMemoryContext(item.projectId, item.sprintId || null, workerAgent.id)
+      ? await this.buildMemoryContext(item.projectId, item.sprintId || null, workerAgent.id, item.summaryMarkdown)
       : undefined;
     const memoryInstructions = settings.memory?.enabled && settings.memory.autoCaptureSprint
       ? resolveAgentMemoryInstructions(workerAgent || {}, settings.memory?.workerLearningsInstruction)
@@ -1346,7 +1347,7 @@ export class VirtualWorkerService {
     let succeeded = false;
     let initialHead = "";
     const memoryContext = workerAgent?.id
-      ? this.buildMemoryContext(item.projectId, item.sprintId || null, workerAgent.id)
+      ? await this.buildMemoryContext(item.projectId, item.sprintId || null, workerAgent.id, item.summaryMarkdown)
       : undefined;
     const memoryInstructions = settings.memory?.enabled && settings.memory.autoCaptureSprint
       ? resolveAgentMemoryInstructions(workerAgent || {}, settings.memory?.workerLearningsInstruction)
@@ -2344,36 +2345,20 @@ export class VirtualWorkerService {
       : null;
   }
 
-  private buildMemoryContext(projectId: string, sprintId: string | null, agentPresetId: string): string | undefined {
+  private async buildMemoryContext(projectId: string, sprintId: string | null, agentPresetId: string, query: string): Promise<string | undefined> {
     const memoryService = this.deps.memoryService;
     if (!memoryService) {
       return undefined;
     }
 
     try {
-      const longTerm = memoryService.listLongTermByAgent(projectId, agentPresetId, 10);
-      const shortTerm = sprintId
-        ? memoryService.listBySprintAndAgent(projectId, sprintId, agentPresetId, 10)
-        : [];
-
-      if (longTerm.length === 0 && shortTerm.length === 0) {
-        return undefined;
-      }
-
-      const sections: string[] = ["## PROJECT CONTEXT FROM MEMORY"];
-      if (longTerm.length > 0) {
-        sections.push("### Long-Term Knowledge");
-        for (const memory of longTerm) {
-          sections.push(`- [${memory.category}] ${memory.content.slice(0, 300)}`);
-        }
-      }
-      if (shortTerm.length > 0) {
-        sections.push("### Recent Sprint Learnings");
-        for (const memory of shortTerm) {
-          sections.push(`- [${memory.category}] ${memory.content.slice(0, 300)}`);
-        }
-      }
-      return sections.join("\n");
+      return (await buildRelevantMemoryInjectionContext(memoryService, {
+        projectId,
+        sprintId,
+        agentPresetId,
+        query,
+        tokenBudget: 1_800,
+      })).markdown;
     } catch {
       return undefined;
     }

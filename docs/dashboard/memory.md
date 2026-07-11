@@ -66,12 +66,19 @@ The memory map uses a pointer-centered camera so users can inspect dense graphs 
 ## Memory Map Controls
 
 The Memory Map control surface is driven by the currently selected project and loaded memory context:
-- **Tier tabs**: Short Term and Long Term are tab-style controls with visible counts. Short Term reads sprint-scoped memory; Long Term reads project-scoped memory.
-- **Sprint and agent filters**: Short Term shows the sprint selector, and both tiers show the agent preset selector. When a source list is empty, the filter row shows reason copy instead of rendering a focusable empty selector.
+- **Tier tabs**: Short Term, Long Term, and Skills are tab-style controls with visible counts. Short Term reads sprint-scoped memory; Long Term reads project-scoped memory; Skills reads bounded descriptors from project skill storages.
+- **Sprint and agent filters**: Short Term shows the sprint selector, and every tier supports agent filtering where applicable. Skills filters to storages attached to the selected agent. When a source list is empty, the filter row shows reason copy instead of rendering a focusable empty selector.
 - **Actions**: Add Memory opens the manual memory dialog for the active tier scope. Model Catalog toggles the embedding model browser and shows active-model status. Danger Delete toggles the Lobotomize delete mode; when armed, graph-node and inspector deletes are immediate while sidebar cards still require their card-level arm step.
 - **Canvas navigation**: wheel zoom, drag pan, node click selection, Zoom in, Zoom out, and Reset view all operate on the graph camera. Reset returns to overview and clears the selected memory.
 - **Sidebar list**: the memory sidebar starts collapsed as a rail with an open/close toggle. Expanded state shows search above the current alive memory list for the selected tier, sprint, and agent filters. The list supports opening a memory in the inspector, selecting visible rows, clearing selection, and confirmed batch deletion.
 - **Inspector and summaries**: selecting a canvas node or sidebar row opens the inspector. The node graph, sidebar list, inspector, and category summary cards all reflect the currently loaded memories for the active tier, sprint, agent, and search context.
+- **Skills mode**: skill descriptors use the deterministic fallback graph when no projection exists. Search and inspection remain available, while Add Memory, embedding-model, selection, and deletion controls are hidden because skill mutation belongs to the skill-management workflow.
+
+## Runtime Memory Injection
+
+All planning, worker, QA, CI/merge repair, and direct provider prompt paths use the same bounded memory-context builder. It loads a defensive recent candidate window, applies agent tier/category/strength policy, combines semantic similarity with lexical overlap, strength, and recency, removes duplicate knowledge across tiers, and emits at most eight items per tier by default. Callers provide a strict token budget (normally 1,600–1,800 estimated tokens); semantic-search failure degrades to deterministic lexical ranking instead of dropping memory context or blocking execution.
+
+Skill retrieval uses a related hybrid strategy but keeps its own index. Each skill stores one compact descriptor embedding plus up to 64 heading-aware body chunks. Search aggregates the strongest chunk per skill, blends it with lexical name/description/tag/body overlap, filters to the requested project storage or authenticated agent attachments, and hydrates only the final bounded result set. Without a loaded embedding model, lexical ranking remains operational.
 
 ## Performance
 

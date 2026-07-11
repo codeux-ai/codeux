@@ -8,6 +8,8 @@ import { AgentPresetRepository } from "../../../src/repositories/agent-preset-re
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { SkillRepository } from "../../../src/repositories/skill-repository.js";
 import { SkillService, type SkillEmbeddingProvider } from "../../../src/services/skill-service.js";
+import { SkillStorageVersionControlService } from "../../../src/services/skill-storage-version-control-service.js";
+import { FakeSkillStorageGitRunner } from "../helpers/fake-skill-storage-git-runner.js";
 
 const tempDirs: string[] = [];
 
@@ -49,7 +51,12 @@ async function createFixture(): Promise<{
   const projectRepository = new ProjectManagementRepository(storage);
   const agentPresetRepository = new AgentPresetRepository(storage);
   const skillRepository = new SkillRepository(storage);
-  const skillService = new SkillService(skillRepository, new FakeEmbeddingProvider());
+  const skillService = new SkillService(
+    skillRepository,
+    new FakeEmbeddingProvider(),
+    undefined,
+    new SkillStorageVersionControlService(path.join(dir, "skill-storages"), new FakeSkillStorageGitRunner()),
+  );
   const project = projectRepository.createProject({ name: "Skill MCP Project", sourceType: "local", sourceRef: "/workspace/skill-mcp" });
   const otherProject = projectRepository.createProject({ name: "Other Skill MCP Project", sourceType: "local", sourceRef: "/workspace/skill-mcp-other" });
   const agent = agentPresetRepository.createAgentPreset(project.id, { id: "review-agent", name: "Review Agent" });

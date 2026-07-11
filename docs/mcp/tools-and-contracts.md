@@ -523,7 +523,7 @@ Detach a flow from an agent:
 
 ### `manage_skills` persistent skill actions
 
-`manage_skills` is the management surface for persistent project skill storage. It is available in the `agents_memory` category for project-manager clients and for agents with explicit Code UX tool access. It is separate from workspace files: callers save skill markdown through the MCP payload, and Code UX writes the durable skill rows and embeddings through `SkillService`.
+`manage_skills` is the management surface for persistent project skill storage. It is available in the `agents_memory` category for project-manager clients and for agents with explicit Code UX tool access. It is separate from workspace files: callers save skill markdown through the MCP payload, and Code UX updates the SQLite query projection plus the storage's internal Git repository through `SkillService`. Git commits run through the standard helper container, and runtime mounts are read-only.
 
 Available actions:
 - `authoring_prompt`: returns the comprehensive skill-authoring prompt, including markdown/frontmatter format and the workflow for saving skills through `manage_skills` instead of writing into the workspace.
