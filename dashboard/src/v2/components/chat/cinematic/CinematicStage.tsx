@@ -15,6 +15,7 @@ import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
 import { resolveDisplayDeliveryStatus } from "../../../hooks/use-chat-thread-data.js";
 import { useAgentMood, type AgentMoodState } from "./use-agent-mood.js";
 import { parseBubbleSegments, StageWidgetRenderer } from "./StageWidgets.js";
+import { isAgentScheduledWakeup, ScheduledWakeupWidget } from "../widgets/ScheduledWakeupWidget.js";
 
 /* ════════════════════════════════════════════════════════════════════════
  *  CinematicStage — the default "3D Chat" view of the chat page.
@@ -233,6 +234,22 @@ const UserBubble: FunctionComponent<{
   useBubbleEnter(ref, reducedMotion);
   const status = resolveDisplayDeliveryStatus(message, allMessages);
   const createdAtLabel = formatChatTime(message.createdAt);
+  const isScheduledWakeup = isAgentScheduledWakeup(message.metadata);
+
+  if (isScheduledWakeup) {
+    return (
+      <div ref={ref} className="flex justify-end">
+        <div className="w-full max-w-[560px]">
+          <ScheduledWakeupWidget
+            instruction={message.bodyMarkdown}
+            status={status}
+            scheduledFor={typeof message.metadata?.scheduledFor === "string" ? message.metadata.scheduledFor : null}
+            compact
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div ref={ref} className={`flex justify-end ${status === "pending" || status === "failed" ? "opacity-60" : ""}`}>

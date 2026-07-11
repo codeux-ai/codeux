@@ -115,6 +115,29 @@ describe("Chat Message Bubbles", () => {
       expect(container.innerHTML).toContain("Hello world");
     });
 
+    it("renders agent-scheduled wakeups as a Project Manager continuation rather than a user message", () => {
+      const message = createChatMessage({
+        id: "msg_scheduled_wakeup",
+        direction: "dashboard_to_connection",
+        authorType: "dashboard_user",
+        bodyMarkdown: "Inspect the saved skill, then report the current conditions.",
+        deliveryStatus: "processed",
+        metadata: {
+          source: "agent_scheduler",
+          origin: "agent_scheduler",
+          scheduledFor: "2026-03-10T12:00:00.000Z",
+        },
+      });
+
+      const { getByRole, getByText, queryByText } = render(<ChatMessageBubble message={message} allMessages={[message]} />);
+
+      expect(getByRole("region", { name: "Project Manager scheduled continuation" })).toBeInTheDocument();
+      expect(getByText("Project Manager continuation")).toBeInTheDocument();
+      expect(getByText("Scheduled by the agent to continue your request — not a message you sent.")).toBeInTheDocument();
+      expect(getByText("Inspect the saved skill, then report the current conditions.")).toBeInTheDocument();
+      expect(queryByText("User")).not.toBeInTheDocument();
+    });
+
     it("renders reasoning metadata as a full-width reasoning widget without bubble chrome", () => {
       const message = createChatMessage({
         id: "msg_reasoning",

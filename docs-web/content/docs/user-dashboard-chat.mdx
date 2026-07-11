@@ -45,6 +45,8 @@ The project chat composer saves your latest draft in SQLite per dashboard user, 
 
 The composer also keeps a recent-message history for successful project chat sends. Press ArrowUp or ArrowDown while composing to preview messages submitted by the current dashboard user in the current project; a fresh dashboard user starts with no recalled messages. Single-line drafts can recall history directly, while multi-line drafts keep normal textarea cursor movement unless the caret is at the true start or end. Code UX preserves the current draft while you cycle through history and restores it when you move back past the newest recalled entry.
 
+When the Project Manager schedules its own continuation, that follow-up is visibly different from a message you wrote. Thread and 3D Chat render an agent-scheduled wakeup as a dedicated Project Manager continuation card, with the exact next-step instruction and its queued, running, completed, or failed state. The card explicitly says it was scheduled by the agent, so automated follow-ups remain auditable without being mistaken for user-authored prompts.
+
 ## Create app quickactions
 
 Use **Create Web App** or **Create Desktop App** when you want Code UX to start an app-building sprint in the selected project from chat. In Threads mode, the buttons sit beside the composer and are also available in an empty thread. In 3D Chat, the idle Web App and Desktop App quickactions send the same kind of request through the active thread.
