@@ -18,6 +18,8 @@ Click **New Project** on the Projects page to initialize a new repository throug
 
 New project creation always writes an explicit project techstack override. New local projects additionally receive `git.githubMode: LOCAL`; new remote projects do not. To set up a web or desktop app inside an existing project, use **Create Web App** or **Create Desktop App** in Chat Threads beside the composer. Those quickactions operate in the selected project, create a chat thread when needed, and launch the matching detached quicksprint without opening the new-project modal.
 
+Code UX persists whether a project was imported or initialized as a new local/remote repository. Initial-app quickactions are eligible only while a persisted new project is still a clean, one-commit seed containing exactly `README.md` and the Code UX `.gitignore`. Additional files, commits, setup artifacts, dirty state, missing checkouts, or inspection failures disable eligibility; imported and legacy projects are never inferred to be new from their source type or age.
+
 The form collects:
 
 | Field | Required | Description |

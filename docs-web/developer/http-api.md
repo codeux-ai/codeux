@@ -32,6 +32,7 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 | `GET` | `/api/projects` | List projects. |
 | `POST` | `/api/projects` | Create. Body: `CreateProjectInput`. |
 | `GET` | `/api/projects/:projectId` | Get one. |
+| `GET` | `/api/projects/:projectId/initialization-state` | Lightweight persisted initialization provenance and fail-closed seeded-checkout eligibility. |
 | `PATCH` | `/api/projects/:projectId` | Update. |
 | `DELETE` | `/api/projects/:projectId` | Delete. |
 | `PUT` | `/api/projects/:projectId/select` | Set active project. |

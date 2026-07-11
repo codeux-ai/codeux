@@ -6,6 +6,7 @@ const validateNonEmptyDir = vi.fn((dir: string) => dir);
 const runCommandStrict = vi.fn(async () => ({ stdout: "", stderr: "", code: 0 }));
 const buildGitHttpAuthEnvWithFallbacks = vi.fn(async () => ({ GIT_TOKEN: "x" }));
 const mkdirSync = vi.fn();
+const writeFileSync = vi.fn();
 const ensureCodeUxGitignoreEntry = vi.fn(async () => true);
 
 vi.mock("../../../../src/utils/path-validator.js", () => ({
@@ -24,6 +25,7 @@ vi.mock("../../../../src/services/git-http-auth.js", () => ({
 
 vi.mock("fs", () => ({
   mkdirSync: (...a: unknown[]) => mkdirSync(...a),
+  writeFileSync: (...a: unknown[]) => writeFileSync(...a),
 }));
 
 vi.mock("../../../../src/infrastructure/git/code-ux-gitignore.js", () => ({
@@ -49,7 +51,7 @@ describe("createGitHubRepo", () => {
       expect(url).toBe("https://api.github.com/user/repos");
       expect(init?.method).toBe("POST");
       const body = JSON.parse(String(init?.body));
-      expect(body).toEqual({ name: "my-repo", private: true, auto_init: true });
+      expect(body).toEqual({ name: "my-repo", private: true, auto_init: false });
       return new Response(JSON.stringify({ clone_url: "https://github.com/me/my-repo.git" }), { status: 201 });
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -73,9 +75,10 @@ describe("createGitHubRepo", () => {
       { GIT_TOKEN: "x" },
     );
     expect(ensureCodeUxGitignoreEntry).toHaveBeenCalledWith("/tmp/parent/my-repo");
-    expect(runCommandStrict).toHaveBeenCalledWith("git", ["add", ".gitignore"], "/tmp/parent/my-repo");
-    expect(runCommandStrict).toHaveBeenCalledWith("git", ["commit", "-m", "chore: ignore Code UX runtime files"], "/tmp/parent/my-repo");
-    expect(runCommandStrict).toHaveBeenCalledWith("git", ["push", "origin", "HEAD"], "/tmp/parent/my-repo", { GIT_TOKEN: "x" });
+    expect(runCommandStrict).toHaveBeenCalledWith("git", ["checkout", "-B", "main"], "/tmp/parent/my-repo");
+    expect(runCommandStrict).toHaveBeenCalledWith("git", ["add", "README.md", ".gitignore"], "/tmp/parent/my-repo");
+    expect(runCommandStrict).toHaveBeenCalledWith("git", ["commit", "-m", "Initial commit"], "/tmp/parent/my-repo");
+    expect(runCommandStrict).toHaveBeenCalledWith("git", ["push", "-u", "origin", "HEAD"], "/tmp/parent/my-repo", { GIT_TOKEN: "x" });
   });
 
   it("rejects when no host token is provided", async () => {
@@ -129,7 +132,7 @@ describe("createGitHubRepo", () => {
 });
 
 describe("createGitLabRepo", () => {
-  it("creates the project with the readme + optional default branch and clones it", async () => {
+  it("creates an empty project and seeds the requested default branch locally", async () => {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       expect(url).toBe("https://gitlab.com/api/v4/projects");
       const body = JSON.parse(String(init?.body));
@@ -137,9 +140,9 @@ describe("createGitLabRepo", () => {
         name: "proj",
         path: "proj",
         visibility: "private",
-        initialize_with_readme: true,
-        default_branch: "trunk",
+        initialize_with_readme: false,
       });
+      expect(body).not.toHaveProperty("default_branch");
       return new Response(JSON.stringify({ http_url_to_repo: "https://gitlab.com/me/proj.git" }), { status: 201 });
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -154,6 +157,7 @@ describe("createGitLabRepo", () => {
 
     expect(result.remoteUrl).toBe("https://gitlab.com/me/proj.git");
     expect(result.localPath).toBe("/tmp/parent/proj");
+    expect(runCommandStrict).toHaveBeenCalledWith("git", ["checkout", "-B", "trunk"], "/tmp/parent/proj");
   });
 
   it("omits default_branch when not provided and defaults to public visibility", async () => {

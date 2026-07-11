@@ -582,6 +582,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureNodeFlowTables(db);
   ensureCustomDashboardTables(db);
 
+  ensureColumn(db, "projects", "initialization_mode", "TEXT NOT NULL DEFAULT 'existing'");
   ensureColumn(db, "provider_invocations", "tool_call_count", "INTEGER NOT NULL DEFAULT 0");
 
   ensureColumn(db, "sprints", "showcase_pinned", "INTEGER NOT NULL DEFAULT 0");
