@@ -68,6 +68,8 @@ Entries support two scheduling modes:
 
 Composer and quicksprint shortcut scheduling both use this same contract. Absolute shortcut submissions send `scheduledFor`; after-sprint-end shortcut submissions send `scheduleAnchor`.
 
+When a scheduled sprint becomes due, the scheduler checks its existing tasks. Taskless sprints run through the planning agent with `autoStart: true`; sprints that already contain tasks start through direct orchestration without replanning. Planning and orchestration errors both use the scheduler entry's existing failed-run handling and operator-visible `lastError`.
+
 Anchors and target-specific payloads are persisted inside the existing `target_json` payload instead of new columns. This keeps existing `scheduler_entries` rows compatible and avoids a destructive migration; older absolute entries simply hydrate with no `scheduleAnchor`.
 
 The target payload keys are:

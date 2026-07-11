@@ -502,6 +502,7 @@ export function createDashboardDependencies(
     quicksprintService,
     chatThreadRuntimeService,
     executionControlService,
+    planningAgentService,
     taskRerunService,
     memoryRemediationService,
     nodeFlowRuntimeService,
