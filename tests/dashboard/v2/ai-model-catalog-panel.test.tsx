@@ -50,6 +50,7 @@ describe("AIModelCatalogPanel", () => {
       sampleRateHz: 16_000,
       voices: [],
       defaultVoice: null,
+      license: { id: "mit-v1", name: "MIT", url: "https://example.test/license", commercialUseAllowed: true, notice: "Test model." },
       downloaded: true,
       downloading: false,
       downloadProgress: 0,
@@ -68,6 +69,7 @@ describe("AIModelCatalogPanel", () => {
       sampleRateHz: 16_000,
       voices: [],
       defaultVoice: null,
+      license: { id: "mit-v1", name: "MIT", url: "https://example.test/license", commercialUseAllowed: true, notice: "Test model." },
       downloaded: true,
       downloading: false,
       downloadProgress: 0,
@@ -86,6 +88,7 @@ describe("AIModelCatalogPanel", () => {
       sampleRateHz: 24_000,
       voices: [{ id: "af_heart", label: "Heart", language: "English (US)" }],
       defaultVoice: "af_heart",
+      license: { id: "apache-v1", name: "Apache-2.0", url: "https://example.test/license", commercialUseAllowed: true, notice: "Test model." },
       downloaded: true,
       downloading: false,
       downloadProgress: 0,
@@ -156,5 +159,32 @@ describe("AIModelCatalogPanel", () => {
     expect(screen.getByLabelText("Text to speech API format")).toBeInTheDocument();
     expect(screen.getByLabelText("Text to speech API key")).toBeInTheDocument();
     expect(screen.queryByLabelText("Local text to speech voice")).not.toBeInTheDocument();
+  });
+
+  it("requires the displayed speech-model license acceptance before download", async () => {
+    const catalog = await speechApi.listSpeechModels();
+    speechApi.listSpeechModels.mockResolvedValue(catalog.map((model: any) => model.id === "kokoro-82m-v1.0-q8"
+      ? { ...model, downloaded: false }
+      : model));
+    speechApi.downloadSpeechModel.mockResolvedValue(undefined);
+
+    render(<AIModelCatalogPanel state={{
+      editableSettings: {
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        speech: {
+          ...DEFAULT_DASHBOARD_SETTINGS.speech,
+          synthesis: { ...DEFAULT_DASHBOARD_SETTINGS.speech.synthesis, enabled: true },
+        },
+      },
+      selectedProject: null,
+      updateEditableSettings: vi.fn(),
+    } as any} />);
+
+    expect(await screen.findByText("Repair required")).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: "Download" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Apache-2.0");
+    expect(speechApi.downloadSpeechModel).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Accept & Download" }));
+    await waitFor(() => expect(speechApi.downloadSpeechModel).toHaveBeenCalledWith("kokoro-82m-v1.0-q8", "apache-v1"));
   });
 });

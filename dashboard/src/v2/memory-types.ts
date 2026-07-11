@@ -147,6 +147,13 @@ export interface EmbeddingModelInfo {
   sizeBytes: number;
   language: string;
   files: string[];
+  license: {
+    id: string;
+    name: string;
+    url: string;
+    commercialUseAllowed: boolean;
+    notice: string;
+  };
 }
 
 export interface EmbeddingModelStatus {

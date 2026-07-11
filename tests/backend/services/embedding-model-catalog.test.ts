@@ -10,6 +10,19 @@ import {
   getModelDownloadUrl,
 } from "../../../src/services/embedding-model-catalog.js";
 
+const CUSTOM_LICENSE_INPUT = {
+  licenseName: "MIT",
+  licenseUrl: "https://example.test/license",
+  commercialUseAllowed: true,
+} as const;
+const CUSTOM_LICENSE = {
+  id: "custom-mit-v1",
+  name: "MIT",
+  url: "https://example.test/license",
+  commercialUseAllowed: true,
+  notice: "Test model.",
+} as const;
+
 describe("embedding-model-catalog", () => {
   it("contains bge-small-en-v1.5 model", () => {
     const model = EMBEDDING_MODEL_CATALOG["bge-small-en-v1.5"];
@@ -69,6 +82,7 @@ describe("embedding-model-catalog", () => {
       dimension: 384,
       approximateSizeBytes: 130_000_000,
       language: "English",
+      ...CUSTOM_LICENSE_INPUT,
     });
 
     expect(model).toEqual(expect.objectContaining({
@@ -81,6 +95,7 @@ describe("embedding-model-catalog", () => {
       dimension: 384,
       approximateSizeBytes: 130_000_000,
       language: "English",
+      license: expect.objectContaining({ name: "MIT", commercialUseAllowed: true }),
       validationStatus: "valid",
     }));
   });
@@ -94,6 +109,7 @@ describe("embedding-model-catalog", () => {
       dimension: 384,
       approximateSizeBytes: 1,
       language: "English",
+      ...CUSTOM_LICENSE_INPUT,
     });
 
     expect(model.huggingFaceRepo).toBe("owner/repo");
@@ -108,6 +124,7 @@ describe("embedding-model-catalog", () => {
       dimension: 384,
       sizeBytes: 90_000_000,
       language: "English",
+      ...CUSTOM_LICENSE_INPUT,
     });
 
     expect(model.huggingFaceRepo).toBe("sentence-transformers/all-MiniLM-L6-v2");
@@ -123,6 +140,7 @@ describe("embedding-model-catalog", () => {
       dimension: 384,
       approximateSizeBytes: 1,
       language: "English",
+      ...CUSTOM_LICENSE_INPUT,
     });
 
     expect(model.id).toMatch(/^hf-owner-repo-onnx-model-[a-f0-9]{8}$/);
@@ -137,6 +155,7 @@ describe("embedding-model-catalog", () => {
       dimension: 384,
       approximateSizeBytes: 1,
       language: "English",
+      ...CUSTOM_LICENSE_INPUT,
     })).toThrow("Only https://huggingface.co");
 
     expect(() => createCustomEmbeddingModelDefinition({
@@ -147,6 +166,7 @@ describe("embedding-model-catalog", () => {
       dimension: 384,
       approximateSizeBytes: 1,
       language: "English",
+      ...CUSTOM_LICENSE_INPUT,
     })).toThrow("owner/repo");
   });
 
@@ -159,6 +179,7 @@ describe("embedding-model-catalog", () => {
       dimension: 768,
       approximateSizeBytes: 100,
       language: "English",
+      ...CUSTOM_LICENSE_INPUT,
     });
 
     expect(getModelDownloadUrl(model.id, "model.onnx", [model])).toBe(
@@ -181,6 +202,7 @@ describe("embedding-model-catalog", () => {
       dimension: 256,
       approximateSizeBytes: 42,
       language: "Multilingual",
+      ...CUSTOM_LICENSE_INPUT,
     });
 
     const catalog = getEmbeddingModelCatalog([custom]);
@@ -205,6 +227,7 @@ describe("embedding-model-catalog", () => {
       approximateSizeBytes: 1,
       language: "English",
       validationStatus: "valid",
+      license: CUSTOM_LICENSE,
     }]);
 
     expect(catalog["bge-small-en-v1.5"].source).toBe("built_in");

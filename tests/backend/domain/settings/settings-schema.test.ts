@@ -597,6 +597,22 @@ describe("validateSettingsPayload", () => {
       synthesis: DEFAULT_DASHBOARD_SETTINGS.speech.synthesis,
     });
   });
+
+  it("migrates removed Piper voices to commercially usable replacements", () => {
+    const sanitized = sanitizeSpeech({
+      speech: {
+        ...DEFAULT_DASHBOARD_SETTINGS.speech,
+        synthesis: {
+          ...DEFAULT_DASHBOARD_SETTINGS.speech.synthesis,
+          localModelId: "piper-en-us-lessac-medium",
+          voice: "lessac",
+        },
+      },
+    });
+
+    expect(sanitized.synthesis.localModelId).toBe("piper-en-us-ljspeech-medium");
+    expect(sanitized.synthesis.voice).toBe("ljspeech");
+  });
 });
 
 describe("maxParsingRetries validation", () => {

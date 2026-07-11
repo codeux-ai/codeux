@@ -151,8 +151,12 @@ export async function listSpeechModels(): Promise<SpeechModelStatus[]> {
   return await response.json() as SpeechModelStatus[];
 }
 
-export async function downloadSpeechModel(modelId: string): Promise<void> {
-  const response = await fetch(`/api/speech/models/${encodeURIComponent(modelId)}/download`, { method: "POST" });
+export async function downloadSpeechModel(modelId: string, acceptedLicenseId: string): Promise<void> {
+  const response = await fetch(`/api/speech/models/${encodeURIComponent(modelId)}/download`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ acceptedLicenseId }),
+  });
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as { error?: string };
     throw new Error(body.error || "Speech model download could not be started.");

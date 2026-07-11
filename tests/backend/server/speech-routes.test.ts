@@ -211,4 +211,32 @@ describe("speech routes", () => {
     expect(response.body).toEqual(Buffer.from("wave-bytes"));
     expect(synthesize).toHaveBeenCalledWith({ text: "Hello", projectId: "project-1", sprintId: null, voice: null });
   });
+
+  it("rejects a speech-model download without the current license acceptance", async () => {
+    const app = express();
+    app.use(express.json());
+    const downloadModel = vi.fn().mockResolvedValue(undefined);
+    const validateDownloadAcceptance = vi.fn((_modelId: string, acceptedLicenseId?: string) => {
+      if (acceptedLicenseId !== "mit-v1") throw new Error("Accept the MIT terms before downloading.");
+    });
+    registerSpeechRoutes(app, {
+      speechTranscriptionService: { transcribe: vi.fn() },
+      speechModelManager: {
+        listModels: vi.fn(),
+        hasModel: vi.fn().mockReturnValue(true),
+        validateDownloadAcceptance,
+        downloadModel,
+        cancelDownload: vi.fn(),
+        deleteModel: vi.fn(),
+      },
+    });
+
+    const rejected = await request(app).post("/api/speech/models/test-model/download").send({});
+    expect(rejected.status).toBe(400);
+    expect(downloadModel).not.toHaveBeenCalled();
+
+    const accepted = await request(app).post("/api/speech/models/test-model/download").send({ acceptedLicenseId: "mit-v1" });
+    expect(accepted.status).toBe(200);
+    expect(downloadModel).toHaveBeenCalledWith("test-model", "mit-v1");
+  });
 });

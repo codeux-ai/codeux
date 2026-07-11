@@ -29,6 +29,9 @@ type CustomModelForm = {
   dimension: string;
   approximateSizeBytes: string;
   language: string;
+  licenseName: string;
+  licenseUrl: string;
+  commercialUseAllowed: boolean;
 };
 
 const DEFAULT_CUSTOM_FORM: CustomModelForm = {
@@ -39,9 +42,18 @@ const DEFAULT_CUSTOM_FORM: CustomModelForm = {
   dimension: "",
   approximateSizeBytes: "",
   language: "English",
+  licenseName: "",
+  licenseUrl: "",
+  commercialUseAllowed: false,
 };
 
 const HUGGING_FACE_REPO_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+function formatModelSize(bytes: number): string {
+  if (!bytes) return "The model bundle";
+  if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
+  return `${Math.round(bytes / 1_000_000)} MB`;
+}
 
 function validateHuggingFaceSource(value: string): string | null {
   const trimmed = value.trim();
@@ -94,6 +106,9 @@ function validateCustomForm(form: CustomModelForm): { ok: true; input: {
   dimension: number;
   approximateSizeBytes: number;
   language: string;
+  licenseName: string;
+  licenseUrl: string;
+  commercialUseAllowed: true;
 } } | { ok: false; message: string } {
   if (!form.displayName.trim()) return { ok: false, message: "Display name is required." };
   const sourceError = validateHuggingFaceSource(form.huggingFaceRepoOrUrl);
@@ -125,6 +140,14 @@ function validateCustomForm(form: CustomModelForm): { ok: true; input: {
   }
 
   if (!form.language.trim()) return { ok: false, message: "Language is required." };
+  if (!form.licenseName.trim()) return { ok: false, message: "Upstream license name is required." };
+  try {
+    const licenseUrl = new URL(form.licenseUrl.trim());
+    if (licenseUrl.protocol !== "https:") return { ok: false, message: "License URL must use HTTPS." };
+  } catch {
+    return { ok: false, message: "Enter a valid upstream license URL." };
+  }
+  if (!form.commercialUseAllowed) return { ok: false, message: "Confirm that the upstream model permits commercial use." };
 
   return {
     ok: true,
@@ -136,6 +159,9 @@ function validateCustomForm(form: CustomModelForm): { ok: true; input: {
       dimension,
       approximateSizeBytes,
       language: form.language.trim(),
+      licenseName: form.licenseName.trim(),
+      licenseUrl: form.licenseUrl.trim(),
+      commercialUseAllowed: true,
     },
   };
 }
@@ -182,7 +208,9 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
   };
 
   const setField = (field: keyof CustomModelForm) => (event: JSX.TargetedEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setCustomForm((current) => ({ ...current, [field]: event.currentTarget.value }));
+    const target = event.currentTarget;
+    const value = target instanceof HTMLInputElement && target.type === "checkbox" ? target.checked : target.value;
+    setCustomForm((current) => ({ ...current, [field]: value }));
     setCustomFormError(null);
   };
 
@@ -429,7 +457,18 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
               <ModelCard key={model.id} model={model}
                 onDownload={(id) => {
                   const selected = models.find((item) => item.id === id);
-                  void runModelAction(id, "download", `Downloading ${selected?.displayName ?? "embedding model"}...`, `${selected?.displayName ?? "Embedding model"} download started.`, () => onDownload(id));
+                  if (!selected) return;
+                  void (async () => {
+                    const accepted = await requestConfirm({
+                      title: `Download ${selected.displayName}`,
+                      body: `${formatModelSize(selected.sizeBytes)} will be downloaded directly from Hugging Face. By continuing, you accept ${selected.license.name}. ${selected.license.notice}`,
+                      confirmLabel: "Accept & Download",
+                      cancelLabel: "Cancel",
+                      tone: "neutral",
+                    });
+                    if (!accepted) return;
+                    await runModelAction(id, "download", `Downloading ${selected.displayName}...`, `${selected.displayName} download started.`, () => onDownload(id));
+                  })();
                 }}
                 onSelect={(id) => {
                   const selected = models.find((item) => item.id === id);
@@ -495,6 +534,18 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
             <label className="flex min-w-0 flex-col gap-1.5">
               <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Language</span>
               <input value={customForm.language} onInput={setField("language")} className={formFieldClass(Boolean(customFormError))} aria-invalid={Boolean(customFormError)} />
+            </label>
+            <label className="flex min-w-0 flex-col gap-1.5 lg:col-span-2">
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Upstream license</span>
+              <input value={customForm.licenseName} onInput={setField("licenseName")} placeholder="MIT or Apache-2.0" className={formFieldClass(Boolean(customFormError))} aria-invalid={Boolean(customFormError)} />
+            </label>
+            <label className="flex min-w-0 flex-col gap-1.5 lg:col-span-2">
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">License URL</span>
+              <input value={customForm.licenseUrl} onInput={setField("licenseUrl")} placeholder="https://..." className={formFieldClass(Boolean(customFormError))} aria-invalid={Boolean(customFormError)} />
+            </label>
+            <label className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300 lg:col-span-2">
+              <input type="checkbox" checked={customForm.commercialUseAllowed} onChange={setField("commercialUseAllowed")} className="h-4 w-4 accent-signal-500" />
+              I verified that the model terms permit commercial use.
             </label>
             <div className="flex items-end">
               <button type="submit" disabled={formStatus.status === "pending"} aria-busy={formStatus.status === "pending"} className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-signal-500 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-white transition-all hover:-translate-y-px hover:bg-signal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F9F8F4] disabled:cursor-wait disabled:opacity-65 disabled:hover:translate-y-0 dark:text-void-950 dark:focus-visible:ring-offset-void-900">

@@ -63,6 +63,7 @@ function createMockDeps(): MemoryRouteDependencies {
       getCatalog: vi.fn().mockReturnValue(EMBEDDING_MODEL_CATALOG),
       hasModel: vi.fn((modelId: string) => Object.prototype.hasOwnProperty.call(EMBEDDING_MODEL_CATALOG, modelId)),
       getModelInfo: vi.fn(),
+      validateDownloadAcceptance: vi.fn(),
     } as any,
     embeddingService: {
       getLoadedModelId: vi.fn().mockReturnValue(null),
@@ -363,6 +364,9 @@ describe("memory-routes", () => {
           dimension: 384,
           approximateSizeBytes: 100,
           language: "English",
+          licenseName: "MIT",
+          licenseUrl: "https://example.test/license",
+          commercialUseAllowed: true,
         },
       }, res);
 
@@ -411,7 +415,9 @@ describe("memory-routes", () => {
     it("starts download for valid model", async () => {
       const handler = routes["POST:/api/embedding-models/:modelId/download"].handler;
       const res = createMockRes();
-      await handler({ params: { modelId: "bge-small-en-v1.5" } }, res);
+      const licenseId = EMBEDDING_MODEL_CATALOG["bge-small-en-v1.5"].license.id;
+      await handler({ params: { modelId: "bge-small-en-v1.5" }, body: { acceptedLicenseId: licenseId } }, res);
+      expect(deps.embeddingModelManager.validateDownloadAcceptance).toHaveBeenCalledWith("bge-small-en-v1.5", licenseId);
       expect(res.json).toHaveBeenCalledWith({ status: "downloading", modelId: "bge-small-en-v1.5" });
     });
 
@@ -427,9 +433,9 @@ describe("memory-routes", () => {
       const res = createMockRes();
       (deps.embeddingModelManager.hasModel as any).mockImplementation((modelId: string) => modelId === "hf-custom");
 
-      await handler({ params: { modelId: "hf-custom" } }, res);
+      await handler({ params: { modelId: "hf-custom" }, body: { acceptedLicenseId: "custom-license" } }, res);
 
-      expect(deps.embeddingModelManager.downloadModel).toHaveBeenCalledWith("hf-custom");
+      expect(deps.embeddingModelManager.downloadModel).toHaveBeenCalledWith("hf-custom", "custom-license");
       expect(res.json).toHaveBeenCalledWith({ status: "downloading", modelId: "hf-custom" });
     });
   });

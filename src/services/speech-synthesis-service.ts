@@ -1,6 +1,4 @@
 import * as fs from "fs/promises";
-import { execFile } from "child_process";
-import { promisify } from "util";
 import type {
   SpeechSettings,
   SpeechSynthesisInput,
@@ -16,9 +14,9 @@ import {
   isSpeechModelAvailable,
   resolveSpeechModelEntry,
 } from "./speech-model-catalog.js";
+import { phonemizeKokoro, phonemizeWithLocalRuntime } from "./local-phonemizer-service.js";
 
 type FetchLike = typeof fetch;
-const execFileAsync = promisify(execFile);
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MAX_SYNTHESIS_TEXT_LENGTH = 8_000;
 
@@ -78,31 +76,15 @@ function floatOutput(value: unknown): Float32Array {
   throw new Error("The ONNX speech model returned an unsupported audio tensor.");
 }
 
-async function defaultPhonemize(text: string, voice: string): Promise<string> {
-  try {
-    const { stdout } = await execFileAsync("espeak-ng", ["--ipa=3", "-q", "-v", voice, text], {
-      encoding: "utf8",
-      maxBuffer: 2 * 1024 * 1024,
-      timeout: 15_000,
-    });
-    return stdout.replace(/\s*\n\s*/g, " ").trim();
-  } catch {
-    // Piper configs and Kokoro tokenizers both retain a grapheme subset. This
-    // keeps local synthesis usable in minimal desktop/container installs; an
-    // available espeak-ng binary still provides substantially better G2P.
-    return text.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
-  }
-}
-
 export class SpeechSynthesisService {
   private readonly fetchImpl: FetchLike;
   private readonly timeoutMs: number;
-  private readonly phonemize: (text: string, voice: string) => Promise<string>;
+  private readonly phonemize?: (text: string, voice: string) => Promise<string>;
 
   constructor(private readonly deps: SpeechSynthesisServiceDependencies = {}) {
     this.fetchImpl = deps.fetchImpl ?? fetch;
     this.timeoutMs = deps.requestTimeoutMs ?? DEFAULT_TIMEOUT_MS;
-    this.phonemize = deps.phonemize ?? defaultPhonemize;
+    this.phonemize = deps.phonemize;
   }
 
   async synthesize(input: SpeechSynthesisInput): Promise<SpeechSynthesisResult> {
@@ -162,7 +144,10 @@ export class SpeechSynthesisService {
     const tokenizerRaw = await fs.readFile(paths.labelsPath!, "utf8");
     const tokenizer = JSON.parse(tokenizerRaw) as { model?: { vocab?: Record<string, number> } };
     const vocab = tokenizer.model?.vocab ?? {};
-    const phonemes = await this.phonemize(text, voice.startsWith("b") ? "en-gb" : "en-us");
+    if (!paths.phonemizerPath && !this.phonemize) throw new Error("Kokoro phonemizer is missing. Delete and download the model again.");
+    const phonemes = this.phonemize
+      ? await this.phonemize(text, voice.startsWith("b") ? "en-gb" : "en-us")
+      : await phonemizeKokoro(paths.phonemizerPath!, text, voice.startsWith("b"));
     const tokens = Array.from(phonemes).map((symbol) => vocab[symbol]).filter((id): id is number => Number.isInteger(id)).slice(0, 510);
     if (tokens.length === 0) throw new Error("Kokoro phonemization did not produce supported tokens.");
 
@@ -199,7 +184,10 @@ export class SpeechSynthesisService {
       num_speakers?: number;
     };
     const map = config.phoneme_id_map ?? {};
-    const phonemes = await this.phonemize(text, config.espeak?.voice || "en-us");
+    if (!paths.phonemizerPath && !this.phonemize) throw new Error("Piper phonemizer is missing. Delete and download the model again.");
+    const phonemes = this.phonemize
+      ? await this.phonemize(text, config.espeak?.voice || "en-us")
+      : await phonemizeWithLocalRuntime(paths.phonemizerPath!, text, config.espeak?.voice || "en-us");
     const ids: number[] = [...(map["^"] ?? [1])];
     for (const symbol of Array.from(phonemes)) {
       const mapped = map[symbol];
