@@ -44,6 +44,7 @@ import {
 import { clearChatDraftFromUrl, readChatDraftFromLocation } from "./lib/no-project-chat-assistant.js";
 import { resolveChatLiveEntities, type ChatLiveEntityWidget } from "./lib/chat-live-entities.js";
 import { STATUS_MESSAGE_MIN_INTERVAL_MS } from "./lib/agent-humor-messages.js";
+import { classifyCinematicRuntimeState } from "./lib/cinematic-runtime-state.js";
 
 
 const EMPTY_LIVE_ENTITIES: readonly ChatLiveEntityWidget[] = [];
@@ -686,18 +687,24 @@ export const ChatPage: FunctionComponent = () => {
 
   const renderDetail = () => {
     if (chatMode === "stage") {
-      // Prefer the preset of the most recent agent reply; fall back to the
-      // thread/connection-linked preset (getLinkedAgentPreset handles both).
+      // Prefer the preset of the most recent agent reply; runtime replies may
+      // use authorType "system", so direction is the authoritative boundary.
+      // Fall back to the thread/connection-linked preset.
       let stagePreset;
       for (let i = messages.length - 1; i >= 0 && !stagePreset; i--) {
         const message = messages[i];
-        if (message.direction !== "dashboard_to_connection" && message.authorType !== "system") {
+        if (message.direction !== "dashboard_to_connection") {
           stagePreset = getLinkedAgentPreset(message);
         }
       }
       if (!stagePreset) {
         stagePreset = getLinkedAgentPreset({ metadata: undefined } as (typeof messages)[0]);
       }
+      const cinematicRuntimeState = classifyCinematicRuntimeState({
+        hasAwaitedReply: hasWorkingReply,
+        invocations,
+        projectManagerAgentPresetId: stagePreset?.id,
+      });
       return (
         <>
           <ConfirmDialog isOpen={isConfirmOpen} options={confirmOptions} onConfirm={handleConfirm} onCancel={handleCancel} />
@@ -712,8 +719,8 @@ export const ChatPage: FunctionComponent = () => {
               selectedThread={selectedThread}
               messages={messages}
               threadMessagesLoading={threadsLoading || threadMessagesLoading}
-              hasWorkingReply={hasWorkingReply}
-              runningInvocationCount={runningInvocationCount}
+              projectManagerActive={cinematicRuntimeState.projectManagerActive}
+              backgroundActivityCount={cinematicRuntimeState.backgroundActivityCount}
               sending={sending}
               error={error}
               input={input}

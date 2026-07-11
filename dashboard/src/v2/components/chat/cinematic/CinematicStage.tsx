@@ -47,11 +47,11 @@ export interface CinematicStageProps {
   selectedThread: ChatThread | null;
   messages: ChatMessageRecord[];
   threadMessagesLoading: boolean;
-  hasWorkingReply: boolean;
-  /** Running (or optimistic) execution invocations for this project — the
-   *  truthful "the agent is actually working / calling tools" signal on the
-   *  virtual-worker path, where thread messages stay `pending` during work. */
-  runningInvocationCount: number;
+  /** True only for the selected thread's awaited reply or a reply invocation
+   * owned by this stage's resolved Project Manager agent. */
+  projectManagerActive: boolean;
+  /** Active project invocations that do not belong to this Project Manager. */
+  backgroundActivityCount: number;
   sending: boolean;
   error: string | null;
   input: string;
@@ -312,8 +312,8 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   selectedThread,
   messages,
   threadMessagesLoading,
-  hasWorkingReply,
-  runningInvocationCount,
+  projectManagerActive,
+  backgroundActivityCount,
   sending,
   error,
   input,
@@ -364,10 +364,9 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     .slice(-2); // at most two queued sends staged at once
   const earlierMessageCount = Math.max(0, visibleMessages.length - (latestAgentMessage ? 1 : 0) - pendingUserMessages.length);
 
-  /* "Busy" is either an awaited listener reply (delivered, unanswered) or a
-     running invocation — the latter is what actually fires on the
-     virtual-worker path, where thread messages stay `pending` during work. */
-  const runtimeBusy = hasWorkingReply || runningInvocationCount > 0;
+  // Background execution remains observable, but never selects the Project
+  // Manager's thinking expression, thought bubble, or work tool.
+  const runtimeBusy = projectManagerActive;
   const quickActions = buildCinematicQuickActions({
     hasProject: Boolean(selectedProject),
     initialEligibilityLoaded,
@@ -493,7 +492,11 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   const showGreeting = !threadMessagesLoading && visibleMessages.length === 0;
 
   return (
-    <div className="relative flex-1 min-h-0 overflow-hidden" data-testid="cinematic-stage">
+    <div
+      className="relative flex-1 min-h-0 overflow-hidden"
+      data-testid="cinematic-stage"
+      data-background-activity-count={backgroundActivityCount}
+    >
       {/* ── Ambient backdrop — aurora glow, pure CSS, zero extra GPU cost ── */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0">
         <div className="stage-aurora absolute left-1/2 top-[16%] h-[52vh] w-[52vh] -translate-x-1/2 rounded-full bg-signal-500/[0.06] blur-3xl dark:bg-signal-500/[0.05]" />
