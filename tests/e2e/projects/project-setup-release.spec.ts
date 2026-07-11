@@ -81,13 +81,14 @@ async function expectProjectSelectedInShell(page: Page, projectName: string): Pr
 }
 
 async function ensureProjectCardSelected(page: Page, projectName: string): Promise<void> {
-  const selectedButton = page.getByRole('button', { name: `${projectName} is selected` });
+  const card = page.getByRole('article', { name: `Project: ${projectName}`, exact: true });
+  const selectedButton = card.getByRole('button', { name: `Selected project: ${projectName}`, exact: true });
   if (await selectedButton.isVisible()) {
     await expect(selectedButton).toBeVisible();
     return;
   }
 
-  await page.getByRole('button', { name: `Select ${projectName}` }).click();
+  await card.getByRole('button', { name: `Select project: ${projectName}`, exact: true }).click();
   await expect(selectedButton).toBeVisible();
 }
 
@@ -158,13 +159,19 @@ test.describe('credential-free project setup release flow', () => {
     await expectNoPersistentLoading(page);
     await expectNoHorizontalOverflow(page);
 
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.getByRole('heading', { name: 'Manage Projects' })).toBeVisible();
+    await expect(page.getByRole('article', { name: `Project: ${projectName}`, exact: true })).toBeVisible();
+    await ensureProjectCardSelected(page, projectName);
+    await expectProjectSelectedInShell(page, projectName);
+    await expectNoHorizontalOverflow(page);
+
     await page.goto('/tasks');
     await expect(page).toHaveURL(/\/tasks$/);
     await expect(page.getByRole('heading', { name: 'Task Board', exact: true })).toBeVisible();
     await expectProjectSelectedInShell(page, projectName);
     await expectNoPersistentLoading(page);
 
-    await page.setViewportSize({ width: 390, height: 844 });
     await expect(page.getByRole('heading', { name: 'Task Board', exact: true })).toBeVisible();
     await expectProjectSelectedInShell(page, projectName);
     await expectNoHorizontalOverflow(page);
