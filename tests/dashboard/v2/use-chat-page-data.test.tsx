@@ -217,6 +217,68 @@ describe("useChatPageResources integration", () => {
     }));
   });
 
+  it("does not reuse a selected thread draft context while switching projects", async () => {
+    const { result, rerender } = renderHook(
+      ({ projectId }: { projectId: string }) => {
+        const cache = useMessageCache();
+        return useChatThreadData({
+          selectedProject: { id: projectId },
+          cache,
+          execution: null,
+          workerRouting: null,
+        });
+      },
+      { initialProps: { projectId: "proj-1" } },
+    );
+
+    const projectOneThread = {
+      id: "thread-project-one",
+      projectId: "proj-1",
+      scope: "project",
+      title: "Project one thread",
+      status: "active",
+      connectionId: null,
+      createdAt: "2026-03-10T12:00:00.000Z",
+      messageCount: 0,
+      pendingMessageCount: 0,
+      lastMessageAt: null,
+      lastMessagePreview: null,
+      updatedAt: "2026-03-10T12:00:00.000Z",
+    } as const;
+
+    await act(async () => {
+      result.current.setThreadsSnapshot([projectOneThread]);
+    });
+    await act(async () => {
+      result.current.setSelectedThreadId(projectOneThread.id);
+    });
+
+    await waitFor(() => expect(fetchConversationDraft).toHaveBeenCalledWith("proj-1", {
+      userId: "dashboard-user-test",
+      contextKey: `thread:${projectOneThread.id}`,
+    }));
+
+    await act(async () => {
+      result.current.setInput("Project one unsent draft");
+    });
+
+    vi.mocked(fetchConversationDraft).mockClear();
+    vi.mocked(upsertConversationDraft).mockClear();
+
+    rerender({ projectId: "proj-2" });
+
+    await waitFor(() => expect(fetchConversationDraft).toHaveBeenCalledWith("proj-2", {
+      userId: "dashboard-user-test",
+      contextKey: "new-thread",
+    }));
+    expect(fetchConversationDraft).not.toHaveBeenCalledWith("proj-2", expect.objectContaining({
+      contextKey: `thread:${projectOneThread.id}`,
+    }));
+    expect(upsertConversationDraft).not.toHaveBeenCalledWith("proj-2", expect.objectContaining({
+      contextKey: `thread:${projectOneThread.id}`,
+    }));
+  });
+
   it("restores a saved draft after the composer remounts", async () => {
     const persistedDrafts = new Map<string, string>();
     vi.mocked(fetchConversationDraft).mockImplementation(async (projectId, input) => {

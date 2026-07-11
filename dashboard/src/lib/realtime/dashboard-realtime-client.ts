@@ -24,6 +24,7 @@ class DashboardRealtimeClient {
   private readonly subscriptions = new Map<number, RealtimeSubscription>();
   private nextSubscriptionId = 1;
   private subscriptionSyncTimer: number | null = null;
+  private subscriptionSyncInFlight = false;
   private lastSentScopesKey = "";
   private snapshotRequiredLastDispatchedAt: number = 0;
   private readonly SNAPSHOT_REQUIRED_COOLDOWN_MS = 3000;
@@ -56,6 +57,7 @@ class DashboardRealtimeClient {
       this.subscriptionSyncTimer = null;
     }
     this.subscriptions.clear();
+    this.subscriptionSyncInFlight = false;
     this.lastSentScopesKey = "";
     if (this.socket) {
       const socket = this.socket;
@@ -126,9 +128,21 @@ class DashboardRealtimeClient {
         if (payload.type === "event") {
           this.handleEvent(payload.event);
         } else if (payload.type === "subscribed") {
-          this.lastSequence = Math.max(this.lastSequence || 0, payload.lastSequence || 0);
+          // The acknowledgement is the authoritative watermark for the current
+          // server process. It can legitimately move backwards after a restart
+          // because non-replayable in-memory sequence markers are not persisted.
+          this.lastSequence = payload.lastSequence;
+          this.subscriptionSyncInFlight = false;
+        } else if (payload.type === "snapshot_required") {
+          // The previous cursor cannot be used for recovery. Clear it immediately
+          // so a reconnect before the following acknowledgement starts from the
+          // REST-backed snapshot instead of repeating the same recovery request.
+          this.lastSequence = null;
         }
         this.dispatch(payload);
+        if (payload.type === "subscribed") {
+          this.syncSubscriptions();
+        }
       } catch {
         // Ignore malformed payloads and rely on fallback polling.
       }
@@ -137,6 +151,7 @@ class DashboardRealtimeClient {
     socket.addEventListener("close", () => {
       if (this.socket !== socket) return;
       this.socket = null;
+      this.subscriptionSyncInFlight = false;
       this.lastSentScopesKey = "";
       if (this.subscriptions.size === 0) {
         this.setTransportState("disconnected");
@@ -205,7 +220,14 @@ class DashboardRealtimeClient {
     if (scopesKey === this.lastSentScopesKey) {
       return;
     }
+    // Wait for the server acknowledgement before sending another scope set. This
+    // lets a restarted server lower the sequence cursor once, then applies any
+    // navigation-driven scope changes using that accepted watermark.
+    if (this.subscriptionSyncInFlight) {
+      return;
+    }
     this.lastSentScopesKey = scopesKey;
+    this.subscriptionSyncInFlight = true;
 
     this.socket.send(JSON.stringify({
       type: "set_subscriptions",
@@ -238,6 +260,7 @@ class DashboardRealtimeClient {
       this.subscriptionSyncTimer = null;
     }
     this.lastSentScopesKey = "";
+    this.subscriptionSyncInFlight = false;
     if (this.socket) {
       const socket = this.socket;
       this.socket = null;

@@ -131,6 +131,11 @@ describe("dashboard-realtime-client", () => {
     const socket = MockWebSocket.instances[0]!;
     socket.emit("open");
     vi.advanceTimersByTime(25);
+    socket.emit("message", {
+      type: "subscribed",
+      scopes: ["overview"],
+      lastSequence: 12,
+    });
     socket.sentMessages = [];
 
     const unsubscribeLive = subscribeToDashboardRealtime(["project:p1:live"], () => {});
@@ -142,6 +147,66 @@ describe("dashboard-realtime-client", () => {
     });
 
     unsubscribeLive();
+    unsubscribeOverview();
+  });
+
+  it("adopts a restarted server's lower watermark before syncing navigation scope changes", async () => {
+    const { subscribeToDashboardRealtime } = await import("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js");
+    const listener = vi.fn();
+    const unsubscribeOverview = subscribeToDashboardRealtime(["overview"], listener);
+
+    const socket = MockWebSocket.instances[0]!;
+    socket.emit("open");
+    vi.advanceTimersByTime(25);
+    socket.emit("message", {
+      type: "subscribed",
+      scopes: ["overview"],
+      lastSequence: 200,
+    });
+
+    socket.emit("close");
+    vi.advanceTimersByTime(250);
+
+    const restartedSocket = MockWebSocket.instances[1]!;
+    restartedSocket.emit("open");
+    vi.advanceTimersByTime(25);
+    expect(JSON.parse(restartedSocket.sentMessages[0] || "{}")).toMatchObject({
+      scopes: ["overview"],
+      lastSequence: 200,
+    });
+
+    const unsubscribeProject = subscribeToDashboardRealtime(["project:p1"], listener);
+    const unsubscribeLive = subscribeToDashboardRealtime(["project:p1:live"], listener);
+
+    // Scope changes are held until the restart recovery handshake is acknowledged.
+    expect(restartedSocket.sentMessages).toHaveLength(1);
+
+    restartedSocket.emit("message", {
+      type: "snapshot_required",
+      reason: "non_replayable_event_missed",
+    });
+    restartedSocket.emit("message", {
+      type: "subscribed",
+      scopes: ["overview"],
+      lastSequence: 100,
+    });
+
+    expect(restartedSocket.sentMessages).toHaveLength(2);
+    expect(JSON.parse(restartedSocket.sentMessages[1] || "{}")).toMatchObject({
+      type: "set_subscriptions",
+      scopes: ["overview", "project:p1", "project:p1:live"],
+      lastSequence: 100,
+    });
+
+    restartedSocket.emit("message", {
+      type: "subscribed",
+      scopes: ["overview", "project:p1", "project:p1:live"],
+      lastSequence: 100,
+    });
+    expect(restartedSocket.sentMessages).toHaveLength(2);
+
+    unsubscribeLive();
+    unsubscribeProject();
     unsubscribeOverview();
   });
 
