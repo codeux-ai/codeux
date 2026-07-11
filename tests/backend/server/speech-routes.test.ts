@@ -185,4 +185,30 @@ describe("speech routes", () => {
     expect(response.body.error.code).toBe("unsupported_audio");
     expect(service.transcribe).not.toHaveBeenCalled();
   });
+
+  it("returns synthesized audio with provider metadata", async () => {
+    const app = express();
+    app.use(express.json());
+    const transcribe = vi.fn();
+    const synthesize = vi.fn().mockResolvedValue({
+      ok: true,
+      audio: Buffer.from("wave-bytes"),
+      contentType: "audio/wav",
+      provider: "local_onnx",
+      model: "kokoro-82m-v1.0-q8",
+      voice: "af_heart",
+    });
+    registerSpeechRoutes(app, {
+      speechTranscriptionService: { transcribe },
+      speechSynthesisService: { synthesize },
+    });
+
+    const response = await request(app).post("/api/speech/synthesis").send({ text: "Hello", projectId: "project-1" });
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toContain("audio/wav");
+    expect(response.headers["x-codeux-speech-provider"]).toBe("local_onnx");
+    expect(response.body).toEqual(Buffer.from("wave-bytes"));
+    expect(synthesize).toHaveBeenCalledWith({ text: "Hello", projectId: "project-1", sprintId: null, voice: null });
+  });
 });

@@ -6,6 +6,7 @@ import { NoticePanel } from "../SettingsSurface.js";
 import { NumberInput, PillChoiceGroup, ProviderLogo, Row, SelectInput, Toggle } from "../SettingsFormFields.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
 import { SettingsModelPricingPanel } from "./SettingsModelPricingPanel.js";
+import { AIModelCatalogPanel } from "./AIModelCatalogPanel.js";
 import { ProviderBrandIcon } from "../../providers/ProviderBrandIcon.js";
 import type {
   InvocationRoutingId,
@@ -453,6 +454,8 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
           </div>
         </div>
       </section>
+
+      <AIModelCatalogPanel state={state} />
 
       <SectionCard title="Default Routing Anchors" watermark="DEF" badge={getBadge("aiProvider", "workers")} icon={<Anchor strokeWidth={2.4} />}>
         {providerEntries.length === 0 ? (

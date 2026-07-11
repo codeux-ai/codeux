@@ -1012,7 +1012,7 @@ describe("settings cloning helpers", () => {
 
   const createMockSpeechSettings = () => ({
     enabled: false,
-    providerMode: "auto" as const,
+    providerMode: "local_onnx" as const,
     localModelId: "onnx-community/whisper-base.en",
     maxAudioSeconds: 120,
     externalTranscription: {

@@ -1,12 +1,12 @@
 # Speech Input Architecture
 
-Speech input turns dashboard microphone or uploaded audio into prompt text through `POST /api/speech/transcriptions`. The current implementation includes persisted settings, the backend transcription route and service, and reusable dashboard primitives for recorder-driven transcription.
+Speech input turns dashboard microphone or uploaded audio into prompt text through `POST /api/speech/transcriptions`. Settings -> AI Models owns speech-model installation, activation, and local/API configuration alongside the TTS catalog.
 
 ## Settings Boundary
 
-Speech settings are project-scoped and flow through the same defaults, override resolution, validation, and sanitization path as memory settings. The persisted `speech` object controls whether transcription is enabled, which provider mode is preferred, the local ONNX model id, a bounded maximum audio duration, and an external transcription fallback endpoint.
+Speech settings are project-scoped and flow through the same defaults, override resolution, validation, and sanitization path as memory settings. The persisted `speech` object controls whether transcription is enabled, whether local ONNX or an external API is selected, the local model id, a bounded maximum audio duration, and external transcription configuration.
 
-The default provider mode is `auto`. In auto mode, runtime implementation should prefer local ONNX transcription first and use the external API provider only as an explicit fallback when local transcription is unavailable or cannot satisfy the request.
+The default provider mode is `local_onnx`. API fields stay hidden until `external_api` is selected, and provider selection is strict: local mode does not send audio externally.
 
 ## Privacy Boundary
 
@@ -30,17 +30,16 @@ The dashboard exposes reusable v2 speech primitives instead of wiring microphone
 
 Composer integration remains intentionally separate so each composer can decide whether to append or replace text, which project or sprint scope applies to the request, and how to handle focus restoration.
 
-## Provider Fallback Behavior
+## Provider Selection
 
-The shared contracts distinguish configured provider mode from the provider that actually handled a transcription request:
+The shared contracts use two explicit provider modes:
 
 - `local_onnx` represents local model inference.
 - `external_api` represents an OpenAI-compatible transcription endpoint.
-- `auto` is a settings mode, not a concrete execution provider.
 
 The external transcription default uses an OpenAI-compatible `/v1/audio/transcriptions` URL with an empty API key. Runtime code must treat a missing key, missing model, unsupported audio format, client permission error, and provider failure as structured error outcomes rather than generic exceptions.
 
-In `auto` mode, Code UX checks the selected local model first. Local speech models use deterministic cache directories under `~/.code-ux/models/speech/<sanitized-model-id>`, where slashes in model ids are normalized for filesystem safety; the default `onnx-community/whisper-base.en` resolves to `~/.code-ux/models/speech/onnx-community--whisper-base.en/`. Each model directory must contain `model.onnx` and may include `labels.json`. Before local ONNX inference, the service decodes the dashboard recorder's PCM WAV payload into mono `Float32Array` samples so the model input is audio waveform data rather than raw RIFF/container bytes. If the local model is missing and external transcription is explicitly configured with a base URL, API key, and model, the service sends the original upload to the external endpoint and returns fallback metadata describing the skipped local provider. If neither provider is usable, the service returns a structured 400-compatible `client_error` explaining that a local model or external credentials are required.
+Local speech bundles use deterministic cache directories under `~/.code-ux/models/speech/<sanitized-model-id>`, where slashes in model ids are normalized for filesystem safety. The catalog downloads every file declared by a bundle and shows progress, installed state, activation, source, and deletion actions. Wav2Vec2 uses direct waveform/CTC inference. Whisper encoder-decoder bundles can be installed and selected, but local generation is not implemented yet; use Wav2Vec2 for direct local transcription or select the external Whisper API. Before local waveform inference, the service decodes the dashboard recorder's PCM WAV payload into mono `Float32Array` samples. A missing local model returns a structured error without invoking the configured API; API requests occur only in `external_api` mode.
 
 External requests use OpenAI-style multipart fields: `file`, `model`, and optional `language`, with bearer token authentication and a request timeout. Provider error text is sanitized before it is returned so API keys and bearer tokens are never echoed to the dashboard.
 
@@ -54,8 +53,8 @@ Implemented now:
 - System defaults for project-level speech settings.
 - Settings validation and sanitization for provider mode, strings, duration bounds, and optional language normalization.
 - `POST /api/speech/transcriptions` multipart upload route.
-- Speech transcription service with local ONNX inference, external API transcription, `auto` fallback behavior, and structured errors.
+- Speech transcription service with explicit local ONNX or external API execution and structured errors.
 - Deterministic local speech model catalog/cache paths.
 - Shared dashboard recorder, transcription API client, and speech input button primitives.
 - Electron microphone permission handling for the trusted dashboard origin.
-- Composer-level speech input wiring.
+- Composer-level speech input wiring in Threads and a compact microphone control on the 3D avatar stage.

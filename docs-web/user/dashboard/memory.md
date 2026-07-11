@@ -1,6 +1,6 @@
 # Memory
 
-The **Memory** page (`/memory`) manages Code UX's two-tier semantic memory system and the embedding models that power it.
+The **Memory** page (`/memory`) manages Code UX's two-tier semantic memory system. Embedding and speech models are installed from **Settings -> AI Models**.
 
 ## The two tiers
 
@@ -33,7 +33,7 @@ The Memory header is the main place to choose what the graph, sidebar, and inspe
 - **Tier summary tabs** — **Short Term**, **Long Term**, and **Skills** show their indexed counts directly in the tab cards.
 - **Current scope line** — shows copy such as `Short Term: showing 7 memories of 17 memories · Sprint 2 · All Agents` or `Long Term: showing 1 memory of 1 memory · Project-wide · All Agents`.
 - **Scope filters** — Short-term memory shows the sprint selector when sprint scope data is available, and both tiers show the agent preset selector when agent presets are available. When a source list is empty, the filter row shows reason copy instead of rendering a focusable empty selector.
-- **Actions** — **Add Memory**, **Model Catalog**, and **Danger Delete** are separated from the selectors. Add Memory opens the manual memory dialog for the current tier scope. Model Catalog shows whether it is shown or hidden plus active-model status. Danger Delete always shows Off/Armed state plus persistent explanatory copy; when armed, the page warning refers to this as Lobotomize mode because graph-node and inspector deletes become immediate.
+- **Actions** — **Add Memory** and **Danger Delete** are separated from the selectors. Add Memory opens the manual memory dialog for the current tier scope. Danger Delete always shows Off/Armed state plus persistent explanatory copy; when armed, the page warning refers to this as Lobotomize mode because graph-node and inspector deletes become immediate. Model management lives in **Settings -> AI Models**.
 
 The sidebar search field filters the current visible tier, sprint, and agent slice by memory text/category. Programmatic semantic search still uses vector similarity across requested scopes (cosine similarity, configurable `minSimilarity`).
 
@@ -102,13 +102,14 @@ Rapid tier, sprint, or agent filter changes are sequenced by the Memory page dat
 
 The graph pauses its canvas animation loop while the browser tab is hidden and resumes when the tab is visible again. Empty or loading maps clear the canvas without running the full edge, pulse, and node drawing passes, so the page stays responsive while data changes.
 
-## Model browser
+## Model catalog
 
-The **Model Catalog** action opens a compact model browser instead of a flat card list. It separates:
+Open **Settings -> AI Models** for the shared compact model browser. It separates:
 
 - **Embedding Models** — memory search models that can be downloaded, activated, deleted, and used for re-embedding.
 - **Add Custom Hugging Face Embedding Model** — a form for compatible ONNX embedding models.
-- **TTS / Speech-Adjacent Hugging Face Models** — informational speech rows that are not memory embedding models and do not show embedding actions.
+- **Speech to text models** — downloadable STT bundles with scoped activation.
+- **Text to speech models** — downloadable Kokoro and Piper bundles used by 3D Chat.
 
 Each embedding row shows:
 
@@ -128,7 +129,7 @@ Actions per model:
 - **Select** — Activates the model. Subsequent embed operations use it.
 - **Delete** — Removes the local cache.
 
-Custom models use the same download, select, delete, source-link, and status actions as built-ins. A custom model cannot be selected until its ONNX file and required tokenizer files are downloaded. Speech-adjacent Hugging Face rows open safe source links only; they cannot be activated as memory embeddings.
+Custom embedding models use the same download, select, delete, source-link, and status actions as built-ins. A custom model cannot be selected until its ONNX file and required tokenizer files are downloaded. Speech models have their own input/output activation actions and cannot be activated as memory embeddings.
 
 ### Re-embedding
 

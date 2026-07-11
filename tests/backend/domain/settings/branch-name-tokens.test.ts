@@ -311,7 +311,7 @@ function makeBasePayload() {
     },
     speech: {
       enabled: false,
-      providerMode: "auto",
+      providerMode: "local_onnx",
       localModelId: "onnx-community/whisper-base.en",
       maxAudioSeconds: 120,
       externalTranscription: {

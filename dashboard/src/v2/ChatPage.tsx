@@ -718,6 +718,7 @@ export const ChatPage: FunctionComponent = () => {
               error={error}
               input={input}
               setInput={setInput}
+              onSpeechTranscript={handleSpeechTranscript}
               handleSend={handleSend}
               handleCreateAppQuickaction={handleCreateAppQuickaction}
               initialEligibilityLoaded={!projectInitializationStateLoading}

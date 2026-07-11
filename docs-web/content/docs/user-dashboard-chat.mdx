@@ -15,6 +15,8 @@ Markdown links use the dashboard's theme-aware signal colors across thread messa
 
 3D chat and agent avatar surfaces use the standard WebGL avatar with studio lighting and pointer-aware head movement. The removed flashlight beam, target glow, low-battery flicker, and emissive shell boost are no longer part of the chat layout; reduced-motion settings or WebGL fallback mode continue to use the static SVG avatar.
 
+When a text-to-speech model or API is active under **Settings -> AI Models**, 3D Chat reads new Project Manager replies aloud. A compact control dock beneath the avatar identity holds the microphone and agent mute/unmute buttons, outside the composer. Voice defaults on, shows synthesis activity, and can be muted immediately. The preference is remembered per project in the current browser; opening an existing thread does not replay its latest historical message.
+
 ## No-project assistant
 
 The no-project assistant is local onboarding guidance for the browser page. Its five quick bubbles are:
@@ -161,12 +163,12 @@ The composer at the bottom supports:
 
 - **Multi-line input** with Enter to send, Shift+Enter for newline.
 - **Recent message recall** with ArrowUp and ArrowDown when native textarea cursor movement is not taking precedence.
-- **Speech input** with the microphone control beside Send in project Threads mode.
+- **Speech input** with the microphone beside Send in project Threads mode and in the avatar control dock in 3D Chat.
 - **Slash commands** that invoke management actions inline.
 - **Attachments** *(planned)*.
 
 Use the microphone control to dictate into the current thread draft. When transcription succeeds, Code UX inserts the transcript at the current caret position when the composer selection is available; otherwise it appends the text to the end of the draft with normal spacing. The composer resizes after insertion, and you can edit the dictated text before pressing Enter or Send.
 
-Speech input is only available for project thread composers. It is disabled while a message is sending and is not shown in no-project assistant chat or invocation transcripts. If the browser cannot record audio, microphone permission is denied, the local speech model is missing, or the configured provider fails, the button reports the failure and leaves the draft unchanged so you can retry or type normally.
+Speech input is available for project Threads and 3D Chat. It is disabled while a message is sending and is not shown in no-project assistant chat or invocation transcripts. If the browser cannot record audio, microphone permission is denied, the local speech model is missing, or the configured provider fails, the button reports the failure and leaves the draft unchanged so you can retry or type normally.
 
 The active thread can be deleted from the **⋯** menu. Deletion is local (the underlying provider session is closed) and does not affect sprints or tasks. You can also cancel the currently running turn for a specific thread, which aborts only the matching in-flight thread turn.

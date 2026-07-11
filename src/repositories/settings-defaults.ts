@@ -1018,7 +1018,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   },
   speech: {
     enabled: false,
-    providerMode: "auto",
+    providerMode: "local_onnx",
     localModelId: "onnx-community/whisper-base.en",
     maxAudioSeconds: 120,
     externalTranscription: {
@@ -1026,6 +1026,20 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
       apiKey: "",
       model: "whisper-1",
       language: null,
+    },
+    synthesis: {
+      enabled: false,
+      providerMode: "local_onnx",
+      localModelId: "kokoro-82m-v1.0-q8",
+      voice: "af_heart",
+      speed: 1,
+      externalSynthesis: {
+        baseUrl: "https://api.openai.com/v1/audio/speech",
+        apiKey: "",
+        model: "gpt-4o-mini-tts",
+        voice: "coral",
+        format: "mp3",
+      },
     },
   },
   modelPricing: {

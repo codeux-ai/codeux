@@ -58,6 +58,8 @@ import type { ProjectSetupService } from "../../services/project-setup-service.j
 import type { SchedulerService } from "../../services/scheduler-service.js";
 import type { ChatProviderIngressService } from "../../services/chat-provider-ingress-service.js";
 import type { SpeechTranscriptionService } from "../../services/speech-transcription-service.js";
+import type { SpeechSynthesisService } from "../../services/speech-synthesis-service.js";
+import type { SpeechModelManager } from "../../services/speech-model-manager.js";
 import type { NodeFlowService } from "../../services/node-flow-service.js";
 import type { MemoryService } from "../../services/memory-service.js";
 import type { KnowledgeService } from "../../services/knowledge-service.js";
@@ -131,6 +133,8 @@ export interface BootDashboardDeps {
   chatThreadRuntimeService: ChatThreadRuntimeService;
   chatProviderIngressService: ChatProviderIngressService;
   speechTranscriptionService: SpeechTranscriptionService;
+  speechSynthesisService: SpeechSynthesisService;
+  speechModelManager: SpeechModelManager;
   chatProviderOutboundService?: ChatProviderOutboundService;
   nodeFlowService?: NodeFlowService;
   customDashboardRepository?: CustomDashboardRepository;
@@ -485,6 +489,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     chatProviderRepository: deps.chatProviderRepository,
     chatProviderIngressService: deps.chatProviderIngressService,
     speechTranscriptionService: deps.speechTranscriptionService,
+    speechSynthesisService: deps.speechSynthesisService,
+    speechModelManager: deps.speechModelManager,
     nodeFlowService: deps.nodeFlowService,
     customDashboardRepository: deps.customDashboardRepository,
     customDashboardValidationService: deps.customDashboardValidationService,

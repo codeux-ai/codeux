@@ -107,6 +107,12 @@ vi.mock("../../../hooks/use-chat-page-data.js", () => ({
   useChatPageData: () => mocks.data,
 }));
 
+vi.mock("../../../hooks/use-project-effective-settings.js", () => ({
+  useProjectEffectiveSettings: () => ({
+    data: { settings: { speech: { synthesis: { enabled: true } } } },
+  }),
+}));
+
 vi.mock("../../../components/speech/SpeechInputButton.js", () => ({
   SpeechInputButton: ({ disabled = false, projectId = null, sprintId = null, onTranscript }: any) => {
     speechButtonMock.lastDisabled = disabled;
@@ -142,6 +148,7 @@ describe("ChatPage speech input", () => {
     speechButtonMock.lastDisabled = false;
     speechButtonMock.lastProjectId = null;
     speechButtonMock.lastSprintId = null;
+    window.localStorage.clear();
     mocks.data = {
       ...mocks.baseData,
       setChatMode: vi.fn(),
@@ -253,5 +260,26 @@ describe("ChatPage speech input", () => {
       "Invocation execution logs are read-only. Switch to Threads to communicate.",
     );
     expect(screen.queryByRole("button", { name: "Start speech recording" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the 3D microphone and agent mute control on the stage, outside the composer", async () => {
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "stage",
+      sending: false,
+      input: "",
+    };
+
+    renderChatPage();
+
+    const controls = screen.getByRole("group", { name: "3D chat voice controls" });
+    const microphone = screen.getByRole("button", { name: "Start speech recording" });
+    const composer = screen.getByRole("textbox", { name: "Message the project manager" });
+    expect(controls).toContainElement(microphone);
+    expect(composer.parentElement).not.toContainElement(microphone);
+    expect(await screen.findByRole("button", { name: "Mute project manager" })).toBeInTheDocument();
+
+    fireEvent.click(microphone);
+    expect(mocks.data.setInput).toHaveBeenCalledWith("Dictated task");
   });
 });

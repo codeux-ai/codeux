@@ -569,6 +569,10 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   speech: {
     ...DEFAULT_DASHBOARD_SETTINGS.speech,
     externalTranscription: { ...DEFAULT_DASHBOARD_SETTINGS.speech.externalTranscription },
+    synthesis: {
+      ...DEFAULT_DASHBOARD_SETTINGS.speech.synthesis,
+      externalSynthesis: { ...DEFAULT_DASHBOARD_SETTINGS.speech.synthesis.externalSynthesis },
+    },
   },
   modelPricing: { overrides: { ...DEFAULT_DASHBOARD_SETTINGS.modelPricing.overrides } },
 });

@@ -30,7 +30,7 @@ The category rail on the left includes these Expert-mode categories:
 | --- | --- |
 | **General** | Scope context, experience mode, automation posture, runtime logging, Docker runtime, restart behavior, and onboarding. |
 | **Appearance** | Theme, navigation mode, motion preference, background, and desktop zoom. |
-| **AI Models** | Default provider anchors, provider routing, model choices, thinking mode, weighting, pricing, and rate-limit controls. |
+| **AI Models** | Downloadable embedding/STT/TTS catalogs, local and API speech settings, provider anchors, routing, model choices, thinking mode, weighting, and pricing. |
 | **Sprint & Git** | Git flow, PR behavior, merge gates, QA, guardrails, branch naming, and execution runtime controls. |
 | **Browser Preview** | Preview runtime, in-app browser visibility, container limits, port allocation, and startup scripts. |
 | **Techstacks** | System catalog management, protected built-in stack, project stack assignment, and web/desktop application kind. |

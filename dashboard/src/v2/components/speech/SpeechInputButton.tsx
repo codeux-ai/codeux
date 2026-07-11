@@ -27,6 +27,7 @@ export type SpeechInputButtonError =
 
 export interface SpeechInputButtonProps {
   disabled?: boolean;
+  compact?: boolean;
   maxDurationSeconds?: number;
   appendMode?: boolean;
   projectId?: string | null;
@@ -65,6 +66,7 @@ const toTranscriptionError = (error: SpeechRecorderError): SpeechInputButtonErro
 
 export const SpeechInputButton: FunctionComponent<SpeechInputButtonProps> = ({
   disabled = false,
+  compact = false,
   maxDurationSeconds = DEFAULT_MAX_DURATION_SECONDS,
   appendMode = true,
   projectId = null,
@@ -239,14 +241,19 @@ export const SpeechInputButton: FunctionComponent<SpeechInputButtonProps> = ({
         aria-pressed={state === "recording" ? "true" : "false"}
         aria-busy={isBusy ? "true" : "false"}
         onClick={handleClick}
-        className={`inline-flex h-10 min-w-[8.75rem] items-center justify-center gap-2 rounded-[var(--radius-ui)] border px-3 text-xs font-bold shadow-sm ${SHARED_INTERACTION_CLASSES} ${
+        title={compact ? statusLabel : undefined}
+        className={`inline-flex items-center justify-center border text-xs font-bold shadow-sm ${SHARED_INTERACTION_CLASSES} ${
+          compact
+            ? "h-11 w-11 min-w-11 rounded-full px-0"
+            : "h-10 min-w-[8.75rem] gap-2 rounded-[var(--radius-ui)] px-3"
+        } ${
           state === "recording"
             ? "border-status-red/30 bg-status-red/[0.08] text-status-red hover:bg-status-red/[0.13]"
             : "border-[color:var(--border-hairline)] bg-[var(--surface-glass)] text-slate-700 hover:bg-[var(--surface-glass-hover)] hover:text-slate-950 dark:text-slate-200 dark:hover:text-white"
         } ${className}`}
       >
         {icon}
-        <span>{statusLabel}</span>
+        <span className={compact ? "sr-only" : undefined}>{statusLabel}</span>
       </button>
       <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
         {announcement}

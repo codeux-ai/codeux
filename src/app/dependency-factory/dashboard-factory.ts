@@ -23,6 +23,8 @@ import { createLateBoundDependency } from "../../shared/late-bound-dependency.js
 import { ChatProviderIngressService } from "../../services/chat-provider-ingress-service.js";
 import { ChatProviderOutboundService } from "../../services/chat-provider-outbound-service.js";
 import { SpeechTranscriptionService } from "../../services/speech-transcription-service.js";
+import { SpeechSynthesisService } from "../../services/speech-synthesis-service.js";
+import { SpeechModelManager } from "../../services/speech-model-manager.js";
 import { NodeFlowRuntimeService } from "../../services/node-flow-runtime-service.js";
 import { NodeFlowService } from "../../services/node-flow-service.js";
 import { resolveEffectiveDashboardSettings } from "../../services/settings-resolution-service.js";
@@ -33,6 +35,8 @@ export interface DashboardDependencies {
   chatProviderIngressService: ChatProviderIngressService;
   chatProviderOutboundService: ChatProviderOutboundService;
   speechTranscriptionService: SpeechTranscriptionService;
+  speechSynthesisService: SpeechSynthesisService;
+  speechModelManager: SpeechModelManager;
   nodeFlowService: CoreDependencies["nodeFlowService"];
   activityCacheService: ActivityCacheService;
   taskRerunService: TaskRerunService;
@@ -192,6 +196,13 @@ export function createDashboardDependencies(
     settingsRepository,
     logger: logger.child({ component: "speech-transcription-service" }),
   });
+  const speechSynthesisService = new SpeechSynthesisService({
+    settingsRepository,
+    logger: logger.child({ component: "speech-synthesis-service" }),
+  });
+  const speechModelManager = new SpeechModelManager(
+    logger.child({ component: "speech-model-manager" }),
+  );
   const nodeFlowRuntimeService = new NodeFlowRuntimeService({
     nodeFlowRepository: coreDeps.nodeFlowRepository,
     executionRepository,
@@ -518,6 +529,8 @@ export function createDashboardDependencies(
     chatProviderIngressService,
     chatProviderOutboundService,
     speechTranscriptionService,
+    speechSynthesisService,
+    speechModelManager,
     nodeFlowService,
     activityCacheService,
     taskRerunService,

@@ -41,6 +41,7 @@
 - [Custom Dashboard Foundation](./architecture/custom-dashboard-foundation.md)
 - [Memory Claims and Evidence](./architecture/memory-claims.md)
 - [Speech Input Architecture](./architecture/speech-input.md)
+- [Speech Output Architecture](./architecture/speech-output.md)
 - [Quality Assurance Agent](./architecture/quality-assurance-agent.md)
 - [Live Connections Runtime Surface](./architecture/live-connections-runtime-surface.md)
 - [Postgres Migration Plan](./architecture/postgres-migration-plan.md)

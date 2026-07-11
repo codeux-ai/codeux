@@ -1,7 +1,7 @@
 import { activeTierSignal, selectedSprintIdSignal, selectedAgentPresetIdSignal } from "./memoryState.js";
 import { FunctionComponent } from "preact";
 import { useEffect, useState } from "preact/hooks";
-import { AlertTriangle, HardDrive, Plus } from "lucide-preact";
+import { AlertTriangle, Plus } from "lucide-preact";
 import { useInteractionTokens } from "../../lib/motion/index.js";
 import type { MemoryStats } from "../../lib/memory-api.js";
 import type { MemoryScope } from "../../memory-types.js";
@@ -18,15 +18,12 @@ export const MemoryFilters: FunctionComponent<{
     stats: MemoryStats;
     sprints: SprintRecord[];
     agentPresets: AgentPreset[];
-    showModels: boolean;
-    setShowModels: (s: boolean) => void;
     setShowAddModal: (s: boolean) => void;
     lobotomize: boolean;
     handleLobotomizeToggle: () => void;
     skillsCount?: number;
 }> = ({
     stats, sprints, agentPresets,
-    showModels, setShowModels,
     setShowAddModal,
     lobotomize, handleLobotomizeToggle, skillsCount = 0,
 }) => {
@@ -68,7 +65,6 @@ export const MemoryFilters: FunctionComponent<{
     const currentScopeCopy = activeTier === "skills"
         ? `${activeTierLabel}: showing ${activeTierCountLabel} · ${currentScopeParts.join(" · ")}`
         : `${activeTierLabel}: showing ${activeTierCountLabel} of ${totalCountLabel} · ${currentScopeParts.join(" · ")}`;
-    const activeModelCopy = stats.activeModel ? `Active: ${stats.activeModel}` : "No active model";
     const unavailableScopeCopy = activeTier === "short_term"
         ? shortTermCount === 0
             ? "No short-term memory filters are available for this tier."
@@ -112,14 +108,6 @@ export const MemoryFilters: FunctionComponent<{
 
     const handleTierChange = (tier: MemTier) => {
         activeTierSignal.value = tier;
-    };
-
-    const handleModelCatalogToggle = () => {
-        const next = !showModels;
-        setShowModels(next);
-        setAnnouncement(next
-            ? `Embedding model catalog shown. ${stats.activeModel ? `Active model ${stats.activeModel}.` : "No active model selected."}`
-            : "Embedding model catalog hidden.");
     };
 
     const handleDangerToggle = () => {
@@ -276,24 +264,6 @@ export const MemoryFilters: FunctionComponent<{
                                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                                    transition-[background-color,border-color,box-shadow,color] motion-reduce:duration-0 sm:flex-none">
                         <Plus className="w-3.5 h-3.5" strokeWidth={2.5} /> Add Memory
-                    </button>
-                    <button type="button" aria-pressed={showModels} onClick={handleModelCatalogToggle}
-                        aria-label={showModels ? "Hide embedding model catalog" : "Show embedding model catalog"}
-                        aria-describedby="model-catalog-status"
-                        style={controlTransitionStyle}
-                        className={`flex min-h-9 min-w-0 max-w-full flex-[1_1_12rem] items-center justify-center gap-1.5 whitespace-normal rounded-xl px-4 py-2 text-xs font-bold leading-tight cursor-pointer
-                                   border transition-[background-color,border-color,box-shadow,color] motion-reduce:duration-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 sm:flex-none
-                                   ${showModels
-                                       ? "bg-signal-500/[0.14] border-signal-500/40 text-signal-600 shadow-[0_0_0_2px_rgba(0,224,160,0.08)] hover:bg-signal-500/[0.2] dark:text-signal-400"
-                                       : "bg-black/[0.04] dark:bg-white/[0.04] border-black/[0.06] dark:border-white/[0.06] text-slate-500 hover:bg-black/[0.08] dark:hover:bg-white/[0.08] hover:text-slate-900 dark:hover:text-white"
-                                   }`}>
-                        <HardDrive className="w-3.5 h-3.5" strokeWidth={2} />
-                        Model Catalog
-                        <span className="text-[10px] opacity-80">{showModels ? "Shown" : "Hidden"}</span>
-                        <span id="model-catalog-status" className="max-w-[8rem] truncate text-[10px] opacity-80" title={activeModelCopy}>{activeModelCopy}</span>
-                        {stats.activeModel && (
-                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-signal-500" aria-hidden="true" />
-                        )}
                     </button>
                 </div>
                 <div className="flex min-w-0 flex-col items-start gap-1 sm:items-end">

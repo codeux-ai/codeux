@@ -18,10 +18,18 @@ const cloneMemorySettings = (memory: ProjectSettings["memory"]): ProjectSettings
   externalEmbedding: { ...memory.externalEmbedding },
 });
 
-const cloneSpeechSettings = (speech: ProjectSettings["speech"]): ProjectSettings["speech"] => ({
-  ...speech,
-  externalTranscription: { ...speech.externalTranscription },
-});
+const cloneSpeechSettings = (speech: ProjectSettings["speech"]): ProjectSettings["speech"] => {
+  return {
+    ...speech,
+    externalTranscription: { ...speech.externalTranscription },
+    ...(speech.synthesis ? {
+      synthesis: {
+        ...speech.synthesis,
+        externalSynthesis: { ...speech.synthesis.externalSynthesis },
+      },
+    } : {}),
+  };
+};
 
 const cloneJiraSettings = (jira: SystemSettings["integrations"]["jira"]): SystemSettings["integrations"]["jira"] => ({ ...jira });
 const cloneImporterSettings = (
