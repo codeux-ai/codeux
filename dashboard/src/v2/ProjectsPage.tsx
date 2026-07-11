@@ -35,6 +35,7 @@ import { fetchProjectInvocations } from "./lib/invocation-api.js";
 import { useToast } from "./components/feedback/ToastProvider.js";
 import { prefetchRoute } from "./router/route-prefetch.js";
 import { buildProjectCardViewModel } from "./lib/project-card-view-model.js";
+import { useRouteProjectSelection } from "./hooks/use-route-project-selection.js";
 
 const EMBER_HEX = '#FFB800';
 
@@ -474,6 +475,12 @@ export const ProjectsPage: FunctionComponent = () => {
         selectProject,
     } = useProjectData();
     const { addToast } = useToast();
+    const routeSearch = typeof window === "undefined" ? "" : window.location.search;
+    const routeProjectId = useMemo(() => {
+        const params = new URLSearchParams(routeSearch);
+        return params.get("projectId")?.trim() || null;
+    }, [routeSearch]);
+    useRouteProjectSelection(routeProjectId, selectedProjectId, selectProject);
 
     const [showSkeletons, setShowSkeletons] = useState(false);
 

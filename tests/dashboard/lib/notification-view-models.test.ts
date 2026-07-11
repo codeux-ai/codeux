@@ -117,6 +117,10 @@ describe("notification view models", () => {
         sprintRunId: null,
         dispatchId: null,
       },
+      links: {
+        ...baseRecord().links,
+        project: "/projects?projectId=project%20%2F%20one&source=notification",
+      },
     }));
 
     expect(result).toMatchObject({
@@ -124,7 +128,7 @@ describe("notification view models", () => {
       severity: "critical",
       icon: ServerCrash,
       subtitle: "Project Project One",
-      actionHref: "/projects?projectId=project%20%2F%20one",
+      actionHref: "/projects?projectId=project%20%2F%20one&source=notification",
     });
     expect(result.details?.some((detail) => detail.label === "Sprint" || detail.label === "Task")).toBe(false);
   });
@@ -135,8 +139,14 @@ describe("notification view models", () => {
       taskKey: null,
       taskTitle: null,
       source: { ...baseRecord().source, sprintRunId: null, dispatchId: null },
+      links: {
+        ...baseRecord().links,
+        sprint: "/sprints?view=ledger&sprintId=sprint%20%2F%20one&projectId=project%20%2F%20one&source=notification",
+      },
     }));
 
-    expect(result.actionHref).toBe("/sprints?projectId=project%20%2F%20one&sprintId=sprint%20%2F%20one");
+    expect(result.actionHref).toBe(
+      "/sprints?view=ledger&sprintId=sprint%20%2F%20one&projectId=project%20%2F%20one&source=notification",
+    );
   });
 });
