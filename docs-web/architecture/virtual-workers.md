@@ -155,6 +155,14 @@ Terminal session states:
 - `CANCELLED` — user cancelled.
 - `QUOTA` / `RATE_LIMITED` → mapped to `QUOTA`.
 
+### Dashboard reply effects and cinematic activity
+
+Dashboard chat replies use the same provider execution and invocation records, but the 3D Chat stage deliberately separates the selected Project Manager from project-wide execution. The Project Manager is active only when the selected thread has an awaited reply or a running `dashboard_reply`/`worker_reply` invocation matches the preset resolved for that stage. Every other running task, planning, CI, QA, or agent reply invocation remains truthful background activity. It may produce a thought/status cue and background count, but it cannot choose the Project Manager's working expression, caption, busy state, or work tool.
+
+JSON-mode dashboard replies can return optional `agentEffect` metadata, while MCP-native replies can embed a `codeux:agent` JSON fence. The exact shape is `{ "emotion": string, "animation": string, "caption"?: string, "durationMs": number }`: emotions are `happy`, `sad`, `angry`, `sleepy`, `bored`, `curious`, `thinking`, `excited`, `surprised`, or `proud`; animations are `hyped`, `shake_head`, `nod`, `laughing`, `wink`, or `dance`; duration is an inclusive 500–10000 safe integer; and a caption must trim to 1–120 characters. Invalid payloads are ignored without losing the reply, and invalid native fences are preserved as ordinary JSON. Valid native fences are removed from visible markdown and the first effect is stored as `metadata.agentEffect`.
+
+The dashboard revalidates persisted metadata and gives a valid `metadata.agentEffect` precedence over a backward-compatible valid fence. Only the latest reply-direction message can apply it, since Project Manager replies may be stored with `authorType: "system"`. Errors, outgoing routing, and active Project Manager work outrank the effect. External-channel prompts suppress this contract; outbound sanitization strips valid `codeux:agent` fences, downgrades invalid ones to readable JSON, and does not forward avatar metadata.
+
 ## Attention item handling
 
 The virtual worker can claim and act on these attention item categories:
