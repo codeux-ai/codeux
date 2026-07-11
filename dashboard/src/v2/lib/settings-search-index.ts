@@ -262,6 +262,13 @@ const BASE_CATEGORY_TERMS: Record<CategoryId, string[]> = {
     "chat provider",
     "channel binding",
     "external channel",
+    "google drive",
+    "linked folder",
+    "linked directory",
+    "drive mount",
+    "container path",
+    "read-only",
+    "read-write",
     "whatsapp",
     "telegram",
     "slack",
@@ -316,6 +323,15 @@ const BASE_CATEGORY_TERMS: Record<CategoryId, string[]> = {
 };
 
 const INTEGRATION_FIELD_TERMS: Record<string, string[]> = {
+  "google-drive": [
+    "google drive",
+    "linked folder",
+    "linked directory",
+    "drive mount",
+    "container path",
+    "read-only",
+    "read-write",
+  ],
   notion: [
     "notion workspace",
     "notion database",
@@ -432,7 +448,7 @@ export const buildSettingsSearchIndex = ({
     index.integrations,
     integrations.flatMap((integration) => [
       ...(INTEGRATION_FIELD_TERMS[integration.id] || []),
-      ...(INTEGRATION_FIELD_TERMS[integration.id] ? IMPORTER_COMMON_TERMS : []),
+      ...(INTEGRATION_FIELD_TERMS[integration.id] && integration.id !== "google-drive" ? IMPORTER_COMMON_TERMS : []),
     ]),
     "term",
   );
