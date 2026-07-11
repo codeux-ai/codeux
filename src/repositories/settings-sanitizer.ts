@@ -8,6 +8,7 @@ import type {
   RuntimeLogLevel,
   ConsoleLogMode,
   ExternalImporterSettings,
+  GoogleDriveSettings,
   RestartInvocationPolicy,
   RestartSprintPolicy,
   SkillToggle,
@@ -243,6 +244,19 @@ const sanitizeTechstackSelection = (value: unknown): TechstackSelectionSettings 
     applicationKind: input.applicationKind === "web" || input.applicationKind === "desktop"
       ? input.applicationKind
       : DEFAULT_PROJECT_TECHSTACK.applicationKind,
+  };
+};
+
+export const sanitizeGoogleDriveSettings = (value: unknown): GoogleDriveSettings => {
+  const input = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  const hasValidAccessMode = input.accessMode === "read-only" || input.accessMode === "read-write";
+
+  return {
+    enabled: hasValidAccessMode && input.enabled === true,
+    hostPath: typeof input.hostPath === "string" ? input.hostPath.trim() : "",
+    accessMode: input.accessMode === "read-write" ? "read-write" : "read-only",
   };
 };
 
@@ -489,6 +503,7 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   techstackCatalog: cloneTechstackCatalog(DEFAULT_DASHBOARD_SETTINGS.techstackCatalog),
   techstack: { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
   designGuidance: cloneDesignGuidance(DEFAULT_DASHBOARD_SETTINGS.designGuidance),
+  googleDrive: { ...DEFAULT_DASHBOARD_SETTINGS.googleDrive },
   git: {
     ...DEFAULT_DASHBOARD_SETTINGS.git,
     githubToken: externalHints?.resolved.githubToken || DEFAULT_DASHBOARD_SETTINGS.git.githubToken,
@@ -655,6 +670,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   const techstackCatalog = sanitizeTechstackCatalog(input.techstackCatalog ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog);
   const techstack = sanitizeTechstackSelection(input.techstack);
   const designGuidance = sanitizeDesignGuidanceSettings(input.designGuidance);
+  const googleDrive = sanitizeGoogleDriveSettings(input.googleDrive);
   const git = sanitizeGit(input, externalHints);
   const jira = sanitizeJira(input.jira, DEFAULT_DASHBOARD_SETTINGS.jira);
   if (externalHints?.resolved?.jiraToken) {
@@ -805,6 +821,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     techstackCatalog,
     techstack,
     designGuidance,
+    googleDrive,
     git,
     jira,
     notion,

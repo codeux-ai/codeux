@@ -36,7 +36,7 @@ import { sanitizeMemory } from "../domain/settings/settings-sanitizers/memory-sa
 import { sanitizeSpeech } from "../domain/settings/settings-sanitizers/speech-sanitizer.js";
 import { sanitizeModelPricing } from "../domain/settings/settings-sanitizers/model-pricing-sanitizer.js";
 import { sanitizeWorkers } from "../domain/settings/settings-sanitizers/worker-sanitizer.js";
-import { sanitizeExternalImporterSettings } from "../repositories/settings-sanitizer.js";
+import { sanitizeExternalImporterSettings, sanitizeGoogleDriveSettings } from "../repositories/settings-sanitizer.js";
 import {
   buildDashboardProviderSettings,
   buildDefaultIntegrationProviders,
@@ -781,6 +781,7 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
     },
     techstack: cloneTechstackSelection(DEFAULT_PROJECT_TECHSTACK),
     designGuidance: cloneDesignGuidance(DEFAULT_DASHBOARD_SETTINGS.designGuidance),
+    googleDrive: { ...DEFAULT_DASHBOARD_SETTINGS.googleDrive },
     git: {
       githubMode: git.githubMode,
       githubToken: git.githubToken,
@@ -962,6 +963,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
     },
     techstack: sanitizeTechstackSelection(input.techstack),
     designGuidance: sanitizeDesignGuidanceSettings(input.designGuidance),
+    googleDrive: sanitizeGoogleDriveSettings(input.googleDrive),
     git: {
       githubMode: git.githubMode,
       githubToken: git.githubToken,
@@ -1368,6 +1370,7 @@ export function resolveDashboardSettings(args: {
     techstackCatalog: cloneTechstackCatalog(techstackCatalog),
     techstack: cloneTechstackSelection(sprintSettings.techstack),
     designGuidance: cloneDesignGuidance(sprintSettings.designGuidance),
+    googleDrive: { ...sprintSettings.googleDrive },
     // GitHub/GitLab/Jira resolve through the scoped project/sprint settings, which
     // inherit the system integration values unless a project or sprint overrides
     // them. A blank scoped value falls back to the system integration value.

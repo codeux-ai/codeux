@@ -47,6 +47,8 @@ The built-in catalog always includes the Code UX Stack (`code-ux-internal`) with
 
 Design guidance is an inheritable scoped setting under `designGuidance`. System defaults, project overrides, and sprint overrides all participate in the normal effective settings resolution, and source metadata reports whether a guidance field came from `system`, `project`, or `sprint`. The block stores selected tech-stack guidance, selected styleguide guidance, `hideDefaultStyleguides`, and custom tech stack/styleguide entries with stable `id`, `name`, `summary`, and `instructionMarkdown` fields. System defaults resolve both selections to `none`, so existing and imported projects receive no design styleguide by inheritance. New local and new remote project initialization writes an explicit project override selecting the built-in `Code UX` styleguide; imported local or Git projects remain at `none` until an operator or setup flow changes them. Planning prompts receive a compact `Project Guidance` section only for selected non-`none` entries, so generated tasks can reflect active guidance without duplicating inactive defaults. Project Setup prompts use the same selected-entry section and also include a setup-only styling investigation notice whenever the styleguide selection is `none`, including when tech-stack guidance is also `none`.
 
+Google Drive host-directory settings are an inheritable scoped block under `googleDrive`. The block stores `enabled`, a trimmed `hostPath`, and `accessMode` (`read-only` or `read-write`). It defaults to disabled with an empty path and read-only access. Missing or invalid access modes sanitize to the disabled, read-only-safe state, and unknown nested fields are discarded. The block represents an already user-linked local directory and never stores Google credentials.
+
 For `.code-ux/settings.json` (used primarily for credential hints during initial onboarding), search roots include:
 - current working directory
 - project root
@@ -175,6 +177,10 @@ Runtime resolution:
     - `hideDefaultStyleguides` (`false` by default)
     - `customTechStacks`
     - `customStyleguides`
+  - `googleDrive`
+    - `enabled` (`false` by default)
+    - `hostPath` (empty by default; trimmed when saved)
+    - `accessMode` (`read-only` by default; also supports `read-write`)
   - `agents`
   - `skills`
 
