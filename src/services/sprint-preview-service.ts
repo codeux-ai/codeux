@@ -97,6 +97,7 @@ export class SprintPreviewService {
   private readonly startupRestartSessionIds = new Set<string>();
   private readonly recoveredUnexpectedContainerIds = new Map<string, string>();
   private readonly healthyContainerIds = new Map<string, string>();
+  private readonly activeStartSessionKeys = new Set<string>();
   private reconciliationPromise: Promise<void> | null = null;
 
   constructor(private readonly deps: SprintPreviewServiceDeps) {
@@ -133,7 +134,15 @@ export class SprintPreviewService {
     await this.waitForStartupCleanup();
     return await this.lifecycle.withSessionLock(
       "preview:global-start",
-      async () => await this.startSessionLocked(projectId, sprintId, options),
+      async () => {
+        const sessionKey = this.buildSessionLockKey(projectId, sprintId);
+        this.activeStartSessionKeys.add(sessionKey);
+        try {
+          return await this.startSessionLocked(projectId, sprintId, options);
+        } finally {
+          this.activeStartSessionKeys.delete(sessionKey);
+        }
+      },
     );
   }
 
@@ -860,6 +869,35 @@ export class SprintPreviewService {
           if (refreshed.status === "running" || refreshed.status === "starting") {
             await this.stopSession(refreshed.id).catch(() => undefined);
           }
+          continue;
+        }
+
+        const sessionKey = this.buildSessionLockKey(refreshed.projectId, refreshed.sprintId);
+        const orphanedStart = refreshed.status === "starting"
+          && !refreshed.containerId
+          && !refreshed.containerName
+          && !this.activeStartSessionKeys.has(sessionKey);
+        if (orphanedStart) {
+          this.deps.sprintPreviewRepository.updateSession(refreshed.id, {
+            status: "stopped",
+            hostPort: null,
+            portMappings: this.clearPortMappingHostPorts(this.getEffectivePortMappings(refreshed)),
+            healthStatus: "unknown",
+            lastError: null,
+          });
+          await this.startSession(refreshed.projectId, refreshed.sprintId).then((result) => {
+            if (result.status === "error") {
+              this.deps.logger?.warn("Failed to recover orphaned sprint preview startup", {
+                sessionId: refreshed.id,
+                error: result.lastError,
+              });
+            }
+          }).catch((error) => {
+            this.deps.logger?.warn("Failed to recover orphaned sprint preview startup", {
+              sessionId: refreshed.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
           continue;
         }
 

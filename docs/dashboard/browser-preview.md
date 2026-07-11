@@ -15,6 +15,7 @@ The browser preview provides an integrated environment for interacting with runn
 - Startup container cleanup is a barrier for preview launch and reconciliation. A manual or automatic launch waits for cleanup instead of racing a stale-container removal.
 - Reconciliation is single-flight, and preview starts are serialized across the shared host-port allocator so overlapping interval/manual launches cannot reserve the same port.
 - Sessions that were running, starting, or backed by an exited container before runtime restart are restored once after cleanup, including manually launched previews whose sprint is no longer actively running.
+- A session left in `starting` before Docker created its container is treated as an orphaned start and retried; reconciliation does not interrupt an in-process start.
 - A preview that was observed healthy, or belongs to an active auto-start sprint, gets one automatic recovery attempt per unexpectedly exited container. This includes manually launched previews after their sprint finishes; a persistent application or startup failure remains visible instead of entering an infinite rebuild loop.
 - Exit code 137 is reported as container termination rather than attaching an unrelated warning from otherwise healthy application logs.
 
