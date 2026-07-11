@@ -191,6 +191,53 @@ describe("SprintLedger Accessibility", () => {
     expect(getAllByRole("button", { name: /Start Frontend Onboarding/i })[0]).toBeInTheDocument();
   });
 
+  it("keeps a compact human-attention row discoverable without removing keyboard controls", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <table>
+        <tbody>
+          <SprintLedgerRow
+            sprint={{ ...mockSprint, status: "paused" }}
+            isSelected={false}
+            isEven={false}
+            activeRun={undefined}
+            pauseResumeRun={undefined}
+            humanIntervention={{
+              title: "Manual approval required",
+              reason: "Review the changes",
+              instructions: "Approve or request changes",
+              attentionType: null,
+              severity: "high",
+              ownerType: "human",
+            }}
+            isAnyBulkPending={false}
+            pendingActionIds={new Set()}
+            onToggleRow={vi.fn()}
+            onToggleShowcase={vi.fn()}
+            onSprintToggle={vi.fn()}
+            onSprintPauseResume={vi.fn()}
+            onEdit={vi.fn()}
+            onExport={vi.fn()}
+            onOverrides={vi.fn()}
+            onMarkCompleted={vi.fn()}
+            onDelete={vi.fn()}
+          />
+        </tbody>
+      </table>,
+    );
+
+    const indicator = screen.getByRole("status", { name: "Sprint waiting for human intervention" });
+    expect(indicator).toHaveAttribute("data-compact", "true");
+    expect(indicator).toHaveTextContent("zZZ");
+    expect(container.querySelector("tr.sprint-attention-human")).toHaveClass("border-status-red/55");
+    expect(container.querySelector("td[class*='lg:border-status-red/45']")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open tasks for sprint Frontend Onboarding" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open live session for sprint Frontend Onboarding" })).toBeInTheDocument();
+
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Select sprint Frontend Onboarding" })).toHaveFocus();
+  });
+
   it("announces bulk selection count through the ledger live region", async () => {
     const user = userEvent.setup();
     render(

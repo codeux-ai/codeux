@@ -116,4 +116,45 @@ describe("SprintCell visuals", () => {
     fireEvent.click(startButton);
     expect(onPrimaryAction).not.toHaveBeenCalled();
   });
+
+  it("renders a reduced-motion-safe failed execution indicator and full red attention border", () => {
+    const { container } = render(
+      <SprintCell
+        sprint={{ ...sprint, status: "failed" }}
+        isEven={false}
+        accentColor="text-signal-600 dark:text-signal-300"
+        humanIntervention={{
+          title: "Approval required",
+          reason: "A reviewer is needed",
+          instructions: "Review the execution",
+          attentionType: null,
+          severity: "high",
+          ownerType: "human",
+        }}
+      />,
+    );
+
+    const cell = container.querySelector('[data-sprint-attention="failure"]');
+    const indicator = screen.getByRole("status", { name: "Sprint execution failed" });
+    const border = container.querySelector("[data-sprint-attention-border]");
+
+    expect(cell).toBeInTheDocument();
+    expect(indicator).toHaveAttribute("data-reduced-motion", "true");
+    expect(indicator.querySelector(".motion-reduce\\:animate-none")).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Sprint waiting for human intervention" })).not.toBeInTheDocument();
+    expect(border).toHaveClass("border-2", "border-status-red/70", "motion-reduce:shadow-none");
+  });
+
+  it("does not render attention for a healthy completed sprint", () => {
+    const { container } = render(
+      <SprintCell
+        sprint={{ ...sprint, status: "completed", completion: 100 }}
+        isEven={false}
+        accentColor="text-signal-600 dark:text-signal-300"
+      />,
+    );
+
+    expect(container.querySelector("[data-sprint-attention]")).not.toBeInTheDocument();
+    expect(container.querySelector("[data-sprint-attention-indicator]")).not.toBeInTheDocument();
+  });
 });

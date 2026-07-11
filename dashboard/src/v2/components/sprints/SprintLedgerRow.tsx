@@ -23,6 +23,10 @@ import { useState, useRef, useEffect } from "preact/hooks";
 import { HumanInterventionBadge } from "../ui/HumanInterventionBadge.js";
 import { SprintReviewBadge } from "./SprintReviewBadge.js";
 import { SprintActionMenu } from "./SprintActionMenu.js";
+import {
+  resolveSprintAttentionIndicatorState,
+  SprintAttentionIndicator,
+} from "./SprintAttentionIndicator.js";
 import { DropdownMenu } from "../ui/DropdownMenu.js";
 import { LinkedIssueTag } from "../sprint/LinkedIssueTag.js";
 import type { Sprint, SprintStatus } from "../../types.js";
@@ -181,6 +185,11 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
     latestReviewStatus: sprint.latestReview?.status ?? null,
   });
   const showInterventionBadge = Boolean(humanIntervention) && statusPresentation.showHumanInterventionBadge;
+  const attentionIndicatorState = resolveSprintAttentionIndicatorState({
+    sprintStatus: sprint.status,
+    statusPresentation,
+    humanIntervention,
+  });
 
   const isTogglePending = pendingActionIds.has(pendingToggleActionId);
   const isPauseResumePending = pendingPauseResumeActionId.length > 0 && pendingActionIds.has(pendingPauseResumeActionId);
@@ -190,12 +199,16 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   // The menu icon only needs to show a loader if deleting/pinning. toggle and pause are shown in their own controls.
   const isRowPending = isPinPending || isDeletePending || isMarkCompletedPending;
 
-  const rowTone = isSelected
+  const rowTone = attentionIndicatorState
+    ? "border-status-red/55 bg-status-red/[0.055] shadow-[0_14px_36px_rgba(227,0,15,0.14)]"
+    : isSelected
     ? "border-signal-500/35 bg-signal-500/[0.08] shadow-[0_18px_44px_rgba(0,224,160,0.12)]"
     : isEven
       ? "border-black/[0.06] bg-white/80 dark:border-white/[0.07] dark:bg-white/[0.045]"
       : "border-black/[0.06] bg-slate-50/80 dark:border-white/[0.07] dark:bg-white/[0.03]";
-  const desktopCellTone = isSelected
+  const desktopCellTone = attentionIndicatorState
+    ? "lg:border-status-red/45 lg:bg-status-red/[0.045] dark:lg:border-status-red/45 dark:lg:bg-status-red/[0.06]"
+    : isSelected
     ? "lg:border-signal-500/25 lg:bg-signal-500/[0.08]"
     : isEven
       ? "lg:border-black/[0.06] lg:bg-white/80 dark:lg:border-white/[0.07] dark:lg:bg-white/[0.045]"
@@ -280,7 +293,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
     <TableRow
       selected={isSelected}
       aria-busy={rowBusy}
-      className={`group transition-all focus-within:ring-2 focus-within:ring-signal-500/20 ${rowTone} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""} ${pendingRowClass} hover:bg-[var(--bg-hover-subtle)] transition-[box-shadow,transform] [@media(hover:hover)]:hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] [@media(hover:hover)]:hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:transform-none`}
+      className={`group ${attentionIndicatorState ? `sprint-attention-${attentionIndicatorState.kind}` : ""} transition-all focus-within:ring-2 focus-within:ring-signal-500/20 ${rowTone} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""} ${pendingRowClass} hover:bg-[var(--bg-hover-subtle)] transition-[box-shadow,transform] [@media(hover:hover)]:hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] [@media(hover:hover)]:hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:transform-none`}
       style={transitionStyle}
     >
       <TableCell isFirst className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`} mobileLabel="Select">
@@ -340,6 +353,9 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       <TableCell className={`min-w-0 max-w-full lg:w-[220px] lg:min-w-[220px] ${desktopCellTone}`} mobileLabel="Sprint">
         <div className="flex flex-wrap items-center gap-2">
           <div className={`font-display text-base font-semibold leading-tight break-words ${isCompleted ? "text-slate-700 dark:text-slate-300" : "text-[var(--text-primary)]"}`}>{sprint.name}</div>
+          {attentionIndicatorState && (
+            <SprintAttentionIndicator state={attentionIndicatorState} compact />
+          )}
           {isSelected ? (
             <span className="inline-flex items-center rounded-full border border-signal-500/25 bg-signal-500/10 px-2.5 py-1 text-[10px] font-bold uppercase text-signal-700 dark:text-signal-300">
               Selected
