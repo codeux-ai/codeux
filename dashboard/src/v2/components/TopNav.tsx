@@ -347,6 +347,11 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
         }
     }, [restoreNotificationFocus]);
 
+    const navigateFromNotification = useCallback(async (href: string): Promise<void> => {
+        closeNotificationMenu();
+        await navigateToNotificationHref(href);
+    }, [closeNotificationMenu, navigateToNotificationHref]);
+
     const handleNotificationMouseEnter = () => {
         if (notificationHoverTimeout.current) clearTimeout(notificationHoverTimeout.current);
         if (notificationInteractionState === 'closed') {
@@ -1180,7 +1185,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                             onMarkRead={notifications.markRead}
                             onDismiss={notifications.dismiss}
                             onRefresh={() => void notifications.refresh()}
-                            onNavigate={navigateToNotificationHref}
+                            onNavigate={navigateFromNotification}
                         />
                     )}
                 </div>

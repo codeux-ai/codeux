@@ -272,6 +272,46 @@ describe("NotificationPanel", () => {
     });
   });
 
+  it("closes notification details before delegating its server-supplied action", async () => {
+    const onMarkRead = vi.fn();
+    const onNavigate = vi.fn();
+    render(
+      <NotificationPanel
+        unreadCount={1}
+        notifications={[makeNotification({
+          id: "project-failure-1",
+          type: "automatic-stop",
+          title: "Project setup failed",
+          actionLabel: "Review project",
+          actionHref: "/projects?projectId=project-9&source=notification&returnTo=%2Ftasks%3Fview%3Dboard",
+          details: [{ label: "Project", value: "Workspace" }],
+        })]}
+        onMarkAllRead={vi.fn()}
+        onMarkRead={onMarkRead}
+        onDismiss={vi.fn()}
+        onRefresh={vi.fn()}
+        onNavigate={onNavigate}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Details for Project setup failed" }));
+    const action = await screen.findByRole("link", { name: "Review project" });
+    expect(action).toHaveAttribute(
+      "href",
+      "/projects?projectId=project-9&source=notification&returnTo=%2Ftasks%3Fview%3Dboard",
+    );
+
+    fireEvent.click(action);
+
+    expect(onMarkRead).toHaveBeenCalledWith("project-failure-1");
+    expect(onNavigate).toHaveBeenCalledWith(
+      "/projects?projectId=project-9&source=notification&returnTo=%2Ftasks%3Fview%3Dboard",
+    );
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Project setup failed" })).not.toBeInTheDocument();
+    });
+  });
+
   it("suppresses duplicate mark-read activation while the row is pending", async () => {
     let resolveMarkRead: () => void = () => undefined;
     const onMarkRead = vi.fn(() => new Promise<void>((resolve) => {

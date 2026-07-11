@@ -103,6 +103,7 @@ export const NotificationDetailsModal: FunctionComponent<{
                   onAction(notification);
                   if (onNavigate) {
                     event.preventDefault();
+                    onClose();
                     void onNavigate(notification.actionHref!);
                   }
                 }}
