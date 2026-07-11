@@ -3,7 +3,7 @@ import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute } from "./route-utils.js";
 import { parseOptionalInteger, requireTrimmedString } from "./request-parsers.js";
 import { HttpRouteError } from "./http-errors.js";
-import type { CreateAgentPresetInput, PushAgentPresetsToMarkdownOptions, UpdateAgentPresetInput } from "../contracts/agent-preset-types.js";
+import type { BaseAgentRole, CreateAgentPresetInput, PushAgentPresetsToMarkdownOptions, UpdateAgentPresetInput } from "../contracts/agent-preset-types.js";
 import type {
   CreateSkillStorageInput,
   SkillCatalogEntry,
@@ -17,6 +17,29 @@ export const SKILL_STORAGE_CONTENTS_MAX_SKILLS = 100;
 export const SKILL_STORAGE_CONTENT_PREVIEW_MAX_LENGTH = 240;
 
 export function registerAgentPresetRoutes(router: Express, deps: DashboardDependencies): void {
+  router.get("/api/projects/:projectId/agent-presets/base-updates", asyncRoute(async (req, res) => {
+    if (!deps.listBaseAgentUpdateNotices) {
+      res.status(404).json({ error: "Base-agent updates are not enabled." });
+      return;
+    }
+    res.json(await deps.listBaseAgentUpdateNotices(requireTrimmedString(req.params.projectId, "projectId")));
+  }));
+
+  router.post("/api/projects/:projectId/agent-presets/base-updates/:baseAgentRole/apply", asyncRoute(async (req, res) => {
+    if (!deps.applyBaseAgentUpdate) {
+      res.status(404).json({ error: "Base-agent updates are not enabled." });
+      return;
+    }
+    const role = requireTrimmedString(req.params.baseAgentRole, "baseAgentRole");
+    if (role !== "planning_agent" && role !== "project_manager") {
+      throw new HttpRouteError(400, `Invalid baseAgentRole: ${role}.`);
+    }
+    res.json(await deps.applyBaseAgentUpdate(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      role as BaseAgentRole,
+    ));
+  }));
+
   router.get("/api/projects/:projectId/agent-presets", asyncRoute(async (req, res) => {
     res.json(await deps.listAgentPresets(requireTrimmedString(req.params.projectId, "projectId")));
   }));

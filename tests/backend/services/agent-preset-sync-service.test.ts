@@ -83,6 +83,20 @@ const createSettingsRepository = (dbPath: string): SettingsRepository => {
   return repository;
 };
 
+async function writeBundledAgentAssets(
+  root: string,
+  instructions: { planning: string; projectManager: string },
+): Promise<void> {
+  const agentsDir = path.join(root, ".code-ux", "agents");
+  await fs.mkdir(agentsDir, { recursive: true });
+  await fs.mkdir(path.join(root, ".code-ux", "container"), { recursive: true });
+  await fs.writeFile(path.join(agentsDir, "planning_agent.md"), instructions.planning, "utf8");
+  await fs.writeFile(path.join(agentsDir, "project_manager.md"), instructions.projectManager, "utf8");
+  await fs.writeFile(path.join(agentsDir, "quality_assurance_agent.md"), "Review changes.\n", "utf8");
+  await fs.writeFile(path.join(agentsDir, "worker.md"), "Implement changes.\n", "utf8");
+  await fs.writeFile(path.join(root, ".code-ux", "container", "setup.sh"), "#!/bin/sh\n", "utf8");
+}
+
 beforeEach(async () => {
   delete process.env.CODE_UX_ENABLE_DEFAULT_ASSET_INSTALL_IN_TESTS;
   const homeDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-home-"));
@@ -1199,6 +1213,207 @@ describe("AgentPresetSyncService", () => {
       const resolved = await syncService.resolveTargetedPlanningAgent(project.id, unlabeled.id);
       expect(resolved.name).toBe("Just a Worker");
     });
+  });
+
+  it("auto-applies changed bundled instructions to untouched built-ins and their project mirror without changing metadata", async () => {
+    process.env.CODE_UX_ENABLE_DEFAULT_ASSET_INSTALL_IN_TESTS = "1";
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-base-update-"));
+    tempDirs.push(dir);
+    await writeBundledAgentAssets(dir, {
+      planning: "Bundled planning revision one.\n",
+      projectManager: "Bundled manager revision one.\n",
+    });
+    const repoPath = path.join(dir, "repo");
+    const { agentPresetRepository, settingsRepository, syncService, project } = await createRepoProject(dir, repoPath);
+    const initial = await syncService.listAgentPresets(project.id);
+    const planning = initial.find((preset) => preset.name === "Planning agent")!;
+    const manager = initial.find((preset) => preset.name === "Project manager")!;
+
+    const customizedMetadata = agentPresetRepository.updateAgentPreset(planning.id, {
+      labels: ["planning", "protected-label"],
+      avatarConfig: { chassis: "classic", accent: "jade", baseColor: "pearl" },
+      providerConfigId: "codex-special",
+      model: "gpt-special",
+      memoryTemplateOverrideEnabled: true,
+      memoryTemplateMarkdown: "Remember carefully.",
+      memoryConfig: {
+        tier: "both",
+        categories: ["context"],
+        minStrength: 2,
+        minStrengthPerCategory: { context: 3 },
+        maxShortTerm: 4,
+        maxLongTerm: 5,
+      },
+      mcpAccess: {
+        codeUxEnabled: false,
+        codeUxToolToggles: [],
+        linkedServerIds: ["custom-server"],
+      },
+    });
+    await syncService.exportAgentPresetToMarkdown(customizedMetadata.id);
+    agentPresetRepository.updateAgentPreset(manager.id, {
+      description: "User-authored manager metadata.",
+      avatarConfig: { chassis: "round", accent: "amber" },
+      providerConfigId: "manager-provider",
+      model: "manager-model",
+      labels: ["manager", "preserved"],
+      memoryTemplateOverrideEnabled: true,
+      memoryTemplateMarkdown: "Manager memory.",
+    });
+    const projectPlanningPath = path.join(repoPath, ".code-ux", "agents", "planning_agent.md");
+    const beforeRouting = settingsRepository.resolveProjectDashboardSettings(project.id).settings.agents.routing;
+    const bundledPlanningPath = path.join(dir, ".code-ux", "agents", "planning_agent.md");
+    const bundledManagerPath = path.join(dir, ".code-ux", "agents", "project_manager.md");
+    const planningTimestamp = (await fs.stat(bundledPlanningPath)).mtime;
+    const managerTimestamp = (await fs.stat(bundledManagerPath)).mtime;
+
+    await writeBundledAgentAssets(dir, {
+      planning: "Bundled planning revision two with deterministic content.\n",
+      projectManager: "Bundled manager revision two.\n",
+    });
+    await fs.utimes(bundledPlanningPath, planningTimestamp, planningTimestamp);
+    await fs.utimes(bundledManagerPath, managerTimestamp, managerTimestamp);
+    const synced = await syncService.listAgentPresets(project.id);
+    const updated = synced.find((preset) => preset.id === planning.id)!;
+
+    expect(updated).toMatchObject({
+      instructionMarkdown: "Bundled planning revision two with deterministic content.",
+      labels: ["planning", "protected-label"],
+      avatarConfig: { chassis: "classic", accent: "jade", baseColor: "pearl" },
+      providerConfigId: "codex-special",
+      model: "gpt-special",
+      memoryTemplateOverrideEnabled: true,
+      memoryTemplateMarkdown: "Remember carefully.",
+      memoryConfig: { tier: "both", categories: ["context"], maxShortTerm: 4, maxLongTerm: 5 },
+      mcpAccess: { linkedServerIds: ["custom-server"] },
+      sourceScope: "project",
+    });
+    expect(await fs.readFile(projectPlanningPath, "utf8")).toContain("Bundled planning revision two");
+    expect(synced.find((preset) => preset.id === manager.id)).toMatchObject({
+      instructionMarkdown: "Bundled manager revision two.",
+      description: "User-authored manager metadata.",
+      avatarConfig: { chassis: "round", accent: "amber" },
+      providerConfigId: "manager-provider",
+      model: "manager-model",
+      labels: ["manager", "preserved"],
+      memoryTemplateOverrideEnabled: true,
+      memoryTemplateMarkdown: "Manager memory.",
+    });
+    expect(settingsRepository.resolveProjectDashboardSettings(project.id).settings.agents.routing).toEqual(beforeRouting);
+    expect(await syncService.listBaseAgentUpdateNotices(project.id)).toEqual([]);
+  });
+
+  it("marks dashboard, database-only, and project markdown instruction edits as customized and never overwrites them", async () => {
+    process.env.CODE_UX_ENABLE_DEFAULT_ASSET_INSTALL_IN_TESTS = "1";
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-base-customized-"));
+    tempDirs.push(dir);
+    await writeBundledAgentAssets(dir, {
+      planning: "Planning baseline.\n",
+      projectManager: "Manager baseline.\n",
+    });
+    const repoPath = path.join(dir, "repo");
+    const { agentPresetRepository, settingsRepository, syncService, project } = await createRepoProject(dir, repoPath);
+    const initial = await syncService.listAgentPresets(project.id);
+    const planning = initial.find((preset) => preset.name === "Planning agent")!;
+    const manager = initial.find((preset) => preset.name === "Project manager")!;
+
+    await syncService.updateAgentPreset(planning.id, { instructionMarkdown: "Dashboard-authored planning behavior." });
+    settingsRepository.saveProjectSettings(project.id, { agents: { saveToProjectDirectory: false } });
+    agentPresetRepository.updateAgentPreset(manager.id, { instructionMarkdown: "Database-only manager behavior." });
+    await writeBundledAgentAssets(dir, {
+      planning: "New planning bundle.\n",
+      projectManager: "New manager bundle.\n",
+    });
+
+    let synced = await syncService.listAgentPresets(project.id);
+    expect(synced.find((preset) => preset.id === planning.id)?.instructionMarkdown).toBe("Dashboard-authored planning behavior.");
+    expect(synced.find((preset) => preset.id === manager.id)?.instructionMarkdown).toBe("Database-only manager behavior.");
+    expect((await syncService.listBaseAgentUpdateNotices(project.id)).map((notice) => notice.reason)).toEqual([
+      "customized_instructions",
+      "customized_instructions",
+    ]);
+
+    const projectPlanningPath = path.join(repoPath, ".code-ux", "agents", "planning_agent.md");
+    await fs.writeFile(projectPlanningPath, "Project markdown planning behavior.\n", "utf8");
+    synced = await syncService.listAgentPresets(project.id);
+    expect(synced.find((preset) => preset.id === planning.id)?.instructionMarkdown).toBe("Project markdown planning behavior.");
+  });
+
+  it("initializes legacy baselines safely and reports alternate planning and dashboard-reply routes", async () => {
+    process.env.CODE_UX_ENABLE_DEFAULT_ASSET_INSTALL_IN_TESTS = "1";
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-base-legacy-routing-"));
+    tempDirs.push(dir);
+    await writeBundledAgentAssets(dir, {
+      planning: "Current planning bundle.\n",
+      projectManager: "Current manager bundle.\n",
+    });
+    const repoPath = path.join(dir, "repo");
+    const { agentPresetRepository, settingsRepository, syncService, project } = await createRepoProject(dir, repoPath);
+    const legacyPlanning = agentPresetRepository.createAgentPreset(project.id, {
+      name: "Planning agent",
+      instructionMarkdown: "Current planning bundle.",
+    });
+    const legacyManager = agentPresetRepository.createAgentPreset(project.id, {
+      name: "Project manager",
+      instructionMarkdown: "Legacy customized manager behavior.",
+    });
+    await syncService.listAgentPresets(project.id);
+    expect(agentPresetRepository.getAgentPreset(legacyPlanning.id)?.baseInstructionStates?.planning_agent).toMatchObject({
+      customized: false,
+    });
+    expect(agentPresetRepository.getAgentPreset(legacyManager.id)?.baseInstructionStates?.project_manager).toMatchObject({
+      customized: true,
+      lastAppliedRevision: null,
+    });
+
+    settingsRepository.saveProjectSettings(project.id, { agents: { saveToProjectDirectory: false } });
+    const alternatePlanning = await syncService.createAgentPreset(project.id, {
+      name: "Specialist planner",
+      instructionMarkdown: "Specialist planning behavior.",
+      avatarConfig: { chassis: "classic", accent: "jade" },
+      providerConfigId: "alternate-provider",
+      model: "alternate-model",
+    });
+    const alternateManager = await syncService.createAgentPreset(project.id, {
+      name: "Specialist manager",
+      instructionMarkdown: "Specialist manager behavior.",
+    });
+    settingsRepository.saveProjectSettings(project.id, {
+      agents: {
+        routing: {
+          planning: { agentPresetId: alternatePlanning.id },
+          dashboardReply: { agentPresetId: alternateManager.id },
+        },
+      },
+    });
+
+    const notices = await syncService.listBaseAgentUpdateNotices(project.id);
+    expect(notices).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: "planning_agent", selectedAgentPresetId: alternatePlanning.id, reason: "alternate_route" }),
+      expect.objectContaining({ role: "project_manager", selectedAgentPresetId: alternateManager.id, reason: "alternate_route" }),
+    ]));
+    const context = await syncService.getBaseAgentUpdateContext(project.id, "planning_agent");
+    expect(context?.selectedAgentPreset).toMatchObject({
+      id: alternatePlanning.id,
+      avatarConfig: { chassis: "classic", accent: "jade" },
+      providerConfigId: "alternate-provider",
+      model: "alternate-model",
+    });
+
+    const applied = await syncService.applyBaseAgentInstructionUpdate(
+      project.id,
+      "planning_agent",
+      "Specialist planning behavior.\n\nUse the current compatibility schema.",
+      alternatePlanning.id,
+    );
+    expect(applied).toMatchObject({
+      id: alternatePlanning.id,
+      instructionMarkdown: "Specialist planning behavior.\n\nUse the current compatibility schema.",
+      avatarConfig: { chassis: "classic", accent: "jade" },
+      providerConfigId: "alternate-provider",
+      model: "alternate-model",
+    });
+    expect((await syncService.listBaseAgentUpdateNotices(project.id)).map((notice) => notice.role)).toEqual(["project_manager"]);
   });
 
   it("syncs agent memory settings down to md file on update and imports memory settings from md file", async () => {

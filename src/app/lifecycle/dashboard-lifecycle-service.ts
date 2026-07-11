@@ -50,6 +50,7 @@ import type { TaskRerunService } from "../../services/task-rerun-service.js";
 import type { ExecutionControlService } from "../../services/execution-control-service.js";
 import type { DashboardRealtimeService } from "../../services/dashboard-realtime-service.js";
 import type { PlanningAgentService } from "../../services/planning-agent-service.js";
+import type { AgentBaseUpdateService } from "../../services/agent-base-update-service.js";
 import type { ExecutionInvocationControlService } from "../../services/execution-invocation-control-service.js";
 import type { ChatThreadRuntimeService } from "../../services/chat-thread-runtime-service.js";
 import type { ChatProviderOutboundService } from "../../services/chat-provider-outbound-service.js";
@@ -126,6 +127,7 @@ export interface BootDashboardDeps {
   executionControlService: ExecutionControlService;
   executionInvocationControlService: ExecutionInvocationControlService;
   planningAgentService: PlanningAgentService;
+  agentBaseUpdateService: AgentBaseUpdateService;
   quicksprintService: QuicksprintService;
   projectSetupService: ProjectSetupService;
   schedulerService: SchedulerService;
@@ -756,6 +758,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     createAgentPreset: async (projectId, input) => await deps.agentPresetSyncService.createAgentPreset(projectId, input),
     updateAgentPreset: async (agentPresetId, input) => await deps.agentPresetSyncService.updateAgentPreset(agentPresetId, input),
     deleteAgentPreset: async (agentPresetId) => await deps.agentPresetSyncService.deleteAgentPreset(agentPresetId),
+    listBaseAgentUpdateNotices: async (projectId) => await deps.agentBaseUpdateService.listUpdates(projectId),
+    applyBaseAgentUpdate: async (projectId, role) => await deps.agentBaseUpdateService.applyUpdate(projectId, role),
     importAgentPresetFromMarkdown: async (agentPresetId) => await deps.agentPresetSyncService.importAgentPresetFromMarkdown(agentPresetId),
     syncAllAgentPresetsFromMarkdown: async (projectId) => await deps.agentPresetSyncService.syncAllAgentPresetsFromMarkdown(projectId),
     pullAgentPresetsFromMarkdown: async (projectId) => await deps.agentPresetSyncService.pullAgentPresetsFromMarkdown(projectId),

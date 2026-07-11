@@ -74,6 +74,18 @@ Older API clients may still call the legacy `sync-markdown` endpoint as a backwa
 
 This makes agent presets first-class repository content — you can check them in, code-review them, and share them across teammates.
 
+## Base-agent compatibility updates
+
+Code UX tracks bundled instruction revisions independently for the Planning agent and Project manager only. Worker, Quality assurance agent, and Project Setup Agent continue through normal preset synchronization and are not automatically updated by this feature. The Planning target comes from `agents.routing.planning.agentPresetId`; the Project manager/dashboard-reply target comes independently from `agents.routing.dashboardReply.agentPresetId`. A null route uses the named built-in fallback.
+
+When a selected built-in has not diverged from its tracked baseline, a newer bundle is applied automatically to its instruction markdown. Custom presets, locally edited instructions, and alternate routed presets are never silently overwritten. `GET /api/projects/:projectId/agent-presets/base-updates` performs the normal synchronization and returns only notices still requiring a decision; checking for notices does not invoke a provider. Each notice names the actual routed preset, so an alternate Planning or dashboard-reply assignment is clearly identified.
+
+The Agents page heading is **Planning agent base update available** or **Project manager base update available**. It explains whether the named preset has customized instructions or is assigned to that route, followed by: **Updating invokes an agent to compare both base files and apply only important system-compatibility instructions. Your main prompt, custom instructions, and behavior are preserved.** No merge runs until you choose **Update with AI**.
+
+To apply a notice, the dashboard uses `POST /api/projects/:projectId/agent-presets/base-updates/:baseAgentRole/apply`, where the role must be `planning_agent` or `project_manager`. The endpoint consumes no request body and runs through the configured supported local planning provider. The agent compares the previous base, current bundle, and selected preset, and may add only compatibility-critical system instructions such as changed MCP or strict output-schema requirements. Code UX accepts only raw JSON containing a single non-empty `instructionMarkdown` value, verifies that all original preset lines remain in order, rechecks that routing still selects the noticed preset, and writes the markdown itself.
+
+The merge cannot change the main prompt, custom behavior, avatar, labels, routing, provider/model, memory, MCP access, persistent skills, or source metadata. A failed provider call, unsupported provider, malformed or destructive response, stale notice, or route change leaves both the preset and its stored bundled revision unchanged, so the notice remains available for retry. A successful merge records the current bundled revision even when the preserved custom markdown differs from the bundle, preventing the same notice from returning.
+
 ## Deleting an agent
 
 Destructive. Requires confirmation. Threads and tasks that referenced the deleted preset fall back to the project default agent.

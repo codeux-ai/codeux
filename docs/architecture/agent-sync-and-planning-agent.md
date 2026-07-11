@@ -65,6 +65,20 @@ That means:
 - the dashboard can push `.code-ux/agents/*.md` back into git, either as a local commit, a commit plus branch push, or a feature-branch pull request into the default branch
 - when opening a pull request, Code UX resolves the effective dashboard GitHub/GitLab host tokens and forwards them to the PR service so repository-host authentication stays aligned with the current project settings
 
+## Bundled Base Instruction Revisions
+
+Only `Planning agent` and `Project manager` participate in bundled base-instruction revision tracking. Worker, Quality assurance agent, and Project Setup Agent continue through normal agent discovery and synchronization; they do not receive this automatic compatibility-update behavior. The two supported roles track their bundled revisions independently from each other and from the normal project/default/home source winner. Revisions are SHA-256 hashes of normalized instruction content, so an update is detected even when filesystem timestamps are unchanged.
+
+Each preset can persist role-keyed `base_instruction_state_json` with the baseline content hash, whether the instructions have diverged, and the last bundled revision applied. A legacy record is initialized as untouched only when both its sqlite instructions and selected markdown source match the current bundle; an ambiguous legacy difference is treated as customized.
+
+The role targets are resolved independently: `agents.routing.planning.agentPresetId` selects the Planning target, and `agents.routing.dashboardReply.agentPresetId` selects the Project manager/dashboard-reply target. A null route falls back to the correspondingly named built-in. When that built-in is still selected and its tracked instructions are untouched, discovery applies a newer bundle automatically and updates only its instruction markdown. Avatar, description, labels, provider/model selection, container mode, memory settings, MCP access, skill bindings, source metadata, and routing settings are preserved. A linked project markdown mirror receives the same instruction-only update.
+
+Dashboard edits, sqlite-only edits, and project markdown edits that diverge from the tracked baseline mark the role customized and are never replaced by background synchronization. Project markdown edits continue to import through the existing source-sync path. If either route selects another preset, automatic application is skipped for that routed behavior. Notice discovery identifies the actual routed target with `selectedAgentPresetId` and `selectedAgentName`, and reports either `customized_instructions` or `alternate_route`.
+
+The Agents page discovers notices with `GET /api/projects/:projectId/agent-presets/base-updates`. The GET performs normal agent synchronization, which may auto-apply an untouched built-in update, but it does not invoke a provider. Its response contains only the remaining notices that need an explicit merge. `POST /api/projects/:projectId/agent-presets/base-updates/:baseAgentRole/apply` accepts only `planning_agent` or `project_manager`, requires an existing notice, and invokes the configured local planning-provider route with execution type `agent_base_update`.
+
+The provider compares the previous base, current bundle, and selected preset, but may return only raw JSON with one non-empty `instructionMarkdown` property. The merge prompt permits only compatibility-critical system additions, such as changed MCP usage or strict output-schema rules. Server validation requires every original selected-preset line to remain in order; Code UX itself writes the validated markdown through `AgentPresetSyncService`. The provider cannot update the main prompt, custom behavior, avatar, labels, routing, provider/model, memory, MCP access, persistent skills, or source metadata. Before writing, the service verifies that the selected route still points to the preset named by the notice. Provider failure, unsupported provider selection, malformed or destructive output, a missing/stale notice, or a concurrent route change leaves the preset instructions and stored bundled revision unchanged. A successful merge advances the selected preset's role revision to the current bundle even when its compatibility-only markdown intentionally differs from the bundle, so the same notice does not recur.
+
 ## Agent Metadata
 
 `agent_presets` now stores source metadata in addition to the editable instruction body:
@@ -76,6 +90,7 @@ That means:
 - `avatar_config_json` (used for dashboard UI avatars: legacy body fields plus robot chassis, eyes, antenna, headphones, accent, base, and visor colors)
 - `memory_template_override_enabled`
 - `memory_template_markdown`
+- `base_instruction_state_json`
 
 These metadata fields are synced bidirectionally with project markdown files using a `---json` frontmatter codec:
 

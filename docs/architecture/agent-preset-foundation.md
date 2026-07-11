@@ -30,6 +30,7 @@ Foundation fields:
 - `container_run_as_root` stores a nullable per-agent Docker root-mode override; `NULL` inherits the resolved `cliWorkflow.containerRunAsRoot` setting
 - `memory_config_json` stores `AgentMemoryConfig` as a JSON blob
 - `persistent_skill_storage_enabled` reserves a default-off runtime enablement flag for future persistent skill retrieval
+- `base_instruction_state_json` stores per-role bundled-instruction baselines, customization state, and the last applied content-hash revision for Planning agent and Project manager updates
 - `created_at`
 - `updated_at`
 
@@ -89,6 +90,12 @@ Dashboard endpoints:
 - `POST /api/projects/:projectId/agent-presets`
 - `PATCH /api/agent-presets/:agentPresetId`
 - `DELETE /api/agent-presets/:agentPresetId`
+- `GET /api/projects/:projectId/agent-presets/base-updates`
+- `POST /api/projects/:projectId/agent-presets/base-updates/:baseAgentRole/apply`
+
+Base-agent updates are limited to `planning_agent` and `project_manager`. The notice endpoint performs no provider work; it reports only changed bundled baselines that cannot be applied automatically because the selected preset has custom instructions or the role is routed to an alternate preset.
+
+Applying a notice uses the existing `planning` virtual-provider route and structured invocation pipeline, recorded as execution invocation type `agent_base_update`. The provider receives the previous bundled/base instructions, current bundled instructions, and the selected preset instructions, but is restricted to returning one raw JSON property: `instructionMarkdown`. Its prompt permits only compatibility-critical additions, such as changed MCP or JSON-schema rules, and forbids workspace writes or metadata changes. Code UX parses the response strictly and then applies only instruction markdown through `AgentPresetSyncService`; avatar, labels, routing, provider/model, memory, MCP access, persistent skills, and source metadata remain unchanged. The stored bundled revision advances only after provider execution and parsing succeed, and the selected preset ID is checked again immediately before application to prevent a concurrent route change from redirecting the result.
 
 These endpoints are project-scoped and intentionally separate from:
 
