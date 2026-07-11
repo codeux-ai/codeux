@@ -6,6 +6,12 @@ Use this section when you need more detail than the inline Settings-page help po
 
 On desktop, choose an area from the persistent category rail. On smaller screens, the sticky command bar shows the current category as one compact button; opening it reveals the same Smart Find-filtered categories and match previews in a keyboard-accessible drawer without pushing the active settings panel down the page.
 
+## Language-First Speech Setup
+
+**Settings -> AI Models -> Configure speech** asks for the output language first, then preselects the catalog's preferred compatible local model and matching voice. Selected, installed/download-required, output enabled/off, and unsaved states remain visibly separate.
+
+Downloads are never automatic. **Download recommended** opens the model's license and attribution confirmation, and starts only after **Accept & Download**. **Compare compatible models** opens Speech output already filtered to the chosen language.
+
 ## How Settings Scope Works
 
 | Scope | Use it for | Watch for |

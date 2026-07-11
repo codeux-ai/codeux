@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import userEvent from "@testing-library/user-event";
+import { useState } from "preact/hooks";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../dashboard/src/lib/settings.js";
 import { AIModelCatalogPanel } from "../../../dashboard/src/v2/components/settings/panels/AIModelCatalogPanel.js";
@@ -85,11 +86,36 @@ describe("AIModelCatalogPanel", () => {
       files: [],
       sizeBytes: 95_000_000,
       language: "English",
+      languages: [{ code: "en-US", label: "English (US)" }],
+      supportsAutomaticLanguageDetection: false,
       sampleRateHz: 24_000,
-      voices: [{ id: "af_heart", label: "Heart", language: "English (US)" }],
+      voices: [{ id: "af_heart", label: "Heart", language: "English (US)", languageCode: "en-US" }],
       defaultVoice: "af_heart",
+      recommendedForLanguages: ["en-US"],
       license: { id: "apache-v1", name: "Apache-2.0", url: "https://example.test/license", commercialUseAllowed: true, notice: "Test model." },
       downloaded: true,
+      downloading: false,
+      downloadProgress: 0,
+      error: null,
+    }, {
+      id: "piper-de-de-mls-medium",
+      kind: "synthesis",
+      adapter: "piper",
+      displayName: "Piper German MLS Medium",
+      description: "Natural local German speech.",
+      repository: "rhasspy/piper-voices",
+      sourceUrl: "https://example.test/german",
+      files: [],
+      sizeBytes: 77_000_000,
+      language: "German",
+      languages: [{ code: "de-DE", label: "German (Germany)" }],
+      supportsAutomaticLanguageDetection: false,
+      sampleRateHz: 22_050,
+      voices: [{ id: "mls-2422", label: "MLS 2422", language: "German (Germany)", languageCode: "de-DE" }],
+      defaultVoice: "mls-2422",
+      recommendedForLanguages: ["de-DE"],
+      license: { id: "german-license", name: "MIT + CC-BY-4.0", url: "https://example.test/german-license", commercialUseAllowed: true, notice: "German test model." },
+      downloaded: false,
       downloading: false,
       downloadProgress: 0,
       error: null,
@@ -337,5 +363,40 @@ describe("AIModelCatalogPanel", () => {
 
     expect(screen.getByRole("dialog", { name: "Speech runtime" })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole("listbox")).not.toBeInTheDocument());
+  });
+
+  it("preselects the preferred language model but downloads only after explicit license acceptance", async () => {
+    speechApi.downloadSpeechModel.mockResolvedValue(undefined);
+    const Harness = () => {
+      const [settings, setSettings] = useState(DEFAULT_DASHBOARD_SETTINGS);
+      return <AIModelCatalogPanel state={{
+        editableSettings: settings,
+        selectedProject: null,
+        updateEditableSettings: (recipe: (current: typeof settings) => typeof settings) => setSettings((current) => recipe(current)),
+      } as any} />;
+    };
+    render(<Harness />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Configure speech" }));
+    await userEvent.click(screen.getByRole("button", { name: "Text to speech language" }));
+    await userEvent.click(screen.getByRole("option", { name: "German (Germany)" }));
+
+    expect(screen.getAllByText("Piper German MLS Medium")).toHaveLength(2);
+    expect(screen.getAllByText("Download required").length).toBeGreaterThan(0);
+    expect(screen.getByText("Selected")).toBeInTheDocument();
+    expect(screen.getByText("Output off")).toBeInTheDocument();
+    expect(screen.getByText(/Nothing downloads until you approve/i)).toBeInTheDocument();
+    expect(speechApi.downloadSpeechModel).not.toHaveBeenCalled();
+
+    const downloadName = "Download recommended Piper German MLS Medium for German (Germany)";
+    await userEvent.click(screen.getByRole("button", { name: downloadName }));
+    expect(screen.getByRole("dialog", { name: "Speech runtime", hidden: true })).toHaveAttribute("inert");
+    expect(speechApi.downloadSpeechModel).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(speechApi.downloadSpeechModel).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: downloadName }));
+    await userEvent.click(screen.getByRole("button", { name: "Accept & Download" }));
+    await waitFor(() => expect(speechApi.downloadSpeechModel).toHaveBeenCalledWith("piper-de-de-mls-medium", "german-license"));
   });
 });

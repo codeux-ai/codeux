@@ -90,12 +90,12 @@ describe("SpeechModelManager", () => {
     const synthesisModels = Object.values(SPEECH_MODEL_CATALOG).filter((model) => model.kind === "synthesis");
 
     for (const model of synthesisModels) {
-      expect(model.license.name).toContain("GPL-3.0-or-later");
+      expect(model.license.name).toContain("GPL-3.0");
       expect(model.license.notice).toContain("eSpeak NG");
-      expect(model.files).toContainEqual(expect.objectContaining({
-        localName: "licenses/espeak-ng-GPL-3.0-or-later.txt",
-        sha256: "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
-      }));
+      expect(model.files.some((artifact) => (
+        artifact.localName.startsWith("licenses/espeak-ng-GPL-3.0")
+        && artifact.sha256 === "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+      ))).toBe(true);
     }
   });
 
@@ -110,6 +110,80 @@ describe("SpeechModelManager", () => {
       downloadUrl: "https://huggingface.co/hexgrad/Kokoro-82M/raw/f3ff3571791e39611d31c381e3a41a3af07b4987/README.md",
       sha256: "91dcabced89db6f109b8786642f50402d3ee87450e8189589b6f85520e7f4d78",
     }));
+  });
+
+  it("catalogs the preferred German Piper voice with immutable, commercially usable provenance", () => {
+    const german = SPEECH_MODEL_CATALOG["piper-de-de-mls-medium"]!;
+
+    expect(german).toMatchObject({
+      kind: "synthesis",
+      adapter: "piper",
+      revision: "e21c7de8d4eab79b902f0d61e662b3f21664b8d2",
+      languages: [{ code: "de-DE", label: "German (Germany)" }],
+      recommendedForLanguages: ["de-DE"],
+      defaultVoice: "mls-de-default",
+    });
+    expect(german.sourceUrl).toContain(german.revision);
+    expect(german.files.every((artifact) => artifact.sha256?.match(/^[a-f0-9]{64}$/))).toBe(true);
+    expect(german.license.name).toContain("CC-BY-4.0");
+    expect(german.license.commercialUseAllowed).toBe(true);
+    expect(german.license.notice).toContain("trained from scratch");
+    expect(german.license.notice).toContain("Multilingual LibriSpeech");
+    expect(german.license.notice).toContain("Vineel Pratap");
+    expect(german.license.notice).toContain("https://www.openslr.org/94/");
+    expect(german.license.notice).toContain("ea36b43595facf07f1c5dc487b9f0de3340c1b5e");
+    expect(german.license.notice).toContain("b723b62cb78f7e861a1bb4408b00d49db84afeac");
+    expect(german.voices).toContainEqual({
+      id: "mls-de-default",
+      label: "MLS German",
+      language: "German (Germany)",
+      languageCode: "de-DE",
+      speakerId: 0,
+    });
+    expect(german.files).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        localName: "model.onnx",
+        sha256: "69cd1d2aa5a35839a518966fcc4924b5f93e5f8c948ed0752b1a616ad53f65bf",
+      }),
+      expect.objectContaining({
+        localName: "config.json",
+        sha256: "b0af1c89ddfdc72d32e015729b0e89b99eec13c2c8caa1db7488d98e9e570b40",
+      }),
+      expect.objectContaining({
+        localName: "licenses/MODEL_CARD.txt",
+        sha256: "ca1bf03a3c287fb6968acfa010e1917f85f0aa59db0f371efc3a2857f4035ffd",
+      }),
+      expect.objectContaining({
+        localName: "licenses/CC-BY-4.0.txt",
+        sha256: "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
+      }),
+      expect.objectContaining({
+        localName: "runtime/espeak-ng.mjs",
+        sha256: "3502d997af2640e54518a06845776c8507bfeebd8ff75f80176370e35de9896b",
+      }),
+      expect.objectContaining({
+        localName: "runtime/espeak-ng.data",
+        sha256: "f7f8eff5685c709db9dae81e88a0e0556867d60514f7308ae99e0579369397b5",
+      }),
+      expect.objectContaining({
+        localName: "licenses/ESPEAK_EMSCRIPTEN_PACKAGE.json",
+        sha256: "1395da6974a7f8faa3a46b67ac62088e248a051cbed5c6da10ef1b1d2385dc67",
+      }),
+    ]));
+    expect(getSpeechModelPaths(german.id, "/tmp/codeux-german-integrity")).toMatchObject({
+      phonemizerSha256: "3502d997af2640e54518a06845776c8507bfeebd8ff75f80176370e35de9896b",
+      phonemizerDataSha256: "f7f8eff5685c709db9dae81e88a0e0556867d60514f7308ae99e0579369397b5",
+    });
+  });
+
+  it("publishes language codes and preferred models for the simple synthesis picker", () => {
+    const kokoro = SPEECH_MODEL_CATALOG["kokoro-82m-v1.0-q8"]!;
+    const cori = SPEECH_MODEL_CATALOG["piper-en-gb-cori-medium"]!;
+
+    expect(kokoro.recommendedForLanguages).toEqual(["en-US"]);
+    expect(kokoro.voices.find((voice) => voice.id === "af_heart")?.languageCode).toBe("en-US");
+    expect(cori.recommendedForLanguages).toEqual(["en-GB"]);
+    expect(cori.voices[0]?.languageCode).toBe("en-GB");
   });
 
   it("catalogs immutable multilingual Whisper bundles and their selectable languages", () => {

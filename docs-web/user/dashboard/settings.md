@@ -32,7 +32,7 @@ The desktop rail and mobile category drawer include these Expert-mode categories
 | --- | --- |
 | **General** | Scope context, experience mode, automation posture, runtime logging, Docker runtime, restart behavior, onboarding, and System legal actions. |
 | **Appearance** | Theme, navigation mode, motion preference, background, and desktop zoom. |
-| **AI Models** | Downloadable embedding/STT/TTS catalogs, local and API speech settings, provider anchors, routing, model choices, thinking mode, weighting, and pricing. |
+| **AI Models** | Language-first local speech setup, downloadable embedding/STT/TTS catalogs, API speech settings, provider anchors, routing, model choices, thinking mode, weighting, and pricing. |
 | **Sprint & Git** | Git flow, PR behavior, merge gates, QA, guardrails, branch naming, and execution runtime controls. |
 | **Browser Preview** | Preview runtime, in-app browser visibility, container limits, port allocation, and startup scripts. |
 | **Techstacks** | System catalog management, protected built-in stack, project stack assignment, and web/desktop application kind. |
@@ -44,6 +44,12 @@ The desktop rail and mobile category drawer include these Expert-mode categories
 | **Danger Zone** | Project override reset, project deletion, memory clearing, and database reset. |
 
 Each category opens one or more **content panels** with grouped fields. Inputs are typed (text, number with min/max, toggle, multi-select) and validate inline.
+
+### Language-first speech output
+
+Open **AI Models -> Configure speech** and choose the output language first. Code UX preselects the catalog's preferred compatible local model and a matching voice. The recommendation keeps **Selected**, **Installed / Download required**, and **Output enabled / off** visible as separate states; the normal **Save Changes** action still controls when the draft becomes active.
+
+No model downloads automatically. **Download recommended** opens the named model's license and attribution confirmation, and only **Accept & Download** starts the transfer. **Compare compatible models** opens Speech output filtered to the chosen language, with the preferred model first and alternatives still available.
 
 ## General legal actions
 

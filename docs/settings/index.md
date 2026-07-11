@@ -6,6 +6,12 @@ Use this section when you need more detail than the inline Settings-page help po
 
 On desktop, choose an area from the persistent category rail. On smaller screens, the sticky command bar shows the current category as one compact button; opening it reveals the same Smart Find-filtered categories and match previews in a keyboard-accessible drawer without pushing the active settings panel down the page.
 
+## Language-First Speech Setup
+
+**Settings -> AI Models -> Configure speech** keeps speech output intentionally simple: choose the output language first, and Code UX preselects the catalog's preferred compatible local model and a matching voice. The recommendation clearly separates **Selected**, **Installed / Download required**, and **Output enabled / off** states so a saved choice never implies that its files are already present.
+
+Downloads are never automatic. **Download recommended** names the model and language, opens the model's license and attribution confirmation, and starts the download only after **Accept & Download**. **Compare compatible models** opens the speech-output catalog already filtered to the chosen language; recommendation badges and ordering keep the preferred choice visible without hiding alternatives.
+
 ## How Settings Scope Works
 
 | Scope | Use it for | Watch for |

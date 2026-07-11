@@ -23,11 +23,15 @@ export interface SpeechModelPaths {
   labelsPath: string | null;
   configPath: string | null;
   phonemizerPath: string | null;
+  phonemizerSha256: string | null;
+  phonemizerDataPath: string | null;
+  phonemizerDataSha256: string | null;
 }
 
 const hf = (repository: string): string => `https://huggingface.co/${repository}`;
 const file = (sourcePath: string, localName = sourcePath, options: Pick<SpeechModelFile, "downloadUrl" | "sha256"> = {}): SpeechModelFile => ({ sourcePath, localName, ...options });
 const mit = (id: string, url: string, notice: string) => ({ id, name: "MIT", url, commercialUseAllowed: true, notice });
+const PIPER_VOICES_REVISION = "e21c7de8d4eab79b902f0d61e662b3f21664b8d2";
 const PHONEMIZER_FILES: SpeechModelFile[] = [
   file("runtime/phonemizer.cjs", "runtime/phonemizer.cjs", {
     downloadUrl: "https://cdn.jsdelivr.net/npm/phonemizer@1.2.1/dist/phonemizer.cjs",
@@ -40,6 +44,28 @@ const PHONEMIZER_FILES: SpeechModelFile[] = [
   file("licenses/espeak-ng-GPL-3.0-or-later.txt", "licenses/espeak-ng-GPL-3.0-or-later.txt", {
     downloadUrl: "https://raw.githubusercontent.com/espeak-ng/espeak-ng/1.52.0/COPYING",
     sha256: "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+  }),
+];
+const MULTILINGUAL_ESPEAK_FILES: SpeechModelFile[] = [
+  file("runtime/espeak-ng.mjs", "runtime/espeak-ng.mjs", {
+    downloadUrl: "https://cdn.jsdelivr.net/npm/@echogarden/espeak-ng-emscripten@0.3.5/espeak-ng.js",
+    sha256: "3502d997af2640e54518a06845776c8507bfeebd8ff75f80176370e35de9896b",
+  }),
+  file("runtime/espeak-ng.data", "runtime/espeak-ng.data", {
+    downloadUrl: "https://cdn.jsdelivr.net/npm/@echogarden/espeak-ng-emscripten@0.3.5/espeak-ng.data",
+    sha256: "f7f8eff5685c709db9dae81e88a0e0556867d60514f7308ae99e0579369397b5",
+  }),
+  file("licenses/espeak-ng-GPL-3.0.txt", "licenses/espeak-ng-GPL-3.0.txt", {
+    downloadUrl: "https://cdn.jsdelivr.net/npm/@echogarden/espeak-ng-emscripten@0.3.5/COPYING",
+    sha256: "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+  }),
+  file("licenses/ESPEAK_EMSCRIPTEN_README.md", "licenses/ESPEAK_EMSCRIPTEN_README.md", {
+    downloadUrl: "https://cdn.jsdelivr.net/npm/@echogarden/espeak-ng-emscripten@0.3.5/README.md",
+    sha256: "8b1a524a57d2a44459fd322c3bcdaa998dc839a71b4b136ce0d5676a5d5db2da",
+  }),
+  file("licenses/ESPEAK_EMSCRIPTEN_PACKAGE.json", "licenses/ESPEAK_EMSCRIPTEN_PACKAGE.json", {
+    downloadUrl: "https://cdn.jsdelivr.net/npm/@echogarden/espeak-ng-emscripten@0.3.5/package.json",
+    sha256: "1395da6974a7f8faa3a46b67ac62088e248a051cbed5c6da10ef1b1d2385dc67",
   }),
 ];
 
@@ -221,13 +247,14 @@ export const SPEECH_MODEL_CATALOG: Record<string, SpeechModelCatalogEntry> = {
     supportsAutomaticLanguageDetection: false,
     sampleRateHz: 24000,
     voices: [
-      { id: "af_heart", label: "Heart", language: "English (US)" },
-      { id: "af_bella", label: "Bella", language: "English (US)" },
-      { id: "af_sky", label: "Sky", language: "English (US)" },
-      { id: "am_michael", label: "Michael", language: "English (US)" },
-      { id: "bf_emma", label: "Emma", language: "English (UK)" },
+      { id: "af_heart", label: "Heart", language: "English (US)", languageCode: "en-US" },
+      { id: "af_bella", label: "Bella", language: "English (US)", languageCode: "en-US" },
+      { id: "af_sky", label: "Sky", language: "English (US)", languageCode: "en-US" },
+      { id: "am_michael", label: "Michael", language: "English (US)", languageCode: "en-US" },
+      { id: "bf_emma", label: "Emma", language: "English (UK)", languageCode: "en-GB" },
     ],
     defaultVoice: "af_heart",
+    recommendedForLanguages: ["en-US"],
   },
   "piper-en-us-ljspeech-medium": {
     id: "piper-en-us-ljspeech-medium",
@@ -257,7 +284,7 @@ export const SPEECH_MODEL_CATALOG: Record<string, SpeechModelCatalogEntry> = {
     languages: [{ code: "en-US", label: "English (US)" }],
     supportsAutomaticLanguageDetection: false,
     sampleRateHz: 22050,
-    voices: [{ id: "ljspeech", label: "LJSpeech", language: "English (US)" }],
+    voices: [{ id: "ljspeech", label: "LJSpeech", language: "English (US)", languageCode: "en-US" }],
     defaultVoice: "ljspeech",
   },
   "piper-en-gb-cori-medium": {
@@ -288,8 +315,61 @@ export const SPEECH_MODEL_CATALOG: Record<string, SpeechModelCatalogEntry> = {
     languages: [{ code: "en-GB", label: "English (UK)" }],
     supportsAutomaticLanguageDetection: false,
     sampleRateHz: 22050,
-    voices: [{ id: "cori", label: "Cori", language: "English (UK)" }],
+    voices: [{ id: "cori", label: "Cori", language: "English (UK)", languageCode: "en-GB" }],
     defaultVoice: "cori",
+    recommendedForLanguages: ["en-GB"],
+  },
+  "piper-de-de-mls-medium": {
+    id: "piper-de-de-mls-medium",
+    kind: "synthesis",
+    adapter: "piper",
+    displayName: "Piper MLS German Medium",
+    description: "Clear German synthesis trained from scratch on the CC BY 4.0 Multilingual LibriSpeech corpus.",
+    repository: "rhasspy/piper-voices",
+    revision: PIPER_VOICES_REVISION,
+    sourceUrl: `${hf("rhasspy/piper-voices")}/tree/${PIPER_VOICES_REVISION}/de/de_DE/mls/medium`,
+    license: {
+      id: "piper-mls-de-mit-cc-by-4.0-espeak-emscripten-gpl3-v1",
+      name: "MIT + CC-BY-4.0 + GPL-3.0-only",
+      url: `${hf("rhasspy/piper-voices")}/blob/${PIPER_VOICES_REVISION}/de/de_DE/mls/medium/MODEL_CARD`,
+      commercialUseAllowed: true,
+      notice: "The Piper Voices repository is MIT-licensed. This German checkpoint was trained from scratch on Multilingual LibriSpeech by Vineel Pratap, Qiantong Xu, Anuroop Sriram, Gabriel Synnaeve, and Ronan Collobert (OpenSLR SLR94, https://www.openslr.org/94/), licensed CC BY 4.0. The opt-in @echogarden eSpeak NG Emscripten 0.3.5 runtime is GPL-3.0-only; its immutable package source is https://github.com/echogarden-project/espeak-ng-emscripten/tree/ea36b43595facf07f1c5dc487b9f0de3340c1b5e and its eSpeak NG fork source is https://github.com/echogarden-project/espeak-ng/tree/b723b62cb78f7e861a1bb4408b00d49db84afeac. Preserve attribution and review GPL source and redistribution obligations before redistributing the downloaded bundle.",
+    },
+    files: [
+      file("de/de_DE/mls/medium/de_DE-mls-medium.onnx", "model.onnx", {
+        sha256: "69cd1d2aa5a35839a518966fcc4924b5f93e5f8c948ed0752b1a616ad53f65bf",
+      }),
+      file("de/de_DE/mls/medium/de_DE-mls-medium.onnx.json", "config.json", {
+        sha256: "b0af1c89ddfdc72d32e015729b0e89b99eec13c2c8caa1db7488d98e9e570b40",
+      }),
+      file("de/de_DE/mls/medium/MODEL_CARD", "licenses/MODEL_CARD.txt", {
+        sha256: "ca1bf03a3c287fb6968acfa010e1917f85f0aa59db0f371efc3a2857f4035ffd",
+      }),
+      file("README.md", "licenses/PIPER_VOICES_MODEL_CARD.md", {
+        sha256: "33e93643fce5180886300f9f0070eeeab8af148efb8e84361f8904def80fd9fb",
+      }),
+      file("licenses/CC-BY-4.0.txt", "licenses/CC-BY-4.0.txt", {
+        downloadUrl: "https://creativecommons.org/licenses/by/4.0/legalcode.txt",
+        sha256: "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
+      }),
+      ...MULTILINGUAL_ESPEAK_FILES,
+    ],
+    modelFile: "model.onnx",
+    configFile: "config.json",
+    sizeBytes: 101_882_821,
+    language: "German (Germany)",
+    languages: [{ code: "de-DE", label: "German (Germany)" }],
+    supportsAutomaticLanguageDetection: false,
+    sampleRateHz: 22050,
+    voices: [{
+      id: "mls-de-default",
+      label: "MLS German",
+      language: "German (Germany)",
+      languageCode: "de-DE",
+      speakerId: 0,
+    }],
+    defaultVoice: "mls-de-default",
+    recommendedForLanguages: ["de-DE"],
   },
 };
 
@@ -311,12 +391,19 @@ export function getSpeechModelCacheRoot(dataDir?: string): string {
 export function getSpeechModelPaths(modelId: string, dataDir?: string): SpeechModelPaths {
   const entry = resolveSpeechModelEntry(modelId);
   const modelDir = path.join(getSpeechModelCacheRoot(dataDir), sanitizeModelIdForPath(entry.id));
+  const phonemizerFile = entry.files.find((item) => (
+    item.localName === "runtime/phonemizer.cjs" || item.localName === "runtime/espeak-ng.mjs"
+  ));
+  const phonemizerDataFile = entry.files.find((item) => item.localName === "runtime/espeak-ng.data");
   return {
     modelDir,
     modelPath: path.join(modelDir, entry.modelFile),
     labelsPath: entry.labelsFile ? path.join(modelDir, entry.labelsFile) : null,
     configPath: entry.configFile ? path.join(modelDir, entry.configFile) : null,
-    phonemizerPath: entry.files.some((item) => item.localName === "runtime/phonemizer.cjs") ? path.join(modelDir, "runtime/phonemizer.cjs") : null,
+    phonemizerPath: phonemizerFile ? path.join(modelDir, phonemizerFile.localName) : null,
+    phonemizerSha256: phonemizerFile?.sha256 ?? null,
+    phonemizerDataPath: phonemizerDataFile ? path.join(modelDir, phonemizerDataFile.localName) : null,
+    phonemizerDataSha256: phonemizerDataFile?.sha256 ?? null,
   };
 }
 
