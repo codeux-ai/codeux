@@ -46,7 +46,7 @@ Skill records are project-bound at every access point. `SkillRepository` validat
 
 Skill markdown is kept outside project worktrees. Each storage is materialized as an internal local-only Git repository under `~/.code-ux/skill-storages/<project-id>/<storage-id>/repo`, with `storage.json` plus one `skills/<skill-id>/SKILL.md` document per skill. Every skill mutation synchronizes and commits that repository, yielding an immutable revision for runtime provenance. Git commands use the shared `alpine/git` helper-container boundary, so this feature never requires host Git. SQLite remains the query projection during the migration: frontmatter fields (`title`, `description`, `tags`, `appliesTo`, `version`) and the markdown body are indexed in `skills`, while `skill_embeddings` stores model id, dimension, chunk index, content hash, and vector blob.
 
-Persistent skill storage remains disabled by default. At runtime, Code UX resolves persistent skill storage only when all of these are true:
+Persistent skill storage remains disabled by default for ordinary presets. The built-in Project Manager is the intentional exception: agent synchronization idempotently creates or reuses one project-owned `Project Manager Skills` storage, attaches it, and enables retrieval when the preset has no existing attachments. Once attached, a later user opt-out is preserved. At runtime, Code UX resolves persistent skill storage only when all of these are true:
 
 - the invoked provider call is associated with an agent preset id
 - that agent has `persistentSkillStorage.enabled === true`
