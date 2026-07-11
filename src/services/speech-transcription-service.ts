@@ -1,4 +1,3 @@
-import * as fs from "fs/promises";
 import type { DashboardSettings } from "../contracts/app-types.js";
 import type {
   SpeechSettings,
@@ -18,7 +17,6 @@ import {
   validateSpeechAudio,
 } from "./speech-audio-utils.js";
 import {
-  getSpeechModelPaths,
   isSpeechModelAvailable,
   resolveSpeechModelEntry,
   type SpeechModelCatalogEntry,
@@ -137,33 +135,6 @@ async function parseExternalError(response: Response, apiKey: string): Promise<s
   }
 }
 
-async function readLabels(labelsPath: string | null): Promise<string[] | null> {
-  if (!labelsPath) {
-    return null;
-  }
-  try {
-    const raw = await fs.readFile(labelsPath, "utf8");
-    const parsed = JSON.parse(raw) as unknown;
-    if (Array.isArray(parsed) && parsed.every((entry) => typeof entry === "string")) {
-      return parsed;
-    }
-    if (parsed && typeof parsed === "object") {
-      const vocab = (parsed as { model?: { vocab?: Record<string, unknown> }; vocab?: Record<string, unknown> }).model?.vocab
-        ?? (parsed as { vocab?: Record<string, unknown> }).vocab;
-      if (vocab && typeof vocab === "object") {
-        const labels: string[] = [];
-        for (const [token, id] of Object.entries(vocab)) {
-          if (typeof id === "number" && Number.isInteger(id) && id >= 0) labels[id] = token;
-        }
-        return labels;
-      }
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
 function resampleLinear(samples: Float32Array, sourceRate: number, targetRate: number): Float32Array {
   if (sourceRate === targetRate || samples.length === 0) return samples;
   const outputLength = Math.max(1, Math.round(samples.length * targetRate / sourceRate));
@@ -179,49 +150,8 @@ function resampleLinear(samples: Float32Array, sourceRate: number, targetRate: n
   return output;
 }
 
-export function normalizeWaveformForCtc(samples: Float32Array): Float32Array {
-  if (samples.length === 0) return samples;
-  let sum = 0;
-  for (const sample of samples) sum += sample;
-  const mean = sum / samples.length;
-  let variance = 0;
-  for (const sample of samples) variance += (sample - mean) ** 2;
-  const scale = Math.sqrt(variance / samples.length + 1e-7);
-  return Float32Array.from(samples, (sample) => (sample - mean) / scale);
-}
-
-export function formatLocalTranscript(text: string, adapter: SpeechModelCatalogEntry["adapter"]): string {
-  const normalized = text.replace(/\s+/g, " ").trim();
-  return adapter === "waveform_ctc" ? normalized.toLocaleLowerCase("en-US") : normalized;
-}
-
-function decodeCtcLogits(data: Iterable<number | bigint>, dims: readonly number[], labels: string[]): string {
-  const vocabularySize = dims.at(-1) ?? labels.length;
-  if (!vocabularySize || vocabularySize <= 1) throw new Error("CTC model returned invalid logits.");
-  const values = Array.from(data, Number);
-  const frames = Math.floor(values.length / vocabularySize);
-  const tokens: number[] = [];
-  let previous = -1;
-  for (let frame = 0; frame < frames; frame += 1) {
-    let bestId = 0;
-    let bestValue = Number.NEGATIVE_INFINITY;
-    for (let id = 0; id < vocabularySize; id += 1) {
-      const value = values[frame * vocabularySize + id] ?? Number.NEGATIVE_INFINITY;
-      if (value > bestValue) {
-        bestValue = value;
-        bestId = id;
-      }
-    }
-    if (bestId !== 0 && bestId !== previous) tokens.push(bestId);
-    previous = bestId;
-  }
-  return tokens
-    .map((id) => labels[id] ?? "")
-    .filter((token) => !token.startsWith("<"))
-    .join("")
-    .replace(/\|/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+export function formatLocalTranscript(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
 }
 
 export class DefaultLocalOnnxSpeechRuntime implements LocalOnnxSpeechRuntime {
@@ -247,67 +177,21 @@ export class DefaultLocalOnnxSpeechRuntime implements LocalOnnxSpeechRuntime {
       throw new Error("ONNX Runtime is unavailable.");
     }
 
+    if (args.model.adapter !== "whisper") {
+      throw new Error(`Model "${args.model.id}" is not a local speech-to-text model.`);
+    }
     const resampled = resampleLinear(args.audio, args.sampleRate, args.model.sampleRateHz);
-    if (args.model.adapter === "whisper") {
-      return {
-        text: await transcribeWhisperOnnx({
-          ort,
-          audio: resampled,
-          model: args.model,
-          dataDir: args.dataDir ?? this.dataDir,
-          durationSeconds: args.durationSeconds,
-        }),
-        language: args.language ?? "en",
+    return {
+      text: await transcribeWhisperOnnx({
+        ort,
+        audio: resampled,
+        model: args.model,
+        dataDir: args.dataDir ?? this.dataDir,
         durationSeconds: args.durationSeconds,
-      };
-    }
-    const paths = getSpeechModelPaths(args.model.id, args.dataDir ?? this.dataDir);
-    const session = await ort.InferenceSession.create(paths.modelPath);
-    try {
-      const inputName = session.inputNames[0];
-      if (!inputName) {
-        throw new Error("Local ONNX model does not declare an input tensor.");
-      }
-      const samples = normalizeWaveformForCtc(resampled);
-      const outputs = await session.run({
-        [inputName]: new ort.Tensor("float32", samples, [1, samples.length]),
-      });
-      const output = Object.values(outputs)[0];
-      if (!output) {
-        throw new Error("Local ONNX model did not return an output tensor.");
-      }
-
-      if (Array.isArray(output.data) && output.data.every((entry) => typeof entry === "string")) {
-        return {
-          text: output.data.join(" ").trim(),
-          language: args.language,
-          durationSeconds: args.durationSeconds,
-        };
-      }
-
-      const labels = await readLabels(paths.labelsPath);
-      if (labels) {
-        if (output.dims.length >= 3) {
-          return {
-            text: decodeCtcLogits(output.data as Iterable<number | bigint>, output.dims, labels),
-            language: args.language,
-            durationSeconds: args.durationSeconds,
-          };
-        }
-        const tokenIds = Array.from(output.data as Iterable<number | bigint>)
-          .map((value) => Number(value))
-          .filter((value) => Number.isInteger(value) && value >= 0 && value < labels.length);
-        return {
-          text: tokenIds.map((tokenId) => labels[tokenId]).join("").trim(),
-          language: args.language,
-          durationSeconds: args.durationSeconds,
-        };
-      }
-
-      throw new Error("Local ONNX model did not return decodable text output.");
-    } finally {
-      await session.release();
-    }
+      }),
+      language: args.language ?? "en",
+      durationSeconds: args.durationSeconds,
+    };
   }
 }
 
@@ -370,7 +254,15 @@ export class SpeechTranscriptionService {
     settings: SpeechSettings,
     durationSeconds: number | null,
   ): Promise<SpeechTranscriptionResult> {
-    const model = resolveSpeechModelEntry(settings.localModelId);
+    let model: ReturnType<typeof resolveSpeechModelEntry>;
+    try {
+      model = resolveSpeechModelEntry(settings.localModelId);
+    } catch {
+      return errorResult("client_error", `Unknown local speech model "${settings.localModelId}".`, {
+        provider: "local_onnx",
+        retryable: false,
+      });
+    }
     if (!await this.localRuntime.isModelAvailable(model.id)) {
       return errorResult(
         "missing_local_model",
@@ -393,7 +285,7 @@ export class SpeechTranscriptionService {
       });
       return {
         ok: true,
-        text: formatLocalTranscript(result.text, model.adapter),
+        text: formatLocalTranscript(result.text),
         provider: "local_onnx",
         model: model.id,
         language: result.language,

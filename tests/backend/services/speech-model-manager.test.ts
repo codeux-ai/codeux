@@ -25,19 +25,22 @@ describe("SpeechModelManager", () => {
     vi.stubGlobal("fetch", fetchImpl);
     const manager = new SpeechModelManager(logger as any, dataDir);
 
-    const modelId = "Xenova/wav2vec2-base-960h";
+    const modelId = "onnx-community/whisper-base.en";
     await manager.downloadModel(modelId, SPEECH_MODEL_CATALOG[modelId]!.license.id);
 
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(5);
     expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
-      "https://huggingface.co/Xenova/wav2vec2-base-960h/resolve/main/onnx/model_quantized.onnx",
-      "https://huggingface.co/Xenova/wav2vec2-base-960h/resolve/main/tokenizer.json",
+      "https://huggingface.co/onnx-community/whisper-base.en/resolve/main/onnx/encoder_model_int8.onnx",
+      "https://huggingface.co/onnx-community/whisper-base.en/resolve/main/onnx/decoder_model_merged_int8.onnx",
+      "https://huggingface.co/onnx-community/whisper-base.en/resolve/main/tokenizer.json",
+      "https://huggingface.co/onnx-community/whisper-base.en/resolve/main/preprocessor_config.json",
+      "https://huggingface.co/onnx-community/whisper-base.en/resolve/main/generation_config.json",
     ]);
     expect((await manager.listModels()).find((model) => model.id === modelId)?.downloaded).toBe(true);
     expect(await fs.readFile(getSpeechModelPaths(modelId, dataDir).modelPath)).toEqual(Buffer.from([1, 2, 3]));
 
     await manager.downloadModel(modelId, SPEECH_MODEL_CATALOG[modelId]!.license.id);
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(5);
 
     await manager.deleteModel(modelId);
     expect((await manager.listModels()).find((model) => model.id === modelId)?.downloaded).toBe(false);
@@ -45,7 +48,7 @@ describe("SpeechModelManager", () => {
 
   it("rejects downloads until the current catalog license is accepted", async () => {
     const manager = new SpeechModelManager(logger as any, "/tmp/codeux-license-test");
-    await expect(manager.downloadModel("Xenova/wav2vec2-base-960h")).rejects.toThrow("Accept the MIT terms");
+    await expect(manager.downloadModel("onnx-community/whisper-tiny.en")).rejects.toThrow("Accept the MIT terms");
   });
 
   it("rejects an executable runtime that fails its pinned integrity check", async () => {

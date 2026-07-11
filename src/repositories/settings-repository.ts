@@ -20,6 +20,12 @@ import {
   toSprintSettingsOverride,
 } from "../services/settings-resolution-service.js";
 import { DEFAULT_VIRTUAL_WORKER_MODELS } from "./settings-defaults.js";
+import {
+  DEFAULT_LOCAL_TRANSCRIPTION_MODEL_ID,
+  LOCAL_TRANSCRIPTION_MODEL_IDS,
+} from "../contracts/speech-types.js";
+
+const LOCAL_TRANSCRIPTION_MODEL_ID_SET = new Set<string>(LOCAL_TRANSCRIPTION_MODEL_IDS);
 
 const LEGACY_DEFAULT_GUARDRAIL_SHAPE = {
   enabled: true,
@@ -76,6 +82,16 @@ function migrateLegacyDefaultAttemptCaps(value: unknown): boolean {
   return true;
 }
 
+function migrateRemovedLocalTranscriptionModel(value: unknown, systemScope: boolean): boolean {
+  if (!isRecord(value)) return false;
+  const settings = systemScope && isRecord(value.defaults) ? value.defaults : value;
+  if (!isRecord(settings) || !isRecord(settings.speech)) return false;
+  const modelId = settings.speech.localModelId;
+  if (typeof modelId !== "string" || LOCAL_TRANSCRIPTION_MODEL_ID_SET.has(modelId.trim())) return false;
+  settings.speech.localModelId = DEFAULT_LOCAL_TRANSCRIPTION_MODEL_ID;
+  return true;
+}
+
 export class SettingsRepository {
   private static systemSettingsCache: SystemSettings | null = null;
   private static hasMigratedLegacySettings = false;
@@ -109,7 +125,9 @@ export class SettingsRepository {
 
     try {
       const parsed = JSON.parse(payload) as unknown;
-      if (migrateLegacyDefaultAttemptCaps(parsed)) {
+      const migratedAttemptCaps = migrateLegacyDefaultAttemptCaps(parsed);
+      const migratedSpeechModel = migrateRemovedLocalTranscriptionModel(parsed, true);
+      if (migratedAttemptCaps || migratedSpeechModel) {
         this.storage.writeSystemPayload(JSON.stringify(parsed));
         // Other repository/scoped-resolver instances may already have resolved
         // the historical defaults during startup. Advance the shared revision
@@ -144,7 +162,12 @@ export class SettingsRepository {
     }
 
     try {
-      return JSON.parse(payload) as ProjectSettingsOverride;
+      const parsed = JSON.parse(payload) as unknown;
+      if (migrateRemovedLocalTranscriptionModel(parsed, false)) {
+        this.storage.writeProjectPayload(projectId, JSON.stringify(parsed));
+        this.invalidateResolutionCache();
+      }
+      return parsed as ProjectSettingsOverride;
     } catch {
       return {};
     }
@@ -171,7 +194,12 @@ export class SettingsRepository {
 
     for (const row of rows) {
       try {
-        result.set(row.project_id, JSON.parse(row.payload) as ProjectSettingsOverride);
+        const parsed = JSON.parse(row.payload) as unknown;
+        if (migrateRemovedLocalTranscriptionModel(parsed, false)) {
+          this.storage.writeProjectPayload(row.project_id, JSON.stringify(parsed));
+          this.invalidateResolutionCache();
+        }
+        result.set(row.project_id, parsed as ProjectSettingsOverride);
       } catch {
         // Ignore
       }
@@ -212,7 +240,12 @@ export class SettingsRepository {
     }
 
     try {
-      return JSON.parse(payload) as SprintSettingsOverride;
+      const parsed = JSON.parse(payload) as unknown;
+      if (migrateRemovedLocalTranscriptionModel(parsed, false)) {
+        this.storage.writeSprintPayload(sprintId, JSON.stringify(parsed));
+        this.invalidateResolutionCache();
+      }
+      return parsed as SprintSettingsOverride;
     } catch {
       return {};
     }

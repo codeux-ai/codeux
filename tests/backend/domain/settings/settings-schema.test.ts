@@ -613,6 +613,57 @@ describe("validateSettingsPayload", () => {
     expect(sanitized.synthesis.localModelId).toBe("piper-en-us-ljspeech-medium");
     expect(sanitized.synthesis.voice).toBe("ljspeech");
   });
+
+  it("migrates removed or unknown local transcription models to Whisper Base", () => {
+    const sanitized = sanitizeSpeech({
+      speech: {
+        ...DEFAULT_DASHBOARD_SETTINGS.speech,
+        localModelId: "removed/local-stt-model",
+      },
+    });
+
+    expect(sanitized.localModelId).toBe("onnx-community/whisper-base.en");
+  });
+
+  it("preserves external transcription settings while migrating a removed local model", () => {
+    const removedModelId = ["Xenova", ["wav2", "vec2-base-960h"].join("")].join("/");
+    const sanitized = sanitizeSpeech({
+      speech: {
+        ...DEFAULT_DASHBOARD_SETTINGS.speech,
+        providerMode: "external_api",
+        localModelId: removedModelId,
+        externalTranscription: {
+          baseUrl: " https://speech.example.test/v1/audio/transcriptions ",
+          apiKey: " secret-key ",
+          model: " multilingual-model ",
+          language: " de ",
+        },
+      },
+    });
+
+    expect(sanitized).toMatchObject({
+      providerMode: "external_api",
+      localModelId: "onnx-community/whisper-base.en",
+      externalTranscription: {
+        baseUrl: "https://speech.example.test/v1/audio/transcriptions",
+        apiKey: "secret-key",
+        model: "multilingual-model",
+        language: "de",
+      },
+    });
+  });
+
+  it.each([
+    "onnx-community/whisper-base.en",
+    "onnx-community/whisper-tiny.en",
+  ])("preserves supported local transcription model %s", (localModelId) => {
+    expect(sanitizeSpeech({
+      speech: {
+        ...DEFAULT_DASHBOARD_SETTINGS.speech,
+        localModelId,
+      },
+    }).localModelId).toBe(localModelId);
+  });
 });
 
 describe("maxParsingRetries validation", () => {

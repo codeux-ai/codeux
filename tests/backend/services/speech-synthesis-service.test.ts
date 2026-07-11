@@ -95,4 +95,22 @@ describe("SpeechSynthesisService", () => {
     }
     expect(fetchImpl).not.toHaveBeenCalled();
   });
+
+  it("returns a structured client error for an unknown local model", async () => {
+    const service = new SpeechSynthesisService({
+      resolveSpeechSettings: () => settings({ providerMode: "local_onnx", localModelId: "removed-tts-model" }),
+    });
+
+    const result = await service.synthesize({ text: "Keep this local" });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "client_error",
+        message: 'Unknown local TTS model "removed-tts-model".',
+        provider: "local_onnx",
+        retryable: false,
+      },
+    });
+  });
 });

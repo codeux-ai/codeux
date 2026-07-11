@@ -1,6 +1,9 @@
 import type { DashboardSettings } from "../../../contracts/app-types.js";
 import type { SpeechProviderMode, SpeechSettings } from "../../../contracts/speech-types.js";
-import { SPEECH_PROVIDER_MODES } from "../../../contracts/speech-types.js";
+import {
+  LOCAL_TRANSCRIPTION_MODEL_IDS,
+  SPEECH_PROVIDER_MODES,
+} from "../../../contracts/speech-types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../repositories/settings-defaults.js";
 import { readBoolean, readInteger, readString } from "../../../shared/config/value-readers.js";
 
@@ -8,6 +11,7 @@ export const MIN_SPEECH_AUDIO_SECONDS = 1;
 export const MAX_SPEECH_AUDIO_SECONDS = 600;
 
 const SPEECH_PROVIDER_MODE_SET = new Set<SpeechProviderMode>(SPEECH_PROVIDER_MODES);
+const LOCAL_TRANSCRIPTION_MODEL_ID_SET = new Set<string>(LOCAL_TRANSCRIPTION_MODEL_IDS);
 const LEGACY_TTS_MODELS: Record<string, { modelId: string; voice: string }> = {
   "piper-en-us-lessac-medium": { modelId: "piper-en-us-ljspeech-medium", voice: "ljspeech" },
   "piper-en-gb-alba-medium": { modelId: "piper-en-gb-cori-medium", voice: "cori" },
@@ -52,13 +56,16 @@ export const sanitizeSpeech = (
     : {};
   const providerMode = readSpeechProviderMode(speechInput.providerMode, defaults.providerMode);
   const requestedLocalModelId = readRequiredTrimmedString(speechInput.localModelId, defaults.localModelId);
+  const localModelId = LOCAL_TRANSCRIPTION_MODEL_ID_SET.has(requestedLocalModelId)
+    ? requestedLocalModelId
+    : defaults.localModelId;
   const requestedSynthesisModelId = readRequiredTrimmedString(synthesisInput.localModelId, defaults.synthesis.localModelId);
   const legacySynthesis = LEGACY_TTS_MODELS[requestedSynthesisModelId];
 
   return {
     enabled: readBoolean(speechInput.enabled, defaults.enabled),
     providerMode,
-    localModelId: requestedLocalModelId,
+    localModelId,
     maxAudioSeconds: Math.max(
       MIN_SPEECH_AUDIO_SECONDS,
       Math.min(MAX_SPEECH_AUDIO_SECONDS, readInteger(speechInput.maxAudioSeconds, defaults.maxAudioSeconds)),

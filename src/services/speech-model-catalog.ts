@@ -1,6 +1,10 @@
 import * as fs from "fs/promises";
 import * as path from "path";
-import type { SpeechModelCatalogItem, SpeechModelFile } from "../contracts/speech-types.js";
+import {
+  LOCAL_TRANSCRIPTION_MODEL_IDS,
+  type SpeechModelCatalogItem,
+  type SpeechModelFile,
+} from "../contracts/speech-types.js";
 import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 import { assertCatalogLicenseApproved } from "./model-license-policy.js";
 
@@ -34,8 +38,8 @@ const PHONEMIZER_FILES: SpeechModelFile[] = [
 ];
 
 export const SPEECH_MODEL_CATALOG: Record<string, SpeechModelCatalogEntry> = {
-  "onnx-community/whisper-base.en": {
-    id: "onnx-community/whisper-base.en",
+  [LOCAL_TRANSCRIPTION_MODEL_IDS[0]]: {
+    id: LOCAL_TRANSCRIPTION_MODEL_IDS[0],
     kind: "transcription",
     adapter: "whisper",
     displayName: "Whisper Base English ONNX",
@@ -58,8 +62,8 @@ export const SPEECH_MODEL_CATALOG: Record<string, SpeechModelCatalogEntry> = {
     voices: [],
     defaultVoice: null,
   },
-  "onnx-community/whisper-tiny.en": {
-    id: "onnx-community/whisper-tiny.en",
+  [LOCAL_TRANSCRIPTION_MODEL_IDS[1]]: {
+    id: LOCAL_TRANSCRIPTION_MODEL_IDS[1],
     kind: "transcription",
     adapter: "whisper",
     displayName: "Whisper Tiny English ONNX",
@@ -77,27 +81,6 @@ export const SPEECH_MODEL_CATALOG: Record<string, SpeechModelCatalogEntry> = {
     modelFile: "encoder_model.onnx",
     labelsFile: "tokenizer.json",
     sizeBytes: 44_000_000,
-    language: "English",
-    sampleRateHz: 16000,
-    voices: [],
-    defaultVoice: null,
-  },
-  "Xenova/wav2vec2-base-960h": {
-    id: "Xenova/wav2vec2-base-960h",
-    kind: "transcription",
-    adapter: "waveform_ctc",
-    displayName: "Wav2Vec2 Base English ONNX",
-    description: "Legacy lightweight English CTC transcription. Faster than Whisper, but less accurate for conversational microphone audio.",
-    repository: "Xenova/wav2vec2-base-960h",
-    sourceUrl: hf("Xenova/wav2vec2-base-960h"),
-    license: mit("fairseq-wav2vec2-mit-v1", "https://github.com/facebookresearch/fairseq/blob/main/LICENSE", "MIT-licensed wav2vec 2.0 model converted to ONNX."),
-    files: [
-      file("onnx/model_quantized.onnx", "model.onnx"),
-      file("tokenizer.json"),
-    ],
-    modelFile: "model.onnx",
-    labelsFile: "tokenizer.json",
-    sizeBytes: 95_500_000,
     language: "English",
     sampleRateHz: 16000,
     voices: [],
@@ -190,24 +173,9 @@ export function sanitizeModelIdForPath(modelId: string): string {
 }
 
 export function resolveSpeechModelEntry(modelId: string): SpeechModelCatalogEntry {
-  return SPEECH_MODEL_CATALOG[modelId] ?? {
-    id: modelId,
-    kind: "transcription",
-    adapter: "waveform_ctc",
-    displayName: modelId,
-    description: "Custom local ONNX speech model.",
-    repository: modelId,
-    sourceUrl: modelId.includes("/") ? hf(modelId) : "",
-    license: { id: "unverified", name: "Unverified", url: "https://huggingface.co/", commercialUseAllowed: false, notice: "Custom model terms have not been verified." },
-    files: [file("model.onnx")],
-    modelFile: "model.onnx",
-    labelsFile: "labels.json",
-    sizeBytes: 0,
-    language: "Unknown",
-    sampleRateHz: 16000,
-    voices: [],
-    defaultVoice: null,
-  };
+  const model = SPEECH_MODEL_CATALOG[modelId];
+  if (!model) throw new Error(`Unknown speech model: ${modelId}`);
+  return model;
 }
 
 export function getSpeechModelCacheRoot(dataDir?: string): string {

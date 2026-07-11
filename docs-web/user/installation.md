@@ -85,8 +85,8 @@ For the default model, the directory is:
 ~/.code-ux/models/speech/onnx-community--whisper-base.en/
 ```
 
-Install and activate Whisper Base English under Settings -> AI Models. Whisper Tiny is faster, while
-the legacy Wav2Vec2 Base model remains available for lower-latency transcription. Local is the default
+Install and activate Whisper Base English under Settings -> AI Models. Whisper Tiny is a faster,
+lower-footprint alternative. Local is the default
 speech provider mode. If the selected model is missing, the dashboard shows a setup error
 without sending audio elsewhere. To use an OpenAI-compatible transcription endpoint, select API in
 Settings -> AI Models and configure its base URL, API key, and model.
