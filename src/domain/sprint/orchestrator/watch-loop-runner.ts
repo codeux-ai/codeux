@@ -650,13 +650,13 @@ export class WatchLoopRunner {
               featureBranch: defaultFeatureBranch,
               defaultBranch,
               mergeStage: "main",
-              prNumber: mergeFeedback.prNumber,
-              prUrl: mergeFeedback.prUrl,
-              mergeStateStatus: mergeFeedback.mergeStateStatus,
               conflictingBranches: {
                 source: defaultFeatureBranch,
                 target: defaultBranch,
               },
+              prNumber: mergeFeedback.prNumber,
+              prUrl: mergeFeedback.prUrl,
+              mergeStateStatus: mergeFeedback.mergeStateStatus,
               sprintNumber: scopedExecutionContext.sprintNumber,
               sprintName: scopedExecutionContext.sprint.name,
               featureBranchTaskContexts: selectMergedTaskContexts(subtasks, { limit: 8 }),
@@ -712,6 +712,10 @@ export class WatchLoopRunner {
               featureBranch: defaultBranch,
               defaultBranch,
               mergeStage: "main",
+              conflictingBranches: {
+                source: defaultFeatureBranch,
+                target: defaultBranch,
+              },
               prNumber: mergeFeedback.prNumber,
               prUrl: mergeFeedback.prUrl,
               mergeStateStatus: mergeFeedback.mergeStateStatus,
@@ -1525,9 +1529,13 @@ function isMainMergeAttentionInScope(
     : null;
   const sourceBranch = typeof conflictingBranches?.source === "string"
     ? conflictingBranches.source
-    : typeof payload.featureBranch === "string"
-      ? payload.featureBranch
-      : null;
+    : item.attentionType === "ci_fix_required" && typeof payload.workerBranch === "string"
+      ? payload.workerBranch
+      : item.attentionType === "ci_fix_required" && typeof payload.branchName === "string"
+        ? payload.branchName
+        : typeof payload.featureBranch === "string"
+          ? payload.featureBranch
+          : null;
   const targetBranch = typeof conflictingBranches?.target === "string"
     ? conflictingBranches.target
     : typeof payload.defaultBranch === "string"

@@ -2262,10 +2262,11 @@ describe("WatchLoopRunner", () => {
     nowSpy.mockRestore();
   });
 
-  it("pauses instead of completing when main auto-merge is blocked by failed checks", async () => {
+  it("keeps the sprint alive when main-merge CI opens a worker fix", async () => {
     const deps = buildDeps();
     const cycleRunner = buildCycleRunner();
     const nowSpy = vi.spyOn(Date, "now");
+    const activeAttentionItems: any[] = [];
 
     nowSpy.mockReturnValueOnce(0).mockReturnValue(1000);
 
@@ -2273,6 +2274,20 @@ describe("WatchLoopRunner", () => {
       if (id === "watchHeader") return "HEADER";
       return "";
     });
+    deps.executionRepository.getSprintRun = vi.fn()
+      .mockReturnValueOnce({ status: "running" })
+      .mockReturnValue({ status: "paused" });
+    deps.projectAttentionService.openItems.mockImplementation((inputs: any[]) => {
+      const opened = inputs.map((input, index) => ({
+        ...input,
+        id: `opened-${index}`,
+        status: "open",
+        summaryMarkdown: input.summaryMarkdown,
+      }));
+      activeAttentionItems.push(...opened);
+      return opened;
+    });
+    deps.projectAttentionService.listActiveProjectItems.mockImplementation(() => activeAttentionItems);
 
     cycleRunner.run.mockResolvedValue({
       subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true, worker_branch: "worker/task-1" })],
@@ -2346,14 +2361,10 @@ describe("WatchLoopRunner", () => {
       sprintRunId: "run-1",
     });
 
-    expect(result).toContain("Sprint Paused");
+    expect(result).toContain("worker is resolving the main-branch merge blocker");
     expect(result).not.toContain("Sprint Execution Finished");
-    expect(deps.executionRepository.appendSprintRunEvent).not.toHaveBeenCalledWith(
-      "run-1",
-      "sprint_completed",
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
+    expect(deps.sprintRunLifecycleService.transition).not.toHaveBeenCalledWith(
+      expect.objectContaining({ status: "paused" }),
     );
     expect(deps.projectAttentionService.openItems).toHaveBeenCalledWith([
       expect.objectContaining({
@@ -2363,6 +2374,10 @@ describe("WatchLoopRunner", () => {
           failedJobLabels: ["CI/build"],
           failedLogSnippets: [expect.stringContaining("FAIL src/example.test.ts\nExpected: true\nReceived: false")],
           failedRuns: [expect.objectContaining({ id: 9001 })],
+          conflictingBranches: {
+            source: "feature/sprint104-implementation",
+            target: "main",
+          },
         }),
       }),
     ]);
@@ -3715,6 +3730,30 @@ describe("evaluateSprintRunState", () => {
     });
     expect(result.noMoreActionPossible).toBe(true);
     expect(result.waitingOnWorkerAttention).toBe(true);
+    expect(result.allFinished).toBe(false);
+  });
+
+  it("keeps a guardrail-exhausted QA handoff alive until the human resolves it", () => {
+    const task = buildMockSubtask({
+      status: "QA_REVIEW_FAILED",
+      sprint_id: "sprint-1",
+      is_merged: false,
+    });
+    const result = evaluateSprintRunState({
+      subtasks: [task],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+      activeProjectAttentionItems: [{
+        ownerType: "human",
+        attentionType: "human_escalation_required",
+        sprintId: "sprint-1",
+        sprintRunId: "run-1",
+      } as any],
+      sprintRunId: "run-1",
+    });
+
+    expect(result.noMoreActionPossible).toBe(true);
+    expect(result.waitingOnHumanAttention).toBe(true);
     expect(result.allFinished).toBe(false);
   });
 });

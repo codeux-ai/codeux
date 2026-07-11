@@ -11,6 +11,8 @@ The **Chat** page (`/chat`) is a thread-based conversation surface that lets you
   - **Invocations** — A historical log of server-created execution invocations, including provider-backed agent runs and MCP `CallTool` activity.
 - **Main panel** — The active thread (or invocation), rendered as a chat transcript with user, assistant, and tool messages. Markdown is rendered with `marked`, including code blocks.
 
+Markdown links use the dashboard's theme-aware signal colors across thread messages, invocation transcripts, truncated system messages, and 3D Chat. In dark mode they render in high-contrast mint with a brighter jade hover/focus state instead of a fixed dark blue; provider-branded badges retain their own readable semantic colors.
+
 3D chat and agent avatar surfaces use the standard WebGL avatar with studio lighting and pointer-aware head movement. The removed flashlight beam, target glow, low-battery flicker, and emissive shell boost are no longer part of the chat layout; reduced-motion settings or WebGL fallback mode continue to use the static SVG avatar.
 
 ## No-project assistant

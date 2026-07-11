@@ -2269,26 +2269,34 @@ describe("QualityAssuranceService", () => {
       getGithubToken: () => undefined,
       sendSessionMessage: async () => ({}),
     });
-    vi.spyOn(service as any, "runReview").mockRejectedValue(new Error("Sprint QA provider timed out."));
+    const runReview = vi.spyOn(service as any, "runReview").mockRejectedValue(new Error("Sprint QA provider timed out."));
 
+    const subtasks = [{
+      record_id: task.id,
+      project_id: project.id,
+      sprint_id: sprint.id,
+      id: "T1",
+      title: "Initial task",
+      prompt: "Implement the initial feature.",
+      depends_on: [],
+      is_independent: true,
+      status: "COMPLETED",
+      is_merged: true,
+      merge_indicator: "MERGED",
+    }] as any;
     const outcome = await service.reviewSprintCompletion({
       projectId: project.id,
       sprintId: sprint.id,
       sprintRunId: sprintRun.id,
       repoPath: dir,
-      subtasks: [{
-        record_id: task.id,
-        project_id: project.id,
-        sprint_id: sprint.id,
-        id: "T1",
-        title: "Initial task",
-        prompt: "Implement the initial feature.",
-        depends_on: [],
-        is_independent: true,
-        status: "COMPLETED",
-        is_merged: true,
-        merge_indicator: "MERGED",
-      }] as any,
+      subtasks,
+    });
+    const retryOutcome = await service.reviewSprintCompletion({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      repoPath: dir,
+      subtasks,
     });
 
     expect(outcome).toMatchObject({
@@ -2296,12 +2304,19 @@ describe("QualityAssuranceService", () => {
       blockedCompletion: true,
       mergeBlocked: true,
     });
+    expect(retryOutcome).toMatchObject({
+      reviewed: false,
+      blockedCompletion: true,
+      mergeBlocked: true,
+    });
+    expect(runReview).toHaveBeenCalledTimes(2);
     expect(outcome.reportText).toContain("Sprint QA failed and blocked merge");
     expect(outcome.reportText).toContain("Sprint QA provider timed out.");
 
     const latestRun = qaReviewRepository.getLatestSprintRun(sprint.id);
     expect(latestRun).toMatchObject({
       status: "failed",
+      runIndex: 2,
       summaryMarkdown: "Sprint QA provider timed out.",
     });
     expect(latestRun?.payload).toMatchObject({ error_code: "UNKNOWN" });

@@ -327,6 +327,22 @@ describe("classifyProviderError", () => {
       expect(classification.userMessage).not.toContain("stdin");
     });
 
+    it("ignores auth and rate-limit phrases inside successful Codex tool output", () => {
+      const stdout = [
+        '{"type":"thread.started","thread_id":"thread-1"}',
+        '{"type":"item.completed","item":{"type":"command_execution","aggregated_output":"fixture: Codex authentication failed; rate limit 429"}}',
+        '{"type":"turn.failed","error":{"message":"turn/start failed: direct app-server input is not allowed"}}',
+      ].join("\n");
+
+      const classification = classifyProviderError(
+        "codex",
+        makeResult(stdout, "Reading additional input from stdin..."),
+      );
+
+      expect(classification.category).toBe("UNKNOWN");
+      expect(classification.userMessage).toContain("direct app-server input is not allowed");
+    });
+
     it("falls back to the generic unexpected-error text when codex produced no parseable detail", () => {
       const classification = classifyProviderError("codex", makeResult("", "Reading additional input from stdin..."));
       expect(classification.category).toBe("UNKNOWN");

@@ -52,6 +52,7 @@ export interface SprintTransitionState {
   runningTasks: Subtask[];
   readyTasks: Subtask[];
   activeWorkerAttentionItems: ProjectAttentionItemRecord[];
+  activeHumanAttentionItems: ProjectAttentionItemRecord[];
   activeWorkerMergeConflictAttention: boolean;
   activeMainMergeAttentionItems: ProjectAttentionItemRecord[];
   qaPendingTasks: Subtask[];
@@ -63,6 +64,7 @@ export interface SprintTransitionState {
   noMoreActionPossible: boolean;
   needsManualMerge: boolean;
   waitingOnWorkerAttention: boolean;
+  waitingOnHumanAttention: boolean;
   allFinished: boolean;
 }
 
@@ -265,7 +267,21 @@ export function evaluateSprintTransitionState(params: SprintTransitionStateParam
       || isLocalCliTaskAwaitingBranchEvidence(task, params)
     ))
     .map(({ task }) => task);
+  const sprintIds = new Set(
+    subtasks
+      .map((task) => task.sprint_id?.trim())
+      .filter((sprintId): sprintId is string => Boolean(sprintId)),
+  );
+  const activeSprintAttentionItems = activeProjectAttentionItems.filter((item) => (
+    item.sprintRunId === sprintRunId
+    || (typeof item.sprintId === "string" && sprintIds.has(item.sprintId))
+  ));
   const activeWorkerAttentionItems = activeProjectAttentionItems.filter((item) => item.ownerType === "worker");
+  const activeHumanAttentionItems = activeSprintAttentionItems.filter((item) => (
+    item.ownerType === "human"
+    || item.attentionType === "human_escalation_required"
+    || item.attentionType === "dashboard_reply_required"
+  ));
   const activeWorkerMergeConflictAttention = activeWorkerAttentionItems.some((item) => item.attentionType === "merge_conflict");
   const workerMergeConflictTasksStillActive = workerEscalatedMergeConflictTasks.filter((task) => {
     const taskId = task.record_id?.trim();
@@ -288,7 +304,12 @@ export function evaluateSprintTransitionState(params: SprintTransitionStateParam
   const waitingOnWorkerAttention = workerMergeConflictTasksStillActive.length > 0
     || activeWorkerMergeConflictAttention
     || activeWorkerAttentionItems.length > 0;
-  const allFinished = allTerminal || ((needsManualMerge || noMoreActionPossible) && !waitingOnWorkerAttention);
+  const waitingOnHumanAttention = activeHumanAttentionItems.length > 0;
+  const allFinished = allTerminal || (
+    (needsManualMerge || noMoreActionPossible)
+    && !waitingOnWorkerAttention
+    && !waitingOnHumanAttention
+  );
 
   return {
     tasksByStatus,
@@ -296,6 +317,7 @@ export function evaluateSprintTransitionState(params: SprintTransitionStateParam
     runningTasks,
     readyTasks,
     activeWorkerAttentionItems,
+    activeHumanAttentionItems,
     activeWorkerMergeConflictAttention,
     activeMainMergeAttentionItems,
     qaPendingTasks,
@@ -307,6 +329,7 @@ export function evaluateSprintTransitionState(params: SprintTransitionStateParam
     noMoreActionPossible,
     needsManualMerge,
     waitingOnWorkerAttention,
+    waitingOnHumanAttention,
     allFinished,
   };
 }
