@@ -272,9 +272,8 @@ export const sanitizeCustomMcpServersWithDefaults = (
     const matchingDefault = sanitizedDefaults.find((candidate) => candidate.id === inputServer.id || candidate.name === inputServer.name);
     const server = matchingDefault
       && inputServer.transport === "stdio"
-      && inputServer.command === "npx"
-      && inputServer.args?.length === 1
-      && inputServer.args[0] === "@playwright/mcp@latest"
+      && inputServer.command === "playwright-mcp"
+      && (inputServer.args?.length ?? 0) === 0
       ? { ...inputServer, command: matchingDefault.command, args: [...(matchingDefault.args || [])] }
       : inputServer;
     const defaultWithSameName = sanitizedDefaults.find((candidate) => candidate.name === server.name);

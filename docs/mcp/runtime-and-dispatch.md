@@ -137,6 +137,8 @@ Code UX seeds Playwright MCP as a default custom MCP server:
 - command: `npx`
 - args: `@playwright/mcp@latest`
 
+Settings sanitization also repairs the legacy built-in `playwright-mcp` command with no arguments to this package-backed configuration. Other user-defined Playwright commands and arguments remain unchanged.
+
 The built-in `code_ux` MCP tool surface is controlled separately from custom MCP servers. Agent presets store MCP access in `mcp_access_json`: `codeUxEnabled` controls the built-in Code UX tools, while `linkedServerIds` selects custom MCP servers such as `playwright`.
 
 Agent-scoped provider runs are default-deny for built-in Code UX tools. Missing, malformed, or unconfigured agent MCP access resolves with `codeUxEnabled: false`, no linked custom servers, and no inherited `code_ux` connection. Explicitly saved `mcp_access_json` records are preserved and continue to control the agent. Non-agent project-manager MCP clients are still governed by system-level `mcpTools` settings rather than agent defaults.
