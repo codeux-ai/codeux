@@ -5,7 +5,7 @@ import { h } from "preact";
 import { useRef, useState } from "preact/hooks";
 import { readFileSync } from "node:fs";
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
+import { render, screen, cleanup, fireEvent, waitFor, within } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
 import { BranchNameSchemeEditor, TaskPrTitleSchemeEditor } from "../BranchNameSchemeEditor";
 import { SprintKeyEditor } from "../SprintKeyEditor";
@@ -13,6 +13,7 @@ import { TextInput, SecretInput, NumberInput, TextAreaInput, PillChoiceGroup, Se
 
 
 import { SettingsCategoryRail, CATEGORIES } from "../SettingsCategoryRail";
+import { SettingsCategoryPicker } from "../SettingsCategoryPicker";
 import { SettingsScopeControls } from "../SettingsScopeControls";
 import { ActionButton, NoticePanel } from "../SettingsSurface";
 import { OverrideBadge } from "../panels/SharedPanelComponents";
@@ -453,6 +454,125 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
 
     expect(screen.getByRole("navigation", { name: "Settings categories" })).toHaveAttribute("data-motion-contract", "selectionMovement");
     expect(screen.getByRole("button", { name: /General/ })).toHaveAttribute("data-motion-contract", "selectionMovement");
+  });
+
+  it("SettingsCategoryPicker opens a focused drawer with Smart Find results and switches by keyboard", async () => {
+    const user = userEvent.setup();
+    const onSwitchCategory = vi.fn();
+    const modelsCategory = CATEGORIES.find((category) => category.id === "models")!;
+    const integrationsCategory = CATEGORIES.find((category) => category.id === "integrations")!;
+    const settingsSearchMatches: SettingsSearchMatches = {
+      models: {
+        categoryId: "models",
+        matchedLabels: ["Claude Code"],
+        matchedDescriptions: [],
+        matchedTerms: ["routing"],
+      },
+      integrations: {
+        categoryId: "integrations",
+        matchedLabels: [],
+        matchedDescriptions: ["API keys"],
+        matchedTerms: [],
+      },
+    };
+
+    render(
+      <SettingsCategoryPicker
+        filteredCategories={[modelsCategory, integrationsCategory]}
+        activeCategory="models"
+        activeCategoryConfig={modelsCategory}
+        settingsSearch="claude"
+        settingsSearchMatches={settingsSearchMatches}
+        onSwitchCategory={onSwitchCategory}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Change settings category. Current category: AI Models" });
+    expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).toHaveAttribute("data-motion-contract", "controlFeedback");
+    expect(screen.getByText("2 matches")).toBeInTheDocument();
+
+    await user.click(trigger);
+
+    const drawer = screen.getByRole("dialog", { name: "Choose a category" });
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(drawer).toHaveTextContent("2 matching categories for “claude”.");
+    const navigation = within(drawer).getByRole("navigation", { name: "Settings categories" });
+    expect(within(navigation).getByText("Claude Code")).toBeInTheDocument();
+    expect(within(navigation).getByText("API keys")).toBeInTheDocument();
+
+    const modelsButton = within(navigation).getByRole("button", { name: /AI Models/ });
+    const integrationsButton = within(navigation).getByRole("button", { name: /Integrations/ });
+    expect(modelsButton).toHaveAttribute("aria-current", "page");
+    await waitFor(() => expect(modelsButton).toHaveFocus());
+
+    fireEvent.keyDown(modelsButton, { key: "ArrowDown" });
+    expect(integrationsButton).toHaveFocus();
+    fireEvent.keyDown(integrationsButton, { key: "Enter" });
+
+    expect(onSwitchCategory).toHaveBeenCalledWith("integrations");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("SettingsCategoryPicker exposes pending and disabled category state inside the drawer", async () => {
+    const user = userEvent.setup();
+    const onSwitchCategory = vi.fn();
+    const generalCategory = CATEGORIES[0]!;
+    const disabledReason = "Finish the current save before changing categories.";
+
+    render(
+      <SettingsCategoryPicker
+        filteredCategories={[generalCategory]}
+        activeCategory="general"
+        activeCategoryConfig={generalCategory}
+        settingsSearch=""
+        settingsSearchMatches={{}}
+        pendingCategory="general"
+        disabledCategoryReason={disabledReason}
+        onSwitchCategory={onSwitchCategory}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Change settings category. Current category: General" });
+    expect(trigger).toHaveAttribute("aria-busy", "true");
+    expect(trigger).toHaveAccessibleDescription(expect.stringContaining(disabledReason));
+    expect(screen.getByText("Switching to General")).toBeInTheDocument();
+
+    await user.click(trigger);
+
+    const drawer = screen.getByRole("dialog", { name: "Choose a category" });
+    const categoryButton = within(drawer).getByRole("button", { name: /General/ });
+    expect(categoryButton).toBeDisabled();
+    expect(categoryButton).toHaveAttribute("aria-busy", "true");
+    expect(within(drawer).getByText(disabledReason)).toBeInTheDocument();
+    await user.click(categoryButton);
+    expect(onSwitchCategory).not.toHaveBeenCalled();
+  });
+
+  it("SettingsCategoryPicker closes with Escape and restores focus to its trigger", async () => {
+    const user = userEvent.setup();
+    const generalCategory = CATEGORIES[0]!;
+
+    render(
+      <SettingsCategoryPicker
+        filteredCategories={[generalCategory]}
+        activeCategory="general"
+        activeCategoryConfig={generalCategory}
+        settingsSearch=""
+        settingsSearchMatches={{}}
+        onSwitchCategory={() => {}}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Change settings category. Current category: General" });
+    await user.click(trigger);
+    expect(screen.getByRole("dialog", { name: "Choose a category" })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 
   it("PillChoiceGroup exposes radio semantics for the selected option", () => {
@@ -1286,9 +1406,11 @@ describe("SettingsControls Accessibility", () => {
 
     expect(source).toContain('import { SettingsScopeControls } from "./components/settings/SettingsScopeControls.js";');
     expect(source).toContain('import { SettingsActivePanelStatus } from "./components/settings/SettingsActivePanelStatus.js";');
+    expect(source).toContain('import { SettingsCategoryPicker } from "./components/settings/SettingsCategoryPicker.js";');
     expect(source).toContain('data-settings-sticky="settings-command-status"');
     expect(commandStatusBarSource).toContain("sticky top-16 z-30");
     expect(commandStatusBarSource).toContain("flex min-w-0 max-w-full flex-wrap");
+    expect(commandStatusBarSource).toContain("<SettingsCategoryPicker");
     expect(commandStatusBarSource).toContain("<SettingsScopeControls");
     expect(commandStatusBarSource).toContain("<SettingsActivePanelStatus");
     expect(commandStatusBarSource).toContain("sticky={false}");
@@ -1302,6 +1424,7 @@ describe("SettingsControls Accessibility", () => {
     expect(source).toMatch(/<SettingsContentPanels\s+state=\{state\}\s+showActivePanelStatus=\{false\}\s+\/>/);
     expect(source).not.toContain("scopeSticky.getBoundingClientRect()");
     expect(source).not.toContain("panelStickyTop");
+    expect(source).toMatch(/<SettingsCategoryRail[\s\S]*?desktopOnly/);
   });
 
   it("SettingsContentPanels renders reset pending feedback while keeping values mounted", () => {

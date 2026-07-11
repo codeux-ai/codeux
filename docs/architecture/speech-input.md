@@ -10,7 +10,7 @@ The default provider mode is `local_onnx`. API fields stay hidden until `externa
 
 ## Privacy Boundary
 
-Actual microphone audio must not enter runtime memory automatically. Recorder UI or Electron shell integration must require an explicit user gesture and permission grant before capturing audio. Persisted settings store only configuration values such as provider mode, model ids, endpoint URL, and optional language; defaults and fixtures must not contain real API keys.
+Actual microphone audio must not enter runtime memory automatically. Recorder UI or Electron shell integration must require an explicit user gesture and permission grant before capturing audio. Persisted settings store only configuration values such as provider mode, model ids, endpoint URL, and optional language; defaults and fixtures must not contain real API keys. Local Whisper and external API language hints are stored independently so changing providers cannot leak a stale, incompatible hint into the other runtime.
 
 Audio bytes should remain request-scoped. They should not be written to settings storage, project markdown, sprint artifacts, logs, telemetry, or memory records unless a future task explicitly introduces a user-visible retention feature with separate consent and deletion controls.
 
@@ -39,9 +39,13 @@ The shared contracts use two explicit provider modes:
 
 The external transcription default uses an OpenAI-compatible `/v1/audio/transcriptions` URL with an empty API key. Runtime code must treat a missing key, missing model, unsupported audio format, client permission error, and provider failure as structured error outcomes rather than generic exceptions.
 
-Local speech bundles use deterministic cache directories under `~/.code-ux/models/speech/<sanitized-model-id>`, where slashes in model ids are normalized for filesystem safety. Whisper Base English is the default and runs its encoder-decoder bundle entirely through `onnxruntime-node`; recordings longer than the model's 30-second window use one-second overlapping chunks with repeated boundary words deduplicated, without sending audio elsewhere. A low-energy silence gate prevents empty microphone input from being forced into hallucinated text, and native inference sessions are released after each request. Whisper Tiny is the faster, lower-footprint local alternative. Before local inference, the service decodes the dashboard recorder's PCM WAV payload into mono `Float32Array` samples. A missing local model returns a structured error without invoking the configured API; API requests occur only in `external_api` mode.
+Local speech bundles use deterministic cache directories under `~/.code-ux/models/speech/<sanitized-model-id>`, where slashes in model ids are normalized for filesystem safety. Whisper Base English remains the default and runs its encoder-decoder bundle entirely through `onnxruntime-node`; Whisper Tiny English is the faster, lower-footprint English alternative. The catalog also offers pinned multilingual Whisper Base and Tiny ONNX bundles. Each multilingual entry exposes its supported language codes and automatic-detection capability so dashboard clients can build a catalog-driven language selector without maintaining a second language list.
 
-All STT downloads are opt-in and use the same license gate as TTS and embedding models. The catalog exposes approved commercial-use terms and provenance, the operator explicitly accepts the current license identifier, and the server rejects missing or stale acceptance before starting a download.
+For multilingual inference, a configured language inserts the matching Whisper language token into the decoder prompt. Auto mode scores only the language tokens declared by the pinned generation configuration on the first audible chunk, reuses that selection for later chunks, and returns the detected language code with the transcript. Nullable `forced_decoder_ids` from multilingual Transformers configurations are resolved deliberately and are never coerced into token zero. English-only checkpoints keep their existing fixed English prompt and result behavior.
+
+Recordings longer than Whisper's 30-second window use one-second overlapping chunks with repeated boundary words deduplicated, without sending audio elsewhere. A low-energy silence gate prevents empty microphone input from being forced into hallucinated text, and native inference sessions are released after each request. Before local inference, the service decodes the dashboard recorder's PCM WAV payload into mono `Float32Array` samples. A missing local model returns a structured error without invoking the configured API; API requests occur only in `external_api` mode.
+
+All STT downloads are opt-in and use the same license gate as TTS and embedding models. The catalog exposes approved commercial-use terms and provenance, the operator explicitly accepts the current license identifier, and the server rejects missing or stale acceptance before starting a download. The multilingual conversions point back to the MIT-licensed OpenAI Whisper weights, use immutable ONNX Community revisions, and integrity-check every downloaded artifact against its cataloged SHA-256 digest.
 
 External requests use OpenAI-style multipart fields: `file`, `model`, and optional `language`, with bearer token authentication and a request timeout. Provider error text is sanitized before it is returned so API keys and bearer tokens are never echoed to the dashboard.
 
@@ -57,6 +61,8 @@ Implemented now:
 - `POST /api/speech/transcriptions` multipart upload route.
 - Speech transcription service with explicit local ONNX or external API execution and structured errors.
 - Deterministic local speech model catalog/cache paths.
+- English and multilingual Whisper Base/Tiny entries with language capability metadata.
+- Explicit multilingual decoder prompting plus first-audible-chunk automatic language detection.
 - Shared dashboard recorder, transcription API client, and speech input button primitives.
 - Electron microphone permission handling for the trusted dashboard origin.
 - Composer-level speech input wiring in Threads and a compact microphone control on the 3D avatar stage.

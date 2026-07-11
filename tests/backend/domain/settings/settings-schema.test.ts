@@ -541,6 +541,7 @@ describe("validateSettingsPayload", () => {
       enabled: "yes",
       providerMode: "remote",
       localModelId: "",
+      localLanguage: 7,
       maxAudioSeconds: 0,
       externalTranscription: {
         baseUrl: "",
@@ -557,6 +558,7 @@ describe("validateSettingsPayload", () => {
       { path: "speech.enabled", message: "Expected a boolean" },
       { path: "speech.providerMode", message: "Expected one of: local_onnx, external_api" },
       { path: "speech.localModelId", message: "Expected a non-empty string" },
+      { path: "speech.localLanguage", message: "Expected null or a string" },
       { path: "speech.maxAudioSeconds", message: "Expected a finite number between 1 and 600" },
       { path: "speech.externalTranscription.baseUrl", message: "Expected a non-empty string" },
       { path: "speech.externalTranscription.apiKey", message: "Expected a string" },
@@ -587,6 +589,7 @@ describe("validateSettingsPayload", () => {
       enabled: true,
       providerMode: "local_onnx",
       localModelId: "onnx-community/whisper-tiny.en",
+      localLanguage: "en",
       maxAudioSeconds: 600,
       externalTranscription: {
         baseUrl: "https://api.example/v1/audio/transcriptions",
@@ -656,6 +659,8 @@ describe("validateSettingsPayload", () => {
   it.each([
     "onnx-community/whisper-base.en",
     "onnx-community/whisper-tiny.en",
+    "onnx-community/whisper-base",
+    "onnx-community/whisper-tiny",
   ])("preserves supported local transcription model %s", (localModelId) => {
     expect(sanitizeSpeech({
       speech: {
@@ -663,6 +668,23 @@ describe("validateSettingsPayload", () => {
         localModelId,
       },
     }).localModelId).toBe(localModelId);
+  });
+
+  it("stores local and external transcription language hints independently", () => {
+    const sanitized = sanitizeSpeech({
+      speech: {
+        ...DEFAULT_DASHBOARD_SETTINGS.speech,
+        localModelId: "onnx-community/whisper-base",
+        localLanguage: " de-DE ",
+        externalTranscription: {
+          ...DEFAULT_DASHBOARD_SETTINGS.speech.externalTranscription,
+          language: "es",
+        },
+      },
+    });
+
+    expect(sanitized.localLanguage).toBe("de-DE");
+    expect(sanitized.externalTranscription.language).toBe("es");
   });
 });
 

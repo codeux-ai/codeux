@@ -41,7 +41,9 @@ The Memory UI relies on specific hex colors that match existing app accents:
 
 ## Model Catalog (Settings -> AI Models)
 - The embedding model catalog uses one Warm Void panel instead of a plain grid. The panel should feel quiet and operational, with low-contrast surfaces, restrained borders, and a header that summarizes available, downloaded, stale, and active model state before the card grid.
-- Model cards use a compact Warm Void standard (`min-h-[17rem]`, modest padding, restrained radius, and low elevation) while keeping model name, status, description, dimension, size, language, progress, stale count, and action controls in stable regions so one-column mobile and two-column desktop layouts remain scannable.
+- A single search field covers model name, id, description, language, and license metadata. Install-state, language, and source filters remain visible beside it, wrap safely on narrow screens, and expose a one-action no-results recovery state.
+- Model cards use a compact Warm Void standard (`min-h-[8.75rem]`, modest padding, restrained radius, and low elevation) while keeping model name, status, description, dimension, size, language, progress, stale count, and action controls in stable regions so one-column mobile and two-column desktop layouts remain scannable.
+- The custom Hugging Face form stays behind an `aria-expanded` **Add custom model** disclosure. Closed form controls are unmounted, and visible copy identifies custom license metadata as operator-asserted rather than Code UX-reviewed.
 - Model catalog action controls use compact `min-h-9` buttons with wrapped labels, visible Signal Jade focus rings, and icon-only delete affordances sized consistently with the rest of the card chrome.
 - Signal Jade is the primary action treatment for download, activate, active, downloaded-progress, and re-embedding progress states. Use it for the user's next constructive model action and avoid competing violet primary buttons in the catalog.
 - Ember is reserved for stale embedding messaging and re-embed prompts. Stale copy should be direct and actionable without making the entire card feel destructive.

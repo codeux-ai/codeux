@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import { ActionButton, NoticePanel } from "../SettingsSurface.js";
 import { ActionFeedbackRegion } from "../../ui/ActionFeedbackRegion.js";
-import { NumberInput, Row, Toggle, TextInput, PillChoiceGroup, SelectInput } from "../SettingsFormFields.js";
+import { NumberInput, OptionCardChoiceGroup, PillChoiceGroup, Row, Toggle, TextInput, SelectInput } from "../SettingsFormFields.js";
 import { LocalFilePickerField } from "../LocalFilePickerField.js";
 import { OpenSourceSoftwareModal } from "../OpenSourceSoftwareModal.js";
 import type { ProjectSettings } from "../../../../../../src/contracts/settings-scope-types.js";
@@ -38,7 +38,7 @@ const ExperienceModeCard: FunctionComponent<{
       badge={getFieldBadge("appearance.experienceMode")}
       last
     >
-      <PillChoiceGroup
+      <OptionCardChoiceGroup
         aria-label="Dashboard experience mode"
         value={settings.appearance.experienceMode}
         onChange={(value) => update((current) => ({
@@ -51,7 +51,7 @@ const ExperienceModeCard: FunctionComponent<{
         options={dashboardExperienceModeOptions.map((option) => ({
           value: option.value,
           label: option.label,
-          hint: option.description,
+          description: option.description,
         }))}
       />
     </Row>

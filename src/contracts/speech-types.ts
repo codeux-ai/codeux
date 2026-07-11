@@ -4,6 +4,8 @@ export const SPEECH_PROVIDER_MODES = ["local_onnx", "external_api"] as const;
 export const LOCAL_TRANSCRIPTION_MODEL_IDS = [
   "onnx-community/whisper-base.en",
   "onnx-community/whisper-tiny.en",
+  "onnx-community/whisper-base",
+  "onnx-community/whisper-tiny",
 ] as const;
 export const DEFAULT_LOCAL_TRANSCRIPTION_MODEL_ID = LOCAL_TRANSCRIPTION_MODEL_IDS[0];
 
@@ -38,6 +40,8 @@ export interface SpeechSettings {
   enabled: boolean;
   providerMode: SpeechProviderMode;
   localModelId: string;
+  /** Language hint used only by the local transcription runtime. Null enables model detection. */
+  localLanguage?: string | null;
   maxAudioSeconds: number;
   externalTranscription: ExternalTranscriptionSettings;
   synthesis: SpeechSynthesisSettings;
@@ -59,6 +63,12 @@ export interface SpeechModelVoice {
   language: string;
 }
 
+export interface SpeechModelLanguage {
+  /** Whisper/API language code or a BCP-47 language tag for synthesis voices. */
+  code: string;
+  label: string;
+}
+
 export interface SpeechModelCatalogItem {
   id: string;
   kind: SpeechModelKind;
@@ -71,6 +81,8 @@ export interface SpeechModelCatalogItem {
   files: SpeechModelFile[];
   sizeBytes: number;
   language: string;
+  languages: SpeechModelLanguage[];
+  supportsAutomaticLanguageDetection: boolean;
   sampleRateHz: number;
   voices: SpeechModelVoice[];
   defaultVoice: string | null;

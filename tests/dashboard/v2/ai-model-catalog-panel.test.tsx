@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, render, screen, waitFor } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -104,11 +104,17 @@ describe("AIModelCatalogPanel", () => {
       updateEditableSettings,
     } as any} />);
 
+    expect(screen.getByText("Local AI Runtime")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Speech to text provider" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Configure speech" }));
     expect(screen.getByRole("button", { name: "Speech to text provider" })).toHaveTextContent("Local");
     expect(screen.getByRole("button", { name: "Text to speech provider" })).toHaveTextContent("Local");
     expect(screen.queryByLabelText("Speech to text API endpoint")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Text to speech API endpoint")).not.toBeInTheDocument();
     expect(screen.queryByText(/Auto \(local, then API\)/i)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    const manageModels = screen.getByRole("button", { name: "Manage local models" });
+    await userEvent.click(manageModels);
     const activate = await screen.findByRole("button", { name: "Use for 3D Chat" });
     expect(screen.getAllByRole("button", { name: "Use for input" })).toHaveLength(2);
     expect(screen.queryByRole("button", { name: "Local runtime pending" })).not.toBeInTheDocument();
@@ -149,7 +155,9 @@ describe("AIModelCatalogPanel", () => {
       updateEditableSettings: vi.fn(),
     } as any} />);
 
+    await userEvent.click(screen.getByRole("button", { name: "Configure speech" }));
     expect(await screen.findByLabelText("Speech to text API endpoint")).toBeInTheDocument();
+    expect(screen.getByLabelText("Speech to text language")).toBeInTheDocument();
     expect(screen.getByLabelText("Speech to text API model")).toBeInTheDocument();
     expect(screen.getByLabelText("Speech to text API key")).toBeInTheDocument();
     expect(screen.getByLabelText("Text to speech API endpoint")).toBeInTheDocument();
@@ -179,11 +187,155 @@ describe("AIModelCatalogPanel", () => {
       updateEditableSettings: vi.fn(),
     } as any} />);
 
+    const manageModels = screen.getByRole("button", { name: "Manage local models" });
+    await userEvent.click(manageModels);
     expect(await screen.findByText("Repair required")).toBeInTheDocument();
-    await userEvent.click(await screen.findByRole("button", { name: "Download" }));
-    expect(screen.getByRole("dialog")).toHaveTextContent("Apache-2.0");
+    await userEvent.click(await screen.findByRole("button", { name: "Download Kokoro 82M v1.0 Q8" }));
+    expect(screen.getByRole("dialog", { name: "Download Kokoro 82M v1.0 Q8" })).toHaveTextContent("Apache-2.0");
+    expect(screen.getByRole("dialog", { name: "Model catalog", hidden: true })).toHaveAttribute("inert");
     expect(speechApi.downloadSpeechModel).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Accept & Download" }));
     await waitFor(() => expect(speechApi.downloadSpeechModel).toHaveBeenCalledWith("kokoro-82m-v1.0-q8", "apache-v1"));
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "Model catalog" })).not.toHaveAttribute("inert"));
+    await userEvent.click(screen.getByRole("button", { name: "Close model catalog" }));
+    await waitFor(() => expect(manageModels).toHaveFocus());
+  });
+
+  it("searches speech models inside the focused catalog without bloating the settings page", async () => {
+    render(<AIModelCatalogPanel state={{
+      editableSettings: DEFAULT_DASHBOARD_SETTINGS,
+      selectedProject: null,
+      updateEditableSettings: vi.fn(),
+    } as any} />);
+
+    expect(screen.queryByText("Whisper Tiny English ONNX")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Manage local models" }));
+    await userEvent.click(screen.getByRole("button", { name: "Speech input" }));
+    const search = screen.getByRole("searchbox", { name: "Search speech models" });
+    fireEvent.input(search, { target: { value: "tiny" } });
+
+    const catalog = screen.getByRole("dialog", { name: "Model catalog" });
+    expect(within(catalog).getByText("Whisper Tiny English ONNX")).toBeInTheDocument();
+    await waitFor(() => expect(within(catalog).queryByText("Whisper Base English ONNX")).not.toBeInTheDocument());
+    expect(within(catalog).queryByRole("region", { name: "Text to speech models" })).not.toBeInTheDocument();
+    await userEvent.click(within(catalog).getByRole("button", { name: "All" }));
+    expect(within(catalog).getByText("Whisper Base English ONNX")).toBeInTheDocument();
+    expect(within(catalog).getByText("Kokoro 82M v1.0 Q8")).toBeInTheDocument();
+    expect(within(catalog).queryByRole("searchbox", { name: "Search speech models" })).not.toBeInTheDocument();
+  });
+
+  it("stores an external transcription language hint in the settings draft", async () => {
+    const updateEditableSettings = vi.fn();
+    render(<AIModelCatalogPanel state={{
+      editableSettings: {
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        speech: { ...DEFAULT_DASHBOARD_SETTINGS.speech, providerMode: "external_api" },
+      },
+      selectedProject: null,
+      updateEditableSettings,
+    } as any} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Configure speech" }));
+    await userEvent.click(screen.getByRole("button", { name: "Speech to text language" }));
+    await userEvent.click(screen.getByRole("option", { name: "German" }));
+
+    const updater = updateEditableSettings.mock.calls.at(-1)?.[0] as (settings: typeof DEFAULT_DASHBOARD_SETTINGS) => typeof DEFAULT_DASHBOARD_SETTINGS;
+    expect(updater(DEFAULT_DASHBOARD_SETTINGS).speech.externalTranscription.language).toBe("de");
+  });
+
+  it("stores a local Whisper language without changing the external API hint", async () => {
+    const models = await speechApi.listSpeechModels();
+    speechApi.listSpeechModels.mockResolvedValue([...models, {
+      ...models[0],
+      id: "onnx-community/whisper-base",
+      displayName: "Whisper Base Multilingual ONNX",
+      repository: "onnx-community/whisper-base",
+      sourceUrl: "https://huggingface.co/onnx-community/whisper-base",
+      language: "Multilingual",
+      languages: [{ code: "en", label: "English" }, { code: "de", label: "German" }],
+      supportsAutomaticLanguageDetection: true,
+    }]);
+    const updateEditableSettings = vi.fn();
+    render(<AIModelCatalogPanel state={{
+      editableSettings: {
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        speech: {
+          ...DEFAULT_DASHBOARD_SETTINGS.speech,
+          localModelId: "onnx-community/whisper-base",
+          localLanguage: null,
+          externalTranscription: {
+            ...DEFAULT_DASHBOARD_SETTINGS.speech.externalTranscription,
+            language: "es",
+          },
+        },
+      },
+      selectedProject: null,
+      updateEditableSettings,
+    } as any} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Configure speech" }));
+    await userEvent.click(screen.getByRole("button", { name: "Speech to text language" }));
+    await userEvent.click(screen.getByRole("option", { name: "German" }));
+
+    const updater = updateEditableSettings.mock.calls.at(-1)?.[0] as (settings: typeof DEFAULT_DASHBOARD_SETTINGS) => typeof DEFAULT_DASHBOARD_SETTINGS;
+    const updated = updater({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      speech: {
+        ...DEFAULT_DASHBOARD_SETTINGS.speech,
+        localModelId: "onnx-community/whisper-base",
+        localLanguage: null,
+        externalTranscription: {
+          ...DEFAULT_DASHBOARD_SETTINGS.speech.externalTranscription,
+          language: "es",
+        },
+      },
+    });
+    expect(updated.speech.localLanguage).toBe("de");
+    expect(updated.speech.externalTranscription.language).toBe("es");
+  });
+
+  it("starts multilingual Whisper in automatic detection when replacing an English-only model", async () => {
+    const models = await speechApi.listSpeechModels();
+    speechApi.listSpeechModels.mockResolvedValue([...models, {
+      ...models[0],
+      id: "onnx-community/whisper-base",
+      displayName: "Whisper Base Multilingual ONNX",
+      repository: "onnx-community/whisper-base",
+      sourceUrl: "https://huggingface.co/onnx-community/whisper-base",
+      language: "Multilingual",
+      languages: [{ code: "en", label: "English" }, { code: "de", label: "German" }],
+      supportsAutomaticLanguageDetection: true,
+    }]);
+    const updateEditableSettings = vi.fn();
+    render(<AIModelCatalogPanel state={{
+      editableSettings: DEFAULT_DASHBOARD_SETTINGS,
+      selectedProject: null,
+      updateEditableSettings,
+    } as any} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Manage local models" }));
+    const card = (await screen.findByText("Whisper Base Multilingual ONNX")).closest("article");
+    expect(card).not.toBeNull();
+    await userEvent.click(within(card as HTMLElement).getByRole("button", { name: "Use for input" }));
+
+    const updater = updateEditableSettings.mock.calls.at(-1)?.[0] as (settings: typeof DEFAULT_DASHBOARD_SETTINGS) => typeof DEFAULT_DASHBOARD_SETTINGS;
+    const updated = updater(DEFAULT_DASHBOARD_SETTINGS);
+    expect(updated.speech.localModelId).toBe("onnx-community/whisper-base");
+    expect(updated.speech.localLanguage).toBeNull();
+  });
+
+  it("keeps the speech dialog open when Escape dismisses its provider listbox", async () => {
+    render(<AIModelCatalogPanel state={{
+      editableSettings: DEFAULT_DASHBOARD_SETTINGS,
+      selectedProject: null,
+      updateEditableSettings: vi.fn(),
+    } as any} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Configure speech" }));
+    await userEvent.click(screen.getByRole("button", { name: "Speech to text provider" }));
+    fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape" });
+
+    expect(screen.getByRole("dialog", { name: "Speech runtime" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("listbox")).not.toBeInTheDocument());
   });
 });

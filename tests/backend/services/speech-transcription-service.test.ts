@@ -166,6 +166,54 @@ describe("SpeechTranscriptionService", () => {
     expect(decodedAudio?.[2]).toBeCloseTo(-1);
   });
 
+  it("uses the local language hint for multilingual Whisper and ignores the API hint", async () => {
+    const wavAudio = createPcm16Wav(new Int16Array([0, 16_384, -16_384]));
+    const localRuntime = createLocalRuntime({
+      isModelAvailable: vi.fn().mockResolvedValue(true),
+    });
+    const service = new SpeechTranscriptionService({
+      resolveSpeechSettings: () => speechSettings({
+        providerMode: "local_onnx",
+        localModelId: "onnx-community/whisper-base",
+        localLanguage: "de-DE",
+        externalTranscription: {
+          ...DEFAULT_DASHBOARD_SETTINGS.speech.externalTranscription,
+          language: "es",
+        },
+      }),
+      localRuntime,
+    });
+
+    await service.transcribe({
+      audio: wavAudio,
+      metadata: createMetadata({ audioBytes: wavAudio.length, mimeType: "audio/wav" }),
+    });
+
+    expect(localRuntime.transcribe).toHaveBeenCalledWith(expect.objectContaining({ language: "de-DE" }));
+  });
+
+  it("forces English for an English-only Whisper model even when a stale hint is supplied", async () => {
+    const wavAudio = createPcm16Wav(new Int16Array([0, 8_192, -8_192]));
+    const localRuntime = createLocalRuntime({
+      isModelAvailable: vi.fn().mockResolvedValue(true),
+    });
+    const service = new SpeechTranscriptionService({
+      resolveSpeechSettings: () => speechSettings({
+        providerMode: "local_onnx",
+        localModelId: "onnx-community/whisper-base.en",
+        localLanguage: "de",
+      }),
+      localRuntime,
+    });
+
+    await service.transcribe({
+      audio: wavAudio,
+      metadata: createMetadata({ audioBytes: wavAudio.length, mimeType: "audio/wav", language: "es" }),
+    });
+
+    expect(localRuntime.transcribe).toHaveBeenCalledWith(expect.objectContaining({ language: "en" }));
+  });
+
   it("uses the external API only when API mode is selected", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       text: "external transcript",

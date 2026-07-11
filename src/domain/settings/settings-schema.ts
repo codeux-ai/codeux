@@ -1005,6 +1005,13 @@ const validateSpeech = (
     issues.push({ path: `${path}.localModelId`, message: "Expected a non-empty string" });
   }
   if (
+    value.localLanguage !== undefined
+    && value.localLanguage !== null
+    && typeof value.localLanguage !== "string"
+  ) {
+    issues.push({ path: `${path}.localLanguage`, message: "Expected null or a string" });
+  }
+  if (
     typeof value.maxAudioSeconds !== "number"
     || !Number.isFinite(value.maxAudioSeconds)
     || value.maxAudioSeconds < 1
