@@ -11,7 +11,11 @@ Sprints are viewed either in a visual organic cell gallery or a dense ledger for
 - **Goal** — first line of the sprint goal.
 - **Action buttons** — Plan / Orchestrate / Pause / Cancel as appropriate, with inactive pause guidance kept out of the visible row to preserve ledger density.
 
-Failed execution and eligible human intervention also receive a shared red attention treatment around the complete gallery cell or ledger row. Failure is identified by an animated exclamation indicator, while a sprint waiting on a person shows a compact human and visible `zZZ` cue. The indicators include explicit assistive status text, remain static when reduced motion is enabled, and do not treat worker- or system-owned transient pauses as requests for human action. Normal status, progress, review badges, links, and controls remain available in both attention states.
+### Sprint attention indicators
+
+Failed execution and eligible human intervention receive a red border around the complete gallery cell or ledger row. A failure shows a pulsing exclamation indicator labelled **Sprint execution failed**. A sprint waiting on a person shows a compact person and visible `zZZ` cue labelled **Sprint waiting for human intervention**. Failure takes precedence if both states are available.
+
+When reduced motion is enabled, the exclamation stops pulsing and the waiting cue stops bouncing; the red border, indicator, visible context, and semantic label remain. Worker- and system-owned transient pauses are not shown as requests for human action. Normal status, progress, review badges, links, and controls also remain available in both attention states.
 
 Completion keeps one decimal when needed across sprint cards, ledger rows, active task streams, and sprint selectors: `7.5%` stays `7.5%`, while whole values such as `5.0%` display as `5%`. Progress bars and accessible values use the same completion number and remain bounded from `0%` to `100%`.
 
