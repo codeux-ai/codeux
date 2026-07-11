@@ -26,7 +26,10 @@ import type {
   UpdateConversationThreadInput,
   UpdateConversationThreadRouteInput,
 } from "../contracts/connection-chat-types.js";
-import { DASHBOARD_APP_PROGRESS_WIDGET_TYPE } from "../contracts/connection-chat-types.js";
+import {
+  DASHBOARD_APP_PROGRESS_WIDGET_TYPE,
+  DASHBOARD_CREATE_APP_QUICKACTION_KINDS,
+} from "../contracts/connection-chat-types.js";
 import type {
   DetachedQuicksprintLaunchInput,
   DetachedQuicksprintLaunchResult,
@@ -48,6 +51,8 @@ import { getCorrelationId } from "../shared/logging/correlation-id.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import { dashboardReplyAgentMcpAccess, isSchedulerOnlyAgentMcpAccess } from "./agent-mcp-access.js";
 import { buildProviderInvocationWorkspaceOptions } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
+import { getCreateAppQuickactionSpec } from "../domain/chat/create-app-quickaction-catalog.js";
+import { getDesignGuidanceCatalog } from "../domain/settings/design-guidance-catalog.js";
 
 interface ChatThreadRuntimeServiceDependencies {
   connectionChatRepository: ConnectionChatRepository;
@@ -168,13 +173,16 @@ function readString(value: unknown): string | null {
 
 function normalizeCreateAppQuickactionKind(value: unknown): DashboardCreateAppQuickactionKind | null {
   const normalized = readString(value);
-  if (normalized === "web_app" || normalized === "web") {
-    return "web_app";
+  const aliases: Record<string, DashboardCreateAppQuickactionKind> = {
+    web: "web_app",
+    desktop: "desktop_app",
+    shop: "online_shop",
+    online_store: "online_shop",
+  };
+  if (normalized && DASHBOARD_CREATE_APP_QUICKACTION_KINDS.includes(normalized as DashboardCreateAppQuickactionKind)) {
+    return normalized as DashboardCreateAppQuickactionKind;
   }
-  if (normalized === "desktop_app" || normalized === "desktop") {
-    return "desktop_app";
-  }
-  return null;
+  return normalized ? aliases[normalized] ?? null : null;
 }
 
 function readStringList(value: unknown): string[] {
@@ -252,15 +260,19 @@ function parseCreateAppQuickactionMetadata(metadata: Record<string, unknown> | n
   if (!requestId) {
     throw new Error("Create app quickaction metadata is missing requestId.");
   }
-  const templateId = readString(quickaction.templateId ?? root.templateId);
-  if (!templateId) {
+  const suppliedTemplateId = readString(quickaction.templateId ?? root.templateId);
+  if (!suppliedTemplateId) {
     throw new Error("Create app quickaction metadata is missing templateId.");
+  }
+  const spec = getCreateAppQuickactionSpec(kind);
+  if (suppliedTemplateId !== spec.templateId) {
+    throw new Error(`Create app quickaction template does not match ${kind}.`);
   }
 
   return {
     kind,
     requestId,
-    templateId,
+    templateId: spec.templateId,
     taskCount: readPositiveInteger(quickaction.taskCount ?? root.taskCount, 5),
     stackSummary: readCreateAppStackSummary(quickaction.stackSummary ?? root.stackSummary, kind),
     suggestionTags: readStringList(quickaction.suggestionTags ?? root.suggestionTags),
@@ -692,7 +704,7 @@ export class ChatThreadRuntimeService {
       upToMessageId: userMessage.id,
     });
 
-    const appLabel = quickaction.kind === "web_app" ? "web app" : "desktop app";
+    const appLabel = getCreateAppQuickactionSpec(quickaction.kind).appKindLabel.toLowerCase();
     const progressMessage = this.deps.connectionChatRepository.postSystemMessage(projectId, {
       threadId: thread.id,
       bodyMarkdown: `Started a ${appLabel} sprint: **${launch.sprint.name}**. Planning is running now; add any directional details here and they can be appended after planning finishes.`,
@@ -1070,7 +1082,17 @@ export class ChatThreadRuntimeService {
   }
 
   private buildCreateAppAdditionalPrompt(bodyMarkdown: string, quickaction: NormalizedCreateAppQuickaction): string {
-    const appLabel = quickaction.kind === "web_app" ? "web application" : "desktop application";
+    const spec = getCreateAppQuickactionSpec(quickaction.kind);
+    const appLabel = spec.kind === "web_app" || spec.kind === "desktop_app"
+      ? `${spec.appKindLabel.slice(0, -3).toLowerCase()}application`
+      : spec.appKindLabel.toLowerCase();
+    const appArticle = /^[aeiou]/i.test(appLabel) ? "an" : "a";
+    const guidanceCatalog = getDesignGuidanceCatalog();
+    const techStackGuidance = guidanceCatalog.techStacks.find((entry) => entry.id === spec.designGuidance.selectedTechStackId);
+    const styleguideGuidance = guidanceCatalog.styleguides.find((entry) => entry.id === spec.designGuidance.selectedStyleguideId);
+    if (!techStackGuidance || !styleguideGuidance) {
+      throw new Error(`Create app quickaction guidance is unavailable for ${quickaction.kind}.`);
+    }
     const stackLines = this.formatCreateAppStackSummary(quickaction.stackSummary);
     const suggestionLine = quickaction.suggestionTags.length > 0
       ? `Suggestion tags from the dashboard: ${quickaction.suggestionTags.join(", ")}.`
@@ -1079,7 +1101,9 @@ export class ChatThreadRuntimeService {
     return [
       "Dashboard create-app quickaction.",
       `Quickaction request id: ${quickaction.requestId}.`,
-      `Create an app sprint for a ${appLabel}.`,
+      `Create an app sprint for ${appArticle} ${appLabel}.`,
+      `Apply tech-stack guidance \`${techStackGuidance.id}\` (${techStackGuidance.name}):\n${techStackGuidance.instructionMarkdown}`,
+      `Apply styleguide guidance \`${styleguideGuidance.id}\` (${styleguideGuidance.name}):\n${styleguideGuidance.instructionMarkdown}`,
       stackLines ? `Suggested stack summary:\n${stackLines}` : "No suggested stack summary was provided; infer the right stack from the selected project before planning.",
       suggestionLine,
       `Original dashboard message:\n${bodyMarkdown.trim()}`,

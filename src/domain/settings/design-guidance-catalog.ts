@@ -3,6 +3,10 @@ import type { DesignGuidanceEntrySettings, DesignGuidanceSettings } from "../../
 export const DESIGN_GUIDANCE_NONE_ID = "none";
 export const CODE_UX_AWARD_WINNING_STYLEGUIDE_ID = "code-ux-award-winning";
 export const CODE_UX_PRODUCT_TECH_STACK_ID = "code-ux-product-stack";
+export const ELECTRON_DESKTOP_APP_TECH_STACK_ID = "electron-desktop-app";
+export const ECOMMERCE_STYLEGUIDE_ID = "ecommerce";
+export const MARKETING_SITE_STYLEGUIDE_ID = "marketing-site";
+export const GAME_EXPERIENCE_STYLEGUIDE_ID = "game-experience";
 
 const ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/;
 
@@ -70,13 +74,13 @@ const DEFAULT_STYLEGUIDES: DesignGuidanceEntrySettings[] = [
     "Make dependencies, priority, progress, and blocked states visible without overwhelming the board or list. Optimize for quick updates, batch scanning, and clear transitions between planning and delivery.",
   ),
   createEntry(
-    "ecommerce",
+    ECOMMERCE_STYLEGUIDE_ID,
     "Commerce",
     "Shopping and merchandising flows where confidence and conversion matter.",
     "Build trust through clear product evidence, transparent pricing states, frictionless comparison, and strong checkout feedback. Keep promotions subordinate to product comprehension and task completion.",
   ),
   createEntry(
-    "marketing-site",
+    MARKETING_SITE_STYLEGUIDE_ID,
     "Marketing Site",
     "Narrative pages for positioning, proof, and conversion.",
     "Create an immediate first-viewport signal for the offer, then support it with concrete proof, crisp scannable sections, and purposeful calls to action. Avoid generic hero composition when product evidence can carry the story.",
@@ -124,6 +128,18 @@ const DEFAULT_STYLEGUIDES: DesignGuidanceEntrySettings[] = [
     "Support fast recognition, playful but legible interaction, and strong state changes. Keep competitive data, inventory, or social actions structured enough for repeated use.",
   ),
   createEntry(
+    GAME_EXPERIENCE_STYLEGUIDE_ID,
+    "Game Experience",
+    "Playable experiences with responsive controls, legible state, stable performance, and inclusive interaction.",
+    [
+      "Design the core play loop around immediate, consistent input feedback and clearly distinguish controllable, interactive, hazardous, collectible, paused, completed, and failed states.",
+      "Keep frame-time, startup, asset loading, memory, and update-loop costs within budgets supported by the repository; avoid visual effects or background work that compromise input responsiveness.",
+      "Model gameplay, menus, pause/resume, save or checkpoint, restart, and error recovery as explicit deterministic states so transitions are testable and interrupted sessions recover safely.",
+      "Make controls discoverable and remappable where the platform permits, support keyboard and non-pointer operation, never communicate essential state through color, sound, or motion alone, and respect reduced-motion and audio preferences.",
+      "Use animation, sound, haptics, and visual emphasis to reinforce timing and consequence without obscuring targets, interface text, focus, status, or player agency.",
+    ].join("\n"),
+  ),
+  createEntry(
     "documentation-knowledge-base",
     "Documentation and Knowledge Base",
     "Reference, learning, and support surfaces with browsable structured content.",
@@ -152,7 +168,7 @@ const DEFAULT_TECH_STACKS: DesignGuidanceEntrySettings[] = [
     "Keep API contracts explicit, validate inputs at boundaries, preserve transaction and logging behavior, and write focused tests around success, validation failure, and operational error paths.",
   ),
   createEntry(
-    "electron-desktop-app",
+    ELECTRON_DESKTOP_APP_TECH_STACK_ID,
     "Electron Desktop App",
     "A desktop shell with web UI, local filesystem integration, and process lifecycle concerns.",
     "Respect process boundaries, startup recovery, filesystem safety, and native-window behavior. Keep renderer UI responsive while moving privileged work through typed main-process services.",

@@ -31,7 +31,7 @@ export interface ChatWidgetState {
   suppressBodyMarkdown?: boolean;
 }
 
-export type AppCreationKind = "web_app" | "desktop_app" | "unknown";
+export type AppCreationKind = "web_app" | "desktop_app" | "online_shop" | "portfolio" | "game" | "unknown";
 
 export type AppCreationProgressStageStatus = "pending" | "running" | "completed" | "failed";
 
@@ -499,6 +499,15 @@ const normalizeAppCreationKind = (value: unknown): AppCreationKind => {
   if (normalized === "desktop_app" || normalized === "desktop") {
     return "desktop_app";
   }
+  if (normalized === "online_shop" || normalized === "shop" || normalized === "online_store") {
+    return "online_shop";
+  }
+  if (normalized === "portfolio") {
+    return "portfolio";
+  }
+  if (normalized === "game") {
+    return "game";
+  }
   return "unknown";
 };
 
@@ -508,6 +517,12 @@ const formatAppCreationKindLabel = (kind: AppCreationKind): string => {
       return "Web app";
     case "desktop_app":
       return "Desktop app";
+    case "online_shop":
+      return "Online shop";
+    case "portfolio":
+      return "Portfolio";
+    case "game":
+      return "Game";
     case "unknown":
     default:
       return "App";

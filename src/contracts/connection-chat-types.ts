@@ -83,7 +83,13 @@ export interface ConversationRuntimeState {
   createAppQuickaction?: DashboardCreateAppQuickactionRuntimeState | null;
 }
 
-export const DASHBOARD_CREATE_APP_QUICKACTION_KINDS = ["web_app", "desktop_app"] as const;
+export const DASHBOARD_CREATE_APP_QUICKACTION_KINDS = [
+  "web_app",
+  "desktop_app",
+  "online_shop",
+  "portfolio",
+  "game",
+] as const;
 export type DashboardCreateAppQuickactionKind = typeof DASHBOARD_CREATE_APP_QUICKACTION_KINDS[number];
 
 export const DASHBOARD_APP_PROGRESS_WIDGET_TYPE = "app_progress" as const;

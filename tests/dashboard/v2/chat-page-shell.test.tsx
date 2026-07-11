@@ -153,9 +153,15 @@ describe("ChatPageShell", () => {
 
     const desktopAction = getByRole("button", { name: "Create Desktop App" });
     const webAction = getByRole("button", { name: "Create Web App" });
+    const shopAction = getByRole("button", { name: "Create Onlineshop" });
+    const portfolioAction = getByRole("button", { name: "Create Portfolio" });
+    const gameAction = getByRole("button", { name: "Create Game" });
 
     expect(desktopAction).toBeEnabled();
     expect(webAction).toBeEnabled();
+    expect(shopAction).toBeEnabled();
+    expect(portfolioAction).toBeEnabled();
+    expect(gameAction).toBeEnabled();
     expect(getByText("Create app quick actions are available.")).toHaveAttribute("aria-live", "polite");
 
     fireEvent.click(desktopAction);
