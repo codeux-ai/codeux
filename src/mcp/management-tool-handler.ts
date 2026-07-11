@@ -18,7 +18,9 @@ import type {
   ManageTelemetryArgs,
   ManageChatProvidersArgs,
   SearchKnowledgeArgs,
-  SearchSkillsArgs
+  SearchSkillsArgs,
+  RequestClarificationArgs,
+  ReplyToClarificationArgs
 } from "../contracts/internal-management-types.js";
 import type { KnowledgeService } from "../services/knowledge-service.js";
 import { getCurrentMcpAgentId } from "../server/mcp-agent-context.js";
@@ -44,6 +46,7 @@ import type {
 } from "../services/worker-task-dispatch-service.js";
 import type { SkillService } from "../services/skill-service.js";
 import type { NodeFlowService } from "../services/node-flow-service.js";
+import type { WorkerClarificationService } from "../services/worker-clarification-service.js";
 
 import type { PlanningAgentService } from "../services/planning-agent-service.js";
 import type { ProjectSetupService } from "../services/project-setup-service.js";
@@ -98,6 +101,7 @@ export interface ManagementToolHandlerDeps {
   schedulerService?: LateBoundOrValue<SchedulerService>;
   logger?: Logger;
   workerTaskDispatchService?: WorkerTaskDispatchService;
+  workerClarificationService?: WorkerClarificationService;
 }
 
 const MANAGEMENT_APPROVAL_TTL_MS = 15 * 60 * 1000;
@@ -540,6 +544,40 @@ export class ManagementToolHandler {
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("telemetry", args.action, error);
+    }
+  }
+
+  async handleRequestClarification(args: RequestClarificationArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      if (!this.deps.workerClarificationService) {
+        throw new Error("Worker clarification service is not enabled.");
+      }
+      const requesterAgentId = getCurrentMcpAgentId();
+      if (!requesterAgentId) {
+        throw new Error("An authenticated worker agent is required to request clarification.");
+      }
+      const clarification = this.deps.workerClarificationService.create({
+        ...args,
+        requesterAgentId,
+      });
+      return { content: [{ type: "text", text: JSON.stringify({ clarification }, null, 2) }] };
+    } catch (error) {
+      return this.formatError("clarifications", "request", error);
+    }
+  }
+
+  async handleReplyToClarification(args: ReplyToClarificationArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      if (!this.deps.workerClarificationService) {
+        throw new Error("Worker clarification service is not enabled.");
+      }
+      const result = this.deps.workerClarificationService.reply(args.projectId, args.clarificationId, {
+        answerMarkdown: args.answerMarkdown,
+        repliedByAgentId: getCurrentMcpAgentId() ?? "project-manager-mcp-client",
+      });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    } catch (error) {
+      return this.formatError("clarifications", "reply", error);
     }
   }
 

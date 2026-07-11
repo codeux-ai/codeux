@@ -750,7 +750,7 @@ describe("WorkerInboxReplyService", () => {
     });
   });
 
-  it("does not grant scheduler-only Code UX access to clarification replies without explicit MCP access", async () => {
+  it("injects the scoped reply gateway without custom MCP servers for clarification replies", async () => {
     mockRunProviderForText.mockResolvedValue({ text: "Only the clarification answer." });
 
     const service = new WorkerInboxReplyService({
@@ -824,7 +824,11 @@ describe("WorkerInboxReplyService", () => {
     });
 
     expect(mockRunProviderForText).toHaveBeenCalledWith(expect.objectContaining({
-      mcpConnection: null,
+      mcpConnection: {
+        url: "http://127.0.0.1:3000/mcp",
+        authToken: "token",
+        agentId: "project-manager",
+      },
       customMcpServers: [],
     }));
   });

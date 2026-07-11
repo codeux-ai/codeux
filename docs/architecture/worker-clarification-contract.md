@@ -35,6 +35,12 @@ The requester supplies a project-scoped deduplication key. Repeating the same no
 
 Before persistence, the service verifies every referenced task, sprint, sprint run, dispatch, and task run belongs to the declared project. It also verifies linked records agree with each other and derives omitted scope fields from the most specific runtime record. Reads and replies require both the project id and clarification id, preventing cross-project access through the public id.
 
+## MCP Audience Boundary
+
+The existing project-manager MCP gateway transports two audience-scoped tools without introducing a new runtime role. `request_clarification` is advertised only to an authenticated agent that is assigned to a task in the project, selected as the manual coding agent, or included in `orchestratorAgentPresetIds`. An assignment-only agent must address its assigned task when calling the tool. `reply_to_clarification` is advertised only to the configured clarification-reply or dashboard-reply agent, the built-in Project manager fallback, or an unscoped project-manager MCP client.
+
+The same resolver runs for `list_tools` and `call_tool`. Scoped calls must declare the agent's project; unknown agents, ineligible project roles, cross-project calls, and cross-audience calls fail as MCP `MethodNotFound`. Audience grants respect system tool toggles and explicit per-agent disables and do not enable unrelated management tools or custom MCP servers. Persistent-skill retrieval and dashboard-reply defaults remain independent grants.
+
 ## Runtime Events and Continuation Boundary
 
 When a task run is present, lifecycle changes append idempotent task-run events such as `worker_clarification_requested`, `worker_clarification_replied`, `worker_clarification_expired`, and `worker_clarification_cancelled`. Event payloads include both the clarification id and attention item id plus the complete runtime scope and requester metadata.

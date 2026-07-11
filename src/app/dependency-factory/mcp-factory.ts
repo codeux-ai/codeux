@@ -6,6 +6,8 @@ import { type DashboardSettings, type DashboardSettingsScope } from "../../contr
 import { resolveEffectiveDashboardSettings } from "../../services/settings-resolution-service.js";
 
 import type { DashboardDependencies } from "./dashboard-factory.js";
+import { WorkerClarificationRepository } from "../../repositories/worker-clarification-repository.js";
+import { WorkerClarificationService } from "../../services/worker-clarification-service.js";
 
 export interface McpDependencies {
   managementToolHandler: ManagementToolHandler;
@@ -56,6 +58,11 @@ export function createMcpDependencies(
     schedulerService: dashboardDeps.schedulerService,
     logger: coreDeps.logger.child({ component: "mcp-management-tool-handler" }),
     workerTaskDispatchService: sprintDeps.workerTaskDispatchService,
+    workerClarificationService: new WorkerClarificationService(
+      new WorkerClarificationRepository(coreDeps.projectAttentionRepository),
+      coreDeps.projectManagementRepository,
+      coreDeps.executionRepository,
+    ),
   });
 
   return {

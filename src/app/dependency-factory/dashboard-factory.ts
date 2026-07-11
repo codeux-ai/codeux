@@ -14,6 +14,8 @@ import { formatSprintBranch } from "../../domain/sprint/branch-name-generator.js
 
 import { ChatThreadRuntimeService } from "../../services/chat-thread-runtime-service.js";
 import { ManagementToolHandler } from "../../mcp/management-tool-handler.js";
+import { WorkerClarificationRepository } from "../../repositories/worker-clarification-repository.js";
+import { WorkerClarificationService } from "../../services/worker-clarification-service.js";
 import { StructuredProviderResponseService } from "../../services/structured-provider-response-service.js";
 import { ChatManagementActionService } from "../../services/chat-management-action-service.js";
 import { ProviderExecutionService } from "../../services/provider-execution-service.js";
@@ -132,6 +134,11 @@ export function createDashboardDependencies(
     quicksprintService: quicksprintServiceRef,
     schedulerService: schedulerServiceRef,
     logger: logger.child({ component: "mcp-management-tool-handler" }),
+    workerClarificationService: new WorkerClarificationService(
+      new WorkerClarificationRepository(coreDeps.projectAttentionRepository),
+      projectManagementRepository,
+      executionRepository,
+    ),
   });
 
   const providerExecutionService = new ProviderExecutionService({

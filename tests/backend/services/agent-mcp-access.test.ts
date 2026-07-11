@@ -9,7 +9,9 @@ import {
   sanitizeAgentMcpAccess,
   resolveAgentMcpRuntime,
   mergeCodeUxToolToggles,
+  projectManagerClarificationAgentMcpAccess,
   toAgentCodeUxToolAccess,
+  workerClarificationAgentMcpAccess,
 } from "../../../src/services/agent-mcp-access.js";
 import type { CustomMcpServer, McpToolToggle } from "../../../src/contracts/app-types.js";
 import type { McpConnectionInfo } from "../../../src/contracts/mcp-connection-types.js";
@@ -52,6 +54,18 @@ describe("sanitizeAgentMcpAccess", () => {
 });
 
 describe("agent MCP defaults", () => {
+  it("injects only the narrow clarification gateway tool when broad Code UX access is off", () => {
+    const worker = workerClarificationAgentMcpAccess(defaultCodingAgentMcpAccess());
+    const manager = projectManagerClarificationAgentMcpAccess(undefined);
+
+    expect(worker.codeUxToolToggles.filter((toggle) => toggle.enabled).map((toggle) => toggle.name))
+      .toEqual(["request_clarification"]);
+    expect(worker.linkedServerIds).toEqual(["playwright"]);
+    expect(manager.codeUxToolToggles.filter((toggle) => toggle.enabled).map((toggle) => toggle.name))
+      .toEqual(["reply_to_clarification"]);
+    expect(manager.linkedServerIds).toEqual([]);
+  });
+
   it("keeps coding-agent custom links without implying Code UX access", () => {
     expect(defaultCodingAgentMcpAccess()).toEqual({
       codeUxEnabled: false,

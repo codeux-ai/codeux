@@ -101,12 +101,14 @@ Worker MCP clients can advertise their agent preset with the `X-Code-Ux-Agent` h
 When the header is present, Code UX must resolve it to an explicit agent MCP access policy before exposing built-in Code UX management tools. Malformed HTTP header values are rejected before MCP routing; if an advertised agent identity reaches the router but is unknown or resolves to an agent without an explicit MCP access policy, `list_tools` returns no Code UX tools and `call_tool` rejects every Code UX management tool with MCP `MethodNotFound`. This fail-closed behavior prevents an unrecognized agent from inheriting broad system-level management access.
 
 For a resolved agent policy:
-- `codeUxEnabled: false` removes every built-in Code UX tool from `list_tools` and causes `call_tool` to return `MethodNotFound`, even when system-level toggles enable those tools.
+- `codeUxEnabled: false` removes the general built-in Code UX management surface. Narrow audience grants can still expose `request_clarification`, `reply_to_clarification`, or existing persistent-skill retrieval without enabling unrelated tools.
 - `codeUxEnabled: true` applies the agent's per-tool overrides over the system MCP tool toggles.
 - Runtime-role filtering still applies after system and agent policy checks.
 - Custom external MCP servers remain limited to the agent's linked server ids and are not broadened by Code UX tool availability.
 
 The dashboard chat reply route is the only route-local default exception. The agent assigned to that route receives full built-in Code UX MCP access, `scheduler_code_ux`, `add_long_term_memory`, and the default Playwright MCP server for dashboard reply turns even when its saved preset has Code UX disabled or no MCP policy. An explicitly narrowed dashboard reply policy still has both dedicated lanes forced on. This default is keyed to the dashboard reply route assignment, not to the generic `project_manager` runtime role.
+
+Clarification tools add a separate audience boundary on the same gateway. `request_clarification` is limited to an assigned task agent, the manual coding route, or an `orchestratorAgentPresetIds` worker-pool member. `reply_to_clarification` is limited to the clarification-reply/dashboard-reply project-manager agent or an unscoped project-manager client. Agent-scoped calls must match the agent's project, and assignment-only workers must address their assigned task. Listing and calling share the same resolver, so unknown, ineligible, cross-project, and cross-audience requests fail closed with `MethodNotFound`.
 
 ## Common Response Shape
 
