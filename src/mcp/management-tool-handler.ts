@@ -571,17 +571,12 @@ export class ManagementToolHandler {
   async handleReplyToClarification(args: ReplyToClarificationArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
       const repliedByAgentId = getCurrentMcpAgentId() ?? "project-manager-mcp-client";
-      if (this.deps.workerClarificationContinuationService) {
-        const result = await this.deps.workerClarificationContinuationService.continueReply({
-          projectId: args.projectId,
-          clarificationId: args.clarificationId,
-          answerMarkdown: args.answerMarkdown,
-          repliedByAgentId,
-        });
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      if (!this.deps.workerClarificationContinuationService) {
+        throw new Error("Worker clarification continuation service is not enabled.");
       }
-      if (!this.deps.workerClarificationService) throw new Error("Worker clarification service is not enabled.");
-      const result = this.deps.workerClarificationService.reply(args.projectId, args.clarificationId, {
+      const result = await this.deps.workerClarificationContinuationService.continueReply({
+        projectId: args.projectId,
+        clarificationId: args.clarificationId,
         answerMarkdown: args.answerMarkdown,
         repliedByAgentId,
       });

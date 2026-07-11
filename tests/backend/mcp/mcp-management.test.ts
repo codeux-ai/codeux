@@ -193,6 +193,31 @@ describe("ManagementToolHandler", () => {
     });
   });
 
+  it("does not settle clarification replies when provider continuation is not configured", async () => {
+    const directReply = vi.fn();
+    const handlerWithoutContinuation = new ManagementToolHandler({
+      ...deps,
+      workerClarificationContinuationService: undefined,
+      workerClarificationService: { reply: directReply },
+    });
+
+    const response = await handlerWithoutContinuation.handleReplyToClarification({
+      projectId: "project-1",
+      clarificationId: "clarification-1",
+      answerMarkdown: "Preserve the legacy rows.",
+    });
+
+    expect(JSON.parse(response.content[0].text)).toMatchObject({
+      result: {
+        status: "error",
+        domain: "clarifications",
+        action: "reply",
+        message: "Worker clarification continuation service is not enabled.",
+      },
+    });
+    expect(directReply).not.toHaveBeenCalled();
+  });
+
   it("returns standardized validation envelopes for blank required strings", async () => {
     const response = await handler.handleManageSprints({ action: "list", projectId: "   " });
     const parsed = JSON.parse(response.content[0].text);

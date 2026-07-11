@@ -20,6 +20,8 @@ Replies close the active attention item only after provider delivery or workspac
 
 Every task, sprint, sprint run, dispatch, and task-run reference is checked against the declared project and against the other linked runtime records. Reads and mutations require the owning project id as well as the clarification id, and continuation verifies that the replying agent is an eligible project manager for that project.
 
+Runtime composition explicitly gives the server its continuation-enabled management handler. If continuation wiring is unavailable, the MCP reply fails closed instead of directly settling the clarification.
+
 ## MCP audience boundary
 
 The project-manager MCP gateway carries two audience-scoped tools; no additional runtime role is created. Authenticated task agents can discover `request_clarification` only when they are assigned to a project task, selected as the manual coding agent, or included in the project's coding worker pool. Only the configured clarification-reply or dashboard-reply agent, the built-in Project manager fallback, or an unscoped project-manager client can discover `reply_to_clarification`.
