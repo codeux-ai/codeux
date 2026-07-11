@@ -1010,7 +1010,7 @@ describe("SettingsIntegrationsPanel", () => {
       expect(screen.getByLabelText("Linked Drive directory")).toBeTruthy();
       const modeTrigger = screen.getByRole("button", { name: "Google Drive access mode" });
       expect(modeTrigger.textContent).toContain("Read-only (recommended)");
-      expect(container.textContent).toContain("/mnt/google-drive");
+      expect(screen.getByText("/mnt/code-ux/google-drive", { selector: "code", exact: true })).toBeTruthy();
       expect(container.textContent).toContain("Docker runs only");
 
       fireEvent.click(screen.getByLabelText("Enable Google Drive mount"));
