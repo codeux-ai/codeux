@@ -157,7 +157,7 @@ The dashboard Guidance panel manages this block through the normal settings save
 }
 ```
 
-This scoped block identifies an already user-linked Google Drive directory on the host. It follows the normal System → Project → Sprint cascade and does not contain API credentials. Paths are trimmed during sanitization, unsupported nested fields are removed, and missing or invalid access modes disable the block and fall back to read-only access. Docker runs validate that the resolved source exists and is a directory before exposing it at `/mnt/code-ux/google-drive` with read-only or read-write access. Host runs and invalid sources receive no mount. The agent notice refers only to this container path, keeps the Drive distinct from the Git workspace, and is idempotent across retries and resumed prompts.
+This scoped block identifies an already user-linked Google Drive directory on the host. It follows the normal System → Project → Sprint cascade and does not contain API credentials. Paths are trimmed during sanitization, unsupported nested fields are removed, and missing or invalid access modes disable the block and fall back to read-only access. Docker runs validate that the resolved source exists and is a directory, pass the typed mount through the provider boundary, and map its source for the Docker daemon before exposing it at `/mnt/code-ux/google-drive` with read-only or read-write access. Host runs and invalid sources receive no mount. The agent notice refers only to this container path, keeps the Drive distinct from the Git workspace, and is idempotent across retries and resumed prompts.
 
 ## `cliWorkflow`
 
