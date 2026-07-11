@@ -205,7 +205,7 @@ describe("ProviderExecutionService", () => {
     }));
   });
 
-  it("appends persistent skill guidance, writable mounts, and retrieval MCP for enabled attached agents", async () => {
+  it("appends persistent skill guidance, versioned mounts, and retrieval MCP for enabled attached agents", async () => {
     providerRunner.runProvider.mockResolvedValue(mockResult);
     const skillRuntime = {
       projectId: "proj-1",
@@ -219,6 +219,7 @@ describe("ProviderExecutionService", () => {
         storageName: "Runtime Skills",
         hostPath: "/home/test/.code-ux/persistent-skill-storages/proj-1/agent-1/storage-1",
         containerPath: "/code-ux/persistent-skills/storage-1",
+        revision: "0123456789abcdef0123456789abcdef01234567",
       }],
     };
     service = new ProviderExecutionService({
@@ -350,6 +351,7 @@ describe("ProviderExecutionService", () => {
             storageName: "Runtime Skills",
             hostPath: "/home/test/.code-ux/persistent-skill-storages/proj-1/agent-1/storage-1",
             containerPath: "/code-ux/persistent-skills/storage-1",
+            revision: "0123456789abcdef0123456789abcdef01234567",
           }],
         }),
       } as any,

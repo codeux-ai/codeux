@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -7,6 +7,9 @@ import { AgentPresetRepository } from "../../../src/repositories/agent-preset-re
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { SkillRepository } from "../../../src/repositories/skill-repository.js";
 import { SkillService, type SkillEmbeddingProvider } from "../../../src/services/skill-service.js";
+import { ContainerizedSkillStorageGitRunner, SkillStorageVersionControlService } from "../../../src/services/skill-storage-version-control-service.js";
+import { FakeSkillStorageGitRunner } from "../helpers/fake-skill-storage-git-runner.js";
+import { commandRunner } from "../../../src/services/cli-process-runner.js";
 
 const tempDirs: string[] = [];
 
@@ -61,12 +64,41 @@ async function createFixture(embeddingProvider: SkillEmbeddingProvider = new Fak
     projectId: project.id,
     otherProjectId: otherProject.id,
     skillRepository,
-    skillService: new SkillService(skillRepository, embeddingProvider),
+    skillService: new SkillService(
+      skillRepository,
+      embeddingProvider,
+      undefined,
+      new SkillStorageVersionControlService(path.join(dir, "skill-storages"), new FakeSkillStorageGitRunner()),
+    ),
     agentPresetRepository,
   };
 }
 
 describe("SkillService", () => {
+  it("forces skill history operations through containerized Git even when host mode is configured", async () => {
+    const runStrict = vi.spyOn(commandRunner, "runStrict").mockResolvedValue({
+      ok: true,
+      code: 0,
+      stdout: "",
+      stderr: "",
+    });
+    const previous = process.env.CODE_UX_GIT_CONTAINER_MODE;
+    process.env.CODE_UX_GIT_CONTAINER_MODE = "host";
+    try {
+      await new ContainerizedSkillStorageGitRunner().run(["status", "--porcelain"], "/tmp/skill-repo");
+      expect(runStrict).toHaveBeenCalledWith("git", ["status", "--porcelain"], expect.objectContaining({
+        cwd: "/tmp/skill-repo",
+        env: expect.objectContaining({ CODE_UX_CONTAINERIZED_GIT: "1" }),
+      }));
+      const options = runStrict.mock.calls[0]![2]!;
+      expect(options.env?.CODE_UX_GIT_CONTAINER_MODE).toBeUndefined();
+    } finally {
+      runStrict.mockRestore();
+      if (previous === undefined) delete process.env.CODE_UX_GIT_CONTAINER_MODE;
+      else process.env.CODE_UX_GIT_CONTAINER_MODE = previous;
+    }
+  });
+
   it("imports and renders skill markdown with frontmatter metadata", async () => {
     const { projectId, skillService } = await createFixture(new FakeEmbeddingProvider(false));
     const storage = skillService.createStorage(projectId, { id: "markdown-storage", name: "Markdown storage" });
@@ -114,6 +146,43 @@ Store this without embedding.
 
     expect(skill.name).toBe("Offline Skill");
     expect(storage.getDatabase().prepare("SELECT COUNT(*) AS count FROM skill_embeddings WHERE skill_id = ?").get(skill.id)).toEqual({ count: 0 });
+    await expect(skillService.search({
+      projectId,
+      storageId: skillStorage.id,
+      query: "offline embedding",
+    })).resolves.toEqual([expect.objectContaining({
+      skill: expect.objectContaining({ id: skill.id }),
+      similarity: expect.any(Number),
+    })]);
+  });
+
+  it("indexes a compact descriptor plus bounded body chunks", async () => {
+    const { storage, projectId, skillService } = await createFixture();
+    const skillStorage = skillService.createStorage(projectId, { id: "chunk-storage", name: "Chunked" });
+    const skill = await skillService.writeSkillFromMarkdown(projectId, skillStorage.id, `---
+title: Deployment Runbook
+description: Release and rollback workflows.
+tags: [release, operations]
+---
+
+## Validate
+
+${"Validate the release artifact and audit result. ".repeat(60)}
+
+## Roll back
+
+${"Restore the previous deployment and verify service health. ".repeat(60)}
+`);
+
+    const rows = storage.getDatabase().prepare(`
+      SELECT chunk_index
+      FROM skill_embeddings
+      WHERE skill_id = ?
+      ORDER BY chunk_index
+    `).all(skill.id) as Array<{ chunk_index: number }>;
+    expect(rows.length).toBeGreaterThan(2);
+    expect(rows[0]?.chunk_index).toBe(0);
+    expect(rows.map((row) => row.chunk_index)).toEqual(rows.map((_, index) => index));
   });
 
   it("preserves imported skill provenance when updating markdown without overrides", async () => {
@@ -274,14 +343,15 @@ Review another project content.
     });
 
     expect(runtime?.instructionMarkdown).toContain("search_skills");
-    expect(runtime?.instructionMarkdown).toContain("manage_skills import_markdown");
+    expect(runtime?.instructionMarkdown).toContain("manage_skills");
     expect(runtime?.mounts).toHaveLength(1);
     expect(runtime?.mounts[0]).toMatchObject({
       storageId: storage.id,
       storageName: "Attached Runtime Skills",
       containerPath: "/code-ux/persistent-skills/attached-storage",
     });
-    expect(runtime?.mounts[0]!.hostPath).toContain(path.join(".code-ux", "persistent-skill-storages"));
+    expect(runtime?.mounts[0]!.hostPath).toContain(path.join("skill-storages", projectId, storage.id, "repo"));
+    expect(runtime?.mounts[0]!.revision).toMatch(/^[0-9a-f]{40}$/);
     const stats = await fs.stat(runtime!.mounts[0]!.hostPath);
     expect(stats.isDirectory()).toBe(true);
   });

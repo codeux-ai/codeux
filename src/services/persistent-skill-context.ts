@@ -25,22 +25,22 @@ export const buildPersistentSkillStorageInstruction = (
   mounts: PersistentSkillStorageRuntimeMount[],
 ): string => {
   const storageLines = mounts.map((mount) =>
-    `- ${mount.storageName} (\`${mount.storageId}\`): mounted at \`${mount.containerPath}\` in Docker and \`${mount.hostPath}\` on host runs.`,
+    `- ${mount.storageName} (\`${mount.storageId}\`, revision \`${mount.revision.slice(0, 12)}\`): readable at \`${mount.containerPath}\` in containerized runs.`,
   );
 
   return [
     PERSISTENT_SKILL_SECTION_HEADING,
     "This agent has persistent skill storage enabled. Use it only for reusable skills that should survive this invocation; do not treat it as project workspace state.",
     "",
-    "Before creating a new skill, search existing attached skills with the `search_skills` MCP tool using:",
+    "Use the `search_skills` MCP tool before applying or creating skill guidance. Do not claim storage is unavailable until that tool returns an error. Search using:",
     `- \`projectId: ${projectId}\``,
     `- \`agentPresetId: ${agentPresetId}\``,
     "- a natural-language query for the guidance you need",
     "",
-    "Attached writable storage paths:",
+    "Attached versioned storage snapshots:",
     ...storageLines,
     "",
-    "When you create a durable new skill, prefer MCP storage APIs if `manage_skills` is available, for example `manage_skills import_markdown` with the target storage id. If MCP write access is not available, save a markdown skill file under the matching mounted storage path. Keep skill markdown concise, include searchable frontmatter, and do not duplicate an existing skill found by search.",
+    "Storage mounts are read-only snapshots. Create or update durable skills through `manage_skills` so Code UX can validate, version, and re-index every change. Keep skill markdown concise, include searchable frontmatter, and do not duplicate an existing skill found by search.",
   ].join("\n");
 };
 

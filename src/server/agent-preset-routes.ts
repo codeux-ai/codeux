@@ -1,11 +1,12 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute } from "./route-utils.js";
-import { requireTrimmedString } from "./request-parsers.js";
+import { parseOptionalInteger, requireTrimmedString } from "./request-parsers.js";
 import { HttpRouteError } from "./http-errors.js";
 import type { CreateAgentPresetInput, PushAgentPresetsToMarkdownOptions, UpdateAgentPresetInput } from "../contracts/agent-preset-types.js";
 import type {
   CreateSkillStorageInput,
+  SkillCatalogEntry,
   SkillRecord,
   SkillStorageContentSummary,
   SkillStorageContentsResponse,
@@ -96,6 +97,26 @@ export function registerAgentPresetRoutes(router: Express, deps: DashboardDepend
   router.get("/api/projects/:projectId/skill-storages", asyncRoute(async (req, res) => {
     const skillService = requireSkillService(deps);
     res.json(skillService.listStorages(requireTrimmedString(req.params.projectId, "projectId")));
+  }));
+
+  router.get("/api/projects/:projectId/skills", asyncRoute(async (req, res) => {
+    const skillService = requireSkillService(deps);
+    const projectId = requireTrimmedString(req.params.projectId, "projectId");
+    const agentPresetId = typeof req.query.agentPresetId === "string" && req.query.agentPresetId.trim()
+      ? req.query.agentPresetId.trim()
+      : undefined;
+    const limit = parseOptionalInteger(req.query.limit, 1, 1000, "limit") ?? 1000;
+    const storages = new Map(skillService.listStorages(projectId).map((storage) => [storage.id, storage.name]));
+    const records = agentPresetId
+      ? skillService.listByAgent(projectId, agentPresetId, limit)
+      : skillService.listByProject(projectId, limit);
+    const response: SkillCatalogEntry[] = records.map((skill) => ({
+      ...toSkillStorageContentSummary(skill),
+      projectId,
+      storageId: skill.storageId,
+      storageName: storages.get(skill.storageId) ?? "Skill storage",
+    }));
+    res.json(response);
   }));
 
   router.post("/api/projects/:projectId/skill-storages", asyncRoute(async (req, res) => {

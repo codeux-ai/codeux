@@ -241,6 +241,7 @@ describe("WorkerInboxReplyService", () => {
       storageName: "Reply Skills",
       hostPath: "/home/test/.code-ux/persistent-skill-storages/project-1/reply-agent/reply-skills",
       containerPath: "/code-ux/persistent-skills/reply-skills",
+      revision: "0123456789abcdef0123456789abcdef01234567",
     }];
     const executionRepository = {
       createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-skills" }),
