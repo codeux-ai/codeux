@@ -35,10 +35,11 @@ const SpeechModelCard: FunctionComponent<{
   model: SpeechModelStatus;
   active: boolean;
   busy: boolean;
+  activationDisabledReason?: string;
   onDownload: () => void;
   onActivate: () => void;
   onDelete: () => void;
-}> = ({ model, active, busy, onDownload, onActivate, onDelete }) => {
+}> = ({ model, active, busy, activationDisabledReason, onDownload, onActivate, onDelete }) => {
   const Icon = model.kind === "transcription" ? Mic : Volume2;
   return (
     <article className={`relative overflow-hidden rounded-2xl border p-4 transition-colors ${active ? "border-signal-500/35 bg-signal-500/[0.07]" : "border-black/[0.06] bg-white/65 dark:border-white/[0.07] dark:bg-white/[0.035]"}`}>
@@ -70,8 +71,8 @@ const SpeechModelCard: FunctionComponent<{
                 {model.downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} Download
               </button>
             ) : (
-              <button type="button" onClick={onActivate} disabled={busy || active} className="inline-flex min-h-9 items-center gap-2 rounded-xl bg-signal-500 px-3 py-2 text-[11px] font-bold text-white hover:bg-signal-400 disabled:cursor-default disabled:opacity-65 dark:text-void-950">
-                <Check className="h-3.5 w-3.5" /> {active ? "Active" : `Use for ${model.kind === "transcription" ? "input" : "3D Chat"}`}
+              <button type="button" onClick={onActivate} disabled={busy || active || Boolean(activationDisabledReason)} title={activationDisabledReason} className="inline-flex min-h-9 items-center gap-2 rounded-xl bg-signal-500 px-3 py-2 text-[11px] font-bold text-white hover:bg-signal-400 disabled:cursor-default disabled:opacity-65 dark:text-void-950">
+                <Check className="h-3.5 w-3.5" /> {active ? "Active" : activationDisabledReason ? "Local runtime pending" : `Use for ${model.kind === "transcription" ? "input" : "3D Chat"}`}
               </button>
             )}
             <a href={model.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-black/[0.07] px-3 py-2 text-[11px] font-bold text-slate-500 hover:text-slate-900 dark:border-white/[0.08] dark:hover:text-white">
@@ -199,6 +200,7 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
                   ? editableSettings.speech.enabled && editableSettings.speech.localModelId === model.id && editableSettings.speech.providerMode !== "external_api"
                   : editableSettings.speech.synthesis.enabled && editableSettings.speech.synthesis.localModelId === model.id && editableSettings.speech.synthesis.providerMode !== "external_api";
                 return <SpeechModelCard key={model.id} model={model} active={active} busy={busyModelId === model.id}
+                  activationDisabledReason={model.kind === "transcription" && model.adapter === "whisper" ? "Whisper local generation is not available yet. Select API mode for Whisper, or activate Wav2Vec2 for local input." : undefined}
                   onDownload={() => void run(model.id, () => downloadSpeechModel(model.id))}
                   onDelete={() => void run(model.id, () => deleteSpeechModel(model.id))}
                   onActivate={() => {

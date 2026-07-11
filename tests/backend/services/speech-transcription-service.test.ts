@@ -85,7 +85,7 @@ describe("SpeechTranscriptionService", () => {
       ok: false,
       error: {
         code: "missing_local_model",
-        message: 'Local speech model "onnx-community/whisper-base.en" is not installed.',
+        message: 'Local speech model "Xenova/wav2vec2-base-960h" is not installed.',
         provider: "local_onnx",
         retryable: false,
       },
@@ -121,13 +121,13 @@ describe("SpeechTranscriptionService", () => {
       ok: true,
       text: "local transcript",
       provider: "local_onnx",
-      model: "onnx-community/whisper-base.en",
+      model: "Xenova/wav2vec2-base-960h",
       language: "en",
       durationSeconds: 1,
       fallback: null,
     });
     expect(localRuntime.transcribe).toHaveBeenCalledWith(expect.objectContaining({
-      model: expect.objectContaining({ id: "onnx-community/whisper-base.en" }),
+      model: expect.objectContaining({ id: "Xenova/wav2vec2-base-960h" }),
       audio: expect.any(Float32Array),
       sampleRate: 16_000,
       language: "en",
@@ -201,7 +201,7 @@ describe("SpeechTranscriptionService", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe("missing_local_model");
-      expect(result.error.message).toContain("onnx-community/whisper-base.en");
+      expect(result.error.message).toContain("Xenova/wav2vec2-base-960h");
     }
     expect(fetchImpl).not.toHaveBeenCalled();
   });

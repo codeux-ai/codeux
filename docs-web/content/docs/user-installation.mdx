@@ -83,7 +83,7 @@ ONNX speech model files in your Code UX home cache:
 For the default model, the directory is:
 
 ```text
-~/.code-ux/models/speech/onnx-community--whisper-base.en/
+~/.code-ux/models/speech/xenova--wav2vec2-base-960h/
 ```
 
 Local is the default speech provider mode. If the model is missing, the dashboard shows a setup error

@@ -586,7 +586,7 @@ describe("validateSettingsPayload", () => {
     expect(result).toEqual({
       enabled: true,
       providerMode: "local_onnx",
-      localModelId: "onnx-community/whisper-tiny.en",
+      localModelId: "Xenova/wav2vec2-base-960h",
       maxAudioSeconds: 600,
       externalTranscription: {
         baseUrl: "https://api.example/v1/audio/transcriptions",
