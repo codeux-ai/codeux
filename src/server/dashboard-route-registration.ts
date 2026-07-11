@@ -76,6 +76,10 @@ export const createDashboardRouteDependencies = (options: DashboardServerOptions
     installLocalMcpProvider: routeDependencies.installLocalMcpProvider ?? (async () => {
       throw new Error("Local MCP CLI installation is not available.");
     }),
+    getDashboardNotifications: options.getDashboardNotifications ?? (() => ({
+      notifications: [],
+      updatedAt: null,
+    })),
   };
 };
 

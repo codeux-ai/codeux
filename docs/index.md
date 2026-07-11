@@ -42,6 +42,7 @@ Use this page as the main entrypoint.
 5. [Execution Schema Foundation](./architecture/execution-schema-foundation.md)
 6. [DB-Native Orchestrator Integration](./architecture/db-native-orchestrator-integration.md)
 7. [Execution Dashboard Projection](./architecture/execution-dashboard-projection.md)
+- [Dashboard Notification Feed](./architecture/dashboard-notification-feed.md)
 8. [Execution Invocation Tracking](./architecture/execution-invocation-tracking.md)
 9. [Code Quality And Performance Contracts](./architecture/code-quality-performance-contracts.md)
 10. [Dashboard Realtime Transport Plan](./architecture/dashboard-realtime-transport-plan.md)

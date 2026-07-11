@@ -52,6 +52,8 @@ The background is an animated Three.js scene ("Deep Ocean") that lazy-loads afte
 
 The Overview telemetry rail combines cross-project runtime health with selected-project detail:
 
+The server also exposes the read-only `GET /api/notifications` feed for global notification surfaces. It combines active attention with unrepresented execution failures and automatic stops across every project, and clients refresh it when the existing `overview.telemetry.updated` realtime event arrives.
+
 - Cross-project intervention cards still show active projects that need human attention.
 - Active sprint cards and the runtime timeline continue to summarize work across active projects.
 - When the top bar has a project selected and that project's live snapshot contains active attention items, Overview shows a compact **Selected Sprint Attention Queue** inside the telemetry panel.
