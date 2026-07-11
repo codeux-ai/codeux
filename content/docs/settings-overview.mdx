@@ -1,0 +1,114 @@
+# Settings
+
+Settings is the configuration hub for Code UX. It covers local runtime behavior, provider routing, project overrides, Git and CI automation, dashboard appearance, memory, integrations, MCP tool access, and destructive maintenance actions.
+
+Use this section when you need more detail than the inline Settings-page help popovers provide. Every Settings card links to one of the pages below, and each page explains what the controls affect, recommended defaults, common risks, and validation steps.
+
+## How Settings Scope Works
+
+| Scope | Use it for | Watch for |
+| --- | --- | --- |
+| System | Defaults shared by every project, provider credentials, global runtime behavior, and reusable catalogs. | A system change can affect future work across projects. |
+| Project | Repository-specific routing, preview behavior, memory, integrations, and workflow policy. | Project overrides can mask system defaults. |
+| Sprint | Narrow execution overrides where supported by the runtime. | Use sparingly so sprint behavior stays explainable. |
+
+## Settings Areas
+
+### Scope, Runtime, And Workspace
+
+| Area | What it covers |
+| --- | --- |
+| [Project Context](/docs/settings-project-context) | Names and identifies the active project without changing the stored project id or execution history. |
+| [Automation](/docs/settings-automation) | Controls how much Code UX may continue without pausing for operator decisions. |
+| [Docker Runtime](/docs/settings-docker-runtime) | Defines the default container environment used by Docker-backed provider CLIs. |
+| [System Runtime](/docs/settings-system-runtime) | Configures dashboard port and runtime logging behavior for the local Code UX process. |
+| [Restart Behavior](/docs/settings-restart-behavior) | Chooses how active sprints and interrupted provider invocations are reconciled after the app restarts. |
+| [Database Settings](/docs/settings-database-settings) | Manages local SQLite retention and maintenance for runtime activity data. |
+| [Onboarding](/docs/settings-onboarding) | Reopens the guided setup flow without changing saved settings by itself. |
+
+### Appearance And Guidance
+
+| Area | What it covers |
+| --- | --- |
+| [Display Settings](/docs/settings-display-settings) | Controls the dashboard shell layout, theme, motion preference, and desktop zoom when available. |
+| [Background](/docs/settings-background) | Customizes the dashboard background image, animation mode, static color, and pattern overlay. |
+| [Techstacks](/docs/settings-techstacks) | Manages the system techstack catalog and per-project techstack/application-kind assignment. |
+| [Guidance](/docs/settings-guidance) | Manages selected tech-stack and styleguide guidance plus custom instruction entries for the active settings scope. |
+| [Default Routing Anchors](/docs/settings-default-routing-anchors) | Sets the global and worker provider instances used when invocation routes inherit defaults. |
+
+### Provider Routing And Models
+
+| Area | What it covers |
+| --- | --- |
+| [Base Provider Configuration](/docs/settings-base-provider-configuration) | Defines each named provider instance's default eligibility, model, thinking depth, weight, and concurrency. |
+| [Route Mapping](/docs/settings-route-mapping) | Routes each invocation type to inherited, manual, weighted, or agent-selected provider pools. |
+| [Model Pricing](/docs/settings-model-pricing) | Stores token pricing metadata used for model cost estimates in dashboard views. |
+| [Provider Integration](/docs/settings-provider-integration) | Explains that provider credentials are system-owned while project scopes still control routing and auth-copy behavior. |
+| [Provider Credentials](/docs/settings-provider-credentials) | Manages named provider instances, authentication mode, local auth copy, dashboard login, provider config files, and base model defaults. |
+
+### Git, CI, QA, And Execution Safety
+
+| Area | What it covers |
+| --- | --- |
+| [Git Flow](/docs/settings-git-flow) | Controls branch naming, PR creation, issue closure, and cleanup for sprint work. |
+| [Merge Gates & Autofix](/docs/settings-merge-gates-autofix) | Configures review, conflict, CI, and auto-merge gates for feature and main-branch merges. |
+| [Quality Assurance](/docs/settings-quality-assurance) | Controls completion-time QA review, QA routing, and trigger-specific agent assignment. |
+| [Guardrails](/docs/settings-guardrails) | Caps repeated agent jobs so runaway planning, coding, CI, merge, clarification, or remediation loops stop predictably. |
+| [Rate Limit](/docs/settings-rate-limit) | Controls retries after provider quota or rate-limit responses. |
+| [Watch Loop](/docs/settings-watch-loop) | Controls whether live sprint orchestration keeps polling and how frequently it emits work. |
+| [Workspace Hygiene](/docs/settings-workspace-hygiene) | Controls cleanup of temporary worktree state after provider CLI runs. |
+| [Workspace Visibility](/docs/settings-workspace-visibility) | Controls automatic preview lifecycle and whether browser workspace entry points appear in the dashboard. |
+| [Runtime Limits](/docs/settings-runtime-limits) | Sets preview container concurrency, host port range, app port, and startup script path. |
+
+### Memory And Knowledge
+
+| Area | What it covers |
+| --- | --- |
+| [Memory System](/docs/settings-memory-system) | Controls capture, promotion, and remediation of sprint and project memory. |
+| [Long-Term Remediation Schedule](/docs/settings-long-term-remediation-schedule) | Schedules recurring project memory cleanup and claim maintenance. |
+| [Limits](/docs/settings-limits) | Caps memory promotion thresholds, retained memories, graph density, and remediation promotions. |
+| [Embedding Provider](/docs/settings-embedding-provider) | Chooses in-app embeddings or an external OpenAI-compatible embeddings API. |
+| [Worker Learnings Instruction](/docs/settings-worker-learnings-instruction) | Defines the prompt appended to worker tasks so useful lessons are captured for memory processing. |
+| [Project Memory](/docs/settings-project-memory) | Clears selected memory tiers for the active project only. |
+| [System Memory](/docs/settings-system-memory) | Clears memory tiers across every project in the local database. |
+
+### Integrations And Imports
+
+| Area | What it covers |
+| --- | --- |
+| [Integrations](/docs/settings-integrations) | Lists provider, git-host, issue-tracker, and read-only importer integrations and exposes manage/add actions. |
+| [Jules Automation](/docs/settings-jules-automation) | Configures Jules clarification automation and CI autofix handoff behavior. |
+| [Git Host Configuration](/docs/settings-git-host-configuration) | Stores GitHub or GitLab tokens and Docker git-auth behavior for repository automation. |
+| [Jira Configuration](/docs/settings-jira-configuration) | Connects Jira issue search, import transitions, and completion transitions. |
+| [Importer Configuration](/docs/settings-importer-configuration) | Configures read-only external work imports for project management, whiteboard, diagram, and design providers. |
+
+### MCP And Tool Access
+
+| Area | What it covers |
+| --- | --- |
+| [MCP Servers](/docs/settings-mcp-servers) | Lists built-in and custom MCP servers injected into provider CLI runtimes. |
+| [Built-in MCP (Code UX)](/docs/settings-built-in-mcp) | Controls which built-in Code UX MCP tool categories are available to containerized CLIs. |
+| [MCP Tool Category](/docs/settings-mcp-tool-category) | Enables or disables one built-in MCP tool category and its individual tools. |
+| [Custom MCP Server](/docs/settings-custom-mcp-server) | Configures one custom MCP server injected into compatible provider CLIs. |
+
+### Destructive Operations
+
+| Area | What it covers |
+| --- | --- |
+| [Danger Zone](/docs/settings-danger-zone) | Groups irreversible project deletion and project override reset actions. |
+| [System Database](/docs/settings-system-database) | Wipes the local Code UX database so the app returns to a clean state on reload. |
+| [Project Markdown Mirror](/docs/settings-project-markdown-mirror) | Controls whether dashboard-authored agent presets are mirrored into project-local markdown files. |
+| [Agent Routing](/docs/settings-agent-routing) | Assigns built-in or project agent presets to planning, coding, CI, merge, dashboard, and clarification work. |
+
+## Recommended Operating Pattern
+
+1. Start with the Settings page in System scope and configure only the defaults that should apply everywhere.
+2. Switch to Project scope for repository-specific provider routing, preview, memory, importer, or Git behavior.
+3. Use the card-level documentation links for exact implications before changing high-impact areas such as credentials, Docker runtime, merge gates, memory deletion, or database reset.
+4. Validate by rerunning the smallest workflow that exercises the changed setting: reload the dashboard for appearance changes, start a preview for preview changes, or run a test sprint for routing and automation changes.
+
+## Related Documentation
+
+- [Dashboard Settings](/docs/user-dashboard-settings)
+- [Settings schema reference](/docs/developer-settings-reference)
+- [Providers and models](/docs/user-providers-and-models)

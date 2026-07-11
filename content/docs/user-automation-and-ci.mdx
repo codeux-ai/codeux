@@ -52,7 +52,7 @@ The `ciIntelligence` block (Settings → CI & Merge) controls how Code UX intera
 | Field | Default | Notes |
 | --- | --- | --- |
 | `waitForJulesCiAutofix` | `false` | If true, dispatch a `VirtualWorkerService` doing `ci_fix` tasks on failing CI. |
-| `julesCiAutofixMaxRetries` | `3` (max `20`) | Max attempts before escalating. |
+| `julesCiAutofixMaxRetries` | `5` (max `20`) | Legacy mirror of the CI-fix guardrail; max attempts before human handoff. |
 
 ### Auto-merge modes
 
@@ -93,6 +93,10 @@ Per project (Settings → Git):
 - **`LOCAL`** — operates only on local Git state. PR-related features degrade gracefully (no live CI, manual merge prompts only).
 
 `REMOTE` requires `gh auth status` to succeed (or `GITHUB_TOKEN` set).
+
+## CI smoke coverage
+
+The Playwright `navigation` project smoke-tests the dashboard Docs page. It covers `/docs`, the docs overview, dashboard overview, and representative sample pages so CI catches broken packaged docs routes before release.
 
 ## Merge indicators
 
@@ -140,7 +144,7 @@ Humans can claim and resolve items at any time from the dashboard.
     "featurePrAutoMergeMode": "WHEN_GREEN",
     "mainBranchAutoMergeMode": "OFF",
     "waitForJulesCiAutofix": true,
-    "julesCiAutofixMaxRetries": 3
+    "julesCiAutofixMaxRetries": 5
   }
 }
 ```

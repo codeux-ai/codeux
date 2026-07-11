@@ -9,10 +9,44 @@ install and start Code UX with **no configuration**; providers are set up later 
 | Requirement | Needed for | Notes |
 | --- | --- | --- |
 | **Node.js 22+** | Source installs | Not required for the desktop app, which bundles its own runtime. |
-| **Docker** | Containerized (default) execution and preview containers | Recommended. Without it, run providers in host mode. |
-| **Git ≥ 2.30** | All project work | Code UX manages branches, worktrees, and merges. |
+| **Docker** | Containerized execution, helper Git, and preview containers | Required for normal runtime operation. Backend Git commands run through containerized helpers, so host Git is not required. |
 | **An agent provider** | Dispatching work | At least one of Jules, Claude Code, Codex, Gemini, Qwen Code, OpenCode, or Antigravity. See [Providers and models](/docs/user-providers-and-models). |
 | **GitHub CLI (`gh`)** | Remote merge protocol *(optional)* | Used when GitHub operations run in remote mode. |
+
+## Onboarding dependency installers
+
+First-run readiness checks report Docker CLI and Docker daemon status. Backend Git work uses
+containerized `alpine/git` helpers that are pulled through Docker, so onboarding no longer requires
+or installs a host Git CLI. The backend also probes installer prerequisites before advertising safe Docker setup options: supported Linux
+package managers plus `systemctl`, Homebrew on macOS, and winget on Windows. These options are
+structured metadata only until an installer action is invoked, and installer execution is limited
+to hardcoded command and argument arrays with bounded output capture. Onboarding invokes installation through
+`POST /api/onboarding/dependencies/install` only after sending the selected `mode` with
+`confirmInstall: true`; unsupported modes and unconfirmed requests are rejected.
+
+| Platform | Recommended mode | Automated behavior | Manual or degraded behavior |
+| --- | --- | --- | --- |
+| **macOS** | `docker-desktop-git` | Uses Homebrew to install Docker Desktop when Homebrew is available. The mode id is retained for API compatibility. | `docker-engine-git` is degraded because standalone Docker Engine requires a Linux VM; use Docker Desktop unless you manage that VM yourself. |
+| **Windows** | `docker-desktop-git` | Uses winget exact package installs for Docker Desktop, including package/source agreement flags. The mode id is retained for API compatibility. | `docker-engine-git` is degraded because Docker Engine is not installed directly on Windows desktops; use Docker Desktop or WSL guidance instead. |
+| **Linux** | `docker-engine-git` | Uses `apt`, `dnf`, `yum`, `zypper`, or `pacman` to install Docker Engine packages, then attempts to start Docker with `systemctl` when available. The mode id is retained for API compatibility. | Linux Docker Desktop artifacts are distro-specific, so `docker-desktop-git` points to Docker's official Desktop download guidance. |
+
+Linux privilege handling is noninteractive. Root runs package commands directly; non-root runs use
+`sudo -n`. If passwordless sudo is unavailable, Code UX returns the display commands and privilege
+guidance instead of prompting for a password.
+
+In onboarding, missing Docker checks show an explicit **Auto Install dependencies** action when
+the recommended installer is available. Clicking it sends the recommended confirmed installer mode and
+lets Code UX run the detected OS package manager for Docker. The same step also keeps advanced
+**Docker Desktop** and **Docker Engine** choices visible with platform availability,
+degraded/manual-download guidance, privilege notes, live progress, command summaries, retry, recheck,
+and manual Docker links for fallback. Onboarding presents local dependency setup only.
+
+Installer attempts do not mark onboarding complete. After any completed installer response, including
+permission-limited or manual-download outcomes, onboarding shows the structured result and rechecks
+readiness so Docker CLI and Docker daemon status refresh. You may still need to refresh your
+terminal PATH, start Docker Desktop or the Docker Engine daemon, add your user to the Docker group, or
+rerun from an elevated shell. Permission failures are shown as guidance with bounded command summaries
+and short command messages, not as raw full command output.
 
 ## Option 1 — Desktop app (recommended)
 
@@ -29,7 +63,40 @@ Download the latest installer for your platform from
 > code-signed. Choose **More info → Run anyway**. Only do this for builds downloaded from the official
 > releases page.
 
-The desktop app launches the runtime and opens the dashboard automatically.
+The desktop app launches the runtime and opens the dashboard automatically. The title bar shows the
+running version so you can confirm which build is active.
+
+### Speech input on desktop
+
+The microphone control in project chat uses the local dashboard origin served by the desktop app.
+The app grants microphone access only to that trusted dashboard window; camera, geolocation,
+notifications, sprint preview pages, and unrelated sites are denied.
+
+Local speech transcription does not require an external API key, but it does require the selected
+ONNX speech model files in your Code UX home cache:
+
+```text
+~/.code-ux/models/speech/<sanitized-model-id>/model.onnx
+~/.code-ux/models/speech/<sanitized-model-id>/labels.json  # optional
+```
+
+For the default model, the directory is:
+
+```text
+~/.code-ux/models/speech/onnx-community--whisper-base.en/
+```
+
+In `auto` mode, Code UX uses the local model when present. If the model is missing, Code UX can
+fall back to an OpenAI-compatible transcription endpoint only when you configure a base URL, API key,
+and model in speech settings. Without a local model or complete external fallback settings, the
+dashboard shows a setup error instead of sending audio elsewhere.
+
+Platform notes:
+
+- **macOS**: allow microphone access in the system prompt, or later in System Settings > Privacy & Security > Microphone.
+- **Windows**: allow microphone access in Windows privacy settings and confirm desktop apps can use the microphone.
+- **Linux**: microphone availability depends on the host PulseAudio/PipeWire and desktop permission setup for your package format.
+- **Browser/npm dashboard**: `http://localhost:<port>` and `http://127.0.0.1:<port>` are treated by modern browsers as secure contexts for microphone capture. If you bind the dashboard to a non-loopback host, use HTTPS and grant browser permission.
 
 ## Option 2 — From source
 
@@ -57,6 +124,8 @@ When Code UX starts it:
 Nothing is required to reach this point — no API keys, no environment variables. Configure providers
 when you are ready to dispatch work (see [Configuring providers](#configuring-providers)).
 
+For headless server deployments, use `--server-mode` with an explicit MCP HTTP bearer token. Server mode does not bind dashboard routes or websockets; operators connect through authenticated MCP HTTP and probe `/health` and `/ready` on the MCP listener.
+
 ## CLI flags
 
 Run `codeux --help` for the authoritative list. The current flags are:
@@ -66,11 +135,19 @@ Run `codeux --help` for the authoritative list. The current flags are:
 | `--api-key VALUE` | Set the Jules API key (overrides env and settings). |
 | `--runtime-role VALUE` | Runtime role: `project_manager` (default) or `worker-host`. |
 | `--headless` (alias `--no-dashboard`) | Start MCP-only without binding the dashboard. |
+| `--server-mode` | Start authenticated MCP HTTP server mode without binding dashboard routes or websockets. Requires an explicit bearer token with at least 32 bearer-safe characters. |
+| `--no-mcp-http` | Preferred alias for disabling the MCP Streamable HTTP gateway outside server mode. |
 | `--mcp-https` / `--no-mcp-https` | Enable/disable the MCP Streamable HTTP gateway (**enabled by default**; legacy flag name). |
+| `--mcp-http-port N` | Preferred alias for the MCP HTTP gateway port. |
 | `--mcp-https-port N` | Port for the MCP HTTP gateway. |
+| `--mcp-http-host H` | Preferred alias for the MCP HTTP gateway host/interface. |
 | `--mcp-https-host H` | Host/interface for the MCP HTTP gateway. |
+| `--mcp-http-path P` | Preferred alias for the MCP HTTP gateway path. |
 | `--mcp-https-path P` | Path for the MCP HTTP gateway (default `/mcp`). |
+| `--mcp-http-auth-token VALUE` | Preferred alias for the MCP HTTP bearer token. |
 | `--mcp-https-auth-token VALUE` | Bearer token for MCP HTTP requests; overrides the generated user token. |
+| `--mcp-http-max-sessions N` | Preferred alias for the active Streamable HTTP session cap. |
+| `--mcp-http-session-timeout-ms N` | Preferred alias for the idle Streamable HTTP session timeout. |
 | `--help`, `-h` | Show help. |
 
 ## Environment variables
@@ -79,11 +156,25 @@ Run `codeux --help` for the authoritative list. The current flags are:
 | --- | --- |
 | `JULES_API_KEY` | Jules API key (also accepted as `JULES_KEY`). |
 | `DASHBOARD_PORT` | Dashboard port (default `4444`). |
+| `DASHBOARD_HOST` | Dashboard bind address (default `127.0.0.1`). Non-loopback values require `CODE_UX_ALLOW_PUBLIC_DASHBOARD=1`. |
+| `CODE_UX_ALLOW_PUBLIC_DASHBOARD` | Set to `1` to explicitly allow unauthenticated dashboard binding outside loopback. |
+| `CODE_UX_SERVER_MODE` | Set to `true` for authenticated MCP HTTP server mode without dashboard binding. Requires an explicit bearer token with at least 32 bearer-safe characters. |
+| `MCP_HTTP_ENABLED` | Preferred alias to enable the MCP HTTP gateway. |
 | `MCP_HTTPS_ENABLED` | Enable the MCP HTTP gateway (default `true`). |
+| `MCP_HTTP_PORT` | Preferred alias for the MCP HTTP gateway port. |
 | `MCP_HTTPS_PORT` | Port for the MCP HTTP gateway. |
+| `MCP_HTTP_HOST` | Preferred alias for the MCP HTTP gateway host/interface. |
 | `MCP_HTTPS_HOST` | Host/interface for the MCP HTTP gateway. |
+| `MCP_HTTP_PATH` | Preferred alias for the MCP HTTP gateway path. |
 | `MCP_HTTPS_PATH` | Path for the MCP HTTP gateway. |
+| `MCP_HTTP_AUTH_TOKEN` | Preferred alias for the MCP HTTP bearer token. |
 | `MCP_HTTPS_AUTH_TOKEN` | Bearer token for MCP HTTP requests; if unset, Code UX creates `~/.code-ux/security.json`. |
+| `MCP_HTTP_MAX_SESSIONS` | Preferred alias for the active Streamable HTTP session cap. |
+| `MCP_HTTP_SESSION_TIMEOUT_MS` | Preferred alias for the idle Streamable HTTP session timeout. |
+
+In server mode, `MCP_HTTPS_AUTH_TOKEN`, `MCP_HTTP_AUTH_TOKEN`, `--mcp-https-auth-token`, or `--mcp-http-auth-token` must provide an explicit token with at least 32 bearer-safe characters. Server mode does not fall back to the generated user token.
+
+For server-mode startup commands, token handling, worker enrollment, settings synchronization, and troubleshooting, see [Connecting MCP clients](/docs/user-mcp-clients#secure-headless-server-mode).
 
 A project-local `.env` file is read on startup, so you can keep settings per repository:
 
@@ -140,6 +231,11 @@ pnpm run build
 # desktop app
 # download and run the latest installer from GitHub Releases
 ```
+
+In the desktop app, the title-bar **Update** action appears only when the dashboard detects an
+available update. When a latest version is known, the button remains version-aware, and it opens the
+latest GitHub Releases page in your default browser. It is a download shortcut, not an automatic
+background or in-app update flow.
 
 ## Uninstall
 
