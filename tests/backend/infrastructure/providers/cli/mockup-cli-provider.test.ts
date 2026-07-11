@@ -73,6 +73,26 @@ describe("mockup-cli QA reviews", () => {
     });
   });
 
+  it("uses the stable HEAD sentinel for detached review worktrees", async () => {
+    const workspace = await createWorkspace();
+    await fs.mkdir(path.join(workspace, ".git"), { recursive: true });
+    await fs.writeFile(path.join(workspace, ".git", "HEAD"), `${"a".repeat(40)}\n`);
+
+    const result = await runMockupCliProvider({
+      prompt: qaPrompt("qa-detached", []),
+      cwd: workspace,
+      model: "default",
+      sessionId: "qa-detached",
+      env: { ...process.env, PATH: "" },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      verdict: "pass",
+      summary: "Mockup QA verified required files on branch HEAD.",
+    });
+  });
+
   it("declines missing requirements with deterministic follow-up instructions", async () => {
     const workspace = await createWorkspace();
 

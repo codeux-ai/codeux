@@ -345,7 +345,7 @@ function currentGitBranch() {
     }
     const head = fs.readFileSync(path.join(gitDirectory, "HEAD"), "utf8").trim();
     const branch = /^ref:\s+refs\/heads\/(.+)$/i.exec(head)?.[1]?.trim();
-    return branch || head.slice(0, 12) || "HEAD";
+    return branch || "HEAD";
   } catch {
     return "unknown";
   }
