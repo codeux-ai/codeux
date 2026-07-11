@@ -311,6 +311,8 @@ Legacy runtime:
 - Action and dismiss clicks return focus to the notification panel after the row state changes, giving keyboard users a stable fallback when an item leaves the list.
 - Active agent-created task runs and wakeups are projected into the existing notification pipeline with stable IDs based on scheduler entry IDs. Read and dismissed state therefore survives notification refreshes while the entry remains scheduled.
 - Execution interventions and failures come from the global `GET /api/notifications` projection, so records from non-selected projects remain visible. Each record carries project/sprint/task context, structured detail fields, and a direct task, Live, sprint, or project target; timestamp-versioned local identity preserves read/dismiss state until the source record is updated.
+- Actionable intervention, execution-failure, automatic-stop, and system-error rows expose a Details dialog with the sanitized reason, recovery guidance, timestamp, and source context. Opening details or a supplied direct target marks the item read, and the shared modal focus trap restores focus to the originating Details control when it closes.
+- After the global notification feed completes its initial hydration, newly arrived or timestamp-updated actionable records produce one contextual navbar toast. Stable source identity plus `updatedAt` suppresses duplicates across unchanged refreshes and reconnects; system errors use persistent assertive error toasts, while other attention uses polite warning feedback.
 
 ### Stats page
 - The Stats page is available at `/stats` and is scoped to the selected project. Without a selected project, it renders the Stats shell with a polite no-project state instead of attempting to fetch telemetry.

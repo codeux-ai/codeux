@@ -88,19 +88,25 @@ const taskLabel = (record: DashboardNotificationRecord): string | null => {
   return record.taskKey || record.taskTitle || record.taskId;
 };
 
-const buildTarget = (record: DashboardNotificationRecord): string => {
-  const projectId = encodeURIComponent(record.projectId);
-  const sprintId = record.sprintId ? encodeURIComponent(record.sprintId) : null;
-  if (record.taskId) {
-    return `/tasks?projectId=${projectId}${sprintId ? `&sprintId=${sprintId}` : ""}&taskId=${encodeURIComponent(record.taskId)}`;
-  }
-  if (sprintId && record.source.sprintRunId) {
-    return `/live?projectId=${projectId}&sprintId=${sprintId}`;
-  }
-  if (sprintId) {
-    return `/sprints?projectId=${projectId}&sprintId=${sprintId}`;
-  }
-  return `/projects?projectId=${projectId}`;
+const actionTarget = (record: DashboardNotificationRecord): string => {
+  if (record.taskId && record.links.task) return record.links.task;
+  if (record.sprintId && record.source.sprintRunId && record.links.live) return record.links.live;
+  if (record.sprintId && record.links.sprint) return record.links.sprint;
+  return record.links.project;
+};
+
+const sourceContext = (record: DashboardNotificationRecord): string => {
+  const sourceLabels: Record<DashboardNotificationRecord["source"]["type"], string> = {
+    attention_item: "Project attention item",
+    task_dispatch: "Task dispatch",
+    sprint_run: "Sprint run",
+    task_run_event: "Task run event",
+    sprint_run_event: "Sprint run event",
+  };
+  const event = record.source.eventType
+    ? ` · ${record.source.eventType.replace(/[_-]+/g, " ")}`
+    : "";
+  return `${sourceLabels[record.source.type]}${event} · Source ${record.source.id}`;
 };
 
 export const toNotificationViewModel = (
@@ -119,8 +125,11 @@ export const toNotificationViewModel = (
     { label: "Project", value: record.projectName },
     ...(sprint ? [{ label: "Sprint", value: sprint }] : []),
     ...(task ? [{ label: "Task", value: task }] : []),
-    { label: "Reason", value: record.reason },
-    { label: "Next step", value: record.instructions },
+    { label: "What went wrong", value: record.summary },
+    { label: "Why this needs attention", value: record.reason },
+    { label: "Recommended next steps", value: record.instructions },
+    { label: "Timestamp", value: record.updatedAt },
+    { label: "Source context", value: sourceContext(record) },
   ];
 
   return {
@@ -137,7 +146,7 @@ export const toNotificationViewModel = (
     icon: presentation.icon,
     iconColor: record.kind === "human_intervention" ? "text-status-amber" : undefined,
     actionLabel: presentation.actionLabel,
-    actionHref: buildTarget(record),
+    actionHref: actionTarget(record),
     details,
   };
 };

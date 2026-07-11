@@ -51,6 +51,10 @@ vi.mock("../../../dashboard/src/v2/hooks/use-notifications.js", () => ({
   })),
 }));
 
+vi.mock("../../../dashboard/src/v2/components/feedback/ToastProvider.js", () => ({
+  useToast: () => ({ addToast: vi.fn() }),
+}));
+
 vi.mock("../../../dashboard/src/v2/hooks/useThemeSetting.js", () => ({
   useThemeSetting: vi.fn(() => ({ setTheme: vi.fn() })),
 }));

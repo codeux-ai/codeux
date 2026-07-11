@@ -16,6 +16,11 @@ import { buildPreviewUrl } from "../../../dashboard/src/v2/lib/preview-origin.js
 
 expect.extend(matchers);
 
+const feedbackMocks = vi.hoisted(() => ({
+    addToast: vi.fn(),
+    navigate: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
 
 
@@ -47,6 +52,10 @@ vi.mock("../../../dashboard/src/v2/hooks/use-notifications.js", () => ({
         dismiss: vi.fn(),
         refresh: vi.fn(),
     })),
+}));
+
+vi.mock("../../../dashboard/src/v2/components/feedback/ToastProvider.js", () => ({
+    useToast: () => ({ addToast: feedbackMocks.addToast }),
 }));
 
 vi.mock("../../../dashboard/src/v2/hooks/useThemeSetting.js", () => ({
@@ -143,7 +152,7 @@ vi.mock("@tanstack/react-router", () => ({
         </a>
     ),
     useRouterState: vi.fn(() => [{ pathname: "/" }]),
-    useNavigate: () => vi.fn().mockResolvedValue(undefined),
+    useNavigate: () => feedbackMocks.navigate,
 }));
 
 const makeProject = (id: string, name: string) => ({
@@ -177,6 +186,25 @@ const makeAgentSchedule = (id: string, overrides: Record<string, unknown> = {}) 
     timingSummary: "Scheduled for Jul 7, 09:00 AM",
     targetSummary: "Thread thread-123",
     scheduledAt: "2026-07-07T09:00:00.000Z",
+    ...overrides,
+});
+
+const makeAttentionNotification = (overrides: Record<string, unknown> = {}) => ({
+    id: "attention-1@2026-07-11T10:00:00.000Z",
+    sourceId: "attention-1",
+    type: "intervention",
+    severity: "warning",
+    title: "Human decision required",
+    body: "Task T02 · Sprint SPR-12 · Project Workspace — A decision is blocking execution.",
+    subtitle: "Task T02 · Sprint SPR-12 · Project Workspace",
+    time: "just now",
+    updatedAt: "2026-07-11T10:00:00.000Z",
+    unread: true,
+    dismissible: true,
+    icon: () => null,
+    actionLabel: "Review intervention",
+    actionHref: "/tasks?projectId=project-9&sprintId=sprint-12&taskId=task-2",
+    details: [],
     ...overrides,
 });
 
@@ -817,6 +845,101 @@ describe("TopNav shell accessibility", () => {
         await waitFor(() => {
             expect(screen.queryByRole("dialog", { name: "Notifications Panel" })).not.toBeInTheDocument();
             expect(document.activeElement).toBe(trigger);
+        });
+    });
+
+    it("suppresses initial notification toasts and emits one toast for each new or materially updated attention item", async () => {
+        mockTopNavData();
+        const markRead = vi.fn();
+        const initial = makeAttentionNotification();
+        const notificationState = {
+            notifications: [initial],
+            unreadCount: 1,
+            agentSchedules: [],
+            notificationFeedHydrated: true,
+            markAllRead: vi.fn(),
+            markRead,
+            dismiss: vi.fn(),
+            refresh: vi.fn(),
+        };
+        vi.mocked(useNotifications).mockReturnValue(notificationState as any);
+
+        const { rerender } = render(<TopNav />);
+        expect(feedbackMocks.addToast).not.toHaveBeenCalled();
+
+        vi.mocked(useNotifications).mockReturnValue({ ...notificationState, notifications: [{ ...initial }] } as any);
+        rerender(<TopNav />);
+        expect(feedbackMocks.addToast).not.toHaveBeenCalled();
+
+        const second = makeAttentionNotification({
+            id: "failure-2@2026-07-11T10:05:00.000Z",
+            sourceId: "failure-2",
+            type: "task-failure",
+            title: "Task execution failed",
+            updatedAt: "2026-07-11T10:05:00.000Z",
+            actionLabel: "Review task",
+        });
+        vi.mocked(useNotifications).mockReturnValue({ ...notificationState, notifications: [initial, second] } as any);
+        rerender(<TopNav />);
+
+        await waitFor(() => expect(feedbackMocks.addToast).toHaveBeenCalledTimes(1));
+        expect(feedbackMocks.addToast).toHaveBeenLastCalledWith(expect.objectContaining({
+            type: "warning",
+            message: expect.stringContaining("Task T02 · Sprint SPR-12 · Project Workspace"),
+        }));
+
+        vi.mocked(useNotifications).mockReturnValue({ ...notificationState, notifications: [{ ...initial }, { ...second }] } as any);
+        rerender(<TopNav />);
+        expect(feedbackMocks.addToast).toHaveBeenCalledTimes(1);
+
+        const updated = {
+            ...second,
+            id: "failure-2@2026-07-11T10:08:00.000Z",
+            updatedAt: "2026-07-11T10:08:00.000Z",
+            title: "Task execution failed again",
+        };
+        vi.mocked(useNotifications).mockReturnValue({ ...notificationState, notifications: [initial, updated] } as any);
+        rerender(<TopNav />);
+        await waitFor(() => expect(feedbackMocks.addToast).toHaveBeenCalledTimes(2));
+    });
+
+    it("uses a persistent error toast whose action opens the supplied scoped route", async () => {
+        mockTopNavData();
+        const markRead = vi.fn();
+        const notificationState = {
+            notifications: [makeAttentionNotification()],
+            unreadCount: 1,
+            agentSchedules: [],
+            notificationFeedHydrated: true,
+            markAllRead: vi.fn(),
+            markRead,
+            dismiss: vi.fn(),
+            refresh: vi.fn(),
+        };
+        vi.mocked(useNotifications).mockReturnValue(notificationState as any);
+        const { rerender } = render(<TopNav />);
+        expect(feedbackMocks.addToast).not.toHaveBeenCalled();
+
+        const systemError = makeAttentionNotification({
+            id: "system-error-3@2026-07-11T10:15:00.000Z",
+            sourceId: "system-error-3",
+            type: "system-error",
+            title: "Sprint runtime failed",
+            updatedAt: "2026-07-11T10:15:00.000Z",
+            actionLabel: "Review error",
+            actionHref: "/live?projectId=project-9&sprintId=sprint-12",
+        });
+        vi.mocked(useNotifications).mockReturnValue({ ...notificationState, notifications: [notificationState.notifications[0], systemError] } as any);
+        rerender(<TopNav />);
+
+        await waitFor(() => expect(feedbackMocks.addToast).toHaveBeenCalledTimes(1));
+        const toast = feedbackMocks.addToast.mock.calls[0][0];
+        expect(toast).toMatchObject({ type: "error", autoDismissMs: 0 });
+        toast.action?.onClick();
+        expect(markRead).toHaveBeenCalledWith("system-error-3@2026-07-11T10:15:00.000Z");
+        expect(feedbackMocks.navigate).toHaveBeenCalledWith({
+            to: "/live",
+            search: { projectId: "project-9", sprintId: "sprint-12" },
         });
     });
 
