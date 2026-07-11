@@ -608,7 +608,7 @@ export class ManagementToolHandler {
 
   async handleSearchSkills(args: SearchSkillsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
-      const envelope = await this.skillActions.handleSearchSkills(args);
+      const envelope = await this.skillActions.handleSearchSkills(args, getCurrentMcpAgentId());
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("skills", "search", error);

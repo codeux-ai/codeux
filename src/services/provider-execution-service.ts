@@ -4,7 +4,8 @@ import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import { resolveAgentMcpRuntime } from "./agent-mcp-access.js";
 import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
-import type { SkillService, PersistentSkillStorageRuntime } from "./skill-service.js";
+import type { SkillService } from "./skill-service.js";
+import { resolvePersistentSkillContext } from "./persistent-skill-context.js";
 import type { ProviderInvocationPurpose } from "../contracts/execution-types.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
@@ -267,7 +268,12 @@ export class ProviderExecutionService {
     let execInvocationId: string | null = args.invocationId || null;
     let lastPersistedMessagesSignature: string | null = null;
     const effectiveModel = resolveEffectiveModel(args);
-    const persistentSkillRuntime = await this.resolvePersistentSkillRuntime(args);
+    const persistentSkillContext = await resolvePersistentSkillContext({
+      projectId: args.projectId,
+      agentPresetId: args.mcpAgentId,
+      prompt: args.prompt,
+    }, this.deps);
+    const persistentSkillRuntime = persistentSkillContext.runtime;
     const codeUxMcpEnabled = args.agentMcpAccess?.codeUxEnabled === true;
     const baseMcpConnection = args.mcpConnection
       ?? (persistentSkillRuntime || codeUxMcpEnabled ? this.deps.getMcpConnectionInfo?.() ?? null : null);
@@ -615,9 +621,7 @@ export class ProviderExecutionService {
       return result;
     };
 
-    const initialPrompt = persistentSkillRuntime
-      ? `${args.prompt}\n\n${persistentSkillRuntime.instructionMarkdown}`
-      : args.prompt;
+    const initialPrompt = persistentSkillContext.prompt;
     let currentPrompt = initialPrompt;
     let providerResult: ProviderRunResult;
     let usedReadFileRetry = false;
@@ -827,30 +831,6 @@ export class ProviderExecutionService {
         }
       }
       return providerResult;
-    }
-  }
-
-  private async resolvePersistentSkillRuntime(args: ExecutionProviderRunArgs): Promise<PersistentSkillStorageRuntime | null> {
-    if (!args.projectId || !args.mcpAgentId || !this.deps.skillService || !this.deps.agentPresetRepository) {
-      return null;
-    }
-    const agent = this.deps.agentPresetRepository.getAgentPreset(args.mcpAgentId);
-    if (!agent || agent.projectId !== args.projectId || !agent.persistentSkillStorage?.enabled) {
-      return null;
-    }
-    try {
-      return await this.deps.skillService.resolvePersistentSkillStorageRuntime({
-        projectId: args.projectId,
-        agentPresetId: agent.id,
-        enabled: true,
-      });
-    } catch (error) {
-      this.deps.logger?.warn("Failed to resolve persistent skill storage runtime", {
-        projectId: args.projectId,
-        agentPresetId: args.mcpAgentId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return null;
     }
   }
 
