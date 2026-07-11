@@ -27,10 +27,28 @@ export const buildPersistentSkillStorageInstruction = (
   const storageLines = mounts.map((mount) =>
     `- ${mount.storageName} (\`${mount.storageId}\`): mounted at \`${mount.containerPath}\` in Docker and \`${mount.hostPath}\` on host runs.`,
   );
+  const inventoryLines = mounts.flatMap((mount) => {
+    const skills = mount.skills;
+    if (skills.length === 0) {
+      return [`### ${mount.storageName}\nNo persistent skills are currently stored here.`];
+    }
+    return [
+      `### ${mount.storageName}`,
+      ...skills.map((skill) => {
+        const description = skill.description.trim() || "No description provided.";
+        const version = skill.version?.trim() ? ` (v${skill.version.trim()})` : "";
+        return `- **${skill.name}**${version}: ${description}`;
+      }),
+    ];
+  });
 
   return [
     PERSISTENT_SKILL_SECTION_HEADING,
     "This agent has persistent skill storage enabled. Use it only for reusable skills that should survive this invocation; do not treat it as project workspace state.",
+    "",
+    "## AVAILABLE PERSISTENT SKILLS",
+    "The following is the complete inventory of skills in your linked storage. When the user asks what skills are available, list these persistent skills first with their descriptions; do not substitute unrelated built-in tools, internal product capabilities, or general agent instructions.",
+    ...inventoryLines,
     "",
     "Before creating a new skill, search existing attached skills with the `search_skills` MCP tool using:",
     `- \`projectId: ${projectId}\``,

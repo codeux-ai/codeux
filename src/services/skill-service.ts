@@ -37,6 +37,8 @@ export interface PersistentSkillStorageRuntimeMount {
   storageName: string;
   hostPath: string;
   containerPath: string;
+  /** Complete skill inventory for this linked storage, injected as prompt context. */
+  skills: Array<Pick<SkillRecord, "id" | "name" | "description" | "version">>;
 }
 
 export interface PersistentSkillStorageRuntime {
@@ -112,6 +114,12 @@ export class SkillService {
         storageName: storage.name,
         hostPath,
         containerPath: buildPersistentSkillStorageContainerPath(storage.id),
+        skills: this.skillRepository.listSkills(args.projectId, storage.id, Number.MAX_SAFE_INTEGER).map((skill) => ({
+          id: skill.id,
+          name: skill.name,
+          description: skill.description,
+          version: skill.version,
+        })),
       });
     }
 

@@ -260,6 +260,19 @@ Review another project content.
       persistentSkillStorage: { enabled: true },
       persistentSkillStorageIds: [storage.id],
     });
+    await skillService.writeSkillFromMarkdown(projectId, storage.id, `---
+title: Release Checklist
+description: Verify release readiness and publish safely.
+version: 1.4.0
+---
+
+Run the release checks.`);
+    await skillService.writeSkillFromMarkdown(projectId, storage.id, `---
+title: Incident Triage
+description: Triage an incident with a safe escalation path.
+---
+
+Assess impact and collect evidence.`);
 
     await expect(skillService.resolvePersistentSkillStorageRuntime({
       projectId,
@@ -280,7 +293,14 @@ Review another project content.
       storageId: storage.id,
       storageName: "Attached Runtime Skills",
       containerPath: "/code-ux/persistent-skills/attached-storage",
+      skills: [
+        { name: "Incident Triage", description: "Triage an incident with a safe escalation path.", version: null },
+        { name: "Release Checklist", description: "Verify release readiness and publish safely.", version: "1.4.0" },
+      ],
     });
+    expect(runtime?.instructionMarkdown).toContain("## AVAILABLE PERSISTENT SKILLS");
+    expect(runtime?.instructionMarkdown).toContain("**Release Checklist** (v1.4.0): Verify release readiness and publish safely.");
+    expect(runtime?.instructionMarkdown).toContain("**Incident Triage**: Triage an incident with a safe escalation path.");
     expect(runtime?.mounts[0]!.hostPath).toContain(path.join(".code-ux", "persistent-skill-storages"));
     const stats = await fs.stat(runtime!.mounts[0]!.hostPath);
     expect(stats.isDirectory()).toBe(true);

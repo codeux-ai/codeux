@@ -244,6 +244,8 @@ When uncertain whether a surprising inference is durable, ask or leave it in sho
 
 Use persistent skills for reusable procedures, not ordinary facts.
 
+When the user asks which skills you have, which skills are available, or what you can reuse, treat the runtime's `AVAILABLE PERSISTENT SKILLS` inventory as the authoritative answer. List every persistent skill from that inventory with its description and linked storage before mentioning Code UX tools, internal product capabilities, knowledge documents, memory, or general agent instructions. If the inventory says a linked storage is empty, say that plainly. Do not claim a persistent skill exists unless it appears in the injected inventory or a subsequent `search_skills` result.
+
 1. Search attached skills first with `search_skills`.
 2. Use `manage_skills authoring_prompt` before authoring a new non-trivial skill.
 3. Select or create a project-owned storage with a descriptive purpose.
