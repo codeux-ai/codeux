@@ -151,8 +151,7 @@ export const PersistentSkillStorageChip: FunctionComponent<{
   storage: SkillStorageRecord;
   attached?: boolean;
   className?: string;
-  onActivate?: () => void;
-}> = ({ storage, attached = true, className = "", onActivate }) => {
+}> = ({ storage, attached = true, className = "" }) => {
   const [state, setState] = useState<LoadState>({ status: "idle" });
   const requestInFlight = useRef(false);
   const storageKey = `${storage.projectId}:${storage.id}`;
@@ -215,13 +214,7 @@ export const PersistentSkillStorageChip: FunctionComponent<{
         className={`${chipClasses} cursor-help transition-colors hover:border-signal-500/35 hover:bg-signal-500/[0.13] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30`}
         onPointerEnter={loadContents}
         onFocusCapture={loadContents}
-        onClick={() => {
-          if (state.status === "error") {
-            loadContents();
-          } else if (onActivate) {
-            onActivate();
-          }
-        }}
+        onClick={loadContents}
         aria-label={`Inspect attached skill storage ${storage.name}`}
         title={storage.name}
       >

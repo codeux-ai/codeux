@@ -968,7 +968,6 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                         <PersistentSkillStorageChip
                           storage={storage}
                           className="border-0 bg-transparent px-0 dark:bg-transparent"
-                          onActivate={toggleStorageAttachment}
                         />
                       ) : null}
                     </div>
