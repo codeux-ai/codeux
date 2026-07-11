@@ -13,6 +13,7 @@ import type { IProviderRunner, ProviderRunResult } from "../infrastructure/provi
 import type { SnapshotCheckout } from "../infrastructure/providers/cli/workspace-manager.js";
 import type { InvocationWorkspaceGitPolicy } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import type { CliProviderId } from "../infrastructure/providers/cli/provider-command-specs.js";
+import type { NativeSessionOperation } from "../infrastructure/providers/cli/provider-command-specs.js";
 import type { ParsedConversationTurn, ProviderUsageTelemetry } from "../infrastructure/providers/cli/provider-usage.js";
 import type {
   AppendExecutionInvocationMessageInput,
@@ -214,6 +215,8 @@ export interface ExecutionProviderRunArgs {
   onActivity?: (description: string, originator?: string) => void;
   signal?: AbortSignal;
   continueSessionId?: string | null;
+  /** Native in-session operation forwarded through the shared provider boundary. */
+  nativeSessionOperation?: NativeSessionOperation;
   /** The previous invocation's raw opencode export snapshot for this session,
    *  when `continueSessionId` resumes it. Ignored for other providers. See
    *  {@link https://opencode.ai} `export` semantics: totals are cumulative for
@@ -266,6 +269,8 @@ export function resolveEffectiveModel(args: Pick<ExecutionProviderRunArgs, "prov
 export class ProviderExecutionService {
   constructor(private readonly deps: ProviderExecutionServiceDeps) {}
 
+  async executeProvider(args: ExecutionProviderRunArgs & { expectTextOutput: true }): Promise<ProviderRunResult & { text: string }>;
+  async executeProvider(args: ExecutionProviderRunArgs): Promise<ProviderRunResult>;
   async executeProvider(args: ExecutionProviderRunArgs): Promise<ProviderRunResult> {
     let execInvocationId: string | null = args.invocationId || null;
     let lastPersistedMessagesSignature: string | null = null;
@@ -452,6 +457,7 @@ export class ProviderExecutionService {
         gitlabToken: args.gitlabToken,
         signal: args.signal,
         continueSessionId,
+        nativeSessionOperation: args.nativeSessionOperation,
         openCodeBaselineUsage: openCodeBaselineRawUsageJson,
         invocationId: execInvocationId,
         providerInvocationId: invocation?.id,

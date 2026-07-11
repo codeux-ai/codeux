@@ -37,7 +37,7 @@ import type {
   DetachedQuicksprintLaunchResult,
 } from "../contracts/quicksprint-types.js";
 import { buildProviderPrompt } from "./cli-workflow-utils.js";
-import { resolveEffectiveModel } from "./provider-execution-service.js";
+import { resolveEffectiveModel, type ProviderExecutionService } from "./provider-execution-service.js";
 import { getRepoCodeUxDir, getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
 import {
   buildChatContinuationPrompt,
@@ -66,6 +66,7 @@ interface ChatThreadRuntimeServiceDependencies {
   agentPresetSyncService: AgentPresetSyncService;
   projectManagementRepository: ProjectManagementRepository;
   providerRunner: IProviderRunner;
+  providerExecutionService: ProviderExecutionService;
   chatManagementActionService: ChatManagementActionService;
   chatProviderOutboundService?: ChatProviderOutboundService;
   knowledgeService: KnowledgeService;
@@ -1562,7 +1563,10 @@ export class ChatThreadRuntimeService {
     });
 
     try {
-      const result = await this.deps.providerRunner.runProviderForText({
+      const result = await this.deps.providerExecutionService.executeProvider({
+        projectId,
+        purpose: "chat_compaction",
+        type: "chat_compaction",
         provider,
         prompt: "Native CLI session operation: compact",
         cwd: repoPath,
@@ -1592,6 +1596,11 @@ export class ChatThreadRuntimeService {
         workspaceSessionId: thread.id,
         workflowSettings,
         repoPath,
+        expectTextOutput: true,
+        invocationId: execInvocation.id,
+        trackPromptInInvocation: false,
+        trackAssistantInInvocation: false,
+        finalizeExecutionInvocation: false,
         ...buildProviderInvocationWorkspaceOptions({
           workflowSettings,
           gitPolicy: {

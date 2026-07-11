@@ -19,6 +19,8 @@ For qualifying runs, Code UX bind-mounts the host directory at the fixed contain
 /mnt/code-ux/google-drive
 ```
 
+This includes native dashboard thread-compaction invocations. Compaction uses the shared provider execution boundary, so it receives the same validated project-scoped mount context as other Docker-backed Project Manager runs.
+
 Host-mode provider runs do not receive the directory. Changing the setting also does not add, remove, or alter mounts in containers that are already running. Start a new provider invocation after saving so Code UX can construct a new container with the effective mount settings.
 
 ## Access Modes
