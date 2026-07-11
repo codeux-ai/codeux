@@ -7,6 +7,23 @@
 @source "./**/*.{ts,tsx}";
 
 /*
+  Tailwind Typography sets --tw-prose-links on each .prose element, so the
+  theme-aware override must share its generated utility layer and win by
+  specificity rather than only inheriting from :root. This covers every
+  markdown surface, including all chat modes.
+*/
+@layer utilities {
+  .prose:not(.not-prose) {
+    --tw-prose-links: var(--link-text);
+  }
+
+  .prose :where(a[href]):hover,
+  .prose :where(a[href]):focus {
+    color: var(--link-text-hover);
+  }
+}
+
+/*
   Canonical Badge Scale
   - Status badges: rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] (border opacity /25, bg opacity /10)
   - Filter pills / category chips: rounded-full px-3.5 py-1.5 text-[11px] font-semibold (border opacity /[0.06])
@@ -127,20 +144,15 @@ html.is-electron.is-fullscreen .app-shell {
   }
 
   a {
-    color: var(--signal-600);
+    color: var(--link-text);
     text-decoration: none;
     transition: color var(--motion-fast) var(--motion-ease-standard);
   }
 
   a:hover,
   a:focus {
-    color: var(--signal-700);
+    color: var(--link-text-hover);
     text-decoration: none;
-  }
-
-  .dark a:hover,
-  .dark a:focus {
-    color: var(--signal-400);
   }
 
   :where(p, li, td, dd, blockquote, article, .prose) a[href] {
