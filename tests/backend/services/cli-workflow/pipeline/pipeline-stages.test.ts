@@ -309,7 +309,7 @@ describe("executePrepareStage", () => {
 
     expect(memoryService.listBySprintAndAgent).not.toHaveBeenCalled();
     expect(memoryService.listLongTermByAgent).toHaveBeenCalledWith("p-1", "agent-1", 100);
-    expect(result.providerPrompt).toContain("## MEMORY CONTEXT");
+    expect(result.providerPrompt).toContain("## RELEVANT MEMORY CONTEXT");
     expect(result.providerPrompt).toContain("### Long-Term Knowledge");
     expect(result.providerPrompt).not.toContain("### Recent Sprint Learnings");
     expect(result.providerPrompt).toContain("kept long-term memory");

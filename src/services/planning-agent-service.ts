@@ -39,6 +39,7 @@ import { ProviderInvocationCancelledError, StructuredProviderResponseService } f
 import { waitUntil } from "../shared/polling/wait-until.js";
 import { LEARNINGS_FILENAME } from "../contracts/memory-types.js";
 import * as PlanningPromptBuilder from "./planning-prompt-builder.js";
+import { buildRelevantMemoryInjectionContext } from "./memory-injection-context.js";
 
 interface PlanningAgentServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
@@ -188,7 +189,7 @@ export class PlanningAgentService {
       agentPresetId: planningAgent.id,
     });
 
-    const memoryContext = this.buildMemoryContext(projectId, null, planningAgent.id);
+    const memoryContext = await this.buildMemoryContext(projectId, null, planningAgent.id, input.goal);
     const learningsInstruction = (runtime.settings.memory?.enabled && runtime.settings.memory?.autoCaptureSprint)
       ? resolveAgentMemoryInstructions(planningAgent, runtime.settings.memory?.workerLearningsInstruction)
       : undefined;
@@ -360,7 +361,7 @@ export class PlanningAgentService {
     });
 
     signal?.throwIfAborted();
-    const memoryContext = this.buildMemoryContext(projectId, sprintId, planningAgent.id);
+    const memoryContext = await this.buildMemoryContext(projectId, sprintId, planningAgent.id, sprint.goal);
     const learningsInstruction = (runtime.settings.memory?.enabled && runtime.settings.memory?.autoCaptureSprint)
       ? resolveAgentMemoryInstructions(planningAgent, runtime.settings.memory?.workerLearningsInstruction)
       : undefined;
@@ -893,17 +894,18 @@ export class PlanningAgentService {
     });
   }
 
-  private buildMemoryContext(projectId: string, sprintId: string | null, agentPresetId: string): string | undefined {
+  private async buildMemoryContext(projectId: string, sprintId: string | null, agentPresetId: string, query: string): Promise<string | undefined> {
     const memoryService = this.deps.memoryService;
     if (!memoryService) return undefined;
 
     try {
-      const longTerm = memoryService.listLongTermByAgent(projectId, agentPresetId, 10);
-      const shortTerm = sprintId
-        ? memoryService.listBySprintAndAgent(projectId, sprintId, agentPresetId, 10)
-        : [];
-
-      return PlanningPromptBuilder.buildMemoryContext(longTerm, shortTerm);
+      return (await buildRelevantMemoryInjectionContext(memoryService, {
+        projectId,
+        sprintId,
+        agentPresetId,
+        query,
+        tokenBudget: 1_800,
+      })).markdown;
     } catch {
       return undefined;
     }
