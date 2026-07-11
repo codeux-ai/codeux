@@ -129,11 +129,14 @@ The batched project aggregation currently covers:
 
 The batched sprint aggregation currently covers:
 - task count per sprint
-- completed task count per sprint, used to compute completion percentage
+- raw completed task count per sprint, kept separate from the weighted completion percentage
+- weighted task progress derived from task lifecycle stages and coding `provider_invocations.tool_call_count` rows (`purpose = 'task_coding'`)
 - latest sprint run status, used for effective sprint status classification
 - latest sprint-completion QA review summary
 
-Sprint linked issues are loaded with the same chunked `IN` pattern during sprint hydration so sprint lists do not issue one linked-issue query per sprint. Execution snapshots and live runtime projection remain outside these project-management summary helpers.
+For weighted progress, `pending` tasks contribute 0%. An `in_progress` task advances through the first 50% from its coding tool-call telemetry, with each call contributing 0.5 percentage points and `tool_call_count` capped at 100. A task at `coding_completed` or `QA_REVIEW_FAILED` contributes 75% while CI, QA, merge, or other post-coding gates remain unsettled, and a settled `completed` task contributes 100%. Sprints without a CI gate move directly from the coding contribution to 100% when the task settles instead of pausing at 75%. The sprint `completion` value is the mean of these task contributions, rounded to the nearest whole percentage point; the raw completed-task count remains available independently for completed/total counters.
+
+Sprint linked issues are loaded with the same chunked `IN` pattern during sprint hydration so sprint lists do not issue one linked-issue query per sprint. Execution snapshots and live runtime projection remain outside these project-management summary helpers, but the Sprints collection refreshes for both `project.structure.updated` and `project.execution.updated`. The execution-telemetry refresh lets changes to coding `provider_invocations.tool_call_count` move weighted progress during an active provider run rather than waiting for a task status transition.
 
 ## Dashboard Behavior
 
