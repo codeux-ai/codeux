@@ -142,8 +142,8 @@ Behavior:
 - after hydration, the v2 Live page treats `project.live.updated` as the only authoritative websocket payload for selected-project runtime state
 - websocket updates replace stale wait time for execution and overview telemetry
 - project collection and selected-project context now refresh over websocket too
-- sprint and task pages now react to project-structure invalidation events
-- sprint and task hooks now treat realtime invalidation as silent background refresh, which avoids foreground loading flicker while the browser is already showing current data
+- sprint collections react to both project-structure and project-execution invalidation events, while task structure continues to refresh from project-structure changes
+- sprint and task hooks treat realtime invalidation as silent background refresh, which avoids foreground loading flicker while the browser is already showing current data; sprint summaries remain on the lightweight project scope instead of subscribing to the heavy live snapshot channel
 - execution snapshot consumers now diff snapshots semantically instead of treating every fetch-time `updatedAt` stamp as a meaningful change
 - git status is now kept off the hot `/api/live` contract and streams only on the `project:<projectId>:git` sub-scope, so base project pages do not parse large Git/CI payloads they ignore
 - reconnect recovery for the Live page now means re-fetching `/api/live` on `snapshot_required`, not running parallel status/execution repair logic in the browser

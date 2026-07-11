@@ -129,9 +129,14 @@ The batched project aggregation currently covers:
 
 The batched sprint aggregation currently covers:
 - task count per sprint
-- completed task count per sprint, used to compute completion percentage
+- raw completed task count per sprint, kept separate from the weighted completion percentage
+- weighted task progress derived from task lifecycle stages and coding `provider_invocations.tool_call_count` rows (`purpose = 'task_coding'`)
 - latest sprint run status, used for effective sprint status classification
 - latest sprint-completion QA review summary
+
+The domain also exposes a side-effect-free sprint progress calculator for read models that need weighted progress without persisted derived state. For weighted progress, `pending` tasks contribute 0%. Active coding (`in_progress` or `RUNNING`) advances through the first 50% from coding `provider_invocations.tool_call_count` telemetry, with each call contributing 0.5 percentage points and the count capped at 100. `coding_completed` contributes 50%; `CI`, `QA_PENDING`, `MERGE_BLOCKED`, and `MERGE_CONFLICT` contribute 75%; and `completed`, merged tasks, or canonically settled merge indicators (`AUTOMERGE`, `MERGED`, and `PR_ONLY`) contribute 100%.
+
+The sprint `completion` value is the mean of these task contributions, rounded to one decimal percentage point; the raw completed-task count remains available independently for completed/total counters. When CI is disabled, a task jumps directly from its final coding contribution to 100% at completion instead of pausing at the 75% CI/post-coding stage. Sprint summaries refresh for both `project.structure.updated` and `project.execution.updated`, so coding tool-call telemetry can move weighted progress during an active provider run rather than waiting for a task status transition.
 
 Sprint linked issues are loaded with the same chunked `IN` pattern during sprint hydration so sprint lists do not issue one linked-issue query per sprint. Execution snapshots and live runtime projection remain outside these project-management summary helpers.
 

@@ -33,6 +33,7 @@ import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { TableRow, TableCell } from "../ui/Table.js";
 import { getSprintStatusPresentation } from "../../lib/sprint-status-presentation.js";
 import { computeSprintActionMenuPosition } from "../../lib/sprint-menu-positioning.js";
+import { clampSprintCompletion, formatSprintCompletion } from "../../lib/sprint-progress-display.js";
 
 // Polished badge tones: increased contrast for backgrounds and borders where appropriate
 const STATUS_BADGE_TONES: Record<SprintStatus, string> = {
@@ -200,6 +201,8 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       ? "lg:border-black/[0.06] lg:bg-white/80 dark:lg:border-white/[0.07] dark:lg:bg-white/[0.045]"
       : "lg:border-black/[0.06] lg:bg-slate-50/80 dark:lg:border-white/[0.07] dark:lg:bg-white/[0.03]";
   const progressTone = PROGRESS_TONES[sprint.status];
+  const completion = clampSprintCompletion(sprint.completion);
+  const completionLabel = formatSprintCompletion(completion);
   const routeSearch = { projectId: sprint.projectId, sprintId: sprint.id } as any;
 
   const attentionOverride = humanIntervention?.attentionType
@@ -419,13 +422,20 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       </TableCell>
       <TableCell align="right" className={`min-w-[12rem] lg:w-[140px] lg:min-w-[140px] ${desktopCellTone}`} mobileLabel="Completion">
         <div className="flex items-center justify-end gap-3">
-          <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-black/10 ring-1 ring-black/[0.03] dark:bg-white/[0.08] dark:ring-white/[0.04]">
+          <div
+            className="h-2.5 flex-1 overflow-hidden rounded-full bg-black/10 ring-1 ring-black/[0.03] dark:bg-white/[0.08] dark:ring-white/[0.04]"
+            role="progressbar"
+            aria-label={`${sprint.name} progress`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={completion}
+          >
             <div
               className={`h-full rounded-full bg-gradient-to-r ${progressTone} transition-[width]`}
-              style={{ ...controlTransitionStyle, width: `${sprint.completion}%` }}
+              style={{ ...controlTransitionStyle, width: `${completion}%` }}
             />
           </div>
-          <span className="font-mono text-sm font-bold text-[var(--text-primary)]">{sprint.completion}%</span>
+          <span className="font-mono text-sm font-bold text-[var(--text-primary)]">{completionLabel}</span>
         </div>
       </TableCell>
       <TableCell className={`lg:w-[120px] lg:min-w-[120px] ${desktopCellTone}`} mobileLabel="Created">

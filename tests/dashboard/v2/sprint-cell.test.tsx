@@ -35,6 +35,19 @@ describe("SprintCell", () => {
     expect(screen.getByText("5")).toBeDefined();
   });
 
+  it("renders whole and fractional completion without rounding", () => {
+    render(
+      <>
+        <SprintCell sprint={{ ...defaultSprint, id: "sprint-5", tasksCount: 10, completion: 5 }} isEven={true} accentColor="text-blue-500" />
+        <SprintCell sprint={{ ...defaultSprint, id: "sprint-7-5", tasksCount: 10, completion: 7.5 }} isEven={false} accentColor="text-blue-500" />
+      </>
+    );
+
+    expect(screen.getByText("5%")).toBeDefined();
+    expect(screen.getByText("7.5%")).toBeDefined();
+    expect(screen.queryByText("8%")).toBeNull();
+  });
+
   it("links to project-aware tasks and live routes", () => {
     render(<SprintCell sprint={defaultSprint} isEven={true} accentColor="text-blue-500" />);
 

@@ -8,6 +8,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { useSprints } from "../../../dashboard/src/hooks/useSprints.js";
 import { fetchSprints, selectSprint } from "../../../dashboard/src/v2/lib/project-api.js";
 import { invalidateLivePayloadCache } from "../../../dashboard/src/lib/api/dashboard-api.js";
+import * as realtime from "../../../dashboard/src/lib/realtime/dashboard-realtime-client.js";
 
 vi.mock("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js", () => ({
   subscribeToDashboardRealtime: vi.fn(() => vi.fn()),
@@ -22,7 +23,7 @@ vi.mock("../../../dashboard/src/lib/api/dashboard-api.js", () => ({
   invalidateLivePayloadCache: vi.fn(),
 }));
 
-const makeCollection = () => ({
+const makeCollection = (completion = 0) => ({
   selectedSprintId: null,
   sprints: [
     {
@@ -40,6 +41,7 @@ const makeCollection = () => ({
       updatedAt: "2026-04-29T06:00:00.000Z",
       tasksCount: 0,
       completedTasksCount: 0,
+      completion,
       showcasePinned: true,
       latestReview: null,
     },
@@ -144,5 +146,59 @@ describe("useSprints", () => {
     });
 
     expect(invalidateLivePayloadCache).toHaveBeenCalledWith(projectId);
+  });
+
+  it.each([
+    "project.structure.updated",
+    "project.execution.updated",
+  ])("refreshes sprint summaries after %s", async (eventType) => {
+    const projectId = `project-${crypto.randomUUID()}`;
+    let realtimeCallback: Parameters<typeof realtime.subscribeToDashboardRealtime>[1] | undefined;
+    vi.mocked(realtime.subscribeToDashboardRealtime).mockImplementation((scopes, callback) => {
+      expect(scopes).toEqual([`project:${projectId}`]);
+      realtimeCallback = callback;
+      return vi.fn();
+    });
+    vi.mocked(fetchSprints)
+      .mockResolvedValueOnce(makeCollection(5) as any)
+      .mockResolvedValue(makeCollection(7.5) as any);
+
+    const { result } = renderHook(() => useSprints(projectId));
+
+    await waitFor(() => {
+      expect(result.current.data[0]?.completion).toBe(5);
+    });
+
+    await act(async () => {
+      realtimeCallback?.({
+        type: "event",
+        event: {
+          sequence: 1,
+          emittedAt: "2026-07-11T00:00:00.000Z",
+          scopeType: "project",
+          scopeId: projectId,
+          scope: `project:${projectId}`,
+          eventType,
+          entityType: "project",
+          entityId: projectId,
+          projectId,
+          sprintId: null,
+          threadId: null,
+          taskId: null,
+          dispatchId: null,
+          sprintRunId: null,
+          taskRunId: null,
+          connectionId: null,
+          correlationId: null,
+          payload: {},
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    });
+
+    await waitFor(() => {
+      expect(result.current.data[0]?.completion).toBe(7.5);
+    });
+    expect(fetchSprints).toHaveBeenCalledTimes(2);
   });
 });

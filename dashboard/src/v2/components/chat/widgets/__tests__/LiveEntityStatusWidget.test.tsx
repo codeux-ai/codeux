@@ -53,7 +53,7 @@ describe("LiveEntityStatusWidget", () => {
   });
 
   it("renders a linked sprint card with status, completion, and task counts", () => {
-    render(<LiveEntityStatusWidget entities={[createSprintEntity()]} />);
+    render(<LiveEntityStatusWidget entities={[createSprintEntity({ completion: 7.5 })]} />);
 
     const link = screen.getByRole("link", {
       name: /Open sprint SPR-7: Build payment flow\. Live status: Running\./,
@@ -63,12 +63,13 @@ describe("LiveEntityStatusWidget", () => {
     expect(within(link).getByText("SPR-7")).toBeInTheDocument();
     expect(within(link).getByText("Build payment flow")).toBeInTheDocument();
     expect(within(link).getByText("Running")).toBeInTheDocument();
-    expect(within(link).getByText("50% complete")).toBeInTheDocument();
+    expect(within(link).getByText("7.5% complete")).toBeInTheDocument();
     expect(within(link).getByText("2/4 complete")).toBeInTheDocument();
     expect(within(link).getByText("4 tasks")).toBeInTheDocument();
 
     const progress = within(link).getByRole("progressbar", { name: "Sprint completion for SPR-7" });
-    expect(progress).toHaveAttribute("aria-valuenow", "50");
+    expect(progress).toHaveAttribute("aria-valuenow", "7.5");
+    expect(progress.firstElementChild).toHaveStyle({ width: "7.5%" });
   });
 
   it("renders a linked task card with status, priority, executor, and review indicator", () => {
