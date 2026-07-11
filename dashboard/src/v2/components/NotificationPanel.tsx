@@ -4,6 +4,7 @@ import gsap from "gsap";
 import { useGsapInteractionTokens } from "../lib/motion/constants.js";
 import { CheckCheck, RefreshCw, X } from "lucide-preact";
 import type { DashboardNotification } from "../hooks/use-notifications.js";
+import { NotificationDetailsModal } from "./NotificationDetailsModal.js";
 
 const severityClasses: Record<DashboardNotification["severity"], {
   icon: string;
@@ -39,6 +40,7 @@ export const NotificationPanel: FunctionComponent<{
   onMarkRead: (id: string) => void | Promise<void>;
   onDismiss: (id: string) => void;
   onRefresh: () => void | Promise<void>;
+  onNavigate?: (href: string) => void | Promise<void>;
 }> = ({
   notifications,
   unreadCount,
@@ -46,6 +48,7 @@ export const NotificationPanel: FunctionComponent<{
   onMarkRead,
   onDismiss,
   onRefresh,
+  onNavigate,
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -55,6 +58,7 @@ export const NotificationPanel: FunctionComponent<{
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
   const [pendingReadIds, setPendingReadIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [detailNotification, setDetailNotification] = useState<DashboardNotification | null>(null);
   const pendingReadIdsRef = useRef<Set<string>>(new Set());
   const [announcement, setAnnouncement] = useState("");
 
@@ -228,6 +232,7 @@ export const NotificationPanel: FunctionComponent<{
       : "";
 
   return (
+    <>
     <div
       ref={panelRef}
       role="dialog"
@@ -356,6 +361,37 @@ export const NotificationPanel: FunctionComponent<{
                       {isMarkingRead ? "Marking read" : notification.unread ? "Mark read" : "Read"}
                     </button>
                     <div className="flex items-center gap-1.5">
+                      {notification.type && notification.details ? (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            void handleMarkRead(notification, event.currentTarget);
+                            setDetailNotification(notification);
+                            setAnnouncement(`Details opened for ${notification.title}.`);
+                          }}
+                          className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors motion-reduce:transition-none hover:bg-black/[0.04] hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white"
+                          aria-label={`Details for ${notification.title}`}
+                        >
+                          Details
+                        </button>
+                      ) : null}
+                      {notification.actionLabel && notification.actionHref ? (
+                        <a
+                          href={notification.actionHref}
+                          onClick={(event) => {
+                            void handleMarkRead(notification, event.currentTarget);
+                            setAnnouncement(`${notification.actionLabel} opened for ${notification.title}.`);
+                            if (onNavigate) {
+                              event.preventDefault();
+                              void onNavigate(notification.actionHref!);
+                            }
+                          }}
+                          className="rounded-full border border-black/10 bg-black/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 hover:bg-black/10 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white transition-colors motion-reduce:transition-none"
+                          aria-label={`${notification.actionLabel} ${notification.title}`}
+                        >
+                          {notification.actionLabel}
+                        </a>
+                      ) : null}
                       {notification.actionLabel && notification.onAction ? (
                         <button
                           type="button"
@@ -402,5 +438,15 @@ export const NotificationPanel: FunctionComponent<{
         })}
       </ul>
     </div>
+    <NotificationDetailsModal
+      notification={detailNotification}
+      onClose={() => setDetailNotification(null)}
+      onAction={(notification) => {
+        void handleMarkRead(notification);
+        setAnnouncement(`${notification.actionLabel ?? "Notification action"} opened for ${notification.title}.`);
+      }}
+      onNavigate={onNavigate}
+    />
+    </>
   );
 };

@@ -56,6 +56,8 @@ The server also exposes the read-only `GET /api/notifications` feed for global n
 
 The top-nav notification center consumes this feed independently of the selected project. Intervention and failure records name their project, sprint, and task when available, expose a direct task or Live-page target with sprint/project fallbacks, and retain browser-local read or dismissed state until the server record receives a newer update timestamp. Startup readiness and selected-project scheduler notices continue to share the same panel; a persistent onboarding action appears when no usable provider authentication is detected.
 
+Actionable rows include a responsive Details dialog with the failure summary, reason, recommended recovery steps, timestamp, and source context; sprint-level records simply omit task context. Direct actions use the server-supplied project and sprint route, and either opening details or following that action marks the record read. Once the first feed snapshot is hydrated, genuinely new or updated attention produces one contextual navbar toast; unchanged refreshes and reconnects are deduplicated, and system errors remain visible as assertive error toasts until dismissed or opened.
+
 - Cross-project intervention cards still show active projects that need human attention.
 - Active sprint cards and the runtime timeline continue to summarize work across active projects.
 - When the top bar has a project selected and that project's live snapshot contains active attention items, Overview shows a compact **Selected Sprint Attention Queue** inside the telemetry panel.

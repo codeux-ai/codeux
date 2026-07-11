@@ -33,10 +33,10 @@ const baseRecord = (overrides: Partial<DashboardNotification> = {}): DashboardNo
     attentionStatus: null,
   },
   links: {
-    project: "/ignored-project-link",
-    sprint: "/ignored-sprint-link",
-    task: "/ignored-task-link",
-    live: "/ignored-live-link",
+    project: "/projects?projectId=project%20%2F%20one",
+    sprint: "/sprints?projectId=project%20%2F%20one&sprintId=sprint%20%2F%20one",
+    task: "/tasks?projectId=project%20%2F%20one&sprintId=sprint%20%2F%20one&taskId=task%20%2F%20two",
+    live: "/live?projectId=project%20%2F%20one&sprintId=sprint%20%2F%20one",
   },
   ...overrides,
 });
@@ -58,8 +58,11 @@ describe("notification view models", () => {
       { label: "Project", value: "Project One" },
       { label: "Sprint", value: "SPR-12 (Hardening)" },
       { label: "Task", value: "T02 (Harden retries)" },
-      { label: "Reason", value: "Provider process exited." },
-      { label: "Next step", value: "Review the task and retry it." },
+      { label: "What went wrong", value: "The provider exited before producing a result." },
+      { label: "Why this needs attention", value: "Provider process exited." },
+      { label: "Recommended next steps", value: "Review the task and retry it." },
+      { label: "Timestamp", value: "2026-07-11T09:30:00.000Z" },
+      { label: "Source context", value: "Task dispatch · dispatch failed · Source dispatch-1" },
     ]);
   });
 
@@ -137,4 +140,3 @@ describe("notification view models", () => {
     expect(result.actionHref).toBe("/sprints?projectId=project%20%2F%20one&sprintId=sprint%20%2F%20one");
   });
 });
-

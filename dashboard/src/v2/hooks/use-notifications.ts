@@ -167,6 +167,7 @@ export const useNotifications = (projectId?: string | null): {
   notifications: DashboardNotification[];
   unreadCount: number;
   agentSchedules: AgentSchedulerSummaryEntry[];
+  notificationFeedHydrated: boolean;
   refresh: () => Promise<void>;
   markAllRead: () => void;
   markRead: (id: string) => void;
@@ -177,6 +178,7 @@ export const useNotifications = (projectId?: string | null): {
     notifications: [],
     updatedAt: null,
   });
+  const [notificationFeedHydrated, setNotificationFeedHydrated] = useState(false);
   const [agentSchedules, setAgentSchedules] = useState<AgentSchedulerSummaryEntry[]>([]);
   const [storedState, setStoredState] = useState<StoredNotificationState>(() => readStoredState());
   const globalRefreshRef = useRef<Promise<void> | null>(null);
@@ -192,7 +194,9 @@ export const useNotifications = (projectId?: string | null): {
         }),
         fetchDashboardNotifications().then((nextFeed) => {
           setInterventionFeed((current) => isDeepEqual(current, nextFeed) ? current : nextFeed);
-        }).catch(() => undefined),
+        }).catch(() => undefined).finally(() => {
+          setNotificationFeedHydrated(true);
+        }),
       ]).then(() => undefined).finally(() => {
         if (globalRefreshRef.current === request) {
           globalRefreshRef.current = null;
@@ -310,6 +314,7 @@ export const useNotifications = (projectId?: string | null): {
     notifications,
     unreadCount: notifications.filter((notification) => notification.unread).length,
     agentSchedules,
+    notificationFeedHydrated,
     refresh,
     markAllRead,
     markRead,
