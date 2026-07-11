@@ -1,6 +1,6 @@
 # Settings
 
-The **Settings** page (`/config`) is the unified configuration surface. It exposes every tunable in the engine, organised into category navigation and content panels.
+The **Settings** page (`/config`) is the unified configuration surface. It exposes every tunable in the engine, organised into a category rail and content panels.
 
 ## The scope hierarchy
 

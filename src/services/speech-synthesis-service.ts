@@ -12,6 +12,7 @@ import { redactText } from "../shared/security/redaction.js";
 import {
   getSpeechModelPaths,
   isSpeechModelAvailable,
+  resolveCompatibleSynthesisVoice,
   resolveSpeechModelEntry,
 } from "./speech-model-catalog.js";
 import { phonemizeKokoro, phonemizeWithLocalRuntime } from "./local-phonemizer-service.js";
@@ -139,7 +140,9 @@ export class SpeechSynthesisService {
     if (!await isSpeechModelAvailable(model.id, this.deps.dataDir)) {
       return failure("missing_local_model", `TTS model "${model.id}" is not installed.`, "local_onnx");
     }
-    const voice = requestedVoice?.trim() || settings.synthesis.voice || model.defaultVoice || "default";
+    const explicitVoice = requestedVoice?.trim();
+    const configuredVoice = settings.synthesis.voice || model.defaultVoice || "default";
+    const voice = explicitVoice || resolveCompatibleSynthesisVoice(model.id, configuredVoice);
 
     try {
       const audio = model.adapter === "kokoro"

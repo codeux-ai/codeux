@@ -357,6 +357,32 @@ describe("ChatPage speech input", () => {
     await waitFor(() => expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledWith("Replay this reply", "p1"));
   });
 
+  it("reports a 3D voice synthesis failure instead of silently discarding it", async () => {
+    synthesisMock.synthesizeSpeech.mockRejectedValueOnce(new Error("Configured voice is unavailable."));
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "stage",
+      messages: [{
+        id: "reply-error",
+        threadId: "thread1",
+        direction: "connection_to_dashboard",
+        authorType: "connection",
+        authorConnectionId: "connection-1",
+        bodyMarkdown: "Replay this reply",
+        deliveryStatus: "delivered",
+        createdAt: "2026-03-10T12:00:00.000Z",
+        metadata: null,
+      }],
+    };
+
+    renderChatPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Replay message from Project Manager" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Voice error: Configured voice is unavailable.",
+    );
+  });
+
   it("auto-plays the first reply after sending in a brand-new empty 3D thread", async () => {
     mocks.data = {
       ...mocks.data,

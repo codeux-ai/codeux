@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { SpeechSettings } from "../../../src/contracts/speech-types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import { resolvePiperSpeakerId, SpeechSynthesisService } from "../../../src/services/speech-synthesis-service.js";
+import { resolveCompatibleSynthesisVoice } from "../../../src/services/speech-model-catalog.js";
 
 function settings(overrides: Partial<SpeechSettings["synthesis"]> = {}): SpeechSettings {
   return {
@@ -25,6 +26,11 @@ describe("SpeechSynthesisService", () => {
       .toThrow('Piper voice "missing-voice" is not available');
     expect(() => resolvePiperSpeakerId("piper-de-de-mls-medium", "mls-de-default", 0))
       .toThrow('Piper speaker 0 is invalid');
+  });
+
+  it("falls back to the selected model default for a stale scoped voice", () => {
+    expect(resolveCompatibleSynthesisVoice("piper-de-de-mls-medium", "am_michael"))
+      .toBe("mls-de-default");
   });
 
   it("sends OpenAI-compatible external synthesis requests and returns audio", async () => {

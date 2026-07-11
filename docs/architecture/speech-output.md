@@ -8,6 +8,8 @@ Text-to-speech configuration lives under `speech.synthesis` in normal system/pro
 
 Model files are installed globally under `~/.code-ux/models/speech/<sanitized-model-id>`, but activation follows the current settings scope. Activating an installed TTS model selects its default voice, sets provider mode to `local_onnx`, and enables synthesis. The normal **Save Changes** action persists that draft.
 
+Model and voice are resolved as one compatible local selection. Because project and sprint scopes can override individual speech fields, an older child-scope voice may outlive a system-level model change. Effective settings replace that stale voice with the selected model's default, and the synthesis service repeats the compatibility check before inference so a valid installed model cannot be silenced by an obsolete scoped voice id.
+
 ## Built-In Local Models
 
 | Family | Default bundle | Runtime behavior |
@@ -38,6 +40,8 @@ Provider selection is explicit: local mode never sends text to an external provi
 Assistant prose messages expose a small accessible replay control in 3D Chat, Threads, and invocation transcripts. Replay is always explicit outside 3D Chat, so thread and invocation loads or live updates never start speech. Long replies are synthesized and played as sequential requests within the backend's 8,000-character request bound. Starting another clip stops the previous clip on that transcript surface.
 
 The avatar nameplate includes a compact microphone button and volume icon, outside the composer. Dictation uses the same caret-aware insertion behavior as Threads mode. Voice defaults on when saved TTS settings are active. Muting stops playback immediately and stores a per-project browser preference; it does not disable the saved TTS model for other clients. If no TTS model/API is active, the volume icon is disabled and its accessible help points the operator to Settings -> AI Models.
+
+Synthesis and browser playback failures appear beside the 3D Chat voice controls in an accessible status message. The transcript remains usable, but provider, model, or browser autoplay problems are no longer silently discarded.
 
 ## Model Management API
 
