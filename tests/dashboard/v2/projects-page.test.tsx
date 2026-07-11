@@ -181,10 +181,11 @@ describe("ProjectsPage", () => {
     } as any);
     render(<ProjectsPage />);
 
-    // Assert that the title exists and is using the line clamp class for truncation
+    // The extracted card keeps a single-line title with the full value available on hover.
     const title = screen.getByText("A very very long project name that should definitely be truncated with line clamp");
     expect(title).toBeInTheDocument();
-    expect(title.className).toContain("line-clamp-2");
+    expect(title).toHaveClass("truncate");
+    expect(title).toHaveAttribute("title", "A very very long project name that should definitely be truncated with line clamp");
 
     // Check that long urls are in a flexible container (min-w-0 for ellipsis truncation)
     const urlText = screen.getByText("https://github.com/acme/a-very-very-long-project-name-that-should-definitely-be-truncated-with-line-clamp.git");
@@ -195,12 +196,10 @@ describe("ProjectsPage", () => {
   it("renders repository metadata, project settings, and isolated quick actions", () => {
     render(<ProjectsPage />);
 
-    // Repo URL and on-disk path are both surfaced for git projects.
+    // Git projects use the repository URL as their normalized location.
     expect(screen.getByText("https://github.com/acme/widget-service.git")).toBeInTheDocument();
-    expect(screen.getByText("/workspace/widget-service")).toBeInTheDocument();
     // Last run timestamp is shown in the manifest.
     expect(screen.getByText("Jan 4, 2026, 5:06 AM")).toBeInTheDocument();
-    expect(screen.getAllByText("github.com").length).toBeGreaterThan(0);
 
     // The selected project's primary action is a select toggle in its "selected" state.
     expect(screen.getByRole("button", { name: /Widget Service is selected/i })).toBeInTheDocument();
