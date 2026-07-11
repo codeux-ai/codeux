@@ -1,5 +1,5 @@
 import { createContext } from "preact";
-import { useCallback, useContext, useMemo } from "preact/hooks";
+import { useCallback, useContext, useMemo, useRef } from "preact/hooks";
 import type { ComponentChildren, FunctionComponent } from "preact";
 import type { CreateProjectInput, Source, UpdateProjectInput } from "../types.js";
 import {
@@ -34,6 +34,7 @@ const EMPTY_PROJECTS: ProjectsResponse = {
 };
 
 export const ProjectDataProvider: FunctionComponent<{ children: ComponentChildren }> = ({ children }) => {
+  const projectSelectionVersionRef = useRef(0);
   const fetchResource = useCallback(async (signal?: AbortSignal) => {
     return await fetchProjects(signal);
   }, []);
@@ -58,10 +59,14 @@ export const ProjectDataProvider: FunctionComponent<{ children: ComponentChildre
   });
 
   const selectProject = useCallback(async (projectId: string): Promise<void> => {
+    const selectionVersion = ++projectSelectionVersionRef.current;
     invalidateLivePayloadCache(); // Invalidate "default" fallback cache
     invalidateLivePayloadCache(projectId);
     updateDataLocally((curr) => ({ ...curr, selectedProjectId: projectId }));
     const nextProjectId = await selectProjectRequest(projectId);
+    if (selectionVersion !== projectSelectionVersionRef.current) {
+      return;
+    }
     updateDataLocally((curr) => ({ ...curr, selectedProjectId: nextProjectId }));
   }, [updateDataLocally]);
 

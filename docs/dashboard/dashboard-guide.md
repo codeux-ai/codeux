@@ -29,6 +29,8 @@ Sprint ledger rows and showcase sprint cards expose separate **Tasks** and **Liv
 
 Destination pages consume a new route project once, switch the selected project first, then apply the sprint scope through the selected project's sprint API. After that initial deep-link handoff, later shared project-selection updates remain authoritative: a mounted Tasks or Live tab does not continuously re-apply its retained query value. The Tasks page still accepts legacy same-project links such as `/tasks?sprint=<sprintId>` and `/tasks?sprintId=<sprintId>`, but project-aware links are required when navigation originates from sprint rows or cards so a sprint is never applied to the previously selected project.
 
+Project and sprint selection mutations are request-versioned and project-scoped in the dashboard. If an earlier request resolves after the user has already chosen another project or sprint, that stale response cannot replace the newer selection. A sprint response also updates only the project that initiated it; it cannot write an old sprint ID into the collection for the project that is active when the response arrives.
+
 ## API Endpoints
 
 Implemented in `src/server/dashboard-server.ts`.

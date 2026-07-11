@@ -165,6 +165,56 @@ describe("ProjectDataProvider", () => {
     expect(screen.getByTestId("selected-project-id").textContent).toBe("p2");
   });
 
+  it("keeps the latest project when an earlier selection response resolves late", async () => {
+    const initialResponse: ProjectCollectionResponse = {
+      projects: [
+        mockProject,
+        { ...mockProject, id: "p2", slug: "p2" },
+        { ...mockProject, id: "p3", slug: "p3" },
+      ],
+      selectedProjectId: "p1",
+    };
+    const selectionResolvers = new Map<string, (projectId: string) => void>();
+    let latestData: ReturnType<typeof useProjectData> | null = null;
+
+    vi.mocked(projectApi.fetchProjects).mockResolvedValue(initialResponse);
+    vi.mocked(projectApi.selectProject).mockImplementation((projectId) => (
+      new Promise<string>((resolve) => {
+        selectionResolvers.set(projectId, resolve);
+      })
+    ));
+
+    render(
+      <ProjectDataProvider>
+        <TestConsumer onRender={(data) => { latestData = data; }} />
+      </ProjectDataProvider>
+    );
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    let firstSelection: Promise<void> | undefined;
+    let secondSelection: Promise<void> | undefined;
+    act(() => {
+      firstSelection = latestData!.selectProject("p2");
+      secondSelection = latestData!.selectProject("p3");
+    });
+    expect(screen.getByTestId("selected-project-id").textContent).toBe("p3");
+
+    await act(async () => {
+      selectionResolvers.get("p3")?.("p3");
+      await secondSelection;
+    });
+    expect(screen.getByTestId("selected-project-id").textContent).toBe("p3");
+
+    await act(async () => {
+      selectionResolvers.get("p2")?.("p2");
+      await firstSelection;
+    });
+    expect(screen.getByTestId("selected-project-id").textContent).toBe("p3");
+  });
+
   it("ignores aborted fetches during refresh", async () => {
     const initialResponse: ProjectCollectionResponse = {
       projects: [mockProject],

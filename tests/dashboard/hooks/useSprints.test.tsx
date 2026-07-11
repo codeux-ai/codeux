@@ -23,12 +23,17 @@ vi.mock("../../../dashboard/src/lib/api/dashboard-api.js", () => ({
   invalidateLivePayloadCache: vi.fn(),
 }));
 
-const makeCollection = (completion = 0) => ({
-  selectedSprintId: null,
+const makeCollection = (
+  completion = 0,
+  projectId = "project-1",
+  sprintId = "sprint-1",
+  selectedSprintId: string | null = null,
+) => ({
+  selectedSprintId,
   sprints: [
     {
-      id: "sprint-1",
-      projectId: "project-1",
+      id: sprintId,
+      projectId,
       number: 1,
       slug: "sprint-1",
       name: "Sprint 1",
@@ -146,6 +151,95 @@ describe("useSprints", () => {
     });
 
     expect(invalidateLivePayloadCache).toHaveBeenCalledWith(projectId);
+  });
+
+  it("does not apply a previous project's late sprint selection to the active project", async () => {
+    const firstProjectId = `project-${crypto.randomUUID()}`;
+    const secondProjectId = `project-${crypto.randomUUID()}`;
+    const firstSprintId = `sprint-${crypto.randomUUID()}`;
+    const secondSprintId = `sprint-${crypto.randomUUID()}`;
+    let resolveFirstSelection: ((sprintId: string | null) => void) | null = null;
+
+    vi.mocked(fetchSprints).mockImplementation(async (projectId) => (
+      projectId === firstProjectId
+        ? makeCollection(0, firstProjectId, firstSprintId) as any
+        : makeCollection(0, secondProjectId, secondSprintId, secondSprintId) as any
+    ));
+    vi.mocked(selectSprint).mockImplementation(async (projectId, sprintId) => {
+      if (projectId === firstProjectId) {
+        return await new Promise<string | null>((resolve) => {
+          resolveFirstSelection = resolve;
+        });
+      }
+      return sprintId;
+    });
+
+    let projectId = firstProjectId;
+    const { result, rerender } = renderHook(() => useSprints(projectId));
+
+    await waitFor(() => {
+      expect(result.current.data[0]?.id).toBe(firstSprintId);
+    });
+
+    let firstSelectionPromise: Promise<void> | undefined;
+    act(() => {
+      firstSelectionPromise = result.current.selectSprint(firstSprintId);
+    });
+
+    projectId = secondProjectId;
+    rerender();
+    await waitFor(() => {
+      expect(result.current.data[0]?.id).toBe(secondSprintId);
+      expect(result.current.selectedSprintId).toBe(secondSprintId);
+    });
+
+    await act(async () => {
+      resolveFirstSelection?.(firstSprintId);
+      await firstSelectionPromise;
+    });
+
+    expect(result.current.data[0]?.projectId).toBe(secondProjectId);
+    expect(result.current.selectedSprintId).toBe(secondSprintId);
+  });
+
+  it("keeps the latest sprint selection when responses resolve out of order", async () => {
+    const projectId = `project-${crypto.randomUUID()}`;
+    const firstSprintId = `sprint-${crypto.randomUUID()}`;
+    const secondSprintId = `sprint-${crypto.randomUUID()}`;
+    const selectionResolvers = new Map<string, (sprintId: string | null) => void>();
+
+    vi.mocked(fetchSprints).mockResolvedValue(
+      makeCollection(0, projectId, firstSprintId) as any,
+    );
+    vi.mocked(selectSprint).mockImplementation(async (_projectId, sprintId) => (
+      await new Promise<string | null>((resolve) => {
+        selectionResolvers.set(sprintId!, resolve);
+      })
+    ));
+
+    const { result } = renderHook(() => useSprints(projectId));
+    await waitFor(() => {
+      expect(result.current.data[0]?.id).toBe(firstSprintId);
+    });
+
+    let firstSelection: Promise<void> | undefined;
+    let secondSelection: Promise<void> | undefined;
+    act(() => {
+      firstSelection = result.current.selectSprint(firstSprintId);
+      secondSelection = result.current.selectSprint(secondSprintId);
+    });
+
+    await act(async () => {
+      selectionResolvers.get(secondSprintId)?.(secondSprintId);
+      await secondSelection;
+    });
+    expect(result.current.selectedSprintId).toBe(secondSprintId);
+
+    await act(async () => {
+      selectionResolvers.get(firstSprintId)?.(firstSprintId);
+      await firstSelection;
+    });
+    expect(result.current.selectedSprintId).toBe(secondSprintId);
   });
 
   it.each([
