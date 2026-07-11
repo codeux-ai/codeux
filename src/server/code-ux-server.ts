@@ -92,6 +92,7 @@ import { disposeCommandSpawner, shutdownGitHelperPool } from "../shared/subproce
 import { LocalMcpCliConfigService } from "../services/local-mcp-cli-config-service.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { ChatProviderIngressService } from "../services/chat-provider-ingress-service.js";
+import { ProjectInitializationStateService } from "../services/project-initialization-state-service.js";
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
   const normalized = String(message || "").trim().toLowerCase();
@@ -153,6 +154,7 @@ export class CodeUxServer {
   private appDbStorage: AppDbStorage;
   private settingsRepository: SettingsRepository;
   private projectManagementRepository: ProjectManagementRepository;
+  private projectInitializationStateService: ProjectInitializationStateService;
   private projectRuntimeRepository: ProjectRuntimeRepository;
   private connectionChatRepository: ConnectionChatRepository;
   private chatProviderRepository: ChatProviderRepository;
@@ -236,6 +238,9 @@ export class CodeUxServer {
     this.appDbStorage = deps.appDbStorage;
     this.settingsRepository = deps.settingsRepository;
     this.projectManagementRepository = deps.projectManagementRepository;
+    this.projectInitializationStateService = new ProjectInitializationStateService(
+      (projectId) => this.projectManagementRepository.getProject(projectId),
+    );
     this.projectRuntimeRepository = deps.projectRuntimeRepository;
     this.connectionChatRepository = deps.connectionChatRepository;
     this.chatProviderRepository = deps.chatProviderRepository;
@@ -1341,6 +1346,7 @@ export class CodeUxServer {
         appDbStorage: this.appDbStorage,
         settingsRepository: this.settingsRepository,
         projectManagementRepository: this.projectManagementRepository,
+        projectInitializationStateService: this.projectInitializationStateService,
         projectRuntimeRepository: this.projectRuntimeRepository,
         executionRepository: this.executionRepository,
         connectionChatRepository: this.connectionChatRepository,

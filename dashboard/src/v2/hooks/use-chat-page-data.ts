@@ -16,6 +16,7 @@ import type { AgentPresetRecord, ExecutionInvocationRecord, Sprint, Task } from 
 import { useSprints } from "../../hooks/useSprints.js";
 import { useProjectTasks } from "./use-project-tasks.js";
 import { clearChatDraftFromUrl, readChatDraftFromLocation } from "../lib/no-project-chat-assistant.js";
+import { useProjectInitializationState } from "./use-project-initialization-state.js";
 
 /** "stage" is the cinematic 3D chat view; threads/invocations are the classic panes. */
 export type ChatMode = "stage" | "threads" | "invocations";
@@ -58,6 +59,11 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
 
   const { data: execution, loading: executionLoading } = useExecutions(selectedProject?.id || null);
   const { data: effectiveSettings, loading: effectiveSettingsLoading } = useProjectEffectiveSettings(selectedProject?.id || null);
+  const {
+    data: projectInitializationState,
+    loading: projectInitializationStateLoading,
+    error: projectInitializationStateError,
+  } = useProjectInitializationState(selectedProject?.id || null);
   const { data: sprints, loading: sprintsLoading, error: sprintsError } = useSprints(selectedProject?.id || null);
   const {
     tasks: projectTasks,
@@ -314,6 +320,10 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
     threadIndex: threadData.threadIndex,
     invocationIndex: invocationData.invocationIndex,
     selectedProject,
+    projectInitializationState,
+    projectInitializationStateLoading,
+    projectInitializationStateError,
+    canCreateInitialAppQuickactions: projectInitializationState?.canCreateInitialAppQuickactions === true,
     execution,
     executionLoading,
     executionLoaded: Boolean(selectedProject && !executionLoading && execution.projectId === selectedProject.id),

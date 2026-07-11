@@ -36,6 +36,48 @@ afterEach(async () => {
 });
 
 describe("ProjectManagementRepository", () => {
+  it("defaults legacy and imported projects to existing provenance", async () => {
+    const { storage, repository } = await createRepository();
+    const imported = repository.createProject({
+      name: "Imported Project",
+      sourceType: "local",
+      sourceRef: "/workspace/imported-project",
+    });
+    expect(imported.initializationMode).toBe("existing");
+
+    const db = storage.getDatabase();
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO projects (id, slug, name, base_dir, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run("legacy-project", "legacy-project", "Legacy Project", "/workspace/legacy-project", "idle", now, now);
+    db.prepare(`
+      INSERT INTO project_sources (id, project_id, source_type, source_ref, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run("legacy-source", "legacy-project", "git", "https://example.test/legacy.git", now);
+
+    expect(repository.getProject("legacy-project")?.initializationMode).toBe("existing");
+  });
+
+  it("persists new local and remote initialization provenance", async () => {
+    const { repository } = await createRepository();
+    const local = repository.createProject({
+      name: "New Local Project",
+      sourceType: "local",
+      sourceRef: "/workspace/new-local-project",
+      initMode: "new-local",
+    });
+    const remote = repository.createProject({
+      name: "New Remote Project",
+      sourceType: "git",
+      sourceRef: "https://example.test/new-remote.git",
+      initMode: "new-remote",
+    });
+
+    expect(repository.getProject(local.id)?.initializationMode).toBe("new-local");
+    expect(repository.getProject(remote.id)?.initializationMode).toBe("new-remote");
+  });
+
   it("creates untitled sprints with deterministic generated names and slugs", async () => {
     const { repository } = await createRepository();
     const project = repository.createProject({

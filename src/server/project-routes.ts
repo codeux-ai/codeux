@@ -76,6 +76,42 @@ export function registerProjectRoutes(router: Express, deps: DashboardDependenci
     res.json(project);
   }));
 
+  router.get("/api/projects/:projectId/initialization-state", asyncRoute(async (req, res) => {
+    const projectId = requireTrimmedString(req.params.projectId, "projectId");
+    const project = deps.getProject(projectId);
+    if (!project) {
+      res.status(404).json({
+        error: `Project not found: ${projectId}`,
+        projectId,
+        initializationMode: "existing",
+        repositoryState: "unavailable",
+        canCreateInitialAppQuickactions: false,
+      });
+      return;
+    }
+
+    if (!deps.getProjectInitializationState) {
+      res.json({
+        projectId,
+        initializationMode: project.initializationMode,
+        repositoryState: "unavailable",
+        canCreateInitialAppQuickactions: false,
+      });
+      return;
+    }
+
+    try {
+      res.json(await deps.getProjectInitializationState(projectId));
+    } catch {
+      res.json({
+        projectId,
+        initializationMode: project.initializationMode,
+        repositoryState: "unavailable",
+        canCreateInitialAppQuickactions: false,
+      });
+    }
+  }));
+
   router.get("/api/projects/:projectId/settings", syncRoute((req, res) => {
     try {
       res.json(deps.getProjectSettings(requireTrimmedString(req.params.projectId, "projectId")));
