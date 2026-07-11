@@ -1,4 +1,5 @@
 import type { WorkerTaskDispatchClaim } from "./execution-types.js";
+import type { PlanningDesignGuidanceSelection } from "./project-management-types.js";
 
 export type McpConnectionRole = "project_manager" | "worker" | "listener";
 export type McpConnectionStatus = "connected" | "listening" | "idle" | "paused" | "stale" | "offline";
@@ -83,7 +84,13 @@ export interface ConversationRuntimeState {
   createAppQuickaction?: DashboardCreateAppQuickactionRuntimeState | null;
 }
 
-export const DASHBOARD_CREATE_APP_QUICKACTION_KINDS = ["web_app", "desktop_app"] as const;
+export const DASHBOARD_CREATE_APP_QUICKACTION_KINDS = [
+  "web_app",
+  "desktop_app",
+  "online_shop",
+  "portfolio",
+  "game",
+] as const;
 export type DashboardCreateAppQuickactionKind = typeof DASHBOARD_CREATE_APP_QUICKACTION_KINDS[number];
 
 export const DASHBOARD_APP_PROGRESS_WIDGET_TYPE = "app_progress" as const;
@@ -105,6 +112,7 @@ export interface DashboardCreateAppQuickactionPayload extends JsonObject {
   kind: DashboardCreateAppQuickactionKind;
   requestId: string;
   templateId: string;
+  designGuidance?: PlanningDesignGuidanceSelection & JsonObject;
   taskCount?: number;
   stackSummary?: DashboardCreateAppQuickactionStackSummary | null;
   suggestionTags?: string[];

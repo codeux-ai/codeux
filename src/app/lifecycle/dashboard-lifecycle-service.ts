@@ -92,6 +92,7 @@ import type {
   LocalMcpInstallResult,
   LocalMcpSetupInfo,
 } from "../../services/local-mcp-cli-config-service.js";
+import type { ProjectInitializationStateService } from "../../services/project-initialization-state-service.js";
 
 const updateCheckerService = new UpdateCheckerService();
 
@@ -104,6 +105,7 @@ export interface BootDashboardDeps {
   appDbStorage: AppDbStorage;
   settingsRepository: SettingsRepository;
   projectManagementRepository: ProjectManagementRepository;
+  projectInitializationStateService: ProjectInitializationStateService;
   projectRuntimeRepository: ProjectRuntimeRepository;
   executionRepository: ExecutionRepository;
   connectionChatRepository: ConnectionChatRepository;
@@ -667,6 +669,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
       }),
     ),
     getProject: (projectId) => deps.projectManagementRepository.getProject(projectId),
+    getProjectInitializationState: (projectId) => deps.projectInitializationStateService.getProjectInitializationState(projectId),
     updateProject: (projectId, input) => deps.projectManagementRepository.updateProject(projectId, input),
     deleteProject: (projectId) => deps.projectManagementRepository.deleteProject(projectId),
     selectProject: (projectId) => {

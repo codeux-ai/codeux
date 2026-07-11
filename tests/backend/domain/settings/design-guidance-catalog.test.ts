@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
   DESIGN_GUIDANCE_NONE_ID,
+  GAME_EXPERIENCE_STYLEGUIDE_ID,
   getDefaultDesignGuidanceStyleguides,
   getDefaultDesignGuidanceTechStacks,
   getDesignGuidanceCatalog,
@@ -14,7 +15,7 @@ describe("design-guidance-catalog", () => {
     const styleguides = getDefaultDesignGuidanceStyleguides();
     const techStacks = getDefaultDesignGuidanceTechStacks();
 
-    expect(styleguides).toHaveLength(17);
+    expect(styleguides).toHaveLength(18);
     expect(styleguides[0]?.id).toBe(DESIGN_GUIDANCE_NONE_ID);
     expect(styleguides.some((entry) => entry.id === CODE_UX_AWARD_WINNING_STYLEGUIDE_ID)).toBe(true);
     expect(techStacks[0]?.id).toBe(DESIGN_GUIDANCE_NONE_ID);
@@ -25,6 +26,18 @@ describe("design-guidance-catalog", () => {
       expect(entry.summary.trim()).toBe(entry.summary);
       expect(entry.instructionMarkdown.trim()).toBe(entry.instructionMarkdown);
     }
+  });
+
+  it("provides concrete game interaction, performance, state, and accessibility guidance", () => {
+    const gameGuidance = getDefaultDesignGuidanceStyleguides()
+      .find((entry) => entry.id === GAME_EXPERIENCE_STYLEGUIDE_ID);
+
+    expect(gameGuidance).toBeDefined();
+    expect(gameGuidance?.instructionMarkdown).toMatch(/input feedback/i);
+    expect(gameGuidance?.instructionMarkdown).toMatch(/frame-time|performance/i);
+    expect(gameGuidance?.instructionMarkdown).toMatch(/deterministic states/i);
+    expect(gameGuidance?.instructionMarkdown).toMatch(/keyboard|remappable/i);
+    expect(gameGuidance?.instructionMarkdown).toMatch(/reduced-motion/i);
   });
 
   it("keeps default styleguides in the backend catalog when hidden from visible choices", () => {

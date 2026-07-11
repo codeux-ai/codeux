@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS projects (
         base_dir TEXT NOT NULL,
         repo_url TEXT,
         source_id TEXT,
+        initialization_mode TEXT NOT NULL DEFAULT 'existing',
         default_branch TEXT,
         feature_branch_prefix TEXT,
         status TEXT NOT NULL DEFAULT 'idle',

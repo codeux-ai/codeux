@@ -40,20 +40,25 @@ const cloneRepository = async (remoteUrl: string, cloneParentDir: string, repoNa
   );
 };
 
-async function seedCodeUxGitignore(remoteUrl: string, localPath: ValidatedPath, hostToken?: string): Promise<void> {
-  const changed = await ensureCodeUxGitignoreEntry(localPath);
-  if (!changed) {
-    return;
-  }
+async function seedEmptyRemoteRepository(
+  remoteUrl: string,
+  localPath: ValidatedPath,
+  projectName: string,
+  defaultBranch: string,
+  hostToken?: string,
+): Promise<void> {
+  fs.writeFileSync(path.join(localPath, "README.md"), `# ${projectName.trim() || "Project"}\n\nInitialized with Code UX.\n`);
+  await ensureCodeUxGitignoreEntry(localPath);
   const env = (await buildGitHttpAuthEnvWithFallbacks(remoteUrl, {
     githubToken: hostToken,
     gitlabToken: hostToken,
   })) || process.env;
   await runCommandStrict("git", ["config", "user.email", "code-ux@local"], localPath);
   await runCommandStrict("git", ["config", "user.name", "Code UX"], localPath);
-  await runCommandStrict("git", ["add", ".gitignore"], localPath);
-  await runCommandStrict("git", ["commit", "-m", "chore: ignore Code UX runtime files"], localPath);
-  await runCommandStrict("git", ["push", "origin", "HEAD"], localPath, env);
+  await runCommandStrict("git", ["checkout", "-B", defaultBranch], localPath);
+  await runCommandStrict("git", ["add", "README.md", ".gitignore"], localPath);
+  await runCommandStrict("git", ["commit", "-m", "Initial commit"], localPath);
+  await runCommandStrict("git", ["push", "-u", "origin", "HEAD"], localPath, env);
 }
 
 /**
@@ -90,11 +95,9 @@ export async function createGitHubRepo(opts: {
         "Content-Type": "application/json",
         "X-GitHub-Api-Version": "2022-11-28",
       },
-      // auto_init creates an initial commit with a README and a default branch,
-      // so the cloned repo starts with real content. Without it the remote is
-      // empty (no commits, unborn default branch) and sprints fail to prepare a
-      // base branch.
-      body: JSON.stringify({ name: opts.repoName, private: opts.isPrivate, auto_init: true }),
+      // Seed locally after cloning so README.md and the Code UX .gitignore land
+      // together in one initial commit.
+      body: JSON.stringify({ name: opts.repoName, private: opts.isPrivate, auto_init: false }),
       signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
     const text = await response.text();
@@ -110,7 +113,7 @@ export async function createGitHubRepo(opts: {
 
     await cloneRepository(remoteUrl, safeParentDir, opts.repoName, opts.hostToken);
     const localPath = safeTargetDir;
-    await seedCodeUxGitignore(remoteUrl, localPath, opts.hostToken);
+    await seedEmptyRemoteRepository(remoteUrl, localPath, opts.repoName, "main", opts.hostToken);
     return { localPath, remoteUrl };
   } catch (error: any) {
     const message = error.stderr?.toString() || error.message;
@@ -155,11 +158,9 @@ export async function createGitLabRepo(opts: {
         name: opts.repoName,
         path: opts.repoName,
         visibility: opts.isPrivate ? "private" : "public",
-        // initialize_with_readme seeds an initial commit + default branch so the
-        // cloned repo has real content. Without it the clone is empty (no
-        // commits, unborn default branch) and sprints fail to prepare a base.
-        initialize_with_readme: true,
-        ...(opts.defaultBranch?.trim() ? { default_branch: opts.defaultBranch.trim() } : {}),
+        // Seed locally after cloning so README.md and the Code UX .gitignore land
+        // together in one initial commit.
+        initialize_with_readme: false,
       }),
       signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
@@ -176,7 +177,13 @@ export async function createGitLabRepo(opts: {
     const localPath = safeTargetDir;
 
     await cloneRepository(remoteUrl, safeParentDir, opts.repoName, opts.hostToken);
-    await seedCodeUxGitignore(remoteUrl, localPath, opts.hostToken);
+    await seedEmptyRemoteRepository(
+      remoteUrl,
+      localPath,
+      opts.repoName,
+      opts.defaultBranch?.trim() || "main",
+      opts.hostToken,
+    );
 
     return { localPath, remoteUrl };
   } catch (error: any) {

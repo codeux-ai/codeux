@@ -9,6 +9,7 @@ import type {
   LocalFileBrowserResponse,
   PlanSprintOptions,
   ProjectCollectionResponse,
+  ProjectInitializationState,
   ProjectSummary,
   ProjectSetupRequestInput,
   ProjectSetupResult,
@@ -45,6 +46,16 @@ import { fetchJson } from "../../lib/api/fetch-json.js";
 
 export const fetchProjects = async (signal?: AbortSignal): Promise<ProjectCollectionResponse> => {
   return fetchJson<ProjectCollectionResponse>("/api/projects", { signal });
+};
+
+export const fetchProjectInitializationState = async (
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<ProjectInitializationState> => {
+  return fetchJson<ProjectInitializationState>(
+    `/api/projects/${encodeURIComponent(projectId)}/initialization-state`,
+    { signal },
+  );
 };
 
 export const fetchLocalDirectories = async (directoryPath?: string): Promise<LocalDirectoryBrowserResponse> => {

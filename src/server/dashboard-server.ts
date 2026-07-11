@@ -86,6 +86,7 @@ import type {
   ImprovePromptInput,
   PlanSprintOptions,
   ProjectCollectionResponse,
+  ProjectInitializationState,
   ProjectSetupRequestInput,
   ProjectSetupResult,
   ProjectSetupStartResult,
@@ -235,6 +236,7 @@ export interface DashboardServerOptions {
   setupProject?: (projectId: string, input?: ProjectSetupRequestInput, signal?: AbortSignal) => Promise<ProjectSetupResult>;
   startProjectSetup?: (projectId: string, input?: ProjectSetupRequestInput) => Promise<ProjectSetupStartResult>;
   getProject: (projectId: string) => ProjectSummary | null;
+  getProjectInitializationState?: (projectId: string) => Promise<ProjectInitializationState>;
   updateProject: (projectId: string, input: UpdateProjectInput) => ProjectSummary;
   deleteProject: (projectId: string) => void;
   selectProject: (projectId: string | null) => string | null;

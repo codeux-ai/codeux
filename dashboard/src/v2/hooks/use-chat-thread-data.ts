@@ -25,6 +25,7 @@ import { useConfirmDialog } from "./use-confirm-dialog.js";
 import type { RefObject } from "preact";
 import type { DashboardSettings, ExecutionDashboardSnapshot, TechstackCatalogEntrySettings } from "../../types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../lib/settings.js";
+import { getCreateAppQuickactionSpec } from "../../../../src/domain/chat/create-app-quickaction-catalog.js";
 
 export const upsertMessage = (messages: ChatMessageRecord[], nextMessage: ChatMessageRecord): ChatMessageRecord[] => {
   if (messages.some((message) => message.id === nextMessage.id)) {
@@ -121,19 +122,9 @@ export const resolveDisplayDeliveryStatus = (
   return status;
 };
 
-const CREATE_APP_QUICKACTION_TEMPLATE_IDS: Record<DashboardCreateAppQuickactionKind, string> = {
-  web_app: "qs-create-web-app",
-  desktop_app: "qs-create-desktop-app",
-};
-
 const NEW_THREAD_DRAFT_CONTEXT_KEY = "new-thread";
 const CHAT_DRAFT_WRITE_DEBOUNCE_MS = 500;
 const LOCAL_CHAT_DRAFT_STORAGE_PREFIX = "codeux.chat.localDraft";
-
-const CREATE_APP_QUICKACTION_BODIES: Record<DashboardCreateAppQuickactionKind, string> = {
-  web_app: "Create a web app",
-  desktop_app: "Create a desktop app",
-};
 
 const createCryptoRandomId = (): string => {
   const cryptoApi = globalThis.crypto;
@@ -217,13 +208,15 @@ const buildCreateAppQuickactionMetadata = (
   dashboardSettings?: DashboardSettings | null,
 ): DashboardCreateAppQuickactionMetadata => {
   const { id, entry } = resolveCreateAppTechstackEntry(dashboardSettings);
+  const spec = getCreateAppQuickactionSpec(kind);
 
   return {
     quickaction: {
       type: "create_app",
       kind,
       requestId: createQuickactionRequestId(kind),
-      templateId: CREATE_APP_QUICKACTION_TEMPLATE_IDS[kind],
+      templateId: spec.templateId,
+      designGuidance: { ...spec.designGuidance },
       stackSummary: buildCreateAppStackSummary(kind, id, entry),
       suggestionTags: uniqueStackSuggestionTags(entry),
     },
@@ -962,10 +955,15 @@ export const useChatThreadData = (options: {
       return;
     }
 
-    const bodyMarkdown = CREATE_APP_QUICKACTION_BODIES[kind];
+    const appKindLabel = getCreateAppQuickactionSpec(kind).appKindLabel.toLowerCase();
+    const bodyMarkdown = `Create ${kind === "online_shop" ? "an" : "a"} ${appKindLabel}`;
+    const composerDraft = inputRef.current;
     setSending(true);
     try {
       const thread = selectedThread || await createThreadForCompose();
+      if (!selectedThread) {
+        setInput(composerDraft);
+      }
       const created = await postConversationMessage(selectedProject.id, {
         threadId: thread.id,
         bodyMarkdown,
@@ -986,7 +984,7 @@ export const useChatThreadData = (options: {
     } finally {
       setSending(false);
     }
-  }, [cache, composerRef, createThreadForCompose, dashboardSettings, onMessageSent, selectedProject, selectedThread, sending, setMessagesSnapshot]);
+  }, [cache, composerRef, createThreadForCompose, dashboardSettings, onMessageSent, selectedProject, selectedThread, sending, setInput, setMessagesSnapshot]);
 
   const handleDeleteThread = useCallback(async (threadId: string): Promise<void> => {
     const nextThreads = removeThread(cache.getThreads(selectedProject?.id || "") || threadsRef.current, threadId);
