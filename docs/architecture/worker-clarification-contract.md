@@ -35,6 +35,8 @@ The requester supplies a project-scoped deduplication key. Repeating the same no
 
 Before persistence, the service verifies every referenced task, sprint, sprint run, dispatch, and task run belongs to the declared project. It also verifies linked records agree with each other and derives omitted scope fields from the most specific runtime record. Reads and replies require both the project id and clarification id, preventing cross-project access through the public id. Reply continuation independently verifies that the replying agent is an eligible project manager for that project.
 
+Runtime dependency composition explicitly supplies the continuation-enabled management handler to `CodeUxServer`. The MCP reply path fails closed when that continuation service is unavailable; it never falls back to settling a task-backed clarification directly.
+
 ## MCP Audience Boundary
 
 The existing project-manager MCP gateway transports two audience-scoped tools without introducing a new runtime role. `request_clarification` is advertised only to an authenticated agent that is assigned to a task in the project, selected as the manual coding agent, or included in `orchestratorAgentPresetIds`. An assignment-only agent must address its assigned task when calling the tool. `reply_to_clarification` is advertised only to the configured clarification-reply or dashboard-reply agent, the built-in Project manager fallback, or an unscoped project-manager MCP client.

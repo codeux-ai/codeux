@@ -4,10 +4,16 @@ import { ServerContext } from "../../../../src/app/dependency-factory.js";
 import { CoreDependencies } from "../../../../src/app/dependency-factory/core-factory.js";
 import { SprintDependencies } from "../../../../src/app/dependency-factory/sprint-factory.js";
 import { ManagementToolHandler } from "../../../../src/mcp/management-tool-handler.js";
+import { WorkerClarificationContinuationService } from "../../../../src/services/worker-clarification-continuation-service.js";
 
 vi.mock("../../../../src/mcp/management-tool-handler.js", () => {
   const ManagementToolHandler = vi.fn();
   return { ManagementToolHandler };
+});
+
+vi.mock("../../../../src/services/worker-clarification-continuation-service.js", () => {
+  const WorkerClarificationContinuationService = vi.fn();
+  return { WorkerClarificationContinuationService };
 });
 
 vi.mock("../../../../src/domain/sprint/branch-name-generator.js", async (importOriginal) => {
@@ -29,7 +35,13 @@ describe("MCP Factory", () => {
 
     mockContext = {
       runtimeContext: {
-        dashboardSettings: { testSetting: true },
+        dashboardSettings: {
+          agents: {
+            routing: {
+              taskCoding: { mode: "AUTO", agentPresetId: null },
+            },
+          },
+        },
       },
       normalizeName: vi.fn(),
       resolveSessionName: vi.fn(),
@@ -43,6 +55,9 @@ describe("MCP Factory", () => {
       logger: { child: vi.fn().mockReturnValue({}) },
       executionRepository: {},
       projectManagementRepository: { getProject: vi.fn() },
+      projectAttentionRepository: {},
+      agentPresetRepository: { getAgentPreset: vi.fn() },
+      julesApi: { sendSessionMessage: vi.fn() },
       agentPresetSyncService: {},
       sprintPreviewService: {},
       settingsRepository: { getDefaultDashboardSettings: vi.fn() },
@@ -85,6 +100,16 @@ describe("MCP Factory", () => {
     expect(managementArgs.executionControlService).toBe(mockDashboardDeps.executionControlService);
     expect(managementArgs.quicksprintService).toBe(mockDashboardDeps.quicksprintService);
     expect(managementArgs.schedulerService).toBe(mockDashboardDeps.schedulerService);
+    expect(managementArgs.workerClarificationContinuationService).toBeDefined();
+
+    const continuationArgs = vi.mocked(WorkerClarificationContinuationService).mock.calls[0][0];
+    expect(continuationArgs.clarificationService).toBe(managementArgs.workerClarificationService);
+    expect(continuationArgs.taskRerunService).toBe(mockDashboardDeps.taskRerunService);
+    expect(continuationArgs.executionRepository).toBe(mockCoreDeps.executionRepository);
+    expect(continuationArgs.projectManagementRepository).toBe(mockCoreDeps.projectManagementRepository);
+    expect(typeof continuationArgs.sendJulesSessionMessage).toBe("function");
+    expect(typeof continuationArgs.isAuthorizedProjectManager).toBe("function");
+    expect(typeof continuationArgs.resolveProviderConfigId).toBe("function");
   });
 
   it("no longer exposes the removed listening handlers", () => {

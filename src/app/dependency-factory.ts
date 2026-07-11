@@ -66,5 +66,11 @@ export function createRuntimeDependencies(
   const dashDeps = createDashboardDependencies(context, coreDeps, sprintDeps);
   const mcpDeps = createMcpDependencies(context, coreDeps, sprintDeps, dashDeps);
 
-  return { ...coreDeps, ...sprintDeps, ...mcpDeps, ...dashDeps };
+  return {
+    ...coreDeps,
+    ...sprintDeps,
+    ...dashDeps,
+    ...mcpDeps,
+    managementToolHandler: mcpDeps.managementToolHandler,
+  };
 }
