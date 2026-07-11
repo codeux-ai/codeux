@@ -224,6 +224,9 @@ export class VirtualWorkerService {
       getMcpConnectionInfo: deps.getMcpConnectionInfo,
       skillService: deps.skillService,
       agentPresetRepository: deps.agentPresetRepository,
+      getDashboardSettings: ({ projectId, sprintId }) => (
+        projectId ? this.resolveDashboardSettings(projectId, sprintId) : deps.settingsRepository.getDefaultDashboardSettings()
+      ),
     });
   }
 

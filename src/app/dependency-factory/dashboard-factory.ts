@@ -153,6 +153,7 @@ export function createDashboardDependencies(
     getMcpConnectionInfo: () => context.getMcpConnectionInfo?.() ?? null,
     skillService: coreDeps.skillService,
     agentPresetRepository: coreDeps.agentPresetRepository,
+    getDashboardSettings: resolveDashboardSettings,
   });
 
   const structuredProviderResponseService = new StructuredProviderResponseService({

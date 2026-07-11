@@ -41,6 +41,7 @@ import { LEARNINGS_FILENAME } from "../contracts/memory-types.js";
 import * as PlanningPromptBuilder from "./planning-prompt-builder.js";
 import { buildRelevantMemoryInjectionContext } from "./memory-injection-context.js";
 import { getDesignGuidanceCatalog } from "../domain/settings/design-guidance-catalog.js";
+import { resolveEffectiveDashboardSettings } from "./settings-resolution-service.js";
 
 interface PlanningAgentServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
@@ -155,6 +156,11 @@ export class PlanningAgentService {
       executionRepository: deps.executionRepository,
       providerRunner: this.providerRunner,
       logger: deps.logger,
+      getDashboardSettings: ({ projectId, sprintId }) => (
+        projectId
+          ? resolveEffectiveDashboardSettings(deps.settingsRepository, projectId, sprintId).settings
+          : deps.settingsRepository.getDefaultDashboardSettings()
+      ),
     });
 
     if (deps.structuredAgentRequestService) {

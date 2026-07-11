@@ -1,4 +1,4 @@
-import type { CustomMcpServer, DashboardSettings, ThinkingMode } from "../contracts/app-types.js";
+import type { CustomMcpServer, DashboardSettings, DashboardSettingsScope, ThinkingMode } from "../contracts/app-types.js";
 import type { ProviderConfigMode, QwenModelProviderSettings } from "../contracts/app-types.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
@@ -32,6 +32,7 @@ import { conversationTurnToMessage } from "./provider-conversation-message-mappe
 import { ActivityWriteCoalescer } from "./activity-write-coalescer.js";
 import { SERVER_SHUTDOWN_STOP_REASON } from "./active-dispatch-registry.js";
 import { isRuntimeShutdownInProgress } from "./shutdown-state.js";
+import { composeGoogleDrivePrompt, resolveGoogleDriveMount } from "./google-drive-mount-service.js";
 
 /** Counts tool-call turns in a parsed provider conversation, for tool-call stats. */
 function countConversationToolCalls(conversation: ParsedConversationTurn[] | undefined | null): number {
@@ -156,6 +157,7 @@ export interface ProviderExecutionServiceDeps {
   getMcpConnectionInfo?: () => McpConnectionInfo | null;
   agentPresetRepository?: AgentPresetRepository;
   skillService?: SkillService;
+  getDashboardSettings?: (scope: DashboardSettingsScope) => DashboardSettings;
 }
 
 export interface ExecutionProviderRunArgs {
@@ -268,6 +270,23 @@ export class ProviderExecutionService {
     let execInvocationId: string | null = args.invocationId || null;
     let lastPersistedMessagesSignature: string | null = null;
     const effectiveModel = resolveEffectiveModel(args);
+    const scopedSettings = args.projectId.trim() && this.deps.getDashboardSettings
+      ? this.deps.getDashboardSettings({
+        projectId: args.projectId,
+        sprintId: args.sprintId,
+      })
+      : null;
+    const googleDriveMount = scopedSettings?.googleDrive
+      ? await resolveGoogleDriveMount(
+        scopedSettings.googleDrive,
+        args.repoPath,
+        args.workflowSettings.executionMode,
+        {
+          logger: this.deps.logger,
+          onActivity: args.onActivity,
+        },
+      )
+      : null;
     const persistentSkillContext = await resolvePersistentSkillContext({
       projectId: args.projectId,
       agentPresetId: args.mcpAgentId,
@@ -440,6 +459,7 @@ export class ProviderExecutionService {
         mcpConnection: resolvedMcp.mcpConnection,
         customMcpServers: resolvedMcp.customMcpServers,
         persistentSkillStorageMounts: persistentSkillRuntime?.mounts,
+        googleDriveMount: googleDriveMount ?? undefined,
         onActivity: (desc: string, originator?: string) => {
           if (args.onActivity) {
             args.onActivity(desc, originator);
@@ -621,7 +641,12 @@ export class ProviderExecutionService {
       return result;
     };
 
-    const initialPrompt = persistentSkillContext.prompt;
+    const initialPrompt = googleDriveMount
+      ? composeGoogleDrivePrompt(
+        persistentSkillContext.prompt,
+        googleDriveMount.readonly ? "read-only" : "read-write",
+      )
+      : persistentSkillContext.prompt;
     let currentPrompt = initialPrompt;
     let providerResult: ProviderRunResult;
     let usedReadFileRetry = false;

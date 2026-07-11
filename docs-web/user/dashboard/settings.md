@@ -115,7 +115,7 @@ If a hint is detected, the panel offers a one-click **Use detected value** butto
 
 Settings > Integrations includes Google Drive under **Storage & Mounts**. It links an already synced local Google Drive directory; Code UX does not request or store Google credentials. The linked directory follows the normal System → Project settings cascade and is saved only with the scoped Settings draft.
 
-The mount is available to Docker-backed provider workspaces at the fixed `/mnt/google-drive` container path. **Read-only** is the safe default. Choose **Read-write** only when agents must modify synced Drive files, because edits and deletions can propagate through Google Drive. A card is **Configured** only after a linked directory is set and **Active** only when that configured mount is also enabled. The host path appears only inside the editable linked-directory control.
+The mount is available to scoped Docker-backed provider workspaces at the fixed `/mnt/code-ux/google-drive` container path. It is shared by Project Manager replies, planning, setup, task coding, QA, CI repair, and merge repair; host-mode and unscoped runs do not receive it. **Read-only** is the safe default. Choose **Read-write** only when agents must modify synced Drive files, because edits and deletions can propagate through Google Drive. A card is **Configured** only after a linked directory is set and **Active** only when that configured mount is also enabled. The host path appears only inside the editable linked-directory control.
 
 ## Provider config files
 

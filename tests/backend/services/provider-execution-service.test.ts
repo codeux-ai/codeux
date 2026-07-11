@@ -11,6 +11,11 @@ import type { ProviderInvocationPurpose } from "../../../src/contracts/execution
 import type { AppendExecutionInvocationMessageInput } from "../../../src/contracts/invocation-types.js";
 import { MAX_TOOL_PAYLOAD_CHARS } from "../../../src/services/invocation-message-limits.js";
 import { SERVER_SHUTDOWN_STOP_REASON } from "../../../src/services/active-dispatch-registry.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
+import { GOOGLE_DRIVE_PROMPT_SECTION_MARKER } from "../../../src/services/google-drive-mount-service.js";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
 
 // Mock dependencies
 vi.mock("../../../src/shared/providers/provider-error-classifier.js", async (importOriginal) => {
@@ -368,6 +373,108 @@ describe("ProviderExecutionService", () => {
     for (const [run] of providerRunner.runProvider.mock.calls) {
       expect(run.prompt.match(/## PERSISTENT SKILL STORAGE/g)).toHaveLength(1);
     }
+  });
+
+  it.each([
+    ["task_coding", "read-only", true, "sprint-1"],
+    ["dashboard_reply", "read-write", false, undefined],
+  ] as const)("resolves Google Drive context once for %s and reuses it across retries", async (purpose, accessMode, readonly, sprintId) => {
+    const driveDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-provider-drive-"));
+    const failedResult = { ...mockResult, ok: false };
+    providerRunner.runProvider
+      .mockResolvedValueOnce(failedResult)
+      .mockResolvedValueOnce(mockResult);
+    vi.mocked(isReadFileNotFoundToolError).mockReturnValueOnce(true);
+    vi.mocked(buildReadFileRetryPrompt).mockImplementationOnce((prompt) => `${prompt}\n\nDiscover files before retrying.`);
+    const settings = structuredClone(DEFAULT_DASHBOARD_SETTINGS);
+    settings.googleDrive = { enabled: true, hostPath: driveDir, accessMode };
+    const getDashboardSettings = vi.fn().mockReturnValue(settings);
+    service = new ProviderExecutionService({
+      providerRunner,
+      executionRepository,
+      logger: logger as any,
+      getDashboardSettings,
+    });
+
+    try {
+      await service.executeProvider({
+        ...defaultArgs,
+        purpose,
+        sprintId,
+        prompt: accessMode === "read-write"
+          ? `Resumed task.\n\n${GOOGLE_DRIVE_PROMPT_SECTION_MARKER}\nExisting Drive guidance.`
+          : "test prompt",
+        workflowSettings: {
+          ...defaultArgs.workflowSettings,
+          executionMode: "DOCKER",
+        },
+      });
+    } finally {
+      await fs.rm(driveDir, { recursive: true, force: true });
+    }
+
+    expect(getDashboardSettings).toHaveBeenCalledOnce();
+    expect(getDashboardSettings).toHaveBeenCalledWith({ projectId: "proj-1", sprintId });
+    expect(providerRunner.runProvider).toHaveBeenCalledTimes(2);
+    const firstRun = providerRunner.runProvider.mock.calls[0]![0];
+    const retryRun = providerRunner.runProvider.mock.calls[1]![0];
+    expect(firstRun.googleDriveMount).toEqual({
+      source: driveDir,
+      destination: "/mnt/code-ux/google-drive",
+      readonly,
+    });
+    expect(retryRun.googleDriveMount).toBe(firstRun.googleDriveMount);
+    for (const run of [firstRun, retryRun]) {
+      expect(run.prompt.match(/## LINKED GOOGLE DRIVE/g)).toHaveLength(1);
+    }
+  });
+
+  it.each([
+    ["HOST", true, "/valid-but-unused"],
+    ["DOCKER", false, "/valid-but-disabled"],
+    ["DOCKER", true, "/path/that/does/not/exist"],
+  ] as const)("does not expose Google Drive context for %s mode with enabled=%s and an unavailable source", async (executionMode, enabled, hostPath) => {
+    providerRunner.runProvider.mockResolvedValue(mockResult);
+    const settings = structuredClone(DEFAULT_DASHBOARD_SETTINGS);
+    settings.googleDrive = { enabled, hostPath, accessMode: "read-only" };
+    service = new ProviderExecutionService({
+      providerRunner,
+      executionRepository,
+      logger: logger as any,
+      getDashboardSettings: vi.fn().mockReturnValue(settings),
+    });
+
+    await service.executeProvider({
+      ...defaultArgs,
+      workflowSettings: {
+        ...defaultArgs.workflowSettings,
+        executionMode,
+      },
+    });
+
+    expect(providerRunner.runProvider).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: "test prompt",
+      googleDriveMount: undefined,
+    }));
+  });
+
+  it("leaves unscoped provider calls unchanged when a settings resolver is available", async () => {
+    providerRunner.runProvider.mockResolvedValue(mockResult);
+    const getDashboardSettings = vi.fn();
+    service = new ProviderExecutionService({
+      providerRunner,
+      executionRepository,
+      logger: logger as any,
+      getDashboardSettings,
+    });
+
+    await service.executeProvider({ ...defaultArgs, projectId: "" });
+
+    expect(getDashboardSettings).not.toHaveBeenCalled();
+    expect(providerRunner.runProvider).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: "test prompt",
+      googleDriveMount: undefined,
+    }));
   });
 
   it("auto-attaches the Code UX MCP gateway for agents with Code UX access enabled", async () => {
