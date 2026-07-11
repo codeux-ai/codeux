@@ -41,6 +41,8 @@ The existing project-manager MCP gateway transports two audience-scoped tools wi
 
 The same resolver runs for `list_tools` and `call_tool`. Scoped calls must declare the agent's project; unknown agents, ineligible project roles, cross-project calls, and cross-audience calls fail as MCP `MethodNotFound`. Audience grants respect system tool toggles and explicit per-agent disables and do not enable unrelated management tools or custom MCP servers. Persistent-skill retrieval and dashboard-reply defaults remain independent grants.
 
+Task-coding provider invocations add the narrow worker clarification gateway even when the selected coding agent's saved policy has built-in Code UX disabled. Existing explicit tool restrictions and linked custom-server filtering remain intact, and coding agents never receive `reply_to_clarification`. Fresh, resumed, and QA-requested coding prompts identify the current project, task, and available runtime records and require the worker to submit one concise, evidence-based `request_clarification` question before reporting ambiguity or a project-manager decision as a terminal blocker.
+
 ## Runtime Events and Continuation Boundary
 
 When a task run is present, lifecycle changes append idempotent task-run events such as `worker_clarification_requested`, `worker_clarification_replied`, `worker_clarification_expired`, and `worker_clarification_cancelled`. Event payloads include both the clarification id and attention item id plus the complete runtime scope and requester metadata.

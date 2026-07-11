@@ -5,6 +5,7 @@ import {
   codeUxAgentMcpAccess,
   codeUxAgentMcpAccessWithoutScheduler,
   dashboardReplyAgentMcpAccess,
+  isWorkerClarificationAgent,
   schedulerOnlyAgentMcpAccess,
   sanitizeAgentMcpAccess,
   resolveAgentMcpRuntime,
@@ -15,6 +16,7 @@ import {
 } from "../../../src/services/agent-mcp-access.js";
 import type { CustomMcpServer, McpToolToggle } from "../../../src/contracts/app-types.js";
 import type { McpConnectionInfo } from "../../../src/contracts/mcp-connection-types.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
 const server = (id: string, name = id): CustomMcpServer => ({
   id, name, enabled: true, transport: "http", url: `https://${name}/mcp`,
@@ -54,6 +56,44 @@ describe("sanitizeAgentMcpAccess", () => {
 });
 
 describe("agent MCP defaults", () => {
+  it("recognizes assigned, manual, and worker-pool coding agents without admitting planning, QA, or unrelated agents", () => {
+    const settings = {
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      agents: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents,
+        routing: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents.routing,
+          taskCoding: {
+            mode: "MANUAL" as const,
+            agentPresetId: "manual-worker",
+            orchestratorAgentPresetIds: ["pool-worker"],
+          },
+          planning: {
+            ...DEFAULT_DASHBOARD_SETTINGS.agents.routing.planning,
+            agentPresetId: "planning-agent",
+          },
+        },
+        qualityAssurance: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+          taskCompletion: { enabled: true, agentPresetId: "qa-agent" },
+        },
+      },
+    };
+
+    const eligible = (agentId: string) => isWorkerClarificationAgent({
+      agentId,
+      assignedTaskAgentIds: ["assigned-worker"],
+      settings,
+    });
+
+    expect(eligible("assigned-worker")).toBe(true);
+    expect(eligible("manual-worker")).toBe(true);
+    expect(eligible("pool-worker")).toBe(true);
+    expect(eligible("planning-agent")).toBe(false);
+    expect(eligible("qa-agent")).toBe(false);
+    expect(eligible("unrelated-agent")).toBe(false);
+  });
+
   it("injects only the narrow clarification gateway tool when broad Code UX access is off", () => {
     const worker = workerClarificationAgentMcpAccess(defaultCodingAgentMcpAccess());
     const manager = projectManagerClarificationAgentMcpAccess(undefined);
@@ -64,6 +104,28 @@ describe("agent MCP defaults", () => {
     expect(manager.codeUxToolToggles.filter((toggle) => toggle.enabled).map((toggle) => toggle.name))
       .toEqual(["reply_to_clarification"]);
     expect(manager.linkedServerIds).toEqual([]);
+  });
+
+  it("preserves explicit coding-agent restrictions and linked servers when Code UX is already enabled", () => {
+    const access = workerClarificationAgentMcpAccess({
+      codeUxEnabled: true,
+      codeUxToolToggles: [
+        { name: "request_clarification", enabled: true, isInternal: true },
+        { name: "reply_to_clarification", enabled: false, isInternal: true },
+        { name: "manage_tasks", enabled: false, isInternal: true },
+      ],
+      linkedServerIds: ["playwright", "docs"],
+    });
+
+    expect(access).toEqual({
+      codeUxEnabled: true,
+      codeUxToolToggles: [
+        { name: "request_clarification", enabled: true, isInternal: true },
+        { name: "reply_to_clarification", enabled: false, isInternal: true },
+        { name: "manage_tasks", enabled: false, isInternal: true },
+      ],
+      linkedServerIds: ["playwright", "docs"],
+    });
   });
 
   it("keeps coding-agent custom links without implying Code UX access", () => {
