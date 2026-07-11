@@ -11,6 +11,8 @@ Sprints are viewed either in a visual organic cell gallery or a dense ledger for
 - **Goal** — first line of the sprint goal.
 - **Action buttons** — Plan / Orchestrate / Pause / Cancel as appropriate, with inactive pause guidance kept out of the visible row to preserve ledger density.
 
+Completion keeps one decimal when needed across sprint cards, ledger rows, active task streams, and sprint selectors: `7.5%` stays `7.5%`, while whole values such as `5.0%` display as `5%`. Progress bars and accessible values use the same completion number and remain bounded from `0%` to `100%`.
+
 Sprints can be **showcase-pinned** to surface them on the Overview page; toggle this from the cell menu or bulk actions.
 
 Each sprint row and showcase card has separate **Tasks** and **Live** actions. These are in-app router links carrying both `projectId` and `sprintId`, so opening a sprint switches the dashboard to that sprint's project before loading the task board or live view without reloading the dashboard shell.

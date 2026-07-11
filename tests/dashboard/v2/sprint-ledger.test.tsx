@@ -52,7 +52,7 @@ const mockSprints: Sprint[] = [
     endDate: null,
     featureBranch: null,
     tasksCount: 5,
-    completion: 50,
+    completion: 7.5,
     createdAt: "2024-01-01T00:00:00Z",
     updatedAt: "2024-01-01T00:00:00Z",
     date: "Jan 1",
@@ -167,6 +167,10 @@ describe("SprintLedger Component", () => {
     expect(tasksLink).toHaveAttribute("href", "/tasks?projectId=proj-1&sprintId=sprint-1");
     expect(liveLink).toHaveAttribute("href", "/live?projectId=proj-1&sprintId=sprint-1");
     expect(alphaScope.queryByRole("link", { name: "Open" })).not.toBeInTheDocument();
+    const progress = alphaScope.getByRole("progressbar", { name: "Alpha Design progress" });
+    expect(progress).toHaveAttribute("aria-valuenow", "7.5");
+    expect(progress.firstElementChild).toHaveStyle({ width: "7.5%" });
+    expect(alphaScope.getByText("7.5%")).toBeInTheDocument();
   });
 
   it("filters by status from the ledger controls", async () => {
