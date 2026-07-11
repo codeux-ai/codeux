@@ -36,6 +36,11 @@ import {
   projectManagerClarificationAgentMcpAccess,
   resolveAgentMcpRuntime,
 } from "./agent-mcp-access.js";
+import {
+  composeGoogleDrivePrompt,
+  resolveGoogleDriveMount,
+  type GoogleDriveRuntimeMount,
+} from "./google-drive-mount-service.js";
 
 export interface GenerateDashboardReplyInput {
   projectId: string;
@@ -109,13 +114,13 @@ export class WorkerInboxReplyService {
 
     const thread = this.deps.connectionChatRepository.getThread(input.threadId);
     const messages = this.deps.connectionChatRepository.listMessages(input.threadId);
+    const settings = this.deps.getDashboardSettings({ projectId: input.projectId });
     let rawPrompt = input.bodyMarkdown.trim();
     let agentProvider: { providerConfigId?: string | null; model?: string | null } | null = null;
     let agentMcpAccess: AgentMcpAccessConfig | null | undefined;
     let mcpAgentId: string | null | undefined;
 
     if (input.mode !== "compact_thread") {
-      const settings = this.deps.getDashboardSettings({ projectId: input.projectId });
       const dashboardReplyAgentPresetId = settings.agents?.routing?.dashboardReply?.agentPresetId ?? null;
       const dashboardReplyAgent = typeof this.deps.agentPresetSyncService.resolveDashboardReplyAgent === "function"
         ? await this.deps.agentPresetSyncService.resolveDashboardReplyAgent(input.projectId, dashboardReplyAgentPresetId)
@@ -155,7 +160,16 @@ export class WorkerInboxReplyService {
       agentPresetId: mcpAgentId,
       prompt: rawPrompt,
     }, this.deps);
-    const prompt = buildProviderPrompt(persistentSkillContext.prompt, providerSettings.thinkingMode, route.provider);
+    const workflowSettings = { ...DEFAULT_CLI_WORKFLOW_SETTINGS, ...settings.cliWorkflow };
+    const googleDriveMount = settings.googleDrive
+      ? await resolveGoogleDriveMount(settings.googleDrive, project.baseDir, workflowSettings.executionMode, {
+        logger: this.deps.logger,
+      })
+      : null;
+    const invocationPrompt = googleDriveMount
+      ? composeGoogleDrivePrompt(persistentSkillContext.prompt, settings.googleDrive.accessMode)
+      : persistentSkillContext.prompt;
+    const prompt = buildProviderPrompt(invocationPrompt, providerSettings.thinkingMode, route.provider);
     const startedAt = new Date().toISOString();
     const sessionId = `dashboard-reply-${randomUUID().slice(0, 8)}`;
 
@@ -170,7 +184,7 @@ export class WorkerInboxReplyService {
         status: "running",
         model: providerSettings.model,
         startedAt,
-        promptChars: persistentSkillContext.prompt.length,
+        promptChars: invocationPrompt.length,
       }
     );
 
@@ -192,7 +206,7 @@ export class WorkerInboxReplyService {
 
     this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
       role: "user",
-      contentMarkdown: persistentSkillContext.prompt,
+      contentMarkdown: invocationPrompt,
     });
 
     let output: string;
@@ -228,6 +242,7 @@ export class WorkerInboxReplyService {
         agentMcpAccess,
         mcpAgentId,
         persistentSkillRuntime: persistentSkillContext.runtime,
+        googleDriveMount,
       });
       output = result.text;
     } catch (err) {
@@ -350,7 +365,16 @@ export class WorkerInboxReplyService {
       agentPresetId: clarificationAgent.id,
       prompt: fullContextPrompt,
     }, this.deps);
-    const prompt = buildProviderPrompt(persistentSkillContext.prompt, providerSettings.thinkingMode, route.provider);
+    const workflowSettings = { ...DEFAULT_CLI_WORKFLOW_SETTINGS, ...settings.cliWorkflow };
+    const googleDriveMount = settings.googleDrive
+      ? await resolveGoogleDriveMount(settings.googleDrive, project.baseDir, workflowSettings.executionMode, {
+        logger: this.deps.logger,
+      })
+      : null;
+    const invocationPrompt = googleDriveMount
+      ? composeGoogleDrivePrompt(persistentSkillContext.prompt, settings.googleDrive.accessMode)
+      : persistentSkillContext.prompt;
+    const prompt = buildProviderPrompt(invocationPrompt, providerSettings.thinkingMode, route.provider);
 
     const startedAt = new Date().toISOString();
 
@@ -369,7 +393,7 @@ export class WorkerInboxReplyService {
         status: "running",
         model: providerSettings.model,
         startedAt,
-        promptChars: persistentSkillContext.prompt.length,
+        promptChars: invocationPrompt.length,
       }
     );
 
@@ -391,7 +415,7 @@ export class WorkerInboxReplyService {
 
     this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
       role: "user",
-      contentMarkdown: persistentSkillContext.prompt,
+      contentMarkdown: invocationPrompt,
     });
 
     let output: string;
@@ -429,6 +453,7 @@ export class WorkerInboxReplyService {
         agentMcpAccess: projectManagerClarificationAgentMcpAccess(clarificationAgent.mcpAccess),
         mcpAgentId: clarificationAgent.id,
         persistentSkillRuntime: persistentSkillContext.runtime,
+        googleDriveMount,
       });
       output = providerResult.text;
     } catch (err) {
@@ -638,6 +663,7 @@ export class WorkerInboxReplyService {
     agentMcpAccess?: AgentMcpAccessConfig | null;
     mcpAgentId?: string | null;
     persistentSkillRuntime?: PersistentSkillStorageRuntime | null;
+    googleDriveMount?: GoogleDriveRuntimeMount | null;
   }): Promise<ProviderRunResult & { text: string }> {
     const dashboardSettings = this.deps.getDashboardSettings(input.projectId
       ? { projectId: input.projectId, sprintId: input.sprintId ?? undefined }
@@ -713,6 +739,7 @@ export class WorkerInboxReplyService {
       mcpConnection: resolvedMcp.mcpConnection,
       customMcpServers: resolvedMcp.customMcpServers,
       persistentSkillStorageMounts: persistentSkillRuntime?.mounts,
+      googleDriveMount: input.googleDriveMount ?? undefined,
       onActivity: () => {},
     });
   }
