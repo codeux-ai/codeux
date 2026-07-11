@@ -304,6 +304,8 @@ Dashboard behavior:
       - constrains weighted or agent-provider route pools; empty pools fail closed to the selected or inherited provider instead of opening to every enabled provider
     - `providers` sparse override map keyed by provider config id
       - supports per-invocation overrides for `enabled`, `model`, `weight`, and `thinkingMode`
+    - `continueTaskSession` (`boolean`, `ci_fix` only, default `true`)
+      - resumes the originating task's logical/native coding session, provider family, effective model, coding agent, and preserved workspace when available; `false` forces the standalone CI Fix route
   - default profiles:
     - `task_coding`: `GLOBAL`
     - `planning`: `WORKER`
@@ -522,7 +524,7 @@ Container execution notes:
 - feature PR review blocking treats `CHANGES_REQUESTED` as authoritative and no longer blocks solely because GitHub reports incidental PR comments while `reviewDecision` is empty. This avoids Jules bot introduction comments holding otherwise merge-ready task PRs.
 - remote GitHub polling keeps recorded task PR URLs in scope for merged-PR filtering and asks GraphQL for the maximum merged-PR page size, so older merged task PRs can still settle their tasks instead of falling back to an endless merge-required state.
 - `waitForJulesCiAutofix` (default `false`): shown under Settings -> Integrations -> Jules. When enabled with `featurePrAutoMergeMode = "WHEN_GREEN"`, failed feature-PR checks on Jules-managed tasks are first sent back to the existing Jules session with CI context. When disabled, Code UX skips that Jules-specific notification path and dispatches a worker-owned `ci_fix_required` item instead. Pending/failed CI still keeps the task in work status until checks clear or guardrails escalate.
-- `julesCiAutofixMaxRetries` (default `3`, clamped to `0..20`): shown under Settings -> Integrations -> Jules. Max CI autofix attempts before escalation to intervention (`FULL -> AGENT`, `SEMI_AUTO/ALWAYS_ASK -> HUMAN`) with explicit task IDs, PR links, and failed check names. The retry cap applies to the CI-fix guardrail whether the attempt is a Jules session notification or a worker repair.
+- `julesCiAutofixMaxRetries` (legacy mirror default `5`, clamped to `0..20`): shown under Settings -> Integrations -> Jules. Max CI autofix attempts before escalation to intervention (`FULL -> AGENT`, `SEMI_AUTO/ALWAYS_ASK -> HUMAN`) with explicit task IDs, PR links, and failed check names. The generic guardrail is authoritative and defaults to five attempts; the retry cap applies whether the attempt is a Jules session notification or a worker repair.
 - `featurePrAutoMergeMode` (default `"ALWAYS"`):
   - `"OFF"`: no feature PR auto-merge
   - `"CREATE_PR"`: open or reuse the feature PR, then stop before auto-merge and mark the task settled with `PR_ONLY`

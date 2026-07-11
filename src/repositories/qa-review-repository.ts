@@ -191,6 +191,22 @@ export class QaReviewRepository {
   }
 
   /**
+   * Clear sprint-completion QA history after an explicit human intervention.
+   * Sprint QA is fail-closed, so a terminal provider failure or exhausted
+   * verdict remains blocking until a human resolves the corresponding handoff.
+   * Removing only sprint-completion rows gives the current sprint a fresh
+   * review cycle without altering task QA history or any guardrail ledger.
+   */
+  resetSprintReviewRuns(sprintId: string): number {
+    const info = this.db.prepare(`
+      DELETE FROM qa_review_runs
+      WHERE sprint_id = ?
+        AND trigger_type = 'sprint_completion'
+    `).run(sprintId);
+    return Number(info.changes || 0);
+  }
+
+  /**
    * Count only QA runs that reached a real verdict (`completed`). Runs that
    * `failed` for infrastructure reasons — the QA reviewer crashing on missing
    * auth/config, a container error, an unparseable response — produced no

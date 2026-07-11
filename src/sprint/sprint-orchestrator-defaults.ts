@@ -28,7 +28,7 @@ export const DEFAULT_CI_INTELLIGENCE_SETTINGS: CiIntelligenceSettings = {
   resolveAllCommentsBeforeFeatureMerge: true,
   resolveMergeConflicts: true,
   waitForJulesCiAutofix: false,
-  julesCiAutofixMaxRetries: 3,
+  julesCiAutofixMaxRetries: 5,
   featurePrAutoMergeMode: "ALWAYS",
   mainBranchAutoMergeMode: "ALWAYS",
 };

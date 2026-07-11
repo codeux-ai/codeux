@@ -179,6 +179,15 @@ export class ProjectAttentionService {
     return this.projectAttentionRepository.patchAttentionItemPayload(itemId, payloadPatch);
   }
 
+  requeueItem(itemId: string, payloadPatch: Record<string, unknown> = {}): ProjectAttentionItemRecord {
+    const current = this.requireItem(itemId);
+    const requeued = this.projectAttentionRepository.requeueAttentionItem(itemId, payloadPatch);
+    if (requeued.ownerType === "worker") {
+      this.onWorkerAttentionOpenedCallback?.(current.projectId);
+    }
+    return requeued;
+  }
+
   private requireItem(itemId: string): ProjectAttentionItemRecord {
     const item = this.projectAttentionRepository.getAttentionItem(itemId);
     if (!item) {

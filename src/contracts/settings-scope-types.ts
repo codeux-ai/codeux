@@ -60,6 +60,7 @@ export interface ProjectInvocationRoutingSettings {
   provider: ProviderConfigId | null;
   allowedProviders: ProviderConfigId[];
   providers: Record<ProviderConfigId, InvocationProviderOverrideSettings>;
+  continueTaskSession?: boolean;
 }
 
 export interface ProjectGitSettings {

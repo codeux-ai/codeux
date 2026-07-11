@@ -36,6 +36,59 @@ function stringify(value: unknown): string {
   }
 }
 
+function readFirstStringField(value: unknown, fieldNames: string[]): string | undefined {
+  const record = asRecord(value);
+  if (!record) return undefined;
+  for (const fieldName of fieldNames) {
+    const fieldValue = record[fieldName];
+    if (typeof fieldValue === "string" && fieldValue) {
+      return fieldValue;
+    }
+  }
+  return undefined;
+}
+
+function readTimestampMs(...values: unknown[]): number | null {
+  for (const value of values) {
+    const record = asRecord(value);
+    const raw = record
+      ? record.timestamp ?? record.createdAt ?? record.created_at ?? record.time
+      : value;
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      return raw > 10_000_000_000 ? raw : raw * 1000;
+    }
+    if (typeof raw === "string" && raw.trim()) {
+      const parsed = Date.parse(raw);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    const time = asRecord(record?.time);
+    const nested = time?.completed ?? time?.end ?? time?.start ?? time?.created;
+    if (typeof nested === "number" && Number.isFinite(nested)) {
+      return nested > 10_000_000_000 ? nested : nested * 1000;
+    }
+  }
+  return null;
+}
+
+function extractVisibleText(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  if (Array.isArray(value)) {
+    return value.map(extractVisibleText).filter(Boolean).join("\n").trim();
+  }
+  const record = asRecord(value);
+  if (!record) {
+    return "";
+  }
+  const candidate = record.text
+    ?? record.content
+    ?? record.message
+    ?? record.value
+    ?? record.delta;
+  return extractVisibleText(candidate);
+}
+
 function flattenVisibleReasoning(value: unknown): string {
   if (typeof value === "string") {
     return value.trim();
@@ -65,6 +118,10 @@ function flattenVisibleReasoning(value: unknown): string {
     }
   }
   return parts.join("").trim();
+}
+
+function extractOpenCodeReasoning(part: Record<string, unknown>): string {
+  return flattenVisibleReasoning(part.reasoning ?? part.thinking ?? part.summary ?? part.text ?? part.content);
 }
 
 interface OpenCodeTokens {
@@ -117,16 +174,16 @@ export function parseOpenCodeExport(exportStdout: string): OpenCodeExportUsage |
   // happens to contain braces can't be mistaken for the payload.
   const infoIndex = exportStdout.search(/\{\s*"info"\s*:/);
   const searchText = infoIndex >= 0 ? exportStdout.slice(infoIndex) : exportStdout;
-  const extracted = extractJsonContainer<Record<string, unknown>>(searchText, "object");
-  if (!extracted.ok) return null;
-  const root = extracted.value;
-  const info = asRecord(root?.info);
-  const tokens = asRecord(info?.tokens);
+  const root = findOpenCodeExportRoot(searchText)
+    ?? (searchText === exportStdout ? null : findOpenCodeExportRoot(exportStdout));
+  if (!root) return null;
+  const info = findOpenCodeExportInfo(root);
+  const tokens = asRecord(info?.tokens) ?? asRecord(info?.usage);
   if (!tokens) {
     return null;
   }
   const t = readOpenCodeTokens(tokens);
-  if (t.input <= 0 && t.output <= 0) {
+  if (t.rawInput <= 0 && t.output <= 0 && t.reasoning <= 0 && t.cacheRead <= 0) {
     return null;
   }
   const cost = toNumber(info?.cost ?? 0);
@@ -141,6 +198,60 @@ export function parseOpenCodeExport(exportStdout: string): OpenCodeExportUsage |
       cost,
     },
   };
+}
+
+function findOpenCodeExportRoot(text: string): Record<string, unknown> | unknown[] | null {
+  let offset = 0;
+  while (offset < text.length) {
+    const extracted = extractJsonContainer<Record<string, unknown> | unknown[]>(text.slice(offset), "object-or-array");
+    if (extracted.ok) {
+      if (findOpenCodeExportInfo(extracted.value)) return extracted.value;
+      offset += extracted.endIndex;
+      continue;
+    }
+    const relativeStart = extracted.startIndex ?? 0;
+    offset += Math.max(relativeStart + 1, 1);
+  }
+  return null;
+}
+
+function findOpenCodeExportInfo(root: unknown): Record<string, unknown> | null {
+  const queue: unknown[] = [root];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (Array.isArray(current)) {
+      queue.push(...current);
+      continue;
+    }
+
+    const record = asRecord(current);
+    if (!record) {
+      continue;
+    }
+
+    const directTokens = asRecord(record.tokens) ?? asRecord(record.usage);
+    if (directTokens) {
+      return record;
+    }
+
+    for (const field of ["info", "session", "data", "result", "message"]) {
+      const nested = asRecord(record[field]);
+      const nestedTokens = asRecord(nested?.tokens) ?? asRecord(nested?.usage);
+      if (nested && nestedTokens) {
+        return nested;
+      }
+      if (nested) {
+        queue.push(nested);
+      }
+    }
+
+    const messages = record.messages;
+    if (Array.isArray(messages)) {
+      queue.push(...messages);
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -206,6 +317,12 @@ function emptyOpenCodeLogResult(): OpenCodeLogResult {
 export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult {
   const textParts: string[] = [];
   const conversation: ParsedConversationTurn[] = [];
+  const textPartIndexes = new Map<string, number>();
+  const textPartTextIndexes = new Map<string, number>();
+  const assistantMessageIndexes = new Map<string, number>();
+  const assistantMessageTextIndexes = new Map<string, number>();
+  const reasoningPartIndexes = new Map<string, number>();
+  const stepFinishTotals = new Map<string, { tokens: OpenCodeTokens; cost: number }>();
   let nativeSessionId: string | null = null;
   let foundEvent = false;
 
@@ -222,23 +339,45 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult {
       continue;
     }
     const parsed = parseJsonObject(trimmed);
-    if (!parsed || typeof parsed.type !== "string") {
+    if (!parsed) {
       continue;
     }
+    const event = asRecord(parsed.event) ?? asRecord(parsed.payload) ?? parsed;
+    const eventType = typeof event.type === "string" ? event.type : "";
+    if (!eventType) continue;
     foundEvent = true;
 
-    const properties = asRecord(parsed.properties);
+    const properties = asRecord(event.properties) ?? asRecord(parsed.properties);
     // The `run` formatter flattens parts to `parsed.part`; the raw bus/event
     // shape nests them under `properties.part`. Accept either.
-    const part = asRecord(parsed.part) ?? asRecord(properties?.part);
-    const info = asRecord(properties?.info) ?? asRecord(parsed.info);
+    const part = asRecord(event.part) ?? asRecord(parsed.part) ?? asRecord(properties?.part);
+    const info = asRecord(properties?.info) ?? asRecord(event.info) ?? asRecord(parsed.info) ?? asRecord(event.message);
+    const session = asRecord(properties?.session) ?? asRecord(event.session);
 
     // Native session id (`ses_...`) appears on parts, messages, and event
     // envelopes. The strict `ses_` regex lets us safely consider `info.id`
     // (which is the session id on `session.created` but a `msg_` id on message
     // events — the latter is simply rejected by the pattern).
     if (!nativeSessionId) {
-      for (const candidate of [part?.sessionID, info?.sessionID, properties?.sessionID, parsed.sessionID, info?.id]) {
+      for (const candidate of [
+        part?.sessionID,
+        part?.sessionId,
+        part?.session_id,
+        info?.sessionID,
+        info?.sessionId,
+        info?.session_id,
+        properties?.sessionID,
+        properties?.sessionId,
+        properties?.session_id,
+        event.sessionID,
+        event.sessionId,
+        event.session_id,
+        parsed.sessionID,
+        parsed.sessionId,
+        parsed.session_id,
+        session?.id,
+        info?.id,
+      ]) {
         if (typeof candidate === "string" && SESSION_ID_RE.test(candidate)) {
           nativeSessionId = candidate;
           break;
@@ -247,33 +386,66 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult {
     }
 
     const partType = typeof part?.type === "string" ? part.type : null;
+    const timestampMs = readTimestampMs(part, info, event, properties, parsed);
 
-    if (parsed.type === "text" && partType === "text" && typeof part?.text === "string" && part.text.trim()) {
-      const text = part.text.trim();
-      textParts.push(text);
-      conversation.push({ kind: "assistant", text });
+    if (partType === "text" && part) {
+      const text = extractVisibleText(part.text ?? part.content ?? part.delta);
+      if (text) {
+        const partId = readFirstStringField(part, ["id", "partID", "partId", "part_id"]);
+        if (partId && textPartTextIndexes.has(partId)) {
+          textParts[textPartTextIndexes.get(partId)!] = text;
+        } else {
+          if (partId) textPartTextIndexes.set(partId, textParts.length);
+          textParts.push(text);
+        }
+        if (partId && textPartIndexes.has(partId)) {
+          const existing = conversation[textPartIndexes.get(partId)!];
+          conversation[textPartIndexes.get(partId)!] = {
+            kind: "assistant",
+            text,
+            ...(timestampMs != null || existing.timestampMs != null
+              ? { timestampMs: timestampMs ?? existing.timestampMs }
+              : {}),
+          };
+        } else {
+          if (partId) textPartIndexes.set(partId, conversation.length);
+          conversation.push({ kind: "assistant", text, ...(timestampMs != null ? { timestampMs } : {}) });
+        }
+      }
       continue;
     }
 
     if (partType === "reasoning" && part) {
-      const visibleReasoning = flattenVisibleReasoning(part.reasoning ?? part.thinking ?? part.summary ?? part.text);
+      const visibleReasoning = extractOpenCodeReasoning(part);
       if (visibleReasoning) {
-        conversation.push({ kind: "reasoning", text: visibleReasoning });
+        const partId = readFirstStringField(part, ["id", "partID", "partId", "part_id"]);
+        if (partId && reasoningPartIndexes.has(partId)) {
+          const index = reasoningPartIndexes.get(partId)!;
+          const existing = conversation[index];
+          conversation[index] = {
+            kind: "reasoning",
+            text: visibleReasoning,
+            ...(timestampMs != null || existing.timestampMs != null
+              ? { timestampMs: timestampMs ?? existing.timestampMs }
+              : {}),
+          };
+        } else {
+          if (partId) reasoningPartIndexes.set(partId, conversation.length);
+          conversation.push({ kind: "reasoning", text: visibleReasoning, ...(timestampMs != null ? { timestampMs } : {}) });
+        }
       }
       continue;
     }
 
     if (partType === "tool" && part) {
       const state = asRecord(part.state);
-      const status = typeof state?.status === "string" ? state.status : undefined;
-      const toolName = typeof part.tool === "string" ? part.tool : undefined;
-      const toolCallId = typeof part.callID === "string"
-        ? part.callID
-        : typeof part.id === "string"
-          ? part.id
-          : undefined;
-      const args = state?.input !== undefined ? stringify(state.input) : undefined;
-      const output = state?.output !== undefined ? stringify(state.output) : undefined;
+      const status = readFirstStringField(state, ["status"]) ?? readFirstStringField(part, ["status"]);
+      const toolName = readFirstStringField(part, ["tool", "toolName", "tool_name", "name"]);
+      const toolCallId = readFirstStringField(part, ["callID", "callId", "call_id", "toolCallId", "tool_call_id", "id"]);
+      const argsValue = state?.input ?? state?.args ?? state?.arguments ?? part.input ?? part.args ?? part.arguments;
+      const outputValue = state?.output ?? state?.result ?? state?.error ?? part.output ?? part.result ?? part.error;
+      const args = argsValue !== undefined ? stringify(argsValue) : undefined;
+      const output = outputValue !== undefined ? stringify(outputValue) : undefined;
       // OpenCode emits the same tool part multiple times as it transitions
       // (pending -> running -> completed). Collapse to one entry per callID,
       // upgrading it as later states carry the input/output.
@@ -285,15 +457,17 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult {
         if (args !== undefined) existing.toolArguments = args;
         if (output !== undefined) existing.toolOutput = output;
         if (status) existing.toolStatus = status;
+        if (existing.timestampMs == null && timestampMs != null) existing.timestampMs = timestampMs;
       } else {
         conversation.push({
           kind: "tool_call",
-          text: "",
+          text: toolName ? `Calling tool ${toolName}` : "Calling tool",
           toolName,
           toolCallId,
           toolArguments: args,
           toolOutput: output,
           toolStatus: status,
+          ...(timestampMs != null ? { timestampMs } : {}),
         });
       }
       continue;
@@ -303,18 +477,32 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult {
     // the flattened top-level type; the underscore spelling and a legacy
     // `part.usage` object are tolerated for forward/backward compatibility.
     const isStepFinish = partType === "step-finish" || partType === "step_finish"
-      || parsed.type === "step-finish" || parsed.type === "step_finish";
-    if (isStepFinish && part) {
-      const tokens = asRecord(part.tokens) ?? asRecord(part.usage);
+      || eventType === "step-finish" || eventType === "step_finish";
+    if (isStepFinish) {
+      const stepId = readFirstStringField(part, ["id", "partID", "partId", "part_id"])
+        ?? readFirstStringField(event, ["id", "eventID", "eventId", "event_id"]);
+      const tokens = asRecord(part?.tokens) ?? asRecord(part?.usage) ?? asRecord(event.tokens) ?? asRecord(event.usage) ?? asRecord(properties?.tokens) ?? asRecord(properties?.usage);
       if (tokens) {
         const t = readOpenCodeTokens(tokens);
+        const cost = toNumber(part?.cost ?? event.cost ?? properties?.cost ?? 0);
+        const prior = stepId ? stepFinishTotals.get(stepId) : undefined;
+        if (prior) {
+          stepTotals.input -= prior.tokens.input;
+          stepTotals.rawInput -= prior.tokens.rawInput;
+          stepTotals.output -= prior.tokens.output;
+          stepTotals.reasoning -= prior.tokens.reasoning;
+          stepTotals.cacheRead -= prior.tokens.cacheRead;
+          stepTotals.cacheWrite -= prior.tokens.cacheWrite;
+          stepCost -= prior.cost;
+        }
         stepTotals.input += t.input;
         stepTotals.rawInput += t.rawInput;
         stepTotals.output += t.output;
         stepTotals.reasoning += t.reasoning;
         stepTotals.cacheRead += t.cacheRead;
         stepTotals.cacheWrite += t.cacheWrite;
-        stepCost += toNumber(part.cost ?? 0);
+        stepCost += cost;
+        if (stepId) stepFinishTotals.set(stepId, { tokens: t, cost });
         sawStepFinish = true;
       }
       continue;
@@ -323,9 +511,33 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult {
     // Assistant message carries cumulative usage for the message; message
     // events stream repeatedly, so keep the latest value per message id.
     if (info && info.role === "assistant") {
-      const tokens = asRecord(info.tokens);
-      if (tokens && typeof info.id === "string") {
-        messageTotals.set(info.id, { tokens: readOpenCodeTokens(tokens), cost: toNumber(info.cost ?? 0) });
+      const messageId = readFirstStringField(info, ["id", "messageID", "messageId", "message_id"]);
+      const tokens = asRecord(info.tokens) ?? asRecord(info.usage);
+      if (tokens && messageId) {
+        messageTotals.set(messageId, { tokens: readOpenCodeTokens(tokens), cost: toNumber(info.cost ?? 0) });
+      }
+
+      const text = extractVisibleText(info.content ?? info.parts ?? info.text ?? event.content ?? event.text);
+      if (text) {
+        if (messageId && assistantMessageTextIndexes.has(messageId)) {
+          textParts[assistantMessageTextIndexes.get(messageId)!] = text;
+        } else {
+          if (messageId) assistantMessageTextIndexes.set(messageId, textParts.length);
+          textParts.push(text);
+        }
+        if (messageId && assistantMessageIndexes.has(messageId)) {
+          const existing = conversation[assistantMessageIndexes.get(messageId)!];
+          conversation[assistantMessageIndexes.get(messageId)!] = {
+            kind: "assistant",
+            text,
+            ...(timestampMs != null || existing.timestampMs != null
+              ? { timestampMs: timestampMs ?? existing.timestampMs }
+              : {}),
+          };
+        } else {
+          if (messageId) assistantMessageIndexes.set(messageId, conversation.length);
+          conversation.push({ kind: "assistant", text, ...(timestampMs != null ? { timestampMs } : {}) });
+        }
       }
     }
   }
@@ -351,7 +563,7 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult {
     }
   }
 
-  const hasUsage = usage.input > 0 || usage.output > 0;
+  const hasUsage = usage.rawInput > 0 || usage.output > 0 || usage.reasoning > 0 || usage.cacheRead > 0;
   const rawUsageJson = hasUsage
     ? {
       tokens: {

@@ -22,6 +22,7 @@ const RUNTIME_VOLUME_SUFFIX = "-runtime";
 const DOCKER_PRUNE_TIMEOUT_MS = 10_000;
 const DOCKER_REMOVE_BATCH_SIZE = 50;
 const PROVIDER_TOOL_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const WORKSPACE_VOLUME_CREATION_GRACE_MS = 10 * 60 * 1000;
 
 export class DockerAssetPruneService {
   constructor(
@@ -84,7 +85,7 @@ export class DockerAssetPruneService {
     };
   }
 
-  private async pruneWorkspaceVolumes(activeSessionIds: ReadonlySet<string>): Promise<string[]> {
+  private async pruneWorkspaceVolumes(startupSessionIds: ReadonlySet<string>): Promise<string[]> {
     const [workspaceResult, runtimeResult] = await Promise.all([
       this.runDocker(["volume", "ls", "-q", "--filter", `label=${WORKSPACE_VOLUME_LABEL}`]),
       this.runDocker(["volume", "ls", "-q", "--filter", `label=${RUNTIME_VOLUME_LABEL}`]),
@@ -94,6 +95,15 @@ export class DockerAssetPruneService {
       ...this.parseLines(workspaceResult?.stdout),
       ...this.parseLines(runtimeResult?.stdout),
     ].filter((line, index, all) => line.startsWith(WORKSPACE_VOLUME_PREFIX) && all.indexOf(line) === index);
+    const activeSessionIds = new Set(startupSessionIds);
+    // Startup cleanup runs in the background. Sessions can become tracked
+    // after cleanup begins but before it removes the listed volumes, so take a
+    // second snapshot at the destructive boundary.
+    for (const session of this.sessionTrackingRepository.listTrackedCliSessions()) {
+      activeSessionIds.add(session.id);
+    }
+    const createdAtByVolume = await this.readVolumeCreationTimes(volumeNames);
+    const recentCutoff = Date.now() - WORKSPACE_VOLUME_CREATION_GRACE_MS;
     const staleVolumes: string[] = [];
 
     for (const volumeName of volumeNames) {
@@ -104,10 +114,40 @@ export class DockerAssetPruneService {
       if (activeSessionIds.has(workspaceKey)) {
         continue;
       }
+      const createdAt = createdAtByVolume.get(volumeName);
+      // A workspace is created before its provider session is persisted. Never
+      // let an overlapping startup scan delete that short-lived untracked
+      // window and cause Docker to recreate an empty volume at launch.
+      if (createdAt !== undefined && createdAt >= recentCutoff) {
+        continue;
+      }
       staleVolumes.push(volumeName);
     }
 
     return await this.removeDockerItems(["volume", "rm", "-f"], staleVolumes);
+  }
+
+  private async readVolumeCreationTimes(volumeNames: string[]): Promise<Map<string, number>> {
+    const createdAtByVolume = new Map<string, number>();
+    for (let index = 0; index < volumeNames.length; index += DOCKER_REMOVE_BATCH_SIZE) {
+      const batch = volumeNames.slice(index, index + DOCKER_REMOVE_BATCH_SIZE);
+      if (batch.length === 0) continue;
+      const result = await this.runDocker(["volume", "inspect", ...batch]);
+      if (!result?.ok) continue;
+      try {
+        const entries = JSON.parse(result.stdout) as Array<{ Name?: string; CreatedAt?: string }>;
+        for (const entry of entries) {
+          if (!entry?.Name) continue;
+          const createdAt = Date.parse(entry.CreatedAt || "");
+          if (Number.isFinite(createdAt)) {
+            createdAtByVolume.set(entry.Name, createdAt);
+          }
+        }
+      } catch {
+        // Unknown creation times retain the historical stale-session behavior.
+      }
+    }
+    return createdAtByVolume;
   }
 
   private async pruneOrphanedLoginContainers(): Promise<string[]> {

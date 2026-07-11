@@ -705,6 +705,7 @@ export const DEFAULT_INVOCATION_ROUTING: Record<InvocationRoutingId, InvocationR
     provider: null,
     allowedProviders: [],
     providers: {},
+    continueTaskSession: true,
   },
   merge_conflict: {
     profile: "WORKER",
@@ -816,7 +817,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     resolveAllCommentsBeforeFeatureMerge: true,
     resolveMergeConflicts: true,
     waitForJulesCiAutofix: false,
-    julesCiAutofixMaxRetries: 3,
+    julesCiAutofixMaxRetries: 5,
     featurePrAutoMergeMode: "ALWAYS",
     mainBranchAutoMergeMode: "ALWAYS",
   },
@@ -824,8 +825,8 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     enabled: true,
     perTaskTotalCeiling: 0,
     jobs: {
-      task_coding: { cap: 8, onLimit: "BLOCK_AND_ESCALATE" },
-      ci_fix: { cap: 3, onLimit: "BLOCK_AND_ESCALATE" },
+      task_coding: { cap: 5, onLimit: "BLOCK_AND_ESCALATE" },
+      ci_fix: { cap: 5, onLimit: "BLOCK_AND_ESCALATE" },
       merge_conflict: { cap: 3, onLimit: "BLOCK_AND_ESCALATE" },
       clarification_reply: { cap: 3, onLimit: "STOP_AND_WAIT" },
       planning: { cap: 5, onLimit: "BLOCK_AND_ESCALATE" },

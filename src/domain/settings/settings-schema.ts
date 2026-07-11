@@ -208,6 +208,9 @@ const validateAiProvider = (
       if (typeof route.strategy !== "string" || !PROVIDER_STRATEGIES.includes(route.strategy as ProviderStrategy)) {
         issues.push({ path: `${routePath}.strategy`, message: `Expected one of: ${PROVIDER_STRATEGIES.join(", ")}` });
       }
+      if ("continueTaskSession" in route && typeof route.continueTaskSession !== "boolean") {
+        issues.push({ path: `${routePath}.continueTaskSession`, message: "Expected a boolean" });
+      }
       if (route.provider !== null && typeof route.provider !== "string") {
         issues.push({ path: `${routePath}.provider`, message: "Expected null or a provider config id string" });
       } else if (typeof route.provider === "string" && providerConfigIds.size > 0 && !providerConfigIds.has(route.provider)) {

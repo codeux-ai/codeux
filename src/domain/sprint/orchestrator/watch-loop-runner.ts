@@ -40,6 +40,7 @@ import { CLI_GIT_FINALIZATION_EVENT_SCAN_LIMIT, isCliTaskRun } from "../ci/cli-g
 import type { HeartbeatService } from "../../../services/heartbeat-service.js";
 import type { SprintIssueService } from "../../../services/sprint-issue-service.js";
 import type { SprintRunLifecycleService } from "../../../services/sprint-run-lifecycle-service.js";
+import { getFailedJobLabels, getFailedLogSnippets } from "../../../sprint/ci-status-utils.js";
 
 
 export type WatchLoopExecutionDependencies = Pick<ExecutionRepository, "appendSprintRunEvent" | "getSprintRun" | "getLatestTaskRun" | "getTaskRunByDispatchId" | "listTaskDispatches" | "listTaskRunEvents">;
@@ -715,6 +716,9 @@ export class WatchLoopRunner {
               prUrl: mergeFeedback.prUrl,
               mergeStateStatus: mergeFeedback.mergeStateStatus,
               failedChecks: mergeFeedback.failedChecks,
+              failedRuns: mergeFeedback.failedRuns || [],
+              failedJobLabels: getFailedJobLabels(mergeFeedback.failedRuns || []),
+              failedLogSnippets: getFailedLogSnippets(mergeFeedback.failedRuns || []),
               sprintNumber: scopedExecutionContext.sprintNumber,
               sprintName: scopedExecutionContext.sprint.name,
               featureBranchTaskContexts: selectMergedTaskContexts(subtasks, { limit: 8 }),

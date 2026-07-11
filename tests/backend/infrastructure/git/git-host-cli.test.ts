@@ -87,6 +87,7 @@ describe("GitHostCli", () => {
         conclusion: "success",
         event: "push",
         headBranch: "main",
+        headSha: null,
         url: "https://gitlab.com/pipe",
         updatedAt: "2023-10-02"
       });

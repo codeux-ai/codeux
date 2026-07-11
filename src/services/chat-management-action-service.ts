@@ -289,7 +289,6 @@ export class ChatManagementActionService {
         workspaceLifecycle: args.workspaceLifecycle,
         invocationId: execInvocationId,
         trackPromptInInvocation: false,
-        trackAssistantInInvocation: false,
         finalizeExecutionInvocation: false,
         expectTextOutput: true,
         mcpConnection: args.mcpConnection,
@@ -301,10 +300,12 @@ export class ChatManagementActionService {
 
       const replyText = (result.text?.trim() || result.stdout || "").trim();
 
-      this.deps.executionRepository.appendExecutionInvocationMessage(execInvocationId, {
-        role: "assistant",
-        contentMarkdown: replyText || "_No response from provider._",
-      });
+      if ((result.usageTelemetry.conversation?.length ?? 0) === 0) {
+        this.deps.executionRepository.appendExecutionInvocationMessage(execInvocationId, {
+          role: "assistant",
+          contentMarkdown: replyText || "_No response from provider._",
+        });
+      }
 
       if (this.isExecutionInvocationActiveForFinalize(execInvocationId)) {
         this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
@@ -405,7 +406,6 @@ export class ChatManagementActionService {
         providerLabel: args.provider,
         invocationId: execInvocationId,
         trackPromptInInvocation: false,
-        trackAssistantInInvocation: false,
         finalizeExecutionInvocation: false,
         parseFn: (bodyMarkdown: string) => {
           return parseProviderManagementJson(bodyMarkdown);
@@ -418,10 +418,12 @@ export class ChatManagementActionService {
 
       const parsed = response.parsed;
 
-      this.deps.executionRepository.appendExecutionInvocationMessage(execInvocationId, {
-        role: "assistant",
-        contentMarkdown: response.bodyMarkdown || parsed.replyMarkdown,
-      });
+      if (!response.hasStructuredConversation) {
+        this.deps.executionRepository.appendExecutionInvocationMessage(execInvocationId, {
+          role: "assistant",
+          contentMarkdown: response.bodyMarkdown || parsed.replyMarkdown,
+        });
+      }
 
       if (!parsed.action || !parsed.action.domain || !parsed.action.action) {
         // No action proposed, just a reply

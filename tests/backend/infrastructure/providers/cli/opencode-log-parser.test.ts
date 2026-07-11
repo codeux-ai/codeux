@@ -60,6 +60,93 @@ describe("parseOpenCodeJsonLines", () => {
     expect(result.conversation.map((t) => t.kind)).toEqual(["reasoning", "assistant"]);
   });
 
+  it("parses current native streaming envelopes for session, text, reasoning, tools, and top-level step usage", () => {
+    const stream = ndjson([
+      {
+        type: "event",
+        event: {
+          type: "session.created",
+          properties: {
+            session: { id: "ses_native1" },
+          },
+        },
+      },
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "part_reason",
+            type: "reasoning",
+            content: [{ type: "summary_text", text: "Need the current files." }],
+          },
+        },
+      },
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "part_text",
+            type: "text",
+            content: [{ text: "Initial response" }],
+          },
+        },
+      },
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "part_text",
+            type: "text",
+            content: [{ text: "Final response" }],
+          },
+        },
+      },
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            type: "tool",
+            toolName: "shell",
+            callId: "call-native",
+            status: "completed",
+            input: { command: "pnpm test" },
+            result: "ok",
+          },
+        },
+      },
+      {
+        type: "step_finish",
+        usage: {
+          promptTokens: 120,
+          completionTokens: 30,
+          reasoningTokens: 4,
+          cachedInputTokens: 20,
+        },
+        cost: 0.05,
+      },
+    ]);
+
+    const result = parseOpenCodeJsonLines(stream);
+
+    expect(result.nativeSessionId).toBe("ses_native1");
+    expect(result.transcriptText).toBe("Final response");
+    expect(result.inputTokens).toBe(100);
+    expect(result.cachedInputTokens).toBe(20);
+    expect(result.outputTokens).toBe(30);
+    expect(result.reasoningOutputTokens).toBe(4);
+    expect(result.cost).toBeCloseTo(0.05);
+    expect(result.conversation.map((turn) => turn.kind)).toEqual(["reasoning", "assistant", "tool_call"]);
+    expect(result.conversation[1]).toMatchObject({ kind: "assistant", text: "Final response" });
+    expect(result.conversation[2]).toMatchObject({
+      kind: "tool_call",
+      toolName: "shell",
+      toolCallId: "call-native",
+      toolArguments: JSON.stringify({ command: "pnpm test" }),
+      toolOutput: "ok",
+      toolStatus: "completed",
+    });
+  });
+
   it("skips malformed JSON lines and preserves partial records", () => {
     const stream = [
       "{\"type\":\"text\",",
@@ -111,6 +198,36 @@ describe("parseOpenCodeJsonLines", () => {
     expect(toolCalls[0].toolName).toBe("bash");
     expect(toolCalls[0].toolStatus).toBe("completed");
     expect(toolCalls[0].toolOutput).toBe("file.txt");
+  });
+
+  it("preserves timestamps and ignores duplicate identified stream events", () => {
+    const timestamp = "2026-06-01T10:00:00.000Z";
+    const stream = ndjson([
+      { type: "reasoning", part: { id: "reason-1", type: "reasoning", text: "initial", createdAt: timestamp } },
+      { type: "reasoning", part: { id: "reason-1", type: "reasoning", text: "final", createdAt: timestamp } },
+      { type: "text", part: { id: "text-1", type: "text", text: "answer", createdAt: timestamp } },
+      { type: "tool", part: { id: "tool-part", type: "tool", tool: "bash", callID: "call-1", state: { status: "running", input: { command: "pwd" } }, createdAt: timestamp } },
+      { type: "tool", part: { id: "tool-part", type: "tool", tool: "bash", callID: "call-1", state: { status: "completed", output: "/workspace" }, createdAt: timestamp } },
+      { type: "step-finish", part: { id: "step-1", type: "step-finish", tokens: { input: 20, output: 5 } } },
+      { type: "step-finish", part: { id: "step-1", type: "step-finish", tokens: { input: 20, output: 5 } } },
+    ]);
+
+    const result = parseOpenCodeJsonLines(stream);
+
+    expect(result.conversation.map((turn) => turn.kind)).toEqual(["reasoning", "assistant", "tool_call"]);
+    expect(result.conversation[0]).toEqual({
+      kind: "reasoning",
+      text: "final",
+      timestampMs: Date.parse(timestamp),
+    });
+    expect(result.conversation[2]).toMatchObject({
+      toolCallId: "call-1",
+      toolStatus: "completed",
+      toolOutput: "/workspace",
+      timestampMs: Date.parse(timestamp),
+    });
+    expect(result.inputTokens).toBe(20);
+    expect(result.outputTokens).toBe(5);
   });
 
   it("falls back to assistant-message usage when no step-finish parts are present", () => {
@@ -241,14 +358,59 @@ describe("parseOpenCodeExport", () => {
     expect(usage.outputTokens).toBe(10284);
   });
 
+  it("skips an unrelated JSON wrapper before the authoritative export", () => {
+    const noisy = `${JSON.stringify({ wrapper: { status: "ready" } })}\n${realExport}\n`;
+    expect(parseOpenCodeExport(noisy)?.outputTokens).toBe(10284);
+  });
+
   it("returns null when the export carries no usable token counts", () => {
     const empty = JSON.stringify({ info: { tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } }, messages: [] });
     expect(parseOpenCodeExport(empty)).toBeNull();
   });
 
+  it("preserves cached-only usage instead of treating it as absent", () => {
+    const usage = parseOpenCodeExport(JSON.stringify({
+      info: { tokens: { input: 25, output: 0, reasoning: 0, cache: { read: 25, write: 0 } } },
+    }));
+    expect(usage).toMatchObject({ inputTokens: 0, cachedInputTokens: 25, outputTokens: 0 });
+  });
+
   it("returns null for truncated exports without leaking raw fragments", () => {
     const usage = parseOpenCodeExport("prefix {\"info\":{\"tokens\":{\"input\":99},\"api_key\":\"sk-test-secret\"");
     expect(usage).toBeNull();
+  });
+
+  it("extracts usage from nested current export payloads wrapped in noisy stdout", () => {
+    const noisy = [
+      "bootstrap log line",
+      JSON.stringify({
+        data: {
+          session: {
+            id: "ses_nested_export",
+            cost: 0.09,
+            tokens: {
+              input: 700,
+              output: 80,
+              reasoning: 12,
+              cache: { read: 200, write: 10 },
+            },
+          },
+        },
+      }),
+    ].join("\n");
+
+    const usage = parseOpenCodeExport(noisy)!;
+    expect(usage).toEqual({
+      inputTokens: 500,
+      cachedInputTokens: 200,
+      outputTokens: 80,
+      reasoningOutputTokens: 12,
+      cost: 0.09,
+      rawUsageJson: {
+        tokens: { input: 700, output: 80, reasoning: 12, cache: { read: 200, write: 10 } },
+        cost: 0.09,
+      },
+    });
   });
 });
 
@@ -305,5 +467,34 @@ describe("subtractOpenCodeBaseline", () => {
     expect(result).toMatchObject({
       inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, cost: 0,
     });
+  });
+
+  it("subtracts baseline snapshots that use OpenAI-style token aliases", () => {
+    const current = {
+      inputTokens: 250,
+      cachedInputTokens: 50,
+      outputTokens: 90,
+      reasoningOutputTokens: 10,
+      cost: 0.12,
+      rawUsageJson: { tokens: { input: 300, output: 90, reasoning: 10, cache: { read: 50, write: 0 } }, cost: 0.12 },
+    };
+    const baseline = {
+      tokens: {
+        promptTokens: 120,
+        completionTokens: 40,
+        reasoningTokens: 3,
+        cachedInputTokens: 20,
+      },
+      cost: 0.05,
+    };
+
+    const result = subtractOpenCodeBaseline(current, baseline);
+
+    expect(result.inputTokens).toBe(150);
+    expect(result.cachedInputTokens).toBe(30);
+    expect(result.outputTokens).toBe(50);
+    expect(result.reasoningOutputTokens).toBe(7);
+    expect(result.cost).toBeCloseTo(0.07);
+    expect(result.rawUsageJson).toEqual(current.rawUsageJson);
   });
 });

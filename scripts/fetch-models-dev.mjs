@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Prefetches the models.dev provider/model catalogue (pricing, limits, capabilities) and
-// caches it locally under assets/models-dev/catalog.json. Run by CI on every push to
-// main/dev (see .github/workflows/models-catalog.yml) so the running app never depends on
+// caches it locally under assets/models-dev/catalog.json. Run by CI on every push to dev
+// (see .github/workflows/models-catalog.yml) so the running app never depends on
 // network access to models.dev at runtime.
 
 import { mkdirSync, writeFileSync } from "node:fs";

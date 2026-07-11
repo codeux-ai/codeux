@@ -158,6 +158,10 @@ function extractAntigravityUsageFromProto(fields: ProtoField[]): {
     cachedInputTokens,
   };
 
+  if (inputTokens <= 0 && usage.outputTokens <= 0 && reasoningTokens <= 0 && cachedInputTokens <= 0) {
+    return { usage: null, rawUsageJson: null };
+  }
+
   const rawUsageJson: Record<string, unknown> = {
     inputTokens,
     outputTokens: usage.outputTokens,
@@ -204,7 +208,150 @@ function extractToolName(value: unknown): string | undefined {
     "toolName",
     "tool_name",
     "name",
+    "functionName",
+    "function_name",
   ]);
+}
+
+function stringify(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value === null || value === undefined) return "";
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function readTimestampMs(entry: Record<string, unknown>): number | null {
+  const raw = entry.created_at ?? entry.createdAt ?? entry.timestamp ?? entry.time;
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    return raw > 10_000_000_000 ? raw : raw * 1000;
+  }
+  if (typeof raw === "string" && raw.trim()) {
+    const parsed = Date.parse(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function readEntryType(entry: Record<string, unknown>): string {
+  const type = readFirstStringField(entry, ["type", "eventType", "event_type", "kind"]);
+  return type ? type.toUpperCase() : "";
+}
+
+function readEntryActor(entry: Record<string, unknown>): string {
+  const actor = readFirstStringField(entry, ["role", "source", "actor", "speaker"]);
+  return actor ? actor.toUpperCase() : "";
+}
+
+function extractFunctionCall(value: unknown): Record<string, unknown> | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  return asRecord(record.functionCall)
+    ?? asRecord(record.function_call)
+    ?? asRecord(record.toolCall)
+    ?? asRecord(record.tool_call);
+}
+
+function extractFunctionResponse(value: unknown): Record<string, unknown> | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  return asRecord(record.functionResponse)
+    ?? asRecord(record.function_response)
+    ?? asRecord(record.toolResponse)
+    ?? asRecord(record.tool_result)
+    ?? asRecord(record.toolResult);
+}
+
+function extractParts(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  const record = asRecord(value);
+  if (!record) return [];
+  const parts = record.parts ?? record.content;
+  return Array.isArray(parts) ? parts : [];
+}
+
+function extractReasoningTextFromParts(parts: unknown[]): string {
+  const text: string[] = [];
+  for (const part of parts) {
+    const record = asRecord(part);
+    if (!record) continue;
+    const type = readEntryType(record);
+    if (record.thought === true || type === "REASONING" || type === "THOUGHT" || type === "THINKING") {
+      const partText = extractVisibleTranscriptText(record.text ?? record.content ?? record.summary ?? record.reasoning ?? record.thinking);
+      if (partText) text.push(partText);
+    }
+  }
+  return text.join("\n").trim();
+}
+
+function extractAssistantText(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (Array.isArray(value)) {
+    const parts: string[] = [];
+    for (const item of value) {
+      const record = asRecord(item);
+      if (record && (record.thought === true || extractFunctionCall(record) || extractFunctionResponse(record))) {
+        continue;
+      }
+      const text = extractAssistantText(item);
+      if (text) parts.push(text);
+    }
+    return parts.join("\n").trim();
+  }
+  const record = asRecord(value);
+  if (!record) return "";
+  if (record.thought === true || extractFunctionCall(record) || extractFunctionResponse(record)) {
+    return "";
+  }
+  return extractAssistantText(record.text ?? record.content ?? record.message ?? record.value ?? record.parts ?? record.response);
+}
+
+function buildToolCallTurn(value: unknown, timestampMs: number | null): ParsedConversationTurn | null {
+  const record = extractFunctionCall(value) ?? asRecord(value);
+  if (!record) return null;
+  const toolName = extractToolName(record);
+  const args = record.args ?? record.arguments ?? record.input ?? record.parameters;
+  const turn: ParsedConversationTurn = {
+    kind: "tool_call",
+    text: toolName ? `Calling tool ${toolName}` : "Calling tool",
+    toolName,
+    toolArguments: args !== undefined ? stringify(args) : "",
+    timestampMs,
+  };
+  const toolCallId = extractToolCallId(record);
+  if (toolCallId) {
+    turn.toolCallId = toolCallId;
+  }
+  const status = readFirstStringField(record, ["status", "state"]);
+  if (status) turn.toolStatus = status;
+  return turn;
+}
+
+function buildToolResultTurn(value: unknown, timestampMs: number | null): ParsedConversationTurn | null {
+  const response = extractFunctionResponse(value);
+  const record = response ?? asRecord(value);
+  if (!record) return null;
+  const toolName = extractToolName(record);
+  const output = record.response ?? record.result ?? record.output ?? record.content ?? record.text ?? record.error;
+  const text = extractVisibleTranscriptText(output) || stringify(output);
+  const turn: ParsedConversationTurn = {
+    kind: "tool_result",
+    text,
+    toolOutput: text,
+    toolName,
+    timestampMs,
+  };
+  const toolCallId = extractToolCallId(record);
+  if (toolCallId) {
+    turn.toolCallId = toolCallId;
+  }
+  const status = readFirstStringField(record, ["status", "state"]);
+  if (status) {
+    turn.toolStatus = status;
+  }
+  return turn;
 }
 
 /**
@@ -229,7 +376,7 @@ export function parseAntigravityDatabase(tempDbPath: string, sinceIdx?: number):
   try {
     db = new DatabaseSync(tempDbPath, { readOnly: true });
     const rows = db.prepare("SELECT idx, data FROM gen_metadata WHERE idx > ? ORDER BY idx ASC")
-      .all(typeof sinceIdx === "number" ? sinceIdx : -1) as { idx: number; data: Buffer }[];
+      .all(typeof sinceIdx === "number" ? sinceIdx : -1) as { idx: number; data: Uint8Array | null }[];
     if (rows.length === 0) {
       return { usage: null, rawUsageJson: null, lastIdx: null };
     }
@@ -239,7 +386,10 @@ export function parseAntigravityDatabase(tempDbPath: string, sinceIdx?: number):
     let lastIdx: number | null = null;
     for (const row of rows) {
       lastIdx = row.idx;
-      const fields = decodeProto(row.data);
+      if (!(row.data instanceof Uint8Array)) {
+        continue;
+      }
+      const fields = decodeProto(Buffer.from(row.data));
       const extracted = extractAntigravityUsageFromProto(fields);
       if (!extracted?.usage) {
         continue;
@@ -276,6 +426,7 @@ export function parseAntigravityTranscript(
 ): ParsedConversationTurn[] {
   const lines = transcriptContent.split("\n");
   const conversation: ParsedConversationTurn[] = [];
+  const seenEntries = new Set<string>();
   const minMs = typeof sinceMs === "number" ? sinceMs - 2000 : null;
 
   for (const rawLine of lines) {
@@ -285,75 +436,127 @@ export function parseAntigravityTranscript(
     const entry = parseJsonObject(trimmed);
     if (!entry) continue;
 
-    const timestampMs = typeof entry.created_at === "string" ? Date.parse(entry.created_at) : null;
-    if (minMs !== null && timestampMs !== null && timestampMs < minMs) {
-      continue;
-    }
-
-    if (entry.type === "USER_INPUT") {
-      let text = typeof entry.content === "string" ? entry.content : "";
-      const requestMatch = text.match(/<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/);
-      if (requestMatch) {
-        text = requestMatch[1].trim();
-      }
-      conversation.push({ kind: "user", text, timestampMs });
-    } else if (entry.type === "PLANNER_RESPONSE") {
-      const reasoningText = extractVisibleTranscriptText(entry.reasoning ?? entry.planner_reasoning ?? entry.summary ?? entry.thinking);
-      if (reasoningText) {
-        conversation.push({ kind: "reasoning", text: reasoningText, timestampMs });
-      }
-      if (entry.content) {
-        const text = extractVisibleTranscriptText(entry.content);
-        if (text) {
-          conversation.push({ kind: "assistant", text, timestampMs });
-        }
-      }
-      if (Array.isArray(entry.tool_calls)) {
-        for (const tc of entry.tool_calls) {
-          const tcRecord = asRecord(tc);
-          const toolName = extractToolName(tcRecord);
-          const toolCall: ParsedConversationTurn = {
-            kind: "tool_call",
-            text: toolName ? `Calling tool ${toolName}` : "Calling tool",
-            toolName,
-            toolArguments: typeof tcRecord?.args === "object" ? JSON.stringify(tcRecord.args) : String(tcRecord?.args || ""),
-            timestampMs,
-          };
-          const toolCallId = extractToolCallId(tcRecord);
-          if (toolCallId) {
-            toolCall.toolCallId = toolCallId;
-          }
-          conversation.push(toolCall);
-        }
-      }
-    } else if (entry.type === "RUN_COMMAND" || entry.type === "TOOL_RESPONSE" || (entry.source === "SYSTEM" && entry.content)) {
-      const text = typeof entry.content === "string" ? entry.content : "";
-      if (entry.type === "RUN_COMMAND" || entry.type === "TOOL_RESPONSE") {
-        const toolResult: ParsedConversationTurn = {
-          kind: "tool_result",
-          text,
-          timestampMs,
-        };
-        const toolCallId = extractToolCallId(entry);
-        if (toolCallId) {
-          toolResult.toolCallId = toolCallId;
-        }
-        const toolName = extractToolName(entry);
-        if (toolName) {
-          toolResult.toolName = toolName;
-        }
-        conversation.push(toolResult);
-      } else if (text) {
-        conversation.push({
-          kind: "reasoning",
-          text,
-          timestampMs,
-        });
-      }
-    }
+    appendAntigravityEntryTurns(entry, conversation, minMs, seenEntries);
   }
 
   return conversation;
+}
+
+function appendAntigravityEntryTurns(
+  entry: Record<string, unknown>,
+  conversation: ParsedConversationTurn[],
+  minMs: number | null,
+  seenEntries: Set<string>,
+): void {
+  const entryKey = JSON.stringify(entry);
+  if (seenEntries.has(entryKey)) return;
+  seenEntries.add(entryKey);
+  const timestampMs = readTimestampMs(entry);
+  if (minMs !== null && timestampMs !== null && timestampMs < minMs) {
+    return;
+  }
+
+  const nestedEntries = entry.entries ?? entry.items ?? entry.turns;
+  if (Array.isArray(nestedEntries)) {
+    for (const nested of nestedEntries) {
+      const nestedRecord = asRecord(nested);
+      if (nestedRecord) {
+        appendAntigravityEntryTurns(nestedRecord, conversation, minMs, seenEntries);
+      }
+    }
+    return;
+  }
+
+  const entryType = readEntryType(entry);
+  const actor = readEntryActor(entry);
+  const parts = extractParts(entry.parts ?? entry.content ?? entry);
+
+  const partToolResults = parts
+    .filter((part) => extractFunctionResponse(part))
+    .map((part) => buildToolResultTurn(part, timestampMs))
+    .filter((turn): turn is ParsedConversationTurn => Boolean(turn));
+  if (partToolResults.length > 0) {
+    conversation.push(...partToolResults);
+    return;
+  }
+
+  if (entryType === "USER_INPUT" || actor === "USER" || actor === "HUMAN") {
+    let text = extractVisibleTranscriptText(entry.content ?? entry.text ?? entry.message ?? entry.parts);
+    const requestMatch = text.match(/<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/);
+    if (requestMatch) {
+      text = requestMatch[1].trim();
+    }
+    if (text) {
+      conversation.push({ kind: "user", text, timestampMs });
+    }
+    return;
+  }
+
+  if (
+    entryType === "RUN_COMMAND"
+    || entryType === "TOOL_RESPONSE"
+    || entryType === "TOOL_RESULT"
+    || entryType === "FUNCTION_RESPONSE"
+  ) {
+    const toolResult = buildToolResultTurn(entry, timestampMs);
+    if (toolResult) {
+      conversation.push(toolResult);
+    }
+    return;
+  }
+
+  const isAssistant = entryType === "PLANNER_RESPONSE"
+    || entryType === "ASSISTANT_RESPONSE"
+    || entryType === "AGENT_RESPONSE"
+    || actor === "ASSISTANT"
+    || actor === "MODEL"
+    || actor === "AGENT"
+    || actor === "PLANNER";
+
+  if (isAssistant) {
+    const reasoningText = extractVisibleTranscriptText(entry.reasoning ?? entry.planner_reasoning ?? entry.summary ?? entry.thinking)
+      || extractReasoningTextFromParts(parts);
+    if (reasoningText) {
+      conversation.push({ kind: "reasoning", text: reasoningText, timestampMs });
+    }
+
+    const text = extractAssistantText(entry.content ?? entry.text ?? entry.message ?? entry.parts ?? entry.response);
+    if (text) {
+      conversation.push({ kind: "assistant", text, timestampMs });
+    }
+
+    const toolCalls = Array.isArray(entry.tool_calls)
+      ? entry.tool_calls
+      : Array.isArray(entry.toolCalls)
+        ? entry.toolCalls
+        : Array.isArray(entry.function_calls)
+          ? entry.function_calls
+          : [];
+    for (const tc of toolCalls) {
+      const toolCall = buildToolCallTurn(tc, timestampMs);
+      if (toolCall) {
+        conversation.push(toolCall);
+      }
+    }
+    for (const part of parts.filter((item) => extractFunctionCall(item))) {
+      const toolCall = buildToolCallTurn(part, timestampMs);
+      if (toolCall) {
+        conversation.push(toolCall);
+      }
+    }
+    return;
+  }
+
+  if (actor === "SYSTEM" && entry.content) {
+    const text = extractVisibleTranscriptText(entry.content);
+    if (text) {
+      conversation.push({
+        kind: "reasoning",
+        text,
+        timestampMs,
+      });
+    }
+  }
 }
 
 function extractVisibleTranscriptText(value: unknown): string {

@@ -7,6 +7,8 @@ import {
 import { bufferToFloat32, cosineSimilarity, float32ToBuffer } from "./embedding-vector-utils.js";
 import { parseSkillMarkdown, renderSkillMarkdown } from "./skill-markdown-parser.js";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
+import { buildPersistentSkillStorageInstruction } from "./persistent-skill-context.js";
+import { ValidationError } from "../repositories/repository-utils.js";
 import type {
   CreateSkillStorageInput,
   SkillRecord,
@@ -117,7 +119,7 @@ export class SkillService {
       projectId: args.projectId,
       agentPresetId: args.agentPresetId,
       mounts,
-      instructionMarkdown: this.buildPersistentSkillStorageInstruction(args.projectId, args.agentPresetId, mounts),
+      instructionMarkdown: buildPersistentSkillStorageInstruction(args.projectId, args.agentPresetId, mounts),
     };
   }
 
@@ -192,12 +194,32 @@ export class SkillService {
   }
 
   async search(query: SkillSearchQuery): Promise<SkillSearchResult[]> {
+    return this.searchStorages(query, this.resolveSearchStorageIds(query));
+  }
+
+  async searchForAgent(query: SkillSearchQuery, authenticatedAgentPresetId: string): Promise<SkillSearchResult[]> {
+    const requestedAgentPresetId = query.agentPresetId?.trim();
+    if (requestedAgentPresetId && requestedAgentPresetId !== authenticatedAgentPresetId) {
+      throw new ValidationError("agentPresetId must match the authenticated MCP agent");
+    }
+
+    const attachedStorageIds = this.skillRepository
+      .listStoragesForAgent(query.projectId, authenticatedAgentPresetId)
+      .map((storage) => storage.id);
+    const requestedStorageId = query.storageId?.trim();
+    if (requestedStorageId && !attachedStorageIds.includes(requestedStorageId)) {
+      throw new ValidationError(`Skill storage is not attached to the authenticated MCP agent: ${requestedStorageId}`);
+    }
+
+    return this.searchStorages(query, requestedStorageId ? [requestedStorageId] : attachedStorageIds);
+  }
+
+  private async searchStorages(query: SkillSearchQuery, storageIds: string[]): Promise<SkillSearchResult[]> {
     const modelId = this.embeddingService.getLoadedModelId();
     if (!modelId) {
       return [];
     }
 
-    const storageIds = this.resolveSearchStorageIds(query);
     if (storageIds.length === 0) {
       return [];
     }
@@ -286,30 +308,6 @@ export class SkillService {
     }
   }
 
-  private buildPersistentSkillStorageInstruction(
-    projectId: string,
-    agentPresetId: string,
-    mounts: PersistentSkillStorageRuntimeMount[],
-  ): string {
-    const storageLines = mounts.map((mount) =>
-      `- ${mount.storageName} (\`${mount.storageId}\`): mounted at \`${mount.containerPath}\` in Docker and \`${mount.hostPath}\` on host runs.`,
-    );
-
-    return [
-      "## PERSISTENT SKILL STORAGE (Opt-in)",
-      "This agent has persistent skill storage enabled. Use it only for reusable skills that should survive this invocation; do not treat it as project workspace state.",
-      "",
-      "Before creating a new skill, search existing attached skills with the `search_skills` MCP tool using:",
-      `- \`projectId: ${projectId}\``,
-      `- \`agentPresetId: ${agentPresetId}\``,
-      "- a natural-language query for the guidance you need",
-      "",
-      "Attached writable storage paths:",
-      ...storageLines,
-      "",
-      "When you create a durable new skill, prefer MCP storage APIs if `manage_skills` is available, for example `manage_skills import_markdown` with the target storage id. If MCP write access is not available, save a markdown skill file under the matching mounted storage path. Keep skill markdown concise, include searchable frontmatter, and do not duplicate an existing skill found by search.",
-    ].join("\n");
-  }
 }
 
 function compareRankedSkill(a: { skillId: string; similarity: number }, b: { skillId: string; similarity: number }): number {

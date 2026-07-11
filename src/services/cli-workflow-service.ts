@@ -346,29 +346,45 @@ export class CliWorkflowService {
         workerBranch: args.workerBranch,
         featureBranch: args.featureBranch,
       }, "cli:prepare:started");
-      const { providerPrompt } = await executePrepareStage(ctx, args.resumeFromFailedSessionId);
+      const { providerPrompt, resumed } = await executePrepareStage(ctx, args.resumeFromFailedSessionId);
       this.appendExecutionEvent(args, "cli_prepare_completed", {
         provider: args.provider,
         worktreePath: ctx.worktreePath,
         resumedFromFailedSessionId: args.resumeFromFailedSessionId || null,
       }, `cli:prepare:completed:${ctx.worktreePath}`);
-      
-      this.appendExecutionEvent(args, "cli_provider_started", {
-        provider: args.provider,
-        worktreePath: ctx.worktreePath,
-      }, `cli:provider:started:${ctx.worktreePath}`);
-      await executeProviderStage(ctx, providerPrompt);
-      this.appendExecutionEvent(args, "cli_provider_completed", {
-        provider: args.provider,
-        worktreePath: ctx.worktreePath,
-      }, `cli:provider:completed:${ctx.worktreePath}`);
 
-      const { memoriesCaptured } = await executeMemoryCaptureStage(ctx);
-      if (memoriesCaptured > 0) {
-        this.appendExecutionEvent(args, "cli_memory_captured", {
+      const recoveredProviderInvocation = resumed
+        ? this.resolveProviderCompletionRecovery(ctx)
+        : null;
+      if (recoveredProviderInvocation) {
+        this.deps.sessionTracking.appendActivity(args.sessionId, {
+          originator: "system",
+          description: "Recovered completed provider work after restart; continuing with Git finalization without invoking the coding agent again.",
+        });
+        this.appendExecutionEvent(args, "cli_provider_completion_recovered", {
           provider: args.provider,
-          memoriesCaptured,
-        }, `cli:memory:captured:${args.sessionId}`);
+          worktreePath: ctx.worktreePath,
+          recoveredProviderInvocationId: recoveredProviderInvocation.id,
+          recoveredTaskRunId: recoveredProviderInvocation.taskRunId,
+        }, `cli:provider:completion-recovered:${recoveredProviderInvocation.id}`);
+      } else {
+        this.appendExecutionEvent(args, "cli_provider_started", {
+          provider: args.provider,
+          worktreePath: ctx.worktreePath,
+        }, `cli:provider:started:${ctx.worktreePath}`);
+        await executeProviderStage(ctx, providerPrompt);
+        this.appendExecutionEvent(args, "cli_provider_completed", {
+          provider: args.provider,
+          worktreePath: ctx.worktreePath,
+        }, `cli:provider:completed:${ctx.worktreePath}`);
+
+        const { memoriesCaptured } = await executeMemoryCaptureStage(ctx);
+        if (memoriesCaptured > 0) {
+          this.appendExecutionEvent(args, "cli_memory_captured", {
+            provider: args.provider,
+            memoriesCaptured,
+          }, `cli:memory:captured:${args.sessionId}`);
+        }
       }
 
       const { hasChanges, committedChanges, pushedBranch, stats } = await executeGitFinalizeStage(ctx);
@@ -627,6 +643,61 @@ export class CliWorkflowService {
     merged.containerImageMode = merged.containerImageMode === "custom" ? "custom" : "managed";
     merged.containerImage = merged.containerImage.trim() || DEFAULT_CLI_WORKFLOW_SETTINGS.containerImage;
     return merged;
+  }
+
+  /**
+   * A runtime can stop after the provider has durably completed but before the
+   * workflow commits and records the task as code-complete. Startup recovery
+   * marks that precise crash window on the old task run. When its preserved
+   * workspace is resumed, continue at Git finalization instead of paying for
+   * and applying a second coding invocation.
+   */
+  private resolveProviderCompletionRecovery(ctx: PipelineContext) {
+    const repository = this.deps.executionRepository;
+    if (!repository || ctx.workspaceSessionId === ctx.sessionId || !ctx.taskRunId) {
+      return null;
+    }
+
+    const currentTaskRun = repository.getTaskRun(ctx.taskRunId);
+    if (!currentTaskRun) {
+      return null;
+    }
+
+    // A retry session can keep resuming the original workspace session while
+    // the provider-completed crash belongs to a newer task run/session. Search
+    // by durable task identity, then require the newest completed provider to
+    // carry the precise startup-recovery marker for this same workspace.
+    const [providerInvocation] = repository
+      .listProviderInvocationsForTask(currentTaskRun.projectId, currentTaskRun.taskId)
+      .filter((invocation) => (
+        invocation.purpose === "task_coding"
+        && invocation.status === "completed"
+        && invocation.taskRunId
+        && invocation.taskRunId !== currentTaskRun.id
+      ))
+      .sort((left, right) => Date.parse(right.finishedAt || right.updatedAt) - Date.parse(left.finishedAt || left.updatedAt));
+    if (!providerInvocation?.taskRunId) {
+      return null;
+    }
+
+    const events = repository.listTaskRunEvents(providerInvocation.taskRunId, 200);
+    const recoveredCompletedProvider = events.some((event) => (
+      event.eventType === "task_dispatch_reconciled"
+      && event.payload?.reason === "terminal_provider_active_dispatch_mismatch"
+      && event.payload?.providerStatus === "completed"
+    ));
+    const sameWorkspace = events.some((event) => (
+      event.eventType === "cli_workspace_bound"
+      && (
+        event.payload?.worktreePath === ctx.worktreePath
+        || event.payload?.workspaceSessionId === ctx.workspaceSessionId
+      )
+    ));
+    const workflowAlreadyCompleted = events.some((event) => event.eventType === "cli_workflow_completed");
+
+    return recoveredCompletedProvider && sameWorkspace && !workflowAlreadyCompleted
+      ? providerInvocation
+      : null;
   }
 
   private applyAgentWorkflowSettings(

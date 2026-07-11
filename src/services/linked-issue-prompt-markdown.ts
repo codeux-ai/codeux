@@ -8,9 +8,7 @@ const MAX_LABELS = 8;
 const MAX_ASSIGNEES = 5;
 
 export function buildLinkedIssuePromptBlock(issues: readonly LinkedIssuePromptInput[]): string {
-  const normalized = issues
-    .filter((issue) => issue.title.trim() && issue.url.trim())
-    .slice(0, MAX_LINKED_ISSUES);
+  const normalized = normalizeLinkedIssuePromptInputs(issues);
 
   if (normalized.length === 0) {
     return "";
@@ -26,7 +24,12 @@ export function buildLinkedIssuePromptBlock(issues: readonly LinkedIssuePromptIn
 }
 
 export function mergePromptWithLinkedIssues(goal: string, issues: readonly LinkedIssuePromptInput[]): string {
-  const block = buildLinkedIssuePromptBlock(issues);
+  if (hasLinkedIssueSection(goal) && hasBodylessLinkedIssueList(issues)) {
+    return goal;
+  }
+
+  const normalizedIssues = normalizeLinkedIssuePromptInputs(issues);
+  const block = buildLinkedIssuePromptBlock(normalizedIssues);
   const trimmedGoal = normalizeImportedMarkdown(goal);
   const goalWithoutLinkedIssues = removeLinkedIssueSections(trimmedGoal);
 
@@ -35,6 +38,19 @@ export function mergePromptWithLinkedIssues(goal: string, issues: readonly Linke
   }
 
   return `${goalWithoutLinkedIssues.trim()}\n\n${block}`.trim();
+}
+
+function normalizeLinkedIssuePromptInputs(issues: readonly LinkedIssuePromptInput[]): LinkedIssuePromptInput[] {
+  return issues
+    .filter((issue) => issue.title.trim() && issue.url.trim())
+    .slice(0, MAX_LINKED_ISSUES);
+}
+
+function hasBodylessLinkedIssueList(issues: readonly LinkedIssuePromptInput[]): boolean {
+  return issues.length > 0 && issues.every((issue) => (
+    !normalizeImportedMarkdown(issue.issueBodyMarkdown)
+      && !normalizeImportedMarkdown(issue.issueConversationMarkdown)
+  ));
 }
 
 function formatLinkedIssuePromptSection(issue: LinkedIssuePromptInput): string {
@@ -91,6 +107,10 @@ function removeLinkedIssueSections(markdown: string): string {
   }
 
   return retained.join("\n").trim();
+}
+
+function hasLinkedIssueSection(markdown: string): boolean {
+  return markdown.split("\n").some((line) => line.trim() === LINKED_ISSUES_HEADING);
 }
 
 function isTopLevelSection(line: string): boolean {

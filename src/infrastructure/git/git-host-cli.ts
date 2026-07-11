@@ -214,7 +214,7 @@ export class GithubHostCli implements GitHostCli {
   runList(hostToken?: string) {
     return this.run([
       "run", "list", "--limit", "50", "--json",
-      "databaseId,name,workflowName,status,conclusion,event,headBranch,url,updatedAt"
+      "databaseId,name,workflowName,status,conclusion,event,headBranch,headSha,url,updatedAt"
     ], hostToken);
   }
 
@@ -505,6 +505,7 @@ export class GithubApiHostCli implements GitHostCli {
         conclusion: run.conclusion ?? null,
         event: run.event ?? null,
         headBranch: run.head_branch ?? null,
+        headSha: run.head_sha ?? null,
         url: run.html_url ?? "",
         updatedAt: run.updated_at ?? null,
       }));
@@ -690,6 +691,7 @@ export class GitlabHostCli implements GitHostCli {
         conclusion: item.status === "success" ? "success" : item.status === "failed" ? "failure" : "neutral",
         event: item.source,
         headBranch: item.ref,
+        headSha: item.sha ?? null,
         url: item.web_url,
         updatedAt: item.updated_at
       }));
@@ -899,6 +901,7 @@ export class GitlabApiHostCli implements GitHostCli {
           conclusion: status === "success" ? "success" : status === "failed" ? "failure" : "neutral",
           event: item.source ?? null,
           headBranch: item.ref ?? null,
+          headSha: item.sha ?? null,
           url: item.web_url ?? "",
           updatedAt: item.updated_at ?? null,
         };

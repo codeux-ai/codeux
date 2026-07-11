@@ -119,6 +119,8 @@ describe("jira-api-client", () => {
   });
 
   it("searches Jira with the enhanced search endpoint and maps issue metadata", async () => {
+    const fullDescription = `${"Full Jira issue body with planner details. ".repeat(8)}Final acceptance criterion.`;
+    const expectedPreview = `${fullDescription.replace(/\s+/g, " ").trim().slice(0, 217)}...`;
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
       expect(_url).toBe("https://acme.atlassian.net/rest/api/3/search/jql");
       expect(init?.method).toBe("POST");
@@ -146,7 +148,7 @@ describe("jira-api-client", () => {
               comment: { total: 4, comments: [{ body: { type: "text", text: "ignored" } }] },
               description: {
                 type: "doc",
-                content: [{ type: "paragraph", content: [{ type: "text", text: "Full Jira issue body." }] }],
+                content: [{ type: "paragraph", content: [{ type: "text", text: fullDescription }] }],
               },
             },
           },
@@ -166,7 +168,8 @@ describe("jira-api-client", () => {
         assignees: ["Pierre"],
         issueType: "Story",
         priority: "High",
-        bodyPreview: "Full Jira issue body.",
+        bodyPreview: expectedPreview,
+        issueBodyMarkdown: fullDescription,
         createdAt: "2026-05-19T10:00:00.000+0000",
         updatedAt: "2026-05-20T10:00:00.000+0000",
         issueReporter: "Alice",

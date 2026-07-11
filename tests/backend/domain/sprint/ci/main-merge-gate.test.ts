@@ -96,6 +96,28 @@ describe("MainMergeGateService", () => {
       ...defaultContext,
       gitStatus: {
         ...defaultContext.gitStatus!,
+        ciRuns: [
+          {
+            id: 9001,
+            name: "CI",
+            workflowName: "CI",
+            status: "completed",
+            conclusion: "failure",
+            event: "pull_request",
+            headBranch: "feature/sprint1",
+            headSha: "abc123",
+            url: "https://github.com/example/repo/actions/runs/9001",
+            updatedAt: "2026-07-10T20:07:39Z",
+            failedJobs: [{
+              id: 42,
+              name: "test",
+              conclusion: "failure",
+              failedSteps: ["Run tests"],
+              logExcerpt: "FAIL src/example.test.ts\nExpected: true\nReceived: false",
+              logCommand: "gh run view 9001 --job 42 --log-failed",
+            }],
+          },
+        ],
         openPullRequests: [
           {
             number: 101,
@@ -124,6 +146,13 @@ describe("MainMergeGateService", () => {
       state: "failed_checks",
       prNumber: 101,
       failedChecks: ["test"],
+      failedRuns: [{
+        id: 9001,
+        failedJobs: [{
+          name: "test",
+          logExcerpt: "FAIL src/example.test.ts\nExpected: true\nReceived: false",
+        }],
+      }],
     });
   });
 

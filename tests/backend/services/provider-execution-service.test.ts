@@ -3,8 +3,13 @@ import { ProviderExecutionService } from "../../../src/services/provider-executi
 import { ProviderQuotaError } from "../../../src/shared/providers/provider-error-classifier.js";
 import { runWithCorrelationId } from "../../../src/shared/logging/correlation-id.js";
 import type { IProviderRunner, ProviderRunResult } from "../../../src/infrastructure/providers/cli/provider-runner.js";
+import type { CliProviderId } from "../../../src/infrastructure/providers/cli/provider-command-specs.js";
+import type { ParsedConversationTurn } from "../../../src/infrastructure/providers/cli/provider-usage.js";
 import type { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
 import type { DashboardSettings } from "../../../src/contracts/app-types.js";
+import type { ProviderInvocationPurpose } from "../../../src/contracts/execution-types.js";
+import type { AppendExecutionInvocationMessageInput } from "../../../src/contracts/invocation-types.js";
+import { MAX_TOOL_PAYLOAD_CHARS } from "../../../src/services/invocation-message-limits.js";
 import { SERVER_SHUTDOWN_STOP_REASON } from "../../../src/services/active-dispatch-registry.js";
 
 // Mock dependencies
@@ -139,6 +144,31 @@ describe("ProviderExecutionService", () => {
     );
   });
 
+  it("bounds provider concurrency waits when the caller supplies a timeout", async () => {
+    providerRunner.runProvider.mockResolvedValue(mockResult);
+    const waitForSlotAndClaim = vi.fn().mockResolvedValue({ id: "prov-inv-bounded" });
+    service = new ProviderExecutionService({
+      providerRunner,
+      executionRepository,
+      logger: logger as any,
+      getGithubToken: vi.fn(),
+      providerConcurrencyService: { waitForSlotAndClaim } as any,
+    });
+
+    await service.executeProvider({
+      ...defaultArgs,
+      concurrencyWaitTimeoutMs: 30_000,
+    });
+
+    expect(waitForSlotAndClaim).toHaveBeenCalledWith(
+      "claude-code",
+      expect.any(Number),
+      expect.objectContaining({ purpose: "test-purpose", sessionId: "session-1" }),
+      undefined,
+      30_000,
+    );
+  });
+
   it("does not append persistent skill instructions or mounts for disabled agents", async () => {
     providerRunner.runProvider.mockResolvedValue(mockResult);
     const skillService = {
@@ -223,6 +253,119 @@ describe("ProviderExecutionService", () => {
     }));
     expect(providerRunner.runProvider.mock.calls[0]![0].prompt).toContain("test prompt");
     expect(providerRunner.runProvider.mock.calls[0]![0].prompt).toContain("## PERSISTENT SKILL STORAGE");
+  });
+
+  it("leaves enabled agents without attached storage unchanged", async () => {
+    providerRunner.runProvider.mockResolvedValue(mockResult);
+    const resolvePersistentSkillStorageRuntime = vi.fn().mockResolvedValue(null);
+    service = new ProviderExecutionService({
+      providerRunner,
+      executionRepository,
+      logger: logger as any,
+      getMcpConnectionInfo: vi.fn().mockReturnValue({ url: "http://127.0.0.1:4444/mcp", authToken: "token" }),
+      agentPresetRepository: {
+        getAgentPreset: vi.fn().mockReturnValue({
+          id: "agent-1",
+          projectId: "proj-1",
+          persistentSkillStorage: { enabled: true },
+          persistentSkillStorageIds: [],
+        }),
+      } as any,
+      skillService: { resolvePersistentSkillStorageRuntime } as any,
+    });
+
+    await service.executeProvider({
+      ...defaultArgs,
+      agentMcpAccess: { codeUxEnabled: false, codeUxToolToggles: [], linkedServerIds: [] },
+      mcpAgentId: "agent-1",
+    });
+
+    expect(resolvePersistentSkillStorageRuntime).toHaveBeenCalledOnce();
+    expect(providerRunner.runProvider).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: "test prompt",
+      mcpConnection: null,
+      persistentSkillStorageMounts: undefined,
+    }));
+  });
+
+  it("rejects persistent skill context from an agent owned by another project", async () => {
+    providerRunner.runProvider.mockResolvedValue(mockResult);
+    const resolvePersistentSkillStorageRuntime = vi.fn();
+    service = new ProviderExecutionService({
+      providerRunner,
+      executionRepository,
+      logger: logger as any,
+      getMcpConnectionInfo: vi.fn(),
+      agentPresetRepository: {
+        getAgentPreset: vi.fn().mockReturnValue({
+          id: "foreign-agent",
+          projectId: "proj-2",
+          persistentSkillStorage: { enabled: true },
+          persistentSkillStorageIds: ["storage-2"],
+        }),
+      } as any,
+      skillService: { resolvePersistentSkillStorageRuntime } as any,
+    });
+
+    await service.executeProvider({
+      ...defaultArgs,
+      agentMcpAccess: { codeUxEnabled: false, codeUxToolToggles: [], linkedServerIds: [] },
+      mcpAgentId: "foreign-agent",
+    });
+
+    expect(resolvePersistentSkillStorageRuntime).not.toHaveBeenCalled();
+    expect(providerRunner.runProvider).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: "test prompt",
+      mcpConnection: null,
+      persistentSkillStorageMounts: undefined,
+    }));
+  });
+
+  it("composes persistent skill guidance once for resumed prompts and retries", async () => {
+    const failedResult = { ...mockResult, ok: false };
+    providerRunner.runProvider
+      .mockResolvedValueOnce(failedResult)
+      .mockResolvedValueOnce(mockResult);
+    vi.mocked(isReadFileNotFoundToolError).mockReturnValueOnce(true);
+    vi.mocked(buildReadFileRetryPrompt).mockImplementationOnce((prompt) => `${prompt}\n\nDiscover files before retrying.`);
+    const instructionMarkdown = "## PERSISTENT SKILL STORAGE (Opt-in)\nUse search_skills.";
+    service = new ProviderExecutionService({
+      providerRunner,
+      executionRepository,
+      logger: logger as any,
+      agentPresetRepository: {
+        getAgentPreset: vi.fn().mockReturnValue({
+          id: "agent-1",
+          projectId: "proj-1",
+          persistentSkillStorage: { enabled: true },
+        }),
+      } as any,
+      skillService: {
+        resolvePersistentSkillStorageRuntime: vi.fn().mockResolvedValue({
+          projectId: "proj-1",
+          agentPresetId: "agent-1",
+          instructionMarkdown,
+          mounts: [{
+            storageId: "storage-1",
+            storageName: "Runtime Skills",
+            hostPath: "/home/test/.code-ux/persistent-skill-storages/proj-1/agent-1/storage-1",
+            containerPath: "/code-ux/persistent-skills/storage-1",
+          }],
+        }),
+      } as any,
+    });
+
+    await service.executeProvider({
+      ...defaultArgs,
+      prompt: `Resumed task.\n\n${instructionMarkdown}`,
+      agentMcpAccess: { codeUxEnabled: false, codeUxToolToggles: [], linkedServerIds: [] },
+      mcpAgentId: "agent-1",
+    });
+
+    expect(providerRunner.runProvider).toHaveBeenCalledTimes(2);
+    for (const [run] of providerRunner.runProvider.mock.calls) {
+      expect(run.prompt.match(/## PERSISTENT SKILL STORAGE/g)).toHaveLength(1);
+    }
   });
 
   it("auto-attaches the Code UX MCP gateway for agents with Code UX access enabled", async () => {
@@ -391,6 +534,25 @@ describe("ProviderExecutionService", () => {
     expect(executionRepository.appendExecutionInvocationMessage).not.toHaveBeenCalledWith(
       "exec-inv-1",
       expect.objectContaining({ contentMarkdown: "late telemetry" }),
+    );
+  });
+
+  it("does not overwrite an externally cancelled provider invocation when the runner exits late", async () => {
+    executionRepository.getProviderInvocationUsage.mockReturnValue({
+      id: "prov-inv-1",
+      status: "cancelled",
+    } as any);
+    providerRunner.runProvider.mockRejectedValue(new Error("late provider exit"));
+
+    await expect(service.executeProvider(defaultArgs)).rejects.toThrow("late provider exit");
+
+    expect(executionRepository.updateProviderInvocationUsage).not.toHaveBeenCalledWith(
+      "prov-inv-1",
+      expect.objectContaining({ status: "failed" }),
+    );
+    expect(executionRepository.updateProviderInvocationUsage).not.toHaveBeenCalledWith(
+      "prov-inv-1",
+      expect.objectContaining({ status: "cancelled" }),
     );
   });
 
@@ -577,6 +739,275 @@ describe("ProviderExecutionService", () => {
     );
   });
 
+  type ProviderPersistenceCase = {
+    provider: CliProviderId;
+    purpose: ProviderInvocationPurpose;
+    type: string;
+    expectTextOutput: boolean;
+    conversation: (prompt: string) => ParsedConversationTurn[];
+    expectedRoles: AppendExecutionInvocationMessageInput["role"][];
+  };
+
+  const standardConversation = (provider: CliProviderId, prompt: string): ParsedConversationTurn[] => {
+    const callId = `${provider}-call-1`;
+    return [
+      { kind: "user", text: prompt },
+      {
+        kind: "reasoning",
+        text: `${provider} reasoning`,
+        tokens: { input: 3, output: 2 },
+        timestampMs: 1001,
+      },
+      {
+        kind: "tool_call",
+        text: "",
+        toolName: "read_file",
+        toolCallId: callId,
+        toolArguments: "{\"path\":\"src/index.ts\"}",
+        toolStatus: "completed",
+        timestampMs: 1002,
+      },
+      {
+        kind: "tool_result",
+        text: "",
+        toolName: "read_file",
+        toolCallId: callId,
+        toolOutput: `${provider} file contents`,
+        toolStatus: "completed",
+        timestampMs: 1003,
+      },
+      {
+        kind: "assistant",
+        text: `${provider} answer`,
+        timestampMs: 1004,
+      },
+    ];
+  };
+
+  const providerPersistenceCases: ProviderPersistenceCase[] = [
+    {
+      provider: "gemini",
+      purpose: "planning",
+      type: "planning",
+      expectTextOutput: true,
+      conversation: (prompt) => standardConversation("gemini", prompt).map((turn) =>
+        turn.kind === "assistant"
+          ? {
+            ...turn,
+            text: [
+              "Gemini kept answer",
+              "fatal: your current branch 'code-ux-bootstrap-123' does not have any commits yet",
+              "Gemini kept tail",
+            ].join("\n"),
+          }
+          : turn
+      ),
+      expectedRoles: ["user", "assistant", "tool", "tool", "assistant"],
+    },
+    {
+      provider: "codex",
+      purpose: "task_coding",
+      type: "task_coding",
+      expectTextOutput: false,
+      conversation: (prompt) => standardConversation("codex", prompt).map((turn) =>
+        turn.kind === "tool_call"
+          ? {
+            ...turn,
+            toolArguments: `{"query":"${"x".repeat(MAX_TOOL_PAYLOAD_CHARS + 128)}"}`,
+          }
+          : turn
+      ),
+      expectedRoles: ["user", "assistant", "tool", "tool", "assistant"],
+    },
+    {
+      provider: "claude-code",
+      purpose: "qa_review",
+      type: "qa_review",
+      expectTextOutput: true,
+      conversation: (prompt) => standardConversation("claude-code", prompt),
+      expectedRoles: ["user", "assistant", "tool", "tool", "assistant"],
+    },
+    {
+      provider: "qwen-code",
+      purpose: "planning",
+      type: "project_setup",
+      expectTextOutput: true,
+      conversation: (prompt) => [
+        { kind: "injected_context", text: "<system-reminder>Use local setup guidance.</system-reminder>" },
+        ...standardConversation("qwen-code", prompt),
+      ],
+      expectedRoles: ["system", "user", "assistant", "tool", "tool", "assistant"],
+    },
+    {
+      provider: "opencode",
+      purpose: "dashboard_reply",
+      type: "node_flow_provider_prompt",
+      expectTextOutput: false,
+      conversation: (prompt) => standardConversation("opencode", prompt),
+      expectedRoles: ["user", "assistant", "tool", "tool", "assistant"],
+    },
+    {
+      provider: "antigravity",
+      purpose: "remediation",
+      type: "memory_remediation",
+      expectTextOutput: true,
+      conversation: (prompt) => standardConversation("antigravity", prompt),
+      expectedRoles: ["user", "assistant", "tool", "tool", "assistant"],
+    },
+    {
+      provider: "mockup-cli",
+      purpose: "worker_reply",
+      type: "chat",
+      expectTextOutput: true,
+      conversation: (prompt) => [
+        { kind: "user", text: prompt },
+        { kind: "assistant", text: "Mockup normalized reply", timestampMs: 2001 },
+      ],
+      expectedRoles: ["user", "assistant"],
+    },
+  ];
+
+  it.each(providerPersistenceCases)(
+    "persists parsed $provider conversations through the normalized final path",
+    async (providerCase) => {
+      const persistedMessages: AppendExecutionInvocationMessageInput[] = [];
+      executionRepository.clearExecutionInvocationMessages.mockImplementation(() => {
+        persistedMessages.length = 0;
+      });
+      executionRepository.appendExecutionInvocationMessage.mockImplementation((_id, message) => {
+        persistedMessages.push(message);
+      });
+
+      const prompt = [
+        `Prompt for ${providerCase.provider}`,
+        "fatal: your current branch 'code-ux-bootstrap-123' does not have any commits yet",
+      ].join("\n");
+      const result = {
+        ...mockResult,
+        text: `${providerCase.provider} fallback text`,
+        nativeSessionId: `${providerCase.provider}-native`,
+        usageTelemetry: {
+          ...mockResult.usageTelemetry,
+          transcriptText: `${providerCase.provider} transcript`,
+          nativeSessionId: `${providerCase.provider}-native`,
+          rawUsageJson: { provider: providerCase.provider },
+          conversation: providerCase.conversation(prompt),
+        },
+      } as ProviderRunResult & { text: string };
+      if (providerCase.expectTextOutput) {
+        providerRunner.runProviderForText.mockImplementation(async (opts: any) => {
+          opts.onTelemetry(result.usageTelemetry);
+          return result;
+        });
+      } else {
+        providerRunner.runProvider.mockImplementation(async (opts: any) => {
+          opts.onTelemetry(result.usageTelemetry);
+          return result;
+        });
+      }
+
+      await service.executeProvider({
+        ...defaultArgs,
+        provider: providerCase.provider,
+        model: "matrix-model",
+        prompt,
+        purpose: providerCase.purpose,
+        type: providerCase.type,
+        expectTextOutput: providerCase.expectTextOutput,
+      });
+
+      expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledWith("exec-inv-1");
+      expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledTimes(1);
+      expect(executionRepository.updateProviderInvocationUsage).toHaveBeenCalledWith(
+        "prov-inv-1",
+        expect.objectContaining({
+          status: "running",
+          inputTokens: 10,
+          outputTokens: 20,
+          totalTokens: 30,
+        }),
+      );
+      expect(persistedMessages.map((message) => message.role)).toEqual(providerCase.expectedRoles);
+      const userMessages = persistedMessages.filter((message) => message.role === "user");
+      expect(userMessages).toHaveLength(1);
+      expect(userMessages[0]?.contentMarkdown).toBe(prompt);
+      expect(userMessages[0]?.contentMarkdown).toContain("fatal: your current branch");
+
+      for (const message of persistedMessages) {
+        expect(message.metadata).toEqual(expect.objectContaining({
+          provider: providerCase.provider,
+          model: "matrix-model",
+        }));
+      }
+
+      const reasoningMessage = persistedMessages.find((message) =>
+        (message.metadata as Record<string, unknown> | undefined)?.kind === "reasoning"
+      );
+      if (providerCase.provider !== "mockup-cli") {
+        expect(reasoningMessage).toEqual(expect.objectContaining({
+          role: "assistant",
+          metadata: expect.objectContaining({
+            kind: "reasoning",
+            tokens: { input: 3, output: 2 },
+            timestampMs: 1001,
+          }),
+        }));
+      }
+
+      const toolCall = persistedMessages.find((message) =>
+        (message.metadata as Record<string, unknown> | undefined)?.kind === "tool_call"
+      );
+      const toolResult = persistedMessages.find((message) =>
+        (message.metadata as Record<string, unknown> | undefined)?.kind === "tool_result"
+      );
+      if (providerCase.provider !== "mockup-cli") {
+        expect(toolCall).toEqual(expect.objectContaining({
+          role: "tool",
+          metadata: expect.objectContaining({
+            kind: "tool_call",
+            toolName: "read_file",
+            toolStatus: "completed",
+            timestampMs: 1002,
+          }),
+        }));
+        expect(toolResult).toEqual(expect.objectContaining({
+          role: "tool",
+          metadata: expect.objectContaining({
+            kind: "tool_result",
+            toolName: "read_file",
+            toolStatus: "completed",
+            timestampMs: 1003,
+          }),
+        }));
+        expect(toolResult?.toolCallsJson).toEqual(expect.objectContaining({
+          output: expect.stringContaining(`${providerCase.provider} file contents`),
+        }));
+      }
+
+      if (providerCase.provider === "codex") {
+        expect(toolCall?.toolCallsJson).toEqual(expect.objectContaining({
+          arguments: expect.stringContaining("characters truncated"),
+        }));
+      }
+
+      if (providerCase.provider === "gemini") {
+        const assistantMessage = persistedMessages.find((message) =>
+          message.role === "assistant"
+          && !(message.metadata as Record<string, unknown> | undefined)?.kind
+        );
+        expect(assistantMessage?.contentMarkdown).toContain("Gemini kept answer");
+        expect(assistantMessage?.contentMarkdown).toContain("Gemini kept tail");
+        expect(assistantMessage?.contentMarkdown).not.toContain("fatal: your current branch");
+      }
+
+      if (providerCase.expectTextOutput) {
+        expect(providerRunner.runProviderForText).toHaveBeenCalled();
+      } else {
+        expect(providerRunner.runProvider).toHaveBeenCalled();
+      }
+    },
+  );
+
   it("persists parsed planning text-output telemetry live before completion and skips duplicate ticks", async () => {
     const liveConversation = [
       { kind: "user", text: "Plan the sprint." },
@@ -744,6 +1175,63 @@ describe("ProviderExecutionService", () => {
         }),
       }),
     );
+  });
+
+  it("preserves caller-owned prompts and audit messages when prompt tracking is disabled", async () => {
+    const persistedMessages: AppendExecutionInvocationMessageInput[] = [
+      { role: "system", contentMarkdown: "Routed through the dashboard worker.", metadata: { routeKind: "virtual" } },
+      { role: "user", contentMarkdown: "Caller-owned prompt" },
+    ];
+    executionRepository.listExecutionInvocationMessages = vi.fn(() => persistedMessages.map((message, index) => ({
+      id: `message-${index}`,
+      invocationId: "exec-inv-1",
+      role: message.role,
+      contentMarkdown: message.contentMarkdown,
+      toolCallsJson: message.toolCallsJson ?? null,
+      metadata: message.metadata ?? null,
+      createdAt: "2026-07-10T00:00:00.000Z",
+    }))) as any;
+    executionRepository.clearExecutionInvocationMessages.mockImplementation(() => {
+      persistedMessages.length = 0;
+    });
+    executionRepository.appendExecutionInvocationMessage.mockImplementation((_id, message) => {
+      persistedMessages.push(message);
+      return {} as any;
+    });
+    providerRunner.runProviderForText.mockImplementation(async (opts: any) => {
+      const usageTelemetry = {
+        ...mockResult.usageTelemetry,
+        transcriptText: "structured dashboard reply",
+        conversation: [
+          { kind: "user", text: "Parser-supplied prompt" },
+          { kind: "reasoning", text: "Inspecting the requested action." },
+          { kind: "assistant", text: "Dashboard reply" },
+        ],
+      };
+      opts.onTelemetry(usageTelemetry);
+      return { ...mockResult, text: "Dashboard reply", usageTelemetry } as ProviderRunResult & { text: string };
+    });
+
+    await service.executeProvider({
+      ...defaultArgs,
+      purpose: "dashboard_reply",
+      type: "worker_reply",
+      expectTextOutput: true,
+      invocationId: "exec-inv-1",
+      trackPromptInInvocation: false,
+      finalizeExecutionInvocation: false,
+    });
+
+    expect(persistedMessages.map((message) => [message.role, message.contentMarkdown])).toEqual([
+      ["system", "Routed through the dashboard worker."],
+      ["user", "Caller-owned prompt"],
+      ["assistant", "Inspecting the requested action."],
+      ["assistant", "Dashboard reply"],
+    ]);
+    expect(persistedMessages).not.toContainEqual(expect.objectContaining({
+      contentMarkdown: "Parser-supplied prompt",
+    }));
+    expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledTimes(1);
   });
 
   it("skips the message rewrite when a telemetry tick repeats the same conversation", async () => {

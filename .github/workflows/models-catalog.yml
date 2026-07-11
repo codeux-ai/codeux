@@ -2,7 +2,7 @@ name: Models Catalog
 
 on:
   push:
-    branches: [main, dev]
+    branches: [dev]
 
 concurrency:
   group: models-catalog-${{ github.ref }}

@@ -28,7 +28,7 @@ import {
   sortCiRunsNewestFirst,
   isRunFailed,
   isFailedConclusion,
-  trimLogExcerpt,
+  extractFailedJobLogExcerpt,
   filterMergedPrs,
 } from "../infrastructure/git/git-status-policy.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks } from "./git-http-auth.js";
@@ -52,8 +52,7 @@ interface RepoPlumbing {
   remoteUrl: string | null;
 }
 
-const FAILED_RUN_DETAILS_LIMIT = 3;
-const FAILED_JOBS_PER_RUN_LIMIT = 3;
+const FAILED_RUN_DETAILS_CONCURRENCY = 3;
 const GIT_MUTATION_TIMEOUT_MS = 8000;
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
@@ -193,6 +192,7 @@ export class GitStatusService {
   private async fetchFailedJobLogExcerpt(
     runId: number,
     jobId: number,
+    failedSteps: string[],
     ghToken?: string
   ): Promise<{ logExcerpt: string | null; warning?: string }> {
     const result = await this.queryClient.ghRunViewLogFailed(runId, jobId, ghToken);
@@ -203,7 +203,7 @@ export class GitStatusService {
     if (stdout.length === 0) {
       return { logExcerpt: null };
     }
-    return { logExcerpt: trimLogExcerpt(stdout) };
+    return { logExcerpt: extractFailedJobLogExcerpt(stdout, failedSteps) };
   }
 
   private async fetchFailedRunJobs(
@@ -255,8 +255,8 @@ export class GitStatusService {
         logCommand: jobId !== null ? `gh run view ${runId} --job ${jobId} --log-failed` : null,
       };
 
-      if (jobId !== null && failedJobs.length < FAILED_JOBS_PER_RUN_LIMIT) {
-        const logResult = await this.fetchFailedJobLogExcerpt(runId, jobId, ghToken);
+      if (jobId !== null) {
+        const logResult = await this.fetchFailedJobLogExcerpt(runId, jobId, failedSteps, ghToken);
         failedJob.logExcerpt = logResult.logExcerpt;
         if (logResult.warning) {
           warnings.push(logResult.warning);
@@ -264,9 +264,6 @@ export class GitStatusService {
       }
 
       failedJobs.push(failedJob);
-      if (failedJobs.length >= FAILED_JOBS_PER_RUN_LIMIT) {
-        break;
-      }
     }
 
     return { failedJobs, warnings };
@@ -277,17 +274,27 @@ export class GitStatusService {
     ghToken?: string
   ): Promise<{ runs: GitCiRunStatus[]; warnings: string[] }> {
     const warnings: string[] = [];
-    const failedCandidates = runs
-      .filter((run) => run.id !== null && isRunFailed(run))
-      .slice(0, FAILED_RUN_DETAILS_LIMIT);
+    const seenHeadWorkflows = new Set<string>();
+    const failedCandidates = runs.filter((run) => {
+      if (run.id === null || !isRunFailed(run)) {
+        return false;
+      }
+      const workflow = run.workflowName || run.name;
+      const duplicateKey = run.headSha ? `${run.headSha}\0${workflow}` : null;
+      if (duplicateKey && seenHeadWorkflows.has(duplicateKey)) {
+        return false;
+      }
+      if (duplicateKey) {
+        seenHeadWorkflows.add(duplicateKey);
+      }
+      return true;
+    });
     if (failedCandidates.length === 0) {
       return { runs, warnings };
     }
 
     const failedJobsByRunId = new Map<number, GitCiFailedJob[]>();
 
-    // Process up to FAILED_RUN_DETAILS_LIMIT concurrently
-    const CONCURRENCY_LIMIT = FAILED_RUN_DETAILS_LIMIT;
     let i = 0;
     const executeNext = async (): Promise<void> => {
       while (i < failedCandidates.length) {
@@ -300,7 +307,10 @@ export class GitStatusService {
       }
     };
 
-    const workers = Array.from({ length: Math.min(CONCURRENCY_LIMIT, failedCandidates.length) }, () => executeNext());
+    const workers = Array.from(
+      { length: Math.min(FAILED_RUN_DETAILS_CONCURRENCY, failedCandidates.length) },
+      () => executeNext(),
+    );
     await Promise.all(workers);
 
     const enrichedRuns = runs.map((run) => {

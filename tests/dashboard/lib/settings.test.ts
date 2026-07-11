@@ -36,7 +36,9 @@ describe("dashboard settings helpers", () => {
     expect(second.sprintLoopSteps.watchLoopIntervalSeconds).toBe(1);
     expect(second.sprintLoopSteps.watchLoopOutputIntervalSeconds).toBe(300);
     expect(second.automationInterventions.autoAnswerClarification).toBe(false);
-    expect(second.ciIntelligence.julesCiAutofixMaxRetries).toBe(3);
+    expect(second.ciIntelligence.julesCiAutofixMaxRetries).toBe(5);
+    expect(second.guardrails.jobs.task_coding.cap).toBe(5);
+    expect(second.guardrails.jobs.ci_fix.cap).toBe(5);
     expect(second.cliWorkflow.cleanupWorktreeOnFailure).toBe(false);
     expect(second.cliWorkflow.resumeFailedTaskInSameWorkspace).toBe(true);
     expect(second.cliWorkflow.executionMode).toBe("DOCKER");

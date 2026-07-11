@@ -16,14 +16,15 @@ It is for contributors and integrators who need to reason about *how* Code UX ma
 | 6 | [Dashboard architecture](./dashboard-architecture.md) | Preact stack, real-time client, route map, state model |
 | 7 | [Data model](./data-model.md) | Projects, sprints, tasks, runs, dispatches, memory, conversations |
 | 8 | [Custom dashboard foundation](./custom-dashboard-foundation.md) | Persisted dashboard manifests, generated bundles, validation history, and publication state |
-| 9 | [External chat connectors](./external-chat-providers.md) | Provider setup, channel bindings, inbound dedupe, outbound delivery state |
-| 10 | [Configuration resolution](./configuration-resolution.md) | Cascade order, search paths, settings hierarchy |
-| 11 | [Speech input](./speech-input.md) | Persisted transcription settings, privacy boundary, provider fallback contract |
-| 12 | [Security model](./security.md) | Authentication, authorisation, secrets, network surface |
+| 9 | [Execution invocation tracking](./execution-invocation-tracking.md) | Provider parser normalization, usage isolation, live telemetry, transcript persistence |
+| 10 | [External chat connectors](./external-chat-providers.md) | Provider setup, channel bindings, inbound dedupe, outbound delivery state |
+| 11 | [Configuration resolution](./configuration-resolution.md) | Cascade order, search paths, settings hierarchy |
+| 12 | [Speech input](./speech-input.md) | Persisted transcription settings, privacy boundary, provider fallback contract |
+| 13 | [Security model](./security.md) | Authentication, authorisation, secrets, network surface |
 
 ## Runtime Notes
 
-Agent persistent skill storage is opt-in per preset. When enabled and attached to a storage, provider invocations receive search-first instructions, retrieval-only `search_skills` MCP access where eligible, and writable storage mounts outside the project workspace (`~/.code-ux/persistent-skill-storages/...` on host, `/code-ux/persistent-skills/...` in Docker).
+Agent persistent skill storage is opt-in per preset. A shared project-owned agent resolver applies the same idempotent search-first prompt guidance, scoped `search_skills` MCP access, and writable storage mounts to canonical provider executions and direct worker-inbox replies. Storage remains outside the project workspace (`~/.code-ux/persistent-skill-storages/...` on host, `/code-ux/persistent-skills/...` in Docker), and disabled, unattached, cross-project, or unscoped invocations remain unchanged.
 
 ## Reading order suggestions
 

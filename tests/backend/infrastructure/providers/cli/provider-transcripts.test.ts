@@ -47,7 +47,7 @@ describe("readQwenLogData", () => {
     const result = await readQwenLogData("/cwd", "DOCKER" as Mode, "sess", 0, runner as never);
 
     expect(result).toEqual({ usage: { totalTokens: 5 }, conversation: [{ role: "user" }] });
-    expect(sumQwenOpenAiUsage).toHaveBeenCalledWith([{ a: 1 }]);
+    expect(sumQwenOpenAiUsage).toHaveBeenCalledWith([{ a: 1 }], 0);
   });
 
   it("tolerates noisy docker wrapper output around the JSON array", async () => {
@@ -58,7 +58,7 @@ describe("readQwenLogData", () => {
     const result = await readQwenLogData("/cwd", "DOCKER" as Mode, "sess", 0, runner as never);
 
     expect(result).toEqual({ usage: { totalTokens: 5 }, conversation: [] });
-    expect(sumQwenOpenAiUsage).toHaveBeenCalledWith([{ a: 1 }]);
+    expect(sumQwenOpenAiUsage).toHaveBeenCalledWith([{ a: 1 }], 0);
   });
 
   it("returns null when the docker read yields nothing", async () => {
@@ -74,6 +74,21 @@ describe("readQwenLogData", () => {
   it("treats a non-array docker payload as no records", async () => {
     const runner = { readWorkspaceJsonArray: vi.fn(async () => JSON.stringify({ foo: 1 })) };
     expect(await readQwenLogData("/cwd", "DOCKER" as Mode, "sess", 0, runner as never)).toBeNull();
+  });
+
+  it("recovers valid docker records beside a malformed neighbor", async () => {
+    const runner = {
+      readWorkspaceJsonArray: vi.fn(async () => '[{"response":{"id":"ok","usage":{"prompt_tokens":2}}},{broken]'),
+    };
+    sumQwenOpenAiUsage.mockReturnValue({ inputTokens: 2 });
+    buildQwenConversation.mockReturnValue([]);
+
+    const result = await readQwenLogData("/cwd", "DOCKER" as Mode, "sess", 0, runner as never);
+
+    expect(result).toEqual({ usage: { inputTokens: 2 }, conversation: [] });
+    expect(sumQwenOpenAiUsage).toHaveBeenCalledWith([
+      { response: { id: "ok", usage: { prompt_tokens: 2 } } },
+    ], 0);
   });
 
   it("reads host log records when not running in docker", async () => {
@@ -126,8 +141,14 @@ describe("readCodexLatestSessionJson", () => {
 });
 
 describe("readClaudeSessionJsonl", () => {
-  it("returns null for non-docker execution", async () => {
-    expect(await readClaudeSessionJsonl("/cwd", "sid", "HOST" as Mode, {} as never)).toBeNull();
+  it("reads the host session path using the cwd slug", async () => {
+    readFile.mockResolvedValue("host transcript");
+
+    expect(await readClaudeSessionJsonl("/repo:one", "sid", "HOST" as Mode, {} as never)).toBe("host transcript");
+    expect(readFile).toHaveBeenCalledWith(
+      expect.stringContaining(".claude/projects/-repo-one/sid.jsonl"),
+      "utf8",
+    );
   });
 
   it("reads the session jsonl path through the docker runner", async () => {

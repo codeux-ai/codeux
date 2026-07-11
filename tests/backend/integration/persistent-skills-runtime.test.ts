@@ -12,6 +12,7 @@ import { ProviderExecutionService } from "../../../src/services/provider-executi
 import { SkillService, type SkillEmbeddingProvider } from "../../../src/services/skill-service.js";
 import type { IProviderRunner, ProviderRunResult } from "../../../src/infrastructure/providers/cli/provider-runner.js";
 import type { DashboardSettings } from "../../../src/contracts/app-types.js";
+import { runWithMcpAgentContext } from "../../../src/server/mcp-agent-context.js";
 
 const tempDirs: string[] = [];
 
@@ -42,6 +43,7 @@ class FakeEmbeddingProvider implements SkillEmbeddingProvider {
 
 async function createFixture(): Promise<{
   projectId: string;
+  projectRepository: ProjectManagementRepository;
   agentPresetRepository: AgentPresetRepository;
   skillService: SkillService;
 }> {
@@ -60,6 +62,7 @@ async function createFixture(): Promise<{
 
   return {
     projectId: project.id,
+    projectRepository,
     agentPresetRepository,
     skillService,
   };
@@ -69,71 +72,88 @@ const parseMcpEnvelope = (response: { content: Array<{ text: string }> }): { res
   return JSON.parse(response.content[0]!.text) as { result: { results: Array<{ skill: { id: string; name: string } }> } };
 };
 
+const parseMcpError = (response: { content: Array<{ text: string }> }): { result: { status: string; message: string } } => {
+  return JSON.parse(response.content[0]!.text) as { result: { status: string; message: string } };
+};
+
 describe("persistent skills runtime integration", () => {
-  it("shares attached skill storage through agent-scoped MCP search only for attached agents", async () => {
-    const { projectId, agentPresetRepository, skillService } = await createFixture();
-    const storage = skillService.createStorage(projectId, {
-      id: "shared-review-skills",
-      name: "Shared Review Skills",
-      description: "Reusable review practices",
+  it("authorizes MCP skill search from the authenticated agent's project attachments", async () => {
+    const { projectId, projectRepository, agentPresetRepository, skillService } = await createFixture();
+    const firstStorage = skillService.createStorage(projectId, {
+      id: "first-review-skills",
+      name: "First Review Skills",
     });
-    const skill = await skillService.writeSkillFromMarkdown(projectId, storage.id, `---
-title: Review Discipline
-description: Keep review findings concrete.
-tags: ["review"]
+    const secondStorage = skillService.createStorage(projectId, {
+      id: "second-review-skills",
+      name: "Second Review Skills",
+    });
+    const firstSkill = await skillService.writeSkillFromMarkdown(projectId, firstStorage.id, `---
+title: First Review Discipline
 ---
 
-Review pull requests for regressions, missing tests, and rollback risk.
+Review regressions for the first agent.
+`);
+    const secondSkill = await skillService.writeSkillFromMarkdown(projectId, secondStorage.id, `---
+title: Second Review Discipline
+---
+
+Review regressions for the second agent.
 `);
     const firstAgent = agentPresetRepository.createAgentPreset(projectId, {
       id: "review-agent-a",
       name: "Review Agent A",
       persistentSkillStorage: { enabled: true },
-      persistentSkillStorageIds: [storage.id],
+      persistentSkillStorageIds: [firstStorage.id],
     });
     const secondAgent = agentPresetRepository.createAgentPreset(projectId, {
       id: "review-agent-b",
       name: "Review Agent B",
       persistentSkillStorage: { enabled: true },
-      persistentSkillStorageIds: [storage.id],
+      persistentSkillStorageIds: [secondStorage.id],
     });
-    const unattachedAgent = agentPresetRepository.createAgentPreset(projectId, {
-      id: "review-agent-unattached",
-      name: "Unattached Review Agent",
-      persistentSkillStorage: { enabled: true },
-      persistentSkillStorageIds: [],
+    const otherProject = projectRepository.createProject({
+      name: "Other Search Project",
+      sourceType: "local",
+      sourceRef: "/workspace/other-search-project",
     });
     const handler = new ManagementToolHandler({ skillService } as ConstructorParameters<typeof ManagementToolHandler>[0]);
 
-    const firstSearch = parseMcpEnvelope(await handler.handleSearchSkills({
-      projectId,
-      agentPresetId: firstAgent.id,
-      query: "review regressions",
-      minSimilarity: 0,
-      limit: 5,
-    }));
-    const secondSearch = parseMcpEnvelope(await handler.handleSearchSkills({
-      projectId,
-      agentPresetId: secondAgent.id,
-      query: "review regressions",
-      minSimilarity: 0,
-      limit: 5,
-    }));
-    const unattachedSearch = parseMcpEnvelope(await handler.handleSearchSkills({
-      projectId,
-      agentPresetId: unattachedAgent.id,
-      query: "review regressions",
-      minSimilarity: 0,
-      limit: 5,
-    }));
+    const attachedSearch = parseMcpEnvelope(await runWithMcpAgentContext(firstAgent.id, () =>
+      handler.handleSearchSkills({
+        projectId,
+        agentPresetId: firstAgent.id,
+        storageId: firstStorage.id,
+        query: "review regressions",
+        minSimilarity: 0,
+      })));
+    const omittedScopeSearch = parseMcpEnvelope(await runWithMcpAgentContext(firstAgent.id, () =>
+      handler.handleSearchSkills({ projectId, query: "review regressions", minSimilarity: 0 })));
+    const mismatchedAgentSearch = parseMcpError(await runWithMcpAgentContext(firstAgent.id, () =>
+      handler.handleSearchSkills({ projectId, agentPresetId: secondAgent.id, query: "review regressions" })));
+    const unrelatedStorageSearch = parseMcpError(await runWithMcpAgentContext(firstAgent.id, () =>
+      handler.handleSearchSkills({ projectId, storageId: secondStorage.id, query: "review regressions" })));
+    const projectMismatchSearch = parseMcpError(await runWithMcpAgentContext(firstAgent.id, () =>
+      handler.handleSearchSkills({ projectId: otherProject.id, query: "review regressions" })));
+    const managerSearch = parseMcpEnvelope(await runWithMcpAgentContext(null, () =>
+      handler.handleSearchSkills({ projectId, query: "review regressions", minSimilarity: 0 })));
 
-    expect(firstSearch.result.results.map((result) => result.skill.id)).toEqual([skill.id]);
-    expect(secondSearch.result.results.map((result) => result.skill.id)).toEqual([skill.id]);
-    expect(unattachedSearch.result.results).toEqual([]);
+    expect(attachedSearch.result.results.map((result) => result.skill.id)).toEqual([firstSkill.id]);
+    expect(omittedScopeSearch.result.results.map((result) => result.skill.id)).toEqual([firstSkill.id]);
+    expect(mismatchedAgentSearch.result).toMatchObject({
+      status: "error",
+      message: "agentPresetId must match the authenticated MCP agent",
+    });
+    expect(unrelatedStorageSearch.result).toMatchObject({
+      status: "error",
+      message: `Skill storage is not attached to the authenticated MCP agent: ${secondStorage.id}`,
+    });
+    expect(projectMismatchSearch.result).toMatchObject({ status: "error" });
+    expect(projectMismatchSearch.result.message).toContain(firstAgent.id);
+    expect(managerSearch.result.results.map((result) => result.skill.id).sort()).toEqual([firstSkill.id, secondSkill.id].sort());
   });
 
   it("injects persistent skill prompt guidance and isolated mounts only for enabled attached agents", async () => {
-    const { projectId, agentPresetRepository, skillService } = await createFixture();
+    const { projectId, projectRepository, agentPresetRepository, skillService } = await createFixture();
     const storage = skillService.createStorage(projectId, {
       id: "runtime-review-skills",
       name: "Runtime Review Skills",
@@ -155,6 +175,21 @@ Review pull requests for regressions, missing tests, and rollback risk.
       name: "Runtime Unattached Agent",
       persistentSkillStorage: { enabled: true },
       persistentSkillStorageIds: [],
+    });
+    const otherProject = projectRepository.createProject({
+      name: "Other Persistent Skills Project",
+      sourceType: "local",
+      sourceRef: "/workspace/other-persistent-skills-integration",
+    });
+    const foreignStorage = skillService.createStorage(otherProject.id, {
+      id: "foreign-runtime-skills",
+      name: "Foreign Runtime Skills",
+    });
+    const foreignAgent = agentPresetRepository.createAgentPreset(otherProject.id, {
+      id: "runtime-foreign-agent",
+      name: "Foreign Runtime Agent",
+      persistentSkillStorage: { enabled: true },
+      persistentSkillStorageIds: [foreignStorage.id],
     });
     const providerResult: ProviderRunResult = {
       ok: true,
@@ -215,6 +250,7 @@ Review pull requests for regressions, missing tests, and rollback risk.
     await service.executeProvider({ ...baseArgs, mcpAgentId: enabledAgent.id });
     await service.executeProvider({ ...baseArgs, mcpAgentId: disabledAgent.id });
     await service.executeProvider({ ...baseArgs, mcpAgentId: unattachedAgent.id });
+    await service.executeProvider({ ...baseArgs, mcpAgentId: foreignAgent.id });
     await service.executeProvider({ ...baseArgs, mcpAgentId: null });
 
     const enabledRun = providerRunner.runProvider.mock.calls[0]![0];

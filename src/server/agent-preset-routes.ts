@@ -2,8 +2,18 @@ import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute } from "./route-utils.js";
 import { requireTrimmedString } from "./request-parsers.js";
+import { HttpRouteError } from "./http-errors.js";
 import type { CreateAgentPresetInput, PushAgentPresetsToMarkdownOptions, UpdateAgentPresetInput } from "../contracts/agent-preset-types.js";
-import type { CreateSkillStorageInput } from "../contracts/skill-types.js";
+import type {
+  CreateSkillStorageInput,
+  SkillRecord,
+  SkillStorageContentSummary,
+  SkillStorageContentsResponse,
+  UpdateSkillStorageInput,
+} from "../contracts/skill-types.js";
+
+export const SKILL_STORAGE_CONTENTS_MAX_SKILLS = 100;
+export const SKILL_STORAGE_CONTENT_PREVIEW_MAX_LENGTH = 240;
 
 export function registerAgentPresetRoutes(router: Express, deps: DashboardDependencies): void {
   router.get("/api/projects/:projectId/agent-presets", asyncRoute(async (req, res) => {
@@ -95,6 +105,31 @@ export function registerAgentPresetRoutes(router: Express, deps: DashboardDepend
     res.status(201).json(skillService.createStorage(projectId, body));
   }));
 
+  router.patch("/api/projects/:projectId/skill-storages/:storageId", asyncRoute(async (req, res) => {
+    const skillService = requireSkillService(deps);
+    const projectId = requireTrimmedString(req.params.projectId, "projectId");
+    const storageId = requireTrimmedString(req.params.storageId, "storageId");
+    res.json(skillService.updateStorage(projectId, storageId, req.body as UpdateSkillStorageInput));
+  }));
+
+  router.get("/api/projects/:projectId/skill-storages/:storageId/contents", asyncRoute(async (req, res) => {
+    const skillService = requireSkillService(deps);
+    const projectId = requireTrimmedString(req.params.projectId, "projectId");
+    const storageId = requireTrimmedString(req.params.storageId, "storageId");
+    const storage = skillService.getStorage(projectId, storageId);
+    if (!storage) {
+      throw new HttpRouteError(404, `Skill storage not found: ${storageId}`);
+    }
+
+    const records = skillService.listByStorage(projectId, storageId, SKILL_STORAGE_CONTENTS_MAX_SKILLS + 1);
+    const response: SkillStorageContentsResponse = {
+      storage,
+      skills: records.slice(0, SKILL_STORAGE_CONTENTS_MAX_SKILLS).map(toSkillStorageContentSummary),
+      truncated: records.length > SKILL_STORAGE_CONTENTS_MAX_SKILLS,
+    };
+    res.json(response);
+  }));
+
   router.delete("/api/projects/:projectId/skill-storages/:storageId", asyncRoute(async (req, res) => {
     const skillService = requireSkillService(deps);
     skillService.deleteStorage(
@@ -103,6 +138,22 @@ export function registerAgentPresetRoutes(router: Express, deps: DashboardDepend
     );
     res.json({ ok: true });
   }));
+}
+
+function toSkillStorageContentSummary(skill: SkillRecord): SkillStorageContentSummary {
+  const normalizedContent = skill.contentMarkdown.replace(/\s+/g, " ").trim();
+  return {
+    id: skill.id,
+    name: skill.name,
+    description: skill.description,
+    tags: skill.tags,
+    appliesTo: skill.appliesTo,
+    version: skill.version,
+    updatedAt: skill.updatedAt,
+    contentPreview: normalizedContent.length <= SKILL_STORAGE_CONTENT_PREVIEW_MAX_LENGTH
+      ? normalizedContent
+      : `${normalizedContent.slice(0, SKILL_STORAGE_CONTENT_PREVIEW_MAX_LENGTH - 3).trimEnd()}...`,
+  };
 }
 
 function requireSkillService(deps: DashboardDependencies): NonNullable<DashboardDependencies["skillService"]> {

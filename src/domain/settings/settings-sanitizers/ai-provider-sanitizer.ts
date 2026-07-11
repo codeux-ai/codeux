@@ -87,6 +87,9 @@ const normalizeInvocationRouting = (
       provider: resolveProviderConfigId(source?.provider, availableProviders),
       allowedProviders: resolveAllowedProviderConfigIds(source?.allowedProviders, availableProviders),
       providers: resolveInvocationProviderOverrides(source?.providers, availableProviders),
+      ...(routeId === "ci_fix"
+        ? { continueTaskSession: typeof source?.continueTaskSession === "boolean" ? source.continueTaskSession : true }
+        : {}),
     };
   }
 

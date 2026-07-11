@@ -7,6 +7,7 @@ export interface ConfirmDialogOptions {
   cancelLabel?: string;
   destructive?: boolean;
   tone?: "default" | "success" | "warning" | "danger" | "neutral";
+  requiredConfirmationText?: string;
 }
 
 export function useConfirmDialog() {

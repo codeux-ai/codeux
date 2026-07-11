@@ -559,6 +559,31 @@ export class ProjectAttentionRepository {
     return this.requireAndNotifyItem(itemId, current.projectId, true);
   }
 
+  requeueAttentionItem(itemId: string, payloadPatch: Record<string, unknown> = {}): ProjectAttentionItemRecord {
+    const current = this.mapRow(requireRecord(this.db.prepare('SELECT * FROM project_attention_items WHERE id = ?').get(itemId) as any, "Project attention item", itemId));
+    if (current.status === "resolved" || current.status === "dismissed" || current.status === "expired") {
+      throw new Error(`Attention item ${itemId} is already closed.`);
+    }
+    const now = new Date().toISOString();
+    const nextPayload = {
+      ...(current.payload || {}),
+      ...payloadPatch,
+      claimedByWorkerEndpointId: null,
+    };
+
+    this.db.prepare(`
+      UPDATE project_attention_items
+      SET status = 'open',
+          assigned_worker_endpoint_id = NULL,
+          claimed_at = NULL,
+          updated_at = ?,
+          payload_json = ?
+      WHERE id = ?
+    `).run(now, serializePayload(nextPayload), itemId);
+
+    return this.requireAndNotifyItem(itemId, current.projectId, true);
+  }
+
   private requireAndNotifyItem(itemId: string, projectId: string, includeOverview: boolean): ProjectAttentionItemRecord {
     const item = this.mapRow(requireRecord(this.db.prepare('SELECT * FROM project_attention_items WHERE id = ?').get(itemId) as any, "Project attention item", itemId));
     this.notifyProjectRefresh(projectId, includeOverview);

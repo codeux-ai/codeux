@@ -81,10 +81,13 @@ function toLinkedIssueInput(issue: SprintLinkedIssueInput): SprintLinkedIssueInp
     state: issue.state,
     labels: issue.labels,
     assignees: issue.assignees,
+    issueBodyMarkdown: issue.issueBodyMarkdown,
+    issueConversationMarkdown: issue.issueConversationMarkdown,
     includeConversation: issue.includeConversation,
     issueAuthor: issue.issueAuthor,
     issueCreatedAt: issue.issueCreatedAt,
     issueUpdatedAt: issue.issueUpdatedAt,
+    metadata: issue.metadata,
   };
 }
 

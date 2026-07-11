@@ -210,7 +210,7 @@ describe("SprintOrchestrator CI logic", () => {
     expect(text).toContain("CI autofix guardrail reached");
     expect(text).toContain("`01-task`");
     expect(text).toContain("https://example.com/pr/42");
-    expect(text).toContain("Escalation (AGENT)");
+    expect(text).toContain("Escalation (HUMAN)");
     expect(deps.sendSessionMessage).not.toHaveBeenCalled();
 
     await removeTempRoot(tmpRoot);

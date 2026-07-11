@@ -20,6 +20,8 @@ export function conversationTurnToMessage(
 ): AppendExecutionInvocationMessageInput {
   const base: Record<string, unknown> = { provider, model };
   if (turn.toolCallId) base.toolCallId = turn.toolCallId;
+  if (turn.timestampMs != null) base.timestampMs = turn.timestampMs;
+  if (turn.tokens) base.tokens = turn.tokens;
 
   if (turn.kind === "user") {
     return { role: "user", contentMarkdown: turn.text || "", metadata: base };
@@ -50,7 +52,6 @@ export function conversationTurnToMessage(
           kind: "tool_call",
           toolName: turn.toolName ?? null,
           toolStatus: turn.toolStatus ?? null,
-          ...(turn.tokens ? { tokens: turn.tokens } : {}),
         },
       };
     case "tool_result":
@@ -58,7 +59,12 @@ export function conversationTurnToMessage(
         role: "tool",
         contentMarkdown: sanitizedTurnText,
         toolCallsJson: { output: capPayload(turn.toolOutput) },
-        metadata: { ...base, kind: "tool_result", toolName: turn.toolName ?? null },
+        metadata: {
+          ...base,
+          kind: "tool_result",
+          toolName: turn.toolName ?? null,
+          toolStatus: turn.toolStatus ?? null,
+        },
       };
   }
 }

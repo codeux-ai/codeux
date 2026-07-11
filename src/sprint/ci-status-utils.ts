@@ -58,10 +58,19 @@ export const selectFailedCiRuns = (gitStatus: GitTrackingStatus, branchName: str
   const runs = Array.isArray(gitStatus.ciRuns) ? gitStatus.ciRuns : [];
   const failedRuns = runs.filter((run) => isCiFailure(run.status, run.conclusion));
   const branchMatched = failedRuns.filter((run) => run.headBranch === branchName);
-  if (branchMatched.length > 0) {
-    return branchMatched.slice(0, 2);
-  }
-  return failedRuns.slice(0, 2);
+  return selectNewestCiRun(branchMatched);
+};
+
+export const selectNewestCiRun = (runs: GitCiRunStatus[]): GitCiRunStatus[] => {
+  const candidates = [...runs].sort((left, right) => {
+    const byUpdatedAt = (right.updatedAt || "").localeCompare(left.updatedAt || "");
+    if (byUpdatedAt !== 0) return byUpdatedAt;
+    return (right.id ?? 0) - (left.id ?? 0);
+  });
+  // A repair agent needs the current failure, not historical failures already
+  // superseded by later pushes. Keep every failed job and assertion from this
+  // newest run, but never append older runs to the prompt.
+  return candidates.slice(0, 1);
 };
 
 export const getFailedJobLabels = (failedRuns: GitCiRunStatus[]): string[] => {

@@ -155,23 +155,43 @@ describe("DockerRunner", () => {
 
   it("runs providers inside isolated Docker volumes", async () => {
     const onSetupImageProgress = vi.fn();
-    await runner.runProviderInDocker({
-      command: "gemini",
-      args: ["--yolo", "--p", "hello"],
-      cwd: "docker-volume://workspace-1",
-      providerEnv: { GEMINI_MODEL: "gemini-2.5-pro" },
-      sessionId: "session-1",
-      providerLabel: "gemini",
-      workflowSettings: {
-        executionMode: "DOCKER",
-        containerImage: "node:24",
-        containerSetupScriptPath: "",
-        containerCacheSetupScriptImage: false,
-      } as any,
-      repoPath: "/repo/project",
-      onActivity: vi.fn(),
-      onSetupImageProgress,
-    });
+    const ensureRuntimeVolume = vi.spyOn<any, any>(
+      Object.getPrototypeOf((runner as any).workspaceManager),
+      "ensureRuntimeVolume",
+    ).mockResolvedValue(undefined);
+    try {
+      await runner.runProviderInDocker({
+        command: "gemini",
+        args: ["--yolo", "--p", "hello"],
+        cwd: "docker-volume://workspace-1",
+        providerEnv: { GEMINI_MODEL: "gemini-2.5-pro" },
+        sessionId: "session-1",
+        providerLabel: "gemini",
+        workflowSettings: {
+          executionMode: "DOCKER",
+          containerImage: "node:24",
+          containerSetupScriptPath: "",
+          containerCacheSetupScriptImage: false,
+        } as any,
+        repoPath: "/repo/project",
+        onActivity: vi.fn(),
+        onSetupImageProgress,
+      });
+      expect(ensureRuntimeVolume).toHaveBeenCalledWith("docker-volume://workspace-1", {
+        initializeOwnership: true,
+        ownerSpec: "1000:1000",
+        forceOwnershipInitialization: true,
+      });
+      expect(ensureRuntimeVolume).toHaveBeenNthCalledWith(1, "docker-volume://workspace-1", {
+        initializeOwnership: false,
+      });
+      expect(ensureRuntimeVolume).toHaveBeenCalledTimes(2);
+      const ownershipRepairOrder = ensureRuntimeVolume.mock.invocationCallOrder[1];
+      const providerLaunchOrder = vi.mocked(runStreamingCommand).mock.invocationCallOrder[0];
+      expect(ownershipRepairOrder).toBeLessThan(providerLaunchOrder);
+    } finally {
+      ensureRuntimeVolume.mockRestore();
+    }
 
     expect(runStreamingCommand).toHaveBeenCalledWith(
       "docker",

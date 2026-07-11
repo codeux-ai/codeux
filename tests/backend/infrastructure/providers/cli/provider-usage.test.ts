@@ -131,8 +131,8 @@ describe("collectProviderUsageTelemetry", () => {
       usageSource: "reported",
       transcriptText: "Applied the edit.",
     });
-    expect(result.conversation.map((t) => t.kind)).toEqual(["reasoning", "assistant"]);
-    expect(result.conversation[0]).toMatchObject({ kind: "reasoning", text: "I should inspect the change first." });
+    expect(result.conversation.map((t) => t.kind)).toEqual(["user", "reasoning", "assistant"]);
+    expect(result.conversation[1]).toMatchObject({ kind: "reasoning", text: "I should inspect the change first." });
   });
 
   it("does not synthesize Gemini reasoning turns from a plain response string", async () => {
@@ -157,6 +157,62 @@ describe("collectProviderUsageTelemetry", () => {
 
     expect(result.conversation).toEqual([]);
     expect(result.reasoningOutputTokens).toBe(3);
+  });
+
+  it("persists Gemini tool calls and results from structured response parts", async () => {
+    const result = await collectProviderUsageTelemetry({
+      provider: "gemini",
+      model: "gemini-2.5-pro",
+      prompt: "Inspect the README.",
+      cwd: "/workspace/repo",
+      stdout: JSON.stringify({
+        response: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  { text: "I will inspect the file." },
+                  { functionCall: { id: "call_1", name: "read_file", args: { path: "README.md" } } },
+                  { functionResponse: { id: "call_1", name: "read_file", response: { content: "hello" }, status: "completed" } },
+                  { text: "Done." },
+                ],
+              },
+            },
+          ],
+        },
+        stats: {
+          tokens: {
+            input: 100,
+            cached: 5,
+            candidates: 25,
+          },
+        },
+      }),
+      stderr: "",
+    });
+
+    expect(result).toMatchObject({
+      inputTokens: 100,
+      cachedInputTokens: 5,
+      outputTokens: 25,
+      totalTokens: 130,
+      usageSource: "reported",
+      transcriptText: "I will inspect the file.\nDone.",
+    });
+    expect(result.conversation.map((turn) => turn.kind)).toEqual(["user", "assistant", "tool_call", "tool_result", "assistant"]);
+    expect(result.conversation[2]).toMatchObject({
+      kind: "tool_call",
+      toolName: "read_file",
+      toolCallId: "call_1",
+      toolArguments: "{\"path\":\"README.md\"}",
+    });
+    expect(result.conversation[3]).toMatchObject({
+      kind: "tool_result",
+      toolName: "read_file",
+      toolCallId: "call_1",
+      toolOutput: "{\"content\":\"hello\"}",
+      toolStatus: "completed",
+    });
   });
 
   it("parses provider-reported Gemini usage across model stats", async () => {
@@ -221,6 +277,59 @@ describe("collectProviderUsageTelemetry", () => {
     expect(result.inputTokens).toBeGreaterThan(0);
     expect(result.outputTokens).toBeGreaterThan(0);
     expect(result.totalTokens).toBe(result.inputTokens + result.outputTokens);
+  });
+
+  it("retains structured Gemini turns while safely estimating missing usage", async () => {
+    const result = await collectProviderUsageTelemetry({
+      provider: "gemini",
+      model: "default",
+      prompt: "Summarize the diff.",
+      cwd: "/workspace/repo",
+      stdout: [
+        "provider bootstrap",
+        JSON.stringify({
+          response: {
+            candidates: [{
+              content: {
+                role: "model",
+                parts: [{ thought: true, text: "Check the patch." }, { text: "Looks good." }],
+              },
+            }],
+          },
+        }),
+      ].join("\n"),
+      stderr: "",
+    });
+
+    expect(result).toMatchObject({
+      usageSource: "estimated",
+      transcriptText: "Looks good.",
+    });
+    expect(result.conversation.map((turn) => turn.kind)).toEqual(["user", "reasoning", "assistant"]);
+    expect(result.inputTokens).toBeGreaterThan(0);
+    expect(result.outputTokens).toBeGreaterThan(0);
+  });
+
+  it("falls back to stdout and stderr text when Gemini stdout is invalid JSON", async () => {
+    const result = await collectProviderUsageTelemetry({
+      provider: "gemini",
+      model: "default",
+      prompt: "Summarize the diff.",
+      cwd: "/workspace/repo",
+      stdout: "provider warning\n{\"response\":",
+      stderr: "Applied the edit after warning.",
+    });
+
+    expect(result).toMatchObject({
+      cachedInputTokens: 0,
+      reasoningOutputTokens: 0,
+      usageSource: "estimated",
+      transcriptText: "provider warning\n{\"response\":\nApplied the edit after warning.",
+      nativeSessionId: null,
+      conversation: [],
+    });
+    expect(result.inputTokens).toBeGreaterThan(0);
+    expect(result.outputTokens).toBeGreaterThan(0);
   });
 
   it("parses provider-reported Codex token usage from JSONL output", async () => {
@@ -577,7 +686,11 @@ describe("collectProviderUsageTelemetry", () => {
       model: "gpt-4o-codex",
       prompt: "Fix the bug.",
       cwd: "/workspace/repo",
-      stdout: JSON.stringify({ type: "turn.completed", usage: { input_tokens: 9999, cached_input_tokens: 9999, output_tokens: 9999 } }),
+      stdout: [
+        JSON.stringify({ type: "thread.started", thread_id: "stdout-thread" }),
+        JSON.stringify({ type: "item.completed", item: { id: "stdout-msg", type: "agent_message", text: "Stdout-only answer." } }),
+        JSON.stringify({ type: "turn.completed", usage: { input_tokens: 9999, cached_input_tokens: 9999, output_tokens: 9999 } }),
+      ].join("\n"),
       stderr: "",
       capturedText: "Bug fixed.",
       codexSessionJson: realisticCodexRollout,
@@ -589,6 +702,9 @@ describe("collectProviderUsageTelemetry", () => {
       outputTokens: 120,
       usageSource: "reported",
     });
+    expect(result.nativeSessionId).toBe("0199codex-uuid");
+    expect(result.conversation.map((turn) => turn.text).join("\n")).toContain("Tests written.");
+    expect(result.conversation.map((turn) => turn.text).join("\n")).not.toContain("Stdout-only answer.");
   });
 
   it("falls back to the exec stdout turn.completed usage when no rollout file is available", async () => {
@@ -1147,6 +1263,41 @@ describe("buildQwenConversation", () => {
     expect(conversation[1]).toMatchObject({ kind: "reasoning", text: "I should run the existing tests first." });
     expect(conversation[4]).toMatchObject({ kind: "reasoning", text: "Tests pass, so I'm done." });
     expect(conversation[5]).toMatchObject({ kind: "assistant", text: "Test added." });
+  });
+
+  it("filters qwen usage and reconstructed turns to the invocation window", () => {
+    const records = [
+      {
+        timestamp: "2026-06-02T10:00:00.000Z",
+        request: { messages: [{ role: "user", content: "Old prompt." }] },
+        response: {
+          id: "old-response",
+          usage: { prompt_tokens: 100, completion_tokens: 20 },
+          choices: [{ message: { role: "assistant", content: "Old answer." } }],
+        },
+      },
+      {
+        timestamp: "2026-06-02T11:00:01.000Z",
+        request: { messages: [{ role: "user", content: "Latest follow-up." }] },
+        response: {
+          id: "new-response",
+          usage: { prompt_tokens: 25, completion_tokens: 7 },
+          choices: [{ message: { role: "assistant", content: "New answer." } }],
+        },
+      },
+    ];
+    const sinceMs = Date.parse("2026-06-02T11:00:00.000Z");
+
+    expect(sumQwenOpenAiUsage(records, sinceMs)).toEqual({
+      inputTokens: 25,
+      cachedInputTokens: 0,
+      outputTokens: 7,
+      reasoningOutputTokens: 0,
+    });
+    expect(buildQwenConversation(records, sinceMs).map((turn) => turn.text)).toEqual([
+      "Latest follow-up.",
+      "New answer.",
+    ]);
   });
 
   it("threads qwen conversation through collectProviderUsageTelemetry", async () => {

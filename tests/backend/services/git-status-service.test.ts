@@ -110,12 +110,14 @@ describe("GitStatusService", () => {
             jobs: [
               { databaseId: 201, conclusion: "failure", name: "Job1", steps: [{ conclusion: "failure", name: "Step1" }] },
               { databaseId: 202, conclusion: "success", name: "Job2" },
-              { conclusion: "failure", name: "Job3", id: 203 } // missing databaseId fallback to id
+              { conclusion: "failure", name: "Job3", id: 203 }, // missing databaseId fallback to id
+              { databaseId: 204, conclusion: "failure", name: "Job4" },
+              { databaseId: 205, conclusion: "failure", name: "Job5" },
             ]
           })};
       }
       if (cmd === "gh" && args[0] === "run" && args[1] === "view" && args[5] === "--log-failed") {
-          return { ok: true, stdout: "Error in Step1\n" };
+          return { ok: true, stdout: "runner bootstrap\nStep1\nAssertionError: expected 1 to equal 2\nExpected: 2\nReceived: 1\npost-job cleanup\n" };
       }
 
       return { ok: true, stdout: "[]" };
@@ -127,10 +129,12 @@ describe("GitStatusService", () => {
 
     expect(status.mode).toBe("REMOTE");
     expect(status.ciRuns[0].conclusion).toBe("failure");
-    expect(status.ciRuns[0].failedJobs?.length).toBe(2);
+    expect(status.ciRuns[0].failedJobs?.length).toBe(4);
     expect(status.ciRuns[0].failedJobs?.[0].id).toBe(201);
     expect(status.ciRuns[0].failedJobs?.[0].failedSteps).toEqual(["Step1"]);
-    expect(status.ciRuns[0].failedJobs?.[0].logExcerpt).toContain("Error in Step1");
+    expect(status.ciRuns[0].failedJobs?.[0].logExcerpt).toContain("AssertionError: expected 1 to equal 2");
+    expect(status.ciRuns[0].failedJobs?.[0].logExcerpt).toContain("Expected: 2");
+    expect(status.ciRuns[0].failedJobs?.[0].logExcerpt).toContain("Received: 1");
   });
 
   it("handles failed run details edge cases (warnings and limit limits)", async () => {

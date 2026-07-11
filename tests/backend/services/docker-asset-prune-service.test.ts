@@ -189,6 +189,52 @@ describe("DockerAssetPruneService", () => {
     expect(result.prunedWorkspaceVolumes).not.toContain("code-ux-repo-aaaaaaaaaaaa-cli-mockup-cli-completed-runtime");
   });
 
+  it("preserves sessions tracked during cleanup and newly created workspace volumes", async () => {
+    const listTrackedCliSessions = vi.fn()
+      .mockReturnValueOnce([])
+      .mockReturnValueOnce([
+        { id: "qa-review-live", state: "RUNNING", provider: "mockup-cli", repoPath: "/repo/a", updateTime: "" },
+      ]);
+    const sessionTracking = { listTrackedCliSessions } as unknown as SessionTrackingRepository;
+    const now = Date.now();
+
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
+      if (args[0] === "volume" && args[1] === "ls" && args.includes("label=code-ux.workspace=true")) {
+        return {
+          ok: true,
+          stdout: [
+            "code-ux-repo-aaaaaaaaaaaa-qa-review-live",
+            "code-ux-repo-aaaaaaaaaaaa-qa-review-not-yet-tracked",
+            "code-ux-repo-aaaaaaaaaaaa-old-orphan",
+          ].join("\n"),
+          stderr: "",
+          code: 0,
+        } as any;
+      }
+      if (args[0] === "volume" && args[1] === "ls" && args.includes("label=code-ux.workspace-runtime=true")) {
+        return { ok: true, stdout: "", stderr: "", code: 0 } as any;
+      }
+      if (args[0] === "volume" && args[1] === "inspect") {
+        return {
+          ok: true,
+          stdout: JSON.stringify([
+            { Name: "code-ux-repo-aaaaaaaaaaaa-qa-review-live", CreatedAt: new Date(now - 60_000).toISOString() },
+            { Name: "code-ux-repo-aaaaaaaaaaaa-qa-review-not-yet-tracked", CreatedAt: new Date(now - 60_000).toISOString() },
+            { Name: "code-ux-repo-aaaaaaaaaaaa-old-orphan", CreatedAt: new Date(now - 60 * 60_000).toISOString() },
+          ]),
+          stderr: "",
+          code: 0,
+        } as any;
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0 } as any;
+    });
+
+    const result = await new DockerAssetPruneService(sessionTracking).cleanupOnStartup();
+
+    expect(listTrackedCliSessions).toHaveBeenCalledTimes(2);
+    expect(result.prunedWorkspaceVolumes).toEqual(["code-ux-repo-aaaaaaaaaaaa-old-orphan"]);
+  });
+
   it("prunes orphaned login containers on startup", async () => {
     const sessionTracking = {
       listTrackedCliSessions: vi.fn(() => []),

@@ -15,6 +15,10 @@ Use it when you are configuring a new project, auditing inherited settings, or d
 
 Per-job caps and on-limit actions determine whether Code UX blocks, waits, warns, or continues.
 
+The system defaults allow five task-coding attempts and five CI-fix attempts per task. Both default to `BLOCK_AND_ESCALATE`, so reaching either cap stops further automated attempts and creates an intervention handoff. A cap of `0` remains unlimited.
+
+On upgrade, a persisted guardrail profile that exactly matches the former complete default (eight coding attempts and three CI-fix attempts, with every other policy unchanged) is advanced once to the new five/five defaults. Any customized policy shape is preserved, even when it intentionally uses an `8` or `3` cap.
+
 | Control Surface | Runtime Effect | Review Before Saving |
 | --- | --- | --- |
 | Settings card fields | Updates the active Settings scope after you save the page. | Confirm whether you are editing System or Project scope. |

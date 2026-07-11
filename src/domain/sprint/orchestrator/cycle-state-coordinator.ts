@@ -258,6 +258,13 @@ export class CycleStateCoordinator {
       if (!taskId) {
         continue;
       }
+      // Exhausted CI repair is represented by a dedicated human escalation
+      // containing the failed jobs and assertion evidence. A generic
+      // action_required row would duplicate that handoff and omit the details
+      // needed to repair the failure.
+      if (task.status === "BLOCKED" && task.merge_indicator === "CI") {
+        continue;
+      }
       actionTaskIds.add(taskId);
       const ownerType: ProjectAttentionOwnerType = task.intervention_owner === "AGENT" ? "worker" : "human";
       itemsToOpen.push(buildTaskAttentionPayload({
@@ -299,7 +306,12 @@ export class CycleStateCoordinator {
     }
 
     for (const taskId of knownTaskIds) {
-      if (!mergeTaskIds.has(taskId) && !ciFixTaskIds.has(taskId) && hasResolvableAttention(taskId, ["merge_required", "merge_conflict"])) {
+      // CI repair owns the task while its CI marker is active. Clear any stale
+      // merge attention even when the merge protocol still projects the task
+      // as awaiting merge; otherwise the dashboard shows a second, misleading
+      // blocker beside the real CI-fix attempt.
+      const shouldClearMergeAttention = ciFixTaskIds.has(taskId) || !mergeTaskIds.has(taskId);
+      if (shouldClearMergeAttention && hasResolvableAttention(taskId, ["merge_required", "merge_conflict"])) {
         itemsToResolve.push({
           filter: {
             projectId,
@@ -595,11 +607,17 @@ export function mapSubtaskStatusToPlanningStatus(status: Subtask["status"]): Pla
       return "in_progress";
     case "CODING_COMPLETED":
       return "coding_completed";
+    case "BLOCKED":
+      // This mapper persists state produced by the CI gate. A CI-blocked task
+      // has already finished coding; storing it as `pending` makes the next
+      // projection eligible for a fresh task_coding dispatch. Keep the durable
+      // planning row code-complete while the runtime task remains BLOCKED and
+      // the attention/guardrail state owns the intervention.
+      return "coding_completed";
     case "COMPLETED":
       return "completed";
     case "PENDING":
     case "FAILED":
-    case "BLOCKED":
     case "QUOTA":
     default:
       return "pending";

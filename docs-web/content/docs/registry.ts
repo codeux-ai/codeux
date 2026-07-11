@@ -99,6 +99,7 @@ export type DocsSlug =
   | 'architecture-ci-integration'
   | 'architecture-dashboard-architecture'
   | 'architecture-data-model'
+  | 'architecture-execution-invocation-tracking'
   | 'architecture-external-chat-providers'
   | 'architecture-configuration-resolution'
   | 'architecture-security'
@@ -788,6 +789,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Data model",
     description: "This page describes the entities Code UX persists and how they relate. The default backend is SQLite; a Postgres migration is planned but not yet shipped.",
   },
+  'architecture-execution-invocation-tracking': {
+    id: 'architecture-execution-invocation-tracking',
+    path: '/docs/architecture-execution-invocation-tracking',
+    section: 'Architecture',
+    title: "Execution invocation tracking",
+    description: "Code UX records provider work in execution_invocations and execution_invocation_messages so the dashboard can show prompt history, live agent transcripts, tool activity, token usage, and terminal status for each provi...",
+  },
   'architecture-external-chat-providers': {
     id: 'architecture-external-chat-providers',
     path: '/docs/architecture-external-chat-providers',
@@ -936,6 +944,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-ci-integration'],
   docsRegistry['architecture-dashboard-architecture'],
   docsRegistry['architecture-data-model'],
+  docsRegistry['architecture-execution-invocation-tracking'],
   docsRegistry['architecture-external-chat-providers'],
   docsRegistry['architecture-configuration-resolution'],
   docsRegistry['architecture-security'],

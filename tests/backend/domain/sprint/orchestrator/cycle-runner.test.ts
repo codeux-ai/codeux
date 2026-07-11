@@ -91,6 +91,58 @@ function buildDeps(): SprintOrchestratorDependencies {
 }
 
 describe("CycleRunner attention sync", () => {
+  it("opens a resettable human handoff when the coding guardrail is exhausted", () => {
+    const deps = buildDeps();
+    vi.mocked(deps.guardrailService!.evaluate).mockReturnValue({
+      allowed: false,
+      count: 5,
+      cap: 5,
+      action: "STOP_AND_WAIT",
+      blockedByTotalCeiling: false,
+    } as any);
+    const runner = new CycleRunner(deps);
+    const task = {
+      id: "T10",
+      record_id: "task-10",
+      title: "Finish release gate",
+      status: "PENDING",
+      session_id: "session-10",
+      provider: "codex",
+    } as any;
+
+    const blocked = (runner as any).applyTaskCodingGuardrail(task, {
+      executionContext: {
+        project: { id: "project-1" },
+        sprint: { id: "sprint-1" },
+      },
+      sprintRunId: "run-1",
+      automationLevel: "SUPERVISED",
+    });
+
+    expect(blocked).toBe(true);
+    expect(task).toMatchObject({
+      status: "BLOCKED",
+      intervention_owner: "HUMAN",
+    });
+    expect(deps.projectAttentionService!.openItems).toHaveBeenCalledWith([
+      expect.objectContaining({
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        taskId: "task-10",
+        sprintRunId: "run-1",
+        attentionType: "human_escalation_required",
+        ownerType: "human",
+        title: "Coding guardrail reached for T10",
+        payload: expect.objectContaining({
+          sourceAttentionType: "task_coding",
+          guardrailAttempts: 5,
+          guardrailCap: 5,
+          sessionId: "session-10",
+        }),
+      }),
+    ]);
+  });
+
   it("consumes duplicate resolved worker conflict signals that no longer have merge work", async () => {
     const deps = buildDeps();
     deps.projectAttentionService = {
@@ -2165,6 +2217,145 @@ describe("CycleRunner attention sync", () => {
     });
   });
 
+  it("recovers an exhausted CI guardrail into one detailed human handoff without reopening merge work", async () => {
+    const deps = buildDeps();
+    vi.mocked(deps.guardrailService!.evaluate).mockReturnValue({
+      allowed: false,
+      count: 3,
+      cap: 3,
+      action: "BLOCK_AND_ESCALATE",
+      reason: "CI fix cap reached",
+    });
+    vi.mocked(deps.sprintExecutionStateService.loadSubtasks).mockResolvedValue([{
+      id: "T1",
+      record_id: "task-1",
+      project_id: "project-1",
+      sprint_id: "sprint-1",
+      title: "Waiting task",
+      prompt: "wait for CI",
+      depends_on: [],
+      is_independent: true,
+      status: "CODING_COMPLETED",
+      is_merged: false,
+      worker_branch: "worker/T1",
+      pr_url: "https://example.com/pr/101",
+      merge_indicator: "CI",
+    }] as any);
+    deps.getCiStatusForScope = vi.fn().mockResolvedValue({
+      available: true,
+      openPullRequests: [{
+        number: 101,
+        title: "Task PR",
+        url: "https://example.com/pr/101",
+        state: "OPEN",
+        isDraft: false,
+        headRefName: "worker/T1",
+        baseRefName: "feature/sprint-1",
+        mergeStateStatus: "UNSTABLE",
+        checks: [{ name: "test", status: "completed", conclusion: "failure" }],
+        comments: 0,
+        reviewDecision: "APPROVED",
+      }],
+      ciRuns: [{
+        id: 501,
+        name: "CI",
+        workflowName: "CI",
+        status: "completed",
+        conclusion: "failure",
+        event: "pull_request",
+        headBranch: "worker/T1",
+        url: "https://example.com/runs/501",
+        failedJobs: [{
+          id: 502,
+          name: "test",
+          conclusion: "failure",
+          failedSteps: ["Run tests"],
+          logExcerpt: "AssertionError: expected true to be false",
+          logCommand: "gh run view 501 --job 502 --log-failed",
+        }],
+      }],
+      mergedPullRequests: [],
+    } as any);
+
+    const result = await new CycleRunner(deps).run({
+      action: "status",
+      automationLevel: "FULL",
+      automationInterventions: DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
+      executionContext: {
+        project: { id: "project-1", name: "Project 1" } as any,
+        sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+        sprintNumber: 1,
+        repoPath: "/repo/project-1",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/repo/project-1",
+      defaultFeatureBranch: "feature/sprint-1",
+      retryFailed: false,
+      loopSteps: {
+        loadSubtasks: true,
+        sessionSync: false,
+        statusDerivation: false,
+        startReadyTasks: false,
+        statusTable: false,
+        mergeProtocol: true,
+        actionRequiredProtocol: true,
+        watchLoopIntervalSeconds: 2,
+      } as any,
+      ciIntelligence: {
+        ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
+        enabled: true,
+        waitForJulesCiAutofix: false,
+        featurePrAutoMergeMode: "WHEN_GREEN",
+      },
+      githubMode: "REMOTE",
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      sprintRunId: "run-1",
+    });
+
+    expect(result.subtasks[0]).toMatchObject({
+      status: "BLOCKED",
+      merge_indicator: "CI",
+      intervention_owner: "HUMAN",
+    });
+    expect(deps.projectManagementRepository.updateTask).toHaveBeenCalledWith("task-1", expect.objectContaining({
+      status: "coding_completed",
+      isMerged: false,
+      mergeIndicator: "CI",
+    }));
+    expect(deps.projectAttentionService!.resolveItemsForTask).toHaveBeenCalledWith(
+      "project-1",
+      "task-1",
+      ["ci_fix_required", "merge_required"],
+      "ci_fix_guardrail_handoff_opened",
+    );
+    expect(deps.projectAttentionService!.openItems).toHaveBeenCalledWith([
+      expect.objectContaining({
+        taskId: "task-1",
+        attentionType: "human_escalation_required",
+        ownerType: "human",
+        summaryMarkdown: expect.stringContaining("AssertionError: expected true to be false"),
+        payload: expect.objectContaining({
+          sourceAttentionType: "ci_fix",
+          guardrailAttempts: 3,
+          guardrailCap: 3,
+          failedRuns: [expect.objectContaining({
+            failedJobs: [expect.objectContaining({
+              failedSteps: ["Run tests"],
+              logExcerpt: "AssertionError: expected true to be false",
+            })],
+          })],
+        }),
+      }),
+    ]);
+    const openedInputs = vi.mocked(deps.projectAttentionService!.openItems).mock.calls.flatMap(([items]) => items);
+    expect(openedInputs).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ attentionType: "merge_required" }),
+      expect.objectContaining({ attentionType: "action_required" }),
+    ]));
+  });
+
   it("does not auto-capture CI failures as short-term memory", async () => {
     const deps = buildDeps();
     const mockMemoryService = {
@@ -3870,6 +4061,28 @@ describe("CycleRunner attention sync", () => {
       expect(deps.projectManagementRepository.updateTask).toHaveBeenCalledWith("task-1", {
         status: "completed",
         isMerged: true,
+        mergeIndicator: "CI",
+      });
+    });
+
+    it("persists a CI-blocked completed task as coding-complete instead of reopening coding", async () => {
+      const deps = buildDeps();
+      const runner = new CycleRunner(deps);
+      const states = new Map();
+      states.set("T1", { id: "T1", status: "RUNNING", isMerged: false, mergeIndicator: "CI" });
+      const subtasks = [{
+        id: "T1",
+        record_id: "task-1",
+        status: "BLOCKED",
+        is_merged: false,
+        merge_indicator: "CI",
+      }] as any;
+
+      (runner as any).stateCoordinator.persistCiGateTaskStateChanges(states, subtasks);
+
+      expect(deps.projectManagementRepository.updateTask).toHaveBeenCalledWith("task-1", {
+        status: "coding_completed",
+        isMerged: false,
         mergeIndicator: "CI",
       });
     });

@@ -123,10 +123,10 @@ Checks:
 
 ### 2a. Models catalog workflow cannot push to a protected branch
 Checks:
-- The Models Catalog workflow runs on pushes to `main` and `dev`, fetches `models.dev`, and compares the result with `assets/models-dev/catalog.json`.
-- When the catalog changes, the workflow must not push directly back to `main` or `dev`; branch protection requires PR-based changes. It pushes `chore/models-catalog-<target-branch>` instead and opens or updates a PR against the branch that triggered the workflow.
+- The Models Catalog workflow runs only on pushes to `dev`, fetches `models.dev`, and compares the result with `assets/models-dev/catalog.json`. It is intentionally excluded from `main` and feature-branch pushes; the normal CI pipeline still validates every branch push.
+- When the catalog changes, the workflow must not push directly back to `dev`; branch protection requires PR-based changes. It pushes `chore/models-catalog-dev` instead and opens or updates a PR against `dev`.
 - Catalog update commits must not include `[skip ci]` or another GitHub Actions skip marker. These PRs only carry `assets/models-dev/catalog.json` changes, but the normal pull request CI still needs to run before merge.
-- If the job reports a push rejection for `refs/heads/main` or `refs/heads/dev`, the workflow is running an older definition. Re-run it after the branch includes the PR-based catalog update workflow.
+- If the job reports a push rejection for `refs/heads/dev`, the workflow is running an older definition. Re-run it after `dev` includes the PR-based catalog update workflow.
 - If PR creation fails, check the workflow token permissions include both `contents: write` and `pull-requests: write`.
 
 ### 3. API-backed tools return key setup instructions
@@ -358,7 +358,7 @@ curl http://localhost:4444/api/git-status
 ## CI And E2E Operations
 
 GitHub validation is split by signal:
-- `Code UX CI Pipeline` is the canonical automatic lane. It runs on pushes to `dev` and `main`, pull requests targeting those branches, and manual dispatches. `dev` runs jobs `01` through `08`, including all three orchestration DAG rows; `main` and manual dispatches additionally run full Playwright and release-candidate matrices.
+- `Code UX CI Pipeline` is the canonical automatic lane. It runs on pushes to every branch, pull requests targeting `dev` or `main`, and manual dispatches. Feature-branch and `dev` pushes run the core numbered jobs, including all three orchestration DAG rows; `main` pushes, `main` pull requests, and manual dispatches additionally run full Playwright and release-candidate matrices.
 - Static, build, and security are the prerequisite stage. The build job uploads `codeux-build-linux` for all downstream jobs.
 - Backend coverage, dashboard tests, npm install smoke, and the cross-OS orchestration DAG matrix reuse that build artifact and run in parallel after the prerequisite stage. Release-candidate packaging starts after package smoke and can run beside the main-only E2E matrix. Matrix bounds are `08 Orchestration` at three shards, `09 E2E` at ten shards, and `10 Release Candidate` at three shards; GitHub's runner quota queues any excess work across the parallel lanes.
 - `Playwright Diagnostics`, `Release Candidate Diagnostics`, and `Mockup Sprint Diagnostics` are manual-only workflows for focused reruns. They no longer run automatically on every PR.

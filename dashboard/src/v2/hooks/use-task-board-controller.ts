@@ -26,6 +26,7 @@ import type { AgentPreset, Sprint, Task, TaskStatus } from "../types.js";
 import { useProjectEffectiveSettings } from "./use-project-effective-settings.js";
 import { useProjectTasks } from "./use-project-tasks.js";
 import { useReducedMotion } from "./use-reduced-motion.js";
+import { useRouteProjectSelection } from "./use-route-project-selection.js";
 
 export interface TaskBoardController {
   projects: ReturnType<typeof useProjectData>["projects"];
@@ -134,14 +135,11 @@ export function useTaskBoardController(): TaskBoardController {
     return params.get("projectId")?.trim() || null;
   }, [locationSearch]);
 
-  useEffect(() => {
-    if (!routeProjectId || selectedProject?.id === routeProjectId) {
-      return;
-    }
-    void selectProject(routeProjectId);
-  }, [routeProjectId, selectedProject?.id, selectProject]);
-
-  const routeProjectReady = !routeProjectId || selectedProject?.id === routeProjectId;
+  const { routeProjectReady } = useRouteProjectSelection(
+    routeProjectId,
+    selectedProject?.id || null,
+    selectProject,
+  );
   const projectId = routeProjectReady ? selectedProject?.id || null : null;
   const {
     data: sprints,

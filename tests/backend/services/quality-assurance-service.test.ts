@@ -6,12 +6,14 @@ import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { QaReviewRepository } from "../../../src/repositories/qa-review-repository.js";
+import { ProjectAttentionRepository } from "../../../src/repositories/project-attention-repository.js";
 import { AgentPresetRepository } from "../../../src/repositories/agent-preset-repository.js";
 import { QualityAssuranceService } from "../../../src/services/quality-assurance-service.js";
 import { WorkspaceManager } from "../../../src/infrastructure/providers/cli/workspace-manager.js";
 import { StructuredProviderResponseService } from "../../../src/services/structured-provider-response-service.js";
 import { StructuredAgentRequestService } from "../../../src/services/structured-agent-request-service.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
+import { buildSprintQaSnapshot } from "../../../src/domain/qa-review/sprint-qa-snapshot.js";
 
 /** Permissive guardrail stub: QA review runs are always allowed unless a test overrides it. */
 const qaGuardrailStub = () => ({
@@ -2301,6 +2303,151 @@ describe("QualityAssuranceService", () => {
       summaryMarkdown: "Sprint QA provider timed out.",
     });
     expect(latestRun?.payload).toMatchObject({ error_code: "UNKNOWN" });
+  });
+
+  it("opens one sprint-scoped human handoff for terminal QA failure at the retry cap", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qa-service-sprint-failure-handoff-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const qaReviewRepository = new QaReviewRepository(storage);
+    const attentionRepository = new ProjectAttentionRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "QA Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      goal: "Ship safely",
+      status: "running",
+      featureBranch: "feature/sprint-1",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Initial task",
+      promptMarkdown: "Implement the initial feature.",
+      status: "completed",
+      isIndependent: true,
+      isMerged: true,
+      mergeIndicator: "MERGED",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const subtasks = [{
+      record_id: task.id,
+      project_id: project.id,
+      sprint_id: sprint.id,
+      id: "T1",
+      title: "Initial task",
+      prompt: "Implement the initial feature.",
+      depends_on: [],
+      is_independent: true,
+      status: "COMPLETED",
+      is_merged: true,
+      merge_indicator: "MERGED",
+    }] as any;
+    const taskSnapshot = buildSprintQaSnapshot(subtasks);
+
+    for (let runIndex = 1; runIndex <= 3; runIndex += 1) {
+      const run = qaReviewRepository.createRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+        sprintRunId: sprintRun.id,
+        triggerType: "sprint_completion",
+        runIndex,
+        payload: { taskSnapshot },
+      });
+      qaReviewRepository.updateRun(run.id, {
+        status: "failed",
+        summaryMarkdown: "Provider authentication failed.",
+        payload: { taskSnapshot, error_code: "AUTH_FAILURE" },
+        finishedAt: new Date().toISOString(),
+      });
+    }
+
+    const projectAttentionService = {
+      listActiveProjectItems: (projectId: string) => attentionRepository.listProjectAttentionItems(projectId, {
+        statuses: ["open", "claimed"],
+        limit: 500,
+      }),
+      openItem: (input: Parameters<ProjectAttentionRepository["openOrRefreshItem"]>[0]) => (
+        attentionRepository.openOrRefreshItem(input)
+      ),
+    };
+    const service = new QualityAssuranceService({
+      projectManagementRepository: projectRepository,
+      executionRepository,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {} as any,
+      qaReviewRepository,
+      taskService: {} as any,
+      agentPresetSyncService: {} as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        agents: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents,
+          qualityAssurance: {
+            ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+            enabled: true,
+            sprintCompletion: { enabled: true, agentPresetIds: [], agentPresetId: null },
+            maxSprintReviewRuns: 3,
+          },
+        },
+      }),
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+      projectAttentionService: projectAttentionService as any,
+    });
+
+    const firstOutcome = await service.reviewSprintCompletion({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      repoPath: dir,
+      subtasks,
+    });
+    const secondOutcome = await service.reviewSprintCompletion({
+      projectId: project.id,
+      sprintId: sprint.id,
+      // Startup recovery may replace the run while the human handoff remains
+      // active. The sprint-scoped gate must still be reused rather than
+      // bypassed or duplicated by the new run identity.
+      sprintRunId: "recovered-run-id",
+      repoPath: dir,
+      subtasks,
+    });
+
+    expect(firstOutcome).toMatchObject({ blockedCompletion: true, mergeBlocked: true });
+    expect(secondOutcome).toMatchObject({ blockedCompletion: true, mergeBlocked: true });
+    const activeItems = attentionRepository.listProjectAttentionItems(project.id, {
+      statuses: ["open", "claimed"],
+    });
+    expect(activeItems).toHaveLength(1);
+    expect(activeItems[0]).toMatchObject({
+      sprintId: sprint.id,
+      sprintRunId: null,
+      taskId: null,
+      attentionType: "human_escalation_required",
+      ownerType: "human",
+      payload: {
+        sourceAttentionType: "qa_review",
+        qaScope: "sprint",
+        qaReason: "terminal_review_failure",
+        attempts: 3,
+        maxAttempts: 3,
+        lastProviderError: "Provider authentication failed.",
+        lastProviderErrorCode: "AUTH_FAILURE",
+        sprintRunId: sprintRun.id,
+      },
+    });
   });
 
   it("marks a shutdown-interrupted task QA review as cancelled instead of failed", async () => {

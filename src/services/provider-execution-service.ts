@@ -4,7 +4,8 @@ import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import { resolveAgentMcpRuntime } from "./agent-mcp-access.js";
 import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
-import type { SkillService, PersistentSkillStorageRuntime } from "./skill-service.js";
+import type { SkillService } from "./skill-service.js";
+import { resolvePersistentSkillContext } from "./persistent-skill-context.js";
 import type { ProviderInvocationPurpose } from "../contracts/execution-types.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
@@ -13,7 +14,10 @@ import type { SnapshotCheckout } from "../infrastructure/providers/cli/workspace
 import type { InvocationWorkspaceGitPolicy } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import type { CliProviderId } from "../infrastructure/providers/cli/provider-command-specs.js";
 import type { ParsedConversationTurn, ProviderUsageTelemetry } from "../infrastructure/providers/cli/provider-usage.js";
-import type { AppendExecutionInvocationMessageInput } from "../contracts/invocation-types.js";
+import type {
+  AppendExecutionInvocationMessageInput,
+  ExecutionInvocationMessageRecord,
+} from "../contracts/invocation-types.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { getCorrelationId } from "../shared/logging/correlation-id.js";
 import type { ProviderConcurrencyService } from "./provider-concurrency-service.js";
@@ -46,7 +50,9 @@ function buildPersistedInvocationMessages(
   trackPromptInInvocation: boolean | undefined,
 ): AppendExecutionInvocationMessageInput[] {
   if (conversation && conversation.length > 0) {
-    return conversation.map((turn) => conversationTurnToMessage(turn, provider, model));
+    return conversation
+      .filter((turn) => trackPromptInInvocation !== false || turn.kind !== "user")
+      .map((turn) => conversationTurnToMessage(turn, provider, model));
   }
 
   const messages: AppendExecutionInvocationMessageInput[] = [];
@@ -69,11 +75,40 @@ function persistInvocationMessages(
   executionRepository: ExecutionRepository,
   execInvocationId: string,
   messages: AppendExecutionInvocationMessageInput[],
+  trackPromptInInvocation: boolean | undefined,
 ): void {
+  const existingMessages = typeof executionRepository.listExecutionInvocationMessages === "function"
+    ? executionRepository.listExecutionInvocationMessages(execInvocationId)
+    : [];
+  const preservedMessages = existingMessages
+    .filter((message) => shouldPreserveInvocationMessage(message, trackPromptInInvocation))
+    .map(toAppendInvocationMessageInput);
+
   executionRepository.clearExecutionInvocationMessages?.(execInvocationId);
-  for (const message of messages) {
+  for (const message of [...preservedMessages, ...messages]) {
     executionRepository.appendExecutionInvocationMessage?.(execInvocationId, message);
   }
+}
+
+function shouldPreserveInvocationMessage(
+  message: ExecutionInvocationMessageRecord,
+  trackPromptInInvocation: boolean | undefined,
+): boolean {
+  if (message.role === "system") {
+    return message.metadata?.kind !== "injected_context";
+  }
+  return trackPromptInInvocation === false && message.role === "user";
+}
+
+function toAppendInvocationMessageInput(
+  message: ExecutionInvocationMessageRecord,
+): AppendExecutionInvocationMessageInput {
+  return {
+    role: message.role,
+    contentMarkdown: message.contentMarkdown,
+    ...(message.toolCallsJson ? { toolCallsJson: message.toolCallsJson } : {}),
+    ...(message.metadata ? { metadata: message.metadata } : {}),
+  };
 }
 
 function buildUsageTelemetrySignature(telemetry: ProviderUsageTelemetry): string {
@@ -138,6 +173,8 @@ export interface ExecutionProviderRunArgs {
 
   provider: CliProviderId;
   maxConcurrentTasks?: number;
+  /** Maximum time to wait for a provider slot before failing the invocation. */
+  concurrencyWaitTimeoutMs?: number;
   prompt: string;
   cwd?: string;
   model: string;
@@ -229,8 +266,14 @@ export class ProviderExecutionService {
 
   async executeProvider(args: ExecutionProviderRunArgs): Promise<ProviderRunResult> {
     let execInvocationId: string | null = args.invocationId || null;
+    let lastPersistedMessagesSignature: string | null = null;
     const effectiveModel = resolveEffectiveModel(args);
-    const persistentSkillRuntime = await this.resolvePersistentSkillRuntime(args);
+    const persistentSkillContext = await resolvePersistentSkillContext({
+      projectId: args.projectId,
+      agentPresetId: args.mcpAgentId,
+      prompt: args.prompt,
+    }, this.deps);
+    const persistentSkillRuntime = persistentSkillContext.runtime;
     const codeUxMcpEnabled = args.agentMcpAccess?.codeUxEnabled === true;
     const baseMcpConnection = args.mcpConnection
       ?? (persistentSkillRuntime || codeUxMcpEnabled ? this.deps.getMcpConnectionInfo?.() ?? null : null);
@@ -261,7 +304,6 @@ export class ProviderExecutionService {
       // a guard a single long run rewrites the same rows dozens of times, and concurrent sprints
       // multiply it. Track a cheap signature of what we last persisted and skip the rewrite when the
       // conversation hasn't changed since the previous tick.
-      let lastPersistedMessagesSignature: string | null = null;
       let lastPersistedUsageSignature: string | null = null;
 
       if (!execInvocationId) {
@@ -323,7 +365,8 @@ export class ProviderExecutionService {
           args.provider as ProviderId,
           limit,
           usageInput,
-          args.signal
+          args.signal,
+          args.concurrencyWaitTimeoutMs,
         );
       } else {
         // Fallback for cases where ProviderConcurrencyService is not provided, 
@@ -454,7 +497,12 @@ export class ProviderExecutionService {
               const signature = JSON.stringify(messages);
 
               if (signature !== lastPersistedMessagesSignature) {
-                persistInvocationMessages(this.deps.executionRepository, execInvocationId, messages);
+                persistInvocationMessages(
+                  this.deps.executionRepository,
+                  execInvocationId,
+                  messages,
+                  args.trackPromptInInvocation,
+                );
                 lastPersistedMessagesSignature = signature;
               }
             }
@@ -471,7 +519,12 @@ export class ProviderExecutionService {
           const wasCancelled = isRuntimeShutdownInProgress() || Boolean(args.signal?.aborted);
           const preserveForStartupRecovery = isServerShutdownAbort(args.signal)
             || isRestartInterruptedDockerInvocation(error, args);
-          if (invocation && this.deps.executionRepository && !preserveForStartupRecovery) {
+          if (
+            invocation
+            && this.deps.executionRepository
+            && !preserveForStartupRecovery
+            && this.isProviderInvocationStillRunning(invocation.id)
+          ) {
             const finishedAt = new Date().toISOString();
             const durationMs = Date.now() - startedMs;
             this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
@@ -568,9 +621,7 @@ export class ProviderExecutionService {
       return result;
     };
 
-    const initialPrompt = persistentSkillRuntime
-      ? `${args.prompt}\n\n${persistentSkillRuntime.instructionMarkdown}`
-      : args.prompt;
+    const initialPrompt = persistentSkillContext.prompt;
     let currentPrompt = initialPrompt;
     let providerResult: ProviderRunResult;
     let usedReadFileRetry = false;
@@ -627,8 +678,15 @@ export class ProviderExecutionService {
                 providerResult.usageTelemetry.transcriptText,
                 args.trackPromptInInvocation,
               );
-              if (this.deps.executionRepository) {
-                persistInvocationMessages(this.deps.executionRepository, execInvocationId, messages);
+              const signature = JSON.stringify(messages);
+              if (this.deps.executionRepository && signature !== lastPersistedMessagesSignature) {
+                persistInvocationMessages(
+                  this.deps.executionRepository,
+                  execInvocationId,
+                  messages,
+                  args.trackPromptInInvocation,
+                );
+                lastPersistedMessagesSignature = signature;
               }
             } else {
               const fallbackText = args.expectTextOutput
@@ -773,30 +831,6 @@ export class ProviderExecutionService {
         }
       }
       return providerResult;
-    }
-  }
-
-  private async resolvePersistentSkillRuntime(args: ExecutionProviderRunArgs): Promise<PersistentSkillStorageRuntime | null> {
-    if (!args.projectId || !args.mcpAgentId || !this.deps.skillService || !this.deps.agentPresetRepository) {
-      return null;
-    }
-    const agent = this.deps.agentPresetRepository.getAgentPreset(args.mcpAgentId);
-    if (!agent || agent.projectId !== args.projectId || !agent.persistentSkillStorage?.enabled) {
-      return null;
-    }
-    try {
-      return await this.deps.skillService.resolvePersistentSkillStorageRuntime({
-        projectId: args.projectId,
-        agentPresetId: agent.id,
-        enabled: true,
-      });
-    } catch (error) {
-      this.deps.logger?.warn("Failed to resolve persistent skill storage runtime", {
-        projectId: args.projectId,
-        agentPresetId: args.mcpAgentId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return null;
     }
   }
 

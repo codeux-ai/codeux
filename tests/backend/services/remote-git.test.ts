@@ -18,7 +18,7 @@ describe("GitStatusService - Remote Git", () => {
           ok: true,
           stdout: JSON.stringify([{ number: 11, headRefName: "task/one", baseRefName: "feature/sprint1-implementation", comments: { totalCount: 2 }, statusCheckRollup: [] }]),
         },
-        "gh run list --limit 50 --json databaseId,name,workflowName,status,conclusion,event,headBranch,url,updatedAt": {
+        "gh run list --limit 50 --json databaseId,name,workflowName,status,conclusion,event,headBranch,headSha,url,updatedAt": {
           ok: true,
           stdout: JSON.stringify([{ databaseId: 101, headBranch: "feature/sprint1-implementation" }, { databaseId: 103, headBranch: "task/one" }]),
         },

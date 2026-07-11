@@ -19,6 +19,23 @@ import {
 import { extractJsonContainer } from "./provider-logs/usage-parse-utils.js";
 import { IDockerRunner } from "./docker-runner.js";
 
+function recoverJsonObjectRecords(value: string): Record<string, unknown>[] {
+  const records: Record<string, unknown>[] = [];
+  let cursor = 0;
+  while (cursor < value.length) {
+    const objectStart = value.indexOf("{", cursor);
+    if (objectStart < 0) break;
+    const parsed = extractJsonContainer<Record<string, unknown>>(value.slice(objectStart), "object");
+    if (parsed.ok) {
+      records.push(parsed.value);
+      cursor = objectStart + parsed.endIndex;
+    } else {
+      cursor = objectStart + 1;
+    }
+  }
+  return records;
+}
+
 export async function readQwenLogData(
     cwd: string,
     executionMode: CliWorkflowSettings["executionMode"],
@@ -31,17 +48,16 @@ export async function readQwenLogData(
       const arrayJson = await dockerRunner.readWorkspaceJsonArray?.(cwd, CONTAINER_QWEN_OPENAI_LOG_DIR).catch(() => null);
       if (!arrayJson) return null;
       const parsed = extractJsonContainer<unknown[]>(arrayJson, "array");
-      if (!parsed.ok) {
-        return null;
-      }
-      records = parsed.value;
+      records = parsed.ok
+        ? parsed.value
+        : (arrayJson.includes("[") ? recoverJsonObjectRecords(arrayJson) : []);
     } else {
       records = await readQwenOpenAiLogRecords(resolveQwenHostLogDir(sessionId), startTimeMs);
     }
     if (records.length === 0) {
       return null;
     }
-    return { usage: sumQwenOpenAiUsage(records), conversation: buildQwenConversation(records) };
+    return { usage: sumQwenOpenAiUsage(records, startTimeMs), conversation: buildQwenConversation(records, startTimeMs) };
 }
 
 export async function readCodexLatestSessionJson(
@@ -92,18 +108,21 @@ export async function readClaudeSessionJsonl(
     executionMode: CliWorkflowSettings["executionMode"],
     dockerRunner: Pick<IDockerRunner, "readWorkspaceFile">
   ): Promise<string | null> {
-    if (executionMode !== "DOCKER") {
-      return null;
+    if (executionMode === "DOCKER") {
+      const sessionPath = pathPosix.join(
+        CONTAINER_RUNTIME_HOME,
+        ".claude",
+        "projects",
+        CONTAINER_WORKSPACE_ROOT.replaceAll(pathPosix.sep, "-"),
+        `${nativeSessionId}.jsonl`,
+      );
+      return (await dockerRunner.readWorkspaceFile?.(cwd, sessionPath).catch(() => null)) || null;
     }
 
-    const sessionPath = pathPosix.join(
-      CONTAINER_RUNTIME_HOME,
-      ".claude",
-      "projects",
-      CONTAINER_WORKSPACE_ROOT.replaceAll(pathPosix.sep, "-"),
-      `${nativeSessionId}.jsonl`,
-    );
-    return (await dockerRunner.readWorkspaceFile?.(cwd, sessionPath).catch(() => null)) || null;
+    const slug = cwd.replace(/[/\\:]/g, "-");
+    const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
+    const sessionPath = path.join(homeDir, ".claude", "projects", slug, `${nativeSessionId}.jsonl`);
+    return (await fs.readFile(sessionPath, "utf8").catch(() => null)) || null;
 }
 
 export async function parseAntigravityConversationId(

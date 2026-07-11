@@ -21,6 +21,61 @@ import {
 } from "../services/settings-resolution-service.js";
 import { DEFAULT_VIRTUAL_WORKER_MODELS } from "./settings-defaults.js";
 
+const LEGACY_DEFAULT_GUARDRAIL_SHAPE = {
+  enabled: true,
+  perTaskTotalCeiling: 0,
+  jobs: {
+    task_coding: { cap: 8, onLimit: "BLOCK_AND_ESCALATE" },
+    ci_fix: { cap: 3, onLimit: "BLOCK_AND_ESCALATE" },
+    merge_conflict: { cap: 5, onLimit: "BLOCK_AND_ESCALATE" },
+    clarification_reply: { cap: 3, onLimit: "STOP_AND_WAIT" },
+    planning: { cap: 5, onLimit: "BLOCK_AND_ESCALATE" },
+    remediation: { cap: 2, onLimit: "BLOCK_AND_ESCALATE" },
+  },
+} as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function matchesLegacyDefaultGuardrails(value: unknown): boolean {
+  if (!isRecord(value) || !isRecord(value.jobs)) {
+    return false;
+  }
+  const expected = LEGACY_DEFAULT_GUARDRAIL_SHAPE;
+  if (value.enabled !== expected.enabled || value.perTaskTotalCeiling !== expected.perTaskTotalCeiling) {
+    return false;
+  }
+  const jobs = value.jobs;
+  return Object.entries(expected.jobs).every(([purpose, expectedPolicy]) => {
+    const policy = jobs[purpose];
+    return isRecord(policy)
+      && policy.cap === expectedPolicy.cap
+      && policy.onLimit === expectedPolicy.onLimit;
+  });
+}
+
+/**
+ * Advances only the complete, historical default guardrail profile. Matching
+ * every policy protects intentional custom values (including a deliberate 8
+ * or 3) from being rewritten during startup.
+ */
+function migrateLegacyDefaultAttemptCaps(value: unknown): boolean {
+  if (!isRecord(value) || !isRecord(value.defaults) || !matchesLegacyDefaultGuardrails(value.defaults.guardrails)) {
+    return false;
+  }
+  const guardrails = value.defaults.guardrails as Record<string, unknown>;
+  const jobs = guardrails.jobs as Record<string, Record<string, unknown>>;
+  jobs.task_coding.cap = 5;
+  jobs.ci_fix.cap = 5;
+
+  const ciIntelligence = value.defaults.ciIntelligence;
+  if (isRecord(ciIntelligence) && ciIntelligence.julesCiAutofixMaxRetries === 3) {
+    ciIntelligence.julesCiAutofixMaxRetries = 5;
+  }
+  return true;
+}
+
 export class SettingsRepository {
   private static systemSettingsCache: SystemSettings | null = null;
   private static hasMigratedLegacySettings = false;
@@ -53,7 +108,16 @@ export class SettingsRepository {
     }
 
     try {
-      SettingsRepository.systemSettingsCache = sanitizeSystemSettings(JSON.parse(payload), this.externalHints);
+      const parsed = JSON.parse(payload) as unknown;
+      if (migrateLegacyDefaultAttemptCaps(parsed)) {
+        this.storage.writeSystemPayload(JSON.stringify(parsed));
+        // Other repository/scoped-resolver instances may already have resolved
+        // the historical defaults during startup. Advance the shared revision
+        // so they cannot keep serving 8/3 after the persisted migration wrote
+        // the new 5/5 profile.
+        this.invalidateResolutionCache();
+      }
+      SettingsRepository.systemSettingsCache = sanitizeSystemSettings(parsed, this.externalHints);
       return SettingsRepository.systemSettingsCache;
     } catch {
       SettingsRepository.systemSettingsCache = buildDefaultSystemSettings(this.externalHints);

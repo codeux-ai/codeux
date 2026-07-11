@@ -171,6 +171,7 @@ export function createSprintDependencies(
     structuredAgentRequestService,
     dockerService: new DockerService(),
     sprintRunLifecycleService: coreDeps.sprintRunLifecycleService,
+    projectAttentionService,
   });
 
   const workerTaskDispatchService = new WorkerTaskDispatchService(
