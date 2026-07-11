@@ -50,6 +50,7 @@ import type { ProjectSetupService } from "../services/project-setup-service.js";
 import type { SprintIssueService } from "../services/sprint-issue-service.js";
 import type { QuicksprintService } from "../services/quicksprint-service.js";
 import type { SchedulerService } from "../services/scheduler-service.js";
+import type { Logger } from "../shared/logging/logger.js";
 import type { CreateProjectInput, ProjectSummary } from "../contracts/project-management-types.js";
 import { initializeProject } from "../domain/projects/project-initializer.js";
 import { prepareGitProjectCreateInput } from "../services/project-git-clone-service.js";
@@ -95,6 +96,7 @@ export interface ManagementToolHandlerDeps {
   sprintIssueService: SprintIssueService;
   quicksprintService?: LateBoundOrValue<QuicksprintService>;
   schedulerService?: LateBoundOrValue<SchedulerService>;
+  logger?: Logger;
   workerTaskDispatchService?: WorkerTaskDispatchService;
 }
 
@@ -133,6 +135,9 @@ export class ManagementToolHandler {
       this.sprintActions = new SprintActions({
         ...this.deps,
         planningAgentService: resolveLateBoundDependency(this.deps.planningAgentService),
+        schedulerService: this.deps.schedulerService
+          ? resolveLateBoundDependency(this.deps.schedulerService)
+          : undefined,
       });
     }
     return this.sprintActions;

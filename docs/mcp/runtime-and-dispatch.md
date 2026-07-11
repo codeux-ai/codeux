@@ -89,6 +89,14 @@ MCP tool calls are wrapped in a correlation scope before dispatch.
 
 This allows all log lines emitted during a tool call to share a single `correlationId`.
 
+## Request-Scoped Agent And Thread Context
+
+Dashboard chat reply turns clone the base Code UX MCP connection and attach the active `threadId` only to that turn. Provider configuration emits the originating thread as the internal `X-Code-Ux-Thread` header on the built-in Code UX MCP connection; non-chat provider runs omit it, and custom MCP servers never receive it. The HTTP gateway validates the header with the same single-value identifier rules used for MCP agent and session headers.
+
+The MCP gateway stores the resolved agent and thread identities in request-scoped `AsyncLocalStorage`. A direct `manage_sprints` `plan` call captures both identities before returning its immediate acknowledgement, so its detached planning continuation can target a completion or failure `agent_wakeup` to the originating dashboard thread after the planning promise settles. This header and context propagation are internal runtime architecture, not public MCP tool arguments.
+
+Standalone MCP clients do not have this dashboard thread context. Their background planning still continues server-side, but no chat wakeup is queued; those clients poll sprint/task management or telemetry state for completion.
+
 ## Dispatch Layers
 
 - Typed registry layer: `src/api/mcp/tool-registry.ts`
@@ -145,7 +153,7 @@ Agent-scoped provider runs are default-deny for built-in Code UX tools. Missing,
 
 The built-in `Worker` and `Project manager` agents still seed the `playwright` custom MCP server where that link is intended, but this custom-server default no longer implies built-in Code UX tool access. Generated task-coding roster agents created by Project Setup use the same custom-server-only default when they are first created. Planning, QA, setup, clarification, CI-fix, merge-conflict, and other non-chat agents do not receive scheduler or management Code UX tools unless their preset explicitly enables them. When Code UX is enabled from the agent MCP manager for a non-dashboard agent, the generated default keeps the restricted `scheduler_code_ux` tool explicitly disabled until the user enables it.
 
-The dashboard chat reply route has one narrow exception. Every assigned dashboard reply agent receives the full built-in Code UX MCP surface, `scheduler_code_ux`, `add_long_term_memory`, and the default Playwright MCP server by default, even when the selected reply preset has Code UX disabled or no saved MCP policy. The provider run still receives the selected agent's linked custom MCP servers, adds the Playwright link once, and sends the assigned agent id through `X-Code-Ux-Agent`; the MCP router recognizes the assigned dashboard reply agent and applies this route-local full-access default. When the preset explicitly enables Code UX access with narrower saved tool choices, the router preserves those saved choices and forces the self-wakeup and direct long-term-memory lanes on for dashboard replies.
+The dashboard chat reply route has one narrow exception. Every assigned dashboard reply agent receives the full built-in Code UX MCP surface, `scheduler_code_ux`, `add_long_term_memory`, and the default Playwright MCP server by default, even when the selected reply preset has Code UX disabled or no saved MCP policy. The provider run still receives the selected agent's linked custom MCP servers, adds the Playwright link once, and sends the assigned agent id through `X-Code-Ux-Agent`; the MCP router recognizes the assigned dashboard reply agent and applies this route-local full-access default. Its per-turn built-in Code UX connection also sends `X-Code-Ux-Thread`, which the HTTP gateway exposes as validated request context for the originating dashboard thread without changing global connection state or custom MCP server headers. When the preset explicitly enables Code UX access with narrower saved tool choices, the router preserves those saved choices and forces the self-wakeup and direct long-term-memory lanes on for dashboard replies.
 
 ## Internal Test Provider
 

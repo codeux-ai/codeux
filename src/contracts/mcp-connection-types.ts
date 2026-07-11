@@ -6,4 +6,9 @@ export interface McpConnectionInfo {
    * so per-agent code_ux tool toggles can be enforced for this run.
    */
   agentId?: string;
+  /**
+   * Dashboard chat thread id advertised only for the active reply turn (via the
+   * X-Code-Ux-Thread header) so MCP handlers can recover the originating thread.
+   */
+  threadId?: string;
 }

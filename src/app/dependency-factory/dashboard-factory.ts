@@ -127,6 +127,7 @@ export function createDashboardDependencies(
     sprintIssueService: coreDeps.sprintIssueService,
     quicksprintService: quicksprintServiceRef,
     schedulerService: schedulerServiceRef,
+    logger: logger.child({ component: "mcp-management-tool-handler" }),
   });
 
   const providerExecutionService = new ProviderExecutionService({

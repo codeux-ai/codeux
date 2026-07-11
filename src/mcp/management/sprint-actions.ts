@@ -15,6 +15,9 @@ import type {
 } from "../../contracts/project-management-types.js";
 import type { PlanningAgentService } from "../../services/planning-agent-service.js";
 import type { IssueSearchInput, SprintIssueService } from "../../services/sprint-issue-service.js";
+import type { SchedulerService } from "../../services/scheduler-service.js";
+import type { Logger } from "../../shared/logging/logger.js";
+import { getCurrentMcpAgentId, getCurrentMcpThreadId } from "../../server/mcp-agent-context.js";
 import { mergePromptWithLinkedIssues } from "../../services/linked-issue-prompt-markdown.js";
 import {
   parseOptionalEnumStrict,
@@ -275,6 +278,8 @@ export interface SprintActionsDeps {
   executionRepository: ExecutionRepository;
   planningAgentService: PlanningAgentService;
   sprintIssueService: SprintIssueService;
+  schedulerService?: Pick<SchedulerService, "createEntry">;
+  logger?: Logger;
 }
 
 export class SprintActions {
@@ -446,11 +451,86 @@ export class SprintActions {
           overrides: payload.overrides as PlanningOverrides | undefined,
         };
 
-        const result = await this.deps.planningAgentService.planSprint(projectId, sprintId, options);
-        return { result };
+        const agentId = getCurrentMcpAgentId();
+        const threadId = getCurrentMcpThreadId();
+        const planning = this.deps.planningAgentService.startPlanSprint(projectId, sprintId, options);
+        void planning.then(
+          (result) => this.queuePlanningWakeup({
+            projectId,
+            sprintId,
+            agentId,
+            threadId,
+            bodyMarkdown: [
+              `Planning completed for sprint ${sprintId} with ${result.createdTaskIds.length} task(s).`,
+              "Review the generated tasks and provide a concise recap that includes the task count and whether execution started.",
+              `Execution started: ${result.started ? "yes" : "no"}.`,
+            ].join(" "),
+          }),
+          (error) => this.queuePlanningWakeup({
+            projectId,
+            sprintId,
+            agentId,
+            threadId,
+            bodyMarkdown: `Planning failed for sprint ${sprintId}: ${error instanceof Error ? error.message : String(error)}. Provide the user with a concise failure recap.`,
+          }),
+        ).catch((error) => {
+          this.deps.logger?.error("Failed to queue MCP planning wakeup", {
+            projectId,
+            sprintId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+
+        return {
+          result: {
+            status: "started",
+            message: "Sprint planning started in the background. You will be notified when it completes or fails.",
+            projectId,
+            sprintId,
+          },
+        };
       }
       default:
         throw new Error(`Unknown action: ${action}`);
     }
+  }
+
+  private queuePlanningWakeup(args: {
+    projectId: string;
+    sprintId: string;
+    agentId: string | null;
+    threadId: string | null;
+    bodyMarkdown: string;
+  }): void {
+    if (!this.deps.schedulerService) {
+      this.deps.logger?.warn("Skipping MCP planning wakeup because scheduler service is unavailable", {
+        projectId: args.projectId,
+        sprintId: args.sprintId,
+      });
+      return;
+    }
+    if (!args.agentId || !args.threadId) {
+      this.deps.logger?.warn("Skipping MCP planning wakeup because agent or thread context is unavailable", {
+        projectId: args.projectId,
+        sprintId: args.sprintId,
+        hasAgentId: Boolean(args.agentId),
+        hasThreadId: Boolean(args.threadId),
+      });
+      return;
+    }
+
+    this.deps.schedulerService.createEntry(args.projectId, {
+      title: "Sprint planning update",
+      targetType: "agent_wakeup",
+      scheduledFor: new Date().toISOString(),
+      recurrence: { frequency: "none", interval: 1, endMode: "never" },
+      agentWakeupTarget: {
+        bodyMarkdown: args.bodyMarkdown,
+        threadId: args.threadId,
+        origin: "agent_scheduler",
+        source: "agent_scheduler",
+        createdByAgentId: args.agentId,
+      },
+    });
   }
 }

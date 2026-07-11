@@ -54,6 +54,7 @@ export function createMcpDependencies(
     sprintIssueService: coreDeps.sprintIssueService,
     quicksprintService: dashboardDeps.quicksprintService,
     schedulerService: dashboardDeps.schedulerService,
+    logger: coreDeps.logger.child({ component: "mcp-management-tool-handler" }),
     workerTaskDispatchService: sprintDeps.workerTaskDispatchService,
   });
 

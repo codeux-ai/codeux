@@ -37,6 +37,26 @@ describe("PlanningAgentService", () => {
       .mockResolvedValue("## Category: Patterns\n- prefer consistent planning context\n");
   });
 
+  it("throws background-start precondition errors synchronously before launching planning", () => {
+    const projectManagementRepository = {
+      getProject: vi.fn().mockReturnValue({ id: "p1", name: "Project", baseDir: "/tmp/project" }),
+      getSprint: vi.fn().mockReturnValue({ id: "s1", projectId: "p1", name: "Sprint", goal: "Goal" }),
+      listTasks: vi.fn().mockReturnValue([{ id: "task-1" }]),
+    } as unknown as ProjectManagementRepository;
+    const service = new PlanningAgentService({
+      projectManagementRepository,
+      connectionChatRepository: {} as ConnectionChatRepository,
+      settingsRepository: {} as SettingsRepository,
+      agentPresetSyncService: {} as AgentPresetSyncService,
+      executionControlService: { orchestrateSprint: vi.fn() } as any,
+    });
+    const planSpy = vi.spyOn(service, "planSprint");
+
+    expect(() => service.startPlanSprint("p1", "s1", { autoStart: false }))
+      .toThrow("Sprint Sprint already has 1 task(s)");
+    expect(planSpy).not.toHaveBeenCalled();
+  });
+
   it("uses the Planning agent reply to improve prompts and create tasks", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-agent-"));
     tempDirs.push(dir);

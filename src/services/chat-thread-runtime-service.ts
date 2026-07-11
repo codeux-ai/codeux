@@ -1247,7 +1247,10 @@ export class ChatThreadRuntimeService {
 
     let promptContent = "";
     let continueSessionId: string | null = null;
-    const mcpConnection = this.deps.getMcpConnectionInfo?.() ?? null;
+    const baseMcpConnection = this.deps.getMcpConnectionInfo?.() ?? null;
+    const mcpConnection = baseMcpConnection
+      ? { ...baseMcpConnection, threadId: thread.id }
+      : null;
 
     const allMessages = this.deps.connectionChatRepository.listMessages(thread.id) ?? [];
     const suppressRichWidgets = isChatProviderSourcedThread(thread, allMessages, latestMessage);

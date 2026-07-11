@@ -741,6 +741,29 @@ For sprint create/update calls:
 - `linkedIssues` can include imported issue body and conversation markdown. Sprint create merges that context into the goal under `## Linked Issues`; sprint update does the same when a replacement goal is provided. Prompt-only issue body and conversation content are not stored in linked issue repository rows.
 - Missing or blank `projectId`, `sprintId`, `sprintRunId`, `name`, and `title` values are rejected before repository calls so MCP clients receive a validation error instead of a low-level `.trim()` failure.
 
+### `manage_sprints plan`
+
+The direct MCP `manage_sprints` call with `action: "plan"` validates the project, sprint, and existing-task/replan preconditions synchronously, starts planning server-side, and returns this stable acknowledgement immediately:
+
+```json
+{
+  "result": {
+    "status": "started",
+    "message": "Sprint planning started in the background. You will be notified when it completes or fails.",
+    "projectId": "project-123",
+    "sprintId": "sprint-123"
+  }
+}
+```
+
+The stable result fields are `status`, `message`, `projectId`, and `sprintId`. The acknowledgement means only that background planning started after synchronous validation. It does not mean tasks already exist, planning self-reflection has finished, or optional `autoStart` has completed.
+
+When the call originates from an MCP-backed dashboard chat turn, Code UX captures the originating agent and thread before the background promise settles. Successful completion then persists an existing due-now, non-recurring `agent_wakeup` targeted to that thread. The scheduler delivers the wakeup through the normal chat-agent path and asks the agent to review the generated tasks, recap their count, and state whether execution actually started. If planning fails, Code UX queues the same kind of same-thread wakeup with the failure reason and asks the agent to provide a concise failure recap.
+
+Standalone MCP clients have no originating dashboard chat-thread context, so they receive the same immediate acknowledgement without a completion wakeup. They should poll with `manage_sprints` and `manage_tasks`, or inspect the relevant `manage_telemetry` sprint-run, task-dispatch, and invocation state, to determine when planning and any requested auto-start work have completed.
+
+This asynchronous response applies only to the direct MCP `manage_sprints` `plan` action. `import_issues` with `planAfterImport`, dashboard planning routes, scheduled sprint planning, quicksprints, and internal callers continue to await planning completion.
+
 ### `manage_sprints import_issues`
 
 `manage_sprints` action `import_issues` is the MCP contract for GitHub, GitLab, Jira, Notion, Asana, Linear, Miro, Lucid, Figma/FigJam, and Mural importer access. Internal MCP clients use it for search-only discovery, assigned-work searches, explicit ticket or external-object imports, linked sprint issue attachment, and optional planning after import.
