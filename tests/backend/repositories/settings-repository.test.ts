@@ -216,6 +216,49 @@ describe("SettingsRepository", () => {
     expect(preserved.defaults.ciIntelligence.julesCiAutofixMaxRetries).toBe(3);
   });
 
+  it("rewrites removed local transcription models in every persisted settings scope", async () => {
+    const { repo } = await createRepo();
+    const db = repo.getDatabase();
+    const now = new Date().toISOString();
+    const removedModelId = ["Xenova", ["wav2", "vec2-base-960h"].join("")].join("/");
+    const system = repo.getSystemSettings();
+
+    db.prepare(`
+      INSERT INTO system_settings (id, payload, updated_at)
+      VALUES (1, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at
+    `).run(JSON.stringify({
+      ...system,
+      defaults: {
+        ...system.defaults,
+        speech: { ...system.defaults.speech, localModelId: removedModelId },
+      },
+    }), now);
+    db.prepare(`
+      INSERT INTO project_settings (project_id, payload, updated_at)
+      VALUES (?, ?, ?)
+    `).run("project-speech-migration", JSON.stringify({ speech: { localModelId: removedModelId } }), now);
+    db.prepare(`
+      INSERT INTO sprint_settings (sprint_id, payload, updated_at)
+      VALUES (?, ?, ?)
+    `).run("sprint-speech-migration", JSON.stringify({ speech: { localModelId: removedModelId } }), now);
+    (SettingsRepository as any).systemSettingsCache = null;
+
+    expect(repo.getSystemSettings().defaults.speech.localModelId).toBe("onnx-community/whisper-base.en");
+    expect(repo.getProjectSettings("project-speech-migration").speech?.localModelId).toBe("onnx-community/whisper-base.en");
+    expect(repo.getSprintSettings("sprint-speech-migration").speech?.localModelId).toBe("onnx-community/whisper-base.en");
+
+    const persistedRows = [
+      db.prepare("SELECT payload FROM system_settings WHERE id = 1").get(),
+      db.prepare("SELECT payload FROM project_settings WHERE project_id = ?").get("project-speech-migration"),
+      db.prepare("SELECT payload FROM sprint_settings WHERE sprint_id = ?").get("sprint-speech-migration"),
+    ] as Array<{ payload: string }>;
+    for (const { payload } of persistedRows) {
+      expect(payload).not.toContain(removedModelId);
+      expect(payload).toContain("onnx-community/whisper-base.en");
+    }
+  });
+
   it("persists system settings and resolves project/sprint overrides", async () => {
     const { repo, dbPath } = await createRepo();
 

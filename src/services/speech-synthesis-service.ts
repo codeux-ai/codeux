@@ -118,7 +118,12 @@ export class SpeechSynthesisService {
   }
 
   private async synthesizeLocal(text: string, requestedVoice: string | null | undefined, settings: SpeechSettings): Promise<SpeechSynthesisResult> {
-    const model = resolveSpeechModelEntry(settings.synthesis.localModelId);
+    let model: ReturnType<typeof resolveSpeechModelEntry>;
+    try {
+      model = resolveSpeechModelEntry(settings.synthesis.localModelId);
+    } catch {
+      return failure("client_error", `Unknown local TTS model "${settings.synthesis.localModelId}".`, "local_onnx");
+    }
     if (model.kind !== "synthesis") return failure("client_error", `Model "${model.id}" is not a text-to-speech model.`, "local_onnx");
     if (!await isSpeechModelAvailable(model.id, this.deps.dataDir)) {
       return failure("missing_local_model", `TTS model "${model.id}" is not installed.`, "local_onnx");

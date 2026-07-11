@@ -1,6 +1,11 @@
 import type { DownloadableModelLicense } from "./model-license-types.js";
 
 export const SPEECH_PROVIDER_MODES = ["local_onnx", "external_api"] as const;
+export const LOCAL_TRANSCRIPTION_MODEL_IDS = [
+  "onnx-community/whisper-base.en",
+  "onnx-community/whisper-tiny.en",
+] as const;
+export const DEFAULT_LOCAL_TRANSCRIPTION_MODEL_ID = LOCAL_TRANSCRIPTION_MODEL_IDS[0];
 
 export type SpeechProviderMode = typeof SPEECH_PROVIDER_MODES[number];
 export type SpeechTranscriptionProvider = SpeechProviderMode;
@@ -39,7 +44,7 @@ export interface SpeechSettings {
 }
 
 export type SpeechModelKind = "transcription" | "synthesis";
-export type SpeechModelAdapter = "waveform_ctc" | "whisper" | "kokoro" | "piper";
+export type SpeechModelAdapter = "whisper" | "kokoro" | "piper";
 
 export interface SpeechModelFile {
   sourcePath: string;

@@ -3,7 +3,6 @@ import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-d
 import type { SpeechSettings } from "../../../src/contracts/speech-types.js";
 import {
   formatLocalTranscript,
-  normalizeWaveformForCtc,
   SpeechTranscriptionService,
   type LocalOnnxSpeechRuntime,
 } from "../../../src/services/speech-transcription-service.js";
@@ -73,24 +72,14 @@ function createLocalRuntime(overrides: Partial<LocalOnnxSpeechRuntime> = {}): Lo
 }
 
 describe("SpeechTranscriptionService", () => {
-  it("normalizes Wav2Vec2 input to zero mean and unit variance", () => {
-    const normalized = normalizeWaveformForCtc(Float32Array.of(1, 2, 3, 4));
-    const mean = Array.from(normalized).reduce((total, value) => total + value, 0) / normalized.length;
-    const variance = Array.from(normalized).reduce((total, value) => total + (value - mean) ** 2, 0) / normalized.length;
-
-    expect(mean).toBeCloseTo(0, 6);
-    expect(variance).toBeCloseTo(1, 5);
-  });
-
-  it("returns legacy uppercase CTC vocabulary output as readable lowercase", () => {
-    expect(formatLocalTranscript("  HALLO   WOMUST BE  ", "waveform_ctc")).toBe("hallo womust be");
-    expect(formatLocalTranscript(" Hello, world. ", "whisper")).toBe("Hello, world.");
+  it("normalizes whitespace without changing Whisper punctuation or casing", () => {
+    expect(formatLocalTranscript("  Hello,   world.  ")).toBe("Hello, world.");
   });
 
   it("returns missing_local_model for explicit local mode when the model is absent", async () => {
     const fetchImpl = vi.fn();
     const service = new SpeechTranscriptionService({
-      resolveSpeechSettings: () => speechSettings({ providerMode: "local_onnx", localModelId: "Xenova/wav2vec2-base-960h" }),
+      resolveSpeechSettings: () => speechSettings({ providerMode: "local_onnx", localModelId: "onnx-community/whisper-base.en" }),
       localRuntime: createLocalRuntime(),
       fetchImpl,
     });
@@ -101,12 +90,33 @@ describe("SpeechTranscriptionService", () => {
       ok: false,
       error: {
         code: "missing_local_model",
-        message: 'Local speech model "Xenova/wav2vec2-base-960h" is not installed.',
+        message: 'Local speech model "onnx-community/whisper-base.en" is not installed.',
         provider: "local_onnx",
         retryable: false,
       },
     });
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("returns a structured client error for an unknown local model", async () => {
+    const localRuntime = createLocalRuntime();
+    const service = new SpeechTranscriptionService({
+      resolveSpeechSettings: () => speechSettings({ providerMode: "local_onnx", localModelId: "removed-local-model" }),
+      localRuntime,
+    });
+
+    const result = await service.transcribe({ audio, metadata: createMetadata() });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "client_error",
+        message: 'Unknown local speech model "removed-local-model".',
+        provider: "local_onnx",
+        retryable: false,
+      },
+    });
+    expect(localRuntime.isModelAvailable).not.toHaveBeenCalled();
   });
 
   it("uses local ONNX when the selected local model is available", async () => {
@@ -120,7 +130,7 @@ describe("SpeechTranscriptionService", () => {
       }),
     });
     const service = new SpeechTranscriptionService({
-      resolveSpeechSettings: () => speechSettings({ providerMode: "local_onnx", localModelId: "Xenova/wav2vec2-base-960h" }),
+      resolveSpeechSettings: () => speechSettings({ providerMode: "local_onnx", localModelId: "onnx-community/whisper-base.en" }),
       localRuntime,
     });
 
@@ -137,13 +147,13 @@ describe("SpeechTranscriptionService", () => {
       ok: true,
       text: "local transcript",
       provider: "local_onnx",
-      model: "Xenova/wav2vec2-base-960h",
+      model: "onnx-community/whisper-base.en",
       language: "en",
       durationSeconds: 1,
       fallback: null,
     });
     expect(localRuntime.transcribe).toHaveBeenCalledWith(expect.objectContaining({
-      model: expect.objectContaining({ id: "Xenova/wav2vec2-base-960h" }),
+      model: expect.objectContaining({ id: "onnx-community/whisper-base.en" }),
       audio: expect.any(Float32Array),
       sampleRate: 16_000,
       language: "en",
@@ -201,7 +211,7 @@ describe("SpeechTranscriptionService", () => {
     const service = new SpeechTranscriptionService({
       resolveSpeechSettings: () => speechSettings({
         providerMode: "local_onnx",
-        localModelId: "Xenova/wav2vec2-base-960h",
+        localModelId: "onnx-community/whisper-base.en",
         externalTranscription: {
           baseUrl: "https://transcribe.example.test/v1/audio/transcriptions",
           apiKey: "configured-but-unused",
@@ -218,7 +228,7 @@ describe("SpeechTranscriptionService", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe("missing_local_model");
-      expect(result.error.message).toContain("Xenova/wav2vec2-base-960h");
+      expect(result.error.message).toContain("onnx-community/whisper-base.en");
     }
     expect(fetchImpl).not.toHaveBeenCalled();
   });

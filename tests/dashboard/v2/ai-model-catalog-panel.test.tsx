@@ -37,15 +37,15 @@ describe("AIModelCatalogPanel", () => {
     memoryApi.listEmbeddingModels.mockResolvedValue([]);
     memoryApi.getMemoryStats.mockResolvedValue({ sprint: 0, agent: 0, project: 0, activeModel: null, staleEmbeddings: 0 });
     speechApi.listSpeechModels.mockResolvedValue([{
-      id: "Xenova/wav2vec2-base-960h",
+      id: "onnx-community/whisper-base.en",
       kind: "transcription",
-      adapter: "waveform_ctc",
-      displayName: "Wav2Vec2 Base English ONNX",
-      description: "Direct local transcription.",
-      repository: "Xenova/wav2vec2-base-960h",
-      sourceUrl: "https://huggingface.co/Xenova/wav2vec2-base-960h",
+      adapter: "whisper",
+      displayName: "Whisper Base English ONNX",
+      description: "Higher-accuracy local transcription.",
+      repository: "onnx-community/whisper-base.en",
+      sourceUrl: "https://huggingface.co/onnx-community/whisper-base.en",
       files: [],
-      sizeBytes: 95_500_000,
+      sizeBytes: 80_000_000,
       language: "English",
       sampleRateHz: 16_000,
       voices: [],
