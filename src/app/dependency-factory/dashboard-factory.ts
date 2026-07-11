@@ -189,6 +189,7 @@ export function createDashboardDependencies(
     agentPresetSyncService,
     projectManagementRepository,
     providerRunner,
+    providerExecutionService,
     chatManagementActionService,
     chatProviderOutboundService,
     knowledgeService: coreDeps.knowledgeService,
