@@ -1035,6 +1035,7 @@ describe("settings cloning helpers", () => {
     },
     techstack: { applicationKind: null, selectedTechstackId: null },
     designGuidance: { ...DEFAULT_DASHBOARD_SETTINGS.designGuidance },
+    googleDrive: { enabled: true, hostPath: "/mnt/google-drive", accessMode: "read-write" },
     git: { githubMode: "app", githubToken: "", defaultBranch: "main", autoCreatePr: false, autoCloseLinkedIssues: false, deleteMergedBranches: false, featureBranchPrefix: "", sprintBranchScheme: "FLAT", sprintKeyPrefix: "", taskPrTitleScheme: "({sprint_tag}) {task_title}" },
     jira: { host: "h", email: "e", apiToken: "t", autoTransitionLinkedIssuesOnImport: true, importTransitionName: "In Work", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
     notion: createMockImporterSettings(),
@@ -1112,6 +1113,7 @@ describe("settings cloning helpers", () => {
     clone.agents.selfReflection.planning.criteria[0]!.threshold = 0.1;
     clone.agents.routing.taskCoding.orchestratorAgentPresetIds.push("c");
     clone.git.taskPrTitleScheme = "{task_key}: {task_title}";
+    clone.googleDrive.hostPath = "/mnt/clone-drive";
     clone.customMcpServers![0].headers!["X-New"] = "123";
     clone.customMcpServers![0].env!["BAZ"] = "qux";
     clone.mcpTools![0].enabled = false;
@@ -1130,6 +1132,8 @@ describe("settings cloning helpers", () => {
     expect(original.agents.selfReflection.planning.criteria[0]!.threshold).toBe(0.8);
     expect(original.agents.routing.taskCoding.orchestratorAgentPresetIds).toEqual(["a", "b"]);
     expect(original.git.taskPrTitleScheme).toBe("({sprint_tag}) {task_title}");
+    expect(original.googleDrive.hostPath).toBe("/mnt/google-drive");
+    expect(clone.googleDrive).not.toBe(original.googleDrive);
     expect(original.customMcpServers![0].headers!["X-New"]).toBeUndefined();
     expect(original.customMcpServers![0].env!["BAZ"]).toBeUndefined();
     expect(original.mcpTools![0].enabled).toBe(true);
@@ -1153,6 +1157,7 @@ describe("settings cloning helpers", () => {
     clone.agents.selfReflection.qualityAssurance.criteria.push({ id: "scope_control", label: "Scope control", prompt: "Stay scoped.", threshold: 0.8 });
     clone.agents.routing.taskCoding.orchestratorAgentPresetIds.push("c");
     clone.git.taskPrTitleScheme = "{provider}: {task_title}";
+    clone.googleDrive.accessMode = "read-only";
     clone.customMcpServers![0].headers!["X-New"] = "123";
 
     // Verify original is untouched
@@ -1166,6 +1171,8 @@ describe("settings cloning helpers", () => {
     expect(original.agents.selfReflection.qualityAssurance.criteria).toHaveLength(1);
     expect(original.agents.routing.taskCoding.orchestratorAgentPresetIds).toEqual(["a", "b"]);
     expect(original.git.taskPrTitleScheme).toBe("({sprint_tag}) {task_title}");
+    expect(original.googleDrive.accessMode).toBe("read-write");
+    expect(clone.googleDrive).not.toBe(original.googleDrive);
     expect(original.customMcpServers![0].headers!["X-New"]).toBeUndefined();
   });
 
@@ -1221,6 +1228,7 @@ describe("settings cloning helpers", () => {
     clone.integrations.providers["p1"].apiKey = "mutated-key";
     clone.defaults.memory.enabled = false;
     clone.defaults.git.taskPrTitleScheme = "{task_title}";
+    clone.defaults.googleDrive.hostPath = "/mnt/system-clone";
     clone.mcpTools[0].enabled = false;
 
     // Verify original is untouched
@@ -1230,6 +1238,8 @@ describe("settings cloning helpers", () => {
     expect(original.integrations.providers["p1"].apiKey).toBe("key");
     expect(original.defaults.memory.enabled).toBe(true);
     expect(original.defaults.git.taskPrTitleScheme).toBe("({sprint_tag}) {task_title}");
+    expect(original.defaults.googleDrive.hostPath).toBe("/mnt/google-drive");
+    expect(clone.defaults.googleDrive).not.toBe(original.defaults.googleDrive);
     expect(original.mcpTools[0].enabled).toBe(true);
   });
 });

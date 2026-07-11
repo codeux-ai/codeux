@@ -100,6 +100,7 @@ export function createSprintDependencies(
     getMcpConnectionInfo: () => context.getMcpConnectionInfo?.() ?? null,
     skillService: coreDeps.skillService,
     agentPresetRepository: coreDeps.agentPresetRepository,
+    getDashboardSettings: resolveDashboardSettings,
   });
   const structuredProviderResponseService = new StructuredProviderResponseService({
     providerExecutionService,

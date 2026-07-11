@@ -149,6 +149,7 @@ export class QualityAssuranceService {
       getMcpConnectionInfo: deps.getMcpConnectionInfo,
       skillService: deps.skillService,
       agentPresetRepository: deps.agentPresetRepository,
+      getDashboardSettings: deps.getDashboardSettings,
     });
 
     if (deps.structuredAgentRequestService) {

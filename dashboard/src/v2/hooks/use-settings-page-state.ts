@@ -115,6 +115,7 @@ type IntegrationId =
   | "antigravity"
   | "github"
   | "gitlab"
+  | "google-drive"
   | "jira"
   | "notion"
   | "asana"
@@ -141,6 +142,7 @@ const INTEGRATIONS: IntegrationDefinition[] = [
   { id: "opencode", label: providerLabels.opencode, description: providerDescriptions.opencode },
   { id: "github", label: "GitHub", description: "Repository, pull request, branch, and CI integration" },
   { id: "gitlab", label: "GitLab", description: "GitLab repository, merge request, and CI token integration" },
+  { id: "google-drive", label: "Google Drive", description: "Mount an already linked local Drive directory into Docker workspaces" },
   { id: "jira", label: "Jira", description: "Atlassian Jira issue search, sprint linking, and completion transitions" },
   { id: "whatsapp", label: "WhatsApp", description: "Managed or webhook bridge for WhatsApp groups and business conversations" },
   { id: "imessage", label: "iMessage", description: "Managed or native macOS bridge for iMessage routing" },

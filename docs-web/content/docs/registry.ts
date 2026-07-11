@@ -103,6 +103,7 @@ export type DocsSlug =
   | 'architecture-external-chat-providers'
   | 'architecture-configuration-resolution'
   | 'architecture-security'
+  | 'settings-google-drive-mount'
   | 'user-dashboard-custom-dashboards'
   | 'architecture-custom-dashboard-foundation'
   | 'architecture-managed-container-runtime'
@@ -819,6 +820,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Security model",
     description: "Code UX is designed to run as a single-user trusted process on a developer's workstation or a dedicated server. This page documents what is and is not protected, the threat model, and the recommended deployment posture.",
   },
+  'settings-google-drive-mount': {
+    id: 'settings-google-drive-mount',
+    path: '/docs/settings-google-drive-mount',
+    section: 'User Guide',
+    title: "Google Drive Project Mount",
+    description: "The Google Drive project mount makes an existing local Google Drive sync or mount directory available to Docker-backed provider runs. Code UX does not connect to the Google Drive API, manage Google credentials, or syn...",
+  },
   'user-dashboard-custom-dashboards': {
     id: 'user-dashboard-custom-dashboards',
     path: '/docs/user-dashboard-custom-dashboards',
@@ -964,6 +972,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-external-chat-providers'],
   docsRegistry['architecture-configuration-resolution'],
   docsRegistry['architecture-security'],
+  docsRegistry['settings-google-drive-mount'],
   docsRegistry['user-dashboard-custom-dashboards'],
   docsRegistry['architecture-custom-dashboard-foundation'],
   docsRegistry['architecture-managed-container-runtime'],

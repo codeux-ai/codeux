@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import {
   buildDefaultProjectSettings,
+  buildDefaultSystemSettings,
   sanitizeProjectSettings,
   resolveDashboardSettings,
   sanitizeSystemSettings,
@@ -52,6 +53,7 @@ describe("Settings Resolution Service", () => {
       expect(settings.agents).toBeDefined();
       expect(settings.skills).toBeDefined();
       expect(settings.memory).toBeDefined();
+      expect(settings.googleDrive).toEqual({ enabled: false, hostPath: "", accessMode: "read-only" });
     });
 
     it("should have default provider entries existing", () => {
@@ -146,6 +148,73 @@ describe("Settings Resolution Service", () => {
 
       expect(settings.appearance.backgroundImage).toBe(null);
       expect(settings.appearance.backgroundPattern).toBe("NONE");
+    });
+  });
+
+  describe("Google Drive scoped settings", () => {
+    it("resolves project and sprint overrides with inheritance, sources, and reset semantics", () => {
+      const systemSettings = buildDefaultSystemSettings();
+      systemSettings.defaults.googleDrive = {
+        enabled: true,
+        hostPath: "/mnt/system-drive",
+        accessMode: "read-only",
+      };
+      const projectOverride: ProjectSettingsOverride = {
+        googleDrive: {
+          enabled: true,
+          hostPath: " /mnt/project-drive ",
+          accessMode: "read-write",
+        },
+      };
+
+      const project = resolveDashboardSettings({ systemSettings, projectOverride });
+      expect(project.settings.googleDrive).toEqual({
+        enabled: true,
+        hostPath: "/mnt/project-drive",
+        accessMode: "read-write",
+      });
+      expect(project.sources["googleDrive.accessMode"]).toBe("project");
+
+      const sprint = resolveDashboardSettings({
+        systemSettings,
+        projectOverride,
+        sprintOverride: { googleDrive: { accessMode: "read-only" } },
+      });
+      expect(sprint.settings.googleDrive).toEqual({
+        enabled: true,
+        hostPath: "/mnt/project-drive",
+        accessMode: "read-only",
+      });
+      expect(sprint.sources["googleDrive.hostPath"]).toBe("project");
+      expect(sprint.sources["googleDrive.accessMode"]).toBe("sprint");
+
+      const afterSprintReset = resolveDashboardSettings({ systemSettings, projectOverride });
+      expect(afterSprintReset.settings.googleDrive.accessMode).toBe("read-write");
+
+      const afterProjectReset = resolveDashboardSettings({ systemSettings });
+      expect(afterProjectReset.settings.googleDrive).toEqual(systemSettings.defaults.googleDrive);
+      afterProjectReset.settings.googleDrive.hostPath = "/mutated";
+      expect(systemSettings.defaults.googleDrive.hostPath).toBe("/mnt/system-drive");
+    });
+
+    it("disables a project setting with an invalid access mode", () => {
+      const systemSettings = buildDefaultSystemSettings();
+      const resolved = resolveDashboardSettings({
+        systemSettings,
+        projectOverride: {
+          googleDrive: {
+            enabled: true,
+            hostPath: "/mnt/project-drive",
+            accessMode: "owner",
+          },
+        } as unknown as ProjectSettingsOverride,
+      });
+
+      expect(resolved.settings.googleDrive).toEqual({
+        enabled: false,
+        hostPath: "/mnt/project-drive",
+        accessMode: "read-only",
+      });
     });
   });
 

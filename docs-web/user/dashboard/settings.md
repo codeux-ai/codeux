@@ -39,7 +39,7 @@ The desktop rail and mobile category drawer include these Expert-mode categories
 | **Guidance** | Tech stack guidance, styleguides, custom worker instructions, and header selector defaults. |
 | **Agents** | Agent routing, markdown mirroring, persistent skill storage, storage attachments, and self-reflection criteria. |
 | **Memory** | Embedding model selection, memory capture, promotion, and remediation policy. |
-| **Integrations** | Provider credentials, Git hosts, Jira, and read-only PM/canvas importers. |
+| **Integrations** | Provider credentials, Git hosts, Jira, project-linked storage mounts, and read-only PM/canvas importers. |
 | **MCP** | MCP servers injected into provider CLIs and built-in tool access. |
 | **Danger Zone** | Project override reset, project deletion, memory clearing, and database reset. |
 
@@ -110,6 +110,12 @@ The **AI providers** category includes a **Detected** column. Code UX inspects:
 - `GITHUB_TOKEN` / `GH_TOKEN` env vars and `gh auth status`.
 
 If a hint is detected, the panel offers a one-click **Use detected value** button so you don't paste secrets manually.
+
+## Google Drive mount
+
+Settings > Integrations includes Google Drive under **Storage & Mounts**. It links an already synced local Google Drive directory; Code UX does not request or store Google credentials. The linked directory follows the normal System → Project settings cascade and is saved only with the scoped Settings draft.
+
+The mount is available to scoped Docker-backed provider workspaces at the fixed `/mnt/code-ux/google-drive` container path. It is shared by Project Manager replies, planning, setup, task coding, QA, CI repair, and merge repair; host-mode and unscoped runs do not receive it. **Read-only** is the safe default. Choose **Read-write** only when agents must modify synced Drive files, because edits and deletions can propagate through Google Drive. A card is **Configured** only after a linked directory is set and **Active** only when that configured mount is also enabled. The host path appears only inside the editable linked-directory control.
 
 ## Provider config files
 

@@ -60,6 +60,7 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
     getMcpConnectionInfo: ctx.deps.getMcpConnectionInfo,
     skillService: ctx.deps.skillService,
     agentPresetRepository: ctx.deps.agentPresetRepository,
+    getDashboardSettings: ctx.deps.getDashboardSettings,
   });
 
   // The provider concurrency cap is a provider-level setting (already clamped to the system

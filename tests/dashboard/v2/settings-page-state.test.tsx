@@ -167,13 +167,33 @@ describe("useSettingsPageState", () => {
     const { result } = renderHook(() => useSettingsPageState(CATEGORIES));
     await waitFor(() => expect(result.current.loading).toBe(false));
     act(() => { result.current.setActiveScope("project"); });
-    act(() => { result.current.updateEditableSettings((curr) => ({ ...curr, aiProvider: {} } as any)); });
+    act(() => {
+      result.current.updateEditableSettings((curr) => ({
+        ...curr,
+        googleDrive: { enabled: true, hostPath: "/project/Drive", accessMode: "read-write" },
+      }));
+    });
+    expect(result.current.projectSettings?.googleDrive).toEqual({
+      enabled: true,
+      hostPath: "/project/Drive",
+      accessMode: "read-write",
+    });
   });
 
   it("updates editable settings for system scope", async () => {
     const { result } = renderHook(() => useSettingsPageState(CATEGORIES));
     await waitFor(() => expect(result.current.loading).toBe(false));
-    act(() => { result.current.updateEditableSettings((curr) => ({ ...curr, aiProvider: {} } as any)); });
+    act(() => {
+      result.current.updateEditableSettings((curr) => ({
+        ...curr,
+        googleDrive: { enabled: true, hostPath: "/system/Drive", accessMode: "read-only" },
+      }));
+    });
+    expect(result.current.systemSettings?.defaults.googleDrive).toEqual({
+      enabled: true,
+      hostPath: "/system/Drive",
+      accessMode: "read-only",
+    });
   });
 
   it("publishes appearance previews from unsaved settings edits", async () => {

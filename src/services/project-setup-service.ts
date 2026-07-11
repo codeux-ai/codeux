@@ -36,6 +36,7 @@ import type { DashboardRealtimeMutationNotifier } from "./dashboard-realtime-ser
 import { resolveAgentAvatarConfig } from "../contracts/agent-avatar-style.js";
 import { defaultCodingAgentMcpAccess } from "./agent-mcp-access.js";
 import type { ProjectDocsAutoEmbedService } from "./project-docs-auto-embed-service.js";
+import { resolveEffectiveDashboardSettings } from "./settings-resolution-service.js";
 
 export const PROJECT_SETUP_AGENT_NAME = "Project Setup Agent";
 
@@ -116,6 +117,11 @@ export class ProjectSetupService {
       providerConcurrencyService: deps.providerConcurrencyService,
       logger: deps.logger,
       getGithubToken: deps.getGithubToken,
+      getDashboardSettings: ({ projectId, sprintId }) => (
+        projectId
+          ? resolveEffectiveDashboardSettings(deps.settingsRepository, projectId, sprintId).settings
+          : deps.settingsRepository.getDefaultDashboardSettings()
+      ),
     });
   }
 

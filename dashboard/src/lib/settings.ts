@@ -59,6 +59,7 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
   techstackCatalog: cloneTechstackCatalog(DEFAULT_DASHBOARD_SETTINGS.techstackCatalog),
   techstack: { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
   designGuidance: cloneDesignGuidanceSettings(DEFAULT_DASHBOARD_SETTINGS.designGuidance),
+  googleDrive: { ...DEFAULT_DASHBOARD_SETTINGS.googleDrive },
   git: { ...DEFAULT_DASHBOARD_SETTINGS.git },
   jira: { ...DEFAULT_DASHBOARD_SETTINGS.jira },
   notion: { ...DEFAULT_DASHBOARD_SETTINGS.notion },
