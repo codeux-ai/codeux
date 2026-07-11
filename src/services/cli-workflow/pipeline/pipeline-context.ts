@@ -1,5 +1,5 @@
 import type { ProviderSettingsOverride } from "../../provider-settings-override.js";
-import type { CliWorkflowSettings, DashboardSettings, ProviderId, QwenModelProviderSettings, Subtask, ThinkingMode } from "../../../contracts/app-types.js";
+import type { CliWorkflowSettings, DashboardSettings, DashboardSettingsScope, ProviderId, QwenModelProviderSettings, Subtask, ThinkingMode } from "../../../contracts/app-types.js";
 import type { AgentMemoryConfig, AgentMcpAccessConfig } from "../../../contracts/agent-preset-types.js";
 import type { IWorkspaceManager } from "../../../infrastructure/providers/cli/workspace-manager.js";
 import type { InvocationWorkspacePreparer } from "../../../infrastructure/providers/cli/invocation-workspace-preparer.js";
@@ -28,7 +28,7 @@ export interface PipelineContextDeps {
   skillService?: SkillService;
   agentPresetRepository?: AgentPresetRepository;
   providerConcurrencyService?: ProviderConcurrencyService;
-  getDashboardSettings: () => DashboardSettings;
+  getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings;
   getWorkerInstruction: (repoPath: string) => Promise<string>;
   getGithubToken: () => string | undefined;
   getMcpConnectionInfo?: () => McpConnectionInfo | null;
