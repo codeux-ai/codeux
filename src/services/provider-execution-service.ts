@@ -173,6 +173,8 @@ export interface ExecutionProviderRunArgs {
 
   provider: CliProviderId;
   maxConcurrentTasks?: number;
+  /** Maximum time to wait for a provider slot before failing the invocation. */
+  concurrencyWaitTimeoutMs?: number;
   prompt: string;
   cwd?: string;
   model: string;
@@ -363,7 +365,8 @@ export class ProviderExecutionService {
           args.provider as ProviderId,
           limit,
           usageInput,
-          args.signal
+          args.signal,
+          args.concurrencyWaitTimeoutMs,
         );
       } else {
         // Fallback for cases where ProviderConcurrencyService is not provided, 

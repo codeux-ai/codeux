@@ -2,7 +2,7 @@ import type { GitTrackingStatus, Subtask, CiIntelligenceSettings, AutomationLeve
 import { isCiFailure, selectFailedCiRuns, getFailedJobLabels } from "../../../../sprint/ci-status-utils.js";
 import { handleCiAutofixEscalation } from "./ci-autofix-policy.js";
 import type { GuardrailService } from "../../../../services/guardrail-service.js";
-import type { WorkerCiFixPayload } from "./ci-autofix-policy.js";
+import type { CiFixGuardrailHandoff, WorkerCiFixPayload } from "./ci-autofix-policy.js";
 import { buildInProgressText, buildFailedChecksText, buildReviewBlockersText } from "./ci-notification-builder.js";
 
 export interface InProgressResult {
@@ -29,6 +29,7 @@ export async function evaluateInProgressState(args: {
   repoPath: string;
   defaultBranch: string;
   hasActiveWorkerCiFixAttempt?: (task: Subtask, prNumber: number) => boolean;
+  onCiFixGuardrailExhausted?: (handoff: CiFixGuardrailHandoff) => void;
 }): Promise<InProgressResult> {
   const shouldKeepPolling =
     args.hasPendingChecks ||
@@ -69,6 +70,7 @@ export async function evaluateInProgressState(args: {
       defaultBranch: args.defaultBranch,
       allowJulesSessionNotification: args.ciIntelligence.waitForJulesCiAutofix,
       hasActiveWorkerCiFixAttempt: args.hasActiveWorkerCiFixAttempt,
+      onGuardrailExhausted: args.onCiFixGuardrailExhausted,
     });
     reportText += escalation.reportTextAddition;
     workerCiFixRequired = escalation.workerCiFixRequired;

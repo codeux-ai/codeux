@@ -61,6 +61,8 @@ import { clearMergeProjectionForRerun, MERGE_PROJECTION_RESET } from "../domain/
 import { buildQaReviewRequests, resolveTaskTriggerType, type BuiltQaReviewRequest } from "../domain/qa-review/qa-review-request-builder.js";
 import { buildSprintQaSnapshot, evaluateSprintQaReviewCycleDecision, shouldRunSprintQaReview } from "../domain/qa-review/sprint-qa-snapshot.js";
 import type { SprintRunLifecycleService } from "./sprint-run-lifecycle-service.js";
+import type { ProjectAttentionService } from "../domain/workers/project-attention-service.js";
+import type { ProjectAttentionItemRecord } from "../contracts/project-attention-types.js";
 
 type CliQaProvider = Exclude<ProviderId, "jules">;
 
@@ -104,6 +106,7 @@ interface QualityAssuranceServiceDependencies {
   structuredAgentRequestService?: StructuredAgentRequestService;
   dockerService?: Pick<{ listContainers: () => Promise<DockerContainer[]> }, "listContainers">;
   sprintRunLifecycleService?: Pick<SprintRunLifecycleService, "updateRun">;
+  projectAttentionService?: Pick<ProjectAttentionService, "listActiveProjectItems" | "openItem">;
 }
 
 export class QualityAssuranceService {
@@ -595,6 +598,16 @@ export class QualityAssuranceService {
       return { reviewed: false, blockedCompletion: false, mergeBlocked: false, reportText: "" };
     }
 
+    const activeHumanHandoff = this.findActiveSprintQaHumanHandoff(args.projectId, args.sprintId);
+    if (activeHumanHandoff) {
+      return {
+        reviewed: false,
+        blockedCompletion: true,
+        mergeBlocked: true,
+        reportText: activeHumanHandoff.summaryMarkdown,
+      };
+    }
+
     const sprintFeatureBranch = sprint.featureBranch?.trim()
       || `${settings.git.featureBranchPrefix || "feature/"}sprint-${sprint.number ?? 0}`;
 
@@ -626,6 +639,14 @@ export class QualityAssuranceService {
     }
 
     if (sprintQaDecision.action === "block_completion") {
+      this.openSprintQaHumanHandoffIfTerminal({
+        projectId: args.projectId,
+        sprintId: args.sprintId,
+        sprintRunId: args.sprintRunId,
+        latestRuns,
+        maxRuns,
+        shouldRunReview,
+      });
       return {
         reviewed: false,
         blockedCompletion: true,
@@ -845,6 +866,92 @@ export class QualityAssuranceService {
       mergeBlocked: false,
       reportText: renderSprintQaPassReport(passSummary),
     };
+  }
+
+  private findActiveSprintQaHumanHandoff(
+    projectId: string,
+    sprintId: string,
+  ): ProjectAttentionItemRecord | null {
+    const service = this.deps.projectAttentionService;
+    if (!service) {
+      return null;
+    }
+
+    return service.listActiveProjectItems(projectId).find((item) => (
+      item.sprintId === sprintId
+      && item.taskId === null
+      && item.ownerType === "human"
+      && item.attentionType === "human_escalation_required"
+      && item.payload?.sourceAttentionType === "qa_review"
+      && item.payload?.qaScope === "sprint"
+    )) ?? null;
+  }
+
+  private openSprintQaHumanHandoffIfTerminal(args: {
+    projectId: string;
+    sprintId: string;
+    sprintRunId: string;
+    latestRuns: QaReviewRunRecord[];
+    maxRuns: number;
+    shouldRunReview: boolean;
+  }): void {
+    const service = this.deps.projectAttentionService;
+    const latestRun = args.latestRuns[0] ?? null;
+    if (!service || !latestRun || args.shouldRunReview) {
+      return;
+    }
+
+    const allTerminal = args.latestRuns.every((run) => run.status !== "running");
+    const terminalFailure = args.latestRuns.find((run) => (
+      run.status === "failed" || run.status === "errored" || run.status === "cancelled"
+    )) ?? null;
+    const retryBudgetExhausted = latestRun.runIndex >= args.maxRuns;
+    if (!allTerminal || (!terminalFailure && !retryBudgetExhausted)) {
+      return;
+    }
+
+    const reason = terminalFailure
+      ? "terminal_review_failure"
+      : "retry_budget_exhausted";
+    const lastProviderError = terminalFailure?.summaryMarkdown?.trim()
+      || latestRun.summaryMarkdown?.trim()
+      || "Sprint QA did not produce a passing verdict.";
+    const errorCode = terminalFailure?.payload?.error_code;
+    const attempts = latestRun.runIndex;
+
+    service.openItem({
+      projectId: args.projectId,
+      sprintId: args.sprintId,
+      // Keep this handoff sprint-scoped rather than run-scoped. A runtime
+      // restart may recover or replace the run, but it must not duplicate or
+      // bypass the unresolved human gate.
+      sprintRunId: null,
+      taskId: null,
+      attentionType: "human_escalation_required",
+      severity: "high",
+      ownerType: "human",
+      title: "Sprint QA requires human attention",
+      summaryMarkdown: [
+        "Sprint completion remains blocked because QA could not produce a passing verdict.",
+        `Attempts: ${attempts}/${args.maxRuns}.`,
+        `Reason: ${reason}.`,
+        `Latest provider error: ${lastProviderError}`,
+        "Resolve this handoff after correcting the provider or reviewing the result to reset sprint QA and allow one fresh review cycle.",
+      ].join("\n\n"),
+      payload: {
+        sourceAttentionType: "qa_review",
+        qaScope: "sprint",
+        qaReason: reason,
+        attempts,
+        maxAttempts: args.maxRuns,
+        runsUsed: attempts,
+        maxRuns: args.maxRuns,
+        lastProviderError,
+        lastProviderErrorCode: typeof errorCode === "string" ? errorCode : null,
+        latestQaRunId: terminalFailure?.id ?? latestRun.id,
+        sprintRunId: args.sprintRunId,
+      },
+    });
   }
 
   getTaskMergeGateStatus(args: {

@@ -480,13 +480,48 @@ jobs:
     context.gitStatus.openPullRequests[0].checks = [
       { name: "build", status: "completed", conclusion: "failure" }
     ];
+    context.gitStatus.ciRuns = [{
+      id: 901,
+      name: "CI",
+      workflowName: "CI",
+      status: "completed",
+      conclusion: "failure",
+      event: "pull_request",
+      headBranch: "feat/T1",
+      url: "https://github.com/repo/actions/runs/901",
+      failedJobs: [{
+        id: 902,
+        name: "build",
+        conclusion: "failure",
+        failedSteps: ["Run tests"],
+        logExcerpt: "AssertionError: expected 1 to equal 2",
+        logCommand: "gh run view 901 --job 902 --log-failed",
+      }],
+    }] as any;
+    context.openCiFixGuardrailHandoff = vi.fn();
     guardrail.counts.set("task-record-1:ci_fix", 3);
 
     const result = await service.evaluateCiGate(subtasks, context);
 
     expect(result.subtasks[0].status).toBe("BLOCKED");
-    expect(result.subtasks[0].intervention_owner).toBe("AGENT");
+    expect(result.subtasks[0].intervention_owner).toBe("HUMAN");
     expect(result.reportText).toContain("CI autofix guardrail reached");
+    expect(context.openCiFixGuardrailHandoff).toHaveBeenCalledWith(expect.objectContaining({
+      task: result.subtasks[0],
+      attempts: 3,
+      cap: 3,
+      payload: expect.objectContaining({
+        failedChecks: ["build"],
+        failedRuns: [expect.objectContaining({
+          id: 901,
+          failedJobs: [expect.objectContaining({
+            id: 902,
+            failedSteps: ["Run tests"],
+            logExcerpt: "AssertionError: expected 1 to equal 2",
+          })],
+        })],
+      }),
+    }));
     expect(context.executionRepository?.appendTaskRunEvent).toHaveBeenCalledWith(
       "run-1",
       "ci_gate_status",

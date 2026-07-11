@@ -764,6 +764,8 @@ export interface InvocationRoutingSettings {
   provider: ProviderConfigId | null;
   allowedProviders: ProviderConfigId[];
   providers: Record<ProviderConfigId, InvocationProviderOverrideSettings>;
+  /** Task-scoped CI repair resumes the originating coding provider session/model when available. */
+  continueTaskSession?: boolean;
 }
 
 export interface AiProviderSettings {
@@ -1384,6 +1386,7 @@ export interface GitCiRunStatus {
   conclusion: string | null;
   event: string | null;
   headBranch: string | null;
+  headSha?: string | null;
   url: string;
   updatedAt: string | null;
   failedJobs?: GitCiFailedJob[];

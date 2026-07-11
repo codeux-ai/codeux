@@ -59,22 +59,70 @@ describe("planVirtualWorkerCycle", () => {
     expect(mockIsProviderConcurrencyAvailable).toHaveBeenCalledWith("codex", 2);
   });
 
-  it("returns DISPATCH_READY when dispatch claim is present", async () => {
+  it("prioritizes repair attention when a coding dispatch is also available", async () => {
+    mockIsProviderConcurrencyAvailable.mockResolvedValueOnce(true);
+    const dispatchClaim = { sprint: { id: "s1" } } as WorkerTaskDispatchClaim;
+    const attentionItem = {
+      summaryMarkdown: "Fix CI",
+      sprintId: "s1",
+      attentionType: "ci_fix_required",
+    } as ProjectAttentionItemRecord;
+    const action = await planVirtualWorkerCycle({
+      projectId: "p1",
+      cycleReason: "test",
+      attentionItem,
+      dispatchClaim,
+      isProviderConcurrencyAvailable: mockIsProviderConcurrencyAvailable,
+      resolveSettings: mockResolveSettings,
+    });
+    expect(action.type).toBe("HANDLE_ATTENTION");
+    if (action.type === "HANDLE_ATTENTION") {
+      expect(action.attentionItem).toBe(attentionItem);
+      expect(action.attentionRoute).toBe("ci_fix");
+    }
+  });
+
+  it("returns DISPATCH_READY when only a dispatch claim is present", async () => {
     mockIsProviderConcurrencyAvailable.mockResolvedValueOnce(true);
     const dispatchClaim = { sprint: { id: "s1" } } as WorkerTaskDispatchClaim;
     const action = await planVirtualWorkerCycle({
       projectId: "p1",
       cycleReason: "test",
-      attentionItem: { summaryMarkdown: "Standard task", sprintId: "s1" } as ProjectAttentionItemRecord,
+      attentionItem: null,
       dispatchClaim,
       isProviderConcurrencyAvailable: mockIsProviderConcurrencyAvailable,
       resolveSettings: mockResolveSettings,
     });
     expect(action.type).toBe("DISPATCH_READY");
-    if (action.type === "DISPATCH_READY") {
-      expect(action.dispatchClaim).toBe(dispatchClaim);
-      expect(action.cycleProviderType).toBe("codex");
-    }
+  });
+
+  it("checks capacity for the invocation-routed CI fix provider", async () => {
+    const attentionItem = {
+      summaryMarkdown: "Fix CI",
+      sprintId: "s1",
+      attentionType: "ci_fix_required",
+    } as ProjectAttentionItemRecord;
+    const resolveAttentionProviderCapacity = vi.fn().mockResolvedValue({
+      provider: "claude-code",
+      limit: 4,
+    });
+
+    await planVirtualWorkerCycle({
+      projectId: "p1",
+      cycleReason: "test",
+      attentionItem,
+      dispatchClaim: null,
+      isProviderConcurrencyAvailable: mockIsProviderConcurrencyAvailable,
+      resolveSettings: mockResolveSettings,
+      resolveAttentionProviderCapacity,
+    });
+
+    expect(resolveAttentionProviderCapacity).toHaveBeenCalledWith(
+      attentionItem,
+      "ci_fix",
+      expect.any(Object),
+    );
+    expect(mockIsProviderConcurrencyAvailable).toHaveBeenCalledWith("claude-code", 4);
   });
 
   it("returns HANDLE_ATTENTION when attention is present and no dispatch", async () => {

@@ -163,7 +163,14 @@ export class DockerRunner implements IDockerRunner {
       onActivity(sanitizeInvocationOutputText(desc), originator);
     };
     const workspace = this.resolveWorkspace(cwd);
-    await this.workspaceManager.ensureRuntimeVolume(cwd);
+    const runAsRoot = workflowSettings.containerRunAsRoot === true;
+    const userSpec = runAsRoot ? "" : await this.resolveDockerUserSpec(repoPath);
+    await this.workspaceManager.ensureRuntimeVolume(cwd, {
+      // Create and label the paired volume now, but perform the ownership
+      // repair at the final launch boundary below. Image/config preparation
+      // and startup pruning may overlap this earlier phase after a restart.
+      initializeOwnership: false,
+    });
     const runtimeHome = CONTAINER_RUNTIME_HOME;
     const runtimeNpmPrefix = pathPosix.join(runtimeHome, ".npm-global");
     const runtimeNpmCache = pathPosix.join(runtimeHome, ".npm-cache");
@@ -267,8 +274,6 @@ export class DockerRunner implements IDockerRunner {
         dockerArgs.push(...DOCKER_HOST_GATEWAY_ARGS);
       }
 
-      const runAsRoot = workflowSettings.containerRunAsRoot === true;
-      const userSpec = runAsRoot ? "" : await this.resolveDockerUserSpec(repoPath);
       if (!runAsRoot && userSpec) {
         dockerArgs.push("--user", userSpec);
         const passwdPath = path.join(tempRoot, "passwd");
@@ -409,11 +414,24 @@ export class DockerRunner implements IDockerRunner {
       }
 
       try {
-        const runDocker = () => runStreamingCommand("docker", dockerArgs, process.cwd(), process.env, {
-          signal,
-          onStdoutLine: (line) => emitActivity(line, "agent"),
-          onStderrLine: (line) => emitActivity(`[${providerLabel}] ${line}`, "provider"),
-        });
+        const runDocker = async (): Promise<CommandResult> => {
+          // Reassert immediately before every launch attempt. Keeping this
+          // adjacent to `docker run` closes the restart/pruner race where a
+          // correctly labelled volume could be recreated as root-owned after
+          // early preparation but before the non-root provider starts.
+          if (!runAsRoot) {
+            await this.workspaceManager.ensureRuntimeVolume(cwd, {
+              initializeOwnership: true,
+              ownerSpec: userSpec || undefined,
+              forceOwnershipInitialization: true,
+            });
+          }
+          return runStreamingCommand("docker", dockerArgs, process.cwd(), process.env, {
+            signal,
+            onStdoutLine: (line) => emitActivity(line, "agent"),
+            onStderrLine: (line) => emitActivity(`[${providerLabel}] ${line}`, "provider"),
+          });
+        };
         const firstResult = await runDocker();
         if (!firstResult.ok && this.isDockerNameConflict(firstResult, containerName) && !signal?.aborted) {
           emitActivity(`Retrying ${providerLabel} after reclaiming stale Docker container ${containerName}.`, "provider");

@@ -650,7 +650,7 @@ describe("CycleStateCoordinator", () => {
       ]));
     });
 
-    it("does not clear merge attention for tasks still waiting in CI", async () => {
+    it("clears misleading merge attention for tasks still waiting in CI", async () => {
       const deps = {
         projectAttentionService: {
           openItems: vi.fn(),
@@ -694,9 +694,10 @@ describe("CycleStateCoordinator", () => {
       );
 
       const resolvePayload = deps.projectAttentionService.resolveItems.mock.calls[0]?.[0] || [];
-      expect(resolvePayload).not.toEqual(expect.arrayContaining([
+      expect(resolvePayload).toEqual(expect.arrayContaining([
         expect.objectContaining({
           filter: { projectId: "proj-1", taskId: "rec-1", attentionTypes: ["merge_required", "merge_conflict"] },
+          resolution: { status: "resolved", reason: "merge_attention_cleared" },
         }),
       ]));
       expect(resolvePayload).toEqual(expect.arrayContaining([

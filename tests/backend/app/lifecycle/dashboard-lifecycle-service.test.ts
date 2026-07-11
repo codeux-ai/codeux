@@ -161,6 +161,7 @@ describe("dashboard-lifecycle-service", () => {
       } as any,
       qaReviewRepository: {
         resetTaskReviewRuns: vi.fn().mockReturnValue(2),
+        resetSprintReviewRuns: vi.fn().mockReturnValue(3),
       } as any,
       guardrailService: {
         resetPurpose: vi.fn(),
@@ -410,6 +411,55 @@ describe("dashboard-lifecycle-service", () => {
       expect(result.status).toBe("resolved");
       expect(mockDeps.qaReviewRepository.resetTaskReviewRuns).toHaveBeenCalledWith("task-1");
       expect(mockDeps.guardrailService.resetPurpose).toHaveBeenCalledWith("task-1", "qa_review");
+    });
+
+    it("resets sprint QA review state when a sprint-scoped QA handoff is resolved", async () => {
+      const escalation = {
+        id: "attention-sprint-qa-1",
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        taskId: null,
+        sprintRunId: null,
+        dispatchId: null,
+        attentionType: "human_escalation_required",
+        severity: "high",
+        ownerType: "human",
+        status: "open",
+        assignedWorkerEndpointId: null,
+        title: "Sprint QA requires human attention",
+        summaryMarkdown: "Sprint QA review is blocked.",
+        payload: {
+          sourceAttentionType: "qa_review",
+          qaScope: "sprint",
+          qaReason: "terminal_review_failure",
+          attempts: 3,
+          maxAttempts: 3,
+          lastProviderError: "Provider authentication failed.",
+          sprintRunId: "run-1",
+        },
+        openedAt: "2026-03-09T00:00:00.000Z",
+        claimedAt: null,
+        resolvedAt: null,
+        updatedAt: "2026-03-09T00:00:00.000Z",
+      };
+      vi.mocked(mockDeps.projectAttentionRepository.getAttentionItem).mockReturnValue(escalation as any);
+      vi.mocked(mockDeps.projectAttentionRepository.resolveAttentionItem).mockReturnValue({
+        ...escalation,
+        status: "resolved",
+        resolvedAt: "2026-03-09T00:01:00.000Z",
+      } as any);
+
+      await bootDashboard(mockDeps);
+      const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+      const result = setupArgs.resolveAttentionItem!("project-1", "attention-sprint-qa-1", {
+        status: "resolved",
+        reason: "provider_reauthenticated",
+      });
+
+      expect(result.status).toBe("resolved");
+      expect(mockDeps.qaReviewRepository.resetSprintReviewRuns).toHaveBeenCalledWith("sprint-1");
+      expect(mockDeps.qaReviewRepository.resetTaskReviewRuns).not.toHaveBeenCalled();
+      expect(mockDeps.guardrailService.resetPurpose).not.toHaveBeenCalled();
     });
 
     it("handles saveSystemSettings callback correctly", async () => {

@@ -203,7 +203,7 @@ CI may set `CODE_UX_SKIP_RELEASE_INSTALL_BUILD=1` after downloading the compiled
 
 ### CI Pipeline Policy
 
-The automatic GitHub lane is `.github/workflows/ci.yml`, named `Code UX CI Pipeline`. It runs on pushes to `dev` and `main`, pull requests targeting those branches, and manual dispatches. `dev` retains jobs `01` through `08`; the full browser and release-candidate matrices are limited to `main` validation and manual dispatches.
+The automatic GitHub lane is `.github/workflows/ci.yml`, named `Code UX CI Pipeline`. It runs on pushes to every branch, pull requests targeting `dev` or `main`, and manual dispatches. Feature-branch and `dev` pushes retain the core numbered jobs; the full browser and release-candidate matrices are limited to `main` validation and manual dispatches.
 
 The lane is intentionally numbered and staged:
 
@@ -211,7 +211,7 @@ The lane is intentionally numbered and staged:
 - `02 Static`, `03 Build`, and `04 Security` are the prerequisite runner stage: quality guardrails plus backend/dashboard typecheck, server/dashboard build, and dependency audit.
 - `03 Build` uploads one `codeux-build-linux` artifact containing `dist/`, `dashboard/dist/`, and TypeScript cache output.
 - `05 Backend`, `06 Dashboard`, `07 Package`, and `08 Orchestration` all start directly after the prerequisite stage. Backend and dashboard tests run in parallel with npm install smoke and the three-row Docker/Electron DAG matrix.
-- Pushes and pull requests targeting `dev` run jobs `01` through `08`, including Linux Docker plus macOS and Windows Electron DAG coverage.
+- Feature-branch pushes plus pushes and pull requests targeting `dev` run the core numbered jobs, including Linux Docker plus macOS and Windows Electron DAG coverage.
 - `09 E2E` runs Playwright from the build artifact with one shared matrix template across Linux, macOS, and Windows. Every OS runs all six project groups (`navigation`, `settings`, `projects`, `tasks`, `agents`, and `config`) with `max-parallel: 10`; it runs only for `main` validation and manual dispatches.
 - `10 Release Candidate` starts after `07 Package` verifies the artifact-backed npm install, then builds unsigned Linux, macOS, and Windows desktop packages with `--publish never`. It runs only for `main` validation and manual dispatches.
 
@@ -267,9 +267,9 @@ Set `CODEUX_E2E_OPENROUTER_MODEL` only when validating a different OpenRouter mo
 
 ### Mockup Sprint Orchestration Policy
 
-The credential-free mockup sprint orchestration gate is part of `.github/workflows/ci.yml`. Its `08 Orchestration / <runtime> DAG` job is a shared OS matrix that runs after the shared build artifact is available and runs for `dev`, `main`, and manual validation. Linux runs `pnpm run test:orchestration:ci-dag:run`, so the deterministic QA DAG executes through Docker-backed provider workspaces without provider secrets and without rebuilding the app. It covers task QA pass, a QA-declined task resumed on its worker branch, sprint QA, and final repository validation.
+The credential-free mockup sprint orchestration gate is part of `.github/workflows/ci.yml`. Its `08 Orchestration / <runtime> DAG` job is a shared OS matrix that runs after the shared build artifact is available and runs for `dev`, `main`, and manual validation. Linux runs `pnpm run test:orchestration:ci-dag:run`, so the deterministic QA DAG executes through Docker-backed provider workspaces without provider secrets and without rebuilding the app. It covers task QA pass, a QA-declined task resumed on its worker branch, sprint QA, a sprint-level final-merge `ci_fix` invocation, and final repository validation. The lane asserts the repair artifact reaches the default branch, the CI-fix invocation is completed without a task id, and completed coding tasks are not spuriously redispatched.
 
-The macOS and Windows entries in the same `08 Orchestration` matrix run `pnpm run test:orchestration:ci-dag:electron:run` on `dev`, `main`, and manual validation. Those jobs install the cached Electron binary, rebuild native dependencies, launch `dist/electron/main.js`, wait for the embedded Code UX server, and run the host-execution mockup fixture through the same QA DAG. GitHub-hosted Windows and macOS runners do not provide Docker job containers, so the native Electron entries validate desktop orchestration while Ubuntu remains the Docker-backed orchestration gate.
+The macOS and Windows entries in the same `08 Orchestration` matrix run `pnpm run test:orchestration:ci-dag:electron:run` on `dev`, `main`, and manual validation. Those jobs install the cached Electron binary, rebuild native dependencies, launch `dist/electron/main.js`, wait for the embedded Code UX server, and run the host-execution mockup fixture through the same QA and final-merge CI-repair DAG. GitHub-hosted Windows and macOS runners do not provide Docker job containers, so the native Electron entries validate desktop orchestration and host-backed CI-fix worktrees while Ubuntu remains the Docker-backed orchestration gate.
 
 The manual `.github/workflows/mockup-sprint-orchestration.yml` workflow remains available as `Mockup Sprint Diagnostics` for focused orchestration reruns. The fast `test:orchestration:rapid` lane remains available for local unit-level regression checks, while the compiled `test:orchestration:full` catalog and heavy `test:orchestration:pentest` lane remain manual escalation tools.
 

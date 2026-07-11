@@ -61,18 +61,30 @@ describe("handleCiAutofixEscalation", () => {
     const task = makeTask();
     const { service, record } = makeGuardrail(block(3, 3));
     const sendSessionMessage = vi.fn();
+    const onGuardrailExhausted = vi.fn();
 
     const result = await handleCiAutofixEscalation({
       ...baseArgs,
       task,
       guardrailService: service,
       sendSessionMessage,
+      onGuardrailExhausted,
     });
 
     expect(task.status).toBe("BLOCKED");
-    expect(task.intervention_owner).toBe("AGENT");
+    expect(task.intervention_owner).toBe("HUMAN");
     expect(result.reportTextAddition).toContain("CI autofix guardrail reached");
     expect(result.workerCiFixRequired).toBe(false);
+    expect(onGuardrailExhausted).toHaveBeenCalledWith(expect.objectContaining({
+      task,
+      attempts: 3,
+      cap: 3,
+      payload: expect.objectContaining({
+        taskKey: "T1",
+        prNumber: 100,
+        failedChecks: ["test"],
+      }),
+    }));
     expect(sendSessionMessage).not.toHaveBeenCalled();
     expect(record).not.toHaveBeenCalled();
   });

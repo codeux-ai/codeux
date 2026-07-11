@@ -196,6 +196,9 @@ describe("WorkspaceManager", () => {
       stdinFile: bundlePath,
     }));
     const bootstrapCommand = String(bootstrapCall?.[1]?.at(-1) || "");
+    expect(bootstrapCommand).toContain("git config --global --add safe.directory /workspace");
+    expect(bootstrapCommand.indexOf("git config --global --add safe.directory /workspace"))
+      .toBeLessThan(bootstrapCommand.indexOf("git -C /workspace symbolic-ref"));
     expect(bootstrapCommand).toContain("git init /workspace");
     expect(bootstrapCommand).toContain("git -C /workspace symbolic-ref HEAD refs/heads/code-ux-bootstrap-$$");
     expect(bootstrapCommand).toContain("git -C /workspace fetch origin");
@@ -208,6 +211,30 @@ describe("WorkspaceManager", () => {
       expect(bootstrapCommand).toContain("chown -R");
       expect(bootstrapCommand).toContain(`${process.getuid()}:${process.getgid()}`);
     }
+  });
+
+  it("reasserts recursive runtime-volume ownership when provider execution forces it", async () => {
+    vi.mocked(runCommandStrict).mockResolvedValue({ ok: true, stdout: "", stderr: "", code: 0, signal: null } as any);
+
+    await manager.ensureRuntimeVolume("docker-volume://workspace-1", {
+      initializeOwnership: true,
+      ownerSpec: "1001:1002",
+      forceOwnershipInitialization: true,
+    });
+    await manager.ensureRuntimeVolume("docker-volume://workspace-1", {
+      initializeOwnership: true,
+      ownerSpec: "1001:1002",
+      forceOwnershipInitialization: true,
+    });
+
+    const ownershipCalls = vi.mocked(runCommandStrict).mock.calls.filter((call) => (
+      call[0] === "docker"
+      && call[1].some((arg) => String(arg).includes("workspace-1-runtime"))
+      && String(call[1].at(-1)).includes("chown -R")
+    ));
+    expect(ownershipCalls).toHaveLength(2);
+    expect(ownershipCalls[0]?.[1].at(-1)).toContain("1001:1002");
+    expect(ownershipCalls[0]?.[1].at(-1)).toContain("/code-ux-runtime-home");
   });
 
   it("checks out the requested branch in a snapshot workspace", async () => {

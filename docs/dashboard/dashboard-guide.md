@@ -27,7 +27,7 @@ Sprint ledger rows and showcase sprint cards expose separate **Tasks** and **Liv
 - `/tasks?projectId=<projectId>&sprintId=<sprintId>`
 - `/live?projectId=<projectId>&sprintId=<sprintId>`
 
-Destination pages must switch the selected project first, then apply the sprint scope through the selected project's sprint API. The Tasks page still accepts legacy same-project links such as `/tasks?sprint=<sprintId>` and `/tasks?sprintId=<sprintId>`, but project-aware links are required when navigation originates from sprint rows or cards so a sprint is never applied to the previously selected project.
+Destination pages consume a new route project once, switch the selected project first, then apply the sprint scope through the selected project's sprint API. After that initial deep-link handoff, later shared project-selection updates remain authoritative: a mounted Tasks or Live tab does not continuously re-apply its retained query value. The Tasks page still accepts legacy same-project links such as `/tasks?sprint=<sprintId>` and `/tasks?sprintId=<sprintId>`, but project-aware links are required when navigation originates from sprint rows or cards so a sprint is never applied to the previously selected project.
 
 ## API Endpoints
 
@@ -838,7 +838,7 @@ Effect:
 - `waitForJulesCiAutofix` controls only the Jules-specific failed-CI feedback path:
   - enabled: a Jules-managed task receives failed-check context in its existing Jules session before worker fallback.
   - disabled: Code UX skips the Jules session notification and dispatches worker-owned CI repair directly.
-- `julesCiAutofixMaxRetries` sets how many CI-fix attempts are allowed before escalation. Escalation output includes exact task ids, PR links, failed check names, failed run summaries, and failed job names so no manual searching is needed.
+- `julesCiAutofixMaxRetries` sets how many CI-fix attempts are allowed before escalation. Escalation output includes exact task ids, PR links, failed check names, and only the newest branch-matched failed run, with every failed job, step, and actionable assertion/error excerpt from that run so no manual searching is needed.
 - `featurePrAutoMergeMode = CREATE_PR` opens or reuses the feature PR and then stops before auto-merge, marking the task settled with `PR_ONLY`.
 - `featurePrAutoMergeMode = WHEN_GREEN` executes feature-PR auto-merge once checks are green and review blockers are clear.
 - `featurePrAutoMergeMode = ALWAYS` attempts auto-merge without waiting for CI, while still respecting merge conflicts and configured review-comment blockers.

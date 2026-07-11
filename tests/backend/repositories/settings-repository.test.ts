@@ -139,6 +139,83 @@ describe("SettingsRepository", () => {
     expect(effectiveProject.sources["designGuidance.selectedStyleguideId"]).toBe("system");
   });
 
+  it("migrates the complete historical default guardrail profile to the new 5-attempt defaults", async () => {
+    const { repo } = await createRepo();
+    const system = repo.getSystemSettings();
+    repo.saveSystemSettings({
+      ...system,
+      defaults: {
+        ...system.defaults,
+        ciIntelligence: {
+          ...system.defaults.ciIntelligence,
+          julesCiAutofixMaxRetries: 3,
+        },
+        guardrails: {
+          enabled: true,
+          perTaskTotalCeiling: 0,
+          jobs: {
+            task_coding: { cap: 8, onLimit: "BLOCK_AND_ESCALATE" },
+            ci_fix: { cap: 3, onLimit: "BLOCK_AND_ESCALATE" },
+            merge_conflict: { cap: 5, onLimit: "BLOCK_AND_ESCALATE" },
+            clarification_reply: { cap: 3, onLimit: "STOP_AND_WAIT" },
+            planning: { cap: 5, onLimit: "BLOCK_AND_ESCALATE" },
+            remediation: { cap: 2, onLimit: "BLOCK_AND_ESCALATE" },
+          },
+        },
+      },
+    });
+
+    (SettingsRepository as any).systemSettingsCache = null;
+    const revisionBeforeMigration = repo.getSettingsResolutionRevision();
+    const migrated = repo.getSystemSettings();
+
+    expect(migrated.defaults.guardrails.jobs.task_coding.cap).toBe(5);
+    expect(migrated.defaults.guardrails.jobs.ci_fix.cap).toBe(5);
+    expect(migrated.defaults.ciIntelligence.julesCiAutofixMaxRetries).toBe(5);
+    expect(repo.getSettingsResolutionRevision()).toBeGreaterThan(revisionBeforeMigration);
+    const persisted = repo.getDatabase().prepare("SELECT payload FROM system_settings WHERE id = 1").get() as { payload: string };
+    expect(JSON.parse(persisted.payload).defaults.guardrails.jobs).toMatchObject({
+      task_coding: { cap: 5 },
+      ci_fix: { cap: 5 },
+    });
+  });
+
+  it("does not migrate intentional guardrail customizations that only reuse the old 8/3 caps", async () => {
+    const { repo } = await createRepo();
+    const system = repo.getSystemSettings();
+    repo.saveSystemSettings({
+      ...system,
+      defaults: {
+        ...system.defaults,
+        ciIntelligence: {
+          ...system.defaults.ciIntelligence,
+          julesCiAutofixMaxRetries: 3,
+        },
+        guardrails: {
+          enabled: true,
+          perTaskTotalCeiling: 0,
+          jobs: {
+            task_coding: { cap: 8, onLimit: "BLOCK_AND_ESCALATE" },
+            ci_fix: { cap: 3, onLimit: "BLOCK_AND_ESCALATE" },
+            // This one changed policy proves the profile is user-shaped.
+            merge_conflict: { cap: 4, onLimit: "BLOCK_AND_ESCALATE" },
+            clarification_reply: { cap: 3, onLimit: "STOP_AND_WAIT" },
+            planning: { cap: 5, onLimit: "BLOCK_AND_ESCALATE" },
+            remediation: { cap: 2, onLimit: "BLOCK_AND_ESCALATE" },
+          },
+        },
+      },
+    });
+
+    (SettingsRepository as any).systemSettingsCache = null;
+    const preserved = repo.getSystemSettings();
+
+    expect(preserved.defaults.guardrails.jobs.task_coding.cap).toBe(8);
+    expect(preserved.defaults.guardrails.jobs.ci_fix.cap).toBe(3);
+    expect(preserved.defaults.guardrails.jobs.merge_conflict.cap).toBe(4);
+    expect(preserved.defaults.ciIntelligence.julesCiAutofixMaxRetries).toBe(3);
+  });
+
   it("persists system settings and resolves project/sprint overrides", async () => {
     const { repo, dbPath } = await createRepo();
 

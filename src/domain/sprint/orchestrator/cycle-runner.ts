@@ -338,6 +338,75 @@ export class CycleRunner {
             this.deps.projectAttentionService.openItems(attentionPayloads);
           }
         },
+        openCiFixGuardrailHandoff: ({ task, payload, attempts, cap }) => {
+          if (!this.deps.projectAttentionService) {
+            return;
+          }
+          const taskId = task.record_id?.trim();
+          if (!taskId) {
+            return;
+          }
+
+          // Recovery can encounter an exhausted legacy ledger while an old
+          // worker CI item or generic merge-required item is still active.
+          // Resolve those machine-owned rows before opening the deduplicated
+          // human handoff so neither path can relaunch coding or repair work.
+          this.deps.projectAttentionService.resolveItemsForTask(
+            args.executionContext.project.id,
+            taskId,
+            ["ci_fix_required", "merge_required"],
+            "ci_fix_guardrail_handoff_opened",
+          );
+
+          const failedEvidence = payload.failedRuns.flatMap((run, runIndex) => {
+            const runLabel = run.workflowName || run.name || `run-${run.id ?? runIndex + 1}`;
+            const lines = [
+              `### Failed run ${runIndex + 1}: ${runLabel}`,
+              `- Run: ${run.id ?? "unknown"}${run.url ? ` (${run.url})` : ""}`,
+              `- Event: ${run.event ?? "unknown"}`,
+              `- Head branch: ${run.headBranch ?? payload.branchName}`,
+            ];
+            for (const job of run.failedJobs || []) {
+              lines.push(`- Failed job: ${job.name} (job ${job.id ?? "unknown"})`);
+              lines.push(`  - Failed steps: ${job.failedSteps.length > 0 ? job.failedSteps.join(", ") : "not reported"}`);
+              lines.push(`  - Log command: ${job.logCommand || "not available"}`);
+              lines.push("  - Failed-step error and assertion evidence:");
+              lines.push("```text");
+              lines.push(job.logExcerpt?.trim() || "No failed-step error evidence was available.");
+              lines.push("```");
+            }
+            return lines;
+          });
+
+          this.deps.projectAttentionService.openItems([{
+            projectId: args.executionContext.project.id,
+            sprintId: args.executionContext.sprint.id,
+            taskId,
+            sprintRunId: args.sprintRunId,
+            attentionType: "human_escalation_required",
+            severity: "high",
+            ownerType: "human" as ProjectAttentionOwnerType,
+            title: `CI autofix guardrail reached for ${task.id}`,
+            summaryMarkdown: [
+              `Task \`${task.id}\` has failing CI after ${attempts}/${cap > 0 ? cap : "∞"} automated repair attempts.`,
+              `PR: ${payload.prUrl}`,
+              `Failed checks: ${payload.failedChecks.join(", ") || "unknown"}`,
+              `Failed jobs: ${payload.failedJobLabels.join(", ") || "unknown"}`,
+              "",
+              "Automation is stopped. A human must fix or explicitly clear this intervention before CI repair can resume.",
+              "",
+              ...failedEvidence,
+            ].join("\n"),
+            payload: {
+              ...payload,
+              sourceAttentionType: "ci_fix",
+              guardrailPurpose: "ci_fix",
+              guardrailAttempts: attempts,
+              guardrailCap: cap,
+              guardrailAction: "human_handoff",
+            },
+          }]);
+        },
         persistMergedTask: async (task) => {
           if (typeof task.record_id !== "string" || task.record_id.trim().length === 0) {
             return;
@@ -453,7 +522,11 @@ export class CycleRunner {
         args,
         resolvedWorkerMergeConflictSuppressionKeys,
         gitStatus,
-      ) || this.isCliTaskAwaitingGitFinalization(task, args),
+      ) || this.isCliTaskAwaitingGitFinalization(task, args)
+        // Failed CI is not merge work. Once its repair guardrail is exhausted,
+        // the CI gate owns a human handoff and the merge protocol must not open
+        // a misleading worker merge_required item for the same task.
+        || (task.status === "BLOCKED" && task.merge_indicator === "CI"),
       renderInstruction: (templateId, variables) => this.deps.renderInstruction(templateId, variables, args.repoPath),
       onTaskEvent: ({ task, eventType, payload, sourceEventKey }) => {
         appendTaskEvent(task, eventType, payload, sourceEventKey);
@@ -711,6 +784,35 @@ export class CycleRunner {
     task.intervention_hint = evaluation.blockedByTotalCeiling
       ? `Per-task invocation ceiling reached for task ${task.id} (${evaluation.reason ?? ""}).`
       : `Coding guardrail reached for task ${task.id}: ${evaluation.count}/${evaluation.cap} coding attempts.`;
+    this.deps.projectAttentionService?.openItems?.([{
+      projectId: args.executionContext.project.id,
+      sprintId: args.executionContext.sprint.id,
+      taskId,
+      sprintRunId: args.sprintRunId,
+      attentionType: "human_escalation_required",
+      severity: "high",
+      ownerType: "human" as ProjectAttentionOwnerType,
+      title: `Coding guardrail reached for ${task.id}`,
+      summaryMarkdown: [
+        `Task \`${task.id}\` (${task.title || "untitled"}) exhausted its automated coding budget.`,
+        `Attempts: ${evaluation.count}/${evaluation.cap > 0 ? evaluation.cap : "∞"}.`,
+        task.intervention_hint,
+        "",
+        "Automation is stopped. Resolve this handoff to clear the coding guardrail and allow one fresh dispatch cycle.",
+      ].join("\n"),
+      payload: {
+        sourceAttentionType: "task_coding",
+        guardrailPurpose: "task_coding",
+        guardrailAttempts: evaluation.count,
+        guardrailCap: evaluation.cap,
+        guardrailAction: "human_handoff",
+        taskKey: task.id,
+        taskTitle: task.title,
+        sessionId: task.session_id || null,
+        sessionName: task.session_name || null,
+        provider: task.provider || null,
+      },
+    }]);
     this.deps.logger.info("Task blocked: coding guardrail reached", {
       taskId: task.id,
       count: evaluation.count,

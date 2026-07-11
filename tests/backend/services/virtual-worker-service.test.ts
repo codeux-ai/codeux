@@ -1083,6 +1083,61 @@ describe("VirtualWorkerService", () => {
     expect(prompt).toContain("Workspace guidance context");
   });
 
+  it("buildCiFixPrompt excludes historical runs from persisted repair attention", async () => {
+    const { virtualWorkerService } = await setupService();
+
+    const prompt = (virtualWorkerService as any).buildCiFixPrompt(
+      {
+        summaryMarkdown: "Fix CI",
+        payload: {
+          failedJobLabels: ["Old Job", "Newest Linux", "Newest Windows"],
+          failedLogSnippets: ["old assertion", "new linux assertion", "new windows error"],
+          failedRuns: [
+            {
+              id: 10,
+              name: "CI",
+              workflowName: "CI",
+              status: "completed",
+              conclusion: "failure",
+              event: "push",
+              headBranch: "fix/branch",
+              url: "https://github.com/test/actions/runs/10",
+              updatedAt: "2026-06-13T14:00:00Z",
+              failedJobs: [{ id: 100, name: "Old Job", conclusion: "failure", failedSteps: ["test"], logExcerpt: "old assertion", logCommand: "old log" }],
+            },
+            {
+              id: 11,
+              name: "CI",
+              workflowName: "CI",
+              status: "completed",
+              conclusion: "failure",
+              event: "pull_request",
+              headBranch: "fix/branch",
+              url: "https://github.com/test/actions/runs/11",
+              updatedAt: "2026-06-13T15:00:00Z",
+              failedJobs: [
+                { id: 110, name: "Newest Linux", conclusion: "failure", failedSteps: ["test"], logExcerpt: "new linux assertion", logCommand: "new linux log" },
+                { id: 111, name: "Newest Windows", conclusion: "failure", failedSteps: ["build"], logExcerpt: "new windows error", logCommand: "new windows log" },
+              ],
+            },
+          ],
+        },
+      },
+      "fix/branch",
+      "Workspace guidance",
+    );
+
+    expect(prompt).toContain("### Failed Run 1: CI");
+    expect(prompt).toContain("- Run ID: 11");
+    expect(prompt).toContain("1. Newest Linux");
+    expect(prompt).toContain("2. Newest Windows");
+    expect(prompt).toContain("new linux assertion");
+    expect(prompt).toContain("new windows error");
+    expect(prompt).not.toContain("Run ID: 10");
+    expect(prompt).not.toContain("Old Job");
+    expect(prompt).not.toContain("old assertion");
+  });
+
   it("buildDispatchSummary formats correctly", async () => {
     const { virtualWorkerService } = await setupService();
 
@@ -1225,6 +1280,96 @@ describe("VirtualWorkerService", () => {
     expect(humanEscalations[0]?.summaryMarkdown).toContain("refusing to mark the fix as pushed");
   });
 
+  it("requeues a failed CI invocation until the CI-fix guardrail is exhausted", async () => {
+    const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository } = await setupServiceWithProject();
+    let count = 0;
+    (virtualWorkerService as any).deps.guardrailService = {
+      evaluate: vi.fn(() => ({
+        allowed: count < 5,
+        count,
+        cap: 5,
+        action: "BLOCK_AND_ESCALATE",
+      })),
+      record: vi.fn(() => { count += 1; }),
+      reset: vi.fn(),
+      getCounts: vi.fn(() => ({})),
+    };
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:ci-retry",
+      displayName: "Virtual Worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType: "ci_fix_required",
+      severity: "high",
+      ownerType: "worker",
+      title: "CI Fix",
+      summaryMarkdown: "Fix it",
+      payload: { repoPath: "/test", branchName: "fix/branch" },
+    });
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree").mockRejectedValue(new Error("provider bootstrap failed"));
+
+    await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+
+    const retried = projectAttentionService.getItem(item.id);
+    expect(retried).toMatchObject({
+      status: "open",
+      assignedWorkerEndpointId: null,
+      payload: expect.objectContaining({
+        lastVirtualWorkerError: "provider bootstrap failed",
+        ciFixRetryCount: 1,
+        ciFixRetryCap: 5,
+      }),
+    });
+    expect(projectAttentionService.listActiveProjectItems(project.id)
+      .some((attentionItem) => attentionItem.attentionType === "human_escalation_required")).toBe(false);
+  });
+
+  it("creates a human handoff when a failed CI invocation reaches the guardrail", async () => {
+    const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository } = await setupServiceWithProject();
+    let count = 4;
+    (virtualWorkerService as any).deps.guardrailService = {
+      evaluate: vi.fn(() => ({
+        allowed: count < 5,
+        count,
+        cap: 5,
+        action: "BLOCK_AND_ESCALATE",
+      })),
+      record: vi.fn(() => { count += 1; }),
+      reset: vi.fn(),
+      getCounts: vi.fn(() => ({})),
+    };
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:ci-handoff",
+      displayName: "Virtual Worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType: "ci_fix_required",
+      severity: "high",
+      ownerType: "worker",
+      title: "CI Fix",
+      summaryMarkdown: "Fix it",
+      payload: { repoPath: "/test", branchName: "fix/branch" },
+    });
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree").mockRejectedValue(new Error("fifth attempt failed"));
+
+    await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+
+    expect(projectAttentionService.getItem(item.id)?.status).toBe("resolved");
+    const handoffs = projectAttentionService.listActiveProjectItems(project.id)
+      .filter((attentionItem) => attentionItem.attentionType === "human_escalation_required");
+    expect(handoffs).toHaveLength(1);
+    expect(handoffs[0]?.summaryMarkdown).toContain("Attempts: 5/5");
+    expect(handoffs[0]?.summaryMarkdown).toContain("fifth attempt failed");
+  });
+
   it("reuses an existing task workspace for CI autofix when the branch already has a CLI session", async () => {
     const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository, sessionTracking } = await setupServiceWithProject();
 
@@ -1286,6 +1431,118 @@ describe("VirtualWorkerService", () => {
       expect.anything(),
       { remoteOnly: true },
     );
+  });
+
+  it("defaults task-scoped CI fixes to the coding session, provider, and model", async () => {
+    const {
+      virtualWorkerService,
+      projectAttentionService,
+      project,
+      projectManagementRepository,
+      executionRepository,
+      sessionTracking,
+    } = await setupServiceWithProject();
+    const sprint = projectManagementRepository.createSprint(project.id, { name: "Sprint 1", number: 1 });
+    const task = projectManagementRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T-CI",
+      title: "Task CI continuation",
+      promptMarkdown: "Implement the task",
+      status: "coding_completed",
+      isIndependent: true,
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      provider: "codex",
+      state: "COMPLETED",
+      sessionId: "cli-codex-task-session",
+      sessionName: "sessions/cli-codex-task-session",
+      workerBranch: "fix/task-ci",
+    });
+    executionRepository.appendTaskRunEvent(taskRun.id, "cli_workspace_bound", "system", {
+      workspaceSessionId: "cli-codex-workspace-session",
+      worktreePath: "docker-volume://cli-codex-workspace-session",
+      executionMode: "DOCKER",
+    });
+    sessionTracking.createSession({
+      id: "cli-codex-task-session",
+      provider: "codex",
+      state: "COMPLETED",
+      repoPath: "/test",
+      workerBranch: "fix/task-ci",
+      featureBranch: "main",
+    });
+    executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      taskRunId: taskRun.id,
+      sessionId: "cli-codex-task-session",
+      provider: "codex",
+      purpose: "task_coding",
+      status: "completed",
+      model: "gpt-5.6-sol",
+      nativeSessionId: "native-codex-task-session",
+    });
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      attentionType: "ci_fix_required",
+      severity: "high",
+      ownerType: "worker",
+      title: "CI Fix",
+      summaryMarkdown: "Fix CI",
+      payload: { repoPath: "/test", branchName: "fix/task-ci" },
+    });
+
+    const settings = (virtualWorkerService as any).resolveDashboardSettings(project.id, sprint.id);
+    const continuation = await (virtualWorkerService as any).resolveTaskCiFixContinuation(item, settings);
+
+    expect(continuation).toMatchObject({
+      provider: "codex",
+      sessionId: "cli-codex-task-session",
+      resumeSessionId: "cli-codex-workspace-session",
+      continueSessionId: "native-codex-task-session",
+      taskRunId: taskRun.id,
+      providerSettings: { model: "gpt-5.6-sol" },
+    });
+  });
+
+  it("uses the explicit CI Fix route when same-session continuation is disabled", async () => {
+    const { virtualWorkerService, projectAttentionService, project, projectManagementRepository, settingsRepository } = await setupServiceWithProject();
+    const sprint = projectManagementRepository.createSprint(project.id, { name: "Sprint 1", number: 1 });
+    const task = projectManagementRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T-ROUTED-CI",
+      title: "Routed CI fix",
+      promptMarkdown: "Implement the task",
+      status: "coding_completed",
+      isIndependent: true,
+    });
+    settingsRepository.saveProjectSettings(project.id, {
+      aiProvider: {
+        invocationRouting: {
+          ci_fix: { continueTaskSession: false },
+        },
+      },
+    } as any);
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      attentionType: "ci_fix_required",
+      severity: "high",
+      ownerType: "worker",
+      title: "CI Fix",
+      summaryMarkdown: "Fix CI",
+      payload: { repoPath: "/test", branchName: "fix/task-ci" },
+    });
+
+    const settings = (virtualWorkerService as any).resolveDashboardSettings(project.id, sprint.id);
+    await expect((virtualWorkerService as any).resolveTaskCiFixContinuation(item, settings)).resolves.toBeNull();
   });
 
   it("falls back to HOST mode for CI autofix when docker is unavailable", async () => {
@@ -1996,7 +2253,8 @@ describe("VirtualWorkerService", () => {
     await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
 
     const updatedItem = projectAttentionService.getItem(item.id);
-    expect(updatedItem?.status).toBe("claimed");
+    expect(updatedItem?.status).toBe("open");
+    expect(updatedItem?.assignedWorkerEndpointId).toBeNull();
     expect(updatedItem?.payload?.lastVirtualWorkerError).toBe("Provider failed");
     expect(updatedItem?.payload?.mergeConflictRetryCount).toBe(1);
 

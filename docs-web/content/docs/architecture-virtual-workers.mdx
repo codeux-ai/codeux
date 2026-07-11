@@ -163,6 +163,18 @@ The virtual worker can claim and act on these attention item categories:
 | --- | --- |
 | `merge_conflict` | Provision a worker on the conflicting worktree; instruct the CLI to resolve and push. |
 | `ci_failure` | Provision a worker; instruct the CLI to read the failing CI log and apply a fix; respects `julesCiAutofixMaxRetries`. |
+
+Repair attention is scheduled before ordinary coding dispatches. Code UX does not lease a coding task while CI-fix or merge-conflict attention is waiting, and capacity is checked against the provider selected by the invocation-specific route rather than the generic virtual-worker provider. The final provider-slot wait is bounded to 30 seconds so sprint finalization cannot wait forever on a saturated or stale route.
+
+Task-scoped CI repair continues the originating coding session, native provider session, effective model, coding-agent instructions, and preserved workspace by default. Settings → AI Models → CI fix can disable this behavior and force the standalone CI Fix route; sprint-level final-merge repair always uses that route. Failed invocations return attention to an unclaimed retryable state while the guardrail budget remains. When the default five-attempt limit is reached, Code UX creates a human handoff containing the last error and attempt count.
+
+Immediately before every Docker provider launch attempt, Code UX reasserts runtime-volume ownership for the container's effective non-root UID/GID. This repairs newly created, stale, or concurrently recreated root-owned provider HOME/cache volumes at the atomic `docker run` boundary, including standalone final-merge CI repair. Workspace seed helpers explicitly trust mounted `/workspace` while initializing Git and then restore the provider UID/GID, so restart recovery does not trip Git's dubious-ownership protection on a correctly non-root-owned volume.
+
+Provider completion and workflow completion are separate durable boundaries. If a restart lands after a coding provider finishes but before Git finalization, startup recovery records that exact crash window. A replacement run that successfully resumes the preserved workspace continues directly with Git/PR finalization and does not invoke the coding provider again; provider completion alone is never treated as merge-ready task state.
+
+Background startup pruning refreshes tracked sessions immediately before volume removal and protects newly created workspace/runtime volumes during their registration window. Restart cleanup therefore cannot delete a just-seeded QA or CI workspace and launch the provider against an empty replacement volume.
+
+If feature-PR CI repair exhausts its guardrail, the task is blocked for intervention while its durable planning state remains coding-complete. The original coding task is not reopened or dispatched again merely because CI still fails.
 | `action_required` (plan approval) | Auto-approve via `julesApiClient.approveSessionPlan()` if `autoApprovePlan: true`. |
 | `action_required` (clarification) | Auto-reply per `autoAnswerClarificationMode` (`TEMPLATE` or `WORKER`). |
 | Other | Escalate to human. |

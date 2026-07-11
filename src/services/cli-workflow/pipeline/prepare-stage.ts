@@ -35,7 +35,7 @@ function passesCategory(m: MemoryRecord, cfg: AgentMemoryConfig | undefined): bo
 export async function executePrepareStage(
   ctx: PipelineContext,
   resumeFromFailedSessionId?: string
-): Promise<{ worktreePath: string; initialHead: string; providerPrompt: string }> {
+): Promise<{ worktreePath: string; initialHead: string; providerPrompt: string; resumed?: boolean }> {
   const resolvedProvider = resolveProviderForInvocation(ctx.settings, {
     invocation: "task_coding",
     task: ctx.task,
@@ -142,5 +142,5 @@ export async function executePrepareStage(
     description: `Running ${ctx.provider} prompt on ${ctx.workerBranch}.`,
   });
 
-  return { worktreePath: ctx.worktreePath, initialHead, providerPrompt };
+  return { worktreePath: ctx.worktreePath, initialHead, providerPrompt, resumed };
 }

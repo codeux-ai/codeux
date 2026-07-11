@@ -31,7 +31,7 @@ import type {
 } from "../../../contracts/app-types.js";
 import type { TaskRunRecord } from "../../../contracts/execution-types.js";
 import type { ExecutionRepository } from "../../../repositories/execution-repository.js";
-import type { WorkerCiFixPayload } from "./feature-pr/ci-autofix-policy.js";
+import type { CiFixGuardrailHandoff, WorkerCiFixPayload } from "./feature-pr/ci-autofix-policy.js";
 import { evaluatePreCiGateTransition, isCompletedTaskAwaitingMerge, isTaskCodeComplete, taskHasMergeEvidence } from "../task-merge-state.js";
 import type { MergeConflictDebouncer } from "./merge-conflict-debouncer.js";
 import type { TaskQaMergeGateStatus } from "../../../services/quality-assurance-service.js";
@@ -81,6 +81,7 @@ export interface CiGateContext {
   executionRepository?: ExecutionRepository;
   sprintRunId?: string;
   openCiFixAttentionItems?: (items: Array<{ task: Subtask; payload: WorkerCiFixPayload }>) => void;
+  openCiFixGuardrailHandoff?: (handoff: CiFixGuardrailHandoff) => void;
   hasActiveWorkerCiFixAttempt?: (task: Subtask, prNumber: number) => boolean;
   evaluateTaskQaGate?: (task: Subtask) => TaskQaMergeGateStatus;
   /**
@@ -850,6 +851,7 @@ export class FeaturePrGateService {
         repoPath: context.repoPath,
         defaultBranch: context.defaultBranch,
         hasActiveWorkerCiFixAttempt: context.hasActiveWorkerCiFixAttempt,
+        onCiFixGuardrailExhausted: context.openCiFixGuardrailHandoff,
       });
       reportText += inProgressResult.reportText;
       if (skipCiWait) {

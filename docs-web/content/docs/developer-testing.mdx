@@ -108,13 +108,13 @@ If `pnpm run ci` is green, GitHub CI will be too (modulo platform-specific diffe
 
 ## CI pipeline (GitHub Actions)
 
-The canonical automatic lane is `.github/workflows/ci.yml`, named `Code UX CI Pipeline`. It runs jobs `01` through `09` for pushes and pull requests targeting `dev` or `main`; the full browser and release matrices run only for `main` validation and manual dispatches.
+The canonical automatic lane is `.github/workflows/ci.yml`, named `Code UX CI Pipeline`. It runs the core numbered jobs for pushes to every branch and for pull requests targeting `dev` or `main`; the full browser and release matrices run only for `main` validation and manual dispatches.
 
 It is staged as:
 
 1. `01 Preflight / release policy`: strict version bump gate for pull requests targeting `main`.
 2. `02 Static`, `03 Build`, and `04 Security`: prerequisite type/guardrail, build, and audit checks.
-3. `05 Backend`, `06 Dashboard`, `07 Package`, and `08 Orchestration`: run in parallel after those prerequisites. The orchestration matrix includes Linux Docker and macOS/Windows Electron on both `dev` and `main`.
+3. `05 Backend`, `06 Dashboard`, `07 Package`, and `08 Orchestration`: run in parallel after those prerequisites. The orchestration matrix includes Linux Docker and macOS/Windows Electron on feature branches, `dev`, and `main`.
 4. `09 Docs / five-page smoke`: loads the Docs index, its overview route, and three representative pages on Linux for every target branch. It fails on HTTP, console, or page errors without crawling all subpages.
 5. `09 E2E`: full Playwright on Linux, macOS, and Windows only for `main` validation and manual dispatches.
 6. `10 Release Candidate`: unsigned desktop release-candidate packages with `--publish never`, only for `main` validation and manual dispatches.
