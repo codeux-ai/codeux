@@ -44,7 +44,6 @@ import {
 import { clearChatDraftFromUrl, readChatDraftFromLocation } from "./lib/no-project-chat-assistant.js";
 import { resolveChatLiveEntities, type ChatLiveEntityWidget } from "./lib/chat-live-entities.js";
 import { STATUS_MESSAGE_MIN_INTERVAL_MS } from "./lib/agent-humor-messages.js";
-import { classifyCinematicRuntimeState } from "./lib/cinematic-runtime-state.js";
 
 
 const EMPTY_LIVE_ENTITIES: readonly ChatLiveEntityWidget[] = [];
@@ -700,11 +699,6 @@ export const ChatPage: FunctionComponent = () => {
       if (!stagePreset) {
         stagePreset = getLinkedAgentPreset({ metadata: undefined } as (typeof messages)[0]);
       }
-      const cinematicRuntimeState = classifyCinematicRuntimeState({
-        hasAwaitedReply: hasWorkingReply,
-        invocations,
-        projectManagerAgentPresetId: stagePreset?.id,
-      });
       return (
         <>
           <ConfirmDialog isOpen={isConfirmOpen} options={confirmOptions} onConfirm={handleConfirm} onCancel={handleCancel} />
@@ -719,8 +713,8 @@ export const ChatPage: FunctionComponent = () => {
               selectedThread={selectedThread}
               messages={messages}
               threadMessagesLoading={threadsLoading || threadMessagesLoading}
-              projectManagerActive={cinematicRuntimeState.projectManagerActive}
-              backgroundActivityCount={cinematicRuntimeState.backgroundActivityCount}
+              hasAwaitedReply={hasWorkingReply}
+              invocations={invocations}
               sending={sending}
               error={error}
               input={input}

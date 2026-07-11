@@ -37,7 +37,6 @@ import { ChatPageShell } from "../../../dashboard/src/v2/components/chat/ChatPag
 import { ChatRail } from "../../../dashboard/src/v2/components/chat/ChatRail.js";
 import { ChatCreateAppQuickActions } from "../../../dashboard/src/v2/components/chat/ChatCreateAppQuickActions.js";
 import { CinematicStage } from "../../../dashboard/src/v2/components/chat/cinematic/CinematicStage.js";
-import { classifyCinematicRuntimeState } from "../../../dashboard/src/v2/lib/cinematic-runtime-state.js";
 import type { AgentPresetRecord, ExecutionInvocationRecord, Source } from "../../../dashboard/src/v2/types.js";
 
 const mockProject = {
@@ -56,11 +55,14 @@ const projectManagerPreset = {
 const renderStageForInvocation = (
   invocation: Pick<ExecutionInvocationRecord, "agentPresetId" | "status" | "type">,
 ) => {
-  const runtimeState = classifyCinematicRuntimeState({
-    hasAwaitedReply: false,
-    invocations: [invocation],
-    projectManagerAgentPresetId: projectManagerPreset.id,
-  });
+  const activityInvocation = {
+    id: "invocation-1",
+    messageCount: 0,
+    provider: "codex",
+    providerInvocationId: null,
+    startedAt: "2026-07-11T10:00:00.000Z",
+    ...invocation,
+  } as ExecutionInvocationRecord;
 
   return render(
     <CinematicStage
@@ -68,8 +70,8 @@ const renderStageForInvocation = (
       selectedThread={null}
       messages={[]}
       threadMessagesLoading={false}
-      projectManagerActive={runtimeState.projectManagerActive}
-      backgroundActivityCount={runtimeState.backgroundActivityCount}
+      hasAwaitedReply={false}
+      invocations={[activityInvocation]}
       sending={false}
       error={null}
       input=""
@@ -269,11 +271,11 @@ describe("ChatPageShell", () => {
     expect(getByTestId("cinematic-stage")).toHaveAttribute("data-background-activity-count", "1");
     expect(getByTestId("agent-avatar-scene")).not.toHaveAttribute("data-expression", "thinking");
     expect(getByTestId("agent-avatar-scene")).toHaveAttribute("data-tool", "");
-    expect(queryByText("Spinning up a workspace")).not.toBeInTheDocument();
+    expect(queryByText(/Background.*Container starting/)).toBeInTheDocument();
   });
 
   it("activates the Project Manager for its matching dashboard-reply invocation", () => {
-    const { getByTestId, getByText } = renderStageForInvocation({
+    const { container, getByTestId, getByText } = renderStageForInvocation({
       agentPresetId: "pm-agent",
       status: "running",
       type: "dashboard_reply",
@@ -281,6 +283,9 @@ describe("ChatPageShell", () => {
 
     expect(getByTestId("cinematic-stage")).toHaveAttribute("data-background-activity-count", "0");
     expect(getByTestId("agent-avatar-scene")).toHaveAttribute("data-expression", "thinking");
-    expect(getByText("Spinning up a workspace")).toBeInTheDocument();
+    const activityLabel = getByText(/Container starting/);
+    expect(activityLabel).toBeInTheDocument();
+    expect(activityLabel.closest('[role="status"]')).toHaveAttribute("aria-atomic", "true");
+    expect(container.querySelector(".stage-thinking-dot")).toHaveClass("motion-reduce:animate-none");
   });
 });
