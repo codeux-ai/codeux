@@ -6,7 +6,7 @@ Use them when a particular shape of sprint recurs — e.g. *"add a CRUD endpoint
 
 ## Where they live
 
-Quicksprint templates are scoped to a **project**. They are stored in the database and (optionally) mirrored on disk under `<repo>/.quicksprints/<template-id>.md`.
+Quicksprint templates are scoped to a **project**. They are stored in the database and mirrored on disk under `<repo>/.code-ux/quicksprints/templates/<template-id>.md`.
 
 The dashboard surface for them is the **Quicksprint panel** on the **Sprints** page.
 
@@ -16,31 +16,26 @@ A template has:
 
 - **Name** — A short label.
 - **Description** — One-line summary shown on cards.
-- **Prompt template** — The sprint prompt body. May contain `{{placeholder}}` slots for runtime substitution.
-- **Default sprint name template** — Used when generating the sprint name from a single execution.
-- **Variables** — A typed list of placeholders the user fills before execution.
-- **Tags** — Used for filtering on the panel.
+- **Icon** — An icon identifier.
+- **Category** — Used for grouping/filtering.
+- **Category Color** *(optional)* — Color code for the category badge.
+- **Agent Instructions** — The sprint prompt body.
+- **Default Task Count** *(optional)* — The default number of subtasks to generate.
 
 ## Creating a template
 
-From the Quicksprint panel, click **+ New template**. The editor lets you write the prompt body and define variables. Each variable has:
-
-- `key` (matches `{{key}}` in the prompt).
-- `label` (UI label).
-- `type` — `text`, `multiline`, `select`.
-- `default` — pre-filled value.
-- `options` — for `select` type.
+From the Quicksprint panel, click **+ New template**. The editor lets you write the prompt body and define the metadata (Name, Description, Icon, Category, Default Task Count).
 
 Save persists the template and broadcasts a real-time event.
 
 ## Executing a template
 
-Click any template card. A modal opens prompting for variable values. On **Run**:
+Click any template card. A sidebar opens where you can configure the run:
 
-1. Code UX substitutes `{{key}}` placeholders with your values.
-2. Creates a new sprint in the active project.
-3. Plans the sprint via the planning agent (using the substituted prompt).
-4. Optionally orchestrates immediately (toggle in the modal).
+1. Code UX prepares to plan the sprint.
+2. You can override the model, or route.
+3. You can use the slider to choose the number of subtasks (up to 30), or toggle **No limit** to let the planner decide.
+4. Click **Plan & Start** to immediately orchestrate after planning, or **Plan Only** to review the plan first.
 
 The resulting sprint is identical to one created manually — you can edit subtasks before running.
 
@@ -48,8 +43,8 @@ The resulting sprint is identical to one created manually — you can edit subta
 
 From the **⋯** menu on a template card:
 
-- **Edit** — Update name, description, prompt, variables.
-- **Delete** — Destructive; confirm to remove.
+- **Edit** — Update name, description, instructions, category, icon, etc.
+- **Delete** — Destructive; confirm to remove. Deleting a built-in template writes a local tombstone marker so it's hidden for the project.
 
 ## REST API
 
@@ -62,31 +57,27 @@ From the **⋯** menu on a template card:
 | DELETE | `/api/projects/:projectId/quicksprints/templates/:templateId` | Delete |
 | POST | `/api/projects/:projectId/quicksprints/execute` | Execute (returns the new sprint) |
 
-The REST execution route keeps awaited semantics: it returns the sprint only after planning completes or fails. Chat quickactions can use the internal detached quicksprint launch primitive when they need the created sprint immediately and want planning to continue in the background with a `clientRequestId` for tracking.
-
 ## Examples
 
 ### "Add CRUD endpoint" template
 
 ```text
-Add a complete CRUD endpoint for the `{{model}}` model.
+Add a complete CRUD endpoint for the specified model.
 
 Requirements:
-- POST /api/{{model_plural}} — create
-- GET /api/{{model_plural}} — list (paginated)
-- GET /api/{{model_plural}}/:id — read
-- PATCH /api/{{model_plural}}/:id — update
-- DELETE /api/{{model_plural}}/:id — delete (soft, unless {{soft_delete}} is "no")
+- POST /api/models — create
+- GET /api/models — list (paginated)
+- GET /api/models/:id — read
+- PATCH /api/models/:id — update
+- DELETE /api/models/:id — delete
 
 Include input validation, integration tests, and an OpenAPI snippet.
 ```
 
-Variables: `model`, `model_plural`, `soft_delete` (select: yes/no).
-
 ### "Dependency upgrade" template
 
 ```text
-Upgrade `{{package}}` from {{from_version}} to {{to_version}}.
+Upgrade the specified package.
 
 Steps:
 - Bump version in package.json / requirements.txt / equivalent.
@@ -97,10 +88,7 @@ Steps:
 - Document the upgrade in CHANGELOG.md.
 ```
 
-Variables: `package`, `from_version`, `to_version`.
-
 ## Tips
 
 - Keep templates short and prescriptive. The planner agent will produce better subtasks from a focused prompt.
-- Use `multiline` variables for free-form context (linked tickets, design docs).
-- Tag templates so you can filter "build" vs "maintenance" vs "investigation".
+- Tag templates so you can filter them.

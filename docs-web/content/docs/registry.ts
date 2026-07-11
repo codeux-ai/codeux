@@ -105,7 +105,6 @@ export type DocsSlug =
   | 'architecture-security'
   | 'user-dashboard-custom-dashboards'
   | 'architecture-custom-dashboard-foundation'
-  | 'architecture-dashboard-notification-feed'
   | 'architecture-managed-container-runtime'
   | 'architecture-speech-input'
 
@@ -832,13 +831,6 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Custom Dashboard Foundation",
     description: "Custom dashboards are a persisted domain model for project-scoped dashboard generation. The foundation stores manifests, generated file bundles, data-source node graphs, validation history, and publication state, and...",
   },
-  'architecture-dashboard-notification-feed': {
-    id: 'architecture-dashboard-notification-feed',
-    path: '/docs/architecture-dashboard-notification-feed',
-    section: 'Architecture',
-    title: "Dashboard notification feed",
-    description: "The dashboard exposes a read-only cross-project notification queue at GET /api/notifications.",
-  },
   'architecture-managed-container-runtime': {
     id: 'architecture-managed-container-runtime',
     path: '/docs/architecture-managed-container-runtime',
@@ -958,7 +950,6 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-security'],
   docsRegistry['user-dashboard-custom-dashboards'],
   docsRegistry['architecture-custom-dashboard-foundation'],
-  docsRegistry['architecture-dashboard-notification-feed'],
   docsRegistry['architecture-managed-container-runtime'],
   docsRegistry['architecture-speech-input'],
 ]

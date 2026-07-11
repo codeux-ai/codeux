@@ -4,6 +4,22 @@ A **virtual worker** is an ephemeral, on-demand agent process that handles work 
 
 This page describes the virtual worker lifecycle, provisioning model, execution modes, and attention-item handling.
 
+## External worker client
+
+Code UX also ships a headless external worker process at `dist/worker/index.js` and exposes it through the `codeux-worker` package bin. This worker is separate from the dashboard server: it connects to an authenticated Streamable HTTP MCP endpoint with `--server-url` and `--auth-token`, registers a stable worker endpoint, polls `pull_task_dispatch`, executes leased dispatches through a local worker-host command, and reports `RUNNING` plus terminal status through `update_task_dispatch`.
+
+External workers can cover multiple projects in one process by repeating `--project-id`. Repeating `--active-project-id` narrows the current poll loop to an active subset while the server keeps the full `projectIds` set enrolled for future focus changes. The worker refuses to execute a dispatch unless the control plane returns a lease token, retries transient network failures with bounded backoff, and calls `cancel_local_dispatch` when the control plane returns a cancel action.
+
+Environment fallbacks are available for headless deployment:
+
+- `CODE_UX_WORKER_SERVER_URL`
+- `CODE_UX_WORKER_AUTH_TOKEN`
+- `MCP_HTTP_SERVER_URL`
+- `MCP_HTTP_AUTH_TOKEN`
+- `MCP_HTTPS_AUTH_TOKEN`
+
+Bearer tokens and local provider credentials remain local and are not logged by the worker client.
+
 ## Source
 
 `src/services/virtual-worker-service.ts` (~1000 LOC).
@@ -81,10 +97,11 @@ Per provider, `executionMode` is `DOCKER` (default) or `HOST`.
 
 ### DOCKER mode
 
-- Image: `node:24-bookworm` (override via `workers.dockerImage`).
+- Image: `node:24-bookworm` (override via `workers.dockerImage`). Images are cached across runs using a setup image cache.
 - Mounts:
-  - The worktree path read-write.
-  - The provider auth path (e.g. `~/.gemini`) read-only, if `mountAuth: true`.
+  - The workspace volume (`code-ux.workspace=true`) is mounted read-write.
+  - Runtime volumes (`code-ux.workspace-runtime=true`) are used for preserving package manager caches and the provider home directory outside of the main workspace.
+  - Provider credentials are conceptually mounted via dedicated, isolated credential mounts (e.g. `mountAuth: true` builds provider-specific mounts without exposing raw host tokens or keys to the workspace root or command arguments).
   - Optional setup script.
 - Network: default bridge.
 - The CLI runs as the container's default user (root, in the default image).
@@ -94,7 +111,7 @@ Per provider, `executionMode` is `DOCKER` (default) or `HOST`.
 
 - The CLI runs directly on the host as the Code UX process user.
 - No mount; the CLI uses its native auth.
-- Faster startup, no Docker dependency, but less hermetic.
+- Used *only* as a fallback for specific edge cases (such as degraded CI autofix runs when Docker is unrecoverably unavailable). Docker is the strict default and is required for merge conflict isolation.
 
 ## Worktree management
 
@@ -106,6 +123,10 @@ Each dispatch operates on its own Git worktree under `<repo>/.worktrees/<session
 - **Preserved** if the dispatch failed and policy says to keep failed worktrees for inspection.
 
 Cleanup of terminal CLI worktrees also runs at sprint finalisation.
+
+Docker-backed planning uses a read-only snapshot workspace instead of a mutable task worktree. In `REMOTE` git mode, fresh planning invocations refresh `origin` and check out only `origin/<branch>` for the explicit sprint feature branch or the effective runtime git default branch, never the host repo's current checkout. If that remote tracking ref or fallback cannot be prepared, planning fails instead of falling back to a stale local branch. Restart and Continue reuse the preserved snapshot workspace so cancelled or interrupted provider sessions can still resume.
+
+Provider CLI workspace preparation is centralized through `InvocationWorkspacePreparer`. Its shared provider-invocation option builder constructs snapshot checkout, git policy, and fresh/continue lifecycle values for Docker provider calls, while its continuation resolver locates preserved workspaces and their current branches. Fresh Docker invocations in `REMOTE` git mode use explicit remote refs only: planning, project setup, dashboard/chat replies, worker inbox replies, node-flow provider prompts, QA review snapshots, task coding, QA follow-up, CI autofix, and merge-conflict repair all materialize from `origin/<branch>` refs rather than local branches or the host repo's current checkout. Dashboard/chat replies resolve dashboard settings with the project scope before building this policy, so local Git projects keep `LOCAL` snapshot behavior and do not require `origin/<defaultBranch>`. Continuation/restart flows may reuse a preserved workspace for provider-session continuity; if a preserved workspace is missing and a new workspace must be materialized, the same remote-only branch policy applies.
 
 ## Session lifecycle
 
@@ -142,6 +163,18 @@ The virtual worker can claim and act on these attention item categories:
 | --- | --- |
 | `merge_conflict` | Provision a worker on the conflicting worktree; instruct the CLI to resolve and push. |
 | `ci_failure` | Provision a worker; instruct the CLI to read the failing CI log and apply a fix; respects `julesCiAutofixMaxRetries`. |
+
+Repair attention is scheduled before ordinary coding dispatches. Code UX does not lease a coding task while CI-fix or merge-conflict attention is waiting, and capacity is checked against the provider selected by the invocation-specific route rather than the generic virtual-worker provider. The final provider-slot wait is bounded to 30 seconds so sprint finalization cannot wait forever on a saturated or stale route.
+
+Task-scoped CI repair continues the originating coding session, native provider session, effective model, coding-agent instructions, and preserved workspace by default. Settings → AI Models → CI fix can disable this behavior and force the standalone CI Fix route; sprint-level final-merge repair always uses that route. Failed invocations return attention to an unclaimed retryable state while the guardrail budget remains. When the default five-attempt limit is reached, Code UX creates a human handoff containing the last error and attempt count.
+
+Immediately before every Docker provider launch attempt, Code UX reasserts runtime-volume ownership for the container's effective non-root UID/GID. This repairs newly created, stale, or concurrently recreated root-owned provider HOME/cache volumes at the atomic `docker run` boundary, including standalone final-merge CI repair. Workspace seed helpers explicitly trust mounted `/workspace` while initializing Git and then restore the provider UID/GID, so restart recovery does not trip Git's dubious-ownership protection on a correctly non-root-owned volume.
+
+Provider completion and workflow completion are separate durable boundaries. If a restart lands after a coding provider finishes but before Git finalization, startup recovery records that exact crash window. A replacement run that successfully resumes the preserved workspace continues directly with Git/PR finalization and does not invoke the coding provider again; provider completion alone is never treated as merge-ready task state.
+
+Background startup pruning refreshes tracked sessions immediately before volume removal and protects newly created workspace/runtime volumes during their registration window. Restart cleanup therefore cannot delete a just-seeded QA or CI workspace and launch the provider against an empty replacement volume.
+
+If feature-PR CI repair exhausts its guardrail, the task is blocked for intervention while its durable planning state remains coding-complete. The original coding task is not reopened or dispatched again merely because CI still fails.
 | `action_required` (plan approval) | Auto-approve via `julesApiClient.approveSessionPlan()` if `autoApprovePlan: true`. |
 | `action_required` (clarification) | Auto-reply per `autoAnswerClarificationMode` (`TEMPLATE` or `WORKER`). |
 | Other | Escalate to human. |
@@ -178,7 +211,7 @@ Each dispatch records:
 - PR URL on success.
 - Failure reason.
 
-Visible in the dashboard's **Tasks** detail panel and via `manage_code_ux` → `tasks` → `inspect_run` and `telemetry` → `list_task_dispatches`.
+Visible in the dashboard's **Tasks** detail panel and via `manage_tasks` → `inspect_run` and `manage_telemetry` → `list_task_dispatches`.
 
 ## Tuning
 

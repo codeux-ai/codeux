@@ -21,7 +21,6 @@ It is for contributors and integrators who need to reason about *how* Code UX ma
 | 11 | [Configuration resolution](./configuration-resolution.md) | Cascade order, search paths, settings hierarchy |
 | 12 | [Speech input](./speech-input.md) | Persisted transcription settings, privacy boundary, provider fallback contract |
 | 13 | [Security model](./security.md) | Authentication, authorisation, secrets, network surface |
-| 14 | [Dashboard notification feed](./dashboard-notification-feed.md) | Cross-project attention and execution-failure projection |
 
 ## Runtime Notes
 

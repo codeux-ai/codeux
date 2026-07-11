@@ -12,7 +12,6 @@
 - [Execution Schema Foundation](./architecture/execution-schema-foundation.md)
 - [DB-Native Orchestrator Integration](./architecture/db-native-orchestrator-integration.md)
 - [Execution Dashboard Projection](./architecture/execution-dashboard-projection.md)
-- [Dashboard Notification Feed](./architecture/dashboard-notification-feed.md)
 - [Execution Invocation Tracking](./architecture/execution-invocation-tracking.md)
 - [Code Quality And Performance Contracts](./architecture/code-quality-performance-contracts.md)
 - [Dashboard Realtime Transport Plan](./architecture/dashboard-realtime-transport-plan.md)
