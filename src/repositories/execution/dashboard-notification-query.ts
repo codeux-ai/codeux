@@ -221,6 +221,7 @@ export class DashboardNotificationQuery {
       LEFT JOIN sprints s ON s.id = COALESCE(pai.sprint_id, sr.sprint_id, attention_dispatch.sprint_id)
       LEFT JOIN tasks t ON t.id = COALESCE(pai.task_id, attention_dispatch.task_id)
       WHERE pai.status IN ('open', 'claimed')
+        AND pai.owner_type IN ('human', 'system')
       ORDER BY pai.updated_at DESC, pai.opened_at DESC, pai.id ASC
       LIMIT ?
     `).all(limit) as unknown as AttentionNotificationRow[];
