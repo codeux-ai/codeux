@@ -97,6 +97,24 @@ The MCP gateway stores the resolved agent and thread identities in request-scope
 
 Standalone MCP clients do not have this dashboard thread context. Their background planning still continues server-side, but no chat wakeup is queued; those clients poll sprint/task management or telemetry state for completion.
 
+## Worker Clarification Dispatch
+
+Task-coding provider runs use the project-manager MCP gateway with the selected agent identity in `X-Code-Ux-Agent`. Code UX adds only the audience-scoped `request_clarification` grant needed by an eligible coding agent; it does not turn that agent into a project manager or expose `reply_to_clarification` or unrelated management tools. The project-manager reply route receives the complementary `reply_to_clarification` grant.
+
+`request_clarification` persists a human-owned `worker_clarification` record in `project_attention_items`. The attention item is the durable public record and carries project, sprint, task, sprint-run, and dispatch ownership. Its versioned payload captures the task run, provider session, authenticated requester, deduplication key, Markdown question/answer, status, and timestamps. Task-run-backed requests also append idempotent `worker_clarification_*` events, allowing `session-sync-step.ts` to reconstruct pending, answered, or settled clarification state after a restart without a second persistence path.
+
+Before persistence, the service validates every supplied execution reference against the project and merges references derived from the task run, dispatch, and sprint run. An exact duplicate request returns the existing attention item; the same project-scoped deduplication key with different content, requester, or runtime context is rejected. Because the item is human-owned, virtual-worker repair queues do not claim or answer it, and scheduling avoids issuing a duplicate task dispatch while the project-manager clarification is pending.
+
+`reply_to_clarification` authorizes the authenticated replier for the clarification's project, then delivers before settling the attention item:
+
+- Jules sends the answer through the existing session-message API. After acceptance, Code UX marks the linked task run, dispatch, and task as running/in progress and records `worker_clarification_continued`.
+- Local CLI providers call the task-rerun continuation path with the preserved workspace, worker branch, provider, effective model, coding-agent route, and native session lineage. A successful tool response means that continuation was accepted by that dispatch path; it does not mean the coding task has completed.
+- A taskless general question stores the answer with `deliveryMode: "recorded_answer"` and creates no coding dispatch.
+
+Delivery failure leaves the clarification `pending`. Missing or mismatched task-run/provider-session scope, an unsupported provider, or a missing/preserved-workspace mismatch therefore cannot silently close the question. Once delivery succeeds, the attention item changes to `replied` and the reply event is appended. Duplicate concurrent replies share one in-flight operation, and a later retry of an already replied clarification returns the settled result without another message or task-rerun dispatch.
+
+Session synchronization treats a latest matching request as blocked and a matching continued/replied event as answered. It ignores stale-session requests and does not resurrect cancelled or paused runs. This reconstruction may restore the runtime projection to running after an accepted answer, but it does not declare provider work or the task complete.
+
 ## Dispatch Layers
 
 - Typed registry layer: `src/api/mcp/tool-registry.ts`
