@@ -4,6 +4,7 @@ import type { PipelineContext } from "./pipeline-context.js";
 import { resolveProviderForInvocation } from "../../provider-routing.js";
 import { resolveAgentMemoryInstructions } from "../../agent-memory-instructions.js";
 import { buildRelevantMemoryInjectionContext } from "../../memory-injection-context.js";
+import { TASK_EXECUTION_OUTCOME_INSTRUCTIONS } from "../../../domain/sprint/task-execution-outcome.js";
 
 export async function executePrepareStage(
   ctx: PipelineContext,
@@ -81,7 +82,11 @@ export async function executePrepareStage(
   ctx.worktreePath = finalPath;
 
   const workspaceGuidance = await ctx.workspaceManager.buildWorkspaceGuidance(ctx.task.prompt, ctx.worktreePath);
-  const providerPrompt = buildProviderPrompt(`${promptBody}\n\n${workspaceGuidance}`, providerSettings.thinkingMode, ctx.provider);
+  const providerPrompt = buildProviderPrompt(
+    `${promptBody}\n\n${workspaceGuidance}\n\n${TASK_EXECUTION_OUTCOME_INSTRUCTIONS}`,
+    providerSettings.thinkingMode,
+    ctx.provider,
+  );
 
   const initialHead = (await ctx.runCommand("git", ["rev-parse", "HEAD"], ctx.worktreePath)).stdout.trim();
   ctx.initialHead = initialHead;

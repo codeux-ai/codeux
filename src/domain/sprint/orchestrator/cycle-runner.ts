@@ -33,6 +33,7 @@ import { matchPrForTask } from "../ci/feature-pr/pr-matcher.js";
 import { resolveCiEscalationOwner } from "../ci/feature-pr/ci-autofix-policy.js";
 import type { MemoryCategory, CreateMemoryInput } from "../../../contracts/memory-types.js";
 import { isTaskCodeComplete } from "../task-merge-state.js";
+import { shouldVerifyContinuedQaFix } from "../../qa-review/qa-review-budget.js";
 import pLimit from "p-limit";
 import { workerBranchHasMergeWork } from "../../../infrastructure/git/local-merge.js";
 import { PROVIDER_IDS } from "../../../repositories/settings-defaults.js";
@@ -1322,7 +1323,9 @@ export class CycleRunner {
       // changes still outstanding at the cap or the reviewer kept failing for
       // infra reasons). Apply the configured exhaustion policy instead of letting
       // it quietly settle as completed or loop forever.
-      if (taskIsCodeComplete && qaGate.reason === "retries_exhausted" && !hasSameSessionFollowUpAfterLatestQaRequest) {
+      const qaNeedsExhaustionPolicy = qaGate.reason === "retries_exhausted"
+        || qaGate.reason === "follow_up_no_progress";
+      if (taskIsCodeComplete && qaNeedsExhaustionPolicy && !hasSameSessionFollowUpAfterLatestQaRequest) {
         const policy = settings.agents.qualityAssurance.exhaustionPolicy;
         if (this.applyQaExhaustionPolicy(task, qaGate, args, policy)) {
           if (policy === "FINISH_TASK") {
@@ -1498,6 +1501,12 @@ export class CycleRunner {
     sprintRunId?: string,
   ): boolean {
     if (!this.hasLatestChangesRequestedQaRun(qaGate) || !qaGate.latestRun?.finishedAt || !task.record_id) {
+      return false;
+    }
+    if (qaGate.reason === "follow_up_no_progress") {
+      return false;
+    }
+    if (qaGate.reason === "retries_exhausted" && !shouldVerifyContinuedQaFix(qaGate.latestRun)) {
       return false;
     }
 

@@ -622,6 +622,10 @@ const validateSprintPreview = (
       issues.push({ path: `${path}.startupScriptPath`, message: "Expected a safe relative path without traversal or environment variables" });
     }
   }
+  if (typeof value.startupCommand !== "string" || value.startupCommand.length > 8_192 || value.startupCommand.includes("\0")) {
+    issues.push({ path: `${path}.startupCommand`, message: "Expected a command string no longer than 8192 characters without null bytes" });
+  }
+  if (typeof value.allowDockerAccess !== "boolean") issues.push({ path: `${path}.allowDockerAccess`, message: "Expected a boolean" });
 };
 
 const validateDesignGuidanceEntry = (

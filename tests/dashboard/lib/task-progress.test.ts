@@ -117,6 +117,26 @@ describe("task progress phase", () => {
     })).toBe("COMPLETED");
   });
 
+  it("does not let a completed coding dispatch hide an authoritative QA failure", () => {
+    expect(getLiveTaskProgressPhase({
+      task: {
+        id: "3c",
+        title: "QA held task",
+        prompt: "",
+        depends_on: [],
+        is_independent: true,
+        status: "QA_REVIEW_FAILED",
+      },
+      dispatch: {
+        status: "completed",
+        taskRunState: "COMPLETED",
+        finishedAt: "2026-07-11T05:52:57.927Z",
+        workerBranch: null,
+        prUrl: null,
+      },
+    })).toBe("QA_REVIEW_FAILED");
+  });
+
   it("keeps shared task phase unchanged while live phase honors terminal dispatch completion", () => {
     const task = {
       id: "4",

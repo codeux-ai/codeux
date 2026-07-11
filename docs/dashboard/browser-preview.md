@@ -7,6 +7,17 @@ The browser preview provides an integrated environment for interacting with runn
 - Fresh system and project settings enable the preview runtime and show the in-app browser workspace by default.
 - Existing persisted system, project, or sprint overrides remain authoritative. Sanitization only fills missing preview fields from the current defaults, so an explicit disabled preview stays disabled.
 - `autoStartOnRunningSprint` remains false by default. Operators still choose whether sprint runs should launch preview containers automatically; the default only makes preview controls and the embedded browser available.
+- `startupCommand` is blank by default, so command detection remains active. A saved container override takes precedence over the scoped settings default, which takes precedence over the detected command.
+- `allowDockerAccess` is false by default because Docker daemon access is equivalent to host-level control.
+
+## Startup Reliability
+
+- Startup container cleanup is a barrier for preview launch and reconciliation. A manual or automatic launch waits for cleanup instead of racing a stale-container removal.
+- Reconciliation is single-flight, and preview starts are serialized across the shared host-port allocator so overlapping interval/manual launches cannot reserve the same port.
+- Sessions that were running, starting, or backed by an exited container before runtime restart are restored once after cleanup, including manually launched previews whose sprint is no longer actively running.
+- A session left in `starting` before Docker created its container is treated as an orphaned start and retried; reconciliation does not interrupt an in-process start.
+- A preview that was observed healthy, or belongs to an active auto-start sprint, gets one automatic recovery attempt per unexpectedly exited container. This includes manually launched previews after their sprint finishes; a persistent application or startup failure remains visible instead of entering an infinite rebuild loop.
+- Exit code 137 is reported as container termination rather than attaching an unrelated warning from otherwise healthy application logs.
 
 ## Interaction Contracts
 
@@ -26,6 +37,7 @@ The browser preview provides an integrated environment for interacting with runn
 - Iframes and embedded views must have descriptive titles indicating their purpose and target.
 - Window controls, navigation controls, session removal, external open, rebuild, stop, and script save actions must use explicit accessible names instead of relying on `title` text or icon shape.
 - Preview environment defaults in the right sidebar and container override modals from preview cards must be keyboard reachable, expose labeled key/value fields, announce save progress, and make clear that saved environment changes apply on the next rebuild or start.
+- The right sidebar startup-command editor is scoped to the selected container, shows the inherited project command when present, and announces that a rebuild is required.
 - Live regions should transparently report loading, starting, running, stopped, reconnecting/unavailable, stale-log, saving, launching, empty-session, and error states without overwhelming screen readers.
 - The address form must keep a programmatic label, describe why it is disabled when the preview container is unavailable, and announce submitted navigation attempts while keeping focus in the address field.
 - Session rails must keep horizontal overflow inside the rail, expose the active session state, and remain keyboard reachable at narrow widths.
@@ -61,9 +73,17 @@ The browser preview provides an integrated environment for interacting with runn
 The browser preview has two proxy paths with different credential rules:
 
 - Dashboard API proxy requests under `/api/browser/sessions/:sessionId/proxy*` originate from the dashboard runtime. Before forwarding to the selected preview port, the proxy strips dashboard cookies, bearer authorization, `set-cookie`, hop-by-hop headers, `proxy-*`, `x-code-ux-*`, `host`, `content-length`, and compression negotiation headers. It also normalizes `Origin`, `Referer`, and `Sec-Fetch-Site` so the preview app sees the selected local upstream origin, such as `http://127.0.0.1:<hostPort>`.
-- Preview-host iframe requests on `preview-<session>.localhost` are the preview app's own origin. Those requests may forward the preview app's own `Authorization` and `Cookie` headers so stateful login/session flows continue to work inside the iframe. Transport, proxy-control, and Code UX control headers are still stripped before the request reaches the container.
+- Preview-host iframe and external-tab requests on `preview-<session>.localhost` are the preview app's own origin. Those requests may forward the preview app's own `Authorization` and `Cookie` headers so stateful login/session flows continue to work. Transport, proxy-control, Code UX control, and client-supplied forwarding headers are stripped. The proxy then presents one coherent local upstream boundary (`Host`, `X-Forwarded-Host`, `Origin`, `Referer`, protocol, and port all agree on `localhost:<mapped-port>`) while the network connection remains pinned to the recorded loopback port. This supports applications that reject untrusted or contradictory host headers.
 
 Both paths only route to loopback host ports recorded on the active preview session. The dashboard API proxy also removes `Set-Cookie`, CSP, CSP report-only, and `X-Frame-Options` response headers before writing the response on the dashboard origin. Preview-host HTML keeps iframe compatibility by stripping upstream document CSP and frame-blocking headers while allowing preview-origin app cookies to reach that preview host.
+
+## Optional Docker Access
+
+Settings can explicitly enable Docker access for preview containers. The Browser page right sidebar exposes the same control as a project-wide default plus an `inherit`/`enabled`/`disabled` override for the selected preview container. Changes take effect on the next rebuild.
+
+When enabled, Code UX mounts the local Unix Docker daemon socket, adds the socket group to the preview user, mounts a compatible host Docker CLI and Compose v2 plugin on Linux when available, and runs both `docker version` and `docker compose version` before starting the application. Missing socket, CLI, Compose plugin, or daemon access fails startup with a focused error instead of letting the application command fail with an ambiguous unknown-command message.
+
+This option is disabled by default and must only be enabled for trusted repositories and commands. Control of the Docker daemon is effectively control of the host. Docker-managed child containers do not automatically inherit the preview workspace or network namespace; Docker-based startup commands can use `SPRINT_PREVIEW_DOCKER_VOLUME`, `SPRINT_PREVIEW_CONTAINER_NAME`, and `SPRINT_PREVIEW_RUNTIME_ROOT` to declare an external named volume and `network_mode: container:<name>` when that topology is required.
 
 ## File Browser Comparison
 

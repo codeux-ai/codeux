@@ -4,8 +4,8 @@ import type {
   ProjectCardSourceBadge,
   ProjectCardTaskCompletion,
   ProjectCardViewModel,
+  Source,
 } from "../types.js";
-import type { ProjectSummary } from "../../../../src/contracts/project-management-types.js";
 
 export const PROJECT_CARD_EMPTY_VALUE = "--";
 
@@ -18,7 +18,7 @@ const PROJECT_CARD_TIMESTAMP_FORMATTER = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
-const PROJECT_PROVIDER_LABELS: Record<ProjectSummary["gitProvider"], string> = {
+const PROJECT_PROVIDER_LABELS: Record<Source["gitProvider"], string> = {
   github: "GitHub",
   gitlab: "GitLab",
   local: "Local",
@@ -86,15 +86,15 @@ export function formatProjectCardTimestamp(value: string | null | undefined): Pr
   };
 }
 
-export function getProjectCardProviderLabel(project: ProjectSummary): ProjectCardDisplayValue {
+export function getProjectCardProviderLabel(project: Source): ProjectCardDisplayValue {
   return formatProjectCardDisplayValue(PROJECT_PROVIDER_LABELS[project.gitProvider] || project.gitProvider);
 }
 
-export function getProjectCardHostLabel(project: ProjectSummary): ProjectCardDisplayValue {
+export function getProjectCardHostLabel(project: Source): ProjectCardDisplayValue {
   return formatProjectCardDisplayValue(project.gitHostDomain);
 }
 
-export function getProjectCardGitUrl(project: ProjectSummary): ProjectCardDisplayValue {
+export function getProjectCardGitUrl(project: Source): ProjectCardDisplayValue {
   if (project.repoUrl?.trim()) {
     return formatProjectCardDisplayValue(project.repoUrl);
   }
@@ -104,11 +104,11 @@ export function getProjectCardGitUrl(project: ProjectSummary): ProjectCardDispla
   return formatProjectCardDisplayValue(null);
 }
 
-export function getProjectCardLocalDirectory(project: ProjectSummary): ProjectCardDisplayValue {
+export function getProjectCardLocalDirectory(project: Source): ProjectCardDisplayValue {
   return formatProjectCardDisplayValue(project.baseDir);
 }
 
-export function getProjectCardBranch(project: ProjectSummary): ProjectCardDisplayValue {
+export function getProjectCardBranch(project: Source): ProjectCardDisplayValue {
   // Prefer the project-scope configured target branch (settings override) over the
   // raw project row default, so the card reflects what sprints actually merge into.
   const scopedBranch = project.settingsOverrides?.git?.defaultBranch;
@@ -118,15 +118,15 @@ export function getProjectCardBranch(project: ProjectSummary): ProjectCardDispla
   return formatProjectCardDisplayValue(project.defaultBranch);
 }
 
-export function getProjectCardFeatureBranchPrefix(project: ProjectSummary): ProjectCardDisplayValue {
+export function getProjectCardFeatureBranchPrefix(project: Source): ProjectCardDisplayValue {
   return formatProjectCardDisplayValue(project.featureBranchPrefix);
 }
 
-export function getProjectCardLastRunStatus(project: ProjectSummary): ProjectCardDisplayValue {
+export function getProjectCardLastRunStatus(project: Source): ProjectCardDisplayValue {
   return formatProjectCardDisplayValue(project.lastRunStatus);
 }
 
-export function getProjectCardSourceBadge(project: ProjectSummary): ProjectCardSourceBadge {
+export function getProjectCardSourceBadge(project: Source): ProjectCardSourceBadge {
   if (project.sourceType === "git") {
     return {
       kind: "remote-git",
@@ -150,7 +150,7 @@ export function getProjectCardSourceBadge(project: ProjectSummary): ProjectCardS
   };
 }
 
-export function getProjectCardTaskCompletion(project: ProjectSummary): ProjectCardTaskCompletion {
+export function getProjectCardTaskCompletion(project: Source): ProjectCardTaskCompletion {
   const completedTasks = Math.max(0, Math.trunc(project.completedTasks));
   const openTasks = Math.max(0, Math.trunc(project.openTasks));
   const totalTasks = completedTasks + openTasks;
@@ -180,7 +180,7 @@ export function buildProjectCardActions(): ProjectCardActionDescriptor[] {
   return PROJECT_CARD_ACTIONS.map((action) => ({ ...action }));
 }
 
-export function buildProjectCardViewModel(project: ProjectSummary): ProjectCardViewModel {
+export function buildProjectCardViewModel(project: Source): ProjectCardViewModel {
   return {
     sourceBadge: getProjectCardSourceBadge(project),
     sourceTypeLabel: project.sourceType === "git" ? "Remote Git" : project.repoUrl?.trim() ? "Local repo" : "Local",
@@ -200,7 +200,7 @@ export function buildProjectCardViewModel(project: ProjectSummary): ProjectCardV
   };
 }
 
-function buildSourceDescription(kind: ProjectCardSourceBadge["kind"], project: ProjectSummary): string {
+function buildSourceDescription(kind: ProjectCardSourceBadge["kind"], project: Source): string {
   const provider = getProjectCardProviderLabel(project).value;
   const host = project.gitHostDomain?.trim() || PROJECT_CARD_EMPTY_VALUE;
 

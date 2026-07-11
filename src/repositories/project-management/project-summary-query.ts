@@ -40,6 +40,7 @@ export const projectSummaryQuery = {
         p.name,
         p.base_dir,
         p.repo_url,
+        p.initialization_mode,
         p.default_branch,
         p.feature_branch_prefix,
         p.status,

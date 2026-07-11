@@ -35,6 +35,8 @@ A practical review flow is:
 
 Built-in guidance is protected. Deleting a selected custom entry clears that selection back to None for the edited scope.
 
+The built-in `game-experience` styleguide is for playable products and covers input feedback, performance budgets, deterministic lifecycle state, recovery, and accessible controls. It is distinct from `gaming-companion`, which remains available for game-adjacent statistics, loadout, matchmaking, and community interfaces.
+
 Before applying changes, check:
 
 - Whether the value affects provider credentials, Docker runtime behavior, Git automation, memory retention, or destructive cleanup.

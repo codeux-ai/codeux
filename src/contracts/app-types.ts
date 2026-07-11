@@ -1086,6 +1086,8 @@ export interface SprintPreviewSettings {
   containerAppPort: number;
   containerAppPorts: number[];
   startupScriptPath: string;
+  startupCommand: string;
+  allowDockerAccess: boolean;
   environmentVariables: PreviewEnvironmentVariable[];
 }
 
@@ -1664,6 +1666,8 @@ export interface SprintPreviewSession {
   installCommand: string | null;
   buildCommand: string | null;
   runCommand: string | null;
+  startupCommandOverride: string | null;
+  dockerAccessOverride: boolean | null;
   environmentOverrides: PreviewEnvironmentVariable[];
   lastCompletedTaskCount: number;
   lastSeenSprintStatus: string | null;

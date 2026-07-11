@@ -4,6 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import { ChatThreadRuntimeService } from "../../../src/services/chat-thread-runtime-service.js";
 import { codeUxAgentMcpAccess, dashboardReplyAgentMcpAccess } from "../../../src/services/agent-mcp-access.js";
+import { CREATE_APP_QUICKACTION_CATALOG } from "../../../src/domain/chat/create-app-quickaction-catalog.js";
 
 describe("ChatThreadRuntimeService", () => {
   let deps: any;
@@ -54,6 +55,12 @@ describe("ChatThreadRuntimeService", () => {
       chatProviderOutboundService: {
         deliverReply: vi.fn().mockResolvedValue(null),
       },
+      getProjectInitializationState: vi.fn().mockResolvedValue({
+        projectId: "p1",
+        initializationMode: "new-local",
+        repositoryState: "initial",
+        canCreateInitialAppQuickactions: true,
+      }),
     };
     service = new ChatThreadRuntimeService(deps);
   });
@@ -116,6 +123,10 @@ describe("ChatThreadRuntimeService", () => {
         kind: "web_app",
         requestId: "quickaction-web-1",
         templateId: "qs-create-web-app",
+        designGuidance: {
+          selectedTechStackId: "code-ux-product-stack",
+          selectedStyleguideId: "code-ux-award-winning",
+        },
         taskCount: 6,
         stackSummary: {
           techstackId: "preact-fullstack",
@@ -177,7 +188,13 @@ describe("ChatThreadRuntimeService", () => {
       taskCount: 6,
       submitMode: "plan_and_start",
       clientRequestId: "quickaction-web-1",
-      additionalPrompt: expect.stringContaining("Create an app sprint for a web application."),
+      planningOverrides: {
+        designGuidance: {
+          selectedTechStackId: "code-ux-product-stack",
+          selectedStyleguideId: "code-ux-award-winning",
+        },
+      },
+      additionalPrompt: expect.stringContaining("Create an app sprint for a web app."),
     }));
     const launchInput = quicksprintLauncher.launchDetachedQuicksprint.mock.calls[0][1];
     expect(launchInput.additionalPrompt).toContain("answer quickly");
@@ -216,6 +233,161 @@ describe("ChatThreadRuntimeService", () => {
       },
     });
     expect(deps.chatManagementActionService.processManagementAction).not.toHaveBeenCalled();
+  });
+
+  it.each(CREATE_APP_QUICKACTION_CATALOG)(
+    "launches $kind with its catalog template, scoped guidance, and progress label",
+    async (spec) => {
+      const requestId = `quickaction-${spec.kind}-catalog`;
+      const metadata = {
+        quickaction: {
+          type: "create_app",
+          kind: spec.kind,
+          requestId,
+          templateId: spec.templateId,
+          designGuidance: spec.designGuidance,
+        },
+      };
+      const quicksprintLauncher = {
+        launchDetachedQuicksprint: vi.fn().mockResolvedValue({
+          sprint: { id: `sprint-${spec.kind}`, name: `QS: ${spec.displayLabel}` },
+          planningRequest: {
+            projectId: "p1",
+            sprintId: `sprint-${spec.kind}`,
+            templateId: spec.templateId,
+            submitMode: "plan_and_start",
+            clientRequestId: requestId,
+            planOptions: { autoStart: true, replan: false, clientRequestId: requestId },
+          },
+          planningPromise: new Promise(() => undefined),
+        }),
+      };
+      service.setQuicksprintLauncher(quicksprintLauncher);
+      deps.connectionChatRepository.postDashboardMessage.mockReturnValue({
+        id: `msg-${spec.kind}`,
+        threadId: "t-app",
+        bodyMarkdown: spec.displayLabel,
+        metadata,
+      });
+      deps.connectionChatRepository.getThread.mockReturnValue({
+        id: "t-app",
+        projectId: "p1",
+        connectionId: null,
+        title: spec.displayLabel,
+        runtimeState: {},
+      });
+
+      await service.postMessage("p1", { bodyMarkdown: spec.displayLabel, metadata });
+
+      expect(quicksprintLauncher.launchDetachedQuicksprint).toHaveBeenCalledWith("p1", expect.objectContaining({
+        templateId: spec.templateId,
+        submitMode: "plan_and_start",
+        clientRequestId: requestId,
+        planningOverrides: { designGuidance: spec.designGuidance },
+      }));
+      expect(deps.connectionChatRepository.postSystemMessage).toHaveBeenCalledWith("p1", expect.objectContaining({
+        bodyMarkdown: expect.stringContaining(`Started a ${spec.appKindLabel.toLowerCase()} sprint`),
+        metadata: {
+          widget_metadata: expect.objectContaining({ appKind: spec.kind, quickactionRequestId: requestId }),
+        },
+      }));
+    },
+  );
+
+  it.each(["web_app", "desktop_app"] as const)(
+    "fails %s safely when the project is not eligible for an initial app",
+    async (kind) => {
+      const spec = CREATE_APP_QUICKACTION_CATALOG.find((entry) => entry.kind === kind)!;
+      const metadata = {
+        quickaction: { type: "create_app", kind, requestId: `request-${kind}`, templateId: spec.templateId },
+      };
+      const quicksprintLauncher = { launchDetachedQuicksprint: vi.fn() };
+      service.setQuicksprintLauncher(quicksprintLauncher);
+      deps.getProjectInitializationState.mockResolvedValue({
+        projectId: "p1",
+        initializationMode: "existing",
+        repositoryState: "unavailable",
+        canCreateInitialAppQuickactions: false,
+      });
+      deps.connectionChatRepository.postDashboardMessage.mockReturnValue({
+        id: `msg-${kind}`,
+        threadId: "t-app",
+        bodyMarkdown: spec.displayLabel,
+        metadata,
+      });
+      deps.connectionChatRepository.getThread.mockReturnValue({
+        id: "t-app",
+        projectId: "p1",
+        connectionId: null,
+        runtimeState: {},
+      });
+
+      const result = await service.postMessage("p1", { bodyMarkdown: spec.displayLabel, metadata });
+
+      expect(result.deliveryStatus).toBe("failed");
+      expect(quicksprintLauncher.launchDetachedQuicksprint).not.toHaveBeenCalled();
+      expect(deps.connectionChatRepository.postSystemMessage).toHaveBeenCalledWith("p1", expect.objectContaining({
+        bodyMarkdown: expect.stringContaining(`${spec.displayLabel} is only available for an eligible initial project.`),
+      }));
+    },
+  );
+
+  it.each(CREATE_APP_QUICKACTION_CATALOG.filter((spec) => !["web_app", "desktop_app"].includes(spec.kind)))(
+    "allows $kind on a normal project chat path without the initial-project guard",
+    async (spec) => {
+      const metadata = {
+        quickaction: { type: "create_app", kind: spec.kind, requestId: `request-${spec.kind}`, templateId: spec.templateId },
+      };
+      const quicksprintLauncher = {
+        launchDetachedQuicksprint: vi.fn().mockResolvedValue({
+          sprint: { id: `sprint-${spec.kind}`, name: `QS: ${spec.displayLabel}` },
+          planningRequest: { clientRequestId: `request-${spec.kind}` },
+          planningPromise: new Promise(() => undefined),
+        }),
+      };
+      service.setQuicksprintLauncher(quicksprintLauncher);
+      deps.connectionChatRepository.postDashboardMessage.mockReturnValue({
+        id: `msg-${spec.kind}`,
+        threadId: "t-app",
+        bodyMarkdown: spec.displayLabel,
+        metadata,
+      });
+      deps.connectionChatRepository.getThread.mockReturnValue({ id: "t-app", projectId: "p1", runtimeState: {} });
+
+      await service.postMessage("p1", { bodyMarkdown: spec.displayLabel, metadata });
+
+      expect(deps.getProjectInitializationState).not.toHaveBeenCalled();
+      expect(quicksprintLauncher.launchDetachedQuicksprint).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([
+    ["template", { templateId: "qs-create-game" }],
+    ["guidance", { designGuidance: { selectedTechStackId: "client-markdown", selectedStyleguideId: "code-ux-award-winning" } }],
+  ] as const)("rejects invalid create-app %s metadata", async (_label, override) => {
+    const metadata = {
+      quickaction: {
+        type: "create_app",
+        kind: "web_app",
+        requestId: "invalid-request",
+        templateId: "qs-create-web-app",
+        ...override,
+      },
+    };
+    const quicksprintLauncher = { launchDetachedQuicksprint: vi.fn() };
+    service.setQuicksprintLauncher(quicksprintLauncher);
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({
+      id: "msg-invalid",
+      threadId: "t-app",
+      bodyMarkdown: "Create a web app",
+      metadata,
+    });
+    deps.connectionChatRepository.getThread.mockReturnValue({ id: "t-app", projectId: "p1", runtimeState: {} });
+
+    const result = await service.postMessage("p1", { bodyMarkdown: "Create a web app", metadata });
+
+    expect(result.deliveryStatus).toBe("failed");
+    expect(quicksprintLauncher.launchDetachedQuicksprint).not.toHaveBeenCalled();
   });
 
   it("queues normal chat follow-ups while create-app planning has no tasks yet", async () => {
@@ -1020,7 +1192,8 @@ describe("ChatThreadRuntimeService", () => {
       id: "reply-agent",
       instructionMarkdown: "",
     });
-    deps.getMcpConnectionInfo = vi.fn().mockReturnValue({ url: "http://127.0.0.1:3000/mcp", authToken: "token" });
+    const globalMcpConnection = { url: "http://127.0.0.1:3000/mcp", authToken: "token" };
+    deps.getMcpConnectionInfo = vi.fn().mockReturnValue(globalMcpConnection);
     deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-scheduler", threadId: "t1", bodyMarkdown: "remind yourself tomorrow" });
     deps.connectionChatRepository.getThread.mockReturnValue({
       id: "t1",
@@ -1042,7 +1215,7 @@ describe("ChatThreadRuntimeService", () => {
 
     expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledWith(
       expect.objectContaining({
-        mcpConnection: { url: "http://127.0.0.1:3000/mcp", authToken: "token" },
+        mcpConnection: { url: "http://127.0.0.1:3000/mcp", authToken: "token", threadId: "t1" },
         mcpAgentId: "reply-agent",
         agentMcpAccess: codeUxAgentMcpAccess(["playwright"]),
         prompt: expect.stringContaining("You have the `manage_code_ux` MCP tool available"),
@@ -1053,6 +1226,7 @@ describe("ChatThreadRuntimeService", () => {
         prompt: expect.stringContaining("You also have the `scheduler_code_ux` MCP tool available"),
       }),
     );
+    expect(globalMcpConnection).toEqual({ url: "http://127.0.0.1:3000/mcp", authToken: "token" });
   });
 
   it("uses full Code UX MCP access for a configured dashboard reply preset", async () => {

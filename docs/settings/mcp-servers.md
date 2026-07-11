@@ -25,6 +25,8 @@ The list configures built-in tool access, custom server enablement, transport, p
 
 Keep built-in tools enabled and restrict custom servers to the CLIs that need them.
 
+The built-in Playwright entry uses stdio with command `npx` and argument `@playwright/mcp@latest`. This lets an assigned chat or coding agent launch the published Playwright MCP package without requiring a separate `playwright-mcp` executable. Existing untouched entries that still use that legacy executable with no arguments are repaired automatically when settings are resolved.
+
 A practical review flow is:
 
 1. Start from the inherited default and change only the fields that solve a concrete operational problem.

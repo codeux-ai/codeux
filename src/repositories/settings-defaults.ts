@@ -269,8 +269,8 @@ export const DEFAULT_PLAYWRIGHT_MCP_SERVER = {
   description: "Browser automation MCP server for coding agents.",
   enabled: true,
   transport: "stdio",
-  command: "playwright-mcp",
-  args: [],
+  command: "npx",
+  args: ["@playwright/mcp@latest"],
   providers: ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"],
 } satisfies DashboardSettings["customMcpServers"][number];
 export const DEFAULT_PROVIDER_CONFIG_NAMES: Record<ProviderId, string> = {
@@ -899,6 +899,8 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     containerAppPort: 3000,
     containerAppPorts: [3000],
     startupScriptPath: ".code-ux/browser/start-preview.sh",
+    startupCommand: "",
+    allowDockerAccess: false,
     environmentVariables: [],
   },
   workers: {

@@ -11,6 +11,14 @@ export type TaskPriority = "critical" | "high" | "medium" | "low";
 export type TaskExecutorType = "auto" | "docker_cli" | "jules" | "mcp_worker";
 export type GitProvider = "github" | "gitlab" | "local";
 export type ProjectInitMode = "existing" | "new-local" | "new-remote";
+export type ProjectInitializationRepositoryState = "initial" | "modified" | "unavailable";
+
+export interface ProjectInitializationState {
+  projectId: string;
+  initializationMode: ProjectInitMode;
+  repositoryState: ProjectInitializationRepositoryState;
+  canCreateInitialAppQuickactions: boolean;
+}
 
 export interface ProjectSummary {
   id: string;
@@ -20,6 +28,7 @@ export interface ProjectSummary {
   repoUrl: string | null;
   sourceType: ProjectSourceType;
   sourceRef: string;
+  initializationMode: ProjectInitMode;
   gitProvider: GitProvider;
   gitHostDomain: string | null;
   defaultBranch: string | null;
@@ -376,6 +385,12 @@ export interface PlanningOverrides {
   planningAgentPresetId?: string;
   agentRoutingMode?: AgentRoutingMode;
   workerAgentPresetId?: string;
+  designGuidance?: PlanningDesignGuidanceSelection;
+}
+
+export interface PlanningDesignGuidanceSelection {
+  selectedTechStackId: string;
+  selectedStyleguideId: string;
 }
 
 export interface ImprovePromptInput {

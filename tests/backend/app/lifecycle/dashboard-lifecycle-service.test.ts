@@ -137,6 +137,8 @@ describe("dashboard-lifecycle-service", () => {
           id: "sprint-1",
           projectId: "project-1",
         }),
+        getTask: vi.fn().mockReturnValue(null),
+        updateTask: vi.fn(),
         listProjects: vi.fn().mockReturnValue({ projects: [], selectedProjectId: "project-1" }),
         notifyProjectsUpdated: vi.fn(),
       } as any,
@@ -395,6 +397,10 @@ describe("dashboard-lifecycle-service", () => {
         updatedAt: "2026-03-09T00:00:00.000Z",
       };
       vi.mocked(mockDeps.projectAttentionRepository.getAttentionItem).mockReturnValue(escalation as any);
+      vi.mocked(mockDeps.projectManagementRepository.getTask).mockReturnValue({
+        id: "task-1",
+        status: "QA_REVIEW_FAILED",
+      } as any);
       vi.mocked(mockDeps.projectAttentionRepository.resolveAttentionItem).mockReturnValue({
         ...escalation,
         status: "resolved",
@@ -411,6 +417,53 @@ describe("dashboard-lifecycle-service", () => {
       expect(result.status).toBe("resolved");
       expect(mockDeps.qaReviewRepository.resetTaskReviewRuns).toHaveBeenCalledWith("task-1");
       expect(mockDeps.guardrailService.resetPurpose).toHaveBeenCalledWith("task-1", "qa_review");
+      expect(mockDeps.projectManagementRepository.updateTask).toHaveBeenCalledWith("task-1", {
+        status: "coding_completed",
+        mergeIndicator: null,
+      });
+    });
+
+    it("does not regress a task that settled after its QA escalation opened", async () => {
+      const escalation = {
+        id: "attention-qa-settled",
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        taskId: "task-1",
+        sprintRunId: "run-1",
+        dispatchId: null,
+        attentionType: "human_escalation_required",
+        severity: "high",
+        ownerType: "human",
+        status: "open",
+        assignedWorkerEndpointId: null,
+        title: "QA could not verify T1",
+        summaryMarkdown: "QA review budget exhausted.",
+        payload: { sourceAttentionType: "qa_review" },
+        openedAt: "2026-03-09T00:00:00.000Z",
+        claimedAt: null,
+        resolvedAt: null,
+        updatedAt: "2026-03-09T00:00:00.000Z",
+      };
+      vi.mocked(mockDeps.projectAttentionRepository.getAttentionItem).mockReturnValue(escalation as any);
+      vi.mocked(mockDeps.projectAttentionRepository.resolveAttentionItem).mockReturnValue({
+        ...escalation,
+        status: "resolved",
+        resolvedAt: "2026-03-09T00:01:00.000Z",
+      } as any);
+      vi.mocked(mockDeps.projectManagementRepository.getTask).mockReturnValue({
+        id: "task-1",
+        status: "completed",
+      } as any);
+
+      await bootDashboard(mockDeps);
+      const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+      setupArgs.resolveAttentionItem!("project-1", "attention-qa-settled", {
+        status: "resolved",
+        reason: "human_reviewed",
+      });
+
+      expect(mockDeps.qaReviewRepository.resetTaskReviewRuns).toHaveBeenCalledWith("task-1");
+      expect(mockDeps.projectManagementRepository.updateTask).not.toHaveBeenCalled();
     });
 
     it("resets sprint QA review state when a sprint-scoped QA handoff is resolved", async () => {

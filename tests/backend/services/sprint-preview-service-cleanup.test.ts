@@ -89,6 +89,7 @@ describe("SprintPreviewService startup cleanup", () => {
           recentEvents: [],
           updatedAt: null,
         }),
+        listSprintRunsByStatus: () => [],
       } as any,
       settingsRepository: {
         resolveSprintDashboardSettings: () => ({ settings: DEFAULT_DASHBOARD_SETTINGS }),
@@ -107,5 +108,13 @@ describe("SprintPreviewService startup cleanup", () => {
     expect(runCommandStrict).not.toHaveBeenCalledWith("docker", expect.arrayContaining(["status=running"]), expect.any(String));
     expect(runCommandStrict).not.toHaveBeenCalledWith("docker", expect.arrayContaining(["inspect"]), expect.any(String));
     expect(runCommandStrict).not.toHaveBeenCalledWith("git", expect.arrayContaining(["worktree"]), expect.any(String));
+
+    const startSession = vi.spyOn(service, "startSession").mockResolvedValue({
+      ...updatedSession!,
+      status: "running",
+      healthStatus: "healthy",
+    });
+    await service.reconcileSessions();
+    expect(startSession).toHaveBeenCalledWith(project.id, sprint.id);
   });
 });

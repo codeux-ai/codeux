@@ -1,7 +1,6 @@
 # Projects
 
-The **Projects** page (`/projects`) lists every project Code UX manages and lets you create, edit, select, and delete them.
-Each card now surfaces the source badge, repository URL, local workspace directory, creation and update timestamps, last run time, branch, provider, and host so the active checkout is easy to scan without opening a second page.
+The **Projects** page (`/projects`) presents every managed repository in a low-noise gallery and lets you create, select, configure, set up, and delete projects. The restrained project cards use quiet surfaces and semantic color: signal for selection and focus, green for running, red for failed or destructive state, ember for **Needs review**, and neutral styling for idle. Selection also has a visible badge and pressed state, so it never depends on color alone.
 
 A *project* is the binding between Code UX and a single Git repository. Each project has its own:
 
@@ -10,13 +9,47 @@ A *project* is the binding between Code UX and a single Git repository. Each pro
 - Settings overrides on top of system defaults.
 - Worker assignments controlling which connected MCP clients can pick up its work.
 
+## Reading and filtering the gallery
+
+Each project card follows a stable hierarchy:
+
+1. Project name and source type.
+2. Text status with a status dot and a source badge.
+3. One repository URL or local path, followed by branch and last-run details.
+4. Setup invocation progress when setup is running.
+5. Sprint, open-task, completed-task, and completion values.
+6. An always-visible footer for selection, setup, project settings, and deletion.
+
+Long project names, locations, branches, source badges, and run details are truncated to one line so cards remain aligned. Full project names and non-empty location, branch, and run values remain available as browser title text. Missing metadata is shown as **Not set**, **No runs yet**, or `--` instead of changing the card layout.
+
+The **All**, **Running**, **Idle**, and **Failed** filters show live counts and update the gallery in place. Projects that need intervention appear in **All** but are not counted as running, idle, or failed. If a filter has no matches, choose **Show all projects** or use the **Add Project** card that remains in the grid.
+
+## Gallery states and responsive behavior
+
+- Initial loading marks the project-card region busy, announces that projects are loading, and shows skeleton cards.
+- A load error is announced as an alert and includes **Add Project**, so importing a repository remains reachable.
+- A new installation shows **No projects connected** beside the **Add Project** card. A no-match filter shows a distinct status and **Show all projects**.
+- **New Project** stays in the page header. **Add Project** stays in populated, collection-empty, and no-match grids.
+- Cards automatically fill the available width and can shrink below their nominal desktop width. Headers, filters, card actions, form controls, and dialog actions wrap or stack on mobile, while long metadata stays inside the card instead of creating horizontal overflow.
+- Setup dialogs stay within the viewport and scroll their choice area internally on short screens.
+
+The page respects reduced motion. Optional hover, progress, spinner, and modal transitions stop, while selected borders, status text, focus rings, busy state, and live announcements remain visible.
+
+## Keyboard and focus behavior
+
+Use Tab and Shift+Tab to move through **New Project**, the status filters, each card's selection surface, and its visible actions. Filters and card controls are native buttons, so Enter or Space activates them. Every control has a visible focus ring.
+
+The primary card surface and footer selection button expose whether the project is selected. Setup, settings, and delete are separate controls and do not accidentally select the card. The Add Project modal keeps focus inside while open, starts at the project name, and restores focus when it closes. Invalid submit announces one summary, marks the affected fields, focuses the first invalid field, and scrolls it into view; directory loading, empty folders, failures, and selected paths are also announced.
+
 ## Creating a project
 
-Click **Add Project** to import an existing local checkout or Git URL. Imported local projects receive only a local git-mode project override, so Code UX operates against local Git state. Imported Git URL projects inherit the system remote-git defaults. Imported projects stay techstack-unassigned until you choose a project techstack in settings, use the top bar selector, or run Project Setup Agent techstack detection.
+Click the dashed **Add Project** card to open the shared modal in local-import mode, then choose **Local Project**, **Git URL**, or **New Project**. Imported local projects receive only a local git-mode project override, so Code UX operates against local Git state. Imported Git URL projects inherit the system remote-git defaults. Imported projects stay techstack-unassigned until you choose a project techstack in settings, use the top bar selector, or run Project Setup Agent techstack detection.
 
 Click **New Project** on the Projects page to initialize a new repository through the same modal. New project initialization does not scaffold application source files in the dashboard; it sends `new-local` or `new-remote` initialization data to the backend repository creation flow.
 
-New project creation always writes an explicit project techstack override. New local projects additionally receive `git.githubMode: LOCAL`; new remote projects do not. To set up a web or desktop app inside an existing project, use **Create Web App** or **Create Desktop App** in Chat Threads beside the composer. Those quickactions operate in the selected project, create a chat thread when needed, and launch the matching detached quicksprint without opening the new-project modal.
+New project creation always writes an explicit project techstack override. New local projects additionally receive `git.githubMode: LOCAL`; new remote projects do not. To set up a web or desktop app in an eligible initial project, use **Create Web App** or **Create Desktop App** in Chat Threads beside the composer. Those quickactions operate in the selected project, create a chat thread when needed, and launch the matching detached quicksprint without opening the new-project modal.
+
+Code UX persists whether a project was imported or initialized as a new local/remote repository. Initial-app quickactions are eligible only while a persisted new project is still a clean, one-commit seed containing exactly `README.md` and the Code UX `.gitignore`. Additional files, commits, setup artifacts, dirty state, missing checkouts, or inspection failures disable eligibility; imported and legacy projects are never inferred to be new from their source type or age.
 
 The form collects:
 
@@ -46,24 +79,30 @@ Docs setup is opt-in from the dashboard setup scope or setup request payloads. W
 Most other dashboard pages operate on a *single active project*. The active project is selectable from:
 
 - The top bar dropdown (always visible).
-- A click on any project card on the Projects page, or the card's **Open** action.
-- The card's **Settings** wheel, which selects the project and opens the project-scoped settings surface.
+- The main selection surface on a project card or its **Select project** footer action.
+- The card's **Project settings** action, which selects the project before opening the project-scoped settings surface.
 
 Programmatically, the active project ID is sent with REST calls (`/api/projects/:projectId/...`) and is the implicit scope of the WebSocket subscription.
 
 ## Editing a project
 
-Click the card's **Open** action to make it the active project, or use the **Settings** wheel to jump directly to the project-scoped settings page.
+Use **Select project** to make a project active, or use **Project settings** to select it and jump directly to `/config`. The settings page keeps project-specific changes as overrides on top of the system configuration.
 
 ## Deleting a project
 
-Deletion is destructive — it removes the project's database row and runtime state, but **does not** delete files inside `<repo>/.code-ux/`. The MCP `manage_projects` action requires explicit `approval.confirmed = true`.
+Deletion is destructive. The project card's **Delete project** action sends the existing dashboard deletion request immediately and refreshes the gallery, so verify the target before activating it. Project deletion removes the project and its associated local runtime data; it does not delete the repository checkout or files inside `<repo>/.code-ux/`.
 
-In the dashboard, the **Delete** action shows a confirm dialog with the count of sprints, tasks and memories that will become orphaned.
+The Settings **Danger Zone** provides a confirmation dialog for its **Delete Project** workflow. Programmatic deletion through the MCP `manage_projects` action remains gated by explicit `approval.confirmed = true`.
+
+## Running Project Setup Agent
+
+Choose **Setup project** on an existing card to select Agents, Quicksprints, Preview Script, CI, Techstack detection, and optional Docs embedding. Starting setup uses the existing background setup flow; duplicate setup is disabled while the run is active.
+
+The page reports setup start, running, completion, and failure through notifications. Once tracking returns an invocation ID, the card's **Project setup running** row opens that invocation in Chat. Completion notifications also retain an **Open invocation** action so generated artifacts and errors can be reviewed after the run finishes.
 
 ## Worker assignment
 
-The card footer shows the *preferred worker* for the project — the connection that virtual-worker dispatches favour when multiple workers are eligible. You can change it via the **Set worker** dropdown, or programmatically via `PUT /api/projects/:projectId/preferred-worker`.
+Preferred-worker assignment remains available programmatically through `PUT /api/projects/:projectId/preferred-worker`; the low-noise project card does not add a worker selector to its action footer.
 
 If no specific worker is preferred, Code UX falls back to load-balancing across capable connections, or spinning up an ephemeral virtual worker via the [Virtual worker service](/docs/architecture-virtual-workers).
 

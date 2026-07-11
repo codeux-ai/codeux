@@ -201,6 +201,13 @@ export function getLiveTaskProgressPhase(args: LiveTaskProgressPhaseArgs): TaskP
     return getTaskProgressPhase(args.task);
   }
 
+  // QA_REVIEW_FAILED is an authoritative human-owned task state. The latest
+  // coding dispatch may still be terminal/completed, but it must not hide the
+  // later QA hold in the live task card.
+  if (args.task.status === "QA_REVIEW_FAILED") {
+    return "QA_REVIEW_FAILED";
+  }
+
   const initialRawStatus = resolveTerminalExecutionPhase(args.dispatch, args.runtimeTerminalPhase)
     ?? args.task.status
     ?? "PENDING";

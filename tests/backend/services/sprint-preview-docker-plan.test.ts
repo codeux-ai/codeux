@@ -112,6 +112,49 @@ describe("SprintPreviewDockerPlanBuilder", () => {
     expect(args.some((arg) => arg.includes("GEMINI_API_KEY="))).toBe(false);
   });
 
+  it("mounts the Docker socket and CLI only when explicitly enabled", () => {
+    const args = buildSprintPreviewDockerCreateArgs({
+      projectId: "proj-1",
+      sprintId: "sprint-1",
+      sessionId: "session-1",
+      containerName: "preview-proj-1-sprint-1",
+      hostPort: 4444,
+      containerAppPort: 3000,
+      containerWorkspacePath: "/workspace",
+      containerRuntimeHome: "/home",
+      volumeName: "my-volume",
+      userSpec: "1000:1000",
+      setupScriptSource: null,
+      shouldRunSetupScriptAtRuntime: false,
+      containerGitUserName: "test",
+      containerGitUserEmail: "test@example.com",
+      credentialMounts: [],
+      effectiveInstallCommand: null,
+      buildCommand: null,
+      runCommand: "npm start",
+      sourceCommit: null,
+      resolvedImage: "node:18",
+      bootstrapScript: "echo bootstrap",
+      dockerAccess: {
+        socketSource: "/run/user/1000/docker.sock",
+        socketGid: 1001,
+        cliSource: "/usr/bin/docker",
+        composePluginSource: "/usr/libexec/docker/cli-plugins/docker-compose",
+      },
+    });
+
+    expect(args).toEqual(expect.arrayContaining([
+      "--group-add",
+      "1001",
+      "DOCKER_HOST=unix:///var/run/docker.sock",
+    ]));
+    expect(args.some((arg) => arg.includes("source=/run/user/1000/docker.sock") && arg.includes("target=/var/run/docker.sock"))).toBe(true);
+    expect(args.some((arg) => arg.includes("source=/usr/bin/docker") && arg.includes("target=/usr/local/bin/docker"))).toBe(true);
+    expect(args.some((arg) => arg.includes("source=/usr/libexec/docker/cli-plugins/docker-compose") && arg.includes("target=/usr/local/lib/docker/cli-plugins/docker-compose"))).toBe(true);
+    expect(args.at(-1)).toContain("docker version");
+    expect(args.at(-1)).toContain("docker compose version");
+  });
+
   it("matches snapshot", () => {
     const args = buildSprintPreviewDockerCreateArgs({
       projectId: "proj-1",

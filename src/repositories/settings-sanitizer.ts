@@ -726,6 +726,17 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
       }
       return raw;
     })(),
+    startupCommand: (() => {
+      const raw = readString(
+        sprintPreviewInput.startupCommand,
+        DEFAULT_DASHBOARD_SETTINGS.sprintPreview.startupCommand,
+      ).trim();
+      return raw.includes("\0") ? "" : raw.slice(0, 8_192);
+    })(),
+    allowDockerAccess: readBoolean(
+      sprintPreviewInput.allowDockerAccess,
+      DEFAULT_DASHBOARD_SETTINGS.sprintPreview.allowDockerAccess,
+    ),
     environmentVariables: sanitizePreviewEnvironmentVariables(sprintPreviewInput.environmentVariables),
   };
   if (sprintPreview.hostPortRangeEnd < sprintPreview.hostPortRangeStart) {

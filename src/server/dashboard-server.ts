@@ -87,6 +87,7 @@ import type {
   ImprovePromptInput,
   PlanSprintOptions,
   ProjectCollectionResponse,
+  ProjectInitializationState,
   ProjectSetupRequestInput,
   ProjectSetupResult,
   ProjectSetupStartResult,
@@ -239,6 +240,7 @@ export interface DashboardServerOptions {
   setupProject?: (projectId: string, input?: ProjectSetupRequestInput, signal?: AbortSignal) => Promise<ProjectSetupResult>;
   startProjectSetup?: (projectId: string, input?: ProjectSetupRequestInput) => Promise<ProjectSetupStartResult>;
   getProject: (projectId: string) => ProjectSummary | null;
+  getProjectInitializationState?: (projectId: string) => Promise<ProjectInitializationState>;
   updateProject: (projectId: string, input: UpdateProjectInput) => ProjectSummary;
   deleteProject: (projectId: string) => void;
   selectProject: (projectId: string | null) => string | null;
@@ -344,6 +346,8 @@ export interface DashboardServerOptions {
   getSprintPreviewLogs?: (sessionId: string, tail?: number) => Promise<{ logs: string }> | { logs: string };
   getSprintPreviewLogsForProjectSprint?: (projectId: string, sprintId: string, sessionId: string, tail?: number) => Promise<{ logs: string }> | { logs: string };
   updateSprintPreviewEnvironmentOverrides?: (projectId: string, sprintId: string, sessionId: string, environmentOverrides: PreviewEnvironmentVariable[]) => Promise<SprintPreviewSession> | SprintPreviewSession;
+  updateSprintPreviewStartupCommandOverride?: (projectId: string, sprintId: string, sessionId: string, startupCommandOverride: string | null) => Promise<SprintPreviewSession> | SprintPreviewSession;
+  updateSprintPreviewDockerAccessOverride?: (projectId: string, sprintId: string, sessionId: string, dockerAccessOverride: boolean | null) => Promise<SprintPreviewSession> | SprintPreviewSession;
   proxySprintPreviewRequest?: (args: {
     sessionId: string;
     method: string;

@@ -11,6 +11,7 @@ import type {
   LinkedIssueProvider,
   LinkedIssueSourceKind,
   ProjectCollectionResponse,
+  ProjectInitMode,
   ProjectSourceType,
   ProjectSummary,
   SprintLinkedIssueInput,
@@ -62,6 +63,7 @@ interface ProjectRow {
   name: string;
   base_dir: string;
   repo_url: string | null;
+  initialization_mode: ProjectInitMode | null;
   default_branch: string | null;
   feature_branch_prefix: string | null;
   status: ProjectSummary["status"];
@@ -221,8 +223,8 @@ export class ProjectManagementRepository {
 
       const insert = this.db.prepare(`
         INSERT INTO projects (
-          id, slug, name, base_dir, repo_url, source_id, default_branch, feature_branch_prefix, status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          id, slug, name, base_dir, repo_url, source_id, initialization_mode, default_branch, feature_branch_prefix, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       const insertSource = this.db.prepare(`
         INSERT INTO project_sources (id, project_id, source_type, source_ref, created_at)
@@ -237,6 +239,7 @@ export class ProjectManagementRepository {
           baseDir,
           repoUrl,
           null,
+          normalizeProjectInitMode(input.initMode),
           input.defaultBranch?.trim() || "main",
           input.featureBranchPrefix?.trim() || "feature/",
           input.status || "idle",
@@ -1279,6 +1282,7 @@ export class ProjectManagementRepository {
       repoUrl: effectiveRepoUrl,
       sourceType,
       sourceRef,
+      initializationMode: normalizeProjectInitMode(row.initialization_mode),
       gitProvider: provider,
       gitHostDomain: hostDomain,
       defaultBranch: row.default_branch,
@@ -1873,6 +1877,10 @@ function mapEffectiveSprintStatus(
     default:
       return storedStatus === "running" ? "idle" : storedStatus;
   }
+}
+
+function normalizeProjectInitMode(value: ProjectInitMode | null | undefined): ProjectInitMode {
+  return value === "new-local" || value === "new-remote" ? value : "existing";
 }
 
 function emptyProjectSummaryAggregation(): ProjectSummaryAggregation {

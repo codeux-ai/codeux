@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
 import type { MemoryService } from "./memory-service.js";
-import type { CliWorkflowSettings, DashboardSettings, ProviderId, QwenModelProviderSettings, Subtask } from "../contracts/app-types.js";
+import type { CliWorkflowSettings, DashboardSettings, DesignGuidanceSettings, ProviderId, QwenModelProviderSettings, Subtask } from "../contracts/app-types.js";
 import type {
   TaskExecutorType,
   TaskPriority,
@@ -40,6 +40,7 @@ import { waitUntil } from "../shared/polling/wait-until.js";
 import { LEARNINGS_FILENAME } from "../contracts/memory-types.js";
 import * as PlanningPromptBuilder from "./planning-prompt-builder.js";
 import { buildRelevantMemoryInjectionContext } from "./memory-injection-context.js";
+import { getDesignGuidanceCatalog } from "../domain/settings/design-guidance-catalog.js";
 
 interface PlanningAgentServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
@@ -62,12 +63,17 @@ interface ImprovePromptResult {
   workerConnectionId: null;
 }
 
-interface PlanSprintResult {
+export interface PlanSprintResult {
   ok: true;
   invocationId: string;
   agentId: string;
   createdTaskIds: string[];
   started: boolean;
+}
+
+interface PlanSprintPreconditions {
+  project: NonNullable<ReturnType<ProjectManagementRepository["getProject"]>>;
+  sprint: NonNullable<ReturnType<ProjectManagementRepository["getSprint"]>>;
 }
 
 interface PlanningResultContext {
@@ -199,7 +205,7 @@ export class PlanningAgentService {
       planningAgent,
       sprintName: input.name,
       goal: input.goal,
-      designGuidance: runtime.settings.designGuidance,
+      designGuidance: this.resolveEffectiveDesignGuidance(runtime.settings.designGuidance, input.overrides),
       memoryContext,
       learningsInstruction,
     });
@@ -326,15 +332,21 @@ export class PlanningAgentService {
     return await this.runPlanSprint(projectId, sprintId, options, signal);
   }
 
+  startPlanSprint(projectId: string, sprintId: string, options: PlanSprintOptions): Promise<PlanSprintResult> {
+    const preconditions = this.validatePlanSprintPreconditions(projectId, sprintId, options);
+    return this.runPlanSprint(projectId, sprintId, options, undefined, undefined, preconditions);
+  }
+
   private async runPlanSprint(
     projectId: string,
     sprintId: string,
     options: PlanSprintOptions,
     signal?: AbortSignal,
     continuation?: PlanningContinuationContext,
+    preconditions?: PlanSprintPreconditions,
   ): Promise<PlanSprintResult> {
-    const project = this.requireProject(projectId);
-    const sprint = this.requireSprint(projectId, sprintId);
+    const { project, sprint } = preconditions
+      ?? this.validatePlanSprintPreconditions(projectId, sprintId, options);
     const runtime = this.resolvePlanningRuntime(projectId, options.overrides);
     const planningAgentPresetId = options.overrides?.planningAgentPresetId
       || options.planningAgentPresetId
@@ -344,11 +356,6 @@ export class PlanningAgentService {
       projectId,
       planningAgentPresetId,
     );
-    const existingTasks = this.deps.projectManagementRepository.listTasks(projectId, sprintId);
-    if (existingTasks.length > 0 && !options.replan) {
-      throw new Error(`Sprint ${sprint.name} already has ${existingTasks.length} task(s). Clear or edit them before running Planning agent.`);
-    }
-
     const invocation = this.deps.executionRepository?.createExecutionInvocation({
       projectId,
       skipValidation: true,
@@ -377,7 +384,7 @@ export class PlanningAgentService {
       sprintName: sprint.name,
       canSetSprintTitle: sprint.isGeneratedName,
       goal: sprint.goal,
-      designGuidance: runtime.settings.designGuidance,
+      designGuidance: this.resolveEffectiveDesignGuidance(runtime.settings.designGuidance, options.overrides),
       memoryContext,
       learningsInstruction,
     });
@@ -576,6 +583,27 @@ export class PlanningAgentService {
       mode: "VIRTUAL",
       settings,
       connection: null,
+    };
+  }
+
+  private resolveEffectiveDesignGuidance(
+    persisted: DesignGuidanceSettings,
+    overrides?: PlanningOverrides,
+  ): DesignGuidanceSettings {
+    const selection = overrides?.designGuidance;
+    if (!selection) {
+      return persisted;
+    }
+    const catalog = getDesignGuidanceCatalog(persisted);
+    const hasTechStack = catalog.techStacks.some((entry) => entry.id === selection.selectedTechStackId);
+    const hasStyleguide = catalog.styleguides.some((entry) => entry.id === selection.selectedStyleguideId);
+    if (!hasTechStack || !hasStyleguide) {
+      throw new Error("Planning design guidance selection is not available in the effective catalog.");
+    }
+    return {
+      ...persisted,
+      selectedTechStackId: selection.selectedTechStackId,
+      selectedStyleguideId: selection.selectedStyleguideId,
     };
   }
 
@@ -976,6 +1004,20 @@ export class PlanningAgentService {
       throw new Error(`Project not found: ${projectId}`);
     }
     return project;
+  }
+
+  private validatePlanSprintPreconditions(
+    projectId: string,
+    sprintId: string,
+    options: PlanSprintOptions,
+  ): PlanSprintPreconditions {
+    const project = this.requireProject(projectId);
+    const sprint = this.requireSprint(projectId, sprintId);
+    const existingTasks = this.deps.projectManagementRepository.listTasks(projectId, sprintId);
+    if (existingTasks.length > 0 && !options.replan) {
+      throw new Error(`Sprint ${sprint.name} already has ${existingTasks.length} task(s). Clear or edit them before running Planning agent.`);
+    }
+    return { project, sprint };
   }
 
   private requireSprint(

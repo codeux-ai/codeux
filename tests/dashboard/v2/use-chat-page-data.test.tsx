@@ -965,40 +965,100 @@ describe("useChatPageResources integration", () => {
     });
 
     await act(async () => {
-      await result.current.threadData.handleCreateAppQuickaction("web_app");
+      result.current.threadData.setInput("Keep this composer draft");
     });
 
+    const quickactions = [
+      {
+        kind: "web_app",
+        bodyMarkdown: "Create a web app",
+        templateId: "qs-create-web-app",
+        designGuidance: {
+          selectedTechStackId: "code-ux-product-stack",
+          selectedStyleguideId: "code-ux-award-winning",
+        },
+      },
+      {
+        kind: "desktop_app",
+        bodyMarkdown: "Create a desktop app",
+        templateId: "qs-create-desktop-app",
+        designGuidance: {
+          selectedTechStackId: "electron-desktop-app",
+          selectedStyleguideId: "code-ux-award-winning",
+        },
+      },
+      {
+        kind: "online_shop",
+        bodyMarkdown: "Create an online shop",
+        templateId: "qs-create-online-shop",
+        designGuidance: {
+          selectedTechStackId: "code-ux-product-stack",
+          selectedStyleguideId: "ecommerce",
+        },
+      },
+      {
+        kind: "portfolio",
+        bodyMarkdown: "Create a portfolio",
+        templateId: "qs-create-portfolio",
+        designGuidance: {
+          selectedTechStackId: "code-ux-product-stack",
+          selectedStyleguideId: "marketing-site",
+        },
+      },
+      {
+        kind: "game",
+        bodyMarkdown: "Create a game",
+        templateId: "qs-create-game",
+        designGuidance: {
+          selectedTechStackId: "code-ux-product-stack",
+          selectedStyleguideId: "game-experience",
+        },
+      },
+    ] as const;
+
+    for (const quickaction of quickactions) {
+      await act(async () => {
+        await result.current.threadData.handleCreateAppQuickaction(quickaction.kind);
+      });
+    }
+
+    expect(createConversationThread).toHaveBeenCalledTimes(1);
     expect(createConversationThread).toHaveBeenCalledWith("proj-1", expect.objectContaining({
       title: expect.stringContaining("Project Chat"),
     }));
-    expect(postConversationMessage).toHaveBeenCalledWith("proj-1", expect.objectContaining({
-      threadId: "thread-new",
-      bodyMarkdown: "Create a web app",
-      metadata: {
-        quickaction: expect.objectContaining({
-          type: "create_app",
-          kind: "web_app",
-          requestId: expect.stringMatching(/^dashboard-create-app-web_app-/),
-          templateId: "qs-create-web-app",
-          stackSummary: {
-            techstackId: "react-saas",
-            techstackName: "React SaaS",
-            applicationKind: "web_app",
-            language: "TypeScript",
-            framework: "React",
-            runtime: "Node.js",
-            packageManager: "pnpm",
-            styling: "Tailwind",
-            testFramework: "Vitest",
+    expect(postConversationMessage).toHaveBeenCalledTimes(5);
+    quickactions.forEach((quickaction, index) => {
+      expect(postConversationMessage).toHaveBeenNthCalledWith(index + 1, "proj-1", {
+        threadId: "thread-new",
+        bodyMarkdown: quickaction.bodyMarkdown,
+        metadata: {
+          quickaction: {
+            type: "create_app",
+            kind: quickaction.kind,
+            requestId: expect.stringMatching(new RegExp(`^dashboard-create-app-${quickaction.kind}-`)),
+            templateId: quickaction.templateId,
+            designGuidance: quickaction.designGuidance,
+            stackSummary: {
+              techstackId: "react-saas",
+              techstackName: "React SaaS",
+              applicationKind: quickaction.kind,
+              language: "TypeScript",
+              framework: "React",
+              runtime: "Node.js",
+              packageManager: "pnpm",
+              styling: "Tailwind",
+              testFramework: "Vitest",
+            },
+            suggestionTags: ["TypeScript", "React", "Node.js", "pnpm", "Tailwind", "Vitest"],
           },
-          suggestionTags: ["TypeScript", "React", "Node.js", "pnpm", "Tailwind", "Vitest"],
-        }),
-      },
-    }));
-    const postedMetadata = vi.mocked(postConversationMessage).mock.calls[0]?.[1].metadata;
+        },
+      });
+    });
     expect(onMessageSending).not.toHaveBeenCalled();
-    expect(result.current.threadData.input).toBe("");
-    expect(result.current.threadData.messages[0]?.metadata).toEqual(postedMetadata);
+    expect(result.current.threadData.input).toBe("Keep this composer draft");
+    expect(result.current.threadData.messages[0]?.metadata).toEqual(
+      vi.mocked(postConversationMessage).mock.calls[0]?.[1].metadata,
+    );
     expect(recordConversationMessageHistory).not.toHaveBeenCalled();
 
     await act(async () => {

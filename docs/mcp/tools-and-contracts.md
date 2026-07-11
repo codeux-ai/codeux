@@ -169,7 +169,7 @@ The restricted `scheduler_code_ux` tool accepts exactly one wakeup timing mode:
 - `scheduledFor`: absolute ISO timestamp.
 - `delaySeconds` or `delayMinutes`: positive relative delay.
 - `wakeAfterReply: true`: schedule the wakeup for the current time so the dashboard chat runtime drains it immediately after the current reply is sent.
-- `afterSprintId`: wake after the referenced sprint reaches a terminal state, with optional non-negative `offsetMinutes`.
+- `afterSprintId`: wake after the referenced sprint completes successfully, with optional non-negative `offsetMinutes`; failed and cancelled sources remain unresolved.
 - `afterTaskId`: wake after the referenced task reaches a terminal project status, with optional non-negative `offsetMinutes`.
 
 `schedule_wakeup` requires `projectId` and `bodyMarkdown`, and may include `title`, `timezone`, `threadId`, and `connectionId`. Completion anchors are persisted as `scheduleAnchor` payloads: `afterSprintId` maps to `{ mode: "after_sprint_end", sourceSprintId, offsetMinutes? }`, and `afterTaskId` maps to `{ mode: "after_task_end", sourceTaskId, offsetMinutes? }`.
@@ -740,6 +740,29 @@ For sprint create/update calls:
 - `goalMarkdown` is accepted as a public MCP alias for `goal`.
 - `linkedIssues` can include imported issue body and conversation markdown. Sprint create merges that context into the goal under `## Linked Issues`; sprint update does the same when a replacement goal is provided. Prompt-only issue body and conversation content are not stored in linked issue repository rows.
 - Missing or blank `projectId`, `sprintId`, `sprintRunId`, `name`, and `title` values are rejected before repository calls so MCP clients receive a validation error instead of a low-level `.trim()` failure.
+
+### `manage_sprints plan`
+
+The direct MCP `manage_sprints` call with `action: "plan"` validates the project, sprint, and existing-task/replan preconditions synchronously, starts planning server-side, and returns this stable acknowledgement immediately:
+
+```json
+{
+  "result": {
+    "status": "started",
+    "message": "Sprint planning started in the background. You will be notified when it completes or fails.",
+    "projectId": "project-123",
+    "sprintId": "sprint-123"
+  }
+}
+```
+
+The stable result fields are `status`, `message`, `projectId`, and `sprintId`. The acknowledgement means only that background planning started after synchronous validation. It does not mean tasks already exist, planning self-reflection has finished, or optional `autoStart` has completed.
+
+When the call originates from an MCP-backed dashboard chat turn, Code UX captures the originating agent and thread before the background promise settles. Successful completion then persists an existing due-now, non-recurring `agent_wakeup` targeted to that thread. The scheduler delivers the wakeup through the normal chat-agent path and asks the agent to review the generated tasks, recap their count, and state whether execution actually started. If planning fails, Code UX queues the same kind of same-thread wakeup with the failure reason and asks the agent to provide a concise failure recap.
+
+Standalone MCP clients have no originating dashboard chat-thread context, so they receive the same immediate acknowledgement without a completion wakeup. They should poll with `manage_sprints` and `manage_tasks`, or inspect the relevant `manage_telemetry` sprint-run, task-dispatch, and invocation state, to determine when planning and any requested auto-start work have completed.
+
+This asynchronous response applies only to the direct MCP `manage_sprints` `plan` action. `import_issues` with `planAfterImport`, dashboard planning routes, scheduled sprint planning, quicksprints, and internal callers continue to await planning completion.
 
 ### `manage_sprints import_issues`
 

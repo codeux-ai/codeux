@@ -458,6 +458,8 @@ QA merge-gate notes:
 - `hostPortRangeEnd`
 - `containerAppPort`
 - `startupScriptPath`
+- `startupCommand` (default blank; container override, then this value, then command detection)
+- `allowDockerAccess` (default `false`; host-level Docker daemon control)
 
 Preview runtime notes:
 - preview settings participate in the same `system -> project -> sprint` resolution model as other project-scoped defaults
@@ -468,6 +470,11 @@ Preview runtime notes:
 - `enabled` disables new preview launches and causes reconciliation to stop active previews for that scope
 - preview workspace export now uses the shared remote-branch sync rule: in `REMOTE` git mode it refreshes `origin` before start/rebuild export, and in `LOCAL` git mode it stays local-only
 - `maxConcurrentContainers` caps active preview containers per project by stopping the oldest previews before starting another
+- startup cleanup blocks preview launch/reconciliation until stale containers are removed, then restores sessions that were previously active
+- reconciliation is single-flight and preview starts share a global allocation lock so concurrent launches cannot claim the same host port
+- unexpectedly exited containers that were previously healthy (or belong to an active auto-start sprint) receive one bounded recovery attempt; persistent startup failures remain in error for operator review
+- preview-host proxy requests present a coherent `localhost:<mapped-port>` host/forwarded-host/origin boundary to strict host-validation middleware
+- Docker access mounts a local Unix socket only when explicitly enabled, supports a nullable per-session override from the Browser sidebar, and preflights the CLI, Compose v2 plugin, and daemon before application startup
 
 `agents` contains:
 - `saveToProjectDirectory` (default `true`)

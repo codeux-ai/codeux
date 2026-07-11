@@ -478,8 +478,65 @@ describe("Chat Message Bubbles", () => {
       expect(view.getByText("Showing each Task")).toBeInTheDocument();
       expect(view.getByText("auth")).toBeInTheDocument();
       expect(view.getByText("dashboard")).toBeInTheDocument();
+      expect(view.getByText("Started a web app sprint.")).toBeInTheDocument();
       expect(container.textContent).not.toContain("appKind");
       expect(container.textContent).not.toContain("stackSummary");
+    });
+
+    it.each([
+      ["online_shop", "Online shop", "Online shop sprint is being planned."],
+      ["portfolio", "Portfolio", "Portfolio sprint is being planned."],
+      ["game", "Game", "Game sprint is being planned."],
+    ] as const)("renders a readable %s app creation progress label", (appKind, appKindLabel, statusLabel) => {
+      const message = createChatMessage({
+        id: `msg_app_progress_${appKind}`,
+        authorType: "system",
+        authorConnectionId: null,
+        bodyMarkdown: `Started ${appKindLabel.toLowerCase()} planning.`,
+        metadata: {
+          widget_metadata: {
+            type: "app_progress",
+            status: "running",
+            appKind,
+            sprintName: `Create ${appKindLabel}`,
+            planningStages: [],
+            suggestionTags: [],
+          },
+        },
+      });
+
+      const { container } = render(<ChatMessageBubble message={message} />);
+      const view = within(container);
+
+      expect(view.getByText(statusLabel)).toBeInTheDocument();
+      expect(view.getByLabelText(`${appKindLabel} sprint stages`)).toBeInTheDocument();
+      expect(view.getByText(message.bodyMarkdown)).toBeInTheDocument();
+    });
+
+    it("falls back to generic app progress labels for malformed app-kind metadata", () => {
+      const message = createChatMessage({
+        id: "msg_app_progress_malformed_kind",
+        authorType: "system",
+        authorConnectionId: null,
+        bodyMarkdown: "App planning is still visible.",
+        metadata: {
+          widget_metadata: {
+            type: "app_progress",
+            status: "running",
+            appKind: { invalid: true },
+            planningStages: "invalid",
+            suggestionTags: "invalid",
+          },
+        },
+      });
+
+      const { container } = render(<ChatMessageBubble message={message} />);
+      const view = within(container);
+
+      expect(view.getByText("App sprint is being planned.")).toBeInTheDocument();
+      expect(view.getByLabelText("App sprint stages")).toBeInTheDocument();
+      expect(view.getByText("App planning is still visible.")).toBeInTheDocument();
+      expect(view.getByText("Project stack defaults")).toBeInTheDocument();
     });
 
     it("renders completed app creation progress without inventing raw metadata", () => {

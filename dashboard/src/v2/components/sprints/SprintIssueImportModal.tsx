@@ -14,7 +14,7 @@ import {
   MessageSquare,
 } from "lucide-preact";
 import type {
-  ProjectSummary,
+  Source,
   SprintImportedTaskInput,
   SprintLinkedIssueInput,
 } from "../../types.js";
@@ -53,7 +53,7 @@ import { IssueImportIssueCard } from "./importer/IssueImportIssueCard.js";
 import { IssueImportSummaryRail } from "./importer/IssueImportSummaryRail.js";
 
 interface SprintIssueImportModalProps {
-  project: ProjectSummary;
+  project: Source;
   initialProvider?: RepositoryIssueProvider;
   onClose: () => void;
   onImport: (issues: SprintLinkedIssueInput[]) => void | Promise<void>;
@@ -145,7 +145,7 @@ const SPECIAL_TASK_KINDS: Array<{
   },
 ];
 
-const inferRepository = (project: ProjectSummary): string => {
+const inferRepository = (project: Source): string => {
   const source = project.repoUrl || project.sourceRef || "";
   const cleaned = source.trim().replace(/\.git$/i, "").replace(/\/+$/g, "");
   if (!cleaned) return "";
@@ -156,7 +156,7 @@ const inferRepository = (project: ProjectSummary): string => {
   return "";
 };
 
-const inferSourceHostDomain = (project: ProjectSummary): string | null => {
+const inferSourceHostDomain = (project: Source): string | null => {
   const source = (project.repoUrl || project.sourceRef || "").trim();
   if (!source) {
     return null;
@@ -183,7 +183,7 @@ const hostLooksLikeProvider = (hostDomain: string | null | undefined, provider: 
   return normalized.includes(provider);
 };
 
-const inferHostDomain = (project: ProjectSummary, provider: RepositoryIssueProvider): string => {
+const inferHostDomain = (project: Source, provider: RepositoryIssueProvider): string => {
   const configuredHost = project.gitHostDomain?.trim();
   if (configuredHost && (project.gitProvider === provider || hostLooksLikeProvider(configuredHost, provider))) {
     return configuredHost;

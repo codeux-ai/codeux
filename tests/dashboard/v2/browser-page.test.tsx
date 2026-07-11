@@ -8,8 +8,8 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 import { BrowserPage } from "../../../dashboard/src/v2/BrowserPage.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
 import { usePreviewSessions } from "../../../dashboard/src/v2/hooks/use-preview-sessions.js";
-import { fetchPreviewLogs, fetchPreviewScript, rebuildPreviewSession, savePreviewEnvironmentOverrides, savePreviewScript } from "../../../dashboard/src/v2/lib/browser-api.js";
-import { saveProjectPreviewEnvironmentVariables } from "../../../dashboard/src/v2/lib/settings-api.js";
+import { fetchPreviewLogs, fetchPreviewScript, rebuildPreviewSession, savePreviewDockerAccessOverride, savePreviewEnvironmentOverrides, savePreviewScript, savePreviewStartupCommandOverride } from "../../../dashboard/src/v2/lib/browser-api.js";
+import { saveProjectPreviewDockerAccess, saveProjectPreviewEnvironmentVariables } from "../../../dashboard/src/v2/lib/settings-api.js";
 
 expect.extend(matchers);
 
@@ -40,6 +40,8 @@ const effectiveSettingsMock = vi.hoisted(() => ({
         sprintPreview: {
           enabled: true,
           showInAppBrowser: true,
+          allowDockerAccess: false,
+          startupCommand: "pnpm default-preview",
           environmentVariables: [{ key: "API_BASE_URL", value: "http://api.local", enabled: true }],
         },
       },
@@ -85,6 +87,7 @@ const buildDefaultPreviewSessionsResult = () => ({
     containerAppPort: 3000,
     hostPort: 8080,
     portMappings: [{ containerPort: 3000, hostPort: 8080, isPrimary: true }],
+    dockerAccessOverride: null,
   },
   loading: false,
   error: null,
@@ -240,11 +243,26 @@ vi.mock("../../../dashboard/src/v2/lib/browser-api.js", () => ({
     portMappings: [{ containerPort: 3000, hostPort: 8080, isPrimary: true }],
     environmentOverrides: [{ key: "CODE_UX_ALLOW_PUBLIC_DASHBOARD", value: "1", enabled: true }],
   }),
+  savePreviewDockerAccessOverride: vi.fn().mockResolvedValue({
+    id: "sess-1",
+    projectId: "p1",
+    sprintId: "s1",
+    dockerAccessOverride: true,
+  }),
+  savePreviewStartupCommandOverride: vi.fn().mockResolvedValue({
+    id: "sess-1",
+    projectId: "p1",
+    sprintId: "s1",
+    startupCommandOverride: "pnpm custom-preview",
+  }),
   startPreviewSession: mockStartPreviewSession,
   stopPreviewSession: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../../dashboard/src/v2/lib/settings-api.js", () => ({
+  saveProjectPreviewDockerAccess: vi.fn().mockResolvedValue({
+    settings: { sprintPreview: { allowDockerAccess: true } },
+  }),
   saveProjectPreviewEnvironmentVariables: vi.fn().mockResolvedValue({
     settings: {
       sprintPreview: {
@@ -262,6 +280,8 @@ afterEach(() => {
   vi.mocked(usePreviewSessions).mockReset();
   vi.mocked(usePreviewSessions).mockImplementation(() => buildDefaultPreviewSessionsResult());
   vi.mocked(saveProjectPreviewEnvironmentVariables).mockReset();
+  vi.mocked(saveProjectPreviewDockerAccess).mockReset();
+  vi.mocked(saveProjectPreviewDockerAccess).mockResolvedValue({ settings: { sprintPreview: { allowDockerAccess: true } } } as any);
   vi.mocked(saveProjectPreviewEnvironmentVariables).mockResolvedValue({
     settings: {
       sprintPreview: {
@@ -312,6 +332,7 @@ describe("BrowserPage", () => {
           sprintPreview: {
             enabled: true,
             showInAppBrowser: true,
+            allowDockerAccess: false,
             environmentVariables: [{ key: "API_BASE_URL", value: "http://api.local", enabled: true }],
           },
         },
@@ -454,6 +475,11 @@ describe("BrowserPage", () => {
       ...buildDefaultPreviewSessionsResult().selectedSession,
       environmentOverrides: [{ key: "CODE_UX_ALLOW_PUBLIC_DASHBOARD", value: "1", enabled: true }],
     } as any);
+    vi.mocked(savePreviewStartupCommandOverride).mockReset();
+    vi.mocked(savePreviewStartupCommandOverride).mockResolvedValue({
+      ...buildDefaultPreviewSessionsResult().selectedSession,
+      startupCommandOverride: "pnpm custom-preview",
+    } as any);
     vi.mocked(rebuildPreviewSession).mockReset();
     vi.mocked(rebuildPreviewSession).mockResolvedValue(undefined);
   });
@@ -522,6 +548,21 @@ describe("BrowserPage", () => {
     expect(container.innerHTML).not.toContain("#f7f3ea");
     expect(screen.getByText("Port routing").parentElement?.className).toContain("bg-sky-500/10");
     expect(screen.getByText("Script path").parentElement?.className).toContain("bg-ember-500/10");
+  });
+
+  it("saves a per-container startup command override from the right sidebar", async () => {
+    const user = userEvent.setup();
+    render(<BrowserPage />);
+
+    await user.click(screen.getByRole("button", { name: /Startup command/i }));
+    const input = screen.getByLabelText("Selected container override");
+    await user.clear(input);
+    await user.type(input, "pnpm custom-preview");
+    await user.click(screen.getByRole("button", { name: "Save command" }));
+
+    await waitFor(() => {
+      expect(savePreviewStartupCommandOverride).toHaveBeenCalledWith("p1", "s1", "sess-1", "pnpm custom-preview");
+    });
   });
 
   it("loads the preview script only when the editor is opened", async () => {
@@ -810,6 +851,28 @@ describe("BrowserPage", () => {
       ],
     );
     expect(screen.getByText("Preview environment defaults saved. Rebuild containers to apply changes.")).toBeInTheDocument();
+  });
+
+  it("enables project-wide Docker access from the right sidebar", async () => {
+    const user = userEvent.setup();
+    render(<BrowserPage />);
+
+    expandPanel(/Docker Access/);
+    await user.click(screen.getByRole("switch", { name: "Project-wide preview Docker access" }));
+
+    expect(saveProjectPreviewDockerAccess).toHaveBeenCalledWith("p1", true);
+    expect(screen.getByText("Project-wide preview Docker access enabled. Rebuild containers to apply it.")).toBeInTheDocument();
+  });
+
+  it("enables Docker access only for the selected preview container", async () => {
+    const user = userEvent.setup();
+    render(<BrowserPage />);
+
+    expandPanel(/Docker Access/);
+    await user.selectOptions(screen.getByLabelText("Selected container Docker access policy"), "enabled");
+
+    expect(savePreviewDockerAccessOverride).toHaveBeenCalledWith("p1", "s1", "sess-1", true);
+    expect(screen.getByText("Selected container Docker access saved. Rebuild the container to apply it.")).toBeInTheDocument();
   });
 
   it("shows script save error feedback and keeps the editor available for recovery", async () => {

@@ -92,6 +92,7 @@ import { disposeCommandSpawner, shutdownGitHelperPool } from "../shared/subproce
 import { LocalMcpCliConfigService } from "../services/local-mcp-cli-config-service.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { ChatProviderIngressService } from "../services/chat-provider-ingress-service.js";
+import { ProjectInitializationStateService } from "../services/project-initialization-state-service.js";
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
   const normalized = String(message || "").trim().toLowerCase();
@@ -132,7 +133,7 @@ export class CodeUxServer {
   private static readonly WAL_CHECKPOINT_INTERVAL_MS = 60_000;
   private static readonly LOOP_INITIAL_DELAY_MS = 15_000;
   private static readonly STARTUP_RECOVERY_DELAY_MS = 1_000;
-  private static readonly STARTUP_CONTAINER_CLEANUP_DELAY_MS = 5_000;
+  private static readonly STARTUP_CONTAINER_CLEANUP_DELAY_MS = 0;
   private static readonly STARTUP_MAINTENANCE_DELAY_MS = 30_000;
   private static readonly SHUTDOWN_CLOSE_TIMEOUT_MS = 5_000;
   private static readonly SHUTDOWN_SIGNAL_TIMEOUT_MS = 30_000;
@@ -153,6 +154,7 @@ export class CodeUxServer {
   private appDbStorage: AppDbStorage;
   private settingsRepository: SettingsRepository;
   private projectManagementRepository: ProjectManagementRepository;
+  private projectInitializationStateService: ProjectInitializationStateService;
   private projectRuntimeRepository: ProjectRuntimeRepository;
   private connectionChatRepository: ConnectionChatRepository;
   private chatProviderRepository: ChatProviderRepository;
@@ -236,6 +238,9 @@ export class CodeUxServer {
     this.appDbStorage = deps.appDbStorage;
     this.settingsRepository = deps.settingsRepository;
     this.projectManagementRepository = deps.projectManagementRepository;
+    this.projectInitializationStateService = new ProjectInitializationStateService(
+      (projectId) => this.projectManagementRepository.getProject(projectId),
+    );
     this.projectRuntimeRepository = deps.projectRuntimeRepository;
     this.connectionChatRepository = deps.connectionChatRepository;
     this.chatProviderRepository = deps.chatProviderRepository;
@@ -1178,7 +1183,7 @@ export class CodeUxServer {
         return;
       }
       void task().catch((error) => {
-        this.logger.error(`${label} failed`, { error });
+        this.logger.error?.(`${label} failed`, { error });
       });
     }, delayMs);
     timer.unref?.();
@@ -1224,12 +1229,12 @@ export class CodeUxServer {
     try {
       await this.sprintPreviewService.cleanupStaleContainersOnStartup();
     } catch (error) {
-      this.logger.error("Failed to clean up stale sprint preview containers on startup", { error });
+      this.logger.error?.("Failed to clean up stale sprint preview containers on startup", { error });
     }
     try {
       await this.sprintFileBrowserService.cleanupStaleContainersOnStartup();
     } catch (error) {
-      this.logger.error("Failed to clean up stale file browser containers on startup", { error });
+      this.logger.error?.("Failed to clean up stale file browser containers on startup", { error });
     }
     try {
       await new DockerAssetPruneService(
@@ -1237,7 +1242,7 @@ export class CodeUxServer {
         this.logger.child({ component: "docker-asset-prune-service" }),
       ).cleanupOnStartup();
     } catch (error) {
-      this.logger.error("Failed to prune stale Docker assets on startup", { error });
+      this.logger.error?.("Failed to prune stale Docker assets on startup", { error });
     }
   }
 
@@ -1319,6 +1324,7 @@ export class CodeUxServer {
       projectRoot: this.projectRoot,
       logger: this.logger,
     });
+    this.sprintPreviewService.prepareForStartupCleanup();
     this.refreshJulesApiKey();
     try {
       const startupPrune = this.connectionChatRepository.pruneDisconnectedConnectionsOnStartup();
@@ -1341,6 +1347,7 @@ export class CodeUxServer {
         appDbStorage: this.appDbStorage,
         settingsRepository: this.settingsRepository,
         projectManagementRepository: this.projectManagementRepository,
+        projectInitializationStateService: this.projectInitializationStateService,
         projectRuntimeRepository: this.projectRuntimeRepository,
         executionRepository: this.executionRepository,
         getDashboardNotifications: () => this.executionRepository.getDashboardNotifications(),
@@ -1391,6 +1398,8 @@ export class CodeUxServer {
         getSprintPreviewScript: (projectId, sprintId) => this.sprintPreviewService.getScript(projectId, sprintId),
         saveSprintPreviewScript: (projectId, sprintId, content) => this.sprintPreviewService.saveScript(projectId, sprintId, content),
         updateSprintPreviewEnvironmentOverrides: (projectId, sprintId, sessionId, environmentOverrides) => this.sprintPreviewService.updateEnvironmentOverridesForProjectSprint(projectId, sprintId, sessionId, environmentOverrides),
+        updateSprintPreviewStartupCommandOverride: (projectId, sprintId, sessionId, startupCommandOverride) => this.sprintPreviewService.updateStartupCommandOverrideForProjectSprint(projectId, sprintId, sessionId, startupCommandOverride),
+        updateSprintPreviewDockerAccessOverride: (projectId, sprintId, sessionId, dockerAccessOverride) => this.sprintPreviewService.updateDockerAccessOverrideForProjectSprint(projectId, sprintId, sessionId, dockerAccessOverride),
         getSprintPreviewLogs: (sessionId, tail) => this.sprintPreviewService.getLogs(sessionId, tail),
         getSprintPreviewLogsForProjectSprint: (projectId, sprintId, sessionId, tail) => this.sprintPreviewService.getLogsForProjectSprint(projectId, sprintId, sessionId, tail),
         proxySprintPreviewRequest: (args) => this.sprintPreviewService.proxyRequest(args),

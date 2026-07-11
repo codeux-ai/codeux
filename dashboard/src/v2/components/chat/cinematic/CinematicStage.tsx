@@ -1,8 +1,8 @@
 import type { FunctionComponent, RefObject } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { AlertTriangle, ArrowUp, Globe, History, ListTodo, Monitor, Radar, RefreshCw, Rocket, Sparkles, Wrench } from "lucide-preact";
-import type { AgentPresetRecord, ChatMessageRecord, ChatThread, Source } from "../../../types.js";
+import { AlertTriangle, ArrowUp, BriefcaseBusiness, Gauge, Gamepad2, GitBranch, Globe2, History, LayoutDashboard, ListTodo, Monitor, Radar, RefreshCw, Rocket, ShoppingCart, Sparkles, WandSparkles, Wrench } from "lucide-preact";
+import type { AgentPresetRecord, ChatMessageRecord, ChatThread, DashboardCreateAppQuickactionKind, Source } from "../../../types.js";
 import { renderMarkdown } from "../../../../lib/markdown.js";
 import { formatChatTime } from "../../../lib/chat-time.js";
 import { getChatWidgetData } from "../../../lib/chat-widget-view-models.js";
@@ -16,6 +16,7 @@ import { resolveDisplayDeliveryStatus } from "../../../hooks/use-chat-thread-dat
 import { useAgentMood, type AgentMoodState } from "./use-agent-mood.js";
 import { parseBubbleSegments, StageWidgetRenderer } from "./StageWidgets.js";
 import { isAgentScheduledWakeup, ScheduledWakeupWidget } from "../widgets/ScheduledWakeupWidget.js";
+import { buildCinematicQuickActions } from "../../../lib/cinematic-quick-actions.js";
 
 /* ════════════════════════════════════════════════════════════════════════
  *  CinematicStage — the default "3D Chat" view of the chat page.
@@ -53,6 +54,9 @@ export interface CinematicStageProps {
   input: string;
   setInput: (value: string) => void;
   handleSend: (overrideText?: string) => Promise<void>;
+  handleCreateAppQuickaction: (kind: DashboardCreateAppQuickactionKind) => Promise<void>;
+  initialEligibilityLoaded: boolean;
+  canCreateInitialAppQuickactions: boolean;
   navigateHistory: (direction: "up" | "down") => boolean;
   composerRef: RefObject<HTMLTextAreaElement>;
   activeConnection: { displayName: string; status: string } | null;
@@ -64,54 +68,24 @@ export interface CinematicStageProps {
 const WORK_TOOLS: AgentSceneTool[] = ["screwdriver", "jackhammer", "wrench", "hammer", "torch"];
 const TOOL_SWAP_MS = 7_000;
 
-/** Idle quick actions floating in an arc on the bot's LEFT — the right side
- *  belongs to the speech bubble, so the two can never collide. Clicking
- *  sends immediately; prompts are phrased to elicit the rich stage widgets.
- *  left uses max() so chips never escape the viewport on narrow stages. */
-const QUICK_ACTIONS = [
-  {
-    icon: Globe,
-    label: "Web App",
-    prompt: "Set up this existing project as a web app using the project's current techstack setting. Inspect the repository first, then propose and run the needed project-scoped commands or sprint work. Do not create or import a new Code UX project.",
-    position: "top-[6%] left-[max(1rem,calc(50%-350px))]",
-    delay: "0s",
-  },
-  {
-    icon: Monitor,
-    label: "Desktop App",
-    prompt: "Set up this existing project as a desktop app using the project's current techstack setting. Inspect the repository first, then propose and run the needed project-scoped commands or sprint work. Do not create or import a new Code UX project.",
-    position: "top-[19%] left-[max(0.75rem,calc(50%-420px))]",
-    delay: "0.8s",
-  },
-  {
-    icon: Radar,
-    label: "Status report",
-    prompt: "Give me a concise status report for this project — CI health, running work, and anything blocked.",
-    position: "top-[32%] left-[max(0.5rem,calc(50%-440px))]",
-    delay: "1.6s",
-  },
-  {
-    icon: Rocket,
-    label: "Sprint progress",
-    prompt: "How is the current sprint progressing? Summarize task completion and what is next.",
-    position: "top-[45%] left-[max(0.5rem,calc(50%-440px))]",
-    delay: "2.4s",
-  },
-  {
-    icon: AlertTriangle,
-    label: "What's failing?",
-    prompt: "What is currently failing or blocked in this project, and what do you recommend we do about it?",
-    position: "top-[58%] left-[max(0.75rem,calc(50%-420px))]",
-    delay: "3.2s",
-  },
-  {
-    icon: ListTodo,
-    label: "Plan next steps",
-    prompt: "Propose the next steps for this project as a short prioritized task list.",
-    position: "top-[71%] left-[max(1rem,calc(50%-350px))]",
-    delay: "4s",
-  },
-] as const;
+const CREATE_APP_ACTION_ICONS: Record<DashboardCreateAppQuickactionKind, typeof Monitor> = {
+  web_app: Globe2,
+  desktop_app: Monitor,
+  online_shop: ShoppingCart,
+  portfolio: BriefcaseBusiness,
+  game: Gamepad2,
+};
+
+const PROMPT_ACTION_ICONS: Record<string, typeof Monitor> = {
+  "status-report": Gauge,
+  "sprint-progress": Rocket,
+  "whats-failing": AlertTriangle,
+  "plan-next-steps": ListTodo,
+  "add-nodes-workflow": GitBranch,
+  "add-dashboard": LayoutDashboard,
+  "create-skill": WandSparkles,
+  "list-skills": Wrench,
+};
 
 /** Debug override: /chat?stageTool=wrench pins a specific tool on the stage. */
 const readForcedTool = (): AgentSceneTool | null => {
@@ -331,6 +305,9 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   input,
   setInput,
   handleSend,
+  handleCreateAppQuickaction,
+  initialEligibilityLoaded,
+  canCreateInitialAppQuickactions,
   navigateHistory,
   composerRef,
   activeConnection,
@@ -369,6 +346,11 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
      running invocation — the latter is what actually fires on the
      virtual-worker path, where thread messages stay `pending` during work. */
   const runtimeBusy = hasWorkingReply || runningInvocationCount > 0;
+  const quickActions = buildCinematicQuickActions({
+    hasProject: Boolean(selectedProject),
+    initialEligibilityLoaded,
+    canCreateInitialAppQuickactions,
+  });
 
   useEffect(() => {
     if (!runtimeBusy) {
@@ -466,25 +448,41 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
 
       {/* ── Center stage — the bot owns the middle of the screen ── */}
       <div className="pointer-events-none absolute inset-x-0 top-10 bottom-32 z-10 flex flex-col items-center justify-start md:justify-center">
-        {/* Idle quick actions — float around the bot, fire a message instantly */}
-        {!runtimeBusy && !sending && !error && (
-          <div aria-label="Quick actions" role="group" className="hidden md:block">
-            {QUICK_ACTIONS.map(({ icon: Icon, label, prompt, position, delay }) => (
-              <div key={label} className={`absolute z-20 ${position}`}>
+        {/* Mobile uses a compact two-row scroller; desktop balances actions in
+            a two-column grid in the open space left of the avatar. */}
+        {!runtimeBusy && !sending && !error && quickActions.length > 0 && (
+          <div
+            aria-label="Project quick actions"
+            role="group"
+            className="pointer-events-auto absolute inset-x-4 top-14 z-20 grid max-h-24 grid-flow-col grid-rows-2 auto-cols-[minmax(9rem,1fr)] gap-2 overflow-x-auto overscroll-x-contain pb-2 md:bottom-28 md:left-4 md:right-auto md:top-14 md:max-h-none md:w-[calc(50%-min(24vh,260px)-2rem)] md:grid-flow-row md:grid-cols-2 md:grid-rows-none md:auto-cols-auto md:content-center md:overflow-y-auto md:pr-2"
+          >
+            {quickActions.map((action) => {
+              const Icon = action.actionType === "create_app"
+                ? CREATE_APP_ACTION_ICONS[action.appKind]
+                : PROMPT_ACTION_ICONS[action.id];
+              return (
                 <button
+                  key={action.id}
                   type="button"
-                  onClick={() => void handleSend(prompt)}
-                  style={{ animationDelay: delay }}
-                  className="stage-quick-float pointer-events-auto inline-flex items-center gap-2 rounded-full border border-black/[0.07] bg-white/80 px-4 py-2.5 text-[12px] font-semibold text-slate-600 shadow-[0_4px_20px_rgba(0,0,0,0.08)] backdrop-blur-md transition-colors hover:border-signal-500/40 hover:text-signal-700 dark:border-white/[0.09] dark:bg-void-800/80 dark:text-slate-300 dark:shadow-[0_4px_24px_rgba(0,0,0,0.35)] dark:hover:text-signal-400"
+                  data-quick-action-zone={action.zone}
+                  onClick={() => {
+                    if (action.actionType === "create_app") {
+                      void handleCreateAppQuickaction(action.appKind);
+                      return;
+                    }
+                    void handleSend(action.prompt);
+                  }}
+                  style={{ animationDelay: action.animationDelay }}
+                  className="stage-quick-float inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-2xl border border-black/[0.07] bg-white/85 px-3 py-2 text-center text-[11px] font-semibold leading-4 text-slate-600 shadow-[0_4px_20px_rgba(0,0,0,0.08)] backdrop-blur-md transition-colors hover:border-signal-500/40 hover:text-signal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-2 dark:border-white/[0.09] dark:bg-void-800/85 dark:text-slate-300 dark:shadow-[0_4px_24px_rgba(0,0,0,0.35)] dark:hover:text-signal-400 dark:focus-visible:ring-offset-void-900"
                 >
-                  <Icon className="h-3.5 w-3.5 text-signal-500" aria-hidden="true" />
-                  {label}
+                  <Icon className="h-3.5 w-3.5 shrink-0 text-signal-500" aria-hidden="true" />
+                  <span className="min-w-0 whitespace-normal break-words">{action.label}</span>
                 </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
-        <div className="relative flex w-full flex-col items-center px-6">
+        <div className={`relative flex w-full flex-col items-center px-6 ${!runtimeBusy && !sending && !error && quickActions.length > 0 ? "pt-28 md:pt-0" : ""}`}>
           {runtimeBusy && (
             <ThoughtBubble text={workingPhase === "starting" ? "Spinning up a workspace" : "Working on it"} />
           )}

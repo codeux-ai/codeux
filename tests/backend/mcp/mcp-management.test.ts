@@ -97,6 +97,7 @@ describe("ManagementToolHandler", () => {
       },
       planningAgentService: {
         planSprint: vi.fn(),
+        startPlanSprint: vi.fn(),
       },
       sprintIssueService: {
         searchIssues: vi.fn(),
@@ -107,6 +108,14 @@ describe("ManagementToolHandler", () => {
       },
       schedulerService: {
         listProjectSchedule: vi.fn(),
+        createEntry: vi.fn(),
+      },
+      logger: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        child: vi.fn(),
       },
       workerTaskDispatchService: {
         registerExternalWorkerEndpoint: vi.fn(),
@@ -214,6 +223,25 @@ describe("ManagementToolHandler", () => {
       field: "taskCount",
     });
     expect(deps.quicksprintService.executeQuicksprint).not.toHaveBeenCalled();
+  });
+
+  it("returns a management error when background planning preconditions fail synchronously", async () => {
+    deps.planningAgentService.startPlanSprint.mockImplementation(() => {
+      throw new Error("Sprint already has tasks. Replan is required.");
+    });
+
+    const response = await handler.handleManageSprints({ action: "plan", projectId: "p1", sprintId: "s1" });
+    const parsed = JSON.parse(response.content[0].text);
+
+    expect(response.isError).toBe(true);
+    expect(parsed.result).toMatchObject({
+      status: "error",
+      domain: "sprints",
+      action: "plan",
+      message: "Sprint already has tasks. Replan is required.",
+      errorType: "runtime",
+    });
+    expect(deps.schedulerService.createEntry).not.toHaveBeenCalled();
   });
 
   it("returns standardized validation envelopes for settings confirmation input errors", async () => {

@@ -127,6 +127,41 @@ export function registerPreviewRoutes(app: Express, deps: DashboardDependencies)
     ));
   }));
 
+  app.put("/api/projects/:projectId/sprints/:sprintId/preview/sessions/:sessionId/startup-command", asyncRoute(async (req, res) => {
+    if (!deps.updateSprintPreviewStartupCommandOverride) {
+      throw new Error("Sprint preview runtime is unavailable.");
+    }
+    const startupCommandOverride = req.body?.startupCommandOverride;
+    if (startupCommandOverride !== null && typeof startupCommandOverride !== "string") {
+      throw new HttpRouteError(400, "startupCommandOverride must be a string or null");
+    }
+    if (typeof startupCommandOverride === "string" && (startupCommandOverride.length > 8_192 || startupCommandOverride.includes("\0"))) {
+      throw new HttpRouteError(400, "startupCommandOverride must be no longer than 8192 characters and cannot contain null bytes");
+    }
+    res.json(await deps.updateSprintPreviewStartupCommandOverride(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      requireTrimmedString(req.params.sprintId, "sprintId"),
+      requireTrimmedString(req.params.sessionId, "sessionId"),
+      startupCommandOverride ?? null,
+    ));
+  }));
+
+  app.put("/api/projects/:projectId/sprints/:sprintId/preview/sessions/:sessionId/docker-access", asyncRoute(async (req, res) => {
+    if (!deps.updateSprintPreviewDockerAccessOverride) {
+      throw new Error("Sprint preview runtime is unavailable.");
+    }
+    const dockerAccessOverride = req.body?.dockerAccessOverride;
+    if (dockerAccessOverride !== null && typeof dockerAccessOverride !== "boolean") {
+      throw new HttpRouteError(400, "dockerAccessOverride must be a boolean or null");
+    }
+    res.json(await deps.updateSprintPreviewDockerAccessOverride(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      requireTrimmedString(req.params.sprintId, "sprintId"),
+      requireTrimmedString(req.params.sessionId, "sessionId"),
+      dockerAccessOverride,
+    ));
+  }));
+
   app.get("/api/projects/:projectId/sprints/:sprintId/preview/sessions/:sessionId/logs", asyncRoute(async (req, res) => {
     if (!deps.getSprintPreviewLogsForProjectSprint) {
       throw new Error("Sprint preview runtime is unavailable.");

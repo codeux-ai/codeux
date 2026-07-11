@@ -80,6 +80,21 @@ describe("QaReviewRepository", () => {
     expect(repository.listRunsForTask(task.id)).toHaveLength(1);
     expect(repository.getLatestTaskRun(task.id)?.id).toBe(completedTaskRun.id);
 
+    const cancelledTaskRun = repository.createRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      triggerType: "task_completion",
+      runIndex: 2,
+    });
+    repository.updateRun(cancelledTaskRun.id, {
+      status: "cancelled",
+      summaryMarkdown: "Recovered stale QA review run after its container disappeared.",
+      finishedAt: new Date().toISOString(),
+    });
+    expect(repository.countTaskRuns(task.id)).toBe(2);
+    expect(repository.countDecisiveTaskRuns(task.id)).toBe(1);
+
     expect(repository.hasSprintReviewRun(sprint.id)).toBe(false);
 
     const sprintRun = repository.createRun({
@@ -100,7 +115,7 @@ describe("QaReviewRepository", () => {
     expect(repository.resetSprintReviewRuns(sprint.id)).toBe(1);
     expect(repository.getLatestSprintRun(sprint.id)).toBeNull();
     expect(repository.hasSprintReviewRun(sprint.id)).toBe(false);
-    expect(repository.getLatestTaskRun(task.id)?.id).toBe(completedTaskRun.id);
+    expect(repository.getLatestTaskRun(task.id)?.id).toBe(cancelledTaskRun.id);
   });
 
   it("counts only decisive (completed) runs toward the verdict budget", async () => {

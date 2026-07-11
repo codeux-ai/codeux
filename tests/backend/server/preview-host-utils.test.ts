@@ -14,6 +14,7 @@ import {
 } from "../../../src/server/preview-host-utils.js";
 import type { Request } from "express";
 import type { SprintPreviewSession } from "../../../src/contracts/app-types.js";
+import { isTrustedDashboardHost } from "../../../src/server/dashboard-security.js";
 
 describe("preview-host-utils", () => {
   describe("buildPreviewProxyRequestHeaders", () => {
@@ -27,6 +28,7 @@ describe("preview-host-utils", () => {
           "upgrade": "websocket",
           "transfer-encoding": "chunked",
           "x-code-ux-test": "test",
+          "x-forwarded-host": "attacker.example",
           "proxy-authenticate": "test",
           "content-length": "100",
           "accept-encoding": "gzip",
@@ -54,11 +56,13 @@ describe("preview-host-utils", () => {
       expect(result["content-length"]).toBeUndefined();
       expect(result["accept-encoding"]).toBeUndefined();
       expect(result["x-custom"]).toBe("allowed");
-      expect(result.host).toBe("127.0.0.1:3000");
-      expect(result.origin).toBe("http://127.0.0.1:3000");
-      expect(result.referer).toBe("http://127.0.0.1:3000/api/form");
+      expect(result.host).toBe("localhost:3000");
+      expect(result.origin).toBe("http://localhost:3000");
+      expect(result.referer).toBe("http://localhost:3000/api/form");
       expect(result["sec-fetch-site"]).toBe("same-origin");
-      expect(result["x-forwarded-host"]).toBe("preview-session.localhost:4444");
+      expect(result["x-forwarded-host"]).toBe("localhost:3000");
+      expect(result["x-forwarded-port"]).toBe("3000");
+      expect(isTrustedDashboardHost(result.host, result["x-forwarded-host"])).toBe(true);
     });
   });
 

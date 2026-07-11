@@ -58,7 +58,7 @@ Use this section when you need more detail than the inline Settings-page help po
 | [Watch Loop](./watch-loop.md) | Controls whether live sprint orchestration keeps polling and how frequently it emits work. |
 | [Workspace Hygiene](./workspace-hygiene.md) | Controls cleanup of temporary worktree state after provider CLI runs. |
 | [Workspace Visibility](./workspace-visibility.md) | Controls automatic preview lifecycle and whether browser workspace entry points appear in the dashboard. |
-| [Runtime Limits](./runtime-limits.md) | Sets preview container concurrency, host port range, app port, and startup script path. |
+| [Runtime Limits](./runtime-limits.md) | Sets preview container concurrency, ports, startup commands, and optional Docker access. |
 
 ### Memory And Knowledge
 

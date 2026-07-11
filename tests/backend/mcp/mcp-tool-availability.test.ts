@@ -117,25 +117,25 @@ describe("sanitizeCustomMcpServers", () => {
       name: "playwright",
       enabled: true,
       transport: "stdio",
-      command: "playwright-mcp",
-      args: [],
+      command: "npx",
+      args: ["@playwright/mcp@latest"],
       providers: ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"],
     });
   });
 
-  it("migrates the untouched npx Playwright server to the baked executable", () => {
+  it("migrates the legacy baked Playwright executable to the published package", () => {
     const result = sanitizeCustomMcpServersWithDefaults([
       {
         id: "playwright",
         name: "playwright",
         enabled: true,
         transport: "stdio",
-        command: "npx",
-        args: ["@playwright/mcp@latest"],
+        command: "playwright-mcp",
+        args: [],
         providers: ["codex"],
       },
     ], DEFAULT_DASHBOARD_SETTINGS.customMcpServers);
-    expect(result[0]).toMatchObject({ command: "playwright-mcp", args: [] });
+    expect(result[0]).toMatchObject({ command: "npx", args: ["@playwright/mcp@latest"] });
   });
 
   it("keeps valid HTTP servers and normalizes optional fields", () => {

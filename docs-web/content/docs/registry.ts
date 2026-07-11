@@ -206,7 +206,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-projects',
     section: 'User Guide',
     title: "Projects",
-    description: "The Projects page (/projects) lists every project Code UX manages and lets you create, edit, select, and delete them. Each card now surfaces the source badge, repository URL, local workspace directory, creation and up...",
+    description: "The Projects page (/projects) presents every managed repository in a low-noise gallery and lets you create, select, configure, set up, and delete projects. The restrained project cards use quiet surfaces and semantic...",
   },
   'user-dashboard-sprints': {
     id: 'user-dashboard-sprints',
@@ -479,7 +479,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/settings-runtime-limits',
     section: 'User Guide',
     title: "Runtime Limits",
-    description: "Sets preview container concurrency, host port range, app port, and startup script path.",
+    description: "Sets preview container concurrency, ports, startup behavior, and optional Docker daemon access.",
   },
   'settings-techstacks': {
     id: 'settings-techstacks',

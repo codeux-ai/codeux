@@ -15,6 +15,8 @@
     --signal-rgb: 0 94 184;
     --accent-primary: var(--signal-600);
     --accent-hover: var(--signal-700);
+    --link-text: var(--signal-600);
+    --link-text-hover: var(--signal-700);
     --radius-ui: 8px;
 
     /* Shared Primitives */
@@ -26,8 +28,8 @@
     --accent-focus-ring: var(--accent-primary);
     --text-metadata: #64748b; /* slate-500 */
 
-    /* Tailwind Typography Overrides - replaces default blue with semantic grays */
-    --tw-prose-links: var(--text-secondary);
+    /* Tailwind Typography Overrides */
+    --tw-prose-links: var(--link-text);
     --tw-prose-quotes: var(--text-secondary);
     --tw-prose-bold: var(--text-primary);
     --tw-prose-counters: var(--text-secondary);
@@ -56,6 +58,8 @@
     --signal-rgb: 0 224 160;
     --accent-primary: var(--signal-500);
     --accent-hover: var(--signal-400);
+    --link-text: var(--signal-300);
+    --link-text-hover: var(--signal-400);
 
     /* Shared Primitives — warm void surfaces (brand "Warm Void" identity) */
     --surface-glass: rgba(24, 20, 17, 0.66); /* void-800 tint, frosted panel */

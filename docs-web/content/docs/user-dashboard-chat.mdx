@@ -11,6 +11,8 @@ The **Chat** page (`/chat`) is a thread-based conversation surface that lets you
   - **Invocations** — A historical log of server-created execution invocations, including provider-backed agent runs and MCP `CallTool` activity.
 - **Main panel** — The active thread (or invocation), rendered as a chat transcript with user, assistant, and tool messages. Markdown is rendered with `marked`, including code blocks.
 
+Markdown links use the dashboard's theme-aware signal colors across thread messages, invocation transcripts, truncated system messages, and 3D Chat. In dark mode they render in high-contrast mint with a brighter jade hover/focus state instead of a fixed dark blue; provider-branded badges retain their own readable semantic colors.
+
 3D chat and agent avatar surfaces use the standard WebGL avatar with studio lighting and pointer-aware head movement. The removed flashlight beam, target glow, low-battery flicker, and emissive shell boost are no longer part of the chat layout; reduced-motion settings or WebGL fallback mode continue to use the static SVG avatar.
 
 ## No-project assistant
@@ -49,26 +51,43 @@ When the Project Manager schedules its own continuation, that follow-up is visib
 
 ## Create app quickactions
 
-Use **Create Web App** or **Create Desktop App** when you want Code UX to start an app-building sprint in the selected project from chat. In Threads mode, the buttons sit beside the composer and are also available in an empty thread. In 3D Chat, the idle Web App and Desktop App quickactions send the same kind of request through the active thread.
+Use **Create Web App**, **Create Desktop App**, **Create Onlineshop** (the Online shop action), **Create Portfolio**, or **Create Game** when you want Code UX to start an app-building sprint in the selected project from chat. In Threads mode, the buttons sit beside the composer and are also available in an empty thread whenever project chat is idle. They hide while sending, working, or showing an error.
 
-Clicking either quickaction starts immediately. You do not need to type composer text first, and Code UX does not show a confirmation step. If there is no active thread yet, the dashboard creates one, posts a short visible message such as `Create a web app`, and starts the matching quicksprint in detached `Plan & Start` mode while you stay in Chat.
+Clicking a quickaction starts immediately. You do not need to type composer text first, and Code UX does not show a confirmation step. If there is no active thread yet, the dashboard creates one, posts a short visible message such as `Create a web app`, and starts the matching quicksprint in detached `Plan & Start` mode while you stay in Chat. Its catalog-selected experience guidance applies to that plan only and does not change saved project settings.
 
-The quickaction carries the active project's effective techstack into planning: the selected catalog entry when assigned, or the catalog default when the project is unassigned. Stack item labels become suggestion tags, so the progress widget and planner begin from the same stack context visible in the dashboard.
+**Create Web App** and **Create Desktop App** appear only for projects persisted as `new-local` or `new-remote` whose repository is still the clean Code UX seed. The project directory must be the repository root, Git must contain exactly one commit, and the root and tracked tree must contain only the generated `README.md` and `.gitignore`. The README must retain its initial `# <project name>` and `Initialized with Code UX.` content; the only effective ignore entry may be `.code-ux/` or `.code-ux`. Imported or legacy projects, setup artifacts, dirty or ignored extra content, altered seed files, additional files or commits, missing checkouts, and inspection errors all fail closed. The dashboard refreshes eligibility after project structure and Git changes, and the server verifies it again at launch, so Web/Desktop disappear after setup or any repository change.
+
+**Create Onlineshop**, **Create Portfolio**, and **Create Game** remain available on normal project-scoped chat paths and do not require an initial repository. Invalid kind, template, or guidance metadata fails safely instead of starting a different sprint.
+
+Each action has a fixed template and request-scoped guidance mapping:
+
+| Action | Template | Planning guidance |
+| --- | --- | --- |
+| **Create Web App** | `qs-create-web-app` | Product journeys, information architecture, service boundaries, responsive/accessibility states, and operational validation using the Code UX product stack and product-grade interface guidance. |
+| **Create Desktop App** | `qs-create-desktop-app` | Window/process lifecycle, safe privileged operations, local data, recovery, packaging, resizing, and keyboard behavior using the Electron desktop stack and product-grade interface guidance. |
+| **Create Onlineshop** | `qs-create-online-shop` | Discovery through order completion, including money, inventory, checkout, payment, privacy, idempotency, and failure recovery, with commerce guidance. |
+| **Create Portfolio** | `qs-create-portfolio` | Narrative, real evidence and content, contact paths, responsive semantics, reduced motion, performance, metadata, and discoverability, with marketing-site guidance. |
+| **Create Game** | `qs-create-game` | A core play loop, deterministic state and controls, progression/recovery, accessible alternatives, performance budgets, and a runnable play-through, with game-experience guidance. |
+
+The quickaction also carries the active project's effective techstack into planning: the selected catalog entry when assigned, or the catalog default when the project is unassigned. Stack item labels become suggestion tags, so the progress widget and planner begin from the same stack context visible in the dashboard. Catalog guidance is applied only to this planning request, reconciled with stronger repository instructions, and never saved as a project setting.
 
 The transcript then shows an app progress widget instead of raw status data. The widget reports:
 
-- whether the sprint is for a web app or desktop app
+- whether the sprint is for a web app, desktop app, online shop, portfolio, or game
 - the app sprint name
 - selected stack details such as framework, runtime, package manager, styling, and tests when available
 - planning stages from Planning through Plan, Showing each Task, Start, and Finish
 - suggestion tags that can guide your next message
 
-You can keep sending messages in the same thread while planning runs. If the planner has not created tasks yet, Code UX queues those follow-ups and applies them to the sprint when planning finishes. Once tasks exist, follow-ups update the sprint direction immediately and the thread confirms the update. The added direction appears on the sprint goal under `Additional direction from chat`; generated task prompts are not rewritten by those follow-ups. Non-app quickactions still use the normal routed chat reply path.
+You can keep sending messages in the same thread while planning runs. If the planner has not created tasks yet, Code UX marks those messages processed, queues them on the thread, and acknowledges the queue. Successful planning flushes them to the sprint goal under `Additional direction from chat`. Once tasks exist, follow-ups append to that sprint direction immediately and the thread confirms the update. Generated task prompts and existing subtasks are not rewritten; failed planning retains queued text for recovery instead of discarding it.
+
 After you send a message, the thread transcript updates from the server's returned chat message. The **Invocations** rail updates separately from persisted server invocation records and realtime refreshes, so it shows only backend-confirmed invocation rows. The dashboard no longer inserts a frontend-only optimistic invocation placeholder while the backend is still creating the real row.
 
 While a reply or invocation container is active, the visible status line uses light deterministic humor instead of static `Initializing` or `Working` copy. These messages are keyed by the active agent, provider/model, and phase, and they remain stable for at least five seconds so live regions do not churn during rapid refreshes. The funny line is a UI adjunct only; it does not replace the actual agent reply, invocation status, or stored transcript.
 
-In 3D Chat, idle quick actions send project-scoped prompts directly through the active thread. **Web App** and **Desktop App** set up the currently selected project using its current techstack setting; an unassigned existing project stays `None`. They do not create or import a new Code UX project.
+In 3D Chat, the complete idle set is the five create-app actions together with **Status Report**, **Sprint Progress**, **What’s Failing?**, **Plan Next Steps**, **Add Nodes Workflow**, **Add Dashboard**, **Create Skill**, and **List Skills**. The create-app buttons use the typed detached quicksprint path described above. The other eight buttons are normal chat actions: they immediately send their fixed informational or workflow prompt through the selected project's routed Thread and do not create detached app planning. Neither path inserts into, replaces, or clears text already in the composer.
+
+On desktop the controls use a balanced two-column grid beside the avatar; on mobile they become a horizontally scrollable two-row layout. Long labels wrap. Every control is a keyboard-reachable button with a visible focus state, and Enter or Space activates it. Reduced-motion mode stops the quickaction floating animation (along with the stage's other decorative motion) without removing actions or status text. The whole group hides without a selected project and while chat is sending, working, or showing an error; Web/Desktop also remain hidden until initial-project eligibility has loaded and passed.
 
 Planning messages can include a rich sprint status card. When Code UX can match the message to loaded live project data, the card is backed by the current task records and execution snapshot, so it updates as tasks move from queued to running, completed, failed, blocked, or quota-waiting. It shows the sprint key/name, request/task/run materialization, overall progress such as `0/7 · 0%`, queued task count, and a compact task list. If either task records or the execution snapshot are still loading, the chat keeps the generic planning status card until both live records are available for the active project.
 

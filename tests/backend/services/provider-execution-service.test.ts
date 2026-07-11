@@ -1566,7 +1566,7 @@ describe("ProviderExecutionService", () => {
     });
   });
 
-  it("Unknown failure passthrough: returns result without throwing on UNKNOWN classification", async () => {
+  it("Unknown failure passthrough: returns an actionable diagnostic without throwing", async () => {
     const failedResult = { ...mockResult, ok: false };
     providerRunner.runProvider.mockResolvedValue(failedResult);
 
@@ -1583,7 +1583,10 @@ describe("ProviderExecutionService", () => {
 
     const result = await service.executeProvider(defaultArgs);
 
-    expect(result).toBe(failedResult);
+    expect(result).toEqual({
+      ...failedResult,
+      stderr: "Unknown error",
+    });
     expect(providerRunner.runProvider).toHaveBeenCalledTimes(1);
   });
 

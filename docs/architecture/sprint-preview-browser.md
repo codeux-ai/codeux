@@ -36,6 +36,7 @@ Key rules:
 - host ports bind to `127.0.0.1` only
 - preview startup injects `HOST`, `PORT`, `DASHBOARD_HOST`, `DASHBOARD_PORT`, and `SPRINT_PREVIEW_WORKSPACE` so containerized apps can bind to the published preview port and boot from the exported snapshot directory. The primary compatibility variables still point at the first mapping, and `SPRINT_PREVIEW_CONTAINER_PORTS`, `SPRINT_PREVIEW_HOST_PORTS`, and `SPRINT_PREVIEW_PORT_MAPPINGS` expose the full routing list.
 - Browser Preview settings and the Browser page right sidebar can define default preview environment variables for every container in the project scope, and each preview container card can open a modal for per-session overrides. These user variables are written through the preview Docker env-file path alongside provider env, while runtime-owned names such as `HOST`, `PORT`, `HOME`, `DASHBOARD_PORT`, `SPRINT_PREVIEW_*`, and `CODE_UX_GIT_USER_*` remain reserved.
+- Docker host access follows the same scoped model: `sprintPreview.allowDockerAccess` is the project/sprint default and each persisted session may inherit it or explicitly enable/disable access. On Linux, enabled sessions mount the host Docker CLI and Compose v2 plugin beside the Unix socket, then preflight both the daemon and `docker compose` before running the preview command.
 - preview startup is serialized per `(projectId, sprintId)` so manual starts, rebuilds, and auto-start reconciliation cannot spawn duplicate session containers
 - if the previewed app still binds a loopback-only internal port, the generated preview bootstrap keeps a dedicated in-container bridge open on the published preview proxy port and forwards requests to the live app listener
 - containers are labeled with sprint-preview metadata so runtime reconciliation can rediscover them
@@ -54,6 +55,7 @@ The table stores:
 - container id/name
 - preview workspace path and feature branch
 - resolved startup mode and detected commands
+- nullable per-session Docker access override (`null` inherits the effective project/sprint setting)
 - task-count and sprint-status markers used by reconciliation
 - timestamps and last error state
 

@@ -35,6 +35,7 @@ const createSource = (id: number, updatedAt: string): Source => ({
   repoUrl: null,
   sourceType: "local",
   sourceRef: `/tmp/project-${id}`,
+  initializationMode: "existing",
   gitProvider: "local",
   gitHostDomain: null,
   defaultBranch: "main",

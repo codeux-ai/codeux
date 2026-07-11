@@ -92,6 +92,7 @@ import type {
   LocalMcpInstallResult,
   LocalMcpSetupInfo,
 } from "../../services/local-mcp-cli-config-service.js";
+import type { ProjectInitializationStateService } from "../../services/project-initialization-state-service.js";
 
 const updateCheckerService = new UpdateCheckerService();
 
@@ -104,6 +105,7 @@ export interface BootDashboardDeps {
   appDbStorage: AppDbStorage;
   settingsRepository: SettingsRepository;
   projectManagementRepository: ProjectManagementRepository;
+  projectInitializationStateService: ProjectInitializationStateService;
   projectRuntimeRepository: ProjectRuntimeRepository;
   executionRepository: ExecutionRepository;
   getDashboardNotifications?: () => ReturnType<ExecutionRepository["getDashboardNotifications"]>;
@@ -156,6 +158,8 @@ export interface BootDashboardDeps {
   getSprintPreviewScript: (projectId: string, sprintId: string) => Promise<SprintPreviewScript>;
   saveSprintPreviewScript: (projectId: string, sprintId: string, content: string) => Promise<SprintPreviewScript>;
   updateSprintPreviewEnvironmentOverrides: (projectId: string, sprintId: string, sessionId: string, environmentOverrides: PreviewEnvironmentVariable[]) => Promise<SprintPreviewSession>;
+  updateSprintPreviewStartupCommandOverride: (projectId: string, sprintId: string, sessionId: string, startupCommandOverride: string | null) => Promise<SprintPreviewSession>;
+  updateSprintPreviewDockerAccessOverride: (projectId: string, sprintId: string, sessionId: string, dockerAccessOverride: boolean | null) => Promise<SprintPreviewSession>;
   getSprintPreviewLogs: (sessionId: string, tail?: number) => Promise<{ logs: string }>;
   getSprintPreviewLogsForProjectSprint: (projectId: string, sprintId: string, sessionId: string, tail?: number) => Promise<{ logs: string }>;
   proxySprintPreviewRequest: (args: {
@@ -263,7 +267,7 @@ function requireProjectAttentionItem(
 }
 
 function resetGuardrailForResolvedHumanAttention(
-  deps: Pick<BootDashboardDeps, "guardrailService" | "qaReviewRepository" | "logger">,
+  deps: Pick<BootDashboardDeps, "guardrailService" | "projectManagementRepository" | "qaReviewRepository" | "logger">,
   item: NonNullable<ReturnType<ProjectAttentionRepository["getAttentionItem"]>>,
 ): void {
   if (
@@ -298,6 +302,14 @@ function resetGuardrailForResolvedHumanAttention(
   if (sourceAttentionType === "qa_review" || isQaReviewHumanEscalation(item)) {
     const clearedRuns = deps.qaReviewRepository.resetTaskReviewRuns(item.taskId);
     deps.guardrailService.resetPurpose(item.taskId, "qa_review");
+    const task = deps.projectManagementRepository.getTask(item.taskId);
+    const requeuedForQa = task?.status === "QA_REVIEW_FAILED";
+    if (requeuedForQa) {
+      deps.projectManagementRepository.updateTask(item.taskId, {
+        status: "coding_completed",
+        mergeIndicator: null,
+      });
+    }
     deps.logger.info("Reset QA review budget after human attention resolution", {
       projectId: item.projectId,
       sprintId: item.sprintId,
@@ -305,6 +317,7 @@ function resetGuardrailForResolvedHumanAttention(
       taskId: item.taskId,
       attentionItemId: item.id,
       clearedRuns,
+      requeuedForQa,
     });
     return;
   }
@@ -660,6 +673,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
       }),
     ),
     getProject: (projectId) => deps.projectManagementRepository.getProject(projectId),
+    getProjectInitializationState: (projectId) => deps.projectInitializationStateService.getProjectInitializationState(projectId),
     updateProject: (projectId, input) => deps.projectManagementRepository.updateProject(projectId, input),
     deleteProject: (projectId) => deps.projectManagementRepository.deleteProject(projectId),
     selectProject: (projectId) => {
@@ -857,6 +871,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     getSprintPreviewScript: deps.getSprintPreviewScript,
     saveSprintPreviewScript: deps.saveSprintPreviewScript,
     updateSprintPreviewEnvironmentOverrides: deps.updateSprintPreviewEnvironmentOverrides,
+    updateSprintPreviewStartupCommandOverride: deps.updateSprintPreviewStartupCommandOverride,
+    updateSprintPreviewDockerAccessOverride: deps.updateSprintPreviewDockerAccessOverride,
     getSprintPreviewLogs: deps.getSprintPreviewLogs,
     getSprintPreviewLogsForProjectSprint: deps.getSprintPreviewLogsForProjectSprint,
     proxySprintPreviewRequest: deps.proxySprintPreviewRequest,
