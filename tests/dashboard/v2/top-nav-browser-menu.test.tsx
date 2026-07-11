@@ -848,46 +848,130 @@ describe("TopNav shell accessibility", () => {
         });
     });
 
-    it("opens a sprint fallback with the server-supplied project and sprint context", async () => {
-        mockTopNavData({
-            selectedProject: makeProject("proj-1", "Alpha"),
-            selectedSprintId: "sprint-1",
-        });
-        vi.mocked(useNotifications).mockReturnValue({
-            notifications: [makeAttentionNotification({
-                id: "sprint-failure-1@2026-07-11T10:00:00.000Z",
-                sourceId: "sprint-failure-1",
+    it.each([
+        {
+            label: "task",
+            notification: {
+                type: "intervention",
+                title: "Task needs a decision",
+                actionLabel: "Review task",
+                actionHref: "/tasks?projectId=project-9&sprintId=sprint-12&taskId=task-2&source=notification",
+            },
+            to: "/tasks",
+            search: { projectId: "project-9", sprintId: "sprint-12", taskId: "task-2", source: "notification" },
+        },
+        {
+            label: "sprint",
+            notification: {
                 type: "sprint-failure",
                 title: "Sprint planning failed",
                 actionLabel: "Review sprint",
                 actionHref: "/sprints?view=ledger&sprintId=sprint-12&projectId=project-9&source=notification",
+            },
+            to: "/sprints",
+            search: { view: "ledger", sprintId: "sprint-12", projectId: "project-9", source: "notification" },
+        },
+        {
+            label: "project",
+            notification: {
+                type: "automatic-stop",
+                title: "Project setup failed",
+                actionLabel: "Review project",
+                actionHref: "/projects?projectId=project-9&source=notification&returnTo=%2Ftasks%3Fview%3Dboard",
+            },
+            to: "/projects",
+            search: { projectId: "project-9", source: "notification", returnTo: "/tasks?view=board" },
+        },
+        {
+            label: "system error",
+            notification: {
+                type: "system-error",
+                title: "Runtime failed",
+                actionLabel: "Review error",
+                actionHref: "/live?projectId=project-9&sprintId=sprint-12&errorId=error-4&source=notification",
+            },
+            to: "/live",
+            search: { projectId: "project-9", sprintId: "sprint-12", errorId: "error-4", source: "notification" },
+        },
+    ])("opens a $label action with its exact server-supplied cross-project destination and closes the panel", async ({ notification, to, search }) => {
+        mockTopNavData({
+            selectedProject: makeProject("proj-1", "Alpha"),
+            selectedSprintId: "sprint-1",
+        });
+        const markRead = vi.fn();
+        vi.mocked(useNotifications).mockReturnValue({
+            notifications: [makeAttentionNotification({
+                id: `${notification.type}-1@2026-07-11T10:00:00.000Z`,
+                sourceId: `${notification.type}-1`,
+                ...notification,
             })],
             unreadCount: 1,
             agentSchedules: [],
             markAllRead: vi.fn(),
-            markRead: vi.fn(),
+            markRead,
             dismiss: vi.fn(),
             refresh: vi.fn(),
         } as any);
 
         render(<TopNav />);
-        fireEvent.click(screen.getByRole("button", { name: /Notifications: 1 unread/i }));
+        const trigger = screen.getByRole("button", { name: /Notifications: 1 unread/i });
+        fireEvent.click(trigger);
 
-        const action = await screen.findByRole("link", { name: "Review sprint Sprint planning failed" });
-        expect(action).toHaveAttribute(
-            "href",
-            "/sprints?view=ledger&sprintId=sprint-12&projectId=project-9&source=notification",
-        );
+        const action = await screen.findByRole("link", { name: `${notification.actionLabel} ${notification.title}` });
+        expect(action).toHaveAttribute("href", notification.actionHref);
         fireEvent.click(action);
 
+        expect(markRead).toHaveBeenCalledWith(`${notification.type}-1@2026-07-11T10:00:00.000Z`);
         expect(feedbackMocks.navigate).toHaveBeenCalledWith({
-            to: "/sprints",
-            search: {
-                view: "ledger",
-                sprintId: "sprint-12",
-                projectId: "project-9",
-                source: "notification",
-            },
+            to,
+            search,
+        });
+        await waitFor(() => {
+            expect(screen.queryByRole("dialog", { name: "Notifications Panel" })).not.toBeInTheDocument();
+            expect(screen.getByRole("navigation", { name: "Primary navigation" })).toBeInTheDocument();
+            expect(trigger).toHaveFocus();
+            expect(trigger).toHaveAttribute("aria-expanded", "false");
+        });
+    });
+
+    it("closes notification details and its panel when the modal action navigates", async () => {
+        mockTopNavData();
+        const markRead = vi.fn();
+        vi.mocked(useNotifications).mockReturnValue({
+            notifications: [makeAttentionNotification({
+                details: [{ label: "Task", value: "T02 (Resolve release gate)" }],
+            })],
+            unreadCount: 1,
+            agentSchedules: [],
+            markAllRead: vi.fn(),
+            markRead,
+            dismiss: vi.fn(),
+            refresh: vi.fn(),
+        } as any);
+
+        render(<TopNav />);
+        const trigger = screen.getByRole("button", { name: /Notifications: 1 unread/i });
+        fireEvent.click(trigger);
+        fireEvent.click(await screen.findByRole("button", { name: "Details for Human decision required" }));
+        const modalAction = await screen.findByRole("link", { name: "Review intervention" });
+        expect(modalAction).toHaveAttribute(
+            "href",
+            "/tasks?projectId=project-9&sprintId=sprint-12&taskId=task-2",
+        );
+
+        fireEvent.click(modalAction);
+
+        expect(markRead).toHaveBeenCalledWith("attention-1@2026-07-11T10:00:00.000Z");
+        expect(feedbackMocks.navigate).toHaveBeenCalledWith({
+            to: "/tasks",
+            search: { projectId: "project-9", sprintId: "sprint-12", taskId: "task-2" },
+        });
+        await waitFor(() => {
+            expect(screen.queryByRole("dialog", { name: "Human decision required" })).not.toBeInTheDocument();
+            expect(screen.queryByRole("dialog", { name: "Notifications Panel" })).not.toBeInTheDocument();
+            expect(screen.getByRole("navigation", { name: "Primary navigation" })).toBeInTheDocument();
+            expect(trigger).toHaveFocus();
+            expect(trigger).toHaveAttribute("aria-expanded", "false");
         });
     });
 
