@@ -186,6 +186,8 @@ Cached setup-script Docker images are content-addressed by base image, setup scr
 
 Interrupted Docker-backed sessions that were running before restart are treated as failed during recovery unless a live backing container is still present. This keeps restart recovery deterministic and prevents dead sessions from holding disk space or waiting forever for callbacks that will never arrive.
 
+Provider completion and workflow completion are separate durable boundaries. When restart recovery finds a completed coding provider linked to an active task dispatch, it closes the interrupted run and records a recovery marker. If the preserved workspace can be resumed, the replacement run consumes that marker and continues directly with Git/PR finalization without launching the coding provider again; it never treats provider completion alone as merge-ready task state.
+
 When a sprint reaches a terminal state, Code UX also removes the resumable CLI workspaces tied to that sprint immediately instead of relying only on the next startup cleanup pass.
 
 If a virtual cycle dies mid-attention:

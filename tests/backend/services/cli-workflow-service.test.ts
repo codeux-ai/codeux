@@ -433,6 +433,96 @@ describe("CliWorkflowService unpushed commit detection", () => {
     );
   });
 
+  it("resumes Git finalization without invoking the provider twice after a restart crash window", async () => {
+    const executionRepository = {
+      getTaskRun: vi.fn().mockReturnValue({
+        id: "current-run",
+        taskId: "task-1",
+        dispatchId: "current-dispatch",
+        startedAt: "2026-07-11T00:25:28.000Z",
+        prUrl: null,
+        workerBranch: "worker-1",
+      }),
+      getLatestProviderInvocationUsageBySession: vi.fn().mockReturnValue({
+        id: "completed-provider",
+        taskRunId: "interrupted-run",
+        status: "completed",
+      }),
+      listTaskRunEvents: vi.fn().mockReturnValue([
+        {
+          eventType: "task_dispatch_reconciled",
+          payload: {
+            reason: "terminal_provider_active_dispatch_mismatch",
+            providerStatus: "completed",
+          },
+        },
+      ]),
+      getLatestTaskRunBySessionId: vi.fn(),
+      appendTaskRunEvent: vi.fn(),
+      updateTaskRun: vi.fn(),
+      updateTaskDispatch: vi.fn(),
+      getSprintRun: vi.fn().mockReturnValue(null),
+    };
+    const deps = {
+      sessionTracking: {
+        findLatestFailedCliSessionForTask: vi.fn().mockReturnValue(null),
+        createSession: vi.fn().mockImplementation((input) => ({ ...input, name: `sessions/${input.id}`, outputs: [] })),
+        appendActivity: vi.fn(),
+        updateSession: vi.fn(),
+      },
+      getDashboardSettings: vi.fn().mockReturnValue({ cliWorkflow: { containerImage: "  " } }),
+      agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue({ instructionMarkdown: "guide" }) },
+      getGithubToken: vi.fn().mockReturnValue("token"),
+      executionRepository,
+      projectManagementRepository: { updateTask: vi.fn() },
+      sprintRunLifecycleService: { finalizeCancellationIfIdle: vi.fn() },
+      logger: { error: vi.fn() },
+    };
+    const service = new CliWorkflowService(deps as any);
+
+    vi.mocked(executePrepareStage).mockResolvedValue({
+      providerPrompt: "unused recovery prompt",
+      worktreePath: "/repo/.worktrees/old-session",
+      initialHead: "abc123",
+      resumed: true,
+    });
+    vi.mocked(executeGitFinalizeStage).mockResolvedValue({
+      hasChanges: true,
+      committedChanges: true,
+      pushedBranch: "worker-1",
+    });
+    vi.mocked(executePrFinalizeStage).mockResolvedValue({ prUrl: null });
+    vi.mocked(executeCleanupStage).mockResolvedValue({ cleanedUp: false });
+
+    await (service as any).runTaskWorkflow({
+      provider: "gemini",
+      task: { id: "T1", prompt: "prompt", title: "title" },
+      repoPath: "/repo",
+      featureBranch: "main",
+      sprintNumber: 1,
+      sessionId: "recovery-session",
+      taskRunId: "current-run",
+      workerBranch: "worker-1",
+      title: "Title",
+      resumeFromFailedSessionId: "old-session",
+      resumeWorktreePath: "/repo/.worktrees/old-session",
+    });
+
+    expect(executionRepository.getLatestProviderInvocationUsageBySession).toHaveBeenCalledWith(
+      "old-session",
+      "task_coding",
+    );
+    expect(executeProviderStage).not.toHaveBeenCalled();
+    expect(executeGitFinalizeStage).toHaveBeenCalledOnce();
+    expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
+      "current-run",
+      "cli_provider_completion_recovered",
+      "system",
+      expect.objectContaining({ recoveredProviderInvocationId: "completed-provider" }),
+      expect.objectContaining({ sourceEventKey: "cli:provider:completion-recovered:completed-provider" }),
+    );
+  });
+
   it.each([
     {
       name: "inherits a true global Docker root setting when the worker preset has no override",

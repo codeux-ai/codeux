@@ -170,6 +170,8 @@ Task-scoped CI repair continues the originating coding session, native provider 
 
 Immediately before every Docker provider launch attempt, Code UX reasserts runtime-volume ownership for the container's effective non-root UID/GID. This repairs newly created, stale, or concurrently recreated root-owned provider HOME/cache volumes at the atomic `docker run` boundary, including standalone final-merge CI repair. Workspace seed helpers explicitly trust mounted `/workspace` while initializing Git and then restore the provider UID/GID, so restart recovery does not trip Git's dubious-ownership protection on a correctly non-root-owned volume.
 
+Provider completion and workflow completion are separate durable boundaries. If a restart lands after a coding provider finishes but before Git finalization, startup recovery records that exact crash window. A replacement run that successfully resumes the preserved workspace continues directly with Git/PR finalization and does not invoke the coding provider again; provider completion alone is never treated as merge-ready task state.
+
 Background startup pruning refreshes tracked sessions immediately before volume removal and protects newly created workspace/runtime volumes during their registration window. Restart cleanup therefore cannot delete a just-seeded QA or CI workspace and launch the provider against an empty replacement volume.
 
 If feature-PR CI repair exhausts its guardrail, the task is blocked for intervention while its durable planning state remains coding-complete. The original coding task is not reopened or dispatched again merely because CI still fails.
