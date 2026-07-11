@@ -481,6 +481,8 @@ export class QualityAssuranceService {
           ...changesRequested.resolvedReview!.raw,
           continued: continued.applied,
           continuationMode: continued.mode,
+          postExhaustionVerificationEligible: continued.applied
+            && decisiveRuns + 1 === qaSettings.maxTaskReviewRuns,
         },
         finishedAt: qaDecisionFinishedAt,
       });
@@ -509,6 +511,8 @@ export class QualityAssuranceService {
         qaReviewRunId: changesRequested.run.id,
         continued: continued.applied,
         continuationMode: continued.mode,
+        postExhaustionVerificationEligible: continued.applied
+          && decisiveRuns + 1 === qaSettings.maxTaskReviewRuns,
         agentPresetId: changesRequested.request.agentPresetId,
         agentName: changesRequested.request.agentName,
       });

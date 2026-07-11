@@ -18,7 +18,8 @@ export function isRecoveredStaleQaRun(run: QaReviewRunRecord | null): boolean {
 export function shouldVerifyContinuedQaFix(run: QaReviewRunRecord | null): boolean {
   return run?.status === "completed"
     && run.outcome === "changes_requested"
-    && run.payload?.continued === true;
+    && run.payload?.continued === true
+    && run.payload?.postExhaustionVerificationEligible === true;
 }
 
 export interface QaReviewBudgetArgs {

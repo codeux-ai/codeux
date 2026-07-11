@@ -262,7 +262,7 @@ function requireProjectAttentionItem(
 }
 
 function resetGuardrailForResolvedHumanAttention(
-  deps: Pick<BootDashboardDeps, "guardrailService" | "qaReviewRepository" | "logger">,
+  deps: Pick<BootDashboardDeps, "guardrailService" | "projectManagementRepository" | "qaReviewRepository" | "logger">,
   item: NonNullable<ReturnType<ProjectAttentionRepository["getAttentionItem"]>>,
 ): void {
   if (
@@ -297,6 +297,14 @@ function resetGuardrailForResolvedHumanAttention(
   if (sourceAttentionType === "qa_review" || isQaReviewHumanEscalation(item)) {
     const clearedRuns = deps.qaReviewRepository.resetTaskReviewRuns(item.taskId);
     deps.guardrailService.resetPurpose(item.taskId, "qa_review");
+    const task = deps.projectManagementRepository.getTask(item.taskId);
+    const requeuedForQa = task?.status === "QA_REVIEW_FAILED";
+    if (requeuedForQa) {
+      deps.projectManagementRepository.updateTask(item.taskId, {
+        status: "coding_completed",
+        mergeIndicator: null,
+      });
+    }
     deps.logger.info("Reset QA review budget after human attention resolution", {
       projectId: item.projectId,
       sprintId: item.sprintId,
@@ -304,6 +312,7 @@ function resetGuardrailForResolvedHumanAttention(
       taskId: item.taskId,
       attentionItemId: item.id,
       clearedRuns,
+      requeuedForQa,
     });
     return;
   }
