@@ -233,6 +233,7 @@ describe("executePrepareStage", () => {
     expect(result.providerPrompt).toContain("worker guide content");
     expect(result.providerPrompt).toContain("test prompt");
     expect(result.providerPrompt).toContain("guidance");
+    expect(result.providerPrompt).toContain("CODE_UX_TASK_OUTCOME: blocked");
     expect(ctx.invocationWorkspacePreparer.prepareWorktree).toHaveBeenCalledWith({
       repoPath: "/repo",
       worktreePath: "/repo/worktree",

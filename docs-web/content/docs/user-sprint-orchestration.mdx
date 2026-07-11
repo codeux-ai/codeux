@@ -88,6 +88,7 @@ Detailed transitions:
 
 - **CODING_COMPLETED → COMPLETED** when the protocol confirms `is_merged: true` or a settled merge indicator (`MERGED`, `AUTOMERGE`, `PR_ONLY`) after any configured QA reviews pass.
 - **CODING_COMPLETED → QA_REVIEW_FAILED** if QA review finds issues and the retry budget is exhausted.
+- `QA_REVIEW_FAILED` remains authoritative in the live task card even when the earlier coding dispatch finished successfully; a completed dispatch cannot hide the later QA hold.
 - **COMPLETED → CODING_COMPLETED** if `is_merged` is false but there is merge evidence (an open PR or a worker branch). This is a temporary "awaiting merge" state.
 - **FAILED**: retried in a new session if `retryFailed: true` (default).
 - **QUOTA**: retried next cycle automatically.

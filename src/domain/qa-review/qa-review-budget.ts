@@ -46,16 +46,19 @@ export function evaluateQaReviewBudget(args: QaReviewBudgetArgs): QaReviewBudget
     return { allowed: true, reason: "within_budget" };
   }
 
+  // This is a hard total-attempt ceiling. Recovery and post-continuation
+  // exceptions may spend the remaining grace attempts, but they must never
+  // turn a permanently broken provider/container into an unbounded loop.
+  if (args.existingRuns >= args.maxTaskReviewRuns + QA_INFRA_FAILURE_GRACE) {
+    return { allowed: false, reason: "infra_grace_exhausted" };
+  }
+
   if (shouldVerifyContinuedQaFix(args.latestRun)) {
     return { allowed: true, reason: "allow_post_continuation_verification" };
   }
 
   if (isRecoveredStaleQaRun(args.latestRun)) {
     return { allowed: true, reason: "allow_recovered_stale_retry" };
-  }
-
-  if (args.existingRuns >= args.maxTaskReviewRuns + QA_INFRA_FAILURE_GRACE) {
-    return { allowed: false, reason: "infra_grace_exhausted" };
   }
 
   return { allowed: false, reason: "budget_exhausted" };

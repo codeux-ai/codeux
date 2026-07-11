@@ -64,10 +64,27 @@ import { buildSprintQaSnapshot, evaluateSprintQaReviewCycleDecision, shouldRunSp
 import type { SprintRunLifecycleService } from "./sprint-run-lifecycle-service.js";
 import type { ProjectAttentionService } from "../domain/workers/project-attention-service.js";
 import type { ProjectAttentionItemRecord } from "../contracts/project-attention-types.js";
+import {
+  parseTaskExecutionOutcomeFromProviderOutput,
+  TASK_EXECUTION_OUTCOME_INSTRUCTIONS,
+  type TaskExecutionOutcome,
+} from "../domain/sprint/task-execution-outcome.js";
 
 type CliQaProvider = Exclude<ProviderId, "jules">;
 
 const SPRINT_RUN_KEEPALIVE_MS = 30_000;
+
+interface QaFixContinuationResult {
+  applied: boolean;
+  mode: "jules" | "cli" | "none";
+  noProgress: boolean;
+  blocker: string | null;
+}
+
+interface CliQaFollowUpResult {
+  producedMergeWork: boolean;
+  providerOutcome: TaskExecutionOutcome;
+}
 
 export interface TaskQaReviewOutcome {
   reviewed: boolean;
@@ -449,7 +466,7 @@ export class QualityAssuranceService {
     if (changesRequested && changesRequested.intentOutcome.intent === "changes_requested") {
       const changesIntent = changesRequested.intentOutcome;
       const qaDecisionFinishedAt = new Date().toISOString();
-      let continued: { applied: boolean; mode: "cli" | "jules" | "none" };
+      let continued: QaFixContinuationResult;
       try {
         continued = changesIntent.fixInstructions
           ? await this.requestFixesForTask({
@@ -460,7 +477,7 @@ export class QualityAssuranceService {
             scope,
             prompt: changesIntent.fixInstructions,
           })
-          : { applied: false, mode: "none" as const };
+          : { applied: false, mode: "none" as const, noProgress: false, blocker: null };
       } catch (error) {
         this.deps.qaReviewRepository.updateRun(changesRequested.run.id, {
           payload: {
@@ -481,13 +498,21 @@ export class QualityAssuranceService {
           ...changesRequested.resolvedReview!.raw,
           continued: continued.applied,
           continuationMode: continued.mode,
+          followUpNoProgress: continued.noProgress,
+          followUpBlocker: continued.blocker,
           postExhaustionVerificationEligible: continued.applied
             && decisiveRuns + 1 === qaSettings.maxTaskReviewRuns,
         },
         finishedAt: qaDecisionFinishedAt,
       });
 
-      if (continued.applied) {
+      if (continued.noProgress) {
+        this.deps.projectManagementRepository.updateTask(taskId, {
+          status: "coding_completed",
+          mergeIndicator: null,
+        });
+        args.task.status = "CODING_COMPLETED";
+      } else if (continued.applied) {
         this.deps.projectManagementRepository.updateTask(taskId, {
           status: "in_progress",
           ...MERGE_PROJECTION_RESET,
@@ -511,6 +536,8 @@ export class QualityAssuranceService {
         qaReviewRunId: changesRequested.run.id,
         continued: continued.applied,
         continuationMode: continued.mode,
+        followUpNoProgress: continued.noProgress,
+        followUpBlocker: continued.blocker,
         postExhaustionVerificationEligible: continued.applied
           && decisiveRuns + 1 === qaSettings.maxTaskReviewRuns,
         agentPresetId: changesRequested.request.agentPresetId,
@@ -1482,11 +1509,11 @@ export class QualityAssuranceService {
     featureBranch: string;
     scope: DashboardSettingsScope;
     prompt: string;
-  }): Promise<{ applied: boolean; mode: "jules" | "cli" | "none" }> {
+  }): Promise<QaFixContinuationResult> {
     const provider = args.task.provider;
     const sessionId = args.task.session_id?.trim();
     if (!provider || !sessionId) {
-      return { applied: false, mode: "none" };
+      return { applied: false, mode: "none", noProgress: false, blocker: null };
     }
 
     const followUpPrompt = [
@@ -1497,10 +1524,10 @@ export class QualityAssuranceService {
 
     if (provider === "jules") {
       await this.deps.sendSessionMessage(sessionId, followUpPrompt);
-      return { applied: true, mode: "jules" };
+      return { applied: true, mode: "jules", noProgress: false, blocker: null };
     }
 
-    await this.continueCliTaskSession({
+    const result = await this.continueCliTaskSession({
       provider,
       sessionId,
       task: args.task,
@@ -1510,7 +1537,12 @@ export class QualityAssuranceService {
       scope: args.scope,
       followUpPrompt,
     });
-    return { applied: true, mode: "cli" };
+    return {
+      applied: result.producedMergeWork,
+      mode: "cli",
+      noProgress: !result.producedMergeWork,
+      blocker: result.providerOutcome.kind === "blocked" ? result.providerOutcome.blocker : null,
+    };
   }
 
   private async continueCliTaskSession(args: {
@@ -1522,7 +1554,7 @@ export class QualityAssuranceService {
     featureBranch: string;
     scope: DashboardSettingsScope;
     followUpPrompt: string;
-  }): Promise<void> {
+  }): Promise<CliQaFollowUpResult> {
     const settings = this.deps.getDashboardSettings(args.scope);
     const workflowSettings = {
       ...DEFAULT_CLI_WORKFLOW_SETTINGS,
@@ -1709,6 +1741,7 @@ export class QualityAssuranceService {
       "",
       "## QA FOLLOW-UP",
       args.followUpPrompt,
+      TASK_EXECUTION_OUTCOME_INSTRUCTIONS,
       workerMemoryInstructions
         ? `## LEARNINGS CAPTURE (Required)\n\n${workerMemoryInstructions}`
         : "",
@@ -1787,6 +1820,12 @@ export class QualityAssuranceService {
       this.deps.sessionTracking.updateSession(args.sessionId, { state: "FAILED" });
       throw new Error(result.stderr || result.stdout || "CLI QA follow-up failed.");
     }
+    const providerOutcome = parseTaskExecutionOutcomeFromProviderOutput({
+      conversation: result.usageTelemetry.conversation,
+      text: result.text,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    });
 
     if (settings.memory?.enabled && settings.memory.autoCaptureSprint) {
       await this.captureMemoriesFromWorkspace(
@@ -1830,6 +1869,11 @@ export class QualityAssuranceService {
         );
       }
     }
+
+    // Existing commits/PR state prove that the task has merge work, but they do
+    // not prove that this follow-up addressed the latest QA request. Only a
+    // patch produced from this invocation counts as continuation progress.
+    const producedMergeWork = applyResult.hasChanges;
 
     let prUrl = args.task.pr_url || args.taskRun?.prUrl || null;
     if (hasUnpushed || hasAhead) {
@@ -1877,6 +1921,31 @@ export class QualityAssuranceService {
       state: "COMPLETED",
       prUrl: prUrl || undefined,
     });
+    if (!producedMergeWork) {
+      const blocker = providerOutcome.kind === "blocked" ? providerOutcome.blocker : null;
+      this.appendTaskEvent(args.taskRun, "qa_followup_no_progress", {
+        provider: args.provider,
+        workerBranch,
+        blocker,
+      });
+      args.task.worker_branch = workerBranch;
+      args.task.pr_url = prUrl || undefined;
+      this.deps.projectManagementRepository.updateTask(args.task.record_id!, {
+        status: "coding_completed",
+        mergeIndicator: null,
+      });
+      args.task.status = "CODING_COMPLETED";
+      args.task.merge_indicator = undefined;
+      if (args.taskRun?.id) {
+        args.taskRun.workerBranch = workerBranch;
+        args.taskRun.prUrl = prUrl;
+        this.deps.executionRepository.updateTaskRun(args.taskRun.id, {
+          workerBranch,
+          prUrl,
+        });
+      }
+      return { producedMergeWork: false, providerOutcome };
+    }
     args.task.worker_branch = workerBranch;
     args.task.pr_url = prUrl || undefined;
     args.task.status = "CODING_COMPLETED";
@@ -1895,6 +1964,7 @@ export class QualityAssuranceService {
       isMerged: false,
       mergeIndicator: null,
     });
+    return { producedMergeWork: true, providerOutcome };
   }
 
   private async cleanupCliWorkspaceIfNeeded(task: Subtask, repoPath: string, scope: DashboardSettingsScope): Promise<void> {

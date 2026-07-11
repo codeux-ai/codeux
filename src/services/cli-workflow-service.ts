@@ -55,6 +55,7 @@ import type { SkillService } from "./skill-service.js";
 import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
+import { parseTaskExecutionOutcomeFromProviderOutput, type TaskExecutionOutcome } from "../domain/sprint/task-execution-outcome.js";
 
 interface CliWorkflowServiceDependencies {
   sessionTracking: SessionTrackingRepository;
@@ -356,6 +357,7 @@ export class CliWorkflowService {
       const recoveredProviderInvocation = resumed
         ? this.resolveProviderCompletionRecovery(ctx)
         : null;
+      let providerOutcome: TaskExecutionOutcome = { kind: "unknown", blocker: null };
       if (recoveredProviderInvocation) {
         this.deps.sessionTracking.appendActivity(args.sessionId, {
           originator: "system",
@@ -372,7 +374,13 @@ export class CliWorkflowService {
           provider: args.provider,
           worktreePath: ctx.worktreePath,
         }, `cli:provider:started:${ctx.worktreePath}`);
-        await executeProviderStage(ctx, providerPrompt);
+        const providerResult = await executeProviderStage(ctx, providerPrompt);
+        providerOutcome = parseTaskExecutionOutcomeFromProviderOutput({
+          conversation: providerResult.usageTelemetry.conversation,
+          text: providerResult.text,
+          stdout: providerResult.stdout,
+          stderr: providerResult.stderr,
+        });
         this.appendExecutionEvent(args, "cli_provider_completed", {
           provider: args.provider,
           worktreePath: ctx.worktreePath,
@@ -391,6 +399,32 @@ export class CliWorkflowService {
 
       if (!hasChanges) {
         const finishedAt = new Date().toISOString();
+        if (providerOutcome.kind !== "completed") {
+          const blocker = providerOutcome.kind === "blocked"
+            ? providerOutcome.blocker
+            : "Coding agent produced no repository changes and did not confirm a completed outcome.";
+          const category = providerOutcome.kind === "blocked"
+            ? "agent_reported_blocker"
+            : "agent_outcome_missing";
+          this.deps.sessionTracking.updateSession(args.sessionId, { state: "BLOCKED" });
+          this.deps.sessionTracking.appendActivity(args.sessionId, {
+            originator: "system",
+            description: `Coding workflow requires attention: ${blocker}`,
+          });
+          this.updateExecutionState(args, {
+            state: "BLOCKED",
+            finishedAt,
+            dispatchStatus: "blocked",
+            errorMessage: blocker,
+            workerBranch: null,
+          });
+          this.appendExecutionEvent(args, "cli_workflow_blocked", {
+            provider: args.provider,
+            category,
+            errorMessage: blocker,
+          }, `cli:workflow:blocked:agent:${args.sessionId}`);
+          return;
+        }
         this.appendExecutionEvent(args, "cli_git_no_changes", {
           provider: args.provider,
           worktreePath: ctx.worktreePath,

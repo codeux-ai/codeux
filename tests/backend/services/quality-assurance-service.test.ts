@@ -835,7 +835,7 @@ describe("QualityAssuranceService", () => {
       finishedAt: "2026-04-11T09:10:00.000Z",
     });
 
-    const staleRun = qaReviewRepository.createRun({
+    const priorVerdict = qaReviewRepository.createRun({
       projectId: project.id,
       sprintId: sprint.id,
       sprintRunId: sprintRun.id,
@@ -843,6 +843,23 @@ describe("QualityAssuranceService", () => {
       taskRunId: taskRun.id,
       triggerType: "task_completion",
       runIndex: 1,
+      startedAt: "2026-04-11T09:10:30.000Z",
+    });
+    qaReviewRepository.updateRun(priorVerdict.id, {
+      status: "completed",
+      outcome: "changes_requested",
+      summaryMarkdown: "A fix is still required.",
+      finishedAt: "2026-04-11T09:10:45.000Z",
+    });
+
+    const staleRun = qaReviewRepository.createRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      taskRunId: taskRun.id,
+      triggerType: "task_completion",
+      runIndex: 2,
       startedAt: "2026-04-11T09:11:00.000Z",
     });
     executionRepository.createExecutionInvocation({
@@ -900,7 +917,7 @@ describe("QualityAssuranceService", () => {
       },
     });
 
-    expect(gate.reason).toBe("pending_review");
+    expect(gate.reason).toBe("review_failed");
     expect(gate.latestRun?.status).toBe("cancelled");
     expect(gate.latestRun?.summaryMarkdown).toContain("Recovered stale QA review run");
     expect(qaReviewRepository.getRun(staleRun.id)?.status).toBe("cancelled");
@@ -1655,8 +1672,8 @@ describe("QualityAssuranceService", () => {
 
     const recoveredRun = qaReviewRepository.getRun(qaRun.id);
     const recoveredInvocation = executionRepository.getExecutionInvocation(invocation.id);
-    expect(gate.reason).toBe("pending_review");
-    expect(gate.runsUsed).toBe(0);
+    expect(gate.reason).toBe("review_failed");
+    expect(gate.runsUsed).toBe(1);
     expect(gate.maxRuns).toBe(1);
     expect(recoveredRun?.status).toBe("cancelled");
     expect(recoveredRun?.summaryMarkdown).toContain("without provider runtime linkage");
@@ -2812,7 +2829,10 @@ describe("QualityAssuranceService", () => {
     });
 
     // Mock continueCliTaskSession to avoid actual filesystem work
-    vi.spyOn(service as any, "continueCliTaskSession").mockResolvedValue(undefined);
+    vi.spyOn(service as any, "continueCliTaskSession").mockResolvedValue({
+      producedMergeWork: true,
+      providerOutcome: { kind: "completed", blocker: null },
+    });
 
     const outcome = await service.reviewCompletedTask({
       projectId: project.id,
@@ -3019,9 +3039,12 @@ describe("QualityAssuranceService", () => {
     vi.spyOn((service as any).workspaceArtifactService, "exportBinaryPatch").mockResolvedValue("");
     vi.spyOn((service as any).workspaceArtifactService, "applyPatchToBranch").mockResolvedValue({ hasChanges: false });
     vi.spyOn((service as any).prService, "hasUnpushedCommits").mockResolvedValue(false);
-    vi.spyOn((service as any).prService, "hasWorkerBranchCommitsAgainstFeature").mockResolvedValue(false);
+    // The recovered branch may already contain the original implementation.
+    // Existing ahead commits must not make a no-change QA follow-up look like
+    // fresh progress or renew the review loop.
+    vi.spyOn((service as any).prService, "hasWorkerBranchCommitsAgainstFeature").mockResolvedValue(true);
 
-    await (service as any).continueCliTaskSession({
+    const continuation = await (service as any).continueCliTaskSession({
       provider: "gemini",
       sessionId: "session-1",
       task: {
@@ -3050,6 +3073,10 @@ describe("QualityAssuranceService", () => {
     expect(runProvider).toHaveBeenCalledWith(expect.objectContaining({
       cwd: "docker-volume://session-1",
     }));
+    expect(continuation).toEqual({
+      producedMergeWork: false,
+      providerOutcome: { kind: "unknown", blocker: null },
+    });
   });
 
   it("returns an actionable error when branch metadata and resume workspace are unavailable", async () => {
@@ -4181,6 +4208,10 @@ describe("QualityAssuranceService", () => {
       ok: true,
       stdout: "Done",
       stderr: "",
+      usageTelemetry: {
+        transcriptText: "Done",
+        conversation: [],
+      },
     });
 
     const outcome = await service.reviewCompletedTask({

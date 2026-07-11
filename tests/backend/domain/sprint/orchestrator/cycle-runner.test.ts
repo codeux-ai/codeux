@@ -2960,12 +2960,13 @@ describe("CycleRunner attention sync", () => {
   describe("QA exhaustion policy", () => {
     const runExhaustedPolicy = async (
       exhaustionPolicy: "ESCALATE_TO_HUMAN" | "FAIL_TASK" | "FINISH_TASK",
+      reason: "retries_exhausted" | "follow_up_no_progress" = "retries_exhausted",
     ) => {
       const deps = buildDeps();
       deps.qualityAssuranceService = {
         getTaskMergeGateStatus: vi.fn().mockReturnValue({
           mergeAllowed: false,
-          reason: "retries_exhausted",
+          reason,
           summary: "QA could not clear this task.",
           latestRun: { id: "qa-run-1" },
           runsUsed: 5,
@@ -3032,6 +3033,18 @@ describe("CycleRunner attention sync", () => {
           attentionType: "human_escalation_required",
           taskId: "task-1",
           payload: expect.objectContaining({ sourceAttentionType: "qa_review" }),
+        }),
+      ]));
+      expect(deps.qualityAssuranceService.reviewCompletedTask).not.toHaveBeenCalled();
+    });
+
+    it("ESCALATE_TO_HUMAN parks a no-progress follow-up without launching another review", async () => {
+      const { deps, task } = await runExhaustedPolicy("ESCALATE_TO_HUMAN", "follow_up_no_progress");
+      expect(task.status).toBe("QA_REVIEW_FAILED");
+      expect(deps.projectAttentionService.openItems).toHaveBeenCalledWith(expect.arrayContaining([
+        expect.objectContaining({
+          taskId: "task-1",
+          payload: expect.objectContaining({ qaReason: "follow_up_no_progress" }),
         }),
       ]));
       expect(deps.qualityAssuranceService.reviewCompletedTask).not.toHaveBeenCalled();
@@ -3365,11 +3378,11 @@ describe("CycleRunner attention sync", () => {
         getTaskMergeGateStatus: vi.fn().mockReturnValue({
           mergeAllowed: false,
           reason: "review_failed",
-          summary: "Recovered stale QA review run after the backing invocation completed. Code UX will retry the review.",
+          summary: "Recovered stale QA review run after its Docker container disappeared. Code UX will retry the review.",
           latestRun: {
             id: "qa-run-3",
             projectId: "project-1",
-            status: "failed",
+            status: "cancelled",
             outcome: null,
             startedAt: "2026-07-02T07:36:57.000Z",
             finishedAt: "2026-07-02T07:38:22.000Z",

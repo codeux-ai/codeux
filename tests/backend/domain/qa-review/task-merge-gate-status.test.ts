@@ -166,6 +166,58 @@ describe("computeTaskMergeGateStatus", () => {
     expect(result.mergeAllowed).toBe(false);
   });
 
+  it("retries a recovery-produced cancelled stale run below the hard infrastructure ceiling", () => {
+    const result = computeTaskMergeGateStatus({
+      taskId: "task-1",
+      triggerType: "completed_task_without_pr",
+      qaSettings: mockSettings,
+      latestRun: createMockRun({
+        status: "cancelled",
+        outcome: null,
+        summaryMarkdown: `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after its Docker container disappeared. Code UX will retry the review.`,
+      }),
+      runsUsed: 5,
+      decisiveRuns: 3,
+    });
+
+    expect(result.reason).toBe("review_failed");
+  });
+
+  it("exhausts repeated recovered stale runs at the hard infrastructure ceiling", () => {
+    const result = computeTaskMergeGateStatus({
+      taskId: "task-1",
+      triggerType: "completed_task_without_pr",
+      qaSettings: mockSettings,
+      latestRun: createMockRun({
+        status: "cancelled",
+        outcome: null,
+        summaryMarkdown: `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after its Docker container disappeared. Code UX will retry the review.`,
+      }),
+      runsUsed: 3 + QA_INFRA_FAILURE_GRACE,
+      decisiveRuns: 3,
+    });
+
+    expect(result.reason).toBe("retries_exhausted");
+  });
+
+  it("stops when a completed QA follow-up produced no mergeable progress", () => {
+    const result = computeTaskMergeGateStatus({
+      taskId: "task-1",
+      triggerType: "completed_task_without_pr",
+      qaSettings: mockSettings,
+      latestRun: createMockRun({
+        status: "completed",
+        outcome: "changes_requested",
+        summaryMarkdown: "The requested implementation is still missing.",
+        payload: { followUpNoProgress: true },
+      }),
+      runsUsed: 1,
+      decisiveRuns: 1,
+    });
+
+    expect(result.reason).toBe("follow_up_no_progress");
+  });
+
   it("returns review_failed when latest run failed normally", () => {
     const result = computeTaskMergeGateStatus({
       taskId: "task-1",

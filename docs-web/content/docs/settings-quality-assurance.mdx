@@ -50,7 +50,8 @@ If the saved setting does not appear to take effect:
 - Refresh the affected dashboard page if the setting controls a rendered surface.
 - Restart the local runtime only when the setting explicitly controls startup, listener, or process-level behavior.
 - If a task exhausts QA and enters `QA_REVIEW_FAILED`, resolve or dismiss its QA handoff after reviewing or correcting the work. Code UX clears that task's QA history and retry guardrail, returns a still-parked task to code-complete review state, and lets the active sprint run one fresh QA cycle. Restarting alone intentionally preserves the QA hold.
-- A fix continuation created by the review that reaches the configured cap gets one final verification review. If that verification still fails or makes no effective progress, Code UX applies the exhaustion policy; repeated continuations cannot extend the budget indefinitely.
+- A fix continuation created by the review that reaches the configured cap gets one final verification review. A CLI continuation with no patch and no commits ahead is treated as `follow_up_no_progress` and applies the exhaustion policy immediately; repeated continuations cannot extend the budget indefinitely.
+- Recovered failed, cancelled, or errored QA attempts retry only within the bounded infrastructure grace. All terminal attempts count toward the hard ceiling, so repeated container loss eventually opens the configured handoff.
 
 ## Related Documentation
 
