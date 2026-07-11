@@ -99,6 +99,8 @@ The dashboard server now exposes:
 
 - `GET /api/realtime` (served by `bootDashboardRealtimeWebSocketServer` in `src/server/dashboard-realtime-websocket-server.ts` and wired from `src/server/dashboard-server.ts`)
 
+The shared dashboard client serializes subscription-set changes until the server acknowledges the current scope set. The acknowledgement's sequence is authoritative, including when it is lower than the client's previous cursor after a server restart. A `snapshot_required` response clears the unusable cursor before REST-backed resources refresh. Navigation-driven scope changes therefore resume from the restarted server's accepted watermark instead of repeatedly requesting recovery with a stale higher sequence.
+
 The protocol is intentionally small:
 
 - browser opens websocket

@@ -124,12 +124,15 @@ Every REST endpoint listed in the [HTTP API reference](/docs/developer-http-api)
 `dashboard/src/lib/realtime/dashboard-realtime-client.ts`:
 
 - Connects to `wss://<origin>/api/realtime` on first subscribe.
-- Maintains per-scope `lastSequence` for resumable reconnection.
-- Auto-reconnects with exponential backoff (max 30 s).
+- Maintains one shared sequence cursor for resumable reconnection across the union of active scopes.
+- Treats the server's `subscribed.lastSequence` acknowledgement as authoritative, including a lower watermark after server restart.
+- Serializes navigation-driven scope changes until the current subscription set is acknowledged.
+- Clears an unrecoverable cursor on `snapshot_required`, then lets resource hooks refresh their REST snapshots.
+- Auto-reconnects with bounded exponential backoff.
 - Emits typed events to subscribed hooks.
 - Falls back to polling the corresponding REST endpoint if the WebSocket can't connect.
 
-Per-scope cooldown (3 s) prevents subscribe-storms after rapid mount/unmount cycles.
+A 3-second dispatch cooldown deduplicates repeated `snapshot_required` notifications while recovery is already refreshing REST resources.
 
 ## Design system
 

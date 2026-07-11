@@ -94,7 +94,7 @@ Checks:
 ### 1a. Dashboard loads slowly or live view feels stale during a sprint
 Checks:
 - If logs show `malformed_snapshot_identity`, `selected_sprint_missing_while_active`, `selected_sprint_outside_project`, or `active_runs_mismatch_snapshot_scope`, runtime state may be temporarily inconsistent. Restarting the dashboard server should reconcile the local state.
-- If logs show `repeated_unhealthy_recovery_patterns`, a client is struggling to keep its WebSocket synced. Check the client's network connection or if a proxy is severing long-lived connections.
+- If logs show `repeated_unhealthy_recovery_patterns`, a client is struggling to keep its WebSocket synced. Check the client's network connection or if a proxy is severing long-lived connections. When `afterSequence` is higher than `latestSequence`, the server probably restarted after the browser observed an in-memory sequence. Current dashboard clients accept the lower `subscribed.lastSequence` acknowledgement and clear unusable cursors on `snapshot_required`; repeated higher-cursor attempts indicate an outdated or stuck client and should stop after a hard refresh or client upgrade.
 - Look at dashboard request timings for static assets and `/api/execution`; multi-second `304` or static asset responses usually indicate event-loop pressure from orchestration work rather than network latency.
 - Verify the current build includes the March 15, 2026 realtime hardening:
   - throttled project execution snapshots

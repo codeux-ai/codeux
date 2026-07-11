@@ -336,8 +336,15 @@ export const useChatThreadData = (options: {
     if (!selectedProject) {
       return null;
     }
-    return threadId ? `thread:${threadId}` : NEW_THREAD_DRAFT_CONTEXT_KEY;
-  }, [selectedProject?.id]);
+    if (!threadId) {
+      return NEW_THREAD_DRAFT_CONTEXT_KEY;
+    }
+
+    const thread = threadIndex.get(threadId);
+    return thread?.projectId === selectedProject.id
+      ? `thread:${threadId}`
+      : NEW_THREAD_DRAFT_CONTEXT_KEY;
+  }, [selectedProject?.id, threadIndex]);
   const activeDraftContextKey = useMemo(
     () => resolveDraftContextKey(selectedThreadId),
     [resolveDraftContextKey, selectedThreadId],
