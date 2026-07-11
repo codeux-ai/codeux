@@ -701,6 +701,88 @@ describe("VirtualWorkerService", () => {
     expect((virtualWorkerService as any).projectNeedsVirtualWorker(project.id)).toBe(true);
   });
 
+  it("does not claim or dispatch queued work while a manager clarification is pending", async () => {
+    const {
+      settingsRepository,
+      sessionTracking,
+      projectManagementRepository,
+      executionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionService,
+      workerTaskDispatchService,
+    } = await createFixture();
+    const project = projectManagementRepository.createProject({
+      name: "Pending Clarification Project",
+      sourceType: "local",
+      sourceRef: "/workspace/pending-clarification",
+      defaultBranch: "main",
+    });
+    const sprint = projectManagementRepository.createSprint(project.id, {
+      name: "Clarification Sprint",
+      number: 1,
+    });
+    const task = projectManagementRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Wait for manager",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "queued",
+    } as any);
+    projectAttentionService.openItem({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: null,
+      attentionType: "worker_clarification",
+      severity: "high",
+      ownerType: "human",
+      title: "Worker clarification requested",
+      summaryMarkdown: "Should compatibility be preserved?",
+      payload: { type: "worker_clarification", status: "pending" },
+    });
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "codex" },
+    });
+
+    const service = new VirtualWorkerService({
+      settingsRepository,
+      sessionTracking,
+      executionRepository,
+      projectManagementRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectWorkerAssignmentService: new ProjectWorkerAssignmentService(
+        projectWorkerAssignmentRepository,
+        workerEndpointRepository,
+      ),
+      projectAttentionService,
+      workerTaskDispatchService,
+      cliWorkflowService: { startTask: vi.fn() } as any,
+      providerConcurrencyService: { hasAvailableCapacity: vi.fn().mockResolvedValue(true) } as any,
+    });
+    const scheduleSpy = vi.spyOn(service, "scheduleProject");
+
+    await service.reconcile();
+
+    expect(scheduleSpy).not.toHaveBeenCalled();
+    expect(workerTaskDispatchService.claimNextDispatchForWorker).not.toHaveBeenCalled();
+    expect(projectAttentionService.listActiveProjectItems(project.id)).toEqual([
+      expect.objectContaining({ ownerType: "human", attentionType: "worker_clarification", status: "open" }),
+    ]);
+  });
+
   it("start and stop manage the reconcile timer", async () => {
     const {
       settingsRepository,

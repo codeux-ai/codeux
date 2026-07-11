@@ -36,4 +36,6 @@ Task-run-backed clarifications emit idempotent lifecycle and delivery events wit
 
 Jules replies use the existing session-message API. Local CLI and virtual coding replies append a delimited manager-answer follow-up and resume the preserved workspace, worker branch, provider, model, task agent, and native session lineage through the task rerun path. Runtime state and attention are updated only after that continuation is accepted.
 
+Session synchronization keeps an unanswered request blocked and visible even when the provider snapshot is stale. A matching continuation or reply restores running state once; repeated reconciliation is idempotent, stale-session requests are ignored, and cancelled or paused runs are not resurrected. Virtual workers treat the clarification type and payload as project-manager-owned, so they cannot auto-answer the question or claim a duplicate dispatch while it is pending.
+
 Taskless questions record the manager answer without creating a coding dispatch. A task-backed reply remains pending when its provider session or preserved CLI workspace is unavailable.
