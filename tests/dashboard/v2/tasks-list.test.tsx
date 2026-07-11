@@ -67,7 +67,7 @@ describe("TasksList", () => {
         sprints: [{
         id: "sprint-1",
         name: "Sprint One",
-        completion: 42,
+        completion: 7.5,
         status: "running"
     }],
         tasks: [mockTask],
@@ -320,9 +320,11 @@ const baseProps: any = {
     it("labels sprint stream status and progress for assistive technology", () => {
         render(<ProjectDataProvider initialData={null as any}><TasksList pageData={pageData} /></ProjectDataProvider>);
 
-        const sprintRegion = screen.getByRole("region", { name: /Sprint One active stream. Running. 42% complete./i });
+        const sprintRegion = screen.getByRole("region", { name: /Sprint One active stream. Running. 7.5% complete./i });
         expect(sprintRegion).toBeInTheDocument();
-        expect(screen.getByRole("progressbar", { name: /Sprint One progress/i })).toHaveAttribute("aria-valuenow", "42");
+        const progress = screen.getByRole("progressbar", { name: /Sprint One progress/i });
+        expect(progress).toHaveAttribute("aria-valuenow", "7.5");
+        expect(progress.firstElementChild).toHaveStyle({ width: "7.5%" });
     });
 
     it("keeps the running sprint selector dot visible without raw pulse animation classes", () => {
@@ -341,8 +343,8 @@ const baseProps: any = {
             endDate: null,
             featureBranch: null,
             baseCommitSha: null,
-            tasksCount: 3,
-            completion: 50,
+            tasksCount: 10,
+            completion: 5,
             linkedIssues: [],
             createdAt: "2026-07-05T00:00:00Z",
             updatedAt: "2026-07-05T00:00:00Z",
@@ -364,6 +366,7 @@ const baseProps: any = {
         expect(runningDot).toBeVisible();
         expect(screen.getByRole("option", { name: /SPR-7: Runtime Scope/i })).toBeInTheDocument();
         expect(screen.getByText("2026-07-05")).toBeInTheDocument();
+        expect(screen.getByText(/10 tasks, 5% complete/)).toBeInTheDocument();
 
         const tokens = (runningDot?.getAttribute("class") ?? "").split(/\s+/).filter(Boolean);
         expect(tokens).toContain("bg-status-green");

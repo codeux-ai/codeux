@@ -6,6 +6,7 @@ import { EXECUTOR_LABEL, PRIORITY_CFG } from "../../../lib/tasks-constants.js";
 import { getStatusConfig } from "../../../lib/status-labels.js";
 import type { ChatLiveEntityWidget, ChatLiveSprintWidget, ChatLiveTaskWidget } from "../../../lib/chat-live-entities.js";
 import type { SprintStatus, TaskStatus } from "../../../types.js";
+import { clampSprintCompletion, formatSprintCompletion } from "../../../lib/sprint-progress-display.js";
 
 export interface LiveEntityStatusWidgetProps {
   entities: readonly ChatLiveEntityWidget[];
@@ -75,8 +76,6 @@ const getSprintHref = (entity: ChatLiveSprintWidget): string => {
   return entity.href;
 };
 
-const clampCompletion = (completion: number): number => Math.min(100, Math.max(0, Math.round(completion)));
-
 const formatTaskCount = (count: number): string => `${count} task${count === 1 ? "" : "s"}`;
 
 const EntityMetaChip: FunctionComponent<{ label: string; value: string }> = ({ label, value }) => (
@@ -87,7 +86,8 @@ const EntityMetaChip: FunctionComponent<{ label: string; value: string }> = ({ l
 );
 
 const SprintEntityCard: FunctionComponent<{ entity: ChatLiveSprintWidget }> = ({ entity }) => {
-  const completion = clampCompletion(entity.completion);
+  const completion = clampSprintCompletion(entity.completion);
+  const completionLabel = formatSprintCompletion(completion);
   const statusLabel = getSprintStatusLabel(entity.status);
   const taskCountLabel = formatTaskCount(entity.tasksCount);
   const ariaLabel = `Open sprint ${entity.displayKey}: ${entity.name}. Live status: ${statusLabel}.`;
@@ -126,7 +126,7 @@ const SprintEntityCard: FunctionComponent<{ entity: ChatLiveSprintWidget }> = ({
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between gap-3 text-[11px] text-slate-500 dark:text-slate-400">
-            <span>{completion}% complete</span>
+            <span>{completionLabel} complete</span>
             <span>{entity.completedTasks}/{entity.tasksCount} complete</span>
           </div>
           <div

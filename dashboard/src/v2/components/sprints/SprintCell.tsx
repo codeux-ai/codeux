@@ -30,6 +30,7 @@ import { MOTION_TOKENS, useInteractionTokens } from "../../lib/motion/tokens.js"
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { computeSprintActionMenuPosition } from "../../lib/sprint-menu-positioning.js";
 import { ORGANIC_CELL_SHADOW_CLASS } from "../ui/organic-cell-styles.js";
+import { formatSprintCompletion } from "../../lib/sprint-progress-display.js";
 
 const CARD_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -157,6 +158,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
 
   const isCompleted = sprint.status === "completed";
   const isRunning = sprint.status === "running";
+  const completionLabel = formatSprintCompletion(sprint.completion);
   const showInterventionBadge = Boolean(humanIntervention) && statusPresentation.showHumanInterventionBadge;
   const animationClass = isCompleted ? "" : isEven ? "animate-organic" : "animate-organic-reverse";
   const controlFeedbackStyle = {
@@ -327,7 +329,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
           </div>
           <div className="h-10 w-px bg-black/[0.08] dark:bg-white/[0.08]" />
           <div className="flex flex-col items-center">
-            <div className="font-mono text-2xl font-semibold text-[var(--text-primary)]">{sprint.completion}%</div>
+            <div className="font-mono text-2xl font-semibold text-[var(--text-primary)]">{completionLabel}</div>
             <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Done</div>
           </div>
         </div>

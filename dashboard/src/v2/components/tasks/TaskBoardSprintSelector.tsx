@@ -6,6 +6,7 @@ import type { Sprint } from "../../types.js";
 import { formatSprintDisplay } from "../../lib/format-sprint.js";
 import { buildTaskBoardSprintScopeState } from "../../lib/tasks/task-board-view-model.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { clampSprintCompletion, formatSprintCompletion } from "../../lib/sprint-progress-display.js";
 
 export interface TaskBoardSprintSelectorProps {
   sprints: Sprint[];
@@ -47,13 +48,18 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
       label: "All Sprints",
       description: "Project-wide task scope",
       sprint: null as Sprint | null,
+      completion: 0,
     },
-    ...sprints.map((sprint) => ({
-      id: sprint.id,
-      label: formatSprintDisplay(sprint, sprintKeyPrefix),
-      description: `${sprint.date}, ${sprint.tasksCount} ${sprint.tasksCount === 1 ? "task" : "tasks"}, ${sprint.completion}% complete`,
-      sprint,
-    })),
+    ...sprints.map((sprint) => {
+      const completion = clampSprintCompletion(sprint.completion);
+      return {
+        id: sprint.id,
+        label: formatSprintDisplay(sprint, sprintKeyPrefix),
+        description: `${sprint.date}, ${sprint.tasksCount} ${sprint.tasksCount === 1 ? "task" : "tasks"}, ${formatSprintCompletion(completion)} complete`,
+        sprint,
+        completion,
+      };
+    }),
   ], [sprints, sprintKeyPrefix]);
 
   const selectedIndex = Math.max(0, options.findIndex((option) => option.id === selectedId));
@@ -319,7 +325,7 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
                     {isActive && <span className="rounded-full bg-ember-500/[0.1] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-ember-600 dark:text-ember-400">Selected</span>}
                     <span className="text-[10px] font-mono font-bold text-slate-500">{sprint.tasksCount}</span>
                     <div className="w-12 h-1 rounded-full bg-black/[0.06] dark:bg-white/[0.06] overflow-hidden">
-                      <div className="h-full rounded-full bg-signal-500 transition-all duration-500" style={{ width: `${sprint.completion}%` }} />
+                      <div className="h-full rounded-full bg-signal-500 transition-all duration-500" style={{ width: `${options[index].completion}%` }} />
                     </div>
                   </div>
                 </button>
