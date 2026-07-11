@@ -10,6 +10,7 @@ This is invaluable for visually verifying changes a sprint has made (UI work, AP
 | --- | --- |
 | **Preview session** | A live Docker container running the sprint's working tree, plus a browser pane that connects to a chosen port inside it. |
 | **Preview script** | A shell script associated with the sprint that the container runs at startup (`npm run dev`, `python manage.py runserver`, etc.). |
+| **Startup command** | Optional Settings default or selected-container override; it takes precedence over command detection. |
 | **Port mapping** | The container's internal port → host port mapping that the browser pane uses. A single preview container can expose multiple port mappings, rendered as distinct tabs in the browser chrome. |
 
 ## Starting a preview
@@ -35,6 +36,12 @@ Preview containers can also receive custom environment variables:
 - Disabled override rows suppress an inherited default with the same key.
 
 For example, a Code UX app running inside a preview container can set `CODE_UX_ALLOW_PUBLIC_DASHBOARD=1` as a container override while Code UX still binds the host-facing preview port to `127.0.0.1`.
+
+The right sidebar provides a selected-container startup command override. Preview proxy headers use one coherent `localhost:<mapped-port>` upstream boundary so strict host validation works in the embedded view and external preview link.
+
+Docker daemon access is disabled by default. The explicit Settings toggle mounts and preflights the local Unix socket and compatible CLI, grants effective host-level control, and must only be used with trusted repositories.
+
+Startup cleanup completes before previews launch, previously active sessions are restored, and single-flight reconciliation plus serialized port allocation prevent overlapping launches from claiming the same host port. Previously healthy previews receive one bounded recovery attempt after an unexpected exit, including manually launched sessions whose sprint has finished.
 
 ## Using the browser pane
 

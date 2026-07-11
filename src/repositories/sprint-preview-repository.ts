@@ -31,6 +31,7 @@ interface SprintPreviewSessionRow {
   install_command: string | null;
   build_command: string | null;
   run_command: string | null;
+  startup_command_override: string | null;
   environment_overrides_json: string | null;
   last_completed_task_count: number | string;
   last_seen_sprint_status: string | null;
@@ -56,6 +57,7 @@ export interface CreateSprintPreviewSessionInput {
   installCommand?: string | null;
   buildCommand?: string | null;
   runCommand?: string | null;
+  startupCommandOverride?: string | null;
   environmentOverrides?: PreviewEnvironmentVariable[];
   lastCompletedTaskCount?: number;
   lastSeenSprintStatus?: string | null;
@@ -76,6 +78,7 @@ export interface UpdateSprintPreviewSessionInput {
   installCommand?: string | null;
   buildCommand?: string | null;
   runCommand?: string | null;
+  startupCommandOverride?: string | null;
   environmentOverrides?: PreviewEnvironmentVariable[];
   lastCompletedTaskCount?: number;
   lastSeenSprintStatus?: string | null;
@@ -183,11 +186,11 @@ export class SprintPreviewRepository {
       INSERT INTO sprint_preview_sessions (
         id, project_id, sprint_id, status, host_port, container_app_port, port_mappings_json,
         container_id, container_name, worktree_path, feature_branch,
-        startup_script_path, startup_mode, install_command, build_command, run_command,
+        startup_script_path, startup_mode, install_command, build_command, run_command, startup_command_override,
         environment_overrides_json,
         last_completed_task_count, last_seen_sprint_status, last_known_path, health_status,
         last_error, last_build_at, last_started_at, last_stopped_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unknown', NULL, NULL, NULL, NULL, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unknown', NULL, NULL, NULL, NULL, ?, ?)
     `).run(
       id,
       input.projectId,
@@ -201,6 +204,7 @@ export class SprintPreviewRepository {
       input.installCommand || null,
       input.buildCommand || null,
       input.runCommand || null,
+      normalizeStartupCommand(input.startupCommandOverride),
       JSON.stringify(sanitizePreviewEnvironmentVariables(input.environmentOverrides)),
       input.lastCompletedTaskCount || 0,
       input.lastSeenSprintStatus || null,
@@ -251,6 +255,7 @@ export class SprintPreviewRepository {
           install_command = ?,
           build_command = ?,
           run_command = ?,
+          startup_command_override = ?,
           environment_overrides_json = ?,
           last_completed_task_count = ?,
           last_seen_sprint_status = ?,
@@ -276,6 +281,7 @@ export class SprintPreviewRepository {
       patch.installCommand === undefined ? current.installCommand : patch.installCommand,
       patch.buildCommand === undefined ? current.buildCommand : patch.buildCommand,
       patch.runCommand === undefined ? current.runCommand : patch.runCommand,
+      patch.startupCommandOverride === undefined ? current.startupCommandOverride : normalizeStartupCommand(patch.startupCommandOverride),
       JSON.stringify(patch.environmentOverrides === undefined ? current.environmentOverrides : sanitizePreviewEnvironmentVariables(patch.environmentOverrides)),
       patch.lastCompletedTaskCount ?? current.lastCompletedTaskCount,
       patch.lastSeenSprintStatus === undefined ? current.lastSeenSprintStatus : patch.lastSeenSprintStatus,
@@ -330,6 +336,7 @@ export class SprintPreviewRepository {
       installCommand: row.install_command,
       buildCommand: row.build_command,
       runCommand: row.run_command,
+      startupCommandOverride: normalizeStartupCommand(row.startup_command_override),
       environmentOverrides: parseEnvironmentVariablesJson(row.environment_overrides_json),
       lastCompletedTaskCount: toNumber(row.last_completed_task_count) || 0,
       lastSeenSprintStatus: row.last_seen_sprint_status,
@@ -343,6 +350,14 @@ export class SprintPreviewRepository {
       updatedAt: row.updated_at,
     };
   }
+}
+
+function normalizeStartupCommand(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const command = value.trim();
+  return command && !command.includes("\0") ? command.slice(0, 8_192) : null;
 }
 
 function parseEnvironmentVariablesJson(raw: string | null): PreviewEnvironmentVariable[] {

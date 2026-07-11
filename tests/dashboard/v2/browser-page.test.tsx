@@ -8,7 +8,7 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 import { BrowserPage } from "../../../dashboard/src/v2/BrowserPage.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
 import { usePreviewSessions } from "../../../dashboard/src/v2/hooks/use-preview-sessions.js";
-import { fetchPreviewLogs, fetchPreviewScript, rebuildPreviewSession, savePreviewEnvironmentOverrides, savePreviewScript } from "../../../dashboard/src/v2/lib/browser-api.js";
+import { fetchPreviewLogs, fetchPreviewScript, rebuildPreviewSession, savePreviewEnvironmentOverrides, savePreviewScript, savePreviewStartupCommandOverride } from "../../../dashboard/src/v2/lib/browser-api.js";
 import { saveProjectPreviewEnvironmentVariables } from "../../../dashboard/src/v2/lib/settings-api.js";
 
 expect.extend(matchers);
@@ -40,6 +40,7 @@ const effectiveSettingsMock = vi.hoisted(() => ({
         sprintPreview: {
           enabled: true,
           showInAppBrowser: true,
+          startupCommand: "pnpm default-preview",
           environmentVariables: [{ key: "API_BASE_URL", value: "http://api.local", enabled: true }],
         },
       },
@@ -239,6 +240,12 @@ vi.mock("../../../dashboard/src/v2/lib/browser-api.js", () => ({
     hostPort: 8080,
     portMappings: [{ containerPort: 3000, hostPort: 8080, isPrimary: true }],
     environmentOverrides: [{ key: "CODE_UX_ALLOW_PUBLIC_DASHBOARD", value: "1", enabled: true }],
+  }),
+  savePreviewStartupCommandOverride: vi.fn().mockResolvedValue({
+    id: "sess-1",
+    projectId: "p1",
+    sprintId: "s1",
+    startupCommandOverride: "pnpm custom-preview",
   }),
   startPreviewSession: mockStartPreviewSession,
   stopPreviewSession: vi.fn().mockResolvedValue(undefined),
@@ -454,6 +461,11 @@ describe("BrowserPage", () => {
       ...buildDefaultPreviewSessionsResult().selectedSession,
       environmentOverrides: [{ key: "CODE_UX_ALLOW_PUBLIC_DASHBOARD", value: "1", enabled: true }],
     } as any);
+    vi.mocked(savePreviewStartupCommandOverride).mockReset();
+    vi.mocked(savePreviewStartupCommandOverride).mockResolvedValue({
+      ...buildDefaultPreviewSessionsResult().selectedSession,
+      startupCommandOverride: "pnpm custom-preview",
+    } as any);
     vi.mocked(rebuildPreviewSession).mockReset();
     vi.mocked(rebuildPreviewSession).mockResolvedValue(undefined);
   });
@@ -522,6 +534,21 @@ describe("BrowserPage", () => {
     expect(container.innerHTML).not.toContain("#f7f3ea");
     expect(screen.getByText("Port routing").parentElement?.className).toContain("bg-sky-500/10");
     expect(screen.getByText("Script path").parentElement?.className).toContain("bg-ember-500/10");
+  });
+
+  it("saves a per-container startup command override from the right sidebar", async () => {
+    const user = userEvent.setup();
+    render(<BrowserPage />);
+
+    await user.click(screen.getByRole("button", { name: /Startup command/i }));
+    const input = screen.getByLabelText("Selected container override");
+    await user.clear(input);
+    await user.type(input, "pnpm custom-preview");
+    await user.click(screen.getByRole("button", { name: "Save command" }));
+
+    await waitFor(() => {
+      expect(savePreviewStartupCommandOverride).toHaveBeenCalledWith("p1", "s1", "sess-1", "pnpm custom-preview");
+    });
   });
 
   it("loads the preview script only when the editor is opened", async () => {

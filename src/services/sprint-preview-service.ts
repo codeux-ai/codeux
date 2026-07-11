@@ -83,12 +83,33 @@ interface PreparedStartupScript {
   runCommand: string | null;
 }
 
+interface PreviewDockerAccess {
+  socketSource: string;
+  socketGid: number;
+  cliSource: string | null;
+}
+
 
 export class SprintPreviewService {
   private readonly lifecycle: DockerSessionLifecycle;
+  private startupCleanupBarrier: Promise<void> | null = null;
+  private completeStartupCleanupBarrier: (() => void) | null = null;
+  private readonly startupRestartSessionIds = new Set<string>();
+  private readonly recoveredUnexpectedContainerIds = new Map<string, string>();
+  private readonly healthyContainerIds = new Map<string, string>();
+  private reconciliationPromise: Promise<void> | null = null;
 
   constructor(private readonly deps: SprintPreviewServiceDeps) {
     this.lifecycle = new DockerSessionLifecycle(this.deps.logger);
+  }
+
+  prepareForStartupCleanup(): void {
+    if (this.startupCleanupBarrier) {
+      return;
+    }
+    this.startupCleanupBarrier = new Promise<void>((resolve) => {
+      this.completeStartupCleanupBarrier = resolve;
+    });
   }
 
   async listSessions(projectId?: string): Promise<SprintPreviewSession[]> {
@@ -109,6 +130,14 @@ export class SprintPreviewService {
   }
 
   async startSession(projectId: string, sprintId: string, options?: { rebuild?: boolean }): Promise<SprintPreviewSession> {
+    await this.waitForStartupCleanup();
+    return await this.lifecycle.withSessionLock(
+      "preview:global-start",
+      async () => await this.startSessionLocked(projectId, sprintId, options),
+    );
+  }
+
+  private async startSessionLocked(projectId: string, sprintId: string, options?: { rebuild?: boolean }): Promise<SprintPreviewSession> {
     return await this.lifecycle.withSessionLock(this.buildSessionLockKey(projectId, sprintId), async () => {
       const project = this.requireProject(projectId);
       const sprint = this.requireSprint(projectId, sprintId);
@@ -147,6 +176,9 @@ export class SprintPreviewService {
       const completedTaskCount = this.countCompletedTasks(projectId, sprintId);
 
       const existing = this.deps.sprintPreviewRepository.getSessionByProjectSprint(projectId, sprintId);
+      const effectiveRunCommand = existing?.startupCommandOverride?.trim()
+        || (settings.startupCommand || "").trim()
+        || preparedScript.runCommand;
       if (existing && !options?.rebuild) {
         const refreshedExisting = await this.refreshRuntimeState(existing);
         if (refreshedExisting.status === "running" || refreshedExisting.status === "starting") {
@@ -174,7 +206,8 @@ export class SprintPreviewService {
         startupMode: preparedScript.mode,
         installCommand: effectiveInstallCommand,
         buildCommand: preparedScript.buildCommand,
-        runCommand: preparedScript.runCommand,
+        runCommand: effectiveRunCommand,
+        startupCommandOverride: null,
         lastCompletedTaskCount: completedTaskCount,
         lastSeenSprintStatus: sprint.status,
         lastKnownPath: "/",
@@ -189,7 +222,8 @@ export class SprintPreviewService {
         startupMode: preparedScript.mode,
         installCommand: effectiveInstallCommand,
         buildCommand: preparedScript.buildCommand,
-        runCommand: preparedScript.runCommand,
+        runCommand: effectiveRunCommand,
+        startupCommandOverride: existing?.startupCommandOverride ?? null,
         lastCompletedTaskCount: completedTaskCount,
         lastSeenSprintStatus: sprint.status,
         lastKnownPath: "/",
@@ -277,6 +311,9 @@ export class SprintPreviewService {
           runtimeNpmCache: containerNpmCache,
           runSetupScript: shouldRunSetupScriptAtRuntime,
         });
+        const dockerAccess = settings.allowDockerAccess
+          ? await this.resolvePreviewDockerAccess()
+          : null;
 
         const userSpec = await this.resolveDockerUserSpec(workspacePath);
         const volumeName = `code-ux-preview-volume-${sprintId}`;
@@ -323,11 +360,12 @@ export class SprintPreviewService {
               })),
               effectiveInstallCommand,
               buildCommand: preparedScript.buildCommand,
-              runCommand: preparedScript.runCommand,
+              runCommand: effectiveRunCommand,
               sourceCommit,
               envFileSource: this.mapDockerSourcePathForDaemon(envFilePath, project.baseDir),
               resolvedImage: resolvedImage.image,
               bootstrapScript,
+              dockerAccess,
             });
 
             return await runCommandStrict("docker", dockerArgs, project.baseDir);
@@ -356,7 +394,9 @@ export class SprintPreviewService {
         });
 
         await this.waitForReadiness(updated, PREVIEW_READINESS_TIMEOUT_MS);
-        return await this.refreshRuntimeState(updated);
+        const running = await this.refreshRuntimeState(updated);
+        this.recoveredUnexpectedContainerIds.delete(session.id);
+        return running;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         await this.lifecycle.removeContainerIfPresent(containerName, project.baseDir);
@@ -447,34 +487,48 @@ export class SprintPreviewService {
   }
 
   async cleanupStaleContainersOnStartup(): Promise<void> {
-    const containerIds = await this.listPreviewContainerIds();
-    await removeContainersByIds(containerIds);
+    try {
+      const containerIds = await this.listPreviewContainerIds();
+      await removeContainersByIds(containerIds);
 
-    const sessions = this.deps.sprintPreviewRepository.listSessions();
-    for (const session of sessions) {
-      if (!session.containerId && !session.containerName && session.status === "stopped") {
-        continue;
+      const sessions = this.deps.sprintPreviewRepository.listSessions();
+      for (const session of sessions) {
+        if (!session.containerId && !session.containerName && session.status === "stopped") {
+          continue;
+        }
+        if (
+          session.status === "running"
+          || session.status === "starting"
+          || (session.status === "error" && Boolean(session.containerId || session.containerName))
+        ) {
+          this.startupRestartSessionIds.add(session.id);
+        }
+        this.deps.sprintPreviewRepository.updateSession(session.id, {
+          status: "stopped",
+          hostPort: session.hostPort,
+          containerAppPort: session.containerAppPort,
+          portMappings: this.getEffectivePortMappings(session),
+          containerId: null,
+          containerName: null,
+          healthStatus: "unknown",
+          lastError: null,
+          lastStoppedAt: new Date().toISOString(),
+        });
       }
-      this.deps.sprintPreviewRepository.updateSession(session.id, {
-        status: "stopped",
-        hostPort: session.hostPort,
-        containerAppPort: session.containerAppPort,
-        portMappings: this.getEffectivePortMappings(session),
-        containerId: null,
-        containerName: null,
-        healthStatus: "unknown",
-        lastError: null,
-        lastStoppedAt: new Date().toISOString(),
-      });
-    }
 
-    if (containerIds.length > 0) {
-      this.deps.logger?.info("Stopped stale sprint preview containers on startup", {
-        stoppedCount: containerIds.length,
-      });
-    }
+      if (containerIds.length > 0) {
+        this.deps.logger?.info("Stopped stale sprint preview containers on startup", {
+          stoppedCount: containerIds.length,
+          restartCount: this.startupRestartSessionIds.size,
+        });
+      }
 
-    await this.pruneOrphanedVolumes();
+      await this.pruneOrphanedVolumes();
+    } finally {
+      this.completeStartupCleanupBarrier?.();
+      this.completeStartupCleanupBarrier = null;
+      this.startupCleanupBarrier = null;
+    }
   }
 
   async rebuildSession(sessionId: string): Promise<SprintPreviewSession> {
@@ -606,6 +660,18 @@ export class SprintPreviewService {
     });
   }
 
+  async updateStartupCommandOverrideForProjectSprint(
+    projectId: string,
+    sprintId: string,
+    sessionId: string,
+    startupCommandOverride: string | null,
+  ): Promise<SprintPreviewSession> {
+    const session = await this.requireScopedSession(projectId, sprintId, sessionId);
+    return this.deps.sprintPreviewRepository.updateSession(session.id, {
+      startupCommandOverride: this.normalizeStartupCommand(startupCommandOverride),
+    });
+  }
+
   async proxyRequest(args: {
     sessionId: string;
     method: string;
@@ -713,6 +779,23 @@ export class SprintPreviewService {
   }
 
   async reconcileSessions(): Promise<void> {
+    if (this.reconciliationPromise) {
+      await this.reconciliationPromise;
+      return;
+    }
+    const reconciliation = this.reconcileSessionsOnce();
+    this.reconciliationPromise = reconciliation;
+    try {
+      await reconciliation;
+    } finally {
+      if (this.reconciliationPromise === reconciliation) {
+        this.reconciliationPromise = null;
+      }
+    }
+  }
+
+  private async reconcileSessionsOnce(): Promise<void> {
+    await this.waitForStartupCleanup();
     const sessions = this.deps.sprintPreviewRepository.listSessions();
     const runningSprintIdsByProject = new Map<string, Set<string>>();
     const getRunningSprintIds = (projectId: string) => {
@@ -742,6 +825,10 @@ export class SprintPreviewService {
         }
         const refreshed = await this.refreshRuntimeState(session, containers);
         const activeRun = getRunningSprintIds(session.projectId).has(session.sprintId);
+        const shouldRestoreAfterStartup = this.startupRestartSessionIds.has(refreshed.id);
+        const wasHealthyUnexpectedExit = refreshed.status === "error"
+          && Boolean(refreshed.containerId)
+          && this.healthyContainerIds.get(refreshed.id) === refreshed.containerId;
 
         // Prune dead sessions for finished sprints. Once a sprint is terminal and has no running
         // container, the session can never auto-start again, so reconciling it every 15s (settings
@@ -750,7 +837,7 @@ export class SprintPreviewService {
         const sprintTerminal = sprint.status === "completed" || sprint.status === "failed" || sprint.status === "cancelled";
         const isDeadSession = (refreshed.status === "stopped" || refreshed.status === "error")
           && !refreshed.containerId && !refreshed.containerName;
-        if (sprintTerminal && !activeRun && isDeadSession) {
+        if (sprintTerminal && !activeRun && isDeadSession && !shouldRestoreAfterStartup) {
           await this.removeSprintVolume(refreshed.sprintId);
           this.deps.sprintPreviewRepository.deleteSession(refreshed.id);
           continue;
@@ -761,7 +848,7 @@ export class SprintPreviewService {
         // autoStop only apply to running sessions, and the task-count update is gated on running too),
         // so skip the expensive settings resolution + completed-task count entirely.
         const isRunningOrStarting = refreshed.status === "running" || refreshed.status === "starting";
-        if (!isRunningOrStarting && !activeRun) {
+        if (!isRunningOrStarting && !activeRun && !shouldRestoreAfterStartup && !wasHealthyUnexpectedExit) {
           continue;
         }
 
@@ -769,15 +856,60 @@ export class SprintPreviewService {
         const completedTaskCount = this.countCompletedTasks(session.projectId, session.sprintId);
 
         if (settings.enabled === false) {
+          this.startupRestartSessionIds.delete(refreshed.id);
           if (refreshed.status === "running" || refreshed.status === "starting") {
             await this.stopSession(refreshed.id).catch(() => undefined);
           }
           continue;
         }
 
+        if (shouldRestoreAfterStartup && refreshed.status !== "running" && refreshed.status !== "starting") {
+          this.startupRestartSessionIds.delete(refreshed.id);
+          await this.startSession(session.projectId, session.sprintId).then((result) => {
+            if (result.status === "error") {
+              this.deps.logger?.warn("Failed to restore sprint preview after startup cleanup", {
+                sessionId: session.id,
+                error: result.lastError,
+              });
+            }
+          }).catch((error) => {
+            this.deps.logger?.warn("Failed to restore sprint preview after startup cleanup", {
+              sessionId: session.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
+          continue;
+        }
+
         if (settings.autoStartOnRunningSprint && activeRun && refreshed.status === "stopped") {
           await this.startSession(session.projectId, session.sprintId).catch((error) => {
             this.deps.logger?.warn("Failed to auto-start sprint preview session", {
+              sessionId: session.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
+          continue;
+        }
+
+        if (
+          refreshed.status === "error"
+          && refreshed.containerId
+          && (
+            (settings.autoStartOnRunningSprint && activeRun)
+            || this.healthyContainerIds.get(refreshed.id) === refreshed.containerId
+          )
+          && this.recoveredUnexpectedContainerIds.get(refreshed.id) !== refreshed.containerId
+        ) {
+          this.recoveredUnexpectedContainerIds.set(refreshed.id, refreshed.containerId);
+          await this.startSession(session.projectId, session.sprintId).then((result) => {
+            if (result.status === "error") {
+              this.deps.logger?.warn("Failed to recover unexpectedly exited sprint preview", {
+                sessionId: session.id,
+                error: result.lastError,
+              });
+            }
+          }).catch((error) => {
+            this.deps.logger?.warn("Failed to recover unexpectedly exited sprint preview", {
               sessionId: session.id,
               error: error instanceof Error ? error.message : String(error),
             });
@@ -877,7 +1009,11 @@ export class SprintPreviewService {
 
     if (container.status !== "running") {
       const logs = await this.readContainerLogs(container.id, PREVIEW_LOG_TAIL_LINES, process.cwd()).catch(() => "");
-      const lastError = this.extractPreviewError(logs) || adoptedSession.lastError || `Preview container is ${container.status}.`;
+      const logError = container.exitCode === 137 ? null : this.extractPreviewError(logs);
+      const exitSummary = container.exitCode !== null && container.exitCode !== undefined
+        ? `Preview container exited with code ${container.exitCode}.`
+        : `Preview container is ${container.status}.`;
+      const lastError = [exitSummary, logError].filter(Boolean).join(" ") || adoptedSession.lastError || exitSummary;
       return this.deps.sprintPreviewRepository.updateSession(adoptedSession.id, {
         status: "error",
         healthStatus: "unreachable",
@@ -886,6 +1022,9 @@ export class SprintPreviewService {
     }
 
     const healthStatus = adoptedSession.hostPort ? await this.fetchHealthStatus(adoptedSession.hostPort) : "unknown";
+    if (healthStatus === "healthy") {
+      this.healthyContainerIds.set(adoptedSession.id, container.id);
+    }
     return this.deps.sprintPreviewRepository.updateSession(adoptedSession.id, {
       status: healthStatus === "healthy" ? "running" : "starting",
       healthStatus,
@@ -1598,6 +1737,62 @@ export class SprintPreviewService {
 
   private shellQuote(value: string): string {
     return `'${value.replace(/'/g, `'\\''`)}'`;
+  }
+
+  private async waitForStartupCleanup(): Promise<void> {
+    const barrier = this.startupCleanupBarrier;
+    if (barrier) {
+      await barrier;
+    }
+  }
+
+  private normalizeStartupCommand(value: string | null | undefined): string | null {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    if (typeof value !== "string" || value.includes("\0") || value.length > 8_192) {
+      throw new Error("Preview startup command must be no longer than 8192 characters and cannot contain null bytes.");
+    }
+    return value.trim() || null;
+  }
+
+  private async resolvePreviewDockerAccess(): Promise<PreviewDockerAccess> {
+    const configuredDockerHost = process.env.DOCKER_HOST?.trim() || "";
+    if (configuredDockerHost && !configuredDockerHost.startsWith("unix://")) {
+      throw new Error("Preview Docker access currently requires a local Unix Docker socket.");
+    }
+    const socketSource = configuredDockerHost.startsWith("unix://")
+      ? configuredDockerHost.slice("unix://".length)
+      : "/var/run/docker.sock";
+    let socketStats: Awaited<ReturnType<typeof fs.stat>>;
+    try {
+      socketStats = await fs.stat(socketSource);
+    } catch {
+      throw new Error(`Preview Docker access is enabled, but the Docker socket is unavailable at ${socketSource}.`);
+    }
+    if (!socketStats.isSocket()) {
+      throw new Error(`Preview Docker access is enabled, but ${socketSource} is not a Unix socket.`);
+    }
+
+    let cliSource: string | null = null;
+    if (process.platform === "linux") {
+      for (const directory of (process.env.PATH || "").split(path.delimiter).filter(Boolean)) {
+        const candidate = path.join(directory, "docker");
+        try {
+          await fs.access(candidate);
+          cliSource = candidate;
+          break;
+        } catch {
+          continue;
+        }
+      }
+    }
+
+    return {
+      socketSource,
+      socketGid: socketStats.gid,
+      cliSource,
+    };
   }
 
   private async resolveDockerUserSpec(workspacePath: string): Promise<string> {

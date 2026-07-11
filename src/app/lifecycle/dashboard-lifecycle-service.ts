@@ -155,6 +155,7 @@ export interface BootDashboardDeps {
   getSprintPreviewScript: (projectId: string, sprintId: string) => Promise<SprintPreviewScript>;
   saveSprintPreviewScript: (projectId: string, sprintId: string, content: string) => Promise<SprintPreviewScript>;
   updateSprintPreviewEnvironmentOverrides: (projectId: string, sprintId: string, sessionId: string, environmentOverrides: PreviewEnvironmentVariable[]) => Promise<SprintPreviewSession>;
+  updateSprintPreviewStartupCommandOverride: (projectId: string, sprintId: string, sessionId: string, startupCommandOverride: string | null) => Promise<SprintPreviewSession>;
   getSprintPreviewLogs: (sessionId: string, tail?: number) => Promise<{ logs: string }>;
   getSprintPreviewLogsForProjectSprint: (projectId: string, sprintId: string, sessionId: string, tail?: number) => Promise<{ logs: string }>;
   proxySprintPreviewRequest: (args: {
@@ -863,6 +864,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     getSprintPreviewScript: deps.getSprintPreviewScript,
     saveSprintPreviewScript: deps.saveSprintPreviewScript,
     updateSprintPreviewEnvironmentOverrides: deps.updateSprintPreviewEnvironmentOverrides,
+    updateSprintPreviewStartupCommandOverride: deps.updateSprintPreviewStartupCommandOverride,
     getSprintPreviewLogs: deps.getSprintPreviewLogs,
     getSprintPreviewLogsForProjectSprint: deps.getSprintPreviewLogsForProjectSprint,
     proxySprintPreviewRequest: deps.proxySprintPreviewRequest,

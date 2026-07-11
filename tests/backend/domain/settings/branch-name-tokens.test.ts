@@ -238,6 +238,8 @@ function makeBasePayload() {
       containerAppPort: 3000,
       containerAppPorts: [3000],
       startupScriptPath: "",
+      startupCommand: "",
+      allowDockerAccess: false,
     },
     workers: {
       executionMode: "VIRTUAL",

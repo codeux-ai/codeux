@@ -235,7 +235,7 @@ export const SETTINGS_SUBCATEGORY_DOCS = {
     id: "runtime-limits",
     title: "Runtime Limits",
     docsHref: settingsDocsPath("runtime-limits"),
-    summary: "Sets preview container concurrency, host port range, app port, and startup script path.",
+    summary: "Sets preview container concurrency, ports, startup commands, and optional Docker access.",
     controls: "Container cap, host port start/end, internal app port, and startup override path decide how previews launch.",
     recommended: "Keep preview ports on localhost-only ranges and set the app port to the project dev server port.",
     risks: "Port collisions or wrong startup scripts prevent previews from becoming reachable.",

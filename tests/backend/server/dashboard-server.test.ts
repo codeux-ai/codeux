@@ -1547,7 +1547,8 @@ describe("setupDashboardServer", () => {
     });
     expect(guardedPostResponse.statusCode).toBe(200);
     expect(guardedPostResponse.body).toContain("\"ok\":true");
-    expect(guardedPostResponse.body).toContain(`\"origin\":\"http://127.0.0.1:${upstreamPort}\"`);
+    expect(guardedPostResponse.body).toContain(`\"origin\":\"http://localhost:${upstreamPort}\"`);
+    expect(guardedPostResponse.body).toContain(`\"host\":\"localhost:${upstreamPort}\"`);
   });
 
   it("falls back to the preview app shell for extensionless direct loads on preview hosts", async () => {

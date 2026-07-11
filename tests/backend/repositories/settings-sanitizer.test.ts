@@ -364,6 +364,19 @@ describe("settings-sanitizer", () => {
     ]);
   });
 
+  it("sanitizes preview startup commands and Docker access", () => {
+    const settings = sanitizeSettings({
+      sprintPreview: {
+        startupCommand: "  pnpm dev --host 0.0.0.0  ",
+        allowDockerAccess: true,
+      },
+    });
+
+    expect(settings.sprintPreview.startupCommand).toBe("pnpm dev --host 0.0.0.0");
+    expect(settings.sprintPreview.allowDockerAccess).toBe(true);
+    expect(sanitizeSettings({ sprintPreview: { startupCommand: "bad\0command" } }).sprintPreview.startupCommand).toBe("");
+  });
+
   it("preserves valid appearance background image and pattern settings", () => {
     const settings = sanitizeSettings({
       appearance: {

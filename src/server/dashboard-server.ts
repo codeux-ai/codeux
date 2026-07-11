@@ -340,6 +340,7 @@ export interface DashboardServerOptions {
   getSprintPreviewLogs?: (sessionId: string, tail?: number) => Promise<{ logs: string }> | { logs: string };
   getSprintPreviewLogsForProjectSprint?: (projectId: string, sprintId: string, sessionId: string, tail?: number) => Promise<{ logs: string }> | { logs: string };
   updateSprintPreviewEnvironmentOverrides?: (projectId: string, sprintId: string, sessionId: string, environmentOverrides: PreviewEnvironmentVariable[]) => Promise<SprintPreviewSession> | SprintPreviewSession;
+  updateSprintPreviewStartupCommandOverride?: (projectId: string, sprintId: string, sessionId: string, startupCommandOverride: string | null) => Promise<SprintPreviewSession> | SprintPreviewSession;
   proxySprintPreviewRequest?: (args: {
     sessionId: string;
     method: string;
