@@ -65,10 +65,11 @@ import type { SprintRunLifecycleService } from "./sprint-run-lifecycle-service.j
 import type { ProjectAttentionService } from "../domain/workers/project-attention-service.js";
 import type { ProjectAttentionItemRecord } from "../contracts/project-attention-types.js";
 import {
+  buildTaskCodingOutcomeInstructions,
   parseTaskExecutionOutcomeFromProviderOutput,
-  TASK_EXECUTION_OUTCOME_INSTRUCTIONS,
   type TaskExecutionOutcome,
 } from "../domain/sprint/task-execution-outcome.js";
+import { workerClarificationAgentMcpAccess } from "./agent-mcp-access.js";
 
 type CliQaProvider = Exclude<ProviderId, "jules">;
 
@@ -1722,7 +1723,16 @@ export class QualityAssuranceService {
       throw prepareError;
     }
 
-    const workerAgent = await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(args.repoPath);
+    const requestedCodingAgentId = args.task.agentPresetId
+      || (settings.agents.routing.taskCoding.mode === "MANUAL"
+        ? settings.agents.routing.taskCoding.agentPresetId
+        : null);
+    const workerAgent = typeof this.deps.agentPresetSyncService.resolveTargetedCodingAgent === "function"
+      ? await this.deps.agentPresetSyncService.resolveTargetedCodingAgent(
+        args.scope.projectId!,
+        requestedCodingAgentId,
+      ).catch(() => null)
+      : await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(args.repoPath).catch(() => null);
     const workerInstructions = workerAgent?.instructionMarkdown?.trim() || "";
     const workerMemoryInstructions = resolveAgentMemoryInstructions(
       workerAgent || {},
@@ -1731,6 +1741,15 @@ export class QualityAssuranceService {
     const workerMemoryContext = workerAgent?.id
       ? await this.buildMemoryContext(args.scope.projectId!, args.scope.sprintId || null, workerAgent.id, args.followUpPrompt)
       : undefined;
+    const outcomeInstructions = buildTaskCodingOutcomeInstructions({
+      projectId: args.scope.projectId,
+      sprintId: args.scope.sprintId,
+      taskId: args.taskRun?.taskId || args.task.record_id || args.task.id,
+      sprintRunId: args.taskRun?.sprintRunId,
+      dispatchId: args.taskRun?.dispatchId,
+      taskRunId: args.taskRun?.id,
+      sessionId: args.sessionId,
+    });
     const promptBody = [
       workerInstructions
         ? `## SYSTEM INSTRUCTIONS & ENGINEERING STANDARDS\n\n${workerInstructions}`
@@ -1741,7 +1760,7 @@ export class QualityAssuranceService {
       "",
       "## QA FOLLOW-UP",
       args.followUpPrompt,
-      TASK_EXECUTION_OUTCOME_INSTRUCTIONS,
+      outcomeInstructions,
       workerMemoryInstructions
         ? `## LEARNINGS CAPTURE (Required)\n\n${workerMemoryInstructions}`
         : "",
@@ -1808,7 +1827,7 @@ export class QualityAssuranceService {
       // execute-provider-stage.ts for the analogous first-pass wiring.
       openCodeBaselineRawUsageJson: args.provider === "opencode" ? (previousInvocation?.rawUsageJson ?? null) : null,
       agentMcpAccess: workerAgent?.id
-        ? this.deps.agentPresetRepository?.getAgentPreset(workerAgent.id)?.mcpAccess ?? null
+        ? workerClarificationAgentMcpAccess(workerAgent.mcpAccess)
         : undefined,
       mcpAgentId: workerAgent?.id ?? null,
     });
