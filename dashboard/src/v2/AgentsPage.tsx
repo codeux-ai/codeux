@@ -3,14 +3,17 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/ho
 import gsap from "gsap";
 import { Bot, Plus, Info, ShieldCheck, AlertTriangle, Database, FileText, CheckCircle2, GitBranch, Loader2, ExternalLink } from "lucide-preact";
 import type { AgentPreset, SkillStorageRecord } from "./types.js";
+import type { BaseAgentRole, BaseAgentUpdateNotice as BaseAgentUpdateNoticeRecord } from "../../../src/contracts/agent-preset-types.js";
 import type { InstructionFileSummary, InstructionFileContent } from "./lib/instruction-file-api.js";
 import { fetchInstructionFiles } from "./lib/instruction-file-api.js";
 import { useProjectData } from "./context/project-data.js";
 import {
   createAgentPreset,
+  applyBaseAgentUpdate,
   deleteAgentPreset,
   exportAgentPresetToMarkdown,
   fetchAgentPresets,
+  fetchBaseAgentUpdateNotices,
   fetchSkillStorages,
   importAgentPresetFromMarkdown,
   pullAgentPresetsFromMarkdown,
@@ -27,6 +30,7 @@ import { AgentsHero } from "./components/agents/AgentsHero.js";
 import { AgentPresetShowcaseCard } from "./components/agents/AgentPresetShowcaseCard.js";
 import { AgentPresetDetailPanel, type AgentUsageSummary } from "./components/agents/AgentPresetDetailPanel.js";
 import { AgentPresetEditorPanel } from "./components/agents/AgentPresetEditorPanel.js";
+import { BaseAgentUpdateNotice } from "./components/agents/BaseAgentUpdateNotice.js";
 import { InstructionFileCard } from "./components/agents/InstructionFileCard.js";
 import { InstructionFileEditorPanel } from "./components/agents/InstructionFileEditorPanel.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
@@ -98,7 +102,12 @@ export const AgentsPage: FunctionComponent = () => {
   const pushButtonRef = useRef<HTMLButtonElement>(null);
   const pushPickerRef = useRef<HTMLDivElement>(null);
   const { selectedProject, loading: projectLoading } = useProjectData();
+  const selectedProjectIdRef = useRef<string | null>(selectedProject?.id ?? null);
+  selectedProjectIdRef.current = selectedProject?.id ?? null;
   const [presets, setPresets] = useState<AgentPreset[]>([]);
+  const [baseAgentUpdateNotices, setBaseAgentUpdateNotices] = useState<BaseAgentUpdateNoticeRecord[]>([]);
+  const [baseAgentNoticesLoading, setBaseAgentNoticesLoading] = useState(false);
+  const [updatingBaseAgentRole, setUpdatingBaseAgentRole] = useState<BaseAgentRole | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -139,6 +148,8 @@ export const AgentsPage: FunctionComponent = () => {
     setPushResult(null);
     setPushMode("commit_only");
     setPushBranchName("");
+    setActionFeedback(null);
+    setUpdatingBaseAgentRole(null);
   }, [selectedProject?.id]);
 
   const refreshPresets = async (preferredSelectedPresetId = selectedPresetId): Promise<void> => {
@@ -194,6 +205,39 @@ export const AgentsPage: FunctionComponent = () => {
     void refreshPresets();
     void refreshInstructionFiles();
     void refreshSkillStorages();
+  }, [selectedProject?.id]);
+
+  useEffect(() => {
+    const projectId = selectedProject?.id;
+    setBaseAgentUpdateNotices([]);
+    if (!projectId) {
+      setBaseAgentNoticesLoading(false);
+      return undefined;
+    }
+
+    let stale = false;
+    setBaseAgentNoticesLoading(true);
+    fetchBaseAgentUpdateNotices(projectId)
+      .then((notices) => {
+        if (!stale && selectedProjectIdRef.current === projectId) {
+          setBaseAgentUpdateNotices(notices);
+        }
+      })
+      .catch((noticeError) => {
+        if (!stale && selectedProjectIdRef.current === projectId) {
+          setBaseAgentUpdateNotices([]);
+          console.warn("Failed to load base-agent update notices", noticeError);
+        }
+      })
+      .finally(() => {
+        if (!stale && selectedProjectIdRef.current === projectId) {
+          setBaseAgentNoticesLoading(false);
+        }
+      });
+
+    return () => {
+      stale = true;
+    };
   }, [selectedProject?.id]);
 
   const handleInstructionFileSaved = (updated: InstructionFileContent): void => {
@@ -441,6 +485,45 @@ export const AgentsPage: FunctionComponent = () => {
       setActionFeedback({ tone: "error", message: `Delete failed: ${message}`, retry: () => void handleDelete(presetId) });
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleBaseAgentUpdate = async (notice: BaseAgentUpdateNoticeRecord): Promise<void> => {
+    const projectId = selectedProject?.id;
+    if (!projectId || projectId !== notice.projectId || updatingBaseAgentRole) return;
+
+    const roleLabel = notice.role === "planning_agent" ? "Planning agent" : "Project manager";
+    setUpdatingBaseAgentRole(notice.role);
+    setActionFeedback({ tone: "pending", message: `Updating ${notice.selectedAgentName} with AI...` });
+    try {
+      await applyBaseAgentUpdate(projectId, notice.role);
+      if (selectedProjectIdRef.current !== projectId) return;
+
+      const [nextPresets, nextNotices] = await Promise.all([
+        fetchAgentPresets(projectId),
+        fetchBaseAgentUpdateNotices(projectId),
+      ]);
+      if (selectedProjectIdRef.current !== projectId) return;
+
+      setPresets(nextPresets);
+      setBaseAgentUpdateNotices(nextNotices);
+      setError(null);
+      setActionFeedback({
+        tone: "success",
+        message: `${roleLabel} compatibility instructions updated. Custom behavior and instructions were preserved.`,
+      });
+    } catch (updateError) {
+      if (selectedProjectIdRef.current !== projectId) return;
+      const message = updateError instanceof Error ? updateError.message : String(updateError);
+      setActionFeedback({
+        tone: "error",
+        message: `${roleLabel} update failed: ${message}`,
+        retry: () => void handleBaseAgentUpdate(notice),
+      });
+    } finally {
+      if (selectedProjectIdRef.current === projectId) {
+        setUpdatingBaseAgentRole(null);
+      }
     }
   };
 
@@ -798,6 +881,31 @@ export const AgentsPage: FunctionComponent = () => {
               Retry
             </button>
           )}
+        </div>
+      )}
+
+      {baseAgentNoticesLoading && selectedProject && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex min-h-[3rem] items-center gap-3 rounded-2xl border border-black/[0.06] bg-white/45 px-5 py-3 text-sm font-medium text-slate-500 backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.025] dark:text-slate-400"
+        >
+          <Loader2 className="h-4 w-4 animate-spin text-signal-500" aria-hidden="true" strokeWidth={2.2} />
+          Checking for base-agent updates...
+        </div>
+      )}
+
+      {!baseAgentNoticesLoading && baseAgentUpdateNotices.length > 0 && (
+        <div className="flex flex-col gap-3" aria-label="Base-agent updates">
+          {baseAgentUpdateNotices.map((notice) => (
+            <BaseAgentUpdateNotice
+              key={notice.role}
+              notice={notice}
+              pending={updatingBaseAgentRole === notice.role}
+              disabled={updatingBaseAgentRole !== null}
+              onUpdate={(selectedNotice) => void handleBaseAgentUpdate(selectedNotice)}
+            />
+          ))}
         </div>
       )}
 
