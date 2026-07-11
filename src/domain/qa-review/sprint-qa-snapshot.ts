@@ -77,9 +77,15 @@ export function evaluateSprintQaReviewDecision(
     return { action: "skip_review", reason: "already_passed" };
   }
 
+  const terminalProviderFailure = latestRun.status === "failed"
+    || latestRun.status === "errored"
+    || latestRun.status === "cancelled";
+  if (terminalProviderFailure && latestRun.runIndex < args.maxSprintReviewRuns) {
+    return { action: "run_review", reason: "needs_review" };
+  }
+
   const retryBudgetExhausted = typeof latestRun.runIndex === "number"
-    && latestRun.runIndex >= args.maxSprintReviewRuns
-    && latestRun.status === "completed";
+    && latestRun.runIndex >= args.maxSprintReviewRuns;
 
   if (retryBudgetExhausted) {
     return { action: "skip_review", reason: "retry_budget_exhausted" };
@@ -117,6 +123,21 @@ export function evaluateSprintQaReviewCycleDecision(
     return { action: "skip_review", reason: "already_passed" };
   }
 
+  const latestRunIndex = args.latestRuns.reduce(
+    (maxRunIndex, run) => Math.max(maxRunIndex, typeof run.runIndex === "number" ? run.runIndex : 0),
+    0,
+  );
+  const hasTerminalProviderFailure = args.latestRuns.some((run) => (
+    run.status === "failed" || run.status === "errored" || run.status === "cancelled"
+  ));
+
+  // Provider/infrastructure failures produced no QA verdict. Retry them even
+  // when the task snapshot is unchanged, and hand off only after the configured
+  // sprint-QA guardrail is actually exhausted.
+  if (hasTerminalProviderFailure && latestRunIndex < args.maxSprintReviewRuns) {
+    return { action: "run_review", reason: "needs_review" };
+  }
+
   if (
     args.latestRuns.some((run) => run.outcome === "changes_requested" || run.status === "failed")
     && !args.shouldRunReview
@@ -124,9 +145,8 @@ export function evaluateSprintQaReviewCycleDecision(
     return { action: "block_completion", reason: "awaiting_follow_up" };
   }
 
-  const retryBudgetExhausted = typeof latestRun.runIndex === "number"
-    && latestRun.runIndex >= args.maxSprintReviewRuns
-    && args.latestRuns.every((run) => run.status === "completed" || run.status === "failed");
+  const retryBudgetExhausted = latestRunIndex >= args.maxSprintReviewRuns
+    && args.latestRuns.every((run) => run.status !== "running");
 
   if (retryBudgetExhausted) {
     return { action: "block_completion", reason: "awaiting_follow_up" };

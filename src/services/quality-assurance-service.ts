@@ -911,7 +911,7 @@ export class QualityAssuranceService {
       run.status === "failed" || run.status === "errored" || run.status === "cancelled"
     )) ?? null;
     const retryBudgetExhausted = latestRun.runIndex >= args.maxRuns;
-    if (!allTerminal || (!terminalFailure && !retryBudgetExhausted)) {
+    if (!allTerminal || !retryBudgetExhausted) {
       return;
     }
 

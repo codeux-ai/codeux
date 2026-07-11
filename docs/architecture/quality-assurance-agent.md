@@ -158,6 +158,8 @@ Task-level prompt scope:
 
 If task QA is still pending, running, or has failed without exhausting `maxTaskReviewRuns`, Code UX marks the task merge state as `QA_PENDING` and keeps the sprint active instead of auto-merging. If QA is exhausted and configured to `ESCALATE_TO_HUMAN`, the task is held in `QA_REVIEW_FAILED` and will not be merged or marked complete until a human resolves it.
 
+Provider/infrastructure failures in sprint-completion QA are also retryable without requiring task changes. Code UX starts the next review cycle until `maxSprintReviewRuns` is reached, opens the sprint-scoped human handoff only at that cap, and leaves the sprint run active so it can observe resolution and continue automatically.
+
 Recovery guarantees:
 
 - task QA no longer depends only on catching a single in-cycle transition edge; if a task is already code-complete and still has no successful QA run, Code UX will enqueue the missing review on the next orchestration cycle instead of leaving the task parked in `QA_PENDING`
@@ -187,7 +189,7 @@ This separation keeps repository writes, provider calls, task status mutations, 
 
 - whether a task QA attempt is still within budget or should require human attention
 - whether a normalized task review means pass, changes requested, retryable failure, or fatal failure
-- whether a sprint completion review should run, stay blocked, or be skipped because it already passed or exhausted its retry budget
+- whether a sprint completion review should run, retry a provider failure, stay blocked, or be skipped because it already passed or exhausted its retry budget
 - whether a `running` QA review row is still legitimately active or should be recovered as a failed stale run
 
 - the initial completed task review always counts as run `1`

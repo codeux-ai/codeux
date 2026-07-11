@@ -139,11 +139,11 @@ describe("Sprint QA Snapshot", () => {
         expected: { action: "skip_review", reason: "already_passed" },
       },
       {
-        name: "blocks completion when a failed review has no meaningful follow-up changes",
+        name: "retries a failed review even when there are no follow-up changes",
         latestRun: makeRun({ status: "failed", outcome: null, runIndex: 1 }),
         maxSprintReviewRuns: 3,
         shouldRunReview: false,
-        expected: { action: "block_completion", reason: "awaiting_follow_up" },
+        expected: { action: "run_review", reason: "needs_review" },
       },
       {
         name: "runs again after a failed review when the sprint changed",
@@ -202,6 +202,20 @@ describe("Sprint QA Snapshot", () => {
           makeRun({ status: "completed", outcome: "pass", runIndex: 1 }),
           makeRun({ id: "run-2", status: "completed", outcome: "changes_requested", runIndex: 1 }),
         ],
+        maxSprintReviewRuns: 3,
+        shouldRunReview: false,
+      })).toEqual({ action: "block_completion", reason: "awaiting_follow_up" });
+    });
+
+    it("retries provider failures until the sprint QA guardrail is reached", () => {
+      expect(evaluateSprintQaReviewCycleDecision({
+        latestRuns: [makeRun({ status: "failed", outcome: null, runIndex: 1 })],
+        maxSprintReviewRuns: 3,
+        shouldRunReview: false,
+      })).toEqual({ action: "run_review", reason: "needs_review" });
+
+      expect(evaluateSprintQaReviewCycleDecision({
+        latestRuns: [makeRun({ status: "failed", outcome: null, runIndex: 3 })],
         maxSprintReviewRuns: 3,
         shouldRunReview: false,
       })).toEqual({ action: "block_completion", reason: "awaiting_follow_up" });

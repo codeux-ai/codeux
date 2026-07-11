@@ -830,7 +830,13 @@ export class ProviderExecutionService {
           });
         }
       }
-      return providerResult;
+      return {
+        ...providerResult,
+        // Downstream workflows historically preferred stderr, where Codex emits
+        // only its benign stdin notice. Preserve raw stdout for audit/telemetry,
+        // but give callers the classifier's actionable diagnostic.
+        stderr: classification.userMessage,
+      };
     }
   }
 
