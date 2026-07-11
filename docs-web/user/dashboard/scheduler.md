@@ -47,8 +47,8 @@ Agent wakeups created through `scheduler_code_ux` can use one timing mode at a t
 - `afterTaskId`, with optional `offsetMinutes`, to wake after a task reaches a terminal project status
 
 Completion-anchored wakeups are one-time entries. A sprint anchor resolves only when its source
-sprint reaches successful `completed` status; failed, cancelled, and otherwise non-completed source
-sprints do not trigger it. The scheduler uses the latest successful sprint run finish time when
+sprint reaches effective successful `completed` status; failed, cancelled, and otherwise non-completed
+source sprints do not trigger it. The scheduler uses the latest successful sprint run finish time when
 available, otherwise the completed sprint `endDate`, and then applies the configured offset. Task
 anchors continue to use terminal task run or dispatch finish evidence before falling back to the
 task update time.

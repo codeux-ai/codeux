@@ -169,7 +169,7 @@ The restricted `scheduler_code_ux` tool accepts exactly one wakeup timing mode:
 - `scheduledFor`: absolute ISO timestamp.
 - `delaySeconds` or `delayMinutes`: positive relative delay.
 - `wakeAfterReply: true`: schedule the wakeup for the current time so the dashboard chat runtime drains it immediately after the current reply is sent.
-- `afterSprintId`: wake after the referenced sprint reaches a terminal state, with optional non-negative `offsetMinutes`.
+- `afterSprintId`: wake after the referenced sprint completes successfully, with optional non-negative `offsetMinutes`; failed and cancelled sources remain unresolved.
 - `afterTaskId`: wake after the referenced task reaches a terminal project status, with optional non-negative `offsetMinutes`.
 
 `schedule_wakeup` requires `projectId` and `bodyMarkdown`, and may include `title`, `timezone`, `threadId`, and `connectionId`. Completion anchors are persisted as `scheduleAnchor` payloads: `afterSprintId` maps to `{ mode: "after_sprint_end", sourceSprintId, offsetMinutes? }`, and `afterTaskId` maps to `{ mode: "after_task_end", sourceTaskId, offsetMinutes? }`.

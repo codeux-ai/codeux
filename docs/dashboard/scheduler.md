@@ -63,7 +63,7 @@ Scheduler state is persisted in SQLite in `scheduler_entries`.
 
 Entries support two scheduling modes:
 - **Absolute time**: the default path. `scheduledFor` is required on create, `nextRunAt` is populated from that timestamp, and recurrence expansion keeps using the existing UTC recurrence helpers.
-- **After sprint end**: set `scheduleAnchor = { mode: "after_sprint_end", sourceSprintId, offsetMinutes? }`. The source sprint must exist in the same project, and the entry becomes eligible only when that sprint reaches the successful `completed` status. Failed, cancelled, and otherwise non-completed source sprints do not trigger the entry. The scheduler uses the latest successful sprint run `finishedAt` when available, otherwise the completed sprint's `endDate`, then applies `offsetMinutes`. The offset is optional, defaults to `0`, and must be non-negative.
+- **After sprint end**: set `scheduleAnchor = { mode: "after_sprint_end", sourceSprintId, offsetMinutes? }`. The source sprint must exist in the same project and reach the effective successful `completed` status; failed, cancelled, and otherwise non-completed source sprints do not resolve the anchor. The scheduler uses the latest successful sprint run `finishedAt` when available, otherwise the completed sprint's `endDate`, then applies `offsetMinutes`. The offset is optional, defaults to `0`, and must be non-negative.
 - **After task end**: set `scheduleAnchor = { mode: "after_task_end", sourceTaskId, offsetMinutes? }`. The source task must exist in the same project and the wakeup becomes due only after that task reaches `completed` or `QA_REVIEW_FAILED`. `offsetMinutes` is optional, defaults to `0`, and must be non-negative.
 
 Composer and quicksprint shortcut scheduling both use this same contract. Absolute shortcut submissions send `scheduledFor`; after-sprint-end shortcut submissions send `scheduleAnchor`.
@@ -91,7 +91,7 @@ The persistence and runtime layers live in:
 
 The dashboard API routes are:
 - `GET /api/projects/:projectId/scheduler?from=<iso>&to=<iso>`
-  - Returns persisted entries and expanded occurrences for the requested window. Anchored entries stay in `entries` but do not appear in `occurrences` until the source sprint reaches successful `completed` status; once resolved, the occurrence starts at the latest successful sprint run finish time when available, otherwise the completed sprint `endDate`, plus any configured offset.
+  - Returns persisted entries and expanded occurrences for the requested window. Anchored entries stay in `entries` but do not appear in `occurrences` until the source sprint reaches effective successful `completed` status; once resolved, the occurrence starts at the latest successful sprint run `finishedAt` when available, otherwise the completed sprint `endDate`, plus any configured offset.
 - `POST /api/projects/:projectId/scheduler`
   - Creates a scheduler entry.
   - Absolute entries use `scheduledFor`; anchored entries use `scheduleAnchor`.
@@ -166,8 +166,8 @@ Behavior:
 - On returned `failed` or `cancelled` runtime status, the schedule moves to `failed` with `lastError`, `lastRunAt`, and `runCount` recording the attempted occurrence.
 
 Anchored entries are evaluated separately from absolute `nextRunAt` polling:
-- An `after_sprint_end` entry is due only after the source sprint reaches successful `completed` status. Failed, cancelled, and otherwise non-completed source sprints do not make the entry eligible.
-- The anchor timestamp is the latest successful sprint run `finishedAt` when one exists; otherwise the scheduler falls back to the completed sprint `endDate`.
+- An `after_sprint_end` entry is due only after the source sprint's effective status reaches successful `completed`; failed, cancelled, and otherwise non-completed sources remain unresolved.
+- The anchor timestamp is the latest successful sprint run `finishedAt` when a valid one exists; otherwise the scheduler falls back to the completed sprint's `endDate`.
 - An `after_task_end` entry is due only after the source task reaches `completed` or `QA_REVIEW_FAILED`.
 - The task anchor timestamp is the latest terminal task run `finishedAt` when one exists, then the latest terminal task dispatch `finishedAt`, and finally the task `updatedAt` fallback.
 - The optional offset is applied after that terminal timestamp.
