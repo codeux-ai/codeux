@@ -40,6 +40,7 @@ import { loadSprintSummaryAggregationMap, sprintSummaryQuery, type SprintSummary
 import { validateTaskDependencies } from "./project-management/task-dependency-graph.js";
 import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 import { TaskSelfReflectionRatingRepository } from "./task-self-reflection-rating-repository.js";
+import { calculateSprintProgress } from "../domain/sprint/sprint-progress.js";
 
 const SELECTED_PROJECT_KEY = "selected_project_id";
 const GENERATED_SPRINT_NAME_PREFIX = "Untitled sprint";
@@ -1318,7 +1319,7 @@ export class ProjectManagementRepository {
     linkedIssues: SprintLinkedIssueRecord[]
   ): SprintRecord {
     const tasksCount = summaryAggregation.tasksCount;
-    const completedTasks = summaryAggregation.completedTasks;
+    const completion = Math.min(100, Math.max(0, calculateSprintProgress(summaryAggregation.progressTasks)));
 
     return {
       id: row.id,
@@ -1336,7 +1337,7 @@ export class ProjectManagementRepository {
       featureBranch: row.feature_branch,
       baseCommitSha: row.base_commit_sha,
       tasksCount,
-      completion: tasksCount > 0 ? Math.round((completedTasks / tasksCount) * 100) : 0,
+      completion,
       linkedIssues,
       latestReview: summaryAggregation.latestReview,
       createdAt: row.created_at,
@@ -1889,6 +1890,7 @@ function emptySprintSummaryAggregation(): SprintSummaryAggregation {
   return {
     tasksCount: 0,
     completedTasks: 0,
+    progressTasks: [],
     latestRunStatus: null,
   };
 }
