@@ -2,7 +2,7 @@
 
 Settings is the configuration hub for Code UX. It covers local runtime behavior, provider routing, project overrides, Git and CI automation, dashboard appearance, memory, integrations, MCP tool access, and destructive maintenance actions.
 
-Use this section when you need more detail than the inline Settings-page help popovers provide. Every Settings card links to one of the pages below, and each page explains what the controls affect, recommended defaults, common risks, and validation steps.
+Use this section when you need more detail than the inline Settings-page help popovers provide. Configuration cards with dedicated reference pages link to the pages below, which explain what the controls affect, recommended defaults, common risks, and validation steps.
 
 ## How Settings Scope Works
 
@@ -11,6 +11,15 @@ Use this section when you need more detail than the inline Settings-page help po
 | System | Defaults shared by every project, provider credentials, global runtime behavior, and reusable catalogs. | A system change can affect future work across projects. |
 | Project | Repository-specific routing, preview behavior, memory, integrations, and workflow policy. | Project overrides can mask system defaults. |
 | Sprint | Narrow execution overrides where supported by the runtime. | Use sparingly so sprint behavior stays explainable. |
+
+## System General Legal Actions
+
+In System scope, the General category includes a legal-actions card alongside its runtime and setup controls:
+
+- **License** opens the canonical Code UX [LICENSE](https://github.com/codeux-ai/codeux/blob/main/LICENSE) file in an external destination.
+- **OS Software** opens a searchable, informational catalog of the open-source dependencies distributed with Code UX. Each catalog entry provides a license identifier and a link to the dependency's project.
+
+The OS Software catalog is a static reference. It does not participate in Settings drafts, **Save Changes**, project overrides, or settings persistence.
 
 ## Settings Areas
 

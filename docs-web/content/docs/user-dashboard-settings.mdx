@@ -28,7 +28,7 @@ The category rail on the left includes these Expert-mode categories:
 
 | Category | What it covers |
 | --- | --- |
-| **General** | Scope context, experience mode, automation posture, runtime logging, Docker runtime, restart behavior, and onboarding. |
+| **General** | Scope context, experience mode, automation posture, runtime logging, Docker runtime, restart behavior, onboarding, and System legal actions. |
 | **Appearance** | Theme, navigation mode, motion preference, background, and desktop zoom. |
 | **AI Models** | Downloadable embedding/STT/TTS catalogs, local and API speech settings, provider anchors, routing, model choices, thinking mode, weighting, and pricing. |
 | **Sprint & Git** | Git flow, PR behavior, merge gates, QA, guardrails, branch naming, and execution runtime controls. |
@@ -42,6 +42,15 @@ The category rail on the left includes these Expert-mode categories:
 | **Danger Zone** | Project override reset, project deletion, memory clearing, and database reset. |
 
 Each category opens one or more **content panels** with grouped fields. Inputs are typed (text, number with min/max, toggle, multi-select) and validate inline.
+
+## General legal actions
+
+In System scope, the General category includes a legal-actions card alongside its runtime and setup controls:
+
+- **License** opens the canonical Code UX [LICENSE](https://github.com/codeux-ai/codeux/blob/main/LICENSE) file in an external destination.
+- **OS Software** opens a searchable, informational catalog of the open-source dependencies distributed with Code UX. Each catalog entry provides a license identifier and a link to the dependency's project.
+
+The OS Software catalog is a static reference. It does not participate in Settings drafts, **Save Changes**, project overrides, or settings persistence.
 
 ## Experience modes
 

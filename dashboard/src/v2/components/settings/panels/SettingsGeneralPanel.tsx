@@ -5,13 +5,18 @@ import { ActionButton, NoticePanel } from "../SettingsSurface.js";
 import { ActionFeedbackRegion } from "../../ui/ActionFeedbackRegion.js";
 import { NumberInput, Row, Toggle, TextInput, PillChoiceGroup, SelectInput } from "../SettingsFormFields.js";
 import { LocalFilePickerField } from "../LocalFilePickerField.js";
+import { OpenSourceSoftwareModal } from "../OpenSourceSoftwareModal.js";
 import type { ProjectSettings } from "../../../../../../src/contracts/settings-scope-types.js";
 import type { DashboardExperienceMode } from "../../../../types.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
-import { Bot, Cog, Database, FolderOpen, RotateCcw, SlidersHorizontal, Sparkles } from "lucide-preact";
+import { Bot, Cog, Database, ExternalLink, FolderOpen, RotateCcw, Scale, SlidersHorizontal, Sparkles } from "lucide-preact";
 import { openOnboarding } from "../../../lib/onboarding-control.js";
 import { useProjectData } from "../../../context/project-data.js";
 import { dashboardExperienceModeOptions } from "../../../lib/experience-mode.js";
+import { getSafeUrl } from "../../../lib/safe-url.js";
+import { SHARED_INTERACTION_CLASSES } from "../../ui/Button.js";
+
+const CODEUX_LICENSE_URL = getSafeUrl("https://github.com/codeux-ai/codeux/blob/main/LICENSE");
 
 const toRestartSprintPolicy = (value: string) => (
   value === "pause" || value === "cancel" ? value : "continue"
@@ -337,6 +342,7 @@ const DockerRuntimeCard: FunctionComponent<{
 );
 
 export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
+  const [isOpenSourceSoftwareOpen, setIsOpenSourceSoftwareOpen] = useState(false);
   const {
     activeScope,
     systemSettings,
@@ -531,6 +537,29 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
               <ActionButton label="Open Onboarding" tone="primary" onClick={openOnboarding} />
             </Row>
           </SectionCard>
+
+          <SectionCard title="License & Open Source" watermark="OSS" icon={<Scale strokeWidth={2.4} />}>
+            <Row label="License" description="Read the canonical Code UX license in the project repository.">
+              <a
+                href={CODEUX_LICENSE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Open the Code UX license in a new tab"
+                className={`${SHARED_INTERACTION_CLASSES} inline-flex items-center justify-center gap-2 rounded-xl border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white`}
+              >
+                View License
+                <ExternalLink aria-hidden="true" className="h-3.5 w-3.5" />
+              </a>
+            </Row>
+            <Row label="Open Source Software" description="Browse the licenses and project sites for software distributed with Code UX." last>
+              <ActionButton label="Open Source Software" onClick={() => setIsOpenSourceSoftwareOpen(true)} />
+            </Row>
+          </SectionCard>
+
+          <OpenSourceSoftwareModal
+            isOpen={isOpenSourceSoftwareOpen}
+            onClose={() => setIsOpenSourceSoftwareOpen(false)}
+          />
         </div>
       );
     }
