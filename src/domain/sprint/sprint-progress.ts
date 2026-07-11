@@ -53,6 +53,14 @@ export function calculateTaskProgress(task: SprintProgressTask): number {
   const status = normalizedStatus(task.status);
   const mergeIndicator = task.mergeIndicator;
 
+  if (status === "PENDING") {
+    return 0;
+  }
+
+  if (status === "IN_PROGRESS" || status === "RUNNING") {
+    return codingToolCallWeight(task.toolCallCount);
+  }
+
   if (
     status === "COMPLETED" ||
     task.isMerged === true ||
@@ -71,10 +79,6 @@ export function calculateTaskProgress(task: SprintProgressTask): number {
 
   if (status === "CODING_COMPLETED") {
     return CODING_COMPLETED_WEIGHT;
-  }
-
-  if (status === "PENDING") {
-    return 0;
   }
 
   return codingToolCallWeight(task.toolCallCount);
