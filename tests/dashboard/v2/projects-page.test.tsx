@@ -4,6 +4,7 @@ import { h } from "preact";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
+import userEvent from "@testing-library/user-event";
 import { ProjectsPage } from "../../../dashboard/src/v2/ProjectsPage.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
 import { useToast } from "../../../dashboard/src/v2/components/feedback/ToastProvider.js";
@@ -110,7 +111,7 @@ vi.mock("../../../dashboard/src/v2/router/route-prefetch.js", () => ({
   prefetchRoute: vi.fn(),
 }));
 
-const createProject = () => ({
+const createProject = (overrides: Record<string, unknown> = {}) => ({
   id: "project-1",
   slug: "project-one",
   name: "Widget Service",
@@ -133,6 +134,7 @@ const createProject = () => ({
   lastRunStatus: "completed",
   createdAt: "2026-01-02T03:04:05.000Z",
   updatedAt: "2026-01-03T04:05:06.000Z",
+  ...overrides,
 });
 
 describe("ProjectsPage", () => {
@@ -161,13 +163,17 @@ describe("ProjectsPage", () => {
     } as any);
   });
 
-  it("truncates long metadata accurately without overflowing the card constraints", () => {
+  it("renders semantic cards and truncates normalized long metadata", () => {
+    const longName = "A very very long project name that should definitely be truncated";
+    const longRepository = "https://github.com/acme/a-very-very-long-project-name-that-should-definitely-be-truncated.git";
+    const longBranch = "a-very-very-long-branch-name-that-should-definitely-be-truncated";
     vi.mocked(useProjectData).mockReturnValue({
       projects: [{
         ...createProject(),
-        name: "A very very long project name that should definitely be truncated with line clamp",
-        repoUrl: "https://github.com/acme/a-very-very-long-project-name-that-should-definitely-be-truncated-with-line-clamp.git",
-        defaultBranch: "a-very-very-long-branch-name-that-should-definitely-be-truncated"
+        name: longName,
+        repoUrl: longRepository,
+        sourceRef: longRepository,
+        defaultBranch: longBranch,
       }],
       selectedProjectId: "project-1",
       loading: false,
@@ -181,46 +187,87 @@ describe("ProjectsPage", () => {
     } as any);
     render(<ProjectsPage />);
 
-    // Assert that the title exists and is using the line clamp class for truncation
-    const title = screen.getByText("A very very long project name that should definitely be truncated with line clamp");
-    expect(title).toBeInTheDocument();
-    expect(title.className).toContain("line-clamp-2");
+    const card = screen.getByRole("article", { name: `Project: ${longName}` });
+    expect(card).toHaveAttribute("data-selected", "true");
 
-    // Check that long urls are in a flexible container (min-w-0 for ellipsis truncation)
-    const urlText = screen.getByText("https://github.com/acme/a-very-very-long-project-name-that-should-definitely-be-truncated-with-line-clamp.git");
-    const containerRow = urlText.closest(".min-w-0");
-    expect(containerRow).toBeInTheDocument();
+    const title = screen.getByTestId("project-name");
+    expect(title).toHaveClass("truncate");
+    expect(title).toHaveAttribute("title", longName);
+    expect(screen.getByTestId("project-location")).toHaveClass("truncate", "min-w-0");
+    expect(screen.getByTestId("project-location")).toHaveAttribute("title", longRepository);
+    expect(screen.getByTestId("project-branch")).toHaveClass("truncate", "min-w-0");
+    expect(screen.getByTestId("project-branch")).toHaveAttribute("title", longBranch);
   });
 
-  it("renders repository metadata, project settings, and isolated quick actions", () => {
+  it("supports keyboard selection and isolates settings, setup, and delete actions", async () => {
+    const user = userEvent.setup();
     render(<ProjectsPage />);
 
-    // Repo URL and on-disk path are both surfaced for git projects.
     expect(screen.getByText("https://github.com/acme/widget-service.git")).toBeInTheDocument();
-    expect(screen.getByText("/workspace/widget-service")).toBeInTheDocument();
-    // Last run timestamp is shown in the manifest.
     expect(screen.getByText("Jan 4, 2026, 5:06 AM")).toBeInTheDocument();
-    expect(screen.getAllByText("github.com").length).toBeGreaterThan(0);
 
-    // The selected project's primary action is a select toggle in its "selected" state.
-    expect(screen.getByRole("button", { name: /Widget Service is selected/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Setup project/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Project settings/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Delete project/i })).toBeInTheDocument();
+    const selectionSurface = screen.getByRole("button", { name: "Selected project: Widget Service" });
+    expect(selectionSurface).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("status", { name: "Widget Service is selected" })).toHaveTextContent("Selected");
+    selectionSurface.focus();
+    await user.keyboard("{Enter}");
+    expect(selectProjectMock).toHaveBeenCalledOnce();
 
-    fireEvent.click(screen.getByRole("button", { name: /Selected project: Widget Service/i }));
-    expect(selectProjectMock).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Setup project" }));
+    expect(screen.getByRole("dialog", { name: "Setup Widget Service" })).toBeInTheDocument();
+    expect(selectProjectMock).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-    fireEvent.click(screen.getByRole("button", { name: /Widget Service is selected/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Project settings" }));
     expect(selectProjectMock).toHaveBeenCalledTimes(2);
-
-    fireEvent.click(screen.getByRole("button", { name: /Project settings/i }));
-    expect(selectProjectMock).toHaveBeenCalledTimes(3);
     expect(navigateMock).toHaveBeenCalledWith({ to: "/config" });
 
-    fireEvent.click(screen.getByRole("button", { name: /Delete project/i }));
-    expect(deleteProjectMock).toHaveBeenCalledTimes(1);
-    expect(selectProjectMock).toHaveBeenCalledTimes(3);
+    fireEvent.click(screen.getByRole("button", { name: "Delete project" }));
+    expect(deleteProjectMock).toHaveBeenCalledOnce();
+    expect(selectProjectMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows correct filter counts and preserves active project selection across every filter", () => {
+    const projects = [
+      createProject({ id: "running-1", name: "Running One", status: "running", isRunning: true }),
+      createProject({ id: "idle-1", name: "Idle One", status: "idle" }),
+      createProject({ id: "failed-1", name: "Failed One", status: "failed" }),
+      createProject({ id: "review-1", name: "Review One", status: "intervention" }),
+    ];
+    vi.mocked(useProjectData).mockReturnValue({
+      projects,
+      selectedProjectId: "idle-1",
+      loading: false,
+      error: null,
+      refreshProjects: vi.fn(),
+      selectProject: selectProjectMock,
+      createProject: createProjectMock,
+      updateProject: vi.fn(),
+      deleteProject: deleteProjectMock,
+      selectedProject: projects[1],
+    } as any);
+
+    render(<ProjectsPage />);
+
+    const expectedFilters = [
+      { name: "All 4", visible: ["Running One", "Idle One", "Failed One", "Review One"] },
+      { name: "Running 1", visible: ["Running One"] },
+      { name: "Idle 1", visible: ["Idle One"] },
+      { name: "Failed 1", visible: ["Failed One"] },
+    ];
+
+    for (const [index, filter] of expectedFilters.entries()) {
+      const tab = screen.getByRole("tab", { name: filter.name });
+      if (index > 0) fireEvent.click(tab);
+      expect(tab).toHaveAttribute("aria-selected", "true");
+      expect(screen.getAllByRole("article").map((article) => article.getAttribute("aria-label"))).toEqual(
+        filter.visible.map((name) => `Project: ${name}`),
+      );
+    }
+
+    fireEvent.click(screen.getByRole("tab", { name: "Idle 1" }));
+    expect(screen.getByRole("button", { name: "Selected project: Idle One" })).toHaveAttribute("aria-pressed", "true");
+    expect(selectProjectMock).not.toHaveBeenCalled();
   });
 
   it("opens the add-project modal from the add card", () => {
@@ -336,6 +383,8 @@ describe("ProjectsPage", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Unable to load projects.");
     expect(screen.getByRole("region", { name: "Project cards" })).not.toHaveAttribute("aria-busy");
     expect(screen.getByRole("button", { name: "New Project" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add Project" }));
+    expect(screen.getByTestId("add-project-modal")).toHaveAttribute("data-initial-source-type", "local");
   });
 
   it("announces the empty project state while keeping add-project controls reachable", () => {
@@ -359,6 +408,36 @@ describe("ProjectsPage", () => {
     expect(screen.getByRole("button", { name: "New Project" })).toBeInTheDocument();
   });
 
+  it("announces a no-filter-match state and recovers to all projects", () => {
+    vi.mocked(useProjectData).mockReturnValue({
+      projects: [createProject()],
+      selectedProjectId: "project-1",
+      loading: false,
+      error: null,
+      refreshProjects: vi.fn(),
+      selectProject: selectProjectMock,
+      createProject: createProjectMock,
+      updateProject: vi.fn(),
+      deleteProject: deleteProjectMock,
+      selectedProject: createProject(),
+    } as any);
+
+    render(<ProjectsPage />);
+    fireEvent.click(screen.getByRole("tab", { name: "Failed 0" }));
+
+    const noMatches = screen.getByRole("status");
+    expect(noMatches).toHaveAttribute("aria-live", "polite");
+    expect(noMatches).toHaveTextContent("No failed projects");
+    expect(noMatches).toHaveTextContent("Choose another filter to see the rest of your projects.");
+    expect(screen.getByRole("button", { name: "Add Project" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show all projects" }));
+    expect(screen.getByRole("tab", { name: "All 1" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("article", { name: "Project: Widget Service" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Selected project: Widget Service" })).toHaveAttribute("aria-pressed", "true");
+    expect(selectProjectMock).not.toHaveBeenCalled();
+  });
+
   it("keeps page header actions stacked until large viewports", () => {
     const { container } = render(<ProjectsPage />);
     const headerContainer = container.querySelector("header");
@@ -371,15 +450,18 @@ describe("ProjectsPage", () => {
   it("wraps filter controls and card actions on narrow screens", () => {
     const { container } = render(<ProjectsPage />);
 
-    // Filter controls
-    const filterBtn = screen.getByText("All");
-    const filterContainer = filterBtn.closest(".flex-wrap");
-    expect(filterContainer).toBeInTheDocument();
+    const filterContainer = screen.getByRole("tablist", { name: "Filter projects by status" });
+    expect(filterContainer).toHaveClass("min-w-0", "flex-wrap");
+    expect(screen.getByRole("tab", { name: "All 1" })).toHaveClass("min-w-0", "flex-1", "sm:flex-none");
 
-    // Card actions
-    const selectBtn = screen.getByRole("button", { name: /Widget Service is selected/i });
-    const actionsContainer = selectBtn.closest(".flex-wrap");
-    expect(actionsContainer).toBeInTheDocument();
+    const cardRegion = screen.getByRole("region", { name: "Project cards" });
+    expect(cardRegion.firstElementChild).toHaveClass(
+      "min-w-0",
+      "grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))]",
+    );
+    const selectBtn = screen.getByRole("button", { name: "Widget Service is selected" });
+    expect(selectBtn.closest(".flex-wrap")).toBeInTheDocument();
+    expect(container.querySelector('[aria-label="Projects"]')).toHaveClass("min-w-0", "overflow-x-clip");
   });
 
   it("stacks the setup dialog actions for mobile heights", () => {

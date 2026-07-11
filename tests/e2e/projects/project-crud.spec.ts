@@ -35,17 +35,18 @@ async function findProjectByName(request: APIRequestContext, projectName: string
 }
 
 function projectCard(page: Page, projectName: string): Locator {
-  return page.locator('.project-card-entry').filter({ hasText: projectName });
+  return page.getByRole('article', { name: `Project: ${projectName}`, exact: true });
 }
 
 async function selectProjectCard(page: Page, projectName: string): Promise<void> {
-  const selectedButton = page.getByRole('button', { name: `${projectName} is selected` });
+  const card = projectCard(page, projectName);
+  const selectedButton = card.getByRole('button', { name: `Selected project: ${projectName}`, exact: true });
   if (await selectedButton.isVisible()) {
     await selectedButton.click();
     return;
   }
 
-  await page.getByRole('button', { name: `Select ${projectName}` }).click();
+  await card.getByRole('button', { name: `Select project: ${projectName}`, exact: true }).click();
   await expect(selectedButton).toBeVisible();
 }
 
