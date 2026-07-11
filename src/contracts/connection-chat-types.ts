@@ -1,4 +1,5 @@
 import type { WorkerTaskDispatchClaim } from "./execution-types.js";
+import type { PlanningDesignGuidanceSelection } from "./project-management-types.js";
 
 export type McpConnectionRole = "project_manager" | "worker" | "listener";
 export type McpConnectionStatus = "connected" | "listening" | "idle" | "paused" | "stale" | "offline";
@@ -111,6 +112,7 @@ export interface DashboardCreateAppQuickactionPayload extends JsonObject {
   kind: DashboardCreateAppQuickactionKind;
   requestId: string;
   templateId: string;
+  designGuidance?: PlanningDesignGuidanceSelection & JsonObject;
   taskCount?: number;
   stackSummary?: DashboardCreateAppQuickactionStackSummary | null;
   suggestionTags?: string[];

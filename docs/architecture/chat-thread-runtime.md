@@ -64,14 +64,17 @@ Structured dashboard replies parse provider output defensively. Some CLI provide
 Create-app dashboard quickactions are the narrow exception to normal routed provider replies. The dashboard posts a short visible user message first, then attaches structured metadata:
 
 - `metadata.quickaction.type = "create_app"`
-- canonical `kind` of `web_app` or `desktop_app`
+- canonical `kind` of `web_app`, `desktop_app`, `online_shop`, `portfolio`, or `game` (legacy Web/Desktop aliases remain accepted)
 - stable `requestId`
 - quicksprint `templateId`
+- optional ID-only `designGuidance` selection
 - optional task count, stack summary, and suggestion tags
 
 The dashboard builds the stack summary and suggestion tags from the selected project's effective settings before posting the message. It uses the assigned techstack catalog entry when present, falls back to the catalog default when the project is unassigned, and forwards the stack item labels as suggestion tags so detached planning and the `app_progress` widget start from the same context the dashboard displays.
 
-`ChatThreadRuntimeService.postMessage` detects this metadata after the message is stored and before the normal in-flight provider turn is created. Valid create-app quickactions do not ask for confirmation, do not route through the dashboard reply provider, and do not create a `dashboard_reply` invocation. Instead, the runtime launches `QuicksprintService.launchDetachedQuicksprint` with `submitMode: "plan_and_start"` and passes the quickaction `requestId` as the planning `clientRequestId`.
+`ChatThreadRuntimeService.postMessage` detects this metadata after the message is stored and before the normal in-flight provider turn is created. The runtime resolves the action through the create-app catalog and rejects mismatched template or guidance IDs. Missing guidance metadata from older clients is normalized to the catalog selection. Web App and Desktop App additionally re-check initial-project eligibility at this runtime boundary; Online Shop, Portfolio, and Game remain available on normal project-scoped chat paths.
+
+Valid create-app quickactions do not ask for confirmation, do not route through the dashboard reply provider, and do not create a `dashboard_reply` invocation. Instead, the runtime launches `QuicksprintService.launchDetachedQuicksprint` with `submitMode: "plan_and_start"`, passes the quickaction `requestId` as the planning `clientRequestId`, and forwards the catalog selection as an ID-only planning override. `PlanningAgentService` resolves those IDs against the effective design-guidance catalog and overlays them only for the prompt sent to `PlanningPromptBuilder`. It never accepts instruction Markdown through this override and never writes the selection back to project settings.
 
 The detached launch creates the sprint synchronously and returns the planning request plus a completion promise while the planner continues in the background. The chat runtime then marks the quickaction message processed, posts an `app_progress` system message, and stores this slice on the thread:
 

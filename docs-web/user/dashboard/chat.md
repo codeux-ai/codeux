@@ -53,6 +53,8 @@ Use **Create Web App**, **Create Desktop App**, **Create Onlineshop**, **Create 
 
 Clicking a quickaction starts immediately. You do not need to type composer text first, and Code UX does not show a confirmation step. If there is no active thread yet, the dashboard creates one, posts a short visible message such as `Create a web app`, and starts the matching quicksprint in detached `Plan & Start` mode while you stay in Chat. Its catalog-selected experience guidance applies to that plan only and does not change saved project settings.
 
+**Create Web App** and **Create Desktop App** are limited to eligible initial projects, and the server verifies eligibility again when launching. **Create Onlineshop**, **Create Portfolio**, and **Create Game** can launch from normal project-scoped chat paths. Invalid template or guidance metadata fails safely instead of starting a different sprint.
+
 The quickaction carries the active project's effective techstack into planning: the selected catalog entry when assigned, or the catalog default when the project is unassigned. Stack item labels become suggestion tags, so the progress widget and planner begin from the same stack context visible in the dashboard.
 
 The transcript then shows an app progress widget instead of raw status data. The widget reports:

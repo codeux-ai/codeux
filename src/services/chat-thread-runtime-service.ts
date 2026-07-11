@@ -26,6 +26,7 @@ import type {
   UpdateConversationThreadInput,
   UpdateConversationThreadRouteInput,
 } from "../contracts/connection-chat-types.js";
+import type { PlanningDesignGuidanceSelection, ProjectInitializationState } from "../contracts/project-management-types.js";
 import {
   DASHBOARD_APP_PROGRESS_WIDGET_TYPE,
   DASHBOARD_CREATE_APP_QUICKACTION_KINDS,
@@ -52,7 +53,7 @@ import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import { dashboardReplyAgentMcpAccess, isSchedulerOnlyAgentMcpAccess } from "./agent-mcp-access.js";
 import { buildProviderInvocationWorkspaceOptions } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import { getCreateAppQuickactionSpec } from "../domain/chat/create-app-quickaction-catalog.js";
-import { getDesignGuidanceCatalog } from "../domain/settings/design-guidance-catalog.js";
+import { ProjectInitializationStateService } from "./project-initialization-state-service.js";
 
 interface ChatThreadRuntimeServiceDependencies {
   connectionChatRepository: ConnectionChatRepository;
@@ -70,6 +71,7 @@ interface ChatThreadRuntimeServiceDependencies {
   getMcpConnectionInfo?: () => McpConnectionInfo | null;
   getMcpApprovalTracker?: () => McpApprovalTracker;
   runDueSchedulerEntriesAfterReply?: () => Promise<void>;
+  getProjectInitializationState?: (projectId: string) => Promise<ProjectInitializationState>;
   logger?: Logger;
 }
 
@@ -81,6 +83,7 @@ interface NormalizedCreateAppQuickaction {
   kind: DashboardCreateAppQuickactionKind;
   requestId: string;
   templateId: string;
+  designGuidance: PlanningDesignGuidanceSelection;
   taskCount: number;
   stackSummary: DashboardCreateAppQuickactionStackSummary | null;
   suggestionTags: string[];
@@ -238,6 +241,27 @@ function readPositiveInteger(value: unknown, fallback: number): number {
   return Math.floor(value);
 }
 
+function readCreateAppDesignGuidance(
+  value: unknown,
+  expected: PlanningDesignGuidanceSelection,
+): PlanningDesignGuidanceSelection {
+  if (value === undefined) {
+    return { ...expected };
+  }
+  const selection = readRecord(value);
+  const selectedTechStackId = readString(selection?.selectedTechStackId);
+  const selectedStyleguideId = readString(selection?.selectedStyleguideId);
+  if (
+    !selectedTechStackId
+    || !selectedStyleguideId
+    || selectedTechStackId !== expected.selectedTechStackId
+    || selectedStyleguideId !== expected.selectedStyleguideId
+  ) {
+    throw new Error("Create app quickaction design guidance does not match its catalog entry.");
+  }
+  return { selectedTechStackId, selectedStyleguideId };
+}
+
 function parseCreateAppQuickactionMetadata(metadata: Record<string, unknown> | null | undefined): NormalizedCreateAppQuickaction | null {
   const root = readRecord(metadata);
   if (!root) {
@@ -273,6 +297,10 @@ function parseCreateAppQuickactionMetadata(metadata: Record<string, unknown> | n
     kind,
     requestId,
     templateId: spec.templateId,
+    designGuidance: readCreateAppDesignGuidance(
+      quickaction.designGuidance ?? quickaction.guidanceSelection ?? root.designGuidance ?? root.guidanceSelection,
+      spec.designGuidance,
+    ),
     taskCount: readPositiveInteger(quickaction.taskCount ?? root.taskCount, 5),
     stackSummary: readCreateAppStackSummary(quickaction.stackSummary ?? root.stackSummary, kind),
     suggestionTags: readStringList(quickaction.suggestionTags ?? root.suggestionTags),
@@ -307,9 +335,14 @@ async function writeThreadSessionTitleFile(repoPath: string, threadId: string, t
 
 export class ChatThreadRuntimeService {
   private readonly inFlightTurns = new Map<string, InFlightChatTurn>();
+  private readonly projectInitializationStateService: ProjectInitializationStateService;
   private quicksprintLauncher: ChatCreateAppQuicksprintLauncher | null = null;
 
-  constructor(private readonly deps: ChatThreadRuntimeServiceDependencies) {}
+  constructor(private readonly deps: ChatThreadRuntimeServiceDependencies) {
+    this.projectInitializationStateService = new ProjectInitializationStateService(
+      (projectId) => this.deps.projectManagementRepository.getProject(projectId),
+    );
+  }
 
   public setQuicksprintLauncher(launcher: ChatCreateAppQuicksprintLauncher): void {
     this.quicksprintLauncher = launcher;
@@ -692,11 +725,23 @@ export class ChatThreadRuntimeService {
       throw new Error("Create-app quickactions are not available until quicksprint launch is initialized.");
     }
 
+    if (quickaction.kind === "web_app" || quickaction.kind === "desktop_app") {
+      const initializationState = this.deps.getProjectInitializationState
+        ? await this.deps.getProjectInitializationState(projectId)
+        : await this.projectInitializationStateService.getProjectInitializationState(projectId);
+      if (!initializationState.canCreateInitialAppQuickactions) {
+        throw new Error(`${getCreateAppQuickactionSpec(quickaction.kind).displayLabel} is only available for an eligible initial project.`);
+      }
+    }
+
     const launch = await this.quicksprintLauncher.launchDetachedQuicksprint(projectId, {
       templateId: quickaction.templateId,
       taskCount: quickaction.taskCount,
       submitMode: "plan_and_start",
       clientRequestId: quickaction.requestId,
+      planningOverrides: {
+        designGuidance: quickaction.designGuidance,
+      },
       additionalPrompt: this.buildCreateAppAdditionalPrompt(userMessage.bodyMarkdown, quickaction),
     });
 
@@ -1083,16 +1128,8 @@ export class ChatThreadRuntimeService {
 
   private buildCreateAppAdditionalPrompt(bodyMarkdown: string, quickaction: NormalizedCreateAppQuickaction): string {
     const spec = getCreateAppQuickactionSpec(quickaction.kind);
-    const appLabel = spec.kind === "web_app" || spec.kind === "desktop_app"
-      ? `${spec.appKindLabel.slice(0, -3).toLowerCase()}application`
-      : spec.appKindLabel.toLowerCase();
+    const appLabel = spec.appKindLabel.toLowerCase();
     const appArticle = /^[aeiou]/i.test(appLabel) ? "an" : "a";
-    const guidanceCatalog = getDesignGuidanceCatalog();
-    const techStackGuidance = guidanceCatalog.techStacks.find((entry) => entry.id === spec.designGuidance.selectedTechStackId);
-    const styleguideGuidance = guidanceCatalog.styleguides.find((entry) => entry.id === spec.designGuidance.selectedStyleguideId);
-    if (!techStackGuidance || !styleguideGuidance) {
-      throw new Error(`Create app quickaction guidance is unavailable for ${quickaction.kind}.`);
-    }
     const stackLines = this.formatCreateAppStackSummary(quickaction.stackSummary);
     const suggestionLine = quickaction.suggestionTags.length > 0
       ? `Suggestion tags from the dashboard: ${quickaction.suggestionTags.join(", ")}.`
@@ -1102,8 +1139,6 @@ export class ChatThreadRuntimeService {
       "Dashboard create-app quickaction.",
       `Quickaction request id: ${quickaction.requestId}.`,
       `Create an app sprint for ${appArticle} ${appLabel}.`,
-      `Apply tech-stack guidance \`${techStackGuidance.id}\` (${techStackGuidance.name}):\n${techStackGuidance.instructionMarkdown}`,
-      `Apply styleguide guidance \`${styleguideGuidance.id}\` (${styleguideGuidance.name}):\n${styleguideGuidance.instructionMarkdown}`,
       stackLines ? `Suggested stack summary:\n${stackLines}` : "No suggested stack summary was provided; infer the right stack from the selected project before planning.",
       suggestionLine,
       `Original dashboard message:\n${bodyMarkdown.trim()}`,

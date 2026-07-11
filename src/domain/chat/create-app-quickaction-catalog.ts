@@ -1,4 +1,5 @@
 import type { DashboardCreateAppQuickactionKind } from "../../contracts/connection-chat-types.js";
+import type { PlanningDesignGuidanceSelection } from "../../contracts/project-management-types.js";
 import {
   CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
   CODE_UX_PRODUCT_TECH_STACK_ID,
@@ -8,10 +9,7 @@ import {
   MARKETING_SITE_STYLEGUIDE_ID,
 } from "../settings/design-guidance-catalog.js";
 
-export interface CreateAppQuickactionDesignGuidanceSelection {
-  selectedTechStackId: string;
-  selectedStyleguideId: string;
-}
+export type CreateAppQuickactionDesignGuidanceSelection = PlanningDesignGuidanceSelection;
 
 export interface CreateAppQuickactionSpec {
   kind: DashboardCreateAppQuickactionKind;
