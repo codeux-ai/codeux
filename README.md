@@ -369,7 +369,7 @@ pnpm run audit
 Additional GitHub Actions behavior:
 
 - Playwright E2E runs only on pushes to `main` and pull requests targeting `main`. It starts `node dist/index.js` and waits on the local `/health` liveness probe.
-- The models.dev catalogue workflow runs on pushes to `main` and `dev`. When upstream catalogue data changes, it uses the built-in `GITHUB_TOKEN` to push a `chore/models-catalog-<branch>` update branch and open a PR. The repository or organization must allow GitHub Actions to create pull requests, and the workflow grants `contents: write` plus `pull-requests: write`.
+- Normal CI runs on every branch push. The models.dev catalogue workflow is a deliberate exception and runs only on pushes to `dev`. When upstream catalogue data changes, it uses the built-in `GITHUB_TOKEN` to push a `chore/models-catalog-dev` update branch and open a PR. The repository or organization must allow GitHub Actions to create pull requests, and the workflow grants `contents: write` plus `pull-requests: write`.
 
 ## Contributing
 

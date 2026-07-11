@@ -111,6 +111,11 @@ export class SettingsRepository {
       const parsed = JSON.parse(payload) as unknown;
       if (migrateLegacyDefaultAttemptCaps(parsed)) {
         this.storage.writeSystemPayload(JSON.stringify(parsed));
+        // Other repository/scoped-resolver instances may already have resolved
+        // the historical defaults during startup. Advance the shared revision
+        // so they cannot keep serving 8/3 after the persisted migration wrote
+        // the new 5/5 profile.
+        this.invalidateResolutionCache();
       }
       SettingsRepository.systemSettingsCache = sanitizeSystemSettings(parsed, this.externalHints);
       return SettingsRepository.systemSettingsCache;

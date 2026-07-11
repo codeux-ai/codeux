@@ -182,6 +182,13 @@ describe("DockerRunner", () => {
         ownerSpec: "1000:1000",
         forceOwnershipInitialization: true,
       });
+      expect(ensureRuntimeVolume).toHaveBeenNthCalledWith(1, "docker-volume://workspace-1", {
+        initializeOwnership: false,
+      });
+      expect(ensureRuntimeVolume).toHaveBeenCalledTimes(2);
+      const ownershipRepairOrder = ensureRuntimeVolume.mock.invocationCallOrder[1];
+      const providerLaunchOrder = vi.mocked(runStreamingCommand).mock.invocationCallOrder[0];
+      expect(ownershipRepairOrder).toBeLessThan(providerLaunchOrder);
     } finally {
       ensureRuntimeVolume.mockRestore();
     }

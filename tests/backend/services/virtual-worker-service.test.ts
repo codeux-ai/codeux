@@ -1083,6 +1083,61 @@ describe("VirtualWorkerService", () => {
     expect(prompt).toContain("Workspace guidance context");
   });
 
+  it("buildCiFixPrompt excludes historical runs from persisted repair attention", async () => {
+    const { virtualWorkerService } = await setupService();
+
+    const prompt = (virtualWorkerService as any).buildCiFixPrompt(
+      {
+        summaryMarkdown: "Fix CI",
+        payload: {
+          failedJobLabels: ["Old Job", "Newest Linux", "Newest Windows"],
+          failedLogSnippets: ["old assertion", "new linux assertion", "new windows error"],
+          failedRuns: [
+            {
+              id: 10,
+              name: "CI",
+              workflowName: "CI",
+              status: "completed",
+              conclusion: "failure",
+              event: "push",
+              headBranch: "fix/branch",
+              url: "https://github.com/test/actions/runs/10",
+              updatedAt: "2026-06-13T14:00:00Z",
+              failedJobs: [{ id: 100, name: "Old Job", conclusion: "failure", failedSteps: ["test"], logExcerpt: "old assertion", logCommand: "old log" }],
+            },
+            {
+              id: 11,
+              name: "CI",
+              workflowName: "CI",
+              status: "completed",
+              conclusion: "failure",
+              event: "pull_request",
+              headBranch: "fix/branch",
+              url: "https://github.com/test/actions/runs/11",
+              updatedAt: "2026-06-13T15:00:00Z",
+              failedJobs: [
+                { id: 110, name: "Newest Linux", conclusion: "failure", failedSteps: ["test"], logExcerpt: "new linux assertion", logCommand: "new linux log" },
+                { id: 111, name: "Newest Windows", conclusion: "failure", failedSteps: ["build"], logExcerpt: "new windows error", logCommand: "new windows log" },
+              ],
+            },
+          ],
+        },
+      },
+      "fix/branch",
+      "Workspace guidance",
+    );
+
+    expect(prompt).toContain("### Failed Run 1: CI");
+    expect(prompt).toContain("- Run ID: 11");
+    expect(prompt).toContain("1. Newest Linux");
+    expect(prompt).toContain("2. Newest Windows");
+    expect(prompt).toContain("new linux assertion");
+    expect(prompt).toContain("new windows error");
+    expect(prompt).not.toContain("Run ID: 10");
+    expect(prompt).not.toContain("Old Job");
+    expect(prompt).not.toContain("old assertion");
+  });
+
   it("buildDispatchSummary formats correctly", async () => {
     const { virtualWorkerService } = await setupService();
 

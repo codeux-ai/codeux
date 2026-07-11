@@ -156,7 +156,7 @@ Override: `maxFailures` setting or `JULES_API_MAX_FAILS` env. Recommended floor:
 
 Per task, the CI gate tracks attempted CI fix dispatches in the durable guardrail ledger. The legacy `julesCiAutofixMaxRetries` mirror defaults to 5 (min 0, max 20); the generic CI-fix guardrail is authoritative and creates a human handoff at its cap.
 
-Beyond the cap, the gate emits or refreshes a human-owned handoff rather than dispatching another fix worker. This also applies when restart recovery encounters an already-exhausted legacy ledger. The handoff includes the matched failed runs, jobs, failed steps, assertion/error excerpts, and log commands; stale worker CI and merge attention is resolved while the task remains durably code-complete with its CI marker.
+Beyond the cap, the gate emits or refreshes a human-owned handoff rather than dispatching another fix worker. This also applies when restart recovery encounters an already-exhausted legacy ledger. The handoff includes only the newest branch-matched failed CI run, while preserving every failed job and step, exact actionable assertion/error excerpt, and fallback log command from that run; older matching failures are excluded. Stale worker CI and merge attention is resolved while the task remains durably code-complete with its CI marker.
 
 ## Finalisation
 

@@ -22,7 +22,6 @@ import { LiveSessionPage } from "./v2/LiveSessionPage.js";
 import { OnboardingExperience } from "./v2/components/onboarding/OnboardingExperience.js";
 import { GuidedDashboardTour } from "./v2/components/onboarding/GuidedDashboardTour.js";
 import { TitleBar } from "./v2/components/TitleBar.js";
-import { DashboardAssistantWidget } from "./v2/components/chat/DashboardAssistantWidget.js";
 import { AddProjectModal, type AddProjectModalSubmission } from "./v2/components/ui/AddProjectModal.js";
 import { ASSISTANT_OPEN_ADD_PROJECT_EVENT } from "./v2/lib/no-project-chat-assistant.js";
 import { isDashboardFeatureEnabled } from "./v2/lib/dashboard-feature-flags.js";
@@ -296,7 +295,6 @@ const AppLayout = () => {
         </div>
 
         {!showSidebar && <KineticDock experienceMode={appearanceSettings?.experienceMode} />}
-        <DashboardAssistantWidget />
         <OnboardingExperience />
         <GuidedDashboardTour />
         {assistantAddProjectOpen && (

@@ -166,11 +166,13 @@ describe("SettingsRepository", () => {
     });
 
     (SettingsRepository as any).systemSettingsCache = null;
+    const revisionBeforeMigration = repo.getSettingsResolutionRevision();
     const migrated = repo.getSystemSettings();
 
     expect(migrated.defaults.guardrails.jobs.task_coding.cap).toBe(5);
     expect(migrated.defaults.guardrails.jobs.ci_fix.cap).toBe(5);
     expect(migrated.defaults.ciIntelligence.julesCiAutofixMaxRetries).toBe(5);
+    expect(repo.getSettingsResolutionRevision()).toBeGreaterThan(revisionBeforeMigration);
     const persisted = repo.getDatabase().prepare("SELECT payload FROM system_settings WHERE id = 1").get() as { payload: string };
     expect(JSON.parse(persisted.payload).defaults.guardrails.jobs).toMatchObject({
       task_coding: { cap: 5 },

@@ -196,6 +196,9 @@ describe("WorkspaceManager", () => {
       stdinFile: bundlePath,
     }));
     const bootstrapCommand = String(bootstrapCall?.[1]?.at(-1) || "");
+    expect(bootstrapCommand).toContain("git config --global --add safe.directory /workspace");
+    expect(bootstrapCommand.indexOf("git config --global --add safe.directory /workspace"))
+      .toBeLessThan(bootstrapCommand.indexOf("git -C /workspace symbolic-ref"));
     expect(bootstrapCommand).toContain("git init /workspace");
     expect(bootstrapCommand).toContain("git -C /workspace symbolic-ref HEAD refs/heads/code-ux-bootstrap-$$");
     expect(bootstrapCommand).toContain("git -C /workspace fetch origin");

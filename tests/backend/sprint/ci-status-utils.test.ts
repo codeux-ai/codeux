@@ -33,7 +33,17 @@ describe("ci-status-utils", () => {
     expect(runs[0].id).toBe(1);
   });
 
-  it("deduplicates push and pull-request failures for the same head and workflow", () => {
+  it("does not attach a failed run from another branch", () => {
+    const status = {
+      ciRuns: [
+        { id: 2, name: "CI", workflowName: "CI", status: "completed", conclusion: "failure", event: "push", headBranch: "other", url: "unrelated", updatedAt: "2026-01-01T00:00:02Z" },
+      ],
+    } as GitTrackingStatus;
+
+    expect(selectFailedCiRuns(status, "task/x")).toEqual([]);
+  });
+
+  it("selects only the newest failed run after ordering and duplicate suppression", () => {
     const status = {
       ciRuns: [
         { id: 3, name: "CI", workflowName: "CI", status: "completed", conclusion: "failure", event: "pull_request", headBranch: "task/x", headSha: "abc", url: "u3", updatedAt: "2026-01-01T00:00:03Z" },
@@ -43,7 +53,30 @@ describe("ci-status-utils", () => {
       ],
     } as GitTrackingStatus;
 
-    expect(selectFailedCiRuns(status, "task/x").map((run) => run.id)).toEqual([3, 1, 4]);
+    expect(selectFailedCiRuns(status, "task/x").map((run) => run.id)).toEqual([3]);
+  });
+
+  it("orders unsorted failures and keeps every failed job from only the newest run", () => {
+    const status = {
+      ciRuns: [
+        { id: 10, name: "CI", workflowName: "CI", status: "completed", conclusion: "failure", event: "push", headBranch: "task/x", url: "old", updatedAt: "2026-01-01T00:00:01Z", failedJobs: [] },
+        { id: 12, name: "CI", workflowName: "CI", status: "completed", conclusion: "failure", event: "pull_request", headBranch: "task/x", url: "new", updatedAt: "2026-01-01T00:00:03Z", failedJobs: [
+          { id: 1, name: "linux", conclusion: "failure", failedSteps: ["test"], logExcerpt: "first assertion", logCommand: "log-1" },
+          { id: 2, name: "windows", conclusion: "failure", failedSteps: ["build"], logExcerpt: "second error", logCommand: "log-2" },
+        ] },
+        { id: 11, name: "Lint", workflowName: "Lint", status: "completed", conclusion: "failure", event: "push", headBranch: "task/x", url: "middle", updatedAt: "2026-01-01T00:00:02Z", failedJobs: [] },
+      ],
+    } as GitTrackingStatus;
+
+    const selected = selectFailedCiRuns(status, "task/x");
+    expect(selected).toHaveLength(1);
+    expect(selected[0]).toMatchObject({
+      id: 12,
+      failedJobs: [
+        { id: 1, logExcerpt: "first assertion" },
+        { id: 2, logExcerpt: "second error" },
+      ],
+    });
   });
 
   it("derives check entries from the newest workflow run per workflow on the branch", () => {

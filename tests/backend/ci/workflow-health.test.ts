@@ -107,7 +107,7 @@ describe("GitHub workflow health", () => {
     const preflight = getJobBlock(ci, "preflight");
 
     expect(ci).toContain("name: Code UX CI Pipeline");
-    expect(ci).toMatch(/push:\n    branches: \[main, dev\]/);
+    expect(ci).toMatch(/on:\n  push:\n  pull_request:\n    branches: \[main, dev\]/);
     expect(ci).toMatch(/pull_request:\n    branches: \[main, dev\]/);
     expect(ci).toContain("workflow_dispatch:");
     expectConcurrencyCancellation(ci, "CI");
@@ -132,6 +132,16 @@ describe("GitHub workflow health", () => {
     expect(preflight).toContain("Main release PRs must bump package.json version above");
     expect(preflight).not.toContain("package.json was not changed; skipping release version bump check.");
     expect(preflight).not.toContain("git diff --name-only");
+  });
+
+  it("runs normal CI for every branch push but limits catalogue prefetches to dev", async () => {
+    const ci = await readRepoFile(WORKFLOWS.ci);
+    const modelsCatalog = await readRepoFile(".github/workflows/models-catalog.yml");
+
+    expect(ci).toMatch(/on:\n  push:\n  pull_request:\n    branches: \[main, dev\]/);
+    expect(ci).not.toMatch(/push:\n    branches:/);
+    expect(modelsCatalog).toMatch(/on:\n  push:\n    branches: \[dev\]/);
+    expect(modelsCatalog).not.toMatch(/branches: \[[^\]]*main/);
   });
 
   it("runs fast core CI first and reuses a single build artifact for downstream lanes", async () => {

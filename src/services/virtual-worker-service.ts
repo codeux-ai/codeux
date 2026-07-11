@@ -54,6 +54,7 @@ import {
   type VirtualWorkerAttentionRoute,
 } from "../domain/workers/virtual-worker-scheduling-policy.js";
 import { planVirtualWorkerCycle } from "../domain/workers/virtual-worker-cycle-plan.js";
+import { getFailedJobLabels, getFailedLogSnippets, selectNewestCiRun } from "../sprint/ci-status-utils.js";
 
 const VIRTUAL_WORKER_RECONCILE_MS = 3_000;
 const VIRTUAL_WORKER_SESSION_POLL_MS = 2_000;
@@ -1678,9 +1679,14 @@ export class VirtualWorkerService {
   ): string {
     const payload = item.payload || {};
     const failedChecks = Array.isArray(payload.failedChecks) ? payload.failedChecks as string[] : [];
-    const failedRuns = Array.isArray(payload.failedRuns) ? payload.failedRuns as GitCiRunStatus[] : [];
-    const failedJobLabels = Array.isArray(payload.failedJobLabels) ? payload.failedJobLabels as string[] : [];
-    const failedLogSnippets = Array.isArray(payload.failedLogSnippets) ? payload.failedLogSnippets as string[] : [];
+    const persistedFailedRuns = Array.isArray(payload.failedRuns) ? payload.failedRuns as GitCiRunStatus[] : [];
+    const failedRuns = selectNewestCiRun(persistedFailedRuns);
+    const failedJobLabels = failedRuns.length > 0
+      ? getFailedJobLabels(failedRuns)
+      : Array.isArray(payload.failedJobLabels) ? payload.failedJobLabels as string[] : [];
+    const failedLogSnippets = failedRuns.length > 0
+      ? getFailedLogSnippets(failedRuns)
+      : Array.isArray(payload.failedLogSnippets) ? payload.failedLogSnippets as string[] : [];
     const prUrl = typeof payload.prUrl === "string" ? payload.prUrl : "";
     const prNumber = typeof payload.prNumber === "number" ? payload.prNumber : 0;
     const taskKey = typeof payload.taskKey === "string" ? payload.taskKey : item.taskId || "unknown task";

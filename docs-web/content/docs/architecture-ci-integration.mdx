@@ -131,12 +131,12 @@ When `waitForJulesCiAutofix: true` and a PR has failing CI:
 2. If an equivalent worker-owned `ci_fix_required` item is already open or claimed, the gate waits without consuming another attempt.
 3. Otherwise Code UX opens repair attention and schedules it before ordinary coding dispatches.
 4. Task-scoped repairs default to the originating coding task's exact provider session and effective model. Disable **Continue from same session and model as coding task** under Settings → AI Models → CI fix to use the standalone `ci_fix` route instead. Final-merge repairs always use the standalone route because no originating task session exists. The final provider-slot wait is bounded to 30 seconds.
-5. The worker receives failed runs, jobs, steps, exact assertion/error evidence, branch/PR context, and the original task only as reference material; it must produce new patch or unpublished-commit evidence before the attention item can resolve. Evidence is selected from the complete failed-job log around failed-step names, error markers, expected/received output, stack traces, and source locations instead of runner bootstrap/cleanup noise. The exact `gh run view <run-id> --job <job-id> --log-failed` command remains available as a fallback.
+5. The worker receives only the newest branch-matched failed CI run; older matching runs are excluded. That run includes every failed job and step, exact actionable assertion/error evidence, branch/PR context, and the original task only as reference material. It must produce new patch or unpublished-commit evidence before the attention item can resolve. For each failed job, evidence is selected from the complete log around failed-step names, error markers, expected/received output, stack traces, and source locations instead of runner bootstrap/cleanup noise. The exact `gh run view <run-id> --job <job-id> --log-failed` command remains available as a fallback.
 6. Failed, timed-out, crashed, and no-op invocations consume one attempt and are requeued with their last error while budget remains. At the cap, Code UX creates a human handoff with the failed-check context. Task-level planning state stays coding-complete so the original implementation cannot be relaunched as ordinary coding work.
 
 While CI repair owns a task, stale merge-required or merge-conflict attention is closed so the CI repair or its human handoff remains the single authoritative blocker.
 
-Equivalent push and pull-request failures for the same workflow and head SHA are de-duplicated. Task-level and final-merge repair use the same structured evidence payload.
+Task-level and final-merge repair use the same newest-run-only structured evidence payload. Guardrail handoffs preserve that same run and all of its failed-job details.
 
 Default retry cap: `5`, max `100`; `0` means unlimited.
 

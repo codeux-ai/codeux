@@ -909,6 +909,10 @@ export class WorkspaceManager implements IWorkspaceManager {
         "tmp=$(mktemp)",
         "cat > \"$tmp\"",
         "rm -rf /workspace/* /workspace/.[!.]* /workspace/..?* 2>/dev/null || true",
+        // The volume root is intentionally owned by the eventual non-root
+        // provider user. Git 2.35+ otherwise rejects the root helper's seed
+        // operations as dubious ownership before the final chown can run.
+        "git config --global --add safe.directory /workspace",
         "git init /workspace >/dev/null",
         "git -C /workspace symbolic-ref HEAD refs/heads/code-ux-bootstrap-$$",
         "git -C /workspace remote add origin \"$tmp\"",
@@ -1062,6 +1066,9 @@ export class WorkspaceManager implements IWorkspaceManager {
         "tmp=$(mktemp)",
         "cat > \"$tmp\"",
         "rm -rf /workspace/* /workspace/.[!.]* /workspace/..?* 2>/dev/null || true",
+        // See the single-branch seed path above: the helper is root while the
+        // persistent volume root belongs to the provider UID/GID.
+        "git config --global --add safe.directory /workspace",
         "git init /workspace >/dev/null",
         "git -C /workspace symbolic-ref HEAD refs/heads/code-ux-bootstrap-$$",
         "git -C /workspace remote add origin \"$tmp\"",

@@ -168,7 +168,9 @@ Repair attention is scheduled before ordinary coding dispatches. Code UX does no
 
 Task-scoped CI repair continues the originating coding session, native provider session, effective model, coding-agent instructions, and preserved workspace by default. Settings → AI Models → CI fix can disable this behavior and force the standalone CI Fix route; sprint-level final-merge repair always uses that route. Failed invocations return attention to an unclaimed retryable state while the guardrail budget remains. When the default five-attempt limit is reached, Code UX creates a human handoff containing the last error and attempt count.
 
-Every provider execution reasserts runtime-volume ownership for the container's effective non-root UID/GID. This repairs newly created or stale root-owned provider HOME/cache volumes before the CLI starts, including standalone final-merge CI repair.
+Immediately before every Docker provider launch attempt, Code UX reasserts runtime-volume ownership for the container's effective non-root UID/GID. This repairs newly created, stale, or concurrently recreated root-owned provider HOME/cache volumes at the atomic `docker run` boundary, including standalone final-merge CI repair. Workspace seed helpers explicitly trust mounted `/workspace` while initializing Git and then restore the provider UID/GID, so restart recovery does not trip Git's dubious-ownership protection on a correctly non-root-owned volume.
+
+Background startup pruning refreshes tracked sessions immediately before volume removal and protects newly created workspace/runtime volumes during their registration window. Restart cleanup therefore cannot delete a just-seeded QA or CI workspace and launch the provider against an empty replacement volume.
 
 If feature-PR CI repair exhausts its guardrail, the task is blocked for intervention while its durable planning state remains coding-complete. The original coding task is not reopened or dispatched again merely because CI still fails.
 | `action_required` (plan approval) | Auto-approve via `julesApiClient.approveSessionPlan()` if `autoApprovePlan: true`. |
