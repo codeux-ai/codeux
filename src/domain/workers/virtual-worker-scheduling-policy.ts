@@ -9,6 +9,7 @@ export type VirtualWorkerScheduleDecision =
         | "active_cycle"
         | "already_scheduled"
         | "workers_not_virtual"
+        | "manager_clarification_pending"
         | "no_actionable_work"
     };
 
@@ -18,6 +19,7 @@ export interface VirtualWorkerProjectSchedulingState {
   isAlreadyScheduled: boolean;
   nextAttentionItem: ProjectAttentionItemRecord | null;
   hasPendingDispatch: boolean;
+  hasPendingManagerClarification?: boolean;
 }
 
 export type VirtualWorkerAttentionRoute =
@@ -29,6 +31,13 @@ export type VirtualWorkerAttentionRoute =
 
 export interface VirtualWorkerAttentionClaimPolicy {
   claimReason: string;
+}
+
+export function isProjectManagerOwnedClarificationItem(
+  item: Pick<ProjectAttentionItemRecord, "attentionType" | "payload">,
+): boolean {
+  return item.attentionType === "worker_clarification"
+    || item.payload?.type === "worker_clarification";
 }
 
 export function isOrchestratorHandledClarificationItem(summaryMarkdown: string): boolean {
@@ -53,6 +62,9 @@ export function decideVirtualWorkerProjectScheduling(
   if (state.executionMode !== "VIRTUAL") {
     return { shouldSchedule: false, reason: "workers_not_virtual" };
   }
+  if (!state.nextAttentionItem && state.hasPendingManagerClarification) {
+    return { shouldSchedule: false, reason: "manager_clarification_pending" };
+  }
   if (!state.nextAttentionItem && !state.hasPendingDispatch) {
     return { shouldSchedule: false, reason: "no_actionable_work" };
   }
@@ -65,6 +77,7 @@ export function projectNeedsVirtualWorker(
   executionMode: WorkerExecutionMode = "VIRTUAL",
   hasPendingDispatch = false,
   isAlreadyScheduled = false,
+  hasPendingManagerClarification = false,
 ): boolean {
   return decideVirtualWorkerProjectScheduling({
     executionMode,
@@ -72,6 +85,7 @@ export function projectNeedsVirtualWorker(
     isAlreadyScheduled,
     nextAttentionItem: nextItem,
     hasPendingDispatch,
+    hasPendingManagerClarification,
   }).shouldSchedule;
 }
 
@@ -79,11 +93,27 @@ export function peekNextWorkerAttention(
   items: ProjectAttentionItemRecord[],
   resolveSettings: (projectId: string, sprintId?: string | null) => DashboardSettings
 ): ProjectAttentionItemRecord | null {
+  const pendingManagerClarifications = items.filter((item) => (
+    isProjectManagerOwnedClarificationItem(item)
+    && item.payload?.status === "pending"
+  ));
+
   return items.find((item) => {
     if (item.ownerType !== "worker") {
       return false;
     }
     if (item.status !== "open" && !(item.status === "claimed" && !item.assignedWorkerEndpointId)) {
+      return false;
+    }
+
+    if (isProjectManagerOwnedClarificationItem(item)) {
+      return false;
+    }
+
+    if (pendingManagerClarifications.some((clarification) => (
+      (Boolean(item.taskId) && clarification.taskId === item.taskId)
+      || (Boolean(item.dispatchId) && clarification.dispatchId === item.dispatchId)
+    ))) {
       return false;
     }
 
@@ -126,8 +156,11 @@ export function computeReconciliationCandidates(
 }
 
 export function resolveVirtualWorkerAttentionRoute(
-  item: Pick<ProjectAttentionItemRecord, "attentionType" | "summaryMarkdown">,
+  item: Pick<ProjectAttentionItemRecord, "attentionType" | "summaryMarkdown" | "payload">,
 ): VirtualWorkerAttentionRoute {
+  if (isProjectManagerOwnedClarificationItem(item)) {
+    return "skip_orchestrator_handled";
+  }
   if (isOrchestratorHandledClarificationItem(item.summaryMarkdown)) {
     return "skip_orchestrator_handled";
   }

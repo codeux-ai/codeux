@@ -43,6 +43,93 @@ const TERMINAL_DISPATCH_STATUSES = new Set([
 
 const DISPATCH_HEARTBEAT_INTERVAL_MS = 60_000;
 
+type WorkerClarificationSyncStatus = "none" | "pending" | "answered" | "settled" | "cancelled_run";
+
+interface WorkerClarificationSyncProjection {
+  clarificationId: string | null;
+  status: WorkerClarificationSyncStatus;
+}
+
+const NO_WORKER_CLARIFICATION: WorkerClarificationSyncProjection = {
+  clarificationId: null,
+  status: "none",
+};
+
+const resolveWorkerClarificationProjection = (
+  deps: SessionSyncDependencies,
+  taskRun: TaskRunRecord,
+): WorkerClarificationSyncProjection => {
+  if (
+    !deps.executionRepository
+    || typeof deps.executionRepository.listTaskRunEvents !== "function"
+  ) {
+    return NO_WORKER_CLARIFICATION;
+  }
+
+  const lifecycleEvents = deps.executionRepository.listTaskRunEvents(taskRun.id, 10_000)
+    .filter((event) => event.eventType.startsWith("worker_clarification_"));
+  const byClarificationId = new Map<string, {
+    latestEventType: string;
+    requestedAt: string;
+    requestPayload: Record<string, unknown> | null;
+  }>();
+
+  for (const event of lifecycleEvents) {
+    const payload = event.payload || {};
+    const clarificationId = typeof payload.clarificationId === "string"
+      ? payload.clarificationId.trim()
+      : "";
+    if (!clarificationId) {
+      continue;
+    }
+    const existing = byClarificationId.get(clarificationId);
+    if (!existing) {
+      byClarificationId.set(clarificationId, {
+        latestEventType: event.eventType,
+        requestedAt: "",
+        requestPayload: null,
+      });
+    }
+    if (event.eventType === "worker_clarification_requested") {
+      const entry = byClarificationId.get(clarificationId)!;
+      entry.requestedAt = event.createdAt;
+      entry.requestPayload = payload;
+    }
+  }
+
+  const scopedRequests = Array.from(byClarificationId.entries())
+    .filter(([, entry]) => entry.requestPayload !== null)
+    .filter(([, entry]) => {
+      const payload = entry.requestPayload!;
+      const eventTaskRunId = typeof payload.taskRunId === "string" ? payload.taskRunId : null;
+      const eventDispatchId = typeof payload.dispatchId === "string" ? payload.dispatchId : null;
+      const eventSessionId = typeof payload.sessionId === "string" ? normalizeSessionRef(payload.sessionId) : null;
+      return (!eventTaskRunId || eventTaskRunId === taskRun.id)
+        && (!eventDispatchId || !taskRun.dispatchId || eventDispatchId === taskRun.dispatchId)
+        && (!eventSessionId || !taskRun.sessionId || eventSessionId === normalizeSessionRef(taskRun.sessionId));
+    })
+    .sort((left, right) => right[1].requestedAt.localeCompare(left[1].requestedAt));
+  const latestRequest = scopedRequests.find(([, entry]) => (
+    entry.latestEventType === "worker_clarification_requested"
+  )) || scopedRequests[0];
+
+  if (!latestRequest) {
+    return NO_WORKER_CLARIFICATION;
+  }
+
+  const [clarificationId, entry] = latestRequest;
+  if (entry.latestEventType === "worker_clarification_requested") {
+    return { clarificationId, status: "pending" };
+  }
+  if (
+    entry.latestEventType === "worker_clarification_continued"
+    || entry.latestEventType === "worker_clarification_replied"
+  ) {
+    return { clarificationId, status: "answered" };
+  }
+  return { clarificationId, status: "settled" };
+};
+
 const shouldRefreshDispatchHeartbeat = (lastHeartbeatAt: string | null, now: string): boolean => {
   if (!lastHeartbeatAt) {
     return true;
@@ -504,9 +591,9 @@ const syncExecutionRunState = async (
   task: Subtask,
   session: JulesSession,
   activities: JulesActivity[] | undefined,
-): Promise<void> => {
+): Promise<WorkerClarificationSyncProjection> => {
   if (!deps.executionRepository || !deps.sprintRunId || !task.record_id) {
-    return;
+    return NO_WORKER_CLARIFICATION;
   }
 
   let taskRun = deps.executionRepository.getLatestTaskRun(task.record_id, deps.sprintRunId);
@@ -546,18 +633,33 @@ const syncExecutionRunState = async (
         sourceEventKey: `session-sync:rehydrate:${taskRun.id}:${deps.sprintRunId}`,
       });
     } else {
-      return;
+      return NO_WORKER_CLARIFICATION;
     }
   }
 
   const currentDispatch = taskRun.dispatchId
     ? deps.executionRepository.getTaskDispatch(taskRun.dispatchId)
     : null;
+  const clarificationProjection = resolveWorkerClarificationProjection(deps, taskRun);
+  if (
+    clarificationProjection.status === "pending"
+    && (
+      taskRun.state === "PAUSED"
+      || currentDispatch?.status === "paused"
+      || currentDispatch?.status === "cancel_requested"
+      || currentDispatch?.status === "cancelled"
+    )
+  ) {
+    return { ...clarificationProjection, status: "cancelled_run" };
+  }
   const wasDispatchTerminal = !currentDispatch
     || currentDispatch.finishedAt !== null
     || TERMINAL_DISPATCH_STATUSES.has(currentDispatch.status);
-  const actionRequiredReplyPending = hasSubmittedReplyForActionRequiredState(task, session.state, activities);
-  const nextRunState = mapSessionStateToTaskRunState(session.state, deps.isActionRequiredState, actionRequiredReplyPending);
+  const actionRequiredReplyPending = hasSubmittedReplyForActionRequiredState(task, session.state, activities)
+    || clarificationProjection.status === "answered";
+  const nextRunState = clarificationProjection.status === "pending"
+    ? "BLOCKED"
+    : mapSessionStateToTaskRunState(session.state, deps.isActionRequiredState, actionRequiredReplyPending);
   const sessionProvider = session.provider || taskRun.provider;
   const isFinishedLocalCliRun = isFinishedLocalCliTaskRun(taskRun, sessionProvider);
   const wasTerminal = taskRun.state === "COMPLETED"
@@ -599,7 +701,7 @@ const syncExecutionRunState = async (
         });
       }
     }
-    return;
+    return clarificationProjection;
   }
 
   const sessionMetadata = sessionMetadataLookup.getForSession(session);
@@ -641,9 +743,12 @@ const syncExecutionRunState = async (
   }
 
   if (taskRun.dispatchId) {
-    const nextDispatchStatus = mergeDispatchStatus(currentDispatch?.status || null, nextRunState, session.state);
+    const projectedSessionState = clarificationProjection.status === "pending"
+      ? "WORKER_CLARIFICATION"
+      : session.state;
+    const nextDispatchStatus = mergeDispatchStatus(currentDispatch?.status || null, nextRunState, projectedSessionState);
     const nextDispatchFinishedAt = nextRunState === "RUNNING" ? null : (currentDispatch?.finishedAt || nextFinishedAt);
-    const nextDispatchErrorMessage = resolveDispatchErrorMessage(currentDispatch?.errorMessage, nextRunState, session.state);
+    const nextDispatchErrorMessage = resolveDispatchErrorMessage(currentDispatch?.errorMessage, nextRunState, projectedSessionState);
     const dispatchChanged = !currentDispatch
       || currentDispatch.status !== nextDispatchStatus
       || currentDispatch.startedAt !== nextStartedAt
@@ -690,11 +795,15 @@ const syncExecutionRunState = async (
     provider || "",
     workerBranch || "",
     prUrl || "",
+    clarificationProjection.clarificationId || "",
+    clarificationProjection.status,
   ].join(":");
   deps.executionRepository.appendTaskRunEvent(taskRun.id, "session_state_synced", "provider", {
     sessionState: session.state || null,
     taskRunState: nextRunState,
     actionRequiredReplyPending,
+    workerClarificationId: clarificationProjection.clarificationId,
+    workerClarificationStatus: clarificationProjection.status,
     provider,
     sessionId,
     sessionName,
@@ -775,6 +884,7 @@ const syncExecutionRunState = async (
       deps.logger.warn("Failed to extract git metrics and token usage from full session", { error: e });
     }
   }
+  return clarificationProjection;
 };
 
 export const runSessionSyncStep = async (
@@ -941,7 +1051,7 @@ export const runSessionSyncStep = async (
       task.activities = activitiesMap.get(sessionName);
     }
 
-    await syncExecutionRunState(
+    const clarificationProjection = await syncExecutionRunState(
       deps,
       sessionMetadataLookup,
       task,
@@ -949,10 +1059,19 @@ export const runSessionSyncStep = async (
       sessionName ? activitiesMap.get(sessionName) : undefined,
     );
 
+    if (clarificationProjection.status === "cancelled_run") {
+      continue;
+    }
+
     // A human now owns this task (QA could not verify it). Leave its status
     // alone — a stale session still reporting COMPLETED must not pull it back
     // into the coding/QA pipeline it was escalated out of.
     if (task.status === "QA_REVIEW_FAILED") {
+      continue;
+    }
+
+    if (clarificationProjection.status === "pending") {
+      task.status = "BLOCKED";
       continue;
     }
 
@@ -965,7 +1084,7 @@ export const runSessionSyncStep = async (
       task,
       match.state,
       sessionName ? activitiesMap.get(sessionName) : undefined,
-    );
+    ) || clarificationProjection.status === "answered";
     const liveRunState = mapSessionStateToTaskRunState(match.state, deps.isActionRequiredState, actionRequiredReplyPending);
     const reactivated = !task.is_merged && (liveRunState === "RUNNING" || liveRunState === "BLOCKED");
     if (task.status === "COMPLETED" && !reactivated && isCompletedTaskSettled(task, { githubMode: context.githubMode })) {
