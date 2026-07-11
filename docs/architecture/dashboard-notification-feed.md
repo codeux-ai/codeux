@@ -33,6 +33,8 @@ The projection never returns raw attention or event payloads, provider/session m
 
 No notification-specific persistence or polling service exists. Attention and execution mutations continue to schedule the existing `overview.telemetry.updated` realtime event. Dashboard clients refresh `/api/notifications` when that cross-project invalidation arrives; reading the feed never claims, resolves, dismisses, or expires attention.
 
+The top-nav notification projection subscribes to `overview` even when no project is selected, and adds the selected `project:<id>` scope for scheduler invalidations. Feed records are mapped to semantic dashboard severity and icon states, retain structured project/sprint/task/reason/instruction details, and expose direct task, Live, sprint, or project targets. Browser-local read and dismiss state keys include the record's `updatedAt`, so an unchanged record remains stable across refreshes while a materially refreshed intervention becomes visible and unread again.
+
 ## Primary files
 
 - `src/contracts/dashboard-notification-types.ts`

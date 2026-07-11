@@ -63,6 +63,7 @@ The top-nav notification center also consumes this readiness payload. Startup no
 - `Cluster not ready` is a non-dismissible critical notification when required dependencies are missing.
 - `Startup checks passed` is a dismissible success notification when required checks pass.
 - Provider auth detection creates a dismissible configuration notification with an action that reopens onboarding.
+- When no provider authentication is usable, `Provider configuration required` remains visible with an onboarding recovery action.
 
 Notification read and dismissed state is stored locally in the browser under `codeux:notification-state:v1`.
 
