@@ -62,12 +62,17 @@ interface ImprovePromptResult {
   workerConnectionId: null;
 }
 
-interface PlanSprintResult {
+export interface PlanSprintResult {
   ok: true;
   invocationId: string;
   agentId: string;
   createdTaskIds: string[];
   started: boolean;
+}
+
+interface PlanSprintPreconditions {
+  project: NonNullable<ReturnType<ProjectManagementRepository["getProject"]>>;
+  sprint: NonNullable<ReturnType<ProjectManagementRepository["getSprint"]>>;
 }
 
 interface PlanningResultContext {
@@ -326,15 +331,21 @@ export class PlanningAgentService {
     return await this.runPlanSprint(projectId, sprintId, options, signal);
   }
 
+  startPlanSprint(projectId: string, sprintId: string, options: PlanSprintOptions): Promise<PlanSprintResult> {
+    const preconditions = this.validatePlanSprintPreconditions(projectId, sprintId, options);
+    return this.runPlanSprint(projectId, sprintId, options, undefined, undefined, preconditions);
+  }
+
   private async runPlanSprint(
     projectId: string,
     sprintId: string,
     options: PlanSprintOptions,
     signal?: AbortSignal,
     continuation?: PlanningContinuationContext,
+    preconditions?: PlanSprintPreconditions,
   ): Promise<PlanSprintResult> {
-    const project = this.requireProject(projectId);
-    const sprint = this.requireSprint(projectId, sprintId);
+    const { project, sprint } = preconditions
+      ?? this.validatePlanSprintPreconditions(projectId, sprintId, options);
     const runtime = this.resolvePlanningRuntime(projectId, options.overrides);
     const planningAgentPresetId = options.overrides?.planningAgentPresetId
       || options.planningAgentPresetId
@@ -344,11 +355,6 @@ export class PlanningAgentService {
       projectId,
       planningAgentPresetId,
     );
-    const existingTasks = this.deps.projectManagementRepository.listTasks(projectId, sprintId);
-    if (existingTasks.length > 0 && !options.replan) {
-      throw new Error(`Sprint ${sprint.name} already has ${existingTasks.length} task(s). Clear or edit them before running Planning agent.`);
-    }
-
     const invocation = this.deps.executionRepository?.createExecutionInvocation({
       projectId,
       skipValidation: true,
@@ -976,6 +982,20 @@ export class PlanningAgentService {
       throw new Error(`Project not found: ${projectId}`);
     }
     return project;
+  }
+
+  private validatePlanSprintPreconditions(
+    projectId: string,
+    sprintId: string,
+    options: PlanSprintOptions,
+  ): PlanSprintPreconditions {
+    const project = this.requireProject(projectId);
+    const sprint = this.requireSprint(projectId, sprintId);
+    const existingTasks = this.deps.projectManagementRepository.listTasks(projectId, sprintId);
+    if (existingTasks.length > 0 && !options.replan) {
+      throw new Error(`Sprint ${sprint.name} already has ${existingTasks.length} task(s). Clear or edit them before running Planning agent.`);
+    }
+    return { project, sprint };
   }
 
   private requireSprint(

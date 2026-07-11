@@ -7,6 +7,9 @@ import { PlanningAgentService } from "../../../src/services/planning-agent-servi
 import { SprintIssueService } from "../../../src/services/sprint-issue-service.js";
 import type { ManageCodeUxArgs } from "../../../src/contracts/internal-management-types.js";
 import { validateToolArguments } from "../../../src/api/mcp/validators/tool-validators.js";
+import { runWithMcpAgentContext } from "../../../src/server/mcp-agent-context.js";
+import type { SchedulerService } from "../../../src/services/scheduler-service.js";
+import type { Logger } from "../../../src/shared/logging/logger.js";
 
 describe("SprintActions", () => {
   let projectRepo: ProjectManagementRepository;
@@ -14,6 +17,8 @@ describe("SprintActions", () => {
   let execRepo: ExecutionRepository;
   let planningAgentService: PlanningAgentService;
   let sprintIssueService: SprintIssueService;
+  let schedulerService: Pick<SchedulerService, "createEntry">;
+  let logger: Logger;
   let sprintActions: SprintActions;
 
   beforeEach(() => {
@@ -39,7 +44,19 @@ describe("SprintActions", () => {
 
     planningAgentService = {
       planSprint: vi.fn(),
+      startPlanSprint: vi.fn(),
     } as unknown as PlanningAgentService;
+
+    schedulerService = {
+      createEntry: vi.fn(),
+    };
+    logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn(),
+    };
 
     sprintIssueService = {
       searchIssues: vi.fn(),
@@ -57,6 +74,8 @@ describe("SprintActions", () => {
       executionRepository: execRepo,
       planningAgentService,
       sprintIssueService,
+      schedulerService,
+      logger,
     });
   });
 
@@ -979,9 +998,12 @@ describe("SprintActions", () => {
     })).toThrow("Invalid arguments for tool manage_sprints");
   });
 
-  it("plans a sprint with options", async () => {
-    const mockPlanResult = { ok: true, createdTasksCount: 3 };
-    vi.mocked(planningAgentService.planSprint).mockResolvedValue(mockPlanResult as any);
+  it("returns before background planning settles and queues a success wakeup", async () => {
+    let resolvePlanning!: (value: any) => void;
+    const planning = new Promise<any>((resolve) => {
+      resolvePlanning = resolve;
+    });
+    vi.mocked(planningAgentService.startPlanSprint).mockReturnValue(planning);
 
     const payload = {
       projectId: "p1",
@@ -992,14 +1014,73 @@ describe("SprintActions", () => {
       overrides: { workerId: "w1" }
     };
 
-    const result = await sprintActions.handleSprintAction(makeArgs("plan", payload));
+    const result = await runWithMcpAgentContext("agent-1", "thread-1", () =>
+      sprintActions.handleSprintAction(makeArgs("plan", payload)));
 
-    expect(planningAgentService.planSprint).toHaveBeenCalledWith("p1", "s1", {
+    expect(planningAgentService.startPlanSprint).toHaveBeenCalledWith("p1", "s1", {
       autoStart: true,
       replan: false,
       planningAgentPresetId: "agent-1",
       overrides: { workerId: "w1" }
     });
-    expect(result.result).toEqual(mockPlanResult);
+    expect(result.result).toEqual({
+      status: "started",
+      message: "Sprint planning started in the background. You will be notified when it completes or fails.",
+      projectId: "p1",
+      sprintId: "s1",
+    });
+    expect(schedulerService.createEntry).not.toHaveBeenCalled();
+
+    resolvePlanning({ ok: true, invocationId: "inv-1", agentId: "planner-1", createdTaskIds: ["t1", "t2"], started: true });
+    await vi.waitFor(() => expect(schedulerService.createEntry).toHaveBeenCalledTimes(1));
+    expect(schedulerService.createEntry).toHaveBeenCalledWith("p1", expect.objectContaining({
+      targetType: "agent_wakeup",
+      scheduledFor: expect.any(String),
+      recurrence: { frequency: "none", interval: 1, endMode: "never" },
+      agentWakeupTarget: expect.objectContaining({
+        threadId: "thread-1",
+        origin: "agent_scheduler",
+        source: "agent_scheduler",
+        createdByAgentId: "agent-1",
+        bodyMarkdown: expect.stringMatching(/2 task\(s\).*Execution started: yes/s),
+      }),
+    }));
+  });
+
+  it("queues a same-thread failure wakeup after background planning rejects", async () => {
+    let rejectPlanning!: (error: Error) => void;
+    const planning = new Promise<any>((_resolve, reject) => {
+      rejectPlanning = reject;
+    });
+    vi.mocked(planningAgentService.startPlanSprint).mockReturnValue(planning);
+
+    const result = await runWithMcpAgentContext("agent-2", "thread-2", () =>
+      sprintActions.handleSprintAction(makeArgs("plan", { projectId: "p1", sprintId: "s1" })));
+    expect(result.result).toMatchObject({ status: "started" });
+
+    rejectPlanning(new Error("provider unavailable"));
+    await vi.waitFor(() => expect(schedulerService.createEntry).toHaveBeenCalledTimes(1));
+    expect(schedulerService.createEntry).toHaveBeenCalledWith("p1", expect.objectContaining({
+      agentWakeupTarget: expect.objectContaining({
+        threadId: "thread-2",
+        createdByAgentId: "agent-2",
+        bodyMarkdown: expect.stringContaining("provider unavailable"),
+      }),
+    }));
+  });
+
+  it("skips completion wakeups when MCP chat context is unavailable", async () => {
+    vi.mocked(planningAgentService.startPlanSprint).mockResolvedValue({
+      ok: true,
+      invocationId: "inv-1",
+      agentId: "planner-1",
+      createdTaskIds: [],
+      started: false,
+    });
+
+    const result = await sprintActions.handleSprintAction(makeArgs("plan", { projectId: "p1", sprintId: "s1" }));
+    expect(result.result).toMatchObject({ status: "started" });
+    await vi.waitFor(() => expect(logger.warn).toHaveBeenCalled());
+    expect(schedulerService.createEntry).not.toHaveBeenCalled();
   });
 });

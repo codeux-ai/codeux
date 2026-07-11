@@ -743,6 +743,14 @@ For sprint create/update calls:
 - `linkedIssues` can include imported issue body and conversation markdown. Sprint create merges that context into the goal under `## Linked Issues`; sprint update does the same when a replacement goal is provided. Prompt-only issue body and conversation content are not stored in linked issue repository rows.
 - Missing or blank `projectId`, `sprintId`, `sprintRunId`, `name`, and `title` values are rejected before repository calls so MCP clients receive a validation error instead of a low-level `.trim()` failure.
 
+### `manage_sprints plan`
+
+The MCP `plan` action validates the project, sprint, and existing-task/replan preconditions synchronously, then returns a stable `status: "started"` result while planning continues in the background. Task persistence and optional `autoStart` remain part of the planning workflow; the immediate response does not imply that planning completed.
+
+When the call originates from an MCP-backed dashboard chat turn, completion or failure persists a due-now, one-shot `agent_wakeup` for the same agent and thread. The existing post-reply scheduler drain delivers that wakeup so the chat agent can review the generated tasks and recap the task count and execution-start state, or report the planning failure. Calls without agent/thread context or an available scheduler still run planning but do not create a wakeup.
+
+This asynchronous response applies only to the direct MCP `manage_sprints` `plan` action. `import_issues` with `planAfterImport`, dashboard planning routes, scheduled sprint planning, quicksprints, and internal callers continue to await planning completion.
+
 ### `manage_sprints import_issues`
 
 `manage_sprints` action `import_issues` is the MCP contract for GitHub, GitLab, Jira, Notion, Asana, Linear, Miro, Lucid, Figma/FigJam, and Mural importer access. Internal MCP clients use it for search-only discovery, assigned-work searches, explicit ticket or external-object imports, linked sprint issue attachment, and optional planning after import.
