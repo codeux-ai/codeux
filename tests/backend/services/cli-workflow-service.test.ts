@@ -13,6 +13,26 @@ vi.mock("../../../src/services/cli-workflow/pipeline/git-finalize-stage.js");
 vi.mock("../../../src/services/cli-workflow/pipeline/pr-finalize-stage.js");
 vi.mock("../../../src/services/cli-workflow/pipeline/cleanup-stage.js");
 
+const buildProviderStageResult = (transcriptText = "") => ({
+  ok: true,
+  stdout: "",
+  stderr: "",
+  exitCode: 0,
+  nativeSessionId: "native-session-1",
+  usageTelemetry: {
+    transcriptText,
+    conversation: transcriptText ? [{ kind: "assistant", text: transcriptText }] : [],
+    inputTokens: 0,
+    cachedInputTokens: 0,
+    outputTokens: 0,
+    reasoningOutputTokens: 0,
+    totalTokens: 0,
+    toolCallCount: 0,
+    usageSource: "estimated",
+    rawUsageJson: null,
+  },
+}) as any;
+
 
 const buildService = (): any => {
   return new CliWorkflowService({
@@ -64,7 +84,7 @@ const runWorkflowForAgentRootMode = async (input: {
   const service = new CliWorkflowService(deps as any);
 
   vi.mocked(executePrepareStage).mockResolvedValue({ providerPrompt: "mock prompt" });
-  vi.mocked(executeProviderStage).mockResolvedValue(undefined);
+  vi.mocked(executeProviderStage).mockResolvedValue(buildProviderStageResult());
   vi.mocked(executeGitFinalizeStage).mockResolvedValue({ hasChanges: false, committedChanges: false });
   vi.mocked(executeCleanupStage).mockResolvedValue({ cleanedUp: true });
 
@@ -83,7 +103,10 @@ const runWorkflowForAgentRootMode = async (input: {
 };
 
 describe("CliWorkflowService unpushed commit detection", () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(executeProviderStage).mockResolvedValue(buildProviderStageResult());
+  });
 
   it("runs task workflow pipeline and handles error", async () => {
     const executionRepository = {
@@ -359,7 +382,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
     const { executeCleanupStage } = await import("../../../src/services/cli-workflow/pipeline/cleanup-stage.js");
 
     vi.mocked(executePrepareStage).mockResolvedValue({ providerPrompt: "mock prompt" });
-    vi.mocked(executeProviderStage).mockResolvedValue(undefined);
+    vi.mocked(executeProviderStage).mockResolvedValue(buildProviderStageResult());
     vi.mocked(executeGitFinalizeStage).mockResolvedValue({
       hasChanges: true,
       committedChanges: true,
@@ -603,6 +626,9 @@ describe("CliWorkflowService unpushed commit detection", () => {
     const { executeCleanupStage } = await import("../../../src/services/cli-workflow/pipeline/cleanup-stage.js");
 
     vi.mocked(executePrepareStage).mockResolvedValue({ providerPrompt: "mock prompt" });
+    vi.mocked(executeProviderStage).mockResolvedValue(buildProviderStageResult(
+      "No repository changes were required.\nCODE_UX_TASK_OUTCOME: completed",
+    ));
     vi.mocked(executeGitFinalizeStage).mockResolvedValue({ hasChanges: false, committedChanges: false });
     vi.mocked(executeCleanupStage).mockResolvedValue({ cleanedUp: false });
 
@@ -640,6 +666,94 @@ describe("CliWorkflowService unpushed commit detection", () => {
       expect.anything(),
       expect.anything(),
       expect.anything()
+    );
+  });
+
+  it.each([
+    {
+      name: "the coding agent reports an external blocker",
+      transcriptText: [
+        "The required release evidence is unavailable.",
+        "CODE_UX_TASK_OUTCOME: blocked",
+        "CODE_UX_BLOCKER: Required release evidence is missing.",
+      ].join("\n"),
+      expectedMessage: "Required release evidence is missing.",
+      expectedCategory: "agent_reported_blocker",
+    },
+    {
+      name: "the coding agent omits its required outcome",
+      transcriptText: "I stopped before implementing the requested work.",
+      expectedMessage: "Coding agent produced no repository changes and did not confirm a completed outcome.",
+      expectedCategory: "agent_outcome_missing",
+    },
+  ])("parks a no-change task when $name", async ({ transcriptText, expectedMessage, expectedCategory }) => {
+    const executionRepository = {
+      getTaskRun: vi.fn().mockReturnValue({
+        id: "run-blocked",
+        startedAt: "2026-07-11T08:00:00.000Z",
+        taskId: "task-blocked",
+        dispatchId: "dispatch-blocked",
+      }),
+      updateTaskRun: vi.fn(),
+      updateTaskDispatch: vi.fn(),
+      appendTaskRunEvent: vi.fn(),
+      getSprintRun: vi.fn().mockReturnValue(null),
+    };
+    const deps = {
+      sessionTracking: {
+        appendActivity: vi.fn(),
+        updateSession: vi.fn(),
+      },
+      projectManagementRepository: { updateTask: vi.fn() },
+      getDashboardSettings: vi.fn().mockReturnValue({ cliWorkflow: { containerImage: "  " } }),
+      agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue({ instructionMarkdown: "guide" }) },
+      getGithubToken: vi.fn().mockReturnValue("token"),
+      executionRepository,
+      logger: { error: vi.fn() },
+    };
+    const service = new CliWorkflowService(deps as any);
+
+    vi.mocked(executePrepareStage).mockResolvedValue({ providerPrompt: "mock prompt" } as any);
+    vi.mocked(executeProviderStage).mockResolvedValue(buildProviderStageResult(transcriptText));
+    vi.mocked(executeGitFinalizeStage).mockResolvedValue({ hasChanges: false, committedChanges: false });
+    vi.mocked(executeCleanupStage).mockResolvedValue({ cleanedUp: false });
+
+    await (service as any).runTaskWorkflow({
+      provider: "codex",
+      task: { id: "T1", prompt: "prompt", title: "title" },
+      repoPath: "/repo",
+      featureBranch: "main",
+      sprintNumber: 1,
+      sessionId: "session-blocked",
+      taskRunId: "run-blocked",
+      workerBranch: "worker-blocked",
+      title: "Title",
+    });
+
+    expect(executionRepository.updateTaskRun).toHaveBeenCalledWith(
+      "run-blocked",
+      expect.objectContaining({ state: "BLOCKED", workerBranch: null }),
+    );
+    expect(executionRepository.updateTaskDispatch).toHaveBeenCalledWith(
+      "dispatch-blocked",
+      expect.objectContaining({
+        status: "blocked",
+        errorMessage: expectedMessage,
+      }),
+    );
+    expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-blocked",
+      "cli_workflow_blocked",
+      "system",
+      expect.objectContaining({ category: expectedCategory }),
+      expect.any(Object),
+    );
+    expect(executionRepository.appendTaskRunEvent).not.toHaveBeenCalledWith(
+      "run-blocked",
+      "cli_git_no_changes",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
     );
   });
 

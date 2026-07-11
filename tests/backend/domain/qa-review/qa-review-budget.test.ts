@@ -163,5 +163,19 @@ describe("QA Review Budget", () => {
       expect(result.allowed).toBe(true);
       expect(result.reason).toBe("allow_recovered_stale_retry");
     });
+
+    it("does not let recovered stale retries exceed the hard infrastructure ceiling", () => {
+      const result = evaluateQaReviewBudget({
+        existingRuns: 2 + QA_INFRA_FAILURE_GRACE,
+        decisiveRuns: 2,
+        maxTaskReviewRuns: 2,
+        latestRun: makeRun({
+          status: "cancelled",
+          summaryMarkdown: `${RECOVERED_STALE_QA_SUMMARY_PREFIX} recovered`,
+        }),
+      });
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toBe("infra_grace_exhausted");
+    });
   });
 });

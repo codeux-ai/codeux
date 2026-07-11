@@ -120,7 +120,7 @@ If a QA agent preset is wired to `qa_review` in routing, completed tasks pass th
 - Creates an attention item with the QA agent's findings.
 - Pauses the task until rectified.
 
-Provider or infrastructure errors do not immediately create this handoff. They retry automatically until the applicable QA run cap is reached, and the sprint watch loop stays alive while worker or human attention is active.
+Provider or infrastructure errors do not immediately create this handoff. Recovered failed, cancelled, and errored attempts retry within a bounded infrastructure grace, and every terminal attempt counts toward the hard ceiling. A CLI QA fix that produces no new patch is escalated as no progress instead of starting another QA cycle; existing branch commits do not renew the cycle. A coding run that produces no changes must explicitly confirm completion or it is blocked for attention. The sprint watch loop stays alive while worker or human attention is active.
 
 ## Attention items: who handles them
 

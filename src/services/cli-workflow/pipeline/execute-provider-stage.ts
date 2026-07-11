@@ -2,8 +2,9 @@ import { buildProviderSettingsOverride } from "../../provider-settings-override.
 import type { PipelineContext } from "./pipeline-context.js";
 import { resolveProviderForInvocation } from "../../provider-routing.js";
 import { ProviderExecutionService, resolveEffectiveModel } from "../../provider-execution-service.js";
+import type { ProviderRunResult } from "../../../infrastructure/providers/cli/provider-runner.js";
 
-export async function executeProviderStage(ctx: PipelineContext, providerPrompt: string): Promise<void> {
+export async function executeProviderStage(ctx: PipelineContext, providerPrompt: string): Promise<ProviderRunResult> {
   const resolvedProvider = resolveProviderForInvocation(ctx.settings, {
     invocation: "task_coding",
     task: ctx.task,
@@ -124,4 +125,5 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
   if (!result.ok) {
     throw new Error(result.stderr || result.stdout || "Provider failed without output.");
   }
+  return result;
 }

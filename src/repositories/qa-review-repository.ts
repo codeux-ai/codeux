@@ -168,7 +168,7 @@ export class QaReviewRepository {
       FROM qa_review_runs
       WHERE task_id = ?
         AND trigger_type IN ('task_completion', 'completed_task_without_pr')
-        AND status IN ('completed', 'failed')
+        AND status IN ('completed', 'failed', 'cancelled', 'errored')
     `).get(taskId) as { count?: number | string } | undefined;
 
     return row ? Number(row.count || 0) : 0;
@@ -213,8 +213,9 @@ export class QaReviewRepository {
    * judgement about the task and must not consume the verdict retry budget.
    * Otherwise a single flaky reviewer error would exhaust QA and let a task
    * settle without ever having been reviewed. Use this for the merge-gate
-   * exhaustion decision; {@link countTaskRuns} (which includes infra failures)
-   * bounds total attempts so a permanently broken reviewer still escalates.
+   * exhaustion decision; {@link countTaskRuns} (which includes failed,
+   * cancelled, and errored infrastructure attempts) bounds total attempts so a
+   * permanently broken reviewer still escalates.
    */
   countDecisiveTaskRuns(taskId: string): number {
     const row = this.db.prepare(`
