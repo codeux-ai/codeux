@@ -125,6 +125,7 @@ Advertised agent identities fail closed when malformed, unknown, or missing an e
 policy. This prevents an unknown worker agent from inheriting broad project-manager tools.
 Agent-scoped provider runs use the same default-deny posture for built-in Code UX tools. Default
 custom MCP links such as `playwright` are stored separately and do not imply `code_ux` access.
+The default Playwright link launches the published package with `npx @playwright/mcp@latest`; settings resolution repairs the legacy no-argument `playwright-mcp` command automatically.
 Dashboard chat replies are the only route-local default exception: assigned reply agents receive
 the full built-in Code UX MCP surface, `scheduler_code_ux`, `add_long_term_memory`, and the default Playwright MCP server by default,
 even when their saved preset access disables Code UX or has no MCP policy. This default is keyed to the dashboard
