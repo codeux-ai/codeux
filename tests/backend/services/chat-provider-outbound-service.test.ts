@@ -83,7 +83,13 @@ describe("ChatProviderOutboundService", () => {
         "```codeux:status",
         JSON.stringify({ title: "Build", items: [{ label: "Lint", state: "ok" }] }),
         "```",
+        "```codeux:agent",
+        JSON.stringify({ emotion: "excited", animation: "hyped", caption: "All green!", durationMs: 2500 }),
+        "```",
       ].join("\n"),
+      metadata: {
+        agentEffect: { emotion: "excited", animation: "hyped", caption: "All green!", durationMs: 2500 },
+      },
     });
 
     const service = new ChatProviderOutboundService({
@@ -117,6 +123,9 @@ describe("ChatProviderOutboundService", () => {
     expect(requests[0].body.replyText).toContain("Build passed.");
     expect(requests[0].body.replyText).toContain("Build\n- Lint: ok");
     expect(requests[0].body.replyText).not.toContain("codeux:status");
+    expect(requests[0].body.replyText).not.toContain("codeux:agent");
+    expect(JSON.stringify(requests[0].body)).not.toContain("agentEffect");
+    expect(JSON.stringify(requests[0].body)).not.toContain("All green!");
     expect(JSON.stringify(delivery?.payload)).not.toContain("super-secret");
     expect(JSON.stringify(delivery?.payload)).not.toContain("metadata-secret");
     expect(JSON.stringify(delivery?.payload)).not.toContain("response-secret-token");

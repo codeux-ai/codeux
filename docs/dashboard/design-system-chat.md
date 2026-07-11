@@ -65,6 +65,7 @@ Agent replies are ordinary markdown; embedding a fenced block renders a designed
 - ` ```codeux:sprint ` — sprint hero card: `{ "key", "name", "status", "done", "total", "branch?", "pr?" }`.
 - ` ```codeux:metrics ` — stat tile row: `{ "title?", "items": [{ "label", "value", "delta?", "tone": "up|down|flat" }] }`.
 - ` ```codeux:actions ` — suggested next steps: `{ "items": [{ "label", "prompt" }] }`; clicking sends the prompt immediately without changing the composer.
+- ` ```codeux:agent ` — dashboard-only avatar reaction metadata with a supported `emotion`, supported `animation`, optional caption of at most 120 characters, and integer `durationMs` from 500 through 10000. Valid blocks are persisted as `metadata.agentEffect` and removed from visible reply markdown; invalid blocks do not suppress the surrounding answer.
 
 ## Interaction
 - Seamless mode switching between the cinematic "3D Chat" stage, standard "Threads" (user-facing chat), and "Invocations" (runtime debugging transcript).

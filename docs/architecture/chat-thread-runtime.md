@@ -130,6 +130,8 @@ Outbound replies are also delivery records. When a system or assistant reply is 
 
 Dashboard-only rich widgets are suppressed for external channels because chat bridges receive plain markdown, not dashboard component instructions. Chat-provider-sourced prompts omit the `codeux:*` widget instruction block, replay/compaction inputs use the same suppression rules, and outbound delivery strips or downgrades any remaining dashboard-only widget fences before sending externally.
 
+Dashboard replies may also carry a bounded `agentEffect` in assistant-message metadata. JSON-mode replies emit it alongside `replyMarkdown`, management actions, and prompt suggestions; MCP-native replies emit the same contract in a `codeux:agent` JSON fence, which is removed from visible markdown after validation. The contract accepts only the documented emotion and animation identifiers, an optional caption of at most 120 characters, and an integer duration from 500 through 10000 milliseconds. Invalid effects are omitted without discarding the reply or changing management-action approval behavior. External chat prompts do not advertise this avatar-only contract, and outbound sanitization removes or downgrades any `codeux:agent` fence before delivery.
+
 ### Compact Conversation Behavior
 
 Long-running conversations accumulate large prompt histories, risking context window exhaustion or unbounded token costs. The chat runtime introduces a compact-conversation action (`compactThreadSession`).

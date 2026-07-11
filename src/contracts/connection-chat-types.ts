@@ -26,6 +26,45 @@ export interface PromptSuggestionsMetadata extends JsonObject {
   promptSuggestions: PromptSuggestion[];
 }
 
+export const AGENT_RESPONSE_EMOTIONS = [
+  "happy",
+  "sad",
+  "angry",
+  "sleepy",
+  "bored",
+  "curious",
+  "thinking",
+  "excited",
+  "surprised",
+  "proud",
+] as const;
+export type AgentResponseEmotion = typeof AGENT_RESPONSE_EMOTIONS[number];
+
+export const AGENT_RESPONSE_ANIMATIONS = [
+  "hyped",
+  "shake_head",
+  "nod",
+  "laughing",
+  "wink",
+  "dance",
+] as const;
+export type AgentResponseAnimation = typeof AGENT_RESPONSE_ANIMATIONS[number];
+
+export const AGENT_RESPONSE_EFFECT_MIN_DURATION_MS = 500;
+export const AGENT_RESPONSE_EFFECT_MAX_DURATION_MS = 10_000;
+export const AGENT_RESPONSE_EFFECT_MAX_CAPTION_LENGTH = 120;
+
+export interface AgentResponseEffect extends JsonObject {
+  emotion: AgentResponseEmotion;
+  animation: AgentResponseAnimation;
+  caption?: string;
+  durationMs: number;
+}
+
+export interface AgentResponseEffectMetadata extends JsonObject {
+  agentEffect: AgentResponseEffect;
+}
+
 export type ConversationMessageMetadata = JsonObject;
 
 export interface McpConnectionCapabilities {
