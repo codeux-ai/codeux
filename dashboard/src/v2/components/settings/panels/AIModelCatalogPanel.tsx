@@ -1,6 +1,6 @@
 import type { FunctionComponent } from "preact";
 import { useCallback, useEffect, useState } from "preact/hooks";
-import { Boxes, Check, Download, ExternalLink, Headphones, Loader2, Mic, Search, Settings2, Trash2, Volume2, Waves, X } from "lucide-preact";
+import { ArrowRight, Boxes, Check, Download, ExternalLink, Headphones, Loader2, Mic, Search, Settings2, Sparkles, Trash2, Volume2, Waves, X } from "lucide-preact";
 import type { SpeechModelStatus, SpeechProviderMode, SpeechSettings } from "../../../../types.js";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import {
@@ -22,6 +22,13 @@ import { SectionCard } from "./SharedPanelComponents.js";
 import { useConfirmDialog } from "../../../hooks/use-confirm-dialog.js";
 import { ConfirmDialog } from "../../ui/ConfirmDialog.js";
 import { Dialog } from "../../ui/Dialog.js";
+import {
+  getRecommendedSynthesisModel,
+  getRecommendedVoice,
+  getSynthesisLanguageOptions,
+  getVoiceLanguageCode,
+  isRecommendedForLanguage,
+} from "../../../lib/speech-model-recommendations.js";
 
 const EMPTY_STATS: MemoryStats = { sprint: 0, agent: 0, project: 0, activeModel: null, staleEmbeddings: 0 };
 const providerOptions = [
@@ -60,7 +67,8 @@ const SpeechModelCard: FunctionComponent<{
   onDownload: () => void;
   onActivate: () => void;
   onDelete: () => void;
-}> = ({ model, active, busy, onDownload, onActivate, onDelete }) => {
+  recommendationLabel?: string;
+}> = ({ model, active, busy, onDownload, onActivate, onDelete, recommendationLabel }) => {
   const Icon = model.kind === "transcription" ? Mic : Volume2;
   const licenseApproved = model.license.commercialUseAllowed
     && Boolean(model.license.id.trim() && model.license.name.trim())
@@ -75,9 +83,10 @@ const SpeechModelCard: FunctionComponent<{
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
+            <div className="min-w-0">
               <h4 className="font-semibold text-slate-900 dark:text-white">{model.displayName}</h4>
               <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{model.adapter} · {model.language} · {formatSize(model.sizeBytes)}</p>
+              {recommendationLabel ? <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-700 dark:text-signal-300"><Sparkles className="h-3 w-3" aria-hidden="true" /> Preferred for {recommendationLabel}</span> : null}
             </div>
             <span className={`rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] ${repairRequired ? "border-amber-500/25 text-amber-600" : active ? "border-signal-500/25 text-signal-700 dark:text-signal-300" : model.downloaded ? "border-slate-400/20 text-slate-500" : "border-amber-500/20 text-amber-600"}`}>
               {!licenseApproved ? "Unavailable" : repairRequired ? "Repair required" : model.downloading ? `${Math.round(model.downloadProgress * 100)}%` : active ? "Active" : model.downloaded ? "Installed" : "Available"}
@@ -184,17 +193,24 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
   const transcriptionModel = speechModels.find((model) => model.id === editableSettings.speech.localModelId);
   const activeEmbeddingModel = embeddingModels.find((model) => model.active);
   const selectedVoice = synthesisModel?.voices.find((voice) => voice.id === editableSettings.speech.synthesis.voice);
-  const voiceOptions = synthesisModel?.voices.length
-    ? synthesisModel.voices.map((voice) => ({ value: voice.id, label: `${voice.label} · ${voice.language}` }))
-    : [{ value: editableSettings.speech.synthesis.voice, label: editableSettings.speech.synthesis.voice }];
   const localTranscriptionLanguageOptions = transcriptionModel?.languages?.length
     ? [
       ...(transcriptionModel.supportsAutomaticLanguageDetection ? [{ value: "", label: "Auto-detect" }] : []),
       ...transcriptionModel.languages.map((language) => ({ value: language.code, label: language.label })),
     ]
     : transcriptionLanguageOptions;
-  const synthesisLanguageOptions = Array.from(new Set(synthesisModel?.voices.map((voice) => voice.language) ?? []))
-    .map((language) => ({ value: language, label: language }));
+  const synthesisLanguageOptions = getSynthesisLanguageOptions(speechModels);
+  const selectedSynthesisLanguage = synthesisModel
+    ? getVoiceLanguageCode(synthesisModel, selectedVoice) ?? getModelLanguages(synthesisModel)[0]?.code ?? ""
+    : "";
+  const selectedSynthesisLanguageLabel = synthesisLanguageOptions.find((language) => language.code === selectedSynthesisLanguage)?.label
+    ?? synthesisModel?.language
+    ?? "Choose a language";
+  const recommendedSynthesisModel = getRecommendedSynthesisModel(speechModels, selectedSynthesisLanguage);
+  const compatibleVoices = synthesisModel?.voices.filter((voice) => getVoiceLanguageCode(synthesisModel, voice) === selectedSynthesisLanguage) ?? [];
+  const voiceOptions = compatibleVoices.length
+    ? compatibleVoices.map((voice) => ({ value: voice.id, label: `${voice.label} · ${voice.language}` }))
+    : [{ value: editableSettings.speech.synthesis.voice, label: editableSettings.speech.synthesis.voice }];
 
   const run = async (modelId: string, action: () => Promise<void>): Promise<void> => {
     setBusyModelId(modelId);
@@ -253,12 +269,43 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
     await run(model.id, () => downloadSpeechModel(model.id, model.license.id));
   };
 
+  const applySynthesisLanguage = (languageCode: string): void => {
+    const model = getRecommendedSynthesisModel(speechModels, languageCode);
+    if (!model) return;
+    const voice = getRecommendedVoice(model, languageCode);
+    updateSpeech((speech) => ({
+      ...speech,
+      synthesis: {
+        ...speech.synthesis,
+        providerMode: "local_onnx",
+        localModelId: model.id,
+        voice: voice?.id ?? model.defaultVoice ?? speech.synthesis.voice,
+      },
+    }));
+  };
+
+  const openSynthesisCatalog = (languageCode = selectedSynthesisLanguage): void => {
+    setCatalogTab("synthesis");
+    setCatalogLanguage(languageCode || "all");
+    setCatalogSearch("");
+    setCatalogInstallState("all");
+    setSpeechSettingsOpen(false);
+    window.setTimeout(() => setCatalogOpen(true), 0);
+  };
+
   const speechInputSummary = editableSettings.speech.providerMode === "external_api"
     ? editableSettings.speech.externalTranscription.model || "External API"
     : transcriptionModel?.displayName || editableSettings.speech.localModelId;
   const speechOutputSummary = editableSettings.speech.synthesis.providerMode === "external_api"
     ? editableSettings.speech.synthesis.externalSynthesis.model || "External API"
     : synthesisModel?.displayName || editableSettings.speech.synthesis.localModelId;
+  const speechOutputStatus = editableSettings.speech.synthesis.providerMode === "local_onnx" && speechModels.length > 0 && !synthesisModel?.downloaded
+    ? "Download required"
+    : editableSettings.speech.synthesis.enabled
+      ? "Enabled"
+      : synthesisModel?.downloaded
+        ? "Ready"
+        : "Off";
   const tabOptions: Array<{ id: CatalogTab; label: string }> = [
     { id: "all", label: "All" },
     { id: "transcription", label: "Speech input" },
@@ -267,7 +314,12 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
   ];
   const catalogLanguageOptions = (() => {
     const languages = new Map<string, string>();
-    for (const model of speechModels) {
+    const modelsForTab = catalogTab === "transcription"
+      ? groups.transcription
+      : catalogTab === "synthesis"
+        ? groups.synthesis
+        : speechModels;
+    for (const model of modelsForTab) {
       for (const language of getModelLanguages(model)) languages.set(language.code, language.label);
     }
     return [...languages.entries()].sort((left, right) => left[1].localeCompare(right[1]));
@@ -282,7 +334,7 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
         </p>
         <div className="grid gap-3 xl:grid-cols-3">
           <CatalogSummaryRow icon={Mic} title="Speech input" value={speechInputSummary} detail={editableSettings.speech.providerMode === "external_api" ? editableSettings.speech.externalTranscription.language || "Auto language" : editableSettings.speech.localLanguage || transcriptionModel?.language || "Auto language"} status={editableSettings.speech.enabled ? "Enabled" : "Off"} />
-          <CatalogSummaryRow icon={Headphones} title="Speech output" value={speechOutputSummary} detail={editableSettings.speech.synthesis.providerMode === "external_api" ? editableSettings.speech.synthesis.externalSynthesis.voice : editableSettings.speech.synthesis.voice} status={editableSettings.speech.synthesis.enabled ? "Enabled" : "Off"} />
+          <CatalogSummaryRow icon={Headphones} title="Speech output" value={speechOutputSummary} detail={editableSettings.speech.synthesis.providerMode === "external_api" ? editableSettings.speech.synthesis.externalSynthesis.voice : selectedSynthesisLanguageLabel} status={speechOutputStatus} />
           <CatalogSummaryRow icon={Waves} title="Memory embeddings" value={activeEmbeddingModel?.displayName || stats.activeModel || "Not configured"} detail={`${embeddingModels.filter((model) => model.downloaded).length} installed · ${stats.staleEmbeddings} stale`} status={activeEmbeddingModel ? "Active" : "Available"} />
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -295,17 +347,17 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
         </div>
       </SectionCard>
 
-      <Dialog isOpen={speechSettingsOpen} onClose={() => setSpeechSettingsOpen(false)} ariaLabelledBy="speech-settings-dialog-title" className="w-[min(1120px,calc(100vw-2rem))] p-5 sm:p-6">
+      <Dialog isOpen={speechSettingsOpen} suspendFocusTrap={isLicenseOpen} onClose={() => setSpeechSettingsOpen(false)} ariaLabelledBy="speech-settings-dialog-title" className="w-[min(1120px,calc(100vw-1rem))] p-4 sm:w-[min(1120px,calc(100vw-2rem))] sm:p-6">
         <header className="flex items-start justify-between gap-4 border-b border-[color:var(--border-hairline)] pb-4">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-300">AI Models</p>
             <h2 id="speech-settings-dialog-title" className="mt-1 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">Speech runtime</h2>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Configure input and output without expanding the Settings page.</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Choose a language first. Code UX prepares the preferred local model and voice for you.</p>
           </div>
           <button type="button" onClick={() => setSpeechSettingsOpen(false)} aria-label="Close speech settings" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--border-hairline)] text-slate-500 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] dark:hover:bg-white/[0.05]"><X className="h-4 w-4" /></button>
         </header>
         <div className="mt-5 grid gap-5 xl:grid-cols-2">
-          <div className="overflow-hidden rounded-2xl border border-black/[0.06] dark:border-white/[0.07]">
+          <div className="order-2 overflow-hidden rounded-2xl border border-black/[0.06] xl:order-1 dark:border-white/[0.07]">
             <div className="flex items-center justify-between gap-3 border-b border-black/[0.06] bg-black/[0.025] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035]">
               <div className="flex items-center gap-2"><Mic className="h-4 w-4 text-signal-500" /><span className="text-xs font-bold uppercase tracking-[0.14em]">Speech to text</span></div>
               <Toggle aria-label="Enable speech to text" value={editableSettings.speech.enabled} onChange={(enabled) => updateSpeech((speech) => ({ ...speech, enabled }))} />
@@ -324,16 +376,32 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
             </> : null}
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-black/[0.06] dark:border-white/[0.07]">
+          <div className="order-1 overflow-hidden rounded-2xl border border-signal-500/20 bg-gradient-to-br from-signal-500/[0.055] to-transparent xl:order-2 dark:border-signal-500/20">
             <div className="flex items-center justify-between gap-3 border-b border-black/[0.06] bg-black/[0.025] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035]">
               <div className="flex items-center gap-2"><Headphones className="h-4 w-4 text-signal-500" /><span className="text-xs font-bold uppercase tracking-[0.14em]">Text to speech</span></div>
               <Toggle aria-label="Enable text to speech" value={editableSettings.speech.synthesis.enabled} onChange={(enabled) => updateSpeech((speech) => ({ ...speech, synthesis: { ...speech.synthesis, enabled } }))} />
             </div>
-            <Row label="Provider" description="Use an installed local ONNX model or an OpenAI-compatible API."><SelectInput aria-label="Text to speech provider" value={editableSettings.speech.synthesis.providerMode} onChange={(providerMode) => updateSpeech((speech) => ({ ...speech, synthesis: { ...speech.synthesis, providerMode: providerMode as SpeechProviderMode } }))} options={providerOptions} /></Row>
-            {editableSettings.speech.synthesis.providerMode === "local_onnx" && synthesisLanguageOptions.length > 0 ? <Row label="Language" description="Only languages backed by the selected, license-cleared voice bundle are available."><SelectInput aria-label="Text to speech language" value={selectedVoice?.language || synthesisLanguageOptions[0]?.value || ""} onChange={(language) => {
-              const voice = synthesisModel?.voices.find((candidate) => candidate.language === language);
-              if (voice) updateSpeech((speech) => ({ ...speech, synthesis: { ...speech.synthesis, voice: voice.id } }));
-            }} options={synthesisLanguageOptions} /></Row> : null}
+            {editableSettings.speech.synthesis.providerMode === "local_onnx" && synthesisLanguageOptions.length > 0 ? <Row label="Your language" description="We automatically select the preferred compatible model and a matching voice."><SelectInput aria-label="Text to speech language" value={selectedSynthesisLanguage} onChange={applySynthesisLanguage} options={synthesisLanguageOptions.map((language) => ({ value: language.code, label: language.label }))} /></Row> : null}
+            {editableSettings.speech.synthesis.providerMode === "local_onnx" && recommendedSynthesisModel ? <div className="mx-3 mb-3 rounded-2xl border border-signal-500/20 bg-white/70 p-4 dark:bg-white/[0.035]">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-signal-500/[0.1] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.13em] text-signal-700 dark:text-signal-300"><Sparkles className="h-3 w-3" aria-hidden="true" /> Preferred for {selectedSynthesisLanguageLabel}</span>
+                    <span className="rounded-full border border-signal-500/20 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-700 dark:text-signal-300">Selected</span>
+                    <span className={`rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] ${recommendedSynthesisModel.downloaded ? "border-emerald-500/20 text-emerald-600" : "border-amber-500/20 text-amber-600"}`}>{recommendedSynthesisModel.downloaded ? "Installed" : "Download required"}</span>
+                    <span className="rounded-full border border-slate-400/20 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500">{editableSettings.speech.synthesis.enabled ? "Output enabled" : "Output off"}</span>
+                  </div>
+                  <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">{recommendedSynthesisModel.displayName}</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{recommendedSynthesisModel.downloaded ? "Selected with a matching voice. Save Settings when you are ready." : `${formatSize(recommendedSynthesisModel.sizeBytes)} · Nothing downloads until you approve the license terms.`}</p>
+                </div>
+                {!recommendedSynthesisModel.downloaded ? <button type="button" aria-label={`Download recommended ${recommendedSynthesisModel.displayName} for ${selectedSynthesisLanguageLabel}`} onClick={() => void requestSpeechDownload(recommendedSynthesisModel)} disabled={busyModelId === recommendedSynthesisModel.id || recommendedSynthesisModel.downloading} className="inline-flex min-h-10 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-signal-500 px-4 py-2 text-xs font-bold text-white hover:bg-signal-400 disabled:cursor-wait disabled:opacity-60 sm:w-auto dark:text-void-950">
+                  {recommendedSynthesisModel.downloading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />} {recommendedSynthesisModel.downloading ? `${Math.round(recommendedSynthesisModel.downloadProgress * 100)}%` : "Download recommended"}
+                </button> : <span className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.07] px-4 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-300"><Check className="h-4 w-4" aria-hidden="true" /> Model installed</span>}
+              </div>
+              {recommendedSynthesisModel.downloading ? <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.08]" role="progressbar" aria-label={`${recommendedSynthesisModel.displayName} download progress`} aria-valuenow={Math.round(recommendedSynthesisModel.downloadProgress * 100)} aria-valuemin={0} aria-valuemax={100}><div className="h-full rounded-full bg-signal-500 transition-[width]" style={{ width: `${Math.round(recommendedSynthesisModel.downloadProgress * 100)}%` }} /></div> : null}
+              <button type="button" onClick={() => openSynthesisCatalog()} className="mt-3 inline-flex min-h-9 items-center gap-1.5 text-[11px] font-bold text-signal-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] dark:text-signal-300">Compare compatible models <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></button>
+            </div> : null}
+            <Row label="Provider" description="Local keeps audio on this device. API uses your configured speech provider."><SelectInput aria-label="Text to speech provider" value={editableSettings.speech.synthesis.providerMode} onChange={(providerMode) => updateSpeech((speech) => ({ ...speech, synthesis: { ...speech.synthesis, providerMode: providerMode as SpeechProviderMode } }))} options={providerOptions} /></Row>
             {editableSettings.speech.synthesis.providerMode === "local_onnx" ? <Row label="Local voice" description="Voice used by the 3D Chat project manager."><SelectInput aria-label="Local text to speech voice" value={editableSettings.speech.synthesis.voice} onChange={(voice) => updateSpeech((speech) => ({ ...speech, synthesis: { ...speech.synthesis, voice } }))} options={voiceOptions} /></Row> : null}
             <Row label="Speech speed" description="0.5× to 2×; 1× keeps the model's natural cadence."><NumberInput value={editableSettings.speech.synthesis.speed} min={0.5} max={2} step={0.05} onChange={(speed) => updateSpeech((speech) => ({ ...speech, synthesis: { ...speech.synthesis, speed } }))} /></Row>
             {editableSettings.speech.synthesis.providerMode === "external_api" ? <>
@@ -345,8 +413,9 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
             </> : null}
           </div>
         </div>
-        <footer className="mt-5 flex justify-end border-t border-[color:var(--border-hairline)] pt-4">
-          <button type="button" onClick={() => setSpeechSettingsOpen(false)} className="inline-flex min-h-10 items-center justify-center rounded-xl bg-signal-500 px-5 py-2 text-xs font-bold text-white hover:bg-signal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] dark:text-void-950">Done</button>
+        <footer className="mt-5 flex flex-col-reverse gap-2 border-t border-[color:var(--border-hairline)] pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-slate-400">Changes are applied when you save Settings.</p>
+          <button type="button" onClick={() => setSpeechSettingsOpen(false)} className="inline-flex min-h-10 w-full items-center justify-center rounded-xl bg-signal-500 px-5 py-2 text-xs font-bold text-white hover:bg-signal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] sm:w-auto dark:text-void-950">Done</button>
         </footer>
       </Dialog>
 
@@ -355,13 +424,13 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-300">Local runtime</p>
             <h2 id="model-catalog-dialog-title" className="mt-1 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">Model catalog</h2>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Search, review licenses, install, and activate speech or memory models.</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Recommended choices appear first. Every download still requires your approval.</p>
           </div>
           <button type="button" onClick={() => setCatalogOpen(false)} aria-label="Close model catalog" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--border-hairline)] text-slate-500 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] dark:hover:bg-white/[0.05]"><X className="h-4 w-4" /></button>
         </header>
         <div className="sticky top-0 z-10 -mx-1 mt-4 space-y-3 bg-white/95 px-1 py-1 backdrop-blur-xl dark:bg-void-800/95">
           <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filter models by purpose">
-            {tabOptions.map((tab) => <button key={tab.id} type="button" aria-pressed={catalogTab === tab.id} onClick={() => setCatalogTab(tab.id)} className={`shrink-0 rounded-xl border px-3 py-2 text-[11px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] ${catalogTab === tab.id ? "border-signal-500/25 bg-signal-500/[0.1] text-signal-700 dark:text-signal-300" : "border-[color:var(--border-hairline)] text-slate-500 hover:bg-black/[0.03] dark:hover:bg-white/[0.04]"}`}>{tab.label}</button>)}
+            {tabOptions.map((tab) => <button key={tab.id} type="button" aria-pressed={catalogTab === tab.id} onClick={() => { setCatalogTab(tab.id); setCatalogLanguage("all"); }} className={`shrink-0 rounded-xl border px-3 py-2 text-[11px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] ${catalogTab === tab.id ? "border-signal-500/25 bg-signal-500/[0.1] text-signal-700 dark:text-signal-300" : "border-[color:var(--border-hairline)] text-slate-500 hover:bg-black/[0.03] dark:hover:bg-white/[0.04]"}`}>{tab.label}</button>)}
           </div>
           {catalogTab === "transcription" || catalogTab === "synthesis" ? <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
             <label className="flex min-h-11 items-center gap-3 rounded-xl border border-[color:var(--border-hairline)] bg-black/[0.025] px-4 dark:bg-white/[0.035]">
@@ -390,11 +459,17 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
             <section key={kind} aria-label={kind === "transcription" ? "Speech to text models" : "Text to speech models"}>
               <div className="mb-2 flex items-center justify-between gap-3"><h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{kind === "transcription" ? "Speech input" : "Speech output"}</h3><span className="font-mono text-[10px] text-slate-400">{filteredGroups[kind].length}</span></div>
               <div className="grid gap-3 xl:grid-cols-2">
-              {filteredGroups[kind].map((model) => {
+              {[...filteredGroups[kind]].sort((left, right) => {
+                if (kind !== "synthesis" || catalogLanguage === "all") return 0;
+                return Number(isRecommendedForLanguage(right, speechModels, catalogLanguage)) - Number(isRecommendedForLanguage(left, speechModels, catalogLanguage));
+              }).map((model) => {
                 const active = kind === "transcription"
                   ? editableSettings.speech.enabled && editableSettings.speech.localModelId === model.id && editableSettings.speech.providerMode !== "external_api"
                   : editableSettings.speech.synthesis.enabled && editableSettings.speech.synthesis.localModelId === model.id && editableSettings.speech.synthesis.providerMode !== "external_api";
-                return <SpeechModelCard key={model.id} model={model} active={active} busy={busyModelId === model.id}
+                const recommendationLanguage = kind === "synthesis" && catalogLanguage !== "all" && isRecommendedForLanguage(model, speechModels, catalogLanguage)
+                  ? catalogLanguageOptions.find(([code]) => code === catalogLanguage)?.[1]
+                  : undefined;
+                return <SpeechModelCard key={model.id} model={model} active={active} busy={busyModelId === model.id} recommendationLabel={recommendationLanguage}
                   onDownload={() => void requestSpeechDownload(model)}
                   onDelete={() => void run(model.id, () => deleteSpeechModel(model.id))}
                   onActivate={() => {

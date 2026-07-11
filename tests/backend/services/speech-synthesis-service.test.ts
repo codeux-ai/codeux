@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SpeechSettings } from "../../../src/contracts/speech-types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
-import { SpeechSynthesisService } from "../../../src/services/speech-synthesis-service.js";
+import { resolvePiperSpeakerId, SpeechSynthesisService } from "../../../src/services/speech-synthesis-service.js";
 
 function settings(overrides: Partial<SpeechSettings["synthesis"]> = {}): SpeechSettings {
   return {
@@ -19,6 +19,14 @@ function settings(overrides: Partial<SpeechSettings["synthesis"]> = {}): SpeechS
 }
 
 describe("SpeechSynthesisService", () => {
+  it("maps the curated German MLS voice to its Piper speaker tensor id", () => {
+    expect(resolvePiperSpeakerId("piper-de-de-mls-medium", "mls-de-default", 236)).toBe(0);
+    expect(() => resolvePiperSpeakerId("piper-de-de-mls-medium", "missing-voice", 236))
+      .toThrow('Piper voice "missing-voice" is not available');
+    expect(() => resolvePiperSpeakerId("piper-de-de-mls-medium", "mls-de-default", 0))
+      .toThrow('Piper speaker 0 is invalid');
+  });
+
   it("sends OpenAI-compatible external synthesis requests and returns audio", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response(new Uint8Array([1, 2, 3]), {
       status: 200,

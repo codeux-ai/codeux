@@ -61,6 +61,10 @@ export interface SpeechModelVoice {
   id: string;
   label: string;
   language: string;
+  /** BCP-47 language tag used to match a voice to the user's speech language. */
+  languageCode?: string;
+  /** Piper speaker index for multi-speaker ONNX checkpoints. */
+  speakerId?: number;
 }
 
 export interface SpeechModelLanguage {
@@ -86,6 +90,8 @@ export interface SpeechModelCatalogItem {
   sampleRateHz: number;
   voices: SpeechModelVoice[];
   defaultVoice: string | null;
+  /** Language tags for which this is the catalog's preferred local model. */
+  recommendedForLanguages?: string[];
 }
 
 export interface SpeechModelStatus extends SpeechModelCatalogItem {

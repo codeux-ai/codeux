@@ -69,6 +69,17 @@ function encodeWave(samples: Float32Array, sampleRate: number): Buffer {
   return output;
 }
 
+export function resolvePiperSpeakerId(modelId: string, voiceId: string, numSpeakers?: number): number {
+  const model = resolveSpeechModelEntry(modelId);
+  const selectedVoice = model.voices.find((candidate) => candidate.id === voiceId);
+  if (!selectedVoice) throw new Error(`Piper voice "${voiceId}" is not available for model "${model.id}".`);
+  const speakerId = selectedVoice.speakerId ?? 0;
+  if (!Number.isSafeInteger(speakerId) || speakerId < 0 || (numSpeakers !== undefined && speakerId >= numSpeakers)) {
+    throw new Error(`Piper speaker ${speakerId} is invalid for model "${model.id}".`);
+  }
+  return speakerId;
+}
+
 function floatOutput(value: unknown): Float32Array {
   if (value instanceof Float32Array) return value;
   if (ArrayBuffer.isView(value)) return Float32Array.from(value as unknown as Iterable<number>);
@@ -133,7 +144,7 @@ export class SpeechSynthesisService {
     try {
       const audio = model.adapter === "kokoro"
         ? await this.synthesizeKokoro(text, voice, settings.synthesis.speed, model.id)
-        : await this.synthesizePiper(text, settings.synthesis.speed, model.id);
+        : await this.synthesizePiper(text, voice, settings.synthesis.speed, model.id);
       return { ok: true, audio, contentType: "audio/wav", provider: "local_onnx", model: model.id, voice };
     } catch (error) {
       const message = redactText(error instanceof Error ? error.message : String(error));
@@ -152,7 +163,11 @@ export class SpeechSynthesisService {
     if (!paths.phonemizerPath && !this.phonemize) throw new Error("Kokoro phonemizer is missing. Delete and download the model again.");
     const phonemes = this.phonemize
       ? await this.phonemize(text, voice.startsWith("b") ? "en-gb" : "en-us")
-      : await phonemizeKokoro(paths.phonemizerPath!, text, voice.startsWith("b"));
+      : await phonemizeKokoro(paths.phonemizerPath!, text, voice.startsWith("b"), {
+        runtimeSha256: paths.phonemizerSha256 ?? "",
+        dataPath: paths.phonemizerDataPath,
+        dataSha256: paths.phonemizerDataSha256,
+      });
     const tokens = Array.from(phonemes).map((symbol) => vocab[symbol]).filter((id): id is number => Number.isInteger(id)).slice(0, 510);
     if (tokens.length === 0) throw new Error("Kokoro phonemization did not produce supported tokens.");
 
@@ -180,7 +195,7 @@ export class SpeechSynthesisService {
     }
   }
 
-  private async synthesizePiper(text: string, speed: number, modelId: string): Promise<Buffer> {
+  private async synthesizePiper(text: string, voice: string, speed: number, modelId: string): Promise<Buffer> {
     const ort = await import("onnxruntime-node");
     const model = resolveSpeechModelEntry(modelId);
     const paths = getSpeechModelPaths(modelId, this.deps.dataDir);
@@ -192,11 +207,16 @@ export class SpeechSynthesisService {
       phoneme_id_map?: Record<string, number[]>;
       num_speakers?: number;
     };
+    const speakerId = resolvePiperSpeakerId(modelId, voice, config.num_speakers);
     const map = config.phoneme_id_map ?? {};
     if (!paths.phonemizerPath && !this.phonemize) throw new Error("Piper phonemizer is missing. Delete and download the model again.");
     const phonemes = this.phonemize
       ? await this.phonemize(text, config.espeak?.voice || "en-us")
-      : await phonemizeWithLocalRuntime(paths.phonemizerPath!, text, config.espeak?.voice || "en-us");
+      : await phonemizeWithLocalRuntime(paths.phonemizerPath!, text, config.espeak?.voice || "en-us", {
+        runtimeSha256: paths.phonemizerSha256 ?? "",
+        dataPath: paths.phonemizerDataPath,
+        dataSha256: paths.phonemizerDataSha256,
+      });
     const ids: number[] = [...(map["^"] ?? [1])];
     for (const symbol of Array.from(phonemes)) {
       const mapped = map[symbol];
@@ -217,7 +237,7 @@ export class SpeechSynthesisService {
           config.inference?.noise_w ?? 0.8,
         ), [3]),
       };
-      if (session.inputNames.includes("sid")) feeds.sid = new ort.Tensor("int64", BigInt64Array.of(0n), [1]);
+      if (session.inputNames.includes("sid")) feeds.sid = new ort.Tensor("int64", BigInt64Array.of(BigInt(speakerId)), [1]);
       const output = await session.run(feeds);
       const tensor = output[session.outputNames[0]!];
       if (!tensor) throw new Error("Piper returned no audio output.");
