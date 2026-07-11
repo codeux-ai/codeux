@@ -31,12 +31,6 @@ self-wakeup tool, the dedicated `add_long_term_memory` lane, and the default Pla
 for that dashboard chat turn. Explicitly narrowed dashboard reply policies still have both dedicated
 lanes forced on.
 
-Dashboard reply provider runs advertise their originating chat thread through the internal
-`X-Code-Ux-Thread` header on the built-in Code UX MCP connection. The gateway validates the value
-with the same identifier rules as agent and session ids and exposes it only as request-scoped server
-context. Non-chat connections omit it, custom MCP servers do not receive it, and it is not a public
-MCP tool argument.
-
 All inputs are validated against their declared JSON Schema (AJV) before dispatch; validation
 failures return `InvalidParams` with the failing JSON path.
 
@@ -92,6 +86,14 @@ Every tool requires `runtimeRoles: ["project_manager"]` and is enabled by defaul
 For `manage_projects` setup, clients may send setup options either as `setup.options` or as top-level `options`. `options.docs: true` is opt-in and embeds discovered repository documentation into the Knowledge docs library.
 
 For the full per-action payloads and return shapes, see [Management actions](/docs/developer-management-actions).
+
+### Background sprint planning
+
+`manage_sprints` with `action: "plan"` returns a `status: "started"` acknowledgement immediately after synchronous precondition validation, while planning continues server-side. The stable `result` fields are `status`, `message`, `projectId`, and `sprintId`; the acknowledgement does not mean generated tasks already exist or that optional auto-start has completed.
+
+For dashboard chat-originated calls, Code UX queues a due-now, non-recurring `agent_wakeup` after planning settles. It targets the originating thread and asks the chat agent to recap the generated task count and whether execution actually started. Planning failures queue a same-thread wakeup containing the failure reason and a request for a concise failure recap.
+
+Standalone MCP clients do not have originating dashboard chat-thread context. They receive the same acknowledgement without a completion wakeup and should poll `manage_sprints` and `manage_tasks`, or inspect relevant `manage_telemetry` state, for completion.
 
 ## `add_long_term_memory`
 

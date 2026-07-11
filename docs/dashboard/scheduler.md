@@ -144,6 +144,10 @@ Due entries execute through existing production paths:
 
 When an agent schedules a wakeup with `wakeAfterReply: true`, the entry is stored as due now. `ChatThreadRuntimeService` drains due scheduler entries after the current dashboard reply finishes and its in-flight turn is cleared, so the scheduled wakeup can start the next turn immediately without superseding the reply that created it.
 
+The direct MCP `manage_sprints` `plan` action reuses this existing wakeup bridge when it originates in dashboard chat. After background planning settles, Code UX creates a due-now, non-recurring `agent_wakeup` for the originating thread with `origin` and `source` set to `agent_scheduler`. A successful-planning wakeup asks the chat agent to review the generated tasks, recap their count, and report whether auto-start actually began execution. A failed-planning wakeup includes the failure reason and asks for a concise failure recap. Standalone MCP calls have no originating chat thread, so they do not create this wakeup and must poll sprint/task or telemetry state instead.
+
+This planning-completion behavior is an internal producer of the existing `agent_wakeup` target; it does not add a scheduling action or broaden either scheduler MCP surface. `manage_scheduler` remains the broad project-manager scheduler tool, while `scheduler_code_ux` remains restricted to agent-owned `list`, `schedule_wakeup`, and `cancel` operations.
+
 AI memory remediation entries create a `remediation` invocation record even when no cleanup candidates are found; in that case the invocation is completed with a skipped reason instead of dispatching an empty provider request.
 
 After a successful run, the service advances `nextRunAt` from the scheduled occurrence time. One-time entries move to `completed`; recurring entries stay `scheduled` until their count or end date/time is exhausted. Failed entries move to `failed` with `lastError` for operator visibility. Node-flow entries are durably claimed before `runFlow` is awaited so the same due occurrence is not dispatched again after a restart, then the scheduler entry is finalized from the returned node-flow run status.
