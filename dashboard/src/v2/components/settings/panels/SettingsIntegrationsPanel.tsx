@@ -1360,7 +1360,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
             helpId="integrations"
           >
             <NoticePanel tone="neutral" title="Docker-only linked directory">
-              Google Drive must already be linked and synced on this host. Code UX mounts the selected directory at the fixed <code>/mnt/google-drive</code> container path for Docker runs only; no Google credentials are stored.
+              Google Drive must already be linked and synced on this host. Code UX mounts the selected directory at the fixed <code>/mnt/code-ux/google-drive</code> container path for Docker runs only; no Google credentials are stored.
             </NoticePanel>
             <Row
               label="Enable Google Drive mount"
@@ -1398,7 +1398,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                 label="Linked Drive directory"
                 placeholder="Select a linked Google Drive directory"
                 helperText={hasLinkedDirectory
-                  ? "This host path stays inside the editable control and mounts at /mnt/google-drive."
+                  ? "This host path stays inside the editable control and mounts at /mnt/code-ux/google-drive."
                   : "No directory linked. Browse or enter the local Google Drive directory to configure the mount."}
               />
             </Row>
