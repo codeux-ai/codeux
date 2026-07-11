@@ -2,7 +2,7 @@ import type { FunctionComponent } from "preact";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import { NumberInput, Row, TextInput, Toggle } from "../SettingsFormFields.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
-import { Eye, Gauge, SlidersHorizontal } from "lucide-preact";
+import { AlertTriangle, Eye, Gauge, SlidersHorizontal, SquareTerminal } from "lucide-preact";
 import { PreviewEnvironmentEditor } from "../../browser/PreviewEnvironmentEditor.js";
 
 export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
@@ -136,7 +136,7 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
             max={65535}
           />
         </Row>
-        <Row label="Startup script path" description="Project-relative path used for the editable preview startup override script." badge={getFieldBadge("sprintPreview.startupScriptPath")} last>
+        <Row label="Startup script path" description="Project-relative path used for the editable preview startup override script." badge={getFieldBadge("sprintPreview.startupScriptPath")}>
           <TextInput
             value={editableSettings.sprintPreview.startupScriptPath}
             onChange={(value) => updateEditableSettings((current) => ({
@@ -148,6 +148,43 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
             }))}
             mono
           />
+        </Row>
+        <Row label="Default startup command" description="Optional command that replaces auto-detected preview startup. Per-container overrides can be set from Browser." badge={getFieldBadge("sprintPreview.startupCommand")} last>
+          <TextInput
+            value={editableSettings.sprintPreview.startupCommand ?? ""}
+            onChange={(value) => updateEditableSettings((current) => ({
+              ...current,
+              sprintPreview: {
+                ...current.sprintPreview,
+                startupCommand: value,
+              },
+            }))}
+            placeholder="pnpm dev --host 0.0.0.0"
+            mono
+          />
+        </Row>
+      </SectionCard>
+
+      <SectionCard title="Docker Access" watermark="ROOT" badge={getBadge("sprintPreview.allowDockerAccess")} icon={<SquareTerminal strokeWidth={2.4} />}>
+        <Row
+          label="Allow Docker access"
+          description="Mount the host Docker daemon socket and a compatible local Docker CLI into preview containers. Disabled by default."
+          badge={getFieldBadge("sprintPreview.allowDockerAccess")}
+          last
+        >
+          <div className="flex w-full max-w-xl flex-col gap-3">
+            <Toggle aria-label="Allow preview containers to control Docker" value={editableSettings.sprintPreview.allowDockerAccess ?? false} onChange={() => updateEditableSettings((current) => ({
+              ...current,
+              sprintPreview: {
+                ...current.sprintPreview,
+                allowDockerAccess: !current.sprintPreview.allowDockerAccess,
+              },
+            }))} />
+            <div className="flex gap-2 rounded-xl border border-status-amber/30 bg-status-amber/10 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:text-amber-200" role="note">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              Docker daemon access is equivalent to host-level control. Enable it only for trusted repositories and startup commands.
+            </div>
+          </div>
         </Row>
       </SectionCard>
 

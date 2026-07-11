@@ -5,6 +5,7 @@ export interface DockerContainerSummary {
   id: string;
   name: string | null;
   status: string | null;
+  exitCode?: number | null;
   hostPort?: number | null;
   labels: Record<string, string>;
 }
@@ -63,6 +64,7 @@ export class DockerSessionLifecycle {
         const sprintId = parts[4];
         const sessionId = parts[5];
         let parsedPort: number | null = null;
+        const exitCode = this.parseDockerExitCode(rawStatus);
 
         if (hasHostPort && parts.length > 6) {
           const hostPortStr = parts[6];
@@ -76,6 +78,7 @@ export class DockerSessionLifecycle {
           id,
           name: name || null,
           status: this.normalizeDockerState(rawStatus),
+          ...(exitCode === null ? {} : { exitCode }),
           ...(hasHostPort ? { hostPort: parsedPort } : {}),
           labels: {
             "code-ux.project-id": projectId || "",
@@ -104,5 +107,10 @@ export class DockerSessionLifecycle {
       return "restarting";
     }
     return normalized;
+  }
+
+  private parseDockerExitCode(rawStatus: string | null | undefined): number | null {
+    const match = String(rawStatus || "").match(/^Exited \((\d+)\)/i);
+    return match ? Number.parseInt(match[1], 10) : null;
   }
 }

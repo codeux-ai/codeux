@@ -137,6 +137,22 @@ describe("SprintPreviewRepository", () => {
     ]);
   });
 
+  it("persists and clears a per-container startup command override", async () => {
+    const { repository, projectId, sprintId } = await createFixture();
+    const session = repository.createSession({
+      projectId,
+      sprintId,
+      status: "starting",
+      containerAppPort: 3000,
+      startupScriptPath: ".code-ux/browser/start-preview.sh",
+      startupMode: "auto",
+      startupCommandOverride: " pnpm dev --host 0.0.0.0 ",
+    });
+
+    expect(session.startupCommandOverride).toBe("pnpm dev --host 0.0.0.0");
+    expect(repository.updateSession(session.id, { startupCommandOverride: null }).startupCommandOverride).toBeNull();
+  });
+
   it("falls back to the first mapping as primary when none is marked", async () => {
     const { repository, projectId, sprintId } = await createFixture();
 

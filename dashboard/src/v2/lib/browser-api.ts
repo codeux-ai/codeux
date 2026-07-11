@@ -67,6 +67,19 @@ export const savePreviewEnvironmentOverrides = async (
   });
 };
 
+export const savePreviewStartupCommandOverride = async (
+  projectId: string,
+  sprintId: string,
+  sessionId: string,
+  startupCommandOverride: string | null,
+): Promise<SprintPreviewSession> => {
+  return fetchJson(buildScopedPreviewSessionPath(projectId, sprintId, sessionId, "/startup-command"), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ startupCommandOverride }),
+  });
+};
+
 export const fetchPreviewLogs = async (projectId: string, sprintId: string, sessionId: string, tail = 200): Promise<{ logs: string }> => {
   const url = new URL(buildScopedPreviewSessionPath(projectId, sprintId, sessionId, "/logs"), window.location.origin);
   url.searchParams.set("tail", String(tail));

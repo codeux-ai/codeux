@@ -132,7 +132,7 @@ export class CodeUxServer {
   private static readonly WAL_CHECKPOINT_INTERVAL_MS = 60_000;
   private static readonly LOOP_INITIAL_DELAY_MS = 15_000;
   private static readonly STARTUP_RECOVERY_DELAY_MS = 1_000;
-  private static readonly STARTUP_CONTAINER_CLEANUP_DELAY_MS = 5_000;
+  private static readonly STARTUP_CONTAINER_CLEANUP_DELAY_MS = 0;
   private static readonly STARTUP_MAINTENANCE_DELAY_MS = 30_000;
   private static readonly SHUTDOWN_CLOSE_TIMEOUT_MS = 5_000;
   private static readonly SHUTDOWN_SIGNAL_TIMEOUT_MS = 30_000;
@@ -1178,7 +1178,7 @@ export class CodeUxServer {
         return;
       }
       void task().catch((error) => {
-        this.logger.error(`${label} failed`, { error });
+        this.logger.error?.(`${label} failed`, { error });
       });
     }, delayMs);
     timer.unref?.();
@@ -1224,12 +1224,12 @@ export class CodeUxServer {
     try {
       await this.sprintPreviewService.cleanupStaleContainersOnStartup();
     } catch (error) {
-      this.logger.error("Failed to clean up stale sprint preview containers on startup", { error });
+      this.logger.error?.("Failed to clean up stale sprint preview containers on startup", { error });
     }
     try {
       await this.sprintFileBrowserService.cleanupStaleContainersOnStartup();
     } catch (error) {
-      this.logger.error("Failed to clean up stale file browser containers on startup", { error });
+      this.logger.error?.("Failed to clean up stale file browser containers on startup", { error });
     }
     try {
       await new DockerAssetPruneService(
@@ -1237,7 +1237,7 @@ export class CodeUxServer {
         this.logger.child({ component: "docker-asset-prune-service" }),
       ).cleanupOnStartup();
     } catch (error) {
-      this.logger.error("Failed to prune stale Docker assets on startup", { error });
+      this.logger.error?.("Failed to prune stale Docker assets on startup", { error });
     }
   }
 
@@ -1319,6 +1319,7 @@ export class CodeUxServer {
       projectRoot: this.projectRoot,
       logger: this.logger,
     });
+    this.sprintPreviewService.prepareForStartupCleanup();
     this.refreshJulesApiKey();
     try {
       const startupPrune = this.connectionChatRepository.pruneDisconnectedConnectionsOnStartup();
@@ -1390,6 +1391,7 @@ export class CodeUxServer {
         getSprintPreviewScript: (projectId, sprintId) => this.sprintPreviewService.getScript(projectId, sprintId),
         saveSprintPreviewScript: (projectId, sprintId, content) => this.sprintPreviewService.saveScript(projectId, sprintId, content),
         updateSprintPreviewEnvironmentOverrides: (projectId, sprintId, sessionId, environmentOverrides) => this.sprintPreviewService.updateEnvironmentOverridesForProjectSprint(projectId, sprintId, sessionId, environmentOverrides),
+        updateSprintPreviewStartupCommandOverride: (projectId, sprintId, sessionId, startupCommandOverride) => this.sprintPreviewService.updateStartupCommandOverrideForProjectSprint(projectId, sprintId, sessionId, startupCommandOverride),
         getSprintPreviewLogs: (sessionId, tail) => this.sprintPreviewService.getLogs(sessionId, tail),
         getSprintPreviewLogsForProjectSprint: (projectId, sprintId, sessionId, tail) => this.sprintPreviewService.getLogsForProjectSprint(projectId, sprintId, sessionId, tail),
         proxySprintPreviewRequest: (args) => this.sprintPreviewService.proxyRequest(args),

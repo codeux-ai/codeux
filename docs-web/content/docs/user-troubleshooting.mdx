@@ -158,6 +158,8 @@ If the header Docker status control shows the red `Runtime not ready` warning, o
 
 For packaged Windows builds, Docker errors that show `C:\...` as a container `--workdir`, `HOME`, or mount target indicate an outdated build. Current preview containers mount Windows/macOS/Linux host runtime storage at Linux container paths under `/code-ux-preview-runtime`.
 
+Current preview routing fixes **Forbidden: Untrusted host** without weakening application allowlists by presenting one coherent local upstream host boundary. Exit-code-137 previews report the actual termination and previously healthy previews receive one bounded recovery attempt. Docker commands require the explicit Docker Access setting and grant effective host-level control.
+
 For packaged Windows builds, `spawn ENAMETOOLONG` during Docker provider launch indicates an outdated build or a launch path still passing a large prompt through the host command line. Current Docker provider runs mount provider arguments from a generated file so large prompts do not become `docker run` arguments.
 
 Chromium `tile_manager.cc` warnings about tile memory limits in the packaged Windows app indicate renderer memory pressure. Current Windows desktop builds use an opaque shell and GPU memory hints to mitigate this. All animated backgrounds remain enabled. If these warnings persist on older builds, try switching to a lighter animation style or setting background mode to Static in Settings > Appearance.

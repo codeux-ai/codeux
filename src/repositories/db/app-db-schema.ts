@@ -944,6 +944,7 @@ CREATE TABLE IF NOT EXISTS sprint_preview_sessions (
         install_command TEXT,
         build_command TEXT,
         run_command TEXT,
+        startup_command_override TEXT,
         environment_overrides_json TEXT,
         last_completed_task_count INTEGER NOT NULL DEFAULT 0,
         last_seen_sprint_status TEXT,

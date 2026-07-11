@@ -899,6 +899,8 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     containerAppPort: 3000,
     containerAppPorts: [3000],
     startupScriptPath: ".code-ux/browser/start-preview.sh",
+    startupCommand: "",
+    allowDockerAccess: false,
     environmentVariables: [],
   },
   workers: {

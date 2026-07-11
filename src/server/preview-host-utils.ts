@@ -171,23 +171,21 @@ export function buildPreviewProxyRequestHeaders(
   // forwarded: the preview iframe runs on its own origin (preview-<id>.localhost), so these
   // are the previewed app's own credentials — never the dashboard's — and stateful preview
   // apps (login/session flows) need them to reach the container.
-  const headersToStrip = ["set-cookie", "connection", "upgrade", "transfer-encoding", "content-length", "accept-encoding"];
+  const headersToStrip = ["set-cookie", "connection", "upgrade", "transfer-encoding", "content-length", "accept-encoding", "forwarded"];
   for (const key of Object.keys(headers)) {
     const lower = key.toLowerCase();
-    if (headersToStrip.includes(lower) || lower.startsWith("proxy-") || lower.startsWith("x-code-ux-")) {
+    if (headersToStrip.includes(lower) || lower.startsWith("proxy-") || lower.startsWith("x-code-ux-") || lower.startsWith("x-forwarded-")) {
       delete headers[key];
     }
   }
-  const upstreamOrigin = `http://127.0.0.1:${upstreamPort}`;
+  const upstreamOrigin = `http://localhost:${upstreamPort}`;
   const previewHost = String(req.headers.host || "");
   const previewOrigin = `${req.protocol || "http"}://${previewHost}`;
-  headers["x-forwarded-host"] = previewHost;
-  headers.host = `127.0.0.1:${upstreamPort}`;
-  headers["x-forwarded-proto"] = req.protocol || "http";
+  headers["x-forwarded-host"] = `localhost:${upstreamPort}`;
+  headers.host = `localhost:${upstreamPort}`;
+  headers["x-forwarded-proto"] = "http";
+  headers["x-forwarded-port"] = String(upstreamPort);
   normalizePreviewRequestOriginHeaders(headers, upstreamOrigin, previewOrigin);
-  if (req.socket.localPort) {
-    headers["x-forwarded-port"] = String(req.socket.localPort);
-  }
   return headers;
 }
 

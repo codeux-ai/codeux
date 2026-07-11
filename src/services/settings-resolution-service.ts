@@ -735,6 +735,12 @@ function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintP
       }
       return raw;
     })(),
+    startupCommand: typeof input.startupCommand === "string" && !input.startupCommand.includes("\0")
+      ? input.startupCommand.trim().slice(0, 8_192)
+      : defaults.startupCommand,
+    allowDockerAccess: typeof input.allowDockerAccess === "boolean"
+      ? input.allowDockerAccess
+      : defaults.allowDockerAccess,
     environmentVariables: sanitizePreviewEnvironmentVariables(input.environmentVariables),
   };
 }

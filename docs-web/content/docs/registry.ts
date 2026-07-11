@@ -479,7 +479,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/settings-runtime-limits',
     section: 'User Guide',
     title: "Runtime Limits",
-    description: "Sets preview container concurrency, host port range, app port, and startup script path.",
+    description: "Sets preview container concurrency, ports, startup behavior, and optional Docker daemon access.",
   },
   'settings-techstacks': {
     id: 'settings-techstacks',
