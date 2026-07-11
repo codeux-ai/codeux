@@ -369,10 +369,47 @@ describe("SprintLedger Component", () => {
     await waitFor(() => {
       // Canonical badge (mocked in this test file to return a div with testid)
       expect(screen.getByTestId("human-intervention-badge")).toBeInTheDocument();
+      expect(screen.getByRole("status", { name: "Sprint waiting for human intervention" })).toBeInTheDocument();
+      expect(screen.getByText("zZZ")).toBeInTheDocument();
 
       // Redundant inline text should be absent
       expect(screen.queryByText("Intervention")).not.toBeInTheDocument();
     });
+  });
+
+  it("gives failed execution precedence and a complete compact red row treatment", async () => {
+    const failedSprint: Sprint = {
+      ...mockSprints[0],
+      id: "sprint-failed",
+      name: "Failed Execution",
+      status: "failed",
+    };
+    const staleIntervention = {
+      title: "Manual approval required",
+      reason: "Review the changes",
+      instructions: "Approve or request changes",
+      attentionType: null,
+      severity: "high",
+      ownerType: "human",
+    };
+
+    render(
+      <SprintLedger
+        {...defaultProps}
+        sprints={[failedSprint]}
+        interventionBySprintId={new Map([[failedSprint.id, staleIntervention]])}
+      />,
+    );
+
+    const row = await screen.findByRole("row", { name: /Failed Execution/i });
+    const rowScope = within(row);
+    const indicator = rowScope.getByRole("status", { name: "Sprint execution failed" });
+    expect(indicator).toHaveAttribute("data-compact", "true");
+    expect(row).toHaveClass("sprint-attention-failure", "border-status-red/55");
+    expect(row.querySelectorAll("td[class*='lg:border-status-red/45']").length).toBeGreaterThan(1);
+    expect(rowScope.queryByRole("status", { name: "Sprint waiting for human intervention" })).not.toBeInTheDocument();
+    expect(rowScope.getByText("Failed")).toBeInTheDocument();
+    expect(rowScope.getByRole("progressbar", { name: "Failed Execution progress" })).toBeInTheDocument();
   });
 
   it("positions row action menu right-aligned and flips upward near viewport bottom", async () => {

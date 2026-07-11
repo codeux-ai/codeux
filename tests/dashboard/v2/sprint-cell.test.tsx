@@ -158,8 +158,32 @@ describe("SprintCell", () => {
 
     // Canonical badge should be present
     expect(screen.getByText("Needs you")).toBeDefined();
+    expect(screen.getByRole("status", { name: "Sprint waiting for human intervention" })).toBeDefined();
+    expect(screen.getByText("zZZ")).toBeDefined();
 
     // Redundant inline alert should be absent
     expect(screen.queryByText("Human intervention required")).toBeNull();
+  });
+
+  it("does not label a worker-owned pause as human intervention", () => {
+    render(
+      <SprintCell
+        sprint={{ ...defaultSprint, status: "paused" }}
+        isEven={true}
+        accentColor="text-blue-500"
+        humanIntervention={{
+          title: "Worker retry",
+          reason: "The worker is retrying execution",
+          instructions: "Wait for the worker",
+          attentionType: null,
+          severity: "medium",
+          ownerType: "worker",
+        }}
+      />,
+    );
+
+    expect(screen.queryByRole("status", { name: "Sprint waiting for human intervention" })).toBeNull();
+    expect(screen.queryByText("zZZ")).toBeNull();
+    expect(screen.queryByText("Needs you")).toBeNull();
   });
 });
