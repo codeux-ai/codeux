@@ -19,6 +19,7 @@ import type { MemoryPromotionService } from "../../../src/services/memory-promot
 import type { EmbeddingModelManager } from "../../../src/services/embedding-model-manager.js";
 import type { PlanningAgentService } from "../../../src/services/planning-agent-service.js";
 import type { SprintIssueService } from "../../../src/services/sprint-issue-service.js";
+import { runWithMcpAgentContext } from "../../../src/server/mcp-agent-context.js";
 
 interface JsonSchemaProperty {
   type?: unknown;
@@ -122,6 +123,9 @@ describe("ManagementToolHandler", () => {
         pullNextDispatch: vi.fn(),
         updateDispatch: vi.fn(),
       },
+      workerClarificationContinuationService: {
+        continueReply: vi.fn(),
+      },
     };
     handler = new ManagementToolHandler(deps);
   });
@@ -162,6 +166,31 @@ describe("ManagementToolHandler", () => {
       }
     });
     expect(response.isError).toBe(true);
+  });
+
+  it("routes clarification replies through provider continuation with the authenticated manager identity", async () => {
+    deps.workerClarificationContinuationService.continueReply.mockResolvedValue({
+      deliveryMode: "cli_workspace",
+      alreadySettled: false,
+      clarification: { id: "clarification-1", status: "replied" },
+    });
+
+    const response = await runWithMcpAgentContext("manager-1", () => handler.handleReplyToClarification({
+      projectId: "project-1",
+      clarificationId: "clarification-1",
+      answerMarkdown: "Preserve the legacy rows.",
+    }));
+
+    expect(deps.workerClarificationContinuationService.continueReply).toHaveBeenCalledWith({
+      projectId: "project-1",
+      clarificationId: "clarification-1",
+      answerMarkdown: "Preserve the legacy rows.",
+      repliedByAgentId: "manager-1",
+    });
+    expect(JSON.parse(response.content[0].text)).toMatchObject({
+      deliveryMode: "cli_workspace",
+      alreadySettled: false,
+    });
   });
 
   it("returns standardized validation envelopes for blank required strings", async () => {

@@ -4,6 +4,7 @@ import type {
   ReplyToWorkerClarificationInput,
   ResolveWorkerClarificationInput,
   WorkerClarificationEventMetadata,
+  WorkerClarificationContinuationRequest,
   WorkerClarificationRecord,
   WorkerClarificationReplyResult,
 } from "../contracts/worker-clarification-types.js";
@@ -86,6 +87,15 @@ export class WorkerClarificationService {
     clarificationId: string,
     input: ReplyToWorkerClarificationInput,
   ): WorkerClarificationReplyResult {
+    const continuation = this.prepareReply(projectId, clarificationId, input);
+    return this.completeReply(continuation);
+  }
+
+  prepareReply(
+    projectId: string,
+    clarificationId: string,
+    input: ReplyToWorkerClarificationInput,
+  ): WorkerClarificationContinuationRequest {
     const normalizedProjectId = requiredText(projectId, "Project id", MAX_IDENTIFIER_CHARS);
     this.requireProject(normalizedProjectId);
     const answerMarkdown = requiredText(
@@ -94,28 +104,46 @@ export class WorkerClarificationService {
       MAX_WORKER_CLARIFICATION_ANSWER_MARKDOWN_CHARS,
     );
     const repliedByAgentId = requiredText(input.repliedByAgentId, "Replying agent id", MAX_IDENTIFIER_CHARS);
+    const normalizedClarificationId = requiredText(clarificationId, "Clarification id", MAX_IDENTIFIER_CHARS);
+    const current = this.clarificationRepository.get(normalizedProjectId, normalizedClarificationId);
+    if (!current) throw new EntityNotFoundError(`Worker clarification not found: ${normalizedClarificationId}`);
+    if (current.status !== "pending") {
+      throw new ValidationError(`Clarification ${normalizedClarificationId} has already been resolved.`);
+    }
+    return this.buildContinuation(current, answerMarkdown, repliedByAgentId);
+  }
+
+  completeReply(continuation: WorkerClarificationContinuationRequest): WorkerClarificationReplyResult {
     const clarification = this.clarificationRepository.markReplied(
-      normalizedProjectId,
-      requiredText(clarificationId, "Clarification id", MAX_IDENTIFIER_CHARS),
-      { answerMarkdown, repliedByAgentId, repliedAt: this.now() },
+      continuation.projectId,
+      continuation.clarificationId,
+      {
+        answerMarkdown: continuation.answerMarkdown,
+        repliedByAgentId: continuation.repliedByAgentId,
+        repliedAt: this.now(),
+      },
     );
-    this.appendTaskRunEvent(clarification, "worker_clarification_replied", repliedByAgentId);
+    this.appendTaskRunEvent(clarification, "worker_clarification_replied", continuation.repliedByAgentId);
+    return { clarification, continuation };
+  }
+
+  getSettledReplyResult(projectId: string, clarificationId: string): WorkerClarificationReplyResult | null {
+    const clarification = this.get(projectId, clarificationId);
+    if (
+      !clarification
+      || clarification.status !== "replied"
+      || !clarification.answerMarkdown
+      || !clarification.repliedByAgentId
+    ) {
+      return null;
+    }
     return {
       clarification,
-      continuation: {
-        kind: "worker_clarification_reply",
-        clarificationId: clarification.id,
-        projectId: clarification.projectId,
-        taskId: clarification.taskId,
-        sprintId: clarification.sprintId,
-        sprintRunId: clarification.sprintRunId,
-        dispatchId: clarification.dispatchId,
-        taskRunId: clarification.taskRunId,
-        sessionId: clarification.sessionId,
-        requesterAgentId: clarification.requesterAgentId,
-        repliedByAgentId,
-        answerMarkdown,
-      },
+      continuation: this.buildContinuation(
+        clarification,
+        clarification.answerMarkdown,
+        clarification.repliedByAgentId,
+      ),
     };
   }
 
@@ -228,5 +256,26 @@ export class WorkerClarificationService {
     this.executionRepository.appendTaskRunEvent(record.taskRunId, eventType, originator, { ...metadata }, {
       sourceEventKey: `worker-clarification:${record.id}:${eventType}`,
     });
+  }
+
+  private buildContinuation(
+    clarification: WorkerClarificationRecord,
+    answerMarkdown: string,
+    repliedByAgentId: string,
+  ): WorkerClarificationContinuationRequest {
+    return {
+      kind: "worker_clarification_reply",
+      clarificationId: clarification.id,
+      projectId: clarification.projectId,
+      taskId: clarification.taskId,
+      sprintId: clarification.sprintId,
+      sprintRunId: clarification.sprintRunId,
+      dispatchId: clarification.dispatchId,
+      taskRunId: clarification.taskRunId,
+      sessionId: clarification.sessionId,
+      requesterAgentId: clarification.requesterAgentId,
+      repliedByAgentId,
+      answerMarkdown,
+    };
   }
 }

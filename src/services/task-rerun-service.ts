@@ -38,6 +38,27 @@ export interface TaskRerunOptions {
   undoMerge?: boolean;
 }
 
+export interface TaskClarificationContinuationInput {
+  answerMarkdown: string;
+  provider: ProviderId;
+  model?: string;
+  providerConfigId?: string;
+  resumeWorkspaceSessionId: string;
+  resumeWorkerBranch: string;
+}
+
+export const buildClarificationContinuationPrompt = (prompt: string, answerMarkdown: string): string => `${prompt.trimEnd()}
+
+---
+
+## PROJECT MANAGER CLARIFICATION ANSWER
+
+${answerMarkdown.trim()}
+
+## CONTINUATION INSTRUCTION
+
+Continue the existing task in the preserved workspace and provider session using the answer above.`;
+
 export interface TaskRerunSprintRunResolution {
   sprintRunId: string;
   created: boolean;
@@ -131,6 +152,67 @@ export class TaskRerunService {
       reason: "task_rerun_reset",
       resumeSprintRun: sprintRun.created,
     });
+  }
+
+  async continueTaskFromClarification(
+    taskId: string,
+    input: TaskClarificationContinuationInput,
+  ): Promise<Subtask> {
+    const context = this.deps.resolveTaskContext(taskId);
+    if (!context) {
+      throw new Error("Cannot continue task: sprint context is incomplete. Run orchestration/status first.");
+    }
+    if (!input.resumeWorkspaceSessionId.trim() || !input.resumeWorkerBranch.trim()) {
+      throw new Error("Cannot continue task: a preserved workspace session and worker branch are required.");
+    }
+
+    const sprintRun = await this.deps.resolveSprintRunId({
+      projectId: context.projectId,
+      sprintId: context.sprintId,
+      sprintNumber: context.sprintNumber,
+      featureBranch: context.featureBranch,
+    });
+    const continuationTask: Subtask = {
+      ...context.task,
+      prompt: buildClarificationContinuationPrompt(context.task.prompt, input.answerMarkdown),
+      provider: input.provider,
+      model: input.model ?? context.task.model,
+    };
+    const session = await this.deps.startTask({
+      task: continuationTask,
+      projectId: context.projectId,
+      sprintId: context.sprintId,
+      sprintRunId: sprintRun.sprintRunId,
+      sourceId: context.sourceId,
+      featureBranch: context.featureBranch,
+      repoPath: context.repoPath,
+      sprintNumber: context.sprintNumber,
+      providerConfigId: input.providerConfigId,
+      resumeWorkspaceSessionId: input.resumeWorkspaceSessionId,
+      resumeWorkerBranch: input.resumeWorkerBranch,
+      forceFreshWorkspace: false,
+    });
+    const continuedTask: Subtask = {
+      ...continuationTask,
+      status: "RUNNING",
+      session_name: this.deps.resolveSessionName(session),
+      session_id: this.deps.extractSessionId(session),
+      worker_branch: input.resumeWorkerBranch,
+      provider: normalizeProviderId(session.provider) ?? input.provider,
+    };
+    if (sprintRun.created && this.deps.resumeSprintRun) {
+      try {
+        await this.deps.resumeSprintRun(sprintRun.sprintRunId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.deps.logger?.warn("Failed to resume sprint orchestration after clarification continuation", {
+          taskId,
+          sprintRunId: sprintRun.sprintRunId,
+          message,
+        });
+      }
+    }
+    return continuedTask;
   }
 
   private collectDependentContexts(

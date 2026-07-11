@@ -47,6 +47,7 @@ import type {
 import type { SkillService } from "../services/skill-service.js";
 import type { NodeFlowService } from "../services/node-flow-service.js";
 import type { WorkerClarificationService } from "../services/worker-clarification-service.js";
+import type { WorkerClarificationContinuationService } from "../services/worker-clarification-continuation-service.js";
 
 import type { PlanningAgentService } from "../services/planning-agent-service.js";
 import type { ProjectSetupService } from "../services/project-setup-service.js";
@@ -102,6 +103,7 @@ export interface ManagementToolHandlerDeps {
   logger?: Logger;
   workerTaskDispatchService?: WorkerTaskDispatchService;
   workerClarificationService?: WorkerClarificationService;
+  workerClarificationContinuationService?: WorkerClarificationContinuationService;
 }
 
 const MANAGEMENT_APPROVAL_TTL_MS = 15 * 60 * 1000;
@@ -568,12 +570,20 @@ export class ManagementToolHandler {
 
   async handleReplyToClarification(args: ReplyToClarificationArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
-      if (!this.deps.workerClarificationService) {
-        throw new Error("Worker clarification service is not enabled.");
+      const repliedByAgentId = getCurrentMcpAgentId() ?? "project-manager-mcp-client";
+      if (this.deps.workerClarificationContinuationService) {
+        const result = await this.deps.workerClarificationContinuationService.continueReply({
+          projectId: args.projectId,
+          clarificationId: args.clarificationId,
+          answerMarkdown: args.answerMarkdown,
+          repliedByAgentId,
+        });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
+      if (!this.deps.workerClarificationService) throw new Error("Worker clarification service is not enabled.");
       const result = this.deps.workerClarificationService.reply(args.projectId, args.clarificationId, {
         answerMarkdown: args.answerMarkdown,
-        repliedByAgentId: getCurrentMcpAgentId() ?? "project-manager-mcp-client",
+        repliedByAgentId,
       });
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     } catch (error) {

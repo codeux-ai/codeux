@@ -8,6 +8,8 @@ import { resolveEffectiveDashboardSettings } from "../../services/settings-resol
 import type { DashboardDependencies } from "./dashboard-factory.js";
 import { WorkerClarificationRepository } from "../../repositories/worker-clarification-repository.js";
 import { WorkerClarificationService } from "../../services/worker-clarification-service.js";
+import { WorkerClarificationContinuationService } from "../../services/worker-clarification-continuation-service.js";
+import { isProjectManagerClarificationAgent } from "../../services/agent-mcp-access.js";
 
 export interface McpDependencies {
   managementToolHandler: ManagementToolHandler;
@@ -32,6 +34,38 @@ export function createMcpDependencies(
 
     return effective.settings;
   };
+
+  const workerClarificationService = new WorkerClarificationService(
+    new WorkerClarificationRepository(coreDeps.projectAttentionRepository),
+    coreDeps.projectManagementRepository,
+    coreDeps.executionRepository,
+  );
+  const workerClarificationContinuationService = new WorkerClarificationContinuationService({
+    clarificationService: workerClarificationService,
+    taskRerunService: dashboardDeps.taskRerunService,
+    executionRepository: coreDeps.executionRepository,
+    projectManagementRepository: coreDeps.projectManagementRepository,
+    sendJulesSessionMessage: async (sessionId, answerMarkdown) => {
+      await coreDeps.julesApi.sendSessionMessage(sessionId, answerMarkdown);
+    },
+    isAuthorizedProjectManager: (projectId, agentId) => {
+      if (agentId === "project-manager-mcp-client") return true;
+      const agent = coreDeps.agentPresetRepository.getAgentPreset(agentId);
+      if (!agent || agent.projectId !== projectId) return false;
+      const settings = getDashboardSettings({ projectId });
+      return isProjectManagerClarificationAgent({ agentId: agent.id, agentName: agent.name, settings });
+    },
+    resolveProviderConfigId: (projectId, taskAgentPresetId) => {
+      const settings = getDashboardSettings({ projectId });
+      const configuredAgentId = settings.agents.routing.taskCoding.mode === "MANUAL"
+        ? settings.agents.routing.taskCoding.agentPresetId
+        : null;
+      const agentId = taskAgentPresetId || configuredAgentId;
+      if (!agentId) return undefined;
+      const agent = coreDeps.agentPresetRepository.getAgentPreset(agentId);
+      return agent?.projectId === projectId ? agent.providerConfigId ?? undefined : undefined;
+    },
+  });
 
   const managementToolHandler = new ManagementToolHandler({
     sprintPreviewService: coreDeps.sprintPreviewService,
@@ -58,11 +92,8 @@ export function createMcpDependencies(
     schedulerService: dashboardDeps.schedulerService,
     logger: coreDeps.logger.child({ component: "mcp-management-tool-handler" }),
     workerTaskDispatchService: sprintDeps.workerTaskDispatchService,
-    workerClarificationService: new WorkerClarificationService(
-      new WorkerClarificationRepository(coreDeps.projectAttentionRepository),
-      coreDeps.projectManagementRepository,
-      coreDeps.executionRepository,
-    ),
+    workerClarificationService,
+    workerClarificationContinuationService,
   });
 
   return {

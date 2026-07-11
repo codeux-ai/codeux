@@ -16,9 +16,9 @@ Clarifications move from `pending` to exactly one terminal state:
 - `expired` when its deadline elapses;
 - `cancelled` when it is withdrawn.
 
-Replies atomically close the active attention item, so a second answer cannot replace the first. Expiry and cancellation are idempotent. Questions are limited to 16,000 characters and answers to 32,000 characters.
+Replies close the active attention item only after provider delivery or workspace continuation succeeds. Repeated replies return the settled result without sending another message or starting another run. Expiry and cancellation are idempotent. Questions are limited to 16,000 characters and answers to 32,000 characters.
 
-Every task, sprint, sprint run, dispatch, and task-run reference is checked against the declared project and against the other linked runtime records. Reads and mutations require the owning project id as well as the clarification id.
+Every task, sprint, sprint run, dispatch, and task-run reference is checked against the declared project and against the other linked runtime records. Reads and mutations require the owning project id as well as the clarification id, and continuation verifies that the replying agent is an eligible project manager for that project.
 
 ## MCP audience boundary
 
@@ -30,6 +30,8 @@ Listing and invocation use the same checks. Unknown or ineligible agents, cross-
 
 A project-scoped deduplication key makes repeated identical submissions return the existing clarification. Reusing the key for different request content or runtime scope is rejected.
 
-Task-run-backed clarifications emit idempotent lifecycle events with clarification, attention, project, task, sprint, dispatch, task-run, session, requester, and status metadata.
+Task-run-backed clarifications emit idempotent lifecycle and delivery events with clarification, attention, project, task, sprint, dispatch, task-run, provider session, requester, and status metadata.
 
-Reply results expose a typed continuation request containing the answer and provider-session correlation. Provider continuation is intentionally outside this contract and is not performed automatically.
+Jules replies use the existing session-message API. Local CLI and virtual coding replies append a delimited manager-answer follow-up and resume the preserved workspace, worker branch, provider, model, task agent, and native session lineage through the task rerun path. Runtime state and attention are updated only after that continuation is accepted.
+
+Taskless questions record the manager answer without creating a coding dispatch. A task-backed reply remains pending when its provider session or preserved CLI workspace is unavailable.
