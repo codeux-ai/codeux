@@ -5,6 +5,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { ListToolsRequestSchema, ListToolsResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import { bootMcpHttpTransport, type McpHttpTransportHandle } from "../../../../src/app/lifecycle/mcp-lifecycle-service.js";
+import { getCurrentMcpAgentId, getCurrentMcpThreadId } from "../../../../src/server/mcp-agent-context.js";
 
 const handles: McpHttpTransportHandle[] = [];
 const STRONG_TOKEN = "cux_test_abcdefghijklmnopqrstuvwxyz123456";
@@ -19,7 +20,7 @@ afterEach(async () => {
   }
 });
 
-function createTestServer(): Server {
+function createTestServer(onListTools?: () => void): Server {
   const server = new Server(
     {
       name: "test-mcp-http-server",
@@ -32,18 +33,21 @@ function createTestServer(): Server {
     },
   );
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [
-      {
-        name: "listen",
-        description: "Listen for Code UX work",
-        inputSchema: {
-          type: "object",
-          properties: {},
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    onListTools?.();
+    return {
+      tools: [
+        {
+          name: "listen",
+          description: "Listen for Code UX work",
+          inputSchema: {
+            type: "object",
+            properties: {},
+          },
         },
-      },
-    ],
-  }));
+      ],
+    };
+  });
 
   return server;
 }
@@ -64,18 +68,21 @@ function createLogger(overrides: Partial<{
   return logger as any;
 }
 
-function createAuthClient(handle: McpHttpTransportHandle, authToken?: string): { client: Client; transport: StreamableHTTPClientTransport } {
+function createAuthClient(
+  handle: McpHttpTransportHandle,
+  authToken?: string,
+  headers: Record<string, string> = {},
+): { client: Client; transport: StreamableHTTPClientTransport } {
   const transport = new StreamableHTTPClientTransport(
     new URL(`http://127.0.0.1:${handle.port}${handle.path}`),
-    authToken
-      ? {
-          requestInit: {
-            headers: {
-              Authorization: `Bearer ${authToken}`,
-            },
-          },
-        }
-      : undefined,
+    {
+      requestInit: {
+        headers: {
+          ...headers,
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+      },
+    },
   );
   const client = new Client({ name: "test", version: "1.0.0" });
   return { client, transport };
@@ -524,6 +531,43 @@ describe("bootMcpHttpTransport", () => {
       body: "{}"
     });
     expect(res2.status).toBe(400);
+
+    const res3 = await fetch(`http://127.0.0.1:${handle!.port}${handle!.path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-code-ux-thread": "invalid/thread",
+      },
+      body: "{}",
+    });
+    expect(res3.status).toBe(400);
+  });
+
+  it("exposes valid agent and thread headers through the MCP request context", async () => {
+    const observedContext = vi.fn();
+    const handle = await bootMcpHttpTransport({
+      enabled: true,
+      host: "127.0.0.1",
+      port: 0,
+      path: "/mcp",
+      authToken: null,
+      logger: createLogger(),
+      createServer: () => createTestServer(() => {
+        observedContext(getCurrentMcpAgentId(), getCurrentMcpThreadId());
+      }),
+      recoveryService: { recover: async () => ({ resumedSprintRunIds: [] }) } as any,
+    });
+    handles.push(handle!);
+
+    const { client, transport } = createAuthClient(handle!, undefined, {
+      "X-Code-Ux-Agent": "agent-9",
+      "X-Code-Ux-Thread": "thread-7",
+    });
+    await client.connect(transport);
+    await client.request({ method: "tools/list", params: {} }, ListToolsResultSchema);
+
+    expect(observedContext).toHaveBeenCalledWith("agent-9", "thread-7");
+    await transport.close();
   });
 
   it("rejects malformed authorization without leaking session state or bearer values", async () => {

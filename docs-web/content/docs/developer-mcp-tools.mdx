@@ -31,6 +31,12 @@ self-wakeup tool, the dedicated `add_long_term_memory` lane, and the default Pla
 for that dashboard chat turn. Explicitly narrowed dashboard reply policies still have both dedicated
 lanes forced on.
 
+Dashboard reply provider runs advertise their originating chat thread through the internal
+`X-Code-Ux-Thread` header on the built-in Code UX MCP connection. The gateway validates the value
+with the same identifier rules as agent and session ids and exposes it only as request-scoped server
+context. Non-chat connections omit it, custom MCP servers do not receive it, and it is not a public
+MCP tool argument.
+
 All inputs are validated against their declared JSON Schema (AJV) before dispatch; validation
 failures return `InvalidParams` with the failing JSON path.
 
