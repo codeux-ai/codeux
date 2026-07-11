@@ -15,6 +15,8 @@ Markdown links use the dashboard's theme-aware signal colors across thread messa
 
 3D chat and agent avatar surfaces use the standard WebGL avatar with studio lighting and pointer-aware head movement. The removed flashlight beam, target glow, low-battery flicker, and emissive shell boost are no longer part of the chat layout; reduced-motion settings or WebGL fallback mode continue to use the static SVG avatar.
 
+The 3D stage enters its Project Manager working state only while the selected thread awaits that agent's reply or a running dashboard/worker reply invocation belongs to the same resolved agent preset. Other agents' replies and unrelated task, planning, or CI invocations remain truthful background activity; they do not make the Project Manager show a thinking expression, thought bubble, or work tool, and they do not suppress the stage's idle quick actions. Sending a message keeps its separate routing state until the awaited reply or matching invocation is visible.
+
 When a text-to-speech model or API is active under **Settings -> AI Models**, 3D Chat reads new Project Manager replies aloud. A compact control dock beneath the avatar identity holds the microphone and agent mute/unmute buttons, outside the composer. Voice defaults on, shows synthesis activity, and can be muted immediately. The preference is remembered per project in the current browser; opening an existing thread does not replay its latest historical message.
 
 ## No-project assistant
