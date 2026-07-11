@@ -53,11 +53,28 @@ Domain for project CRUD and selection.
 | `force_cancel` | – | `sprintRunId` | Force-cancel (immediate). |
 | `inspect_run` | – | `projectId`, `sprintId`, `sprintRunId?` | Inspect run(s). |
 | `import_issues` | – | `projectId`, optional `sprintId`, filters | Search provider issues, and optionally replace sprint linked issues. |
-| `plan` | – | `projectId`, `sprintId` | Start the planning agent in the background and return `status: "started"` immediately after synchronous precondition validation. Optional `autoStart`, `replan`, `planningAgentPresetId`, and `overrides` are preserved. MCP dashboard-chat calls receive a same-thread scheduler wakeup after planning completes or fails. |
+| `plan` | – | `projectId`, `sprintId` | Start the planning agent server-side and return a started acknowledgement immediately after synchronous precondition validation. Optional `autoStart`, `replan`, `planningAgentPresetId`, and `overrides` are preserved. |
 
 `title` and `goalMarkdown` are MCP-friendly aliases. The repository stores sprint `name` and `goal`.
 
-The immediate `plan` response does not mark planning complete. Task persistence, planning self-reflection, and optional sprint execution remain owned by the background planning workflow. `import_issues` with `planAfterImport` and non-MCP planning callers retain their awaited behavior.
+The stable immediate response is:
+
+```json
+{
+  "result": {
+    "status": "started",
+    "message": "Sprint planning started in the background. You will be notified when it completes or fails.",
+    "projectId": "project-123",
+    "sprintId": "sprint-123"
+  }
+}
+```
+
+The stable `result` fields are `status`, `message`, `projectId`, and `sprintId`. This response acknowledges that background planning started; it does not mark planning complete, promise that tasks already exist, or indicate that optional auto-start has completed. Task persistence, planning self-reflection, and optional sprint execution remain owned by the background workflow.
+
+For MCP calls made from dashboard chat, planning success queues a due-now, non-recurring `agent_wakeup` for the originating thread. The wakeup asks the chat agent to recap the generated task count and whether execution actually started. Planning failure queues a same-thread wakeup with the failure reason and asks for a concise failure recap. Standalone MCP clients receive the acknowledgement without a chat wakeup and should poll `manage_sprints` and `manage_tasks`, or inspect relevant `manage_telemetry` state, for completion.
+
+This detached behavior applies only to the direct MCP `plan` action. `import_issues` with `planAfterImport` and non-MCP planning callers retain their awaited behavior.
 
 ---
 

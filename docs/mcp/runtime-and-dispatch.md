@@ -89,6 +89,14 @@ MCP tool calls are wrapped in a correlation scope before dispatch.
 
 This allows all log lines emitted during a tool call to share a single `correlationId`.
 
+## Request-Scoped Agent And Thread Context
+
+Dashboard chat reply turns clone the base Code UX MCP connection and attach the active `threadId` only to that turn. Provider configuration emits the originating thread as the internal `X-Code-Ux-Thread` header on the built-in Code UX MCP connection; non-chat provider runs omit it, and custom MCP servers never receive it. The HTTP gateway validates the header with the same single-value identifier rules used for MCP agent and session headers.
+
+The MCP gateway stores the resolved agent and thread identities in request-scoped `AsyncLocalStorage`. A direct `manage_sprints` `plan` call captures both identities before returning its immediate acknowledgement, so its detached planning continuation can target a completion or failure `agent_wakeup` to the originating dashboard thread after the planning promise settles. This header and context propagation are internal runtime architecture, not public MCP tool arguments.
+
+Standalone MCP clients do not have this dashboard thread context. Their background planning still continues server-side, but no chat wakeup is queued; those clients poll sprint/task management or telemetry state for completion.
+
 ## Dispatch Layers
 
 - Typed registry layer: `src/api/mcp/tool-registry.ts`

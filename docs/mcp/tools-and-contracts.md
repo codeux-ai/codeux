@@ -108,8 +108,6 @@ For a resolved agent policy:
 
 The dashboard chat reply route is the only route-local default exception. The agent assigned to that route receives full built-in Code UX MCP access, `scheduler_code_ux`, `add_long_term_memory`, and the default Playwright MCP server for dashboard reply turns even when its saved preset has Code UX disabled or no MCP policy. An explicitly narrowed dashboard reply policy still has both dedicated lanes forced on. This default is keyed to the dashboard reply route assignment, not to the generic `project_manager` runtime role.
 
-Dashboard reply provider runs also advertise the originating chat thread through the internal `X-Code-Ux-Thread` header on their built-in Code UX MCP connection. The HTTP gateway validates it with the same identifier rules as agent and session ids and exposes it only as request-scoped server context. Non-chat MCP connections omit the header, custom MCP servers do not receive it, and it is not part of any public MCP tool argument.
-
 ## Common Response Shape
 
 Successful responses return:
@@ -745,9 +743,24 @@ For sprint create/update calls:
 
 ### `manage_sprints plan`
 
-The MCP `plan` action validates the project, sprint, and existing-task/replan preconditions synchronously, then returns a stable `status: "started"` result while planning continues in the background. Task persistence and optional `autoStart` remain part of the planning workflow; the immediate response does not imply that planning completed.
+The direct MCP `manage_sprints` call with `action: "plan"` validates the project, sprint, and existing-task/replan preconditions synchronously, starts planning server-side, and returns this stable acknowledgement immediately:
 
-When the call originates from an MCP-backed dashboard chat turn, completion or failure persists a due-now, one-shot `agent_wakeup` for the same agent and thread. The existing post-reply scheduler drain delivers that wakeup so the chat agent can review the generated tasks and recap the task count and execution-start state, or report the planning failure. Calls without agent/thread context or an available scheduler still run planning but do not create a wakeup.
+```json
+{
+  "result": {
+    "status": "started",
+    "message": "Sprint planning started in the background. You will be notified when it completes or fails.",
+    "projectId": "project-123",
+    "sprintId": "sprint-123"
+  }
+}
+```
+
+The stable result fields are `status`, `message`, `projectId`, and `sprintId`. The acknowledgement means only that background planning started after synchronous validation. It does not mean tasks already exist, planning self-reflection has finished, or optional `autoStart` has completed.
+
+When the call originates from an MCP-backed dashboard chat turn, Code UX captures the originating agent and thread before the background promise settles. Successful completion then persists an existing due-now, non-recurring `agent_wakeup` targeted to that thread. The scheduler delivers the wakeup through the normal chat-agent path and asks the agent to review the generated tasks, recap their count, and state whether execution actually started. If planning fails, Code UX queues the same kind of same-thread wakeup with the failure reason and asks the agent to provide a concise failure recap.
+
+Standalone MCP clients have no originating dashboard chat-thread context, so they receive the same immediate acknowledgement without a completion wakeup. They should poll with `manage_sprints` and `manage_tasks`, or inspect the relevant `manage_telemetry` sprint-run, task-dispatch, and invocation state, to determine when planning and any requested auto-start work have completed.
 
 This asynchronous response applies only to the direct MCP `manage_sprints` `plan` action. `import_issues` with `planAfterImport`, dashboard planning routes, scheduled sprint planning, quicksprints, and internal callers continue to await planning completion.
 
