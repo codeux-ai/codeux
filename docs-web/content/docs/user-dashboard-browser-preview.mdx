@@ -42,6 +42,7 @@ The right sidebar provides a selected-container startup command override. Previe
 Docker daemon access is disabled by default. The explicit Settings toggle mounts and preflights the local Unix socket and compatible CLI, grants effective host-level control, and must only be used with trusted repositories.
 
 Startup cleanup completes before previews launch, previously active sessions are restored, and single-flight reconciliation plus serialized port allocation prevent overlapping launches from claiming the same host port. Previously healthy previews receive one bounded recovery attempt after an unexpected exit, including manually launched sessions whose sprint has finished.
+If a process interruption leaves a session marked as starting before Docker creates its container, reconciliation resets that orphaned state and retries it without disturbing starts that are still active.
 
 ## Using the browser pane
 

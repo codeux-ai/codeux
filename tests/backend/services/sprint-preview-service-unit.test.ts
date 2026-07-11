@@ -1339,6 +1339,53 @@ describe("SprintPreviewService unit tests", () => {
       expect(stopSessionSpy).toHaveBeenCalledWith("session-1");
     });
 
+    it("recovers an orphaned starting session that has no container", async () => {
+      const session = makeSession({
+        status: "starting",
+        hostPort: null,
+        portMappings: [{ containerPort: 3000, hostPort: null, isPrimary: true }],
+        containerId: null,
+        containerName: null,
+        healthStatus: "unreachable",
+      });
+      deps.sprintPreviewRepository.listSessions.mockReturnValue([session]);
+      deps.executionRepository.listSprintRunsByStatus.mockReturnValue([
+        { projectId: "proj-1", sprintId: "sprint-1", status: "running" },
+      ]);
+      const service = new SprintPreviewService(deps as any);
+      const startSessionSpy = vi.spyOn(service, "startSession").mockResolvedValue(makeSession({ status: "running" }));
+
+      await service.reconcileSessions();
+
+      expect(deps.sprintPreviewRepository.updateSession).toHaveBeenCalledWith(
+        session.id,
+        expect.objectContaining({ status: "stopped", hostPort: null, healthStatus: "unknown" }),
+      );
+      expect(startSessionSpy).toHaveBeenCalledWith("proj-1", "sprint-1");
+    });
+
+    it("leaves a containerless starting session alone while its startup is active", async () => {
+      const session = makeSession({
+        status: "starting",
+        hostPort: 5555,
+        containerId: null,
+        containerName: null,
+        healthStatus: "unknown",
+      });
+      deps.sprintPreviewRepository.listSessions.mockReturnValue([session]);
+      const service = new SprintPreviewService(deps as any);
+      (service as any).activeStartSessionKeys.add("proj-1:sprint-1");
+      const startSessionSpy = vi.spyOn(service, "startSession").mockResolvedValue(makeSession({ status: "running" }));
+
+      await service.reconcileSessions();
+
+      expect(deps.sprintPreviewRepository.updateSession).not.toHaveBeenCalledWith(
+        session.id,
+        expect.objectContaining({ status: "stopped" }),
+      );
+      expect(startSessionSpy).not.toHaveBeenCalled();
+    });
+
     it("attempts one bounded recovery for an unexpectedly exited active preview", async () => {
       const session = makeSession({ status: "error", containerId: "exited-137" });
       deps.sprintPreviewRepository.listSessions.mockReturnValue([session]);
