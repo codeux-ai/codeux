@@ -368,6 +368,79 @@ describe("ChatManagementActionService", () => {
     });
   });
 
+  it("parses a bounded agent effect without changing the visible reply", () => {
+    const parsed = parseProviderManagementJson(JSON.stringify({
+      replyMarkdown: "The deployment is ready.",
+      action: null,
+      agentEffect: {
+        emotion: "excited",
+        animation: "nod",
+        caption: "Ready to ship!",
+        durationMs: 2400,
+      },
+    }));
+
+    expect(parsed).toEqual({
+      replyMarkdown: "The deployment is ready.",
+      action: null,
+      agentEffect: {
+        emotion: "excited",
+        animation: "nod",
+        caption: "Ready to ship!",
+        durationMs: 2400,
+      },
+    });
+  });
+
+  it.each([
+    null,
+    "happy",
+    { emotion: "unknown", animation: "nod", durationMs: 1000 },
+    { emotion: "happy", animation: "teleport", durationMs: 1000 },
+    { emotion: "happy", animation: "nod", durationMs: 499 },
+    { emotion: "happy", animation: "nod", durationMs: 10_001 },
+    { emotion: "happy", animation: "nod", durationMs: 1000.5 },
+    { emotion: "happy", animation: "nod", durationMs: 1000, caption: "x".repeat(121) },
+  ])("omits invalid agent effects while preserving the reply: %j", (agentEffect) => {
+    expect(parseProviderManagementJson(JSON.stringify({
+      replyMarkdown: "Still readable.",
+      action: null,
+      agentEffect,
+    }))).toEqual({
+      replyMarkdown: "Still readable.",
+      action: null,
+    });
+  });
+
+  it("retains a valid agent effect on action results", async () => {
+    structuredProviderResponseService.executeAndParse.mockResolvedValue({
+      parsed: {
+        replyMarkdown: "I updated the sprint.",
+        action: { domain: "sprints", action: "update_sprint", payload: { id: "s1" } },
+        agentEffect: { emotion: "proud", animation: "nod", durationMs: 1800 },
+      },
+      nativeSessionId: "sess1",
+      bodyMarkdown: "",
+    });
+    managementToolHandler.handleManageCodeUx.mockResolvedValue({
+      content: [{ type: "text", text: JSON.stringify({ result: { status: "success" } }) }],
+    });
+
+    const result = await service.processManagementAction({
+      projectId: "proj1",
+      provider: "claude-code",
+      model: "claude-3",
+      apiKey: "test-key",
+      sessionId: "sess1",
+      settings: mockSettings,
+      prompt: "Update sprint",
+      repoPath: "/tmp/test-repo",
+    });
+
+    expect(result.agentEffect).toEqual({ emotion: "proud", animation: "nod", durationMs: 1800 });
+    expect(result.action).not.toBeNull();
+  });
+
   it("should parse promptSuggestions aliases and cap stored suggestions", () => {
     const promptSuggestions = Array.from({ length: 8 }, (_, index) => ({
       label: `Option ${index + 1}`,
@@ -456,6 +529,51 @@ describe("ChatManagementActionService", () => {
       const calls = executionRepository.appendExecutionInvocationMessage.mock.calls;
       expect(calls[0]).toEqual(["exec-123", { role: "user", contentMarkdown: "List sprints" }]);
       expect(calls[1]).toEqual(["exec-123", { role: "assistant", contentMarkdown: "Here are the sprints for your project." }]);
+    });
+
+    it("extracts a valid codeux:agent fence and preserves malformed fences as readable markdown", async () => {
+      providerExecutionService.executeProvider
+        .mockResolvedValueOnce({
+          ok: true,
+          stdout: "",
+          stderr: "",
+          text: [
+            "All done.",
+            "```codeux:agent",
+            JSON.stringify({ emotion: "happy", animation: "dance", caption: "Done!", durationMs: 2200 }),
+            "```",
+          ].join("\n"),
+          usageTelemetry: { transcriptText: "", conversation: [] },
+          nativeSessionId: "native-1",
+        } as any)
+        .mockResolvedValueOnce({
+          ok: true,
+          stdout: "",
+          stderr: "",
+          text: "Reply\n```codeux:agent\n{not json}\n```",
+          usageTelemetry: { transcriptText: "", conversation: [] },
+          nativeSessionId: "native-1",
+        } as any);
+
+      const args = {
+        projectId: "proj1",
+        provider: "gemini" as const,
+        model: "gemini-2",
+        apiKey: "test-key",
+        sessionId: "sess1",
+        settings: mockSettings,
+        prompt: "Reply",
+        repoPath: "/tmp/test-repo",
+        mcpConnection,
+      };
+      const valid = await service.processManagementAction(args);
+      const malformed = await service.processManagementAction(args);
+
+      expect(valid.replyMarkdown).toBe("All done.");
+      expect(valid.agentEffect).toEqual({ emotion: "happy", animation: "dance", caption: "Done!", durationMs: 2200 });
+      expect(malformed.agentEffect).toBeUndefined();
+      expect(malformed.replyMarkdown).toContain("```json\n{not json}\n```");
+      expect(malformed.replyMarkdown).not.toContain("codeux:agent");
     });
 
     it("forwards LOCAL git policy for mockup-cli MCP-native chat workers", async () => {

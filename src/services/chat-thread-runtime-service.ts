@@ -16,6 +16,7 @@ import type {
   ConversationMessageRecord,
   ConversationRuntimeState,
   PromptSuggestionsMetadata,
+  AgentResponseEffectMetadata,
   DashboardAppProgressPlanningStage,
   DashboardAppProgressWidgetMetadata,
   DashboardCreateAppQuickactionKind,
@@ -1437,11 +1438,17 @@ export class ChatThreadRuntimeService {
     const promptSuggestionsMetadata: PromptSuggestionsMetadata | undefined = result.promptSuggestions?.length
       ? { promptSuggestions: result.promptSuggestions }
       : undefined;
+    const agentEffectMetadata: AgentResponseEffectMetadata | undefined = result.agentEffect
+      ? { agentEffect: result.agentEffect }
+      : undefined;
+    const replyMetadata = promptSuggestionsMetadata || agentEffectMetadata
+      ? { ...promptSuggestionsMetadata, ...agentEffectMetadata }
+      : undefined;
 
     const replyMessage = this.deps.connectionChatRepository.postSystemMessage(projectId, {
       threadId: thread.id,
       bodyMarkdown: systemReply.trim(),
-      ...(promptSuggestionsMetadata ? { metadata: promptSuggestionsMetadata } : {}),
+      ...(replyMetadata ? { metadata: replyMetadata } : {}),
     });
     await this.deliverChatProviderReplyIfNeeded(projectId, thread, latestMessage, replyMessage);
 

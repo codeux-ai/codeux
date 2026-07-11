@@ -1090,6 +1090,43 @@ describe("ChatThreadRuntimeService", () => {
     });
   });
 
+  it("stores an agent effect alongside existing assistant reply metadata", async () => {
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-effect", threadId: "t1", bodyMarkdown: "good news?" });
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t1",
+      projectId: "p1",
+      title: "Thread",
+      connectionId: null,
+      runtimeState: {},
+    });
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "codex",
+      providers: { codex: { model: "gpt-5.3-codex", apiKey: "codex-key" } },
+    });
+    deps.connectionChatRepository.listMessages.mockReturnValue([
+      { id: "msg-effect", authorType: "dashboard_user", bodyMarkdown: "good news?" },
+    ]);
+    deps.chatManagementActionService.processManagementAction.mockResolvedValue({
+      replyMarkdown: "Everything passed.",
+      action: null,
+      approvalRequired: false,
+      promptSuggestions: [{ label: "Deploy", prompt: "Deploy now" }],
+      agentEffect: { emotion: "excited", animation: "hyped", caption: "All green!", durationMs: 2600 },
+    });
+
+    await service.postMessage("p1", { bodyMarkdown: "good news?" });
+
+    expect(deps.connectionChatRepository.postSystemMessage).toHaveBeenCalledWith("p1", {
+      threadId: "t1",
+      bodyMarkdown: "Everything passed.",
+      metadata: {
+        promptSuggestions: [{ label: "Deploy", prompt: "Deploy now" }],
+        agentEffect: { emotion: "excited", animation: "hyped", caption: "All green!", durationMs: 2600 },
+      },
+    });
+  });
+
   it("leaves no-suggestion virtual replies without message metadata", async () => {
     deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-no-suggestions", threadId: "t1", bodyMarkdown: "hello" });
     deps.connectionChatRepository.getThread.mockReturnValue({

@@ -108,9 +108,11 @@ describe("chat-reply-prompt", () => {
       });
       expect(prompt).not.toContain("## WORKER INSTRUCTIONS");
       expect(prompt).toContain("### User\nHello");
-      expect(prompt).toContain("You must return STRICT JSON format containing `replyMarkdown`, `action`, and optional `suggestions`.");
+      expect(prompt).toContain("You must return STRICT JSON format containing `replyMarkdown`, `action`, and optional `suggestions` and `agentEffect`.");
       expect(prompt).toContain("Each item must be `{ \"label\": string, \"prompt\": string, \"icon\"?: string, \"id\"?: string }`.");
       expect(prompt).toContain("Use only stable string icon identifiers");
+      expect(prompt).toContain("optional `suggestions` and `agentEffect`");
+      expect(prompt).toContain("`durationMs` must be from 500 through 10000");
     });
 
     it("includes pending management action context if it exists in runtime state", () => {
@@ -184,6 +186,7 @@ describe("chat-reply-prompt", () => {
       expect(prompt).toContain("manage_custom_dashboards");
       expect(prompt).toContain("publish_revision");
       expect(prompt).toContain("Do NOT wrap your response in JSON");
+      expect(prompt).toContain("`codeux:agent` fenced JSON block");
       expect(prompt).not.toContain("You must return STRICT JSON format");
     });
 
@@ -269,6 +272,7 @@ describe("chat-reply-prompt", () => {
       });
       expect(prompt).not.toContain("## RICH WIDGETS");
       expect(prompt).not.toContain("codeux:status");
+      expect(prompt).not.toContain("codeux:agent");
     });
 
     it("strips dashboard widget fences from replayed assistant replies for external chat threads", () => {
@@ -414,6 +418,35 @@ describe("chat-reply-prompt", () => {
         "Saved.",
         "Remembered (patterns): Use dependency-aware sprint tasks.",
       ].join("\n"));
+    });
+
+    it("removes valid agent-effect fences from outbound markdown", () => {
+      const markdown = [
+        "Great news.",
+        "```codeux:agent",
+        JSON.stringify({ emotion: "excited", animation: "hyped", caption: "All green!", durationMs: 2500 }),
+        "```",
+      ].join("\n");
+
+      expect(stripDashboardOnlyWidgets(markdown)).toBe("Great news.");
+      expect(stripDashboardOnlyWidgets(markdown)).not.toContain("codeux:agent");
+    });
+
+    it("downgrades malformed agent-effect fences without leaking the dashboard fence tag", () => {
+      const markdown = "Reply\n```codeux:agent\n{not json}\n```";
+      expect(stripDashboardOnlyWidgets(markdown)).toBe("Reply\n```json\n{not json}\n```");
+    });
+
+    it("preserves unknown agent-effect payloads as readable JSON", () => {
+      const markdown = [
+        "Reply",
+        "```codeux:agent",
+        JSON.stringify({ emotion: "happy", animation: "teleport", durationMs: 1000 }),
+        "```",
+      ].join("\n");
+      expect(stripDashboardOnlyWidgets(markdown)).toContain("```json");
+      expect(stripDashboardOnlyWidgets(markdown)).toContain('"animation":"teleport"');
+      expect(stripDashboardOnlyWidgets(markdown)).not.toContain("codeux:agent");
     });
   });
 
