@@ -89,6 +89,8 @@ const taskLabel = (record: DashboardNotificationRecord): string | null => {
 };
 
 const actionTarget = (record: DashboardNotificationRecord): string => {
+  // These links are server-owned route metadata. Choose the most specific
+  // available destination without rebuilding or normalizing its query string.
   if (record.taskId && record.links.task) return record.links.task;
   if (record.sprintId && record.source.sprintRunId && record.links.live) return record.links.live;
   if (record.sprintId && record.links.sprint) return record.links.sprint;

@@ -848,6 +848,49 @@ describe("TopNav shell accessibility", () => {
         });
     });
 
+    it("opens a sprint fallback with the server-supplied project and sprint context", async () => {
+        mockTopNavData({
+            selectedProject: makeProject("proj-1", "Alpha"),
+            selectedSprintId: "sprint-1",
+        });
+        vi.mocked(useNotifications).mockReturnValue({
+            notifications: [makeAttentionNotification({
+                id: "sprint-failure-1@2026-07-11T10:00:00.000Z",
+                sourceId: "sprint-failure-1",
+                type: "sprint-failure",
+                title: "Sprint planning failed",
+                actionLabel: "Review sprint",
+                actionHref: "/sprints?view=ledger&sprintId=sprint-12&projectId=project-9&source=notification",
+            })],
+            unreadCount: 1,
+            agentSchedules: [],
+            markAllRead: vi.fn(),
+            markRead: vi.fn(),
+            dismiss: vi.fn(),
+            refresh: vi.fn(),
+        } as any);
+
+        render(<TopNav />);
+        fireEvent.click(screen.getByRole("button", { name: /Notifications: 1 unread/i }));
+
+        const action = await screen.findByRole("link", { name: "Review sprint Sprint planning failed" });
+        expect(action).toHaveAttribute(
+            "href",
+            "/sprints?view=ledger&sprintId=sprint-12&projectId=project-9&source=notification",
+        );
+        fireEvent.click(action);
+
+        expect(feedbackMocks.navigate).toHaveBeenCalledWith({
+            to: "/sprints",
+            search: {
+                view: "ledger",
+                sprintId: "sprint-12",
+                projectId: "project-9",
+                source: "notification",
+            },
+        });
+    });
+
     it("suppresses initial notification toasts and emits one toast for each new or materially updated attention item", async () => {
         mockTopNavData();
         const markRead = vi.fn();

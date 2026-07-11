@@ -138,6 +138,7 @@ const createProject = () => ({
 describe("ProjectsPage", () => {
   beforeEach(() => {
     cleanup();
+    window.history.replaceState({}, "", "/projects");
     vi.useRealTimers();
     vi.clearAllMocks();
     vi.mocked(startProjectSetup).mockResolvedValue({
@@ -159,6 +160,26 @@ describe("ProjectsPage", () => {
       deleteProject: deleteProjectMock,
       selectedProject: createProject(),
     } as any);
+  });
+
+  it("applies a project fallback query when another project is selected", async () => {
+    window.history.replaceState({}, "", "/projects?projectId=project-9");
+    vi.mocked(useProjectData).mockReturnValue({
+      projects: [createProject(), { ...createProject(), id: "project-9", name: "Notification Project" }],
+      selectedProjectId: "project-1",
+      loading: false,
+      error: null,
+      refreshProjects: vi.fn(),
+      selectProject: selectProjectMock,
+      createProject: createProjectMock,
+      updateProject: vi.fn(),
+      deleteProject: deleteProjectMock,
+      selectedProject: createProject(),
+    } as any);
+
+    render(<ProjectsPage />);
+
+    await waitFor(() => expect(selectProjectMock).toHaveBeenCalledWith("project-9"));
   });
 
   it("truncates long metadata accurately without overflowing the card constraints", () => {
