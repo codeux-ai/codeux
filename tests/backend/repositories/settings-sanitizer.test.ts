@@ -332,6 +332,41 @@ describe("settings-sanitizer", () => {
     expect(settings.agents.qualityAssurance.completedTaskWithoutPr.agentPresetId).toBe(null);
   });
 
+  it("sanitizes Google Drive settings to a disabled read-only-safe block", () => {
+    expect(cloneDefaults().googleDrive).toEqual({
+      enabled: false,
+      hostPath: "",
+      accessMode: "read-only",
+    });
+
+    const malformed = sanitizeSettings({
+      googleDrive: {
+        enabled: true,
+        hostPath: "  /mnt/google-drive  ",
+        accessMode: "owner",
+        credentials: { token: "unsupported" },
+      },
+    });
+
+    expect(malformed.googleDrive).toEqual({
+      enabled: false,
+      hostPath: "/mnt/google-drive",
+      accessMode: "read-only",
+    });
+    expect(malformed.googleDrive).not.toHaveProperty("credentials");
+
+    expect(sanitizeProjectSettings({
+      googleDrive: {
+        enabled: true,
+        hostPath: 42,
+      },
+    }).googleDrive).toEqual({
+      enabled: false,
+      hostPath: "",
+      accessMode: "read-only",
+    });
+  });
+
   it("dedupes preview container app ports while preserving primary-first order", () => {
     const settings = sanitizeSettings({
       sprintPreview: {

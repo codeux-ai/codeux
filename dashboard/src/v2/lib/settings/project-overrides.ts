@@ -183,6 +183,7 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
   aiProvider: cloneProjectAiProviderSettings(settings.aiProvider),
   techstack: cloneTechstackSelection(settings.techstack) ?? { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
   designGuidance: cloneDesignGuidance(settings.designGuidance),
+  googleDrive: { ...settings.googleDrive },
   git: {
     githubMode: settings.git.githubMode,
     githubToken: settings.git.githubToken,
@@ -242,6 +243,7 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
   aiProvider: cloneProjectAiProviderSettings(settings.aiProvider),
   techstack: cloneTechstackSelection(settings.techstack) ?? { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
   designGuidance: cloneDesignGuidance(settings.designGuidance),
+  googleDrive: { ...settings.googleDrive },
   git: {
     ...settings.git,
   },

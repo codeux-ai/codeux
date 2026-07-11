@@ -6,6 +6,11 @@ import { h, Fragment } from "preact";
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { render, waitFor, screen, fireEvent, cleanup, within } from "@testing-library/preact";
 import { SettingsIntegrationsPanel } from "../../../dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.js";
+import { fetchLocalFiles } from "../../../dashboard/src/v2/lib/project-api.js";
+
+vi.mock("../../../dashboard/src/v2/lib/project-api.js", () => ({
+  fetchLocalFiles: vi.fn(),
+}));
 
 vi.mock("gsap", () => {
   const applyStyles = (target: unknown, props: Record<string, unknown>) => {
@@ -118,6 +123,36 @@ describe("SettingsIntegrationsPanel", () => {
     selectedIntegration: null,
     setSelectedIntegration: vi.fn(),
     integrations: importerIntegrations,
+    importingHints: false,
+    externalHints: { resolved: {} },
+    handleImportHints: vi.fn(),
+    updateEditableSettings: vi.fn(),
+    updateSystem: vi.fn(),
+    updateProject: vi.fn(),
+    ...overrides,
+  });
+
+  const createGoogleDriveState = (overrides: Record<string, unknown> = {}) => ({
+    activeScope: "system",
+    selectedProject: null,
+    editableSettings: {
+      cliWorkflow: { executionMode: "DOCKER" },
+      googleDrive: { enabled: false, hostPath: "", accessMode: "read-only" },
+    },
+    systemSettings: {
+      integrations: { providers: {}, githubToken: "", gitlabToken: "" },
+      defaults: {
+        googleDrive: { enabled: false, hostPath: "", accessMode: "read-only" },
+      },
+    },
+    projectSources: {},
+    selectedIntegration: null,
+    setSelectedIntegration: vi.fn(),
+    integrations: [{
+      id: "google-drive",
+      label: "Google Drive",
+      description: "Mount an already linked local Drive directory into Docker workspaces",
+    }],
     importingHints: false,
     externalHints: { resolved: {} },
     handleImportHints: vi.fn(),
@@ -916,6 +951,115 @@ describe("SettingsIntegrationsPanel", () => {
       expect(providerConfig.mountAuth).toBe(true);
       expect(providerConfig.apiKey).toBe("");
       expect(providerConfig.openCodeAuthMode).toBe("LOCAL_AUTH");
+    });
+  });
+
+  describe("Google Drive mount", () => {
+    it("groups the mount under storage and requires both enablement and a path for active status", async () => {
+      const state = createGoogleDriveState({
+        editableSettings: {
+          cliWorkflow: { executionMode: "DOCKER" },
+          googleDrive: { enabled: true, hostPath: "", accessMode: "read-only" },
+        },
+      });
+      const { container, rerender } = render(<SettingsIntegrationsPanel state={state as any} />);
+
+      await waitFor(() => expect(container.textContent).toContain("STORAGE & MOUNTS"));
+      expect(container.textContent).toContain("Not configured");
+      expect(container.textContent).not.toContain("Active");
+      expect(container.textContent).not.toContain("/host/");
+
+      rerender(<SettingsIntegrationsPanel state={{
+        ...state,
+        editableSettings: {
+          ...state.editableSettings,
+          googleDrive: { enabled: true, hostPath: "/host/Drive", accessMode: "read-only" },
+        },
+      } as any} />);
+
+      await waitFor(() => expect(container.textContent).toContain("Configured"));
+      expect(container.textContent).toContain("Active");
+      expect(container.textContent).not.toContain("/host/Drive");
+    });
+
+    it("renders accessible system controls, browses a path, and updates the scoped draft", async () => {
+      vi.mocked(fetchLocalFiles).mockResolvedValue({
+        currentPath: "/host",
+        parentPath: "/",
+        homePath: "/home/test",
+        directories: [],
+        files: [{ name: "Drive", path: "/host/Drive", size: 0, modifiedAt: "" }],
+      } as any);
+      const editableSettings = {
+        cliWorkflow: { executionMode: "DOCKER" },
+        googleDrive: { enabled: false, hostPath: "", accessMode: "read-only" as const },
+      };
+      let draft: any = editableSettings;
+      const state = createGoogleDriveState({
+        selectedIntegration: "google-drive",
+        editableSettings,
+      });
+      state.updateEditableSettings = vi.fn((recipe) => {
+        draft = recipe(draft);
+      });
+
+      const { container } = render(<SettingsIntegrationsPanel state={state as any} />);
+      await waitFor(() => expect(container.textContent).toContain("Google Drive Configuration"));
+
+      expect(screen.getByLabelText("Enable Google Drive mount")).toBeTruthy();
+      expect(screen.getByLabelText("Linked Drive directory")).toBeTruthy();
+      const modeTrigger = screen.getByRole("button", { name: "Google Drive access mode" });
+      expect(modeTrigger.textContent).toContain("Read-only (recommended)");
+      expect(screen.getByText("/mnt/code-ux/google-drive", { selector: "code", exact: true })).toBeTruthy();
+      expect(container.textContent).toContain("Docker runs only");
+
+      fireEvent.click(screen.getByLabelText("Enable Google Drive mount"));
+      expect(draft.googleDrive.enabled).toBe(true);
+
+      fireEvent.input(screen.getByLabelText("Linked Drive directory"), { target: { value: "/typed/Drive" } });
+      expect(draft.googleDrive.hostPath).toBe("/typed/Drive");
+
+      fireEvent.click(screen.getByRole("button", { name: "Browse" }));
+      await waitFor(() => expect(fetchLocalFiles).toHaveBeenCalled());
+      fireEvent.click(await screen.findByRole("button", { name: "Drive" }));
+      expect(draft.googleDrive.hostPath).toBe("/host/Drive");
+
+      fireEvent.keyDown(modeTrigger, { key: "ArrowDown" });
+      const listbox = await screen.findByRole("listbox");
+      fireEvent.keyDown(listbox, { key: "End" });
+      fireEvent.keyDown(listbox, { key: "Enter" });
+      expect(draft.googleDrive.accessMode).toBe("read-write");
+      expect(state.updateSystem).not.toHaveBeenCalled();
+    });
+
+    it("renders project source badges and writes project-scoped Google Drive values", async () => {
+      const editableSettings = {
+        cliWorkflow: { executionMode: "DOCKER" },
+        googleDrive: { enabled: true, hostPath: "/host/Drive", accessMode: "read-write" as const },
+      };
+      let updatedProject: any = editableSettings;
+      const state = createGoogleDriveState({
+        activeScope: "project",
+        selectedProject: { id: "project-1", name: "Project" },
+        selectedIntegration: "google-drive",
+        editableSettings,
+        projectSources: {
+          "googleDrive.enabled": "project",
+          "googleDrive.hostPath": "project",
+          "googleDrive.accessMode": "project",
+        },
+      });
+      state.updateEditableSettings = vi.fn((recipe) => {
+        updatedProject = recipe(updatedProject);
+      });
+
+      const { container } = render(<SettingsIntegrationsPanel state={state as any} />);
+      await waitFor(() => expect(container.textContent).toContain("Google Drive Configuration"));
+
+      expect(screen.getAllByText("Project override").length).toBeGreaterThanOrEqual(3);
+      fireEvent.input(screen.getByLabelText("Linked Drive directory"), { target: { value: "/project/Drive" } });
+      expect(updatedProject.googleDrive.hostPath).toBe("/project/Drive");
+      expect(state.updateProject).not.toHaveBeenCalled();
     });
   });
 });

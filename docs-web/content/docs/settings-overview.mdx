@@ -95,6 +95,7 @@ The OS Software catalog is a static reference. It does not participate in Settin
 | Area | What it covers |
 | --- | --- |
 | [Integrations](/docs/settings-integrations) | Lists provider, git-host, issue-tracker, and read-only importer integrations and exposes manage/add actions. |
+| [Google Drive Project Mount](/docs/settings-google-drive-mount) | Links an existing local Google Drive directory into Docker-backed provider containers with read-only or explicit read-write access. |
 | [Jules Automation](/docs/settings-jules-automation) | Configures Jules clarification automation and CI autofix handoff behavior. |
 | [Git Host Configuration](/docs/settings-git-host-configuration) | Stores GitHub or GitLab tokens and Docker git-auth behavior for repository automation. |
 | [Jira Configuration](/docs/settings-jira-configuration) | Connects Jira issue search, import transitions, and completion transitions. |
