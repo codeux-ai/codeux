@@ -654,20 +654,29 @@ export class CliWorkflowService {
    */
   private resolveProviderCompletionRecovery(ctx: PipelineContext) {
     const repository = this.deps.executionRepository;
-    if (!repository || ctx.workspaceSessionId === ctx.sessionId) {
+    if (!repository || ctx.workspaceSessionId === ctx.sessionId || !ctx.taskRunId) {
       return null;
     }
 
-    const providerInvocation = repository.getLatestProviderInvocationUsageBySession(
-      ctx.workspaceSessionId,
-      "task_coding",
-    );
-    if (
-      !providerInvocation
-      || providerInvocation.status !== "completed"
-      || !providerInvocation.taskRunId
-      || providerInvocation.taskRunId === ctx.taskRunId
-    ) {
+    const currentTaskRun = repository.getTaskRun(ctx.taskRunId);
+    if (!currentTaskRun) {
+      return null;
+    }
+
+    // A retry session can keep resuming the original workspace session while
+    // the provider-completed crash belongs to a newer task run/session. Search
+    // by durable task identity, then require the newest completed provider to
+    // carry the precise startup-recovery marker for this same workspace.
+    const [providerInvocation] = repository
+      .listProviderInvocationsForTask(currentTaskRun.projectId, currentTaskRun.taskId)
+      .filter((invocation) => (
+        invocation.purpose === "task_coding"
+        && invocation.status === "completed"
+        && invocation.taskRunId
+        && invocation.taskRunId !== currentTaskRun.id
+      ))
+      .sort((left, right) => Date.parse(right.finishedAt || right.updatedAt) - Date.parse(left.finishedAt || left.updatedAt));
+    if (!providerInvocation?.taskRunId) {
       return null;
     }
 
@@ -677,9 +686,16 @@ export class CliWorkflowService {
       && event.payload?.reason === "terminal_provider_active_dispatch_mismatch"
       && event.payload?.providerStatus === "completed"
     ));
+    const sameWorkspace = events.some((event) => (
+      event.eventType === "cli_workspace_bound"
+      && (
+        event.payload?.worktreePath === ctx.worktreePath
+        || event.payload?.workspaceSessionId === ctx.workspaceSessionId
+      )
+    ));
     const workflowAlreadyCompleted = events.some((event) => event.eventType === "cli_workflow_completed");
 
-    return recoveredCompletedProvider && !workflowAlreadyCompleted
+    return recoveredCompletedProvider && sameWorkspace && !workflowAlreadyCompleted
       ? providerInvocation
       : null;
   }

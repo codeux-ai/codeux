@@ -437,18 +437,31 @@ describe("CliWorkflowService unpushed commit detection", () => {
     const executionRepository = {
       getTaskRun: vi.fn().mockReturnValue({
         id: "current-run",
+        projectId: "project-1",
         taskId: "task-1",
         dispatchId: "current-dispatch",
         startedAt: "2026-07-11T00:25:28.000Z",
         prUrl: null,
         workerBranch: "worker-1",
       }),
-      getLatestProviderInvocationUsageBySession: vi.fn().mockReturnValue({
-        id: "completed-provider",
-        taskRunId: "interrupted-run",
-        status: "completed",
-      }),
+      listProviderInvocationsForTask: vi.fn().mockReturnValue([
+        {
+          id: "completed-provider",
+          purpose: "task_coding",
+          taskRunId: "interrupted-run",
+          status: "completed",
+          finishedAt: "2026-07-11T00:25:26.000Z",
+          updatedAt: "2026-07-11T00:25:26.000Z",
+        },
+      ]),
       listTaskRunEvents: vi.fn().mockReturnValue([
+        {
+          eventType: "cli_workspace_bound",
+          payload: {
+            worktreePath: "/repo/.worktrees/old-session",
+            workspaceSessionId: "old-session",
+          },
+        },
         {
           eventType: "task_dispatch_reconciled",
           payload: {
@@ -508,9 +521,9 @@ describe("CliWorkflowService unpushed commit detection", () => {
       resumeWorktreePath: "/repo/.worktrees/old-session",
     });
 
-    expect(executionRepository.getLatestProviderInvocationUsageBySession).toHaveBeenCalledWith(
-      "old-session",
-      "task_coding",
+    expect(executionRepository.listProviderInvocationsForTask).toHaveBeenCalledWith(
+      "project-1",
+      "task-1",
     );
     expect(executeProviderStage).not.toHaveBeenCalled();
     expect(executeGitFinalizeStage).toHaveBeenCalledOnce();
