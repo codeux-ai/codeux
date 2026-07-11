@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   decideVirtualWorkerProjectScheduling,
+  hasPendingManagerClarificationForScope,
   isProjectManagerOwnedClarificationItem,
   isOrchestratorHandledClarificationItem,
   planVirtualWorkerAttentionClaim,
@@ -99,16 +100,6 @@ describe("Virtual Worker Scheduling Policy", () => {
       expect(decideVirtualWorkerProjectScheduling(state)).toEqual(expected);
     });
 
-    it("defers queued work while a manager clarification is pending", () => {
-      expect(decideVirtualWorkerProjectScheduling({
-        executionMode: "VIRTUAL",
-        hasActiveCycle: false,
-        isAlreadyScheduled: false,
-        nextAttentionItem: null,
-        hasPendingDispatch: true,
-        hasPendingManagerClarification: true,
-      })).toEqual({ shouldSchedule: false, reason: "manager_clarification_pending" });
-    });
   });
 
   describe("isProjectManagerOwnedClarificationItem", () => {
@@ -121,6 +112,40 @@ describe("Virtual Worker Scheduling Policy", () => {
         attentionType: "action_required",
         payload: { type: "worker_clarification" },
       })).toBe(true);
+    });
+  });
+
+  describe("hasPendingManagerClarificationForScope", () => {
+    const clarification = (overrides: Partial<ProjectAttentionItemRecord> = {}) => ({
+      attentionType: "worker_clarification",
+      payload: { type: "worker_clarification", status: "pending" },
+      taskId: "task-1",
+      dispatchId: "dispatch-1",
+      ...overrides,
+    } as ProjectAttentionItemRecord);
+
+    it("matches the same task or dispatch only", () => {
+      const items = [clarification()];
+
+      expect(hasPendingManagerClarificationForScope(
+        { taskId: "task-1", dispatchId: "dispatch-2" },
+        items,
+      )).toBe(true);
+      expect(hasPendingManagerClarificationForScope(
+        { taskId: "task-2", dispatchId: "dispatch-1" },
+        items,
+      )).toBe(true);
+      expect(hasPendingManagerClarificationForScope(
+        { taskId: "task-2", dispatchId: "dispatch-2" },
+        items,
+      )).toBe(false);
+    });
+
+    it("does not let a taskless general clarification block coding scope", () => {
+      expect(hasPendingManagerClarificationForScope(
+        { taskId: "task-1", dispatchId: "dispatch-1" },
+        [clarification({ taskId: null, dispatchId: null })],
+      )).toBe(false);
     });
   });
 
@@ -223,6 +248,33 @@ describe("Virtual Worker Scheduling Policy", () => {
 
       expect(peekNextWorkerAttention([workerItem, clarification], resolver)).toBeNull();
       expect(resolver).not.toHaveBeenCalled();
+    });
+
+    it("keeps unrelated worker attention eligible while a clarification is pending", () => {
+      const resolver = vi.fn().mockReturnValue(mockSettings({
+        automationInterventions: { autoAnswerClarification: true },
+      }));
+      const workerItem = {
+        projectId: "project-1",
+        taskId: "task-2",
+        dispatchId: "dispatch-2",
+        ownerType: "worker",
+        status: "open",
+        summaryMarkdown: "The unrelated worker needs action.",
+        attentionType: "action_required",
+      } as ProjectAttentionItemRecord;
+      const clarification = {
+        projectId: "project-1",
+        taskId: "task-1",
+        dispatchId: "dispatch-1",
+        ownerType: "human",
+        status: "open",
+        summaryMarkdown: "Manager input required.",
+        attentionType: "worker_clarification",
+        payload: { type: "worker_clarification", status: "pending" },
+      } as ProjectAttentionItemRecord;
+
+      expect(peekNextWorkerAttention([workerItem, clarification], resolver)).toBe(workerItem);
     });
 
     it.each([

@@ -9,7 +9,6 @@ export type VirtualWorkerScheduleDecision =
         | "active_cycle"
         | "already_scheduled"
         | "workers_not_virtual"
-        | "manager_clarification_pending"
         | "no_actionable_work"
     };
 
@@ -19,7 +18,6 @@ export interface VirtualWorkerProjectSchedulingState {
   isAlreadyScheduled: boolean;
   nextAttentionItem: ProjectAttentionItemRecord | null;
   hasPendingDispatch: boolean;
-  hasPendingManagerClarification?: boolean;
 }
 
 export type VirtualWorkerAttentionRoute =
@@ -38,6 +36,20 @@ export function isProjectManagerOwnedClarificationItem(
 ): boolean {
   return item.attentionType === "worker_clarification"
     || item.payload?.type === "worker_clarification";
+}
+
+export function hasPendingManagerClarificationForScope(
+  scope: Pick<ProjectAttentionItemRecord, "taskId" | "dispatchId">,
+  items: ProjectAttentionItemRecord[],
+): boolean {
+  return items.some((item) => {
+    if (!isProjectManagerOwnedClarificationItem(item) || item.payload?.status !== "pending") {
+      return false;
+    }
+
+    return (Boolean(scope.taskId) && item.taskId === scope.taskId)
+      || (Boolean(scope.dispatchId) && item.dispatchId === scope.dispatchId);
+  });
 }
 
 export function isOrchestratorHandledClarificationItem(summaryMarkdown: string): boolean {
@@ -62,9 +74,6 @@ export function decideVirtualWorkerProjectScheduling(
   if (state.executionMode !== "VIRTUAL") {
     return { shouldSchedule: false, reason: "workers_not_virtual" };
   }
-  if (!state.nextAttentionItem && state.hasPendingManagerClarification) {
-    return { shouldSchedule: false, reason: "manager_clarification_pending" };
-  }
   if (!state.nextAttentionItem && !state.hasPendingDispatch) {
     return { shouldSchedule: false, reason: "no_actionable_work" };
   }
@@ -77,7 +86,6 @@ export function projectNeedsVirtualWorker(
   executionMode: WorkerExecutionMode = "VIRTUAL",
   hasPendingDispatch = false,
   isAlreadyScheduled = false,
-  hasPendingManagerClarification = false,
 ): boolean {
   return decideVirtualWorkerProjectScheduling({
     executionMode,
@@ -85,7 +93,6 @@ export function projectNeedsVirtualWorker(
     isAlreadyScheduled,
     nextAttentionItem: nextItem,
     hasPendingDispatch,
-    hasPendingManagerClarification,
   }).shouldSchedule;
 }
 
@@ -93,11 +100,6 @@ export function peekNextWorkerAttention(
   items: ProjectAttentionItemRecord[],
   resolveSettings: (projectId: string, sprintId?: string | null) => DashboardSettings
 ): ProjectAttentionItemRecord | null {
-  const pendingManagerClarifications = items.filter((item) => (
-    isProjectManagerOwnedClarificationItem(item)
-    && item.payload?.status === "pending"
-  ));
-
   return items.find((item) => {
     if (item.ownerType !== "worker") {
       return false;
@@ -110,10 +112,7 @@ export function peekNextWorkerAttention(
       return false;
     }
 
-    if (pendingManagerClarifications.some((clarification) => (
-      (Boolean(item.taskId) && clarification.taskId === item.taskId)
-      || (Boolean(item.dispatchId) && clarification.dispatchId === item.dispatchId)
-    ))) {
+    if (hasPendingManagerClarificationForScope(item, items)) {
       return false;
     }
 

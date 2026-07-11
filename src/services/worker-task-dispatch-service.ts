@@ -122,6 +122,8 @@ export class WorkerTaskDispatchService {
     ownerKey?: string;
     connectionId?: string | null;
     connectionKey?: string | null;
+    dispatchId?: string;
+    taskId?: string;
     sprintId?: string;
     executorType?: TaskDispatchExecutorType;
   }): WorkerTaskDispatchClaim | null {
@@ -148,6 +150,8 @@ export class WorkerTaskDispatchService {
       ownerKey: args.ownerKey || workerEndpoint.endpointKey,
       leaseToken: randomUUID(),
       leaseExpiresAt: this.createLeaseExpiry(),
+      dispatchId: args.dispatchId,
+      taskId: args.taskId,
     });
     if (!claimed) {
       return null;
