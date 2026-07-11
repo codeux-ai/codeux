@@ -48,15 +48,28 @@ The background is an animated Three.js scene ("Deep Ocean") that lazy-loads afte
 | `/config` | [Settings](./settings.md) | System / project / sprint settings hierarchy |
 | `/config?category=guidance#guidance` | [Styleguides and Tech Stacks](./styleguides-and-tech-stacks.md) | Tech-stack guidance, styleguide catalogs, and custom worker instructions |
 
+## Notifications and human intervention
+
+The top-nav notification center is global: it combines human intervention, task and sprint execution failures, automatic stops, and system errors from every project. It also includes global startup readiness and active scheduler notices for the selected project. Startup notices identify missing required dependencies and provider misconfiguration; when no usable provider authentication is detected, **Open onboarding** remains available.
+
+Execution notifications include the project, sprint, and task when those levels exist. Select **Details** to review:
+
+- Project, and optional Sprint and Task context.
+- What went wrong and why it needs attention.
+- Recommended next steps.
+- Timestamp and source context.
+
+Sprint-level records omit Task rather than showing placeholder task data. Opening Details or following the notification action marks the item read. Read and dismissed state is stored in the browser for that notification version; if the same source is updated later, the new version becomes actionable again.
+
+Notification actions use project-aware destinations supplied by the server. A task notification opens its scoped Tasks route, a sprint-run notification can open Live, and sprint or project routes are used as fallbacks. The links keep their real destination for browser and assistive-technology behavior while normal dashboard navigation stays in-app.
+
+After the first execution-feed snapshot loads, each genuinely new or updated intervention, failure, automatic stop, or system error produces one contextual toast. Existing records do not all toast at startup, and unchanged refreshes or reconnects do not repeat them. Warning notifications use the standard bottom-right toast stack. System errors use a persistent assertive error toast and remain until dismissed or opened. Startup and scheduler notices stay in the notification center rather than creating execution toasts.
+
+Notification panel and toast transitions honor reduced motion: reveal and reordering happen immediately, while severity, read/unread state, cross-project context, action labels, keyboard focus behavior, and screen-reader announcements remain available. The Details modal traps focus, supports Escape, and returns focus to its trigger when closed.
+
 ## Overview telemetry
 
-The Overview telemetry rail combines cross-project runtime health with selected-project detail:
-
-The server also exposes the read-only `GET /api/notifications` feed for global notification surfaces. It combines active attention with unrepresented execution failures and automatic stops across every project, and clients refresh it when the existing `overview.telemetry.updated` realtime event arrives.
-
-The top-nav notification center consumes this feed independently of the selected project. Intervention and failure records name their project, sprint, and task when available, expose a direct task or Live-page target with sprint/project fallbacks, and retain browser-local read or dismissed state until the server record receives a newer update timestamp. Startup readiness and selected-project scheduler notices continue to share the same panel; a persistent onboarding action appears when no usable provider authentication is detected.
-
-Actionable rows include a responsive Details dialog with the failure summary, reason, recommended recovery steps, timestamp, and source context; sprint-level records simply omit task context. Direct actions use the server-supplied project and sprint route, and either opening details or following that action marks the record read. Once the first feed snapshot is hydrated, genuinely new or updated attention produces one contextual navbar toast; unchanged refreshes and reconnects are deduplicated, and system errors remain visible as assertive error toasts until dismissed or opened.
+The Overview telemetry rail combines cross-project runtime health with selected-project detail. The read-only `GET /api/notifications` feed refreshes with the existing `overview.telemetry.updated` realtime event.
 
 - Cross-project intervention cards still show active projects that need human attention.
 - Active sprint cards and the runtime timeline continue to summarize work across active projects.
