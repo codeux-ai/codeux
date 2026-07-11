@@ -74,6 +74,12 @@ Older API clients may still call the legacy `sync-markdown` endpoint as a backwa
 
 This makes agent presets first-class repository content — you can check them in, code-review them, and share them across teammates.
 
+## Base-agent compatibility updates
+
+Code UX tracks bundled instruction revisions for the Planning agent and Project manager. `GET /api/projects/:projectId/agent-presets/base-updates` reports an update only when custom instructions or an alternate role assignment prevent the new bundle from being applied automatically; checking for notices does not invoke a provider.
+
+To apply a notice, the dashboard uses `POST /api/projects/:projectId/agent-presets/base-updates/:baseAgentRole/apply`, where the role must be `planning_agent` or `project_manager`. The request runs through the configured planning provider and asks for a compatibility-only merge of the previous base, current bundle, and selected preset. Code UX accepts only raw JSON containing a single non-empty `instructionMarkdown` value and writes that value itself. Custom behavior and the main prompt are retained, while avatar, labels, routing, provider/model, memory, MCP access, persistent skills, and source metadata are not provider-editable. Failed provider calls or malformed responses leave both the preset and its stored baseline unchanged.
+
 ## Deleting an agent
 
 Destructive. Requires confirmation. Threads and tasks that referenced the deleted preset fall back to the project default agent.
