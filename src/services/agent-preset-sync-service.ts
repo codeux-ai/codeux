@@ -15,6 +15,7 @@ import { readLocalGitOriginUrl } from "../infrastructure/git/local-git-origin.js
 import { PrService } from "../infrastructure/providers/cli/pr-service.js";
 import { hasAgentAvatarConfig, resolveAgentAvatarConfig } from "../contracts/agent-avatar-style.js";
 import { defaultCodingAgentMcpAccess } from "./agent-mcp-access.js";
+import type { SkillService } from "./skill-service.js";
 
 interface AgentPresetSyncServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
@@ -24,6 +25,7 @@ interface AgentPresetSyncServiceDeps {
   projectRoot: string;
   logger?: Logger;
   knowledgeService?: KnowledgeService;
+  skillService?: Pick<SkillService, "listStorages" | "createStorage">;
 }
 
 interface AgentSourceFile {
@@ -51,6 +53,8 @@ const BASE_AGENT_IDS: Record<string, string> = {
   "quality assurance agent": "4",
   "project setup agent": "5",
 };
+
+export const PROJECT_MANAGER_DEFAULT_SKILL_STORAGE_NAME = "Project Manager Skills";
 
 export class AgentPresetSyncService {
   private static readonly DASHBOARD_BACKGROUND_SYNC_INTERVAL_MS = 30_000;
@@ -350,6 +354,7 @@ export class AgentPresetSyncService {
       }
     }
 
+    this.seedProjectManagerSkillStorage(projectId);
     await this.seedProjectManagerInternalDocs(projectId);
   }
 
@@ -878,6 +883,25 @@ export class AgentPresetSyncService {
     const existing = this.deps.knowledgeService.listSubscriptions(projectManager.id);
     this.deps.knowledgeService.setSubscriptions(projectManager.id, projectId, [...new Set([...existing, doc.id])]);
     this.deps.agentPresetRepository.markInternalDocsSubscriptionSeeded(projectId);
+  }
+
+  private seedProjectManagerSkillStorage(projectId: string): void {
+    if (!this.deps.skillService) return;
+    const projectManager = this.deps.agentPresetRepository.findAgentPresetByName(projectId, "Project manager")
+      || this.deps.agentPresetRepository.findAgentPresetByName(projectId, "Iris");
+    if (!projectManager || (projectManager.persistentSkillStorageIds?.length ?? 0) > 0) return;
+
+    const storage = this.deps.skillService.listStorages(projectId)
+      .find((candidate) => candidate.name.toLowerCase() === PROJECT_MANAGER_DEFAULT_SKILL_STORAGE_NAME.toLowerCase())
+      ?? this.deps.skillService.createStorage(projectId, {
+        name: PROJECT_MANAGER_DEFAULT_SKILL_STORAGE_NAME,
+        description: "Versioned reusable skills for the dashboard Project Manager.",
+        storageKind: "project",
+      });
+    this.deps.agentPresetRepository.updateAgentPreset(projectManager.id, {
+      persistentSkillStorageIds: [storage.id],
+      persistentSkillStorage: { enabled: true },
+    });
   }
 
   private shouldSaveToProjectDirectory(projectId: string): boolean {

@@ -191,6 +191,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
   providerOptions?: AgentProviderOption[];
   availableMcpServers?: CustomMcpServer[];
   availableSkillStorages?: SkillStorageRecord[];
+  isDashboardReplyAgent?: boolean;
   usageSummary?: AgentUsageSummary | null;
   usageLoading?: boolean;
   onEdit: () => void;
@@ -207,6 +208,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
   providerOptions = [],
   availableMcpServers = [],
   availableSkillStorages = [],
+  isDashboardReplyAgent = false,
   usageSummary,
   usageLoading = false,
   onEdit,
@@ -227,7 +229,9 @@ export const AgentPresetDetailPanel: FunctionComponent<{
   const accentHex = getAccentHex(preset.avatarConfig?.accent);
   const sync = syncStatusDisplay(preset);
   const selectedProvider = providerOptions.find((option) => option.value === preset.providerConfigId) || null;
-  const mcpTags = resolveAgentMcpTags(preset.mcpAccess, availableMcpServers);
+  const mcpTags = resolveAgentMcpTags(preset.mcpAccess, availableMcpServers, {
+    effectiveCodeUxEnabled: isDashboardReplyAgent,
+  });
   const visibleMcpTags = mcpTags.slice(0, 6);
   const hiddenMcpTagCount = mcpTags.length - visibleMcpTags.length;
   const attachedSkillStorages = (preset.persistentSkillStorageIds ?? [])

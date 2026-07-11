@@ -40,6 +40,7 @@ import type { Logger } from "../shared/logging/logger.js";
 import { runCommandStrict } from "./cli-process-runner.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "./git-http-auth.js";
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
+import { buildRelevantMemoryInjectionContext } from "./memory-injection-context.js";
 import { formatTaskPrTitle } from "../domain/git/task-pr-title-template.js";
 import { buildTaskPrComposerInput } from "../domain/sprint/composer/task-pr-input-builder.js";
 import { composeTaskPrBody } from "../domain/sprint/composer/pr-description-composer.js";
@@ -1028,7 +1029,7 @@ export class QualityAssuranceService {
       const providerSettings = route.providers[providerConfigId];
 
       const memoryContext = args.agentPresetId
-        ? this.buildMemoryContext(args.scope.projectId!, args.scope.sprintId || null, args.agentPresetId)
+        ? await this.buildMemoryContext(args.scope.projectId!, args.scope.sprintId || null, args.agentPresetId, args.sprintGoal)
         : undefined;
       const prompt = this.buildReviewPrompt({
         ...args,
@@ -1692,7 +1693,7 @@ export class QualityAssuranceService {
       settings.memory?.workerLearningsInstruction,
     );
     const workerMemoryContext = workerAgent?.id
-      ? this.buildMemoryContext(args.scope.projectId!, args.scope.sprintId || null, workerAgent.id)
+      ? await this.buildMemoryContext(args.scope.projectId!, args.scope.sprintId || null, workerAgent.id, args.followUpPrompt)
       : undefined;
     const promptBody = [
       workerInstructions
@@ -1978,36 +1979,20 @@ export class QualityAssuranceService {
     );
   }
 
-  private buildMemoryContext(projectId: string, sprintId: string | null, agentPresetId: string): string | undefined {
+  private async buildMemoryContext(projectId: string, sprintId: string | null, agentPresetId: string, query: string): Promise<string | undefined> {
     const memoryService = this.deps.memoryService;
     if (!memoryService) {
       return undefined;
     }
 
     try {
-      const longTerm = memoryService.listLongTermByAgent(projectId, agentPresetId, 10);
-      const shortTerm = sprintId
-        ? memoryService.listBySprintAndAgent(projectId, sprintId, agentPresetId, 10)
-        : [];
-
-      if (longTerm.length === 0 && shortTerm.length === 0) {
-        return undefined;
-      }
-
-      const sections: string[] = ["## PROJECT CONTEXT FROM MEMORY"];
-      if (longTerm.length > 0) {
-        sections.push("### Long-Term Knowledge");
-        for (const memory of longTerm) {
-          sections.push(`- [${memory.category}] ${memory.content.slice(0, 300)}`);
-        }
-      }
-      if (shortTerm.length > 0) {
-        sections.push("### Recent Sprint Learnings");
-        for (const memory of shortTerm) {
-          sections.push(`- [${memory.category}] ${memory.content.slice(0, 300)}`);
-        }
-      }
-      return sections.join("\n");
+      return (await buildRelevantMemoryInjectionContext(memoryService, {
+        projectId,
+        sprintId,
+        agentPresetId,
+        query,
+        tokenBudget: 1_800,
+      })).markdown;
     } catch {
       return undefined;
     }

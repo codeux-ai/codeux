@@ -67,32 +67,35 @@ describe("agent preset routes", () => {
       createdAt: "2026-07-09T00:00:00.000Z",
       updatedAt: "2026-07-09T00:00:00.000Z",
     };
+    const skillRecords = Array.from(
+      { length: SKILL_STORAGE_CONTENTS_MAX_SKILLS + 1 },
+      (_, index) => ({
+        id: `skill-${index}`,
+        projectId: "project-1",
+        storageId: "storage-1",
+        name: `Skill ${index}`,
+        description: `Description ${index}`,
+        contentMarkdown: index === 0
+          ? `  ${"bounded markdown ".repeat(30)}\n\nfinal line  `
+          : `Skill body ${index}`,
+        sourceType: "manual",
+        sourceRef: null,
+        contentHash: `hash-${index}`,
+        tags: ["review"],
+        appliesTo: ["src/**"],
+        version: "1.0.0",
+        createdAt: "2026-07-09T00:00:00.000Z",
+        updatedAt: "2026-07-10T00:00:00.000Z",
+      }),
+    );
     const skillService = {
       listStorages: vi.fn().mockReturnValue([storage]),
       createStorage: vi.fn().mockReturnValue(storage),
       updateStorage: vi.fn().mockReturnValue({ ...storage, name: "Updated Skills" }),
       getStorage: vi.fn().mockReturnValue(storage),
-      listByStorage: vi.fn().mockReturnValue(Array.from(
-        { length: SKILL_STORAGE_CONTENTS_MAX_SKILLS + 1 },
-        (_, index) => ({
-          id: `skill-${index}`,
-          projectId: "project-1",
-          storageId: "storage-1",
-          name: `Skill ${index}`,
-          description: `Description ${index}`,
-          contentMarkdown: index === 0
-            ? `  ${"bounded markdown ".repeat(30)}\n\nfinal line  `
-            : `Skill body ${index}`,
-          sourceType: "manual",
-          sourceRef: null,
-          contentHash: `hash-${index}`,
-          tags: ["review"],
-          appliesTo: ["src/**"],
-          version: "1.0.0",
-          createdAt: "2026-07-09T00:00:00.000Z",
-          updatedAt: "2026-07-10T00:00:00.000Z",
-        }),
-      )),
+      listByStorage: vi.fn().mockReturnValue(skillRecords),
+      listByProject: vi.fn().mockReturnValue(skillRecords.slice(0, 2)),
+      listByAgent: vi.fn().mockReturnValue(skillRecords.slice(0, 1)),
       deleteStorage: vi.fn(),
     };
     const app = express();
@@ -109,6 +112,22 @@ describe("agent preset routes", () => {
     expect(listResponse.status).toBe(200);
     expect(listResponse.body).toEqual([storage]);
     expect(skillService.listStorages).toHaveBeenCalledWith("project-1");
+
+    const catalogResponse = await request(app).get("/api/projects/project-1/skills?limit=2");
+    expect(catalogResponse.status).toBe(200);
+    expect(catalogResponse.body).toHaveLength(2);
+    expect(catalogResponse.body[0]).toMatchObject({
+      id: "skill-0",
+      projectId: "project-1",
+      storageId: "storage-1",
+      storageName: "Team Skills",
+    });
+    expect(catalogResponse.body[0]).not.toHaveProperty("contentMarkdown");
+    expect(skillService.listByProject).toHaveBeenCalledWith("project-1", 2);
+
+    const agentCatalogResponse = await request(app).get("/api/projects/project-1/skills?agentPresetId=agent-1&limit=1");
+    expect(agentCatalogResponse.status).toBe(200);
+    expect(skillService.listByAgent).toHaveBeenCalledWith("project-1", "agent-1", 1);
 
     const createResponse = await request(app)
       .post("/api/projects/project-1/skill-storages")

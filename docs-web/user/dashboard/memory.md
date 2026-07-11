@@ -30,7 +30,7 @@ Categories drive default rendering and can be used as filters in search.
 
 The Memory header is the main place to choose what the graph, sidebar, and inspector are showing. It is grouped into separate rows so the current state stays readable on desktop and wraps cleanly on narrow screens:
 
-- **Tier summary tabs** — **Short Term** and **Long Term** show their memory counts directly in the tab cards.
+- **Tier summary tabs** — **Short Term**, **Long Term**, and **Skills** show their indexed counts directly in the tab cards.
 - **Current scope line** — shows copy such as `Short Term: showing 7 memories of 17 memories · Sprint 2 · All Agents` or `Long Term: showing 1 memory of 1 memory · Project-wide · All Agents`.
 - **Scope filters** — Short-term memory shows the sprint selector when sprint scope data is available, and both tiers show the agent preset selector when agent presets are available. When a source list is empty, the filter row shows reason copy instead of rendering a focusable empty selector.
 - **Actions** — **Add Memory**, **Model Catalog**, and **Danger Delete** are separated from the selectors. Add Memory opens the manual memory dialog for the current tier scope. Model Catalog shows whether it is shown or hidden plus active-model status. Danger Delete always shows Off/Armed state plus persistent explanatory copy; when armed, the page warning refers to this as Lobotomize mode because graph-node and inspector deletes become immediate.
@@ -138,7 +138,9 @@ Switching the active model leaves existing memories embedded with the previous m
 
 Persistent skills are reusable agent instructions, not sprint learnings. They are stored in project-owned skill storages, attached to agent presets, and kept out of the project workspace and `.code-ux/` sprint files.
 
-Skill markdown has frontmatter for `title`, `description`, `tags`, `appliesTo`, and `version`; the markdown body is the stored instruction content. When embeddings are available, skills are vectorized into `skill_embeddings` with model and dimension metadata. Search only compares vectors from the requested project/storage or agent-attached storages, skips dimension mismatches, caps candidate loading, ranks by cosine similarity, and uses skill id as a deterministic tie-breaker.
+Open the **Skills** tier to visualize the bounded skill catalog as a read-only graph. You can search it and filter to an agent's attached storages; memory creation, embedding-model controls, and deletion controls are intentionally unavailable in this tier. Runtime skill repositories are versioned internally and mounted read-only, while skill changes go through the management tools.
+
+Skill markdown has frontmatter for `title`, `description`, `tags`, `appliesTo`, and `version`; the markdown body is the stored instruction content. When embeddings are available, each skill gets a compact descriptor vector plus bounded, heading-aware body chunks. Search combines the strongest matching chunk with lexical descriptor/body overlap, stays within the requested project/storage or agent attachments, skips dimension mismatches, caps candidate loading, and uses deterministic tie-breakers. If the embedding model is offline, lexical search remains available instead of returning an empty catalog.
 
 ## Stats
 

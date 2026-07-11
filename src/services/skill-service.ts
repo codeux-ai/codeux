@@ -1,14 +1,14 @@
 import { SkillRepository } from "../repositories/skill-repository.js";
-import * as fs from "fs/promises";
 import {
   buildPersistentSkillStorageContainerPath,
-  buildPersistentSkillStorageHostPath,
 } from "../infrastructure/providers/cli/workspace-manager.js";
 import { bufferToFloat32, cosineSimilarity, float32ToBuffer } from "./embedding-vector-utils.js";
 import { parseSkillMarkdown, renderSkillMarkdown } from "./skill-markdown-parser.js";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
 import { buildPersistentSkillStorageInstruction } from "./persistent-skill-context.js";
 import { ValidationError } from "../repositories/repository-utils.js";
+import { SkillStorageVersionControlService } from "./skill-storage-version-control-service.js";
+import { KnowledgeIngestionService } from "./knowledge-ingestion-service.js";
 import type {
   CreateSkillStorageInput,
   SkillRecord,
@@ -39,6 +39,7 @@ export interface PersistentSkillStorageRuntimeMount {
   containerPath: string;
   /** Complete skill inventory for this linked storage, injected as prompt context. */
   skills: Array<Pick<SkillRecord, "id" | "name" | "description" | "version">>;
+  revision: string;
 }
 
 export interface PersistentSkillStorageRuntime {
@@ -49,12 +50,14 @@ export interface PersistentSkillStorageRuntime {
 }
 
 const MAX_SEARCH_CANDIDATES = 10000;
+const MAX_SKILL_BODY_CHUNKS = 64;
 
 export class SkillService {
   constructor(
     private readonly skillRepository: SkillRepository,
     private readonly embeddingService: SkillEmbeddingProvider,
     private readonly logger: Logger = createLogger({ bindings: { component: "SkillService" } }),
+    private readonly versionControl: SkillStorageVersionControlService = new SkillStorageVersionControlService(),
   ) {}
 
   createStorage(projectId: string, input: CreateSkillStorageInput): SkillStorageRecord {
@@ -107,19 +110,21 @@ export class SkillService {
 
     const mounts: PersistentSkillStorageRuntimeMount[] = [];
     for (const storage of attachments) {
-      const hostPath = buildPersistentSkillStorageHostPath(args.projectId, args.agentPresetId, storage.id);
-      await fs.mkdir(hostPath, { recursive: true, mode: 0o700 });
+      const skills = this.skillRepository.listSkills(args.projectId, storage.id, MAX_SEARCH_CANDIDATES);
+      const snapshot = await this.versionControl.synchronize(args.projectId, storage, skills);
+      const hostPath = snapshot.repositoryPath;
       mounts.push({
         storageId: storage.id,
         storageName: storage.name,
         hostPath,
         containerPath: buildPersistentSkillStorageContainerPath(storage.id),
-        skills: this.skillRepository.listSkills(args.projectId, storage.id, Number.MAX_SAFE_INTEGER).map((skill) => ({
+        skills: skills.map((skill) => ({
           id: skill.id,
           name: skill.name,
           description: skill.description,
           version: skill.version,
         })),
+        revision: snapshot.revision,
       });
     }
 
@@ -161,7 +166,9 @@ export class SkillService {
       : this.skillRepository.createSkill(projectId, storageId, input);
 
     await this.embedSkillIfAvailable(skill);
-    return this.skillRepository.getSkill(projectId, skill.id) ?? skill;
+    const persisted = this.skillRepository.getSkill(projectId, skill.id) ?? skill;
+    await this.synchronizeStorage(projectId, storageId, options.skillId ? `skill: update ${persisted.name}` : `skill: add ${persisted.name}`);
+    return persisted;
   }
 
   renderSkillToMarkdown(projectId: string, skillId: string): string {
@@ -189,8 +196,19 @@ export class SkillService {
     return results;
   }
 
+  listByProject(projectId: string, limit = 1000): SkillRecord[] {
+    const results: SkillRecord[] = [];
+    for (const storage of this.skillRepository.listStorages(projectId)) {
+      if (results.length >= limit) break;
+      results.push(...this.skillRepository.listSkills(projectId, storage.id, limit - results.length));
+    }
+    return results;
+  }
+
   async deleteSkill(projectId: string, skillId: string): Promise<void> {
+    const skill = this.requireSkill(projectId, skillId);
     this.skillRepository.deleteSkill(projectId, skillId);
+    await this.synchronizeStorage(projectId, skill.storageId, `skill: delete ${skill.name}`);
   }
 
   async resetStorage(projectId: string, storageId: string): Promise<number> {
@@ -198,7 +216,17 @@ export class SkillService {
     for (const skill of skills) {
       this.skillRepository.deleteSkill(projectId, skill.id);
     }
+    await this.synchronizeStorage(projectId, storageId, "skill: reset storage");
     return skills.length;
+  }
+
+  private async synchronizeStorage(projectId: string, storageId: string, commitMessage: string): Promise<void> {
+    const storage = this.skillRepository.getStorage(projectId, storageId);
+    if (!storage) {
+      return;
+    }
+    const skills = this.skillRepository.listSkills(projectId, storageId, MAX_SEARCH_CANDIDATES);
+    await this.versionControl.synchronize(projectId, storage, skills, commitMessage);
   }
 
   async search(query: SkillSearchQuery): Promise<SkillSearchResult[]> {
@@ -223,60 +251,54 @@ export class SkillService {
   }
 
   private async searchStorages(query: SkillSearchQuery, storageIds: string[]): Promise<SkillSearchResult[]> {
-    const modelId = this.embeddingService.getLoadedModelId();
-    if (!modelId) {
-      return [];
-    }
-
     if (storageIds.length === 0) {
       return [];
     }
-
-    const queryEmbedding = await this.embeddingService.embed(query.query);
-    const dimension = queryEmbedding.length;
-    const candidates = this.skillRepository.loadEmbeddingsForStorages(
-      query.projectId,
-      storageIds,
-      modelId,
-      MAX_SEARCH_CANDIDATES,
-    );
-
     const limit = Math.max(1, query.limit ?? 20);
     const minSimilarity = query.minSimilarity ?? 0.3;
-    const topK: Array<{ skillId: string; similarity: number }> = [];
+    const skills = storageIds
+      .flatMap((storageId) => this.skillRepository.listSkills(query.projectId, storageId, MAX_SEARCH_CANDIDATES))
+      .slice(0, MAX_SEARCH_CANDIDATES);
+    const lexicalScores = new Map(skills.map((skill) => [skill.id, computeSkillLexicalScore(skill, query.query)]));
+    const vectorScores = new Map<string, number>();
+    const modelId = this.embeddingService.getLoadedModelId();
 
-    for (const candidate of candidates) {
-      if (candidate.embeddingDimension !== dimension) {
-        continue;
-      }
-      const similarity = cosineSimilarity(queryEmbedding, bufferToFloat32(candidate.embeddingBlob, candidate.embeddingDimension));
-      if (similarity < minSimilarity) {
-        continue;
-      }
-      const next = { skillId: candidate.skillId, similarity };
-      if (topK.length < limit) {
-        topK.push(next);
-        topK.sort(compareRankedSkill);
-        continue;
-      }
-      const last = topK[topK.length - 1]!;
-      if (compareRankedSkill(next, last) < 0) {
-        topK.pop();
-        topK.push(next);
-        topK.sort(compareRankedSkill);
+    if (modelId && query.query.trim()) {
+      try {
+        const queryEmbedding = await this.embeddingService.embed(query.query);
+        const candidates = this.skillRepository.loadEmbeddingsForStorages(
+          query.projectId,
+          storageIds,
+          modelId,
+          MAX_SEARCH_CANDIDATES,
+        );
+        for (const candidate of candidates) {
+          if (candidate.embeddingDimension !== queryEmbedding.length) continue;
+          const similarity = cosineSimilarity(
+            queryEmbedding,
+            bufferToFloat32(candidate.embeddingBlob, candidate.embeddingDimension),
+          );
+          vectorScores.set(candidate.skillId, Math.max(vectorScores.get(candidate.skillId) ?? -1, similarity));
+        }
+      } catch (error) {
+        this.logger.warn(`Skill semantic search unavailable; using lexical fallback: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
 
-    const skills = this.skillRepository.getSkills(query.projectId, topK.map((item) => item.skillId));
-    const skillMap = new Map(skills.map((skill) => [skill.id, skill]));
-    const results: SkillSearchResult[] = [];
-    for (const item of topK) {
-      const skill = skillMap.get(item.skillId);
-      if (skill) {
-        results.push({ skill, similarity: item.similarity });
-      }
-    }
-    return results;
+    const semanticAvailable = vectorScores.size > 0;
+    return skills
+      .map((skill) => {
+        const lexical = lexicalScores.get(skill.id) ?? 0;
+        const vector = vectorScores.get(skill.id);
+        const similarity = vector === undefined
+          ? lexical
+          : vector * 0.82 + lexical * 0.18;
+        return { skill, similarity, lexical, vector };
+      })
+      .filter((result) => result.similarity >= minSimilarity && (result.similarity > 0 || result.lexical > 0))
+      .sort((a, b) => b.similarity - a.similarity || b.lexical - a.lexical || a.skill.id.localeCompare(b.skill.id))
+      .slice(0, limit)
+      .map(({ skill, similarity }) => ({ skill, similarity: semanticAvailable ? similarity : Math.min(1, similarity) }));
   }
 
   private resolveSearchStorageIds(query: SkillSearchQuery): string[] {
@@ -309,8 +331,28 @@ export class SkillService {
     }
 
     try {
-      const embedding = await this.embeddingService.embed(renderSkillMarkdown(skill));
-      this.skillRepository.saveEmbedding(skill.projectId, skill.id, modelId, embedding.length, float32ToBuffer(embedding));
+      this.skillRepository.deleteEmbeddingsForSkill(skill.projectId, skill.id);
+      const descriptor = [
+        skill.name,
+        skill.description,
+        skill.tags.length > 0 ? `Tags: ${skill.tags.join(", ")}` : "",
+        skill.appliesTo.length > 0 ? `Applies to: ${skill.appliesTo.join(", ")}` : "",
+      ].filter(Boolean).join("\n");
+      const chunks = new KnowledgeIngestionService(this.logger)
+        .chunkText(skill.contentMarkdown)
+        .slice(0, MAX_SKILL_BODY_CHUNKS);
+      const embeddingInputs = [descriptor || skill.name, ...chunks.map((chunk) => chunk.content)];
+      for (const [chunkIndex, input] of embeddingInputs.entries()) {
+        const embedding = await this.embeddingService.embed(input);
+        this.skillRepository.saveEmbedding(
+          skill.projectId,
+          skill.id,
+          modelId,
+          embedding.length,
+          float32ToBuffer(embedding),
+          chunkIndex,
+        );
+      }
     } catch (error) {
       this.logger.warn(`Failed to embed skill ${skill.id}: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -318,6 +360,17 @@ export class SkillService {
 
 }
 
-function compareRankedSkill(a: { skillId: string; similarity: number }, b: { skillId: string; similarity: number }): number {
-  return b.similarity - a.similarity || a.skillId.localeCompare(b.skillId);
+function computeSkillLexicalScore(skill: SkillRecord, query: string): number {
+  const terms = query.toLowerCase().match(/[a-z0-9_./-]{2,}/g) ?? [];
+  if (terms.length === 0) return 0;
+  const descriptor = `${skill.name} ${skill.description} ${skill.tags.join(" ")} ${skill.appliesTo.join(" ")}`.toLowerCase();
+  const body = skill.contentMarkdown.toLowerCase();
+  let matched = 0;
+  let descriptorMatches = 0;
+  for (const term of new Set(terms)) {
+    if (descriptor.includes(term) || body.includes(term)) matched++;
+    if (descriptor.includes(term)) descriptorMatches++;
+  }
+  const uniqueTermCount = new Set(terms).size;
+  return Math.min(1, matched / uniqueTermCount * 0.75 + descriptorMatches / uniqueTermCount * 0.25);
 }

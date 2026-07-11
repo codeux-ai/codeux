@@ -5,7 +5,7 @@ import { effect } from "@preact/signals";
 import { Inspector } from "./components/memory/Inspector.js";
 import { MemoryFilters, MemoryDetails, MemoryCard } from "./components/memory/index.js";
 import MemorySidebar from "./components/memory/MemorySidebar.js";
-import { memorySidebarExpandedSignal, searchQuerySignal, activeMemoryIdSignal, hoveredMemoryIdSignal, activeTierSignal, selectedSprintIdSignal, selectedAgentPresetIdSignal, lobotomizeModeSignal } from "./components/memory/memoryState.js";
+import { memorySidebarExpandedSignal, searchQuerySignal, activeMemoryIdSignal, hoveredMemoryIdSignal, activeTierSignal, selectedSprintIdSignal, selectedAgentPresetIdSignal, lobotomizeModeSignal, clearSelectedMemoryIds } from "./components/memory/memoryState.js";
 
 import { AddMemoryModal } from "./components/memory/AddMemoryModal.js";
 import type { FunctionComponent } from "preact";
@@ -271,6 +271,7 @@ export const MemoryPage: FunctionComponent = () => {
         loadError,
         records,
         memoryCount,
+        skillCount,
         setMemoryCount,
         initialModels,
         initialStats,
@@ -279,6 +280,13 @@ export const MemoryPage: FunctionComponent = () => {
         requestedContextKey,
         loadData
     } = useMemoryPageData(pid, activeScope, activeTier, effectiveSelectedSprintId, selectedAgentPresetId, memoryDataEnabled);
+    const skillsActive = activeTier === "skills";
+
+    useEffect(() => {
+        if (!skillsActive) return;
+        setLobotomize(false);
+        clearSelectedMemoryIds();
+    }, [skillsActive]);
     const graphMatchesRequestedContext = graphDataContextKey === requestedContextKey;
     const graphNodes = useMemo(
         () => graphMatchesRequestedContext ? (graphData?.graph.nodes ?? []) : [],
@@ -330,8 +338,8 @@ export const MemoryPage: FunctionComponent = () => {
         : null;
     const activeMemoryCategory = activeMemory ? (CAT[activeMemory.category] || CAT.context).label : null;
     const selectionStatus = activeMemory
-        ? `Selected ${activeMemoryCategory} memory: ${activeMemory.content}`
-        : "No memory selected";
+        ? `Selected ${activeMemoryCategory} ${skillsActive ? "skill" : "memory"}: ${activeMemory.content}`
+        : `No ${skillsActive ? "skill" : "memory"} selected`;
 
     /* ── Fetch agent presets on project change ─────────────── */
     useEffect(() => {
@@ -1048,7 +1056,9 @@ export const MemoryPage: FunctionComponent = () => {
                 icon={Brain}
                 eyebrow="Neural Memory"
                 title="Memory Map"
-                subtitle="Explore the neural landscape of your agents' persistent memory. Click nodes to inspect. Scroll to zoom. Drag to pan."
+                subtitle={skillsActive
+                    ? "Explore the versioned skill catalog available to your agents. Filter by agent, inspect skill nodes, and discover related capabilities."
+                    : "Explore the neural landscape of your agents' persistent memory. Click nodes to inspect. Scroll to zoom. Drag to pan."}
                 actions={
                     <MemoryFilters
                         stats={stats}
@@ -1059,12 +1069,13 @@ export const MemoryPage: FunctionComponent = () => {
                         setShowAddModal={setShowAddModal}
                         lobotomize={lobotomize}
                         handleLobotomizeToggle={handleLobotomizeToggle}
+                        skillsCount={skillCount}
                     />
                 }
             />
 
             {/* ── Model Management ────────────────────────────────────── */}
-            {showModels && (
+            {!skillsActive && showModels && (
                 <ModelBrowser
                     models={models}
                     stats={stats}
@@ -1078,7 +1089,7 @@ export const MemoryPage: FunctionComponent = () => {
             )}
 
             {/* ── Lobotomize warning ──────────────────────────────────── */}
-            {lobotomize && (
+            {!skillsActive && lobotomize && (
                 <div className="flex items-center gap-3 px-5 py-3 rounded-2xl
                                bg-status-red/[0.08] border border-status-red/25 text-status-red"
                     style={{ animation: "lobotomize-pulse 2s ease-in-out infinite" }}>
@@ -1142,7 +1153,7 @@ export const MemoryPage: FunctionComponent = () => {
                         <span className="mt-0.5 line-clamp-2 break-words">
                             {activeMemory
                                 ? `${activeMemoryCategory}: ${activeMemory.content}`
-                                : "No memory selected"}
+                                : `No ${skillsActive ? "skill" : "memory"} selected`}
                         </span>
                     </div>
 
@@ -1174,7 +1185,7 @@ export const MemoryPage: FunctionComponent = () => {
                         }`}
                     >
                     <span className="text-[9px] font-mono text-slate-300 dark:text-slate-600">
-                        {memoryCount} nodes
+                        {memoryCount} {skillsActive ? "skill nodes" : "nodes"}
                     </span>
                     <span className="sr-only">{selectionStatus}</span>
                     </div>
@@ -1184,10 +1195,12 @@ export const MemoryPage: FunctionComponent = () => {
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 pointer-events-none z-20">
                         <Brain className="w-12 h-12 text-signal-500/20" strokeWidth={1.5} />
                         <p className="text-base font-semibold font-display tracking-tight text-slate-400/60">
-                            No memories yet
+                            {skillsActive ? "No skills indexed yet" : "No memories yet"}
                         </p>
                         <p className="text-xs font-mono text-slate-400/50">
-                            Memories will appear here as sprints capture them, or add one manually.
+                            {skillsActive
+                                ? "Create or attach a persistent skill storage to visualize its catalog."
+                                : "Memories will appear here as sprints capture them, or add one manually."}
                         </p>
                     </div>
                 )}
@@ -1201,7 +1214,9 @@ export const MemoryPage: FunctionComponent = () => {
                     >
                         <div className="flex items-center gap-3 rounded-xl border border-signal-500/15 bg-white/75 px-4 py-3 text-xs font-bold text-signal-700 shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:bg-void-800/75 dark:text-signal-300">
                             <Loader2 className="w-4 h-4 text-signal-500/70 motion-safe:animate-spin" strokeWidth={1.8} aria-hidden="true" />
-                            <span>{memoryCount > 0 ? "Refreshing memory map. Current memories remain visible." : "Loading memory map..."}</span>
+                            <span>{memoryCount > 0
+                                ? `Refreshing ${skillsActive ? "skill catalog" : "memory map"}. Current nodes remain visible.`
+                                : `Loading ${skillsActive ? "skill catalog" : "memory map"}...`}</span>
                         </div>
                     </div>
                 )}
@@ -1213,6 +1228,7 @@ export const MemoryPage: FunctionComponent = () => {
                     lobotomize={lobotomize}
                     onClose={() => { S.current.selectedIdx = -1; activeMemoryIdSignal.value = null; }}
                     onDelete={handleDelete}
+                    entityLabel={skillsActive ? "skill" : "memory"}
                 />
                 </div>
 
@@ -1222,7 +1238,9 @@ export const MemoryPage: FunctionComponent = () => {
                     refreshing={loading}
                     loadError={loadError}
                     onRetry={loadData}
-                    onAddMemory={() => setShowAddModal(true)}
+                    onAddMemory={skillsActive ? undefined : () => setShowAddModal(true)}
+                    readOnly={skillsActive}
+                    entityLabel={skillsActive ? "skill" : "memory"}
                 />
             </div>
 

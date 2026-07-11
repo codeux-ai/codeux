@@ -934,6 +934,7 @@ export const AgentsPage: FunctionComponent = () => {
                   providerOptions={providerOptions}
                   availableMcpServers={availableMcpServers}
                   availableSkillStorages={skillStorages}
+                  isDashboardReplyAgent={selectedPresetIsDashboardReplyAgent}
                   usageSummary={selectedAgentUsage}
                   usageLoading={selectedAgentUsageLoading}
                   onEdit={() => setIsEditing(true)}

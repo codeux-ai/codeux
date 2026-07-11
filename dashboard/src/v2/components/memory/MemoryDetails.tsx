@@ -9,7 +9,8 @@ export const MemoryDetails: FunctionComponent<{
     lobotomize: boolean;
     onClose: () => void;
     onDelete: (id: string) => void;
-}> = ({ allNodes, edges, lobotomize, onClose, onDelete }) => {
+    entityLabel?: "memory" | "skill";
+}> = ({ allNodes, edges, lobotomize, onClose, onDelete, entityLabel = "memory" }) => {
 
     // Subscribe directly to signal for the selected node
     const selectedId = activeMemoryIdSignal.value;
@@ -25,6 +26,7 @@ export const MemoryDetails: FunctionComponent<{
             lobotomize={lobotomize}
             onClose={onClose}
             onDelete={onDelete}
+            entityLabel={entityLabel}
         />
     );
 };

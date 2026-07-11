@@ -81,6 +81,7 @@ const renderFilters = ({
             setShowAddModal={vi.fn()}
             lobotomize={false}
             handleLobotomizeToggle={vi.fn()}
+            skillsCount={12}
         />
     );
 };
@@ -131,6 +132,19 @@ describe("MemoryFilters", () => {
         expect(activeTierSignal.value).toBe("short_term");
         expect(document.activeElement).toBe(shortTermTab);
         expect(shortTermTab).toHaveAttribute("tabindex", "0");
+    });
+
+    it("shows the indexed Skills tier without destructive memory actions", () => {
+        renderFilters();
+        const skillsTab = screen.getByRole("tab", { name: /Skills/ });
+        expect(within(skillsTab).getByText("12 skills")).toBeInTheDocument();
+
+        fireEvent.click(skillsTab);
+
+        expect(activeTierSignal.value).toBe("skills");
+        expect(screen.queryByRole("button", { name: "Add Memory" })).toBeNull();
+        expect(screen.queryByRole("button", { name: /danger delete mode/i })).toBeNull();
+        expect(screen.getByText(/Versioned skill storages/)).toBeInTheDocument();
     });
 
     it("resets sprint and agent signals to undefined when placeholder options are selected", async () => {

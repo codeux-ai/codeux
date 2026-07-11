@@ -26,7 +26,8 @@ export const Inspector: FunctionComponent<{
     lobotomize: boolean;
     onClose: () => void;
     onDelete: (id: string) => void;
-}> = ({ node, missingSelectedMemoryId = null, allNodes, edges, lobotomize, onClose, onDelete }) => {
+    entityLabel?: "memory" | "skill";
+}> = ({ node, missingSelectedMemoryId = null, allNodes, edges, lobotomize, onClose, onDelete, entityLabel = "memory" }) => {
     const contentRef = useRef<HTMLDivElement>(null);
     const reducedMotion = useReducedMotion();
     const interactionTokens = useInteractionTokens();
@@ -79,7 +80,7 @@ export const Inspector: FunctionComponent<{
     return (
         <div
             role="region"
-            aria-label={node ? "Selected memory details" : missingSelectedMemoryId ? "Selected memory unavailable" : "Memory inspector"}
+            aria-label={node ? `Selected ${entityLabel} details` : missingSelectedMemoryId ? `Selected ${entityLabel} unavailable` : `${entityLabel === "skill" ? "Skill" : "Memory"} inspector`}
             aria-live="polite"
             className="absolute inset-x-0 bottom-0 z-30 flex h-[min(56dvh,34rem)] w-full flex-col gap-4 overflow-hidden rounded-t-[1.5rem]
                        border-t border-black/[0.06] bg-white/90 p-5 pt-12 shadow-[0_-24px_70px_rgba(0,0,0,0.12)]
@@ -96,8 +97,8 @@ export const Inspector: FunctionComponent<{
             <button
                 type="button"
                 onClick={onClose}
-                aria-label="Close memory inspector"
-                title="Close memory inspector"
+                aria-label={`Close ${entityLabel} inspector`}
+                title={`Close ${entityLabel} inspector`}
                 className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full
                            bg-black/[0.04] text-slate-500 transition-colors hover:bg-black/[0.08] hover:text-slate-700
                            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-white dark:focus-visible:ring-offset-void-900"
@@ -106,15 +107,15 @@ export const Inspector: FunctionComponent<{
                 <X className="w-3.5 h-3.5 text-slate-500" strokeWidth={2} />
             </button>
             {!node && (
-                <p className="sr-only">No memory selected. Select a memory from the graph or list to inspect its details.</p>
+                <p className="sr-only">No {entityLabel} selected. Select a {entityLabel} from the graph or list to inspect its details.</p>
             )}
             {!node && missingSelectedMemoryId && (
                 <div ref={contentRef} className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1 dashboard-scrollbar">
                     <div className="rounded-xl border border-ember-500/20 bg-ember-500/[0.08] px-3 py-2 text-[11px] font-bold leading-4 text-ember-600 dark:text-ember-400">
-                        Selected memory is no longer in the current result set.
+                        Selected {entityLabel} is no longer in the current result set.
                     </div>
                     <p className="text-sm font-medium leading-6 text-slate-600 dark:text-slate-300">
-                        Refreshing, deleting, or changing filters can make an open memory unavailable. Close the inspector, retry the current filter, or choose another memory from the graph or list.
+                        Refreshing or changing filters can make an open {entityLabel} unavailable. Close the inspector, retry the current filter, or choose another {entityLabel} from the graph or list.
                     </p>
                     <button
                         type="button"
@@ -129,7 +130,7 @@ export const Inspector: FunctionComponent<{
             {node && (
                 <div ref={contentRef} className="flex min-h-0 flex-col gap-4 overflow-y-auto overflow-x-hidden pr-1 will-change-[opacity,transform] dashboard-scrollbar">
                     <div className="rounded-xl border border-signal-500/20 bg-signal-500/[0.08] px-3 py-2 text-[11px] font-bold text-signal-700 dark:text-signal-300">
-                        Selected memory open in inspector
+                        Selected {entityLabel} open in inspector
                     </div>
                     <div className="flex items-center gap-2 pt-1">
                         <div className="w-2.5 h-2.5 rounded-full" style={{ background: cat.hex, boxShadow: `0 0 10px ${cat.hex}` }} />
@@ -145,7 +146,7 @@ export const Inspector: FunctionComponent<{
                     </p>
                     <div className="flex flex-col gap-3 pt-3 border-t border-black/[0.06] dark:border-white/[0.06]">
                         <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Strength</span>
+                            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{entityLabel === "skill" ? "Relevance" : "Strength"}</span>
                             <div className="flex items-center gap-2">
                                 <div className="w-20 h-1.5 rounded-full bg-black/[0.06] dark:bg-white/[0.06] overflow-hidden">
                                     <div className="h-full rounded-full transition-[width]"

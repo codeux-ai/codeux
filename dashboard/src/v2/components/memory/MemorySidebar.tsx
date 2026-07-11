@@ -13,9 +13,11 @@ interface MemorySidebarProps {
   loadError?: string | null;
   onRetry?: () => void;
   onAddMemory?: () => void;
+  readOnly?: boolean;
+  entityLabel?: "memory" | "skill";
 }
 
-const MemorySidebar = ({ nodes, onSelectNode, refreshing = false, loadError = null, onRetry, onAddMemory }: MemorySidebarProps) => {
+const MemorySidebar = ({ nodes, onSelectNode, refreshing = false, loadError = null, onRetry, onAddMemory, readOnly = false, entityLabel = "memory" }: MemorySidebarProps) => {
   const isExpanded = memorySidebarExpandedSignal.value;
   const previousExpanded = useRef(isExpanded);
 
@@ -46,10 +48,10 @@ const MemorySidebar = ({ nodes, onSelectNode, refreshing = false, loadError = nu
                 {isExpanded && (
                     <div className="min-w-0 flex-1">
                         <p className="truncate font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">
-                            Memory
+                            {entityLabel === "skill" ? "Skills" : "Memory"}
                         </p>
                         <p className="truncate text-[11px] text-slate-500">
-                            Browse project memory
+                            {entityLabel === "skill" ? "Browse indexed skills" : "Browse project memory"}
                         </p>
                     </div>
                 )}
@@ -100,6 +102,8 @@ const MemorySidebar = ({ nodes, onSelectNode, refreshing = false, loadError = nu
                         loadError={loadError}
                         onRetry={onRetry}
                         onAddMemory={onAddMemory}
+                        readOnly={readOnly}
+                        entityLabel={entityLabel}
                     />
                 </div>
             </div>

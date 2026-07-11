@@ -29,7 +29,7 @@ Use explicit badging inside `.code-ux/agents` lists:
 - **Synced:** `border-black/[0.08] bg-white/80 text-slate-500 shadow-sm`.
 - **Out of Sync:** `border-amber-400/30 bg-amber-400/15 text-amber-600`.
 - **Missing Source:** `border-status-red/20 bg-status-red/8 text-status-red`.
-- **Persistent Skills:** show `Default off` until the agent has at least one attached skill storage and retrieval is explicitly enabled. Do not reuse memory colors or place this status inside memory filter controls.
+- **Persistent Skills:** show `Default off` until the agent has at least one attached skill storage and retrieval is explicitly enabled. The built-in Project Manager is seeded with one enabled default storage, while a later opt-out remains authoritative. Do not reuse memory colors or place this status inside memory filter controls.
 
 ## Persistent Skills
 - Persistent skill storage is a separate agent capability from workspace memory and knowledge subscriptions. The editor/detail panels must present it as storage attachments with durable storage names, not as ordinary memory filters.
