@@ -15,6 +15,18 @@ Sprints can be **showcase-pinned** to surface them on the Overview page; toggle 
 
 Each sprint row and showcase card has separate **Tasks** and **Live** actions. These are in-app router links carrying both `projectId` and `sprintId`, so opening a sprint switches the dashboard to that sprint's project before loading the task board or live view without reloading the dashboard shell.
 
+## How sprint progress is calculated
+
+The progress percentage is a weighted view of every task's lifecycle, not the completed-task counter:
+
+- A task begins at 0% and can advance through the first 50% while coding is active. Code UX uses coding `provider_invocations.tool_call_count` telemetry for this band: each tool call adds 0.5 percentage points, up to a 100-call cap. Calls after the first 100 do not increase the coding contribution beyond 50%.
+- After coding, a task contributes 75% while CI, QA, merge, or another post-coding gate is still settling.
+- A task contributes 100% only after final settlement.
+
+The sprint percentage is the average of its task contributions, rounded to the nearest whole percentage point. The completed / total task counter remains a separate raw count, so it does not need to match the weighted percentage. When CI is disabled, a task jumps directly from its final coding contribution to 100% at completion; it does not pause at the 75% CI/post-coding stage.
+
+Sprint summaries refresh on both project-structure changes and execution-telemetry updates. This means progress can move as coding tool-call telemetry arrives during an active provider run, before the task changes lifecycle stage.
+
 ## Creating a sprint
 
 You can create a sprint from the Sprints page or directly from the top-bar sprint selector.
