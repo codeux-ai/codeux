@@ -68,6 +68,53 @@ action-specific fields, and an optional `approval` object for destructive action
 
 Every tool uses the existing `project_manager` gateway runtime role and is enabled by default. Clarification tools additionally require their worker or project-manager audience grant; unknown, cross-project, and unauthorized agent calls return `MethodNotFound`.
 
+## Worker clarification contract
+
+The clarification tools are narrow audience grants on the existing project-manager MCP gateway. They do not create a worker runtime role or grant coding agents project-manager management tools. An eligible task-coding agent can receive `request_clarification`; it never receives `reply_to_clarification`. The configured clarification-reply/dashboard-reply Project manager agent, the built-in fallback when applicable, or an unscoped project-manager client can receive `reply_to_clarification`.
+
+### `request_clarification`
+
+```json
+{
+  "projectId": "project-123",
+  "taskId": "task-456",
+  "taskRunId": "task-run-789",
+  "questionMarkdown": "Should the migration preserve legacy rows, or may it rebuild the table?",
+  "deduplicationKey": "task-456:legacy-row-policy"
+}
+```
+
+Required fields are `projectId`, non-blank `questionMarkdown` (maximum 16,000 characters), and a stable project-scoped `deduplicationKey` (maximum 512 characters). Optional context is `taskId`, `sprintId`, `sprintRunId`, `dispatchId`, `taskRunId`, and `sessionId`. The authenticated MCP agent supplies the requester identity; payloads cannot spoof it. Code UX verifies every supplied reference against the project and the other linked execution records. An assignment-only coding agent must address its assigned task.
+
+Success returns `{ "clarification": ... }`. A new clarification is `pending` and its id is the durable project attention-item id. Repeating the same requester, question, key, and full runtime scope returns that existing record in its current state. Reusing the key with different content or scope is rejected.
+
+### `reply_to_clarification`
+
+```json
+{
+  "projectId": "project-123",
+  "clarificationId": "attention-item-abc",
+  "answerMarkdown": "Preserve the legacy rows and use an additive migration."
+}
+```
+
+All three fields are required; `answerMarkdown` is limited to 32,000 characters. The replying identity comes from the authenticated agent context rather than the payload. Agent-scoped replies must belong to that agent's project and are limited to the configured clarification-reply/dashboard-reply audience.
+
+A successful runtime response includes the `clarification`, its typed `continuation`, a `deliveryMode`, and `alreadySettled`:
+
+```json
+{
+  "clarification": { "id": "attention-item-abc", "status": "replied" },
+  "continuation": { "kind": "worker_clarification_reply", "answerMarkdown": "..." },
+  "deliveryMode": "cli_workspace",
+  "alreadySettled": false
+}
+```
+
+`deliveryMode` is `jules_message` after the existing Jules session accepts the answer, `cli_workspace` after the task-rerun path accepts continuation in the preserved local workspace/native session lineage, or `recorded_answer` for a taskless general question. These values do not claim the coding task completed. A task-backed clarification becomes `replied` only after provider delivery or workspace continuation succeeds; otherwise it remains `pending`.
+
+Clarification states are `pending`, `replied`, `expired`, and `cancelled`. Repeating a reply after `replied` returns the original settled result with `alreadySettled: true` and does not send or dispatch twice. Concurrent duplicate replies share the in-flight operation. Schema errors return `InvalidParams`; disabled tools, unknown agents, wrong audiences, ineligible task scope, and cross-project calls fail closed with `MethodNotFound`; service or delivery failures return the management error envelope with `isError: true`.
+
 ### Action enums
 
 | Tool | `action` values |
