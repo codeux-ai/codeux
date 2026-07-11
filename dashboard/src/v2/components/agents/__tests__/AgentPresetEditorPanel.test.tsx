@@ -3,11 +3,13 @@
 import { h } from "preact";
 import { describe, expect, afterEach, vi, it } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { AgentPresetEditorPanel } from "../AgentPresetEditorPanel.js";
 import { DEFAULT_AGENT_MEMORY_CONFIG, type AgentMemoryConfig } from "../../../memory-types.js";
 import type { AgentPreset } from "../../../types.js";
 import * as knowledgeApi from "../../../lib/knowledge-api.js";
+import { fetchSkillStorageContents } from "../../../lib/agent-preset-api.js";
 import { TOOL_DEFINITIONS } from "../../../../../../src/contracts/mcp-tool-definitions.js";
 import { schedulerOnlyAgentMcpAccess } from "../../../lib/agent-mcp-display.js";
 
@@ -24,7 +26,10 @@ vi.mock("gsap", () => ({
     }),
     context: vi.fn().mockImplementation((fn) => {
       if (fn) fn();
-      return { revert: vi.fn() };
+      return {
+        add: (callback: () => void) => callback(),
+        revert: vi.fn(),
+      };
     }),
   },
 }));
@@ -168,6 +173,10 @@ vi.mock("../../../lib/knowledge-api.js", () => ({
   setAgentKnowledgeSubscriptions: vi.fn(async (_agentPresetId: string, documentIds: string[]) => documentIds),
 }));
 
+vi.mock("../../../lib/agent-preset-api.js", () => ({
+  fetchSkillStorageContents: vi.fn(),
+}));
+
 function makePreset(overrides: Partial<AgentPreset> = {}): AgentPreset {
   return {
     id: "preset_1",
@@ -206,54 +215,67 @@ describe("AgentPresetEditorPanel", () => {
     vi.clearAllMocks();
   });
 
-  it("keeps attached storage names and default-off or enabled status visible", () => {
-    const availableSkillStorages = [{
-      id: "skills-shared",
-      projectId: "project_1",
-      name: "Shared Skills",
-      description: "Reusable instructions",
-      storageKind: "project" as const,
-      createdAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-01T00:00:00.000Z",
-    }];
-    const view = render(
-      <AgentPresetEditorPanel
-        preset={makePreset({
+  it.each(["click", "keyboard"] as const)(
+    "keeps an attached storage checked and out of the update payload mutation path after %s inspection",
+    async (activation) => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      const availableSkillStorages = [{
+        id: "skills-shared",
+        projectId: "project_1",
+        name: "Shared Skills",
+        description: "Reusable instructions",
+        storageKind: "project" as const,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }];
+      vi.mocked(fetchSkillStorageContents).mockResolvedValue({
+        storage: availableSkillStorages[0],
+        skills: [],
+        truncated: false,
+      });
+      render(
+        <AgentPresetEditorPanel
+          preset={makePreset({
+            persistentSkillStorageIds: ["skills-shared"],
+            persistentSkillStorage: { enabled: false },
+          })}
+          saving={false}
+          availableSkillStorages={availableSkillStorages}
+          onSave={onSave}
+          onCancel={vi.fn()}
+        />
+      );
+
+      expect(screen.getByText("Default off")).toBeInTheDocument();
+      const attachedStorageChip = screen.getByRole("button", { name: "Inspect attached skill storage Shared Skills" });
+      expect(attachedStorageChip).toBeInTheDocument();
+      expect(screen.getByLabelText("Shared Skills")).toBeChecked();
+
+      if (activation === "click") {
+        await user.click(attachedStorageChip);
+      } else {
+        attachedStorageChip.focus();
+        await user.keyboard("{Enter}");
+      }
+
+      expect(await screen.findByText("No skills saved in this storage.")).toBeInTheDocument();
+      expect(screen.getByLabelText("Shared Skills")).toBeChecked();
+      expect(screen.getByRole("button", { name: "Save Agent" })).toBeDisabled();
+
+      await user.clear(screen.getByLabelText(/Agent Name/));
+      await user.type(screen.getByLabelText(/Agent Name/), "Planning Lead");
+      await user.click(screen.getByRole("button", { name: "Save Agent" }));
+
+      expect(onSave).toHaveBeenCalledWith(
+        "preset_1",
+        expect.objectContaining({
           persistentSkillStorageIds: ["skills-shared"],
           persistentSkillStorage: { enabled: false },
-        })}
-        saving={false}
-        availableSkillStorages={availableSkillStorages}
-        onSave={vi.fn()}
-        onCancel={vi.fn()}
-      />
-    );
-
-    expect(screen.getByText("Default off")).toBeInTheDocument();
-    const attachedStorageChip = screen.getByRole("button", { name: "Inspect attached skill storage Shared Skills" });
-    expect(attachedStorageChip).toBeInTheDocument();
-    expect(screen.getByLabelText("Shared Skills")).toBeChecked();
-
-    fireEvent.click(attachedStorageChip);
-    expect(screen.getByLabelText("Shared Skills")).not.toBeChecked();
-
-    view.rerender(
-      <AgentPresetEditorPanel
-        preset={makePreset({
-          id: "preset_2",
-          persistentSkillStorageIds: ["skills-shared"],
-          persistentSkillStorage: { enabled: true },
-        })}
-        saving={false}
-        availableSkillStorages={availableSkillStorages}
-        onSave={vi.fn()}
-        onCancel={vi.fn()}
-      />
-    );
-
-    expect(screen.getByText("Enabled")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Inspect attached skill storage Shared Skills" })).toBeInTheDocument();
-  });
+        })
+      );
+    }
+  );
 
   it("renders disabled reasons on the save button and verifies validation updates", async () => {
     const onSave = vi.fn();
