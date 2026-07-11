@@ -43,11 +43,13 @@ Agent wakeups created through `scheduler_code_ux` can use one timing mode at a t
 - an absolute `scheduledFor` timestamp
 - a positive `delaySeconds` or `delayMinutes` value
 - `wakeAfterReply: true`, which wakes the agent immediately after its current dashboard reply is sent
-- `afterSprintId`, with optional `offsetMinutes`, to wake after a sprint reaches a terminal state
+- `afterSprintId`, with optional `offsetMinutes`, to wake after a sprint completes successfully
 - `afterTaskId`, with optional `offsetMinutes`, to wake after a task reaches a terminal project status
 
-Completion-anchored wakeups are one-time entries. Sprint anchors use the terminal sprint run finish
-time when available, and task anchors use terminal task run or dispatch finish evidence before
+Completion-anchored wakeups are one-time entries. Sprint anchors resolve only when the source sprint's
+effective status is `completed`; failed and cancelled sources remain unresolved. They use the latest
+successful sprint-run finish time when available and otherwise fall back to the completed sprint's
+end time. Task anchors continue to use terminal task run or dispatch finish evidence before
 falling back to the task update time.
 
 ## Recurrence

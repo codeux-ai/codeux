@@ -556,12 +556,12 @@ export class SchedulerService {
       return null;
     }
     const sprint = this.deps.projectManagementRepository.getSprint(anchor.sourceSprintId);
-    if (!sprint || sprint.projectId !== projectId || !isTerminalSprintStatus(sprint.status)) {
+    if (!sprint || sprint.projectId !== projectId || !isSuccessfulSprintStatus(sprint.status)) {
       return null;
     }
 
     const latestRunFinishedAt = this.deps.executionRepository
-      ? latestTerminalRunFinishedAt(this.deps.executionRepository.listSprintRuns(projectId, anchor.sourceSprintId))
+      ? latestSuccessfulRunFinishedAt(this.deps.executionRepository.listSprintRuns(projectId, anchor.sourceSprintId))
       : null;
     if (latestRunFinishedAt) {
       return latestRunFinishedAt;
@@ -631,18 +631,18 @@ export class SchedulerService {
   }
 }
 
-function isTerminalSprintStatus(status: string): boolean {
-  return status === "completed" || status === "failed" || status === "cancelled";
+function isSuccessfulSprintStatus(status: string): boolean {
+  return status === "completed";
 }
 
 function isTerminalProjectTaskStatus(status: string): boolean {
   return status === "completed" || status === "QA_REVIEW_FAILED";
 }
 
-function latestTerminalRunFinishedAt(runs: SprintRunRecord[]): Date | null {
+function latestSuccessfulRunFinishedAt(runs: SprintRunRecord[]): Date | null {
   let latest: Date | null = null;
   for (const run of runs) {
-    if (!isTerminalSprintStatus(run.status) || !run.finishedAt) {
+    if (!isSuccessfulSprintStatus(run.status) || !run.finishedAt) {
       continue;
     }
     const finishedAt = new Date(run.finishedAt);
