@@ -17,6 +17,7 @@ import type { ExecutionControlService } from "./execution-control-service.js";
 import type { MemoryRemediationService } from "./memory-remediation-service.js";
 import type { TaskRerunService } from "./task-rerun-service.js";
 import type { NodeFlowRuntimeService } from "./node-flow-runtime-service.js";
+import type { PlanningAgentService } from "./planning-agent-service.js";
 import type { NodeFlowRepository } from "../repositories/node-flow-repository.js";
 import type { NodeFlowRunSummaryResponse } from "../contracts/node-flow-types.js";
 import { buildSchedulerOccurrences, computeNextRunAfterOccurrence } from "../domain/scheduler/schedule-time.js";
@@ -33,6 +34,7 @@ export interface SchedulerServiceDeps {
   quicksprintService: QuicksprintService;
   chatThreadRuntimeService: ChatThreadRuntimeService;
   executionControlService: ExecutionControlService;
+  planningAgentService: Pick<PlanningAgentService, "planSprint">;
   taskRerunService?: TaskRerunService;
   memoryRemediationService?: MemoryRemediationService;
   nodeFlowRuntimeService?: NodeFlowRuntimeService;
@@ -279,6 +281,11 @@ export class SchedulerService {
       const sprintId = entry.sprintTarget?.sprintId;
       if (!sprintId) {
         throw new Error("Scheduled sprint target is missing.");
+      }
+      const tasks = this.deps.projectManagementRepository.listTasks(entry.projectId, sprintId);
+      if (tasks.length === 0) {
+        await this.deps.planningAgentService.planSprint(entry.projectId, sprintId, { autoStart: true });
+        return;
       }
       await this.deps.executionControlService.orchestrateSprint(entry.projectId, sprintId);
       return;
@@ -556,12 +563,12 @@ export class SchedulerService {
       return null;
     }
     const sprint = this.deps.projectManagementRepository.getSprint(anchor.sourceSprintId);
-    if (!sprint || sprint.projectId !== projectId || !isTerminalSprintStatus(sprint.status)) {
+    if (!sprint || sprint.projectId !== projectId || !isSuccessfulSprintStatus(sprint.status)) {
       return null;
     }
 
     const latestRunFinishedAt = this.deps.executionRepository
-      ? latestTerminalRunFinishedAt(this.deps.executionRepository.listSprintRuns(projectId, anchor.sourceSprintId))
+      ? latestSuccessfulRunFinishedAt(this.deps.executionRepository.listSprintRuns(projectId, anchor.sourceSprintId))
       : null;
     if (latestRunFinishedAt) {
       return latestRunFinishedAt;
@@ -631,18 +638,18 @@ export class SchedulerService {
   }
 }
 
-function isTerminalSprintStatus(status: string): boolean {
-  return status === "completed" || status === "failed" || status === "cancelled";
+function isSuccessfulSprintStatus(status: string): boolean {
+  return status === "completed";
 }
 
 function isTerminalProjectTaskStatus(status: string): boolean {
   return status === "completed" || status === "QA_REVIEW_FAILED";
 }
 
-function latestTerminalRunFinishedAt(runs: SprintRunRecord[]): Date | null {
+function latestSuccessfulRunFinishedAt(runs: SprintRunRecord[]): Date | null {
   let latest: Date | null = null;
   for (const run of runs) {
-    if (!isTerminalSprintStatus(run.status) || !run.finishedAt) {
+    if (!isSuccessfulSprintStatus(run.status) || !run.finishedAt) {
       continue;
     }
     const finishedAt = new Date(run.finishedAt);

@@ -63,10 +63,12 @@ Scheduler state is persisted in SQLite in `scheduler_entries`.
 
 Entries support two scheduling modes:
 - **Absolute time**: the default path. `scheduledFor` is required on create, `nextRunAt` is populated from that timestamp, and recurrence expansion keeps using the existing UTC recurrence helpers.
-- **After sprint end**: set `scheduleAnchor = { mode: "after_sprint_end", sourceSprintId, offsetMinutes? }`. The source sprint must exist in the same project. `offsetMinutes` is optional, defaults to `0`, and must be non-negative.
+- **After sprint end**: set `scheduleAnchor = { mode: "after_sprint_end", sourceSprintId, offsetMinutes? }`. The source sprint must exist in the same project and reach the effective successful `completed` status; failed, cancelled, and otherwise non-completed source sprints do not resolve the anchor. The scheduler uses the latest successful sprint run `finishedAt` when available, otherwise the completed sprint's `endDate`, then applies `offsetMinutes`. The offset is optional, defaults to `0`, and must be non-negative.
 - **After task end**: set `scheduleAnchor = { mode: "after_task_end", sourceTaskId, offsetMinutes? }`. The source task must exist in the same project and the wakeup becomes due only after that task reaches `completed` or `QA_REVIEW_FAILED`. `offsetMinutes` is optional, defaults to `0`, and must be non-negative.
 
 Composer and quicksprint shortcut scheduling both use this same contract. Absolute shortcut submissions send `scheduledFor`; after-sprint-end shortcut submissions send `scheduleAnchor`.
+
+When a scheduled sprint becomes due, the scheduler checks its existing tasks. Taskless sprints run through the planning agent with `autoStart: true`; sprints that already contain tasks start through direct orchestration without replanning. Planning and orchestration errors both use the scheduler entry's existing failed-run handling and operator-visible `lastError`.
 
 Anchors and target-specific payloads are persisted inside the existing `target_json` payload instead of new columns. This keeps existing `scheduler_entries` rows compatible and avoids a destructive migration; older absolute entries simply hydrate with no `scheduleAnchor`.
 
@@ -91,7 +93,7 @@ The persistence and runtime layers live in:
 
 The dashboard API routes are:
 - `GET /api/projects/:projectId/scheduler?from=<iso>&to=<iso>`
-  - Returns persisted entries and expanded occurrences for the requested window. Anchored entries stay in `entries` but do not appear in `occurrences` until the source sprint reaches a terminal state; once resolved, the occurrence starts at the terminal sprint timestamp plus any configured offset.
+  - Returns persisted entries and expanded occurrences for the requested window. Anchored entries stay in `entries` but do not appear in `occurrences` until the source sprint reaches effective successful `completed` status; once resolved, the occurrence starts at the latest successful sprint run `finishedAt` when available, otherwise the completed sprint `endDate`, plus any configured offset.
 - `POST /api/projects/:projectId/scheduler`
   - Creates a scheduler entry.
   - Absolute entries use `scheduledFor`; anchored entries use `scheduleAnchor`.
@@ -132,7 +134,7 @@ Agent-created `agent_wakeup` and `task` entries are display-only in the dashboar
 ### Due Entry Execution
 
 Due entries execute through existing production paths:
-- sprint entries call `ExecutionControlService.orchestrateSprint`
+- sprint entries with no tasks call the planning path with auto-start enabled, so successful planning creates the tasks and starts execution automatically; sprint entries that already have tasks call `ExecutionControlService.orchestrateSprint` directly
 - quicksprint entries call `QuicksprintService.executeQuicksprint`
 - chat entries call `ChatThreadRuntimeService.postMessage`
 - memory remediation entries call `MemoryRemediationService.remediateLongTermMemories`
@@ -145,6 +147,8 @@ When an agent schedules a wakeup with `wakeAfterReply: true`, the entry is store
 AI memory remediation entries create a `remediation` invocation record even when no cleanup candidates are found; in that case the invocation is completed with a skipped reason instead of dispatching an empty provider request.
 
 After a successful run, the service advances `nextRunAt` from the scheduled occurrence time. One-time entries move to `completed`; recurring entries stay `scheduled` until their count or end date/time is exhausted. Failed entries move to `failed` with `lastError` for operator visibility. Node-flow entries are durably claimed before `runFlow` is awaited so the same due occurrence is not dispatched again after a restart, then the scheduler entry is finalized from the returned node-flow run status.
+
+For sprint targets, failures from either automatic planning or direct orchestration are recorded on the scheduler entry: the entry moves to `failed`, and `lastError` exposes the failure in the scheduled-entry list.
 
 ### Node-Flow Schedules
 
@@ -164,8 +168,8 @@ Behavior:
 - On returned `failed` or `cancelled` runtime status, the schedule moves to `failed` with `lastError`, `lastRunAt`, and `runCount` recording the attempted occurrence.
 
 Anchored entries are evaluated separately from absolute `nextRunAt` polling:
-- An `after_sprint_end` entry is due only after the source sprint reaches `completed`, `failed`, or `cancelled`.
-- The anchor timestamp is the latest terminal sprint run `finishedAt` when a terminal run exists; otherwise the scheduler falls back to the sprint `endDate`.
+- An `after_sprint_end` entry is due only after the source sprint's effective status reaches successful `completed`; failed, cancelled, and otherwise non-completed sources remain unresolved.
+- The anchor timestamp is the latest successful sprint run `finishedAt` when a valid one exists; otherwise the scheduler falls back to the completed sprint's `endDate`.
 - An `after_task_end` entry is due only after the source task reaches `completed` or `QA_REVIEW_FAILED`.
 - The task anchor timestamp is the latest terminal task run `finishedAt` when one exists, then the latest terminal task dispatch `finishedAt`, and finally the task `updatedAt` fallback.
 - The optional offset is applied after that terminal timestamp.
