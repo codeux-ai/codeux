@@ -216,6 +216,7 @@ const buildCreateAppQuickactionMetadata = (
       kind,
       requestId: createQuickactionRequestId(kind),
       templateId: spec.templateId,
+      designGuidance: { ...spec.designGuidance },
       stackSummary: buildCreateAppStackSummary(kind, id, entry),
       suggestionTags: uniqueStackSuggestionTags(entry),
     },
@@ -956,9 +957,13 @@ export const useChatThreadData = (options: {
 
     const appKindLabel = getCreateAppQuickactionSpec(kind).appKindLabel.toLowerCase();
     const bodyMarkdown = `Create ${kind === "online_shop" ? "an" : "a"} ${appKindLabel}`;
+    const composerDraft = inputRef.current;
     setSending(true);
     try {
       const thread = selectedThread || await createThreadForCompose();
+      if (!selectedThread) {
+        setInput(composerDraft);
+      }
       const created = await postConversationMessage(selectedProject.id, {
         threadId: thread.id,
         bodyMarkdown,
@@ -979,7 +984,7 @@ export const useChatThreadData = (options: {
     } finally {
       setSending(false);
     }
-  }, [cache, composerRef, createThreadForCompose, dashboardSettings, onMessageSent, selectedProject, selectedThread, sending, setMessagesSnapshot]);
+  }, [cache, composerRef, createThreadForCompose, dashboardSettings, onMessageSent, selectedProject, selectedThread, sending, setInput, setMessagesSnapshot]);
 
   const handleDeleteThread = useCallback(async (threadId: string): Promise<void> => {
     const nextThreads = removeThread(cache.getThreads(selectedProject?.id || "") || threadsRef.current, threadId);

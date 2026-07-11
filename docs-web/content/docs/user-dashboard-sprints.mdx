@@ -73,7 +73,7 @@ The plan is persisted as markdown files at `<repo>/.code-ux/sprints/sprint-<n>/<
 
 ## Chat-created app sprints
 
-The Chat page can create app-building sprints through **Create Web App** and **Create Desktop App** quickactions. Those quickactions start a detached `Plan & Start` quicksprint from the selected project and show planning progress in the chat transcript while the sprint appears here like any other sprint.
+The Chat page can create app-building sprints through **Create Web App**, **Create Desktop App**, **Create Onlineshop**, **Create Portfolio**, and **Create Game** quickactions. Each action starts its shared-catalog detached `Plan & Start` quicksprint with request-scoped experience guidance and shows planning progress in the chat transcript while the sprint appears here like any other sprint.
 
 If you send more direction in the same chat thread while planning is still running, Code UX applies that text to the sprint goal under `Additional direction from chat` after planning finishes. Once the sprint already has tasks, new chat follow-ups are appended to the sprint goal immediately. The generated task prompts are left unchanged, so use the sprint goal as the record of later direction and re-plan only when you want subtasks regenerated.
 

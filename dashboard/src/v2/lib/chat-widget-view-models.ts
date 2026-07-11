@@ -1,4 +1,10 @@
-import type { ChatMessageRecord, ConversationRuntimeState, ExecutionInvocationMessageRecord, Task } from "../types.js";
+import type {
+  ChatMessageRecord,
+  ConversationRuntimeState,
+  DashboardCreateAppQuickactionKind,
+  ExecutionInvocationMessageRecord,
+  Task,
+} from "../types.js";
 import type {
   ExecutionDashboardSnapshot,
   ExecutionSprintRunSummary,
@@ -6,6 +12,10 @@ import type {
 import type { ExecutionStatus } from "../components/chat/widgets/ChatWidgetFrame.js";
 import { formatChatTime } from "./chat-time.js";
 import { buildLiveSessionTasks } from "./live-session-task-structure.js";
+import {
+  CREATE_APP_QUICKACTION_CATALOG,
+  getCreateAppQuickactionSpec,
+} from "../../../../src/domain/chat/create-app-quickaction-catalog.js";
 
 export type ChatWidgetType = "planning" | "app_creation_progress" | "external_reference" | "none";
 
@@ -31,7 +41,7 @@ export interface ChatWidgetState {
   suppressBodyMarkdown?: boolean;
 }
 
-export type AppCreationKind = "web_app" | "desktop_app" | "online_shop" | "portfolio" | "game" | "unknown";
+export type AppCreationKind = DashboardCreateAppQuickactionKind | "unknown";
 
 export type AppCreationProgressStageStatus = "pending" | "running" | "completed" | "failed";
 
@@ -493,40 +503,24 @@ const normalizeWidgetExecutionStatus = (value: unknown, fallback: ExecutionStatu
 
 const normalizeAppCreationKind = (value: unknown): AppCreationKind => {
   const normalized = readString(value)?.toLowerCase().replace(/[\s-]+/g, "_") ?? "";
-  if (normalized === "web_app" || normalized === "web") {
+  const catalogKind = CREATE_APP_QUICKACTION_CATALOG.find(({ kind }) => kind === normalized)?.kind;
+  if (catalogKind) {
+    return catalogKind;
+  }
+  if (normalized === "web") {
     return "web_app";
   }
-  if (normalized === "desktop_app" || normalized === "desktop") {
+  if (normalized === "desktop") {
     return "desktop_app";
   }
-  if (normalized === "online_shop" || normalized === "shop" || normalized === "online_store") {
+  if (normalized === "shop" || normalized === "online_store") {
     return "online_shop";
-  }
-  if (normalized === "portfolio") {
-    return "portfolio";
-  }
-  if (normalized === "game") {
-    return "game";
   }
   return "unknown";
 };
 
 const formatAppCreationKindLabel = (kind: AppCreationKind): string => {
-  switch (kind) {
-    case "web_app":
-      return "Web app";
-    case "desktop_app":
-      return "Desktop app";
-    case "online_shop":
-      return "Online shop";
-    case "portfolio":
-      return "Portfolio";
-    case "game":
-      return "Game";
-    case "unknown":
-    default:
-      return "App";
-  }
+  return kind === "unknown" ? "App" : getCreateAppQuickactionSpec(kind).appKindLabel;
 };
 
 const formatAppCreationStatusLabel = (status: ExecutionStatus, appKindLabel: string): string => {
