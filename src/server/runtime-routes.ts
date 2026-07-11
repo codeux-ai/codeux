@@ -23,6 +23,10 @@ export function registerRuntimeRoutes(app: Express, options: DashboardDependenci
     res.json(options.getOverviewTelemetrySnapshot());
   }));
 
+  app.get("/api/notifications", syncRoute((req, res) => {
+    res.json(options.getDashboardNotifications());
+  }));
+
   app.get("/api/stats/header-throughput", syncRoute((req, res) => {
     res.json(options.getHeaderTokenThroughputSnapshot(parseHeaderTokenThroughputQuery(req.query as Record<string, unknown>)));
   }));
