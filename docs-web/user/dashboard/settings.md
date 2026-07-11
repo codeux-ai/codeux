@@ -55,15 +55,19 @@ Changing mode filters what is visible. It does not delete hidden values, mutate 
 
 ## Agents settings
 
-The **Agents** category includes project markdown mirroring, agent routing, persistent skill storage, and self-reflection controls.
+The **Agents** category is a modular surface for project markdown mirroring, agent routing, persistent skill storage, storage attachments, and self-reflection controls.
 
 - Project Markdown Mirror starts with a compact status summary, then the mirror toggle and `.code-ux/agents` target directory. The status summary makes it clear whether dashboard-authored project agents are mirrored to repository-visible markdown or kept database-backed only.
 - Agent Routing is split into a routing-mode choice, an orchestrator roster, and role-specific preset selectors. Manual mode pins coding to one preset or the built-in Worker fallback. Orchestrator mode gives the Planning agent a multi-select roster of project specialists; the selected-count summary stays visible, long agent names wrap, and an empty roster explains that project agents must be created first.
 - Role selectors for planning, coding, CI fix, merge conflict, dashboard reply, and clarification reply always keep the built-in fallback available. When custom project agents are unavailable, disabled selectors explain that you must select a project before choosing project presets.
-- Persistent skill storage is project-scoped and separate from memory. Creating a storage does not enable runtime retrieval. Attach one or more storages to an agent, then enable persistent skills for that agent.
-- Storage deletion is destructive and requires confirmation because it removes stored skills, embeddings, and agent attachments.
+- Persistent skill storage is project-scoped and separate from memory. A compact summary opens a dedicated storage manager for creating, renaming, describing, and deleting records; those actions save immediately and do not use the Settings draft or global **Save Changes** action.
+- The manager reports whether each storage has skill content, while making clear that storage does not enable runtime retrieval by itself. Per-agent attachments and retrieval toggles remain in the main Agents settings panel.
+- The per-agent attachment matrix is separate from storage management. Each agent shows attached storage choices, a visible **Default off** or **Enabled** state, and an explanation when retrieval cannot be enabled yet. Retrieval is off by default and removing the last attachment forces it off. Attachment and retrieval-toggle changes update the agent preset immediately rather than waiting for **Save Changes**. Loading, empty, project-only, and error states remain visible without hiding the other Agents settings groups.
+- The four Agents groups stack for narrow screens and form a wider card workspace when room is available, so markdown mirroring, routing, storage, and reflection can be scanned independently.
+- Storage deletion is destructive and requires typing the exact storage name because it removes stored skills, embeddings, and agent attachments.
 - Planning and QA self-reflection are disabled by default. Each loop has an enable toggle, editable criteria rows, per-criterion thresholds, and a max improvement attempts setting.
 - QA self-reflection also appears in the existing Quality Assurance settings area so review criteria can be edited alongside QA routing and review budgets.
+- Agent routing and planning/QA self-reflection fields retain the normal Settings draft behavior: they are not persisted until **Save Changes** is used. Immediate storage and attachment mutations do not save or discard those draft fields.
 
 ## Saving & resetting
 

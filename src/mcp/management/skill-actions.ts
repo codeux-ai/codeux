@@ -63,20 +63,26 @@ export class SkillActions {
     }
   }
 
-  async handleSearchSkills(args: SearchSkillsArgs): Promise<ManagementResponseEnvelope> {
+  async handleSearchSkills(
+    args: SearchSkillsArgs,
+    authenticatedAgentPresetId: string | null = null,
+  ): Promise<ManagementResponseEnvelope> {
     const payload = args as unknown as Record<string, unknown>;
     const projectId = parseRequiredString(payload, "projectId");
     const query = parseRequiredString(payload, "query");
     const limit = normalizeLimit(args.limit, DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT);
     const minSimilarity = normalizeSimilarity(args.minSimilarity);
-    const results = await this.skillService.search({
+    const searchQuery = {
       projectId,
       query,
       agentPresetId: normalizeOptionalString(args.agentPresetId),
       storageId: normalizeOptionalString(args.storageId),
       limit,
       minSimilarity,
-    });
+    };
+    const results = authenticatedAgentPresetId
+      ? await this.skillService.searchForAgent(searchQuery, authenticatedAgentPresetId)
+      : await this.skillService.search(searchQuery);
 
     return {
       result: {

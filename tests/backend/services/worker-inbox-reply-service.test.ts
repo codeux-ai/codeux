@@ -234,6 +234,85 @@ describe("WorkerInboxReplyService", () => {
     }));
   });
 
+  it("composes and persists persistent skill context for direct dashboard replies", async () => {
+    mockRunProviderForText.mockResolvedValue({ text: "Persistent guidance applied." });
+    const mounts = [{
+      storageId: "reply-skills",
+      storageName: "Reply Skills",
+      hostPath: "/home/test/.code-ux/persistent-skill-storages/project-1/reply-agent/reply-skills",
+      containerPath: "/code-ux/persistent-skills/reply-skills",
+    }];
+    const executionRepository = {
+      createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-skills" }),
+      appendExecutionInvocationMessage: vi.fn(),
+      updateExecutionInvocation: vi.fn(),
+    };
+    const service = new WorkerInboxReplyService({
+      projectManagementRepository: {
+        getProject: vi.fn().mockReturnValue({ id: "project-1", name: "Test Project", baseDir: "/repo" }),
+      } as any,
+      connectionChatRepository: {
+        getThread: vi.fn().mockReturnValue({ id: "thread-1", title: "Status", runtimeState: null }),
+        listMessages: vi.fn().mockReturnValue([
+          { id: "m1", authorType: "dashboard_user", bodyMarkdown: "Use the saved reply practices." },
+        ]),
+      } as any,
+      taskService: { resolveInvocationProvider: vi.fn().mockReturnValue(geminiRoute) } as any,
+      agentPresetSyncService: {
+        resolveDashboardReplyAgent: vi.fn().mockResolvedValue({
+          id: "reply-agent",
+          instructionMarkdown: "Answer directly.",
+          mcpAccess: { codeUxEnabled: false, codeUxToolToggles: [], linkedServerIds: [] },
+        }),
+      } as any,
+      executionRepository: executionRepository as any,
+      getDashboardSettings: () => ({
+        ...settings,
+        agents: { routing: { dashboardReply: { agentPresetId: "reply-agent" } } },
+      }),
+      getGithubToken: () => undefined,
+      providerRunner: { runProviderForText: mockRunProviderForText } as any,
+      providerConcurrencyService: {
+        waitForSlotAndClaim: vi.fn().mockImplementation((p, l, input) => ({ ...input, id: "inv-skills" })),
+      } as any,
+      agentPresetRepository: {
+        getAgentPreset: vi.fn().mockReturnValue({
+          id: "reply-agent",
+          projectId: "project-1",
+          persistentSkillStorage: { enabled: true },
+        }),
+      } as any,
+      skillService: {
+        resolvePersistentSkillStorageRuntime: vi.fn().mockResolvedValue({
+          projectId: "project-1",
+          agentPresetId: "reply-agent",
+          instructionMarkdown: "## PERSISTENT SKILL STORAGE (Opt-in)\nUse search_skills before creating duplicates.",
+          mounts,
+        }),
+      } as any,
+      getMcpConnectionInfo: () => ({ url: "http://127.0.0.1:3000/mcp", authToken: "token" }),
+    });
+
+    await service.generateReply({
+      projectId: "project-1",
+      threadId: "thread-1",
+      bodyMarkdown: "Use the saved reply practices.",
+    });
+
+    const providerInput = mockRunProviderForText.mock.calls[0]![0];
+    expect(providerInput.prompt.match(/## PERSISTENT SKILL STORAGE/g)).toHaveLength(1);
+    expect(providerInput.mcpConnection).toEqual({
+      url: "http://127.0.0.1:3000/mcp",
+      authToken: "token",
+      agentId: "reply-agent",
+    });
+    expect(providerInput.persistentSkillStorageMounts).toEqual(mounts);
+    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith("exec-inv-skills", {
+      role: "user",
+      contentMarkdown: expect.stringContaining("## PERSISTENT SKILL STORAGE"),
+    });
+  });
+
   it("uses full Code UX MCP access in the configured dashboard reply inbox path", async () => {
     mockRunProviderForText.mockResolvedValue({ text: "I can use the explicit access." });
     const explicitAccess = {
