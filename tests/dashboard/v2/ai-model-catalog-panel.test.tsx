@@ -37,6 +37,42 @@ describe("AIModelCatalogPanel", () => {
     memoryApi.listEmbeddingModels.mockResolvedValue([]);
     memoryApi.getMemoryStats.mockResolvedValue({ sprint: 0, agent: 0, project: 0, activeModel: null, staleEmbeddings: 0 });
     speechApi.listSpeechModels.mockResolvedValue([{
+      id: "Xenova/wav2vec2-base-960h",
+      kind: "transcription",
+      adapter: "waveform_ctc",
+      displayName: "Wav2Vec2 Base English ONNX",
+      description: "Direct local transcription.",
+      repository: "Xenova/wav2vec2-base-960h",
+      sourceUrl: "https://huggingface.co/Xenova/wav2vec2-base-960h",
+      files: [],
+      sizeBytes: 95_500_000,
+      language: "English",
+      sampleRateHz: 16_000,
+      voices: [],
+      defaultVoice: null,
+      downloaded: true,
+      downloading: false,
+      downloadProgress: 0,
+      error: null,
+    }, {
+      id: "onnx-community/whisper-tiny.en",
+      kind: "transcription",
+      adapter: "whisper",
+      displayName: "Whisper Tiny English ONNX",
+      description: "Downloadable Whisper bundle.",
+      repository: "onnx-community/whisper-tiny.en",
+      sourceUrl: "https://huggingface.co/onnx-community/whisper-tiny.en",
+      files: [],
+      sizeBytes: 180_000_000,
+      language: "English",
+      sampleRateHz: 16_000,
+      voices: [],
+      defaultVoice: null,
+      downloaded: true,
+      downloading: false,
+      downloadProgress: 0,
+      error: null,
+    }, {
       id: "kokoro-82m-v1.0-q8",
       kind: "synthesis",
       adapter: "kokoro",
@@ -70,8 +106,10 @@ describe("AIModelCatalogPanel", () => {
     expect(screen.queryByLabelText("Speech to text API endpoint")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Text to speech API endpoint")).not.toBeInTheDocument();
     expect(screen.queryByText(/Auto \(local, then API\)/i)).not.toBeInTheDocument();
-
     const activate = await screen.findByRole("button", { name: "Use for 3D Chat" });
+    expect(screen.getByRole("button", { name: "Use for input" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Local runtime pending" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Local runtime pending" })).toHaveAttribute("title", expect.stringContaining("Select API mode"));
     await userEvent.click(activate);
 
     expect(updateEditableSettings).toHaveBeenCalledTimes(1);

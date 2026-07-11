@@ -8,6 +8,10 @@ export const MIN_SPEECH_AUDIO_SECONDS = 1;
 export const MAX_SPEECH_AUDIO_SECONDS = 600;
 
 const SPEECH_PROVIDER_MODE_SET = new Set<SpeechProviderMode>(SPEECH_PROVIDER_MODES);
+const UNSUPPORTED_LOCAL_TRANSCRIPTION_MODELS = new Set([
+  "onnx-community/whisper-base.en",
+  "onnx-community/whisper-tiny.en",
+]);
 
 const readSpeechProviderMode = (value: unknown, fallback: SpeechProviderMode): SpeechProviderMode => (
   typeof value === "string" && SPEECH_PROVIDER_MODE_SET.has(value as SpeechProviderMode)
@@ -46,11 +50,16 @@ export const sanitizeSpeech = (
   const externalSynthesisInput = synthesisInput.externalSynthesis && typeof synthesisInput.externalSynthesis === "object"
     ? synthesisInput.externalSynthesis as Partial<SpeechSettings["synthesis"]["externalSynthesis"]>
     : {};
+  const providerMode = readSpeechProviderMode(speechInput.providerMode, defaults.providerMode);
+  const requestedLocalModelId = readRequiredTrimmedString(speechInput.localModelId, defaults.localModelId);
+  const localModelId = providerMode === "local_onnx" && UNSUPPORTED_LOCAL_TRANSCRIPTION_MODELS.has(requestedLocalModelId)
+    ? defaults.localModelId
+    : requestedLocalModelId;
 
   return {
     enabled: readBoolean(speechInput.enabled, defaults.enabled),
-    providerMode: readSpeechProviderMode(speechInput.providerMode, defaults.providerMode),
-    localModelId: readRequiredTrimmedString(speechInput.localModelId, defaults.localModelId),
+    providerMode,
+    localModelId,
     maxAudioSeconds: Math.max(
       MIN_SPEECH_AUDIO_SECONDS,
       Math.min(MAX_SPEECH_AUDIO_SECONDS, readInteger(speechInput.maxAudioSeconds, defaults.maxAudioSeconds)),

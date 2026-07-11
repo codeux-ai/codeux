@@ -25,7 +25,7 @@ export const SPEECH_MODEL_CATALOG: Record<string, SpeechModelCatalogEntry> = {
     kind: "transcription",
     adapter: "whisper",
     displayName: "Whisper Base English ONNX",
-    description: "Balanced English speech recognition bundle with quantized encoder and merged decoder weights.",
+    description: "Downloadable English Whisper bundle. Local encoder-decoder generation is not available yet; use API mode for Whisper transcription.",
     repository: "onnx-community/whisper-base.en",
     sourceUrl: hf("onnx-community/whisper-base.en"),
     files: [
@@ -48,7 +48,7 @@ export const SPEECH_MODEL_CATALOG: Record<string, SpeechModelCatalogEntry> = {
     kind: "transcription",
     adapter: "whisper",
     displayName: "Whisper Tiny English ONNX",
-    description: "Compact English Whisper bundle for lower-resource systems and fast microphone transcription.",
+    description: "Compact downloadable Whisper bundle. Local encoder-decoder generation is not available yet; use API mode for Whisper transcription.",
     repository: "onnx-community/whisper-tiny.en",
     sourceUrl: hf("onnx-community/whisper-tiny.en"),
     files: [

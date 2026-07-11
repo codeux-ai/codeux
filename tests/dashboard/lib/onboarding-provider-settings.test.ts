@@ -28,7 +28,7 @@ const createImporterSettings = () => ({
 const createSpeechSettings = () => ({
   enabled: false,
   providerMode: "local_onnx" as const,
-  localModelId: "onnx-community/whisper-base.en",
+  localModelId: "Xenova/wav2vec2-base-960h",
   maxAudioSeconds: 120,
   externalTranscription: {
     baseUrl: "https://api.openai.com/v1/audio/transcriptions",
