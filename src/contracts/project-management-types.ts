@@ -385,6 +385,12 @@ export interface PlanningOverrides {
   planningAgentPresetId?: string;
   agentRoutingMode?: AgentRoutingMode;
   workerAgentPresetId?: string;
+  designGuidance?: PlanningDesignGuidanceSelection;
+}
+
+export interface PlanningDesignGuidanceSelection {
+  selectedTechStackId: string;
+  selectedStyleguideId: string;
 }
 
 export interface ImprovePromptInput {

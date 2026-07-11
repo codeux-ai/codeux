@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
 import type { MemoryService } from "./memory-service.js";
-import type { CliWorkflowSettings, DashboardSettings, ProviderId, QwenModelProviderSettings, Subtask } from "../contracts/app-types.js";
+import type { CliWorkflowSettings, DashboardSettings, DesignGuidanceSettings, ProviderId, QwenModelProviderSettings, Subtask } from "../contracts/app-types.js";
 import type {
   TaskExecutorType,
   TaskPriority,
@@ -40,6 +40,7 @@ import { waitUntil } from "../shared/polling/wait-until.js";
 import { LEARNINGS_FILENAME } from "../contracts/memory-types.js";
 import * as PlanningPromptBuilder from "./planning-prompt-builder.js";
 import { buildRelevantMemoryInjectionContext } from "./memory-injection-context.js";
+import { getDesignGuidanceCatalog } from "../domain/settings/design-guidance-catalog.js";
 
 interface PlanningAgentServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
@@ -199,7 +200,7 @@ export class PlanningAgentService {
       planningAgent,
       sprintName: input.name,
       goal: input.goal,
-      designGuidance: runtime.settings.designGuidance,
+      designGuidance: this.resolveEffectiveDesignGuidance(runtime.settings.designGuidance, input.overrides),
       memoryContext,
       learningsInstruction,
     });
@@ -377,7 +378,7 @@ export class PlanningAgentService {
       sprintName: sprint.name,
       canSetSprintTitle: sprint.isGeneratedName,
       goal: sprint.goal,
-      designGuidance: runtime.settings.designGuidance,
+      designGuidance: this.resolveEffectiveDesignGuidance(runtime.settings.designGuidance, options.overrides),
       memoryContext,
       learningsInstruction,
     });
@@ -576,6 +577,27 @@ export class PlanningAgentService {
       mode: "VIRTUAL",
       settings,
       connection: null,
+    };
+  }
+
+  private resolveEffectiveDesignGuidance(
+    persisted: DesignGuidanceSettings,
+    overrides?: PlanningOverrides,
+  ): DesignGuidanceSettings {
+    const selection = overrides?.designGuidance;
+    if (!selection) {
+      return persisted;
+    }
+    const catalog = getDesignGuidanceCatalog(persisted);
+    const hasTechStack = catalog.techStacks.some((entry) => entry.id === selection.selectedTechStackId);
+    const hasStyleguide = catalog.styleguides.some((entry) => entry.id === selection.selectedStyleguideId);
+    if (!hasTechStack || !hasStyleguide) {
+      throw new Error("Planning design guidance selection is not available in the effective catalog.");
+    }
+    return {
+      ...persisted,
+      selectedTechStackId: selection.selectedTechStackId,
+      selectedStyleguideId: selection.selectedStyleguideId,
     };
   }
 
