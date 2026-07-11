@@ -41,6 +41,8 @@ The external transcription default uses an OpenAI-compatible `/v1/audio/transcri
 
 Local speech bundles use deterministic cache directories under `~/.code-ux/models/speech/<sanitized-model-id>`, where slashes in model ids are normalized for filesystem safety. Wav2Vec2 is the default and uses direct waveform/CTC inference. The catalog can download Whisper encoder-decoder bundles, but keeps their local activation action disabled until generation is implemented; select API mode for Whisper transcription. Before local waveform inference, the service decodes the dashboard recorder's PCM WAV payload into mono `Float32Array` samples. A missing local model returns a structured error without invoking the configured API; API requests occur only in `external_api` mode.
 
+All STT downloads are opt-in and use the same license gate as TTS and embedding models. The catalog exposes approved commercial-use terms and provenance, the operator explicitly accepts the current license identifier, and the server rejects missing or stale acceptance before starting a download.
+
 External requests use OpenAI-style multipart fields: `file`, `model`, and optional `language`, with bearer token authentication and a request timeout. Provider error text is sanitized before it is returned so API keys and bearer tokens are never echoed to the dashboard.
 
 Electron packages include the `onnxruntime-node` runtime dependency and unpack its native bindings from ASAR, but model weights remain user-cache data under `~/.code-ux/models/speech/` to avoid bloating installers and to let users replace or add models independently.

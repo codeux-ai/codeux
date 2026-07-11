@@ -8,6 +8,7 @@ import type {
   InAppEmbeddingModelId,
 } from "../contracts/memory-types.js";
 import { isInAppEmbeddingModelId } from "../contracts/memory-types.js";
+import { assertCatalogLicenseApproved } from "./model-license-policy.js";
 
 interface EmbeddingModelSource {
   repo: string;
@@ -19,6 +20,8 @@ const STANDARD_MODEL_FILES = [
   "tokenizer.json",
   "tokenizer_config.json",
 ];
+const mit = (id: string, url: string, notice: string) => ({ id, name: "MIT", url, commercialUseAllowed: true, notice });
+const apache = (id: string, url: string, notice: string) => ({ id, name: "Apache-2.0", url, commercialUseAllowed: true, notice });
 
 export const EMBEDDING_MODEL_CATALOG: Record<InAppEmbeddingModelId, EmbeddingModelInfo> = {
   "bge-small-en-v1.5": {
@@ -30,6 +33,8 @@ export const EMBEDDING_MODEL_CATALOG: Record<InAppEmbeddingModelId, EmbeddingMod
     language: "English",
     files: STANDARD_MODEL_FILES,
     source: "built_in",
+    huggingFaceRepo: "BAAI/bge-small-en-v1.5",
+    license: mit("bge-small-en-v1.5-mit", "https://huggingface.co/BAAI/bge-small-en-v1.5", "MIT-licensed BGE model."),
   },
   "bge-base-en-v1.5": {
     id: "bge-base-en-v1.5",
@@ -40,6 +45,8 @@ export const EMBEDDING_MODEL_CATALOG: Record<InAppEmbeddingModelId, EmbeddingMod
     language: "English",
     files: STANDARD_MODEL_FILES,
     source: "built_in",
+    huggingFaceRepo: "Xenova/bge-base-en-v1.5",
+    license: mit("bge-base-en-v1.5-mit", "https://huggingface.co/BAAI/bge-base-en-v1.5", "MIT-licensed BGE model and ONNX conversion."),
   },
   "bge-large-en-v1.5": {
     id: "bge-large-en-v1.5",
@@ -50,6 +57,8 @@ export const EMBEDDING_MODEL_CATALOG: Record<InAppEmbeddingModelId, EmbeddingMod
     language: "English",
     files: STANDARD_MODEL_FILES,
     source: "built_in",
+    huggingFaceRepo: "Xenova/bge-large-en-v1.5",
+    license: mit("bge-large-en-v1.5-mit", "https://huggingface.co/BAAI/bge-large-en-v1.5", "MIT-licensed BGE model converted to ONNX."),
   },
   "all-minilm-l6-v2": {
     id: "all-minilm-l6-v2",
@@ -60,6 +69,8 @@ export const EMBEDDING_MODEL_CATALOG: Record<InAppEmbeddingModelId, EmbeddingMod
     language: "English",
     files: STANDARD_MODEL_FILES,
     source: "built_in",
+    huggingFaceRepo: "Xenova/all-MiniLM-L6-v2",
+    license: apache("all-minilm-l6-v2-apache-2.0", "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2", "Apache-2.0 sentence-transformers model converted to ONNX."),
   },
   "all-mpnet-base-v2": {
     id: "all-mpnet-base-v2",
@@ -70,6 +81,8 @@ export const EMBEDDING_MODEL_CATALOG: Record<InAppEmbeddingModelId, EmbeddingMod
     language: "English",
     files: STANDARD_MODEL_FILES,
     source: "built_in",
+    huggingFaceRepo: "Xenova/all-mpnet-base-v2",
+    license: apache("all-mpnet-base-v2-apache-2.0", "https://huggingface.co/sentence-transformers/all-mpnet-base-v2", "Apache-2.0 sentence-transformers model converted to ONNX."),
   },
   "multilingual-e5-large": {
     id: "multilingual-e5-large",
@@ -80,6 +93,8 @@ export const EMBEDDING_MODEL_CATALOG: Record<InAppEmbeddingModelId, EmbeddingMod
     language: "Multilingual",
     files: STANDARD_MODEL_FILES,
     source: "built_in",
+    huggingFaceRepo: "intfloat/multilingual-e5-large",
+    license: mit("multilingual-e5-large-mit", "https://huggingface.co/intfloat/multilingual-e5-large", "MIT-licensed multilingual E5 model."),
   },
 };
 
@@ -152,6 +167,7 @@ export function customEmbeddingModelToCatalogEntry(model: CustomEmbeddingModelDe
     huggingFaceRepo: model.huggingFaceRepo,
     onnxModelFile: model.onnxModelFile,
     validationStatus: model.validationStatus,
+    license: model.license,
   };
 }
 
@@ -194,6 +210,16 @@ export function createCustomEmbeddingModelDefinition(
   const approximateSizeBytes = readNonNegativeInteger(input.approximateSizeBytes ?? input.sizeBytes, "approximateSizeBytes");
   const displayName = readRequiredString(input.displayName, "displayName");
   const language = readRequiredString(input.language, "language");
+  const licenseName = readRequiredString(input.licenseName, "licenseName");
+  const licenseUrl = readHttpsUrl(input.licenseUrl, "licenseUrl");
+  if (input.commercialUseAllowed !== true) throw new Error("commercialUseAllowed must be confirmed before adding a custom model");
+  const license = {
+    id: `custom-${createHash("sha256").update(`${licenseName}:${licenseUrl}`).digest("hex").slice(0, 16)}`,
+    name: licenseName,
+    url: licenseUrl,
+    commercialUseAllowed: true,
+    notice: "User-supplied license declaration. Verify the upstream model terms before downloading.",
+  };
   const id = buildCustomModelId(source.repo, onnxModelFile);
 
   const existing = existingModels.find((model) => model.id === id);
@@ -206,6 +232,7 @@ export function createCustomEmbeddingModelDefinition(
       dimension,
       approximateSizeBytes,
       language,
+      license,
       validationStatus: "valid",
     };
   }
@@ -221,6 +248,7 @@ export function createCustomEmbeddingModelDefinition(
     approximateSizeBytes,
     language,
     validationStatus: "valid",
+    license,
   };
 }
 
@@ -245,6 +273,10 @@ export function sanitizeCustomEmbeddingModelDefinitions(
       const approximateSizeBytes = readNonNegativeInteger(record.approximateSizeBytes ?? record.sizeBytes, "approximateSizeBytes");
       const displayName = readRequiredString(record.displayName, "displayName");
       const language = readRequiredString(record.language, "language");
+      const licenseRecord = record.license as Record<string, unknown> | undefined;
+      const verifiedLicense = Boolean(licenseRecord && licenseRecord.commercialUseAllowed === true);
+      const licenseName = verifiedLicense ? readRequiredString(licenseRecord?.name, "license.name") : "Unverified";
+      const licenseUrl = verifiedLicense ? readHttpsUrl(licenseRecord?.url, "license.url") : `${HUGGING_FACE_BASE_URL}/${source.repo}`;
       const id = typeof record.id === "string" && record.id.trim()
         ? record.id.trim() as EmbeddingModelId
         : buildCustomModelId(source.repo, onnxModelFile);
@@ -263,7 +295,14 @@ export function sanitizeCustomEmbeddingModelDefinitions(
         dimension,
         approximateSizeBytes,
         language,
-        validationStatus: record.validationStatus === "invalid" ? "invalid" : "valid",
+        validationStatus: record.validationStatus === "invalid" || !verifiedLicense ? "invalid" : "valid",
+        license: {
+          id: verifiedLicense ? readRequiredString(licenseRecord?.id, "license.id") : `unverified-${id}`,
+          name: licenseName,
+          url: licenseUrl,
+          commercialUseAllowed: verifiedLicense,
+          notice: verifiedLicense && typeof licenseRecord?.notice === "string" ? licenseRecord.notice : "License metadata must be verified before downloading.",
+        },
       });
     } catch {
       // Drop malformed persisted custom model definitions during settings sanitization.
@@ -389,6 +428,21 @@ function readRequiredString(value: unknown, field: string): string {
     throw new Error(`${field} is required`);
   }
   return value.trim();
+}
+
+function readHttpsUrl(value: unknown, field: string): string {
+  const raw = readRequiredString(value, field);
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:") throw new Error();
+    return url.toString();
+  } catch {
+    throw new Error(`${field} must be a valid HTTPS URL`);
+  }
+}
+
+for (const model of Object.values(EMBEDDING_MODEL_CATALOG)) {
+  assertCatalogLicenseApproved(model.license, model.id);
 }
 
 function readPositiveInteger(value: unknown, field: string): number {

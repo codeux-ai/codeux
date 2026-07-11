@@ -12,10 +12,16 @@ Local is the default for TTS and API fields stay hidden until API is selected. A
 
 | Family | Included choices | Notes |
 | --- | --- | --- |
-| Kokoro | Kokoro 82M v1.0 Q8 | Natural multi-voice English output, five bundled voices, roughly 95 MB. |
-| Piper | Lessac Medium, Alba Medium | Efficient American and British English voices, roughly 63 MB each. |
+| Kokoro | Kokoro 82M v1.0 Q8 | Apache-2.0 multi-voice English output, five lightweight voices, and an integrity-pinned phonemizer, roughly 98 MB. |
+| Piper | LJSpeech Medium, Cori Medium | MIT-cataloged American and British voices trained from scratch with public-domain data, roughly 65 MB each. |
 
-Models run through the packaged `onnxruntime-node` dependency. `espeak-ng` improves phonemization when installed; a built-in grapheme fallback keeps minimal desktop/container installations usable.
+Models run through the packaged `onnxruntime-node` dependency. The opt-in phonemizer runs as a separate process and supplies the IPA expected by Kokoro and Piper. There is no raw spelling fallback: a missing or invalid phonemizer stops synthesis with a repair message instead of producing unintelligible speech.
+
+## License acceptance
+
+Every downloadable speech model shows its upstream terms, provenance, commercial-use status, and download size. **Accept & Download** sends the current stable license identifier to the server, which rejects missing or outdated acceptance. Artifacts download directly from upstream into the user cache and are not bundled with Code UX.
+
+The catalog excludes non-commercial and research-only models. Piper LJSpeech and Cori replace Lessac and Alba because they were trained from scratch using public-domain data. Executable runtime downloads are SHA-256 verified, and license/model-card notices are stored beside their artifacts.
 
 ## API TTS
 
@@ -30,7 +36,7 @@ When TTS is active, the volume icon in the avatar nameplate control dock starts 
 Local weights live under `~/.code-ux/models/speech/<sanitized-model-id>`.
 
 - `GET /api/speech/models` lists installation status.
-- `POST /api/speech/models/:modelId/download` installs a bundle.
+- `POST /api/speech/models/:modelId/download` accepts the current terms and installs a bundle.
 - `DELETE /api/speech/models/:modelId` removes a bundle.
 - `POST /api/speech/synthesis` returns synthesized audio.
 

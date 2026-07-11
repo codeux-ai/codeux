@@ -12,6 +12,10 @@ const UNSUPPORTED_LOCAL_TRANSCRIPTION_MODELS = new Set([
   "onnx-community/whisper-base.en",
   "onnx-community/whisper-tiny.en",
 ]);
+const LEGACY_TTS_MODELS: Record<string, { modelId: string; voice: string }> = {
+  "piper-en-us-lessac-medium": { modelId: "piper-en-us-ljspeech-medium", voice: "ljspeech" },
+  "piper-en-gb-alba-medium": { modelId: "piper-en-gb-cori-medium", voice: "cori" },
+};
 
 const readSpeechProviderMode = (value: unknown, fallback: SpeechProviderMode): SpeechProviderMode => (
   typeof value === "string" && SPEECH_PROVIDER_MODE_SET.has(value as SpeechProviderMode)
@@ -55,6 +59,8 @@ export const sanitizeSpeech = (
   const localModelId = providerMode === "local_onnx" && UNSUPPORTED_LOCAL_TRANSCRIPTION_MODELS.has(requestedLocalModelId)
     ? defaults.localModelId
     : requestedLocalModelId;
+  const requestedSynthesisModelId = readRequiredTrimmedString(synthesisInput.localModelId, defaults.synthesis.localModelId);
+  const legacySynthesis = LEGACY_TTS_MODELS[requestedSynthesisModelId];
 
   return {
     enabled: readBoolean(speechInput.enabled, defaults.enabled),
@@ -73,8 +79,8 @@ export const sanitizeSpeech = (
     synthesis: {
       enabled: readBoolean(synthesisInput.enabled, defaults.synthesis.enabled),
       providerMode: readSpeechProviderMode(synthesisInput.providerMode, defaults.synthesis.providerMode),
-      localModelId: readRequiredTrimmedString(synthesisInput.localModelId, defaults.synthesis.localModelId),
-      voice: readRequiredTrimmedString(synthesisInput.voice, defaults.synthesis.voice),
+      localModelId: legacySynthesis?.modelId ?? requestedSynthesisModelId,
+      voice: legacySynthesis?.voice ?? readRequiredTrimmedString(synthesisInput.voice, defaults.synthesis.voice),
       speed: Math.max(0.5, Math.min(2, typeof synthesisInput.speed === "number" && Number.isFinite(synthesisInput.speed)
         ? synthesisInput.speed
         : defaults.synthesis.speed)),

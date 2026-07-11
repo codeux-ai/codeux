@@ -1,3 +1,5 @@
+import type { DownloadableModelLicense } from "./model-license-types.js";
+
 export const SPEECH_PROVIDER_MODES = ["local_onnx", "external_api"] as const;
 
 export type SpeechProviderMode = typeof SPEECH_PROVIDER_MODES[number];
@@ -42,6 +44,8 @@ export type SpeechModelAdapter = "waveform_ctc" | "whisper" | "kokoro" | "piper"
 export interface SpeechModelFile {
   sourcePath: string;
   localName: string;
+  downloadUrl?: string;
+  sha256?: string;
 }
 
 export interface SpeechModelVoice {
@@ -58,6 +62,7 @@ export interface SpeechModelCatalogItem {
   description: string;
   repository: string;
   sourceUrl: string;
+  license: DownloadableModelLicense;
   files: SpeechModelFile[];
   sizeBytes: number;
   language: string;

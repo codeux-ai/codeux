@@ -21,7 +21,7 @@ const upload = multer({
 export interface SpeechRouteDependencies {
   speechTranscriptionService: Pick<SpeechTranscriptionService, "transcribe">;
   speechSynthesisService?: Pick<SpeechSynthesisService, "synthesize">;
-  speechModelManager?: Pick<SpeechModelManager, "listModels" | "hasModel" | "downloadModel" | "cancelDownload" | "deleteModel">;
+  speechModelManager?: Pick<SpeechModelManager, "listModels" | "hasModel" | "validateDownloadAcceptance" | "downloadModel" | "cancelDownload" | "deleteModel">;
 }
 
 function resultStatus(result: SpeechTranscriptionResult): number {
@@ -150,11 +150,20 @@ export function registerSpeechRoutes(app: Express, deps: SpeechRouteDependencies
 
     app.post("/api/speech/models/:modelId/download", asyncRoute(async (req, res) => {
       const modelId = String(req.params.modelId || "");
+      const acceptedLicenseId = typeof req.body?.acceptedLicenseId === "string" ? req.body.acceptedLicenseId : undefined;
       if (!deps.speechModelManager!.hasModel(modelId)) {
         res.status(400).json({ error: `Unknown speech model: ${modelId}` });
         return;
       }
-      deps.speechModelManager!.downloadModel(modelId).catch(() => undefined);
+      try {
+        // Validate acceptance synchronously before returning a background status.
+        deps.speechModelManager!.validateDownloadAcceptance(modelId, acceptedLicenseId);
+        const download = deps.speechModelManager!.downloadModel(modelId, acceptedLicenseId);
+        download.catch(() => undefined);
+      } catch (error) {
+        res.status(400).json({ error: error instanceof Error ? error.message : "Model license acceptance is required." });
+        return;
+      }
       res.json({ status: "downloading", modelId });
     }));
 

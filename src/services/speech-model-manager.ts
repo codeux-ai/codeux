@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { pipeline } from "stream/promises";
 import { Readable } from "stream";
+import { createHash } from "crypto";
 import type { SpeechModelStatus } from "../contracts/speech-types.js";
 import type { Logger } from "../shared/logging/logger.js";
 import {
@@ -10,6 +11,7 @@ import {
   resolveSpeechModelEntry,
   SPEECH_MODEL_CATALOG,
 } from "./speech-model-catalog.js";
+import { assertModelLicenseAccepted } from "./model-license-policy.js";
 
 interface DownloadState {
   controller: AbortController;
@@ -30,6 +32,12 @@ export class SpeechModelManager {
     return Object.hasOwn(SPEECH_MODEL_CATALOG, modelId);
   }
 
+  validateDownloadAcceptance(modelId: string, acceptedLicenseId?: string): void {
+    if (!this.hasModel(modelId)) throw new Error(`Unknown speech model: ${modelId}`);
+    const model = resolveSpeechModelEntry(modelId);
+    assertModelLicenseAccepted(model.license, model.id, acceptedLicenseId);
+  }
+
   async listModels(): Promise<SpeechModelStatus[]> {
     return await Promise.all(Object.values(SPEECH_MODEL_CATALOG).map(async (model) => {
       const state = this.downloads.get(model.id);
@@ -43,8 +51,8 @@ export class SpeechModelManager {
     }));
   }
 
-  async downloadModel(modelId: string): Promise<void> {
-    if (!this.hasModel(modelId)) throw new Error(`Unknown speech model: ${modelId}`);
+  async downloadModel(modelId: string, acceptedLicenseId?: string): Promise<void> {
+    this.validateDownloadAcceptance(modelId, acceptedLicenseId);
     if (this.downloads.has(modelId)) throw new Error(`Download already in progress for ${modelId}`);
 
     const model = resolveSpeechModelEntry(modelId);
@@ -60,8 +68,12 @@ export class SpeechModelManager {
         const modelFile = model.files[index]!;
         const destination = path.join(modelDir, modelFile.localName);
         fs.mkdirSync(path.dirname(destination), { recursive: true });
-        const url = `https://huggingface.co/${model.repository}/resolve/main/${modelFile.sourcePath}`;
-        await this.downloadFile(url, destination, controller.signal, (fileProgress) => {
+        if (await this.isReusableFile(destination, modelFile.sha256)) {
+          state.progress = Math.min(0.99, (index + 1) / model.files.length);
+          continue;
+        }
+        const url = modelFile.downloadUrl ?? `https://huggingface.co/${model.repository}/resolve/main/${modelFile.sourcePath}`;
+        await this.downloadFile(url, destination, modelFile.sha256, controller.signal, (fileProgress) => {
           state.progress = Math.min(0.99, (index + fileProgress) / model.files.length);
         });
       }
@@ -92,6 +104,7 @@ export class SpeechModelManager {
   private async downloadFile(
     url: string,
     destination: string,
+    sha256: string | undefined,
     signal: AbortSignal,
     onProgress: (progress: number) => void,
   ): Promise<void> {
@@ -108,11 +121,32 @@ export class SpeechModelManager {
         onProgress(total > 0 ? downloaded / total : 0.5);
       });
       await pipeline(source, writeStream);
+      if (sha256) {
+        const actual = await this.hashFile(temporary);
+        if (actual !== sha256) throw new Error(`Integrity check failed downloading ${url}`);
+      }
       await fs.promises.rename(temporary, destination);
     } catch (error) {
       writeStream.destroy();
       await fs.promises.rm(temporary, { force: true }).catch(() => undefined);
       throw error;
     }
+  }
+
+  private async isReusableFile(destination: string, sha256?: string): Promise<boolean> {
+    try {
+      const stat = await fs.promises.stat(destination);
+      if (!stat.isFile() || stat.size === 0) return false;
+      return sha256 ? await this.hashFile(destination) === sha256 : true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async hashFile(filePath: string): Promise<string> {
+    const hash = createHash("sha256");
+    const stream = fs.createReadStream(filePath);
+    for await (const chunk of stream) hash.update(chunk as Buffer);
+    return hash.digest("hex");
   }
 }

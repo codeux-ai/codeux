@@ -12,10 +12,18 @@ Model files are installed globally under `~/.code-ux/models/speech/<sanitized-mo
 
 | Family | Default bundle | Runtime behavior |
 | --- | --- | --- |
-| Kokoro | `kokoro-82m-v1.0-q8` | Quantized ONNX model, tokenizer, and five English voice embeddings. The adapter sends token ids, the selected 256-value style vector, and speed to ONNX Runtime and returns 24 kHz mono WAV. |
-| Piper | `piper-en-us-lessac-medium`, `piper-en-gb-alba-medium` | Voice ONNX plus its JSON phoneme map. The adapter sends phoneme ids, lengths, and synthesis scales to ONNX Runtime and returns mono WAV at the configured sample rate. |
+| Kokoro | `kokoro-82m-v1.0-q8` | Apache-2.0 quantized ONNX model, tokenizer, five lightweight English voice embeddings, and an integrity-pinned phonemizer runtime. The adapter sends IPA token ids, the selected 256-value style vector, and speed to ONNX Runtime and returns 24 kHz mono WAV. |
+| Piper | `piper-en-us-ljspeech-medium`, `piper-en-gb-cori-medium` | MIT-cataloged voice ONNX bundles trained from scratch with public-domain LJSpeech or LibriVox data, plus JSON phoneme maps and the integrity-pinned phonemizer. The adapter returns mono WAV at the configured sample rate. |
 
-Both adapters use `espeak-ng` for grapheme-to-phoneme conversion when it is available. Minimal installations fall back to each bundle's grapheme vocabulary so synthesis remains available, with lower pronunciation quality for unusual words.
+Both adapters use the opt-in phonemizer bundle in a separate Node process. Kokoro applies English-specific normalization and IPA compatibility fixes before tokenization. Synthesis fails closed with a repair message when the phonemizer is absent or invalid; it never feeds raw English spelling into a phoneme-trained model. This removes the former fallback that made Bella and other Kokoro voices sound foreign or unintelligible on systems without `espeak-ng`.
+
+## License Acceptance And Provenance
+
+Every built-in downloadable speech entry declares a stable license identifier, an HTTPS terms link, commercial-use eligibility, source provenance, and a notice. Catalog initialization rejects incomplete metadata or licenses that do not permit commercial use. The dashboard shows these details and requires **Accept & Download** for the current identifier; the server independently rejects a missing or stale acceptance.
+
+Downloads go directly to the user cache from their upstream repositories. Code UX does not bundle or sublicense weights, voices, or the phonemizer. License and model-card notices included in a manifest are saved beside the artifacts. Piper Lessac and derivatives based on Lessac are intentionally absent because their source-data terms are research-only; LJSpeech and Cori replace the former Lessac and Alba defaults.
+
+Downloaded executable runtime files are pinned by SHA-256. Existing non-empty model files are reused, so upgrading an older Kokoro cache downloads only newly required artifacts. A hash mismatch removes the partial file and leaves the bundle unavailable.
 
 ## External API
 
@@ -32,12 +40,12 @@ The avatar nameplate includes a compact microphone button and volume icon, outsi
 ## Model Management API
 
 - `GET /api/speech/models` lists STT and TTS entries with installation and progress state.
-- `POST /api/speech/models/:modelId/download` starts a background bundle download.
+- `POST /api/speech/models/:modelId/download` validates `acceptedLicenseId` and starts a background bundle download.
 - `POST /api/speech/models/:modelId/cancel` cancels an in-flight download.
 - `DELETE /api/speech/models/:modelId` removes the local bundle.
 - `POST /api/speech/synthesis` resolves scoped settings and returns audio bytes.
 
-Downloads use fixed Hugging Face repositories and file manifests. Partial files use a `.part` suffix and are removed after failure. Local weights stay outside npm/Electron packages so application upgrades do not duplicate or replace user model caches.
+Downloads use fixed upstream repositories and file manifests. Partial files use a `.part` suffix and are removed after failure. Local weights stay outside npm/Electron packages so application upgrades do not duplicate or replace user model caches.
 
 ## Related Documentation
 

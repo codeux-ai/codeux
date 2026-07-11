@@ -25,6 +25,10 @@ Backend, external URL, model id, and API key control semantic memory embedding.
 
 Use in-app models for local-first operation; use external APIs only when you need a managed embedding model.
 
+Built-in embedding downloads are available from Settings -> AI Models only after the operator reviews and accepts the displayed upstream license. Each catalog entry must have an approved commercial-use license, source link, stable acceptance identifier, and notice. The server checks that identifier independently before contacting Hugging Face.
+
+Custom Hugging Face entries require a license name, HTTPS terms URL, and an explicit confirmation that commercial use is permitted. This is an operator declaration rather than a Code UX legal review. Existing custom definitions without this metadata are retained as unverified and cannot be downloaded until they are re-added with complete terms.
+
 A practical review flow is:
 
 1. Start from the inherited default and change only the fields that solve a concrete operational problem.

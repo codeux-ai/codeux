@@ -158,6 +158,9 @@ export interface CustomEmbeddingModelInput {
   dimension: number;
   approximateSizeBytes: number;
   language: string;
+  licenseName: string;
+  licenseUrl: string;
+  commercialUseAllowed: true;
 }
 
 export type EmbeddingModelSource = "built_in" | "custom";
@@ -187,8 +190,12 @@ export const createCustomEmbeddingModel = async (input: CustomEmbeddingModelInpu
   });
 };
 
-export const downloadEmbeddingModel = async (modelId: string): Promise<{ status: string; modelId: string }> => {
-  return fetchJson(`/api/embedding-models/${modelId}/download`, { method: "POST" });
+export const downloadEmbeddingModel = async (modelId: string, acceptedLicenseId: string): Promise<{ status: string; modelId: string }> => {
+  return fetchJson(`/api/embedding-models/${modelId}/download`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ acceptedLicenseId }),
+  });
 };
 
 export const cancelModelDownload = async (modelId: string): Promise<{ status: string; modelId: string }> => {

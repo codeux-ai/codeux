@@ -31,6 +31,7 @@ const model = (overrides: Partial<EmbeddingModelWithStatus> = {}): EmbeddingMode
   error: null,
   active: false,
   source: "built_in",
+  license: { id: "mit-v1", name: "MIT", url: "https://example.test/license", commercialUseAllowed: true, notice: "Test model." },
   ...overrides,
 });
 

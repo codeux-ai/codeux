@@ -19,6 +19,8 @@ import { deleteSpeechModel, downloadSpeechModel, listSpeechModels } from "../../
 import { ModelBrowser } from "../../memory/ModelBrowser.js";
 import { NumberInput, Row, SecretInput, SelectInput, TextInput, Toggle } from "../SettingsFormFields.js";
 import { SectionCard } from "./SharedPanelComponents.js";
+import { useConfirmDialog } from "../../../hooks/use-confirm-dialog.js";
+import { ConfirmDialog } from "../../ui/ConfirmDialog.js";
 
 const EMPTY_STATS: MemoryStats = { sprint: 0, agent: 0, project: 0, activeModel: null, staleEmbeddings: 0 };
 const providerOptions = [
@@ -41,6 +43,7 @@ const SpeechModelCard: FunctionComponent<{
   onDelete: () => void;
 }> = ({ model, active, busy, activationDisabledReason, onDownload, onActivate, onDelete }) => {
   const Icon = model.kind === "transcription" ? Mic : Volume2;
+  const repairRequired = active && !model.downloaded && !model.downloading;
   return (
     <article className={`relative overflow-hidden rounded-2xl border p-4 transition-colors ${active ? "border-signal-500/35 bg-signal-500/[0.07]" : "border-black/[0.06] bg-white/65 dark:border-white/[0.07] dark:bg-white/[0.035]"}`}>
       <div aria-hidden className={`absolute inset-y-4 left-0 w-1 rounded-r-full ${active ? "bg-signal-500" : "bg-transparent"}`} />
@@ -54,11 +57,15 @@ const SpeechModelCard: FunctionComponent<{
               <h4 className="font-semibold text-slate-900 dark:text-white">{model.displayName}</h4>
               <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{model.adapter} · {model.language} · {formatSize(model.sizeBytes)}</p>
             </div>
-            <span className={`rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] ${active ? "border-signal-500/25 text-signal-700 dark:text-signal-300" : model.downloaded ? "border-slate-400/20 text-slate-500" : "border-amber-500/20 text-amber-600"}`}>
-              {active ? "Active" : model.downloading ? `${Math.round(model.downloadProgress * 100)}%` : model.downloaded ? "Installed" : "Available"}
+            <span className={`rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] ${repairRequired ? "border-amber-500/25 text-amber-600" : active ? "border-signal-500/25 text-signal-700 dark:text-signal-300" : model.downloaded ? "border-slate-400/20 text-slate-500" : "border-amber-500/20 text-amber-600"}`}>
+              {repairRequired ? "Repair required" : model.downloading ? `${Math.round(model.downloadProgress * 100)}%` : active ? "Active" : model.downloaded ? "Installed" : "Available"}
             </span>
           </div>
           <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">{model.description}</p>
+          <div className="mt-2 rounded-xl border border-black/[0.06] bg-black/[0.025] px-3 py-2 text-[11px] leading-4 text-slate-500 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-slate-400">
+            <span className="font-bold text-slate-700 dark:text-slate-200">{model.license.name}</span> · Commercial use permitted. {model.license.notice}
+            {" "}<a href={model.license.url} target="_blank" rel="noreferrer" className="font-bold text-signal-600 hover:underline dark:text-signal-300">Review terms</a>
+          </div>
           {model.downloading ? (
             <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.08]" role="progressbar" aria-valuenow={Math.round(model.downloadProgress * 100)} aria-valuemin={0} aria-valuemax={100}>
               <div className="h-full rounded-full bg-signal-500 transition-[width]" style={{ width: `${Math.round(model.downloadProgress * 100)}%` }} />
@@ -99,6 +106,7 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
   const [reembed, setReembed] = useState<ReembedProgress | null>(null);
   const [busyModelId, setBusyModelId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { isOpen: isLicenseOpen, options: licenseOptions, requestConfirm: requestLicenseAcceptance, handleConfirm: acceptLicense, handleCancel: cancelLicense } = useConfirmDialog();
 
   const refresh = useCallback(async (): Promise<void> => {
     const [nextEmbedding, nextSpeech, nextStats] = await Promise.all([
@@ -149,6 +157,18 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
     transcription: speechModels.filter((model) => model.kind === "transcription"),
     synthesis: speechModels.filter((model) => model.kind === "synthesis"),
   }), [speechModels]);
+
+  const requestSpeechDownload = async (model: SpeechModelStatus): Promise<void> => {
+    const accepted = await requestLicenseAcceptance({
+      title: `Download ${model.displayName}`,
+      body: `${formatSize(model.sizeBytes)} will be downloaded directly from the listed upstream sources. By continuing, you accept ${model.license.name} and its third-party notices. ${model.license.notice}`,
+      confirmLabel: "Accept & Download",
+      cancelLabel: "Cancel",
+      tone: "neutral",
+    });
+    if (!accepted) return;
+    await run(model.id, () => downloadSpeechModel(model.id, model.license.id));
+  };
 
   return (
     <>
@@ -201,7 +221,7 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
                   : editableSettings.speech.synthesis.enabled && editableSettings.speech.synthesis.localModelId === model.id && editableSettings.speech.synthesis.providerMode !== "external_api";
                 return <SpeechModelCard key={model.id} model={model} active={active} busy={busyModelId === model.id}
                   activationDisabledReason={model.kind === "transcription" && model.adapter === "whisper" ? "Whisper local generation is not available yet. Select API mode for Whisper, or activate Wav2Vec2 for local input." : undefined}
-                  onDownload={() => void run(model.id, () => downloadSpeechModel(model.id))}
+                  onDownload={() => void requestSpeechDownload(model)}
                   onDelete={() => void run(model.id, () => deleteSpeechModel(model.id))}
                   onActivate={() => {
                     if (kind === "transcription") updateSpeech((speech) => ({ ...speech, enabled: true, providerMode: "local_onnx", localModelId: model.id }));
@@ -218,7 +238,11 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
         stats={stats}
         reembed={reembed}
         onModelsChanged={setEmbeddingModels}
-        onDownload={(modelId) => run(modelId, () => downloadEmbeddingModel(modelId).then(() => undefined))}
+        onDownload={(modelId) => {
+          const model = embeddingModels.find((item) => item.id === modelId);
+          if (!model) throw new Error(`Unknown embedding model: ${modelId}`);
+          return run(modelId, () => downloadEmbeddingModel(modelId, model.license.id).then(() => undefined));
+        }}
         onSelect={(modelId) => run(modelId, () => selectEmbeddingModel(modelId).then(() => undefined))}
         onDelete={(modelId) => run(modelId, () => deleteEmbeddingModel(modelId))}
         onReembed={async () => {
@@ -228,6 +252,7 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
           setReembed(progress);
         }}
       />
+      <ConfirmDialog isOpen={isLicenseOpen} options={licenseOptions} onConfirm={acceptLicense} onCancel={cancelLicense} />
     </>
   );
 };

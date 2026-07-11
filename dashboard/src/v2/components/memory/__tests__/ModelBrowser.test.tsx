@@ -48,6 +48,7 @@ const model = (overrides: Partial<EmbeddingModelWithStatus> = {}): EmbeddingMode
   localPath: null,
   error: null,
   active: false,
+  license: { id: "mit-v1", name: "MIT", url: "https://example.test/license", commercialUseAllowed: true, notice: "Test model." },
   ...overrides,
 });
 
@@ -115,6 +116,8 @@ describe("ModelBrowser", () => {
     });
 
     await user.click(screen.getByRole("button", { name: "Download" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("MIT");
+    await user.click(screen.getByRole("button", { name: "Accept & Download" }));
     expect(props.onDownload).toHaveBeenCalledWith("bge-small-en-v1.5");
 
     await waitFor(() => {
@@ -150,6 +153,7 @@ describe("ModelBrowser", () => {
       huggingFaceRepo: "acme/custom-embed",
       onnxModelFile: "onnx/model.onnx",
       validationStatus: "valid" as const,
+      license: { id: "mit-v1", name: "MIT", url: "https://example.test/license", commercialUseAllowed: true, notice: "Test model." },
     };
     const refreshed = [model(), model({ ...created, downloaded: false, downloading: false, downloadProgress: 0, localPath: null, error: null, active: false })];
     memoryApiMock.createCustomEmbeddingModel.mockResolvedValue(created);
@@ -162,6 +166,9 @@ describe("ModelBrowser", () => {
     await user.type(screen.getByLabelText("Dimension"), "384");
     await user.clear(screen.getByLabelText("Size bytes"));
     await user.type(screen.getByLabelText("Size bytes"), "120000000");
+    await user.type(screen.getByLabelText("Upstream license"), "MIT");
+    await user.type(screen.getByLabelText("License URL"), "https://example.test/license");
+    await user.click(screen.getByLabelText("I verified that the model terms permit commercial use."));
     await user.click(screen.getByRole("button", { name: "Add" }));
 
     await waitFor(() => {
@@ -173,6 +180,9 @@ describe("ModelBrowser", () => {
         dimension: 384,
         approximateSizeBytes: 120_000_000,
         language: "English",
+        licenseName: "MIT",
+        licenseUrl: "https://example.test/license",
+        commercialUseAllowed: true,
       });
     });
     expect(memoryApiMock.listEmbeddingModels).toHaveBeenCalledTimes(1);
