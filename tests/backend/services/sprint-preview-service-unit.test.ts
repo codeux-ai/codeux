@@ -30,6 +30,8 @@ vi.mock("../../../src/services/sprint-preview-utils.js", () => ({
 }));
 
 vi.mock("../../../src/services/cli-docker-utils.js", () => ({
+  DOCKER_BRIDGE_NETWORK_ARGS: ["--network", "bridge"],
+  DOCKER_NO_NEW_PRIVILEGES_ARGS: ["--security-opt", "no-new-privileges"],
   getDockerUserSpec: vi.fn(() => "1000:1000"),
   mapPathPrefix: vi.fn((mapped: string) => mapped),
   pickContainerEnv: vi.fn(() => []),
@@ -141,6 +143,7 @@ function makeSession(overrides: Partial<SprintPreviewSession> = {}): SprintPrevi
     buildCommand: "npm run build",
     runCommand: "npm start",
     startupCommandOverride: null,
+    dockerAccessOverride: null,
     environmentOverrides: [],
     lastCompletedTaskCount: 0,
     lastSeenSprintStatus: "running",
@@ -280,6 +283,19 @@ describe("SprintPreviewService unit tests", () => {
       const service = new SprintPreviewService(deps as any);
       const result = await service.getSession("session-1");
       expect(result).toBeTruthy();
+    });
+  });
+
+  describe("updateDockerAccessOverrideForProjectSprint", () => {
+    it("persists the selected container override within its project and sprint scope", async () => {
+      const session = makeSession();
+      deps.sprintPreviewRepository.getSessionForProjectSprint.mockReturnValue(session);
+      const service = new SprintPreviewService(deps as any);
+
+      const updated = await service.updateDockerAccessOverrideForProjectSprint("proj-1", "sprint-1", session.id, true);
+
+      expect(deps.sprintPreviewRepository.updateSession).toHaveBeenCalledWith(session.id, { dockerAccessOverride: true });
+      expect(updated.dockerAccessOverride).toBe(true);
     });
   });
 
@@ -563,6 +579,51 @@ describe("SprintPreviewService unit tests", () => {
         existingSession.id,
         expect.objectContaining({ startupCommandOverride: "pnpm custom-preview", runCommand: "pnpm custom-preview" }),
       );
+      vi.unstubAllGlobals();
+    });
+
+    it("uses a per-container Docker access override and mounts the Compose plugin", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true })));
+      const existingSession = makeSession({
+        status: "stopped",
+        containerId: null,
+        containerName: null,
+        dockerAccessOverride: true,
+      });
+      deps.sprintPreviewRepository.getSessionByProjectSprint.mockReturnValue(existingSession);
+      deps.settingsRepository.resolveSprintDashboardSettings.mockReturnValue({
+        settings: { ...DEFAULT_DASHBOARD_SETTINGS,
+          sprintPreview: makePreviewSettings({ allowDockerAccess: false }),
+          git: { githubMode: "REMOTE", defaultBranch: "main", sprintBranchScheme: "feature/sprint-{number}" },
+          cliWorkflow: { containerImage: "", containerCacheSetupScriptImage: false, containerSetupScriptPath: "" },
+        },
+      });
+      vi.mocked(fs.stat).mockImplementation(async (target) => {
+        if (String(target) === "/var/run/docker.sock") {
+          return { isSocket: () => true, gid: 998 } as Awaited<ReturnType<typeof fs.stat>>;
+        }
+        return { uid: 1000, gid: 1000 } as Awaited<ReturnType<typeof fs.stat>>;
+      });
+      vi.mocked(fs.access).mockImplementation(async (target) => {
+        if (String(target) === "/usr/bin/docker" || String(target) === "/usr/local/lib/docker/cli-plugins/docker-compose") {
+          return;
+        }
+        throw new Error("ENOENT");
+      });
+      vi.mocked(runCommandStrict).mockImplementation(async (cmd, args) => {
+        if (cmd === "docker" && args[0] === "create") {
+          return { exitCode: 0, stdout: "cid123\n", stderr: "", durationMs: 1 };
+        }
+        return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 };
+      });
+
+      const service = new SprintPreviewService(deps as any);
+      const result = await service.startSession("proj-1", "sprint-1");
+
+      const createArgs = vi.mocked(runCommandStrict).mock.calls.find((call) => call[0] === "docker" && call[1][0] === "create")?.[1] ?? [];
+      expect(result.lastError).toBeNull();
+      expect(createArgs.some((arg) => arg.includes("source=/usr/local/lib/docker/cli-plugins/docker-compose") && arg.includes("target=/usr/local/lib/docker/cli-plugins/docker-compose"))).toBe(true);
+      expect(createArgs.at(-1)).toContain("docker compose version");
       vi.unstubAllGlobals();
     });
 

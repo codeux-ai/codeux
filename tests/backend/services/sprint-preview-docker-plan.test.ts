@@ -139,6 +139,7 @@ describe("SprintPreviewDockerPlanBuilder", () => {
         socketSource: "/run/user/1000/docker.sock",
         socketGid: 1001,
         cliSource: "/usr/bin/docker",
+        composePluginSource: "/usr/libexec/docker/cli-plugins/docker-compose",
       },
     });
 
@@ -149,7 +150,9 @@ describe("SprintPreviewDockerPlanBuilder", () => {
     ]));
     expect(args.some((arg) => arg.includes("source=/run/user/1000/docker.sock") && arg.includes("target=/var/run/docker.sock"))).toBe(true);
     expect(args.some((arg) => arg.includes("source=/usr/bin/docker") && arg.includes("target=/usr/local/bin/docker"))).toBe(true);
+    expect(args.some((arg) => arg.includes("source=/usr/libexec/docker/cli-plugins/docker-compose") && arg.includes("target=/usr/local/lib/docker/cli-plugins/docker-compose"))).toBe(true);
     expect(args.at(-1)).toContain("docker version");
+    expect(args.at(-1)).toContain("docker compose version");
   });
 
   it("matches snapshot", () => {

@@ -1667,6 +1667,7 @@ export interface SprintPreviewSession {
   buildCommand: string | null;
   runCommand: string | null;
   startupCommandOverride: string | null;
+  dockerAccessOverride: boolean | null;
   environmentOverrides: PreviewEnvironmentVariable[];
   lastCompletedTaskCount: number;
   lastSeenSprintStatus: string | null;

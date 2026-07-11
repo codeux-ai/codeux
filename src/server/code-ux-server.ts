@@ -1398,6 +1398,7 @@ export class CodeUxServer {
         saveSprintPreviewScript: (projectId, sprintId, content) => this.sprintPreviewService.saveScript(projectId, sprintId, content),
         updateSprintPreviewEnvironmentOverrides: (projectId, sprintId, sessionId, environmentOverrides) => this.sprintPreviewService.updateEnvironmentOverridesForProjectSprint(projectId, sprintId, sessionId, environmentOverrides),
         updateSprintPreviewStartupCommandOverride: (projectId, sprintId, sessionId, startupCommandOverride) => this.sprintPreviewService.updateStartupCommandOverrideForProjectSprint(projectId, sprintId, sessionId, startupCommandOverride),
+        updateSprintPreviewDockerAccessOverride: (projectId, sprintId, sessionId, dockerAccessOverride) => this.sprintPreviewService.updateDockerAccessOverrideForProjectSprint(projectId, sprintId, sessionId, dockerAccessOverride),
         getSprintPreviewLogs: (sessionId, tail) => this.sprintPreviewService.getLogs(sessionId, tail),
         getSprintPreviewLogsForProjectSprint: (projectId, sprintId, sessionId, tail) => this.sprintPreviewService.getLogsForProjectSprint(projectId, sprintId, sessionId, tail),
         proxySprintPreviewRequest: (args) => this.sprintPreviewService.proxyRequest(args),

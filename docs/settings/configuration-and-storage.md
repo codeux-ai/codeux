@@ -474,7 +474,7 @@ Preview runtime notes:
 - reconciliation is single-flight and preview starts share a global allocation lock so concurrent launches cannot claim the same host port
 - unexpectedly exited containers that were previously healthy (or belong to an active auto-start sprint) receive one bounded recovery attempt; persistent startup failures remain in error for operator review
 - preview-host proxy requests present a coherent `localhost:<mapped-port>` host/forwarded-host/origin boundary to strict host-validation middleware
-- Docker access mounts a local Unix socket only when explicitly enabled and preflights both the CLI and daemon before application startup
+- Docker access mounts a local Unix socket only when explicitly enabled, supports a nullable per-session override from the Browser sidebar, and preflights the CLI, Compose v2 plugin, and daemon before application startup
 
 `agents` contains:
 - `saveToProjectDirectory` (default `true`)

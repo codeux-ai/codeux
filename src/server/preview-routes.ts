@@ -146,6 +146,22 @@ export function registerPreviewRoutes(app: Express, deps: DashboardDependencies)
     ));
   }));
 
+  app.put("/api/projects/:projectId/sprints/:sprintId/preview/sessions/:sessionId/docker-access", asyncRoute(async (req, res) => {
+    if (!deps.updateSprintPreviewDockerAccessOverride) {
+      throw new Error("Sprint preview runtime is unavailable.");
+    }
+    const dockerAccessOverride = req.body?.dockerAccessOverride;
+    if (dockerAccessOverride !== null && typeof dockerAccessOverride !== "boolean") {
+      throw new HttpRouteError(400, "dockerAccessOverride must be a boolean or null");
+    }
+    res.json(await deps.updateSprintPreviewDockerAccessOverride(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      requireTrimmedString(req.params.sprintId, "sprintId"),
+      requireTrimmedString(req.params.sessionId, "sessionId"),
+      dockerAccessOverride,
+    ));
+  }));
+
   app.get("/api/projects/:projectId/sprints/:sprintId/preview/sessions/:sessionId/logs", asyncRoute(async (req, res) => {
     if (!deps.getSprintPreviewLogsForProjectSprint) {
       throw new Error("Sprint preview runtime is unavailable.");

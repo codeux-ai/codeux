@@ -39,7 +39,9 @@ For example, a Code UX app running inside a preview container can set `CODE_UX_A
 
 The right sidebar provides a selected-container startup command override. Preview proxy headers use one coherent `localhost:<mapped-port>` upstream boundary so strict host validation works in the embedded view and external preview link.
 
-Docker daemon access is disabled by default. The explicit Settings toggle mounts and preflights the local Unix socket and compatible CLI, grants effective host-level control, and must only be used with trusted repositories.
+Docker daemon access is disabled by default. Open **Docker Access** in the Browser page right sidebar to set the project-wide default or choose an inherited/enabled/disabled policy for the selected preview container. The Settings toggle remains the same project-wide control. Changes apply after a rebuild.
+
+When enabled, Code UX mounts and preflights the local Unix socket, a compatible Docker CLI, and the Compose v2 plugin so startup commands such as `docker compose up` work inside the preview. Docker daemon access grants effective host-level control and must only be used with trusted repositories.
 
 Startup cleanup completes before previews launch, previously active sessions are restored, and single-flight reconciliation plus serialized port allocation prevent overlapping launches from claiming the same host port. Previously healthy previews receive one bounded recovery attempt after an unexpected exit, including manually launched sessions whose sprint has finished.
 If a process interruption leaves a session marked as starting before Docker creates its container, reconciliation resets that orphaned state and retries it without disturbing starts that are still active.
@@ -55,7 +57,7 @@ The pane is an iframe-like container with toolbar buttons:
 
 The URL bar is read-only; it shows the host URL the container is exposing.
 
-The right sidebar keeps **Launch Container** expanded so new previews are always immediately available. **Selected Sprint**, **Environment**, **Runtime notes**, and **Container logs** are collapsed by default; the Selected Sprint header still shows the active port mapping, or `port pending` until a running preview has a routed port.
+The right sidebar keeps **Launch Container** expanded so new previews are always immediately available. **Docker Access**, **Selected Sprint**, **Environment**, **Runtime notes**, and **Container logs** are collapsed by default; the Selected Sprint header still shows the active port mapping, or `port pending` until a running preview has a routed port.
 
 ## Preview session cards
 
