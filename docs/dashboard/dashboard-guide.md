@@ -310,6 +310,7 @@ Legacy runtime:
 - Critical notifications are rendered ahead of non-critical items so scroll overflow cannot push blocking startup issues behind lower-priority messages. They remain visible until the notification source clears or the user explicitly dismisses a dismissible critical item.
 - Action and dismiss clicks return focus to the notification panel after the row state changes, giving keyboard users a stable fallback when an item leaves the list.
 - Active agent-created task runs and wakeups are projected into the existing notification pipeline with stable IDs based on scheduler entry IDs. Read and dismissed state therefore survives notification refreshes while the entry remains scheduled.
+- Execution interventions and failures come from the global `GET /api/notifications` projection, so records from non-selected projects remain visible. Each record carries project/sprint/task context, structured detail fields, and a direct task, Live, sprint, or project target; timestamp-versioned local identity preserves read/dismiss state until the source record is updated.
 
 ### Stats page
 - The Stats page is available at `/stats` and is scoped to the selected project. Without a selected project, it renders the Stats shell with a polite no-project state instead of attempting to fetch telemetry.

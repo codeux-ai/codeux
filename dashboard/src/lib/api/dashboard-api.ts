@@ -1,5 +1,6 @@
 import type {
   DashboardSettings,
+  DashboardNotificationFeed,
   DashboardStatus,
   ExecutionAttentionItemSummary,
   ExecutionDashboardSnapshot,
@@ -123,6 +124,7 @@ export const clearLivePayloadCacheForTests = (): void => {
   livePayloadInflight.clear();
   livePayloadProjectIndex.clear();
   overviewTelemetryInflight = null;
+  dashboardNotificationsInflight = null;
   onboardingReadinessInflight = null;
 };
 
@@ -197,6 +199,7 @@ export const fetchLiveActivities = async (): Promise<import("../../types.js").Li
 };
 
 let overviewTelemetryInflight: Promise<OverviewTelemetrySnapshot> | null = null;
+let dashboardNotificationsInflight: Promise<DashboardNotificationFeed> | null = null;
 
 export const fetchOverviewTelemetry = async (): Promise<OverviewTelemetrySnapshot> => {
   if (!overviewTelemetryInflight) {
@@ -205,6 +208,15 @@ export const fetchOverviewTelemetry = async (): Promise<OverviewTelemetrySnapsho
     });
   }
   return overviewTelemetryInflight;
+};
+
+export const fetchDashboardNotifications = async (): Promise<DashboardNotificationFeed> => {
+  if (!dashboardNotificationsInflight) {
+    dashboardNotificationsInflight = fetchJson<DashboardNotificationFeed>("/api/notifications").finally(() => {
+      dashboardNotificationsInflight = null;
+    });
+  }
+  return dashboardNotificationsInflight;
 };
 
 export const fetchGitTrackingStatus = async (): Promise<GitTrackingStatus> => {
