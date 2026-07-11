@@ -36,7 +36,7 @@ describe("QA Review Budget", () => {
       expect(shouldVerifyContinuedQaFix(makeRun({
         status: "completed",
         outcome: "changes_requested",
-        payload: { continued: true },
+        payload: { continued: true, postExhaustionVerificationEligible: true },
       }))).toBe(true);
     });
     it("returns false if continued is not true", () => {
@@ -50,6 +50,14 @@ describe("QA Review Budget", () => {
       expect(shouldVerifyContinuedQaFix(makeRun({
         status: "completed",
         outcome: "pass",
+        payload: { continued: true, postExhaustionVerificationEligible: true },
+      }))).toBe(false);
+    });
+
+    it("does not renew post-exhaustion verification for an ordinary later continuation", () => {
+      expect(shouldVerifyContinuedQaFix(makeRun({
+        status: "completed",
+        outcome: "changes_requested",
         payload: { continued: true },
       }))).toBe(false);
     });
@@ -121,11 +129,26 @@ describe("QA Review Budget", () => {
         latestRun: makeRun({
           status: "completed",
           outcome: "changes_requested",
-          payload: { continued: true },
+          payload: { continued: true, postExhaustionVerificationEligible: true },
         }),
       });
       expect(result.allowed).toBe(true);
       expect(result.reason).toBe("allow_post_continuation_verification");
+    });
+
+    it("rejects a second continuation after the one post-exhaustion verification", () => {
+      const result = evaluateQaReviewBudget({
+        existingRuns: 3,
+        decisiveRuns: 3,
+        maxTaskReviewRuns: 2,
+        latestRun: makeRun({
+          status: "completed",
+          outcome: "changes_requested",
+          payload: { continued: true },
+        }),
+      });
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toBe("budget_exhausted");
     });
 
     it("allows run for recovered stale retry even if budget is exhausted", () => {

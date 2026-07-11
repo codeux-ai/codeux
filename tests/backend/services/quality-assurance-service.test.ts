@@ -1212,6 +1212,7 @@ describe("QualityAssuranceService", () => {
       payload: {
         continued: true,
         continuationMode: "cli",
+        postExhaustionVerificationEligible: true,
       },
       finishedAt: "2026-06-13T20:43:00.000Z",
     });
@@ -1540,6 +1541,7 @@ describe("QualityAssuranceService", () => {
 
     expect(outcome.reopenedTask).toBe(true);
     expect(qaReviewRepository.getLatestTaskRun(task.id)?.payload?.continued).toBe(true);
+    expect(qaReviewRepository.getLatestTaskRun(task.id)?.payload?.postExhaustionVerificationEligible).toBe(false);
   });
 
   it("recovers a running task QA review when the execution invocation never linked provider runtime", async () => {
