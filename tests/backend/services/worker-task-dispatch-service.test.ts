@@ -398,11 +398,15 @@ describe("WorkerTaskDispatchService", () => {
       projectId: "project-1",
       workerEndpointId: "worker-endpoint-1",
       executionMode: "VIRTUAL",
+      dispatchId: "dispatch-1",
+      taskId: "task-1",
     });
 
     expect(result?.leaseToken).toBe("lease-virtual-1");
     expect(deps.executionRepository.claimNextTaskDispatch).toHaveBeenCalledWith(expect.objectContaining({
       projectId: "project-1",
+      dispatchId: "dispatch-1",
+      taskId: "task-1",
       executorType: "docker_cli",
       ownerKey: "virtual:project-1",
     }));

@@ -1490,6 +1490,8 @@ export class ExecutionRepository {
     ownerKey?: string;
     leaseToken?: string;
     leaseExpiresAt?: string;
+    dispatchId?: string;
+    taskId?: string;
     sprintId?: string;
     sprintRunId?: string;
   }): ClaimedTaskDispatchRecord | null {

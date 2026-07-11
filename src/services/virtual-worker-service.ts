@@ -52,6 +52,7 @@ import {
   peekNextWorkerAttention,
   resolveWorkerExecutionMode,
   computeReconciliationCandidates,
+  hasPendingManagerClarificationForScope,
   isProjectManagerOwnedClarificationItem,
   resolveVirtualWorkerAttentionRoute,
   type VirtualWorkerAttentionRoute,
@@ -343,11 +344,17 @@ export class VirtualWorkerService {
     const effectiveResolver = resolver || ((pId, sId) => this.resolveDashboardSettings(pId, sId));
     const activeItems = this.deps.projectAttentionService.listActiveProjectItems(projectId);
     const nextAttentionItem = peekNextWorkerAttention(activeItems, effectiveResolver);
-    const hasPendingManagerClarification = activeItems.some((item) => (
-      isProjectManagerOwnedClarificationItem(item)
-      && item.payload?.status === "pending"
-    ));
-    const pendingDispatchAvailable = hasPendingDispatch ?? this.deps.executionRepository.listProjectIdsWithPendingDispatches().includes(projectId);
+    const projectHasPendingDispatch = hasPendingDispatch
+      ?? this.deps.executionRepository.listProjectIdsWithPendingDispatches().includes(projectId);
+    const pendingDispatchAvailable = projectHasPendingDispatch && this.deps.executionRepository
+      .listTaskDispatches({ projectId })
+      .some((dispatch) => (
+        dispatch.status === "queued"
+        && !hasPendingManagerClarificationForScope({
+          taskId: dispatch.taskId,
+          dispatchId: dispatch.id,
+        }, activeItems)
+      ));
     const executionMode = !nextAttentionItem && pendingDispatchAvailable
       ? resolveWorkerExecutionMode(effectiveResolver(projectId))
       : "VIRTUAL";
@@ -357,7 +364,6 @@ export class VirtualWorkerService {
       executionMode,
       pendingDispatchAvailable,
       this.scheduledProjects.has(projectId),
-      hasPendingManagerClarification,
     );
   }
 
@@ -385,19 +391,27 @@ export class VirtualWorkerService {
     try {
       const activeItems = this.deps.projectAttentionService.listActiveProjectItems(projectId);
       const attentionItem = peekNextWorkerAttention(activeItems, effectiveResolver);
-      const hasPendingManagerClarification = activeItems.some((item) => (
-        isProjectManagerOwnedClarificationItem(item)
-        && item.payload?.status === "pending"
-      ));
+      const nextDispatch = this.deps.executionRepository
+        .listTaskDispatches({ projectId })
+        .find((dispatch) => (
+          dispatch.status === "queued"
+          && !hasPendingManagerClarificationForScope({
+            taskId: dispatch.taskId,
+            dispatchId: dispatch.id,
+          }, activeItems)
+        ));
       // Do not lease ordinary coding work while a CI/merge repair is waiting.
       // A leased dispatch is durable, so claiming it and then prioritizing the
       // attention item would strand the dispatch until lease recovery.
-      const dispatchClaim = attentionItem || hasPendingManagerClarification
+      const dispatchClaim = attentionItem || !nextDispatch
         ? null
         : this.deps.workerTaskDispatchService.claimNextDispatchForWorker({
           projectId,
           workerEndpointId: endpoint.id,
-          executionMode: "VIRTUAL"
+          executionMode: "VIRTUAL",
+          dispatchId: nextDispatch.id,
+          taskId: nextDispatch.taskId,
+          sprintId: nextDispatch.sprintId,
         });
 
       const plan = await planVirtualWorkerCycle({
