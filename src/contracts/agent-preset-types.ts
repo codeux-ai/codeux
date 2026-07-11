@@ -3,6 +3,41 @@ import type { MemoryCategory } from "./memory-types.js";
 
 export type AgentSourceScope = "project" | "home" | "default";
 
+export type BaseAgentRole = "planning_agent" | "project_manager";
+
+export interface BaseAgentInstructionState {
+  role: BaseAgentRole;
+  /** Hash of the bundled instructions used as the customization baseline. */
+  baselineContentHash: string;
+  customized: boolean;
+  /** Deterministic bundled revision last applied to this preset. */
+  lastAppliedRevision: string | null;
+}
+
+export type BaseAgentInstructionStates = Partial<Record<BaseAgentRole, BaseAgentInstructionState>>;
+
+export type BaseAgentUpdateReason = "customized_instructions" | "alternate_route";
+
+export interface BaseAgentUpdateNotice {
+  projectId: string;
+  role: BaseAgentRole;
+  baseAgentPresetId: string;
+  selectedAgentPresetId: string;
+  selectedAgentName: string;
+  reason: BaseAgentUpdateReason;
+  currentRevision: string | null;
+  availableRevision: string;
+}
+
+export interface BaseAgentUpdateContext {
+  role: BaseAgentRole;
+  bundledInstructionMarkdown: string;
+  bundledRevision: string;
+  baseAgentPreset: AgentPresetRecord;
+  selectedAgentPreset: AgentPresetRecord;
+  notice: BaseAgentUpdateNotice | null;
+}
+
 /**
  * Per-agent MCP access configuration. Controls which MCP servers a given agent
  * exposes when it runs in a container.
@@ -87,6 +122,7 @@ export interface AgentPresetRecord {
   mcpAccess?: AgentMcpAccessConfig;
   persistentSkillStorageIds?: string[];
   persistentSkillStorage?: AgentPersistentSkillStorageConfig;
+  baseInstructionStates?: BaseAgentInstructionStates;
   createdAt: string;
   updatedAt: string;
 }
@@ -107,6 +143,7 @@ export interface CreateAgentPresetInput {
   mcpAccess?: AgentMcpAccessConfig;
   persistentSkillStorageIds?: string[];
   persistentSkillStorage?: AgentPersistentSkillStorageConfig;
+  baseInstructionStates?: BaseAgentInstructionStates;
 }
 
 export interface UpdateAgentPresetInput {
@@ -124,6 +161,7 @@ export interface UpdateAgentPresetInput {
   mcpAccess?: AgentMcpAccessConfig;
   persistentSkillStorageIds?: string[];
   persistentSkillStorage?: AgentPersistentSkillStorageConfig;
+  baseInstructionStates?: BaseAgentInstructionStates;
 }
 
 export interface PushAgentPresetsToMarkdownOptions {

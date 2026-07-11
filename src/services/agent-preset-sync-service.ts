@@ -1,6 +1,17 @@
 import * as fs from "fs/promises";
 import * as path from "path";
-import type { AgentMcpAccessConfig, AgentMemoryConfig, AgentPresetRecord, AgentSourceScope, AgentAvatarConfig, PushAgentPresetsToMarkdownOptions } from "../contracts/agent-preset-types.js";
+import type {
+  AgentMcpAccessConfig,
+  AgentMemoryConfig,
+  AgentPresetRecord,
+  AgentSourceScope,
+  AgentAvatarConfig,
+  BaseAgentInstructionState,
+  BaseAgentRole,
+  BaseAgentUpdateContext,
+  BaseAgentUpdateNotice,
+  PushAgentPresetsToMarkdownOptions,
+} from "../contracts/agent-preset-types.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
 import { ValidationError } from "../repositories/repository-utils.js";
@@ -16,6 +27,13 @@ import { PrService } from "../infrastructure/providers/cli/pr-service.js";
 import { hasAgentAvatarConfig, resolveAgentAvatarConfig } from "../contracts/agent-avatar-style.js";
 import { defaultCodingAgentMcpAccess } from "./agent-mcp-access.js";
 import type { SkillService } from "./skill-service.js";
+import {
+  BASE_AGENT_ROLE_DEFINITIONS,
+  createBaseAgentInstructionState,
+  getBaseAgentRoleDefinition,
+  hashBaseAgentInstructions,
+  resolveBaseAgentRole,
+} from "./base-agent-update-state.js";
 
 interface AgentPresetSyncServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
@@ -43,6 +61,12 @@ interface AgentSourceFile {
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
   memoryConfig?: AgentMemoryConfig;
+}
+
+interface BundledBaseAgentSource {
+  role: BaseAgentRole;
+  instructionMarkdown: string;
+  revision: string;
 }
 
 const BASE_AGENT_IDS: Record<string, string> = {
@@ -250,11 +274,14 @@ export class AgentPresetSyncService {
     const presetsById = new Map(existingPresets.map((preset) => [preset.id, preset]));
     const presetsByName = new Map(existingPresets.map((preset) => [this.normalizeName(preset.name), preset]));
     const sourceFiles = await this.readAgentSources(project.baseDir);
+    const bundledBaseAgents = await this.readBundledBaseAgentSources();
 
-    for (const source of sourceFiles) {
-      const existing = existingPresets.find((preset) => preset.sourcePath === source.sourcePath)
+    for (let source of sourceFiles) {
+      let existing = existingPresets.find((preset) => preset.sourcePath === source.sourcePath)
         || presetsByName.get(source.normalizedName)
         || null;
+      const baseRole = resolveBaseAgentRole(source.name);
+      const bundledBaseAgent = baseRole ? bundledBaseAgents.get(baseRole) : undefined;
 
       if (!existing) {
         const labels = this.inferLabelsForSource(source.normalizedName);
@@ -287,8 +314,26 @@ export class AgentPresetSyncService {
           mcpAccess: this.defaultMcpAccessForSource(source.normalizedName),
         });
         presetsById.set(created.id, created);
-        presetsByName.set(source.normalizedName, created);
+        const initialized = bundledBaseAgent
+          ? this.initializeBaseInstructionState(created, bundledBaseAgent, source)
+          : created;
+        presetsById.set(initialized.id, initialized);
+        presetsByName.set(source.normalizedName, initialized);
         continue;
+      }
+
+      if (baseRole && bundledBaseAgent) {
+        existing = await this.reconcileBaseAgentInstructions({
+          projectBaseDir: project.baseDir,
+          preset: existing,
+          source,
+          bundled: bundledBaseAgent,
+        });
+        presetsById.set(existing.id, existing);
+        presetsByName.set(source.normalizedName, existing);
+        if (source.sourceScope === "project") {
+          source = await this.readAgentSourceFile(source.sourcePath, source.sourceScope);
+        }
       }
 
       const labels = existing.labels.length > 0 ? existing.labels : this.inferLabelsForSource(source.normalizedName);
@@ -314,23 +359,37 @@ export class AgentPresetSyncService {
         });
       }
 
-      const contentChanged = source.instructionMarkdown.trim() !== existing.instructionMarkdown.trim();
-      const descriptionChanged = (source.description || "") !== (existing.description || "");
-      const nameChanged = source.normalizedName !== this.normalizeName(existing.name);
-      const avatarChanged = JSON.stringify(avatarConfig || {}) !== JSON.stringify(existing.avatarConfig || {});
-      const providerChanged = (source.providerConfigId || "") !== (existing.providerConfigId || "");
-      const modelChanged = (source.model || "") !== (existing.model || "");
-      const containerRunAsRootChanged = source.containerRunAsRoot !== undefined
+      const preserveTrackedBaseInstructions = Boolean(existing.baseInstructionStates
+        && Object.keys(existing.baseInstructionStates).length > 0);
+      const contentChanged = !(baseRole && bundledBaseAgent) && !preserveTrackedBaseInstructions
+        && source.instructionMarkdown.trim() !== existing.instructionMarkdown.trim();
+      const preserveBundledBaseMetadata = Boolean(baseRole && bundledBaseAgent && source.sourceScope === "default");
+      const descriptionChanged = !preserveBundledBaseMetadata
+        && (source.description || "") !== (existing.description || "");
+      const nameChanged = !preserveBundledBaseMetadata
+        && source.normalizedName !== this.normalizeName(existing.name);
+      const avatarChanged = !preserveBundledBaseMetadata
+        && JSON.stringify(avatarConfig || {}) !== JSON.stringify(existing.avatarConfig || {});
+      const providerChanged = !preserveBundledBaseMetadata
+        && (source.providerConfigId || "") !== (existing.providerConfigId || "");
+      const modelChanged = !preserveBundledBaseMetadata
+        && (source.model || "") !== (existing.model || "");
+      const containerRunAsRootChanged = !preserveBundledBaseMetadata && source.containerRunAsRoot !== undefined
         && source.containerRunAsRoot !== existing.containerRunAsRoot;
-      const memoryEnabledChanged = Boolean(source.memoryTemplateOverrideEnabled) !== Boolean(existing.memoryTemplateOverrideEnabled);
-      const memoryMarkdownChanged = (source.memoryTemplateMarkdown || "") !== (existing.memoryTemplateMarkdown || "");
-      const memoryConfigChanged = JSON.stringify(source.memoryConfig || null) !== JSON.stringify(existing.memoryConfig || null);
+      const memoryEnabledChanged = !preserveBundledBaseMetadata
+        && Boolean(source.memoryTemplateOverrideEnabled) !== Boolean(existing.memoryTemplateOverrideEnabled);
+      const memoryMarkdownChanged = !preserveBundledBaseMetadata
+        && (source.memoryTemplateMarkdown || "") !== (existing.memoryTemplateMarkdown || "");
+      const memoryConfigChanged = !preserveBundledBaseMetadata
+        && JSON.stringify(source.memoryConfig || null) !== JSON.stringify(existing.memoryConfig || null);
 
       if (contentChanged || descriptionChanged || nameChanged || avatarChanged || providerChanged || modelChanged || containerRunAsRootChanged || memoryEnabledChanged || memoryMarkdownChanged || memoryConfigChanged) {
         const imported = this.deps.agentPresetRepository.importLinkedAgentPreset(existing.id, {
           name: source.sourceScope === "project" ? existing.name : source.name,
           description: source.description,
-          instructionMarkdown: source.instructionMarkdown,
+          instructionMarkdown: baseRole && bundledBaseAgent || preserveTrackedBaseInstructions
+            ? existing.instructionMarkdown
+            : source.instructionMarkdown,
           sourceUpdatedAt: source.sourceUpdatedAt,
           avatarConfig,
           providerConfigId: source.providerConfigId,
@@ -549,6 +608,42 @@ export class AgentPresetSyncService {
     return await this.getRequiredAgent(projectId, "Planning agent", "planning_agent.md");
   }
 
+  async listBaseAgentUpdateNotices(projectId: string): Promise<BaseAgentUpdateNotice[]> {
+    await this.syncProjectAgents(projectId);
+    const notices: BaseAgentUpdateNotice[] = [];
+    for (const definition of BASE_AGENT_ROLE_DEFINITIONS) {
+      const context = await this.getBaseAgentUpdateContextWithoutSync(projectId, definition.role);
+      if (context?.notice) notices.push(context.notice);
+    }
+    return notices;
+  }
+
+  async getBaseAgentUpdateContext(
+    projectId: string,
+    role: BaseAgentRole,
+  ): Promise<BaseAgentUpdateContext | null> {
+    await this.syncProjectAgents(projectId);
+    return await this.getBaseAgentUpdateContextWithoutSync(projectId, role);
+  }
+
+  async applyBaseAgentInstructionUpdate(
+    projectId: string,
+    role: BaseAgentRole,
+  ): Promise<AgentPresetRecord> {
+    await this.syncProjectAgents(projectId);
+    const context = await this.getBaseAgentUpdateContextWithoutSync(projectId, role);
+    if (!context) {
+      throw new Error(`Bundled ${getBaseAgentRoleDefinition(role).name} instructions are not available.`);
+    }
+
+    return await this.applyBundledInstructionsToPreset({
+      preset: context.selectedAgentPreset,
+      role,
+      instructionMarkdown: context.bundledInstructionMarkdown,
+      revision: context.bundledRevision,
+    });
+  }
+
   async resolveTargetedPlanningAgent(projectId: string, planningAgentPresetId?: string): Promise<AgentPresetRecord> {
     await this.syncProjectAgents(projectId);
 
@@ -731,6 +826,223 @@ export class AgentPresetSyncService {
     }
   }
 
+  private initializeBaseInstructionState(
+    preset: AgentPresetRecord,
+    bundled: BundledBaseAgentSource,
+    source?: AgentSourceFile,
+  ): AgentPresetRecord {
+    const presetMatchesBundle = hashBaseAgentInstructions(preset.instructionMarkdown) === bundled.revision;
+    const sourceMatchesBundle = !source
+      || hashBaseAgentInstructions(source.instructionMarkdown) === bundled.revision;
+    const customized = !presetMatchesBundle || !sourceMatchesBundle;
+    return this.setBaseInstructionState(preset, createBaseAgentInstructionState(
+      bundled.role,
+      bundled.revision,
+      customized,
+      customized ? null : bundled.revision,
+    ));
+  }
+
+  private async reconcileBaseAgentInstructions(args: {
+    projectBaseDir: string;
+    preset: AgentPresetRecord;
+    source: AgentSourceFile;
+    bundled: BundledBaseAgentSource;
+  }): Promise<AgentPresetRecord> {
+    let preset = args.preset;
+    let state = preset.baseInstructionStates?.[args.bundled.role];
+    if (!state) {
+      preset = this.initializeBaseInstructionState(preset, args.bundled, args.source);
+      state = preset.baseInstructionStates?.[args.bundled.role];
+    }
+    if (!state) return preset;
+
+    const presetHash = hashBaseAgentInstructions(preset.instructionMarkdown);
+    const sourceHash = hashBaseAgentInstructions(args.source.instructionMarkdown);
+    const sourceChangedSinceImport = args.source.sourceUpdatedAt !== preset.sourceImportedAt;
+    const sourceIsCurrentBundle = args.source.sourceScope === "default"
+      && sourceHash === args.bundled.revision;
+    const presetIsCustomized = presetHash !== state.baselineContentHash;
+    const customized = state.customized
+      || presetIsCustomized
+      || (sourceHash !== state.baselineContentHash && !sourceIsCurrentBundle);
+
+    if (customized) {
+      const shouldImportCustomizedSource = Boolean(preset.sourcePath && preset.sourceScope)
+        && sourceChangedSinceImport
+        && sourceHash !== presetHash
+        && (args.source.sourceScope === "project" || !presetIsCustomized);
+      if (shouldImportCustomizedSource) {
+        preset = this.deps.agentPresetRepository.importLinkedAgentPreset(preset.id, {
+          name: args.source.sourceScope === "project" ? preset.name : args.source.name,
+          description: args.source.description,
+          instructionMarkdown: args.source.instructionMarkdown,
+          sourceUpdatedAt: args.source.sourceUpdatedAt,
+          avatarConfig: args.source.avatarConfig ?? preset.avatarConfig,
+          providerConfigId: args.source.providerConfigId,
+          model: args.source.model,
+          containerRunAsRoot: args.source.containerRunAsRoot,
+          memoryTemplateOverrideEnabled: args.source.memoryTemplateOverrideEnabled,
+          memoryTemplateMarkdown: args.source.memoryTemplateMarkdown,
+          memoryConfig: args.source.memoryConfig,
+        });
+      }
+      return this.setBaseInstructionState(preset, { ...state, customized: true });
+    }
+
+    if (args.bundled.revision === state.lastAppliedRevision) return preset;
+
+    const selectedPresetId = this.getConfiguredBaseAgentPresetId(preset.projectId, args.bundled.role);
+    if (selectedPresetId && selectedPresetId !== preset.id) return preset;
+
+    return await this.applyBundledInstructionsToPreset({
+      preset,
+      role: args.bundled.role,
+      instructionMarkdown: args.bundled.instructionMarkdown,
+      revision: args.bundled.revision,
+      projectBaseDir: args.projectBaseDir,
+    });
+  }
+
+  private setBaseInstructionState(
+    preset: AgentPresetRecord,
+    state: BaseAgentInstructionState,
+  ): AgentPresetRecord {
+    return this.deps.agentPresetRepository.updateAgentPreset(preset.id, {
+      baseInstructionStates: {
+        ...preset.baseInstructionStates,
+        [state.role]: state,
+      },
+    });
+  }
+
+  private async applyBundledInstructionsToPreset(args: {
+    preset: AgentPresetRecord;
+    role: BaseAgentRole;
+    instructionMarkdown: string;
+    revision: string;
+    projectBaseDir?: string;
+  }): Promise<AgentPresetRecord> {
+    let preset = args.preset;
+    const projectBaseDir = args.projectBaseDir ?? this.requireProject(preset.projectId).baseDir;
+    if ((preset.sourceScope === "project" && preset.sourcePath) || this.shouldSaveToProjectDirectory(preset.projectId)) {
+      const source = await this.writeProjectAgentFile({
+        projectId: preset.projectId,
+        agentPresetId: preset.id,
+        projectBaseDir,
+        name: preset.name,
+        description: preset.description,
+        instructionMarkdown: args.instructionMarkdown,
+        avatarConfig: preset.avatarConfig,
+        providerConfigId: preset.providerConfigId,
+        model: preset.model,
+        containerRunAsRoot: preset.containerRunAsRoot,
+        memoryTemplateOverrideEnabled: preset.memoryTemplateOverrideEnabled,
+        memoryTemplateMarkdown: preset.memoryTemplateMarkdown,
+        memoryConfig: preset.memoryConfig,
+        previousProjectSourcePath: preset.sourceScope === "project" ? preset.sourcePath : null,
+      });
+      preset = this.deps.agentPresetRepository.updateAgentPreset(preset.id, {
+        instructionMarkdown: args.instructionMarkdown,
+      });
+      preset = this.deps.agentPresetRepository.linkAgentPresetToSource(preset.id, {
+        sourcePath: source.sourcePath,
+        sourceScope: source.sourceScope,
+        sourceUpdatedAt: source.sourceUpdatedAt,
+        sourceImportedAt: source.sourceUpdatedAt,
+      });
+    } else {
+      preset = this.deps.agentPresetRepository.updateAgentPreset(preset.id, {
+        instructionMarkdown: args.instructionMarkdown,
+      });
+    }
+
+    return this.setBaseInstructionState(preset, createBaseAgentInstructionState(
+      args.role,
+      args.revision,
+      false,
+      args.revision,
+    ));
+  }
+
+  private async getBaseAgentUpdateContextWithoutSync(
+    projectId: string,
+    role: BaseAgentRole,
+  ): Promise<BaseAgentUpdateContext | null> {
+    const bundled = (await this.readBundledBaseAgentSources()).get(role);
+    if (!bundled) return null;
+
+    const definition = getBaseAgentRoleDefinition(role);
+    const baseAgentPreset = this.deps.agentPresetRepository.findAgentPresetByName(projectId, definition.name);
+    if (!baseAgentPreset) return null;
+    const configuredPresetId = this.getConfiguredBaseAgentPresetId(projectId, role);
+    const configuredPreset = configuredPresetId
+      ? this.deps.agentPresetRepository.getAgentPreset(configuredPresetId)
+      : null;
+    const selectedAgentPreset = configuredPreset?.projectId === projectId ? configuredPreset : baseAgentPreset;
+    const state = selectedAgentPreset.baseInstructionStates?.[role];
+    const selectedRevision = hashBaseAgentInstructions(selectedAgentPreset.instructionMarkdown);
+
+    let notice: BaseAgentUpdateNotice | null = null;
+    if (selectedAgentPreset.id !== baseAgentPreset.id && selectedRevision !== bundled.revision) {
+      notice = this.createBaseAgentUpdateNotice({
+        projectId,
+        role,
+        baseAgentPreset,
+        selectedAgentPreset,
+        reason: "alternate_route",
+        currentRevision: state?.lastAppliedRevision ?? null,
+        availableRevision: bundled.revision,
+      });
+    } else if (state?.customized && state.lastAppliedRevision !== bundled.revision) {
+      notice = this.createBaseAgentUpdateNotice({
+        projectId,
+        role,
+        baseAgentPreset,
+        selectedAgentPreset,
+        reason: "customized_instructions",
+        currentRevision: state.lastAppliedRevision,
+        availableRevision: bundled.revision,
+      });
+    }
+
+    return {
+      role,
+      bundledInstructionMarkdown: bundled.instructionMarkdown,
+      bundledRevision: bundled.revision,
+      baseAgentPreset,
+      selectedAgentPreset,
+      notice,
+    };
+  }
+
+  private createBaseAgentUpdateNotice(args: {
+    projectId: string;
+    role: BaseAgentRole;
+    baseAgentPreset: AgentPresetRecord;
+    selectedAgentPreset: AgentPresetRecord;
+    reason: BaseAgentUpdateNotice["reason"];
+    currentRevision: string | null;
+    availableRevision: string;
+  }): BaseAgentUpdateNotice {
+    return {
+      projectId: args.projectId,
+      role: args.role,
+      baseAgentPresetId: args.baseAgentPreset.id,
+      selectedAgentPresetId: args.selectedAgentPreset.id,
+      selectedAgentName: args.selectedAgentPreset.name,
+      reason: args.reason,
+      currentRevision: args.currentRevision,
+      availableRevision: args.availableRevision,
+    };
+  }
+
+  private getConfiguredBaseAgentPresetId(projectId: string, role: BaseAgentRole): string | null {
+    const routing = this.deps.settingsRepository.resolveProjectDashboardSettings(projectId).settings.agents.routing;
+    const definition = getBaseAgentRoleDefinition(role);
+    return routing[definition.routingKey].agentPresetId;
+  }
+
   private async readAgentSources(repoPath: string): Promise<AgentSourceFile[]> {
     await ensureDefaultCodeUxAssetsInstalled({
       projectRoot: this.deps.projectRoot,
@@ -765,6 +1077,30 @@ export class AgentPresetSyncService {
     }
 
     return Array.from(collected.values());
+  }
+
+  private async readBundledBaseAgentSources(): Promise<Map<BaseAgentRole, BundledBaseAgentSource>> {
+    const bundledCodeUxDir = process.env.NODE_ENV === "test" && process.env.CODE_UX_ENABLE_DEFAULT_ASSET_INSTALL_IN_TESTS !== "1"
+      ? null
+      : await resolveBundledCodeUxDir({
+        projectRoot: this.deps.projectRoot,
+        requireQuicksprintTemplates: false,
+      });
+    const bundled = new Map<BaseAgentRole, BundledBaseAgentSource>();
+    if (!bundledCodeUxDir) return bundled;
+
+    for (const definition of BASE_AGENT_ROLE_DEFINITIONS) {
+      const source = await this.readAgentSourceFile(
+        path.join(bundledCodeUxDir, "agents", definition.fileName),
+        "default",
+      );
+      bundled.set(definition.role, {
+        role: definition.role,
+        instructionMarkdown: source.instructionMarkdown,
+        revision: hashBaseAgentInstructions(source.instructionMarkdown),
+      });
+    }
+    return bundled;
   }
 
   private async readAgentSourceFile(sourcePath: string, sourceScope: AgentSourceScope): Promise<AgentSourceFile> {

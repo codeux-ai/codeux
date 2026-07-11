@@ -30,6 +30,7 @@ Foundation fields:
 - `container_run_as_root` stores a nullable per-agent Docker root-mode override; `NULL` inherits the resolved `cliWorkflow.containerRunAsRoot` setting
 - `memory_config_json` stores `AgentMemoryConfig` as a JSON blob
 - `persistent_skill_storage_enabled` reserves a default-off runtime enablement flag for future persistent skill retrieval
+- `base_instruction_state_json` stores per-role bundled-instruction baselines, customization state, and the last applied content-hash revision for Planning agent and Project manager updates
 - `created_at`
 - `updated_at`
 

@@ -27,6 +27,8 @@ Use built-ins first, then assign specialists where project-specific instructions
 
 The dashboard reply fallback is **Project manager**. New and imported projects pin that fallback at project scope so the primary user conversation does not inherit an unrelated Worker route. Select another preset only when that agent is intentionally responsible for the project's user-facing conversation.
 
+Bundled instruction revisions apply automatically only while the built-in Planning agent or Project manager route remains selected and its tracked instructions are untouched. Customized instructions and alternate planning/dashboard-reply routes require an explicit apply decision; background synchronization does not overwrite them.
+
 A practical review flow is:
 
 1. Start from the inherited default and change only the fields that solve a concrete operational problem.

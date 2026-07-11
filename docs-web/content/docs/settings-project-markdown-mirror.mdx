@@ -25,6 +25,8 @@ The mirror toggle writes companion files under `.code-ux/agents` for selected pr
 
 Enable it when agent instructions should be reviewable with project changes.
 
+For the built-in Planning agent and Project manager, a mirrored file matching the tracked baseline can receive an instruction-only bundled update. A file edit that diverges from the baseline is treated as customization and preserved together with all non-instruction metadata.
+
 A practical review flow is:
 
 1. Start from the inherited default and change only the fields that solve a concrete operational problem.

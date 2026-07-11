@@ -266,4 +266,46 @@ describe("AgentPresetRepository", () => {
     expect(renamed.mcpAccess?.codeUxEnabled).toBe(false);
     expect(renamed.mcpAccess?.linkedServerIds).toEqual(["srv-1", "srv-2"]);
   });
+
+  it("round-trips typed base instruction state and safely ignores malformed legacy JSON", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-preset-base-state-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const project = projectRepository.createProject({
+      name: "Base State Project",
+      sourceType: "local",
+      sourceRef: "/workspace/base-state-project",
+    });
+
+    const created = agentPresetRepository.createAgentPreset(project.id, {
+      name: "Planning agent",
+      instructionMarkdown: "Plan carefully.",
+      baseInstructionStates: {
+        planning_agent: {
+          role: "planning_agent",
+          baselineContentHash: "sha256:baseline",
+          customized: false,
+          lastAppliedRevision: "sha256:baseline",
+        },
+      },
+    });
+    expect(created.baseInstructionStates?.planning_agent).toEqual({
+      role: "planning_agent",
+      baselineContentHash: "sha256:baseline",
+      customized: false,
+      lastAppliedRevision: "sha256:baseline",
+    });
+
+    const renamed = agentPresetRepository.updateAgentPreset(created.id, { name: "Planning agent renamed" });
+    expect(renamed.baseInstructionStates).toEqual(created.baseInstructionStates);
+
+    storage.getDatabase().prepare(`
+      UPDATE agent_presets
+      SET base_instruction_state_json = ?
+      WHERE id = ?
+    `).run('{"planning_agent":{"role":"worker"}}', created.id);
+    expect(agentPresetRepository.getAgentPreset(created.id)?.baseInstructionStates).toBeUndefined();
+  });
 });

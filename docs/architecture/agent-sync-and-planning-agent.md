@@ -65,6 +65,16 @@ That means:
 - the dashboard can push `.code-ux/agents/*.md` back into git, either as a local commit, a commit plus branch push, or a feature-branch pull request into the default branch
 - when opening a pull request, Code UX resolves the effective dashboard GitHub/GitLab host tokens and forwards them to the PR service so repository-host authentication stays aligned with the current project settings
 
+## Bundled Base Instruction Revisions
+
+`Planning agent` and `Project manager` track bundled instruction revisions independently from the normal project/default/home source winner. Revisions are SHA-256 hashes of normalized instruction content, so an update is detected even when filesystem timestamps are unchanged.
+
+Each preset can persist role-keyed `base_instruction_state_json` with the baseline content hash, whether the instructions have diverged, and the last bundled revision applied. A legacy record is initialized as untouched only when both its sqlite instructions and selected markdown source match the current bundle; an ambiguous legacy difference is treated as customized.
+
+When an untouched built-in remains selected by `agents.routing.planning.agentPresetId` or `agents.routing.dashboardReply.agentPresetId`, a newer bundle updates only its instruction markdown. Avatar, description, labels, provider/model selection, container mode, memory settings, MCP access, skill bindings, and routing settings are preserved. A linked project markdown mirror receives the same instruction-only update.
+
+Dashboard edits, sqlite-only edits, and project markdown edits that diverge from the tracked baseline mark the role customized and are never replaced by background synchronization. Project markdown edits continue to import through the existing source-sync path. If a route selects another preset, automatic application is skipped for that routed behavior. The provider/API layer can inspect `listBaseAgentUpdateNotices` and `getBaseAgentUpdateContext`, then call `applyBaseAgentInstructionUpdate` only after an explicit decision; contexts identify the selected alternate preset and report `customized_instructions` or `alternate_route`.
+
 ## Agent Metadata
 
 `agent_presets` now stores source metadata in addition to the editable instruction body:
@@ -76,6 +86,7 @@ That means:
 - `avatar_config_json` (used for dashboard UI avatars: legacy body fields plus robot chassis, eyes, antenna, headphones, accent, base, and visor colors)
 - `memory_template_override_enabled`
 - `memory_template_markdown`
+- `base_instruction_state_json`
 
 These metadata fields are synced bidirectionally with project markdown files using a `---json` frontmatter codec:
 

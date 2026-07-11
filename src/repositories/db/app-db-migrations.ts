@@ -652,6 +652,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "agent_presets", "mcp_access_json", "TEXT");
   ensureColumn(db, "agent_presets", "memory_config_json", "TEXT");
   ensureColumn(db, "agent_presets", "persistent_skill_storage_enabled", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "agent_presets", "base_instruction_state_json", "TEXT");
 
   ensureColumn(db, "connection_project_bindings", "last_attention_cursor", "TEXT");
   ensureColumn(db, "connection_project_bindings", "last_assignment_cursor", "TEXT");
