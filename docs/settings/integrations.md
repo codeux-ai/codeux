@@ -25,6 +25,8 @@ Cards show connection state, auth hints, active/configured importer status, and 
 
 Configure provider and importer credentials at system scope and use project overrides only for repository-specific git hosts or importer defaults.
 
+For Google Drive, link an existing host-side sync or mount directory and enable the opt-in Docker mount only for projects that need it. The mount defaults to read-only; see [Google Drive Project Mount](./google-drive-mount.md) for access, inheritance, security, and troubleshooting details. This integration does not configure Google Drive API synchronization or credentials.
+
 A practical review flow is:
 
 1. Start from the inherited default and change only the fields that solve a concrete operational problem.
@@ -53,6 +55,7 @@ If the saved setting does not appear to take effect:
 ## Related Documentation
 
 - [Settings overview](./index.md)
+- [Google Drive Project Mount](./google-drive-mount.md)
 - [Dashboard Settings](../../dashboard/design-system-settings.md)
 - [Configuration and Storage](../configuration-and-storage.md)
 - [Security Hardening](../../operations/security-hardening.md)
