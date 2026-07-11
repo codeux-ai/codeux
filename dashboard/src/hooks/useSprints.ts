@@ -108,8 +108,15 @@ export function useSprints(projectId: string | null): UseSprintsResult {
     stabilizeNext: stabilizeSprintCollection,
     realtime: projectId ? {
       scopes: [`project:${projectId}`],
-      eventType: "project.structure.updated",
-      updateDirectlyFromEvent: false, // Refetch to allow cache populating
+      shouldRefetch: (message) => {
+        if (message.type === "snapshot_required") {
+          return true;
+        }
+        return message.type === "event" && (
+          message.event.eventType === "project.structure.updated"
+          || message.event.eventType === "project.execution.updated"
+        );
+      },
     } : undefined,
     pollIntervalMs: projectId ? 15000 : 0,
     isAlreadyLoaded: projectCacheEntryRef.current.hadInitialCache || !projectId,
