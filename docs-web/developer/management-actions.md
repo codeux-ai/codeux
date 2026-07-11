@@ -53,9 +53,11 @@ Domain for project CRUD and selection.
 | `force_cancel` | – | `sprintRunId` | Force-cancel (immediate). |
 | `inspect_run` | – | `projectId`, `sprintId`, `sprintRunId?` | Inspect run(s). |
 | `import_issues` | – | `projectId`, optional `sprintId`, filters | Search provider issues, and optionally replace sprint linked issues. |
-| `plan` | – | `projectId`, `sprintId` | Run the planning agent. Optional `autoStart`, `replan`, `planningAgentPresetId`, and `overrides`. Planning self-reflection gates `autoStart` when enabled; non-passing reflection saves the plan without starting the sprint. |
+| `plan` | – | `projectId`, `sprintId` | Start the planning agent in the background and return `status: "started"` immediately after synchronous precondition validation. Optional `autoStart`, `replan`, `planningAgentPresetId`, and `overrides` are preserved. MCP dashboard-chat calls receive a same-thread scheduler wakeup after planning completes or fails. |
 
 `title` and `goalMarkdown` are MCP-friendly aliases. The repository stores sprint `name` and `goal`.
+
+The immediate `plan` response does not mark planning complete. Task persistence, planning self-reflection, and optional sprint execution remain owned by the background planning workflow. `import_issues` with `planAfterImport` and non-MCP planning callers retain their awaited behavior.
 
 ---
 
