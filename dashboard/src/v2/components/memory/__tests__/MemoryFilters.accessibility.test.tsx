@@ -24,8 +24,6 @@ describe("MemoryFilters Accessibility", () => {
                 stats={{ sprint: 5, agent: 2, project: 10, activeModel: "test", staleEmbeddings: 0 }}
                 sprints={[]}
                 agentPresets={[]}
-                showModels={false}
-                setShowModels={() => {}}
                 setShowAddModal={() => {}}
                 lobotomize={false}
                 handleLobotomizeToggle={() => {}}
@@ -53,8 +51,6 @@ describe("MemoryFilters Accessibility", () => {
                 stats={{ sprint: 5, agent: 2, project: 10, activeModel: "test", staleEmbeddings: 0 }}
                 sprints={[{ id: "1", number: 1, goal: "test", name: "", repoPath: "" } as any]}
                 agentPresets={[{ id: "agent1", name: "Agent 1", description: "", modelName: "" } as any]}
-                showModels={false}
-                setShowModels={() => {}}
                 setShowAddModal={() => {}}
                 lobotomize={false}
                 handleLobotomizeToggle={() => {}}
@@ -79,8 +75,6 @@ describe("MemoryFilters Accessibility", () => {
                     { id: "agent1", name: "Agent 1", description: "", modelName: "" } as any,
                     { id: "agent2", name: "Agent 2", description: "", modelName: "" } as any
                 ]}
-                showModels={false}
-                setShowModels={() => {}}
                 setShowAddModal={() => {}}
                 lobotomize={false}
                 handleLobotomizeToggle={() => {}}
@@ -104,8 +98,6 @@ describe("MemoryFilters Accessibility", () => {
                 stats={{ sprint: 5, agent: 2, project: 10, activeModel: "test", staleEmbeddings: 0 }}
                 sprints={[]}
                 agentPresets={[]}
-                showModels={false}
-                setShowModels={() => {}}
                 setShowAddModal={() => {}}
                 lobotomize={false}
                 handleLobotomizeToggle={() => {}}
@@ -134,35 +126,12 @@ describe("MemoryFilters Accessibility", () => {
         expect(document.activeElement).toBe(shortTermTab);
     });
 
-    test("model catalog button communicates pressed visibility state", () => {
-        const { getByRole, getByText } = render(
-            <MemoryFilters
-                stats={{ sprint: 5, agent: 2, project: 10, activeModel: "test", staleEmbeddings: 0 }}
-                sprints={[]}
-                agentPresets={[]}
-                showModels={true}
-                setShowModels={() => {}}
-                setShowAddModal={() => {}}
-                lobotomize={false}
-                handleLobotomizeToggle={() => {}}
-            />
-        );
-
-        const toggleBtn = getByRole("button", { name: "Hide embedding model catalog" });
-        expect(toggleBtn).toHaveAttribute("aria-pressed", "true");
-        expect(toggleBtn).toHaveAccessibleDescription("Active: test");
-        expect(getByText("Shown")).toBeInTheDocument();
-        expect(getByText("Active: test")).toBeInTheDocument();
-    });
-
     test("Danger mode toggle uses aria-pressed and persistent state copy", async () => {
         const { getByRole } = render(
             <MemoryFilters
                 stats={{ sprint: 5, agent: 2, project: 10, activeModel: "test", staleEmbeddings: 0 }}
                 sprints={[]}
                 agentPresets={[]}
-                showModels={false}
-                setShowModels={() => {}}
                 setShowAddModal={() => {}}
                 lobotomize={true}
                 handleLobotomizeToggle={() => {}}
@@ -181,8 +150,6 @@ describe("MemoryFilters Accessibility", () => {
                 stats={{ sprint: 5, agent: 2, project: 10, activeModel: "test", staleEmbeddings: 0 }}
                 sprints={[]}
                 agentPresets={[]}
-                showModels={false}
-                setShowModels={() => {}}
                 setShowAddModal={() => {}}
                 lobotomize={false}
                 handleLobotomizeToggle={() => {}}
@@ -190,7 +157,6 @@ describe("MemoryFilters Accessibility", () => {
         );
 
         expect(getByRole("button", { name: "Add Memory" })).toBeInTheDocument();
-        expect(getByRole("button", { name: "Show embedding model catalog" })).toBeInTheDocument();
         expect(getByRole("button", { name: "Enable danger delete mode" })).toBeInTheDocument();
     });
 
@@ -201,8 +167,6 @@ describe("MemoryFilters Accessibility", () => {
                 stats={{ sprint: 0, agent: 0, project: 3, activeModel: null, staleEmbeddings: 0 }}
                 sprints={[]}
                 agentPresets={[]}
-                showModels={false}
-                setShowModels={() => {}}
                 setShowAddModal={() => {}}
                 lobotomize={false}
                 handleLobotomizeToggle={() => {}}
@@ -215,25 +179,18 @@ describe("MemoryFilters Accessibility", () => {
         expect(getByText("No short-term memory filters are available for this tier.")).toBeInTheDocument();
     });
 
-    test("model catalog and danger toggles announce changed pressed state", async () => {
-        const setShowModels = vi.fn();
+    test("danger toggle announces changed pressed state", async () => {
         const handleDanger = vi.fn();
         const { getByRole, getByText } = render(
             <MemoryFilters
                 stats={{ sprint: 1, agent: 0, project: 0, activeModel: null, staleEmbeddings: 0 }}
                 sprints={[]}
                 agentPresets={[]}
-                showModels={false}
-                setShowModels={setShowModels}
                 setShowAddModal={() => {}}
                 lobotomize={false}
                 handleLobotomizeToggle={handleDanger}
             />
         );
-
-        await fireEvent.click(getByRole("button", { name: "Show embedding model catalog" }));
-        expect(setShowModels).toHaveBeenCalledWith(true);
-        expect(getByText("Embedding model catalog shown. No active model selected.")).toBeInTheDocument();
 
         await fireEvent.click(getByRole("button", { name: "Enable danger delete mode" }));
         expect(handleDanger).toHaveBeenCalledTimes(1);

@@ -1,7 +1,7 @@
-export const SPEECH_PROVIDER_MODES = ["auto", "local_onnx", "external_api"] as const;
+export const SPEECH_PROVIDER_MODES = ["local_onnx", "external_api"] as const;
 
 export type SpeechProviderMode = typeof SPEECH_PROVIDER_MODES[number];
-export type SpeechTranscriptionProvider = Exclude<SpeechProviderMode, "auto">;
+export type SpeechTranscriptionProvider = SpeechProviderMode;
 
 export interface ExternalTranscriptionSettings {
   baseUrl: string;
@@ -10,12 +10,67 @@ export interface ExternalTranscriptionSettings {
   language?: string | null;
 }
 
+export interface ExternalSpeechSynthesisSettings {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  voice: string;
+  format: "mp3" | "wav" | "opus" | "aac" | "flac";
+}
+
+export interface SpeechSynthesisSettings {
+  enabled: boolean;
+  providerMode: SpeechProviderMode;
+  localModelId: string;
+  voice: string;
+  speed: number;
+  externalSynthesis: ExternalSpeechSynthesisSettings;
+}
+
 export interface SpeechSettings {
   enabled: boolean;
   providerMode: SpeechProviderMode;
   localModelId: string;
   maxAudioSeconds: number;
   externalTranscription: ExternalTranscriptionSettings;
+  synthesis: SpeechSynthesisSettings;
+}
+
+export type SpeechModelKind = "transcription" | "synthesis";
+export type SpeechModelAdapter = "waveform_ctc" | "whisper" | "kokoro" | "piper";
+
+export interface SpeechModelFile {
+  sourcePath: string;
+  localName: string;
+}
+
+export interface SpeechModelVoice {
+  id: string;
+  label: string;
+  language: string;
+}
+
+export interface SpeechModelCatalogItem {
+  id: string;
+  kind: SpeechModelKind;
+  adapter: SpeechModelAdapter;
+  displayName: string;
+  description: string;
+  repository: string;
+  sourceUrl: string;
+  files: SpeechModelFile[];
+  sizeBytes: number;
+  language: string;
+  sampleRateHz: number;
+  voices: SpeechModelVoice[];
+  defaultVoice: string | null;
+}
+
+export interface SpeechModelStatus extends SpeechModelCatalogItem {
+  downloaded: boolean;
+  downloading: boolean;
+  downloadProgress: number;
+  error: string | null;
 }
 
 export type SpeechTranscriptionErrorCode =
@@ -60,6 +115,27 @@ export type SpeechTranscriptionResult =
       language: string | null;
       durationSeconds: number | null;
       fallback?: SpeechTranscriptionFallbackMetadata | null;
+    }
+  | {
+      ok: false;
+      error: SpeechTranscriptionError;
+    };
+
+export interface SpeechSynthesisInput {
+  text: string;
+  projectId?: string | null;
+  sprintId?: string | null;
+  voice?: string | null;
+}
+
+export type SpeechSynthesisResult =
+  | {
+      ok: true;
+      audio: Buffer;
+      contentType: string;
+      provider: SpeechTranscriptionProvider;
+      model: string;
+      voice: string;
     }
   | {
       ok: false;

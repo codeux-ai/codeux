@@ -27,7 +27,7 @@ const createImporterSettings = () => ({
 
 const createSpeechSettings = () => ({
   enabled: false,
-  providerMode: "auto" as const,
+  providerMode: "local_onnx" as const,
   localModelId: "onnx-community/whisper-base.en",
   maxAudioSeconds: 120,
   externalTranscription: {

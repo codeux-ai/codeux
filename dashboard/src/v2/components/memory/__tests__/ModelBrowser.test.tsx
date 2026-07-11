@@ -89,7 +89,7 @@ afterEach(() => {
 });
 
 describe("ModelBrowser", () => {
-  it("groups embedding models separately from speech-adjacent Hugging Face models", () => {
+  it("keeps the embedding catalog focused after speech models move to AI Models settings", () => {
     renderBrowser();
 
     const embeddingSection = screen.getByRole("region", { name: "Embedding Models" });
@@ -97,11 +97,7 @@ describe("ModelBrowser", () => {
     expect(within(embeddingSection).getByText("Acme Custom Embed")).toBeInTheDocument();
     expect(within(embeddingSection).getByRole("link", { name: /acme\/custom-embed/i })).toHaveAttribute("href", "https://huggingface.co/acme/custom-embed");
 
-    const speechSection = screen.getByRole("region", { name: "TTS / Speech-Adjacent Hugging Face Models" });
-    expect(within(speechSection).getByText("Whisper Base English ONNX")).toBeInTheDocument();
-    expect(within(speechSection).getByText("Whisper Tiny English ONNX")).toBeInTheDocument();
-    expect(within(speechSection).getAllByText("Speech only")).toHaveLength(2);
-    expect(within(speechSection).queryByRole("button", { name: /Download|Activate|Delete|Re-embed/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: /Speech-Adjacent|Speech to text|Text to speech/i })).not.toBeInTheDocument();
   });
 
   it("keeps embedding actions available from compact model rows", async () => {

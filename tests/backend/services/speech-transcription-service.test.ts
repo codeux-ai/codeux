@@ -140,14 +140,14 @@ describe("SpeechTranscriptionService", () => {
     expect(decodedAudio?.[2]).toBeCloseTo(-1);
   });
 
-  it("falls back to an explicitly configured external API in auto mode", async () => {
+  it("uses the external API only when API mode is selected", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       text: "external transcript",
       language: "en",
     }), { status: 200, headers: { "content-type": "application/json" } }));
     const service = new SpeechTranscriptionService({
       resolveSpeechSettings: () => speechSettings({
-        providerMode: "auto",
+        providerMode: "external_api",
         externalTranscription: {
           baseUrl: "https://transcribe.example.test/v1/audio/transcriptions",
           apiKey: "sk-test-secret-1234567890123456",
@@ -176,22 +176,18 @@ describe("SpeechTranscriptionService", () => {
       model: "whisper-1",
       language: "en",
       durationSeconds: 1,
-      fallback: {
-        attemptedProvider: "local_onnx",
-        reason: "missing_local_model",
-        message: 'Local speech model "onnx-community/whisper-base.en" is not installed.',
-      },
+      fallback: null,
     });
   });
 
-  it("does not send audio externally in auto mode without explicit external credentials", async () => {
+  it("does not send audio externally while local mode is selected", async () => {
     const fetchImpl = vi.fn();
     const service = new SpeechTranscriptionService({
       resolveSpeechSettings: () => speechSettings({
-        providerMode: "auto",
+        providerMode: "local_onnx",
         externalTranscription: {
           baseUrl: "https://transcribe.example.test/v1/audio/transcriptions",
-          apiKey: "",
+          apiKey: "configured-but-unused",
           model: "whisper-1",
           language: null,
         },
@@ -204,8 +200,8 @@ describe("SpeechTranscriptionService", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error.code).toBe("client_error");
-      expect(result.error.message).toContain("Install local model");
+      expect(result.error.code).toBe("missing_local_model");
+      expect(result.error.message).toContain("onnx-community/whisper-base.en");
     }
     expect(fetchImpl).not.toHaveBeenCalled();
   });

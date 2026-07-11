@@ -28,6 +28,8 @@ const readOptionalLanguage = (value: unknown): string | null => {
   return trimmed || null;
 };
 
+const SPEECH_FORMATS = new Set(["mp3", "wav", "opus", "aac", "flac"] as const);
+
 export const sanitizeSpeech = (
   input: Partial<DashboardSettings> | undefined,
 ): SpeechSettings => {
@@ -37,6 +39,12 @@ export const sanitizeSpeech = (
   const defaults = DEFAULT_DASHBOARD_SETTINGS.speech;
   const externalInput = speechInput.externalTranscription && typeof speechInput.externalTranscription === "object"
     ? speechInput.externalTranscription as Partial<SpeechSettings["externalTranscription"]>
+    : {};
+  const synthesisInput = speechInput.synthesis && typeof speechInput.synthesis === "object"
+    ? speechInput.synthesis as Partial<SpeechSettings["synthesis"]>
+    : {};
+  const externalSynthesisInput = synthesisInput.externalSynthesis && typeof synthesisInput.externalSynthesis === "object"
+    ? synthesisInput.externalSynthesis as Partial<SpeechSettings["synthesis"]["externalSynthesis"]>
     : {};
 
   return {
@@ -52,6 +60,24 @@ export const sanitizeSpeech = (
       apiKey: readString(externalInput.apiKey, defaults.externalTranscription.apiKey).trim(),
       model: readRequiredTrimmedString(externalInput.model, defaults.externalTranscription.model),
       language: readOptionalLanguage(externalInput.language),
+    },
+    synthesis: {
+      enabled: readBoolean(synthesisInput.enabled, defaults.synthesis.enabled),
+      providerMode: readSpeechProviderMode(synthesisInput.providerMode, defaults.synthesis.providerMode),
+      localModelId: readRequiredTrimmedString(synthesisInput.localModelId, defaults.synthesis.localModelId),
+      voice: readRequiredTrimmedString(synthesisInput.voice, defaults.synthesis.voice),
+      speed: Math.max(0.5, Math.min(2, typeof synthesisInput.speed === "number" && Number.isFinite(synthesisInput.speed)
+        ? synthesisInput.speed
+        : defaults.synthesis.speed)),
+      externalSynthesis: {
+        baseUrl: readRequiredTrimmedString(externalSynthesisInput.baseUrl, defaults.synthesis.externalSynthesis.baseUrl),
+        apiKey: readString(externalSynthesisInput.apiKey, defaults.synthesis.externalSynthesis.apiKey).trim(),
+        model: readRequiredTrimmedString(externalSynthesisInput.model, defaults.synthesis.externalSynthesis.model),
+        voice: readRequiredTrimmedString(externalSynthesisInput.voice, defaults.synthesis.externalSynthesis.voice),
+        format: typeof externalSynthesisInput.format === "string" && SPEECH_FORMATS.has(externalSynthesisInput.format as never)
+          ? externalSynthesisInput.format as SpeechSettings["synthesis"]["externalSynthesis"]["format"]
+          : defaults.synthesis.externalSynthesis.format,
+      },
     },
   };
 };

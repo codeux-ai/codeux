@@ -195,6 +195,8 @@ export class CodeUxServer {
   private chatThreadRuntimeService: import("../services/chat-thread-runtime-service.js").ChatThreadRuntimeService;
   private chatProviderIngressService: ChatProviderIngressService;
   private speechTranscriptionService: import("../services/speech-transcription-service.js").SpeechTranscriptionService;
+  private speechSynthesisService: import("../services/speech-synthesis-service.js").SpeechSynthesisService;
+  private speechModelManager: import("../services/speech-model-manager.js").SpeechModelManager;
   private runtimeCleanupService: RuntimeCleanupService;
   private runtimeStartupRecoveryService: RuntimeStartupRecoveryService;
   private dashboardRealtimeService: DashboardRealtimeService;
@@ -284,6 +286,8 @@ export class CodeUxServer {
     this.chatThreadRuntimeService = deps.chatThreadRuntimeService;
     this.chatProviderIngressService = deps.chatProviderIngressService;
     this.speechTranscriptionService = deps.speechTranscriptionService;
+    this.speechSynthesisService = deps.speechSynthesisService;
+    this.speechModelManager = deps.speechModelManager;
     this.runtimeCleanupService = deps.runtimeCleanupService;
     this.runtimeStartupRecoveryService = new RuntimeStartupRecoveryService({
       sessionTracking: this.sessionTracking,
@@ -1378,6 +1382,8 @@ export class CodeUxServer {
         chatThreadRuntimeService: this.chatThreadRuntimeService,
         chatProviderIngressService: this.chatProviderIngressService,
         speechTranscriptionService: this.speechTranscriptionService,
+        speechSynthesisService: this.speechSynthesisService,
+        speechModelManager: this.speechModelManager,
         dashboardRealtimeService: this.dashboardRealtimeService,
         logger: this.logger,
         getLiveActivitiesForActiveTasks: () => this.getLiveActivitiesForActiveTasks(),

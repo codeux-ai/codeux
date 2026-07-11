@@ -107,6 +107,7 @@ export type DocsSlug =
   | 'architecture-custom-dashboard-foundation'
   | 'architecture-managed-container-runtime'
   | 'architecture-speech-input'
+  | 'architecture-speech-output'
 
 export interface DocsRegistryEntry extends Partial<Omit<PageMeta, 'title' | 'description'>> {
   id: DocsSlug
@@ -276,7 +277,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-memory',
     section: 'User Guide',
     title: "Memory",
-    description: "The Memory page (/memory) manages Code UX's two-tier semantic memory system and the embedding models that power it.",
+    description: "The Memory page (/memory) manages Code UX's two-tier semantic memory system. Embedding and speech models are installed from Settings -&gt; AI Models.",
   },
   'user-dashboard-knowledge': {
     id: 'user-dashboard-knowledge',
@@ -843,7 +844,14 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/architecture-speech-input',
     section: 'Architecture',
     title: "Speech Input Architecture",
-    description: "Speech input turns dashboard microphone or uploaded audio into prompt text through POST /api/speech/transcriptions. The current implementation includes persisted settings, the backend transcription route and service,...",
+    description: "Speech input turns dashboard microphone or uploaded audio into prompt text through POST /api/speech/transcriptions. Install and activate local models, or configure the API variant, under Settings -&gt; AI Models.",
+  },
+  'architecture-speech-output': {
+    id: 'architecture-speech-output',
+    path: '/docs/architecture-speech-output',
+    section: 'Architecture',
+    title: "Speech Output Architecture",
+    description: "Speech output turns project-manager replies into audio through POST /api/speech/synthesis. Code UX supports local ONNX synthesis and OpenAI-compatible TTS APIs, and 3D Chat provides playback plus a voice on/off control.",
   },
 }
 
@@ -952,6 +960,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-custom-dashboard-foundation'],
   docsRegistry['architecture-managed-container-runtime'],
   docsRegistry['architecture-speech-input'],
+  docsRegistry['architecture-speech-output'],
 ]
 
 export const groupedDocs = orderedDocs.reduce<Record<DocsSection, DocsRegistryEntry[]>>(

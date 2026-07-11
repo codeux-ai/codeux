@@ -1,7 +1,7 @@
 import type { FunctionComponent, RefObject } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { AlertTriangle, ArrowUp, BriefcaseBusiness, Gauge, Gamepad2, GitBranch, Globe2, History, LayoutDashboard, ListTodo, Monitor, Radar, RefreshCw, Rocket, ShoppingCart, Sparkles, WandSparkles, Wrench } from "lucide-preact";
+import { AlertTriangle, ArrowUp, BriefcaseBusiness, Gauge, Gamepad2, GitBranch, Globe2, History, LayoutDashboard, ListTodo, Monitor, Radar, RefreshCw, Rocket, ShoppingCart, Sparkles, Volume2, VolumeX, WandSparkles, Wrench } from "lucide-preact";
 import type { AgentPresetRecord, ChatMessageRecord, ChatThread, DashboardCreateAppQuickactionKind, Source } from "../../../types.js";
 import { renderMarkdown } from "../../../../lib/markdown.js";
 import { formatChatTime } from "../../../lib/chat-time.js";
@@ -17,6 +17,9 @@ import { useAgentMood, type AgentMoodState } from "./use-agent-mood.js";
 import { parseBubbleSegments, StageWidgetRenderer } from "./StageWidgets.js";
 import { isAgentScheduledWakeup, ScheduledWakeupWidget } from "../widgets/ScheduledWakeupWidget.js";
 import { buildCinematicQuickActions } from "../../../lib/cinematic-quick-actions.js";
+import { useProjectEffectiveSettings } from "../../../hooks/use-project-effective-settings.js";
+import { synthesizeSpeech } from "../../../lib/speech-api.js";
+import { SpeechInputButton } from "../../speech/SpeechInputButton.js";
 
 /* ════════════════════════════════════════════════════════════════════════
  *  CinematicStage — the default "3D Chat" view of the chat page.
@@ -53,6 +56,7 @@ export interface CinematicStageProps {
   error: string | null;
   input: string;
   setInput: (value: string) => void;
+  onSpeechTranscript: (text: string) => void;
   handleSend: (overrideText?: string) => Promise<void>;
   handleCreateAppQuickaction: (kind: DashboardCreateAppQuickactionKind) => Promise<void>;
   initialEligibilityLoaded: boolean;
@@ -93,6 +97,16 @@ const readForcedTool = (): AgentSceneTool | null => {
   const value = new URLSearchParams(window.location.search).get("stageTool");
   return (WORK_TOOLS as string[]).includes(value ?? "") ? (value as AgentSceneTool) : null;
 };
+
+const speechTextFromMarkdown = (markdown: string): string => markdown
+  .replace(/```[\s\S]*?```/g, " Code block omitted. ")
+  .replace(/`([^`]+)`/g, "$1")
+  .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+  .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+  .replace(/^#{1,6}\s+/gm, "")
+  .replace(/[*_~>|]/g, " ")
+  .replace(/\s+/g, " ")
+  .trim();
 
 /** GSAP entrance shared by bubbles — mirrors ChatMessageBubble's timing. */
 function useBubbleEnter(ref: RefObject<HTMLElement>, reducedMotion: boolean) {
@@ -304,6 +318,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   error,
   input,
   setInput,
+  onSpeechTranscript,
   handleSend,
   handleCreateAppQuickaction,
   initialEligibilityLoaded,
@@ -318,6 +333,13 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   const reducedMotion = useReducedMotion();
   const [composerFocused, setComposerFocused] = useState(false);
   const [workingPhase, setWorkingPhase] = useState<"starting" | "working" | null>(null);
+  const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
+  const voiceAvailable = Boolean(effectiveSettings?.settings.speech?.synthesis?.enabled);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
+  const spokenMessageIdRef = useRef<string | null>(null);
 
   const agentName = agentPreset?.name || activeConnection?.displayName || "Project Manager";
   const avatarConfig = agentPreset?.avatarConfig || DEFAULT_AGENT_AVATAR_CONFIG;
@@ -351,6 +373,61 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     initialEligibilityLoaded,
     canCreateInitialAppQuickactions,
   });
+
+  useEffect(() => {
+    const projectId = selectedProject?.id;
+    if (!projectId || !voiceAvailable) {
+      setVoiceEnabled(false);
+      return;
+    }
+    setVoiceEnabled(window.localStorage.getItem(`codeux:chat-voice:${projectId}`) !== "off");
+  }, [selectedProject?.id, voiceAvailable]);
+
+  useEffect(() => {
+    if (!latestAgentMessage || runtimeBusy || !voiceAvailable || !voiceEnabled) return;
+    if (spokenMessageIdRef.current === null) {
+      spokenMessageIdRef.current = latestAgentMessage.id;
+      return;
+    }
+    if (spokenMessageIdRef.current === latestAgentMessage.id) return;
+    spokenMessageIdRef.current = latestAgentMessage.id;
+    const text = speechTextFromMarkdown(latestAgentMessage.bodyMarkdown || "");
+    if (!text) return;
+
+    let cancelled = false;
+    setVoiceBusy(true);
+    void synthesizeSpeech(text, selectedProject?.id || null).then((audioBlob) => {
+      if (cancelled) return;
+      audioRef.current?.pause();
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+      const url = URL.createObjectURL(audioBlob);
+      audioUrlRef.current = url;
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => setVoiceBusy(false);
+      audio.onerror = () => setVoiceBusy(false);
+      return audio.play();
+    }).catch(() => {
+      if (!cancelled) setVoiceBusy(false);
+    });
+    return () => { cancelled = true; };
+  }, [latestAgentMessage?.id, runtimeBusy, selectedProject?.id, voiceAvailable, voiceEnabled]);
+
+  useEffect(() => () => {
+    audioRef.current?.pause();
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+  }, []);
+
+  const toggleVoice = (): void => {
+    if (!voiceAvailable || !selectedProject?.id) return;
+    const next = !voiceEnabled;
+    setVoiceEnabled(next);
+    window.localStorage.setItem(`codeux:chat-voice:${selectedProject.id}`, next ? "on" : "off");
+    if (!next) {
+      audioRef.current?.pause();
+      setVoiceBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (!runtimeBusy) {
@@ -509,6 +586,31 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
             <div className="mt-1.5 flex items-center justify-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
               <span className={`h-1 w-1 rounded-full ${activeConnection ? "bg-signal-500" : "bg-slate-300 dark:bg-slate-600"}`} aria-hidden="true" />
               {activeConnection ? `${activeConnection.displayName} · ${activeConnection.status}` : "queued routing"}
+            </div>
+            <div
+              role="group"
+              aria-label="3D chat voice controls"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-black/[0.07] bg-white/80 p-1.5 shadow-[0_8px_28px_rgba(0,0,0,0.09)] backdrop-blur-xl dark:border-white/[0.09] dark:bg-void-800/80 dark:shadow-[0_8px_30px_rgba(0,0,0,0.35)]"
+            >
+              <SpeechInputButton
+                compact
+                disabled={!selectedProject || sending}
+                projectId={selectedProject?.id ?? null}
+                onTranscript={onSpeechTranscript}
+                className="border-transparent bg-transparent shadow-none hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+              />
+              <span aria-hidden="true" className="h-6 w-px bg-black/[0.08] dark:bg-white/[0.1]" />
+              <button
+                type="button"
+                onClick={toggleVoice}
+                disabled={!voiceAvailable}
+                aria-pressed={voiceEnabled}
+                aria-label={!voiceAvailable ? "Voice unavailable; activate a TTS model in AI Models settings" : voiceEnabled ? "Mute project manager" : "Unmute project manager"}
+                title={!voiceAvailable ? "Activate a TTS model in Settings → AI Models" : voiceEnabled ? "Mute agent" : "Unmute agent"}
+                className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 ${voiceEnabled ? "bg-signal-500/[0.12] text-signal-600 dark:text-signal-300" : "bg-black/[0.03] text-slate-400 dark:bg-white/[0.04]"} disabled:cursor-not-allowed disabled:opacity-45`}
+              >
+                {voiceEnabled ? <Volume2 className={`h-5 w-5 ${voiceBusy ? "animate-pulse motion-reduce:animate-none" : ""}`} aria-hidden="true" /> : <VolumeX className="h-5 w-5" aria-hidden="true" />}
+              </button>
             </div>
           </div>
         </div>

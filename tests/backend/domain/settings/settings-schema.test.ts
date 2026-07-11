@@ -555,7 +555,7 @@ describe("validateSettingsPayload", () => {
     expect(result.success).toBe(false);
     expect(result.issues).toEqual(expect.arrayContaining([
       { path: "speech.enabled", message: "Expected a boolean" },
-      { path: "speech.providerMode", message: "Expected one of: auto, local_onnx, external_api" },
+      { path: "speech.providerMode", message: "Expected one of: local_onnx, external_api" },
       { path: "speech.localModelId", message: "Expected a non-empty string" },
       { path: "speech.maxAudioSeconds", message: "Expected a finite number between 1 and 600" },
       { path: "speech.externalTranscription.baseUrl", message: "Expected a non-empty string" },
@@ -585,7 +585,7 @@ describe("validateSettingsPayload", () => {
 
     expect(result).toEqual({
       enabled: true,
-      providerMode: "auto",
+      providerMode: "local_onnx",
       localModelId: "onnx-community/whisper-tiny.en",
       maxAudioSeconds: 600,
       externalTranscription: {
@@ -594,6 +594,7 @@ describe("validateSettingsPayload", () => {
         model: "custom-transcribe",
         language: null,
       },
+      synthesis: DEFAULT_DASHBOARD_SETTINGS.speech.synthesis,
     });
   });
 });

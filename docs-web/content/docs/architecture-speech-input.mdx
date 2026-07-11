@@ -1,12 +1,12 @@
 # Speech Input Architecture
 
-Speech input turns dashboard microphone or uploaded audio into prompt text through `POST /api/speech/transcriptions`. The current implementation includes persisted settings, the backend transcription route and service, and reusable dashboard primitives for recorder-driven transcription.
+Speech input turns dashboard microphone or uploaded audio into prompt text through `POST /api/speech/transcriptions`. Install and activate local models, or configure the API variant, under **Settings -> AI Models**.
 
 ## Settings Boundary
 
-Speech settings are project-scoped. They flow through defaults, override resolution, validation, and sanitization alongside other project settings. The `speech` object stores whether transcription is enabled, the provider mode, local ONNX model id, maximum audio duration, and external transcription fallback configuration.
+Speech settings are project-scoped. They flow through defaults, override resolution, validation, and sanitization alongside other project settings. The `speech` object stores whether transcription is enabled, the explicit Local or API provider mode, local ONNX model id, maximum audio duration, and external transcription configuration.
 
-The default provider mode is `auto`, which is intended to prefer local ONNX transcription first and fall back to an OpenAI-compatible external API only when local transcription is unavailable.
+Local is the default provider mode. API fields stay hidden until API is selected, and local mode never sends microphone audio to an external provider.
 
 ## Privacy Boundary
 
@@ -30,16 +30,15 @@ Reusable v2 primitives keep microphone capture out of individual composers:
 
 Composer integration remains separate so each composer can choose append/replace behavior, request scope, and focus handling.
 
-## Provider Fallback Behavior
+## Provider Selection
 
-The contracts separate settings mode from execution provider:
+The contracts expose two explicit execution modes:
 
 - `local_onnx` is local model inference.
 - `external_api` is an OpenAI-compatible transcription endpoint.
-- `auto` is a settings mode, not a concrete execution provider.
 
 Structured transcription errors cover unsupported audio, missing local models, permission/client errors, and provider failures.
 
-Local model files are resolved under deterministic cache directories in `~/.code-ux/models/speech/<sanitized-model-id>`. The default `onnx-community/whisper-base.en` resolves to `~/.code-ux/models/speech/onnx-community--whisper-base.en/`; each model directory must contain `model.onnx` and may include `labels.json`. In `auto` mode, Code UX uses local ONNX first when the selected model is present. Before local inference, the service decodes the dashboard recorder's PCM WAV payload into mono `Float32Array` samples so the model input is audio waveform data rather than raw RIFF/container bytes. If the model is missing and an external base URL, API key, and model are configured, the service falls back to an OpenAI-style multipart request using bearer token auth and returns fallback metadata. Provider error messages are sanitized before returning to the dashboard so API keys are never echoed.
+Local model files are resolved under deterministic cache directories in `~/.code-ux/models/speech/<sanitized-model-id>`. The default `onnx-community/whisper-base.en` resolves to `~/.code-ux/models/speech/onnx-community--whisper-base.en/`; each model directory must contain `model.onnx` and may include `labels.json`. Before local inference, the service decodes the dashboard recorder's PCM WAV payload into mono `Float32Array` samples so the model input is audio waveform data rather than raw RIFF/container bytes. A missing local model produces a structured error without API fallback. API mode uses an OpenAI-style multipart request with bearer token auth. Provider error messages are sanitized before returning to the dashboard so API keys are never echoed.
 
 Electron packages include the `onnxruntime-node` runtime dependency and unpack its native bindings from ASAR, but model weights remain user-cache data under `~/.code-ux/models/speech/` to avoid bloating installers and to let users replace or add models independently.

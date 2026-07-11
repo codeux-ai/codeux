@@ -35,11 +35,11 @@ The Memory UI relies on specific hex colors that match existing app accents:
 - **Overlay Safety:** Zoom controls, legend, and node count live inside the canvas wrapper with safe offsets that move away from the inspector on desktop and stay reachable on mobile.
 - **Header Filters & Actions:** The Memory header control surface groups tier summary tabs, current-scope copy, scope selectors, and actions into distinct rows. Tier tabs show Short Term and Long Term counts directly; the compact scope line uses the pattern `Short Term: showing 7 memories of 17 memories · Sprint 2 · All Agents` or `Long Term: showing 1 memory of 1 memory · Project-wide · All Agents`.
 - **Filters & Search:** Filter controls wrap into multiple rows with `flex-wrap`, `min-w-0`, stable flex bases, and `max-w-full` so tier tabs, sprint selectors, agent selectors, model catalog, add memory, and danger actions never force horizontal scrolling.
-- **Header Actions:** Add Memory, Model Catalog, and Danger Delete are visually separated from selectors. Model Catalog keeps `aria-pressed`, shown/hidden text, and active-model status visible. Danger Delete keeps `aria-pressed`, Off/Armed button text, and persistent explanatory copy visible in both states.
+- **Header Actions:** Add Memory and Danger Delete are visually separated from selectors. Danger Delete keeps `aria-pressed`, Off/Armed button text, and persistent explanatory copy visible in both states. Model configuration belongs to Settings -> AI Models.
 - **Sidebar Search:** The expanded memory sidebar includes a visible search field above the list. Search filters are debounced and optional; clearing the field must restore the full alive memory list for the current tier/filter context.
 - **Truncation:** Metadata limits string lengths gracefully using `truncate`, `break-words`, and compact badges for connected-memory details.
 
-## Model Catalog
+## Model Catalog (Settings -> AI Models)
 - The embedding model catalog uses one Warm Void panel instead of a plain grid. The panel should feel quiet and operational, with low-contrast surfaces, restrained borders, and a header that summarizes available, downloaded, stale, and active model state before the card grid.
 - Model cards use a compact Warm Void standard (`min-h-[17rem]`, modest padding, restrained radius, and low elevation) while keeping model name, status, description, dimension, size, language, progress, stale count, and action controls in stable regions so one-column mobile and two-column desktop layouts remain scannable.
 - Model catalog action controls use compact `min-h-9` buttons with wrapped labels, visible Signal Jade focus rings, and icon-only delete affordances sized consistently with the rest of the card chrome.

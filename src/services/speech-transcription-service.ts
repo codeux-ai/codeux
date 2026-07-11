@@ -2,9 +2,7 @@ import * as fs from "fs/promises";
 import type { DashboardSettings } from "../contracts/app-types.js";
 import type {
   SpeechSettings,
-  SpeechTranscriptionError,
   SpeechTranscriptionErrorCode,
-  SpeechTranscriptionFallbackMetadata,
   SpeechTranscriptionProvider,
   SpeechTranscriptionRequestMetadata,
   SpeechTranscriptionResult,
@@ -148,10 +146,65 @@ async function readLabels(labelsPath: string | null): Promise<string[] | null> {
     if (Array.isArray(parsed) && parsed.every((entry) => typeof entry === "string")) {
       return parsed;
     }
+    if (parsed && typeof parsed === "object") {
+      const vocab = (parsed as { model?: { vocab?: Record<string, unknown> }; vocab?: Record<string, unknown> }).model?.vocab
+        ?? (parsed as { vocab?: Record<string, unknown> }).vocab;
+      if (vocab && typeof vocab === "object") {
+        const labels: string[] = [];
+        for (const [token, id] of Object.entries(vocab)) {
+          if (typeof id === "number" && Number.isInteger(id) && id >= 0) labels[id] = token;
+        }
+        return labels;
+      }
+    }
   } catch {
     return null;
   }
   return null;
+}
+
+function resampleLinear(samples: Float32Array, sourceRate: number, targetRate: number): Float32Array {
+  if (sourceRate === targetRate || samples.length === 0) return samples;
+  const outputLength = Math.max(1, Math.round(samples.length * targetRate / sourceRate));
+  const output = new Float32Array(outputLength);
+  const ratio = sourceRate / targetRate;
+  for (let index = 0; index < outputLength; index += 1) {
+    const position = index * ratio;
+    const left = Math.floor(position);
+    const right = Math.min(samples.length - 1, left + 1);
+    const fraction = position - left;
+    output[index] = (samples[left] ?? 0) * (1 - fraction) + (samples[right] ?? 0) * fraction;
+  }
+  return output;
+}
+
+function decodeCtcLogits(data: Iterable<number | bigint>, dims: readonly number[], labels: string[]): string {
+  const vocabularySize = dims.at(-1) ?? labels.length;
+  if (!vocabularySize || vocabularySize <= 1) throw new Error("CTC model returned invalid logits.");
+  const values = Array.from(data, Number);
+  const frames = Math.floor(values.length / vocabularySize);
+  const tokens: number[] = [];
+  let previous = -1;
+  for (let frame = 0; frame < frames; frame += 1) {
+    let bestId = 0;
+    let bestValue = Number.NEGATIVE_INFINITY;
+    for (let id = 0; id < vocabularySize; id += 1) {
+      const value = values[frame * vocabularySize + id] ?? Number.NEGATIVE_INFINITY;
+      if (value > bestValue) {
+        bestValue = value;
+        bestId = id;
+      }
+    }
+    if (bestId !== 0 && bestId !== previous) tokens.push(bestId);
+    previous = bestId;
+  }
+  return tokens
+    .map((id) => labels[id] ?? "")
+    .filter((token) => !token.startsWith("<"))
+    .join("")
+    .replace(/\|/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export class DefaultLocalOnnxSpeechRuntime implements LocalOnnxSpeechRuntime {
@@ -184,7 +237,10 @@ export class DefaultLocalOnnxSpeechRuntime implements LocalOnnxSpeechRuntime {
       throw new Error("Local ONNX model does not declare an input tensor.");
     }
 
-    const samples = args.audio;
+    if (args.model.adapter === "whisper") {
+      throw new Error("This Whisper ONNX bundle requires encoder-decoder generation; choose Wav2Vec2 for direct local waveform transcription or use the external Whisper API.");
+    }
+    const samples = resampleLinear(args.audio, args.sampleRate, args.model.sampleRateHz);
     const outputs = await session.run({
       [inputName]: new ort.Tensor("float32", samples, [1, samples.length]),
     });
@@ -203,6 +259,13 @@ export class DefaultLocalOnnxSpeechRuntime implements LocalOnnxSpeechRuntime {
 
     const labels = await readLabels(paths.labelsPath);
     if (labels) {
+      if (output.dims.length >= 3) {
+        return {
+          text: decodeCtcLogits(output.data as Iterable<number | bigint>, output.dims, labels),
+          language: args.language,
+          durationSeconds: args.durationSeconds,
+        };
+      }
       const tokenIds = Array.from(output.data as Iterable<number | bigint>)
         .map((value) => Number(value))
         .filter((value) => Number.isInteger(value) && value >= 0 && value < labels.length);
@@ -251,15 +314,10 @@ export class SpeechTranscriptionService {
       return errorResult(audioError.code, audioError.message, { retryable: false });
     }
 
-    if (settings.providerMode === "local_onnx") {
-      return await this.transcribeLocal(input, settings, durationSeconds);
-    }
-
     if (settings.providerMode === "external_api") {
       return await this.transcribeExternal(input, settings, durationSeconds);
     }
-
-    return await this.transcribeAuto(input, settings, durationSeconds);
+    return await this.transcribeLocal(input, settings, durationSeconds);
   }
 
   private resolveSettings(projectId?: string | null, sprintId?: string | null): SpeechSettings {
@@ -274,43 +332,6 @@ export class SpeechTranscriptionService {
       ? this.deps.settingsRepository.resolveSprintDashboardSettings(projectId, sprintId)
       : this.deps.settingsRepository.resolveProjectDashboardSettings(projectId);
     return response.settings.speech;
-  }
-
-  private async transcribeAuto(
-    input: SpeechTranscriptionInput,
-    settings: SpeechSettings,
-    durationSeconds: number | null,
-  ): Promise<SpeechTranscriptionResult> {
-    const localAvailable = await this.localRuntime.isModelAvailable(settings.localModelId);
-    if (localAvailable) {
-      const localResult = await this.transcribeLocal(input, settings, durationSeconds);
-      if (localResult.ok) {
-        return localResult;
-      }
-      if (!isExternalConfigured(settings)) {
-        return localResult;
-      }
-      const fallback = this.toFallbackMetadata(localResult.error);
-      const externalResult = await this.transcribeExternal(input, settings, durationSeconds);
-      return externalResult.ok ? { ...externalResult, fallback } : externalResult;
-    }
-
-    const missingLocalError: SpeechTranscriptionError = {
-      code: "missing_local_model",
-      message: `Local speech model "${settings.localModelId}" is not installed.`,
-      provider: "local_onnx",
-      retryable: false,
-    };
-    if (isExternalConfigured(settings)) {
-      const externalResult = await this.transcribeExternal(input, settings, durationSeconds);
-      return externalResult.ok ? { ...externalResult, fallback: this.toFallbackMetadata(missingLocalError) } : externalResult;
-    }
-
-    return errorResult(
-      "client_error",
-      `Speech transcription is not configured. Install local model "${settings.localModelId}" or configure external transcription credentials.`,
-      { retryable: false },
-    );
   }
 
   private async transcribeLocal(
@@ -437,13 +458,5 @@ export class SpeechTranscriptionService {
     } finally {
       clearTimeout(timeout);
     }
-  }
-
-  private toFallbackMetadata(error: SpeechTranscriptionError): SpeechTranscriptionFallbackMetadata {
-    return {
-      attemptedProvider: error.provider ?? "local_onnx",
-      reason: error.code,
-      message: error.message,
-    };
   }
 }

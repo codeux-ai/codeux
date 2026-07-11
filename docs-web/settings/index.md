@@ -40,6 +40,7 @@ Use this section when you need more detail than the inline Settings-page help po
 
 | Area | What it covers |
 | --- | --- |
+| [Speech Output Architecture](/docs/architecture-speech-output) | Installs and activates STT/TTS ONNX bundles, configures API variants, and controls the 3D Chat voice. |
 | [Base Provider Configuration](/docs/settings-base-provider-configuration) | Defines each named provider instance's default eligibility, model, thinking depth, weight, and concurrency. |
 | [Route Mapping](/docs/settings-route-mapping) | Routes each invocation type to inherited, manual, weighted, or agent-selected provider pools. |
 | [Model Pricing](/docs/settings-model-pricing) | Stores token pricing metadata used for model cost estimates in dashboard views. |

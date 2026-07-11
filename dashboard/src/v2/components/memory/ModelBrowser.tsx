@@ -1,9 +1,8 @@
 import type { FunctionComponent, JSX } from "preact";
 import { useRef, useState } from "preact/hooks";
-import { AlertTriangle, Boxes, CheckCircle2, ExternalLink, Loader2, Mic, Plus, RefreshCw } from "lucide-preact";
+import { AlertTriangle, Boxes, CheckCircle2, Loader2, Plus, RefreshCw } from "lucide-preact";
 import type { EmbeddingModelWithStatus, MemoryStats, ReembedProgress } from "../../lib/memory-api.js";
 import { createCustomEmbeddingModel, listEmbeddingModels } from "../../lib/memory-api.js";
-import { getSafeUrl } from "../../lib/safe-url.js";
 import { useInteractionTokens } from "../../lib/motion/index.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
@@ -43,23 +42,6 @@ const DEFAULT_CUSTOM_FORM: CustomModelForm = {
 };
 
 const HUGGING_FACE_REPO_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
-
-const SPEECH_ADJACENT_MODELS = [
-  {
-    id: "onnx-community/whisper-base.en",
-    displayName: "Whisper Base English ONNX",
-    description: "Local speech transcription model used by speech input settings. It is not an embedding model.",
-    task: "Speech transcription",
-    href: "https://huggingface.co/onnx-community/whisper-base.en",
-  },
-  {
-    id: "onnx-community/whisper-tiny.en",
-    displayName: "Whisper Tiny English ONNX",
-    description: "Smaller local speech transcription model for lower-resource systems. It is not an embedding model.",
-    task: "Speech transcription",
-    href: "https://huggingface.co/onnx-community/whisper-tiny.en",
-  },
-] as const;
 
 function validateHuggingFaceSource(value: string): string | null {
   const trimmed = value.trim();
@@ -325,7 +307,7 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
                 Memory and speech models
               </h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
-                Manage embedding models for memory search, add compatible Hugging Face embedding entries, and inspect speech-adjacent Hugging Face models separately.
+                Manage local embedding models for memory search and add compatible Hugging Face embedding entries.
               </p>
             </div>
           </div>
@@ -482,7 +464,7 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
               Add Custom Hugging Face Embedding Model
             </h3>
             <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">
-              Add ONNX embedding models with tokenizer files. Speech-only models should stay in the speech group below.
+              Add ONNX embedding models with tokenizer files. Speech input and output models are managed in the speech catalog above.
             </p>
           </div>
           <form className="mt-3 grid gap-3 lg:grid-cols-6" onSubmit={(event) => { void handleCustomSubmit(event); }} noValidate>
@@ -529,51 +511,6 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
           )}
         </section>
 
-        <section aria-labelledby="speech-models-heading" className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <h3 id="speech-models-heading" className="text-sm font-semibold tracking-tight text-slate-900 dark:text-white">
-                TTS / Speech-Adjacent Hugging Face Models
-              </h3>
-              <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
-                Informational speech models are kept separate because they cannot be activated as memory embedding models.
-              </p>
-            </div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">{SPEECH_ADJACENT_MODELS.length} speech entries</p>
-          </div>
-          <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-            {SPEECH_ADJACENT_MODELS.map((model) => {
-              const safeHref = getSafeUrl(model.href);
-              return (
-                <article key={model.id} className="grid min-h-[7rem] gap-3 rounded-lg border border-black/[0.06] bg-white/58 p-3 shadow-[0_6px_18px_rgba(15,23,42,0.035)] focus-within:ring-2 focus-within:ring-signal-500/25 focus-within:ring-offset-2 focus-within:ring-offset-[#F9F8F4] dark:border-white/[0.06] dark:bg-void-800/48 dark:focus-within:ring-offset-void-900">
-                  <div className="flex min-w-0 items-start justify-between gap-3">
-                    <div className="flex min-w-0 gap-2.5">
-                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-500/20 bg-slate-500/[0.08] text-slate-500 dark:text-slate-300">
-                        <Mic className="h-4 w-4" strokeWidth={2.2} />
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="truncate text-sm font-semibold leading-tight tracking-tight text-slate-900 dark:text-white">{model.displayName}</h4>
-                        <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500 dark:text-slate-400">{model.description}</p>
-                      </div>
-                    </div>
-                    <span className="inline-flex shrink-0 rounded-full border border-slate-500/15 bg-slate-500/[0.08] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-300">
-                      Speech only
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">{model.task}</p>
-                    {safeHref && (
-                      <a href={safeHref} target="_blank" rel="noreferrer" className="inline-flex max-w-full items-center gap-1 truncate text-[11px] font-bold text-signal-700 underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F9F8F4] dark:text-signal-300 dark:focus-visible:ring-offset-void-900">
-                        <ExternalLink className="h-3 w-3 shrink-0" strokeWidth={2.4} />
-                        <span className="truncate">{model.id}</span>
-                      </a>
-                    )}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </section>
       </div>
       <ConfirmDialog
         isOpen={isConfirmOpen}

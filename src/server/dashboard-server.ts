@@ -133,6 +133,8 @@ import type { LocalMcpCliProvider, LocalMcpInstallResult, LocalMcpSetupInfo } fr
 import { resolveDashboardBindHost } from "../config/app-config.js";
 import type { ChatProviderIngressService } from "../services/chat-provider-ingress-service.js";
 import type { SpeechTranscriptionService } from "../services/speech-transcription-service.js";
+import type { SpeechSynthesisService } from "../services/speech-synthesis-service.js";
+import type { SpeechModelManager } from "../services/speech-model-manager.js";
 import type { NodeFlowService } from "../services/node-flow-service.js";
 import type { CustomDashboardRepository } from "../repositories/custom-dashboard-repository.js";
 import type { CustomDashboardValidationService } from "../services/custom-dashboard-validation-service.js";
@@ -179,6 +181,8 @@ export interface DashboardServerOptions {
   chatProviderRepository?: ChatProviderRepository;
   chatProviderIngressService?: ChatProviderIngressService;
   speechTranscriptionService?: SpeechTranscriptionService;
+  speechSynthesisService?: SpeechSynthesisService;
+  speechModelManager?: SpeechModelManager;
   nodeFlowService?: NodeFlowService;
   customDashboardRepository?: CustomDashboardRepository;
   customDashboardValidationService?: CustomDashboardValidationService;

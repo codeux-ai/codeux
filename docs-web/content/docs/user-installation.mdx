@@ -86,10 +86,9 @@ For the default model, the directory is:
 ~/.code-ux/models/speech/onnx-community--whisper-base.en/
 ```
 
-In `auto` mode, Code UX uses the local model when present. If the model is missing, Code UX can
-fall back to an OpenAI-compatible transcription endpoint only when you configure a base URL, API key,
-and model in speech settings. Without a local model or complete external fallback settings, the
-dashboard shows a setup error instead of sending audio elsewhere.
+Local is the default speech provider mode. If the model is missing, the dashboard shows a setup error
+without sending audio elsewhere. To use an OpenAI-compatible transcription endpoint, select API in
+Settings -> AI Models and configure its base URL, API key, and model.
 
 Platform notes:
 

@@ -831,6 +831,10 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
     speech: {
       ...DEFAULT_DASHBOARD_SETTINGS.speech,
       externalTranscription: { ...DEFAULT_DASHBOARD_SETTINGS.speech.externalTranscription },
+      synthesis: {
+        ...DEFAULT_DASHBOARD_SETTINGS.speech.synthesis,
+        externalSynthesis: { ...DEFAULT_DASHBOARD_SETTINGS.speech.synthesis.externalSynthesis },
+      },
     },
   };
 }
@@ -1423,7 +1427,14 @@ export function resolveDashboardSettings(args: {
       })),
       externalEmbedding: { ...sprintSettings.memory.externalEmbedding },
     },
-    speech: { ...sprintSettings.speech, externalTranscription: { ...sprintSettings.speech.externalTranscription } },
+    speech: {
+      ...sprintSettings.speech,
+      externalTranscription: { ...sprintSettings.speech.externalTranscription },
+      synthesis: {
+        ...sprintSettings.speech.synthesis,
+        externalSynthesis: { ...sprintSettings.speech.synthesis.externalSynthesis },
+      },
+    },
     modelPricing: { overrides: { ...args.systemSettings.modelPricing?.overrides } },
   };
 

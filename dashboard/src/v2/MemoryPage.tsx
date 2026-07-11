@@ -1,6 +1,4 @@
 import { useMemoryPageData } from "./hooks/use-memory-page-data.js";
-import { useEmbeddingModelStatus } from "./hooks/use-embedding-model-status.js";
-import { ModelBrowser } from "./components/memory/ModelBrowser.js";
 import { effect } from "@preact/signals";
 import { Inspector } from "./components/memory/Inspector.js";
 import { MemoryFilters, MemoryDetails, MemoryCard } from "./components/memory/index.js";
@@ -12,7 +10,7 @@ import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef, useState, useCallback, useEffect, useMemo } from "preact/hooks";
 import gsap from "gsap";
 import { Brain, AlertTriangle, ZoomIn, ZoomOut, Maximize2, Loader2 } from "lucide-preact";
-import { deleteMemory as apiDeleteMemory, listEmbeddingModels, downloadEmbeddingModel, selectEmbeddingModel, deleteEmbeddingModel, getMemoryStats, startReembed, getReembedProgress, type EmbeddingMapResult } from "./lib/memory-api.js";
+import { deleteMemory as apiDeleteMemory, type EmbeddingMapResult } from "./lib/memory-api.js";
 import type { MemoryRecord, MemoryScope, MemoryCategory } from "./memory-types.js";
 import { useProjectData } from "./context/project-data.js";
 import { useSprints } from "../hooks/useSprints.js";
@@ -252,7 +250,6 @@ export const MemoryPage: FunctionComponent = () => {
         const [deletedCount, setDeletedCount] = useState(0);
     const activeTier = activeTierSignal.value;
     const activeScope: MemoryScope = activeTier === "short_term" ? "sprint" : "project";
-    const [showModels, setShowModels] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);
 
     // Sprint / agent filter state
@@ -273,7 +270,6 @@ export const MemoryPage: FunctionComponent = () => {
         memoryCount,
         skillCount,
         setMemoryCount,
-        initialModels,
         initialStats,
         graphData,
         graphDataContextKey,
@@ -297,14 +293,7 @@ export const MemoryPage: FunctionComponent = () => {
         [graphData, graphMatchesRequestedContext],
     );
 
-    const {
-        models,
-        setModels,
-        stats,
-        setStats,
-        reembed,
-        setReembed
-    } = useEmbeddingModelStatus(pid, initialModels, initialStats, loadData);
+    const stats = initialStats;
 
     // Mutable render state
     const S = useRef({
@@ -970,63 +959,6 @@ export const MemoryPage: FunctionComponent = () => {
         activeMemoryIdSignal.value = null;
     }, []);
 
-    /* ── Model actions ────────────────────────────────────────────────── */
-    const handleDownloadModel = useCallback(async (modelId: string) => {
-        try {
-            await downloadEmbeddingModel(modelId);
-            const updated = await listEmbeddingModels();
-            setModels(updated);
-        } catch (error) {
-            throw error;
-        }
-    }, []);
-    const handleSelectModel = useCallback(async (modelId: string) => {
-        try {
-            await selectEmbeddingModel(modelId);
-            const updated = await listEmbeddingModels();
-            setModels(updated);
-        } catch (error) {
-            throw error;
-        }
-    }, []);
-    const handleDeleteModel = useCallback(async (modelId: string) => {
-        try {
-            await deleteEmbeddingModel(modelId);
-            const updated = await listEmbeddingModels();
-            setModels(updated);
-        } catch (error) {
-            throw error;
-        }
-    }, []);
-    const handleReembed = useCallback(async () => {
-        if (!pid) return;
-        try {
-            await startReembed(pid);
-            setReembed({ active: true, completed: 0, total: 0 });
-            // Poll immediately — small models finish near-instantly
-            const progress = await getReembedProgress(pid);
-            setReembed(progress);
-            if (!progress.active) {
-                loadData();
-            }
-        } catch (error) {
-            throw error;
-        }
-    }, [pid, loadData]);
-    const handleSelectModelWithStats = useCallback(async (modelId: string) => {
-        try {
-            await selectEmbeddingModel(modelId);
-            const [updated, updatedStats] = await Promise.all([
-                listEmbeddingModels(),
-                pid ? getMemoryStats(pid) : Promise.resolve(stats),
-            ]);
-            setModels(updated);
-            setStats(updatedStats);
-        } catch (error) {
-            throw error;
-        }
-    }, [pid, stats]);
-
         const onSelectNode = useCallback((idx: number) => {
         const s = S.current;
         if (idx >= 0 && idx < s.graph.nodes.length) {
@@ -1064,8 +996,6 @@ export const MemoryPage: FunctionComponent = () => {
                         stats={stats}
                         sprints={sprints}
                         agentPresets={agentPresets}
-                        showModels={showModels}
-                        setShowModels={setShowModels}
                         setShowAddModal={setShowAddModal}
                         lobotomize={lobotomize}
                         handleLobotomizeToggle={handleLobotomizeToggle}
@@ -1073,20 +1003,6 @@ export const MemoryPage: FunctionComponent = () => {
                     />
                 }
             />
-
-            {/* ── Model Management ────────────────────────────────────── */}
-            {!skillsActive && showModels && (
-                <ModelBrowser
-                    models={models}
-                    stats={stats}
-                    reembed={reembed}
-                    onModelsChanged={setModels}
-                    onDownload={handleDownloadModel}
-                    onSelect={handleSelectModelWithStats}
-                    onDelete={handleDeleteModel}
-                    onReembed={handleReembed}
-                />
-            )}
 
             {/* ── Lobotomize warning ──────────────────────────────────── */}
             {!skillsActive && lobotomize && (

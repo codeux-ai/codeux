@@ -1032,6 +1032,51 @@ const validateSpeech = (
   ) {
     issues.push({ path: `${path}.externalTranscription.language`, message: "Expected null or a string" });
   }
+  // Older persisted/project payloads predate TTS. Sanitization supplies the
+  // current synthesis defaults before runtime use, while explicitly supplied
+  // synthesis settings remain strictly validated.
+  if (value.synthesis === undefined) {
+    return;
+  }
+  if (!isRecord(value.synthesis)) {
+    issues.push({ path: `${path}.synthesis`, message: "Expected an object" });
+    return;
+  }
+  if (typeof value.synthesis.enabled !== "boolean") {
+    issues.push({ path: `${path}.synthesis.enabled`, message: "Expected a boolean" });
+  }
+  if (typeof value.synthesis.providerMode !== "string" || !SPEECH_PROVIDER_MODES.includes(value.synthesis.providerMode as SpeechProviderMode)) {
+    issues.push({ path: `${path}.synthesis.providerMode`, message: `Expected one of: ${SPEECH_PROVIDER_MODES.join(", ")}` });
+  }
+  if (typeof value.synthesis.localModelId !== "string" || value.synthesis.localModelId.trim().length === 0) {
+    issues.push({ path: `${path}.synthesis.localModelId`, message: "Expected a non-empty string" });
+  }
+  if (typeof value.synthesis.voice !== "string" || value.synthesis.voice.trim().length === 0) {
+    issues.push({ path: `${path}.synthesis.voice`, message: "Expected a non-empty string" });
+  }
+  if (typeof value.synthesis.speed !== "number" || !Number.isFinite(value.synthesis.speed) || value.synthesis.speed < 0.5 || value.synthesis.speed > 2) {
+    issues.push({ path: `${path}.synthesis.speed`, message: "Expected a finite number between 0.5 and 2" });
+  }
+  if (!isRecord(value.synthesis.externalSynthesis)) {
+    issues.push({ path: `${path}.synthesis.externalSynthesis`, message: "Expected an object" });
+    return;
+  }
+  const externalSynthesis = value.synthesis.externalSynthesis;
+  if (typeof externalSynthesis.baseUrl !== "string" || externalSynthesis.baseUrl.trim().length === 0) {
+    issues.push({ path: `${path}.synthesis.externalSynthesis.baseUrl`, message: "Expected a non-empty string" });
+  }
+  if (typeof externalSynthesis.apiKey !== "string") {
+    issues.push({ path: `${path}.synthesis.externalSynthesis.apiKey`, message: "Expected a string" });
+  }
+  if (typeof externalSynthesis.model !== "string" || externalSynthesis.model.trim().length === 0) {
+    issues.push({ path: `${path}.synthesis.externalSynthesis.model`, message: "Expected a non-empty string" });
+  }
+  if (typeof externalSynthesis.voice !== "string" || externalSynthesis.voice.trim().length === 0) {
+    issues.push({ path: `${path}.synthesis.externalSynthesis.voice`, message: "Expected a non-empty string" });
+  }
+  if (typeof externalSynthesis.format !== "string" || !["mp3", "wav", "opus", "aac", "flac"].includes(externalSynthesis.format)) {
+    issues.push({ path: `${path}.synthesis.externalSynthesis.format`, message: "Expected one of: mp3, wav, opus, aac, flac" });
+  }
 };
 
 export const validateSettingsPayload = (payload: unknown): ValidationResult<DashboardSettings> => {

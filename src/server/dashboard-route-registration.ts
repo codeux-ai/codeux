@@ -137,7 +137,11 @@ const registerSystemIntegrationRouteGroup = (app: Express, deps: DashboardDepend
 
 const registerSpeechRouteGroup = (app: Express, deps: DashboardDependencies): void => {
   if (deps.speechTranscriptionService) {
-    registerSpeechRoutes(app, { speechTranscriptionService: deps.speechTranscriptionService });
+    registerSpeechRoutes(app, {
+      speechTranscriptionService: deps.speechTranscriptionService,
+      speechSynthesisService: deps.speechSynthesisService,
+      speechModelManager: deps.speechModelManager,
+    });
   }
 };
 
