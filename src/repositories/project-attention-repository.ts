@@ -84,6 +84,10 @@ export interface OpenProjectAttentionItemInput {
   title: string;
   summaryMarkdown: string;
   payload?: Record<string, unknown> | null;
+  /** Narrows active-item deduplication within an otherwise identical attention scope. */
+  deduplicationKey?: string;
+  /** Defaults to true; false returns an existing duplicate without mutating its content. */
+  refreshOnDuplicate?: boolean;
 }
 
 export interface ResolveProjectAttentionItemsFilter {
@@ -285,6 +289,23 @@ export class ProjectAttentionRepository {
     return row ? this.mapRow(row) : null;
   }
 
+  getAttentionItemByDeduplicationKey(
+    projectId: string,
+    attentionType: ProjectAttentionType,
+    deduplicationKey: string,
+  ): ProjectAttentionItemRecord | null {
+    const row = this.db.prepare(`
+      SELECT *
+      FROM project_attention_items
+      WHERE project_id = ?
+        AND attention_type = ?
+        AND json_extract(payload_json, '$.deduplicationKey') = ?
+      ORDER BY opened_at DESC, id DESC
+      LIMIT 1
+    `).get(projectId, attentionType, deduplicationKey) as ProjectAttentionItemRow | undefined;
+    return row ? this.mapRow(row) : null;
+  }
+
   openOrRefreshItems(inputs: OpenProjectAttentionItemInput[]): ProjectAttentionItemRecord[] {
     if (inputs.length === 0) return [];
 
@@ -298,29 +319,31 @@ export class ProjectAttentionRepository {
         let itemId: string;
 
         if (existing) {
-          const nextPayload = {
-            ...(existing.payload || {}),
-            ...(input.payload || {}),
-          };
-          this.db.prepare(`
-            UPDATE project_attention_items
-            SET severity = ?,
-                assigned_worker_endpoint_id = ?,
-                title = ?,
-                summary_markdown = ?,
-                payload_json = ?,
-                updated_at = ?
-            WHERE id = ?
-          `).run(
-            input.severity,
-            input.assignedWorkerEndpointId ?? existing.assignedWorkerEndpointId,
-            input.title.trim(),
-            input.summaryMarkdown.trim(),
-            serializePayload(nextPayload),
-            now,
-            existing.id,
-          );
           itemId = existing.id;
+          if (input.refreshOnDuplicate !== false) {
+            const nextPayload = {
+              ...(existing.payload || {}),
+              ...(input.payload || {}),
+            };
+            this.db.prepare(`
+              UPDATE project_attention_items
+              SET severity = ?,
+                  assigned_worker_endpoint_id = ?,
+                  title = ?,
+                  summary_markdown = ?,
+                  payload_json = ?,
+                  updated_at = ?
+              WHERE id = ?
+            `).run(
+              input.severity,
+              input.assignedWorkerEndpointId ?? existing.assignedWorkerEndpointId,
+              input.title.trim(),
+              input.summaryMarkdown.trim(),
+              serializePayload(nextPayload),
+              now,
+              existing.id,
+            );
+          }
         } else {
           itemId = randomUUID();
           this.db.prepare(`
@@ -537,6 +560,51 @@ export class ProjectAttentionRepository {
     return this.requireAndNotifyItem(itemId, current.projectId, true);
   }
 
+  resolveAttentionItemIfActive(
+    itemId: string,
+    input: ResolveProjectAttentionItemInput,
+  ): { item: ProjectAttentionItemRecord; transitioned: boolean } {
+    return this.db.transaction(() => {
+      const current = this.mapRow(requireRecord(
+        this.db.prepare("SELECT * FROM project_attention_items WHERE id = ?").get(itemId) as any,
+        "Project attention item",
+        itemId,
+      ));
+      if (current.status !== "open" && current.status !== "claimed") {
+        return { item: current, transitioned: false };
+      }
+
+      const now = new Date().toISOString();
+      const nextPayload = {
+        ...(current.payload || {}),
+        resolutionReason: input.reason ?? (current.payload || {}).resolutionReason ?? null,
+        resolvedByWorkerEndpointId: input.resolvedByWorkerEndpointId ?? (current.payload || {}).resolvedByWorkerEndpointId ?? null,
+        ...(input.payloadPatch || {}),
+      };
+      const result = this.db.prepare(`
+        UPDATE project_attention_items
+        SET status = ?,
+            resolved_at = ?,
+            updated_at = ?,
+            summary_markdown = ?,
+            payload_json = ?
+        WHERE id = ? AND status IN ('open', 'claimed')
+      `).run(
+        input.status || "resolved",
+        now,
+        now,
+        input.resolutionSummaryMarkdown?.trim() || current.summaryMarkdown,
+        serializePayload(nextPayload),
+        itemId,
+      );
+      const transitioned = Number((result as { changes?: number }).changes || 0) > 0;
+      return {
+        item: transitioned ? this.requireAndNotifyItem(itemId, current.projectId, true) : current,
+        transitioned,
+      };
+    });
+  }
+
   patchAttentionItemPayload(itemId: string, payloadPatch: Record<string, unknown>): ProjectAttentionItemRecord {
     const current = this.mapRow(requireRecord(this.db.prepare('SELECT * FROM project_attention_items WHERE id = ?').get(itemId) as any, "Project attention item", itemId));
     const now = new Date().toISOString();
@@ -637,6 +705,9 @@ export class ProjectAttentionRepository {
   }
 
   private findActiveDuplicate(input: OpenProjectAttentionItemInput): ProjectAttentionItemRecord | null {
+    const deduplicationClause = input.deduplicationKey
+      ? "AND json_extract(payload_json, '$.deduplicationKey') = ?"
+      : "";
     const row = this.db.prepare(`
       SELECT *
       FROM project_attention_items
@@ -647,6 +718,7 @@ export class ProjectAttentionRepository {
         AND COALESCE(dispatch_id, '') = COALESCE(?, '')
         AND attention_type = ?
         AND owner_type = ?
+        ${deduplicationClause}
         AND status IN ('open', 'claimed')
       LIMIT 1
     `).get(
@@ -657,6 +729,7 @@ export class ProjectAttentionRepository {
       input.dispatchId ?? null,
       input.attentionType,
       input.ownerType,
+      ...(input.deduplicationKey ? [input.deduplicationKey] : []),
     ) as ProjectAttentionItemRow | undefined;
 
     return row ? this.mapRow(row) : null;
