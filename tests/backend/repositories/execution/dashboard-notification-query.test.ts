@@ -91,6 +91,39 @@ describe("DashboardNotificationQuery", () => {
     expect(JSON.stringify(first)).not.toContain("attention-resolved");
   });
 
+  it("excludes open and claimed worker attention while retaining human and system attention", async () => {
+    const { storage, projects, execution } = await createRepositories();
+    const project = projects.createProject({ name: "Ownership Project", sourceType: "local", sourceRef: "/ownership" });
+    const sprint = projects.createSprint(project.id, { name: "Ownership Sprint", number: 3 });
+    const task = projects.createTask(project.id, { sprintId: sprint.id, title: "Recover task", promptMarkdown: "Recover" });
+    const db = storage.getDatabase();
+
+    db.prepare(`INSERT INTO sprint_runs
+      (id, project_id, sprint_id, status, trigger_type, executor_mode, created_at, updated_at)
+      VALUES ('ownership-run', ?, ?, 'completed', 'manual', 'autonomous', '2026-07-01T11:00:00.000Z', '2026-07-01T11:05:00.000Z')`
+    ).run(project.id, sprint.id);
+    db.prepare(`INSERT INTO task_dispatches
+      (id, project_id, sprint_id, task_id, sprint_run_id, executor_type, status, queued_at, finished_at, error_message, created_at, updated_at)
+      VALUES ('ownership-dispatch', ?, ?, ?, 'ownership-run', 'cli', 'failed', '2026-07-01T11:00:00.000Z', '2026-07-01T11:04:00.000Z', 'Worker recovery failed', '2026-07-01T11:00:00.000Z', '2026-07-01T11:04:00.000Z')`
+    ).run(project.id, sprint.id, task.id);
+    const insertAttention = db.prepare(`INSERT INTO project_attention_items
+      (id, project_id, sprint_id, task_id, sprint_run_id, dispatch_id, attention_type, severity, owner_type, status, title, summary_markdown, opened_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'action_required', 'high', ?, ?, ?, ?, ?, ?)`);
+    insertAttention.run("worker-open", project.id, sprint.id, task.id, "ownership-run", "ownership-dispatch", "worker", "open", "Worker open", "Do not show", "2026-07-01T11:06:00.000Z", "2026-07-01T11:06:00.000Z");
+    insertAttention.run("worker-claimed", project.id, sprint.id, null, null, null, "worker", "claimed", "Worker claimed", "Do not show", "2026-07-01T11:07:00.000Z", "2026-07-01T11:07:00.000Z");
+    insertAttention.run("human-open", project.id, sprint.id, null, null, null, "human", "open", "Human open", "Show human", "2026-07-01T11:08:00.000Z", "2026-07-01T11:08:00.000Z");
+    insertAttention.run("system-claimed", project.id, sprint.id, null, null, null, "system", "claimed", "System claimed", "Show system", "2026-07-01T11:09:00.000Z", "2026-07-01T11:09:00.000Z");
+
+    const feed = execution.getDashboardNotifications();
+
+    expect(feed.notifications.map((item) => item.id)).toEqual([
+      "attention:system-claimed",
+      "attention:human-open",
+      "dispatch:ownership-dispatch:failed",
+    ]);
+    expect(feed.notifications.map((item) => item.source.attentionOwnerType)).toEqual(["system", "human", null]);
+  });
+
   it("returns newest deduplicated task failures, sprint failures, automatic stops, and system errors", async () => {
     const { storage, projects, execution } = await createRepositories();
     const project = projects.createProject({ name: "Runtime Project", sourceType: "local", sourceRef: "/runtime" });

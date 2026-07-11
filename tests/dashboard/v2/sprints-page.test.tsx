@@ -2,7 +2,7 @@
 /** @jsx h */
 import { h } from "preact";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, fireEvent, screen, cleanup } from "@testing-library/preact";
+import { render, fireEvent, screen, cleanup, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { SprintsPage } from "../../../dashboard/src/v2/pages/sprints/SprintsPage";
 
@@ -227,6 +227,54 @@ describe("SprintsPage", () => {
     projectManagementImportModalProps = null;
     canvasImportModalProps = null;
     window.localStorage.clear();
+    window.history.replaceState({}, "", "/sprints");
+  });
+
+  it("applies sprint fallback project and sprint context once the target project loads", async () => {
+    window.history.replaceState({}, "", "/sprints?projectId=project-9&sprintId=sprint-12");
+    const selectProject = vi.fn().mockResolvedValue(undefined);
+    const selectSprint = vi.fn().mockResolvedValue(undefined);
+    const baseData = {
+      projects: [{ id: "proj-1" }, { id: "project-9" }],
+      selectedProject: { id: "proj-1" },
+      selectProject,
+      sprints: [],
+      selectedSprintId: "sprint-1",
+      selectSprint,
+      planningRoute: { available: true },
+      sortedSprints: [],
+      showcaseSprints: [],
+      activeRunsBySprintId: new Map(),
+      interventionBySprintId: new Map(),
+      nextId: "spr-123",
+      virtualProviders: [],
+      pendingActionIds: new Set(),
+      planningPresets: [],
+      quicksprintTemplates: [],
+      showImportModal: false,
+      setShowImportModal: vi.fn(),
+      showQuicksprint: false,
+      setShowQuicksprint: vi.fn(),
+      showCreateComposer: false,
+      setShowCreateComposer: vi.fn(),
+      setEditingSprint: vi.fn(),
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
+    };
+    vi.mocked(useSprintsPageData).mockReturnValue(baseData as any);
+
+    const { rerender } = render(<SprintsPage />);
+    await waitFor(() => expect(selectProject).toHaveBeenCalledWith("project-9"));
+
+    vi.mocked(useSprintsPageData).mockReturnValue({
+      ...baseData,
+      selectedProject: { id: "project-9" },
+      sprints: [{ id: "sprint-12", projectId: "project-9" }],
+      sortedSprints: [],
+    } as any);
+    rerender(<SprintsPage />);
+
+    await waitFor(() => expect(selectSprint).toHaveBeenCalledWith("sprint-12"));
   });
 
   it("renders the import menu and opens the markdown modal", async () => {
