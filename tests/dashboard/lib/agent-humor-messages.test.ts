@@ -18,6 +18,10 @@ describe("agent humor messages", () => {
     expect(AGENT_HUMOR_CATEGORIES).toEqual([
       "starting",
       "working",
+      "planning",
+      "qa_handoff",
+      "completion",
+      "error",
       "thinking",
       "tool_exec",
       "tool_edit",

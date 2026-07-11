@@ -2,7 +2,7 @@ import type { FunctionComponent, RefObject } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { AlertTriangle, ArrowUp, BriefcaseBusiness, Gauge, Gamepad2, GitBranch, Globe2, History, LayoutDashboard, ListTodo, Monitor, Radar, RefreshCw, Rocket, ShoppingCart, Sparkles, Volume2, VolumeX, WandSparkles, Wrench } from "lucide-preact";
-import type { AgentPresetRecord, ChatMessageRecord, ChatThread, DashboardCreateAppQuickactionKind, Source } from "../../../types.js";
+import type { AgentPresetRecord, ChatMessageRecord, ChatThread, DashboardCreateAppQuickactionKind, ExecutionInvocationRecord, Source } from "../../../types.js";
 import { renderMarkdown } from "../../../../lib/markdown.js";
 import { formatChatTime } from "../../../lib/chat-time.js";
 import { getChatWidgetData } from "../../../lib/chat-widget-view-models.js";
@@ -26,6 +26,9 @@ import {
   getAgentResponseEffectCaption,
   resolveAgentResponseEffect,
 } from "../../../lib/agent-response-effects.js";
+import { STATUS_MESSAGE_MIN_INTERVAL_MS } from "../../../lib/agent-humor-messages.js";
+import { resolveCinematicActivityDisplayState } from "../../../lib/cinematic-activity.js";
+import { StageActivityStrip } from "./StageActivityStrip.js";
 
 /* ════════════════════════════════════════════════════════════════════════
  *  CinematicStage — the default "3D Chat" view of the chat page.
@@ -53,11 +56,8 @@ export interface CinematicStageProps {
   selectedThread: ChatThread | null;
   messages: ChatMessageRecord[];
   threadMessagesLoading: boolean;
-  /** True only for the selected thread's awaited reply or a reply invocation
-   * owned by this stage's resolved Project Manager agent. */
-  projectManagerActive: boolean;
-  /** Active project invocations that do not belong to this Project Manager. */
-  backgroundActivityCount: number;
+  hasAwaitedReply: boolean;
+  invocations: ExecutionInvocationRecord[];
   sending: boolean;
   error: string | null;
   input: string;
@@ -125,30 +125,6 @@ function useBubbleEnter(ref: RefObject<HTMLElement>, reducedMotion: boolean) {
     );
   }, []);
 }
-
-/* ── Thought bubble — internal state, cloud-shaped, above the antenna ── */
-const ThoughtBubble: FunctionComponent<{ text: string }> = ({ text }) => {
-  const ref = useRef<HTMLDivElement>(null);
-  const reducedMotion = useReducedMotion();
-  useBubbleEnter(ref, reducedMotion);
-  return (
-    <div ref={ref} className="pointer-events-none absolute left-1/2 top-0 z-20 w-max max-w-[240px] -translate-x-[12%]">
-      <div role="status" aria-live="polite" className="rounded-[1.75rem] border border-black/[0.06] bg-white/90 px-4 py-2.5 shadow-[0_8px_32px_rgba(0,0,0,0.10)] backdrop-blur-md dark:border-white/10 dark:bg-void-800/90">
-        <span className="flex items-center gap-2 text-[12px] font-medium text-slate-600 dark:text-slate-300">
-          {text}
-          <span aria-hidden="true" className="flex items-end gap-0.5 pb-0.5">
-            <span className="stage-thinking-dot h-1 w-1 rounded-full bg-signal-500" />
-            <span className="stage-thinking-dot h-1 w-1 rounded-full bg-signal-500 [animation-delay:150ms]" />
-            <span className="stage-thinking-dot h-1 w-1 rounded-full bg-signal-500 [animation-delay:300ms]" />
-          </span>
-        </span>
-      </div>
-      {/* Trailing cloud puffs pointing down toward the bot's head */}
-      <div aria-hidden="true" className="ml-6 mt-1 h-2.5 w-2.5 rounded-full border border-black/[0.05] bg-white/90 dark:border-white/10 dark:bg-void-800/90" />
-      <div aria-hidden="true" className="ml-4 mt-0.5 h-1.5 w-1.5 rounded-full border border-black/[0.05] bg-white/85 dark:border-white/10 dark:bg-void-800/85" />
-    </div>
-  );
-};
 
 /** Markdown container classes shared by agent bubbles — includes glass table
  *  styling for GFM tables (agents report sprints/status as tables today). */
@@ -318,8 +294,8 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   selectedThread,
   messages,
   threadMessagesLoading,
-  projectManagerActive,
-  backgroundActivityCount,
+  hasAwaitedReply,
+  invocations,
   sending,
   error,
   input,
@@ -338,7 +314,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   const floatRef = useRef<HTMLDivElement>(null);
   const reducedMotion = useReducedMotion();
   const [composerFocused, setComposerFocused] = useState(false);
-  const [workingPhase, setWorkingPhase] = useState<"starting" | "working" | null>(null);
+  const [activityNowMs, setActivityNowMs] = useState(Date.now);
   const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
   const voiceAvailable = Boolean(effectiveSettings?.settings.speech?.synthesis?.enabled);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
@@ -349,6 +325,19 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
 
   const agentName = agentPreset?.name || activeConnection?.displayName || "Project Manager";
   const avatarConfig = agentPreset?.avatarConfig || DEFAULT_AGENT_AVATAR_CONFIG;
+  useEffect(() => {
+    const timer = window.setInterval(() => setActivityNowMs(Date.now()), STATUS_MESSAGE_MIN_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, []);
+  const activityState = resolveCinematicActivityDisplayState({
+    agentId: agentPreset?.id,
+    error,
+    hasAwaitedReply,
+    invocations,
+    nowMs: activityNowMs,
+    projectManagerAgentPresetId: agentPreset?.id,
+    selectedThread,
+  });
   // The runtime stores agent replies with authorType "system", so speech vs.
   // user bubbles are decided by direction alone — never filter on authorType.
   const visibleMessages = messages;
@@ -388,7 +377,10 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
 
   // Background execution remains observable, but never selects the Project
   // Manager's thinking expression, thought bubble, or work tool.
-  const runtimeBusy = projectManagerActive;
+  const runtimeBusy = activityState.projectManagerActive;
+  const workingPhase: "starting" | "working" | null = runtimeBusy
+    ? (activityState.foregroundCue?.phase === "container_startup" ? "starting" : "working")
+    : null;
   const quickActions = buildCinematicQuickActions({
     hasProject: Boolean(selectedProject),
     initialEligibilityLoaded,
@@ -449,16 +441,6 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
       setVoiceBusy(false);
     }
   };
-
-  useEffect(() => {
-    if (!runtimeBusy) {
-      setWorkingPhase(null);
-      return;
-    }
-    setWorkingPhase("starting");
-    const timer = window.setTimeout(() => setWorkingPhase("working"), 4000);
-    return () => window.clearTimeout(timer);
-  }, [runtimeBusy]);
 
   /* Work tools — while the runtime is executing, the bot pulls a tool from
      its toolbox and swaps to a fresh one every few seconds. */
@@ -527,7 +509,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     <div
       className="relative flex-1 min-h-0 overflow-hidden"
       data-testid="cinematic-stage"
-      data-background-activity-count={backgroundActivityCount}
+      data-background-activity-count={activityState.backgroundActivityCount}
     >
       {/* ── Ambient backdrop — aurora glow, pure CSS, zero extra GPU cost ── */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0">
@@ -595,9 +577,11 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
           </div>
         )}
         <div className={`relative flex w-full flex-col items-center px-6 ${!runtimeBusy && !sending && !error && quickActions.length > 0 ? "pt-28 md:pt-0" : ""}`}>
-          {runtimeBusy && (
-            <ThoughtBubble text={workingPhase === "starting" ? "Spinning up a workspace" : "Working on it"} />
-          )}
+          <StageActivityStrip
+            foregroundCue={activityState.foregroundCue}
+            backgroundCue={activityState.backgroundCue}
+            backgroundActivityCount={activityState.backgroundActivityCount}
+          />
           <AgentAmbientEffects cue={mood.ambientCue} motionEnabled={mood.ambientMotionEnabled} />
           {/* Generous square canvas so antenna, ears, and aura never clip,
               even at the extremes of the float/lean drift. */}
