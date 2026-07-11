@@ -70,9 +70,19 @@ Create-app dashboard quickactions are the narrow exception to normal routed prov
 - optional ID-only `designGuidance` selection
 - optional task count, stack summary, and suggestion tags
 
+`DashboardCreateAppQuickactionMetadata` is the typed detached protocol. Its `quickaction` payload is discriminated by `type: "create_app"`; `kind` is one of `DashboardCreateAppQuickactionKind`, and the remaining fields are validated against the shared catalog rather than trusted as arbitrary client planning input. The catalog contract is:
+
+| Kind | Display/app label | Template id | Tech stack guidance | Style guidance |
+| --- | --- | --- | --- | --- |
+| `web_app` | Create Web App / Web app | `qs-create-web-app` | `code-ux-product-stack` | `code-ux-award-winning` |
+| `desktop_app` | Create Desktop App / Desktop app | `qs-create-desktop-app` | `electron-desktop-app` | `code-ux-award-winning` |
+| `online_shop` | Create Onlineshop / Online shop | `qs-create-online-shop` | `code-ux-product-stack` | `ecommerce` |
+| `portfolio` | Create Portfolio / Portfolio | `qs-create-portfolio` | `code-ux-product-stack` | `marketing-site` |
+| `game` | Create Game / Game | `qs-create-game` | `code-ux-product-stack` | `game-experience` |
+
 The dashboard builds the stack summary and suggestion tags from the selected project's effective settings before posting the message. It uses the assigned techstack catalog entry when present, falls back to the catalog default when the project is unassigned, and forwards the stack item labels as suggestion tags so detached planning and the `app_progress` widget start from the same context the dashboard displays.
 
-`ChatThreadRuntimeService.postMessage` detects this metadata after the message is stored and before the normal in-flight provider turn is created. The runtime resolves the action through the create-app catalog and rejects mismatched template or guidance IDs. Missing guidance metadata from older clients is normalized to the catalog selection. Web App and Desktop App additionally re-check initial-project eligibility at this runtime boundary; Online Shop, Portfolio, and Game remain available on normal project-scoped chat paths.
+`ChatThreadRuntimeService.postMessage` detects this metadata after the message is stored and before the normal in-flight provider turn is created. The runtime resolves the action through the create-app catalog and rejects mismatched template or guidance IDs. Missing guidance metadata from older clients is normalized to the catalog selection. Web App and Desktop App additionally re-check initial-project eligibility at this runtime boundary: the project must have persisted `new-local` or `new-remote` provenance and still be the clean one-commit Code UX seed containing only the generated `README.md` and supported `.gitignore`. Existing/imported provenance, setup artifacts, repository changes, missing repositories, and inspection errors all fail closed. Online Shop, Portfolio, and Game remain available on normal project-scoped chat paths and rely on the existing project/thread ownership checks instead of the initial-repository restriction.
 
 Valid create-app quickactions do not ask for confirmation, do not route through the dashboard reply provider, and do not create a `dashboard_reply` invocation. Instead, the runtime launches `QuicksprintService.launchDetachedQuicksprint` with `submitMode: "plan_and_start"`, passes the quickaction `requestId` as the planning `clientRequestId`, and forwards the catalog selection as an ID-only planning override. `PlanningAgentService` resolves those IDs against the effective design-guidance catalog and overlays them only for the prompt sent to `PlanningPromptBuilder`. It never accepts instruction Markdown through this override and never writes the selection back to project settings.
 
