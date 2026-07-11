@@ -133,6 +133,8 @@ The batched sprint aggregation currently covers:
 - latest sprint run status, used for effective sprint status classification
 - latest sprint-completion QA review summary
 
+The domain also exposes a side-effect-free sprint progress calculator for read models that need weighted progress without persisted derived state. Pending work contributes `0`; active coding contributes `0.005` per task-coding provider tool call up to `0.5`; code-complete work contributes `0.5`; CI, QA, and merge blockers contribute `0.75`; and completed or canonically settled merge states contribute `1.0`. Sprint percentages are averaged across tasks and rounded to one decimal place.
+
 Sprint linked issues are loaded with the same chunked `IN` pattern during sprint hydration so sprint lists do not issue one linked-issue query per sprint. Execution snapshots and live runtime projection remain outside these project-management summary helpers.
 
 ## Dashboard Behavior
