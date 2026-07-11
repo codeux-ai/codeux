@@ -1,6 +1,6 @@
 # Settings
 
-The **Settings** page (`/config`) is the unified configuration surface. It exposes every tunable in the engine, organised into a category rail and content panels.
+The **Settings** page (`/config`) is the unified configuration surface. It exposes every tunable in the engine, organised into category navigation and content panels.
 
 ## The scope hierarchy
 
@@ -20,11 +20,13 @@ Switch scope with the selector at the top:
 
 The sticky command/status bar keeps the System/Project selector, project availability or inheritance context, active panel, and the Reset Project / Save Changes actions visible together while you scroll. Smart Find stays compact by showing only the search field until you type; active searches then show result status and match-preview chips while the exact category total remains available to assistive technology.
 
+On desktop, categories stay visible in the left rail. On smaller screens, the command bar shows one compact current-category button instead of the full rail. Open it to use the same Smart Find-filtered category list and match previews in a drawer. Arrow keys move between categories, Enter or Space selects one, and Escape closes the drawer and restores focus to the category button.
+
 The last selected **System** or **Project** scope is remembered in the local database as part of system runtime settings. Changing only that selector is saved immediately and does not save unrelated draft edits in the active settings form.
 
 ## Categories
 
-The category rail on the left includes these Expert-mode categories:
+The desktop rail and mobile category drawer include these Expert-mode categories:
 
 | Category | What it covers |
 | --- | --- |

@@ -72,7 +72,8 @@ export class SpeechModelManager {
           state.progress = Math.min(0.99, (index + 1) / model.files.length);
           continue;
         }
-        const url = modelFile.downloadUrl ?? `https://huggingface.co/${model.repository}/resolve/main/${modelFile.sourcePath}`;
+        const revision = model.revision ?? "main";
+        const url = modelFile.downloadUrl ?? `https://huggingface.co/${model.repository}/resolve/${revision}/${modelFile.sourcePath}`;
         await this.downloadFile(url, destination, modelFile.sha256, controller.signal, (fileProgress) => {
           state.progress = Math.min(0.99, (index + fileProgress) / model.files.length);
         });

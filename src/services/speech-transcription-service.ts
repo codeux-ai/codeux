@@ -181,15 +181,17 @@ export class DefaultLocalOnnxSpeechRuntime implements LocalOnnxSpeechRuntime {
       throw new Error(`Model "${args.model.id}" is not a local speech-to-text model.`);
     }
     const resampled = resampleLinear(args.audio, args.sampleRate, args.model.sampleRateHz);
+    const transcription = await transcribeWhisperOnnx({
+      ort,
+      audio: resampled,
+      model: args.model,
+      dataDir: args.dataDir ?? this.dataDir,
+      language: args.language,
+      durationSeconds: args.durationSeconds,
+    });
     return {
-      text: await transcribeWhisperOnnx({
-        ort,
-        audio: resampled,
-        model: args.model,
-        dataDir: args.dataDir ?? this.dataDir,
-        durationSeconds: args.durationSeconds,
-      }),
-      language: args.language ?? "en",
+      text: transcription.text,
+      language: transcription.language,
       durationSeconds: args.durationSeconds,
     };
   }
@@ -272,7 +274,8 @@ export class SpeechTranscriptionService {
     }
 
     try {
-      const language = input.metadata.language ?? settings.externalTranscription.language ?? null;
+      const requestedLanguage = input.metadata.language ?? settings.localLanguage ?? null;
+      const language = model.supportsAutomaticLanguageDetection ? requestedLanguage : "en";
       const decodedAudio = decodeWavePcmToFloat32(input.audio);
       const result = await this.localRuntime.transcribe({
         audio: decodedAudio.samples,

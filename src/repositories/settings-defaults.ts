@@ -1020,6 +1020,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     enabled: false,
     providerMode: "local_onnx",
     localModelId: "onnx-community/whisper-base.en",
+    localLanguage: "en",
     maxAudioSeconds: 120,
     externalTranscription: {
       baseUrl: "https://api.openai.com/v1/audio/transcriptions",

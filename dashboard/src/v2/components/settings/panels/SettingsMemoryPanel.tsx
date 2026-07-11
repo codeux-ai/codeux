@@ -358,7 +358,7 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
         </SectionCard>
 
         <NoticePanel title="Embedding models" tone="success">
-          Download and manage embedding models from the Memory page. Once a model is active, new memories are automatically embedded for semantic search. The memory system works without a model — search falls back to text matching.
+          Download and manage embedding models from Settings → AI Models. Once a model is active, new memories are automatically embedded for semantic search. The memory system works without a model — search falls back to text matching.
         </NoticePanel>
       </div>
     );

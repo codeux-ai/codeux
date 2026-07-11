@@ -66,6 +66,7 @@ export const sanitizeSpeech = (
     enabled: readBoolean(speechInput.enabled, defaults.enabled),
     providerMode,
     localModelId,
+    localLanguage: localModelId.endsWith(".en") ? "en" : readOptionalLanguage(speechInput.localLanguage),
     maxAudioSeconds: Math.max(
       MIN_SPEECH_AUDIO_SECONDS,
       Math.min(MAX_SPEECH_AUDIO_SECONDS, readInteger(speechInput.maxAudioSeconds, defaults.maxAudioSeconds)),

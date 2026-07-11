@@ -3,13 +3,25 @@ import type { InferenceSession, Tensor } from "onnxruntime-node";
 import type { SpeechModelCatalogEntry } from "./speech-model-catalog.js";
 import { getSpeechModelPaths } from "./speech-model-catalog.js";
 
-interface WhisperGenerationConfig {
+export interface WhisperGenerationConfig {
   decoder_start_token_id?: number;
   eos_token_id?: number;
   no_timestamps_token_id?: number;
-  forced_decoder_ids?: Array<[number, number]>;
+  forced_decoder_ids?: Array<[number, number | null]>;
+  is_multilingual?: boolean;
+  lang_to_id?: Record<string, number>;
   suppress_tokens?: number[];
   begin_suppress_tokens?: number[];
+}
+
+export interface WhisperLanguageSelection {
+  code: string;
+  tokenId: number;
+}
+
+export interface WhisperTranscription {
+  text: string;
+  language: string | null;
 }
 
 interface WhisperTokenizer {
@@ -227,6 +239,79 @@ function chooseToken(logits: Tensor, suppressed: Set<number>): number {
   return bestId;
 }
 
+function languageCodeFromToken(generation: WhisperGenerationConfig, tokenId: number): string | null {
+  for (const [token, id] of Object.entries(generation.lang_to_id ?? {})) {
+    if (id === tokenId) return token.match(/^<\|(.+)\|>$/)?.[1] ?? null;
+  }
+  return null;
+}
+
+export function selectWhisperLanguageToken(
+  logits: Pick<Tensor, "data" | "dims">,
+  generation: WhisperGenerationConfig,
+): WhisperLanguageSelection {
+  const languageTokens = new Set(Object.values(generation.lang_to_id ?? {}).filter(Number.isInteger));
+  if (languageTokens.size === 0) throw new Error("Whisper multilingual language metadata is missing.");
+  const vocabularySize = logits.dims.at(-1) ?? 0;
+  const sequenceLength = logits.dims.at(-2) ?? 1;
+  const offset = (sequenceLength - 1) * vocabularySize;
+  const data = logits.data as Float32Array;
+  let bestTokenId: number | null = null;
+  let bestValue = Number.NEGATIVE_INFINITY;
+  for (const tokenId of languageTokens) {
+    const value = data[offset + tokenId] ?? Number.NEGATIVE_INFINITY;
+    if (value > bestValue) {
+      bestTokenId = tokenId;
+      bestValue = value;
+    }
+  }
+  const code = bestTokenId === null ? null : languageCodeFromToken(generation, bestTokenId);
+  if (bestTokenId === null || !code) throw new Error("Whisper could not detect a supported language.");
+  return { code, tokenId: bestTokenId };
+}
+
+export async function resolveWhisperLanguageSelection(args: {
+  generation: WhisperGenerationConfig;
+  requestedLanguage: string | null;
+  cachedSelection?: WhisperLanguageSelection | null;
+  detect: () => Promise<WhisperLanguageSelection>;
+}): Promise<WhisperLanguageSelection> {
+  const requested = args.requestedLanguage?.trim().toLowerCase();
+  if (requested && requested !== "auto") {
+    const languageCode = args.generation.lang_to_id?.[`<|${requested}|>`] !== undefined
+      ? requested
+      : requested.split("-")[0] ?? requested;
+    const tokenId = args.generation.lang_to_id?.[`<|${languageCode}|>`];
+    if (!Number.isInteger(tokenId)) throw new Error(`Whisper language "${requested}" is not supported by this model.`);
+    return { code: languageCode, tokenId: tokenId! };
+  }
+  if (args.cachedSelection) return args.cachedSelection;
+  return await args.detect();
+}
+
+export function buildWhisperInitialIds(
+  generation: WhisperGenerationConfig,
+  languageSelection: WhisperLanguageSelection | null,
+): number[] {
+  const startToken = generation.decoder_start_token_id ?? 50_257;
+  const prompt: number[] = [startToken];
+  const forced = [...(generation.forced_decoder_ids ?? [])].sort(([left], [right]) => left - right);
+  for (const [position, configuredToken] of forced) {
+    const tokenId = configuredToken ?? (position === 1 ? languageSelection?.tokenId : undefined);
+    if (!Number.isInteger(tokenId)) continue;
+    if (position !== prompt.length) {
+      throw new Error(`Whisper decoder prompt has an unsupported token gap at position ${position}.`);
+    }
+    prompt.push(tokenId!);
+  }
+  if (generation.is_multilingual && languageSelection && prompt.length === 1) {
+    prompt.push(languageSelection.tokenId);
+  }
+  const noTimestampsToken = generation.no_timestamps_token_id ?? 50_362;
+  if (!prompt.includes(noTimestampsToken)) prompt.push(noTimestampsToken);
+  return prompt;
+}
+
 function zeroPastKeyValues(ort: OnnxRuntimeModule, session: InferenceSession): Record<string, Tensor> {
   const tensors: Record<string, Tensor> = {};
   for (const metadata of session.inputMetadata) {
@@ -243,9 +328,16 @@ export async function transcribeWhisperOnnx(args: {
   audio: Float32Array;
   model: SpeechModelCatalogEntry;
   dataDir?: string;
+  language: string | null;
   durationSeconds: number | null;
-}): Promise<string> {
-  if (!hasAudibleSpeech(args.audio)) return "";
+}): Promise<WhisperTranscription> {
+  const configuredLanguage = args.language?.trim().toLowerCase() || null;
+  if (!hasAudibleSpeech(args.audio)) {
+    return {
+      text: "",
+      language: args.model.supportsAutomaticLanguageDetection ? configuredLanguage : configuredLanguage ?? "en",
+    };
+  }
   const paths = getSpeechModelPaths(args.model.id, args.dataDir);
   const decoderPath = `${paths.modelDir}/decoder_model_merged.onnx`;
   const generationPath = `${paths.modelDir}/generation_config.json`;
@@ -255,11 +347,8 @@ export async function transcribeWhisperOnnx(args: {
   ]);
   const generation = JSON.parse(generationRaw) as WhisperGenerationConfig;
   const tokenizer = JSON.parse(tokenizerRaw) as WhisperTokenizer;
-  const startToken = generation.decoder_start_token_id ?? 50_257;
   const endToken = generation.eos_token_id ?? 50_256;
   const noTimestampsToken = generation.no_timestamps_token_id ?? 50_362;
-  const initialIds = [startToken, ...(generation.forced_decoder_ids ?? []).sort(([left], [right]) => left - right).map(([, id]) => id)];
-  if (!initialIds.includes(noTimestampsToken)) initialIds.push(noTimestampsToken);
 
   const encoder = await args.ort.InferenceSession.create(paths.modelPath);
   let decoder: InferenceSession | null = null;
@@ -268,6 +357,7 @@ export async function transcribeWhisperOnnx(args: {
     const suppressed = new Set([...(generation.suppress_tokens ?? []), noTimestampsToken]);
     const beginSuppressed = new Set([...suppressed, ...(generation.begin_suppress_tokens ?? [])]);
     const transcripts: string[] = [];
+    let languageSelection: WhisperLanguageSelection | null = null;
     for (const chunk of splitWhisperAudio(args.audio)) {
       if (!hasAudibleSpeech(chunk)) continue;
       const inputFeatures = createWhisperInputFeatures(chunk);
@@ -276,6 +366,26 @@ export async function transcribeWhisperOnnx(args: {
       });
       const hiddenStates = Object.values(encoded)[0];
       if (!hiddenStates) throw new Error("Whisper encoder did not return hidden states.");
+
+      if (generation.is_multilingual) {
+        languageSelection = await resolveWhisperLanguageSelection({
+          generation,
+          requestedLanguage: configuredLanguage,
+          cachedSelection: languageSelection,
+          detect: async () => {
+            const detectionOutputs = await decoder!.run({
+              input_ids: new args.ort.Tensor("int64", BigInt64Array.of(BigInt(generation.decoder_start_token_id ?? 50_257)), [1, 1]),
+              encoder_hidden_states: hiddenStates,
+              ...zeroPastKeyValues(args.ort, decoder!),
+              use_cache_branch: new args.ort.Tensor("bool", [false], [1]),
+            });
+            const detectionLogits = detectionOutputs.logits;
+            if (!detectionLogits) throw new Error("Whisper decoder did not return language-detection logits.");
+            return selectWhisperLanguageToken(detectionLogits, generation);
+          },
+        });
+      }
+      const initialIds = buildWhisperInitialIds(generation, languageSelection);
 
       const generated: number[] = [];
       let inputIds = initialIds;
@@ -310,7 +420,12 @@ export async function transcribeWhisperOnnx(args: {
       }
       transcripts.push(decodeWhisperTokens(generated, tokenizer));
     }
-    return mergeWhisperTranscripts(transcripts);
+    return {
+      text: mergeWhisperTranscripts(transcripts),
+      language: generation.is_multilingual
+        ? languageSelection?.code ?? configuredLanguage
+        : configuredLanguage ?? "en",
+    };
   } finally {
     const releases = [encoder.release()];
     if (decoder) releases.push(decoder.release());

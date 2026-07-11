@@ -6,6 +6,7 @@ import { ActionButton } from "./components/settings/SettingsSurface.js";
 import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 import { useSettingsPageState, type Category, type CategoryId } from "./hooks/use-settings-page-state.js";
 import { SettingsCategoryRail, CATEGORIES } from "./components/settings/SettingsCategoryRail.js";
+import { SettingsCategoryPicker } from "./components/settings/SettingsCategoryPicker.js";
 import { SettingsContentPanels } from "./components/settings/SettingsContentPanels.js";
 import { SettingsActivePanelStatus } from "./components/settings/SettingsActivePanelStatus.js";
 import { SettingsScopeControls } from "./components/settings/SettingsScopeControls.js";
@@ -444,6 +445,15 @@ export const SettingsPage: FunctionComponent = () => {
           data-settings-sticky="settings-command-status"
           className="sticky top-16 z-30 -mx-2 flex min-w-0 max-w-full flex-wrap items-center gap-3 overflow-visible rounded-[1.75rem] border border-white/[0.08] bg-void-950 p-3 shadow-[0_20px_50px_rgba(2,6,23,0.32)] lg:col-start-2 lg:row-start-1"
         >
+          <SettingsCategoryPicker
+            activeCategory={activeCategory}
+            activeCategoryConfig={activeCategoryConfig}
+            filteredCategories={filteredCategories}
+            settingsSearch={settingsSearch}
+            settingsSearchMatches={settingsSearchMatches}
+            onSwitchCategory={switchCategory}
+            pendingCategory={pendingCategory}
+          />
           <SettingsScopeControls
             activeScope={activeScope}
             setActiveScope={setActiveScope}
@@ -521,6 +531,7 @@ export const SettingsPage: FunctionComponent = () => {
           settingsSearchMatches={settingsSearchMatches}
           onSwitchCategory={switchCategory}
           pendingCategory={pendingCategory}
+          desktopOnly
           className="lg:col-start-1 lg:row-span-2 lg:row-start-1"
         />
 

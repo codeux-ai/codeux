@@ -1,5 +1,5 @@
-import type { FunctionComponent, JSX } from "preact";
-import { useCallback, useEffect, useRef, useState } from "preact/hooks";
+import type { FunctionComponent, JSX, RefObject } from "preact";
+import { useCallback, useEffect, useId, useRef, useState } from "preact/hooks";
 import type { Category, CategoryId } from "../../hooks/use-settings-page-state.js";
 import {
   getSettingsSearchMatchPreview,
@@ -35,6 +35,9 @@ export interface SettingsCategoryRailProps {
   pendingCategory?: CategoryId | null;
   disabledCategoryReason?: string | null;
   className?: string;
+  variant?: "desktop" | "drawer";
+  desktopOnly?: boolean;
+  activeButtonRef?: RefObject<HTMLButtonElement>;
 }
 
 export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> = ({
@@ -46,6 +49,9 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
   pendingCategory = null,
   disabledCategoryReason = null,
   className,
+  variant = "desktop",
+  desktopOnly = false,
+  activeButtonRef,
 }) => {
   const normalizedSearch = settingsSearch.trim().toLowerCase();
   const railRef = useRef<HTMLElement | null>(null);
@@ -53,8 +59,8 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
   const [railAvailableHeight, setRailAvailableHeight] = useState<number | null>(null);
   const [showScrollHint, setShowScrollHint] = useState(false);
   const tokens = useInteractionTokens();
-  const disabledReasonId = "settings-category-rail-disabled-reason";
-  const instructionsId = "settings-category-rail-instructions";
+  const disabledReasonId = useId();
+  const instructionsId = useId();
   const instructionsText = normalizedSearch
     ? filteredCategories.length > 0
       ? `Showing ${filteredCategories.length} categories for "${settingsSearch.trim()}". Use arrow keys to move through matching categories.`
@@ -64,10 +70,15 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
     transitionDuration: tokens.selectionMovement.duration,
     transitionTimingFunction: tokens.selectionMovement.ease,
   };
-  const railHeightStyle = railAvailableHeight === null ? undefined : {
+  const railHeightStyle = variant === "desktop" && railAvailableHeight !== null ? {
     "--settings-category-rail-available-height": `${railAvailableHeight}px`,
-  } as JSX.CSSProperties;
+  } as JSX.CSSProperties : undefined;
   const updateRailMetrics = useCallback(() => {
+    if (variant === "drawer") {
+      setRailAvailableHeight(null);
+      setShowScrollHint(false);
+      return;
+    }
     const rail = railRef.current;
     if (!rail) {
       return;
@@ -79,7 +90,7 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
 
     setRailAvailableHeight(availableHeight);
     setShowScrollHint(rail.scrollHeight - rail.scrollTop - visibleHeight > 2);
-  }, []);
+  }, [variant]);
 
   useEffect(() => {
     let frameId = 0;
@@ -131,7 +142,9 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
       style={railHeightStyle}
       data-motion-contract="selectionMovement"
       className={[
-        "scrollbar-hide flex min-w-0 flex-col gap-3 rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-3 backdrop-blur-2xl shadow-[var(--elevation-base)] lg:sticky lg:top-16 lg:max-h-[var(--settings-category-rail-available-height)] lg:overflow-y-auto lg:overscroll-contain",
+        variant === "drawer"
+          ? "scrollbar-hide flex min-w-0 flex-col gap-3 p-3"
+          : `scrollbar-hide ${desktopOnly ? "hidden lg:flex" : "flex"} min-w-0 flex-col gap-3 rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-3 backdrop-blur-2xl shadow-[var(--elevation-base)] lg:sticky lg:top-16 lg:max-h-[var(--settings-category-rail-available-height)] lg:overflow-y-auto lg:overscroll-contain`,
         className,
       ].filter(Boolean).join(" ")}
     >
@@ -167,7 +180,12 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
           <button
             key={category.id}
             type="button"
-            ref={el => { buttonsRef.current[index] = el; }}
+            ref={el => {
+              buttonsRef.current[index] = el;
+              if (isActive && activeButtonRef) {
+                activeButtonRef.current = el;
+              }
+            }}
             disabled={disabled}
             onClick={() => onSwitchCategory(category.id)}
             onKeyDown={(e) => handleKeyDown(e, index)}

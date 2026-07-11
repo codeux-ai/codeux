@@ -3,7 +3,7 @@
 /** @jsxFrag Fragment */
 import { h, Fragment } from "preact";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, render, screen, waitFor, fireEvent } from "@testing-library/preact";
+import { cleanup, render, screen, waitFor, fireEvent, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { SettingsPage } from "../../../dashboard/src/v2/SettingsPage.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
@@ -393,6 +393,25 @@ describe("SettingsPage data interactions", () => {
 
     expect(search).toHaveValue("");
     expect(search).toBe(document.activeElement);
+  });
+
+  it("switches the active panel from the compact category drawer", async () => {
+    render(<SettingsPage />);
+
+    await waitFor(() => {
+      expect(fetchSystemSettings).toHaveBeenCalledTimes(1);
+    });
+
+    const trigger = screen.getByRole("button", { name: "Change settings category. Current category: General" });
+    fireEvent.click(trigger);
+
+    const drawer = screen.getByRole("dialog", { name: "Choose a category" });
+    fireEvent.click(within(drawer).getByRole("button", { name: "Agents" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Quality Assurance")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Change settings category. Current category: Agents" })).toHaveAttribute("aria-expanded", "false");
+    });
   });
 
   it("renders quality assurance controls in agents settings", async () => {

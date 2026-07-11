@@ -176,5 +176,7 @@ describe("ModelCard", () => {
     const link = screen.getByRole("link", { name: /acme\/custom-minilm/i });
     expect(link).toHaveAttribute("href", "https://huggingface.co/acme/custom-minilm");
     expect(link).toHaveAttribute("rel", "noreferrer");
+    expect(screen.getByRole("link", { name: "MIT · operator asserted" })).toBeInTheDocument();
+    expect(screen.queryByText("MIT · commercial use")).not.toBeInTheDocument();
   });
 });

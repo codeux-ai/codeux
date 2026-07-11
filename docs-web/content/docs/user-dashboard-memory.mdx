@@ -107,9 +107,11 @@ The graph pauses its canvas animation loop while the browser tab is hidden and r
 Open **Settings -> AI Models** for the shared compact model browser. It separates:
 
 - **Embedding Models** — memory search models that can be downloaded, activated, deleted, and used for re-embedding.
-- **Add Custom Hugging Face Embedding Model** — a form for compatible ONNX embedding models.
+- **Add custom model** — an accessible disclosure that keeps the advanced Hugging Face ONNX form unmounted until it is opened.
 - **Speech to text models** — downloadable STT bundles with scoped activation.
 - **Text to speech models** — downloadable Kokoro and Piper bundles used by 3D Chat.
+
+The embedding catalog search matches model name, id, description, language, and license metadata. Install-state, language, and source filters can be combined, and the no-results state provides one action that restores the complete catalog.
 
 Each embedding row shows:
 
@@ -120,16 +122,17 @@ Each embedding row shows:
 
 The local embedding runtime supports both BGE-style WordPiece tokenizers and XLM-R/SentencePiece Unigram tokenizers such as `multilingual-e5-large`.
 
-Custom in-app models can be added from Hugging Face model links. The form accepts either `owner/repo` identifiers or `https://huggingface.co/...` model/file URLs plus display name, ONNX model file, tokenizer files, dimension, approximate size, and language. The backend rejects other hosts and stores the normalized repo, ONNX model file path, tokenizer files, dimension, approximate size, language, and validation status. Custom entries are durable settings, so they appear beside built-in models after restart.
+Custom in-app models can be added from Hugging Face model links after opening **Add custom model**. The form accepts either `owner/repo` identifiers or `https://huggingface.co/...` model/file URLs plus display name, ONNX model file, tokenizer files, dimension, approximate size, and language. The backend rejects other hosts and stores the normalized repo, ONNX model file path, tokenizer files, dimension, approximate size, language, and validation status. Custom entries are durable settings, so they appear beside built-in models after restart.
+
+Custom license metadata is an operator assertion, not a Code UX license review or approval. Custom model rows label those terms as **operator asserted**, and the operator must review the upstream terms before confirming that commercial use is permitted.
 
 Actions per model:
 
 - **Download** — Pulls model weights to local cache.
-- **Cancel download** — Aborts an in-flight download.
 - **Select** — Activates the model. Subsequent embed operations use it.
 - **Delete** — Removes the local cache.
 
-Custom embedding models use the same download, select, delete, source-link, and status actions as built-ins. A custom model cannot be selected until its ONNX file and required tokenizer files are downloaded. Speech models have their own input/output activation actions and cannot be activated as memory embeddings.
+Custom embedding models use the same download, select, source-link, and status actions as built-ins. Deleting a custom model also removes its custom catalog definition, so it must be added again before it can be downloaded later. A custom model cannot be selected until its ONNX file and required tokenizer files are downloaded. Speech models have their own input/output activation actions and cannot be activated as memory embeddings.
 
 ### Re-embedding
 

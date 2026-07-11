@@ -72,6 +72,7 @@ Feedback surfaces indicate system status or asynchronous progress.
 ## Accessibility
 
 - Ensure overlays (`Dialog`, `Modal`, `ConfirmDialog`) manage focus properly using `useFocusTrap`.
+- Render shared dialogs through the document-body portal so transformed or animated page ancestors cannot displace fixed overlays. When a confirmation opens above a dialog, suspend the parent focus trap and mark its surface inert until the confirmation closes.
 - Maintain appropriate ARIA attributes for semantic landmarks: `role="dialog"`, `aria-modal="true"`.
 - Every dialog primitive must have an accessible name via `ariaLabel`, `ariaLabelledBy`, or `titleId`.
 - `aria-describedby` must only be added if there is meaningful help or body text.

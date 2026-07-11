@@ -4,6 +4,8 @@ Settings is the configuration hub for Code UX. It covers local runtime behavior,
 
 Use this section when you need more detail than the inline Settings-page help popovers provide. Configuration cards with dedicated reference pages link to the pages below, which explain what the controls affect, recommended defaults, common risks, and validation steps.
 
+On desktop, choose an area from the persistent category rail. On smaller screens, the sticky command bar shows the current category as one compact button; opening it reveals the same Smart Find-filtered categories and match previews in a keyboard-accessible drawer without pushing the active settings panel down the page.
+
 ## How Settings Scope Works
 
 | Scope | Use it for | Watch for |
