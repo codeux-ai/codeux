@@ -31,6 +31,14 @@ Use explicit badging inside `.code-ux/agents` lists:
 - **Missing Source:** `border-status-red/20 bg-status-red/8 text-status-red`.
 - **Persistent Skills:** show `Default off` until the agent has at least one attached skill storage and retrieval is explicitly enabled. The built-in Project Manager is seeded with one enabled default storage, while a later opt-out remains authoritative. Do not reuse memory colors or place this status inside memory filter controls.
 
+## Base-Agent Update Notices
+- Render one amber `role="alert"` notice per pending Planning agent or Project manager compatibility update. Do not extend this notice system to Worker, Quality assurance agent, or Project Setup Agent.
+- While notices load, show the polite status copy **Checking for base-agent updates...**. A notice-discovery failure is fail-soft: keep the roster usable, log the failure, and do not replace the page with an error state.
+- The heading copy is **Planning agent base update available** or **Project manager base update available**. Customized targets say **<selected agent> has customized <role> instructions and must be updated.** Alternate targets say **<selected agent> is assigned to the <role> route and must be updated.** Always use the selected routed preset's name, not the built-in fallback's name.
+- Keep the explanatory guarantee visible: **Updating invokes an agent to compare both base files and apply only important system-compatibility instructions. Your main prompt, custom instructions, and behavior are preserved.** The action label is **Update with AI**, with an accessible name of **Update <selected agent> with AI**.
+- Activation is explicit and provider-assisted; loading the page never invokes the provider. While an update runs, disable all base-update actions and show **Updating...**. On success, refresh both presets and notices. On failure, keep the notice visible and expose the existing retry feedback.
+- The backend guard is part of the UX contract: only compatibility-critical instruction additions are accepted, every original selected-preset line must remain in order, and Code UX—not the provider—owns the write. Avatar, labels, routing, provider/model, memory, MCP access, persistent skills, source metadata, the user's main prompt, and custom behavior are preserved.
+
 ## Persistent Skills
 - Persistent skill storage is a separate agent capability from workspace memory and knowledge subscriptions. The editor/detail panels must present it as storage attachments with durable storage names, not as ordinary memory filters.
 - The editor shows an explicit retrieval toggle plus checkboxes for storage attachment. The toggle is disabled when no storage is attached, and saving must persist both `persistentSkillStorageIds` and `persistentSkillStorage.enabled`.

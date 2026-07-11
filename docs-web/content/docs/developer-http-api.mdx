@@ -162,8 +162,18 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 | `DELETE` | `/api/agent-presets/:agentPresetId` | Delete. |
 | `POST` | `/api/agent-presets/:agentPresetId/import-markdown` | Import from a single file. |
 | `POST` | `/api/projects/:projectId/agent-presets/sync-markdown` | Bulk-sync from `.code-ux/agents/`. |
+| `GET` | `/api/projects/:projectId/agent-presets/base-updates` | Synchronize sources, auto-apply newer bundled instructions to untouched selected built-ins, and return only pending Planning agent or Project manager notices. This endpoint does not invoke a provider. |
+| `POST` | `/api/projects/:projectId/agent-presets/base-updates/:baseAgentRole/apply` | Apply one pending compatibility merge. `baseAgentRole` must be `planning_agent` or `project_manager`; no request body is consumed. |
 
 ---
+
+### Base-agent update contract
+
+The GET response is an array of notices with `projectId`, `role`, `baseAgentPresetId`, `selectedAgentPresetId`, `selectedAgentName`, `reason`, `currentRevision`, and `availableRevision`. `reason` is `customized_instructions` or `alternate_route`. Planning and Project manager targets are resolved independently from `agents.routing.planning.agentPresetId` and `agents.routing.dashboardReply.agentPresetId`, using their named built-ins when the route value is null. Worker, Quality assurance agent, and Project Setup Agent are outside this contract.
+
+POST requires a current notice and a supported local provider resolved through the `planning` invocation route. It records `agent_base_update` telemetry, sends the previous base, current bundle, and selected preset to the provider, and accepts exactly one raw JSON object containing one non-empty string property, `instructionMarkdown`. The validated result must retain every original selected-preset line in order. Immediately before writing, the service verifies that the selected routed preset still matches the notice.
+
+Only instruction markdown is writable, and only compatibility-critical system additions are requested. The main prompt, custom behavior, avatar, labels, routing, provider/model, memory, MCP access, persistent skills, and source metadata remain unchanged. An invalid role returns `400`; an unknown project returns `404`; disabled endpoint wiring returns `404`. A missing or stale notice, unsupported provider, invalid response, or concurrent route change is rejected, while provider execution failures propagate as request errors. All failures occur before the preset write and bundled-revision advance. A successful response is the updated `AgentPresetRecord` and advances the selected preset's role revision even if its preserved markdown does not equal the current bundle.
 
 ## Quicksprint templates
 
