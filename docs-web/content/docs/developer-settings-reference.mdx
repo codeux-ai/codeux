@@ -146,6 +146,18 @@ The backend catalog always includes `none`, the built-in `Code UX` styleguide, a
 
 The dashboard Guidance panel manages this block through the normal settings save flows. System scope edits `system.defaults.designGuidance`; project scope edits the active project override. Built-in catalog entries can be selected but cannot be edited or deleted. Custom entries can be added, edited, and deleted; deleting a selected custom entry clears that selector back to `none`.
 
+## `googleDrive`
+
+```jsonc
+{
+  "enabled": false,
+  "hostPath": "",
+  "accessMode": "read-only" // "read-only" | "read-write"
+}
+```
+
+This scoped block identifies an already user-linked Google Drive directory on the host and follows the normal System → Project → Sprint cascade without storing API credentials. Docker runs validate that the resolved source exists and is a directory before exposing it at `/mnt/code-ux/google-drive` with the configured access mode. Host runs and invalid sources receive no mount. The agent notice refers only to this fixed container path, distinguishes the Drive from the Git workspace, and appears at most once across retries and resumed prompts.
+
 ## `cliWorkflow`
 
 ```jsonc
