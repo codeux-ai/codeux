@@ -55,6 +55,8 @@ import type {
 } from "../contracts/instruction-file-types.js";
 import type {
   AgentPresetRecord,
+  BaseAgentRole,
+  BaseAgentUpdateNotice,
   CreateAgentPresetInput,
   PushAgentPresetsToMarkdownOptions,
   UpdateAgentPresetInput,
@@ -272,6 +274,8 @@ export interface DashboardServerOptions {
   createAgentPreset: (projectId: string, input: CreateAgentPresetInput) => Promise<AgentPresetRecord> | AgentPresetRecord;
   updateAgentPreset: (agentPresetId: string, input: UpdateAgentPresetInput) => Promise<AgentPresetRecord> | AgentPresetRecord;
   deleteAgentPreset: (agentPresetId: string) => Promise<void> | void;
+  listBaseAgentUpdateNotices?: (projectId: string) => Promise<BaseAgentUpdateNotice[]> | BaseAgentUpdateNotice[];
+  applyBaseAgentUpdate?: (projectId: string, role: BaseAgentRole) => Promise<AgentPresetRecord> | AgentPresetRecord;
   importAgentPresetFromMarkdown?: (agentPresetId: string) => Promise<AgentPresetRecord> | AgentPresetRecord;
   syncAllAgentPresetsFromMarkdown?: (projectId: string) => Promise<AgentPresetRecord[]> | AgentPresetRecord[];
   pullAgentPresetsFromMarkdown?: (projectId: string) => Promise<AgentPresetRecord[]> | AgentPresetRecord[];

@@ -629,17 +629,23 @@ export class AgentPresetSyncService {
   async applyBaseAgentInstructionUpdate(
     projectId: string,
     role: BaseAgentRole,
+    instructionMarkdown?: string,
+    expectedAgentPresetId?: string,
   ): Promise<AgentPresetRecord> {
     await this.syncProjectAgents(projectId);
     const context = await this.getBaseAgentUpdateContextWithoutSync(projectId, role);
     if (!context) {
       throw new Error(`Bundled ${getBaseAgentRoleDefinition(role).name} instructions are not available.`);
     }
+    if (expectedAgentPresetId && context.selectedAgentPreset.id !== expectedAgentPresetId) {
+      throw new ValidationError("The selected base-agent route changed before the update could be applied.");
+    }
+    const nextInstructionMarkdown = instructionMarkdown?.trim() || context.bundledInstructionMarkdown;
 
     return await this.applyBundledInstructionsToPreset({
       preset: context.selectedAgentPreset,
       role,
-      instructionMarkdown: context.bundledInstructionMarkdown,
+      instructionMarkdown: nextInstructionMarkdown,
       revision: context.bundledRevision,
     });
   }
@@ -984,7 +990,11 @@ export class AgentPresetSyncService {
     const selectedRevision = hashBaseAgentInstructions(selectedAgentPreset.instructionMarkdown);
 
     let notice: BaseAgentUpdateNotice | null = null;
-    if (selectedAgentPreset.id !== baseAgentPreset.id && selectedRevision !== bundled.revision) {
+    if (
+      selectedAgentPreset.id !== baseAgentPreset.id
+      && selectedRevision !== bundled.revision
+      && state?.lastAppliedRevision !== bundled.revision
+    ) {
       notice = this.createBaseAgentUpdateNotice({
         projectId,
         role,

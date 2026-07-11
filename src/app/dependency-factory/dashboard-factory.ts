@@ -15,6 +15,8 @@ import { formatSprintBranch } from "../../domain/sprint/branch-name-generator.js
 import { ChatThreadRuntimeService } from "../../services/chat-thread-runtime-service.js";
 import { ManagementToolHandler } from "../../mcp/management-tool-handler.js";
 import { StructuredProviderResponseService } from "../../services/structured-provider-response-service.js";
+import { StructuredAgentRequestService } from "../../services/structured-agent-request-service.js";
+import { AgentBaseUpdateService } from "../../services/agent-base-update-service.js";
 import { ChatManagementActionService } from "../../services/chat-management-action-service.js";
 import { ProviderExecutionService } from "../../services/provider-execution-service.js";
 import { SchedulerService } from "../../services/scheduler-service.js";
@@ -43,6 +45,7 @@ export interface DashboardDependencies {
   executionControlService: ExecutionControlService;
   executionInvocationControlService: ExecutionInvocationControlService;
   planningAgentService: PlanningAgentService;
+  agentBaseUpdateService: AgentBaseUpdateService;
   quicksprintService: QuicksprintService;
   projectSetupService: ProjectSetupService;
   sprintIssueService: CoreDependencies["sprintIssueService"];
@@ -149,6 +152,11 @@ export function createDashboardDependencies(
     providerExecutionService,
     executionRepository,
     logger: logger.child({ component: "structured-provider-response-service" }),
+  });
+  const structuredAgentRequestService = new StructuredAgentRequestService({
+    executionRepository,
+    structuredProviderResponseService,
+    logger: logger.child({ component: "structured-agent-request-service" }),
   });
 
   const chatManagementActionService = new ChatManagementActionService({
@@ -467,11 +475,19 @@ export function createDashboardDependencies(
     agentPresetSyncService,
     executionControlService,
     providerExecutionService,
+    structuredAgentRequestService,
     memoryService: coreDeps.memoryService,
     logger: logger.child({ component: "planning-agent-service" }),
   });
 
   planningAgentServiceRef.set(planningAgentService);
+
+  const agentBaseUpdateService = new AgentBaseUpdateService({
+    projectManagementRepository,
+    settingsRepository,
+    agentPresetSyncService,
+    structuredAgentRequestService,
+  });
 
   const quicksprintService = new QuicksprintService(
     (projectId) => {
@@ -537,6 +553,7 @@ export function createDashboardDependencies(
     executionControlService,
     executionInvocationControlService,
     planningAgentService,
+    agentBaseUpdateService,
     quicksprintService,
     projectSetupService,
     sprintIssueService: coreDeps.sprintIssueService,

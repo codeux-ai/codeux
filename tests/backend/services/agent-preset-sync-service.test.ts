@@ -1400,10 +1400,15 @@ describe("AgentPresetSyncService", () => {
       model: "alternate-model",
     });
 
-    const applied = await syncService.applyBaseAgentInstructionUpdate(project.id, "planning_agent");
+    const applied = await syncService.applyBaseAgentInstructionUpdate(
+      project.id,
+      "planning_agent",
+      "Specialist planning behavior.\n\nUse the current compatibility schema.",
+      alternatePlanning.id,
+    );
     expect(applied).toMatchObject({
       id: alternatePlanning.id,
-      instructionMarkdown: "Current planning bundle.",
+      instructionMarkdown: "Specialist planning behavior.\n\nUse the current compatibility schema.",
       avatarConfig: { chassis: "classic", accent: "jade" },
       providerConfigId: "alternate-provider",
       model: "alternate-model",

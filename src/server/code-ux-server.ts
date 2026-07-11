@@ -55,6 +55,7 @@ import { DatabaseMaintenanceService } from "../services/database-maintenance-ser
 import { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
 import { AgentPresetSyncService } from "../services/agent-preset-sync-service.js";
 import { PlanningAgentService } from "../services/planning-agent-service.js";
+import type { AgentBaseUpdateService } from "../services/agent-base-update-service.js";
 import { ExecutionInvocationControlService } from "../services/execution-invocation-control-service.js";
 import { createRuntimeDependencies, ServerContext } from "../app/dependency-factory.js";
 import { generateCorrelationId, runWithCorrelationId } from "../shared/logging/correlation-id.js";
@@ -188,6 +189,7 @@ export class CodeUxServer {
   private activeDispatchRegistry: ActiveDispatchRegistry;
   private shutdownContainerService: ShutdownContainerService;
   private planningAgentService: PlanningAgentService;
+  private agentBaseUpdateService: AgentBaseUpdateService;
   private quicksprintService: import("../services/quicksprint-service.js").QuicksprintService;
   private projectSetupService: import("../services/project-setup-service.js").ProjectSetupService;
   private schedulerService: import("../services/scheduler-service.js").SchedulerService;
@@ -279,6 +281,7 @@ export class CodeUxServer {
       logger: this.logger.child({ component: "shutdown-container-service" }),
     });
     this.planningAgentService = deps.planningAgentService;
+    this.agentBaseUpdateService = deps.agentBaseUpdateService;
     this.quicksprintService = deps.quicksprintService;
     this.projectSetupService = deps.projectSetupService;
     this.schedulerService = deps.schedulerService;
@@ -1372,6 +1375,7 @@ export class CodeUxServer {
         executionControlService: this.executionControlService,
         executionInvocationControlService: this.executionInvocationControlService,
         planningAgentService: this.planningAgentService,
+        agentBaseUpdateService: this.agentBaseUpdateService,
         quicksprintService: this.quicksprintService,
         projectSetupService: this.projectSetupService,
         schedulerService: this.schedulerService,
