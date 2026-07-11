@@ -20,8 +20,10 @@ The Agents management surface leans into a premium "Workshop" feel. We use a lot
 
 ## Avatar Scene Motion
 - The 3D agent avatar uses standard Three.js materials, studio lights, pointer-aware head movement, and runtime tool props. Do not add flashlight beams, target glows, low-battery flicker overlays, or shell/screen emissive boosts that recolor the avatar.
-- Reduced-motion and fallback SVG paths continue to render the static avatar without requiring WebGL.
-- New avatar scene geometries, materials, textures, and lights must follow the existing `AgentAvatarScene` WebGL lifecycle split: renderer and persistent scene resources are created once, avatar/config resources rebuild independently, animation reads refs per frame, and all reachable Three.js resources are disposed on unmount.
+- Runtime props use the typed `agent-scene-tools` catalog for the stable `screwdriver`, `jackhammer`, `wrench`, `hammer`, and `torch` identifiers. The catalog owns each prop's stage anchor, contrast palette, geometry parts, animation references, and deterministic elapsed-time motion contract; `?stageTool=<identifier>` remains the design-review override.
+- Tool swaps animate the previous prop out and the next prop in without rebuilding the renderer. Once an exit completes, the scene removes the old subtree and disposes every reachable geometry, material, and texture exactly once.
+- Reduced-motion and fallback SVG paths continue to render the static avatar without requiring WebGL, with a static tool label when a runtime prop is active so tool state is not communicated by motion alone.
+- New avatar scene geometries, materials, textures, and lights must follow the existing `AgentAvatarScene` WebGL lifecycle split: renderer and persistent scene resources are created once, avatar/config and tool resources rebuild independently, animation reads refs per frame, and all reachable Three.js resources are disposed on swap or unmount.
 
 ## Badges and Sync States
 Use explicit badging inside `.code-ux/agents` lists:

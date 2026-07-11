@@ -54,4 +54,25 @@ test.describe('AgentAvatarScene E2E Tests', () => {
     const avatarScene = page.locator('[data-testid="agent-avatar-scene"]');
     await expect(avatarScene).not.toBeVisible();
   });
+
+  test('should preserve forced tool selection across WebGL, fallback, swaps, and unmount', async ({ page }) => {
+    await page.goto('/chat?stageTool=wrench');
+
+    const avatarScene = page.locator('[data-testid="agent-avatar-scene"]');
+    await expect(avatarScene).toBeVisible();
+    await expect(avatarScene).toHaveAttribute('data-tool', 'wrench');
+
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const fallback = page.locator('[data-testid="agent-avatar-fallback"]');
+    await expect(fallback).toBeVisible();
+    await expect(fallback).toHaveAttribute('data-tool', 'wrench');
+    await expect(page.getByTestId('agent-avatar-static-tool')).toHaveText('Open-end wrench');
+
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.goto('/chat?stageTool=torch');
+    await expect(page.locator('[data-testid="agent-avatar-scene"]')).toHaveAttribute('data-tool', 'torch');
+
+    await page.goto('/agents');
+    await expect(page.locator('[data-testid="agent-avatar-scene"][data-tool]')).toHaveCount(0);
+  });
 });

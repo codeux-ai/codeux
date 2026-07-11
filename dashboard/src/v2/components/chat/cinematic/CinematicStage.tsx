@@ -9,7 +9,11 @@ import { getChatWidgetData } from "../../../lib/chat-widget-view-models.js";
 import { PlanningRequestWidget } from "../widgets/PlanningRequestWidget.js";
 import { ExternalReferenceWidget } from "../widgets/ExternalReferenceWidget.js";
 import { LazyAgentAvatarScene } from "../../agents/LazyAgentAvatarScene.js";
-import type { AgentSceneTool } from "../../agents/AgentAvatarScene.js";
+import {
+  AGENT_SCENE_TOOL_IDS,
+  isAgentSceneTool,
+  type AgentSceneTool,
+} from "../../../lib/agent-scene-tools.js";
 import { DEFAULT_AGENT_AVATAR_CONFIG } from "../../../lib/agent-avatar.js";
 import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
 import { resolveDisplayDeliveryStatus } from "../../../hooks/use-chat-thread-data.js";
@@ -75,7 +79,7 @@ export interface CinematicStageProps {
 }
 
 /** The bot cycles through its toolbox while the runtime is executing. */
-const WORK_TOOLS: AgentSceneTool[] = ["screwdriver", "jackhammer", "wrench", "hammer", "torch"];
+const WORK_TOOLS: readonly AgentSceneTool[] = AGENT_SCENE_TOOL_IDS;
 const TOOL_SWAP_MS = 7_000;
 
 const CREATE_APP_ACTION_ICONS: Record<DashboardCreateAppQuickactionKind, typeof Monitor> = {
@@ -101,7 +105,7 @@ const PROMPT_ACTION_ICONS: Record<string, typeof Monitor> = {
 const readForcedTool = (): AgentSceneTool | null => {
   if (typeof window === "undefined") return null;
   const value = new URLSearchParams(window.location.search).get("stageTool");
-  return (WORK_TOOLS as string[]).includes(value ?? "") ? (value as AgentSceneTool) : null;
+  return isAgentSceneTool(value) ? value : null;
 };
 
 const speechTextFromMarkdown = (markdown: string): string => markdown
