@@ -1,7 +1,7 @@
 # Projects
 
 The **Projects** page (`/projects`) lists every project Code UX manages and lets you create, edit, select, and delete them.
-Each card now surfaces the source badge, repository URL, local workspace directory, creation and update timestamps, last run time, branch, provider, and host so the active checkout is easy to scan without opening a second page.
+Its status filters show live counts for all, running, idle, and failed projects. Project cards summarize the source, repository or local path, branch, last run, task completion, and setup state, while distinct loading, error, empty, and filtered-empty views keep project creation actions available.
 
 A *project* is the binding between Code UX and a single Git repository. Each project has its own:
 

@@ -47,3 +47,10 @@ This document outlines the design system for the Projects page and related compo
 *   **Source & Setup Motion:** Source-type changes, init-mode changes, and setup-scope reveals use shared interaction motion tokens (`listReveal`/related tokenized transitions). Reduced-motion mode must snap instantly while keeping the same selected states and live status text.
 *   **Directory Picker Feedback:** The directory browser must show and politely announce loading, current path changes, empty child-directory lists, failed loads, and selected-path confirmation without stealing focus from Browse, navigation, refresh, or directory buttons.
 *   **Submit Outcomes:** While project creation is pending, close/cancel/submit controls expose a disabled or busy reason. Failed submissions keep the modal open and present retryable feedback; retries submit the same form contract without changing backend request shapes.
+
+## Page Composition
+
+*   Build filter labels, counts, and visible-project state through `projects-page-view-model.ts`; intervention projects remain part of the All total without appearing in Running, Idle, or Failed.
+*   Render loading, load-error, collection-empty, and filtered-empty surfaces inside the named project-card region. Keep New Project in the page header and Add Project reachable from the grid or blocking error surface.
+*   Use the shared `ProjectCard` and `AddProjectCard` components in an auto-filling grid sized with `minmax(min(100%, 320px), 1fr)` so the page cannot force horizontal overflow.
+*   Keep setup dialogs bounded to the viewport, place setup choices in an internally scrolling body, and stack footer actions on narrow screens.
