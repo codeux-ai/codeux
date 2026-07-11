@@ -1,6 +1,7 @@
 import type { ProjectAttentionItemRecord, ProjectAttentionType, WorkerAttentionOutcome } from "../../contracts/project-attention-types.js";
 import { ConnectionChatRepository } from "../../repositories/connection-chat-repository.js";
 import { ProjectAttentionService } from "./project-attention-service.js";
+import { isProjectManagerOwnedClarificationItem } from "./virtual-worker-scheduling-policy.js";
 
 export interface ReportWorkerAttentionOutcomeInput {
   attentionItemId: string;
@@ -39,6 +40,44 @@ export class WorkerAttentionOutcomeService {
 
     const current = this.requireWorkerOwnedItem(input.attentionItemId, input.workerEndpointId);
     const currentPayload = current.payload || {};
+    const existingClarificationItemId = this.readPayloadString(currentPayload.workerClarificationAttentionItemId);
+    if (existingClarificationItemId) {
+      return {
+        sourceItem: current,
+        handoffItem: this.projectAttentionService.getItem(existingClarificationItemId),
+        threadId: null,
+        threadMessageId: null,
+      };
+    }
+    const pendingClarification = this.projectAttentionService.listActiveProjectItems(current.projectId)
+      .find((item) => (
+        isProjectManagerOwnedClarificationItem(item)
+        && item.payload?.status === "pending"
+        && (
+          (Boolean(current.taskId) && item.taskId === current.taskId)
+          || (Boolean(current.dispatchId) && item.dispatchId === current.dispatchId)
+        )
+      ));
+    if (pendingClarification) {
+      return {
+        sourceItem: this.projectAttentionService.resolveItem(current.id, {
+          status: "resolved",
+          reason: "worker_clarification_pending",
+          resolutionSummaryMarkdown: [
+            current.summaryMarkdown.trim(),
+            "",
+            "A project-manager-owned worker clarification is already pending for this task.",
+          ].join("\n"),
+          workerEndpointId: input.workerEndpointId,
+          payloadPatch: {
+            workerClarificationAttentionItemId: pendingClarification.id,
+          },
+        }),
+        handoffItem: pendingClarification,
+        threadId: null,
+        threadMessageId: null,
+      };
+    }
     if (
       current.status !== "open"
       && current.status !== "claimed"
@@ -129,6 +168,9 @@ export class WorkerAttentionOutcomeService {
     const item = this.projectAttentionService.getItem(itemId);
     if (!item) {
       throw new Error(`Project attention item not found: ${itemId}`);
+    }
+    if (isProjectManagerOwnedClarificationItem(item)) {
+      throw new Error(`Attention item ${itemId} is project-manager-owned.`);
     }
     if (item.ownerType !== "worker") {
       throw new Error(`Attention item ${itemId} is not worker-owned.`);

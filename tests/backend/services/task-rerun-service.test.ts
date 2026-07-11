@@ -180,6 +180,60 @@ describe("TaskRerunService", () => {
     }));
   });
 
+  it("continues a clarification in the preserved workspace with a delimited follow-up prompt", async () => {
+    resolveSprintRunId.mockResolvedValue({ sprintRunId: "run-1", created: false });
+    startTask.mockResolvedValue({
+      id: "continuation-session",
+      name: "sessions/continuation-session",
+      prompt: "",
+      provider: "codex",
+    });
+
+    const continued = await service.continueTaskFromClarification("task-record-1", {
+      answerMarkdown: "Preserve the legacy rows.",
+      provider: "codex",
+      model: "gpt-5.1-codex",
+      providerConfigId: "codex-primary",
+      resumeWorkspaceSessionId: "old-session",
+      resumeWorkerBranch: "worker/task-1",
+    });
+
+    expect(startTask).toHaveBeenCalledWith(expect.objectContaining({
+      providerConfigId: "codex-primary",
+      resumeWorkspaceSessionId: "old-session",
+      resumeWorkerBranch: "worker/task-1",
+      forceFreshWorkspace: false,
+      task: expect.objectContaining({
+        provider: "codex",
+        model: "gpt-5.1-codex",
+        prompt: expect.stringContaining(
+          "## PROJECT MANAGER CLARIFICATION ANSWER\n\nPreserve the legacy rows.\n\n## CONTINUATION INSTRUCTION",
+        ),
+      }),
+    }));
+    expect(continued).toMatchObject({
+      status: "RUNNING",
+      session_id: "continuation-session",
+      worker_branch: "worker/task-1",
+      provider: "codex",
+    });
+    expect(cancelActiveDispatch).not.toHaveBeenCalled();
+    expect(updateTaskPlanningStatus).not.toHaveBeenCalled();
+    expect(persistMergedFlag).not.toHaveBeenCalled();
+    expect(resolveTaskAttention).not.toHaveBeenCalled();
+    expect(resetTaskQaState).not.toHaveBeenCalled();
+  });
+
+  it("rejects clarification continuation without preserved workspace metadata", async () => {
+    await expect(service.continueTaskFromClarification("task-record-1", {
+      answerMarkdown: "Proceed.",
+      provider: "codex",
+      resumeWorkspaceSessionId: "",
+      resumeWorkerBranch: "worker/task-1",
+    })).rejects.toThrow(/preserved workspace session and worker branch/i);
+    expect(startTask).not.toHaveBeenCalled();
+  });
+
   it("marks the task failed when fresh session start fails", async () => {
     resolveSprintRunId.mockResolvedValue({ sprintRunId: "run-1", created: false });
     startTask.mockRejectedValue(new Error("provider unavailable"));

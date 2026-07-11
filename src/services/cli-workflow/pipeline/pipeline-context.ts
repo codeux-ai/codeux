@@ -17,6 +17,7 @@ import type { CommandResult } from "../../cli-process-runner.js";
 import type { AgentPresetRepository } from "../../../repositories/agent-preset-repository.js";
 import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
 import type { TaskSelfReflectionRatingRepository } from "../../../repositories/task-self-reflection-rating-repository.js";
+import type { TaskCodingClarificationContext } from "../../../domain/sprint/task-execution-outcome.js";
 
 export interface PipelineContextDeps {
   sessionTracking: SessionTrackingRepository;
@@ -62,6 +63,8 @@ export interface PipelineContext {
    * not agent-scoped (no MCP filtering); `null` means an agent exists but was never configured.
    */
   agentMcpAccess?: AgentMcpAccessConfig | null;
+  /** Durable project/task/runtime identifiers supplied to request_clarification guidance. */
+  taskClarificationContext?: TaskCodingClarificationContext;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
 

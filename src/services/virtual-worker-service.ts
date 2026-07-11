@@ -45,12 +45,15 @@ import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import { buildRelevantMemoryInjectionContext } from "./memory-injection-context.js";
 import { LEARNINGS_FILENAME } from "../contracts/memory-types.js";
 import { DockerService } from "./docker-service.js";
+import { workerClarificationAgentMcpAccess } from "./agent-mcp-access.js";
 import {
   planVirtualWorkerAttentionClaim,
   projectNeedsVirtualWorker,
   peekNextWorkerAttention,
   resolveWorkerExecutionMode,
   computeReconciliationCandidates,
+  hasPendingManagerClarificationForScope,
+  isProjectManagerOwnedClarificationItem,
   resolveVirtualWorkerAttentionRoute,
   type VirtualWorkerAttentionRoute,
 } from "../domain/workers/virtual-worker-scheduling-policy.js";
@@ -339,8 +342,19 @@ export class VirtualWorkerService {
     hasPendingDispatch?: boolean,
   ): boolean {
     const effectiveResolver = resolver || ((pId, sId) => this.resolveDashboardSettings(pId, sId));
-    const nextAttentionItem = this.peekNextWorkerAttention(projectId, resolver);
-    const pendingDispatchAvailable = hasPendingDispatch ?? this.deps.executionRepository.listProjectIdsWithPendingDispatches().includes(projectId);
+    const activeItems = this.deps.projectAttentionService.listActiveProjectItems(projectId);
+    const nextAttentionItem = peekNextWorkerAttention(activeItems, effectiveResolver);
+    const projectHasPendingDispatch = hasPendingDispatch
+      ?? this.deps.executionRepository.listProjectIdsWithPendingDispatches().includes(projectId);
+    const pendingDispatchAvailable = projectHasPendingDispatch && this.deps.executionRepository
+      .listTaskDispatches({ projectId })
+      .some((dispatch) => (
+        dispatch.status === "queued"
+        && !hasPendingManagerClarificationForScope({
+          taskId: dispatch.taskId,
+          dispatchId: dispatch.id,
+        }, activeItems)
+      ));
     const executionMode = !nextAttentionItem && pendingDispatchAvailable
       ? resolveWorkerExecutionMode(effectiveResolver(projectId))
       : "VIRTUAL";
@@ -375,16 +389,29 @@ export class VirtualWorkerService {
     this.deps.projectWorkerAssignmentService.ensureWorkerAssignment(projectId, endpoint.id);
 
     try {
-      const attentionItem = this.peekNextWorkerAttention(projectId, resolver);
+      const activeItems = this.deps.projectAttentionService.listActiveProjectItems(projectId);
+      const attentionItem = peekNextWorkerAttention(activeItems, effectiveResolver);
+      const nextDispatch = this.deps.executionRepository
+        .listTaskDispatches({ projectId })
+        .find((dispatch) => (
+          dispatch.status === "queued"
+          && !hasPendingManagerClarificationForScope({
+            taskId: dispatch.taskId,
+            dispatchId: dispatch.id,
+          }, activeItems)
+        ));
       // Do not lease ordinary coding work while a CI/merge repair is waiting.
       // A leased dispatch is durable, so claiming it and then prioritizing the
       // attention item would strand the dispatch until lease recovery.
-      const dispatchClaim = attentionItem
+      const dispatchClaim = attentionItem || !nextDispatch
         ? null
         : this.deps.workerTaskDispatchService.claimNextDispatchForWorker({
           projectId,
           workerEndpointId: endpoint.id,
-          executionMode: "VIRTUAL"
+          executionMode: "VIRTUAL",
+          dispatchId: nextDispatch.id,
+          taskId: nextDispatch.taskId,
+          sprintId: nextDispatch.sprintId,
         });
 
       const plan = await planVirtualWorkerCycle({
@@ -719,7 +746,7 @@ export class VirtualWorkerService {
     attentionRoute: VirtualWorkerAttentionRoute = resolveVirtualWorkerAttentionRoute(item),
     claimReason: string = planVirtualWorkerAttentionClaim(item, reason).claimReason,
   ): Promise<void> {
-    if (attentionRoute === "skip_orchestrator_handled") {
+    if (attentionRoute === "skip_orchestrator_handled" || isProjectManagerOwnedClarificationItem(item)) {
       return;
     }
 
@@ -1054,7 +1081,7 @@ export class VirtualWorkerService {
           customBaseUrl: providerSettings.customBaseUrl,
           customModel: providerSettings.customModel,
           githubToken: settings.git.githubToken,
-          agentMcpAccess: workerAgent?.mcpAccess ?? null,
+          agentMcpAccess: workerAgent ? workerClarificationAgentMcpAccess(workerAgent.mcpAccess) : null,
           mcpAgentId: workerAgent?.id ?? null,
         });
       }
@@ -1455,7 +1482,7 @@ export class VirtualWorkerService {
           ? taskContinuation?.previousInvocation?.rawUsageJson ?? null
           : null,
         githubToken: settings.git.githubToken,
-        agentMcpAccess: workerAgent?.mcpAccess ?? null,
+        agentMcpAccess: workerAgent ? workerClarificationAgentMcpAccess(workerAgent.mcpAccess) : null,
         mcpAgentId: workerAgent?.id ?? null,
       });
 

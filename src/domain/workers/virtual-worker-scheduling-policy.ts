@@ -31,6 +31,27 @@ export interface VirtualWorkerAttentionClaimPolicy {
   claimReason: string;
 }
 
+export function isProjectManagerOwnedClarificationItem(
+  item: Pick<ProjectAttentionItemRecord, "attentionType" | "payload">,
+): boolean {
+  return item.attentionType === "worker_clarification"
+    || item.payload?.type === "worker_clarification";
+}
+
+export function hasPendingManagerClarificationForScope(
+  scope: Pick<ProjectAttentionItemRecord, "taskId" | "dispatchId">,
+  items: ProjectAttentionItemRecord[],
+): boolean {
+  return items.some((item) => {
+    if (!isProjectManagerOwnedClarificationItem(item) || item.payload?.status !== "pending") {
+      return false;
+    }
+
+    return (Boolean(scope.taskId) && item.taskId === scope.taskId)
+      || (Boolean(scope.dispatchId) && item.dispatchId === scope.dispatchId);
+  });
+}
+
 export function isOrchestratorHandledClarificationItem(summaryMarkdown: string): boolean {
   return summaryMarkdown.includes("Clarification cooldown active")
     || summaryMarkdown.includes("already answered automatically")
@@ -87,6 +108,14 @@ export function peekNextWorkerAttention(
       return false;
     }
 
+    if (isProjectManagerOwnedClarificationItem(item)) {
+      return false;
+    }
+
+    if (hasPendingManagerClarificationForScope(item, items)) {
+      return false;
+    }
+
     if (isOrchestratorHandledClarificationItem(item.summaryMarkdown)) {
       return false;
     }
@@ -126,8 +155,11 @@ export function computeReconciliationCandidates(
 }
 
 export function resolveVirtualWorkerAttentionRoute(
-  item: Pick<ProjectAttentionItemRecord, "attentionType" | "summaryMarkdown">,
+  item: Pick<ProjectAttentionItemRecord, "attentionType" | "summaryMarkdown" | "payload">,
 ): VirtualWorkerAttentionRoute {
+  if (isProjectManagerOwnedClarificationItem(item)) {
+    return "skip_orchestrator_handled";
+  }
   if (isOrchestratorHandledClarificationItem(item.summaryMarkdown)) {
     return "skip_orchestrator_handled";
   }

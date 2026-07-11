@@ -1,8 +1,10 @@
 import type { ToolName as ContractToolName } from "../../contracts/mcp-tool-definitions.js";
-import type { ManageCodeUxArgs, ManageProjectsArgs, ManageSprintsArgs, ManageTasksArgs, ManageQuicksprintsArgs, ManageSchedulerArgs, SchedulerArgs, ManageAgentsArgs, ManageNodeFlowsArgs, ManageMemoryArgs, AddLongTermMemoryArgs, ManageSkillsArgs, ManageSettingsArgs, ManagePreviewArgs, ManageCustomDashboardsArgs, ManageChatProvidersArgs, ManageTelemetryArgs, SearchKnowledgeArgs, SearchSkillsArgs } from "../../contracts/internal-management-types.js";
+import type { ManageCodeUxArgs, ManageProjectsArgs, ManageSprintsArgs, ManageTasksArgs, ManageQuicksprintsArgs, ManageSchedulerArgs, SchedulerArgs, ManageAgentsArgs, ManageNodeFlowsArgs, ManageMemoryArgs, AddLongTermMemoryArgs, ManageSkillsArgs, ManageSettingsArgs, ManagePreviewArgs, ManageCustomDashboardsArgs, ManageChatProvidersArgs, ManageTelemetryArgs, SearchKnowledgeArgs, SearchSkillsArgs, RequestClarificationArgs, ReplyToClarificationArgs } from "../../contracts/internal-management-types.js";
 import type { PullWorkerTaskDispatchArgs, RegisterExternalWorkerEndpointArgs, UpdateWorkerTaskDispatchArgs } from "../../services/worker-task-dispatch-service.js";
 
 export interface McpToolArgsByName {
+  request_clarification: RequestClarificationArgs;
+  reply_to_clarification: ReplyToClarificationArgs;
   manage_code_ux: ManageCodeUxArgs;
   manage_projects: ManageProjectsArgs;
   manage_sprints: ManageSprintsArgs;

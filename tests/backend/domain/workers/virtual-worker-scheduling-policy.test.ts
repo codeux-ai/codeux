@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   decideVirtualWorkerProjectScheduling,
+  hasPendingManagerClarificationForScope,
+  isProjectManagerOwnedClarificationItem,
   isOrchestratorHandledClarificationItem,
   planVirtualWorkerAttentionClaim,
   resolveWorkerExecutionMode,
@@ -97,6 +99,54 @@ describe("Virtual Worker Scheduling Policy", () => {
     it.each(cases)("$name", ({ state, expected }) => {
       expect(decideVirtualWorkerProjectScheduling(state)).toEqual(expected);
     });
+
+  });
+
+  describe("isProjectManagerOwnedClarificationItem", () => {
+    it("recognizes both the canonical attention type and payload discriminator", () => {
+      expect(isProjectManagerOwnedClarificationItem({
+        attentionType: "worker_clarification",
+        payload: null,
+      })).toBe(true);
+      expect(isProjectManagerOwnedClarificationItem({
+        attentionType: "action_required",
+        payload: { type: "worker_clarification" },
+      })).toBe(true);
+    });
+  });
+
+  describe("hasPendingManagerClarificationForScope", () => {
+    const clarification = (overrides: Partial<ProjectAttentionItemRecord> = {}) => ({
+      attentionType: "worker_clarification",
+      payload: { type: "worker_clarification", status: "pending" },
+      taskId: "task-1",
+      dispatchId: "dispatch-1",
+      ...overrides,
+    } as ProjectAttentionItemRecord);
+
+    it("matches the same task or dispatch only", () => {
+      const items = [clarification()];
+
+      expect(hasPendingManagerClarificationForScope(
+        { taskId: "task-1", dispatchId: "dispatch-2" },
+        items,
+      )).toBe(true);
+      expect(hasPendingManagerClarificationForScope(
+        { taskId: "task-2", dispatchId: "dispatch-1" },
+        items,
+      )).toBe(true);
+      expect(hasPendingManagerClarificationForScope(
+        { taskId: "task-2", dispatchId: "dispatch-2" },
+        items,
+      )).toBe(false);
+    });
+
+    it("does not let a taskless general clarification block coding scope", () => {
+      expect(hasPendingManagerClarificationForScope(
+        { taskId: "task-1", dispatchId: "dispatch-1" },
+        [clarification({ taskId: null, dispatchId: null })],
+      )).toBe(false);
+    });
   });
 
   describe("isOrchestratorHandledClarificationItem", () => {
@@ -153,6 +203,78 @@ describe("Virtual Worker Scheduling Policy", () => {
     it("ignores orchestrator handled clarification items", () => {
       const item = { ownerType: "worker", status: "open", summaryMarkdown: "Clarification cooldown active" } as ProjectAttentionItemRecord;
       expect(peekNextWorkerAttention([item], () => mockSettings({}))).toBeNull();
+    });
+
+    it("ignores manager-owned clarification payloads even if legacy data marks them worker-owned", () => {
+      const resolver = vi.fn().mockReturnValue(mockSettings({
+        automationInterventions: { autoAnswerClarification: true },
+      }));
+      const item = {
+        ownerType: "worker",
+        status: "open",
+        summaryMarkdown: "Should the worker preserve compatibility?",
+        attentionType: "action_required",
+        payload: { type: "worker_clarification", status: "pending" },
+      } as ProjectAttentionItemRecord;
+
+      expect(peekNextWorkerAttention([item], resolver)).toBeNull();
+      expect(resolver).not.toHaveBeenCalled();
+    });
+
+    it("ignores worker action items for a task that already has a pending manager clarification", () => {
+      const resolver = vi.fn().mockReturnValue(mockSettings({
+        automationInterventions: { autoAnswerClarification: true },
+      }));
+      const workerItem = {
+        id: "worker-item",
+        projectId: "project-1",
+        taskId: "task-1",
+        ownerType: "worker",
+        status: "open",
+        summaryMarkdown: "The worker is blocked.",
+        attentionType: "action_required",
+        payload: { sessionState: "AWAITING_USER_FEEDBACK" },
+      } as ProjectAttentionItemRecord;
+      const clarification = {
+        id: "clarification-1",
+        projectId: "project-1",
+        taskId: "task-1",
+        ownerType: "human",
+        status: "open",
+        summaryMarkdown: "Which behavior should be used?",
+        attentionType: "worker_clarification",
+        payload: { type: "worker_clarification", status: "pending" },
+      } as ProjectAttentionItemRecord;
+
+      expect(peekNextWorkerAttention([workerItem, clarification], resolver)).toBeNull();
+      expect(resolver).not.toHaveBeenCalled();
+    });
+
+    it("keeps unrelated worker attention eligible while a clarification is pending", () => {
+      const resolver = vi.fn().mockReturnValue(mockSettings({
+        automationInterventions: { autoAnswerClarification: true },
+      }));
+      const workerItem = {
+        projectId: "project-1",
+        taskId: "task-2",
+        dispatchId: "dispatch-2",
+        ownerType: "worker",
+        status: "open",
+        summaryMarkdown: "The unrelated worker needs action.",
+        attentionType: "action_required",
+      } as ProjectAttentionItemRecord;
+      const clarification = {
+        projectId: "project-1",
+        taskId: "task-1",
+        dispatchId: "dispatch-1",
+        ownerType: "human",
+        status: "open",
+        summaryMarkdown: "Manager input required.",
+        attentionType: "worker_clarification",
+        payload: { type: "worker_clarification", status: "pending" },
+      } as ProjectAttentionItemRecord;
+
+      expect(peekNextWorkerAttention([workerItem, clarification], resolver)).toBe(workerItem);
     });
 
     it.each([
@@ -263,6 +385,15 @@ describe("Virtual Worker Scheduling Policy", () => {
       {
         name: "retry deferral for orchestrator-handled clarification",
         item: { attentionType: "action_required", summaryMarkdown: "Resume instruction already sent." } as ProjectAttentionItemRecord,
+        expected: "skip_orchestrator_handled",
+      },
+      {
+        name: "project-manager-owned worker clarification",
+        item: {
+          attentionType: "action_required",
+          summaryMarkdown: "Manager input required.",
+          payload: { type: "worker_clarification", status: "pending" },
+        } as ProjectAttentionItemRecord,
         expected: "skip_orchestrator_handled",
       },
     ])("$name routes to $expected", ({ item, expected }) => {

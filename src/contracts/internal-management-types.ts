@@ -21,6 +21,24 @@ export interface ManagementApproval {
   confirmed: boolean;
 }
 
+export interface RequestClarificationArgs {
+  projectId: string;
+  questionMarkdown: string;
+  deduplicationKey: string;
+  taskId?: string;
+  sprintId?: string;
+  sprintRunId?: string;
+  dispatchId?: string;
+  taskRunId?: string;
+  sessionId?: string;
+}
+
+export interface ReplyToClarificationArgs {
+  projectId: string;
+  clarificationId: string;
+  answerMarkdown: string;
+}
+
 export interface ManagementRequestEnvelope {
   domain: string;
   action: string;

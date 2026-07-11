@@ -21,6 +21,7 @@ It is for contributors and integrators who need to reason about *how* Code UX ma
 | 11 | [Configuration resolution](./configuration-resolution.md) | Cascade order, search paths, settings hierarchy |
 | 12 | [Speech input](./speech-input.md) | Persisted transcription settings, privacy boundary, provider fallback contract |
 | 13 | [Security model](./security.md) | Authentication, authorisation, secrets, network surface |
+| 14 | [Worker clarification contract](./worker-clarification-contract.md) | Durable human-owned worker questions, idempotent replies, and continuation boundary |
 
 ## Runtime Notes
 

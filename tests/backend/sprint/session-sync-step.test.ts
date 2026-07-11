@@ -3420,4 +3420,234 @@ describe("runSessionSyncStep", () => {
     });
     expect(projectRepository.getTask(task.id)?.status).toBe("pending");
   });
+
+  it("keeps worker clarification projections blocked until one answered transition resumes coding", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-worker-clarification-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const project = projectRepository.createProject({
+      name: "Clarification Sync Project",
+      sourceType: "local",
+      sourceRef: "/tmp/clarification-sync",
+    });
+    const sprint = projectRepository.createSprint(project.id, { name: "Sprint 41", number: 41 });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Await manager answer",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "jules",
+      status: "running",
+      startedAt: "2026-07-11T10:00:00.000Z",
+    } as any);
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "jules",
+      mode: "jules",
+      sessionId: "clarification-session",
+      sessionName: "sessions/clarification-session",
+      state: "RUNNING",
+      startedAt: "2026-07-11T10:00:00.000Z",
+    });
+    const lifecyclePayload = {
+      clarificationId: "clarification-1",
+      taskRunId: taskRun.id,
+      dispatchId: dispatch.id,
+      sessionId: "clarification-session",
+    };
+    executionRepository.appendTaskRunEvent(
+      taskRun.id,
+      "worker_clarification_requested",
+      "coding-agent",
+      lifecyclePayload,
+      { createdAt: "2026-07-11T10:01:00.000Z", sourceEventKey: "clarification-1:requested" },
+    );
+    const subtasks: Subtask[] = [{
+      id: "T01",
+      record_id: task.id,
+      project_id: project.id,
+      sprint_id: sprint.id,
+      title: task.title,
+      prompt: task.promptMarkdown,
+      depends_on: [],
+      is_independent: true,
+      status: "RUNNING",
+    }];
+    let providerState = "RUNNING";
+    const deps = {
+      listSessions: vi.fn().mockImplementation(async () => ({ sessions: [{
+        id: "clarification-session",
+        name: "sessions/clarification-session",
+        title: "Sprint 41: [run:clarification-sync/s41/t01] [T01] Await manager answer",
+        state: providerState,
+        provider: "jules",
+      }] })),
+      resolveSessionName: (session: { name?: string }) => session.name,
+      extractSessionId: (session: { id?: string }) => session.id,
+      fetchRecentActivities: vi.fn().mockResolvedValue([]),
+      isActionRequiredState: (state?: string) => state === "AWAITING_USER_FEEDBACK",
+      executionRepository,
+      projectManagementRepository: projectRepository,
+      sprintRunId: sprintRun.id,
+      logger: { warn: vi.fn() },
+    };
+
+    const waiting = await runSessionSyncStep(subtasks, deps, false, {
+      repoPath: "/tmp/clarification-sync",
+      sprintNumber: 41,
+    });
+    expect(waiting.subtasks[0]?.status).toBe("BLOCKED");
+    expect(executionRepository.getTaskRun(taskRun.id)?.state).toBe("BLOCKED");
+    expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({
+      status: "blocked",
+      errorMessage: "Provider session requires attention: WORKER_CLARIFICATION",
+    });
+
+    executionRepository.appendTaskRunEvent(
+      taskRun.id,
+      "worker_clarification_continued",
+      "manager-agent",
+      lifecyclePayload,
+      { createdAt: "2026-07-11T10:02:00.000Z", sourceEventKey: "clarification-1:continued" },
+    );
+    executionRepository.appendTaskRunEvent(
+      taskRun.id,
+      "worker_clarification_replied",
+      "manager-agent",
+      lifecyclePayload,
+      { createdAt: "2026-07-11T10:02:01.000Z", sourceEventKey: "clarification-1:replied" },
+    );
+    executionRepository.appendTaskRunEvent(
+      taskRun.id,
+      "worker_clarification_requested",
+      "stale-coding-agent",
+      { ...lifecyclePayload, clarificationId: "clarification-stale", sessionId: "retired-session" },
+      { createdAt: "2026-07-11T10:03:00.000Z", sourceEventKey: "clarification-stale:requested" },
+    );
+    providerState = "AWAITING_USER_FEEDBACK";
+
+    const resumed = await runSessionSyncStep(subtasks, deps, false, {
+      repoPath: "/tmp/clarification-sync",
+      sprintNumber: 41,
+    });
+    await runSessionSyncStep(subtasks, deps, false, {
+      repoPath: "/tmp/clarification-sync",
+      sprintNumber: 41,
+    });
+
+    expect(resumed.subtasks[0]?.status).toBe("RUNNING");
+    expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({ state: "RUNNING", finishedAt: null });
+    expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({
+      status: "running",
+      finishedAt: null,
+      errorMessage: null,
+    });
+    expect(projectRepository.getTask(task.id)?.status).toBe("in_progress");
+    const syncEvents = executionRepository.listTaskRunEvents(taskRun.id, 200)
+      .filter((event) => event.eventType === "session_state_synced");
+    expect(syncEvents).toHaveLength(2);
+    expect(syncEvents.map((event) => event.payload?.workerClarificationStatus)).toEqual(
+      expect.arrayContaining(["pending", "answered"]),
+    );
+  });
+
+  it("does not resurrect a cancelled run for a pending worker clarification", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-cancelled-clarification-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const project = projectRepository.createProject({
+      name: "Cancelled Clarification Project",
+      sourceType: "local",
+      sourceRef: "/tmp/cancelled-clarification",
+    });
+    const sprint = projectRepository.createSprint(project.id, { name: "Sprint 42", number: 42 });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T02",
+      title: "Cancelled clarification",
+      status: "pending",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "cancelled",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "jules",
+      status: "cancelled",
+      finishedAt: "2026-07-11T11:00:00.000Z",
+    } as any);
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "jules",
+      sessionId: "cancelled-session",
+      state: "PAUSED",
+      finishedAt: "2026-07-11T11:00:00.000Z",
+    });
+    executionRepository.appendTaskRunEvent(taskRun.id, "worker_clarification_requested", "coding-agent", {
+      clarificationId: "clarification-cancelled",
+      taskRunId: taskRun.id,
+      dispatchId: dispatch.id,
+      sessionId: "cancelled-session",
+    });
+
+    await runSessionSyncStep([{
+      id: "T02",
+      record_id: task.id,
+      project_id: project.id,
+      sprint_id: sprint.id,
+      title: task.title,
+      prompt: task.promptMarkdown,
+      depends_on: [],
+      is_independent: true,
+      status: "PENDING",
+    }], {
+      listSessions: vi.fn().mockResolvedValue({ sessions: [{
+        id: "cancelled-session",
+        name: "sessions/cancelled-session",
+        title: "Sprint 42: [run:cancelled-clarification/s42/t02] [T02] Cancelled clarification",
+        state: "AWAITING_USER_FEEDBACK",
+        provider: "jules",
+      }] }),
+      resolveSessionName: (session: { name?: string }) => session.name,
+      extractSessionId: (session: { id?: string }) => session.id,
+      fetchRecentActivities: vi.fn().mockResolvedValue([]),
+      isActionRequiredState: () => true,
+      executionRepository,
+      projectManagementRepository: projectRepository,
+      sprintRunId: sprintRun.id,
+      logger: { warn: vi.fn() },
+    }, false, { repoPath: "/tmp/cancelled-clarification", sprintNumber: 42 });
+
+    expect(executionRepository.getTaskRun(taskRun.id)?.state).toBe("PAUSED");
+    expect(executionRepository.getTaskDispatch(dispatch.id)?.status).toBe("cancelled");
+    expect(projectRepository.getTask(task.id)?.status).toBe("pending");
+  });
 });

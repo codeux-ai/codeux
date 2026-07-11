@@ -108,6 +108,7 @@ export type DocsSlug =
   | 'architecture-managed-container-runtime'
   | 'architecture-speech-input'
   | 'architecture-speech-output'
+  | 'architecture-worker-clarification-contract'
 
 export interface DocsRegistryEntry extends Partial<Omit<PageMeta, 'title' | 'description'>> {
   id: DocsSlug
@@ -853,6 +854,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Speech Output Architecture",
     description: "Speech output turns project-manager replies into audio through POST /api/speech/synthesis. Code UX supports local ONNX synthesis and OpenAI-compatible TTS APIs, and 3D Chat provides playback plus a voice on/off control.",
   },
+  'architecture-worker-clarification-contract': {
+    id: 'architecture-worker-clarification-contract',
+    path: '/docs/architecture-worker-clarification-contract',
+    section: 'Architecture',
+    title: "Worker clarification contract",
+    description: "Worker clarification requests use the existing project attention ledger as their durable store. They do not create a parallel table.",
+  },
 }
 
 export const orderedDocs: DocsRegistryEntry[] = [
@@ -961,6 +969,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-managed-container-runtime'],
   docsRegistry['architecture-speech-input'],
   docsRegistry['architecture-speech-output'],
+  docsRegistry['architecture-worker-clarification-contract'],
 ]
 
 export const groupedDocs = orderedDocs.reduce<Record<DocsSection, DocsRegistryEntry[]>>(

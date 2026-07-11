@@ -26,6 +26,7 @@ import {
 } from "./cli-workflow-utils.js";
 import { buildTaskRunKey, buildTaskRunTag } from "./task-run-key.js";
 import type { Logger } from "../shared/logging/logger.js";
+import { workerClarificationAgentMcpAccess } from "./agent-mcp-access.js";
 
 // New Modules
 import { WorkspaceManager, IWorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
@@ -276,6 +277,9 @@ export class CliWorkflowService {
         return null;
       });
     const effectiveWorkflowSettings = this.applyAgentWorkflowSettings(workflowSettings, workerAgent);
+    const taskRun = args.taskRunId && this.deps.executionRepository
+      ? this.deps.executionRepository.getTaskRun(args.taskRunId)
+      : null;
 
     const ctx: PipelineContext = {
       ...args,
@@ -290,7 +294,16 @@ export class CliWorkflowService {
       preserveSuccessfulWorktreeForActiveSprint,
       agentPresetId: workerAgent?.id,
       agentMemoryConfig: workerAgent?.memoryConfig,
-      agentMcpAccess: workerAgent ? (workerAgent.mcpAccess ?? null) : undefined,
+      agentMcpAccess: workerAgent ? workerClarificationAgentMcpAccess(workerAgent.mcpAccess) : undefined,
+      taskClarificationContext: {
+        projectId: taskRun?.projectId || args.settingsScope?.projectId,
+        sprintId: taskRun?.sprintId || args.settingsScope?.sprintId,
+        taskId: taskRun?.taskId || args.taskRecordId || args.task.record_id || args.task.id,
+        sprintRunId: taskRun?.sprintRunId,
+        dispatchId: taskRun?.dispatchId || args.dispatchId,
+        taskRunId: taskRun?.id || args.taskRunId,
+        sessionId: args.sessionId,
+      },
       memoryTemplateOverrideEnabled: workerAgent?.memoryTemplateOverrideEnabled,
       memoryTemplateMarkdown: workerAgent?.memoryTemplateMarkdown,
       workspaceManager: this.workspaceManager,

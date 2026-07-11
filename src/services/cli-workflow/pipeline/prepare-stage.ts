@@ -4,7 +4,7 @@ import type { PipelineContext } from "./pipeline-context.js";
 import { resolveProviderForInvocation } from "../../provider-routing.js";
 import { resolveAgentMemoryInstructions } from "../../agent-memory-instructions.js";
 import { buildRelevantMemoryInjectionContext } from "../../memory-injection-context.js";
-import { TASK_EXECUTION_OUTCOME_INSTRUCTIONS } from "../../../domain/sprint/task-execution-outcome.js";
+import { buildTaskCodingOutcomeInstructions } from "../../../domain/sprint/task-execution-outcome.js";
 
 export async function executePrepareStage(
   ctx: PipelineContext,
@@ -82,8 +82,13 @@ export async function executePrepareStage(
   ctx.worktreePath = finalPath;
 
   const workspaceGuidance = await ctx.workspaceManager.buildWorkspaceGuidance(ctx.task.prompt, ctx.worktreePath);
+  const outcomeInstructions = buildTaskCodingOutcomeInstructions(ctx.taskClarificationContext ?? {
+    taskId: ctx.task.record_id || ctx.task.id,
+    taskRunId: ctx.taskRunId,
+    sessionId: ctx.sessionId,
+  });
   const providerPrompt = buildProviderPrompt(
-    `${promptBody}\n\n${workspaceGuidance}\n\n${TASK_EXECUTION_OUTCOME_INSTRUCTIONS}`,
+    `${promptBody}\n\n${workspaceGuidance}\n\n${outcomeInstructions}`,
     providerSettings.thinkingMode,
     ctx.provider,
   );

@@ -112,6 +112,14 @@ Where Code UX *uses* a preset is governed by the **invocation routing** settings
 
 A common pattern: have a "Planner" agent (Claude Opus, sober and structured) for `planning`, a "Coder" agent (Codex GPT-5) for `task_coding`, and a "Reviewer" agent for `qa_review`.
 
+## Worker questions and Project manager replies
+
+During task coding, an eligible coding agent can call `request_clarification` when repository evidence cannot resolve a blocking ambiguity or a Project manager decision is required. Code UX captures the project plus any supplied task, sprint, run, dispatch, task-run, and provider-session context in a human-owned project attention item. The coding agent receives only this narrow request grant; it does not gain Project manager management tools and cannot call `reply_to_clarification`.
+
+The agent selected by `clarification_reply` answers with `reply_to_clarification`. The dashboard-reply agent and built-in Project manager fallback can also be eligible under the project-manager routing rules, while arbitrary agents and cross-project calls are rejected. The reply agent's identity is taken from its MCP session, not from editable tool arguments.
+
+After an answer is accepted, Jules receives it in the existing hosted session. Local CLI coding uses the task-rerun continuation path with the preserved workspace and native provider session. This means Code UX accepted continuation; the task still completes through its normal execution and verification lifecycle. If the provider session or preserved workspace is unavailable, the question stays pending. General questions without a task simply record the answer and do not start coding work. Repeated requests and replies are deduplicated, so retries do not create another question, provider message, or coding dispatch.
+
 ## Memory templates
 
 When `memoryTemplateOverrideEnabled` is set, the preset's `memoryTemplateMarkdown` controls how project / sprint memories are formatted into prompts. The template uses simple `{{ }}` placeholders for memory blocks. See [Memory](./memory.md) for available placeholders.
@@ -137,6 +145,8 @@ Persistent skills remain separate from memory templates, knowledge document subs
 ## MCP access
 
 Agent MCP access is default-deny. If a preset has no saved MCP access record, Code UX built-in tools display as disabled and the agent does not inherit broad project-manager tool access. Custom MCP server links, such as Playwright, are controlled separately and can remain linked without enabling Code UX built-in tools.
+
+Clarification grants are route- and audience-scoped exceptions to that broad default. An eligible task-coding run may receive only `request_clarification` even when general Code UX access is off, and an eligible Project manager reply run may receive only `reply_to_clarification`. System tool toggles and explicit per-agent disables still apply. Unknown presets, wrong project/task scope, and wrong-audience calls fail closed rather than inheriting access.
 
 The **Connected MCPs** editor panel opens a risk-gated manager for Code UX tools. Turning on Code UX for the dashboard reply agent enables the built-in MCP surface plus the restricted `scheduler_code_ux` tool and the dedicated `add_long_term_memory` lane. Turning on Code UX for other agents keeps `scheduler_code_ux` explicitly disabled by default while broader tools remain visible for review.
 
