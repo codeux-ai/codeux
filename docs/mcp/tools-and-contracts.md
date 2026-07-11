@@ -108,6 +108,8 @@ For a resolved agent policy:
 
 The dashboard chat reply route is the only route-local default exception. The agent assigned to that route receives full built-in Code UX MCP access, `scheduler_code_ux`, `add_long_term_memory`, and the default Playwright MCP server for dashboard reply turns even when its saved preset has Code UX disabled or no MCP policy. An explicitly narrowed dashboard reply policy still has both dedicated lanes forced on. This default is keyed to the dashboard reply route assignment, not to the generic `project_manager` runtime role.
 
+Dashboard reply provider runs also advertise the originating chat thread through the internal `X-Code-Ux-Thread` header on their built-in Code UX MCP connection. The HTTP gateway validates it with the same identifier rules as agent and session ids and exposes it only as request-scoped server context. Non-chat MCP connections omit the header, custom MCP servers do not receive it, and it is not part of any public MCP tool argument.
+
 ## Common Response Shape
 
 Successful responses return:

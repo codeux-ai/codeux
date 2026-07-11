@@ -1020,7 +1020,8 @@ describe("ChatThreadRuntimeService", () => {
       id: "reply-agent",
       instructionMarkdown: "",
     });
-    deps.getMcpConnectionInfo = vi.fn().mockReturnValue({ url: "http://127.0.0.1:3000/mcp", authToken: "token" });
+    const globalMcpConnection = { url: "http://127.0.0.1:3000/mcp", authToken: "token" };
+    deps.getMcpConnectionInfo = vi.fn().mockReturnValue(globalMcpConnection);
     deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-scheduler", threadId: "t1", bodyMarkdown: "remind yourself tomorrow" });
     deps.connectionChatRepository.getThread.mockReturnValue({
       id: "t1",
@@ -1042,7 +1043,7 @@ describe("ChatThreadRuntimeService", () => {
 
     expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledWith(
       expect.objectContaining({
-        mcpConnection: { url: "http://127.0.0.1:3000/mcp", authToken: "token" },
+        mcpConnection: { url: "http://127.0.0.1:3000/mcp", authToken: "token", threadId: "t1" },
         mcpAgentId: "reply-agent",
         agentMcpAccess: codeUxAgentMcpAccess(["playwright"]),
         prompt: expect.stringContaining("You have the `manage_code_ux` MCP tool available"),
@@ -1053,6 +1054,7 @@ describe("ChatThreadRuntimeService", () => {
         prompt: expect.stringContaining("You also have the `scheduler_code_ux` MCP tool available"),
       }),
     );
+    expect(globalMcpConnection).toEqual({ url: "http://127.0.0.1:3000/mcp", authToken: "token" });
   });
 
   it("uses full Code UX MCP access for a configured dashboard reply preset", async () => {

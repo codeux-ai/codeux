@@ -176,6 +176,7 @@ export function buildProviderMcpConfigArtifact(
   const headers: Record<string, string> = {};
   if (processedConn?.authToken) headers["Authorization"] = `Bearer ${processedConn.authToken}`;
   if (processedConn?.agentId) headers["X-Code-Ux-Agent"] = processedConn.agentId;
+  if (processedConn?.threadId) headers["X-Code-Ux-Thread"] = processedConn.threadId;
 
   if (provider === "claude-code") {
     const mcpServers: Record<string, unknown> = {};
@@ -322,6 +323,9 @@ export function buildProviderMcpConfigArtifact(
       }
       if (processedConn.agentId) {
         codexHeaderParts.push(`"X-Code-Ux-Agent" = "${escapeTomlString(processedConn.agentId)}"`);
+      }
+      if (processedConn.threadId) {
+        codexHeaderParts.push(`"X-Code-Ux-Thread" = "${escapeTomlString(processedConn.threadId)}"`);
       }
       if (codexHeaderParts.length > 0) {
         lines.push(`http_headers = { ${codexHeaderParts.join(", ")} }`);

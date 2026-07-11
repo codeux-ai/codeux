@@ -943,19 +943,21 @@ describe("DockerRunner custom MCP server injection", () => {
     expect(toml).toContain('env = { "TOKEN" = "x" }');
   });
 
-  it("advertises the agent id to code_ux via the X-Code-Ux-Agent header (claude JSON)", async () => {
-    await build("claude-code", { url: "http://127.0.0.1:3000/mcp", authToken: "secret", agentId: "agent-9" }, []);
+  it("advertises agent and thread ids to code_ux via headers (claude JSON)", async () => {
+    await build("claude-code", { url: "http://127.0.0.1:3000/mcp", authToken: "secret", agentId: "agent-9", threadId: "thread-7" }, []);
     const json = JSON.parse(writtenFor("claude-mcp.json")!);
     expect(json.mcpServers.code_ux.headers).toMatchObject({
       Authorization: "Bearer secret",
       "X-Code-Ux-Agent": "agent-9",
+      "X-Code-Ux-Thread": "thread-7",
     });
   });
 
-  it("advertises the agent id to code_ux via http_headers (codex TOML)", async () => {
-    await build("codex", { url: "http://127.0.0.1:3000/mcp", authToken: "secret", agentId: "agent-9" }, []);
+  it("advertises agent and thread ids to code_ux via http_headers (codex TOML)", async () => {
+    await build("codex", { url: "http://127.0.0.1:3000/mcp", authToken: "secret", agentId: "agent-9", threadId: "thread-7" }, []);
     const toml = writtenFor("codex-config.toml")!;
     expect(toml).toContain('"X-Code-Ux-Agent" = "agent-9"');
+    expect(toml).toContain('"X-Code-Ux-Thread" = "thread-7"');
     expect(toml).toContain('"Authorization" = "Bearer secret"');
   });
 
@@ -984,9 +986,10 @@ describe("DockerRunner custom MCP server injection", () => {
     expect(json.mcpServers.localtool).toEqual({ command: "python", args: ["script.py"] });
   });
 
-  it("omits the agent header when no agent id is set", async () => {
+  it("omits internal identity headers when no agent or thread id is set", async () => {
     await build("claude-code", { url: "http://127.0.0.1:3000/mcp", authToken: "secret" }, []);
     const json = JSON.parse(writtenFor("claude-mcp.json")!);
     expect(json.mcpServers.code_ux.headers["X-Code-Ux-Agent"]).toBeUndefined();
+    expect(json.mcpServers.code_ux.headers["X-Code-Ux-Thread"]).toBeUndefined();
   });
 });
