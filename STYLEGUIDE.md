@@ -60,6 +60,17 @@ One semantic accent. Always. The signal utilities keep the same names across the
 
 **Rule:** Signal is never used for decoration. It appears when something is active, selected, running, or requires the user's attention in a positive way.
 
+#### Links
+
+Text links use the signal palette but have their own semantic tokens so prose renderers cannot fall back to a fixed browser or typography-plugin blue.
+
+| Token | Light | Dark | Usage |
+|---|---|---|---|
+| `--link-text` | `signal-600` (`#004B93`) | `signal-300` (`#80FFD6`) | Default text link |
+| `--link-text-hover` | `signal-700` (`#003A70`) | `signal-400` (`#33FFB8`) | Hover and focus |
+
+Markdown and chat prose must resolve `--tw-prose-links` through `--link-text`. Do not use fixed blue utilities for ordinary links; reserve provider-specific blue for branded or semantic badges with an explicit dark-mode tone.
+
 #### Ember (Secondary Accent)
 
 Warm amber used sparingly as a secondary data accent — for weekly/volume metrics and secondary navigation states.
