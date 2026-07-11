@@ -14,6 +14,7 @@ import { DEFAULT_AGENT_AVATAR_CONFIG } from "../../../lib/agent-avatar.js";
 import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
 import { resolveDisplayDeliveryStatus } from "../../../hooks/use-chat-thread-data.js";
 import { useAgentMood, type AgentMoodState } from "./use-agent-mood.js";
+import { AgentAmbientEffects } from "./AgentAmbientEffects.js";
 import { parseBubbleSegments, StageWidgetRenderer } from "./StageWidgets.js";
 import { isAgentScheduledWakeup, ScheduledWakeupWidget } from "../widgets/ScheduledWakeupWidget.js";
 import { buildCinematicQuickActions } from "../../../lib/cinematic-quick-actions.js";
@@ -485,19 +486,23 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     messages: visibleMessages,
     userEngaged: composerFocused || input.trim().length > 0,
     agentName,
+    reducedMotion,
+    ambientPaused: Boolean(activeResponseEffect),
   });
   // Runtime truth always wins. A validated reply effect may only replace the
   // otherwise idle/listening micro-expression for its bounded lifetime.
   const responseEffect = !error && !sending && !runtimeBusy ? activeResponseEffect : null;
   const stageExpression = responseEffect?.emotion ?? mood.expression;
-  const stageAnimation = reducedMotion ? undefined : responseEffect?.animation;
+  const stageAnimation = reducedMotion
+    ? undefined
+    : responseEffect?.animation ?? (mood.ambientMotionEnabled ? mood.ambientCue?.animation : undefined);
   const stageCaption = responseEffect ? getAgentResponseEffectCaption(responseEffect) : mood.caption;
 
   /* Cinematic drift — the whole bot slowly floats, leans, and wanders a few
      pixels on top of the scene's own idle bob, so it never reads as parked. */
   useLayoutEffect(() => {
     const el = floatRef.current;
-    if (!el || reducedMotion) return;
+    if (!el || !mood.ambientMotionEnabled) return;
     const tl = gsap.timeline({ repeat: -1, yoyo: true, defaults: { ease: "sine.inOut" } });
     tl.to(el, { y: -16, x: 6, rotation: 1.4, duration: 3.4 })
       .to(el, { y: 4, x: -8, rotation: -1.1, duration: 3.0 })
@@ -506,7 +511,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
       tl.kill();
       gsap.set(el, { x: 0, y: 0, rotation: 0 });
     };
-  }, [reducedMotion]);
+  }, [mood.ambientMotionEnabled]);
 
   const applySuggestion = (prompt: string): void => {
     void handleSend(prompt).finally(() => {
@@ -526,8 +531,8 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     >
       {/* ── Ambient backdrop — aurora glow, pure CSS, zero extra GPU cost ── */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-        <div className="stage-aurora absolute left-1/2 top-[16%] h-[52vh] w-[52vh] -translate-x-1/2 rounded-full bg-signal-500/[0.06] blur-3xl dark:bg-signal-500/[0.05]" />
-        <div className="stage-aurora-slow absolute -right-[12%] bottom-[4%] h-[50%] w-[40%] rounded-full bg-purple-500/[0.04] blur-3xl dark:bg-purple-500/[0.04]" />
+        <div className={`${mood.ambientMotionEnabled ? "stage-aurora" : ""} absolute left-1/2 top-[16%] h-[52vh] w-[52vh] -translate-x-1/2 rounded-full bg-signal-500/[0.06] blur-3xl dark:bg-signal-500/[0.05]`} />
+        <div className={`${mood.ambientMotionEnabled ? "stage-aurora-slow" : ""} absolute -right-[12%] bottom-[4%] h-[50%] w-[40%] rounded-full bg-purple-500/[0.04] blur-3xl dark:bg-purple-500/[0.04]`} />
       </div>
 
       {/* ── Context strip — thread identity + escape hatch to Threads ── */}
@@ -580,7 +585,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
                     void handleSend(action.prompt);
                   }}
                   style={{ animationDelay: action.animationDelay }}
-                  className="stage-quick-float inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-2xl border border-black/[0.07] bg-white/85 px-3 py-2 text-center text-[11px] font-semibold leading-4 text-slate-600 shadow-[0_4px_20px_rgba(0,0,0,0.08)] backdrop-blur-md transition-colors hover:border-signal-500/40 hover:text-signal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-2 dark:border-white/[0.09] dark:bg-void-800/85 dark:text-slate-300 dark:shadow-[0_4px_24px_rgba(0,0,0,0.35)] dark:hover:text-signal-400 dark:focus-visible:ring-offset-void-900"
+                  className={`${mood.ambientMotionEnabled ? "stage-quick-float" : ""} inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-2xl border border-black/[0.07] bg-white/85 px-3 py-2 text-center text-[11px] font-semibold leading-4 text-slate-600 shadow-[0_4px_20px_rgba(0,0,0,0.08)] backdrop-blur-md transition-colors hover:border-signal-500/40 hover:text-signal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-2 dark:border-white/[0.09] dark:bg-void-800/85 dark:text-slate-300 dark:shadow-[0_4px_24px_rgba(0,0,0,0.35)] dark:hover:text-signal-400 dark:focus-visible:ring-offset-void-900`}
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0 text-signal-500" aria-hidden="true" />
                   <span className="min-w-0 whitespace-normal break-words">{action.label}</span>
@@ -593,6 +598,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
           {runtimeBusy && (
             <ThoughtBubble text={workingPhase === "starting" ? "Spinning up a workspace" : "Working on it"} />
           )}
+          <AgentAmbientEffects cue={mood.ambientCue} motionEnabled={mood.ambientMotionEnabled} />
           {/* Generous square canvas so antenna, ears, and aura never clip,
               even at the extremes of the float/lean drift. */}
           <div

@@ -1,21 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import type { AgentResponseAnimation } from "../../../../../../src/contracts/connection-chat-types.js";
 import type { AgentAvatarExpression } from "../../../lib/agent-avatar.js";
 import type { ChatMessageRecord } from "../../../types.js";
-
-/* ════════════════════════════════════════════════════════════════════════
- *  Agent mood engine — maps real runtime state onto avatar choreography.
- *
- *  The stage never fakes emotion: every expression is derived from what the
- *  runtime is actually doing (routing, container spin-up, reply landing,
- *  errors) plus a slow idle decay that wakes the bot when the user types.
- *
- *      error        → sad       "Hit a snag"
- *      sending      → nod       "On it — routing your message"
- *      working      → happy     (thought bubble carries the thinking cue)
- *      reply lands  → hyped     celebratory burst, then settles to happy
- *      idle > 90s   → bored
- *      idle > 240s  → sleepy    (typing instantly wakes it)
- * ════════════════════════════════════════════════════════════════════════ */
 
 export type AgentMood =
   | "greeting"
@@ -28,22 +14,50 @@ export type AgentMood =
   | "bored"
   | "sleepy";
 
+export type AgentAmbientCueKind = "wink" | "dance" | "sing" | "curious" | "greeting" | "welcome_back";
+
+export interface AgentAmbientCue {
+  kind: AgentAmbientCueKind;
+  expression: AgentAvatarExpression;
+  animation?: AgentResponseAnimation;
+  label: string;
+  showNotes: boolean;
+}
+
 export interface AgentMoodState {
   mood: AgentMood;
   expression: AgentAvatarExpression;
   /** One-line status shown under the name plate — always truthful to runtime state. */
   caption: string;
+  /** A bounded decorative beat. Its text is visible but intentionally not live-announced. */
+  ambientCue: AgentAmbientCue | null;
+  /** False whenever decorative motion or its timers must be suspended. */
+  ambientMotionEnabled: boolean;
 }
 
 const BORED_AFTER_MS = 90_000;
 const SLEEPY_AFTER_MS = 240_000;
 const CELEBRATE_FOR_MS = 2_600;
 const IDLE_TICK_MS = 5_000;
-/** Calm moods get spontaneous 2s micro-expressions so the bot never freezes. */
-const MICRO_EXPRESSIONS: AgentAvatarExpression[] = ["nod", "curious", "wink", "excited", "dance", "proud", "laughing"];
-const MICRO_MIN_GAP_MS = 9_000;
-const MICRO_MAX_GAP_MS = 20_000;
-const MICRO_FOR_MS = 2_200;
+export const AGENT_IDLE_CUE_GAP_MS = 12_000;
+export const AGENT_AMBIENT_CUE_FOR_MS = 2_800;
+export const AGENT_RETURN_GREETING_AFTER_MS = 30_000;
+
+const IDLE_CUES: readonly AgentAmbientCue[] = [
+  { kind: "wink", expression: "wink", animation: "wink", label: "Still with you.", showNotes: false },
+  { kind: "dance", expression: "dance", animation: "dance", label: "Tiny stretch break.", showNotes: false },
+  { kind: "sing", expression: "happy", animation: "nod", label: "Humming while I wait.", showNotes: true },
+  { kind: "curious", expression: "curious", animation: "nod", label: "What shall we explore next?", showNotes: false },
+  { kind: "greeting", expression: "proud", animation: "hyped", label: "Ready when you are.", showNotes: false },
+];
+
+const WELCOME_BACK_CUE: AgentAmbientCue = {
+  kind: "welcome_back",
+  expression: "happy",
+  animation: "hyped",
+  label: "Welcome back — I’m ready when you are.",
+  showNotes: false,
+};
 
 const MOOD_EXPRESSION: Record<AgentMood, AgentAvatarExpression> = {
   greeting: "happy",
@@ -66,6 +80,11 @@ export interface UseAgentMoodOptions {
   /** True while the composer has focus or draft text — keeps the bot attentive. */
   userEngaged: boolean;
   agentName: string;
+  reducedMotion?: boolean;
+  /** Pauses idle choreography while another bounded response effect owns the avatar. */
+  ambientPaused?: boolean;
+  /** Primarily configurable so hosts and fake-timer tests can share one threshold. */
+  returnGreetingAfterMs?: number;
 }
 
 export const useAgentMood = ({
@@ -76,28 +95,31 @@ export const useAgentMood = ({
   messages,
   userEngaged,
   agentName,
+  reducedMotion = false,
+  ambientPaused = false,
+  returnGreetingAfterMs = AGENT_RETURN_GREETING_AFTER_MS,
 }: UseAgentMoodOptions): AgentMoodState => {
   const [celebrating, setCelebrating] = useState(false);
   const [idleMood, setIdleMood] = useState<"idle" | "bored" | "sleepy">("idle");
+  const [pagePresent, setPagePresent] = useState(() => typeof document === "undefined" || !document.hidden);
+  const [ambientCue, setAmbientCue] = useState<AgentAmbientCue | null>(null);
   const lastActivityRef = useRef<number>(Date.now());
+  const awayAtRef = useRef<number | null>(null);
   const lastAgentMessageIdRef = useRef<string | null>(null);
+  const nextCueIndexRef = useRef(0);
+  const ambientSuppressed = Boolean(error || sending || hasWorkingReply || reducedMotion || ambientPaused);
+  const ambientMotionEnabled = pagePresent && !ambientSuppressed;
 
   const latestAgentMessageId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
-      // Agent replies are stored with authorType "system" in this runtime, so
-      // only the direction distinguishes them from the user's own messages.
-      if (messages[i].direction !== "dashboard_to_connection") {
-        return messages[i].id;
-      }
+      if (messages[i].direction !== "dashboard_to_connection") return messages[i].id;
     }
     return null;
   }, [messages]);
 
-  /* A new agent reply triggers the celebration burst. */
   useEffect(() => {
     if (!latestAgentMessageId) return;
     if (lastAgentMessageIdRef.current === null) {
-      // First observation (initial load) — don't celebrate history.
       lastAgentMessageIdRef.current = latestAgentMessageId;
       return;
     }
@@ -108,11 +130,11 @@ export const useAgentMood = ({
     return () => window.clearTimeout(timer);
   }, [latestAgentMessageId]);
 
-  /* Idle decay — any activity resets the clock; a slow tick escalates it. */
   const activityKey = `${messages.length}|${sending}|${hasWorkingReply}|${userEngaged}`;
   useEffect(() => {
     lastActivityRef.current = Date.now();
     setIdleMood("idle");
+    setAmbientCue(null);
   }, [activityKey]);
 
   useEffect(() => {
@@ -123,34 +145,57 @@ export const useAgentMood = ({
     return () => window.clearInterval(tick);
   }, []);
 
-  /* Micro-expressions — spontaneous nods/bounces while nothing is happening,
-     so the bot reads as alive rather than parked on a single loop. */
-  const [microExpression, setMicroExpression] = useState<AgentAvatarExpression | null>(null);
-  const calm = !error && !sending && !hasWorkingReply && !celebrating && idleMood !== "sleepy";
+  /* Visibility and focus share an away timestamp. A brief tab switch does not
+     produce a greeting; a genuinely hidden or already-idle stage does. */
   useEffect(() => {
-    if (!calm) {
-      setMicroExpression(null);
+    if (typeof document === "undefined" || typeof window === "undefined") return;
+    const leave = (): void => {
+      awayAtRef.current ??= Date.now();
+      setPagePresent(false);
+      setAmbientCue(null);
+    };
+    const enter = (): void => {
+      if (document.hidden) return;
+      const now = Date.now();
+      const awayFor = awayAtRef.current === null ? 0 : now - awayAtRef.current;
+      const idleFor = now - lastActivityRef.current;
+      awayAtRef.current = null;
+      setPagePresent(true);
+      if (!ambientSuppressed && (awayFor >= returnGreetingAfterMs || idleFor >= returnGreetingAfterMs)) {
+        setAmbientCue(WELCOME_BACK_CUE);
+      }
+    };
+    const visibilityChanged = (): void => document.hidden ? leave() : enter();
+    document.addEventListener("visibilitychange", visibilityChanged);
+    window.addEventListener("blur", leave);
+    window.addEventListener("focus", enter);
+    window.addEventListener("pageshow", enter);
+    return () => {
+      document.removeEventListener("visibilitychange", visibilityChanged);
+      window.removeEventListener("blur", leave);
+      window.removeEventListener("focus", enter);
+      window.removeEventListener("pageshow", enter);
+    };
+  }, [ambientSuppressed, returnGreetingAfterMs]);
+
+  useEffect(() => {
+    if (!ambientMotionEnabled || celebrating || userEngaged || idleMood === "sleepy" || ambientCue) return;
+    const timer = window.setTimeout(() => {
+      const cue = IDLE_CUES[nextCueIndexRef.current % IDLE_CUES.length];
+      nextCueIndexRef.current += 1;
+      setAmbientCue(cue);
+    }, AGENT_IDLE_CUE_GAP_MS);
+    return () => window.clearTimeout(timer);
+  }, [ambientMotionEnabled, celebrating, userEngaged, idleMood, ambientCue]);
+
+  useEffect(() => {
+    if (!ambientCue || !ambientMotionEnabled) {
+      if (ambientCue && !ambientMotionEnabled) setAmbientCue(null);
       return;
     }
-    let clearTimer: number | undefined;
-    let scheduleTimer: number | undefined;
-    const schedule = () => {
-      const gap = MICRO_MIN_GAP_MS + Math.random() * (MICRO_MAX_GAP_MS - MICRO_MIN_GAP_MS);
-      scheduleTimer = window.setTimeout(() => {
-        setMicroExpression(MICRO_EXPRESSIONS[Math.floor(Math.random() * MICRO_EXPRESSIONS.length)]);
-        clearTimer = window.setTimeout(() => {
-          setMicroExpression(null);
-          schedule();
-        }, MICRO_FOR_MS);
-      }, gap);
-    };
-    schedule();
-    return () => {
-      window.clearTimeout(scheduleTimer);
-      window.clearTimeout(clearTimer);
-      setMicroExpression(null);
-    };
-  }, [calm]);
+    const timer = window.setTimeout(() => setAmbientCue(null), AGENT_AMBIENT_CUE_FOR_MS);
+    return () => window.clearTimeout(timer);
+  }, [ambientCue, ambientMotionEnabled]);
 
   return useMemo<AgentMoodState>(() => {
     let mood: AgentMood;
@@ -164,9 +209,7 @@ export const useAgentMood = ({
       caption = "Got it — routing your message.";
     } else if (hasWorkingReply) {
       mood = "thinking";
-      caption = workingPhase === "starting"
-        ? "Spinning up a workspace for this…"
-        : "Thinking it through…";
+      caption = workingPhase === "starting" ? "Spinning up a workspace for this…" : "Thinking it through…";
     } else if (celebrating) {
       mood = "celebrating";
       caption = "Fresh answer, just landed.";
@@ -187,9 +230,9 @@ export const useAgentMood = ({
       caption = `${agentName} is up to date on this thread.`;
     }
 
-    const expression = (microExpression && (mood === "idle" || mood === "greeting" || mood === "listening"))
-      ? microExpression
+    const expression = ambientCue && (mood === "idle" || mood === "greeting")
+      ? ambientCue.expression
       : MOOD_EXPRESSION[mood];
-    return { mood, expression, caption };
-  }, [error, sending, hasWorkingReply, workingPhase, celebrating, userEngaged, messages.length, idleMood, agentName, microExpression]);
+    return { mood, expression, caption, ambientCue, ambientMotionEnabled };
+  }, [error, sending, hasWorkingReply, workingPhase, celebrating, userEngaged, messages.length, idleMood, agentName, ambientCue, ambientMotionEnabled]);
 };
