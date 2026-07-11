@@ -2,9 +2,9 @@
  * @vitest-environment jsdom
  */
 /// <reference types="@testing-library/jest-dom" />
-import { cleanup, render, screen, within } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { InvocationMessageBubble } from "../InvocationMessageBubble.js";
 import type { ChatLiveSprintWidget, ChatLiveTaskWidget } from "../../../lib/chat-live-entities.js";
 import type { ExecutionInvocationMessageRecord } from "../../../types.js";
@@ -153,5 +153,39 @@ describe("InvocationMessageBubble live entities", () => {
     expect(screen.queryByRole("link", {
       name: /Open sprint SPR-7/,
     })).not.toBeInTheDocument();
+  });
+
+  it("offers replay for assistant prose without making invocation playback automatic", () => {
+    const onReplay = vi.fn();
+    const message = createInvocationMessage();
+
+    render(
+      <InvocationMessageBubble message={message} agentName="Reviewer" onReplay={onReplay} />,
+    );
+
+    expect(onReplay).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Replay message from Reviewer" }));
+    expect(onReplay).toHaveBeenCalledWith(message);
+  });
+
+  it("does not offer replay when a rich widget suppresses its raw JSON body", () => {
+    const contentMarkdown = JSON.stringify({
+      provider: "github",
+      kind: "issue",
+      number: 108,
+      title: "Track dashboard widget polish",
+      state: "open",
+      url: "https://github.com/codeux-ai/codeux/issues/108",
+      repositoryPath: "codeux-ai/codeux",
+    });
+
+    render(
+      <InvocationMessageBubble
+        message={createInvocationMessage({ contentMarkdown })}
+        onReplay={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /Replay message/ })).not.toBeInTheDocument();
   });
 });

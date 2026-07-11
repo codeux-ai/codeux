@@ -110,9 +110,8 @@ describe("AIModelCatalogPanel", () => {
     expect(screen.queryByLabelText("Text to speech API endpoint")).not.toBeInTheDocument();
     expect(screen.queryByText(/Auto \(local, then API\)/i)).not.toBeInTheDocument();
     const activate = await screen.findByRole("button", { name: "Use for 3D Chat" });
-    expect(screen.getByRole("button", { name: "Use for input" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Local runtime pending" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Local runtime pending" })).toHaveAttribute("title", expect.stringContaining("Select API mode"));
+    expect(screen.getAllByRole("button", { name: "Use for input" })).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "Local runtime pending" })).not.toBeInTheDocument();
     await userEvent.click(activate);
 
     expect(updateEditableSettings).toHaveBeenCalledTimes(1);

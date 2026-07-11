@@ -1019,7 +1019,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   speech: {
     enabled: false,
     providerMode: "local_onnx",
-    localModelId: "Xenova/wav2vec2-base-960h",
+    localModelId: "onnx-community/whisper-base.en",
     maxAudioSeconds: 120,
     externalTranscription: {
       baseUrl: "https://api.openai.com/v1/audio/transcriptions",

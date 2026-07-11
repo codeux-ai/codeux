@@ -161,14 +161,18 @@ export class SpeechSynthesisService {
 
     const ids = BigInt64Array.from([0, ...tokens, 0].map(BigInt));
     const session = await ort.InferenceSession.create(paths.modelPath);
-    const output = await session.run({
-      input_ids: new ort.Tensor("int64", ids, [1, ids.length]),
-      style: new ort.Tensor("float32", style, [1, 256]),
-      speed: new ort.Tensor("float32", Float32Array.of(speed), [1]),
-    });
-    const tensor = output[session.outputNames[0]!];
-    if (!tensor) throw new Error("Kokoro returned no audio output.");
-    return encodeWave(floatOutput(tensor.data), model.sampleRateHz);
+    try {
+      const output = await session.run({
+        input_ids: new ort.Tensor("int64", ids, [1, ids.length]),
+        style: new ort.Tensor("float32", style, [1, 256]),
+        speed: new ort.Tensor("float32", Float32Array.of(speed), [1]),
+      });
+      const tensor = output[session.outputNames[0]!];
+      if (!tensor) throw new Error("Kokoro returned no audio output.");
+      return encodeWave(floatOutput(tensor.data), model.sampleRateHz);
+    } finally {
+      await session.release();
+    }
   }
 
   private async synthesizePiper(text: string, speed: number, modelId: string): Promise<Buffer> {
@@ -197,21 +201,25 @@ export class SpeechSynthesisService {
     if (ids.length <= 2) throw new Error("Piper phonemization did not produce supported tokens.");
 
     const session = await ort.InferenceSession.create(paths.modelPath);
-    const inputIds = BigInt64Array.from(ids.map(BigInt));
-    const feeds: Record<string, import("onnxruntime-node").Tensor> = {
-      input: new ort.Tensor("int64", inputIds, [1, ids.length]),
-      input_lengths: new ort.Tensor("int64", BigInt64Array.of(BigInt(ids.length)), [1]),
-      scales: new ort.Tensor("float32", Float32Array.of(
-        config.inference?.noise_scale ?? 0.667,
-        (config.inference?.length_scale ?? 1) / speed,
-        config.inference?.noise_w ?? 0.8,
-      ), [3]),
-    };
-    if (session.inputNames.includes("sid")) feeds.sid = new ort.Tensor("int64", BigInt64Array.of(0n), [1]);
-    const output = await session.run(feeds);
-    const tensor = output[session.outputNames[0]!];
-    if (!tensor) throw new Error("Piper returned no audio output.");
-    return encodeWave(floatOutput(tensor.data), config.audio?.sample_rate || model.sampleRateHz);
+    try {
+      const inputIds = BigInt64Array.from(ids.map(BigInt));
+      const feeds: Record<string, import("onnxruntime-node").Tensor> = {
+        input: new ort.Tensor("int64", inputIds, [1, ids.length]),
+        input_lengths: new ort.Tensor("int64", BigInt64Array.of(BigInt(ids.length)), [1]),
+        scales: new ort.Tensor("float32", Float32Array.of(
+          config.inference?.noise_scale ?? 0.667,
+          (config.inference?.length_scale ?? 1) / speed,
+          config.inference?.noise_w ?? 0.8,
+        ), [3]),
+      };
+      if (session.inputNames.includes("sid")) feeds.sid = new ort.Tensor("int64", BigInt64Array.of(0n), [1]);
+      const output = await session.run(feeds);
+      const tensor = output[session.outputNames[0]!];
+      if (!tensor) throw new Error("Piper returned no audio output.");
+      return encodeWave(floatOutput(tensor.data), config.audio?.sample_rate || model.sampleRateHz);
+    } finally {
+      await session.release();
+    }
   }
 
   private async synthesizeExternal(text: string, requestedVoice: string | null | undefined, settings: SpeechSettings): Promise<SpeechSynthesisResult> {

@@ -22,6 +22,7 @@ import type { ChatWidgetLiveData, ParsedTurnTokens, RichWidgetDescriptor } from 
 import type { ChatLiveEntityWidget } from "../../lib/chat-live-entities.js";
 import { getPromptSuggestionViewModels } from "../../lib/chat-suggestion-view-models.js";
 import { isAgentScheduledWakeup, ScheduledWakeupWidget } from "./widgets/ScheduledWakeupWidget.js";
+import { SpeechReplayButton } from "../speech/SpeechReplayButton.js";
 
 export interface ChatMessageBubbleProps {
   message: ChatMessageRecord;
@@ -32,6 +33,8 @@ export interface ChatMessageBubbleProps {
   widgetLiveData?: ChatWidgetLiveData;
   liveEntities?: readonly ChatLiveEntityWidget[];
   onPromptSuggestionSelect?: (prompt: string) => void;
+  onReplay?: (message: ChatMessageRecord) => void;
+  replaying?: boolean;
 }
 
 export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
@@ -43,6 +46,8 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
   widgetLiveData,
   liveEntities = [],
   onPromptSuggestionSelect,
+  onReplay,
+  replaying = false,
 }) => {
   const fromDashboard = message.direction === "dashboard_to_connection";
   const isScheduledWakeup = fromDashboard && isAgentScheduledWakeup(message.metadata);
@@ -166,6 +171,13 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
               </span>
             )}
             {createdAtLabel && <span>{createdAtLabel}</span>}
+            {!fromDashboard && onReplay && !widgetData.suppressBodyMarkdown && message.bodyMarkdown.trim() && (
+              <SpeechReplayButton
+                busy={replaying}
+                label={`Replay message from ${senderName}`}
+                onReplay={() => onReplay(message)}
+              />
+            )}
           </div>
 
           {/* Message Body */}

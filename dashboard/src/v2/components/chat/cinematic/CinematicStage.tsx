@@ -23,8 +23,10 @@ import { parseBubbleSegments, StageWidgetRenderer } from "./StageWidgets.js";
 import { isAgentScheduledWakeup, ScheduledWakeupWidget } from "../widgets/ScheduledWakeupWidget.js";
 import { buildCinematicQuickActions } from "../../../lib/cinematic-quick-actions.js";
 import { useProjectEffectiveSettings } from "../../../hooks/use-project-effective-settings.js";
-import { synthesizeSpeech } from "../../../lib/speech-api.js";
 import { SpeechInputButton } from "../../speech/SpeechInputButton.js";
+import { SpeechReplayButton } from "../../speech/SpeechReplayButton.js";
+import { useSpeechPlayback } from "../../../hooks/use-speech-playback.js";
+import { speechTextFromMarkdown } from "../../../lib/speech-playback.js";
 import type { AgentResponseEffect } from "../../../../../../src/contracts/connection-chat-types.js";
 import {
   getAgentResponseEffectCaption,
@@ -108,15 +110,10 @@ const readForcedTool = (): AgentSceneTool | null => {
   return isAgentSceneTool(value) ? value : null;
 };
 
-const speechTextFromMarkdown = (markdown: string): string => markdown
-  .replace(/```[\s\S]*?```/g, " Code block omitted. ")
-  .replace(/`([^`]+)`/g, "$1")
-  .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
-  .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-  .replace(/^#{1,6}\s+/gm, "")
-  .replace(/[*_~>|]/g, " ")
-  .replace(/\s+/g, " ")
-  .trim();
+const canSpeakAgentMessage = (message: ChatMessageRecord): boolean => (
+  !getChatWidgetData(message).suppressBodyMarkdown
+  && speechTextFromMarkdown(message.bodyMarkdown || "").length > 0
+);
 
 /** GSAP entrance shared by bubbles — mirrors ChatMessageBubble's timing. */
 function useBubbleEnter(ref: RefObject<HTMLElement>, reducedMotion: boolean) {
@@ -148,7 +145,9 @@ const AgentSpeechBubble: FunctionComponent<{
   message: ChatMessageRecord;
   agentName: string;
   onAction?: (prompt: string) => void;
-}> = ({ message, agentName, onAction }) => {
+  onReplay: (message: ChatMessageRecord) => void;
+  replaying: boolean;
+}> = ({ message, agentName, onAction, onReplay, replaying }) => {
   const ref = useRef<HTMLDivElement>(null);
   const reducedMotion = useReducedMotion();
   useBubbleEnter(ref, reducedMotion);
@@ -167,6 +166,13 @@ const AgentSpeechBubble: FunctionComponent<{
         <div className="mb-2 flex shrink-0 items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
           <span className="text-signal-600 dark:text-signal-400">{agentName}</span>
           {createdAtLabel && <span className="font-mono font-normal tracking-normal">{createdAtLabel}</span>}
+          {canSpeakAgentMessage(message) && (
+            <SpeechReplayButton
+              busy={replaying}
+              label={`Replay message from ${agentName}`}
+              onReplay={() => onReplay(message)}
+            />
+          )}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
           {segments.map((segment, index) =>
@@ -322,10 +328,12 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
   const voiceAvailable = Boolean(effectiveSettings?.settings.speech?.synthesis?.enabled);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
-  const [voiceBusy, setVoiceBusy] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const audioUrlRef = useRef<string | null>(null);
-  const spokenMessageIdRef = useRef<string | null>(null);
+  const speechPlayback = useSpeechPlayback();
+  const speechBaselineThreadIdRef = useRef<string | null>(null);
+  const speechBaselineReadyRef = useRef(false);
+  const seenAgentMessageIdsRef = useRef<Set<string>>(new Set());
+  const pendingAutoPlayMessageRef = useRef<ChatMessageRecord | null>(null);
+  const expectingFreshAgentReplyRef = useRef(false);
 
   const agentName = agentPreset?.name || activeConnection?.displayName || "Project Manager";
   const avatarConfig = agentPreset?.avatarConfig || DEFAULT_AGENT_AVATAR_CONFIG;
@@ -391,6 +399,11 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     canCreateInitialAppQuickactions,
   });
 
+  const sendStageMessage = async (overrideText?: string): Promise<void> => {
+    expectingFreshAgentReplyRef.current = true;
+    await handleSend(overrideText);
+  };
+
   useEffect(() => {
     const projectId = selectedProject?.id;
     if (!projectId || !voiceAvailable) {
@@ -400,40 +413,81 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     setVoiceEnabled(window.localStorage.getItem(`codeux:chat-voice:${projectId}`) !== "off");
   }, [selectedProject?.id, voiceAvailable]);
 
+  // Loading or opening a thread establishes a historical baseline. Only an
+  // agent message appended after that baseline is eligible for auto-play.
   useEffect(() => {
-    if (!latestAgentMessage || runtimeBusy || !voiceAvailable || !voiceEnabled) return;
-    if (spokenMessageIdRef.current === null) {
-      spokenMessageIdRef.current = latestAgentMessage.id;
+    const threadId = selectedThread?.id ?? null;
+    if (speechBaselineThreadIdRef.current !== threadId) {
+      const preserveExpectedFirstReply = expectingFreshAgentReplyRef.current
+        && speechBaselineThreadIdRef.current === null
+        && threadId !== null;
+      speechBaselineThreadIdRef.current = threadId;
+      speechBaselineReadyRef.current = false;
+      seenAgentMessageIdsRef.current = new Set();
+      pendingAutoPlayMessageRef.current = null;
+      if (!preserveExpectedFirstReply) expectingFreshAgentReplyRef.current = false;
+      speechPlayback.stop();
+    }
+    if (!threadId || threadMessagesLoading) return;
+
+    const agentMessages = messages.filter((message) => (
+      message.threadId === threadId && message.direction !== "dashboard_to_connection"
+    ));
+    if (pendingAutoPlayMessageRef.current) {
+      pendingAutoPlayMessageRef.current = agentMessages.find(
+        (message) => message.id === pendingAutoPlayMessageRef.current?.id,
+      ) ?? pendingAutoPlayMessageRef.current;
+    }
+    if (!speechBaselineReadyRef.current) {
+      seenAgentMessageIdsRef.current = new Set(agentMessages.map((message) => message.id));
+      speechBaselineReadyRef.current = true;
+      if (expectingFreshAgentReplyRef.current) {
+        let latestDashboardMessageIndex = -1;
+        for (let index = messages.length - 1; index >= 0; index -= 1) {
+          if (messages[index].threadId === threadId && messages[index].direction === "dashboard_to_connection") {
+            latestDashboardMessageIndex = index;
+            break;
+          }
+        }
+        const firstReply = messages
+          .slice(latestDashboardMessageIndex + 1)
+          .filter((message) => (
+            message.threadId === threadId
+            && message.direction !== "dashboard_to_connection"
+            && canSpeakAgentMessage(message)
+          ))
+          .at(-1);
+        if (latestDashboardMessageIndex >= 0 && firstReply && voiceAvailable && voiceEnabled) {
+          pendingAutoPlayMessageRef.current = firstReply;
+          expectingFreshAgentReplyRef.current = false;
+        }
+      }
       return;
     }
-    if (spokenMessageIdRef.current === latestAgentMessage.id) return;
-    spokenMessageIdRef.current = latestAgentMessage.id;
-    const text = speechTextFromMarkdown(latestAgentMessage.bodyMarkdown || "");
-    if (!text) return;
 
-    let cancelled = false;
-    setVoiceBusy(true);
-    void synthesizeSpeech(text, selectedProject?.id || null).then((audioBlob) => {
-      if (cancelled) return;
-      audioRef.current?.pause();
-      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
-      const url = URL.createObjectURL(audioBlob);
-      audioUrlRef.current = url;
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      audio.onended = () => setVoiceBusy(false);
-      audio.onerror = () => setVoiceBusy(false);
-      return audio.play();
-    }).catch(() => {
-      if (!cancelled) setVoiceBusy(false);
+    const newAgentMessages = agentMessages.filter((message) => !seenAgentMessageIdsRef.current.has(message.id));
+    for (const message of newAgentMessages) seenAgentMessageIdsRef.current.add(message.id);
+    const newSpeakableAgentMessages = newAgentMessages.filter(canSpeakAgentMessage);
+    if (newSpeakableAgentMessages.length > 0 && voiceAvailable && voiceEnabled) {
+      pendingAutoPlayMessageRef.current = newSpeakableAgentMessages[newSpeakableAgentMessages.length - 1];
+      expectingFreshAgentReplyRef.current = false;
+    }
+  }, [messages, selectedThread?.id, threadMessagesLoading, voiceAvailable, voiceEnabled]);
+
+  useEffect(() => {
+    const pendingMessage = pendingAutoPlayMessageRef.current;
+    if (!pendingMessage || runtimeBusy || !voiceAvailable || !voiceEnabled) return;
+    pendingAutoPlayMessageRef.current = null;
+    void speechPlayback.play({
+      markdown: pendingMessage.bodyMarkdown,
+      messageId: pendingMessage.id,
+      projectId: selectedProject?.id ?? null,
     });
-    return () => { cancelled = true; };
-  }, [latestAgentMessage?.id, runtimeBusy, selectedProject?.id, voiceAvailable, voiceEnabled]);
+  }, [messages, runtimeBusy, selectedProject?.id, voiceAvailable, voiceEnabled]);
 
-  useEffect(() => () => {
-    audioRef.current?.pause();
-    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
-  }, []);
+  useEffect(() => {
+    if (error) expectingFreshAgentReplyRef.current = false;
+  }, [error]);
 
   const toggleVoice = (): void => {
     if (!voiceAvailable || !selectedProject?.id) return;
@@ -441,8 +495,8 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     setVoiceEnabled(next);
     window.localStorage.setItem(`codeux:chat-voice:${selectedProject.id}`, next ? "on" : "off");
     if (!next) {
-      audioRef.current?.pause();
-      setVoiceBusy(false);
+      pendingAutoPlayMessageRef.current = null;
+      speechPlayback.stop();
     }
   };
 
@@ -500,7 +554,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   }, [mood.ambientMotionEnabled]);
 
   const applySuggestion = (prompt: string): void => {
-    void handleSend(prompt).finally(() => {
+    void sendStageMessage(prompt).finally(() => {
       requestAnimationFrame(() => {
         composerRef.current?.focus({ preventScroll: true });
       });
@@ -568,7 +622,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
                       void handleCreateAppQuickaction(action.appKind);
                       return;
                     }
-                    void handleSend(action.prompt);
+                    void sendStageMessage(action.prompt);
                   }}
                   style={{ animationDelay: action.animationDelay }}
                   className={`${mood.ambientMotionEnabled ? "stage-quick-float" : ""} inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-2xl border border-black/[0.07] bg-white/85 px-3 py-2 text-center text-[11px] font-semibold leading-4 text-slate-600 shadow-[0_4px_20px_rgba(0,0,0,0.08)] backdrop-blur-md transition-colors hover:border-signal-500/40 hover:text-signal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-2 dark:border-white/[0.09] dark:bg-void-800/85 dark:text-slate-300 dark:shadow-[0_4px_24px_rgba(0,0,0,0.35)] dark:hover:text-signal-400 dark:focus-visible:ring-offset-void-900`}
@@ -641,7 +695,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
                 title={!voiceAvailable ? "Activate a TTS model in Settings → AI Models" : voiceEnabled ? "Mute agent" : "Unmute agent"}
                 className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 ${voiceEnabled ? "bg-signal-500/[0.12] text-signal-600 dark:text-signal-300" : "bg-black/[0.03] text-slate-400 dark:bg-white/[0.04]"} disabled:cursor-not-allowed disabled:opacity-45`}
               >
-                {voiceEnabled ? <Volume2 className={`h-5 w-5 ${voiceBusy ? "animate-pulse motion-reduce:animate-none" : ""}`} aria-hidden="true" /> : <VolumeX className="h-5 w-5" aria-hidden="true" />}
+                {voiceEnabled ? <Volume2 className={`h-5 w-5 ${speechPlayback.activeMessageId ? "animate-pulse motion-reduce:animate-none" : ""}`} aria-hidden="true" /> : <VolumeX className="h-5 w-5" aria-hidden="true" />}
               </button>
             </div>
           </div>
@@ -673,6 +727,12 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
                   message={latestAgentMessage}
                   agentName={agentName}
                   onAction={applySuggestion}
+                  onReplay={(message) => void speechPlayback.play({
+                    markdown: message.bodyMarkdown,
+                    messageId: message.id,
+                    projectId: selectedProject?.id ?? null,
+                  })}
+                  replaying={speechPlayback.activeMessageId === latestAgentMessage.id}
                 />
               )}
               {pendingUserMessages.map((message) => (
@@ -721,7 +781,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
                   if (event.isComposing) return;
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
-                    void handleSend();
+                    void sendStageMessage();
                     return;
                   }
                   if (event.key === "ArrowUp" || event.key === "ArrowDown") {
@@ -748,7 +808,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
                 aria-label={sending ? "Sending message" : "Send message"}
                 aria-busy={sending}
                 type="button"
-                onClick={() => void handleSend()}
+                onClick={() => void sendStageMessage()}
                 disabled={!selectedProject || !input.trim() || sending}
                 className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-[1.25rem] transition-all ${
                   !selectedProject || (!input.trim() && !sending)

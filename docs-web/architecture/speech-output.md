@@ -29,7 +29,9 @@ The external variant uses an OpenAI-compatible `/audio/speech` endpoint. Configu
 
 ## 3D Chat voice
 
-When TTS is active, the volume icon in the avatar nameplate control dock starts enabled. New project-manager replies are synthesized and played automatically; opening existing history does not replay it. Click the icon to mute or unmute. The adjacent microphone dictates into the 3D Chat draft. Both controls remain outside the composer. Muting stops current playback and is remembered per project in that browser without disabling the saved TTS runtime for other clients.
+When TTS is active, the volume icon in the avatar nameplate control dock starts enabled. New project-manager replies are synthesized and played once; refreshing, opening existing history, or changing threads does not replay them. Before synthesis, Code UX silently removes dashboard-only rich-widget fences and fenced code while preserving the surrounding visible prose, so widget payloads and artificial omission notices are never spoken. Click the icon to mute or unmute. The adjacent microphone dictates into the 3D Chat draft. Both controls remain outside the composer. Muting stops current playback and is remembered per project in that browser without disabling the saved TTS runtime for other clients.
+
+Assistant prose messages include a small accessible replay control in 3D Chat, Threads, and invocation transcripts. Replay is explicit in Threads and Invocations: transcript loading and live updates never start speech. Long replies play as sequential requests within the synthesis request limit, and starting another clip stops the previous clip on that surface.
 
 ## Local files and endpoints
 

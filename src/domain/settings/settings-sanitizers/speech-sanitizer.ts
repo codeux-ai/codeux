@@ -8,10 +8,6 @@ export const MIN_SPEECH_AUDIO_SECONDS = 1;
 export const MAX_SPEECH_AUDIO_SECONDS = 600;
 
 const SPEECH_PROVIDER_MODE_SET = new Set<SpeechProviderMode>(SPEECH_PROVIDER_MODES);
-const UNSUPPORTED_LOCAL_TRANSCRIPTION_MODELS = new Set([
-  "onnx-community/whisper-base.en",
-  "onnx-community/whisper-tiny.en",
-]);
 const LEGACY_TTS_MODELS: Record<string, { modelId: string; voice: string }> = {
   "piper-en-us-lessac-medium": { modelId: "piper-en-us-ljspeech-medium", voice: "ljspeech" },
   "piper-en-gb-alba-medium": { modelId: "piper-en-gb-cori-medium", voice: "cori" },
@@ -56,16 +52,13 @@ export const sanitizeSpeech = (
     : {};
   const providerMode = readSpeechProviderMode(speechInput.providerMode, defaults.providerMode);
   const requestedLocalModelId = readRequiredTrimmedString(speechInput.localModelId, defaults.localModelId);
-  const localModelId = providerMode === "local_onnx" && UNSUPPORTED_LOCAL_TRANSCRIPTION_MODELS.has(requestedLocalModelId)
-    ? defaults.localModelId
-    : requestedLocalModelId;
   const requestedSynthesisModelId = readRequiredTrimmedString(synthesisInput.localModelId, defaults.synthesis.localModelId);
   const legacySynthesis = LEGACY_TTS_MODELS[requestedSynthesisModelId];
 
   return {
     enabled: readBoolean(speechInput.enabled, defaults.enabled),
     providerMode,
-    localModelId,
+    localModelId: requestedLocalModelId,
     maxAudioSeconds: Math.max(
       MIN_SPEECH_AUDIO_SECONDS,
       Math.min(MAX_SPEECH_AUDIO_SECONDS, readInteger(speechInput.maxAudioSeconds, defaults.maxAudioSeconds)),
