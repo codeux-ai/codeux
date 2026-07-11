@@ -26,24 +26,39 @@ Each memory has a **category**:
 
 Categories drive default rendering and can be used as filters in search.
 
-## Filters and tabs
+## Header summary, filters, and actions
 
-The page splits into:
+The Memory header is the main place to choose what the graph, sidebar, and inspector are showing. It is grouped into separate rows so the current state stays readable on desktop and wraps cleanly on narrow screens:
 
-- **Short-term** tab — memories scoped to a specific sprint.
-- **Long-term** tab — project-wide memories.
-- **Search** — vector similarity search across both tiers (cosine similarity, configurable `minSimilarity`).
+- **Tier summary tabs** — **Short Term**, **Long Term**, and **Skills** show their indexed counts directly in the tab cards.
+- **Current scope line** — shows copy such as `Short Term: showing 7 memories of 17 memories · Sprint 2 · All Agents` or `Long Term: showing 1 memory of 1 memory · Project-wide · All Agents`.
+- **Scope filters** — Short-term memory shows the sprint selector when sprint scope data is available, and both tiers show the agent preset selector when agent presets are available. When a source list is empty, the filter row shows reason copy instead of rendering a focusable empty selector.
+- **Actions** — **Add Memory**, **Model Catalog**, and **Danger Delete** are separated from the selectors. Add Memory opens the manual memory dialog for the current tier scope. Model Catalog shows whether it is shown or hidden plus active-model status. Danger Delete always shows Off/Armed state plus persistent explanatory copy; when armed, the page warning refers to this as Lobotomize mode because graph-node and inspector deletes become immediate.
 
-Filter bar:
+The sidebar search field filters the current visible tier, sprint, and agent slice by memory text/category. Programmatic semantic search still uses vector similarity across requested scopes (cosine similarity, configurable `minSimilarity`).
 
-- **Category** (multi-select).
-- **Sprint** (short-term only).
-- **Agent preset** (only memories scoped to that preset).
-- **Strength range** — filter by promotion strength score (0.0 – 1.0+).
+Danger Delete semantics are unchanged: graph and inspector single-memory deletes are immediate only while Danger Delete is armed, while sidebar card deletion uses its separate arm/cancel guard.
+
+## Memory Map controls
+
+The graph canvas supports direct map navigation:
+
+- Scroll the canvas to zoom around the pointer and drag to pan.
+- Click a memory node to select it, focus the camera on that memory, and open the inspector.
+- Use the **Zoom in**, **Zoom out**, and **Reset view** icon controls in the canvas. Reset returns to the overview and clears the current memory selection.
+- The canvas also shows the category legend, visible node count, and a selection status chip for the currently loaded memories.
+
+The sidebar starts collapsed so the graph remains visible. Use the sidebar toggle to open or close the memory list. When expanded, it shows search above the current alive memory list for the selected tier, sprint, and agent filter. Selecting a row opens that memory in the inspector; list controls can select all currently visible rows, clear selection, or delete selected memories after confirmation. Closing the sidebar clears the transient search and selected list rows.
+
+Below the graph, category summary cards show alive and loaded totals for each memory category in the current result set.
+
+### Performance
+
+The animated neural canvas pauses rendering while the browser tab or page is hidden and resumes when it becomes visible again. The node graph, sidebar list, inspector, and category summary reflect the currently loaded memories for the active tier, sprint, agent, and search context.
 
 ## Creating a memory
 
-Click **+ New memory**. Provide:
+Click **Add Memory**. Provide:
 
 - **Content** — the memory body (markdown supported).
 - **Category** (default `context`).
@@ -53,9 +68,19 @@ Click **+ New memory**. Provide:
 
 The memory is embedded immediately using the active embedding model.
 
+## Worker capture
+
+Worker `.task-learnings.md` files still create short-term memories from `## Category:` bullets. They may also include an optional `## Self Reflection Rating` section with `Overall: N/5` and per-section bullets such as `- Implementation: 4/5 - note`. Ratings are stored as task-run self-reflection records, separate from semantic memories, and malformed rating sections are ignored.
+
+## Project Manager direct memory
+
+The dashboard reply route defaults to the **Project manager**. It keeps the normal short-term and long-term context, and it also receives `add_long_term_memory`, a dedicated direct-write lane for explicit remember/learn requests and stable knowledge it judges valuable.
+
+A successful direct write creates a canonical long-term claim plus a searchable project-memory mirror. The Project Manager then re-emits the exact returned statement, category, claim id, and mirror-memory id in a `codeux:memory` block, which the dashboard renders as a rich confirmation widget. Short-term sprint evidence and normal remediation/promotion remain unchanged.
+
 ## Editing & deleting
 
-Each memory card has **Edit** (content, category, strength) and **Delete**. Deletion requires confirmation.
+Sidebar memory cards use their own guarded delete flow. Graph and inspector single-memory deletion is immediate only while Danger Delete is armed.
 
 ## Promotion (short-term → long-term)
 
@@ -69,13 +94,23 @@ Auto-promotion also runs as the final step of a sprint when the sprint settles s
 
 ## The graph view
 
-Open a memory and click **Inspect** to see its **embedding map**: a 2D projection of nearby memories with edges to top-K neighbours. Useful for spotting clusters and duplicates.
+Select a memory from the canvas or sidebar to inspect its **embedding map** context: a 2D projection of nearby memories with edges to top-K neighbours. Useful for spotting clusters and duplicates.
 
-You can rebuild the map after re-embedding or after promotion.
+The map updates after memory reloads, re-embedding, or promotion.
 
-## Embedding models
+Rapid tier, sprint, or agent filter changes are sequenced by the Memory page data hook. Older responses are discarded, so only the newest memory list and embedding map can update the graph or clear the loading state.
 
-The right sidebar lists available embedding models. Each card shows:
+The graph pauses its canvas animation loop while the browser tab is hidden and resumes when the tab is visible again. Empty or loading maps clear the canvas without running the full edge, pulse, and node drawing passes, so the page stays responsive while data changes.
+
+## Model browser
+
+The **Model Catalog** action opens a compact model browser instead of a flat card list. It separates:
+
+- **Embedding Models** — memory search models that can be downloaded, activated, deleted, and used for re-embedding.
+- **Add Custom Hugging Face Embedding Model** — a form for compatible ONNX embedding models.
+- **TTS / Speech-Adjacent Hugging Face Models** — informational speech rows that are not memory embedding models and do not show embedding actions.
+
+Each embedding row shows:
 
 - Model ID and provenance (e.g. `bge-small-en-v1.5`).
 - Download status (not downloaded / downloading / ready).
@@ -84,6 +119,8 @@ The right sidebar lists available embedding models. Each card shows:
 
 The local embedding runtime supports both BGE-style WordPiece tokenizers and XLM-R/SentencePiece Unigram tokenizers such as `multilingual-e5-large`.
 
+Custom in-app models can be added from Hugging Face model links. The form accepts either `owner/repo` identifiers or `https://huggingface.co/...` model/file URLs plus display name, ONNX model file, tokenizer files, dimension, approximate size, and language. The backend rejects other hosts and stores the normalized repo, ONNX model file path, tokenizer files, dimension, approximate size, language, and validation status. Custom entries are durable settings, so they appear beside built-in models after restart.
+
 Actions per model:
 
 - **Download** — Pulls model weights to local cache.
@@ -91,9 +128,19 @@ Actions per model:
 - **Select** — Activates the model. Subsequent embed operations use it.
 - **Delete** — Removes the local cache.
 
+Custom models use the same download, select, delete, source-link, and status actions as built-ins. A custom model cannot be selected until its ONNX file and required tokenizer files are downloaded. Speech-adjacent Hugging Face rows open safe source links only; they cannot be activated as memory embeddings.
+
 ### Re-embedding
 
 Switching the active model leaves existing memories embedded with the previous model — search results across mixed dimensions are nonsensical. Click **Re-embed all** to re-vectorize the project's memories with the new model. Progress is shown live; you can leave the page and check back.
+
+## Persistent skills
+
+Persistent skills are reusable agent instructions, not sprint learnings. They are stored in project-owned skill storages, attached to agent presets, and kept out of the project workspace and `.code-ux/` sprint files.
+
+Open the **Skills** tier to visualize the bounded skill catalog as a read-only graph. You can search it and filter to an agent's attached storages; memory creation, embedding-model controls, and deletion controls are intentionally unavailable in this tier. Runtime skill repositories are versioned internally and mounted read-only, while skill changes go through the management tools.
+
+Skill markdown has frontmatter for `title`, `description`, `tags`, `appliesTo`, and `version`; the markdown body is the stored instruction content. When embeddings are available, each skill gets a compact descriptor vector plus bounded, heading-aware body chunks. Search combines the strongest matching chunk with lexical descriptor/body overlap, stays within the requested project/storage or agent attachments, skips dimension mismatches, caps candidate loading, and uses deterministic tie-breakers. If the embedding model is offline, lexical search remains available instead of returning an empty catalog.
 
 ## Stats
 
@@ -101,4 +148,4 @@ The footer shows aggregate memory statistics: total counts per scope/category, a
 
 ## Programmatic access
 
-The Memory MCP tool (`manage_memory`) exposes search, list, get, create, update, delete, promote, start_reembed, get_map, count, and model_status actions, as well as durable claim actions. Destructive actions require approval confirmation. (Note: The legacy unified `manage_code_ux` tool is deprecated). See [Management actions → memory](/docs/developer-management-actions#memory).
+The Memory MCP tool (`manage_memory`) exposes search, list, get, create, update, delete, promote, start_reembed, get_map, count, and model_status actions, as well as durable claim actions. The dedicated `add_long_term_memory` tool writes one canonical durable memory and returns confirmation-widget data. Destructive actions require approval confirmation. See [Management actions → memory](/docs/developer-management-actions#memory).

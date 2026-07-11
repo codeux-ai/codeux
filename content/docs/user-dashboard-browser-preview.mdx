@@ -10,20 +10,31 @@ This is invaluable for visually verifying changes a sprint has made (UI work, AP
 | --- | --- |
 | **Preview session** | A live Docker container running the sprint's working tree, plus a browser pane that connects to a chosen port inside it. |
 | **Preview script** | A shell script associated with the sprint that the container runs at startup (`npm run dev`, `python manage.py runserver`, etc.). |
-| **Port mapping** | The container's internal port → host port mapping that the browser pane uses. |
+| **Port mapping** | The container's internal port → host port mapping that the browser pane uses. A single preview container can expose multiple port mappings, rendered as distinct tabs in the browser chrome. |
 
 ## Starting a preview
 
 1. Open the **Browser** page.
-2. Pick a sprint from the dropdown.
+2. Pick a sprint from the dropdown. Note that sessions are scoped strictly to one sprint per project.
 3. Click **Launch container**.
 4. If no preview script exists yet, the **Preview script editor** opens. Write the startup script (defaults provided per language).
 5. Save and click **Start**. Code UX:
    - Builds a container image based on `node:24-bookworm` (or your override).
    - Exports the sprint branch snapshot into preview runtime storage and mounts it into the container.
    - Runs the script.
-   - Maps the configured port to a host port.
-6. The browser pane appears. Logs stream in a side panel.
+   - Maps the configured container ports to explicit local host ports under `127.0.0.1`.
+6. The browser pane appears. Logs stream in a side panel and are retained even if the container is stopped.
+
+Preview startup does not install Playwright browsers by default. Managed provider coding containers mount the verified Playwright browser volume at `/ms-playwright`; preview scripts that use Playwright should install a browser in the preview startup path or use a custom image/script that already provides it.
+
+Preview containers can also receive custom environment variables:
+- Set project-wide defaults from the Browser page right sidebar or **Settings → Browser Preview → Preview Environment**.
+- Set selected-container overrides from the preview container card's **Env** action, which opens an override modal.
+- Overrides apply after the next rebuild or start.
+- Runtime-owned names such as `PORT`, `HOST`, `HOME`, `DASHBOARD_PORT`, `SPRINT_PREVIEW_*`, and `CODE_UX_GIT_USER_*` are reserved for Code UX routing.
+- Disabled override rows suppress an inherited default with the same key.
+
+For example, a Code UX app running inside a preview container can set `CODE_UX_ALLOW_PUBLIC_DASHBOARD=1` as a container override while Code UX still binds the host-facing preview port to `127.0.0.1`.
 
 ## Using the browser pane
 
@@ -36,9 +47,11 @@ The pane is an iframe-like container with toolbar buttons:
 
 The URL bar is read-only; it shows the host URL the container is exposing.
 
-## Preview session sider
+The right sidebar keeps **Launch Container** expanded so new previews are always immediately available. **Selected Sprint**, **Environment**, **Runtime notes**, and **Container logs** are collapsed by default; the Selected Sprint header still shows the active port mapping, or `port pending` until a running preview has a routed port.
 
-The **PreviewSessionSlider** at the top of the page shows all sessions currently running across this project — switch between them with one click.
+## Preview session cards
+
+The preview session cards sit below the browser pane, keeping the browser workspace as the primary surface while still showing every running session across the current project. Use the bottom rail to switch sessions, open environment overrides, or remove a stopped preview.
 
 ## Stopping & removing
 
@@ -48,7 +61,7 @@ The **PreviewSessionSlider** at the top of the page shows all sessions currently
 
 ## Editing the preview script
 
-The script lives in the project's `.code-ux/sprints/sprint-<n>/preview.sh`. Editing it via the dashboard saves directly to that file, so the script is portable across teammates.
+The script can be customized directly through the Browser page and saves to the project's runtime or the sprint snapshot. Editing it via the dashboard saves it using the `update_script` API/MCP tool so it applies directly to the specific sprint workspace.
 
 ## Quotas
 
@@ -56,4 +69,4 @@ The page shows the count of running preview containers. Code UX does not enforce
 
 ## Programmatic control
 
-The MCP `preview` management domain provides equivalent controls — `list_sessions`, `start_session`, `rebuild_session`, `stop_session`, `remove_session`, `get_script`. See [Management actions → preview](/docs/developer-management-actions#preview).
+The MCP `preview` management domain provides equivalent controls — `list_sessions`, `start_session`, `rebuild_session`, `stop_session`, `remove_session`, `get_script`, `update_script`. See [Management actions → preview](/docs/developer-management-actions#preview).

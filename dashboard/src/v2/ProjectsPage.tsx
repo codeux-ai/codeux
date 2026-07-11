@@ -14,6 +14,7 @@ import { PageContainer } from "./components/layout/PageContainer.js";
 import { PageHeader } from "./components/layout/PageHeader.js";
 import { SkeletonLoader, SkeletonPanel } from "./components/layout/SkeletonLoader.js";
 import { useToast } from "./components/feedback/ToastProvider.js";
+import { useRouteProjectSelection } from "./hooks/use-route-project-selection.js";
 import { useProjectData } from "./context/project-data.js";
 import { buildProjectCreationSettingsOverride } from "../lib/settings-updaters.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../lib/settings.js";
@@ -67,6 +68,12 @@ export const ProjectsPage: FunctionComponent = () => {
     () => buildProjectsPageViewModel(sources, activeFilter),
     [activeFilter, sources],
   );
+  const routeSearch = typeof window === "undefined" ? "" : window.location.search;
+  const routeProjectId = useMemo(() => {
+    const params = new URLSearchParams(routeSearch);
+    return params.get("projectId")?.trim() || null;
+  }, [routeSearch]);
+  useRouteProjectSelection(routeProjectId, selectedProjectId, selectProject);
 
   const openAddProject = (sourceType: AddProjectModalSourceType) => {
     setModalSourceType(sourceType);

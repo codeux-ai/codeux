@@ -30,7 +30,8 @@ import { DockerStatusMenu } from "./DockerStatusMenu.js";
 import { BrowserSessionsMenu } from "./browser/BrowserSessionsMenu.js";
 import { NotificationPanel } from "./NotificationPanel.js";
 import { Tooltip } from "./ui/Tooltip.js";
-import { useNotifications } from "../hooks/use-notifications.js";
+import { useNotifications, type DashboardNotification } from "../hooks/use-notifications.js";
+import { useToast } from "./feedback/ToastProvider.js";
 import { useThemeSetting } from "../hooks/useThemeSetting.js";
 import { useIsDark } from "../hooks/use-is-dark.js";
 import type { AgentSchedulerSummaryEntry } from "../lib/scheduler-api.js";
@@ -183,6 +184,13 @@ const getRenderedOptionActiveDescendantId = (
     return optionIds[0];
 };
 
+const isAttentionNotification = (notification: DashboardNotification): boolean => Boolean(notification.type);
+
+const notificationToastMessage = (notification: DashboardNotification): string => {
+    const context = notification.subtitle ?? notification.body;
+    return context ? `${notification.title}. ${context}` : notification.title;
+};
+
 interface TopNavProps {
     onMenuToggle?: () => void;
     isMobile?: boolean;
@@ -275,6 +283,7 @@ const ScheduledAgentIndicator: FunctionComponent<{ entries: AgentSchedulerSummar
 export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile, hideLogo, isMobileMenuOpen }) => {
     const navRef = useRef<HTMLElement>(null);
     const navigate = useNavigate();
+    const { addToast } = useToast();
 
     const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -290,6 +299,13 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     const routeMatches = useRouterState({ select: (state) => state.matches });
     const currentPath = routeMatches.length > 0 ? routeMatches[routeMatches.length - 1]?.pathname || "/" : "/";
     const previousPathRef = useRef(currentPath);
+    const navigateToNotificationHref = useCallback(async (href: string): Promise<void> => {
+        const target = new URL(href, window.location.origin);
+        await navigate({
+            to: target.pathname,
+            search: Object.fromEntries(target.searchParams.entries()),
+        } as any);
+    }, [navigate]);
     const replaceWorkspaceScope = useCallback(async (nextProjectId: string, nextSprintId: string | null): Promise<void> => {
         if (currentPath !== "/tasks" && currentPath !== "/live") {
             return;
@@ -330,6 +346,11 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
             queueMicrotask(restoreNotificationFocus);
         }
     }, [restoreNotificationFocus]);
+
+    const navigateFromNotification = useCallback(async (href: string): Promise<void> => {
+        closeNotificationMenu();
+        await navigateToNotificationHref(href);
+    }, [closeNotificationMenu, navigateToNotificationHref]);
 
     const handleNotificationMouseEnter = () => {
         if (notificationHoverTimeout.current) clearTimeout(notificationHoverTimeout.current);
@@ -407,6 +428,44 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     const projectId = selectedProject?.id || null;
     const { data: effectiveSettings, loading: effectiveSettingsLoading, refresh: refreshEffectiveSettings } = useProjectEffectiveSettings(projectId);
     const notifications = useNotifications(projectId);
+    const notificationToastVersionsRef = useRef<Map<string, string>>(new Map());
+    const notificationToastsHydratedRef = useRef(false);
+
+    useEffect(() => {
+        if (!notifications.notificationFeedHydrated) return;
+
+        const actionable = notifications.notifications.filter(isAttentionNotification);
+        if (!notificationToastsHydratedRef.current) {
+            actionable.forEach((notification) => {
+                notificationToastVersionsRef.current.set(
+                    notification.sourceId ?? notification.id,
+                    notification.updatedAt ?? notification.id,
+                );
+            });
+            notificationToastsHydratedRef.current = true;
+            return;
+        }
+
+        actionable.forEach((notification) => {
+            const identity = notification.sourceId ?? notification.id;
+            const version = notification.updatedAt ?? notification.id;
+            if (notificationToastVersionsRef.current.get(identity) === version) return;
+            notificationToastVersionsRef.current.set(identity, version);
+
+            addToast({
+                type: notification.type === "system-error" ? "error" : "warning",
+                message: notificationToastMessage(notification),
+                action: notification.actionHref ? {
+                    label: notification.actionLabel ?? "Open",
+                    onClick: () => {
+                        notifications.markRead(notification.id);
+                        void navigateToNotificationHref(notification.actionHref!);
+                    },
+                } : undefined,
+                autoDismissMs: notification.type === "system-error" ? 0 : undefined,
+            });
+        });
+    }, [addToast, navigateToNotificationHref, notifications.notificationFeedHydrated, notifications.notifications, notifications.markRead]);
     const sprintKeyPrefix = effectiveSettings?.settings?.git?.sprintKeyPrefix || "SPR";
 
     const {
@@ -1126,6 +1185,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                             onMarkRead={notifications.markRead}
                             onDismiss={notifications.dismiss}
                             onRefresh={() => void notifications.refresh()}
+                            onNavigate={navigateFromNotification}
                         />
                     )}
                 </div>

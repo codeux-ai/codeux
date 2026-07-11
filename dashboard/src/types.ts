@@ -140,6 +140,15 @@ import type {
   ExecutionInvocationMessageRecord,
 } from "../../src/contracts/invocation-types.js";
 import type {
+  DashboardNotification,
+  DashboardNotificationFeed,
+  DashboardNotificationKind,
+  DashboardNotificationLinks,
+  DashboardNotificationSeverity,
+  DashboardNotificationSource,
+  DashboardNotificationSourceType,
+} from "../../src/contracts/dashboard-notification-types.js";
+import type {
   ChatProviderBridgeMode,
   ChatProviderBridgeSetupSchema,
   ChatProviderChannelBindingRecord,
@@ -327,6 +336,13 @@ export type {
 export type {
   ExecutionInvocationRecord,
   ExecutionInvocationMessageRecord,
+  DashboardNotification,
+  DashboardNotificationFeed,
+  DashboardNotificationKind,
+  DashboardNotificationLinks,
+  DashboardNotificationSeverity,
+  DashboardNotificationSource,
+  DashboardNotificationSourceType,
   ChatProviderBridgeMode,
   ChatProviderBridgeSetupSchema,
   ChatProviderChannelBindingRecord,

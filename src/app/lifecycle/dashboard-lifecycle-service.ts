@@ -108,6 +108,7 @@ export interface BootDashboardDeps {
   projectInitializationStateService: ProjectInitializationStateService;
   projectRuntimeRepository: ProjectRuntimeRepository;
   executionRepository: ExecutionRepository;
+  getDashboardNotifications?: () => ReturnType<ExecutionRepository["getDashboardNotifications"]>;
   connectionChatRepository: ConnectionChatRepository;
   chatProviderRepository: ChatProviderRepository;
   projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
@@ -515,6 +516,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
         };
     },
     getOverviewTelemetrySnapshot: cache.getOverviewTelemetrySnapshot,
+    getDashboardNotifications: deps.getDashboardNotifications
+      ?? (() => deps.executionRepository.getDashboardNotifications()),
     // `/api/projects/:id/execution` is the public REST snapshot and includes
     // recent events/invocations; realtime execution pushes stay feed-less above.
     getProjectExecutionSnapshot: cache.getProjectExecutionSnapshot,

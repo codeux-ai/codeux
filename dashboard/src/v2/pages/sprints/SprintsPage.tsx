@@ -46,6 +46,7 @@ import { useSprintsPageData } from "./use-sprints-page-data.js";
 import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "../../lib/list-window.js";
 import { ExecutionTimelineProvider } from "../../../hooks/ExecutionTimelineContext.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useRouteProjectSelection } from "../../hooks/use-route-project-selection.js";
 import { PageContainer } from "../../components/layout/PageContainer.js";
 import { PageHeader } from "../../components/layout/PageHeader.js";
 import type { SprintLinkedIssueInput } from "../../types.js";
@@ -202,6 +203,10 @@ export const SprintsPage: FunctionComponent = () => {
   const {
     projects = [],
     selectedProject,
+    selectProject,
+    sprints,
+    selectedSprintId,
+    selectSprint,
     sortedSprints,
     loading,
     showcaseSprints,
@@ -262,6 +267,53 @@ export const SprintsPage: FunctionComponent = () => {
     handleImportSprint,
     handleAddProject = async () => undefined,
   } = useSprintsPageData();
+
+  const routeSearch = typeof window === "undefined" ? "" : window.location.search;
+  const routeProjectId = useMemo(() => {
+    const params = new URLSearchParams(routeSearch);
+    return params.get("projectId")?.trim() || null;
+  }, [routeSearch]);
+  const routeSprintId = useMemo(() => {
+    const params = new URLSearchParams(routeSearch);
+    return params.get("sprintId")?.trim() || null;
+  }, [routeSearch]);
+  const { routeProjectReady } = useRouteProjectSelection(
+    routeProjectId,
+    selectedProject?.id || null,
+    selectProject,
+  );
+  const consumedRouteSprintKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!routeSprintId) {
+      consumedRouteSprintKeyRef.current = null;
+      return;
+    }
+    if (!routeProjectReady || (routeProjectId && selectedProject?.id !== routeProjectId)) {
+      return;
+    }
+
+    const routeSprintKey = `${routeProjectId || selectedProject?.id || ""}:${routeSprintId}`;
+    if (consumedRouteSprintKeyRef.current === routeSprintKey) {
+      return;
+    }
+    if (!sprints.some((sprint) => sprint.id === routeSprintId)) {
+      return;
+    }
+
+    consumedRouteSprintKeyRef.current = routeSprintKey;
+    if (selectedSprintId !== routeSprintId) {
+      void selectSprint(routeSprintId);
+    }
+  }, [
+    routeProjectId,
+    routeProjectReady,
+    routeSprintId,
+    selectedProject?.id,
+    selectedSprintId,
+    selectSprint,
+    sprints,
+  ]);
 
   const activeRowMenuSprint = useMemo(() => rowMenu
     ? sortedSprints.find((sprint) => sprint.id === rowMenu.sprintId) || null

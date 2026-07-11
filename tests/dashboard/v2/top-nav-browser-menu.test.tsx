@@ -16,6 +16,11 @@ import { buildPreviewUrl } from "../../../dashboard/src/v2/lib/preview-origin.js
 
 expect.extend(matchers);
 
+const feedbackMocks = vi.hoisted(() => ({
+    addToast: vi.fn(),
+    navigate: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
 
 
@@ -47,6 +52,10 @@ vi.mock("../../../dashboard/src/v2/hooks/use-notifications.js", () => ({
         dismiss: vi.fn(),
         refresh: vi.fn(),
     })),
+}));
+
+vi.mock("../../../dashboard/src/v2/components/feedback/ToastProvider.js", () => ({
+    useToast: () => ({ addToast: feedbackMocks.addToast }),
 }));
 
 vi.mock("../../../dashboard/src/v2/hooks/useThemeSetting.js", () => ({
@@ -143,7 +152,7 @@ vi.mock("@tanstack/react-router", () => ({
         </a>
     ),
     useRouterState: vi.fn(() => [{ pathname: "/" }]),
-    useNavigate: () => vi.fn().mockResolvedValue(undefined),
+    useNavigate: () => feedbackMocks.navigate,
 }));
 
 const makeProject = (id: string, name: string) => ({
@@ -177,6 +186,25 @@ const makeAgentSchedule = (id: string, overrides: Record<string, unknown> = {}) 
     timingSummary: "Scheduled for Jul 7, 09:00 AM",
     targetSummary: "Thread thread-123",
     scheduledAt: "2026-07-07T09:00:00.000Z",
+    ...overrides,
+});
+
+const makeAttentionNotification = (overrides: Record<string, unknown> = {}) => ({
+    id: "attention-1@2026-07-11T10:00:00.000Z",
+    sourceId: "attention-1",
+    type: "intervention",
+    severity: "warning",
+    title: "Human decision required",
+    body: "Task T02 · Sprint SPR-12 · Project Workspace — A decision is blocking execution.",
+    subtitle: "Task T02 · Sprint SPR-12 · Project Workspace",
+    time: "just now",
+    updatedAt: "2026-07-11T10:00:00.000Z",
+    unread: true,
+    dismissible: true,
+    icon: () => null,
+    actionLabel: "Review intervention",
+    actionHref: "/tasks?projectId=project-9&sprintId=sprint-12&taskId=task-2",
+    details: [],
     ...overrides,
 });
 
@@ -817,6 +845,228 @@ describe("TopNav shell accessibility", () => {
         await waitFor(() => {
             expect(screen.queryByRole("dialog", { name: "Notifications Panel" })).not.toBeInTheDocument();
             expect(document.activeElement).toBe(trigger);
+        });
+    });
+
+    it.each([
+        {
+            label: "task",
+            notification: {
+                type: "intervention",
+                title: "Task needs a decision",
+                actionLabel: "Review task",
+                actionHref: "/tasks?projectId=project-9&sprintId=sprint-12&taskId=task-2&source=notification",
+            },
+            to: "/tasks",
+            search: { projectId: "project-9", sprintId: "sprint-12", taskId: "task-2", source: "notification" },
+        },
+        {
+            label: "sprint",
+            notification: {
+                type: "sprint-failure",
+                title: "Sprint planning failed",
+                actionLabel: "Review sprint",
+                actionHref: "/sprints?view=ledger&sprintId=sprint-12&projectId=project-9&source=notification",
+            },
+            to: "/sprints",
+            search: { view: "ledger", sprintId: "sprint-12", projectId: "project-9", source: "notification" },
+        },
+        {
+            label: "project",
+            notification: {
+                type: "automatic-stop",
+                title: "Project setup failed",
+                actionLabel: "Review project",
+                actionHref: "/projects?projectId=project-9&source=notification&returnTo=%2Ftasks%3Fview%3Dboard",
+            },
+            to: "/projects",
+            search: { projectId: "project-9", source: "notification", returnTo: "/tasks?view=board" },
+        },
+        {
+            label: "system error",
+            notification: {
+                type: "system-error",
+                title: "Runtime failed",
+                actionLabel: "Review error",
+                actionHref: "/live?projectId=project-9&sprintId=sprint-12&errorId=error-4&source=notification",
+            },
+            to: "/live",
+            search: { projectId: "project-9", sprintId: "sprint-12", errorId: "error-4", source: "notification" },
+        },
+    ])("opens a $label action with its exact server-supplied cross-project destination and closes the panel", async ({ notification, to, search }) => {
+        mockTopNavData({
+            selectedProject: makeProject("proj-1", "Alpha"),
+            selectedSprintId: "sprint-1",
+        });
+        const markRead = vi.fn();
+        vi.mocked(useNotifications).mockReturnValue({
+            notifications: [makeAttentionNotification({
+                id: `${notification.type}-1@2026-07-11T10:00:00.000Z`,
+                sourceId: `${notification.type}-1`,
+                ...notification,
+            })],
+            unreadCount: 1,
+            agentSchedules: [],
+            markAllRead: vi.fn(),
+            markRead,
+            dismiss: vi.fn(),
+            refresh: vi.fn(),
+        } as any);
+
+        render(<TopNav />);
+        const trigger = screen.getByRole("button", { name: /Notifications: 1 unread/i });
+        fireEvent.click(trigger);
+
+        const action = await screen.findByRole("link", { name: `${notification.actionLabel} ${notification.title}` });
+        expect(action).toHaveAttribute("href", notification.actionHref);
+        fireEvent.click(action);
+
+        expect(markRead).toHaveBeenCalledWith(`${notification.type}-1@2026-07-11T10:00:00.000Z`);
+        expect(feedbackMocks.navigate).toHaveBeenCalledWith({
+            to,
+            search,
+        });
+        await waitFor(() => {
+            expect(screen.queryByRole("dialog", { name: "Notifications Panel" })).not.toBeInTheDocument();
+            expect(screen.getByRole("navigation", { name: "Primary navigation" })).toBeInTheDocument();
+            expect(trigger).toHaveFocus();
+            expect(trigger).toHaveAttribute("aria-expanded", "false");
+        });
+    });
+
+    it("closes notification details and its panel when the modal action navigates", async () => {
+        mockTopNavData();
+        const markRead = vi.fn();
+        vi.mocked(useNotifications).mockReturnValue({
+            notifications: [makeAttentionNotification({
+                details: [{ label: "Task", value: "T02 (Resolve release gate)" }],
+            })],
+            unreadCount: 1,
+            agentSchedules: [],
+            markAllRead: vi.fn(),
+            markRead,
+            dismiss: vi.fn(),
+            refresh: vi.fn(),
+        } as any);
+
+        render(<TopNav />);
+        const trigger = screen.getByRole("button", { name: /Notifications: 1 unread/i });
+        fireEvent.click(trigger);
+        fireEvent.click(await screen.findByRole("button", { name: "Details for Human decision required" }));
+        const modalAction = await screen.findByRole("link", { name: "Review intervention" });
+        expect(modalAction).toHaveAttribute(
+            "href",
+            "/tasks?projectId=project-9&sprintId=sprint-12&taskId=task-2",
+        );
+
+        fireEvent.click(modalAction);
+
+        expect(markRead).toHaveBeenCalledWith("attention-1@2026-07-11T10:00:00.000Z");
+        expect(feedbackMocks.navigate).toHaveBeenCalledWith({
+            to: "/tasks",
+            search: { projectId: "project-9", sprintId: "sprint-12", taskId: "task-2" },
+        });
+        await waitFor(() => {
+            expect(screen.queryByRole("dialog", { name: "Human decision required" })).not.toBeInTheDocument();
+            expect(screen.queryByRole("dialog", { name: "Notifications Panel" })).not.toBeInTheDocument();
+            expect(screen.getByRole("navigation", { name: "Primary navigation" })).toBeInTheDocument();
+            expect(trigger).toHaveFocus();
+            expect(trigger).toHaveAttribute("aria-expanded", "false");
+        });
+    });
+
+    it("suppresses initial notification toasts and emits one toast for each new or materially updated attention item", async () => {
+        mockTopNavData();
+        const markRead = vi.fn();
+        const initial = makeAttentionNotification();
+        const notificationState = {
+            notifications: [initial],
+            unreadCount: 1,
+            agentSchedules: [],
+            notificationFeedHydrated: true,
+            markAllRead: vi.fn(),
+            markRead,
+            dismiss: vi.fn(),
+            refresh: vi.fn(),
+        };
+        vi.mocked(useNotifications).mockReturnValue(notificationState as any);
+
+        const { rerender } = render(<TopNav />);
+        expect(feedbackMocks.addToast).not.toHaveBeenCalled();
+
+        vi.mocked(useNotifications).mockReturnValue({ ...notificationState, notifications: [{ ...initial }] } as any);
+        rerender(<TopNav />);
+        expect(feedbackMocks.addToast).not.toHaveBeenCalled();
+
+        const second = makeAttentionNotification({
+            id: "failure-2@2026-07-11T10:05:00.000Z",
+            sourceId: "failure-2",
+            type: "task-failure",
+            title: "Task execution failed",
+            updatedAt: "2026-07-11T10:05:00.000Z",
+            actionLabel: "Review task",
+        });
+        vi.mocked(useNotifications).mockReturnValue({ ...notificationState, notifications: [initial, second] } as any);
+        rerender(<TopNav />);
+
+        await waitFor(() => expect(feedbackMocks.addToast).toHaveBeenCalledTimes(1));
+        expect(feedbackMocks.addToast).toHaveBeenLastCalledWith(expect.objectContaining({
+            type: "warning",
+            message: expect.stringContaining("Task T02 · Sprint SPR-12 · Project Workspace"),
+        }));
+
+        vi.mocked(useNotifications).mockReturnValue({ ...notificationState, notifications: [{ ...initial }, { ...second }] } as any);
+        rerender(<TopNav />);
+        expect(feedbackMocks.addToast).toHaveBeenCalledTimes(1);
+
+        const updated = {
+            ...second,
+            id: "failure-2@2026-07-11T10:08:00.000Z",
+            updatedAt: "2026-07-11T10:08:00.000Z",
+            title: "Task execution failed again",
+        };
+        vi.mocked(useNotifications).mockReturnValue({ ...notificationState, notifications: [initial, updated] } as any);
+        rerender(<TopNav />);
+        await waitFor(() => expect(feedbackMocks.addToast).toHaveBeenCalledTimes(2));
+    });
+
+    it("uses a persistent error toast whose action opens the supplied scoped route", async () => {
+        mockTopNavData();
+        const markRead = vi.fn();
+        const notificationState = {
+            notifications: [makeAttentionNotification()],
+            unreadCount: 1,
+            agentSchedules: [],
+            notificationFeedHydrated: true,
+            markAllRead: vi.fn(),
+            markRead,
+            dismiss: vi.fn(),
+            refresh: vi.fn(),
+        };
+        vi.mocked(useNotifications).mockReturnValue(notificationState as any);
+        const { rerender } = render(<TopNav />);
+        expect(feedbackMocks.addToast).not.toHaveBeenCalled();
+
+        const systemError = makeAttentionNotification({
+            id: "system-error-3@2026-07-11T10:15:00.000Z",
+            sourceId: "system-error-3",
+            type: "system-error",
+            title: "Sprint runtime failed",
+            updatedAt: "2026-07-11T10:15:00.000Z",
+            actionLabel: "Review error",
+            actionHref: "/live?projectId=project-9&sprintId=sprint-12",
+        });
+        vi.mocked(useNotifications).mockReturnValue({ ...notificationState, notifications: [notificationState.notifications[0], systemError] } as any);
+        rerender(<TopNav />);
+
+        await waitFor(() => expect(feedbackMocks.addToast).toHaveBeenCalledTimes(1));
+        const toast = feedbackMocks.addToast.mock.calls[0][0];
+        expect(toast).toMatchObject({ type: "error", autoDismissMs: 0 });
+        toast.action?.onClick();
+        expect(markRead).toHaveBeenCalledWith("system-error-3@2026-07-11T10:15:00.000Z");
+        expect(feedbackMocks.navigate).toHaveBeenCalledWith({
+            to: "/live",
+            search: { projectId: "project-9", sprintId: "sprint-12" },
         });
     });
 

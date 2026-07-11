@@ -41,7 +41,7 @@ Code UX is a single Node process that hosts multiple cooperating services. This 
 └────────────────────────────────────────────────────────────────────┘
 ```
 
-The process is started by `src/index.ts` → `CodeUxServer.run()`. Lifecycle:
+The primary CLI/management entrypoint is `src/index.ts`, which loads configuration and starts `CodeUxServer.run()`. `CodeUxServer` wires all backend services. The dashboard/API serves on a configured port (default 4444), while the worker host and Electron shell operate as separate entrypoints. Lifecycle:
 
 1. **Boot settings** — load and migrate the settings DB.
 2. **Refresh API key** — pull from CLI / env / settings.
@@ -51,7 +51,7 @@ The process is started by `src/index.ts` → `CodeUxServer.run()`. Lifecycle:
 6. **Boot dashboard** — bind Express on `DASHBOARD_PORT`.
 7. **Boot MCP stdio transport** — connect to stdin/stdout if not a TTY.
 8. **Boot MCP HTTP transport** *(optional)* — bind the JSON-RPC HTTP listener.
-9. **Mark MCP service bound** — `/ready` flips to ready.
+9. **Mark MCP service bound and finish startup recovery** — `/ready` flips to ready after listener binding and runtime recovery complete.
 10. **Start background loops** — runtime cleanup (15 s), sprint preview reconciliation (15 s), live snapshot refresh (30 s).
 11. **Start virtual worker service** — begin reconcile cycle (3 s).
 
@@ -112,7 +112,7 @@ Subtask data is *also* persisted as markdown files for portability — see [Spri
 ## Data flow: a sprint cycle
 
 ```
-Dashboard click "Orchestrate"            MCP client calls manage_code_ux:start
+Dashboard click "Orchestrate"            MCP client calls grouped tools (e.g., manage_sprints:start) (manage_code_ux is deprecated)
             │                                            │
             ▼                                            ▼
       POST /api/sprints/.../orchestrate        ToolRegistry → sprint-actions.ts

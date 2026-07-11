@@ -31,6 +31,7 @@ import type {
   HeaderTokenThroughputSnapshot,
 } from "../contracts/app-types.js";
 import type { OnboardingStateRecord } from "../domain/user/onboarding-state.js";
+import type { DashboardNotificationFeed } from "../contracts/dashboard-notification-types.js";
 import type {
   EffectiveSettingsResponse,
   ProjectSettingsOverride,
@@ -153,11 +154,13 @@ export type DashboardDependencies = Omit<
   | "port"
   | "liveActivityCacheMs"
   | "getUpdateStatus"
+  | "getDashboardNotifications"
 > & {
   getUpdateStatus: () => Promise<UpdateStatus>;
   getLocalMcpSetup: () => LocalMcpSetupInfo;
   regenerateLocalMcpAuthToken: () => LocalMcpSetupInfo;
   installLocalMcpProvider: (provider: LocalMcpCliProvider) => Promise<LocalMcpInstallResult> | LocalMcpInstallResult;
+  getDashboardNotifications: () => DashboardNotificationFeed;
 };
 
 export interface DashboardServerOptions {
@@ -213,6 +216,7 @@ export interface DashboardServerOptions {
     input?: { status?: "resolved" | "dismissed"; reason?: string; resolutionSummaryMarkdown?: string },
   ) => ExecutionAttentionItemSummary;
   getOverviewTelemetrySnapshot: () => OverviewTelemetrySnapshot;
+  getDashboardNotifications?: () => DashboardNotificationFeed;
   getLiveActivities: () => Promise<Record<string, JulesActivity[]>>;
   getGitStatus: () => Promise<GitTrackingStatus>;
   getExternalSettingsHints: () => ExternalSettingsHints;

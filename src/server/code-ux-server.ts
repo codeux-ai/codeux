@@ -1350,6 +1350,7 @@ export class CodeUxServer {
         projectInitializationStateService: this.projectInitializationStateService,
         projectRuntimeRepository: this.projectRuntimeRepository,
         executionRepository: this.executionRepository,
+        getDashboardNotifications: () => this.executionRepository.getDashboardNotifications(),
         connectionChatRepository: this.connectionChatRepository,
         chatProviderRepository: this.chatProviderRepository,
         projectWorkerAssignmentRepository: this.projectWorkerAssignmentRepository,
