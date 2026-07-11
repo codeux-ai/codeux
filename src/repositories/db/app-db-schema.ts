@@ -946,6 +946,7 @@ CREATE TABLE IF NOT EXISTS sprint_preview_sessions (
         build_command TEXT,
         run_command TEXT,
         startup_command_override TEXT,
+        docker_access_override INTEGER,
         environment_overrides_json TEXT,
         last_completed_task_count INTEGER NOT NULL DEFAULT 0,
         last_seen_sprint_status TEXT,

@@ -79,7 +79,9 @@ Both paths only route to loopback host ports recorded on the active preview sess
 
 ## Optional Docker Access
 
-Settings can explicitly enable Docker access for preview containers. When enabled, Code UX mounts the local Unix Docker daemon socket, adds the socket group to the preview user, mounts a compatible host Docker CLI on Linux when available, and runs `docker version` before starting the application. Missing socket, CLI, or daemon access fails startup with a focused error.
+Settings can explicitly enable Docker access for preview containers. The Browser page right sidebar exposes the same control as a project-wide default plus an `inherit`/`enabled`/`disabled` override for the selected preview container. Changes take effect on the next rebuild.
+
+When enabled, Code UX mounts the local Unix Docker daemon socket, adds the socket group to the preview user, mounts a compatible host Docker CLI and Compose v2 plugin on Linux when available, and runs both `docker version` and `docker compose version` before starting the application. Missing socket, CLI, Compose plugin, or daemon access fails startup with a focused error instead of letting the application command fail with an ambiguous unknown-command message.
 
 This option is disabled by default and must only be enabled for trusted repositories and commands. Control of the Docker daemon is effectively control of the host. Docker-managed child containers do not automatically inherit the preview workspace or network namespace; Docker-based startup commands can use `SPRINT_PREVIEW_DOCKER_VOLUME`, `SPRINT_PREVIEW_CONTAINER_NAME`, and `SPRINT_PREVIEW_RUNTIME_ROOT` to declare an external named volume and `network_mode: container:<name>` when that topology is required.
 

@@ -126,6 +126,21 @@ export const saveProjectPreviewEnvironmentVariables = async (
   return fetchProjectEffectiveSettings(projectId, { cache: "reload" });
 };
 
+export const saveProjectPreviewDockerAccess = async (
+  projectId: string,
+  allowDockerAccess: boolean,
+): Promise<EffectiveSettingsResponse> => {
+  const effective = await fetchProjectEffectiveSettings(projectId, { cache: "reload" });
+  await saveProjectSettings(projectId, {
+    ...(effective.settings as ProjectSettings),
+    sprintPreview: {
+      ...effective.settings.sprintPreview,
+      allowDockerAccess,
+    },
+  });
+  return fetchProjectEffectiveSettings(projectId, { cache: "reload" });
+};
+
 export const saveProjectTechstackSettings = async (
   projectId: string,
   techstack: TechstackSelectionSettings,

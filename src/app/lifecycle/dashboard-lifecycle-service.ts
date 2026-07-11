@@ -158,6 +158,7 @@ export interface BootDashboardDeps {
   saveSprintPreviewScript: (projectId: string, sprintId: string, content: string) => Promise<SprintPreviewScript>;
   updateSprintPreviewEnvironmentOverrides: (projectId: string, sprintId: string, sessionId: string, environmentOverrides: PreviewEnvironmentVariable[]) => Promise<SprintPreviewSession>;
   updateSprintPreviewStartupCommandOverride: (projectId: string, sprintId: string, sessionId: string, startupCommandOverride: string | null) => Promise<SprintPreviewSession>;
+  updateSprintPreviewDockerAccessOverride: (projectId: string, sprintId: string, sessionId: string, dockerAccessOverride: boolean | null) => Promise<SprintPreviewSession>;
   getSprintPreviewLogs: (sessionId: string, tail?: number) => Promise<{ logs: string }>;
   getSprintPreviewLogsForProjectSprint: (projectId: string, sprintId: string, sessionId: string, tail?: number) => Promise<{ logs: string }>;
   proxySprintPreviewRequest: (args: {
@@ -868,6 +869,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     saveSprintPreviewScript: deps.saveSprintPreviewScript,
     updateSprintPreviewEnvironmentOverrides: deps.updateSprintPreviewEnvironmentOverrides,
     updateSprintPreviewStartupCommandOverride: deps.updateSprintPreviewStartupCommandOverride,
+    updateSprintPreviewDockerAccessOverride: deps.updateSprintPreviewDockerAccessOverride,
     getSprintPreviewLogs: deps.getSprintPreviewLogs,
     getSprintPreviewLogsForProjectSprint: deps.getSprintPreviewLogsForProjectSprint,
     proxySprintPreviewRequest: deps.proxySprintPreviewRequest,

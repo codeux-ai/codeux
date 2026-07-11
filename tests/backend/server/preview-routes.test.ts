@@ -159,6 +159,44 @@ describe("preview routes", () => {
     expect(updateSprintPreviewStartupCommandOverride).not.toHaveBeenCalled();
   });
 
+  it("updates a Docker access override through the scoped project route", async () => {
+    const updateSprintPreviewDockerAccessOverride = vi.fn(async () => ({
+      id: "session-1",
+      projectId: "project-a",
+      sprintId: "sprint-a",
+      dockerAccessOverride: true,
+    }));
+    const app = express();
+    app.use(express.json());
+    registerPreviewRoutes(app, { updateSprintPreviewDockerAccessOverride } as any);
+
+    const response = await request(app)
+      .put("/api/projects/project-a/sprints/sprint-a/preview/sessions/session-1/docker-access")
+      .send({ dockerAccessOverride: true });
+
+    expect(response.status).toBe(200);
+    expect(updateSprintPreviewDockerAccessOverride).toHaveBeenCalledWith(
+      "project-a",
+      "sprint-a",
+      "session-1",
+      true,
+    );
+  });
+
+  it("rejects an invalid Docker access override", async () => {
+    const updateSprintPreviewDockerAccessOverride = vi.fn();
+    const app = express();
+    app.use(express.json());
+    registerPreviewRoutes(app, { updateSprintPreviewDockerAccessOverride } as any);
+
+    const response = await request(app)
+      .put("/api/projects/project-a/sprints/sprint-a/preview/sessions/session-1/docker-access")
+      .send({ dockerAccessOverride: "yes" });
+
+    expect(response.status).toBe(400);
+    expect(updateSprintPreviewDockerAccessOverride).not.toHaveBeenCalled();
+  });
+
   it("hides foreign preview sessions behind a generic not found response", async () => {
     const stopSprintPreviewSessionForProjectSprint = vi.fn(async () => {
       throw new EntityNotFoundError("Sprint preview session not found.");

@@ -87,6 +87,7 @@ interface PreviewDockerAccess {
   socketSource: string;
   socketGid: number;
   cliSource: string | null;
+  composePluginSource: string | null;
 }
 
 
@@ -320,7 +321,8 @@ export class SprintPreviewService {
           runtimeNpmCache: containerNpmCache,
           runSetupScript: shouldRunSetupScriptAtRuntime,
         });
-        const dockerAccess = settings.allowDockerAccess
+        const dockerAccessEnabled = session.dockerAccessOverride ?? settings.allowDockerAccess;
+        const dockerAccess = dockerAccessEnabled
           ? await this.resolvePreviewDockerAccess()
           : null;
 
@@ -679,6 +681,16 @@ export class SprintPreviewService {
     return this.deps.sprintPreviewRepository.updateSession(session.id, {
       startupCommandOverride: this.normalizeStartupCommand(startupCommandOverride),
     });
+  }
+
+  async updateDockerAccessOverrideForProjectSprint(
+    projectId: string,
+    sprintId: string,
+    sessionId: string,
+    dockerAccessOverride: boolean | null,
+  ): Promise<SprintPreviewSession> {
+    const session = await this.requireScopedSession(projectId, sprintId, sessionId);
+    return this.deps.sprintPreviewRepository.updateSession(session.id, { dockerAccessOverride });
   }
 
   async proxyRequest(args: {
@@ -1813,6 +1825,7 @@ export class SprintPreviewService {
     }
 
     let cliSource: string | null = null;
+    let composePluginSource: string | null = null;
     if (process.platform === "linux") {
       for (const directory of (process.env.PATH || "").split(path.delimiter).filter(Boolean)) {
         const candidate = path.join(directory, "docker");
@@ -1824,12 +1837,30 @@ export class SprintPreviewService {
           continue;
         }
       }
+
+      const composePluginCandidates = [
+        "/usr/local/lib/docker/cli-plugins/docker-compose",
+        "/usr/local/libexec/docker/cli-plugins/docker-compose",
+        "/usr/lib/docker/cli-plugins/docker-compose",
+        "/usr/libexec/docker/cli-plugins/docker-compose",
+        path.join(os.homedir(), ".docker", "cli-plugins", "docker-compose"),
+      ];
+      for (const candidate of composePluginCandidates) {
+        try {
+          await fs.access(candidate);
+          composePluginSource = candidate;
+          break;
+        } catch {
+          continue;
+        }
+      }
     }
 
     return {
       socketSource,
       socketGid: socketStats.gid,
       cliSource,
+      composePluginSource,
     };
   }
 

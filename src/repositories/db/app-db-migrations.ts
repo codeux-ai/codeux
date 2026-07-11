@@ -593,6 +593,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "sprint_preview_sessions", "port_mappings_json", "TEXT");
   ensureColumn(db, "sprint_preview_sessions", "environment_overrides_json", "TEXT");
   ensureColumn(db, "sprint_preview_sessions", "startup_command_override", "TEXT");
+  ensureColumn(db, "sprint_preview_sessions", "docker_access_override", "INTEGER");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS sprint_linked_issues (

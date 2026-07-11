@@ -153,6 +153,23 @@ describe("SprintPreviewRepository", () => {
     expect(repository.updateSession(session.id, { startupCommandOverride: null }).startupCommandOverride).toBeNull();
   });
 
+  it("persists and clears a per-container Docker access override", async () => {
+    const { repository, projectId, sprintId } = await createFixture();
+    const session = repository.createSession({
+      projectId,
+      sprintId,
+      status: "starting",
+      containerAppPort: 3000,
+      startupScriptPath: ".code-ux/browser/start-preview.sh",
+      startupMode: "auto",
+      dockerAccessOverride: true,
+    });
+
+    expect(session.dockerAccessOverride).toBe(true);
+    expect(repository.updateSession(session.id, { dockerAccessOverride: false }).dockerAccessOverride).toBe(false);
+    expect(repository.updateSession(session.id, { dockerAccessOverride: null }).dockerAccessOverride).toBeNull();
+  });
+
   it("falls back to the first mapping as primary when none is marked", async () => {
     const { repository, projectId, sprintId } = await createFixture();
 

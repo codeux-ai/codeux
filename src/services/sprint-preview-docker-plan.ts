@@ -11,6 +11,7 @@ export const CONTAINER_PREVIEW_RUNTIME_ROOT = "/code-ux-preview-runtime";
 export const PREVIEW_LOG_DRIVER = "local";
 export const CONTAINER_DOCKER_SOCKET_PATH = "/var/run/docker.sock";
 export const CONTAINER_DOCKER_CLI_PATH = "/usr/local/bin/docker";
+export const CONTAINER_DOCKER_COMPOSE_PLUGIN_PATH = "/usr/local/lib/docker/cli-plugins/docker-compose";
 
 export interface SprintPreviewDockerPlanArgs {
   projectId: string;
@@ -44,6 +45,7 @@ export interface SprintPreviewDockerPlanArgs {
     socketSource: string;
     socketGid: number;
     cliSource: string | null;
+    composePluginSource: string | null;
   } | null;
 }
 
@@ -105,6 +107,13 @@ export function buildSprintPreviewDockerCreateArgs(args: SprintPreviewDockerPlan
     if (args.dockerAccess.cliSource) {
       dockerArgs.push("--mount", toDockerMountArg({ source: args.dockerAccess.cliSource, destination: CONTAINER_DOCKER_CLI_PATH, readonly: true }));
     }
+    if (args.dockerAccess.composePluginSource) {
+      dockerArgs.push("--mount", toDockerMountArg({
+        source: args.dockerAccess.composePluginSource,
+        destination: CONTAINER_DOCKER_COMPOSE_PLUGIN_PATH,
+        readonly: true,
+      }));
+    }
   }
 
   if (args.userSpec) {
@@ -128,6 +137,7 @@ export function buildSprintPreviewDockerCreateArgs(args: SprintPreviewDockerPlan
     ...(args.dockerAccess ? [
       "command -v docker >/dev/null 2>&1 || { echo '[preview] Docker access is enabled, but this preview image does not provide a Docker CLI.' >&2; exit 1; }",
       "docker version >/dev/null || { echo '[preview] Docker access is enabled, but the Docker daemon socket is not reachable.' >&2; exit 1; }",
+      "docker compose version >/dev/null || { echo '[preview] Docker access is enabled, but Docker Compose is unavailable. Install the Docker Compose CLI plugin on the host or in the preview image.' >&2; exit 1; }",
     ] : []),
     `mkdir -p "${args.containerWorkspacePath}"`,
     `tar -xf /tmp/workspace.tar -C "${args.containerWorkspacePath}"`,
