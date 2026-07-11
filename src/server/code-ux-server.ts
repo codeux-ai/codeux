@@ -44,7 +44,13 @@ import { ActivityCacheService } from "./activity-cache-service.js";
 import { registerMcpRequestHandlers } from "./mcp-request-router.js";
 import { TaskRerunService } from "../services/task-rerun-service.js";
 import { ExecutionControlService } from "../services/execution-control-service.js";
-import { dashboardReplyAgentMcpAccess, toAgentCodeUxToolAccess } from "../services/agent-mcp-access.js";
+import {
+  dashboardReplyAgentMcpAccess,
+  isProjectManagerClarificationAgent,
+  isWorkerClarificationAgent,
+  toAgentCodeUxToolAccess,
+  withClarificationAudienceAccess,
+} from "../services/agent-mcp-access.js";
 import { JulesSourceResolver } from "../services/jules-source-resolver.js";
 import { RuntimeCleanupService } from "../services/runtime-cleanup-service.js";
 import { RuntimeStartupRecoveryService } from "../services/runtime-startup-recovery-service.js";
@@ -465,8 +471,44 @@ export class CodeUxServer {
       managementToolHandler: this.managementToolHandler,
       getDashboardSettings: () => this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
       getRuntimeRole: () => runtimeRole,
-      resolveAgentMcpToolAccess: (agentId) => {
+      resolveAgentMcpToolAccess: (agentId, request) => {
         const agent = this.agentPresetRepository.getAgentPreset(agentId);
+        if (!agent) return null;
+        const settings = this.settingsRepository.resolveProjectDashboardSettings(agent.projectId).settings;
+        const assignedTaskIds = this.projectManagementRepository.listTasks(agent.projectId)
+          .filter((task) => task.agentPresetId === agent.id)
+          .map((task) => task.id);
+        const workerEligible = isWorkerClarificationAgent({
+          agentId: agent.id,
+          assignedTaskAgentIds: assignedTaskIds.length > 0 ? [agent.id] : [],
+          settings,
+        });
+        const projectManagerEligible = isProjectManagerClarificationAgent({
+          agentId: agent.id,
+          agentName: agent.name,
+          settings,
+        });
+        const requestArgs = request?.arguments && typeof request.arguments === "object"
+          ? request.arguments as Record<string, unknown>
+          : null;
+        if (
+          request
+          && (request.toolName === "request_clarification" || request.toolName === "reply_to_clarification")
+          && requestArgs?.projectId !== agent.projectId
+        ) {
+          return null;
+        }
+        if (request?.toolName === "request_clarification") {
+          const routing = settings.agents.routing.taskCoding;
+          const hasProjectWorkerRole = (routing.mode === "MANUAL" && routing.agentPresetId === agent.id)
+            || routing.orchestratorAgentPresetIds.includes(agent.id);
+          if (!workerEligible || (!hasProjectWorkerRole && !assignedTaskIds.includes(String(requestArgs?.taskId ?? "")))) {
+            return null;
+          }
+        }
+        if (request?.toolName === "reply_to_clarification" && !projectManagerEligible) {
+          return null;
+        }
         const access = agent && this.isDashboardReplyRouteAgent(agent)
           ? dashboardReplyAgentMcpAccess(agent.mcpAccess)
           : agent?.mcpAccess;
@@ -475,11 +517,18 @@ export class CodeUxServer {
           && agent.persistentSkillStorageIds
           && agent.persistentSkillStorageIds.length > 0,
         );
-        return access
+        let resolvedAccess = access
           ? toAgentCodeUxToolAccess(access, persistentSkillRetrievalEnabled)
           : persistentSkillRetrievalEnabled
             ? toAgentCodeUxToolAccess({ codeUxEnabled: false, codeUxToolToggles: [] }, true)
-            : null;
+            : { codeUxEnabled: false, codeUxToolToggles: [] };
+        if (workerEligible) {
+          resolvedAccess = withClarificationAudienceAccess(resolvedAccess, "worker", "request_clarification");
+        }
+        if (projectManagerEligible) {
+          resolvedAccess = withClarificationAudienceAccess(resolvedAccess, "project_manager", "reply_to_clarification");
+        }
+        return resolvedAccess;
       },
       formatError: (error: unknown) => this.formatError(error),
       logger: this.logger.child({ component: "mcp-request-router", runtimeRole }),

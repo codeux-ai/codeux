@@ -33,6 +33,7 @@ import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import {
   dashboardReplyAgentMcpAccess,
   isSchedulerOnlyAgentMcpAccess,
+  projectManagerClarificationAgentMcpAccess,
   resolveAgentMcpRuntime,
 } from "./agent-mcp-access.js";
 
@@ -425,7 +426,7 @@ export class WorkerInboxReplyService {
         githubToken: this.deps.getGithubToken(),
         projectId: args.projectId,
         sprintId: invocationSprintId,
-        agentMcpAccess: clarificationAgent.mcpAccess ?? null,
+        agentMcpAccess: projectManagerClarificationAgentMcpAccess(clarificationAgent.mcpAccess),
         mcpAgentId: clarificationAgent.id,
         persistentSkillRuntime: persistentSkillContext.runtime,
       });

@@ -26,6 +26,7 @@ import {
 } from "./cli-workflow-utils.js";
 import { buildTaskRunKey, buildTaskRunTag } from "./task-run-key.js";
 import type { Logger } from "../shared/logging/logger.js";
+import { workerClarificationAgentMcpAccess } from "./agent-mcp-access.js";
 
 // New Modules
 import { WorkspaceManager, IWorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
@@ -290,7 +291,7 @@ export class CliWorkflowService {
       preserveSuccessfulWorktreeForActiveSprint,
       agentPresetId: workerAgent?.id,
       agentMemoryConfig: workerAgent?.memoryConfig,
-      agentMcpAccess: workerAgent ? (workerAgent.mcpAccess ?? null) : undefined,
+      agentMcpAccess: workerAgent ? workerClarificationAgentMcpAccess(workerAgent.mcpAccess) : undefined,
       memoryTemplateOverrideEnabled: workerAgent?.memoryTemplateOverrideEnabled,
       memoryTemplateMarkdown: workerAgent?.memoryTemplateMarkdown,
       workspaceManager: this.workspaceManager,

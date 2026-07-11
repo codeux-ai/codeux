@@ -1,9 +1,13 @@
 import type { CustomMcpServer, CustomMcpTransport, DashboardSettings, McpToolToggle, ProviderId } from "../contracts/app-types.js";
-import { TOOL_DEFINITIONS, type McpRuntimeRole, type ToolName } from "../contracts/mcp-tool-definitions.js";
+import { TOOL_DEFINITIONS, type McpRuntimeRole, type McpToolAudience, type ToolName } from "../contracts/mcp-tool-definitions.js";
 
 export interface AgentCodeUxToolAccess {
   codeUxEnabled: boolean;
   codeUxToolToggles: McpToolToggle[];
+  /** Audiences the authenticated agent is eligible to act as. */
+  audiences?: McpToolAudience[];
+  /** Narrow audience grants that do not imply broad Code UX management access. */
+  audienceToolNames?: ToolName[];
 }
 
 export type AgentToolAvailability = McpToolToggle[] | AgentCodeUxToolAccess | null | undefined;
@@ -320,7 +324,10 @@ const getEnabledToolNameSet = (
   for (const tool of settings.mcpTools) {
     enabledByName.set(tool.name, tool.enabled);
   }
-  if (agentToolAccess && !Array.isArray(agentToolAccess) && !agentToolAccess.codeUxEnabled) {
+  const audienceGrantedNames = agentToolAccess && !Array.isArray(agentToolAccess)
+    ? new Set(agentToolAccess.audienceToolNames ?? [])
+    : new Set<ToolName>();
+  if (agentToolAccess && !Array.isArray(agentToolAccess) && !agentToolAccess.codeUxEnabled && audienceGrantedNames.size === 0) {
     return new Set();
   }
   const agentToolToggles = Array.isArray(agentToolAccess)
@@ -331,11 +338,15 @@ const getEnabledToolNameSet = (
       enabledByName.set(tool.name, tool.enabled);
     }
   }
-  return new Set(
+  const normallyEnabled = new Set(
     [...enabledByName.entries()]
       .filter(([, enabled]) => enabled)
       .map(([name]) => name),
   );
+  if (agentToolAccess && !Array.isArray(agentToolAccess) && !agentToolAccess.codeUxEnabled) {
+    return new Set([...audienceGrantedNames].filter((name) => enabledByName.get(name) === true));
+  }
+  return normallyEnabled;
 };
 
 const isToolVisibleForRuntimeRole = (
@@ -345,13 +356,39 @@ const isToolVisibleForRuntimeRole = (
   return !tool.runtimeRoles || (tool.runtimeRoles as readonly McpRuntimeRole[]).includes(runtimeRole);
 };
 
+const isToolVisibleForAudience = (
+  tool: (typeof TOOL_DEFINITIONS)[number],
+  agentToolAccess?: AgentToolAvailability,
+): boolean => {
+  const toolAudiences = "audiences" in tool
+    ? tool.audiences as readonly McpToolAudience[]
+    : ["project_manager"] as const;
+  const audiences: readonly McpToolAudience[] = agentToolAccess && !Array.isArray(agentToolAccess)
+    ? agentToolAccess.audiences ?? ["project_manager"]
+    : ["project_manager"];
+  if (!toolAudiences.some((audience) => audiences.includes(audience))) {
+    return false;
+  }
+  if (
+    agentToolAccess
+    && !Array.isArray(agentToolAccess)
+    && "requiresAudienceGrant" in tool
+    && tool.requiresAudienceGrant
+  ) {
+    return agentToolAccess.audienceToolNames?.includes(tool.name) === true;
+  }
+  return true;
+};
+
 export const getEnabledToolDefinitions = (
   settings: DashboardSettings,
   runtimeRole: McpRuntimeRole = "project_manager",
   agentToolAccess?: AgentToolAvailability,
 ): Array<(typeof TOOL_DEFINITIONS)[number]> => {
   const enabled = getEnabledToolNameSet(settings, agentToolAccess);
-  return TOOL_DEFINITIONS.filter((tool) => enabled.has(tool.name) && isToolVisibleForRuntimeRole(tool, runtimeRole)) as Array<(typeof TOOL_DEFINITIONS)[number]>;
+  return TOOL_DEFINITIONS.filter((tool) => enabled.has(tool.name)
+    && isToolVisibleForRuntimeRole(tool, runtimeRole)
+    && isToolVisibleForAudience(tool, agentToolAccess)) as Array<(typeof TOOL_DEFINITIONS)[number]>;
 };
 
 export const isToolEnabled = (
@@ -365,5 +402,7 @@ export const isToolEnabled = (
   }
 
   const tool = TOOL_DEFINITIONS.find((candidate) => candidate.name === toolName);
-  return !!tool && isToolVisibleForRuntimeRole(tool, runtimeRole);
+  return !!tool
+    && isToolVisibleForRuntimeRole(tool, runtimeRole)
+    && isToolVisibleForAudience(tool, agentToolAccess);
 };

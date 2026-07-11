@@ -1,8 +1,53 @@
 export type McpRuntimeRole = "project_manager";
 
+/** Agent audience is independent from the project-manager MCP gateway transport role. */
+export type McpToolAudience = "project_manager" | "worker";
+
 export type McpToolCategory = "orchestration" | "agents_memory" | "platform" | "advanced";
 
 export const TOOL_DEFINITIONS = [
+  {
+    name: "request_clarification",
+    runtimeRoles: ["project_manager"],
+    audiences: ["worker"],
+    requiresAudienceGrant: true,
+    category: "orchestration",
+    description: "Ask a project-scoped clarification question while executing a coding task. The requester identity is derived from the authenticated MCP agent context.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        projectId: { type: "string", minLength: 1, description: "Project that owns the task and clarification." },
+        questionMarkdown: { type: "string", minLength: 1, maxLength: 16000, description: "Clarification question in Markdown." },
+        deduplicationKey: { type: "string", minLength: 1, maxLength: 512, description: "Stable project-scoped idempotency key for this question." },
+        taskId: { type: "string", minLength: 1, description: "Optional task context." },
+        sprintId: { type: "string", minLength: 1, description: "Optional sprint context." },
+        sprintRunId: { type: "string", minLength: 1, description: "Optional sprint-run context." },
+        dispatchId: { type: "string", minLength: 1, description: "Optional task-dispatch context." },
+        taskRunId: { type: "string", minLength: 1, description: "Optional task-run context." },
+        sessionId: { type: "string", minLength: 1, description: "Optional provider-session context." },
+      },
+      required: ["projectId", "questionMarkdown", "deduplicationKey"],
+    },
+  },
+  {
+    name: "reply_to_clarification",
+    runtimeRoles: ["project_manager"],
+    audiences: ["project_manager"],
+    requiresAudienceGrant: true,
+    category: "orchestration",
+    description: "Reply to a pending worker clarification. The replying identity is derived from the authenticated MCP agent context when present.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        projectId: { type: "string", minLength: 1, description: "Project that owns the clarification." },
+        clarificationId: { type: "string", minLength: 1, maxLength: 512, description: "Clarification attention-item id." },
+        answerMarkdown: { type: "string", minLength: 1, maxLength: 32000, description: "Clarification answer in Markdown." },
+      },
+      required: ["projectId", "clarificationId", "answerMarkdown"],
+    },
+  },
   {
     name: "manage_code_ux",
     runtimeRoles: ["project_manager"],
@@ -485,6 +530,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: "search_skills",
     runtimeRoles: ["project_manager"],
+    audiences: ["project_manager", "worker"],
     category: "agents_memory",
     description: "Search persistent Code UX skills by project, optional agent attachment, or optional storage. Returns concise ranked skill summaries with IDs and metadata; use manage_skills export_markdown or get_skill with includeContent for a full skill.",
     inputSchema: {

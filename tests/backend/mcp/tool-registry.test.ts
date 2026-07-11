@@ -8,7 +8,10 @@ import type { AgentCodeUxToolAccess } from "../../../src/mcp/mcp-tool-availabili
 
 type RouterHandlers = Record<"listTools" | "callTool", (request?: unknown) => Promise<unknown>>;
 
-const createRouterHarness = (resolveAgentMcpToolAccess?: (agentId: string) => AgentCodeUxToolAccess | null) => {
+const createRouterHarness = (resolveAgentMcpToolAccess?: (
+  agentId: string,
+  request?: { toolName: string; arguments: unknown },
+) => AgentCodeUxToolAccess | null) => {
   const handlers = {} as RouterHandlers;
   const managementToolHandler = {
     handleManageProjects: vi.fn(async () => ({ content: [{ type: "text", text: "ok" }] })),
@@ -16,6 +19,8 @@ const createRouterHarness = (resolveAgentMcpToolAccess?: (agentId: string) => Ag
     handleManageCustomDashboards: vi.fn(async () => ({ content: [{ type: "text", text: "custom-dashboards" }] })),
     handleManageNodeFlows: vi.fn(async () => ({ content: [{ type: "text", text: "node-flows" }] })),
     handleScheduler: vi.fn(async () => ({ content: [{ type: "text", text: "scheduled" }] })),
+    handleRequestClarification: vi.fn(async () => ({ content: [{ type: "text", text: "requested" }] })),
+    handleReplyToClarification: vi.fn(async () => ({ content: [{ type: "text", text: "replied" }] })),
   };
 
   registerMcpRequestHandlers({
@@ -84,6 +89,19 @@ const callManageCustomDashboards = async (handlers: RouterHandlers): Promise<unk
     },
   });
 
+const callClarificationTool = async (
+  handlers: RouterHandlers,
+  name: "request_clarification" | "reply_to_clarification",
+  projectId = "project-1",
+): Promise<unknown> => handlers.callTool({
+  params: {
+    name,
+    arguments: name === "request_clarification"
+      ? { projectId, questionMarkdown: "Which API?", deduplicationKey: "question-1" }
+      : { projectId, clarificationId: "clarification-1", answerMarkdown: "Use the typed API." },
+  },
+});
+
 describe("ToolRegistry", () => {
   it("dispatches a registered tool handler", async () => {
     const registry = new ToolRegistry<McpToolArgsByName, string>();
@@ -148,6 +166,24 @@ describe("ToolRegistry", () => {
     expect(handler).toHaveBeenCalledWith({
       action: "list",
     });
+  });
+
+  it("can register and dispatch both typed clarification tools", async () => {
+    const registry = new ToolRegistry<McpToolArgsByName, string>();
+    registry.register("request_clarification", async (args) => args.questionMarkdown);
+    registry.register("reply_to_clarification", async (args) => args.answerMarkdown);
+
+    await expect(registry.dispatch("request_clarification", {
+      projectId: "project-1",
+      questionMarkdown: "Which API?",
+      deduplicationKey: "question-1",
+      taskId: "task-1",
+    })).resolves.toBe("Which API?");
+    await expect(registry.dispatch("reply_to_clarification", {
+      projectId: "project-1",
+      clarificationId: "clarification-1",
+      answerMarkdown: "Use the typed API.",
+    })).resolves.toBe("Use the typed API.");
   });
 
   it("can register and dispatch scheduler", async () => {
@@ -358,6 +394,56 @@ describe("MCP router per-agent Code UX access", () => {
     await runWithMcpAgentContext("unknown-agent", async () => {
       expect(await listToolNames(handlers)).toEqual([]);
       await expect(callManageProjects(handlers)).rejects.toMatchObject({ code: ErrorCode.MethodNotFound });
+    });
+  });
+
+  it("lists and calls only the worker clarification request grant", async () => {
+    const workerAccess: AgentCodeUxToolAccess = {
+      codeUxEnabled: false,
+      codeUxToolToggles: [],
+      audiences: ["worker"],
+      audienceToolNames: ["request_clarification"],
+    };
+    const { handlers, managementToolHandler } = createRouterHarness((agentId, request) => {
+      if (agentId !== "worker-agent") return null;
+      if (request && (request.arguments as { projectId?: string }).projectId !== "project-1") return null;
+      return workerAccess;
+    });
+
+    await runWithMcpAgentContext("worker-agent", async () => {
+      expect(await listToolNames(handlers)).toEqual(["request_clarification"]);
+      await expect(callClarificationTool(handlers, "request_clarification")).resolves.toEqual({
+        content: [{ type: "text", text: "requested" }],
+      });
+      await expect(callClarificationTool(handlers, "reply_to_clarification")).rejects.toMatchObject({ code: ErrorCode.MethodNotFound });
+      await expect(callClarificationTool(handlers, "request_clarification", "other-project")).rejects.toMatchObject({ code: ErrorCode.MethodNotFound });
+    });
+
+    expect(managementToolHandler.handleRequestClarification).toHaveBeenCalledTimes(1);
+    expect(managementToolHandler.handleReplyToClarification).not.toHaveBeenCalled();
+  });
+
+  it("allows scoped and unscoped project-manager clarification replies", async () => {
+    const managerAccess: AgentCodeUxToolAccess = {
+      codeUxEnabled: false,
+      codeUxToolToggles: [],
+      audiences: ["project_manager"],
+      audienceToolNames: ["reply_to_clarification"],
+    };
+    const { handlers } = createRouterHarness((agentId) => agentId === "manager-agent" ? managerAccess : null);
+
+    await runWithMcpAgentContext("manager-agent", async () => {
+      expect(await listToolNames(handlers)).toEqual(["reply_to_clarification"]);
+      await expect(callClarificationTool(handlers, "reply_to_clarification")).resolves.toEqual({
+        content: [{ type: "text", text: "replied" }],
+      });
+    });
+    await runWithMcpAgentContext(null, async () => {
+      await expect(listToolNames(handlers)).resolves.toContain("reply_to_clarification");
+      await expect(callClarificationTool(handlers, "reply_to_clarification")).resolves.toEqual({
+        content: [{ type: "text", text: "replied" }],
+      });
+      await expect(callClarificationTool(handlers, "request_clarification")).rejects.toMatchObject({ code: ErrorCode.MethodNotFound });
     });
   });
 });

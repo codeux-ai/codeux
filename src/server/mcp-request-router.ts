@@ -17,7 +17,10 @@ export interface McpRequestRouterArgs {
   getDashboardSettings: () => DashboardSettings;
   getRuntimeRole: () => McpRuntimeRole;
   /** Resolve explicit code_ux tool access for the agent advertised on the current request, if any. */
-  resolveAgentMcpToolAccess?: (agentId: string) => AgentCodeUxToolAccess | null;
+  resolveAgentMcpToolAccess?: (
+    agentId: string,
+    request?: { toolName: string; arguments: unknown },
+  ) => AgentCodeUxToolAccess | null;
   /** @deprecated Use resolveAgentMcpToolAccess so codeUxEnabled can be enforced. */
   resolveAgentMcpToolToggles?: (agentId: string) => McpToolToggle[] | null;
   formatError: (error: unknown) => { content: Array<{ type: string; text: string }>; isError: true };
@@ -29,6 +32,8 @@ export interface McpRequestRouterArgs {
 export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => {
   const logger = args.logger;
   const toolRegistry = new ToolRegistry<McpToolArgsByName, McpToolResponse>()
+    .register("request_clarification", async (input) => (await args.managementToolHandler.handleRequestClarification(input)) as McpToolResponse)
+    .register("reply_to_clarification", async (input) => (await args.managementToolHandler.handleReplyToClarification(input)) as McpToolResponse)
     .register("manage_code_ux", async (input) => (await args.managementToolHandler.handleManageCodeUx(input)) as McpToolResponse)
     .register("manage_projects", async (input) => (await args.managementToolHandler.handleManageProjects(input)) as McpToolResponse)
     .register("manage_sprints", async (input) => (await args.managementToolHandler.handleManageSprints(input)) as McpToolResponse)
@@ -57,13 +62,15 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
     codeUxToolToggles: [],
   };
 
-  const resolveAgentToolAccess = (): AgentCodeUxToolAccess | McpToolToggle[] | null => {
+  const resolveAgentToolAccess = (
+    request?: { toolName: string; arguments: unknown },
+  ): AgentCodeUxToolAccess | McpToolToggle[] | null => {
     const agentId = getCurrentMcpAgentId();
     if (!agentId) {
       return null;
     }
     if (args.resolveAgentMcpToolAccess) {
-      return args.resolveAgentMcpToolAccess(agentId) ?? denyAllCodeUxTools;
+      return args.resolveAgentMcpToolAccess(agentId, request) ?? denyAllCodeUxTools;
     }
     if (args.resolveAgentMcpToolToggles) {
       return args.resolveAgentMcpToolToggles(agentId) ?? denyAllCodeUxTools;
@@ -91,7 +98,12 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
       const { name, arguments: toolArgs } = request.params;
       logger?.debug("MCP tool request received", { toolName: name });
 
-      if (!isToolEnabled(args.getDashboardSettings(), name, args.getRuntimeRole(), resolveAgentToolAccess())) {
+      if (!isToolEnabled(
+        args.getDashboardSettings(),
+        name,
+        args.getRuntimeRole(),
+        resolveAgentToolAccess({ toolName: name, arguments: toolArgs }),
+      )) {
         logger?.warn("MCP tool request rejected because tool is disabled", { toolName: name });
         throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
       }

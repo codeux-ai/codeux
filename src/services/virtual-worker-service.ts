@@ -45,6 +45,7 @@ import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import { buildRelevantMemoryInjectionContext } from "./memory-injection-context.js";
 import { LEARNINGS_FILENAME } from "../contracts/memory-types.js";
 import { DockerService } from "./docker-service.js";
+import { workerClarificationAgentMcpAccess } from "./agent-mcp-access.js";
 import {
   planVirtualWorkerAttentionClaim,
   projectNeedsVirtualWorker,
@@ -1054,7 +1055,7 @@ export class VirtualWorkerService {
           customBaseUrl: providerSettings.customBaseUrl,
           customModel: providerSettings.customModel,
           githubToken: settings.git.githubToken,
-          agentMcpAccess: workerAgent?.mcpAccess ?? null,
+          agentMcpAccess: workerAgent ? workerClarificationAgentMcpAccess(workerAgent.mcpAccess) : null,
           mcpAgentId: workerAgent?.id ?? null,
         });
       }
@@ -1455,7 +1456,7 @@ export class VirtualWorkerService {
           ? taskContinuation?.previousInvocation?.rawUsageJson ?? null
           : null,
         githubToken: settings.git.githubToken,
-        agentMcpAccess: workerAgent?.mcpAccess ?? null,
+        agentMcpAccess: workerAgent ? workerClarificationAgentMcpAccess(workerAgent.mcpAccess) : null,
         mcpAgentId: workerAgent?.id ?? null,
       });
 

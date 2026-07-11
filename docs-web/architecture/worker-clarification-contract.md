@@ -20,6 +20,12 @@ Replies atomically close the active attention item, so a second answer cannot re
 
 Every task, sprint, sprint run, dispatch, and task-run reference is checked against the declared project and against the other linked runtime records. Reads and mutations require the owning project id as well as the clarification id.
 
+## MCP audience boundary
+
+The project-manager MCP gateway carries two audience-scoped tools; no additional runtime role is created. Authenticated task agents can discover `request_clarification` only when they are assigned to a project task, selected as the manual coding agent, or included in the project's coding worker pool. Only the configured clarification-reply or dashboard-reply agent, the built-in Project manager fallback, or an unscoped project-manager client can discover `reply_to_clarification`.
+
+Listing and invocation use the same checks. Unknown or ineligible agents, cross-project calls, and cross-audience calls return `MethodNotFound`. These narrow grants still honor system toggles and explicit agent disables and do not grant other management tools or custom MCP servers. Dashboard-reply and persistent-skill access continue to use their existing policies.
+
 ## Idempotency and events
 
 A project-scoped deduplication key makes repeated identical submissions return the existing clarification. Reusing the key for different request content or runtime scope is rejected.
