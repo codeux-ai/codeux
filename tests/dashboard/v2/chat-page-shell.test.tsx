@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render } from "@testing-library/preact";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render } from "@testing-library/preact";
 import { h } from "preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 /** @jsx h */
@@ -30,6 +30,8 @@ const mockProject = {
 };
 
 describe("ChatPageShell", () => {
+  afterEach(cleanup);
+
   it("renders onboarding mode without project chat controls when no project is selected", () => {
     const { getByText, queryByRole } = render(
       <ChatPageShell
@@ -147,6 +149,7 @@ describe("ChatPageShell", () => {
       <ChatCreateAppQuickActions
         hasProject={true}
         sending={false}
+        showInitialCreateActions={true}
         onSelect={onSelect}
       />
     );
@@ -171,11 +174,29 @@ describe("ChatPageShell", () => {
       <ChatCreateAppQuickActions
         hasProject={false}
         sending={false}
+        showInitialCreateActions={false}
         onSelect={onSelect}
       />
     );
 
-    expect(getByRole("button", { name: "Create Desktop App" })).toBeDisabled();
+    expect(() => getByRole("button", { name: "Create Desktop App" })).toThrow();
+    expect(getByRole("button", { name: "Create Game" })).toBeDisabled();
     expect(getByText("Create app quick actions are unavailable until a project is selected.")).toBeInTheDocument();
+  });
+
+  it("omits initial-only app actions for an ineligible project", () => {
+    const { getByRole, queryByRole } = render(
+      <ChatCreateAppQuickActions
+        hasProject
+        showInitialCreateActions={false}
+        onSelect={vi.fn()}
+      />
+    );
+
+    expect(queryByRole("button", { name: "Create Web App" })).not.toBeInTheDocument();
+    expect(queryByRole("button", { name: "Create Desktop App" })).not.toBeInTheDocument();
+    expect(getByRole("button", { name: "Create Onlineshop" })).toBeEnabled();
+    expect(getByRole("button", { name: "Create Portfolio" })).toBeEnabled();
+    expect(getByRole("button", { name: "Create Game" })).toBeEnabled();
   });
 });
