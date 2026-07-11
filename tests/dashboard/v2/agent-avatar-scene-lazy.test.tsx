@@ -19,7 +19,9 @@ vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({
 vi.mock("../../../dashboard/src/v2/components/agents/AgentAvatarScene.js", () => {
   sceneModuleState.loaded = true;
   return {
-    AgentAvatarScene: () => <div data-testid="agent-avatar-scene" />,
+    AgentAvatarScene: (props: { tool?: string | null }) => (
+      <div data-testid="agent-avatar-scene" data-tool={props.tool ?? ""} />
+    ),
   };
 });
 
@@ -95,6 +97,16 @@ describe("LazyAgentAvatarScene", () => {
     expect(screen.queryByTestId("agent-avatar-scene")).not.toBeInTheDocument();
   });
 
+  it("keeps the selected tool identifiable in the reduced-motion fallback", () => {
+    sceneModuleState.reducedMotion = true;
+
+    render(<LazyAgentAvatarScene eager tool="torch" expression="thinking" />);
+
+    expect(screen.getByTestId("agent-avatar-fallback")).toHaveAttribute("data-tool", "torch");
+    expect(screen.getByTestId("agent-avatar-static-tool")).toHaveTextContent("Welding torch");
+    expect(screen.getByRole("img", { name: "Agent avatar preview working with Welding torch" })).toBeInTheDocument();
+  });
+
   it("imports and renders the 3D scene once the avatar stage becomes visible", async () => {
     window.IntersectionObserver = ImmediateIntersectionObserver;
 
@@ -104,6 +116,16 @@ describe("LazyAgentAvatarScene", () => {
       expect(screen.getByTestId("agent-avatar-scene")).toBeInTheDocument();
     });
     expect(sceneModuleState.loaded).toBe(true);
+  });
+
+  it("passes the selected tool through to the visible 3D scene", async () => {
+    window.IntersectionObserver = ImmediateIntersectionObserver;
+
+    render(<LazyAgentAvatarScene tool="wrench" expression="happy" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("agent-avatar-scene")).toHaveAttribute("data-tool", "wrench");
+    });
   });
 
   it("disconnects the visibility observer when unmounted before visibility", () => {

@@ -26,9 +26,9 @@ Each preset is a card with avatar, name, label tags, and a one-line description.
 
 ## Avatar preview behavior
 
-The 3D avatar preview uses lightweight WebGL presentation effects only. It relies on studio lighting, material finish, and avatar/tool animation rather than flashlight beams, target glows, or post-processing.
+The 3D avatar preview uses lightweight WebGL presentation effects only. It relies on studio lighting, material finish, and distinct screwdriver, jackhammer, wrench, hammer, and welding-torch props rather than flashlight beams, target glows, or post-processing. Tool changes use smooth entrance and exit motion without restarting the WebGL renderer.
 
-When motion is allowed, the avatar head can track pointer hover and runtime tool props animate beside the bot. Reduced-motion settings and WebGL fallback mode use the static SVG avatar instead, so the Agents page remains usable without animation or a WebGL context.
+When motion is allowed, the avatar head can track pointer hover and runtime tool props animate beside the bot. Reduced-motion settings and WebGL fallback mode use the static SVG avatar plus an active-tool label, so the Agents page remains usable and the work prop remains identifiable without animation or a WebGL context.
 
 ## Creating an agent
 
