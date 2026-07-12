@@ -26,4 +26,10 @@ The debugger reads persisted runs, node runs, attempt history, and approval deci
 
 The layout stacks on small screens, preserves keyboard-visible focus, labels loading/error/empty states, and bounds long histories and JSON output with scrolling.
 
+## Agent attachments
+
+For the selected flow, the workspace loads project-owned agent presets and existing attachments. The selector excludes agents already attached, and attach/detach buttons are native keyboard controls with visible focus treatment. Every mutation uses the governed flow attachment API and refreshes the selected flow's bindings afterward. Changing projects or flows clears the prior selection and attachment state; late responses from the old scope are ignored. Load and mutation failures leave known bindings visible and provide a retry action.
+
+The inspector receives agent names and attachment metadata only. An attachment exposes only the narrow `run_attached_flow` capability to that project agent; execution continues to verify ownership, the binding, an immutable publication, and credential policy without exposing graph or secret material.
+
 Outside development, `/nodes` requires the Nodes feature flag plus the node-flow backend and automation-security prerequisites. Individual definitions can require additional provider, credential-broker, egress, approval/outbox, webhook, or custom-runtime configuration; catalog presence alone does not assert production readiness for an integration.

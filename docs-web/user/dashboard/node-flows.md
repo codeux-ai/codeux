@@ -38,6 +38,10 @@ The run debugger lists durable approvals beside node attempts. A pending item of
 
 A flow can be attached to a project agent preset as a repeatable skill with a name and description. Detaching removes only that binding; the flow, its graph, schedules, and run history remain in the project.
 
+The Nodes workspace loads the selected project's agent presets together with the selected flow's existing bindings. Already attached agents are removed from the selector. Attach and detach actions are keyboard accessible, use the governed APIs, and refresh the binding list after success. Switching projects or flows clears selection and stale attachment state. A failed load or mutation leaves known bindings visible and exposes a retry action.
+
+The inspector displays attachment metadata only. An attached agent receives the narrow `run_attached_flow` operation, which still verifies project ownership, the binding, publication state, and credential policy without granting graph inspection, credential access, or `manage_node_flows`.
+
 ## Scheduling
 
 Use the [Scheduler](./scheduler.md) page to run a saved node flow once or on a recurrence. Scheduled node-flow entries select a project-owned flow and may include optional JSON object input. Pause, resume, failure handling, and due-run behavior match the normal scheduler model.

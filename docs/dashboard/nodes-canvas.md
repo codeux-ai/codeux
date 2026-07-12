@@ -14,6 +14,8 @@ The versioned definition registry supplies the palette, executable state, typed 
 
 Credential slots show metadata-only states such as bound, missing, or denied and can submit a binding request. Secret material stays behind the credential broker and is excluded from graphs, browser output, logs, and examples.
 
+The selected flow also loads the active project's agent presets and its current flow-to-agent attachments. Attachment controls remain page-owned and pass only preset and attachment metadata into the inspector. Attaching or detaching calls the governed node-flow attachment routes and then reloads the selected flow's bindings; switching projects or flows clears the prior selection and ignores stale responses. Loading and retryable failure states remain visible without exposing graphs, credentials, or broader node-flow management capability to an attached agent.
+
 Validation and dry run report structural issues, requested capabilities, credential requirements, side-effect differences, and policy findings. Dry run is review-only and does not execute nodes. Publication requires the current draft revision, a valid graph with no error-level policy findings, and all declared credential requirements bound. Publications are immutable; comparison and rollback operate on versioned snapshots.
 
 ## Executable definitions
@@ -27,3 +29,5 @@ Validated custom definitions may also execute after their versioned manifest and
 Only published versions run. The debugger shows redacted run output, graph and node states, attempts, retry classifications and decisions, approval state, invocation links, timing, cancellation, and safe retry controls. Approval decisions resume or terminate the same pinned durable run. Scheduling is entered through the Scheduler page and targets a pinned or latest-published version.
 
 Outside development builds, the workspace is exposed only when the Nodes feature flag and both node-flow backend and automation-security prerequisites are enabled. Execution also depends on the services required by a definition: for example, a configured provider for `provider_prompt`, allowed egress for `http_request`, approval and outbox services for governed email sending, webhook configuration for webhook ingress, and the custom-node runtime for registered custom definitions. Availability is not a claim that every integration is configured for production.
+
+An attached agent receives only the governed `run_attached_flow` capability for that project-owned binding. Runtime execution still verifies project ownership, publication state, attachment identity, and credential policy; attachment never grants graph inspection, credential access, or the broader `manage_node_flows` surface.
