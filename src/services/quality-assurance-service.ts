@@ -679,7 +679,6 @@ export class QualityAssuranceService {
         sprintRunId: args.sprintRunId,
         latestRuns,
         maxRuns,
-        shouldRunReview,
       });
       return {
         reviewed: false,
@@ -819,7 +818,11 @@ export class QualityAssuranceService {
       const targetTaskRun = targetTask ? this.resolveTaskRunForSubtask(targetTask, args.sprintRunId) : null;
       const fixInstructions = review.fixInstructions;
       const canContinueTargetTask = Boolean(targetTask && !this.isMergedSubtask(targetTask));
-      const continued = targetTask && fixInstructions && canContinueTargetTask
+      // Reserve the final configured review as a verification/handoff cycle.
+      // Creating more automatic work at the cap leaves no budget to verify it
+      // and previously trapped the sprint in an invisible heartbeat loop.
+      const canApplyAutomaticFollowUp = runIndex < maxRuns;
+      const continued = canApplyAutomaticFollowUp && targetTask && fixInstructions && canContinueTargetTask
         ? await this.requestFixesForTask({
           task: targetTask,
           taskRun: targetTaskRun,
@@ -829,15 +832,17 @@ export class QualityAssuranceService {
           prompt: fixInstructions,
         })
         : { applied: false, mode: "none" as const };
-      const createdFollowUpTasks = this.createSprintFollowUpTasks({
-        projectId: args.projectId,
-        sprintId: args.sprintId,
-        targetTask,
-        fixInstructions,
-        review,
-        existingSubtasks: args.subtasks,
-        sourceRunId: changesRequested.run.id,
-      });
+      const createdFollowUpTasks = canApplyAutomaticFollowUp
+        ? this.createSprintFollowUpTasks({
+          projectId: args.projectId,
+          sprintId: args.sprintId,
+          targetTask,
+          fixInstructions,
+          review,
+          existingSubtasks: args.subtasks,
+          sourceRunId: changesRequested.run.id,
+        })
+        : [];
 
       this.deps.qaReviewRepository.updateRun(changesRequested.run.id, {
         targetTaskKey: targetTask?.id || review.targetTaskKey,
@@ -848,9 +853,14 @@ export class QualityAssuranceService {
           ...review.raw,
           continued: continued.applied,
           continuationMode: continued.mode,
-          continuationSkippedReason: targetTask && fixInstructions && !canContinueTargetTask
-            ? "target_task_already_merged"
-            : undefined,
+          continuationSkippedReason: !canApplyAutomaticFollowUp
+            ? "sprint_qa_retry_budget_exhausted"
+            : targetTask && fixInstructions && !canContinueTargetTask
+              ? "target_task_already_merged"
+              : undefined,
+          automaticFollowUpSuppressedReason: canApplyAutomaticFollowUp
+            ? undefined
+            : "sprint_qa_retry_budget_exhausted",
           createdFollowUpTaskKeys: createdFollowUpTasks.map((task) => task.taskKey),
           taskSnapshot: currentTaskSnapshot,
         },
@@ -867,6 +877,19 @@ export class QualityAssuranceService {
         clearMergeProjectionForRerun(targetTask);
       }
 
+      if (!canApplyAutomaticFollowUp) {
+        const terminalLatestRuns = this.deps.qaReviewRepository
+          .listLatestSprintCycleRuns(args.sprintId)
+          .filter((run) => run.sprintRunId === args.sprintRunId);
+        this.openSprintQaHumanHandoffIfTerminal({
+          projectId: args.projectId,
+          sprintId: args.sprintId,
+          sprintRunId: args.sprintRunId,
+          latestRuns: terminalLatestRuns,
+          maxRuns,
+        });
+      }
+
       return {
         reviewed: true,
         blockedCompletion: true,
@@ -876,7 +899,7 @@ export class QualityAssuranceService {
           targetTask?.id || review.targetTaskKey,
           continued.applied,
           createdFollowUpTasks.map((task) => task.taskKey),
-        ),
+        ) + (!canApplyAutomaticFollowUp ? renderSprintQaBudgetExhaustedReport(maxRuns) : ""),
       };
     }
 
@@ -927,11 +950,10 @@ export class QualityAssuranceService {
     sprintRunId: string;
     latestRuns: QaReviewRunRecord[];
     maxRuns: number;
-    shouldRunReview: boolean;
   }): void {
     const service = this.deps.projectAttentionService;
     const latestRun = args.latestRuns[0] ?? null;
-    if (!service || !latestRun || args.shouldRunReview) {
+    if (!service || !latestRun) {
       return;
     }
 
@@ -947,9 +969,10 @@ export class QualityAssuranceService {
     const reason = terminalFailure
       ? "terminal_review_failure"
       : "retry_budget_exhausted";
-    const lastProviderError = terminalFailure?.summaryMarkdown?.trim()
+    const latestReviewDetail = terminalFailure?.summaryMarkdown?.trim()
       || latestRun.summaryMarkdown?.trim()
       || "Sprint QA did not produce a passing verdict.";
+    const lastProviderError = terminalFailure ? latestReviewDetail : null;
     const errorCode = terminalFailure?.payload?.error_code;
     const attempts = latestRun.runIndex;
 
@@ -969,7 +992,7 @@ export class QualityAssuranceService {
         "Sprint completion remains blocked because QA could not produce a passing verdict.",
         `Attempts: ${attempts}/${args.maxRuns}.`,
         `Reason: ${reason}.`,
-        `Latest provider error: ${lastProviderError}`,
+        `${terminalFailure ? "Latest provider error" : "Latest QA result"}: ${latestReviewDetail}`,
         "Resolve this handoff after correcting the provider or reviewing the result to reset sprint QA and allow one fresh review cycle.",
       ].join("\n\n"),
       payload: {
@@ -981,6 +1004,7 @@ export class QualityAssuranceService {
         runsUsed: attempts,
         maxRuns: args.maxRuns,
         lastProviderError,
+        latestQaSummary: latestRun.summaryMarkdown?.trim() || null,
         lastProviderErrorCode: typeof errorCode === "string" ? errorCode : null,
         latestQaRunId: terminalFailure?.id ?? latestRun.id,
         sprintRunId: args.sprintRunId,
@@ -2230,6 +2254,10 @@ function renderSprintQaPendingReport(run: QaReviewRunRecord): string {
     return `\nSprint QA is still waiting on follow-up work before merge.${summary ? ` ${summary}` : ""}\n`;
   }
   return `\nSprint QA must be retried before merge.${summary ? ` ${summary}` : ""}\n`;
+}
+
+function renderSprintQaBudgetExhaustedReport(maxRuns: number): string {
+  return `\nSprint QA used all ${maxRuns} configured review cycles. No additional automatic follow-up tasks were created; human review is required.\n`;
 }
 
 function renderSprintQaFailedReport(error: unknown): string {
