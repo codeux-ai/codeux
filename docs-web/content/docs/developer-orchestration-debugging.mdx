@@ -24,6 +24,8 @@ Run `pnpm run test:orchestration:ci-dag` for the Linux no-secret CI lane. It bui
 
 Run `pnpm run test:orchestration:ci-dag:electron` for the native macOS and Windows Electron lane. It launches `dist/electron/main.js`, waits for the embedded Code UX server, and runs the same QA DAG shape through a host-execution mockup fixture.
 
+Host workspace setup validates the configured project root with `git rev-parse`. A Git for Windows DLL initialization exit (`0xC0000142`) is retried twice with bounded backoff before the task is failed; ordinary invalid-checkout and nested-root errors still fail immediately.
+
 In GitHub Actions, `08 Orchestration` is one OS matrix: Linux runs the Docker-backed compiled-runtime DAG, and macOS/Windows run the Electron DAG with Electron binary install and native dependency rebuild exposed as separate steps. Each DAG job has a 25-minute workflow timeout, and the mockup runner bounds individual HTTP calls at 60 seconds plus the full project run at the configured `--timeout-ms`. During orchestration, it streams redacted runtime stdout/stderr, emits `mockup_pentest_progress` records on sprint/task changes plus 15-second heartbeats, fails after `--stall-timeout-ms 180000` when no sprint, task status, merge, or expected-output progress is observed after polling starts, and writes a final Markdown table to `GITHUB_STEP_SUMMARY`.
 
 ## Local Branch Merge Drain

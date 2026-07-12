@@ -1150,6 +1150,41 @@ describe("WorkspaceManager", () => {
     );
   });
 
+  it("retries a Git root probe after a transient Windows DLL initialization failure", async () => {
+    vi.useFakeTimers();
+    let rootProbeCalls = 0;
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
+      if (args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        rootProbeCalls += 1;
+        if (rootProbeCalls === 1) {
+          throw new Error("git rev-parse --show-toplevel failed: Unknown error (exit code 3221225794, no output captured)");
+        }
+        return { ok: true, stdout: "/repo/project\n", stderr: "", code: 0 } as any;
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0 } as any;
+    });
+
+    try {
+      const workspacePromise = manager.createHostSnapshotWorkspace("/repo/project", "session-1");
+      await vi.runAllTimersAsync();
+      await expect(workspacePromise).resolves.toMatch(/code-ux-qa-[a-f0-9]{16}$/);
+      expect(rootProbeCalls).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not retry ordinary Git checkout validation failures", async () => {
+    vi.mocked(runCommandStrict).mockRejectedValue(new Error(
+      "git rev-parse --show-toplevel failed: fatal: not a git repository",
+    ));
+
+    await expect(manager.createHostSnapshotWorkspace("/repo/project", "session-1"))
+      .rejects
+      .toThrow("Project repository path is not a Git checkout");
+    expect(runCommandStrict).toHaveBeenCalledTimes(1);
+  });
+
   it("accepts exact Git roots when configured and reported paths canonicalize to the same checkout", async () => {
     vi.mocked(fs.realpath).mockImplementation(async (candidate) => {
       const value = String(candidate);

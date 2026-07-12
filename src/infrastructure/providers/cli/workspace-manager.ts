@@ -24,7 +24,18 @@ const WORKSPACE_VOLUME_LABEL = "code-ux.workspace=true";
 const RUNTIME_VOLUME_LABEL = "code-ux.workspace-runtime=true";
 const WORKSPACE_SESSION_LABEL_PREFIX = "code-ux.workspace-session=";
 const GIT_BUNDLE_REUSE_GRACE_MS = 2_000;
+const WINDOWS_DLL_INITIALIZATION_FAILURE_CODES = ["3221225794", "-1073741502"];
+const GIT_ROOT_PROBE_RETRY_DELAYS_MS = [250, 750];
 export const CONTAINER_PERSISTENT_SKILL_STORAGE_ROOT = "/code-ux/persistent-skills";
+
+const isTransientGitProcessInitializationFailure = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : String(error);
+  return WINDOWS_DLL_INITIALIZATION_FAILURE_CODES.some((code) => message.includes(`exit code ${code}`));
+};
+
+const waitForGitProcessRecovery = async (delayMs: number): Promise<void> => {
+  await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+};
 
 async function canonicalizeExistingPath(candidate: string): Promise<string> {
   const resolved = path.resolve(candidate);
@@ -1367,11 +1378,23 @@ export class WorkspaceManager implements IWorkspaceManager {
   }
 
   private async assertExactGitWorktreeRoot(repoPath: string): Promise<void> {
-    let result: CommandResult;
-    try {
-      result = await runCommandStrict("git", ["rev-parse", "--show-toplevel"], repoPath);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+    let result: CommandResult | undefined;
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= GIT_ROOT_PROBE_RETRY_DELAYS_MS.length; attempt += 1) {
+      try {
+        result = await runCommandStrict("git", ["rev-parse", "--show-toplevel"], repoPath);
+        break;
+      } catch (error) {
+        lastError = error;
+        const retryDelay = GIT_ROOT_PROBE_RETRY_DELAYS_MS[attempt];
+        if (retryDelay === undefined || !isTransientGitProcessInitializationFailure(error)) {
+          break;
+        }
+        await waitForGitProcessRecovery(retryDelay);
+      }
+    }
+    if (!result) {
+      const message = lastError instanceof Error ? lastError.message : String(lastError);
       throw new Error(`Project repository path is not a Git checkout: ${repoPath}. ${message}`);
     }
 
