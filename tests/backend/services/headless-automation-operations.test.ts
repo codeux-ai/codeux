@@ -91,9 +91,10 @@ describe("authenticated headless automation operations", () => {
   });
 
   it("fails key readiness closed only when encrypted data requires recovery", async () => {
+    const health = vi.fn(async () => ({ available: false, secure: true, provider: "vault", keyId: null, keyVersion: null, reason: "vault unavailable" }));
     const unavailableKeyProvider: KeyProvider = {
       providerName: "vault",
-      health: async () => ({ available: false, secure: true, provider: "vault", keyId: null, keyVersion: null, reason: "vault unavailable" }),
+      health,
       getActiveKey: async () => { throw new Error("unavailable"); },
       getKey: async () => { throw new Error("unavailable"); },
     };
@@ -105,6 +106,7 @@ describe("authenticated headless automation operations", () => {
       security: { mode: "local", serviceIdentities: [], allowInsecureHttp: true, remoteCredentialManagement: false },
     });
     await expect(optional.refresh()).resolves.toMatchObject({ status: "READY", components: { credentialKey: { status: "not_required" } } });
+    expect(health).not.toHaveBeenCalled();
 
     const required = new HeadlessOperationalReadinessService({
       credentialRepository: { countEncryptedSecrets: () => 1 } as unknown as AutomationCredentialRepository,
@@ -113,6 +115,7 @@ describe("authenticated headless automation operations", () => {
       security: { mode: "local", serviceIdentities: [], allowInsecureHttp: true, remoteCredentialManagement: false },
     });
     await expect(required.assertStartupReady()).rejects.toThrow(/encrypted credential data exists/i);
+    expect(health).toHaveBeenCalledTimes(1);
     expect(required.snapshot()).toMatchObject({ status: "NOT_READY", components: { credentialKey: { provider: "vault" } } });
   });
 

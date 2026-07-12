@@ -29,16 +29,9 @@ export class HeadlessOperationalReadinessService {
   async refresh(): Promise<HeadlessOperationalReadiness> {
     const encryptedSecretCount = this.dependencies.credentialRepository.countEncryptedSecrets();
     const keyRequired = encryptedSecretCount > 0 || this.dependencies.security.remoteCredentialManagement;
-    const keyHealth = await this.dependencies.keyProvider.health();
     const credentialKey = keyRequired
-      ? keyHealth.available && keyHealth.secure
-        ? { status: "ready" as const, provider: keyHealth.provider }
-        : {
-            status: "not_ready" as const,
-            provider: keyHealth.provider,
-            reason: keyHealth.reason ?? "The configured credential key provider is unavailable.",
-          }
-      : { status: "not_required" as const, provider: keyHealth.provider };
+      ? await this.checkRequiredCredentialKey()
+      : { status: "not_required" as const, provider: this.dependencies.keyProvider.providerName };
     const auditStore = this.dependencies.auditService.health()
       ? { status: "ready" as const }
       : { status: "not_ready" as const, reason: "The durable audit store is unavailable." };
@@ -58,6 +51,17 @@ export class HeadlessOperationalReadinessService {
       components: { credentialKey, auditStore, distributedRunner },
     };
     return this.snapshot();
+  }
+
+  private async checkRequiredCredentialKey(): Promise<HeadlessOperationalReadiness["components"]["credentialKey"]> {
+    const keyHealth = await this.dependencies.keyProvider.health();
+    return keyHealth.available && keyHealth.secure
+      ? { status: "ready", provider: keyHealth.provider }
+      : {
+          status: "not_ready",
+          provider: keyHealth.provider,
+          reason: keyHealth.reason ?? "The configured credential key provider is unavailable.",
+        };
   }
 
   async assertStartupReady(): Promise<void> {
