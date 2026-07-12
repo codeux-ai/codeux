@@ -23,7 +23,7 @@ These checks are intentionally conservative. An ambiguous history is not an auto
 
 `SprintRollbackService` fetches the default branch, creates a detached temporary worktree, creates a unique `rollback/<source>-<suffix>` branch, and runs `git revert -m 1` against the proven integration merge. Temporary worktree commands remain rooted in the source repository and address the worktree with `git -C`, preserving the containerized Git helper's metadata paths. The branch is pushed to `origin` only after the revert succeeds. The visible checkout and uncommitted user work are never changed.
 
-The rollback sprint receives one already-settled audit task and starts normal finalization. Automatic rollbacks skip task/sprint provider work, completion QA, and memory-remediation invocation. They still use the normal remote main-merge gate for PR creation, CI observation, conflict repair, and final completion.
+The rollback sprint receives one already-settled audit task and starts normal finalization. Automatic rollback cycles have a hard dispatch boundary: they skip task dispatch, task QA, agent intervention, completion QA, and memory-remediation invocation even if a stale runtime projection temporarily presents the audit task as pending. They still use the normal remote main-merge gate for PR creation, CI observation, conflict repair, and final completion.
 
 If the deterministic revert conflicts or any Git step cannot complete safely, the same rollback sprint is changed to `agent_assisted` and receives a pending rollback task.
 
