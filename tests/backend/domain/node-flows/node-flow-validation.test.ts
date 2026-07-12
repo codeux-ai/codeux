@@ -112,4 +112,71 @@ describe("node flow validation", () => {
 
     expect(validateNodeFlowGraph(graph).executionOrder).toEqual(["a", "z"]);
   });
+
+  it("returns deterministic field-level issues for malformed nested graph entries", () => {
+    const malformed = {
+      schemaVersion: 2,
+      nodes: [
+        null,
+        {
+          id: "broken",
+          type: "input",
+          title: "Broken",
+          definition: { type: null, version: "one" },
+          ports: [null, { id: "", direction: "sideways", schema: null }],
+          credentialBindings: [null, { slot: "provider", credentialId: null }],
+          policy: { retry: null, timeout: [] },
+          data: { nested: [null, { value: true }] },
+        },
+      ],
+      edges: [null],
+      inputSchema: { fields: [null] },
+      schemas: { input: { type: "object", required: [null], properties: { child: null } }, output: [] },
+      publication: null,
+    } as unknown;
+
+    const first = validateNodeFlowGraph(malformed);
+    const second = validateNodeFlowGraph(malformed);
+
+    expect(first).toEqual(second);
+    expect(first.valid).toBe(false);
+    expect(first.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: "nodes[0]", code: "invalid_node" }),
+      expect.objectContaining({ field: "nodes[1].definition.type", code: "required" }),
+      expect.objectContaining({ field: "nodes[1].definition.version", code: "invalid_definition_version" }),
+      expect.objectContaining({ field: "nodes[1].ports[0]", code: "invalid_port" }),
+      expect.objectContaining({ field: "nodes[1].credentialBindings[0]", code: "invalid_credential_binding" }),
+      expect.objectContaining({ field: "nodes[1].policy.retry", code: "invalid_retry_policy" }),
+      expect.objectContaining({ field: "edges[0]", code: "invalid_edge" }),
+      expect.objectContaining({ field: "inputSchema.fields[0]", code: "invalid_widget_field" }),
+      expect.objectContaining({ field: "schemas.input.required[0]", code: "invalid_value_schema" }),
+      expect.objectContaining({ field: "schemas.input.properties.child", code: "invalid_value_schema" }),
+      expect.objectContaining({ field: "schemas.output", code: "invalid_value_schema" }),
+      expect.objectContaining({ field: "publication", code: "invalid_publication" }),
+    ]));
+  });
+
+  it("rejects malformed collection containers without throwing", () => {
+    const result = validateNodeFlowGraph({
+      nodes: [{
+        id: "start",
+        type: "input",
+        title: "Start",
+        definition: null,
+        ports: null,
+        credentialBindings: {},
+        policy: "forever",
+        capabilities: [null],
+      }],
+      edges: [],
+    });
+
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: "nodes[0].definition", code: "invalid_definition_reference" }),
+      expect.objectContaining({ field: "nodes[0].ports", code: "invalid_ports" }),
+      expect.objectContaining({ field: "nodes[0].credentialBindings", code: "invalid_credential_bindings" }),
+      expect.objectContaining({ field: "nodes[0].policy", code: "invalid_policy" }),
+      expect.objectContaining({ field: "nodes[0].capabilities", code: "invalid_capabilities" }),
+    ]));
+  });
 });

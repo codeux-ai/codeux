@@ -69,7 +69,11 @@ export const NodesPage: FunctionComponent = () => {
       let nextFlows = library.flows;
       const legacy = typeof window !== "undefined" ? window.localStorage.getItem(NODES_CANVAS_STORAGE_KEY) : null;
       if (legacy && !window.localStorage.getItem(migrationMarker(nextProjectId))) {
-        const importedGraph = toCanonicalNodeFlowGraph(deserializeNodeCanvasGraphWithMigration(legacy).graph);
+        const legacySnapshot: unknown = JSON.parse(legacy);
+        const importedGraph = toCanonicalNodeFlowGraph(
+          deserializeNodeCanvasGraphWithMigration(legacy).graph,
+          legacySnapshot,
+        );
         const imported = await createNodeFlowDraft(nextProjectId, { title: "Imported Nodes Canvas", description: "One-time import from the legacy browser canvas.", graph: importedGraph });
         window.localStorage.setItem(migrationMarker(nextProjectId), imported.flowId);
         window.localStorage.removeItem(NODES_CANVAS_STORAGE_KEY);

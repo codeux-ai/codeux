@@ -58,6 +58,10 @@ function trimmedString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function isJsonValue(value: unknown, seen = new Set<object>()): value is NodeFlowJsonValue {
   if (value === null) {
     return true;
@@ -252,48 +256,81 @@ function normalizeWidgetSchema(
   return { fields: normalizedFields };
 }
 
-function containsForbiddenGraphValue(value: NodeFlowJsonValue): boolean {
-  if (Array.isArray(value)) return value.some(containsForbiddenGraphValue);
+function containsForbiddenGraphValue(value: unknown, seen = new Set<object>()): boolean {
+  if (Array.isArray(value)) return value.some((entry) => containsForbiddenGraphValue(entry, seen));
   if (!value || typeof value !== "object") return false;
-  return Object.entries(value).some(([key, entry]) => FORBIDDEN_GRAPH_KEY.test(key) || containsForbiddenGraphValue(entry));
+  if (seen.has(value)) return false;
+  seen.add(value);
+  return Object.entries(value).some(([key, entry]) => FORBIDDEN_GRAPH_KEY.test(key) || containsForbiddenGraphValue(entry, seen));
 }
 
 function validatePolicy(
-  policy: NodeFlowNode["policy"],
+  policy: unknown,
   path: string,
   issues: NodeFlowValidationIssue[],
 ): void {
-  if (!policy) return;
-  const retry = policy.retry;
-  if (retry && (!Number.isInteger(retry.maxAttempts) || retry.maxAttempts < 1 || retry.maxAttempts > 10)) {
+  if (policy === undefined) return;
+  if (!policy || typeof policy !== "object" || Array.isArray(policy)) {
+    issues.push(issue(path, "invalid_policy", "Node policy must be an object."));
+    return;
+  }
+  const typedPolicy = policy as Record<string, unknown>;
+  if (typedPolicy.retry !== undefined && (!typedPolicy.retry || typeof typedPolicy.retry !== "object" || Array.isArray(typedPolicy.retry))) {
+    issues.push(issue(`${path}.retry`, "invalid_retry_policy", "Retry policy must be an object."));
+  }
+  if (typedPolicy.timeout !== undefined && (!typedPolicy.timeout || typeof typedPolicy.timeout !== "object" || Array.isArray(typedPolicy.timeout))) {
+    issues.push(issue(`${path}.timeout`, "invalid_timeout_policy", "Timeout policy must be an object."));
+  }
+  const retry = isRecord(typedPolicy.retry) ? typedPolicy.retry : undefined;
+  const timeout = isRecord(typedPolicy.timeout) ? typedPolicy.timeout : undefined;
+  if (retry && (typeof retry.maxAttempts !== "number" || !Number.isInteger(retry.maxAttempts) || retry.maxAttempts < 1 || retry.maxAttempts > 10)) {
     issues.push(issue(`${path}.retry.maxAttempts`, "invalid_retry_policy", "Retry maxAttempts must be an integer from 1 to 10."));
   }
-  if (retry && (!Number.isFinite(retry.backoffMs) || retry.backoffMs < 0 || retry.backoffMs > 300_000)) {
+  if (retry && (typeof retry.backoffMs !== "number" || !Number.isFinite(retry.backoffMs) || retry.backoffMs < 0 || retry.backoffMs > 300_000)) {
     issues.push(issue(`${path}.retry.backoffMs`, "invalid_retry_policy", "Retry backoffMs must be between 0 and 300000."));
   }
-  if (retry?.maxBackoffMs !== undefined && (!Number.isFinite(retry.maxBackoffMs) || retry.maxBackoffMs < retry.backoffMs)) {
+  if (retry?.maxBackoffMs !== undefined && (
+    typeof retry.maxBackoffMs !== "number"
+    || !Number.isFinite(retry.maxBackoffMs)
+    || typeof retry.backoffMs !== "number"
+    || retry.maxBackoffMs < retry.backoffMs
+  )) {
     issues.push(issue(`${path}.retry.maxBackoffMs`, "invalid_retry_policy", "Retry maxBackoffMs must be at least backoffMs."));
   }
-  if (policy.timeout && (!Number.isInteger(policy.timeout.timeoutMs) || policy.timeout.timeoutMs < 1 || policy.timeout.timeoutMs > 300_000)) {
+  if (timeout && (typeof timeout.timeoutMs !== "number" || !Number.isInteger(timeout.timeoutMs) || timeout.timeoutMs < 1 || timeout.timeoutMs > 300_000)) {
     issues.push(issue(`${path}.timeout.timeoutMs`, "invalid_timeout_policy", "Timeout must be an integer from 1 to 300000 milliseconds."));
   }
 }
 
 function validateCredentialBindings(
-  node: NodeFlowNode,
+  bindings: unknown,
   nodePath: string,
   allowedSlots: string[],
   issues: NodeFlowValidationIssue[],
-): void {
+): NodeFlowNode["credentialBindings"] {
+  if (bindings === undefined) return [];
+  if (!Array.isArray(bindings)) {
+    issues.push(issue(`${nodePath}.credentialBindings`, "invalid_credential_bindings", "Credential bindings must be an array."));
+    return [];
+  }
   const slots = new Set<string>();
-  (node.credentialBindings ?? []).forEach((binding, index) => {
+  const normalized: NonNullable<NodeFlowNode["credentialBindings"]> = [];
+  bindings.forEach((binding, index) => {
     const path = `${nodePath}.credentialBindings[${index}]`;
-    if (!trimmedString(binding.slot)) issues.push(issue(`${path}.slot`, "required", "Credential slot is required."));
-    if (!trimmedString(binding.credentialId)) issues.push(issue(`${path}.credentialId`, "required", "Credential binding must reference a credential id."));
-    if (slots.has(binding.slot)) issues.push(issue(`${path}.slot`, "duplicate_credential_slot", `Duplicate credential slot: ${binding.slot}`));
-    if (!allowedSlots.includes(binding.slot)) issues.push(issue(`${path}.slot`, "unknown_credential_slot", `Definition does not declare credential slot: ${binding.slot}`));
-    slots.add(binding.slot);
+    if (!isRecord(binding)) {
+      issues.push(issue(path, "invalid_credential_binding", "Credential binding must be an object."));
+      return;
+    }
+    const slot = trimmedString(binding.slot);
+    const credentialId = trimmedString(binding.credentialId);
+    if (!slot) issues.push(issue(`${path}.slot`, "required", "Credential slot is required."));
+    if (!credentialId) issues.push(issue(`${path}.credentialId`, "required", "Credential binding must reference a credential id."));
+    if (slot && slots.has(slot)) issues.push(issue(`${path}.slot`, "duplicate_credential_slot", `Duplicate credential slot: ${slot}`));
+    if (slot && !allowedSlots.includes(slot)) issues.push(issue(`${path}.slot`, "unknown_credential_slot", `Definition does not declare credential slot: ${slot}`));
+    if (slot) slots.add(slot);
+    if (slot && credentialId) normalized.push({ slot, credentialId });
   });
+  return normalized;
 }
 
 function validateConfiguration(
@@ -324,9 +361,70 @@ function matchesValueSchema(value: NodeFlowJsonValue, type: NodeFlowValueSchema[
   return typeof value === type;
 }
 
-function normalizeNode(rawNode: NodeFlowNode, index: number, issues: NodeFlowValidationIssue[]): NodeFlowNode | null {
+const VALUE_SCHEMA_TYPES = new Set<NodeFlowValueSchema["type"]>([
+  "any", "object", "array", "string", "number", "boolean", "null",
+]);
+
+function normalizeValueSchema(
+  value: unknown,
+  path: string,
+  issues: NodeFlowValidationIssue[],
+  ancestors = new Set<object>(),
+): NodeFlowValueSchema | undefined {
+  if (!isRecord(value)) {
+    issues.push(issue(path, "invalid_value_schema", "Value schema must be an object."));
+    return undefined;
+  }
+  if (ancestors.has(value)) {
+    issues.push(issue(path, "invalid_value_schema", "Value schema cannot contain circular references."));
+    return undefined;
+  }
+  const type = value.type;
+  if (typeof type !== "string" || !VALUE_SCHEMA_TYPES.has(type as NodeFlowValueSchema["type"])) {
+    issues.push(issue(`${path}.type`, "invalid_value_schema_type", "Value schema type is not supported."));
+    return undefined;
+  }
+  const nextAncestors = new Set(ancestors).add(value);
+  const normalized: NodeFlowValueSchema = { type: type as NodeFlowValueSchema["type"] };
+  if (value.description !== undefined) {
+    if (typeof value.description === "string") normalized.description = value.description.trim();
+    else issues.push(issue(`${path}.description`, "invalid_value_schema", "Value schema description must be a string."));
+  }
+  if (value.required !== undefined) {
+    if (!Array.isArray(value.required)) {
+      issues.push(issue(`${path}.required`, "invalid_value_schema", "Value schema required must be an array of strings."));
+    } else {
+      const required: string[] = [];
+      value.required.forEach((entry, index) => {
+        const name = trimmedString(entry);
+        if (!name) issues.push(issue(`${path}.required[${index}]`, "invalid_value_schema", "Required property name must be a non-empty string."));
+        else required.push(name);
+      });
+      normalized.required = required;
+    }
+  }
+  if (value.properties !== undefined) {
+    if (!isRecord(value.properties)) {
+      issues.push(issue(`${path}.properties`, "invalid_value_schema", "Value schema properties must be an object."));
+    } else {
+      const properties: Record<string, NodeFlowValueSchema> = {};
+      for (const [key, property] of Object.entries(value.properties)) {
+        const normalizedProperty = normalizeValueSchema(property, `${path}.properties.${key}`, issues, nextAncestors);
+        if (normalizedProperty) properties[key] = normalizedProperty;
+      }
+      normalized.properties = properties;
+    }
+  }
+  if (value.items !== undefined) {
+    const items = normalizeValueSchema(value.items, `${path}.items`, issues, nextAncestors);
+    if (items) normalized.items = items;
+  }
+  return normalized;
+}
+
+function normalizeNode(rawNode: unknown, index: number, issues: NodeFlowValidationIssue[]): NodeFlowNode | null {
   const nodePath = `nodes[${index}]`;
-  if (!rawNode || typeof rawNode !== "object" || Array.isArray(rawNode)) {
+  if (!isRecord(rawNode)) {
     issues.push(issue(nodePath, "invalid_node", "Node must be an object."));
     return null;
   }
@@ -346,8 +444,8 @@ function normalizeNode(rawNode: NodeFlowNode, index: number, issues: NodeFlowVal
     return null;
   }
 
-  const widgetSchema = normalizeWidgetSchema(rawNode.widgetSchema, `${nodePath}.widgetSchema`, issues);
-  const position = rawNode.position
+  const widgetSchema = normalizeWidgetSchema(rawNode.widgetSchema as NodeWidgetSchema | undefined, `${nodePath}.widgetSchema`, issues);
+  const position = isRecord(rawNode.position)
     && typeof rawNode.position.x === "number"
     && Number.isFinite(rawNode.position.x)
     && typeof rawNode.position.y === "number"
@@ -361,31 +459,76 @@ function normalizeNode(rawNode: NodeFlowNode, index: number, issues: NodeFlowVal
     issues.push(issue(`${nodePath}.data`, "invalid_data", `Node ${id} data must be a JSON object.`));
   }
 
-  const definitionRef = rawNode.definition ?? { type, version: 1 };
-  const definition = resolveNodeDefinition(definitionRef.type, definitionRef.version);
-  if (definitionRef.type !== type) {
+  const rawDefinitionRef = rawNode.definition === undefined ? { type, version: 1 } : rawNode.definition;
+  let definitionType: string | null = null;
+  let definitionVersion: number | null = null;
+  if (!isRecord(rawDefinitionRef)) {
+    issues.push(issue(`${nodePath}.definition`, "invalid_definition_reference", "Node definition reference must be an object."));
+  } else {
+    definitionType = trimmedString(rawDefinitionRef.type);
+    if (!definitionType) issues.push(issue(`${nodePath}.definition.type`, "required", "Node definition type is required."));
+    if (typeof rawDefinitionRef.version !== "number" || !Number.isInteger(rawDefinitionRef.version) || rawDefinitionRef.version < 1) {
+      issues.push(issue(`${nodePath}.definition.version`, "invalid_definition_version", "Node definition version must be a positive integer."));
+    } else {
+      definitionVersion = rawDefinitionRef.version;
+    }
+  }
+  const definition = definitionType && definitionVersion ? resolveNodeDefinition(definitionType, definitionVersion) : null;
+  if (definitionType && definitionType !== type) {
     issues.push(issue(`${nodePath}.definition.type`, "definition_type_mismatch", "Node type must match its definition reference."));
   }
-  if (!definition) {
-    issues.push(issue(`${nodePath}.definition`, "unknown_node_definition", `Unknown node definition: ${definitionRef.type}@${definitionRef.version}`));
+  if (definitionType && definitionVersion && !definition) {
+    issues.push(issue(`${nodePath}.definition`, "unknown_node_definition", `Unknown node definition: ${definitionType}@${definitionVersion}`));
   }
   if (definition && rawNode.sideEffect !== undefined && rawNode.sideEffect !== definition.sideEffect) {
     issues.push(issue(`${nodePath}.sideEffect`, "definition_metadata_mismatch", "Node side effect must match its definition."));
   }
-  if (definition && rawNode.capabilities !== undefined && [...rawNode.capabilities].sort().join("\0") !== [...definition.capabilities].sort().join("\0")) {
-    issues.push(issue(`${nodePath}.capabilities`, "definition_metadata_mismatch", "Node capabilities must match its definition."));
+  let suppliedCapabilities: string[] | undefined;
+  if (rawNode.capabilities !== undefined) {
+    if (!Array.isArray(rawNode.capabilities) || rawNode.capabilities.some((capability) => typeof capability !== "string")) {
+      issues.push(issue(`${nodePath}.capabilities`, "invalid_capabilities", "Node capabilities must be an array of strings."));
+    } else {
+      suppliedCapabilities = rawNode.capabilities;
+      if (definition && [...suppliedCapabilities].sort().join("\0") !== [...definition.capabilities].sort().join("\0")) {
+        issues.push(issue(`${nodePath}.capabilities`, "definition_metadata_mismatch", "Node capabilities must match its definition."));
+      }
+    }
   }
-  const ports = rawNode.ports ?? definition?.ports ?? [];
+  const rawPorts = rawNode.ports === undefined ? definition?.ports ?? [] : rawNode.ports;
+  if (!Array.isArray(rawPorts)) {
+    issues.push(issue(`${nodePath}.ports`, "invalid_ports", "Node ports must be an array."));
+  }
+  const ports: NonNullable<NodeFlowNode["ports"]> = [];
   const portIds = new Set<string>();
-  ports.forEach((port, portIndex) => {
+  (Array.isArray(rawPorts) ? rawPorts : []).forEach((port, portIndex) => {
     const portPath = `${nodePath}.ports[${portIndex}]`;
-    if (!trimmedString(port.id)) issues.push(issue(`${portPath}.id`, "required", "Port id is required."));
-    if (portIds.has(port.id)) issues.push(issue(`${portPath}.id`, "duplicate_port_id", `Duplicate port id: ${port.id}`));
-    portIds.add(port.id);
-    if (port.direction !== "input" && port.direction !== "output") issues.push(issue(`${portPath}.direction`, "invalid_port_direction", "Port direction must be input or output."));
+    if (!isRecord(port)) {
+      issues.push(issue(portPath, "invalid_port", "Port must be an object."));
+      return;
+    }
+    const portId = trimmedString(port.id);
+    if (!portId) issues.push(issue(`${portPath}.id`, "required", "Port id is required."));
+    if (portId && portIds.has(portId)) issues.push(issue(`${portPath}.id`, "duplicate_port_id", `Duplicate port id: ${portId}`));
+    if (portId) portIds.add(portId);
+    const direction = port.direction;
+    if (direction !== "input" && direction !== "output") issues.push(issue(`${portPath}.direction`, "invalid_port_direction", "Port direction must be input or output."));
+    const schema = normalizeValueSchema(port.schema, `${portPath}.schema`, issues);
+    const cardinality = port.cardinality;
+    if (cardinality !== undefined && cardinality !== "one" && cardinality !== "many") {
+      issues.push(issue(`${portPath}.cardinality`, "invalid_port_cardinality", "Port cardinality must be one or many."));
+    }
+    if (portId && (direction === "input" || direction === "output") && schema) {
+      ports.push({
+        id: portId,
+        direction,
+        schema,
+        ...(port.required !== undefined ? { required: Boolean(port.required) } : {}),
+        ...(cardinality === "one" || cardinality === "many" ? { cardinality } : {}),
+      });
+    }
   });
   validatePolicy(rawNode.policy, `${nodePath}.policy`, issues);
-  validateCredentialBindings(rawNode, nodePath, definition?.credentials.map((credential) => credential.slot) ?? [], issues);
+  const credentialBindings = validateCredentialBindings(rawNode.credentialBindings, nodePath, definition?.credentials.map((credential) => credential.slot) ?? [], issues);
   if (rawNode.data && containsForbiddenGraphValue(rawNode.data)) {
     issues.push(issue(`${nodePath}.data`, "unsafe_graph_data", "Graph data cannot contain raw secrets or custom source code."));
   }
@@ -399,19 +542,19 @@ function normalizeNode(rawNode: NodeFlowNode, index: number, issues: NodeFlowVal
     ...(widgetSchema ? { widgetSchema } : {}),
     ...(position ? { position } : {}),
     ...(rawNode.data !== undefined && isPlainJsonObject(rawNode.data) ? { data: rawNode.data } : {}),
-    definition: definitionRef,
+    definition: { type: definitionType ?? type, version: definitionVersion ?? 1 },
     ports,
-    credentialBindings: rawNode.credentialBindings ?? [],
-    policy: rawNode.policy ?? definition?.defaultPolicy ?? {},
-    capabilities: definition?.capabilities ?? rawNode.capabilities ?? [],
-    sideEffect: definition?.sideEffect ?? rawNode.sideEffect ?? "none",
-    disabled: rawNode.disabled ?? false,
+    credentialBindings,
+    policy: isRecord(rawNode.policy) ? rawNode.policy as NodeFlowNode["policy"] : definition?.defaultPolicy ?? {},
+    capabilities: definition?.capabilities ?? suppliedCapabilities ?? [],
+    sideEffect: definition?.sideEffect ?? (typeof rawNode.sideEffect === "string" ? rawNode.sideEffect as NodeFlowNode["sideEffect"] : "none"),
+    disabled: typeof rawNode.disabled === "boolean" ? rawNode.disabled : false,
   };
 }
 
-function normalizeEdge(rawEdge: NodeFlowEdge, index: number, issues: NodeFlowValidationIssue[]): NodeFlowEdge | null {
+function normalizeEdge(rawEdge: unknown, index: number, issues: NodeFlowValidationIssue[]): NodeFlowEdge | null {
   const edgePath = `edges[${index}]`;
-  if (!rawEdge || typeof rawEdge !== "object" || Array.isArray(rawEdge)) {
+  if (!isRecord(rawEdge)) {
     issues.push(issue(edgePath, "invalid_edge", "Edge must be an object."));
     return null;
   }
@@ -534,22 +677,36 @@ export function validateNodeFlowGraph(graph: unknown): NodeFlowValidationRespons
   });
 
   const inputSchema = normalizeWidgetSchema(rawGraph.inputSchema, "inputSchema", issues);
+  let schemas: NodeFlowGraph["schemas"] | undefined;
+  if (rawGraph.schemas !== undefined) {
+    if (!isRecord(rawGraph.schemas)) {
+      issues.push(issue("schemas", "invalid_schemas", "Node flow schemas must be an object."));
+    } else {
+      const input = rawGraph.schemas.input === undefined
+        ? undefined
+        : normalizeValueSchema(rawGraph.schemas.input, "schemas.input", issues);
+      const output = rawGraph.schemas.output === undefined
+        ? undefined
+        : normalizeValueSchema(rawGraph.schemas.output, "schemas.output", issues);
+      schemas = { ...(input ? { input } : {}), ...(output ? { output } : {}) };
+    }
+  }
   if (rawGraph.metadata !== undefined && !isPlainJsonObject(rawGraph.metadata)) {
     issues.push(issue("metadata", "invalid_metadata", "Node flow graph metadata must be a JSON object."));
   }
   if (rawGraph.metadata && containsForbiddenGraphValue(rawGraph.metadata)) {
     issues.push(issue("metadata", "unsafe_graph_metadata", "Graph metadata cannot contain raw secrets or custom source code."));
   }
-  validatePublication(rawGraph.publication, issues);
+  const publication = validatePublication(rawGraph.publication, issues);
 
   const normalizedGraph: NodeFlowGraph = {
     schemaVersion: NODE_FLOW_SCHEMA_VERSION,
     nodes,
     edges,
     ...(inputSchema ? { inputSchema } : {}),
-    ...(rawGraph.schemas ? { schemas: rawGraph.schemas } : {}),
+    ...(schemas ? { schemas } : {}),
     ...(rawGraph.metadata !== undefined && isPlainJsonObject(rawGraph.metadata) ? { metadata: rawGraph.metadata } : {}),
-    ...(rawGraph.publication ? { publication: rawGraph.publication } : {}),
+    ...(publication ? { publication } : {}),
   };
   const executionOrder = computeExecutionOrder(nodes, edges, issues);
   const valid = issues.length === 0;
@@ -561,18 +718,30 @@ export function validateNodeFlowGraph(graph: unknown): NodeFlowValidationRespons
 }
 
 function validatePublication(
-  publication: NodeFlowGraph["publication"],
+  publication: unknown,
   issues: NodeFlowValidationIssue[],
-): void {
-  if (!publication) return;
-  if (!trimmedString(publication.publicationId)) issues.push(issue("publication.publicationId", "required", "Publication id is required."));
-  if (!trimmedString(publication.publishedBy)) issues.push(issue("publication.publishedBy", "required", "Publication author is required."));
-  if (!trimmedString(publication.publishedAt) || !Number.isFinite(Date.parse(publication.publishedAt))) {
+): NodeFlowGraph["publication"] | undefined {
+  if (publication === undefined) return undefined;
+  if (!isRecord(publication)) {
+    issues.push(issue("publication", "invalid_publication", "Publication metadata must be an object."));
+    return undefined;
+  }
+  const publicationId = trimmedString(publication.publicationId);
+  const publishedBy = trimmedString(publication.publishedBy);
+  const publishedAt = trimmedString(publication.publishedAt);
+  const sourceVersion = publication.sourceVersion;
+  if (!publicationId) issues.push(issue("publication.publicationId", "required", "Publication id is required."));
+  if (!publishedBy) issues.push(issue("publication.publishedBy", "required", "Publication author is required."));
+  if (!publishedAt || !Number.isFinite(Date.parse(publishedAt))) {
     issues.push(issue("publication.publishedAt", "invalid_publication", "Publication timestamp must be ISO-compatible."));
   }
-  if (!Number.isInteger(publication.sourceVersion) || publication.sourceVersion < 1) {
+  if (typeof sourceVersion !== "number" || !Number.isInteger(sourceVersion) || sourceVersion < 1) {
     issues.push(issue("publication.sourceVersion", "invalid_publication", "Publication sourceVersion must be a positive integer."));
   }
+  if (!publicationId || !publishedBy || !publishedAt || typeof sourceVersion !== "number" || !Number.isInteger(sourceVersion) || sourceVersion < 1) {
+    return undefined;
+  }
+  return { publicationId, publishedBy, publishedAt, sourceVersion };
 }
 
 export function normalizeNodeFlowGraph(graph: unknown): NormalizedNodeFlowValidation {

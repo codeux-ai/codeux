@@ -7,6 +7,7 @@ import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NODES_CANVAS_STORAGE_KEY, NodesPage } from "../../../dashboard/src/v2/NodesPage.js";
 import { ProjectDataContext } from "../../../dashboard/src/v2/context/project-data.js";
+import { createInitialNodeCanvasGraph } from "../../../dashboard/src/v2/lib/nodes-canvas-state.js";
 
 const api = vi.hoisted(() => ({ fetchNodeFlows: vi.fn(), fetchNodeFlowCatalog: vi.fn(), createNodeFlowDraft: vi.fn(), fetchNodeFlow: vi.fn(), fetchNodeFlowRuns: vi.fn(), fetchNodeFlowNodeRuns: vi.fn(), fetchNodeFlowAttempts: vi.fn(), patchNodeFlowDraft: vi.fn(), fetchNodeDefinition: vi.fn(), validateNodeFlowDraft: vi.fn(), deleteNodeFlow: vi.fn() }));
 vi.mock("../../../dashboard/src/v2/lib/node-flow-api.js", async (original) => ({ ...(await original()), ...api }));
@@ -31,13 +32,40 @@ describe("NodesPage governed workspace", () => {
   });
 
   it("imports legacy localStorage once and removes it as a source of truth", async () => {
-    window.localStorage.setItem(NODES_CANVAS_STORAGE_KEY, JSON.stringify({ schemaVersion: 2, nodes: [{ id: "input-1", type: "input", title: "Input", position: { x: 1, y: 1 } }], edges: [] }));
+    const { schemaVersion: _schemaVersion, ...legacy } = createInitialNodeCanvasGraph();
+    window.localStorage.setItem(NODES_CANVAS_STORAGE_KEY, JSON.stringify(legacy));
     api.createNodeFlowDraft.mockResolvedValue({ flowId: "imported", draftRevision: 1 });
     api.fetchNodeFlows.mockResolvedValueOnce({ flows: [] }).mockResolvedValueOnce({ flows: [flow] });
     render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
     await waitFor(() => expect(api.createNodeFlowDraft).toHaveBeenCalledTimes(1));
+    expect(api.createNodeFlowDraft).toHaveBeenCalledWith("project-1", expect.objectContaining({
+      graph: expect.objectContaining({
+        schemaVersion: 2,
+        nodes: expect.arrayContaining([
+          expect.objectContaining({ type: "input", definition: { type: "input", version: 1 } }),
+          expect.objectContaining({ type: "set_fields", definition: { type: "set_fields", version: 1 } }),
+          expect.objectContaining({ type: "template", definition: { type: "template", version: 1 } }),
+        ]),
+        metadata: expect.objectContaining({
+          migration: { source: "browser_canvas_v1", legacySnapshot: legacy },
+        }),
+      }),
+    }));
     expect(window.localStorage.getItem(NODES_CANVAS_STORAGE_KEY)).toBeNull();
     expect(window.localStorage.getItem("codeux:nodes-canvas:imported:project-1")).toBe("imported");
+  });
+
+  it("keeps legacy localStorage available when backend persistence fails", async () => {
+    const legacy = JSON.stringify(createInitialNodeCanvasGraph());
+    window.localStorage.setItem(NODES_CANVAS_STORAGE_KEY, legacy);
+    api.createNodeFlowDraft.mockRejectedValue(new Error("Draft persistence failed"));
+    api.fetchNodeFlows.mockResolvedValueOnce({ flows: [] });
+
+    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Draft persistence failed");
+    expect(window.localStorage.getItem(NODES_CANVAS_STORAGE_KEY)).toBe(legacy);
+    expect(window.localStorage.getItem("codeux:nodes-canvas:imported:project-1")).toBeNull();
   });
 
   it("surfaces optimistic save conflicts", async () => {
