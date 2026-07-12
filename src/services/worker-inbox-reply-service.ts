@@ -78,7 +78,7 @@ interface WorkerInboxReplyServiceDependencies {
    * Jules API. Used to read the live clarification request at reply time so we
    * never depend on a possibly-empty local activity cache.
    */
-  fetchSessionActivities?: (sessionName: string, pageSize?: number) => Promise<JulesActivity[]>;
+  fetchSessionActivities?: (projectId: string, sessionName: string, pageSize?: number) => Promise<JulesActivity[]>;
   logger?: Logger;
   settingsCredentialResolver?: SettingsCredentialResolver;
 }
@@ -337,7 +337,7 @@ export class WorkerInboxReplyService {
       .trim();
     const knowledgeManifest = this.deps.knowledgeService?.buildManifestMarkdownForAgent(clarificationAgent.id) ?? null;
 
-    const clarificationActivities = await this.resolveClarificationActivities(args.task, args.subtasks);
+    const clarificationActivities = await this.resolveClarificationActivities(args.projectId, args.task, args.subtasks);
     const clarificationRequest = this.getLatestClarificationRequest(clarificationActivities);
 
     const fullContextPrompt = [
@@ -545,12 +545,12 @@ export class WorkerInboxReplyService {
    * unavailable, fails, or returns nothing — guaranteeing the real Jules
    * message is never silently dropped.
    */
-  private async resolveClarificationActivities(task: Subtask, subtasks: Subtask[]): Promise<JulesActivity[]> {
+  private async resolveClarificationActivities(projectId: string, task: Subtask, subtasks: Subtask[]): Promise<JulesActivity[]> {
     const sessionName = this.resolveSessionNameForTask(task, subtasks);
     const isCliSession = !!sessionName && sessionName.replace(/^sessions\//, "").startsWith("cli-");
     if (sessionName && !isCliSession && this.deps.fetchSessionActivities) {
       try {
-        const liveActivities = await this.deps.fetchSessionActivities(sessionName, 15);
+        const liveActivities = await this.deps.fetchSessionActivities(projectId, sessionName, 15);
         if (Array.isArray(liveActivities) && liveActivities.length > 0) {
           return liveActivities;
         }

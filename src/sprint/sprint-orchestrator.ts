@@ -48,6 +48,11 @@ import type { JulesUsageService } from "../domain/jules/jules-usage-service.js";
 import { buildSprintPrComposerInput } from "../domain/sprint/composer/sprint-pr-input-builder.js";
 import { composeSprintPrBody, composeSprintPrTitle } from "../domain/sprint/composer/pr-description-composer.js";
 import type { SprintRunLifecycleService } from "../services/sprint-run-lifecycle-service.js";
+import type { SettingsCredentialResolver } from "../services/credentials/settings-credential-resolver.js";
+import { withResolvedGitSettingsCredentials } from "../services/credentials/git-settings-credential-resolver.js";
+import type { GitHttpAuthOptions } from "../services/git-http-auth.js";
+import { readLocalGitOriginUrl } from "../infrastructure/git/local-git-origin.js";
+import { resolveRepositoryHost } from "../infrastructure/git/repository-host-resolver.js";
 
 
 const SPRINT_ORCHESTRATOR_OWNER_KEY = `sprint_orchestrator:${process.pid}`;
@@ -127,6 +132,12 @@ export interface SprintOrchestratorDependencies {
   heartbeatService: HeartbeatService;
   sprintRunLifecycleService: SprintRunLifecycleService;
   workspaceManager: WorkspaceManager;
+  settingsCredentialResolver?: SettingsCredentialResolver;
+  withJulesCredentialContext?: <T>(args: {
+    projectId: string;
+    sprintId: string;
+    consumer: string;
+  }, consumer: () => T | Promise<T>) => Promise<T>;
   /** Resolve the planning agent preset ID for a project (used for per-agent memory tagging). */
   resolvePlanningAgentPresetId?: (projectId: string) => Promise<string | undefined>;
 }
@@ -186,6 +197,22 @@ export class SprintOrchestrator {
     repoPath?: string,
   ): Promise<string> {
     return await this.deps.renderInstruction(templateId, variables, repoPath);
+  }
+
+  private async withGitCredentials<T>(args: {
+    projectId: string;
+    repoPath: string;
+    settings: DashboardSettings;
+    purpose: string;
+  }, consumer: (auth: GitHttpAuthOptions) => T | Promise<T>): Promise<T> {
+    return await withResolvedGitSettingsCredentials({
+      resolver: this.deps.settingsCredentialResolver,
+      projectId: args.projectId,
+      workspaceId: args.projectId,
+      repoPath: args.repoPath,
+      consumer: `git.sprint.${args.purpose}`,
+      git: args.settings.git,
+    }, consumer);
   }
 
   private async renderBranchBlocker(
@@ -408,7 +435,7 @@ export class SprintOrchestrator {
     return this.activeOrchestrations.has(`${projectId}:${sprintId}`);
   }
 
-  async recoverSprintRun(sprintRunId: string): Promise<any> {
+  async recoverSprintRun(sprintRunId: string, credentialContextBound = false): Promise<any> {
     const existingRun = this.deps.executionRepository.getSprintRun(sprintRunId);
     if (!existingRun) {
       throw new Error(`Sprint run not found: ${sprintRunId}`);
@@ -437,6 +464,13 @@ export class SprintOrchestrator {
       projectId: initialExecutionContext.project.id,
       sprintId: initialExecutionContext.sprint.id,
     });
+    if (!credentialContextBound && this.deps.withJulesCredentialContext) {
+      return await this.deps.withJulesCredentialContext({
+        projectId: initialExecutionContext.project.id,
+        sprintId: initialExecutionContext.sprint.id,
+        consumer: "jules.sprint.recovery",
+      }, () => this.recoverSprintRun(sprintRunId, true));
+    }
     const executionContext = this.deps.sprintExecutionStateService.resolveContext(args, dashboardSettings);
     const repoPath = executionContext.repoPath;
     const defaultFeatureBranch = executionContext.featureBranch;
@@ -521,13 +555,20 @@ export class SprintOrchestrator {
     }
   }
 
-  async execute(args: SprintAgentArgs): Promise<any> {
+  async execute(args: SprintAgentArgs, credentialContextBound = false): Promise<any> {
     const fallbackDashboardSettings = this.deps.getDashboardSettings();
     const initialExecutionContext = this.deps.sprintExecutionStateService.resolveContext(args, fallbackDashboardSettings);
     const dashboardSettings = this.deps.getDashboardSettings({
       projectId: initialExecutionContext.project.id,
       sprintId: initialExecutionContext.sprint.id,
     });
+    if (!credentialContextBound && this.deps.withJulesCredentialContext) {
+      return await this.deps.withJulesCredentialContext({
+        projectId: initialExecutionContext.project.id,
+        sprintId: initialExecutionContext.sprint.id,
+        consumer: "jules.sprint.orchestration",
+      }, () => this.execute(args, true));
+    }
     const executionContext = this.deps.sprintExecutionStateService.resolveContext(args, dashboardSettings);
     const repoPath = executionContext.repoPath;
     const planningTarget = `${executionContext.project.name} / ${executionContext.sprint.name}`;
@@ -546,11 +587,6 @@ export class SprintOrchestrator {
     const automationLevel = dashboardSettings.automationLevel;
     const automationInterventions = this.getAutomationInterventionsSettings(dashboardSettings);
     const featureBranchPrefix = dashboardSettings.git.featureBranchPrefix;
-    const gitAuthOptions = {
-      githubToken: dashboardSettings.git.githubToken,
-      gitlabToken: dashboardSettings.git.gitlabToken,
-    };
-
     const enabledProviders = Object.entries(dashboardSettings.aiProvider.providers)
       .filter(([, provider]) => provider.enabled)
       .map(([provider]) => provider);
@@ -569,8 +605,22 @@ export class SprintOrchestrator {
     if (loopSteps.branchPreflight && (args.action === "plan" || args.action === "orchestrate")) {
       if (githubMode === "REMOTE") {
         try {
-          await fetchOriginIfAvailable(repoPath, gitAuthOptions);
+          await this.withGitCredentials({
+            projectId: executionContext.project.id,
+            repoPath,
+            settings: dashboardSettings,
+            purpose: "origin-fetch",
+          }, (auth) => fetchOriginIfAvailable(repoPath, auth));
         } catch (error) {
+          const originProvider = resolveRepositoryHost(readLocalGitOriginUrl(repoPath)).provider;
+          const hasConfiguredOriginReference = originProvider === "github"
+            ? Boolean(dashboardSettings.git.githubTokenCredentialRef)
+            : originProvider === "gitlab"
+              ? Boolean(dashboardSettings.git.gitlabTokenCredentialRef)
+              : Boolean(dashboardSettings.git.githubTokenCredentialRef || dashboardSettings.git.gitlabTokenCredentialRef);
+          if (hasConfiguredOriginReference) {
+            throw error;
+          }
           const message = error instanceof Error ? error.message : String(error);
           this.deps.logger.warn("Origin refresh failed during branch preflight; continuing with local refs and direct remote checks.", {
             projectId: executionContext.project.id,
@@ -587,7 +637,12 @@ export class SprintOrchestrator {
         && !args.feature_branch?.trim()
         && !executionContext.sprint.featureBranch?.trim();
       if (shouldAllocateFreshBranchName) {
-        const allocatedBranch = await resolveUniqueSprintBranchName(repoPath, defaultFeatureBranch, gitAuthOptions);
+        const allocatedBranch = await this.withGitCredentials({
+          projectId: executionContext.project.id,
+          repoPath,
+          settings: dashboardSettings,
+          purpose: "branch-discovery",
+        }, (auth) => resolveUniqueSprintBranchName(repoPath, defaultFeatureBranch, auth));
         if (allocatedBranch !== defaultFeatureBranch) {
           this.deps.logger.info("Allocated unique sprint feature branch because the generated branch already exists.", {
             projectId: executionContext.project.id,
@@ -602,10 +657,20 @@ export class SprintOrchestrator {
       }
 
       const branchPreparation = args.action === "orchestrate"
-        ? await prepareBranchForOrchestration(repoPath, defaultFeatureBranch, defaultBranch, gitAuthOptions)
+        ? await this.withGitCredentials({
+          projectId: executionContext.project.id,
+          repoPath,
+          settings: dashboardSettings,
+          purpose: "branch-prepare",
+        }, (auth) => prepareBranchForOrchestration(repoPath, defaultFeatureBranch, defaultBranch, auth))
         : null;
       const branchAvailability = branchPreparation
-        ?? await runBranchPreflightStep(repoPath, defaultFeatureBranch, gitAuthOptions);
+        ?? await this.withGitCredentials({
+          projectId: executionContext.project.id,
+          repoPath,
+          settings: dashboardSettings,
+          purpose: "branch-preflight",
+        }, (auth) => runBranchPreflightStep(repoPath, defaultFeatureBranch, auth));
 
       // Record the fork point the first time the branch is created. This is the stable
       // checkpoint the file browser diffs against, and it must be captured now — once the

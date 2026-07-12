@@ -8,6 +8,47 @@ import { buildDeps } from "./sprint-orchestrator.setup.js";
 import { SprintActionRunner } from "../../../src/domain/sprint/orchestrator/sprint-action-runner.js";
 
 describe("SprintOrchestrator core execution", () => {
+  it("resolves remote-origin credentials with an operation-specific sprint consumer", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-orch-credential-"));
+    try {
+      await fs.mkdir(path.join(repoPath, ".git"));
+      await fs.writeFile(path.join(repoPath, ".git", "config"), [
+        '[remote "origin"]',
+        "  url = https://github.com/example/repo.git",
+      ].join("\n"));
+      const withCredential = vi.fn(async (_reference, _context, consumer) => (
+        await consumer(Buffer.from("broker-github-token"))
+      ));
+      const { deps } = buildDeps();
+      deps.settingsCredentialResolver = { withCredential };
+      const orchestrator = new SprintOrchestrator(deps as any);
+      const settings = {
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        git: {
+          ...DEFAULT_DASHBOARD_SETTINGS.git,
+          githubToken: "",
+          githubTokenCredentialRef: { credentialId: "github-credential", capability: "read" as const },
+        },
+      };
+
+      const token = await (orchestrator as any).withGitCredentials({
+        projectId: "project-1",
+        repoPath,
+        settings,
+        purpose: "branch-preflight",
+      }, async (auth: { githubToken?: string }) => auth.githubToken);
+
+      expect(token).toBe("broker-github-token");
+      expect(withCredential).toHaveBeenCalledWith(settings.git.githubTokenCredentialRef, {
+        projectId: "project-1",
+        workspaceId: "project-1",
+        consumer: "git.sprint.branch-preflight.github",
+      }, expect.any(Function));
+    } finally {
+      await fs.rm(repoPath, { recursive: true, force: true });
+    }
+  });
+
   it("routes actions via SprintActionRunner correctly", async () => {
     const { deps } = buildDeps();
     const orchestrator = new SprintOrchestrator(deps as any);

@@ -86,4 +86,24 @@ describe("withResolvedGitSettingsCredentials", () => {
     await expect(withResolvedGitSettingsCredentials(request, async () => undefined))
       .rejects.toThrow("require an active project scope");
   });
+
+  it.each(["denied", "revoked", "missing"])("does not use ambient Git auth when the configured reference is %s", async (reason) => {
+    const repoPath = await createRepo("https://github.com/example/repo.git");
+    const resolver = {
+      withCredential: vi.fn(async () => { throw new Error(`Credential ${reason}.`); }),
+    } as unknown as SettingsCredentialResolver;
+    const consumer = vi.fn();
+
+    await expect(withResolvedGitSettingsCredentials({
+      resolver,
+      projectId: "project-1",
+      repoPath,
+      consumer: "git.sprint.branch-preflight",
+      git: {
+        githubToken: "ambient-token",
+        githubTokenCredentialRef: { credentialId: "credential-1", capability: "read" },
+      },
+    }, consumer)).rejects.toThrow(`Credential ${reason}.`);
+    expect(consumer).not.toHaveBeenCalled();
+  });
 });

@@ -21,6 +21,7 @@ import type { DashboardSettings, DashboardSettingsScope, DashboardStatusSnapshot
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
 import { WorkspaceManager } from "../../infrastructure/providers/cli/workspace-manager.js";
 import { DockerService } from "../../services/docker-service.js";
+import { withJulesSettingsCredentialContext } from "../../services/credentials/jules-settings-credential-context.js";
 
 export interface SprintDependencies {
   cliWorkflowService: CliWorkflowService;
@@ -150,8 +151,13 @@ export function createSprintDependencies(
     skillService: coreDeps.skillService,
     agentPresetRepository: coreDeps.agentPresetRepository,
     getMcpConnectionInfo: () => context.getMcpConnectionInfo?.() ?? null,
-    fetchSessionActivities: (sessionName, pageSize) =>
-      coreDeps.julesApi.fetchRecentActivitiesLite(sessionName, pageSize ?? 15),
+    fetchSessionActivities: (projectId, sessionName, pageSize) => withJulesSettingsCredentialContext({
+      julesApi: coreDeps.julesApi,
+      settings: resolveDashboardSettings({ projectId }),
+      projectId,
+      workspaceId: projectId,
+      consumer: "jules.worker-inbox.activities",
+    }, () => coreDeps.julesApi.fetchRecentActivitiesLite(sessionName, pageSize ?? 15)),
     logger: logger.child({ component: "worker-inbox-reply-service" }),
     settingsCredentialResolver: coreDeps.settingsCredentialResolver,
   });
@@ -168,7 +174,13 @@ export function createSprintDependencies(
     getDashboardSettings: resolveDashboardSettings,
     getGithubToken: () => context.getEffectiveGithubToken(),
     providerConcurrencyService: coreDeps.providerConcurrencyService,
-    sendSessionMessage: (sessionId, prompt) => julesApi.sendSessionMessage(sessionId, prompt),
+    sendSessionMessage: (projectId, sessionId, prompt) => withJulesSettingsCredentialContext({
+      julesApi,
+      settings: resolveDashboardSettings({ projectId }),
+      projectId,
+      workspaceId: projectId,
+      consumer: "jules.qa.follow-up",
+    }, () => julesApi.sendSessionMessage(sessionId, prompt)),
     logger: logger.child({ component: "quality-assurance-service" }),
     memoryService: coreDeps.memoryService,
     skillService: coreDeps.skillService,
@@ -232,8 +244,20 @@ export function createSprintDependencies(
     sprintExecutionStateService,
     workerInboxReplyService,
     instructionService,
-    approveSessionPlan: (sessionId) => julesApi.approveSessionPlan(sessionId),
-    sendSessionMessage: (sessionId, prompt) => julesApi.sendSessionMessage(sessionId, prompt),
+    approveSessionPlan: (projectId, sessionId) => withJulesSettingsCredentialContext({
+      julesApi,
+      settings: resolveDashboardSettings({ projectId }),
+      projectId,
+      workspaceId: projectId,
+      consumer: "jules.virtual-worker.plan-approval",
+    }, () => julesApi.approveSessionPlan(sessionId)),
+    sendSessionMessage: (projectId, sessionId, prompt) => withJulesSettingsCredentialContext({
+      julesApi,
+      settings: resolveDashboardSettings({ projectId }),
+      projectId,
+      workspaceId: projectId,
+      consumer: "jules.virtual-worker.message",
+    }, () => julesApi.sendSessionMessage(sessionId, prompt)),
     providerConcurrencyService: coreDeps.providerConcurrencyService,
     memoryService: coreDeps.memoryService,
     skillService: coreDeps.skillService,
@@ -319,6 +343,14 @@ export function createSprintDependencies(
     taskService,
     heartbeatService,
     workspaceManager: new WorkspaceManager(),
+    settingsCredentialResolver: coreDeps.settingsCredentialResolver,
+    withJulesCredentialContext: (args, consumer) => withJulesSettingsCredentialContext({
+      julesApi: coreDeps.julesApi,
+      settings: resolveDashboardSettings({ projectId: args.projectId, sprintId: args.sprintId }),
+      projectId: args.projectId,
+      workspaceId: args.projectId,
+      consumer: args.consumer,
+    }, consumer),
     resolvePlanningAgentPresetId: async (projectId: string) => {
       try {
         const agent = await agentPresetSyncService.resolveTargetedPlanningAgent(projectId);

@@ -33,6 +33,7 @@ import { NodeFlowRuntimeService } from "../../services/node-flow-runtime-service
 import { NodeFlowService } from "../../services/node-flow-service.js";
 import { NodeFlowRecoveryService } from "../../services/node-flows/node-flow-recovery-service.js";
 import { resolveEffectiveDashboardSettings } from "../../services/settings-resolution-service.js";
+import { withJulesSettingsCredentialContext } from "../../services/credentials/jules-settings-credential-context.js";
 import { ApprovalService } from "../../services/node-flows/approval-service.js";
 import { MockSideEffectProvider, OutboxService } from "../../services/node-flows/outbox-service.js";
 import { EgressPolicyService } from "../../services/node-flows/egress-policy-service.js";
@@ -124,6 +125,13 @@ export function createDashboardDependencies(
     activeDispatchRegistry,
     sprintRunLifecycleService: coreDeps.sprintRunLifecycleService,
     qaReviewRepository: coreDeps.qaReviewRepository,
+    withJulesCredentialContext: (projectId, consumer, callback) => withJulesSettingsCredentialContext({
+      julesApi,
+      settings: resolveDashboardSettings({ projectId }),
+      projectId,
+      workspaceId: projectId,
+      consumer,
+    }, callback),
     logger: logger.child({ component: "execution-control-service" }),
   });
   const executionInvocationControlService = new ExecutionInvocationControlService({

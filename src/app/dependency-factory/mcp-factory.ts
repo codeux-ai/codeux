@@ -10,6 +10,7 @@ import { WorkerClarificationRepository } from "../../repositories/worker-clarifi
 import { WorkerClarificationService } from "../../services/worker-clarification-service.js";
 import { WorkerClarificationContinuationService } from "../../services/worker-clarification-continuation-service.js";
 import { isProjectManagerClarificationAgent } from "../../services/agent-mcp-access.js";
+import { withJulesSettingsCredentialContext } from "../../services/credentials/jules-settings-credential-context.js";
 
 export interface McpDependencies {
   managementToolHandler: ManagementToolHandler;
@@ -45,8 +46,14 @@ export function createMcpDependencies(
     taskRerunService: dashboardDeps.taskRerunService,
     executionRepository: coreDeps.executionRepository,
     projectManagementRepository: coreDeps.projectManagementRepository,
-    sendJulesSessionMessage: async (sessionId, answerMarkdown) => {
-      await coreDeps.julesApi.sendSessionMessage(sessionId, answerMarkdown);
+    sendJulesSessionMessage: async (projectId, sessionId, answerMarkdown) => {
+      await withJulesSettingsCredentialContext({
+        julesApi: coreDeps.julesApi,
+        settings: getDashboardSettings({ projectId }),
+        projectId,
+        workspaceId: projectId,
+        consumer: "jules.clarification.reply",
+      }, () => coreDeps.julesApi.sendSessionMessage(sessionId, answerMarkdown));
     },
     isAuthorizedProjectManager: (projectId, agentId) => {
       if (agentId === "project-manager-mcp-client") return true;

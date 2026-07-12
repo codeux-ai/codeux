@@ -26,7 +26,7 @@ describe("JulesApiClient", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    client = new JulesApiClient({ baseUrl, apiKey });
+    client = new JulesApiClient({ baseUrl, getApiKey: () => apiKey });
   });
 
   it("should have api key", () => {

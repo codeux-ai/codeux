@@ -117,7 +117,7 @@ interface QualityAssuranceServiceDependencies {
   providerConcurrencyService: ProviderConcurrencyService;
   getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings;
   getGithubToken: () => string | undefined;
-  sendSessionMessage: (sessionId: string, prompt: string) => Promise<unknown>;
+  sendSessionMessage: (projectId: string | undefined, sessionId: string, prompt: string) => Promise<unknown>;
   logger?: Logger;
   memoryService?: MemoryService;
   skillService?: SkillService;
@@ -1563,7 +1563,7 @@ export class QualityAssuranceService {
     ].join("\n");
 
     if (provider === "jules") {
-      await this.deps.sendSessionMessage(sessionId, followUpPrompt);
+      await this.deps.sendSessionMessage(args.scope.projectId, sessionId, followUpPrompt);
       return { applied: true, mode: "jules", noProgress: false, blocker: null };
     }
 
