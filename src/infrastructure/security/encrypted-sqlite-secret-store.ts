@@ -5,11 +5,11 @@ import type { AutomationCredentialRepository } from "../../repositories/automati
 
 export class EncryptedSqliteSecretStore implements SecretStore {
   constructor(private readonly repository: AutomationCredentialRepository, private readonly keyProvider: KeyProvider) {}
-  async put(context: SecretContext, plaintext: Buffer): Promise<StoredSecretEnvelope> {
+  async seal(context: SecretContext, plaintext: Buffer): Promise<StoredSecretEnvelope> {
     const health = await this.keyProvider.health();
     if (!health.available || !health.secure) throw new Error(health.reason ?? "Secure key provider is unavailable.");
     const rootKey = await this.keyProvider.getActiveKey();
-    try { const envelope=encryptEnvelope(context,plaintext,rootKey); this.repository.putEnvelope(envelope); return envelope; }
+    try { return encryptEnvelope(context, plaintext, rootKey); }
     finally { rootKey.key.fill(0); }
   }
   async get(context: SecretContext): Promise<Buffer> {
@@ -17,5 +17,4 @@ export class EncryptedSqliteSecretStore implements SecretStore {
     const rootKey=await this.keyProvider.getKey(envelope.keyId,envelope.keyVersion);
     try { return decryptEnvelope(context,envelope,rootKey); } finally { rootKey.key.fill(0); }
   }
-  async delete(credentialId: string): Promise<void> { this.repository.deleteEnvelope(credentialId); }
 }

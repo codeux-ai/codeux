@@ -208,6 +208,7 @@ describe("AppDbSchema", () => {
       expect(getTable("node_flow_node_runs")).toBeDefined();
       expect(getColumnNames("node_flow_runs")).toContain("execution_invocation_id");
       expect(getColumnNames("node_flow_node_runs")).toContain("execution_invocation_id");
+      expect(getColumnNames("automation_credentials")).toContain("management_project_id");
       expect(getColumnNames("sprint_linked_issues")).toEqual(expect.arrayContaining([
         "issue_body_markdown",
         "issue_conversation_markdown",

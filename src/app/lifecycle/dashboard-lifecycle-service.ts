@@ -100,6 +100,7 @@ import type {
   LocalMcpSetupInfo,
 } from "../../services/local-mcp-cli-config-service.js";
 import type { ProjectInitializationStateService } from "../../services/project-initialization-state-service.js";
+import type { CredentialBroker } from "../../services/credentials/credential-broker.js";
 
 const updateCheckerService = new UpdateCheckerService();
 
@@ -143,6 +144,7 @@ export interface BootDashboardDeps {
   speechModelManager: SpeechModelManager;
   chatProviderOutboundService?: ChatProviderOutboundService;
   nodeFlowService?: NodeFlowService;
+  credentialBroker: CredentialBroker;
   headlessAuthService: HeadlessAuthService;
   automationAuditService: AutomationAuditExportService;
   headlessReadinessService: HeadlessOperationalReadinessService;
@@ -502,6 +504,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     speechSynthesisService: deps.speechSynthesisService,
     speechModelManager: deps.speechModelManager,
     nodeFlowService: deps.nodeFlowService,
+    credentialBroker: deps.credentialBroker,
     headlessAuthService: deps.headlessAuthService,
     automationAuditService: deps.automationAuditService,
     headlessReadinessService: deps.headlessReadinessService,
