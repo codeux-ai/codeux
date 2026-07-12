@@ -570,6 +570,8 @@ describe('ChatPage Accessibility', () => {
     expect(screen.getByRole("group", { name: "Create quick actions" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Project pulse quick actions" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Workflows quick actions" })).toBeInTheDocument();
+    expect(document.querySelector("[data-quick-action-group='insight']")).toHaveClass("md:flex", "md:flex-wrap");
+    expect(document.querySelector("[data-quick-action-group='workflow']")).toHaveClass("md:flex", "md:flex-wrap");
     labels.forEach((label) => expect(screen.getByRole("button", { name: label })).toBeInTheDocument());
     const iconTiles = Array.from(document.querySelectorAll<HTMLElement>("[data-quick-action-icon]"));
     expect(iconTiles).toHaveLength(labels.length);
@@ -578,7 +580,7 @@ describe('ChatPage Accessibility', () => {
       "min-h-9",
       "w-fit",
       "rounded-xl",
-      "md:justify-self-start",
+      "md:ml-1",
     );
 
     await user.click(screen.getByRole("button", { name: "Create Web App" }));

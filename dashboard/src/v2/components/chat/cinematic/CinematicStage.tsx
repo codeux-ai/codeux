@@ -120,19 +120,19 @@ const QUICK_ACTION_ICON_STYLES: Record<string, string> = {
 };
 
 const QUICK_ACTION_SCATTER_STYLES: Record<string, string> = {
-  "create-web_app": "md:justify-self-start md:ml-1 md:mt-1",
-  "create-desktop_app": "md:justify-self-end md:mr-6 md:-mt-1",
-  "create-online_shop": "md:justify-self-center md:ml-6 md:mt-1",
-  "create-portfolio": "md:justify-self-start md:ml-8 md:-mt-0.5",
-  "create-game": "md:justify-self-end md:mr-2 md:mt-1.5",
-  "status-report": "md:justify-self-start md:ml-3 md:-mt-0.5",
-  "sprint-progress": "md:justify-self-end md:mr-10 md:mt-1",
-  "whats-failing": "md:justify-self-center md:ml-8 md:mt-1",
-  "plan-next-steps": "md:justify-self-end md:mr-1 md:-mt-0.5",
-  "add-nodes-workflow": "md:justify-self-start md:ml-6 md:-mt-0.5",
-  "add-dashboard": "md:justify-self-end md:mr-4 md:mt-1",
-  "create-skill": "md:justify-self-center md:ml-10 md:mt-1",
-  "list-skills": "md:justify-self-end md:mr-9 md:-mt-0.5",
+  "create-web_app": "md:ml-0 md:mt-0",
+  "create-desktop_app": "md:ml-3 md:-mt-1",
+  "create-online_shop": "md:ml-5 md:mt-1",
+  "create-portfolio": "md:ml-3 md:-mt-0.5",
+  "create-game": "md:ml-12 md:mt-1",
+  "status-report": "md:ml-1 md:mt-0",
+  "sprint-progress": "md:ml-5 md:-mt-1",
+  "whats-failing": "md:ml-8 md:mt-1",
+  "plan-next-steps": "md:ml-2 md:-mt-0.5",
+  "add-nodes-workflow": "md:ml-0 md:mt-0",
+  "add-dashboard": "md:ml-4 md:-mt-1",
+  "create-skill": "md:ml-8 md:mt-1",
+  "list-skills": "md:ml-6 md:-mt-0.5",
 };
 
 const QUICK_ACTION_GROUPS = [
@@ -650,7 +650,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
           <div
             aria-label="Project quick actions"
             role="group"
-            className="pointer-events-auto absolute inset-x-4 top-14 z-20 flex max-h-24 gap-4 overflow-x-auto overscroll-x-contain py-1.5 md:bottom-24 md:left-2 md:right-auto md:top-20 md:max-h-none md:w-[calc(50%-min(16vh,170px)-0.75rem)] md:flex-col md:justify-center md:gap-3 md:overflow-visible md:px-1.5 md:py-4"
+            className="pointer-events-auto absolute inset-x-4 top-14 z-20 flex max-h-24 gap-4 overflow-x-auto overscroll-x-contain py-1.5 md:bottom-24 md:left-0 md:right-auto md:top-20 md:max-h-none md:w-[min(21rem,calc(50%-1.5rem))] md:flex-col md:justify-center md:gap-3 md:overflow-visible md:px-1.5 md:py-4"
           >
             {quickActionGroups.map((group) => (
               <div
@@ -665,7 +665,10 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
                     {group.label}
                   </span>
                 </div>
-                <div className="grid grid-flow-col grid-rows-2 auto-cols-max gap-x-3 gap-y-1.5 md:grid-flow-row md:grid-cols-2 md:grid-rows-none md:auto-cols-auto md:gap-x-8 md:gap-y-2">
+                <div
+                  data-quick-action-group={group.zone}
+                  className="grid grid-flow-col grid-rows-2 auto-cols-max gap-x-3 gap-y-1.5 md:flex md:flex-wrap md:items-center md:gap-x-2 md:gap-y-2"
+                >
                   {group.actions.map((action) => {
                     const Icon = action.actionType === "create_app"
                       ? CREATE_APP_ACTION_ICONS[action.appKind]
