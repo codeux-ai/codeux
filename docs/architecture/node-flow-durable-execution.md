@@ -13,3 +13,9 @@ Every node execution creates a numbered attempt with executor identity, optional
 Startup recovery scans queued and waiting work plus running work with expired leases. A pre-invocation attempt can be requeued safely without inserting a duplicate attempt. An expired attempt with an invocation id has an unknown externally observable outcome and moves to `attention_required`; Code UX does not silently replay it. Approval- and retry-waiting runs retain their durable state until their prerequisite becomes actionable.
 
 The relevant tables are `node_flow_publications`, `node_flow_runs`, `node_flow_node_runs`, and `node_flow_node_attempts`. Attempt history is available at `GET /api/node-flow-runs/:runId/attempts` and contains only redacted payloads and credential identifiers.
+
+## Distributed ownership and side effects
+
+Authenticated runners claim through a service principal with `automation_runner` and explicit project membership. The database update from queued/retry-waiting to running is the ownership compare-and-set; heartbeats renew only when both run id and lease owner match. A second runner therefore cannot acquire an active lease.
+
+External email-style effects use `automation_outbox`. The idempotency key is derived from publication, run, node, and logical item, so reconstructing services after restart returns an existing sent row rather than invoking the provider twice. Known failures may be retried; unknown outcomes become `attention_required`. Approval decisions and deliveries are durable and produce redacted correlation audit records alongside run and attempt events.

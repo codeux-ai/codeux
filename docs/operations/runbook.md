@@ -1,5 +1,20 @@
 # Operations Runbook
 
+## Authenticated automation recovery drills
+
+Run these drills against the approved local test project with mocked job/email boundaries only:
+
+1. Send an authenticated read using a viewer identity, then verify a different project returns `403` with the same correlation id visible in redacted audit export.
+2. Stop the key provider while encrypted rows exist. `/health` must remain live, `/ready` must return `503`, and a fresh process must refuse startup. Restore the exact key version before retrying.
+3. Start a 20-record fixture run, approve selected drafts, and restart after durable outbox enqueue. Recovery may reclaim expired pre-invocation work; it must not repeat a `sent` idempotency key. Unknown provider outcomes require attention instead of replay.
+4. Rotate the externally configured credential and verify the unchanged binding resolves the next credential version. Revoke it and verify new resolution is denied without secret text in logs, attempts, graph export, prompts, or diagnostics.
+5. Publish a second automation version, then roll back by drafting/publishing the earlier immutable version. Existing runs stay pinned; new runs select the rollback publication.
+6. Restore the SQLite/WAL snapshot and key-provider state into isolation. Keep runner admission disabled until `/ready`, audit continuity, approval rows, leases, and outbox counts match the backup manifest.
+
+Record the backup timestamp, database integrity result, key ids/versions (never key material), last audit id, active lease count, outbox status counts, and rollback publication id. A drill passes only with 20 processed fixture records, the expected selected-message count, no duplicate provider ids/idempotency keys, and no secret canary in any exported artifact.
+
+Alert response starts by disabling runner identities, preserving the database/WAL and audit export, and checking `/api/admin/readiness` plus `/api/admin/metrics/slo`. Do not delete attention-required attempts or manually mark uncertain outbox rows sent; reconcile them with the mocked/provider idempotency record first.
+
 This runbook covers day-to-day operation and incident handling for the MCP server and dashboard.
 
 ## Normal Startup Procedure

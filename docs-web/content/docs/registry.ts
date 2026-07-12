@@ -104,6 +104,9 @@ export type DocsSlug =
   | 'architecture-configuration-resolution'
   | 'architecture-security'
   | 'operations-credential-security'
+  | 'operations-runbook'
+  | 'operations-security-hardening'
+  | 'operations-server-mode'
   | 'settings-google-drive-mount'
   | 'user-dashboard-custom-dashboards'
   | 'architecture-custom-dashboard-foundation'
@@ -833,6 +836,27 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Automation Credential Security",
     description: "Code UX resolves canonical node credential IDs and named project binding keys through the credential broker. Stored values are not exposed to nodes, dashboard reads, MCP payloads, agent context, run inspection records...",
   },
+  'operations-runbook': {
+    id: 'operations-runbook',
+    path: '/docs/operations-runbook',
+    section: 'User Guide',
+    title: "Authenticated Automation Runbook",
+    description: "Run recovery drills only against the approved local test project and mocked job/email providers.",
+  },
+  'operations-security-hardening': {
+    id: 'operations-security-hardening',
+    path: '/docs/operations-security-hardening',
+    section: 'User Guide',
+    title: "Headless Security Hardening",
+    description: "Remote dashboard/API access requires a service-token or trusted OIDC reverse-proxy boundary, TLS, project-scoped roles, and request correlation. A non-loopback DASHBOARD_HOST does not make credential routes public: ca...",
+  },
+  'operations-server-mode': {
+    id: 'operations-server-mode',
+    path: '/docs/operations-server-mode',
+    section: 'User Guide',
+    title: "Authenticated Headless Server Mode",
+    description: "Code UX separates MCP bearer access from the authenticated dashboard administrative API. Remote dashboard/API deployments must use digest-backed service identities or terminate OIDC at a trusted reverse proxy; loopbac...",
+  },
   'settings-google-drive-mount': {
     id: 'settings-google-drive-mount',
     path: '/docs/settings-google-drive-mount',
@@ -1021,6 +1045,9 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-configuration-resolution'],
   docsRegistry['architecture-security'],
   docsRegistry['operations-credential-security'],
+  docsRegistry['operations-runbook'],
+  docsRegistry['operations-security-hardening'],
+  docsRegistry['operations-server-mode'],
   docsRegistry['settings-google-drive-mount'],
   docsRegistry['user-dashboard-custom-dashboards'],
   docsRegistry['architecture-custom-dashboard-foundation'],

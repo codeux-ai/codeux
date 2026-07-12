@@ -1,11 +1,12 @@
 import { AutomationOutboxRepository, type AutomationOutboxRecord } from "../../repositories/automation-outbox-repository.js";
 import type { NodeFlowJsonObject } from "../../contracts/node-flow-types.js";
+import type { AutomationAuditExportService } from "../automation-audit-export-service.js";
 
 export interface SideEffectProviderResult { providerMessageId: string }
 export interface SideEffectProvider { send(effectType: string, payload: NodeFlowJsonObject, idempotencyKey: string): Promise<SideEffectProviderResult> }
 
 export class OutboxService {
-  constructor(private readonly repository: AutomationOutboxRepository, private readonly provider: SideEffectProvider) {
+  constructor(private readonly repository: AutomationOutboxRepository, private readonly provider: SideEffectProvider, private readonly auditService?: AutomationAuditExportService) {
     this.repository.recoverSending();
   }
 
@@ -19,10 +20,14 @@ export class OutboxService {
     if (!claimed) return this.repository.get(record.id)!;
     try {
       const result = await this.provider.send(claimed.effectType, claimed.payload, claimed.idempotencyKey);
-      return this.repository.markSent(claimed.id, result.providerMessageId);
+      const sent = this.repository.markSent(claimed.id, result.providerMessageId);
+      this.auditService?.recordSystem({ action: "outbox.delivered", resourceType: "automation_outbox", resourceId: claimed.id, projectId: claimed.projectId, outcome: "succeeded", metadata: { runId: claimed.runId, nodeId: claimed.nodeId, effectType: claimed.effectType, idempotencyKey: claimed.idempotencyKey } });
+      return sent;
     } catch (error) {
       const unknownOutcome = error instanceof UnknownSideEffectOutcomeError;
-      return this.repository.markFailed(claimed.id, error instanceof Error ? error.message : String(error), unknownOutcome);
+      const failed = this.repository.markFailed(claimed.id, error instanceof Error ? error.message : String(error), unknownOutcome);
+      this.auditService?.recordSystem({ action: "outbox.delivery", resourceType: "automation_outbox", resourceId: claimed.id, projectId: claimed.projectId, outcome: "failed", metadata: { runId: claimed.runId, nodeId: claimed.nodeId, effectType: claimed.effectType, unknownOutcome } });
+      return failed;
     }
   }
 }

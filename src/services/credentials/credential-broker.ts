@@ -3,13 +3,14 @@ import type { AutomationCredentialMetadata, CreateAutomationCredentialInput, Cre
 import type { AutomationCredentialRepository } from "../../repositories/automation-credential-repository.js";
 import type { KeyProvider } from "./key-provider.js";
 import type { SecretStore } from "./secret-store.js";
+import type { AutomationAuditExportService } from "../automation-audit-export-service.js";
 
 export class CredentialAccessDeniedError extends Error {
   constructor(message: string) { super(message); this.name = "CredentialAccessDeniedError"; }
 }
 
 export class CredentialBroker {
-  constructor(private readonly repository: AutomationCredentialRepository, private readonly secretStore: SecretStore, private readonly keyProvider: KeyProvider) {}
+  constructor(private readonly repository: AutomationCredentialRepository, private readonly secretStore: SecretStore, private readonly keyProvider: KeyProvider, private readonly auditService?: AutomationAuditExportService) {}
 
   health(): Promise<CredentialBackendHealth> { return this.keyProvider.health(); }
   list(projectId: string): AutomationCredentialMetadata[] { return this.repository.list(projectId); }
@@ -63,6 +64,7 @@ export class CredentialBroker {
     try {
       const secret=await this.secretStore.get(this.context(credential)); const value=secret.toString("utf8"); secret.fill(0);
       this.repository.recordAccess({credentialId:credential.id,projectId:request.projectId,bindingKey:request.bindingKey,capability:request.capability,operation:"resolve",outcome:"granted",reason:null});
+      this.auditService?.recordSystem({ action: "credential.access", resourceType: "automation_credential", resourceId: credential.id, projectId: request.projectId, outcome: "succeeded", metadata: { bindingKey: request.bindingKey, capability: request.capability, credentialVersion: credential.version } });
       return {credentialId:credential.id,value,version:credential.version};
     } catch { return this.deny(request,credential.id,"Credential backend is unavailable or authentication failed."); }
   }
@@ -76,6 +78,7 @@ export class CredentialBroker {
     try {
       const secret=await this.secretStore.get(this.context(credential)); const value=secret.toString("utf8"); secret.fill(0);
       this.repository.recordAccess({credentialId:credential.id,projectId:request.projectId,bindingKey:request.bindingKey,capability:request.capability,operation:"resolve",outcome:"granted",reason:null});
+      this.auditService?.recordSystem({ action: "credential.access", resourceType: "automation_credential", resourceId: credential.id, projectId: request.projectId, outcome: "succeeded", metadata: { bindingKey: request.bindingKey, capability: request.capability, credentialVersion: credential.version } });
       return {credentialId:credential.id,value,version:credential.version};
     } catch { return this.deny(request,credential.id,"Credential backend is unavailable or authentication failed."); }
   }
@@ -84,5 +87,5 @@ export class CredentialBroker {
   private context(credential:AutomationCredentialMetadata){ return {credentialId:credential.id,projectId:credential.projectId ?? "global",workspaceId:credential.projectId ?? "global"}; }
   private canAccess(credential:AutomationCredentialMetadata,projectId:string):boolean{return credential.scope === "project" ? credential.projectId === projectId : credential.allowedProjectIds.includes(projectId);}
   private requireAccessible(projectId:string,credentialId:string):AutomationCredentialMetadata{this.repository.requireProject(projectId);const credential=this.repository.get(credentialId);if(!credential||!this.canAccess(credential,projectId))throw new CredentialAccessDeniedError("Credential is not available to this project.");return credential;}
-  private deny(request:CredentialResolutionRequest,credentialId:string|null,reason:string):never{this.repository.recordAccess({credentialId,projectId:request.projectId,bindingKey:request.bindingKey,capability:request.capability,operation:"resolve",outcome:"denied",reason});throw new CredentialAccessDeniedError(reason);}
+  private deny(request:CredentialResolutionRequest,credentialId:string|null,reason:string):never{this.repository.recordAccess({credentialId,projectId:request.projectId,bindingKey:request.bindingKey,capability:request.capability,operation:"resolve",outcome:"denied",reason});this.auditService?.recordSystem({action:"credential.access",resourceType:"automation_credential",resourceId:credentialId,projectId:request.projectId,outcome:"denied",metadata:{bindingKey:request.bindingKey,capability:request.capability,reason}});throw new CredentialAccessDeniedError(reason);}
 }

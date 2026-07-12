@@ -21,6 +21,7 @@ import type { ApprovalService } from "./node-flows/approval-service.js";
 import { ApprovalRequiredError } from "./node-flows/approval-service.js";
 import type { OutboxService } from "./node-flows/outbox-service.js";
 import type { CustomNodeRuntimeService } from "./custom-nodes/custom-node-runtime-service.js";
+import type { AutomationAuditExportService } from "./automation-audit-export-service.js";
 import type { NodeFlowFailureClassification } from "../contracts/node-flow-execution-policy-types.js";
 import { buildProviderInvocationWorkspaceOptions } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import type {
@@ -57,6 +58,7 @@ interface NodeFlowRuntimeDeps {
   approvalService?: ApprovalService;
   outboxService?: OutboxService;
   customNodeRuntimeService?: CustomNodeRuntimeService;
+  auditService?: AutomationAuditExportService;
 }
 
 interface RuntimeContext {
@@ -156,6 +158,7 @@ export class NodeFlowRuntimeService {
       input: sanitizedInput,
       startedAt: null,
     });
+    this.deps.auditService?.recordSystem({ action: "automation.run.started", resourceType: "node_flow_run", resourceId: run.id, projectId, outcome: "succeeded", metadata: { flowId: flow.id, publicationId: publication.id, version: publication.version, triggerType: options.triggerType ?? "manual" } });
     const executorId = options.executorId?.trim() || `node-flow-runtime:${process.pid}:${randomUUID()}`;
     const claimedRun = new NodeFlowQueueService(this.deps.nodeFlowRepository).claim(run, executorId);
     const leaseService = new NodeFlowLeaseService(this.deps.nodeFlowRepository);
@@ -249,6 +252,7 @@ export class NodeFlowRuntimeService {
         context.outputs.set(node.id, result.output);
         if (result.selectedPorts) context.selectedPorts.set(node.id, new Set(result.selectedPorts));
         attemptService.succeed(attempt, maskSecrets(result.output), result.invocationId);
+        this.deps.auditService?.recordSystem({ action: "automation.attempt.succeeded", resourceType: "node_flow_attempt", resourceId: attempt.id, projectId, outcome: "succeeded", metadata: { runId: run.id, flowId: flow.id, nodeId: node.id, attemptNumber } });
         this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, {
           status: "succeeded",
           executionInvocationId: result.invocationId ?? nodeRun.executionInvocationId,
@@ -261,6 +265,7 @@ export class NodeFlowRuntimeService {
         clearTimeout(timeout); options.signal?.removeEventListener("abort", parentAbort); context.options = previousOptions;
         const message = error instanceof Error ? error.message : String(error);
         const classification = classifyFailure(error, options.signal?.aborted === true, timeoutController.signal.aborted);
+        this.deps.auditService?.recordSystem({ action: "automation.attempt.failed", resourceType: "node_flow_attempt", resourceId: attempt.id, projectId, outcome: "failed", metadata: { runId: run.id, flowId: flow.id, nodeId: node.id, attemptNumber, classification } });
         if (error instanceof ApprovalRequiredError) {
           attemptService.fail(attempt, "permanent", message, false);
           this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, {
@@ -343,6 +348,7 @@ export class NodeFlowRuntimeService {
         status: terminalStatus,
       },
     });
+    this.deps.auditService?.recordSystem({ action: "automation.run.finished", resourceType: "node_flow_run", resourceId: run.id, projectId, outcome: terminalStatus === "succeeded" ? "succeeded" : "failed", metadata: { flowId: flow.id, publicationId: publication.id, status: terminalStatus } });
 
     clearInterval(heartbeatTimer);
     return {

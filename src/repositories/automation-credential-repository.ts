@@ -17,6 +17,11 @@ export class AutomationCredentialRepository {
     if (!this.db.prepare("SELECT id FROM projects WHERE id = ?").get(projectId)) throw new EntityNotFoundError(`Project not found: ${projectId}`);
   }
 
+  countEncryptedSecrets(): number {
+    const row = this.db.prepare("SELECT COUNT(*) AS count FROM automation_credential_secrets").get() as { count?: number | bigint } | undefined;
+    return Number(row?.count ?? 0);
+  }
+
   list(projectId: string): AutomationCredentialMetadata[] {
     this.requireProject(projectId);
     const rows = this.db.prepare(`SELECT c.*, EXISTS(SELECT 1 FROM automation_credential_secrets s WHERE s.credential_id=c.id) AS configured FROM automation_credentials c WHERE c.project_id = ? OR (c.scope = 'global' AND EXISTS (SELECT 1 FROM json_each(c.allowed_project_ids_json) WHERE value = ?)) ORDER BY c.updated_at DESC`).all(projectId, projectId) as CredentialRow[];

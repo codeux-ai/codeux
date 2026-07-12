@@ -100,6 +100,10 @@ import { disposeCommandSpawner, shutdownGitHelperPool } from "../shared/subproce
 import { LocalMcpCliConfigService } from "../services/local-mcp-cli-config-service.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { ChatProviderIngressService } from "../services/chat-provider-ingress-service.js";
+import type { HeadlessAuthService } from "../services/headless-auth-service.js";
+import type { AutomationAuditExportService } from "../services/automation-audit-export-service.js";
+import type { HeadlessOperationalReadinessService } from "../services/headless-operational-readiness-service.js";
+import type { AutomationSloService } from "../services/automation-slo-service.js";
 import { ProjectInitializationStateService } from "../services/project-initialization-state-service.js";
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
@@ -229,6 +233,10 @@ export class CodeUxServer {
   private closePromise: Promise<void> | null = null;
   private readonly mcpApprovalTracker = new McpApprovalTracker();
   private readonly localMcpCliConfigService = new LocalMcpCliConfigService();
+  private readonly headlessAuthService: HeadlessAuthService;
+  private readonly automationAuditService: AutomationAuditExportService;
+  private readonly headlessReadinessService: HeadlessOperationalReadinessService;
+  private readonly automationSloService: AutomationSloService;
   private readonly signalHandler: () => void;
   private runtimeProcessLockRelease: RuntimeProcessLockRelease | null = null;
 
@@ -277,6 +285,10 @@ export class CodeUxServer {
     this.sessionTracking = deps.sessionTracking;
     this.cliWorkflowService = deps.cliWorkflowService;
     this.managementToolHandler = deps.managementToolHandler;
+    this.headlessAuthService = deps.headlessAuthService;
+    this.automationAuditService = deps.automationAuditService;
+    this.headlessReadinessService = deps.headlessReadinessService;
+    this.automationSloService = deps.automationSloService;
 
     this.activityCacheService = deps.activityCacheService;
     this.taskRerunService = deps.taskRerunService;
@@ -1379,6 +1391,7 @@ export class CodeUxServer {
   }
 
   private async runInternal(): Promise<void> {
+    await this.headlessReadinessService.assertStartupReady();
     await bootSettings({
       runtimeContext: this.runtimeContext,
       projectRoot: this.projectRoot,
@@ -1433,6 +1446,10 @@ export class CodeUxServer {
         projectSetupService: this.projectSetupService,
         schedulerService: this.schedulerService,
         nodeFlowService: this.nodeFlowService,
+        headlessAuthService: this.headlessAuthService,
+        automationAuditService: this.automationAuditService,
+        headlessReadinessService: this.headlessReadinessService,
+        automationSloService: this.automationSloService,
         customDashboardRepository: this.customDashboardRepository,
         customDashboardValidationService: this.customDashboardValidationService,
         skillService: this.skillService,
