@@ -172,7 +172,7 @@ export class CustomDashboardValidationService {
         await materializeCustomDashboardWorkspace({
           revision,
           workspacePath,
-          bridgeConfig: buildBridgeConfig(revision),
+          bridgeConfig: buildBridgeConfig(revision, session.id),
         });
 
         const bootstrapScript = new DockerBootstrapBuilder().build({

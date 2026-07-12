@@ -1,4 +1,4 @@
-import { fetchJson } from "../../lib/api/fetch-json.js";
+import { requestCustomDashboardRuntimeSource } from "./custom-dashboard-api.js";
 import type {
   CustomDashboardJsonValue,
   CustomDashboardRecord,
@@ -26,6 +26,7 @@ export interface CustomDashboardPublishedRuntime {
   dashboard: CustomDashboardRecord;
   revision: CustomDashboardRevisionRecord;
   document: string;
+  bridgeSessionId: string;
 }
 
 export type CustomDashboardRuntimeResolution =
@@ -38,9 +39,16 @@ export type CustomDashboardRuntimeResolution =
   };
 
 export interface CustomDashboardRuntimeMessage {
-  type: "codeux-custom-dashboard:source-request" | "codeux-custom-dashboard:runtime-error";
+  type: "codeux-custom-dashboard:source-request" | "codeux-custom-dashboard:source-cancel" | "codeux-custom-dashboard:runtime-error";
   requestId?: string;
   sourceId?: string;
+  bridgeSessionId?: string;
+  route?: string;
+  method?: string;
+  credentialSlot?: string;
+  capability?: string;
+  headers?: Record<string, string>;
+  body?: CustomDashboardJsonValue;
   message?: string;
 }
 
@@ -57,19 +65,6 @@ interface CustomDashboardViewerArtifact {
 }
 
 export const CUSTOM_DASHBOARD_SOURCE_RESPONSE_TYPE = "codeux-custom-dashboard:source-response";
-
-const supportedSourceTypes = new Set<string>([
-  "project_dashboard_data",
-  "project_dashboard",
-  "dashboard_data",
-  "stats",
-  "project_stats",
-  "telemetry",
-  "overview_telemetry",
-  "integrations_metadata",
-  "integrations",
-  "external_api",
-]);
 
 export function resolvePublishedCustomDashboardRuntime(
   dashboard: CustomDashboardRecord,
@@ -108,12 +103,14 @@ export function resolvePublishedCustomDashboardRuntime(
     };
   }
 
+  const bridgeSessionId = createBridgeSessionId();
   return {
     status: "ready",
     runtime: {
       dashboard,
       revision: publishedRevision,
-      document: buildCustomDashboardFrameDocument(dashboard, publishedRevision),
+      document: buildCustomDashboardFrameDocument(dashboard, publishedRevision, bridgeSessionId),
+      bridgeSessionId,
     },
   };
 }
@@ -121,6 +118,7 @@ export function resolvePublishedCustomDashboardRuntime(
 export function buildCustomDashboardFrameDocument(
   dashboard: CustomDashboardRecord,
   revision: CustomDashboardRevisionRecord,
+  bridgeSessionId = createBridgeSessionId(),
 ): string {
   const entryFile = revision.fileBundle.files.find((file) => file.path === revision.manifest.entryFile) ?? null;
   const bridgeConfig = {
@@ -131,6 +129,7 @@ export function buildCustomDashboardFrameDocument(
     sourceNodeGraph: revision.sourceNodeGraph,
     styleguide: revision.styleguide,
     runtimeMetadata: revision.runtimeMetadata,
+    bridgeSessionId,
   };
   const bootstrap = buildBridgeBootstrapScript(bridgeConfig);
   const title = escapeHtml(revision.manifest.title || dashboard.title);
@@ -185,45 +184,26 @@ export function buildCustomDashboardFrameDocument(
 }
 
 export async function resolveCustomDashboardRuntimeSource(
-  projectId: string,
+  runtime: CustomDashboardPublishedRuntime,
   source: CustomDashboardDataSourceNode,
+  requestId: string,
+  options: Pick<CustomDashboardRuntimeMessage, "route" | "method" | "credentialSlot" | "capability" | "headers" | "body"> = {},
   signal?: AbortSignal,
 ): Promise<CustomDashboardRuntimeSourceResult> {
-  if (!supportedSourceTypes.has(source.type)) {
-    throw new Error(`Data source "${source.title || source.id}" is unavailable: unsupported source type "${source.type}".`);
-  }
-
-  const normalizedType = normalizeSourceType(source.type);
-  if (normalizedType === "external_api") {
-    throw new Error(`External API source "${source.title || source.id}" is a placeholder and is not available in the in-app viewer.`);
-  }
-  if (normalizedType === "integrations_metadata") {
-    return {
-      sourceId: source.id,
-      type: source.type,
-      title: source.title,
-      data: {
-        available: true,
-        source: {
-          id: source.id,
-          title: source.title,
-          type: source.type,
-          config: source.config ?? {},
-        },
-        note: "Integration metadata is limited to non-secret source-node metadata in the in-app viewer.",
-      },
-    };
-  }
-
-  const data = await fetchJson<CustomDashboardJsonValue>(
-    buildSourceEndpoint(projectId, normalizedType, source),
-    { signal },
-  );
+  const response = await requestCustomDashboardRuntimeSource({
+    requestId,
+    projectId: runtime.revision.projectId,
+    dashboardId: runtime.dashboard.id,
+    revisionId: runtime.revision.id,
+    access: { kind: "published" },
+    sourceId: source.id,
+    ...options,
+  }, signal);
   return {
     sourceId: source.id,
     type: source.type,
     title: source.title,
-    data,
+    data: response.data,
   };
 }
 
@@ -233,8 +213,14 @@ export function createCustomDashboardRuntimeMessageHandler(args: {
   onRuntimeError: (message: string) => void;
   signal?: AbortSignal;
 }): (event: MessageEvent) => void {
+  const requests = new Map<string, AbortController>();
+  args.signal?.addEventListener("abort", () => {
+    for (const controller of requests.values()) controller.abort(args.signal?.reason);
+    requests.clear();
+  }, { once: true });
   return (event: MessageEvent) => {
-    if (!args.frameWindow || event.source !== args.frameWindow || !isRuntimeMessage(event.data)) {
+    if (!args.frameWindow || event.source !== args.frameWindow || event.origin !== "null" || !isRuntimeMessage(event.data)
+      || event.data.bridgeSessionId !== args.runtime.bridgeSessionId) {
       return;
     }
     const frameWindow = args.frameWindow;
@@ -242,10 +228,17 @@ export function createCustomDashboardRuntimeMessageHandler(args: {
       args.onRuntimeError(event.data.message || "The custom dashboard frame reported an unknown runtime error.");
       return;
     }
+    if (event.data.type === "codeux-custom-dashboard:source-cancel") {
+      if (event.data.requestId) {
+        requests.get(event.data.requestId)?.abort(new Error("Custom dashboard source request was cancelled."));
+        requests.delete(event.data.requestId);
+      }
+      return;
+    }
     const requestId = event.data.requestId;
     const sourceId = event.data.sourceId;
     if (!requestId || !sourceId) {
-      postSourceResponse(args.frameWindow, {
+      postSourceResponse(args.frameWindow, args.runtime.bridgeSessionId, {
         requestId: requestId || "unknown",
         ok: false,
         error: "Custom dashboard source requests require requestId and sourceId.",
@@ -254,20 +247,36 @@ export function createCustomDashboardRuntimeMessageHandler(args: {
     }
     const source = args.runtime.revision.sourceNodeGraph.nodes.find((node) => node.id === sourceId);
     if (!source) {
-      postSourceResponse(frameWindow, {
+      postSourceResponse(frameWindow, args.runtime.bridgeSessionId, {
         requestId,
         ok: false,
         error: `Custom dashboard source not declared: ${sourceId}.`,
       });
       return;
     }
-    void resolveCustomDashboardRuntimeSource(args.runtime.revision.projectId, source, args.signal)
-      .then((result) => postSourceResponse(frameWindow, { requestId, ok: true, data: result.data }))
-      .catch((error) => postSourceResponse(frameWindow, {
+    if (requests.has(requestId) || requests.size >= 64) {
+      postSourceResponse(frameWindow, args.runtime.bridgeSessionId, {
         requestId,
         ok: false,
-        error: error instanceof Error ? error.message : "Custom dashboard source request failed.",
-      }));
+        error: "Custom dashboard source request capacity was exceeded.",
+      });
+      return;
+    }
+    const controller = new AbortController();
+    const abort = (): void => controller.abort(args.signal?.reason);
+    args.signal?.addEventListener("abort", abort, { once: true });
+    requests.set(requestId, controller);
+    void resolveCustomDashboardRuntimeSource(args.runtime, source, requestId, event.data, controller.signal)
+      .then((result) => postSourceResponse(frameWindow, args.runtime.bridgeSessionId, { requestId, ok: true, data: result.data }))
+      .catch((error) => postSourceResponse(frameWindow, args.runtime.bridgeSessionId, {
+        requestId,
+        ok: false,
+        error: boundedRuntimeError(error),
+      }))
+      .finally(() => {
+        requests.delete(requestId);
+        args.signal?.removeEventListener("abort", abort);
+      });
   };
 }
 
@@ -285,41 +294,6 @@ function getLastValidationReport(revisions: CustomDashboardRevisionRecord[]): Cu
     ?.validationReport ?? null;
 }
 
-function normalizeSourceType(type: string): CustomDashboardRuntimeSourceKind {
-  switch (type) {
-    case "project_dashboard":
-    case "dashboard_data":
-      return "project_dashboard_data";
-    case "project_stats":
-      return "stats";
-    case "overview_telemetry":
-      return "telemetry";
-    case "integrations":
-      return "integrations_metadata";
-    case "external_api":
-      return "external_api";
-    default:
-      return type as CustomDashboardRuntimeSourceKind;
-  }
-}
-
-function buildSourceEndpoint(
-  projectId: string,
-  type: Exclude<CustomDashboardRuntimeSourceKind, "external_api" | "integrations_metadata">,
-  source: CustomDashboardDataSourceNode,
-): string {
-  if (type === "project_dashboard_data") {
-    return `/api/projects/${encodeURIComponent(projectId)}/execution`;
-  }
-  if (type === "telemetry") {
-    return "/api/telemetry/overview";
-  }
-  const windowValue = typeof source.config?.window === "string" && source.config.window.trim()
-    ? source.config.window.trim()
-    : "7d";
-  return `/api/projects/${encodeURIComponent(projectId)}/stats?window=${encodeURIComponent(windowValue)}`;
-}
-
 function isRuntimeMessage(value: unknown): value is CustomDashboardRuntimeMessage {
   return Boolean(
     value
@@ -327,6 +301,7 @@ function isRuntimeMessage(value: unknown): value is CustomDashboardRuntimeMessag
       && "type" in value
       && (
         (value as { type?: unknown }).type === "codeux-custom-dashboard:source-request"
+        || (value as { type?: unknown }).type === "codeux-custom-dashboard:source-cancel"
         || (value as { type?: unknown }).type === "codeux-custom-dashboard:runtime-error"
       ),
   );
@@ -334,9 +309,10 @@ function isRuntimeMessage(value: unknown): value is CustomDashboardRuntimeMessag
 
 function postSourceResponse(
   frameWindow: Window,
+  bridgeSessionId: string,
   response: { requestId: string; ok: true; data: CustomDashboardJsonValue } | { requestId: string; ok: false; error: string },
 ): void {
-  frameWindow.postMessage({ type: CUSTOM_DASHBOARD_SOURCE_RESPONSE_TYPE, ...response }, "*");
+  frameWindow.postMessage({ type: CUSTOM_DASHBOARD_SOURCE_RESPONSE_TYPE, bridgeSessionId, ...response }, "*");
 }
 
 function buildBridgeBootstrapScript(config: Record<string, unknown>): string {
@@ -345,18 +321,24 @@ function buildBridgeBootstrapScript(config: Record<string, unknown>): string {
     `  const config = Object.freeze(${escapeScript(JSON.stringify(config))});`,
     "  const pending = new Map();",
     "  let seq = 0;",
-    "  const readSource = (sourceId) => new Promise((resolve, reject) => {",
+    "  const parentOrigin = (() => { try { return new URL(document.referrer).origin; } catch { return '*'; } })();",
+    "  const readSource = (sourceId, options = {}) => new Promise((resolve, reject) => {",
+    "    if (pending.size >= 64) { reject(new Error('Custom dashboard source request capacity was exceeded.')); return; }",
     "    const requestId = `source-${Date.now()}-${++seq}`;",
-    "    pending.set(requestId, { resolve, reject });",
-    "    window.parent.postMessage({ type: 'codeux-custom-dashboard:source-request', requestId, sourceId }, '*');",
+    "    const cancel = () => { pending.delete(requestId); window.parent.postMessage({ type: 'codeux-custom-dashboard:source-cancel', bridgeSessionId: config.bridgeSessionId, requestId }, parentOrigin); reject(new DOMException('The source request was cancelled.', 'AbortError')); };",
+    "    if (options.signal?.aborted) { cancel(); return; }",
+    "    options.signal?.addEventListener('abort', cancel, { once: true });",
+    "    pending.set(requestId, { resolve, reject, signal: options.signal, cancel });",
+    "    window.parent.postMessage({ type: 'codeux-custom-dashboard:source-request', bridgeSessionId: config.bridgeSessionId, requestId, sourceId, route: options.route, method: options.method, credentialSlot: options.credentialSlot, capability: options.capability, headers: options.headers, body: options.body }, parentOrigin);",
     "  });",
     "  window.addEventListener('message', (event) => {",
-    `    if (!event.data || event.data.type !== '${CUSTOM_DASHBOARD_SOURCE_RESPONSE_TYPE}') return;`,
+    `    if (event.source !== window.parent || !event.data || event.data.type !== '${CUSTOM_DASHBOARD_SOURCE_RESPONSE_TYPE}' || event.data.bridgeSessionId !== config.bridgeSessionId) return;`,
     "    const entry = pending.get(event.data.requestId);",
     "    if (!entry) return;",
     "    pending.delete(event.data.requestId);",
+    "    entry.signal?.removeEventListener('abort', entry.cancel);",
     "    if (event.data.ok) entry.resolve(event.data.data);",
-    "    else entry.reject(new Error(event.data.error || 'Custom dashboard source request failed.'));",
+    "    else entry.reject(new Error(String(event.data.error || 'Custom dashboard source request failed.').slice(0, 320)));",
     "  });",
     "  const bridge = Object.freeze({",
     "    ...config,",
@@ -365,7 +347,7 @@ function buildBridgeBootstrapScript(config: Record<string, unknown>): string {
     "  });",
     "  Object.defineProperty(window, 'codeUxDataBridge', { value: bridge, writable: false, configurable: false });",
     "  Object.defineProperty(window, 'CodeUXCustomDashboard', { value: bridge, writable: false, configurable: false });",
-    "  const report = (message) => window.parent.postMessage({ type: 'codeux-custom-dashboard:runtime-error', message }, '*');",
+    "  const report = (message) => window.parent.postMessage({ type: 'codeux-custom-dashboard:runtime-error', bridgeSessionId: config.bridgeSessionId, message: String(message).slice(0, 320) }, parentOrigin);",
     "  window.addEventListener('error', (event) => report(event.message || 'Custom dashboard runtime error.'));",
     "  window.addEventListener('unhandledrejection', (event) => report(event.reason?.message || String(event.reason || 'Unhandled custom dashboard rejection.')));",
     "})();",
@@ -536,4 +518,15 @@ function escapeScript(value: string): string {
 
 function escapeStyle(value: string): string {
   return value.replace(/<\/style/gi, "<\\/style").replace(/<!--/g, "<\\!--");
+}
+
+function createBridgeSessionId(): string {
+  return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `bridge-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function boundedRuntimeError(error: unknown): string {
+  const message = error instanceof Error ? error.message : "Custom dashboard source request failed.";
+  return message.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 320) || "Custom dashboard source request failed.";
 }

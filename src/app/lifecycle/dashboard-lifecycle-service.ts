@@ -74,6 +74,8 @@ import type { EmbeddingService } from "../../services/embedding-service.js";
 import type { MemoryRepository } from "../../repositories/memory-repository.js";
 import type { CustomDashboardRepository } from "../../repositories/custom-dashboard-repository.js";
 import type { CustomDashboardValidationService } from "../../services/custom-dashboard-validation-service.js";
+import { CustomDashboardRuntimeService } from "../../services/custom-dashboard-runtime-service.js";
+import { EgressPolicyService } from "../../services/node-flows/egress-policy-service.js";
 import type { SkillService } from "../../services/skill-service.js";
 import type { GuardrailService } from "../../services/guardrail-service.js";
 import type { ProjectSettings } from "../../contracts/settings-scope-types.js";
@@ -458,6 +460,16 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     projectWorkerAssignmentRepository: deps.projectWorkerAssignmentRepository,
     projectAttentionRepository: deps.projectAttentionRepository,
   });
+  const customDashboardRuntimeService = deps.customDashboardRepository
+    ? new CustomDashboardRuntimeService({
+        customDashboardRepository: deps.customDashboardRepository,
+        credentialBroker: deps.credentialBroker,
+        egressPolicyService: new EgressPolicyService(),
+        getProjectExecutionSnapshot: cache.getProjectExecutionSnapshot,
+        getProjectStatsSnapshot: cache.getProjectStatsSnapshot,
+        getOverviewTelemetrySnapshot: cache.getOverviewTelemetrySnapshot,
+      })
+    : undefined;
 
   deps.dashboardRealtimeService.setCacheInvalidator(cache);
 
@@ -525,6 +537,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     automationSloService: deps.automationSloService,
     customDashboardRepository: deps.customDashboardRepository,
     customDashboardValidationService: deps.customDashboardValidationService,
+    customDashboardRuntimeService,
     skillService: deps.skillService,
     projectManagementRepository: deps.projectManagementRepository,
     executionRepository: deps.executionRepository,

@@ -51,7 +51,7 @@ Validation flow:
 
 - `startValidation(projectId, dashboardId, revisionId)` creates a validation session, materializes the immutable revision bundle under `.code-ux/runtime/custom-dashboards/<dashboardId>/<revisionId>/workspace`, and writes a generated Vite/Preact harness.
 - Validation runtime paths are canonicalized under the selected project before filesystem reads or writes, including bundle materialization, logs, and persisted viewer artifacts.
-- The harness injects a read-only Code UX data bridge containing the revision manifest, source node graph, styleguide, runtime metadata, integrations, and declared `external_api` nodes.
+- The harness injects a read-only Code UX data bridge containing non-secret revision metadata and a source client bound to the validation session; credential bindings and values are excluded.
 - The service runs install/build inside Docker using the resolved `cliWorkflow.containerImage`, then creates and starts a detached serving container on an allocated localhost port.
 - A validation session is marked `passed` only after install, build, start, and root URL health checks succeed. Build/start/health failures are recorded as failed validation reports with bounded log excerpts.
 - Runtime metadata persists the workspace path, log path, host port, container id/name, image, validation URL path, commands, latest error/log excerpt, and a browser-ready Vite `dist` artifact for passed revisions so the published viewer can render TSX-based drafts without a live validation container.
@@ -66,6 +66,7 @@ Dashboard HTTP routes live in `src/server/custom-dashboard-routes.ts` and are re
 - dashboard routes get/update/archive a dashboard and create revisions
 - validation routes start validation, read status/logs, stop/remove validation sessions, and publish revisions
 - validation proxy routes forward same-origin requests to a running validation host port when the session runtime metadata exposes one
+- `/api/custom-dashboard-runtime/source` is shared by validation previews and active published revisions and verifies ownership plus declared sources/routes before serving data
 
 The MCP management surface is `manage_custom_dashboards` in `src/mcp/management/custom-dashboard-actions.ts`. It supports `list`, `get`, `create`, `update`, `create_revision`, `validate_revision`, `validation_status`, `validation_logs`, `publish_revision`, `archive`, and `data_catalog`. `archive` follows the same approval fingerprint flow as other destructive management actions.
 
@@ -91,7 +92,7 @@ Draft edits remain persisted bundle text sent back through API calls; generated 
 
 Published dashboards open through `CustomDashboardViewer`, which resolves the active `publishedRevisionId` from the loaded dashboard detail and renders only when the dashboard status is `published`, the published revision exists, and that revision still has a valid passed validation report. Draft, rejected, archived, unvalidated, and missing-publication states render a local blocked panel with the last validation report and a return-to-editor action rather than executing the bundle.
 
-The viewer uses a sandboxed iframe `srcdoc` document so generated dashboard code never runs inside the main Preact bundle. For validated TSX/Preact revisions, it prefers the persisted Vite `dist` viewer artifact from revision runtime metadata and inlines the artifact's HTML, CSS, and JavaScript into the frame document. Older direct HTML or browser-ready JavaScript entry files still render through the previous entry-file path. The frame receives a frozen `codeUxDataBridge` / `CodeUXCustomDashboard` object and can request only declared source nodes by `id` through `postMessage`. The parent page handles those requests with explicit same-origin API calls for project execution data, project stats, and overview telemetry; integration metadata is limited to non-secret source-node metadata; external API nodes are placeholders and return clear unavailable-source errors. Frame `error` and `unhandledrejection` events are reported back to the viewer and displayed as dashboard-specific failures without breaking the surrounding app shell.
+The viewer remains isolated in a sandboxed `srcdoc` iframe. Published requests cross a frame-source, opaque-origin, per-frame-session message boundary, while validation requests carry their owning validation session. Both reach `CustomDashboardRuntimeService`, which authorizes the revision and declared source/route before built-in access or external egress. Credentials resolve only inside the broker callback and flow as trusted egress headers; they are never serialized into the bridge.
 
 Navigation is centralized through `dashboard/src/v2/lib/navigation-items.ts`, so both the kinetic dock and sidebar expose the Dashboards destination with stable labels, tour markers, and route prefetching.
 

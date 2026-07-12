@@ -25,7 +25,7 @@ Custom dashboards declare a `sourceNodeGraph` with nodes, edges, and optional me
 | `stats`, `project_stats` | Reads project stats. `config.window` selects the stats window when present. |
 | `telemetry`, `overview_telemetry` | Reads overview telemetry. |
 | `integrations_metadata`, `integrations` | Returns only non-secret metadata declared on the source node. |
-| `external_api` | Placeholder only. Arbitrary external calls are not proxied and return an unavailable-source error. |
+| `external_api` | Reads declared routes through the server source gateway. Hosts, methods, ports, content types, redirects, timeouts, rate limits, and response sizes remain server-controlled; credential values never enter the viewer. |
 
 Generated dashboards should handle unavailable-source errors visibly. External API connectors are not fully available through the in-app viewer yet.
 
@@ -36,6 +36,10 @@ Source nodes may declare up to 32 credential slots with a stable slot identifier
 ### Route definitions
 
 Drafts may declare up to 32 metadata-only routes. Every route has a normalized local path, label, bundle-relative entry file listed in the manifest, and optional bounded JSON metadata. Schemes, query strings, fragments, traversal, filesystem paths, script URLs, duplicate normalized paths, and host-app route prefixes are rejected. Revisions retain their route snapshot when draft routes change.
+
+Validation previews and published viewers use the same `/api/custom-dashboard-runtime/source` boundary. Requests must identify the owning project/dashboard/revision, an active publication or matching validation session, a declared source, and any requested route, credential slot, and capability. External credentials resolve only on the server and are never included in generated bridge payloads.
+
+An external node declares its fixed `baseUrl`, explicit `allowedHosts`, and `routes` with allowed methods. Optional port, content-type, timeout, redirect, response-size, and rate-limit settings remain bounded by the runtime. Dashboard code calls `readSource` with the declared source and route; it cannot ask the gateway to fetch an arbitrary URL.
 
 ## Agent and API Notes
 

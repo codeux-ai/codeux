@@ -5,6 +5,7 @@ import type {
 } from "../../../dashboard/src/v2/types.js";
 import {
   buildPublishedCustomDashboardLink,
+  createCustomDashboardRuntimeMessageHandler,
   resolveCustomDashboardRuntimeSource,
   resolvePublishedCustomDashboardRuntime,
 } from "../../../dashboard/src/v2/lib/custom-dashboard-runtime.js";
@@ -28,6 +29,8 @@ const dashboard: CustomDashboardRecord = {
     nodes: [{ id: "stats", type: "stats", title: "Stats", config: { window: "24h" } }],
     edges: [],
   },
+  credentialBindings: [],
+  routes: [],
   styleguide: { tone: "operational" },
   runtimeMetadata: {},
   publishedRevisionId: "revision-1",
@@ -43,6 +46,8 @@ const revision: CustomDashboardRevisionRecord = {
   manifest: dashboard.manifest,
   fileBundle: dashboard.fileBundle,
   sourceNodeGraph: dashboard.sourceNodeGraph,
+  credentialBindings: [],
+  routes: [],
   styleguide: dashboard.styleguide,
   validationStatus: "passed",
   validationReport: { valid: true, summary: "Passed", issues: [] },
@@ -51,8 +56,6 @@ const revision: CustomDashboardRevisionRecord = {
   createdAt: "2026-07-07T00:00:00.000Z",
   updatedAt: "2026-07-07T00:00:00.000Z",
 };
-
-type CustomDashboardDataSourceNode = CustomDashboardRevisionRecord["sourceNodeGraph"]["nodes"][number];
 
 describe("custom dashboard runtime", () => {
   beforeEach(() => {
@@ -83,35 +86,111 @@ describe("custom dashboard runtime", () => {
     expect(archived.status === "blocked" ? archived.reason : "").toContain("Archived");
   });
 
-  it("reads declared project data, stats, and telemetry through explicit API endpoints", async () => {
-    await resolveCustomDashboardRuntimeSource("project-1", { id: "project", type: "project_dashboard_data", title: "Project" });
-    expect(fetch).toHaveBeenLastCalledWith("/api/projects/project-1/execution", expect.objectContaining({ cache: "no-store" }));
+  it("reads every declared source through the shared typed gateway", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      requestId: "source-request",
+      sourceId: "stats",
+      status: 200,
+      headers: { "content-type": "application/json" },
+      data: { ok: true },
+    }), { status: 200, headers: { "content-type": "application/json" } })));
+    const resolved = resolvePublishedCustomDashboardRuntime(dashboard, [revision]);
+    expect(resolved.status).toBe("ready");
+    if (resolved.status !== "ready") return;
 
-    await resolveCustomDashboardRuntimeSource("project-1", { id: "stats", type: "stats", title: "Stats", config: { window: "24h" } });
-    expect(fetch).toHaveBeenLastCalledWith("/api/projects/project-1/stats?window=24h", expect.objectContaining({ cache: "no-store" }));
-
-    await resolveCustomDashboardRuntimeSource("project-1", { id: "telemetry", type: "telemetry", title: "Telemetry" });
-    expect(fetch).toHaveBeenLastCalledWith("/api/telemetry/overview", expect.objectContaining({ cache: "no-store" }));
+    await resolveCustomDashboardRuntimeSource(
+      resolved.runtime,
+      { id: "stats", type: "stats", title: "Stats", config: { window: "24h" } },
+      "source-request",
+      { route: "/summary" },
+    );
+    expect(fetch).toHaveBeenLastCalledWith("/api/custom-dashboard-runtime/source", expect.objectContaining({
+      method: "POST",
+      cache: "no-store",
+      body: expect.stringContaining('"sourceId":"stats"'),
+    }));
+    const init = vi.mocked(fetch).mock.calls.at(-1)?.[1];
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      requestId: "source-request",
+      projectId: "project-1",
+      dashboardId: "dashboard-1",
+      revisionId: "revision-1",
+      access: { kind: "published" },
+      sourceId: "stats",
+      route: "/summary",
+    });
   });
 
-  it("keeps integration metadata non-secret and reports unavailable source types clearly", async () => {
-    const integrations = await resolveCustomDashboardRuntimeSource("project-1", {
-      id: "jira",
-      type: "integrations_metadata",
-      title: "Jira",
-      config: { projectKey: "OPS" },
+  it("checks frame source, opaque origin, bridge session, request IDs, and cancellation", async () => {
+    const resolved = resolvePublishedCustomDashboardRuntime(dashboard, [revision]);
+    expect(resolved.status).toBe("ready");
+    if (resolved.status !== "ready") return;
+    const postMessage = vi.fn();
+    const frameWindow = { postMessage } as unknown as Window;
+    const errors: string[] = [];
+    const handler = createCustomDashboardRuntimeMessageHandler({
+      frameWindow,
+      runtime: resolved.runtime,
+      onRuntimeError: (message) => errors.push(message),
     });
-    expect(integrations.data).toMatchObject({ available: true, source: { id: "jira", config: { projectKey: "OPS" } } });
+
+    handler({
+      source: {} as MessageEventSource,
+      origin: "null",
+      data: { type: "codeux-custom-dashboard:source-request", bridgeSessionId: resolved.runtime.bridgeSessionId, requestId: "wrong-frame", sourceId: "stats" },
+    } as MessageEvent);
+    handler({
+      source: frameWindow,
+      origin: "https://attacker.example",
+      data: { type: "codeux-custom-dashboard:source-request", bridgeSessionId: resolved.runtime.bridgeSessionId, requestId: "wrong-origin", sourceId: "stats" },
+    } as MessageEvent);
+    handler({
+      source: frameWindow,
+      origin: "null",
+      data: { type: "codeux-custom-dashboard:source-request", bridgeSessionId: "wrong-session", requestId: "wrong-session", sourceId: "stats" },
+    } as MessageEvent);
     expect(fetch).not.toHaveBeenCalled();
 
-    await expect(resolveCustomDashboardRuntimeSource("project-1", {
-      id: "incidents",
-      type: "external_api",
-      title: "Incidents",
-    })).rejects.toThrow("placeholder");
+    handler({
+      source: frameWindow,
+      origin: "null",
+      data: { type: "codeux-custom-dashboard:source-request", bridgeSessionId: resolved.runtime.bridgeSessionId, sourceId: "stats" },
+    } as MessageEvent);
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "codeux-custom-dashboard:source-response",
+      bridgeSessionId: resolved.runtime.bridgeSessionId,
+      ok: false,
+    }), "*");
 
-    const unsupported: CustomDashboardDataSourceNode = { id: "raw", type: "raw_sql", title: "Raw SQL" };
-    await expect(resolveCustomDashboardRuntimeSource("project-1", unsupported)).rejects.toThrow("unsupported source type");
+    handler({
+      source: frameWindow,
+      origin: "null",
+      data: { type: "codeux-custom-dashboard:source-cancel", bridgeSessionId: resolved.runtime.bridgeSessionId, requestId: "cancelled" },
+    } as MessageEvent);
+    expect(errors).toEqual([]);
+  });
+
+  it("does not serialize credential bindings or values into published bridge payloads", () => {
+    const credentialRevision = {
+      ...revision,
+      sourceNodeGraph: {
+        nodes: [{ id: "external", type: "external_api", title: "External", credentialSlots: [{ slot: "token", label: "Token", required: true, allowedKinds: ["api-token"], requiredCapability: "read" }] }],
+        edges: [],
+      },
+      credentialBindings: [{
+        slot: "token",
+        credentialId: "credential-1",
+        capability: "read",
+        bindingKey: "custom-dashboard:dashboard-1:token",
+        credential: { id: "credential-1", name: "Token", kind: "api-token", scope: "project" as const, capabilities: ["read"], status: "active" as const, configured: true },
+      }],
+    };
+    const resolved = resolvePublishedCustomDashboardRuntime(dashboard, [credentialRevision]);
+    expect(resolved.status).toBe("ready");
+    const document = resolved.status === "ready" ? resolved.runtime.document : "";
+    expect(document).toContain("credentialSlots");
+    expect(document).not.toContain("credential-1");
+    expect(document).not.toContain("custom-dashboard:dashboard-1:token");
   });
 
   it("builds shareable published viewer links", () => {

@@ -8,6 +8,7 @@ import type {
   CustomDashboardRouteDefinition,
   CustomDashboardRevisionRecord,
   CustomDashboardValidationSessionRecord,
+  CustomDashboardJsonValue,
   UpdateCustomDashboardDraftInput,
 } from "../types.js";
 
@@ -45,6 +46,33 @@ export interface CustomDashboardDataCatalogResponse {
 
 export interface CustomDashboardValidationLogsResponse {
   logs: string;
+}
+
+export type CustomDashboardRuntimeAccess =
+  | { kind: "published" }
+  | { kind: "validation"; sessionId: string };
+
+export interface CustomDashboardRuntimeSourceRequest {
+  requestId: string;
+  projectId: string;
+  dashboardId: string;
+  revisionId: string;
+  access: CustomDashboardRuntimeAccess;
+  sourceId: string;
+  route?: string;
+  method?: string;
+  credentialSlot?: string;
+  capability?: string;
+  headers?: Record<string, string>;
+  body?: CustomDashboardJsonValue;
+}
+
+export interface CustomDashboardRuntimeSourceResponse {
+  requestId: string;
+  sourceId: string;
+  status: number;
+  headers: Record<string, string>;
+  data: CustomDashboardJsonValue;
 }
 
 const jsonHeaders = { "Content-Type": "application/json" };
@@ -171,4 +199,16 @@ export const fetchCustomDashboardDataCatalog = (
     `/api/projects/${encodeURIComponent(projectId)}/custom-dashboards/data-catalog`,
     { signal },
   )
+);
+
+export const requestCustomDashboardRuntimeSource = (
+  input: CustomDashboardRuntimeSourceRequest,
+  signal?: AbortSignal,
+): Promise<CustomDashboardRuntimeSourceResponse> => (
+  fetchJson<CustomDashboardRuntimeSourceResponse>("/api/custom-dashboard-runtime/source", {
+    method: "POST",
+    headers: { ...jsonHeaders, "X-Request-Id": input.requestId },
+    body: JSON.stringify(input),
+    signal,
+  })
 );

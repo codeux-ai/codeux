@@ -8,8 +8,27 @@ import { HttpRouteError } from "./http-errors.js";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute } from "./route-utils.js";
 import { requireTrimmedString } from "./request-parsers.js";
+import {
+  CustomDashboardRuntimeError,
+  type CustomDashboardRuntimeSourceRequest,
+} from "../services/custom-dashboard-runtime-service.js";
 
 export function registerCustomDashboardRoutes(app: Express, deps: DashboardDependencies): void {
+  app.post("/api/custom-dashboard-runtime/source", asyncRoute(async (req, res) => {
+    assertSafeRuntimeRequestOrigin(req);
+    const service = requireCustomDashboardRuntimeService(deps);
+    const body = requireObjectBody<CustomDashboardRuntimeSourceRequest & { requestId?: unknown }>(req.body);
+    const requestId = requireRuntimeRequestId(req, body.requestId);
+    try {
+      const result = await service.requestSource(requestId, body, requestAbortSignal(req));
+      res.setHeader("cache-control", "no-store");
+      res.json(result);
+    } catch (error) {
+      if (!(error instanceof CustomDashboardRuntimeError)) throw error;
+      res.status(error.statusCode).json({ requestId, error: { code: error.code, message: error.message } });
+    }
+  }));
+
   app.get("/api/projects/:projectId/custom-dashboards", asyncRoute(async (req, res) => {
     const repository = requireCustomDashboardRepository(deps);
     const projectId = requireTrimmedString(req.params.projectId, "projectId");
@@ -148,6 +167,52 @@ export function registerCustomDashboardRoutes(app: Express, deps: DashboardDepen
     const proxied = await service.proxyValidationRequest(buildProxyRequestArgs(req, sessionId, prefix));
     sendProxiedResponse(res, proxied);
   }));
+}
+
+function requireCustomDashboardRuntimeService(
+  deps: DashboardDependencies,
+): NonNullable<DashboardDependencies["customDashboardRuntimeService"]> {
+  if (!deps.customDashboardRuntimeService) {
+    throw new HttpRouteError(503, "Custom dashboard source runtime is unavailable.");
+  }
+  return deps.customDashboardRuntimeService;
+}
+
+function requireRuntimeRequestId(req: Request, bodyRequestId: unknown): string {
+  const value = typeof bodyRequestId === "string"
+    ? bodyRequestId
+    : typeof req.headers["x-request-id"] === "string"
+      ? req.headers["x-request-id"]
+      : "";
+  const requestId = value.trim();
+  if (!requestId || requestId.length > 128 || !/^[a-zA-Z0-9._:-]+$/.test(requestId)) {
+    throw new HttpRouteError(400, "A valid custom dashboard runtime requestId is required.");
+  }
+  return requestId;
+}
+
+function assertSafeRuntimeRequestOrigin(req: Request): void {
+  const site = req.headers["sec-fetch-site"];
+  if (typeof site === "string" && !["same-origin", "same-site", "none"].includes(site)) {
+    throw new HttpRouteError(403, "Cross-site custom dashboard runtime requests are not allowed.");
+  }
+  const origin = req.headers.origin;
+  if (!origin) return;
+  let parsed: URL;
+  try {
+    parsed = new URL(origin);
+  } catch {
+    throw new HttpRouteError(403, "Custom dashboard runtime request origin is invalid.");
+  }
+  if (parsed.host !== req.get("host")) {
+    throw new HttpRouteError(403, "Cross-origin custom dashboard runtime requests are not allowed.");
+  }
+}
+
+function requestAbortSignal(req: Request): AbortSignal {
+  const controller = new AbortController();
+  req.once("aborted", () => controller.abort(new Error("Custom dashboard runtime request was cancelled.")));
+  return controller.signal;
 }
 
 function requireCustomDashboardRepository(deps: DashboardDependencies): NonNullable<DashboardDependencies["customDashboardRepository"]> {
