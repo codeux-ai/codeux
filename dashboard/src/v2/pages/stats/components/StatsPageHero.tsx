@@ -15,7 +15,6 @@ import type {
 } from "../../../types.js";
 import { formatDateTime, isValidCustomRange } from "../stats-utils.js";
 import {
-  PANEL_CLASS,
   CHIP_CLASS,
   INPUT_CLASS,
   SUBPANEL_CLASS,
@@ -44,7 +43,7 @@ const MODE_LABELS: Record<StatsVisualMode, string> = {
   system: "System",
 };
 
-const HERO_PANEL_CLASS = PANEL_CLASS.replace("overflow-hidden", "overflow-visible");
+const HERO_PANEL_CLASS = "relative overflow-visible";
 
 const ContextBadge: FunctionComponent<{
   icon: LucideIcon;

@@ -90,11 +90,33 @@ export function buildDonutArcPath(
   startAngle: number,
   endAngle: number,
 ): string {
+  const sweep = endAngle - startAngle;
   const outerStart = polarToCartesian(cx, cy, outerRadius, startAngle);
   const outerEnd = polarToCartesian(cx, cy, outerRadius, endAngle);
   const innerEnd = polarToCartesian(cx, cy, innerRadius, endAngle);
   const innerStart = polarToCartesian(cx, cy, innerRadius, startAngle);
-  const largeArcFlag = endAngle - startAngle > 180 ? 1 : 0;
+  const largeArcFlag = sweep > 180 ? 1 : 0;
+
+  // A single SVG arc cannot draw a complete circle: at a 360-degree sweep its
+  // start and end coordinates are identical. Extremely dominant segments can
+  // hit the same failure after the coordinates are rounded for the path. Split
+  // those rings into two arcs while preserving the real end angle, so a tiny
+  // neighbouring segment can still render in the remaining gap or on top.
+  if (sweep >= 359.99) {
+    const midAngle = startAngle + sweep / 2;
+    const outerMid = polarToCartesian(cx, cy, outerRadius, midAngle);
+    const innerMid = polarToCartesian(cx, cy, innerRadius, midAngle);
+
+    return [
+      `M ${outerStart.x.toFixed(2)} ${outerStart.y.toFixed(2)}`,
+      `A ${outerRadius} ${outerRadius} 0 0 1 ${outerMid.x.toFixed(2)} ${outerMid.y.toFixed(2)}`,
+      `A ${outerRadius} ${outerRadius} 0 0 1 ${outerEnd.x.toFixed(2)} ${outerEnd.y.toFixed(2)}`,
+      `L ${innerEnd.x.toFixed(2)} ${innerEnd.y.toFixed(2)}`,
+      `A ${innerRadius} ${innerRadius} 0 0 0 ${innerMid.x.toFixed(2)} ${innerMid.y.toFixed(2)}`,
+      `A ${innerRadius} ${innerRadius} 0 0 0 ${innerStart.x.toFixed(2)} ${innerStart.y.toFixed(2)}`,
+      "Z",
+    ].join(" ");
+  }
 
   return [
     `M ${outerStart.x.toFixed(2)} ${outerStart.y.toFixed(2)}`,

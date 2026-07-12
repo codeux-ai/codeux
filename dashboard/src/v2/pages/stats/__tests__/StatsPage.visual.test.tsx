@@ -437,12 +437,12 @@ describe('StatsPage visual tests', () => {
     const heroPresetButtonActiveRule = css.match(/\.heroPresetButtonActive\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? '';
     const stateMessageIconRule = css.match(/\.stateMessageIcon\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? '';
 
-    expect(heroPanelRule).toContain('background: var(--stats-surface-panel)');
+    expect(heroPanelRule).toContain('background: transparent');
     expect(heroPanelRule).not.toContain('box-shadow');
     expect(heroControlsRule).toContain('background: var(--stats-surface-subpanel)');
     expect(heroPresetButtonActiveRule).toContain('background: var(--stats-surface-control-active-strong)');
     expect(stateMessageIconRule).toContain('background: var(--stats-surface-chip)');
-    expect(heroPanelRule).toContain('background: var(--stats-surface-panel)');
+    expect(heroPanelRule).toContain('background: transparent');
     expect(heroControlsRule).toContain('background: var(--stats-surface-subpanel)');
     expect(heroControlSectionRule).not.toMatch(/border:\s*1px/);
     expect(heroControlSectionRule).not.toMatch(/background:/);

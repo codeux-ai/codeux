@@ -223,19 +223,19 @@ export const GitTelemetryLedger: FunctionComponent<{
             ) : emptyLabel}
           </div>
         ) : (
-          <div ref={scrollContainerRef} className="max-h-[42rem] overflow-y-auto pr-2 dashboard-scrollbar">
-            <div className="space-y-3">
+          <div ref={scrollContainerRef} className="max-h-[42rem] overflow-y-auto border-t border-[color:var(--stats-border-hairline)] dashboard-scrollbar">
+            <div className="space-y-1.5 bg-[color:var(--stats-surface-subpanel)] p-1.5">
               {visibleItems.map((item, index) => {
                 const itemChurn = item.metrics.insertions + item.metrics.deletions;
                 const shareOfTotal = totals.churn > 0 ? (itemChurn / totals.churn) * 100 : 0;
                 const shareOfLeader = totals.leaderChurn > 0 ? (itemChurn / totals.leaderChurn) * 100 : 0;
 
                 return (
-                  <div key={item.id} className={`${LEDGER_ROW_MODERN_CLASS} !p-4`} aria-label={`${item.label} git telemetry row`}>
+                  <div key={item.id} className={LEDGER_ROW_MODERN_CLASS} aria-label={`${item.label} git telemetry row`}>
                     <div className="flex flex-col gap-4">
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--stats-chip-radius)] border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-subpanel)] text-xs font-semibold text-[color:var(--stats-value-color)]">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--stats-control-radius)] border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-subpanel)] font-mono text-xs font-semibold text-[color:var(--stats-value-color)]">
                             {index + 1}
                           </div>
                           <div className="min-w-0">

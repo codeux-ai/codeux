@@ -310,6 +310,15 @@ export const CompositionStudio: FunctionComponent<{
           <div className={DASHED_EMPTY_CLASS}>No provider data for this window.</div>
         ) : (
           <div className={styles.providerLedger} data-testid="composition-provider-activity">
+            <div className={styles.providerLedgerHeader} aria-hidden="true">
+              <span>Provider</span>
+              <span>Token distribution</span>
+              <span>Calls</span>
+              <span>Cache</span>
+              <span>Tokens / call</span>
+              <span>Active</span>
+              <span>Cost</span>
+            </div>
             {providers.map((provider) => {
               const { icon: Icon, bg, text } = getProviderIcon(provider.provider);
               const providerCacheDenominator = provider.usage.inputTokens + provider.usage.cachedInputTokens;

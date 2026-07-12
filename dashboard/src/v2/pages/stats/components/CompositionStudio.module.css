@@ -2,14 +2,14 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem;
 }
 
 .primaryGrid,
 .secondaryGrid {
   display: grid;
   min-width: 0;
-  gap: 1rem;
+  gap: 1.25rem;
 }
 
 .tokenPanel,
@@ -58,8 +58,8 @@
   margin: 0.35rem 0 0;
   color: var(--stats-value-color);
   font-family: var(--font-display);
-  font-size: clamp(1.125rem, 1.8vw, 1.375rem);
-  font-weight: 620;
+  font-size: clamp(1.25rem, 1.8vw, 1.5rem);
+  font-weight: 630;
   line-height: 1.2;
   letter-spacing: -0.02em;
 }
@@ -68,8 +68,8 @@
   max-width: 42rem;
   margin: 0.35rem 0 0;
   color: var(--stats-detail-color);
-  font-size: 0.8125rem;
-  line-height: 1.5;
+  font-size: 0.875rem;
+  line-height: 1.55;
 }
 
 .sectionMeta {
@@ -106,7 +106,7 @@
 .dataDetail,
 .tokenLaneShare {
   color: var(--stats-detail-color);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   line-height: 1.4;
 }
 
@@ -177,7 +177,7 @@
 .tokenLaneValue {
   color: var(--stats-value-color);
   font-family: var(--font-mono);
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   font-weight: 650;
 }
 
@@ -202,7 +202,7 @@
 .cacheCallout p {
   margin: 0;
   color: var(--stats-detail-color);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   line-height: 1.5;
 }
 
@@ -247,7 +247,7 @@
 .providerMixShare {
   min-width: 0;
   color: var(--stats-value-color);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 620;
 }
 
@@ -293,7 +293,7 @@
 .purposeTitle {
   overflow-wrap: anywhere;
   color: var(--stats-value-color);
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 620;
   text-transform: capitalize;
 }
@@ -309,12 +309,12 @@
 .purposeValue strong {
   color: var(--stats-value-color);
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
 }
 
 .purposeValue span {
   color: var(--stats-detail-color);
-  font-size: 0.625rem;
+  font-size: 0.6875rem;
 }
 
 .efficiencyGrid {
@@ -356,16 +356,21 @@
   margin-top: 1rem;
   overflow: hidden;
   border: 1px solid var(--stats-border-hairline);
-  border-radius: var(--stats-panel-radius);
+  border-radius: var(--stats-subpanel-radius);
   background: var(--stats-surface-panel);
+}
+
+.providerLedgerHeader {
+  display: none;
 }
 
 .providerRow {
   display: grid;
   min-width: 0;
-  gap: 1rem;
+  position: relative;
+  gap: 0.875rem;
   border-bottom: 1px solid var(--stats-border-hairline);
-  padding: 1rem;
+  padding: 0.875rem 1rem;
   transition: background-color var(--stats-motion-fast);
 }
 
@@ -377,6 +382,20 @@
   background: var(--stats-surface-panel-hover);
 }
 
+.providerRow::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: var(--stats-accent-signal);
+  content: "";
+  opacity: 0;
+  transition: opacity var(--stats-motion-fast);
+}
+
+.providerRow:hover::before {
+  opacity: 1;
+}
+
 .providerIdentity {
   display: flex;
   min-width: 0;
@@ -385,8 +404,8 @@
 }
 
 .providerIcon {
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2rem;
+  height: 2rem;
 }
 
 .providerNameBlock {
@@ -397,15 +416,15 @@
   margin: 0;
   overflow-wrap: anywhere;
   color: var(--stats-value-color);
-  font-size: 0.8125rem;
-  font-weight: 650;
+  font-size: 0.875rem;
+  font-weight: 630;
 }
 
 .providerNameBlock p {
   margin: 0.2rem 0 0;
   overflow-wrap: anywhere;
   color: var(--stats-detail-color);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
 }
 
 .providerVolume {
@@ -420,7 +439,7 @@
   margin-bottom: 0.5rem;
   color: var(--stats-value-color);
   font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 620;
 }
 
@@ -445,8 +464,8 @@
   overflow-wrap: anywhere;
   color: var(--stats-value-color);
   font-family: var(--font-mono);
-  font-size: 0.75rem;
-  font-weight: 620;
+  font-size: 0.8125rem;
+  font-weight: 630;
 }
 
 @media (min-width: 640px) {
@@ -475,12 +494,32 @@
 }
 
 @media (min-width: 1440px) {
+  .providerLedgerHeader,
   .providerRow {
-    grid-template-columns: minmax(12rem, 0.68fr) minmax(15rem, 0.95fr) minmax(25rem, 1.37fr);
+    grid-template-columns: minmax(11rem, 0.72fr) minmax(13rem, 1fr) repeat(5, minmax(4.5rem, 0.38fr));
+  }
+
+  .providerLedgerHeader {
+    display: grid;
+    align-items: center;
+    gap: 0.875rem;
+    border-bottom: 1px solid var(--stats-border-hairline);
+    background: var(--stats-surface-subpanel);
+    padding: 0.625rem 1rem;
+    color: var(--stats-label-color);
+    font-size: 0.5625rem;
+    font-weight: 700;
+    line-height: 1.2;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
   }
 
   .providerFacts {
-    grid-column: auto;
+    display: contents;
+  }
+
+  .providerFacts dt {
+    display: none;
   }
 }
 
@@ -499,7 +538,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .providerRow {
+  .providerRow,
+  .providerRow::before {
     transition: none;
   }
 }

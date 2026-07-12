@@ -2,9 +2,7 @@
 
 .card {
   @apply relative flex min-w-0 flex-col justify-between overflow-visible motion-safe:transform-gpu;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--stats-card-bg) 96%, var(--stats-card-accent-fill, transparent) 4%), var(--stats-card-bg)),
-    var(--stats-card-bg);
+  background: var(--stats-card-bg);
   border: 1px solid var(--stats-card-border);
   border-radius: var(--stats-card-radius);
   padding: var(--stats-card-padding);
@@ -20,15 +18,9 @@
 
 .card:hover,
 .card.active {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-panel-hover) 94%, var(--stats-card-accent-fill, transparent) 6%), var(--stats-surface-panel-hover)),
-    var(--stats-surface-panel-hover);
+  background: var(--stats-surface-panel-hover);
   border-color: var(--stats-border-strong);
   box-shadow: var(--stats-card-shadow-hover);
-}
-
-.card:hover {
-  transform: translateY(-1px);
 }
 
 .card:focus-within {
@@ -49,15 +41,11 @@
 }
 
 .toneWarm {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-panel) 96%, var(--stats-card-accent-fill, transparent) 4%), var(--stats-surface-panel)),
-    var(--stats-surface-panel);
+  background: var(--stats-surface-panel);
 }
 
 .toneMuted {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-subpanel) 96%, var(--stats-card-accent-fill, transparent) 4%), var(--stats-surface-subpanel)),
-    var(--stats-surface-subpanel);
+  background: var(--stats-surface-subpanel);
 }
 
 .header {
@@ -69,7 +57,7 @@
 }
 
 .title {
-  @apply min-w-0 max-w-full break-words text-xs font-semibold uppercase;
+  @apply min-w-0 max-w-full break-words text-[11px] font-semibold uppercase;
   color: var(--stats-label-color);
   letter-spacing: var(--stats-card-title-letter-spacing);
   line-height: 1.35;
@@ -108,7 +96,7 @@
 }
 
 .description {
-  @apply text-xs leading-snug;
+  @apply text-[13px] leading-snug;
   color: var(--stats-detail-color);
   overflow-wrap: anywhere;
 }

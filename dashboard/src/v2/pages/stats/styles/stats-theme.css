@@ -1,10 +1,10 @@
 @layer base {
   :root {
     /* Layout Tokens */
-    --stats-card-radius: 1.25rem;
-    --stats-panel-radius: 1.35rem;
-    --stats-subpanel-radius: 1.05rem;
-    --stats-control-radius: 0.95rem;
+    --stats-card-radius: 1rem;
+    --stats-panel-radius: 1.125rem;
+    --stats-subpanel-radius: 0.75rem;
+    --stats-control-radius: 0.625rem;
     --stats-chip-radius: 9999px;
     --stats-card-padding: 1.5rem;
     --stats-card-padding-compact: 1rem;
@@ -26,11 +26,11 @@
     --stats-surface-control-active-strong: var(--stats-accent-amber-fill);
     --stats-card-bg: var(--stats-surface-panel);
     --stats-card-border: rgba(61, 49, 37, 0.13);
-    --stats-card-shadow: 0 1px 2px rgba(61, 49, 37, 0.05), 0 8px 20px rgba(61, 49, 37, 0.04);
-    --stats-card-shadow-hover: 0 2px 4px rgba(61, 49, 37, 0.07), 0 14px 30px rgba(61, 49, 37, 0.06);
+    --stats-card-shadow: 0 1px 2px rgba(61, 49, 37, 0.035);
+    --stats-card-shadow-hover: 0 2px 8px rgba(61, 49, 37, 0.055);
     --stats-card-shadow-focus: 0 0 0 3px color-mix(in srgb, var(--stats-accent-signal) 14%, transparent), var(--stats-card-shadow-hover);
-    --stats-panel-shadow: 0 1px 2px rgba(61, 49, 37, 0.05), 0 10px 24px rgba(61, 49, 37, 0.045);
-    --stats-subpanel-shadow: 0 1px 2px rgba(61, 49, 37, 0.04);
+    --stats-panel-shadow: 0 1px 2px rgba(61, 49, 37, 0.04);
+    --stats-subpanel-shadow: none;
     --stats-border-hairline: rgba(61, 49, 37, 0.13);
     --stats-border-strong: color-mix(in srgb, var(--stats-value-color) 18%, transparent);
     --stats-control-shadow: 0 1px 2px rgba(61, 49, 37, 0.05);
@@ -88,11 +88,11 @@
     --stats-surface-input: #120f0d;
     --stats-card-bg: var(--stats-surface-panel);
     --stats-card-border: rgba(250, 244, 237, 0.09);
-    --stats-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.22), 0 12px 28px rgba(0, 0, 0, 0.18);
-    --stats-card-shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.26), 0 18px 36px rgba(0, 0, 0, 0.24);
+    --stats-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    --stats-card-shadow-hover: 0 3px 10px rgba(0, 0, 0, 0.22);
     --stats-card-shadow-focus: 0 0 0 3px color-mix(in srgb, var(--stats-accent-signal) 16%, transparent), var(--stats-card-shadow-hover);
-    --stats-panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.24), 0 14px 32px rgba(0, 0, 0, 0.2);
-    --stats-subpanel-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+    --stats-panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+    --stats-subpanel-shadow: none;
     --stats-border-hairline: rgba(250, 244, 237, 0.09);
     --stats-border-strong: color-mix(in srgb, var(--stats-value-color) 14%, transparent);
     --stats-control-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
@@ -114,26 +114,42 @@
 @layer components {
   .stats-surface-panel {
     border: 1px solid var(--stats-border-hairline);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-panel) 96%, white 4%), var(--stats-surface-panel)),
-      var(--stats-surface-panel);
+    background: var(--stats-surface-panel);
     box-shadow: var(--stats-panel-shadow);
   }
 
   .stats-surface-subpanel {
     border: 1px solid var(--stats-border-hairline);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-subpanel) 96%, white 4%), var(--stats-surface-subpanel)),
-      var(--stats-surface-subpanel);
+    background: var(--stats-surface-subpanel);
     box-shadow: var(--stats-subpanel-shadow);
   }
 
   .stats-surface-chip {
     border: 1px solid var(--stats-border-hairline);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-chip) 94%, white 6%), var(--stats-surface-chip)),
-      var(--stats-surface-chip);
+    background: var(--stats-surface-chip);
     box-shadow: var(--stats-subpanel-shadow);
+  }
+
+  .stats-ledger-row {
+    border: 1px solid var(--stats-border-hairline);
+    background: var(--stats-surface-panel);
+    box-shadow: none;
+  }
+
+  .stats-ledger-row:hover {
+    border-color: var(--stats-border-strong);
+    background: var(--stats-surface-panel-hover);
+  }
+
+  .stats-ledger-row-joined {
+    border-top: 0;
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+  }
+
+  .stats-ledger-row-joined:last-child {
+    border-bottom: 0;
   }
 
   .stats-surface-input {
