@@ -39,7 +39,7 @@ export type CustomDashboardRuntimeResolution =
   };
 
 export interface CustomDashboardRuntimeMessage {
-  type: "codeux-custom-dashboard:source-request" | "codeux-custom-dashboard:source-cancel" | "codeux-custom-dashboard:runtime-error";
+  type: "codeux-custom-dashboard:source-request" | "codeux-custom-dashboard:source-cancel" | "codeux-custom-dashboard:runtime-error" | "codeux-custom-dashboard:runtime-ready";
   requestId?: string;
   sourceId?: string;
   bridgeSessionId?: string;
@@ -77,6 +77,16 @@ export function resolvePublishedCustomDashboardRuntime(
 
   if (dashboard.status === "archived") {
     return { status: "blocked", reason: "Archived custom dashboards cannot be opened.", validationReport, publishedRevision };
+  }
+  if (dashboard.runtimeState.status === "halted") {
+    return {
+      status: "blocked",
+      reason: dashboard.runtimeState.haltedReason
+        ? `This custom dashboard runtime is halted: ${dashboard.runtimeState.haltedReason}`
+        : "This custom dashboard runtime is halted and requires an explicit validated resume or rollback.",
+      validationReport,
+      publishedRevision,
+    };
   }
   if (dashboard.status !== "published") {
     return {
@@ -211,10 +221,25 @@ export function createCustomDashboardRuntimeMessageHandler(args: {
   frameWindow: Window | null;
   runtime: CustomDashboardPublishedRuntime;
   onRuntimeError: (message: string) => void;
+  readinessTimeoutMs?: number;
   signal?: AbortSignal;
 }): (event: MessageEvent) => void {
   const requests = new Map<string, AbortController>();
+  let ready = false;
+  let failureReported = false;
+  const reportFailure = (reason: string): void => {
+    if (failureReported || args.signal?.aborted) return;
+    failureReported = true;
+    const bounded = boundedRuntimeReason(reason);
+    args.onRuntimeError(bounded);
+    void persistCustomDashboardRuntimeHalt(args.runtime, bounded).catch(() => undefined);
+  };
+  const readinessTimer = globalThis.setTimeout(
+    () => { if (!ready) reportFailure("Custom dashboard runtime failed to report readiness."); },
+    args.readinessTimeoutMs ?? 10_000,
+  );
   args.signal?.addEventListener("abort", () => {
+    globalThis.clearTimeout(readinessTimer);
     for (const controller of requests.values()) controller.abort(args.signal?.reason);
     requests.clear();
   }, { once: true });
@@ -224,8 +249,13 @@ export function createCustomDashboardRuntimeMessageHandler(args: {
       return;
     }
     const frameWindow = args.frameWindow;
+    if (event.data.type === "codeux-custom-dashboard:runtime-ready") {
+      ready = true;
+      globalThis.clearTimeout(readinessTimer);
+      return;
+    }
     if (event.data.type === "codeux-custom-dashboard:runtime-error") {
-      args.onRuntimeError(event.data.message || "The custom dashboard frame reported an unknown runtime error.");
+      reportFailure(event.data.message || "The custom dashboard frame reported an unknown runtime error.");
       return;
     }
     if (event.data.type === "codeux-custom-dashboard:source-cancel") {
@@ -280,6 +310,26 @@ export function createCustomDashboardRuntimeMessageHandler(args: {
   };
 }
 
+export async function persistCustomDashboardRuntimeHalt(
+  runtime: CustomDashboardPublishedRuntime,
+  reason: string,
+): Promise<void> {
+  const response = await fetch(`/api/custom-dashboards/${encodeURIComponent(runtime.dashboard.id)}/runtime/halt`, {
+    method: "POST",
+    cache: "no-store",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      revisionId: runtime.revision.id,
+      reason: boundedRuntimeReason(reason),
+      recoveryMetadata: { source: "published_iframe", bridgeSessionId: runtime.bridgeSessionId },
+    }),
+  });
+  if (!response.ok && response.status !== 409 && response.status !== 423) {
+    throw new Error("Failed to persist the custom dashboard runtime halt.");
+  }
+}
+
 export function buildPublishedCustomDashboardLink(dashboardId: string, origin = window.location.origin): string {
   const url = new URL("/custom-dashboards", origin);
   url.searchParams.set("dashboard", dashboardId);
@@ -303,6 +353,7 @@ function isRuntimeMessage(value: unknown): value is CustomDashboardRuntimeMessag
         (value as { type?: unknown }).type === "codeux-custom-dashboard:source-request"
         || (value as { type?: unknown }).type === "codeux-custom-dashboard:source-cancel"
         || (value as { type?: unknown }).type === "codeux-custom-dashboard:runtime-error"
+        || (value as { type?: unknown }).type === "codeux-custom-dashboard:runtime-ready"
       ),
   );
 }
@@ -347,9 +398,14 @@ function buildBridgeBootstrapScript(config: Record<string, unknown>): string {
     "  });",
     "  Object.defineProperty(window, 'codeUxDataBridge', { value: bridge, writable: false, configurable: false });",
     "  Object.defineProperty(window, 'CodeUXCustomDashboard', { value: bridge, writable: false, configurable: false });",
-    "  const report = (message) => window.parent.postMessage({ type: 'codeux-custom-dashboard:runtime-error', bridgeSessionId: config.bridgeSessionId, message: String(message).slice(0, 320) }, parentOrigin);",
+    "  let runtimeStateReported = false;",
+    "  const report = (message) => { if (runtimeStateReported) return; runtimeStateReported = true; window.parent.postMessage({ type: 'codeux-custom-dashboard:runtime-error', bridgeSessionId: config.bridgeSessionId, message: String(message).slice(0, 320) }, parentOrigin); };",
     "  window.addEventListener('error', (event) => report(event.message || 'Custom dashboard runtime error.'));",
     "  window.addEventListener('unhandledrejection', (event) => report(event.reason?.message || String(event.reason || 'Unhandled custom dashboard rejection.')));",
+    "  window.addEventListener('DOMContentLoaded', () => {",
+    "    if (!document.body || document.body.childElementCount === 0) { report('Custom dashboard runtime produced no usable document body.'); return; }",
+    "    if (!runtimeStateReported) window.parent.postMessage({ type: 'codeux-custom-dashboard:runtime-ready', bridgeSessionId: config.bridgeSessionId }, parentOrigin);",
+    "  }, { once: true });",
     "})();",
   ].join("\n");
 }
@@ -529,4 +585,15 @@ function createBridgeSessionId(): string {
 function boundedRuntimeError(error: unknown): string {
   const message = error instanceof Error ? error.message : "Custom dashboard source request failed.";
   return message.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 320) || "Custom dashboard source request failed.";
+}
+
+function boundedRuntimeReason(reason: string): string {
+  return reason
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\b(Bearer)\s+[^\s]+/gi, "$1 [REDACTED]")
+    .replace(/\b(api[-_ ]?key|token|secret|password)\s*[:=]\s*[^\s,;]+/gi, "$1=[REDACTED]")
+    .replace(/\b[A-Za-z0-9_-]{40,}\b/g, "[REDACTED]")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 320) || "Custom dashboard runtime became unusable.";
 }

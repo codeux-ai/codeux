@@ -13,6 +13,7 @@ import { SessionTrackingRepository } from "../../../src/repositories/session-tra
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import { ProjectAttentionService } from "../../../src/domain/workers/project-attention-service.js";
 import { RuntimeStartupRecoveryService } from "../../../src/services/runtime-startup-recovery-service.js";
+import { CustomDashboardRepository } from "../../../src/repositories/custom-dashboard-repository.js";
 import { SprintRunLifecycleService } from "../../../src/services/sprint-run-lifecycle-service.js";
 import { QaReviewRecoveryService } from "../../../src/services/runtime-recovery/qa-review-recovery.js";
 import { InvocationRecoveryService } from "../../../src/services/runtime-recovery/invocation-recovery.js";
@@ -41,6 +42,7 @@ async function createFixture(options?: {
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   const projectRepository = new ProjectManagementRepository(storage);
   const executionRepository = new ExecutionRepository(storage);
+  const customDashboardRepository = new CustomDashboardRepository(storage);
   const guardrailRepository = new GuardrailRepository(storage);
   const projectAttentionRepository = new ProjectAttentionRepository(storage);
   const projectWorkerAssignmentRepository = new ProjectWorkerAssignmentRepository(storage);
@@ -75,6 +77,7 @@ async function createFixture(options?: {
     getDashboardSettings: options?.getDashboardSettings ?? (() => DEFAULT_DASHBOARD_SETTINGS),
     isProcessAlive: options?.isProcessAlive,
     logger: options?.logger,
+    customDashboardRepository,
   });
 
   return {
@@ -89,6 +92,7 @@ async function createFixture(options?: {
     sessionTracking,
     service,
     recoverSprintRun,
+    customDashboardRepository,
   };
 }
 
@@ -97,6 +101,45 @@ afterEach(async () => {
 });
 
 describe("RuntimeStartupRecoveryService", () => {
+  it("preserves halted dashboards and fails stale managed validation sessions without invalidating publication", async () => {
+    const fixture = await createFixture({ dockerService: { listContainers: vi.fn().mockResolvedValue([]) } });
+    const project = fixture.projectRepository.createProject({
+      name: "Recovery project",
+      sourceType: "local",
+      sourceRef: fixture.dir,
+    });
+    const dashboard = fixture.customDashboardRepository.createDraft(project.id, {
+      title: "Recovery dashboard",
+      manifest: { schemaVersion: 1, title: "Recovery dashboard", entryFile: "index.html", filePaths: ["index.html"] },
+      fileBundle: { files: [{ path: "index.html", content: "<main>ok</main>", contentType: "text/html" }] },
+    });
+    const revision = fixture.customDashboardRepository.markRevisionValidated(
+      fixture.customDashboardRepository.createRevision(dashboard.id).id,
+      { valid: true, summary: "Passed", issues: [] },
+    );
+    fixture.customDashboardRepository.publishRevision(dashboard.id, revision.id);
+    fixture.customDashboardRepository.haltRuntime(dashboard.id, revision.id, "frame failed");
+    const stale = fixture.customDashboardRepository.createValidationSession(revision.id, {
+      status: "running",
+      runtimeMetadata: { validation: { containerName: "missing-validation" } },
+    });
+
+    const result = await fixture.service.recover();
+
+    expect(result.preservedHaltedCustomDashboardIds).toEqual([dashboard.id]);
+    expect(result.failedCustomDashboardValidationSessionIds).toEqual([stale.id]);
+    expect(fixture.customDashboardRepository.getDashboardById(dashboard.id)).toMatchObject({
+      status: "published",
+      publishedRevisionId: revision.id,
+      runtimeState: { status: "halted", recoveryMetadata: { startupRecoveryCount: 1 } },
+    });
+    expect(fixture.customDashboardRepository.getRevisionById(revision.id)).toMatchObject({
+      validationStatus: "passed",
+      validationReport: { valid: true },
+    });
+    expect(fixture.customDashboardRepository.getValidationSessionById(stale.id)).toMatchObject({ status: "failed" });
+  });
+
   it("executes recovery submodules in the correct order", async () => {
     const { service } = await createFixture();
 

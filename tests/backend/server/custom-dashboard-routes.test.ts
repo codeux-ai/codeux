@@ -424,6 +424,51 @@ describe("custom dashboard routes", () => {
     expect(repository.getDashboardById(dashboard.id)?.publishedRevisionId).toBe(firstRevision.id);
   });
 
+  it("persists authenticated runtime halts and requires an explicit validated resume", async () => {
+    const { app, repository, projectId } = await createFixture();
+    const dashboard = repository.createDraft(projectId, {
+      title: "Delivery Pulse",
+      manifest: manifest(),
+      fileBundle: fileBundle(),
+    });
+    const revision = repository.markRevisionValidated(repository.createRevision(dashboard.id).id, passedReport());
+    repository.publishRevision(dashboard.id, revision.id);
+
+    const crossSite = await request(app)
+      .post(`/api/custom-dashboards/${dashboard.id}/runtime/halt`)
+      .set("Origin", "https://attacker.example")
+      .send({ revisionId: revision.id, reason: "frame failed" });
+    expect(crossSite.status).toBe(403);
+
+    const halted = await request(app)
+      .post(`/api/custom-dashboards/${dashboard.id}/runtime/halt`)
+      .send({ revisionId: revision.id, reason: "token=secret frame failed" });
+    expect(halted.status).toBe(200);
+    expect(halted.body.runtimeState).toMatchObject({ status: "halted", haltedRevisionId: revision.id });
+    expect(JSON.stringify(halted.body)).not.toContain("token=secret");
+
+    const blocked = await request(app).post("/api/custom-dashboard-runtime/source").send({
+      requestId: "halted-source",
+      projectId,
+      dashboardId: dashboard.id,
+      revisionId: revision.id,
+      access: { kind: "published" },
+      sourceId: "missing",
+    });
+    expect(blocked.status).toBe(423);
+    expect(blocked.body.error.code).toBe("runtime_halted");
+
+    const staleResume = await request(app)
+      .post(`/api/custom-dashboards/${dashboard.id}/runtime/resume`)
+      .send({ revisionId: "stale-revision" });
+    expect(staleResume.status).toBe(404);
+    const resumed = await request(app)
+      .post(`/api/custom-dashboards/${dashboard.id}/runtime/resume`)
+      .send({ revisionId: revision.id });
+    expect(resumed.status).toBe(200);
+    expect(resumed.body.runtimeState.status).toBe("active");
+  });
+
   it("returns validation status, logs, stop, and remove responses", async () => {
     const { app, repository, validationService, projectId } = await createFixture();
     const dashboard = repository.createDraft(projectId, {

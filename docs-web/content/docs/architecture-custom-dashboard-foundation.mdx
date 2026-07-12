@@ -8,8 +8,8 @@ The shared contracts live in `src/contracts/custom-dashboard-types.ts`.
 
 Primary records:
 
-- `CustomDashboardRecord` stores the mutable project-scoped draft state, status, manifest, generated file bundle, source node graph, styleguide JSON, runtime metadata JSON, and active published revision id.
-- `CustomDashboardRevisionRecord` stores immutable dashboard bundle snapshots. Manifest, files, source node graph, and styleguide data are copied into each revision so future draft edits do not mutate validation or publication history.
+- `CustomDashboardRecord` stores the mutable project-scoped draft state, status, manifest, generated file bundle, source node graph, safe routes, credential bindings, styleguide JSON, runtime metadata JSON, and active published revision id.
+- `CustomDashboardRevisionRecord` stores immutable dashboard bundle snapshots. Manifest, files, source node graph, safe routes, credential bindings, and styleguide data are copied into each revision so future draft edits do not mutate validation or publication history.
 - `CustomDashboardValidationSessionRecord` stores validation attempts for a revision, including queued/building/running/passed/failed/cancelled status, validation report JSON, runtime metadata, and timestamps.
 - `CustomDashboardManifest` describes the generated dashboard bundle with schema version, title, entry file, file paths, optional data-source graph, and metadata.
 
@@ -27,6 +27,8 @@ SQLite tables are created in both the initial schema and startup migrations:
 | `custom_dashboard_publications` | The active publication pointer for a dashboard. The table is keyed by `dashboard_id`, so each dashboard has at most one active published revision. |
 
 All dashboard JSON payloads are stored as text and hydrated through `CustomDashboardRepository`. Repository methods validate required fields, JSON-safety, project ownership, revision ownership, and publication invariants before writing.
+
+Credential slots live on source nodes. Bindings are authorized against credential metadata without resolving plaintext, persisted under stable dashboard/slot binding keys, and serialized with metadata only. Route definitions are normalized, bounded, bundle-relative metadata; executable URLs, traversal, and host-app route prefixes are rejected before persistence.
 
 ## Repository Boundary
 
@@ -92,7 +94,7 @@ Draft edits remain persisted bundle text sent back through API calls; generated 
 
 Published dashboards open through `CustomDashboardViewer`, which resolves the active `publishedRevisionId` from the loaded dashboard detail and renders only when the dashboard status is `published`, the published revision exists, and that revision still has a valid passed validation report. Draft, rejected, archived, unvalidated, and missing-publication states render a local blocked panel with the last validation report and a return-to-editor action rather than executing the bundle.
 
-The viewer remains isolated in a sandboxed `srcdoc` iframe. Published requests cross a frame-source, opaque-origin, per-frame-session message boundary, while validation requests carry their owning validation session. Both reach the server runtime gateway, which authorizes the revision and declared source/route before built-in access or external egress. Credentials resolve only inside the broker callback and never enter bridge payloads.
+The viewer remains isolated in a sandboxed `srcdoc` iframe. Published requests cross a frame-source, opaque-origin, per-frame-session message boundary, while validation requests carry their owning validation session. Both reach `CustomDashboardRuntimeService`, which authorizes the revision and declared source/route before built-in access or external egress. Credentials resolve only inside the broker callback and flow as trusted egress headers; they are never serialized into the bridge.
 
 Navigation is centralized through `dashboard/src/v2/lib/navigation-items.ts`, so both the kinetic dock and sidebar expose the Dashboards destination with stable labels, tour markers, and route prefetching.
 

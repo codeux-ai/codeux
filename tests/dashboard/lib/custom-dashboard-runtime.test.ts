@@ -33,6 +33,15 @@ const dashboard: CustomDashboardRecord = {
   routes: [],
   styleguide: { tone: "operational" },
   runtimeMetadata: {},
+  runtimeState: {
+    status: "active",
+    haltedReason: null,
+    haltedRevisionId: null,
+    haltedAt: null,
+    resumedAt: null,
+    updatedAt: "2026-07-07T00:00:00.000Z",
+    recoveryMetadata: {},
+  },
   publishedRevisionId: "revision-1",
   createdAt: "2026-07-07T00:00:00.000Z",
   updatedAt: "2026-07-07T00:00:00.000Z",
@@ -84,6 +93,18 @@ describe("custom dashboard runtime", () => {
 
     const archived = resolvePublishedCustomDashboardRuntime({ ...dashboard, status: "archived" }, [revision]);
     expect(archived.status === "blocked" ? archived.reason : "").toContain("Archived");
+
+    const halted = resolvePublishedCustomDashboardRuntime({
+      ...dashboard,
+      runtimeState: {
+        ...dashboard.runtimeState,
+        status: "halted",
+        haltedReason: "Frame crashed",
+        haltedRevisionId: revision.id,
+        haltedAt: "2026-07-07T01:00:00.000Z",
+      },
+    }, [revision]);
+    expect(halted.status === "blocked" ? halted.reason : "").toContain("Frame crashed");
   });
 
   it("reads every declared source through the shared typed gateway", async () => {
@@ -168,6 +189,43 @@ describe("custom dashboard runtime", () => {
       data: { type: "codeux-custom-dashboard:source-cancel", bridgeSessionId: resolved.runtime.bridgeSessionId, requestId: "cancelled" },
     } as MessageEvent);
     expect(errors).toEqual([]);
+  });
+
+  it("persists one bounded halt per frame instance without throwing into the host shell", async () => {
+    const resolved = resolvePublishedCustomDashboardRuntime(dashboard, [revision]);
+    expect(resolved.status).toBe("ready");
+    if (resolved.status !== "ready") return;
+    const frameWindow = { postMessage: vi.fn() } as unknown as Window;
+    const errors: string[] = [];
+    const controller = new AbortController();
+    const handler = createCustomDashboardRuntimeMessageHandler({
+      frameWindow,
+      runtime: resolved.runtime,
+      onRuntimeError: (message) => errors.push(message),
+      signal: controller.signal,
+      readinessTimeoutMs: 60_000,
+    });
+    const event = {
+      source: frameWindow,
+      origin: "null",
+      data: {
+        type: "codeux-custom-dashboard:runtime-error",
+        bridgeSessionId: resolved.runtime.bridgeSessionId,
+        message: `token=private ${"x".repeat(500)}`,
+      },
+    } as MessageEvent;
+
+    expect(() => handler(event)).not.toThrow();
+    handler(event);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).not.toContain("private");
+    expect(errors[0]?.length).toBeLessThanOrEqual(320);
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body))).toMatchObject({
+      revisionId: revision.id,
+      reason: expect.stringContaining("[REDACTED]"),
+    });
+    controller.abort();
   });
 
   it("does not serialize credential bindings or values into published bridge payloads", () => {

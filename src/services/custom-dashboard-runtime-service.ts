@@ -116,6 +116,9 @@ export class CustomDashboardRuntimeService {
       throw new CustomDashboardRuntimeError(404, "runtime_not_found", "The custom dashboard runtime was not found.");
     }
     if (request.access.kind === "published") {
+      if (dashboard.runtimeState.status === "halted") {
+        throw new CustomDashboardRuntimeError(423, "runtime_halted", "The custom dashboard runtime is halted and requires an explicit validated resume or rollback.");
+      }
       if (dashboard.status !== "published" || dashboard.publishedRevisionId !== revision.id
         || revision.validationStatus !== "passed" || revision.validationReport?.valid !== true) {
         throw new CustomDashboardRuntimeError(403, "publication_denied", "The requested revision is not the active published dashboard revision.");

@@ -497,6 +497,21 @@ export function ensureCustomDashboardTables(db: DatabaseAdapter): void {
   `);
   ensureColumn(db, "custom_dashboards", "credential_bindings_json", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "custom_dashboards", "routes_json", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, "custom_dashboards", "runtime_status", "TEXT NOT NULL DEFAULT 'active'");
+  ensureColumn(db, "custom_dashboards", "runtime_halt_reason", "TEXT");
+  ensureColumn(db, "custom_dashboards", "runtime_halted_revision_id", "TEXT");
+  ensureColumn(db, "custom_dashboards", "runtime_halted_at", "TEXT");
+  ensureColumn(db, "custom_dashboards", "runtime_resumed_at", "TEXT");
+  ensureColumn(db, "custom_dashboards", "runtime_state_updated_at", "TEXT");
+  ensureColumn(db, "custom_dashboards", "runtime_recovery_metadata_json", "TEXT NOT NULL DEFAULT '{}'");
+  db.prepare(`
+    UPDATE custom_dashboards
+    SET runtime_status = 'active',
+        runtime_state_updated_at = COALESCE(runtime_state_updated_at, updated_at, created_at)
+    WHERE runtime_status IS NULL
+       OR runtime_status NOT IN ('active', 'halted')
+       OR runtime_state_updated_at IS NULL
+  `).run();
   db.exec(`
     CREATE TABLE IF NOT EXISTS custom_dashboard_revisions (
       id TEXT PRIMARY KEY,

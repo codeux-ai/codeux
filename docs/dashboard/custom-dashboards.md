@@ -15,6 +15,8 @@ The source of truth is the Code UX database. Drafts stay mutable, revisions are 
 7. Publish the validated revision. The UI and repository gate publication to revisions with `validationStatus: "passed"` and a valid validation report. Publishing another passed revision is the rollback path.
 8. Archive dashboards you no longer want active. Archiving clears the active publication and marks the dashboard archived while preserving revision and validation history.
 
+If a published frame crashes, rejects a promise without a handler, fails to become ready, or produces no usable document, Code UX halts that dashboard revision. The main dashboard shell and unrelated projects continue running. Refreshes and process restarts do not reactivate it: explicitly resume the same still-validated revision or publish an earlier validated revision as a guarded rollback.
+
 If validation fails, use the report and logs to create a new revision. Do not publish around the failure; the repository rejects failed, queued, running, cancelled, missing, or mismatched validation sessions before publication state changes. When a dashboard is already published, validating later drafts keeps the active published dashboard open, and validation sessions for the active published revision do not replace its published validation snapshot.
 
 Dashboard bundles can use individualized Preact components, strict TypeScript/TSX route entries, CSS, and Tailwind v4 utilities. List every source and stylesheet in `manifest.filePaths`; route `entryFile` values must name declared TypeScript/TSX files. Code UX supplies the package manifest and Vite, TypeScript, and Tailwind configuration. User package files, install scripts, build configuration, arbitrary dependencies, undeclared or oversized files, unsafe paths, and embedded credential literals fail validation before any build runs.
@@ -84,6 +86,8 @@ Custom dashboard routes are registered with the dashboard server:
 | `POST` | `/api/custom-dashboards/:dashboardId/revisions` | Create an immutable revision from the draft or supplied overrides. |
 | `POST` | `/api/custom-dashboards/:dashboardId/revisions/:revisionId/validate` | Start a detached validation session. Body may include `projectId`; otherwise the server resolves it from the revision. |
 | `POST` | `/api/custom-dashboards/:dashboardId/revisions/:revisionId/publish` | Publish a validated revision, optionally with `validationSessionId`. |
+| `POST` | `/api/custom-dashboards/:dashboardId/runtime/halt` | Halt the exact current published revision with a bounded runtime reason. |
+| `POST` | `/api/custom-dashboards/:dashboardId/runtime/resume` | Explicitly resume the exact current revision after its passed validation report is rechecked. |
 | `GET` | `/api/custom-dashboard-validations/:sessionId` | Read validation session status and runtime metadata. |
 | `GET` | `/api/custom-dashboard-validations/:sessionId/logs?tail=200` | Read bounded validation and container logs. |
 | `POST` | `/api/custom-dashboard-validations/:sessionId/stop` | Stop the detached validation container. |
@@ -93,6 +97,8 @@ Custom dashboard routes are registered with the dashboard server:
 | `POST` | `/api/custom-dashboard-runtime/source` | Serve a declared source for an owned validation session or active published revision. |
 
 Publication is gated in `CustomDashboardRepository.publishRevision`. The requested revision must belong to the dashboard, must be marked `passed`, must have `validatedAt`, and must have `validationReport.valid === true`. If `validationSessionId` is supplied, that session must also belong to the same dashboard/revision/project and be passed with a valid report. Active publications remain the opening source of truth while later validation sessions run.
+
+Runtime state is separate from publication state. A halt preserves the immutable publication for diagnosis or rollback but blocks viewer and source access. Publishing or rolling back while halted must include the expected current published revision so concurrent changes fail safely.
 
 ## MCP Surface
 

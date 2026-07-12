@@ -339,6 +339,7 @@ export class CodeUxServer {
         ).settings;
       },
       logger: this.logger.child({ component: "runtime-startup-recovery-service" }),
+      customDashboardRepository: this.customDashboardRepository,
     });
     this.dashboardRealtimeService = deps.dashboardRealtimeService;
     this.memoryService = deps.memoryService;

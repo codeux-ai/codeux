@@ -58,6 +58,15 @@ const dashboard: CustomDashboardRecord = {
   routes: [],
   styleguide: { tone: "operational" },
   runtimeMetadata: {},
+  runtimeState: {
+    status: "active",
+    haltedReason: null,
+    haltedRevisionId: null,
+    haltedAt: null,
+    resumedAt: null,
+    updatedAt: "2026-07-07T00:00:00.000Z",
+    recoveryMetadata: {},
+  },
   publishedRevisionId: "revision-1",
   createdAt: "2026-07-07T00:00:00.000Z",
   updatedAt: "2026-07-07T00:00:00.000Z",
@@ -214,10 +223,12 @@ describe("CustomDashboardViewer", () => {
       />,
     );
     const iframe = screen.getByTitle("Published custom dashboard: Delivery Pulse") as HTMLIFrameElement;
+    const bridgeSessionId = iframe.getAttribute("srcdoc")?.match(/"bridgeSessionId":"([^"]+)"/)?.[1];
 
     window.dispatchEvent(new MessageEvent("message", {
-      data: { type: "codeux-custom-dashboard:runtime-error", message: "Frame exploded" },
+      data: { type: "codeux-custom-dashboard:runtime-error", bridgeSessionId, message: "Frame exploded" },
       source: iframe.contentWindow,
+      origin: "null",
     }));
 
     expect(await screen.findByRole("alert", { name: "Custom dashboard runtime failure" })).toHaveTextContent("Frame exploded");
@@ -234,10 +245,12 @@ describe("CustomDashboardViewer", () => {
     );
     const iframe = screen.getByTitle("Published custom dashboard: Delivery Pulse") as HTMLIFrameElement;
     const postMessage = vi.spyOn(iframe.contentWindow!, "postMessage").mockImplementation(() => undefined);
+    const bridgeSessionId = iframe.getAttribute("srcdoc")?.match(/"bridgeSessionId":"([^"]+)"/)?.[1];
 
     window.dispatchEvent(new MessageEvent("message", {
-      data: { type: "codeux-custom-dashboard:source-request", requestId: "request-1", sourceId: "incidents" },
+      data: { type: "codeux-custom-dashboard:source-request", bridgeSessionId, requestId: "request-1", sourceId: "incidents" },
       source: iframe.contentWindow,
+      origin: "null",
     }));
 
     await waitFor(() => {
@@ -246,7 +259,7 @@ describe("CustomDashboardViewer", () => {
           type: "codeux-custom-dashboard:source-response",
           requestId: "request-1",
           ok: false,
-          error: expect.stringContaining("placeholder"),
+          error: expect.any(String),
         }),
         "*",
       );

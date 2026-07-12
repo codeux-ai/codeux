@@ -254,6 +254,65 @@ describe("CustomDashboardRepository", () => {
     expect(dashboards.getDashboardById(firstDashboard.id)?.publishedRevisionId).toBe(replacementRevision.id);
   });
 
+  it("durably halts the current revision, rejects stale reports, and resumes only after validation", async () => {
+    const { dashboards, projectId, storage } = await createFixture();
+    const dashboard = dashboards.createDraft(projectId, {
+      title: "Delivery Pulse",
+      manifest: manifest(),
+      fileBundle: fileBundle(),
+    });
+    const revision = dashboards.markRevisionValidated(dashboards.createRevision(dashboard.id).id, passedReport());
+    dashboards.publishRevision(dashboard.id, revision.id);
+
+    const halted = dashboards.haltRuntime(
+      dashboard.id,
+      revision.id,
+      "Bearer top-secret token=also-secret runtime exploded",
+      { source: "iframe" },
+    );
+    expect(halted.runtimeState).toMatchObject({
+      status: "halted",
+      haltedRevisionId: revision.id,
+      recoveryMetadata: { source: "iframe" },
+    });
+    expect(halted.runtimeState.haltedReason).toContain("[REDACTED]");
+    expect(halted.runtimeState.haltedReason).not.toContain("top-secret");
+    expect(dashboards.haltRuntime(dashboard.id, revision.id, "second concurrent report").runtimeState.haltedReason)
+      .toBe(halted.runtimeState.haltedReason);
+    expect(() => dashboards.haltRuntime(dashboard.id, "stale-revision", "stale report")).toThrow(ValidationError);
+    expect(() => dashboards.haltRuntime(dashboard.id, revision.id, "\u0000\n")).toThrow(ValidationError);
+
+    const reopened = new CustomDashboardRepository(storage);
+    expect(reopened.getDashboardById(dashboard.id)?.runtimeState.status).toBe("halted");
+    reopened.reconcileRuntimeStatesOnStartup();
+    expect(reopened.getDashboardById(dashboard.id)?.runtimeState).toMatchObject({
+      status: "halted",
+      recoveryMetadata: { startupRecoveryCount: 1 },
+    });
+
+    expect(reopened.resumeRuntime(dashboard.id, revision.id).runtimeState.status).toBe("active");
+    expect(reopened.resumeRuntime(dashboard.id, revision.id).runtimeState.status).toBe("active");
+  });
+
+  it("rolls a halted dashboard back only with a validated revision and current publication guard", async () => {
+    const { dashboards, projectId } = await createFixture();
+    const dashboard = dashboards.createDraft(projectId, {
+      title: "Delivery Pulse",
+      manifest: manifest(),
+      fileBundle: fileBundle("first"),
+    });
+    const earlier = dashboards.markRevisionValidated(dashboards.createRevision(dashboard.id).id, passedReport());
+    dashboards.updateDraft(dashboard.id, { fileBundle: fileBundle("current") });
+    const current = dashboards.markRevisionValidated(dashboards.createRevision(dashboard.id).id, passedReport());
+    dashboards.publishRevision(dashboard.id, current.id);
+    dashboards.haltRuntime(dashboard.id, current.id, "current revision failed");
+
+    expect(() => dashboards.publishRevision(dashboard.id, earlier.id)).toThrow(ValidationError);
+    expect(() => dashboards.publishRevision(dashboard.id, earlier.id, undefined, earlier.id)).toThrow(ValidationError);
+    const rolledBack = dashboards.publishRevision(dashboard.id, earlier.id, undefined, current.id);
+    expect(rolledBack).toMatchObject({ publishedRevisionId: earlier.id, runtimeState: { status: "active" } });
+  });
+
   it("keeps a published dashboard open when later draft validation fails", async () => {
     const { dashboards, projectId } = await createFixture();
     const dashboard = dashboards.createDraft(projectId, {
