@@ -28,7 +28,7 @@ async function createService(): Promise<{
 const validGraph = (): NodeFlowGraph => ({
   nodes: [
     { id: "input", type: "input", title: "Input" },
-    { id: "agent", type: "agent", title: "Agent" },
+    { id: "agent", type: "output", title: "Output" },
   ],
   edges: [{ fromNodeId: "input", toNodeId: "agent" }],
 });

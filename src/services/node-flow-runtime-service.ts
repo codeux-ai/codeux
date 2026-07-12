@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { normalizeNodeFlowGraph } from "../domain/node-flows/node-flow-validation.js";
+import { resolveNodeDefinition } from "../domain/node-flows/node-definition-registry.js";
 import { ValidationError, EntityNotFoundError } from "../repositories/repository-utils.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../repositories/settings-defaults.js";
 import type { NodeFlowRepository } from "../repositories/node-flow-repository.js";
@@ -26,7 +27,6 @@ import type {
   RunNodeFlowOptions,
 } from "../contracts/node-flow-types.js";
 
-const SUPPORTED_NODE_TYPES = new Set(["input", "set_fields", "template", "provider_prompt", "http_request", "output"]);
 const EXTERNALLY_OBSERVABLE_NODE_TYPES = new Set(["provider_prompt", "http_request"]);
 const CLI_PROVIDER_IDS = new Set<ProviderId>(["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity", "mockup-cli"]);
 const SECRET_KEY_PATTERN = /(api[_-]?key|authorization|cookie|password|secret|token)/i;
@@ -148,6 +148,10 @@ export class NodeFlowRuntimeService {
         await this.persistSkippedNode(context, node, "skipped", "Skipped because an upstream node failed.");
         continue;
       }
+      if (node.disabled) {
+        await this.persistSkippedNode(context, node, "skipped", "Skipped because the node is disabled.");
+        continue;
+      }
 
       const nodeRun = this.deps.nodeFlowRepository.createNodeRun({
         runId: run.id,
@@ -234,7 +238,10 @@ export class NodeFlowRuntimeService {
   }
 
   private requireSupportedNodes(graph: NodeFlowGraph): void {
-    const unsupported = graph.nodes.filter((node) => !SUPPORTED_NODE_TYPES.has(node.type));
+    const unsupported = graph.nodes.filter((node) => {
+      const reference = node.definition ?? { type: node.type, version: 1 };
+      return resolveNodeDefinition(reference.type, reference.version)?.executable !== true;
+    });
     if (unsupported.length > 0) {
       throw new ValidationError(`Unsupported node flow node type: ${unsupported[0]!.type}.`);
     }

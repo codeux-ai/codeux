@@ -20,6 +20,7 @@ import type {
   UpdateNodeFlowInput,
   UpdateNodeFlowRunInput,
 } from "../contracts/node-flow-types.js";
+import { migratePersistedNodeFlowGraphs } from "./db/app-db-migrations.js";
 
 interface NodeFlowRow {
   id: string;
@@ -96,6 +97,7 @@ export class NodeFlowRepository {
     private readonly realtimeNotifier?: DashboardRealtimeMutationNotifier,
   ) {
     this.db = storage.getDatabase();
+    migratePersistedNodeFlowGraphs(this.db);
   }
 
   listFlows(projectId: string): NodeFlowRecord[] {

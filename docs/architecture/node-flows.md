@@ -98,3 +98,11 @@ Use these rules:
 - Validate every node field before saving: required prompt/template/url fields, finite numeric limits, supported HTTP method, JSON object input, and select defaults that match options.
 - Keep flows deterministic and rerunnable. Avoid hidden dependence on local time, ambient chat state, or one-off sprint context unless it is explicitly passed as JSON input.
 - Preserve inspection value. Name nodes for the operation they perform, keep edges acyclic, and make the output node return the artifact another operator or agent will actually consume.
+
+## Graph v2 contract and migration
+
+Graph v2 is the single workflow model used by backend, MCP, runtime, and dashboard. It adds `schemaVersion: 2`, stable definition references, typed ports and flow schemas, credential-id bindings, retry and timeout policies, capability and side-effect metadata, disabled state, and optional immutable publication metadata. Plaintext credentials, secret-shaped fields, generated source, and custom code are not valid graph data.
+
+The executable registry is exactly `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, and `output`. Planned trigger, agent-router, task, condition, notification, and integration entries are not executable until handlers exist.
+
+Backend Graph v1 migration retains the exact prior version and appends deterministic v2. Browser canvas v1 migration returns the untouched legacy snapshot separately from the normalized graph.

@@ -73,3 +73,7 @@ The page displays the deterministic `buildNodeCanvasAgentSummary` output so agen
 `Clear` replaces the graph with an empty canvas. The canvas and inspector show empty/no-selection states, while the palette remains available for recovery. `Reset` restores the starter trigger -> agent -> task -> condition -> output graph and refreshes the exchange JSON.
 
 The page uses responsive grid columns that collapse into a single column at smaller widths so the palette, canvas, inspector, validation panel, and JSON exchange controls remain reachable without overlapping.
+
+## Graph v2 migration
+
+Serialization writes `schemaVersion: 2`. Importing a legacy browser v1 value deterministically normalizes it and retains the untouched snapshot separately. Trigger, agent, task, condition, and output palette entries are planning concepts; executable definitions are limited to `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, and `output`.

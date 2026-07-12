@@ -41,3 +41,7 @@ The page displays a deterministic graph summary for command workflows, including
 ## Empty and reset states
 
 `Clear` empties the canvas while keeping the palette available. `Reset` restores the starter trigger -> agent -> task -> condition -> output graph. The layout collapses to a single column at smaller widths so controls remain reachable without overlapping.
+
+## Graph v2 migration
+
+Serialization writes `schemaVersion: 2`. Legacy browser v1 values migrate deterministically with their untouched snapshot retained separately. Trigger, agent, task, condition, and output are planning concepts; executable definitions are limited to `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, and `output`.
