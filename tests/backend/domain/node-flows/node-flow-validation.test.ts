@@ -112,4 +112,102 @@ describe("node flow validation", () => {
 
     expect(validateNodeFlowGraph(graph).executionOrder).toEqual(["a", "z"]);
   });
+
+  it("fails closed on malformed canonical nested values with stable field paths", () => {
+    const graph = {
+      schemaVersion: 2,
+      nodes: [
+        null,
+        {
+          id: "start",
+          type: "input",
+          title: "Start",
+          definition: { type: "input", version: 1 },
+          ports: [null, { id: "out", direction: "output", schema: { type: "any" } }],
+          credentialBindings: [null],
+          capabilities: [null],
+          policy: { retry: null },
+        },
+      ],
+      edges: [null, { fromNodeId: "start", toNodeId: "missing", fromHandle: "out" }],
+      schemas: {
+        input: { type: "object", properties: { valid: { type: "string" }, invalid: null } },
+        output: null,
+      },
+      metadata: { valid: true, nested: { invalid: undefined } },
+    };
+
+    const first = validateNodeFlowGraph(graph);
+    const second = validateNodeFlowGraph(graph);
+
+    expect(first).toEqual(second);
+    expect(first.valid).toBe(false);
+    expect(first.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: "nodes[0]", code: "invalid_node" }),
+      expect.objectContaining({ field: "nodes[1].ports[0]", code: "invalid_port" }),
+      expect.objectContaining({ field: "nodes[1].credentialBindings[0]", code: "invalid_credential_binding" }),
+      expect.objectContaining({ field: "nodes[1].capabilities[0]", code: "invalid_capability" }),
+      expect.objectContaining({ field: "nodes[1].policy.retry", code: "invalid_retry_policy" }),
+      expect.objectContaining({ field: "edges[0]", code: "invalid_edge" }),
+      expect.objectContaining({ field: "edges[1].toNodeId", code: "invalid_edge_endpoint" }),
+      expect.objectContaining({ field: "schemas.input.properties.invalid", code: "invalid_value_schema" }),
+      expect.objectContaining({ field: "schemas.output", code: "invalid_value_schema" }),
+      expect.objectContaining({ field: "metadata.nested.invalid", code: "invalid_json_value" }),
+    ]));
+  });
+
+  it("reports malformed Graph v1 references and collections without throwing", () => {
+    const graph = {
+      nodes: [
+        null,
+        {
+          id: "start",
+          type: "input",
+          title: "Start",
+          definition: { type: "input", version: "invalid" },
+          ports: null,
+          credentialBindings: null,
+          capabilities: null,
+          policy: null,
+        },
+      ],
+      edges: [null],
+    };
+
+    const result = validateNodeFlowGraph(graph);
+
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: "nodes[0]", code: "invalid_node" }),
+      expect.objectContaining({ field: "nodes[1].definition.version", code: "invalid_definition_version" }),
+      expect.objectContaining({ field: "nodes[1].ports", code: "invalid_ports" }),
+      expect.objectContaining({ field: "nodes[1].credentialBindings", code: "invalid_credential_bindings" }),
+      expect.objectContaining({ field: "nodes[1].capabilities", code: "invalid_capabilities" }),
+      expect.objectContaining({ field: "nodes[1].policy", code: "invalid_policy" }),
+      expect.objectContaining({ field: "edges[0]", code: "invalid_edge" }),
+    ]));
+  });
+
+  it.each([
+    [{ schemaVersion: 2, nodes: null, edges: [] }, "nodes"],
+    [{ nodes: [], edges: "invalid" }, "edges"],
+  ])("rejects malformed graph arrays at their root path", (graph, field) => {
+    expect(validateNodeFlowGraph(graph).errors).toContainEqual(expect.objectContaining({ field, code: "required" }));
+  });
+
+  it("rejects circular metadata at the repeated field path without throwing", () => {
+    const graph = validGraph() as unknown as Record<string, unknown>;
+    const metadata: Record<string, unknown> = { safe: true };
+    metadata.circular = metadata;
+    graph.schemaVersion = 2;
+    graph.metadata = metadata;
+
+    const first = validateNodeFlowGraph(graph);
+    const second = validateNodeFlowGraph(graph);
+
+    expect(first).toEqual(second);
+    expect(first.errors).toContainEqual(expect.objectContaining({
+      field: "metadata.circular",
+      code: "invalid_json_value",
+    }));
+  });
 });

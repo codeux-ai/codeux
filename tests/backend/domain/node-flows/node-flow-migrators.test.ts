@@ -28,4 +28,31 @@ describe("node flow migrators", () => {
     expect(result.graph.metadata).toEqual({ canvasSelection: legacy.selection });
     expect(JSON.stringify(result.graph)).not.toContain("legacySnapshot");
   });
+
+  it("preserves malformed v1 entries for field-level validation without throwing", () => {
+    const legacy = {
+      nodes: [null, { id: "start", type: "input", title: "Start", ports: [null], credentialBindings: [null] }],
+      edges: [null],
+    };
+
+    const result = migrateNodeFlowGraph(legacy);
+
+    expect(result.graph.nodes).toHaveLength(2);
+    expect(result.graph.nodes[0]).toBeNull();
+    expect(result.graph.nodes[1]?.ports?.[0]).toBeNull();
+    expect(result.graph.nodes[1]?.credentialBindings?.[0]).toBeNull();
+    expect(result.graph.edges[0]).toBeNull();
+  });
+
+  it("clones malformed canonical graphs deterministically without JSON serialization", () => {
+    const metadata: Record<string, unknown> = { valid: true, invalid: undefined };
+    metadata.circular = metadata;
+    const graph = { schemaVersion: 2, nodes: [], edges: [], metadata };
+
+    const result = migrateNodeFlowGraph(graph);
+
+    expect(result.migrated).toBe(false);
+    expect(result.graph.metadata).not.toBe(metadata);
+    expect((result.graph.metadata as Record<string, unknown>).circular).toBe(result.graph.metadata);
+  });
 });
