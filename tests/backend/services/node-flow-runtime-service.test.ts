@@ -595,4 +595,127 @@ describe("NodeFlowRuntimeService", () => {
     const messages = executionRepository.listExecutionInvocationMessages(result.run.executionInvocationId!);
     expect(JSON.stringify(messages)).not.toContain("secret-token");
   });
+
+  it.each([
+    { items: [] as number[], expectedItems: 0, expectedEmpty: "succeeded", expectedWorker: ["default"] },
+    { items: [7], expectedItems: 1, expectedEmpty: "skipped", expectedWorker: ["foreach:0"] },
+    { items: [1, 2, 3], expectedItems: 3, expectedEmpty: "skipped", expectedWorker: ["foreach:0", "foreach:1", "foreach:2"] },
+  ])("executes zero, one, and many Foreach items durably: $items", async ({ items, expectedItems, expectedEmpty, expectedWorker }) => {
+    const { dir, projectRepository, nodeFlowRepository, runtime } = await createRuntime();
+    const project = projectRepository.createProject({ name: "Foreach cardinality", sourceType: "local", sourceRef: dir });
+    const flow = nodeFlowRepository.createFlow(project.id, { title: "Foreach cardinality", graph: {
+      nodes: [
+        { id: "foreach", type: "foreach", title: "Foreach", data: { path: "input.items", concurrency: 2 } },
+        { id: "worker", type: "set_fields", title: "Worker", data: { fields: { value: "{{item}}", index: "{{itemIndex}}" } } },
+        { id: "empty", type: "set_fields", title: "Empty", data: { fields: { empty: true } } },
+        { id: "output", type: "output", title: "Output" },
+      ],
+      edges: [
+        { fromNodeId: "foreach", fromHandle: "items", toNodeId: "worker" },
+        { fromNodeId: "foreach", fromHandle: "empty", toNodeId: "empty" },
+        { fromNodeId: "worker", toNodeId: "output" },
+        { fromNodeId: "empty", toNodeId: "output" },
+      ],
+    } });
+
+    const result = await runtime.runFlow(project.id, flow.id, { items });
+    const workerRuns = result.nodeRuns.filter((record) => record.nodeId === "worker");
+    expect(result.run.status).toBe("succeeded");
+    expect(workerRuns.map((record) => record.logicalItem)).toEqual(expectedWorker);
+    expect(workerRuns.filter((record) => record.status === "succeeded")).toHaveLength(expectedItems);
+    expect(result.nodeRuns.find((record) => record.nodeId === "empty")?.status).toBe(expectedEmpty);
+    if (items.length > 0) {
+      expect(workerRuns.map((record) => record.input?.item)).toEqual(items);
+      expect(result.attempts?.filter((attempt) => attempt.nodeId === "worker").map((attempt) => [attempt.logicalItem, attempt.attemptNumber]))
+        .toEqual(expectedWorker.map((logicalItem) => [logicalItem, 1]));
+    }
+  });
+
+  it("bounds Foreach concurrency and isolates per-item retries and failures", async () => {
+    let active = 0;
+    let maximumActive = 0;
+    const attempts = new Map<string, number>();
+    const executeProvider = vi.fn().mockImplementation(async ({ prompt }: { prompt: string }) => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      active -= 1;
+      const count = (attempts.get(prompt) ?? 0) + 1;
+      attempts.set(prompt, count);
+      if (prompt === "2" && count === 1) throw new Error("503 retry item two");
+      if (prompt === "3") throw new Error("permanent item three");
+      return { ok: true, stdout: prompt, stderr: "", code: 0, text: prompt, nativeSessionId: null,
+        usageTelemetry: { transcriptText: prompt, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, usageSource: "reported", rawUsageJson: null } };
+    });
+    const { dir, projectRepository, nodeFlowRepository, runtime } = await createRuntime({ executeProvider } as Partial<ProviderExecutionService>);
+    const project = projectRepository.createProject({ name: "Foreach concurrency", sourceType: "local", sourceRef: dir });
+    const flow = nodeFlowRepository.createFlow(project.id, { title: "Foreach concurrency", graph: {
+      nodes: [
+        { id: "foreach", type: "foreach", title: "Foreach", data: { path: "input.items", concurrency: 2 } },
+        { id: "prompt", type: "provider_prompt", title: "Prompt", data: { provider: "mockup-cli", prompt: "{{item}}" },
+          policy: { retry: { maxAttempts: 2, backoffMs: 0, maxBackoffMs: 0 } } },
+      ],
+      edges: [{ fromNodeId: "foreach", fromHandle: "items", toNodeId: "prompt" }],
+    } });
+
+    const result = await runtime.runFlow(project.id, flow.id, { items: [1, 2, 3, 4] });
+    expect(result.run.status).toBe("failed");
+    expect(maximumActive).toBe(2);
+    expect(result.nodeRuns.filter((record) => record.nodeId === "prompt" && record.status === "succeeded")).toHaveLength(3);
+    expect(result.attempts?.filter((attempt) => attempt.logicalItem === "foreach:1").map((attempt) => attempt.attemptNumber)).toEqual([1, 2]);
+    expect(result.attempts?.filter((attempt) => attempt.logicalItem === "foreach:2")).toHaveLength(1);
+  });
+
+  it("cancels active logical items and persists their cancellation identity", async () => {
+    const controller = new AbortController();
+    const executeProvider = vi.fn().mockImplementation(async () => {
+      controller.abort("cancel foreach");
+      throw new Error("foreach provider cancelled");
+    });
+    const { dir, projectRepository, nodeFlowRepository, runtime } = await createRuntime({ executeProvider } as Partial<ProviderExecutionService>);
+    const project = projectRepository.createProject({ name: "Foreach cancellation", sourceType: "local", sourceRef: dir });
+    const flow = nodeFlowRepository.createFlow(project.id, { title: "Foreach cancellation", graph: {
+      nodes: [
+        { id: "foreach", type: "foreach", title: "Foreach", data: { path: "input.items" } },
+        { id: "prompt", type: "provider_prompt", title: "Prompt", data: { provider: "mockup-cli", prompt: "{{item}}" } },
+      ], edges: [{ fromNodeId: "foreach", fromHandle: "items", toNodeId: "prompt" }],
+    } });
+    const result = await runtime.runFlow(project.id, flow.id, { items: [1] }, { signal: controller.signal });
+    expect(result.run.status).toBe("cancelled");
+    expect(result.nodeRuns.find((record) => record.nodeId === "prompt")).toMatchObject({ logicalItem: "foreach:0", status: "cancelled" });
+    expect(result.attempts?.find((attempt) => attempt.nodeId === "prompt")).toMatchObject({ logicalItem: "foreach:0", failureClassification: "cancelled" });
+  });
+
+  it("recovers approval-gated Foreach sends without duplicate side effects", async () => {
+    const initialProvider = new MockSideEffectProvider();
+    const setup = await createRuntime(undefined, undefined, undefined, initialProvider);
+    const project = setup.projectRepository.createProject({ name: "Foreach approval recovery", sourceType: "local", sourceRef: setup.dir });
+    const flow = setup.nodeFlowRepository.createFlow(project.id, { title: "Foreach sends", graph: {
+      nodes: [
+        { id: "foreach", type: "foreach", title: "Foreach", data: { path: "input.items", concurrency: 2 } },
+        { id: "send", type: "email_send", title: "Send", data: { to: "ops@example.test", subject: "Item {{item}}", body: "Body {{item}}" } },
+      ], edges: [{ fromNodeId: "foreach", fromHandle: "items", toNodeId: "send" }],
+    } });
+    const waiting = await setup.runtime.runFlow(project.id, flow.id, { items: ["a", "b"] });
+    const approvals = setup.approvalService!.listForRun(waiting.run.id);
+    expect(waiting.run.status).toBe("approval_waiting");
+    expect(approvals.map((approval) => approval.logicalItem).sort()).toEqual(["foreach:0", "foreach:1"]);
+    for (const approval of approvals) setup.approvalService!.approve(approval.id, "operator");
+
+    const restartedProvider = new MockSideEffectProvider();
+    const restartedRuntime = new NodeFlowRuntimeService({
+      nodeFlowRepository: new NodeFlowRepository(setup.storage), executionRepository: new ExecutionRepository(setup.storage),
+      projectManagementRepository: new ProjectManagementRepository(setup.storage), settingsRepository: new SettingsRepository(path.join(setup.dir, "foreach-restart.db")),
+      approvalService: new ApprovalService(new AutomationApprovalRepository(setup.storage)),
+      outboxService: new OutboxService(new AutomationOutboxRepository(setup.storage), restartedProvider), getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+    });
+    const completed = await restartedRuntime.resumeApproval(project.id, approvals[0]!.id, waiting.run.id);
+    const replay = await restartedRuntime.resumeApproval(project.id, approvals[0]!.id, waiting.run.id);
+    expect(completed.run.status).toBe("succeeded");
+    expect(replay.run.status).toBe("succeeded");
+    expect(restartedProvider.sends).toHaveLength(2);
+    expect(new Set(new AutomationOutboxRepository(setup.storage).listForRun(waiting.run.id).map((record) => record.idempotencyKey)).size).toBe(2);
+    expect(completed.attempts?.filter((attempt) => attempt.nodeId === "send").map((attempt) => [attempt.logicalItem, attempt.attemptNumber]))
+      .toEqual([["foreach:0", 1], ["foreach:1", 1]]);
+  });
 });

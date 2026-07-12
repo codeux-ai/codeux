@@ -16,6 +16,8 @@ describe("governed built-in executors", () => {
     const executors = new BuiltinExecutors();
     await expect(executors.execute("foreach", { ...base, upstream: { items: Array(MAX_FOREACH_ITEMS + 1).fill(null) }, config: { path: "upstream.items" } }))
       .rejects.toThrow(/bounded item limit/i);
+    await expect(executors.execute("foreach", { ...base, upstream: { items: [1, 2, 3] }, config: { path: "upstream.items", maxItems: 2 } }))
+      .rejects.toThrow(/bounded item limit of 2/i);
     await expect(executors.execute("delay", { ...base, config: { delayMs: 3_600_001 } })).rejects.toThrow(/Delay must be between/i);
   });
 

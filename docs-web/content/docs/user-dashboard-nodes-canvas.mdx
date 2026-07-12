@@ -26,8 +26,6 @@ Validated custom definitions can also execute after their immutable artifact and
 
 Credential slots display metadata-only status such as bound, missing, or denied and can submit a binding request. Secret values remain behind the credential broker and are not returned to the graph or browser.
 
-The selected flow also loads the active project's agent presets and current flow attachments. Attaching and detaching use the governed node-flow APIs and refresh the binding list after each successful mutation. Project or flow changes clear the prior selection and discard late responses from the old scope. Loading and retryable failure states remain visible while the inspector receives only agent and attachment metadata.
-
 Validation and dry run report graph issues, requested capabilities, credential requirements, side-effect differences, and policy findings. Dry run does not execute nodes. Publication requires the current draft revision, a valid graph and policy review, and all required credentials bound. Published snapshots are immutable; the workspace can compare versions or restore a prior version into a new draft revision.
 
 ## Runs and schedules
@@ -37,5 +35,3 @@ Only published versions run. The debugger shows redacted run output, flow and no
 Use the [Scheduler](/docs/user-dashboard-scheduler) to schedule a pinned or latest-published flow version. Provider, HTTP, approval-gated email, webhook, and custom-node execution each require their corresponding configured runtime and security services.
 
 Outside development builds, the workspace is available only when the Nodes feature flag, node-flow backend prerequisite, and automation-security prerequisite are enabled. These gates expose the feature; they do not assert that every external integration is configured for production.
-
-Attached agents receive only the governed `run_attached_flow` capability for the project-owned binding. Runtime still verifies ownership, attachment identity, publication state, and credential policy and does not expose the graph, credentials, or broader node-flow management operations.

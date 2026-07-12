@@ -13,7 +13,7 @@ An unpublished type/version is absent from the executable node-definition regist
 
 ## Package contract
 
-`CustomNodeProjectService` generates `.code-ux/nodes/<node-id>/` with `node.json`, exact package metadata, a frozen pnpm lockfile, strict TypeScript configuration, `src/index.ts`, a local typed SDK, an isolated stdio runner, deterministic tests, fixtures, and a multi-stage Dockerfile. Both the Dockerfile and generated runner must remain byte-for-byte equal to their trusted generated versions during validation.
+`CustomNodeProjectService` generates `.code-ux/nodes/<node-id>/` with `node.json`, exact package metadata, a frozen pnpm lockfile, strict TypeScript configuration, `src/index.ts`, a local typed SDK, an isolated stdio runner, deterministic tests, fixtures, and a multi-stage Dockerfile.
 
 The handler receives only `NodeExecutionContext`: immutable JSON input/config, correlation and invocation ids, an abort signal, a redacting logger, a deterministic clock, bounded HTTP and credential slots, tmpfs-backed temporary storage, and artifact writing. It does not receive a project path, process environment, host filesystem handle, subprocess API, Docker handle, or raw network client.
 
@@ -46,11 +46,9 @@ The audit hook is intentionally injected so custom nodes consume the governed de
 - a fresh stdin credential/input envelope and a fresh tmpfs scratch directory per invocation
 - Docker logging disabled; bounded stdout/stderr are captured by the parent
 
-Credential values are resolved through the existing `CredentialBroker` using the project, credential id, workspace, and required capability. They are never placed in an image layer, image label, cache key, graph, process environment, or broker configuration. The temporary stdin file is mode `0600`, removed after the invocation, and its in-memory values are cleared. Credential values and the ephemeral bridge token are exact-value redaction inputs for structured output, diagnostics, and captured logs.
+Credential values are resolved through the existing `CredentialBroker` using the project, credential id, workspace, and required capability. They are never placed in an image layer, image label, cache key, graph, or process environment. The temporary stdin file is mode `0600`, removed after the invocation, and its in-memory values are cleared.
 
-For a manifest that declares `network.http`, the runtime starts a per-invocation Unix-socket broker, mounts only that socket directory read-only into the network-none container, and supplies an ephemeral authenticated bridge reference in the stdin envelope. The generated runner sends SDK requests over that socket; it cannot open Internet connections directly. A node without the capability receives no bridge reference or mount and fails closed.
-
-Every bridged request goes through the shared `EgressPolicyService` with the manifest's host and port allowlists, HTTPS default and explicit HTTP opt-in, double DNS resolution and private-network blocking, redirect revalidation, restricted request headers, bounded content types and response size, timeout, retry, and per-project/node rate policy. The broker accepts only bounded typed messages, authenticates its random per-run token with constant-time comparison, and disappears with the run directory after execution. Policy failures are returned to the runner as errors and never enable Docker bridge or host networking.
+The SDK's HTTP authority is fail closed unless a transport backed by the existing `EgressPolicyService` is supplied. The default network-none runner rejects HTTP calls; it never falls back to Docker bridge networking or a second allowlist. A future broker transport must retain the T02 host/port, DNS-rebinding, redirect, response-size, timeout, retry, and rate policies before enabling `network.http` publication.
 
 Outputs are schema-checked before persistence. Resolved credential canaries are recursively redacted from JSON output and replaced in logs and diagnostics. Run directories are unique and deleted after each invocation, so image caching retains only immutable code and cannot retain plaintext credentials or mutable run state.
 

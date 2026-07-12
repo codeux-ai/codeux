@@ -16,7 +16,7 @@ import { NodeFlowQueueService } from "./node-flows/node-flow-queue-service.js";
 import { NodeFlowAttemptService } from "./node-flows/node-flow-attempt-service.js";
 import { NodeFlowLeaseService } from "./node-flows/node-flow-lease-service.js";
 import { EgressPolicyService } from "./node-flows/egress-policy-service.js";
-import { BuiltinExecutors } from "./node-flows/builtins/builtin-executors.js";
+import { BuiltinExecutors, MAX_FOREACH_CONCURRENCY } from "./node-flows/builtins/builtin-executors.js";
 import type { ApprovalService } from "./node-flows/approval-service.js";
 import { ApprovalRequiredError } from "./node-flows/approval-service.js";
 import { UnknownSideEffectOutcomeError, type OutboxService } from "./node-flows/outbox-service.js";
@@ -79,6 +79,9 @@ interface RuntimeContext {
   publicationId: string;
   subflowDepth: number;
   resolvedCredentialValues: string[];
+  logicalItem: string;
+  item?: NodeFlowJsonValue;
+  itemIndex?: number;
 }
 
 interface NodeExecutionResult {
@@ -198,13 +201,15 @@ export class NodeFlowRuntimeService {
       throw new ValidationError("Approval scope does not match its node flow run.");
     }
     if (run.status !== "approval_waiting") return this.summarizeRun(run.id);
-    const waitingNode = this.deps.nodeFlowRepository.listNodeRuns(run.id).find((candidate) => candidate.status === "approval_waiting");
-    if (!waitingNode || waitingNode.nodeId !== approval.nodeId) {
+    const waitingNode = this.deps.nodeFlowRepository.listNodeRuns(run.id)
+      .find((candidate) => candidate.status === "approval_waiting" && candidate.nodeId === approval.nodeId
+        && (candidate.logicalItem === approval.logicalItem || candidate.logicalItem === "default"));
+    if (!waitingNode) {
       throw new ValidationError("Approval does not match the governed node currently waiting in this run.");
     }
     if (approval.status === "pending") throw new ValidationError(`Approval ${approval.id} is still pending.`);
     if (approval.status === "rejected" || approval.status === "expired") {
-      return this.terminateApprovalRun(run, approval.nodeId, approval.status);
+      return this.terminateApprovalRun(run, approval.nodeId, approval.logicalItem, approval.status);
     }
     if (run.cancelRequestedAt) return this.terminateCancelledRun(run);
     const publication = new NodeFlowPublicationService(this.deps.nodeFlowRepository).resolve(run.flowId, { mode: "pinned", version: run.version });
@@ -256,13 +261,14 @@ export class NodeFlowRuntimeService {
       publicationId: publication.id,
       subflowDepth: options.subflowDepth ?? 0,
       resolvedCredentialValues: [],
+      logicalItem: "default",
     };
 
     const persistedNodeRuns = this.deps.nodeFlowRepository.listNodeRuns(run.id);
     const persistedByNode = new Map<string, NodeFlowNodeRunRecord>();
-    for (const persisted of persistedNodeRuns) persistedByNode.set(persisted.nodeId, persisted);
+    for (const persisted of persistedNodeRuns) persistedByNode.set(nodeRunKey(persisted.nodeId, persisted.logicalItem), persisted);
     for (const node of graph.nodes) {
-      const persisted = persistedByNode.get(node.id);
+      const persisted = persistedByNode.get(nodeRunKey(node.id, "default"));
       if (!persisted?.output || !["succeeded", "failed"].includes(persisted.status)) continue;
       context.outputs.set(node.id, persisted.output);
       const selectedPorts = inferSelectedPorts(node, persisted.output);
@@ -270,6 +276,7 @@ export class NodeFlowRuntimeService {
     }
 
     const blockedNodes = new Set<string>();
+    const fanoutHandledNodes = new Set<string>();
     let terminalStatus: NodeFlowRunRecord["status"] = "succeeded";
     let terminalError: string | null = null;
 
@@ -279,8 +286,18 @@ export class NodeFlowRuntimeService {
       if (!node) {
         continue;
       }
-      const persistedNodeRun = persistedByNode.get(node.id);
+      const persistedNodeRun = persistedByNode.get(nodeRunKey(node.id, "default"));
+      if (fanoutHandledNodes.has(node.id)) continue;
       if (persistedNodeRun && ["succeeded", "failed", "skipped", "cancelled"].includes(persistedNodeRun.status)) {
+        if (node.type === "foreach" && persistedNodeRun.status === "succeeded") {
+          const fanout = await this.executeForeachFanout(context, node, publication, persistedNodeRun.output ?? {}, persistedNodeRuns);
+          if (fanout.handled) {
+            for (const descendant of context.descendants.get(node.id) ?? []) fanoutHandledNodes.add(descendant);
+            terminalStatus = fanout.status;
+            terminalError = fanout.error;
+            if (terminalStatus !== "succeeded") break;
+          }
+        }
         continue;
       }
       if (options.signal?.aborted || this.deps.nodeFlowRepository.getRun(run.id)?.cancelRequestedAt) {
@@ -317,6 +334,7 @@ export class NodeFlowRuntimeService {
           flowId,
           projectId,
           nodeId: node.id,
+          logicalItem: context.logicalItem,
           status: "running",
           input: nodeInput,
           startedAt: new Date().toISOString(),
@@ -356,6 +374,9 @@ export class NodeFlowRuntimeService {
         context.outputs.set(node.id, safeOutput);
         if (result.selectedPorts) context.selectedPorts.set(node.id, new Set(result.selectedPorts));
         attemptService.succeed(attempt, safeOutput, result.invocationId);
+        this.deps.auditService?.recordSystem({ action: "automation.attempt.succeeded", resourceType: "node_flow_attempt", resourceId: attempt.id,
+          projectId: context.projectId, outcome: "succeeded", metadata: { runId: context.runId, flowId: context.flowId, nodeId: node.id,
+            logicalItem: context.logicalItem, attemptNumber: attempt.attemptNumber } });
         this.deps.auditService?.recordSystem({ action: "automation.attempt.succeeded", resourceType: "node_flow_attempt", resourceId: attempt.id, projectId, outcome: "succeeded", metadata: { runId: run.id, flowId, nodeId: node.id, attemptNumber: attempt.attemptNumber } });
         this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, {
           status: "succeeded",
@@ -363,6 +384,14 @@ export class NodeFlowRuntimeService {
           output: safeOutput,
           finishedAt: new Date().toISOString(),
         });
+        if (node.type === "foreach") {
+          const fanout = await this.executeForeachFanout(context, node, publication, safeOutput, persistedNodeRuns);
+          if (fanout.handled) {
+            for (const descendant of context.descendants.get(node.id) ?? []) fanoutHandledNodes.add(descendant);
+            terminalStatus = fanout.status;
+            terminalError = fanout.error;
+          }
+        }
         break;
       } catch (error) {
         const message = redactCredentialText(error instanceof Error ? error.message : String(error), context.resolvedCredentialValues);
@@ -440,7 +469,7 @@ export class NodeFlowRuntimeService {
       leaseExpiresAt: null,
     });
     this.deps.executionRepository.updateExecutionInvocation(parentInvocationId, {
-      status: terminalStatus === "succeeded" ? "completed" : terminalStatus === "attention_required" ? "failed" : terminalStatus === "approval_waiting" ? "running" : terminalStatus,
+      status: terminalStatus === "succeeded" ? "completed" : terminalStatus === "approval_waiting" ? "running" : terminalStatus === "cancelled" ? "cancelled" : "failed",
       errorMessage: terminalStatus === "approval_waiting" ? null : terminalError,
       finishedAt,
     });
@@ -466,12 +495,188 @@ export class NodeFlowRuntimeService {
     };
   }
 
-  private terminateApprovalRun(run: NodeFlowRunRecord, nodeId: string, status: "rejected" | "expired"): NodeFlowRunSummaryResponse {
+  private async executeForeachFanout(
+    parent: RuntimeContext,
+    foreachNode: NodeFlowNode,
+    publication: NodeFlowPublicationRecord,
+    foreachOutput: NodeFlowJsonObject,
+    persistedNodeRuns: NodeFlowNodeRunRecord[],
+  ): Promise<{ handled: boolean; status: NodeFlowRunRecord["status"]; error: string | null }> {
+    const items = Array.isArray(foreachOutput.items) ? foreachOutput.items : [];
+    if (items.length === 0) return { handled: false, status: "succeeded", error: null };
+    const rawConcurrency = Number(readNodeConfig(foreachNode).concurrency ?? 1);
+    const concurrency = Math.max(1, Math.min(MAX_FOREACH_CONCURRENCY, Number.isFinite(rawConcurrency) ? Math.floor(rawConcurrency) : 1));
+    const descendantIds = parent.descendants.get(foreachNode.id) ?? new Set<string>();
+    const order = parent.order.filter((nodeId) => descendantIds.has(nodeId));
+    const itemOutputs: Array<Map<string, NodeFlowJsonObject> | undefined> = new Array(items.length);
+    const outcomes = await mapWithConcurrency(items, concurrency, async (item, index) => {
+      const logicalItem = `${foreachNode.id}:${index}`;
+      const context: RuntimeContext = {
+        ...parent,
+        outputs: new Map(parent.outputs),
+        selectedPorts: new Map([...parent.selectedPorts].map(([nodeId, ports]) => [nodeId, new Set(ports)])),
+        options: { ...parent.options },
+        currentAttemptId: undefined,
+        resolvedCredentialValues: [],
+        logicalItem,
+        item,
+        itemIndex: index,
+      };
+      context.outputs.set(foreachNode.id, { item, index, count: items.length, logicalItem });
+      context.selectedPorts.set(foreachNode.id, new Set(["items"]));
+      const persistedByNode = new Map(persistedNodeRuns
+        .filter((record) => record.logicalItem === logicalItem)
+        .map((record) => [record.nodeId, record]));
+      for (const record of persistedByNode.values()) {
+        if (record.output && ["succeeded", "failed"].includes(record.status)) {
+          context.outputs.set(record.nodeId, record.output);
+          const node = context.graph.nodes.find((candidate) => candidate.id === record.nodeId);
+          const selectedPorts = node ? inferSelectedPorts(node, record.output) : null;
+          if (selectedPorts) context.selectedPorts.set(record.nodeId, selectedPorts);
+        }
+      }
+      const blocked = new Set<string>();
+      let itemError = [...persistedByNode.values()].find((record) => record.status === "failed"
+        && context.graph.nodes.find((node) => node.id === record.nodeId)?.data?.continueOnError !== true)?.errorMessage ?? null;
+      for (const nodeId of order) {
+        const node = context.graph.nodes.find((candidate) => candidate.id === nodeId);
+        if (!node) continue;
+        const persisted = persistedByNode.get(node.id);
+        if (persisted && ["succeeded", "failed", "skipped", "cancelled"].includes(persisted.status)) continue;
+        if (context.options.signal?.aborted || this.deps.nodeFlowRepository.getRun(context.runId)?.cancelRequestedAt) {
+          await this.persistSkippedNode(context, node, "cancelled", "Node flow run was cancelled.");
+          return { status: "cancelled" as const, error: "Node flow run was cancelled." };
+        }
+        if (blocked.has(node.id)) {
+          await this.persistSkippedNode(context, node, "skipped", "Skipped because this logical item's upstream node failed.");
+          continue;
+        }
+        if (this.isInactiveBranch(context, node.id)) {
+          await this.persistSkippedNode(context, node, "skipped", "Skipped because this logical item's incoming branch was not selected.");
+          continue;
+        }
+        if (node.disabled) {
+          await this.persistSkippedNode(context, node, "skipped", "Skipped because the node is disabled.");
+          continue;
+        }
+        const result = await this.executeLogicalItemNode(context, node, publication, persisted);
+        if (result.status === "approval_waiting" || result.status === "attention_required" || result.status === "cancelled") {
+          return result;
+        }
+        if (result.status === "failed" && node.data?.continueOnError !== true) {
+          itemError ??= result.error;
+          for (const descendant of context.descendants.get(node.id) ?? []) blocked.add(descendant);
+        }
+      }
+      itemOutputs[index] = context.outputs;
+      return { status: itemError ? "failed" as const : "succeeded" as const, error: itemError };
+    });
+
+    for (const nodeId of order) {
+      const values = itemOutputs.map((outputs) => outputs?.get(nodeId) ?? null);
+      parent.outputs.set(nodeId, { items: values, count: items.length });
+    }
+    const priority: NodeFlowRunRecord["status"][] = ["attention_required", "cancelled", "approval_waiting", "failed"];
+    const terminal = priority.find((status) => outcomes.some((outcome) => outcome.status === status));
+    const error = outcomes.find((outcome) => outcome.status === terminal)?.error ?? null;
+    return { handled: true, status: terminal ?? "succeeded", error };
+  }
+
+  private async executeLogicalItemNode(
+    context: RuntimeContext,
+    node: NodeFlowNode,
+    publication: NodeFlowPublicationRecord,
+    persisted?: NodeFlowNodeRunRecord,
+  ): Promise<{ status: NodeFlowRunRecord["status"]; error: string | null }> {
+    const nodeInput = maskSecrets(this.buildNodeInput(context, node.id));
+    const resumable = persisted && ["running", "retry_waiting", "approval_waiting"].includes(persisted.status);
+    const nodeRun = resumable
+      ? this.deps.nodeFlowRepository.updateNodeRun(persisted.id, { status: "running", input: nodeInput, errorMessage: null })
+      : this.deps.nodeFlowRepository.createNodeRun({ runId: context.runId, flowId: context.flowId, projectId: context.projectId,
+        nodeId: node.id, logicalItem: context.logicalItem, status: "running", input: nodeInput, startedAt: new Date().toISOString() });
+    const attemptService = new NodeFlowAttemptService(this.deps.nodeFlowRepository);
+    const retryPolicy = { ...publication.policy.retry, ...(node.policy?.retry ?? {}) };
+    let executionAttempt = this.deps.nodeFlowRepository.listNodeAttempts(context.runId)
+      .filter((attempt) => attempt.nodeRunId === nodeRun.id && attempt.status !== "approval_waiting" && !(attempt.status === "running" && attempt.invocationId === null)).length;
+    let waitingAttempt = this.deps.nodeFlowRepository.listNodeAttempts(context.runId)
+      .find((attempt) => attempt.nodeRunId === nodeRun.id && attempt.status === "approval_waiting");
+    let interruptedAttempt = this.deps.nodeFlowRepository.listNodeAttempts(context.runId)
+      .find((attempt) => attempt.nodeRunId === nodeRun.id && attempt.status === "running" && attempt.invocationId === null);
+    while (executionAttempt < retryPolicy.maxAttempts) {
+      executionAttempt += 1;
+      clearResolvedCredentials(context);
+      const attempt = waitingAttempt
+        ? this.deps.nodeFlowRepository.updateNodeAttempt(waitingAttempt.id, { status: "running", errorMessage: null, finishedAt: null })
+        : interruptedAttempt
+          ? this.deps.nodeFlowRepository.updateNodeAttempt(interruptedAttempt.id, { status: "running", errorMessage: null, finishedAt: null })
+          : attemptService.start(nodeRun, context.executorId, nodeInput, (node.credentialBindings ?? []).map((binding) => binding.credentialId));
+      waitingAttempt = undefined;
+      interruptedAttempt = undefined;
+      context.currentAttemptId = attempt.id;
+      const timeoutMs = node.policy?.timeout?.timeoutMs ?? publication.policy.defaultTimeoutMs;
+      const timeoutController = new AbortController();
+      const parentAbort = (): void => timeoutController.abort(context.options.signal?.reason);
+      context.options.signal?.addEventListener("abort", parentAbort, { once: true });
+      const timeout = setTimeout(() => timeoutController.abort(new Error(`Node ${node.id} timed out after ${timeoutMs}ms.`)), timeoutMs);
+      const previousOptions = context.options;
+      context.options = { ...context.options, signal: timeoutController.signal };
+      try {
+        const result = await this.executeNode(context, node, nodeRun);
+        const safeOutput = redactCredentialJson(result.output, context.resolvedCredentialValues);
+        context.outputs.set(node.id, safeOutput);
+        if (result.selectedPorts) context.selectedPorts.set(node.id, new Set(result.selectedPorts));
+        attemptService.succeed(attempt, safeOutput, result.invocationId);
+        this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, { status: "succeeded", executionInvocationId: result.invocationId ?? nodeRun.executionInvocationId,
+          output: safeOutput, finishedAt: new Date().toISOString() });
+        return { status: "succeeded", error: null };
+      } catch (error) {
+        const message = redactCredentialText(error instanceof Error ? error.message : String(error), context.resolvedCredentialValues);
+        const classification = classifyFailure(error, previousOptions.signal?.aborted === true, timeoutController.signal.aborted);
+        if (error instanceof ApprovalRequiredError) {
+          this.deps.nodeFlowRepository.updateNodeAttempt(attempt.id, { status: "approval_waiting", errorMessage: message, retryDecision: null, finishedAt: null });
+          this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, { status: "approval_waiting", errorMessage: message, finishedAt: null });
+          return { status: "approval_waiting", error: message };
+        }
+        this.deps.auditService?.recordSystem({ action: "automation.attempt.failed", resourceType: "node_flow_attempt", resourceId: attempt.id,
+          projectId: context.projectId, outcome: "failed", metadata: { runId: context.runId, flowId: context.flowId, nodeId: node.id,
+            logicalItem: context.logicalItem, attemptNumber: attempt.attemptNumber, classification } });
+        const retryable = retryPolicy.retryableClasses.includes(classification) && executionAttempt < retryPolicy.maxAttempts;
+        const invocationId = this.deps.nodeFlowRepository.listNodeAttempts(context.runId).find((candidate) => candidate.id === attempt.id)?.invocationId;
+        attemptService.fail(attempt, classification, message, retryable, invocationId);
+        if (retryable) {
+          this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, { status: "retry_waiting", errorMessage: message });
+          await delay(retryDelay(retryPolicy.backoffMs, retryPolicy.maxBackoffMs ?? retryPolicy.backoffMs, retryPolicy.jitterRatio ?? 0, executionAttempt), previousOptions.signal);
+          this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, { status: "running", errorMessage: null });
+          continue;
+        }
+        const status = classification === "unknown_side_effect" ? "attention_required" : classification === "cancelled" ? "cancelled" : "failed";
+        const failureOutput = { error: message };
+        context.outputs.set(node.id, failureOutput);
+        this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, { status: status === "attention_required" ? "attention_required" : status,
+          output: maskSecrets(failureOutput), errorMessage: message, finishedAt: new Date().toISOString() });
+        return { status, error: message };
+      } finally {
+        clearTimeout(timeout);
+        previousOptions.signal?.removeEventListener("abort", parentAbort);
+        context.options = previousOptions;
+        clearResolvedCredentials(context);
+      }
+    }
+    return { status: "failed", error: `Logical item ${context.logicalItem} exhausted its retry budget.` };
+  }
+
+  private terminateApprovalRun(run: NodeFlowRunRecord, nodeId: string, logicalItem: string, status: "rejected" | "expired"): NodeFlowRunSummaryResponse {
     const message = `Approval for node ${nodeId} was ${status}.`;
-    const nodeRun = this.deps.nodeFlowRepository.listNodeRuns(run.id).find((candidate) => candidate.nodeId === nodeId && candidate.status === "approval_waiting");
+    const nodeRun = this.deps.nodeFlowRepository.listNodeRuns(run.id).find((candidate) => candidate.nodeId === nodeId && (candidate.logicalItem === logicalItem || candidate.logicalItem === "default") && candidate.status === "approval_waiting");
     if (nodeRun) this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, { status: "failed", errorMessage: message, finishedAt: new Date().toISOString() });
-    const attempt = this.deps.nodeFlowRepository.listNodeAttempts(run.id).find((candidate) => candidate.nodeId === nodeId && candidate.status === "approval_waiting");
+    const attempt = this.deps.nodeFlowRepository.listNodeAttempts(run.id).find((candidate) => candidate.nodeId === nodeId && (candidate.logicalItem === logicalItem || candidate.logicalItem === "default") && candidate.status === "approval_waiting");
     if (attempt) this.deps.nodeFlowRepository.updateNodeAttempt(attempt.id, { status: "failed", failureClassification: "permanent", retryDecision: "stop", errorMessage: message, finishedAt: new Date().toISOString() });
+    for (const waitingNode of this.deps.nodeFlowRepository.listNodeRuns(run.id).filter((candidate) => candidate.status === "approval_waiting" && candidate.id !== nodeRun?.id)) {
+      this.deps.nodeFlowRepository.updateNodeRun(waitingNode.id, { status: "cancelled", errorMessage: message, finishedAt: new Date().toISOString() });
+    }
+    for (const waitingAttempt of this.deps.nodeFlowRepository.listNodeAttempts(run.id).filter((candidate) => candidate.status === "approval_waiting" && candidate.id !== attempt?.id)) {
+      this.deps.nodeFlowRepository.updateNodeAttempt(waitingAttempt.id, { status: "cancelled", failureClassification: "cancelled", retryDecision: "stop", errorMessage: message, finishedAt: new Date().toISOString() });
+    }
     const updated = this.deps.nodeFlowRepository.updateRun(run.id, { status: "failed", errorMessage: message, finishedAt: new Date().toISOString(), leaseOwner: null, leaseExpiresAt: null });
     if (updated.executionInvocationId) this.deps.executionRepository.updateExecutionInvocation(updated.executionInvocationId, { status: "failed", errorMessage: message, finishedAt: updated.finishedAt });
     return this.summarizeRun(updated.id);
@@ -479,10 +684,12 @@ export class NodeFlowRuntimeService {
 
   private terminateCancelledRun(run: NodeFlowRunRecord): NodeFlowRunSummaryResponse {
     const message = "Node flow run was cancelled while waiting for approval.";
-    const nodeRun = this.deps.nodeFlowRepository.listNodeRuns(run.id).find((candidate) => candidate.status === "approval_waiting");
-    if (nodeRun) this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, { status: "cancelled", errorMessage: message, finishedAt: new Date().toISOString() });
-    const attempt = this.deps.nodeFlowRepository.listNodeAttempts(run.id).find((candidate) => candidate.status === "approval_waiting");
-    if (attempt) this.deps.nodeFlowRepository.updateNodeAttempt(attempt.id, { status: "cancelled", failureClassification: "cancelled", retryDecision: "stop", errorMessage: message, finishedAt: new Date().toISOString() });
+    for (const nodeRun of this.deps.nodeFlowRepository.listNodeRuns(run.id).filter((candidate) => candidate.status === "approval_waiting")) {
+      this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, { status: "cancelled", errorMessage: message, finishedAt: new Date().toISOString() });
+    }
+    for (const attempt of this.deps.nodeFlowRepository.listNodeAttempts(run.id).filter((candidate) => candidate.status === "approval_waiting")) {
+      this.deps.nodeFlowRepository.updateNodeAttempt(attempt.id, { status: "cancelled", failureClassification: "cancelled", retryDecision: "stop", errorMessage: message, finishedAt: new Date().toISOString() });
+    }
     const updated = this.deps.nodeFlowRepository.updateRun(run.id, { status: "cancelled", errorMessage: message, finishedAt: new Date().toISOString(), leaseOwner: null, leaseExpiresAt: null });
     if (updated.executionInvocationId) this.deps.executionRepository.updateExecutionInvocation(updated.executionInvocationId, { status: "cancelled", errorMessage: message, finishedAt: updated.finishedAt });
     return this.summarizeRun(updated.id);
@@ -572,6 +779,7 @@ export class NodeFlowRuntimeService {
           config: evaluateTemplates(readNodeConfig(node), context) as NodeFlowJsonObject,
           upstream: this.buildUpstreamObject(context, node.id), flowInput: context.input,
           signal: context.options.signal, subflowDepth: context.subflowDepth,
+          logicalItem: context.logicalItem,
           redactJson: (value) => redactCredentialJson(value, context.resolvedCredentialValues),
           redactText: (value) => redactCredentialText(value, context.resolvedCredentialValues),
         });
@@ -865,6 +1073,7 @@ export class NodeFlowRuntimeService {
       flowInput: context.input,
       upstream,
       nodes: Object.fromEntries(context.outputs),
+      ...(context.itemIndex === undefined ? {} : { item: context.item ?? null, itemIndex: context.itemIndex, logicalItem: context.logicalItem }),
     };
   }
 
@@ -917,6 +1126,7 @@ export class NodeFlowRuntimeService {
       flowId: context.flowId,
       projectId: context.projectId,
       nodeId: node.id,
+      logicalItem: context.logicalItem,
       status,
       input: maskSecrets(this.buildNodeInput(context, node.id)),
       errorMessage: message,
@@ -1007,6 +1217,7 @@ function inferSelectedPorts(node: NodeFlowNode, output: NodeFlowJsonObject): Set
   if (node.type === "condition" && typeof output.matched === "boolean") return new Set([output.matched ? "true" : "false"]);
   if (node.type === "switch" && typeof output.selectedCase === "string") return new Set([output.selectedCase]);
   if (node.type === "approval" && output.approved === true) return new Set(["approved"]);
+  if (node.type === "foreach" && Array.isArray(output.items)) return new Set([output.items.length > 0 ? "items" : "empty"]);
   return null;
 }
 
@@ -1040,7 +1251,30 @@ function contextToObject(context: RuntimeContext): NodeFlowJsonObject {
   return {
     input: context.input,
     nodes: Object.fromEntries(context.outputs),
+    ...(context.itemIndex === undefined ? {} : { item: context.item ?? null, itemIndex: context.itemIndex, logicalItem: context.logicalItem }),
   };
+}
+
+function nodeRunKey(nodeId: string, logicalItem: string): string {
+  return `${nodeId}\0${logicalItem}`;
+}
+
+async function mapWithConcurrency<T, R>(
+  values: readonly T[],
+  concurrency: number,
+  worker: (value: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(values.length);
+  let nextIndex = 0;
+  const runners = Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+    while (nextIndex < values.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await worker(values[index]!, index);
+    }
+  });
+  await Promise.all(runners);
+  return results;
 }
 
 function readPath(value: unknown, path: string): unknown {

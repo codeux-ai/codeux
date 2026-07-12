@@ -17,8 +17,8 @@ import type {
 } from "../../../../src/contracts/skill-types.js";
 import { fetchJson } from "../../lib/api/fetch-json.js";
 
-export const fetchAgentPresets = async (projectId: string, signal?: AbortSignal): Promise<AgentPreset[]> => {
-  return fetchJson<AgentPreset[]>(`/api/projects/${encodeURIComponent(projectId)}/agent-presets`, { signal });
+export const fetchAgentPresets = async (projectId: string): Promise<AgentPreset[]> => {
+  return fetchJson<AgentPreset[]>(`/api/projects/${encodeURIComponent(projectId)}/agent-presets`);
 };
 
 export const fetchBaseAgentUpdateNotices = async (projectId: string): Promise<BaseAgentUpdateNotice[]> => {

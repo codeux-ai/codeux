@@ -97,7 +97,7 @@ const manifests: NodeDefinitionManifest[] = [
     fields: [field("path", "Value path", "text"), field("cases", "Cases", "json")],
     ports: [dataPort("input", "input"), { ...dataPort("case", "output"), cardinality: "many" }, dataPort("default", "output")] }),
   builtin({ type: "foreach", label: "Foreach", description: "Emits a bounded list for deterministic fan-out.", category: "control",
-    properties: { path: { type: "string" }, maxItems: { type: "number" } }, fields: [field("path", "Items path", "text"), field("maxItems", "Maximum items", "number")],
+    properties: { path: { type: "string" }, maxItems: { type: "number" }, concurrency: { type: "number" } }, fields: [field("path", "Items path", "text"), field("maxItems", "Maximum items", "number"), field("concurrency", "Concurrency", "number")],
     ports: [dataPort("input", "input"), { ...dataPort("items", "output"), schema: { type: "array", items: { type: "any" } } }, dataPort("empty", "output")] }),
   builtin({ type: "merge", label: "Merge", description: "Combines upstream values with an explicit strategy.", category: "transform",
     properties: { strategy: { type: "string" } }, fields: [field("strategy", "Strategy", "select")],
