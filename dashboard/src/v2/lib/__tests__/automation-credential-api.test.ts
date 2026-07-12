@@ -1,0 +1,5 @@
+import { beforeEach,describe,expect,it,vi } from "vitest";
+import { fetchJson } from "../../../lib/api/fetch-json.js";
+import { createAutomationCredential,rotateAutomationCredential } from "../automation-credential-api.js";
+vi.mock("../../../lib/api/fetch-json.js",()=>({fetchJson:vi.fn()}));
+describe("automation credential api",()=>{beforeEach(()=>vi.clearAllMocks());it("uses write-only create and rotate endpoints",async()=>{vi.mocked(fetchJson).mockResolvedValue({});await createAutomationCredential("project/one",{name:"Token",kind:"api-token",value:"secret"});expect(fetchJson).toHaveBeenCalledWith("/api/projects/project%2Fone/credentials",expect.objectContaining({method:"POST",body:JSON.stringify({name:"Token",kind:"api-token",value:"secret"})}));await rotateAutomationCredential("project/one","credential/one","next");expect(fetchJson).toHaveBeenLastCalledWith("/api/projects/project%2Fone/credentials/credential%2Fone/rotate",expect.objectContaining({method:"POST",body:JSON.stringify({value:"next"})}));});});

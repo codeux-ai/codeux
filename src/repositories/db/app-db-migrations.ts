@@ -392,6 +392,89 @@ export function ensureCustomDashboardTables(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_custom_dashboard_publications_project", "custom_dashboard_publications", "project_id, published_at DESC");
 }
 
+export function ensureAutomationCredentialTables(db: DatabaseAdapter): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS automation_credentials (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      scope TEXT NOT NULL CHECK (scope IN ('project', 'global')),
+      project_id TEXT,
+      allowed_project_ids_json TEXT NOT NULL DEFAULT '[]',
+      capabilities_json TEXT NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'active',
+      key_id TEXT NOT NULL,
+      key_version INTEGER NOT NULL,
+      version INTEGER NOT NULL DEFAULT 1,
+      last_validated_at TEXT,
+      validation_status TEXT NOT NULL DEFAULT 'untested',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      CHECK ((scope = 'project' AND project_id IS NOT NULL) OR (scope = 'global' AND project_id IS NULL))
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS automation_credential_secrets (
+      credential_id TEXT PRIMARY KEY,
+      ciphertext BLOB NOT NULL,
+      nonce BLOB NOT NULL,
+      auth_tag BLOB NOT NULL,
+      wrapped_data_key BLOB NOT NULL,
+      wrap_nonce BLOB NOT NULL,
+      wrap_auth_tag BLOB NOT NULL,
+      key_id TEXT NOT NULL,
+      key_version INTEGER NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (credential_id) REFERENCES automation_credentials(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS automation_credential_bindings (
+      id TEXT PRIMARY KEY,
+      credential_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      binding_key TEXT NOT NULL,
+      required_capabilities_json TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (credential_id) REFERENCES automation_credentials(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      UNIQUE (project_id, binding_key)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS automation_credential_access_events (
+      id TEXT PRIMARY KEY,
+      credential_id TEXT,
+      project_id TEXT NOT NULL,
+      binding_key TEXT,
+      capability TEXT,
+      operation TEXT NOT NULL,
+      outcome TEXT NOT NULL,
+      reason TEXT,
+      created_at TEXT NOT NULL
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS automation_credential_rotations (
+      id TEXT PRIMARY KEY,
+      credential_id TEXT NOT NULL,
+      from_version INTEGER NOT NULL,
+      to_version INTEGER NOT NULL,
+      key_id TEXT NOT NULL,
+      key_version INTEGER NOT NULL,
+      rotated_at TEXT NOT NULL,
+      FOREIGN KEY (credential_id) REFERENCES automation_credentials(id) ON DELETE CASCADE
+    )
+  `);
+  ensureIndex(db, "idx_automation_credentials_project", "automation_credentials", "project_id, status, updated_at DESC");
+  ensureIndex(db, "idx_automation_credentials_global", "automation_credentials", "scope, status, updated_at DESC");
+  ensureIndex(db, "idx_automation_credential_bindings_credential", "automation_credential_bindings", "credential_id, project_id");
+  ensureIndex(db, "idx_automation_credential_access_events_project", "automation_credential_access_events", "project_id, created_at DESC");
+  ensureIndex(db, "idx_automation_credential_rotations_credential", "automation_credential_rotations", "credential_id, rotated_at DESC");
+}
+
 export function migrateSprintLinkedIssuesExternalSources(db: DatabaseAdapter): void {
   ensureColumn(db, "sprint_linked_issues", "project_key", "TEXT");
   ensureColumn(db, "sprint_linked_issues", "external_id", "TEXT");
@@ -627,6 +710,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureNodeFlowTables(db);
   migratePersistedNodeFlowGraphs(db);
   ensureCustomDashboardTables(db);
+  ensureAutomationCredentialTables(db);
 
   ensureColumn(db, "projects", "initialization_mode", "TEXT NOT NULL DEFAULT 'existing'");
   ensureColumn(db, "provider_invocations", "tool_call_count", "INTEGER NOT NULL DEFAULT 0");

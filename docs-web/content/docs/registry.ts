@@ -103,6 +103,7 @@ export type DocsSlug =
   | 'architecture-external-chat-providers'
   | 'architecture-configuration-resolution'
   | 'architecture-security'
+  | 'operations-credential-security'
   | 'settings-google-drive-mount'
   | 'user-dashboard-custom-dashboards'
   | 'architecture-custom-dashboard-foundation'
@@ -822,6 +823,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Security model",
     description: "Code UX is designed to run as a single-user trusted process on a developer's workstation or a dedicated server. This page documents what is and is not protected, the threat model, and the recommended deployment posture.",
   },
+  'operations-credential-security': {
+    id: 'operations-credential-security',
+    path: '/docs/operations-credential-security',
+    section: 'User Guide',
+    title: "Automation Credential Security",
+    description: "Code UX resolves canonical node credential IDs and named project binding keys through the credential broker. Stored values are not exposed to nodes, dashboard reads, MCP payloads, agent context, run inspection records...",
+  },
   'settings-google-drive-mount': {
     id: 'settings-google-drive-mount',
     path: '/docs/settings-google-drive-mount',
@@ -988,6 +996,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-external-chat-providers'],
   docsRegistry['architecture-configuration-resolution'],
   docsRegistry['architecture-security'],
+  docsRegistry['operations-credential-security'],
   docsRegistry['settings-google-drive-mount'],
   docsRegistry['user-dashboard-custom-dashboards'],
   docsRegistry['architecture-custom-dashboard-foundation'],

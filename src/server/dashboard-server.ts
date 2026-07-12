@@ -141,6 +141,7 @@ import type { NodeFlowService } from "../services/node-flow-service.js";
 import type { CustomDashboardRepository } from "../repositories/custom-dashboard-repository.js";
 import type { CustomDashboardValidationService } from "../services/custom-dashboard-validation-service.js";
 import type { SkillService } from "../services/skill-service.js";
+import type { CredentialBroker } from "../services/credentials/credential-broker.js";
 import type { ManagedRuntimeService } from "../services/managed-runtime-service.js";
 import type { ProviderToolManager } from "../services/provider-tool-manager.js";
 import {
@@ -189,6 +190,7 @@ export interface DashboardServerOptions {
   customDashboardRepository?: CustomDashboardRepository;
   customDashboardValidationService?: CustomDashboardValidationService;
   skillService?: SkillService;
+  credentialBroker?: CredentialBroker;
   managedRuntimeService?: ManagedRuntimeService;
   providerToolManager?: ProviderToolManager;
   playwrightBrowserManager?: PlaywrightBrowserManager;

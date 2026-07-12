@@ -34,6 +34,7 @@ import { NodeFlowService } from "../../services/node-flow-service.js";
 import { resolveEffectiveDashboardSettings } from "../../services/settings-resolution-service.js";
 
 export interface DashboardDependencies {
+  credentialBroker: CoreDependencies["credentialBroker"];
   chatThreadRuntimeService: ChatThreadRuntimeService;
   chatProviderRepository: CoreDependencies["chatProviderRepository"];
   chatProviderIngressService: ChatProviderIngressService;
@@ -226,6 +227,7 @@ export function createDashboardDependencies(
     projectManagementRepository,
     settingsRepository,
     providerExecutionService,
+    credentialBroker: coreDeps.credentialBroker,
     getDashboardSettings: (projectId) => resolveDashboardSettings({ projectId }),
   });
   const nodeFlowService = new NodeFlowService(coreDeps.nodeFlowRepository, nodeFlowRuntimeService);
@@ -549,6 +551,7 @@ export function createDashboardDependencies(
   schedulerServiceRef.set(schedulerService);
 
   return {
+    credentialBroker: coreDeps.credentialBroker,
     chatProviderRepository,
     chatThreadRuntimeService,
     chatProviderIngressService,

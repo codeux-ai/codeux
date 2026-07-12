@@ -105,6 +105,7 @@
 - [Operations Runbook](./operations/runbook.md)
 - [Secure Headless Server Mode](./operations/server-mode.md)
 - [Security Hardening](./operations/security-hardening.md)
+- [Automation Credential Security](./operations/credential-security.md)
 - [Logging and Correlation IDs](./operations/logging-and-correlation.md)
 - [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, prompting, JSON payloads, and approvals
 - [CLI Management Surface](./operations/management-cli.md)
