@@ -115,6 +115,14 @@ export function registerNodeFlowRoutes(app: Express, deps: DashboardDependencies
   app.post("/api/node-flow-runs/:runId/retry", asyncRoute(async (req, res) => {
     res.status(201).json(await requireNodeFlowService(deps).retryRun(requireTrimmedString(req.body?.projectId, "projectId"), requireTrimmedString(req.params.runId, "runId")));
   }));
+
+  app.post("/api/node-flow-runs/:runId/resume-approval", asyncRoute(async (req, res) => {
+    res.json(await requireNodeFlowService(deps).resumeApproval(
+      requireTrimmedString(req.body?.projectId, "projectId"),
+      requireTrimmedString(req.params.runId, "runId"),
+      requireTrimmedString(req.body?.approvalId, "approvalId"),
+    ));
+  }));
   app.get("/api/projects/:projectId/node-flows", syncRoute((req, res) => {
     res.json(requireNodeFlowService(deps).list(requireTrimmedString(req.params.projectId, "projectId")));
   }));
@@ -230,13 +238,26 @@ export function registerNodeFlowRoutes(app: Express, deps: DashboardDependencies
     res.json({ approvals: deps.approvalService.listForRun(requireTrimmedString(req.params.runId, "runId")) });
   }));
 
-  app.post("/api/automation-approvals/:approvalId/decision", syncRoute((req, res) => {
+  app.post("/api/automation-approvals/:approvalId/decision", asyncRoute(async (req, res) => {
     if (!deps.approvalService) throw new HttpRouteError(404, "Approval service is not enabled.");
     const body = req.body as { decision?: string; decidedBy?: string; metadata?: NodeFlowJsonObject };
     const approvalId = requireTrimmedString(req.params.approvalId, "approvalId");
     const decidedBy = requireTrimmedString(body.decidedBy, "decidedBy");
-    if (body.decision === "approve") res.json(deps.approvalService.approve(approvalId, decidedBy, body.metadata));
-    else if (body.decision === "reject") res.json(deps.approvalService.reject(approvalId, decidedBy, body.metadata));
+    const current = deps.approvalService.get(approvalId);
+    if (current?.status === "expired") {
+      const resumed = await requireNodeFlowService(deps).resumeApproval(current.projectId, current.runId, current.id);
+      res.json({ ...current, run: resumed.run, nodeRuns: resumed.nodeRuns, attempts: resumed.attempts, output: resumed.output });
+      return;
+    }
+    const approval = body.decision === "approve"
+      ? deps.approvalService.approve(approvalId, decidedBy, body.metadata)
+      : body.decision === "reject"
+        ? deps.approvalService.reject(approvalId, decidedBy, body.metadata)
+        : null;
+    if (approval) {
+      const resumed = await requireNodeFlowService(deps).resumeApproval(approval.projectId, approval.runId, approval.id);
+      res.json({ ...approval, run: resumed.run, nodeRuns: resumed.nodeRuns, attempts: resumed.attempts, output: resumed.output });
+    }
     else throw new HttpRouteError(400, "decision must be approve or reject.");
   }));
 

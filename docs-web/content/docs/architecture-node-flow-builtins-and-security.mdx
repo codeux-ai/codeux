@@ -7,7 +7,7 @@ The governed catalog adds deterministic branches, bounded collection processing,
 - `condition` selects `true` or `false`; `switch` selects one named case or `default`. Unselected branches persist as skipped node runs.
 - `foreach` accepts no more than 1,000 items. `merge` supports `object`, `array`, and `first` strategies.
 - `delay` is cancellable and capped at one hour. `execute_subflow` requires same-project ownership, rejects direct self-reference, and caps depth at eight.
-- `approval` persists an operator decision. `email_draft` never sends. `email_send` requires approval and uses the idempotent outbox.
+- `approval` persists an idempotent operator decision and continues the exact pinned run after approval. `email_draft` never sends. `email_send` requires approval and uses the idempotent outbox.
 - `webhook_trigger` emits payloads accepted through secret-authenticated webhook ingress.
 
 ## Network policy
@@ -17,6 +17,8 @@ HTTP nodes and future custom nodes use the same `EgressPolicyService`. HTTPS is 
 Every redirect is manually revalidated. DNS is checked for private results and rebinding. Host and port allowlists, response-size and content-type limits, propagated cancellation and timeouts, capped retries, idempotency requirements for unsafe retry, normalized headers, and per-key rate windows keep requests bounded.
 
 ## OAuth, approvals, and outbox
+
+Pending approvals preserve the run, governed node, logical item, and numbered attempt. Approved decisions resume at that node boundary; rejected and expired decisions terminate durably. Repeated decisions and restart recovery do not create a second approval request, attempt, or external delivery.
 
 OAuth authorization uses PKCE S256 and short-lived AES-256-GCM state tied to an allowlisted callback origin. Tokens live behind the connection store, rotate on refresh, enforce scopes and expiry, and are never written into graph JSON or agent-visible output. Revocation, reconnect, and health checks expose no token values.
 

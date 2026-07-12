@@ -19,7 +19,7 @@ import { EgressPolicyService } from "./node-flows/egress-policy-service.js";
 import { BuiltinExecutors } from "./node-flows/builtins/builtin-executors.js";
 import type { ApprovalService } from "./node-flows/approval-service.js";
 import { ApprovalRequiredError } from "./node-flows/approval-service.js";
-import type { OutboxService } from "./node-flows/outbox-service.js";
+import { UnknownSideEffectOutcomeError, type OutboxService } from "./node-flows/outbox-service.js";
 import type { CustomNodeRuntimeService } from "./custom-nodes/custom-node-runtime-service.js";
 import type { AutomationAuditExportService } from "./automation-audit-export-service.js";
 import type { NodeFlowFailureClassification } from "../contracts/node-flow-execution-policy-types.js";
@@ -35,6 +35,7 @@ import type {
   NodeFlowJsonValue,
   NodeFlowNode,
   NodeFlowNodeRunRecord,
+  NodeFlowPublicationRecord,
   NodeFlowRunRecord,
   NodeFlowRunSummaryResponse,
   RunNodeFlowOptions,
@@ -105,7 +106,8 @@ export class NodeFlowRuntimeService {
   }
 
   requestCancellation(runId: string): NodeFlowRunRecord {
-    return this.deps.nodeFlowRepository.requestCancellation(runId);
+    const requested = this.deps.nodeFlowRepository.requestCancellation(runId);
+    return requested.status === "approval_waiting" ? this.terminateCancelledRun(requested).run : requested;
   }
 
   async runFlow(
@@ -159,8 +161,57 @@ export class NodeFlowRuntimeService {
       startedAt: null,
     });
     this.deps.auditService?.recordSystem({ action: "automation.run.started", resourceType: "node_flow_run", resourceId: run.id, projectId, outcome: "succeeded", metadata: { flowId: flow.id, publicationId: publication.id, version: publication.version, triggerType: options.triggerType ?? "manual" } });
+    return await this.executeRun(run, publication, graph, executionOrder, input, options, "queued");
+  }
+
+  async resumeApproval(projectId: string, approvalId: string, expectedRunId?: string, options: Pick<RunNodeFlowOptions, "signal" | "executorId"> = {}): Promise<NodeFlowRunSummaryResponse> {
+    if (!this.deps.approvalService) throw new ValidationError("Approval service is not configured.");
+    const approval = this.deps.approvalService.get(approvalId);
+    if (!approval) throw new EntityNotFoundError(`Automation approval not found: ${approvalId}`);
+    const run = this.deps.nodeFlowRepository.getRun(approval.runId);
+    if (!run) throw new EntityNotFoundError(`Node flow run not found: ${approval.runId}`);
+    if (expectedRunId && run.id !== expectedRunId) throw new ValidationError("Approval does not belong to the requested node flow run.");
+    if (run.projectId !== projectId) throw new ValidationError("Node flow run does not belong to the requested project.");
+    if (run.flowId !== approval.flowId || run.projectId !== approval.projectId) {
+      throw new ValidationError("Approval scope does not match its node flow run.");
+    }
+    if (run.status !== "approval_waiting") return this.summarizeRun(run.id);
+    const waitingNode = this.deps.nodeFlowRepository.listNodeRuns(run.id).find((candidate) => candidate.status === "approval_waiting");
+    if (!waitingNode || waitingNode.nodeId !== approval.nodeId) {
+      throw new ValidationError("Approval does not match the governed node currently waiting in this run.");
+    }
+    if (approval.status === "pending") throw new ValidationError(`Approval ${approval.id} is still pending.`);
+    if (approval.status === "rejected" || approval.status === "expired") {
+      return this.terminateApprovalRun(run, approval.nodeId, approval.status);
+    }
+    if (run.cancelRequestedAt) return this.terminateCancelledRun(run);
+    const publication = new NodeFlowPublicationService(this.deps.nodeFlowRepository).resolve(run.flowId, { mode: "pinned", version: run.version });
+    if (run.publicationId && publication.id !== run.publicationId) {
+      throw new ValidationError("The waiting run no longer matches its pinned publication.");
+    }
+    const { graph, executionOrder } = normalizeNodeFlowGraph(publication.graph);
+    this.requireSupportedNodes(graph);
+    return await this.executeRun(run, publication, graph, executionOrder, run.input ?? {}, options, "approval_waiting");
+  }
+
+  private async executeRun(
+    run: NodeFlowRunRecord,
+    publication: NodeFlowPublicationRecord,
+    graph: NodeFlowGraph,
+    executionOrder: string[],
+    input: NodeFlowJsonObject,
+    options: RunNodeFlowOptions,
+    claimFrom: "queued" | "approval_waiting",
+  ): Promise<NodeFlowRunSummaryResponse> {
+    const projectId = run.projectId;
+    const flowId = run.flowId;
+    const parentInvocationId = run.executionInvocationId;
+    if (!parentInvocationId) throw new ValidationError(`Node flow run ${run.id} has no parent execution invocation.`);
     const executorId = options.executorId?.trim() || `node-flow-runtime:${process.pid}:${randomUUID()}`;
-    const claimedRun = new NodeFlowQueueService(this.deps.nodeFlowRepository).claim(run, executorId);
+    const claimedRun = claimFrom === "queued"
+      ? new NodeFlowQueueService(this.deps.nodeFlowRepository).claim(run, executorId)
+      : this.deps.nodeFlowRepository.claimApprovalWaitingRun(run.id, executorId, publication.policy.leaseDurationMs);
+    if (!claimedRun) return this.summarizeRun(run.id);
     const leaseService = new NodeFlowLeaseService(this.deps.nodeFlowRepository);
     const heartbeatTimer = setInterval(() => {
       leaseService.heartbeat(claimedRun.id, executorId, publication.policy.leaseDurationMs);
@@ -169,7 +220,7 @@ export class NodeFlowRuntimeService {
 
     const context: RuntimeContext = {
       projectId,
-      flowId: flow.id,
+      flowId,
       runId: claimedRun.id,
       graph,
       order: executionOrder,
@@ -184,6 +235,17 @@ export class NodeFlowRuntimeService {
       subflowDepth: options.subflowDepth ?? 0,
     };
 
+    const persistedNodeRuns = this.deps.nodeFlowRepository.listNodeRuns(run.id);
+    const persistedByNode = new Map<string, NodeFlowNodeRunRecord>();
+    for (const persisted of persistedNodeRuns) persistedByNode.set(persisted.nodeId, persisted);
+    for (const node of graph.nodes) {
+      const persisted = persistedByNode.get(node.id);
+      if (!persisted?.output || !["succeeded", "failed"].includes(persisted.status)) continue;
+      context.outputs.set(node.id, persisted.output);
+      const selectedPorts = inferSelectedPorts(node, persisted.output);
+      if (selectedPorts) context.selectedPorts.set(node.id, selectedPorts);
+    }
+
     const blockedNodes = new Set<string>();
     let terminalStatus: NodeFlowRunRecord["status"] = "succeeded";
     let terminalError: string | null = null;
@@ -192,6 +254,10 @@ export class NodeFlowRuntimeService {
       const nodeId = executionOrder[nodeIndex]!;
       const node = graph.nodes.find((candidate) => candidate.id === nodeId);
       if (!node) {
+        continue;
+      }
+      const persistedNodeRun = persistedByNode.get(node.id);
+      if (persistedNodeRun && ["succeeded", "failed", "skipped", "cancelled"].includes(persistedNodeRun.status)) {
         continue;
       }
       if (options.signal?.aborted || this.deps.nodeFlowRepository.getRun(run.id)?.cancelRequestedAt) {
@@ -220,25 +286,32 @@ export class NodeFlowRuntimeService {
       }
 
       const nodeInput = maskSecrets(this.buildNodeInput(context, node.id));
-      const nodeRun = this.deps.nodeFlowRepository.createNodeRun({
-        runId: run.id,
-        flowId: flow.id,
-        projectId,
-        nodeId: node.id,
-        status: "running",
-        input: nodeInput,
-        startedAt: new Date().toISOString(),
-      });
+      const nodeRun = persistedNodeRun?.status === "approval_waiting"
+        ? this.deps.nodeFlowRepository.updateNodeRun(persistedNodeRun.id, { status: "running", errorMessage: null })
+        : this.deps.nodeFlowRepository.createNodeRun({
+          runId: run.id,
+          flowId,
+          projectId,
+          nodeId: node.id,
+          status: "running",
+          input: nodeInput,
+          startedAt: new Date().toISOString(),
+        });
 
       const attemptService = new NodeFlowAttemptService(this.deps.nodeFlowRepository);
       const retryPolicy = {
         ...publication.policy.retry,
         ...(node.policy?.retry ?? {}),
       };
-      let attemptNumber = 0;
-      while (attemptNumber < retryPolicy.maxAttempts) {
-        attemptNumber += 1;
-        const attempt = attemptService.start(nodeRun, executorId, nodeInput, (node.credentialBindings ?? []).map((binding) => binding.credentialId));
+      let executionAttempt = 0;
+      let waitingAttempt = this.deps.nodeFlowRepository.listNodeAttempts(run.id)
+        .find((candidate) => candidate.nodeRunId === nodeRun.id && candidate.status === "approval_waiting");
+      while (executionAttempt < retryPolicy.maxAttempts) {
+        executionAttempt += 1;
+        const attempt = waitingAttempt
+          ? this.deps.nodeFlowRepository.updateNodeAttempt(waitingAttempt.id, { status: "running", errorMessage: null, finishedAt: null })
+          : attemptService.start(nodeRun, executorId, nodeInput, (node.credentialBindings ?? []).map((binding) => binding.credentialId));
+        waitingAttempt = undefined;
         context.currentAttemptId = attempt.id;
         const timeoutMs = node.policy?.timeout?.timeoutMs ?? publication.policy.defaultTimeoutMs;
         const timeoutController = new AbortController();
@@ -252,7 +325,7 @@ export class NodeFlowRuntimeService {
         context.outputs.set(node.id, result.output);
         if (result.selectedPorts) context.selectedPorts.set(node.id, new Set(result.selectedPorts));
         attemptService.succeed(attempt, maskSecrets(result.output), result.invocationId);
-        this.deps.auditService?.recordSystem({ action: "automation.attempt.succeeded", resourceType: "node_flow_attempt", resourceId: attempt.id, projectId, outcome: "succeeded", metadata: { runId: run.id, flowId: flow.id, nodeId: node.id, attemptNumber } });
+        this.deps.auditService?.recordSystem({ action: "automation.attempt.succeeded", resourceType: "node_flow_attempt", resourceId: attempt.id, projectId, outcome: "succeeded", metadata: { runId: run.id, flowId, nodeId: node.id, attemptNumber: attempt.attemptNumber } });
         this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, {
           status: "succeeded",
           executionInvocationId: result.invocationId ?? nodeRun.executionInvocationId,
@@ -265,9 +338,8 @@ export class NodeFlowRuntimeService {
         clearTimeout(timeout); options.signal?.removeEventListener("abort", parentAbort); context.options = previousOptions;
         const message = error instanceof Error ? error.message : String(error);
         const classification = classifyFailure(error, options.signal?.aborted === true, timeoutController.signal.aborted);
-        this.deps.auditService?.recordSystem({ action: "automation.attempt.failed", resourceType: "node_flow_attempt", resourceId: attempt.id, projectId, outcome: "failed", metadata: { runId: run.id, flowId: flow.id, nodeId: node.id, attemptNumber, classification } });
         if (error instanceof ApprovalRequiredError) {
-          attemptService.fail(attempt, "permanent", message, false);
+          this.deps.nodeFlowRepository.updateNodeAttempt(attempt.id, { status: "approval_waiting", errorMessage: message, retryDecision: null, finishedAt: null });
           this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, {
             status: "approval_waiting", errorMessage: message, finishedAt: null,
           });
@@ -275,12 +347,13 @@ export class NodeFlowRuntimeService {
           terminalError = message;
           break;
         }
+        this.deps.auditService?.recordSystem({ action: "automation.attempt.failed", resourceType: "node_flow_attempt", resourceId: attempt.id, projectId, outcome: "failed", metadata: { runId: run.id, flowId, nodeId: node.id, attemptNumber: attempt.attemptNumber, classification } });
         const wasCancelled = classification === "cancelled";
-        const retryable = retryPolicy.retryableClasses.includes(classification) && attemptNumber < retryPolicy.maxAttempts;
+        const retryable = retryPolicy.retryableClasses.includes(classification) && executionAttempt < retryPolicy.maxAttempts;
         attemptService.fail(attempt, classification, message, retryable, this.deps.nodeFlowRepository.listNodeAttempts(run.id).find((candidate) => candidate.id === attempt.id)?.invocationId);
         if (retryable) {
           this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, { status: "retry_waiting", errorMessage: message });
-          await delay(retryDelay(retryPolicy.backoffMs, retryPolicy.maxBackoffMs ?? retryPolicy.backoffMs, retryPolicy.jitterRatio ?? 0, attemptNumber), options.signal);
+          await delay(retryDelay(retryPolicy.backoffMs, retryPolicy.maxBackoffMs ?? retryPolicy.backoffMs, retryPolicy.jitterRatio ?? 0, executionAttempt), options.signal);
           this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, { status: "running", errorMessage: null });
           continue;
         }
@@ -332,23 +405,23 @@ export class NodeFlowRuntimeService {
       leaseOwner: null,
       leaseExpiresAt: null,
     });
-    this.deps.executionRepository.updateExecutionInvocation(parentInvocation.id, {
+    this.deps.executionRepository.updateExecutionInvocation(parentInvocationId, {
       status: terminalStatus === "succeeded" ? "completed" : terminalStatus === "attention_required" ? "failed" : terminalStatus === "approval_waiting" ? "running" : terminalStatus,
       errorMessage: terminalStatus === "approval_waiting" ? null : terminalError,
       finishedAt,
     });
-    this.deps.executionRepository.appendExecutionInvocationMessage(parentInvocation.id, {
+    this.deps.executionRepository.appendExecutionInvocationMessage(parentInvocationId, {
       role: terminalStatus === "succeeded" ? "assistant" : "system",
       contentMarkdown: terminalStatus === "succeeded"
         ? "Node flow run completed."
         : `Node flow run ${terminalStatus}: ${terminalError ?? "No error message."}`,
       metadata: {
-        flowId: flow.id,
+        flowId,
         runId: run.id,
         status: terminalStatus,
       },
     });
-    this.deps.auditService?.recordSystem({ action: "automation.run.finished", resourceType: "node_flow_run", resourceId: run.id, projectId, outcome: terminalStatus === "succeeded" ? "succeeded" : "failed", metadata: { flowId: flow.id, publicationId: publication.id, status: terminalStatus } });
+    this.deps.auditService?.recordSystem({ action: terminalStatus === "approval_waiting" ? "automation.run.approval_waiting" : "automation.run.finished", resourceType: "node_flow_run", resourceId: run.id, projectId, outcome: terminalStatus === "succeeded" || terminalStatus === "approval_waiting" ? "succeeded" : "failed", metadata: { flowId, publicationId: publication.id, status: terminalStatus } });
 
     clearInterval(heartbeatTimer);
     return {
@@ -357,6 +430,34 @@ export class NodeFlowRuntimeService {
       attempts: this.deps.nodeFlowRepository.listNodeAttempts(run.id),
       output: updatedRun.output,
     };
+  }
+
+  private terminateApprovalRun(run: NodeFlowRunRecord, nodeId: string, status: "rejected" | "expired"): NodeFlowRunSummaryResponse {
+    const message = `Approval for node ${nodeId} was ${status}.`;
+    const nodeRun = this.deps.nodeFlowRepository.listNodeRuns(run.id).find((candidate) => candidate.nodeId === nodeId && candidate.status === "approval_waiting");
+    if (nodeRun) this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, { status: "failed", errorMessage: message, finishedAt: new Date().toISOString() });
+    const attempt = this.deps.nodeFlowRepository.listNodeAttempts(run.id).find((candidate) => candidate.nodeId === nodeId && candidate.status === "approval_waiting");
+    if (attempt) this.deps.nodeFlowRepository.updateNodeAttempt(attempt.id, { status: "failed", failureClassification: "permanent", retryDecision: "stop", errorMessage: message, finishedAt: new Date().toISOString() });
+    const updated = this.deps.nodeFlowRepository.updateRun(run.id, { status: "failed", errorMessage: message, finishedAt: new Date().toISOString(), leaseOwner: null, leaseExpiresAt: null });
+    if (updated.executionInvocationId) this.deps.executionRepository.updateExecutionInvocation(updated.executionInvocationId, { status: "failed", errorMessage: message, finishedAt: updated.finishedAt });
+    return this.summarizeRun(updated.id);
+  }
+
+  private terminateCancelledRun(run: NodeFlowRunRecord): NodeFlowRunSummaryResponse {
+    const message = "Node flow run was cancelled while waiting for approval.";
+    const nodeRun = this.deps.nodeFlowRepository.listNodeRuns(run.id).find((candidate) => candidate.status === "approval_waiting");
+    if (nodeRun) this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, { status: "cancelled", errorMessage: message, finishedAt: new Date().toISOString() });
+    const attempt = this.deps.nodeFlowRepository.listNodeAttempts(run.id).find((candidate) => candidate.status === "approval_waiting");
+    if (attempt) this.deps.nodeFlowRepository.updateNodeAttempt(attempt.id, { status: "cancelled", failureClassification: "cancelled", retryDecision: "stop", errorMessage: message, finishedAt: new Date().toISOString() });
+    const updated = this.deps.nodeFlowRepository.updateRun(run.id, { status: "cancelled", errorMessage: message, finishedAt: new Date().toISOString(), leaseOwner: null, leaseExpiresAt: null });
+    if (updated.executionInvocationId) this.deps.executionRepository.updateExecutionInvocation(updated.executionInvocationId, { status: "cancelled", errorMessage: message, finishedAt: updated.finishedAt });
+    return this.summarizeRun(updated.id);
+  }
+
+  private summarizeRun(runId: string): NodeFlowRunSummaryResponse {
+    const run = this.deps.nodeFlowRepository.getRun(runId);
+    if (!run) throw new EntityNotFoundError(`Node flow run not found: ${runId}`);
+    return { run, nodeRuns: this.deps.nodeFlowRepository.listNodeRuns(runId), attempts: this.deps.nodeFlowRepository.listNodeAttempts(runId), output: run.output };
   }
 
   private requireSupportedNodes(graph: NodeFlowGraph): void {
@@ -825,6 +926,13 @@ function buildDescendants(graph: NodeFlowGraph): Map<string, Set<string>> {
   }));
 }
 
+function inferSelectedPorts(node: NodeFlowNode, output: NodeFlowJsonObject): Set<string> | null {
+  if (node.type === "condition" && typeof output.matched === "boolean") return new Set([output.matched ? "true" : "false"]);
+  if (node.type === "switch" && typeof output.selectedCase === "string") return new Set([output.selectedCase]);
+  if (node.type === "approval" && output.approved === true) return new Set(["approved"]);
+  return null;
+}
+
 function renderTemplate(template: string, context: RuntimeContext): string {
   const source = contextToObject(context);
   return template.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_match, rawPath: string) => {
@@ -973,6 +1081,7 @@ function classifyFailure(error: unknown, parentAborted: boolean, attemptAborted:
   if (parentAborted) return "cancelled";
   const message = error instanceof Error ? error.message : String(error);
   if (attemptAborted || /timed? out|timeout/i.test(message)) return "timeout";
+  if (error instanceof UnknownSideEffectOutcomeError) return "unknown_side_effect";
   if (/quota|rate.?limit|429/i.test(message)) return "quota";
   if (/credential|secret|access denied/i.test(message)) return "credential";
   if (error instanceof ValidationError || /requires|unsupported|must /i.test(message)) return "validation";

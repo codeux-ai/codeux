@@ -151,4 +151,42 @@ describe("node flow routes", () => {
     expect(response.status).toBe(409);
     expect(response.body.conflict).toMatchObject({ code: "draft_revision_conflict", actualDraftRevision: 2 });
   });
+
+  it.each(["approve", "reject"] as const)("decides and resumes the exact run for an approval %s", async (decision) => {
+    const approval = { id: "approval-1", projectId: "project-1", flowId: "flow-1", runId: "run-1", nodeId: "send", logicalItem: "default", status: decision === "approve" ? "approved" : "rejected" };
+    const approvalService = {
+      get: vi.fn().mockReturnValue(null),
+      approve: vi.fn().mockReturnValue(approval),
+      reject: vi.fn().mockReturnValue(approval),
+    };
+    const nodeFlowService = {
+      resumeApproval: vi.fn().mockResolvedValue({ run: { id: "run-1", status: decision === "approve" ? "succeeded" : "failed" }, nodeRuns: [], attempts: [], output: {} }),
+    };
+    const app = express(); app.use(express.json()); registerNodeFlowRoutes(app, { approvalService, nodeFlowService } as any);
+
+    const response = await request(app).post("/api/automation-approvals/approval-1/decision").send({ decision, decidedBy: "operator" });
+
+    expect(response.status).toBe(200);
+    expect(response.body.run.id).toBe("run-1");
+    expect(nodeFlowService.resumeApproval).toHaveBeenCalledWith("project-1", "run-1", "approval-1");
+  });
+
+  it("exposes an explicit idempotent approval-resume route", async () => {
+    const nodeFlowService = { resumeApproval: vi.fn().mockResolvedValue({ run: { id: "run-1", status: "succeeded" }, nodeRuns: [], attempts: [] }) };
+    const app = express(); app.use(express.json()); registerNodeFlowRoutes(app, { nodeFlowService } as any);
+    const response = await request(app).post("/api/node-flow-runs/run-1/resume-approval").send({ projectId: "project-1", approvalId: "approval-1" });
+    expect(response.status).toBe(200);
+    expect(nodeFlowService.resumeApproval).toHaveBeenCalledWith("project-1", "run-1", "approval-1");
+  });
+
+  it("terminates an expired approval through the decision route without overwriting its decision", async () => {
+    const expired = { id: "approval-1", projectId: "project-1", flowId: "flow-1", runId: "run-1", nodeId: "send", logicalItem: "default", status: "expired" };
+    const approvalService = { get: vi.fn().mockReturnValue(expired), approve: vi.fn(), reject: vi.fn() };
+    const nodeFlowService = { resumeApproval: vi.fn().mockResolvedValue({ run: { id: "run-1", status: "failed" }, nodeRuns: [], attempts: [] }) };
+    const app = express(); app.use(express.json()); registerNodeFlowRoutes(app, { approvalService, nodeFlowService } as any);
+    const response = await request(app).post("/api/automation-approvals/approval-1/decision").send({ decision: "approve", decidedBy: "operator" });
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ status: "expired", run: { status: "failed" } });
+    expect(approvalService.approve).not.toHaveBeenCalled();
+  });
 });

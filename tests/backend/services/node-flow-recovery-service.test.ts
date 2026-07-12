@@ -8,6 +8,9 @@ import { ProjectManagementRepository } from "../../../src/repositories/project-m
 import { NodeFlowRecoveryService } from "../../../src/services/node-flows/node-flow-recovery-service.js";
 import { NodeFlowQueueService, NodeFlowQuotaExceededError } from "../../../src/services/node-flows/node-flow-queue-service.js";
 import { DEFAULT_NODE_FLOW_EXECUTION_POLICY } from "../../../src/contracts/node-flow-execution-policy-types.js";
+import { AutomationApprovalRepository } from "../../../src/repositories/automation-approval-repository.js";
+import { ApprovalService } from "../../../src/services/node-flows/approval-service.js";
+import type { NodeFlowRuntimeService } from "../../../src/services/node-flow-runtime-service.js";
 
 const dirs: string[] = [];
 afterEach(async () => Promise.all(dirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true }))));
@@ -55,5 +58,23 @@ describe("NodeFlowRecoveryService", () => {
     const [recovered] = new NodeFlowRecoveryService(repository).recover();
     expect(recovered?.status).toBe("attention_required");
     expect(recovered?.errorMessage).toMatch(/outcome is unknown/i);
+  });
+
+  it("resumes a decision persisted before process restart", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "flow-approval-recovery-")); dirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projects = new ProjectManagementRepository(storage); const repository = new NodeFlowRepository(storage);
+    const project = projects.createProject({ name: "Approval Recovery", sourceType: "local", sourceRef: dir });
+    const flow = repository.createFlow(project.id, { title: "Recover approval", graph: { nodes: [{ id: "approval", type: "approval", title: "Approval" }], edges: [] } });
+    const run = repository.createRun({ flowId: flow.id, projectId: project.id, version: 1, publicationId: repository.getPublication(flow.id)!.id, status: "approval_waiting" });
+    repository.createNodeRun({ runId: run.id, flowId: flow.id, projectId: project.id, nodeId: "approval", status: "approval_waiting" });
+    const approvals = new AutomationApprovalRepository(storage);
+    const approval = approvals.request({ projectId: project.id, flowId: flow.id, runId: run.id, nodeId: "approval", logicalItem: "default", request: {} });
+    approvals.decide(approval.id, { status: "approved", decidedBy: "operator" });
+    const resumed = { ...run, status: "succeeded" as const };
+    const runtime = { resumeApproval: async () => ({ run: resumed, nodeRuns: [], attempts: [], output: {} }) } as unknown as NodeFlowRuntimeService;
+
+    const recovered = await new NodeFlowRecoveryService(repository, new ApprovalService(approvals), runtime).resumeDecidedApprovals();
+    expect(recovered).toEqual([resumed]);
   });
 });

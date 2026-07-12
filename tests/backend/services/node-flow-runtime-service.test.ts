@@ -13,15 +13,22 @@ import type { ProviderExecutionService } from "../../../src/services/provider-ex
 import type { NodeFlowGraph } from "../../../src/contracts/node-flow-types.js";
 import type { CredentialBroker } from "../../../src/services/credentials/credential-broker.js";
 import { EgressPolicyService } from "../../../src/services/node-flows/egress-policy-service.js";
+import { AutomationApprovalRepository } from "../../../src/repositories/automation-approval-repository.js";
+import { AutomationOutboxRepository } from "../../../src/repositories/automation-outbox-repository.js";
+import { ApprovalService } from "../../../src/services/node-flows/approval-service.js";
+import { MockSideEffectProvider, OutboxService, type SideEffectProvider } from "../../../src/services/node-flows/outbox-service.js";
 
 const tempDirs: string[] = [];
 
-async function createRuntime(providerExecutionService?: Partial<ProviderExecutionService>,credentialBroker?:Partial<CredentialBroker>, egressPolicyService?: EgressPolicyService): Promise<{
+async function createRuntime(providerExecutionService?: Partial<ProviderExecutionService>,credentialBroker?:Partial<CredentialBroker>, egressPolicyService?: EgressPolicyService, sideEffectProvider?: SideEffectProvider): Promise<{
   dir: string;
+  storage: AppDbStorage;
   projectRepository: ProjectManagementRepository;
   nodeFlowRepository: NodeFlowRepository;
   executionRepository: ExecutionRepository;
   runtime: NodeFlowRuntimeService;
+  approvalService?: ApprovalService;
+  outboxRepository?: AutomationOutboxRepository;
 }> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "node-flow-runtime-"));
   tempDirs.push(dir);
@@ -29,6 +36,8 @@ async function createRuntime(providerExecutionService?: Partial<ProviderExecutio
   const projectRepository = new ProjectManagementRepository(storage);
   const nodeFlowRepository = new NodeFlowRepository(storage);
   const executionRepository = new ExecutionRepository(storage);
+  const approvalService = sideEffectProvider ? new ApprovalService(new AutomationApprovalRepository(storage)) : undefined;
+  const outboxRepository = sideEffectProvider ? new AutomationOutboxRepository(storage) : undefined;
   const runtime = new NodeFlowRuntimeService({
     nodeFlowRepository,
     executionRepository,
@@ -37,9 +46,11 @@ async function createRuntime(providerExecutionService?: Partial<ProviderExecutio
     providerExecutionService: providerExecutionService as ProviderExecutionService | undefined,
     credentialBroker: credentialBroker as CredentialBroker | undefined,
     egressPolicyService,
+    approvalService,
+    outboxService: sideEffectProvider && outboxRepository ? new OutboxService(outboxRepository, sideEffectProvider) : undefined,
     getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
   });
-  return { dir, projectRepository, nodeFlowRepository, executionRepository, runtime };
+  return { dir, storage, projectRepository, nodeFlowRepository, executionRepository, runtime, approvalService, outboxRepository };
 }
 
 afterEach(async () => {
@@ -47,6 +58,92 @@ afterEach(async () => {
 });
 
 describe("NodeFlowRuntimeService", () => {
+  it("resumes an approval-gated email send on the pinned run exactly once across restart and repeated decisions", async () => {
+    const firstProvider = new MockSideEffectProvider();
+    const setup = await createRuntime(undefined, undefined, undefined, firstProvider);
+    const project = setup.projectRepository.createProject({ name: "Approval Project", sourceType: "local", sourceRef: setup.dir });
+    const flow = setup.nodeFlowRepository.createFlow(project.id, { title: "Approved email", graph: {
+      nodes: [
+        { id: "input", type: "input", title: "Input" },
+        { id: "send", type: "email_send", title: "Send", data: { to: "ops@example.test", subject: "Release", body: "Ready", logicalItem: "release-email" } },
+        { id: "output", type: "output", title: "Output" },
+      ],
+      edges: [{ fromNodeId: "input", toNodeId: "send" }, { fromNodeId: "send", toNodeId: "output" }],
+    } });
+
+    const waiting = await setup.runtime.runFlow(project.id, flow.id, { release: "v1" });
+    expect(waiting.run.status).toBe("approval_waiting");
+    expect(waiting.attempts).toHaveLength(2);
+    expect(waiting.attempts?.find((attempt) => attempt.nodeId === "send")).toMatchObject({ attemptNumber: 1, status: "approval_waiting" });
+    expect(firstProvider.sends).toHaveLength(0);
+    expect(setup.outboxRepository?.listForRun(waiting.run.id)).toHaveLength(0);
+
+    const approval = setup.approvalService!.listForRun(waiting.run.id)[0]!;
+    setup.approvalService!.approve(approval.id, "operator", { ticket: "change-1" });
+    const restartedProvider = new MockSideEffectProvider();
+    const restartedRuntime = new NodeFlowRuntimeService({
+      nodeFlowRepository: new NodeFlowRepository(setup.storage),
+      executionRepository: new ExecutionRepository(setup.storage),
+      projectManagementRepository: new ProjectManagementRepository(setup.storage),
+      settingsRepository: new SettingsRepository(path.join(setup.dir, "settings-restarted.db")),
+      approvalService: new ApprovalService(new AutomationApprovalRepository(setup.storage)),
+      outboxService: new OutboxService(new AutomationOutboxRepository(setup.storage), restartedProvider),
+      getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+    });
+
+    const concurrent = await Promise.all([
+      restartedRuntime.resumeApproval(project.id, approval.id, waiting.run.id),
+      restartedRuntime.resumeApproval(project.id, approval.id, waiting.run.id),
+    ]);
+    const completed = concurrent.find((result) => result.run.status === "succeeded")!;
+    const repeated = await restartedRuntime.resumeApproval(project.id, approval.id, waiting.run.id);
+    expect(completed.run).toMatchObject({ id: waiting.run.id, publicationId: waiting.run.publicationId, status: "succeeded" });
+    expect(repeated.run.status).toBe("succeeded");
+    expect(completed.attempts?.find((attempt) => attempt.nodeId === "send")).toMatchObject({ attemptNumber: 1, status: "succeeded" });
+    expect(completed.attempts?.filter((attempt) => attempt.nodeId === "send")).toHaveLength(1);
+    expect(restartedProvider.sends).toHaveLength(1);
+    expect(new AutomationOutboxRepository(setup.storage).listForRun(waiting.run.id)).toHaveLength(1);
+  });
+
+  it.each(["rejected", "expired"] as const)("terminates a %s waiting approval durably", async (decision) => {
+    const provider = new MockSideEffectProvider();
+    const setup = await createRuntime(undefined, undefined, undefined, provider);
+    const project = setup.projectRepository.createProject({ name: `Approval ${decision}`, sourceType: "local", sourceRef: setup.dir });
+    const flow = setup.nodeFlowRepository.createFlow(project.id, { title: "Approval", graph: { nodes: [{ id: "approval", type: "approval", title: "Approval" }], edges: [] } });
+    const waiting = await setup.runtime.runFlow(project.id, flow.id, {});
+    const approval = setup.approvalService!.listForRun(waiting.run.id)[0]!;
+    if (decision === "rejected") setup.approvalService!.reject(approval.id, "operator");
+    else {
+      setup.storage.getDatabase().prepare("UPDATE automation_approvals SET expires_at = ? WHERE id = ?").run("2020-01-01T00:00:00.000Z", approval.id);
+      setup.approvalService!.get(approval.id);
+    }
+    const result = await setup.runtime.resumeApproval(project.id, approval.id, waiting.run.id);
+    expect(result.run).toMatchObject({ id: waiting.run.id, status: "failed" });
+    expect(result.run.errorMessage).toContain(decision);
+    expect(result.attempts?.[0]).toMatchObject({ status: "failed", retryDecision: "stop" });
+    expect(provider.sends).toHaveLength(0);
+  });
+
+  it("does not resume an approval that is still pending", async () => {
+    const setup = await createRuntime(undefined, undefined, undefined, new MockSideEffectProvider());
+    const project = setup.projectRepository.createProject({ name: "Pending Approval", sourceType: "local", sourceRef: setup.dir });
+    const flow = setup.nodeFlowRepository.createFlow(project.id, { title: "Approval", graph: { nodes: [{ id: "approval", type: "approval", title: "Approval" }], edges: [] } });
+    const waiting = await setup.runtime.runFlow(project.id, flow.id, {});
+    const approval = setup.approvalService!.listForRun(waiting.run.id)[0]!;
+    await expect(setup.runtime.resumeApproval(project.id, approval.id, waiting.run.id)).rejects.toThrow(/still pending/i);
+    expect(setup.nodeFlowRepository.getRun(waiting.run.id)?.status).toBe("approval_waiting");
+  });
+
+  it("cancels a waiting approval without leaving an active node attempt", async () => {
+    const setup = await createRuntime(undefined, undefined, undefined, new MockSideEffectProvider());
+    const project = setup.projectRepository.createProject({ name: "Cancelled Approval", sourceType: "local", sourceRef: setup.dir });
+    const flow = setup.nodeFlowRepository.createFlow(project.id, { title: "Approval", graph: { nodes: [{ id: "approval", type: "approval", title: "Approval" }], edges: [] } });
+    const waiting = await setup.runtime.runFlow(project.id, flow.id, {});
+    const cancelled = setup.runtime.requestCancellation(waiting.run.id);
+    expect(cancelled.status).toBe("cancelled");
+    expect(setup.nodeFlowRepository.listNodeRuns(waiting.run.id)[0]?.status).toBe("cancelled");
+    expect(setup.nodeFlowRepository.listNodeAttempts(waiting.run.id)[0]?.status).toBe("cancelled");
+  });
   it("persists unselected condition branches as skipped while the selected branch runs", async () => {
     const { dir, projectRepository, nodeFlowRepository, runtime } = await createRuntime();
     const project = projectRepository.createProject({ name: "Branch Project", sourceType: "local", sourceRef: dir });

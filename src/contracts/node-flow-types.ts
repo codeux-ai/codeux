@@ -15,6 +15,26 @@ export type NodeFlowJsonValue =
   | { [key: string]: NodeFlowJsonValue };
 export type NodeFlowJsonObject = { [key: string]: NodeFlowJsonValue };
 
+export type AutomationApprovalStatus = "pending" | "approved" | "rejected" | "expired";
+
+export interface AutomationApprovalRecord {
+  id: string;
+  projectId: string;
+  flowId: string;
+  runId: string;
+  nodeId: string;
+  logicalItem: string;
+  status: AutomationApprovalStatus;
+  request: NodeFlowJsonObject;
+  decision: NodeFlowJsonObject | null;
+  requestedAt: string;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const NODE_FLOW_SCHEMA_VERSION = 2 as const;
 export type NodeFlowSchemaVersion = typeof NODE_FLOW_SCHEMA_VERSION;
 

@@ -429,6 +429,13 @@ export class NodeFlowRepository {
     return result.changes > 0 ? this.getRun(runId) : null;
   }
 
+  claimApprovalWaitingRun(runId: string, executorId: string, leaseDurationMs: number, now = new Date()): NodeFlowRunRecord | null {
+    const expiresAt = new Date(now.getTime() + leaseDurationMs).toISOString();
+    const result = this.db.prepare(`UPDATE node_flow_runs SET status = 'running', lease_owner = ?, lease_expires_at = ?, heartbeat_at = ?, updated_at = ? WHERE id = ? AND status = 'approval_waiting' AND cancel_requested_at IS NULL`)
+      .run(executorId, expiresAt, now.toISOString(), now.toISOString(), runId);
+    return result.changes > 0 ? this.getRun(runId) : null;
+  }
+
   heartbeatRun(runId: string, executorId: string, leaseDurationMs: number, now = new Date()): boolean {
     const result = this.db.prepare(`UPDATE node_flow_runs SET heartbeat_at = ?, lease_expires_at = ?, updated_at = ? WHERE id = ? AND status = 'running' AND lease_owner = ?`)
       .run(now.toISOString(), new Date(now.getTime() + leaseDurationMs).toISOString(), now.toISOString(), runId, executorId);

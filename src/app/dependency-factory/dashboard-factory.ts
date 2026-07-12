@@ -274,7 +274,11 @@ export function createDashboardDependencies(
     getDashboardSettings: (projectId) => resolveDashboardSettings({ projectId }),
   });
   if (coreDeps.nodeFlowRepository) {
-    new NodeFlowRecoveryService(coreDeps.nodeFlowRepository).recover();
+    const recoveryService = new NodeFlowRecoveryService(coreDeps.nodeFlowRepository, approvalService, nodeFlowRuntimeService);
+    recoveryService.recover();
+    void recoveryService.resumeDecidedApprovals().catch((error: unknown) => {
+      logger.error("Failed to resume a decided node-flow approval during startup recovery", { error: error instanceof Error ? error.message : String(error) });
+    });
   }
   const nodeFlowService = new NodeFlowService(coreDeps.nodeFlowRepository, nodeFlowRuntimeService, coreDeps.credentialBroker, {
     repository: customNodeRepository,

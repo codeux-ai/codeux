@@ -32,6 +32,8 @@ The manual run panel accepts JSON object input and starts a node-flow run. Runs 
 
 Rendered run payloads redact secret-shaped keys such as `apiKey`, `authorization`, `cookie`, `password`, `secret`, and `token`.
 
+The run debugger lists durable approvals beside node attempts. A pending item offers **Approve & continue** and **Reject** actions. The decision applies to the same pinned run, and repeated clicks return its current state without sending an approved external effect twice.
+
 ## Agent Attachment
 
 A flow can be attached to a project agent preset as a repeatable skill with a name and description. Detaching removes only that binding; the flow, its graph, schedules, and run history remain in the project.

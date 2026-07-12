@@ -1,4 +1,5 @@
 import type {
+  AutomationApprovalRecord,
   AttachNodeFlowSkillInput,
   CreateNodeFlowInput,
   NodeFlowListResponse,
@@ -130,6 +131,23 @@ export const retryNodeFlowRun = async (projectId: string, runId: string): Promis
 
 export const fetchNodeFlowAttempts = async (runId: string, signal?: AbortSignal): Promise<{ attempts: NodeFlowNodeAttemptRecord[] }> =>
   fetchJson<{ attempts: NodeFlowNodeAttemptRecord[] }>(`/api/node-flow-runs/${encodeURIComponent(runId)}/attempts`, { signal });
+
+export const fetchNodeFlowApprovals = async (runId: string, signal?: AbortSignal): Promise<{ approvals: AutomationApprovalRecord[] }> =>
+  fetchJson<{ approvals: AutomationApprovalRecord[] }>(`/api/node-flow-runs/${encodeURIComponent(runId)}/approvals`, { signal });
+
+export const decideNodeFlowApproval = async (
+  approvalId: string,
+  decision: "approve" | "reject",
+  decidedBy = "dashboard",
+): Promise<AutomationApprovalRecord & NodeFlowRunSummaryResponse> =>
+  fetchJson<AutomationApprovalRecord & NodeFlowRunSummaryResponse>(`/api/automation-approvals/${encodeURIComponent(approvalId)}/decision`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision, decidedBy }),
+  });
+
+export const resumeNodeFlowApproval = async (projectId: string, runId: string, approvalId: string): Promise<NodeFlowRunSummaryResponse> =>
+  fetchJson<NodeFlowRunSummaryResponse>(`/api/node-flow-runs/${encodeURIComponent(runId)}/resume-approval`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, approvalId }),
+  });
 
 export const fetchNodeFlows = async (
   projectId: string,

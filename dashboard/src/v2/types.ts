@@ -126,6 +126,7 @@ import type {
   UpdateSchedulerEntryInput,
 } from "../../../src/contracts/scheduler-types.js";
 import type {
+  AutomationApprovalRecord,
   AttachNodeFlowSkillInput,
   CreateNodeFlowInput,
   NodeFlowEdge,
@@ -478,6 +479,7 @@ export type {
   SpeechTranscriptionProvider,
   SpeechTranscriptionRequestMetadata,
   SpeechTranscriptionResult,
+  AutomationApprovalRecord,
   AttachNodeFlowSkillInput,
   CreateNodeFlowInput,
   NodeFlowEdge,

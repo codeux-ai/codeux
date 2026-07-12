@@ -224,6 +224,13 @@ export class NodeFlowService {
     });
   }
 
+  async resumeApproval(projectId: string, runId: string, approvalId: string): Promise<NodeFlowRunSummaryResponse> {
+    const run = this.requireOwnedRun(runId, projectId);
+    if (!this.runtimeService) throw new ValidationError("Node flow runtime is not configured.");
+    const result = await this.runtimeService.resumeApproval(projectId, approvalId, run.id);
+    return result;
+  }
+
   update(flowId: string, input: UpdateNodeFlowInput): NodeFlowRecord {
     const update: UpdateNodeFlowInput = {};
     if (input.title !== undefined) {
