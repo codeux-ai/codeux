@@ -4,6 +4,7 @@ import {
   fetchSystemSettings,
   openConfigPage,
   openSettingsCategory,
+  openSettingsSection,
   prepareConfigPage,
   saveButton,
   saveSettings,
@@ -21,7 +22,8 @@ test.describe('theme and appearance persistence', () => {
     const targetThemeLabel = targetTheme === 'DARK' ? /Dark/i : /Light/i;
 
     await openConfigPage(page);
-    await openSettingsCategory(page, /Appearance Dashboard layout and theme preferences/i, 'Display Settings');
+    await openSettingsCategory(page, 'Appearance', 'Display Settings');
+    await openSettingsSection(page, 'Display Settings');
 
     await chooseRowRadio(page, 'Theme', targetThemeLabel);
     if (targetTheme === 'DARK') {
@@ -38,7 +40,8 @@ test.describe('theme and appearance persistence', () => {
 
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Settings & Integration' })).toBeVisible();
-    await openSettingsCategory(page, /Appearance Dashboard layout and theme preferences/i, 'Display Settings');
+    await openSettingsCategory(page, 'Appearance', 'Display Settings');
+    await openSettingsSection(page, 'Display Settings');
 
     await expect(settingRow(page, 'Theme').getByRole('radio', { name: targetThemeLabel })).toHaveAttribute('aria-checked', 'true');
     if (targetTheme === 'DARK') {

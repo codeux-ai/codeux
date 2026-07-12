@@ -333,6 +333,7 @@ export const SettingsMcpPanel: FunctionComponent<{ state: SettingsPageState }> =
             <SectionCard
               key={category}
               title={meta.label}
+              sectionId={`mcp-tool-category-${category}`}
               icon={<Icon strokeWidth={2.4} />}
               badge={`${toolsInCategory.filter((def) => enabledByName.get(def.name) ?? true).length}/${toolsInCategory.length}`}
               helpId="mcp-tool-category"

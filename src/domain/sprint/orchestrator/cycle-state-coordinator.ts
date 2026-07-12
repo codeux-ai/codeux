@@ -8,6 +8,7 @@ import { resolveTaskSessionId } from "../../../sprint/action-required-automation
 import { buildTaskAttentionPayload } from "./attention-payload-builder.js";
 import { buildConflictSummaryMarkdown, selectMergedTaskContexts, type MergeConflictTaskContext } from "./conflict-summary-utils.js";
 import type { CycleRunnerArgs } from "./cycle-runner.js";
+import { isCompletedTaskSettled } from "../task-pipeline-stage.js";
 
 export interface TaskStateSnapshot {
   id: string;
@@ -162,6 +163,12 @@ export class CycleStateCoordinator {
       if (!taskId) {
         continue;
       }
+      // CI owns this task until checks settle or its repair handoff is cleared.
+      // Opening merge_required here and resolving it later in this same method
+      // creates one closed attention row per watch cycle.
+      if (task.merge_indicator === "CI") {
+        continue;
+      }
       const pr = gitStatus?.available ? matchPrForTask(task, gitStatus) : undefined;
       const resolvedWorkerConflictKey = buildResolvedWorkerMergeConflictKey(
         taskId,
@@ -300,7 +307,11 @@ export class CycleStateCoordinator {
     const ciFixTaskIds = new Set<string>();
     for (const task of subtasks) {
       const taskId = task.record_id?.trim();
-      if (taskId && task.merge_indicator === "CI" && (task.status === "RUNNING" || task.status === "CODING_COMPLETED")) {
+      if (
+        taskId
+        && task.merge_indicator === "CI"
+        && (task.status === "RUNNING" || task.status === "CODING_COMPLETED" || task.status === "BLOCKED")
+      ) {
         ciFixTaskIds.add(taskId);
       }
     }
@@ -363,6 +374,45 @@ export class CycleStateCoordinator {
       args,
       activeProjectAttentionItems || [],
     );
+    this.resolveSettledTaskGuardrailHandoffs(
+      subtasks,
+      args,
+      activeProjectAttentionItems || [],
+    );
+  }
+
+  private resolveSettledTaskGuardrailHandoffs(
+    subtasks: Subtask[],
+    args: CycleRunnerArgs,
+    activeProjectAttentionItems: ProjectAttentionItemRecord[],
+  ): void {
+    if (typeof this.deps.projectAttentionService?.resolveItem !== "function") {
+      return;
+    }
+    const tasksByRecordId = new Map(
+      subtasks
+        .filter((task) => task.record_id?.trim())
+        .map((task) => [task.record_id!.trim(), task]),
+    );
+
+    for (const item of activeProjectAttentionItems) {
+      const task = item.taskId ? tasksByRecordId.get(item.taskId) : undefined;
+      if (
+        !task
+        || !isCompletedTaskSettled(task, { githubMode: args.githubMode })
+        || item.ownerType !== "human"
+        || (item.attentionType !== "human_escalation_required" && item.attentionType !== "dashboard_reply_required")
+        || item.payload?.guardrailAction !== "human_handoff"
+        || typeof item.payload?.guardrailPurpose !== "string"
+      ) {
+        continue;
+      }
+
+      this.deps.projectAttentionService.resolveItem(item.id, {
+        status: "resolved",
+        reason: "settled_task_guardrail_handoff_cleared",
+      });
+    }
   }
 
   resolveStaleHumanMergeConflictEscalations(

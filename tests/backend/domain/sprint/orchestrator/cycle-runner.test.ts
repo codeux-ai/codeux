@@ -131,6 +131,7 @@ describe("CycleRunner attention sync", () => {
         taskId: "task-10",
         sprintRunId: "run-1",
         attentionType: "human_escalation_required",
+        deduplicationKey: "guardrail:task_coding:task-10",
         ownerType: "human",
         title: "Coding guardrail reached for T10",
         payload: expect.objectContaining({
@@ -2334,6 +2335,7 @@ describe("CycleRunner attention sync", () => {
       expect.objectContaining({
         taskId: "task-1",
         attentionType: "human_escalation_required",
+        deduplicationKey: "guardrail:ci_fix:task-1",
         ownerType: "human",
         summaryMarkdown: expect.stringContaining("AssertionError: expected true to be false"),
         payload: expect.objectContaining({

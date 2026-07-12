@@ -17,7 +17,7 @@ export function isPathInside(basePath: string, targetPath: string): boolean {
   return relative.length === 0 || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
-export function validateSafeRepoName(name: string): void {
+export function validateSafeRepoName(name: string): string {
   if (!name || name.trim() === '') throw new Error("Repository name cannot be empty");
   if (name.includes('/') || name.includes('\\')) throw new Error("Repository name cannot contain path separators");
   if (name.includes('..')) throw new Error("Repository name cannot contain path traversal characters");
@@ -29,6 +29,7 @@ export function validateSafeRepoName(name: string): void {
   // Must not start with a hyphen to avoid Git command-line option injection.
   if (!/^[a-zA-Z0-9_.][-a-zA-Z0-9_.]*$/.test(name)) throw new Error("Repository name contains invalid characters or starts with a hyphen");
   if (name === '.' || name === '..') throw new Error("Invalid repository name");
+  return name;
 }
 
 export function validateSafeClonePath(requestedDir: string, allowedRoot?: string): ValidatedPath {

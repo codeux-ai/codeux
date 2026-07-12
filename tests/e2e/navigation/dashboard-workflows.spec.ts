@@ -63,7 +63,7 @@ async function selectProjectFromDashboard(page: Page, project: ProjectSummary): 
 
   const projectList = page.getByRole('listbox', { name: 'Project list' });
   await expect(projectList).toBeVisible();
-  await page.getByLabel('Filter projects').fill(project.name);
+  await page.getByRole('textbox', { name: 'Filter projects', exact: true }).fill(project.name);
 
   const option = page.getByRole('option', { name: new RegExp(escapeRegExp(project.name)) });
   await expect(option).toBeVisible();

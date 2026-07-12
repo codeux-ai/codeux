@@ -126,7 +126,7 @@ CLI-backed tasks refresh the remote branch before preparing the worker branch. T
 
 A `VirtualWorkerService` doing `ci_fix` tasks keeps trying and failing.
 
-**Fix:** the underlying CI failure is structural. Triage it operationally: inspect the failing PR's CI log, reproduce the issue locally with repo scripts, fix it manually, push, and mark the attention item resolved. Escalate only after you have local evidence. Optionally lower `julesCiAutofixMaxRetries` to fail faster next time.
+**Fix:** inspect the latest run before assuming the failure is still current. GitHub may retain an older cancelled or failed check beside a successful rerun; Code UX evaluates only the latest timestamped observation per workflow/check and sends repair evidence only when the newest branch run failed. If the newest run still fails, reproduce it locally, fix it, push, and resolve the attention item. A CI-blocked task should remain code-complete and must not start another ordinary coding invocation. Optionally lower the CI-fix guardrail cap to fail faster next time.
 
 ### Sprint paused at finalisation
 

@@ -30,10 +30,26 @@ export async function openConfigPage(page: Page): Promise<void> {
   await expect(page.getByRole('region', { name: 'Settings category panel' })).toBeVisible();
 }
 
-export async function openSettingsCategory(page: Page, name: RegExp, panelText: string | RegExp): Promise<void> {
-  await page.getByRole('button', { name }).click();
+export async function openSettingsCategory(page: Page, name: string, panelText: string | RegExp): Promise<void> {
+  await page
+    .getByRole('navigation', { name: 'Settings categories' })
+    .getByRole('button', { name, exact: true })
+    .click();
   const panel = page.getByRole('region', { name: 'Settings category panel' });
   await expect(panel).toContainText(panelText);
+}
+
+export async function openSettingsSection(page: Page, title: string): Promise<void> {
+  const panel = settingsPanel(page);
+  await panel.getByRole('button', { name: `Configure ${title}`, exact: true }).click();
+  await expect(panel.getByRole('heading', { name: title, exact: true })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Back to category overview', exact: true })).toBeVisible();
+}
+
+export async function returnToSettingsCategoryOverview(page: Page): Promise<void> {
+  const panel = settingsPanel(page);
+  await panel.getByRole('button', { name: 'Back to category overview', exact: true }).click();
+  await expect(panel.getByRole('button', { name: /^Configure / }).first()).toBeVisible();
 }
 
 export function settingsPanel(page: Page): Locator {

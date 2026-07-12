@@ -130,7 +130,11 @@ async function writeDeterministicFiles(cwd, run) {
 
 function writeProviderStdout(run) {
   const nativeSessionId = run.nativeSessionId || `mock-${run.provider}-${Date.now().toString(36)}`;
-  const responseText = "Mock provider completed successfully.";
+  const requestedOutcome = readMarker(run.prompt, "outcome")?.toLowerCase();
+  const outcomeMarker = requestedOutcome === "completed" || requestedOutcome === "blocked"
+    ? `\nCODE_UX_TASK_OUTCOME: ${requestedOutcome}`
+    : "";
+  const responseText = `Mock provider completed successfully.${outcomeMarker}`;
   console.log(JSON.stringify({
     type: "thread.started",
     thread_id: nativeSessionId,

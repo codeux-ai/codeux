@@ -1,7 +1,13 @@
 import * as fs from "fs";
 import * as path from "path";
+import { pathToFileURL } from "node:url";
 import { runCommandStrict } from "../../services/cli-process-runner.js";
-import { validateSafeRepoName, validateSafeClonePath, validateNonEmptyDir } from "../../utils/path-validator.js";
+import {
+  isPathInside,
+  validateSafeRepoName,
+  validateSafeClonePath,
+  validateNonEmptyDir,
+} from "../../utils/path-validator.js";
 import type { ValidatedPath } from "../../utils/path-validator.js";
 import { buildGitHttpAuthEnvWithFallbacks } from "../../services/git-http-auth.js";
 import { ensureCodeUxGitignoreEntry } from "./code-ux-gitignore.js";
@@ -12,6 +18,7 @@ export interface RemoteRepoResult {
 }
 
 const API_TIMEOUT_MS = 30_000;
+const NOFOLLOW_FLAG = typeof fs.constants.O_NOFOLLOW === "number" ? fs.constants.O_NOFOLLOW : 0;
 
 const parseApiError = (fallback: string, text: string): string => {
   try {
@@ -24,14 +31,14 @@ const parseApiError = (fallback: string, text: string): string => {
 };
 
 const cloneRepository = async (remoteUrl: string, cloneParentDir: string, repoName: string, hostToken?: string): Promise<void> => {
-  validateSafeRepoName(repoName);
+  const safeRepoName = validateSafeRepoName(repoName);
   const safeParentDir = validateSafeClonePath(cloneParentDir);
-  const targetDir = path.resolve(safeParentDir, repoName);
+  const targetDir = path.resolve(safeParentDir, safeRepoName);
   validateNonEmptyDir(targetDir, safeParentDir);
 
   await runCommandStrict(
     "git",
-    ["clone", remoteUrl, repoName],
+    ["clone", remoteUrl, safeRepoName],
     safeParentDir,
     (await buildGitHttpAuthEnvWithFallbacks(remoteUrl, {
       githubToken: hostToken,
@@ -40,6 +47,42 @@ const cloneRepository = async (remoteUrl: string, cloneParentDir: string, repoNa
   );
 };
 
+function resolveSeedReadmeFile(localPath: ValidatedPath): URL {
+  const repoRoot = path.resolve(localPath);
+  const readmePath = path.resolve(repoRoot, "README.md");
+  if (!isPathInside(repoRoot, readmePath)) {
+    throw new Error("README path must stay inside the repository.");
+  }
+  const repoRootForUrl = repoRoot.endsWith(path.sep) ? repoRoot : `${repoRoot}${path.sep}`;
+  return new URL("README.md", pathToFileURL(repoRootForUrl));
+}
+
+function writeSeedReadme(localPath: ValidatedPath, contents: string): void {
+  const readmeFile = resolveSeedReadmeFile(localPath);
+  let descriptor: number;
+  try {
+    // The repository root passed clone-parent containment checks, the filename
+    // is fixed, and O_NOFOLLOW prevents a raced symlink from redirecting the
+    // initialization write.
+    // codeql[js/path-injection]
+    descriptor = fs.openSync(
+      readmeFile,
+      fs.constants.O_CREAT | fs.constants.O_TRUNC | fs.constants.O_WRONLY | NOFOLLOW_FLAG,
+      0o666,
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ELOOP") {
+      throw new Error("README path must stay inside the repository.");
+    }
+    throw error;
+  }
+  try {
+    fs.writeFileSync(descriptor, contents, "utf8");
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
 async function seedEmptyRemoteRepository(
   remoteUrl: string,
   localPath: ValidatedPath,
@@ -47,7 +90,7 @@ async function seedEmptyRemoteRepository(
   defaultBranch: string,
   hostToken?: string,
 ): Promise<void> {
-  fs.writeFileSync(path.join(localPath, "README.md"), `# ${projectName.trim() || "Project"}\n\nInitialized with Code UX.\n`);
+  writeSeedReadme(localPath, `# ${projectName.trim() || "Project"}\n\nInitialized with Code UX.\n`);
   await ensureCodeUxGitignoreEntry(localPath);
   const env = (await buildGitHttpAuthEnvWithFallbacks(remoteUrl, {
     githubToken: hostToken,
@@ -72,11 +115,11 @@ export async function createGitHubRepo(opts: {
   hostToken?: string;
 }): Promise<RemoteRepoResult> {
   try {
-    validateSafeRepoName(opts.repoName);
+    const safeRepoName = validateSafeRepoName(opts.repoName);
     // Operate on the sanitized, resolved parent directory returned by the
     // validator rather than the raw request-supplied path.
     const safeParentDir = validateSafeClonePath(opts.cloneParentDir);
-    const targetDir = path.resolve(safeParentDir, opts.repoName);
+    const targetDir = path.resolve(safeParentDir, safeRepoName);
     const safeTargetDir = validateNonEmptyDir(targetDir, safeParentDir);
     // Local-first repository creation intentionally creates the user-selected
     // directory after validateSafeClonePath/validateNonEmptyDir constrain it.
@@ -97,7 +140,7 @@ export async function createGitHubRepo(opts: {
       },
       // Seed locally after cloning so README.md and the Code UX .gitignore land
       // together in one initial commit.
-      body: JSON.stringify({ name: opts.repoName, private: opts.isPrivate, auto_init: false }),
+      body: JSON.stringify({ name: safeRepoName, private: opts.isPrivate, auto_init: false }),
       signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
     const text = await response.text();
@@ -111,9 +154,9 @@ export async function createGitHubRepo(opts: {
       throw new Error("GitHub API response did not include clone_url.");
     }
 
-    await cloneRepository(remoteUrl, safeParentDir, opts.repoName, opts.hostToken);
+    await cloneRepository(remoteUrl, safeParentDir, safeRepoName, opts.hostToken);
     const localPath = safeTargetDir;
-    await seedEmptyRemoteRepository(remoteUrl, localPath, opts.repoName, "main", opts.hostToken);
+    await seedEmptyRemoteRepository(remoteUrl, localPath, safeRepoName, "main", opts.hostToken);
     return { localPath, remoteUrl };
   } catch (error: any) {
     const message = error.stderr?.toString() || error.message;
@@ -133,11 +176,11 @@ export async function createGitLabRepo(opts: {
   defaultBranch?: string;
 }): Promise<RemoteRepoResult> {
   try {
-    validateSafeRepoName(opts.repoName);
+    const safeRepoName = validateSafeRepoName(opts.repoName);
     // Operate on the sanitized, resolved parent directory returned by the
     // validator rather than the raw request-supplied path.
     const safeParentDir = validateSafeClonePath(opts.cloneParentDir);
-    const targetDir = path.resolve(safeParentDir, opts.repoName);
+    const targetDir = path.resolve(safeParentDir, safeRepoName);
     const safeTargetDir = validateNonEmptyDir(targetDir, safeParentDir);
     // Local-first repository creation intentionally creates the user-selected
     // directory after validateSafeClonePath/validateNonEmptyDir constrain it.
@@ -155,8 +198,8 @@ export async function createGitLabRepo(opts: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        name: opts.repoName,
-        path: opts.repoName,
+        name: safeRepoName,
+        path: safeRepoName,
         visibility: opts.isPrivate ? "private" : "public",
         // Seed locally after cloning so README.md and the Code UX .gitignore land
         // together in one initial commit.
@@ -176,11 +219,11 @@ export async function createGitLabRepo(opts: {
     }
     const localPath = safeTargetDir;
 
-    await cloneRepository(remoteUrl, safeParentDir, opts.repoName, opts.hostToken);
+    await cloneRepository(remoteUrl, safeParentDir, safeRepoName, opts.hostToken);
     await seedEmptyRemoteRepository(
       remoteUrl,
       localPath,
-      opts.repoName,
+      safeRepoName,
       opts.defaultBranch?.trim() || "main",
       opts.hostToken,
     );
