@@ -89,18 +89,18 @@ export const SettingsCategoryPicker: FunctionComponent<SettingsCategoryPickerPro
           transitionDuration: tokens.controlFeedback.duration,
           transitionTimingFunction: tokens.controlFeedback.ease,
         }}
-        className={`${SHARED_INTERACTION_CLASSES} flex min-h-14 w-full min-w-0 items-center gap-3 rounded-2xl border border-white/[0.1] bg-white/[0.06] px-3.5 py-3 text-left text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] hover:bg-white/[0.1] focus-visible:ring-offset-void-950`}
+        className={`${SHARED_INTERACTION_CLASSES} flex min-h-14 w-full min-w-0 items-center gap-3 rounded-2xl border border-signal-600/12 bg-white/65 px-3.5 py-3 text-left text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)] hover:bg-white/85 focus-visible:ring-offset-white dark:border-signal-300/12 dark:bg-white/[0.05] dark:text-white dark:shadow-none dark:hover:bg-white/[0.085] dark:focus-visible:ring-offset-[#10282a]`}
       >
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-signal-400/20 bg-signal-400/10 text-signal-300">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-signal-500/20 bg-signal-500/10 text-signal-700 dark:text-signal-300">
           <activeCategoryConfig.icon className="h-4 w-4" strokeWidth={2.1} aria-hidden="true" />
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-bold">{activeCategoryConfig.label}</span>
-          <span id={triggerDescriptionId} className="mt-0.5 block truncate text-[10px] font-semibold text-slate-400">
+          <span id={triggerDescriptionId} className="mt-0.5 block truncate text-[10px] font-semibold text-slate-500 dark:text-slate-400">
             {activeCategoryConfig.description}
           </span>
         </span>
-        <span className="flex shrink-0 items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-300">
+        <span className="flex shrink-0 items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-300">
           {pendingCategory ? <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : null}
           <span id={triggerStatusId} className="hidden min-[380px]:inline">{categoryStatus}</span>
           <ChevronRight className="h-4 w-4" strokeWidth={2.3} aria-hidden="true" />

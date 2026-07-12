@@ -41,7 +41,16 @@ export const SettingsModelPricingPanel: FunctionComponent<{ state: SettingsPageS
 
   return (
     <div className="flex flex-col gap-5">
-      <SectionCard title="Model Pricing" watermark="USD" icon={<Banknote strokeWidth={2.4} />}>
+      <SectionCard
+        title="Model Pricing"
+        watermark="USD"
+        icon={<Banknote strokeWidth={2.4} />}
+        highlights={[
+          { label: "Models in use", value: relevantRefs.size, tone: "active" },
+          { label: "Overrides", value: Object.keys(normalizedOverrides).length },
+          { label: "Catalog", value: `${catalog.length} models` },
+        ]}
+      >
         <div className="mb-4 flex items-center gap-2 rounded-xl border border-black/[0.06] bg-black/[0.02] px-3.5 py-2.5 dark:border-white/[0.06] dark:bg-white/[0.02]">
           <Search className="h-4 w-4 shrink-0 text-slate-400" />
           <input

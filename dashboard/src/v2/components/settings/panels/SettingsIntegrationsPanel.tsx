@@ -1828,6 +1828,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
         watermark="INT"
         badge={getBadge("integrations", "cliWorkflow")}
         icon={<Plug strokeWidth={2.4} />}
+        drilldown={false}
         actions={
           selectedIntegration ? null : (
             <>

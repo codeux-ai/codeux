@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   parseDashboardFeatureFlagValue,
   resolveDashboardFeatureFlags,
@@ -16,6 +19,9 @@ const navigationLabels = (featureFlags: Record<"nodes" | "custom-dashboards", bo
   getPrimaryNavigationItems("EXPERT", { featureFlags }).map((item) => item.label)
 );
 
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const devScriptSource = readFileSync(path.join(repoRoot, "scripts/dev.mjs"), "utf8");
+
 describe("dashboard feature flags", () => {
   it("parses explicit enabled and disabled values", () => {
     expect(parseDashboardFeatureFlagValue("true")).toBe(true);
@@ -32,13 +38,29 @@ describe("dashboard feature flags", () => {
     expect(resolveDashboardFeatureFlags({ devMode: true })).toEqual({ nodes: true, "custom-dashboards": true });
   });
 
+  it("builds the watched dashboard with Vite development semantics", () => {
+    expect(devScriptSource).toContain('{ ...process.env, NODE_ENV: "development" }');
+  });
+
   it("hides unfinished features by default outside development mode", () => {
     expect(resolveDashboardFeatureFlags({ devMode: false })).toEqual({ nodes: false, "custom-dashboards": false });
   });
 
-  it("lets explicit values override the mode default", () => {
-    expect(resolveDashboardFeatureFlags({ devMode: true, values: { nodes: "false", "custom-dashboards": "off" } })).toEqual({ nodes: false, "custom-dashboards": false });
+  it("keeps every flagged surface available in development despite disabled env values", () => {
+    const flags = resolveDashboardFeatureFlags({
+      devMode: true,
+      values: { nodes: "false", "custom-dashboards": "off" },
+    });
+
+    expect(flags).toEqual({ nodes: true, "custom-dashboards": true });
+    expect(navigationLabels(flags)).toEqual(expect.arrayContaining(["Nodes", "Dashboards"]));
+    expect(canPrefetchRoute("/nodes", flags)).toBe(true);
+    expect(canPrefetchRoute("/custom-dashboards", flags)).toBe(true);
+  });
+
+  it("honors explicit values outside development mode", () => {
     expect(resolveDashboardFeatureFlags({ devMode: false, values: { nodes: "true", "custom-dashboards": "enabled" } })).toEqual({ nodes: true, "custom-dashboards": true });
+    expect(resolveDashboardFeatureFlags({ devMode: false, values: { nodes: "false", "custom-dashboards": "off" } })).toEqual({ nodes: false, "custom-dashboards": false });
   });
 
   it("filters Nodes from shared navigation and prefetch when disabled", () => {

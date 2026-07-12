@@ -12,7 +12,7 @@ import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadge
 import { Bot, Cog, Database, ExternalLink, FolderOpen, RotateCcw, Scale, SlidersHorizontal, Sparkles } from "lucide-preact";
 import { openOnboarding } from "../../../lib/onboarding-control.js";
 import { useProjectData } from "../../../context/project-data.js";
-import { dashboardExperienceModeOptions } from "../../../lib/experience-mode.js";
+import { dashboardExperienceModeOptions, getDashboardExperienceModeLabel } from "../../../lib/experience-mode.js";
 import { getSafeUrl } from "../../../lib/safe-url.js";
 import { SHARED_INTERACTION_CLASSES } from "../../ui/Button.js";
 
@@ -31,7 +31,29 @@ const ExperienceModeCard: FunctionComponent<{
   update: (recipe: (current: ProjectSettings) => ProjectSettings) => void;
   getFieldBadge: (path: string) => string | undefined;
 }> = ({ settings, update, getFieldBadge }) => (
-  <SectionCard title="Experience Mode" watermark="MODE" icon={<SlidersHorizontal strokeWidth={2.4} />}>
+  <SectionCard
+    title="Experience Mode"
+    watermark="MODE"
+    icon={<SlidersHorizontal strokeWidth={2.4} />}
+    summary="Choose how much operational detail Code UX shows while keeping every saved setting intact."
+    highlights={[
+      { label: "Current mode", value: getDashboardExperienceModeLabel(settings.appearance.experienceMode), tone: "active" },
+      { label: "Settings depth", value: settings.appearance.experienceMode === "EXPERT" ? "All categories" : settings.appearance.experienceMode === "STANDARD" ? "Common workflows" : "Essentials only" },
+      { label: "Saved values", value: "Always preserved" },
+    ]}
+    overview={(
+      <PillChoiceGroup
+        aria-label="Quick dashboard experience mode"
+        value={settings.appearance.experienceMode}
+        onChange={(value) => update((current) => ({
+          ...current,
+          appearance: { ...current.appearance, experienceMode: value as DashboardExperienceMode },
+        }))}
+        options={dashboardExperienceModeOptions.map((option) => ({ value: option.value, label: option.label }))}
+      />
+    )}
+    configureLabel="Review mode details"
+  >
     <Row
       label="Dashboard mode"
       description="Choose how much of the dashboard surface is shown. Hidden routes and settings are preserved."
@@ -121,7 +143,17 @@ const ProjectContextCard: FunctionComponent<{
   };
 
   return (
-    <SectionCard title="Project Context" watermark="PRJ" icon={<FolderOpen strokeWidth={2.4} />}>
+    <SectionCard
+      title="Project Context"
+      watermark="PRJ"
+      icon={<FolderOpen strokeWidth={2.4} />}
+      highlights={[
+        { label: "Project", value: projectName, tone: "active" },
+        { label: "Source", value: sourceTypeLabel },
+        { label: "Workspace", value: baseDir.split(/[\\/]/).filter(Boolean).at(-1) || baseDir },
+      ]}
+      configureLabel="Manage project details"
+    >
       <Row label="Project name" description="Rename the selected project. Settings, tasks, and runtime history stay attached to the same project id.">
         <div className="flex min-w-0 flex-col gap-2">
           <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
@@ -190,7 +222,17 @@ const AutomationCard: FunctionComponent<{
   getBadge: (...prefixes: string[]) => string | undefined;
   getFieldBadge: (path: string) => string | undefined;
 }> = ({ settings, update, getBadge, getFieldBadge }) => (
-  <SectionCard title="Automation" watermark="AUTO" badge={getBadge("automationLevel", "automationInterventions")} icon={<Bot strokeWidth={2.4} />}>
+  <SectionCard
+    title="Automation"
+    watermark="AUTO"
+    badge={getBadge("automationLevel", "automationInterventions")}
+    icon={<Bot strokeWidth={2.4} />}
+    highlights={[
+      { label: "Level", value: settings.automationLevel === "SEMI_AUTO" ? "Semi-auto" : settings.automationLevel === "ALWAYS_ASK" ? "Always ask" : "Full", tone: "active" },
+      { label: "Plan approval", value: settings.automationInterventions.autoApprovePlan ? "Automatic" : "Manual" },
+      { label: "Paused runs", value: settings.automationInterventions.autoResumePaused ? "Auto-resume" : "Stay paused" },
+    ]}
+  >
     <Row label="Automation level" description="Choose how much the project should proceed without a worker stepping in." badge={getFieldBadge("automationLevel")}>
       <PillChoiceGroup
         value={settings.automationLevel}
@@ -233,7 +275,17 @@ const DockerRuntimeCard: FunctionComponent<{
   getBadge: (...prefixes: string[]) => string | undefined;
   getFieldBadge: (path: string) => string | undefined;
 }> = ({ settings, update, getBadge, getFieldBadge }) => (
-  <SectionCard title="Docker Runtime" watermark="DKR" badge={getBadge("cliWorkflow")} icon={<Cog strokeWidth={2.4} />}>
+  <SectionCard
+    title="Docker Runtime"
+    watermark="DKR"
+    badge={getBadge("cliWorkflow")}
+    icon={<Cog strokeWidth={2.4} />}
+    highlights={[
+      { label: "Image", value: settings.cliWorkflow.containerImageMode === "custom" ? "Custom" : "Managed", tone: settings.cliWorkflow.containerImageMode === "managed" ? "active" : "warning" },
+      { label: "Memory", value: settings.cliWorkflow.containerMemoryLimitMb > 0 ? `${settings.cliWorkflow.containerMemoryLimitMb} MiB` : "Unlimited" },
+      { label: "Container user", value: settings.cliWorkflow.containerRunAsRoot ? "Root" : "Non-root", tone: settings.cliWorkflow.containerRunAsRoot ? "warning" : "neutral" },
+    ]}
+  >
     <Row label="Runtime image mode" description="Managed mode automatically pulls the verified Code UX Linux runtime and provider updates." badge={getFieldBadge("cliWorkflow.containerImageMode")}>
       <SelectInput
         aria-label="Runtime image mode"
@@ -358,7 +410,7 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
   const getFieldBadge = (path: string) => getFieldBadgeHelper(activeScope, projectSources, path);
     if (activeScope === "system") {
       return (
-        <div className="flex flex-col gap-5">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
           {editableSettings ? (
             <>
               <ExperienceModeCard
@@ -374,7 +426,16 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
               />
             </>
           ) : null}
-          <SectionCard title="System Runtime" watermark="SYS" icon={<Cog strokeWidth={2.4} />}>
+          <SectionCard
+            title="System Runtime"
+            watermark="SYS"
+            icon={<Cog strokeWidth={2.4} />}
+            highlights={[
+              { label: "Dashboard", value: `Port ${systemSettings?.runtime.dashboardPort ?? 4444}`, tone: "active" },
+              { label: "Console", value: systemSettings?.runtime.consoleLogLevel ?? "info" },
+              { label: "Debug file", value: systemSettings?.runtime.debugLogFileLevel ?? "error" },
+            ]}
+          >
             <Row label="Dashboard port" description="System-wide HTTP port for the dashboard server.">
               <NumberInput
                 value={systemSettings?.runtime.dashboardPort ?? 4444}
@@ -445,7 +506,16 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
             </Row>
           </SectionCard>
 
-          <SectionCard title="Restart Behavior" watermark="RST" icon={<RotateCcw strokeWidth={2.4} />}>
+          <SectionCard
+            title="Restart Behavior"
+            watermark="RST"
+            icon={<RotateCcw strokeWidth={2.4} />}
+            highlights={[
+              { label: "Active sprints", value: systemSettings?.runtime.restartSprintPolicy ?? "continue", tone: "active" },
+              { label: "Invocations", value: systemSettings?.runtime.restartInvocationPolicy ?? "continue" },
+              { label: "Applies", value: "Next restart" },
+            ]}
+          >
             <Row label="After app restart" description="Choose what Code UX does with sprint runs that were active when the runtime stopped.">
               <PillChoiceGroup
                 value={systemSettings?.runtime.restartSprintPolicy ?? "continue"}
@@ -482,7 +552,16 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
             </Row>
           </SectionCard>
 
-          <SectionCard title="Database Settings" watermark="DBM" icon={<Database strokeWidth={2.4} />}>
+          <SectionCard
+            title="Database Settings"
+            watermark="DBM"
+            icon={<Database strokeWidth={2.4} />}
+            highlights={[
+              { label: "Pruning", value: (systemSettings?.runtime.dbPruningEnabled ?? true) ? "Enabled" : "Off", tone: (systemSettings?.runtime.dbPruningEnabled ?? true) ? "active" : "warning" },
+              { label: "Retention", value: `${systemSettings?.runtime.dbRetentionDays ?? 14} days` },
+              { label: "Startup vacuum", value: (systemSettings?.runtime.dbAutoVacuumOnStartup ?? true) ? "Enabled" : "Off" },
+            ]}
+          >
             <Row label="Automatic pruning" description="Automatically prune completed task runs, VM activities, attention items, and realtime events on startup.">
               <Toggle aria-label="Toggle setting"                 value={systemSettings?.runtime.dbPruningEnabled ?? true}
                 onChange={() => updateSystem((current) => ({
@@ -573,7 +652,7 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
     }
 
     return (
-      <div className="flex flex-col gap-5">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         <ProjectContextCard
           projectName={selectedProject.name}
           projectId={selectedProject.id}

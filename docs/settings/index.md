@@ -4,7 +4,28 @@ Settings is the configuration hub for Code UX. It covers local runtime behavior,
 
 Use this section when you need more detail than the inline Settings-page help popovers provide. Configuration cards with dedicated reference pages link to the pages below, which explain what the controls affect, recommended defaults, common risks, and validation steps.
 
-On desktop, choose an area from the persistent category rail. On smaller screens, the sticky command bar shows the current category as one compact button; opening it reveals the same Smart Find-filtered categories and match previews in a keyboard-accessible drawer without pushing the active settings panel down the page.
+On desktop, choose an area from the persistent category rail. The sticky command surface keeps the active category name, description, scope, save state, and primary actions together while settings scroll beneath it. On smaller screens, the same surface shows the current category as one compact button; opening it reveals the Smart Find-filtered categories and match previews in a keyboard-accessible drawer without pushing the active settings panel down the page.
+
+The rail groups configuration into **Basics**, **AI & Knowledge**, **Delivery**, **Connections**, and **System** so unrelated categories no longer compete in one flat numbered list.
+
+Each category opens as a modern overview made from subsystem cards. A card combines a plain-language purpose with up to three live values such as current mode, provider, safety posture, capacity, or enabled state. The most important low-risk choice may stay directly editable in the overview; **Configure** moves the category into one focused inline workspace for the full control set. **Back to category overview** restores the card grid without changing the Settings draft, scope inheritance, or saving.
+
+This is a drill-down workspace, not a stack of accordions: only the selected subsystem's detailed controls remain on screen. Local AI Runtime is the reference pattern. It keeps speech input, speech output, and memory embedding status visible, while **Configure speech** and **Manage local models** open full-width inline workspaces instead of modal overlays.
+
+## Settings Surface Reduction Audit
+
+The following controls can leave the Settings page without deleting persisted configuration. They are metadata, navigation, or derived diagnostics and should be relocated before their Settings rows are removed:
+
+| Candidate | Why it is safe to remove from Settings | Destination |
+| --- | --- | --- |
+| Project id, source type, and base directory | Read-only project metadata; no Settings draft is changed. | Project details or workspace information. |
+| License and Open Source Software | Static legal references; they do not participate in scope or Save Changes. | About / Help. |
+| Show onboarding again | Navigation command, not configuration. | Help menu or command palette. |
+| Provider host config path and generated endpoint rows | Read-only or derived from the selected provider mode. | Context below the owning selector. |
+| Generated Qwen/OpenCode config previews | Derived, masked troubleshooting output. | A provider-level **Troubleshoot** disclosure. |
+| MCP effective config preview | Derived from the editable MCP fields. | A server-level **Preview generated config** disclosure. |
+
+Do not remove the apparent duplicates for automation, container runtime, QA reflection, or provider model selection yet. They currently represent different scopes, execution meanings, or intentionally shared editing contexts. Consolidate each onto one backing control before removing an entry.
 
 ## Language-First Speech Setup
 

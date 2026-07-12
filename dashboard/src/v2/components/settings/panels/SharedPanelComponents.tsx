@@ -1,10 +1,69 @@
-import type { ComponentChildren, FunctionComponent } from "preact";
-import { useId } from "preact/hooks";
-import { BookOpenText } from "lucide-preact";
+import { createContext, type ComponentChildren, type FunctionComponent } from "preact";
+import { useContext, useId, useMemo, useRef, useState } from "preact/hooks";
+import { ArrowLeft, ArrowRight, BookOpenText } from "lucide-preact";
 import type { SettingsValueSource } from "../../../../types.js";
 import { getSettingsSubcategoryDoc, toHelpSections, type SettingsSubcategoryId } from "../../../lib/settings-subcategory-docs.js";
 import { getFieldSourceLabel } from "../../../lib/settings-view-models.js";
 import { InfoIconPopover } from "../../ui/InfoIconPopover.js";
+
+interface SettingsDetailWorkspaceContextValue {
+  enabled: boolean;
+  activeSection: string | null;
+  openSection: (sectionId: string) => void;
+  closeSection: () => void;
+}
+
+const DISABLED_SETTINGS_DETAIL_WORKSPACE: SettingsDetailWorkspaceContextValue = {
+  enabled: false,
+  activeSection: null,
+  openSection: () => {},
+  closeSection: () => {},
+};
+
+const SettingsDetailWorkspaceContext = createContext<SettingsDetailWorkspaceContextValue>(DISABLED_SETTINGS_DETAIL_WORKSPACE);
+
+export const useSettingsDetailWorkspace = (): SettingsDetailWorkspaceContextValue => (
+  useContext(SettingsDetailWorkspaceContext)
+);
+
+export const SettingsDetailWorkspaceProvider: FunctionComponent<{
+  enabled?: boolean;
+  children: ComponentChildren;
+}> = ({ enabled = true, children }) => (
+  <SettingsDetailWorkspaceProviderState enabled={enabled}>
+    {children}
+  </SettingsDetailWorkspaceProviderState>
+);
+
+const SettingsDetailWorkspaceProviderState: FunctionComponent<{
+  enabled: boolean;
+  children: ComponentChildren;
+}> = ({ enabled, children }) => {
+  const [activeSection, setActiveSection] = useState<string | null>(null);
+  const value = useMemo<SettingsDetailWorkspaceContextValue>(() => ({
+    enabled,
+    activeSection: enabled ? activeSection : null,
+    openSection: setActiveSection,
+    closeSection: () => setActiveSection(null),
+  }), [activeSection, enabled]);
+
+  return (
+    <SettingsDetailWorkspaceContext.Provider value={value}>
+      <div
+        data-settings-detail-active={enabled && activeSection ? "true" : "false"}
+        className={enabled && activeSection ? "[&_[data-settings-overview-only]]:hidden" : undefined}
+      >
+        {children}
+      </div>
+    </SettingsDetailWorkspaceContext.Provider>
+  );
+};
+
+export interface SettingsSectionHighlight {
+  label: string;
+  value: ComponentChildren;
+  tone?: "neutral" | "active" | "warning";
+}
 
 export const SectionCard: FunctionComponent<{
   title: string;
@@ -15,22 +74,152 @@ export const SectionCard: FunctionComponent<{
   icon?: ComponentChildren;
   actions?: ComponentChildren;
   helpId?: SettingsSubcategoryId | string;
-}> = ({ title, children, danger, badge, icon, actions, helpId }) => {
+  summary?: string;
+  overview?: ComponentChildren;
+  highlights?: SettingsSectionHighlight[];
+  drilldown?: boolean;
+  configureLabel?: string;
+  sectionId?: string;
+  featured?: boolean;
+}> = ({
+  title,
+  watermark,
+  children,
+  danger,
+  badge,
+  icon,
+  actions,
+  helpId,
+  summary,
+  overview,
+  highlights = [],
+  drilldown,
+  configureLabel = "Configure",
+  sectionId,
+  featured = false,
+}) => {
   const titleId = useId();
+  const detailsId = useId();
+  const configureButtonRef = useRef<HTMLButtonElement>(null);
   const helpDoc = getSettingsSubcategoryDoc(helpId || title);
+  const detailWorkspace = useContext(SettingsDetailWorkspaceContext);
+  const resolvedSectionId = sectionId || String(helpId || title);
+  const usesDrilldown = drilldown ?? detailWorkspace.enabled;
+  const isFocusedDetail = usesDrilldown && detailWorkspace.activeSection === resolvedSectionId;
+  const description = summary || helpDoc?.summary || `Configure ${title.toLowerCase()} when the defaults need to change.`;
+
+  if (detailWorkspace.enabled && detailWorkspace.activeSection && !isFocusedDetail) {
+    return null;
+  }
+
+  if (usesDrilldown && !isFocusedDetail) {
+    return (
+      <section
+        aria-labelledby={titleId}
+        data-settings-overview-card={resolvedSectionId}
+        className={`group relative flex h-auto min-w-0 self-start flex-col overflow-hidden rounded-[1.75rem] border p-5 shadow-[var(--elevation-base)] transition-[border-color,box-shadow,transform] duration-300 hover:-translate-y-0.5 hover:shadow-[var(--elevation-raised)] motion-reduce:transform-none ${featured ? "xl:col-span-2" : ""} ${
+          danger
+            ? "border-status-red/20 bg-status-red/[0.03] dark:border-status-red/20 dark:bg-status-red/[0.04]"
+            : "border-[color:var(--border-hairline)] bg-[var(--settings-card-surface)] hover:border-signal-500/20"
+        }`}
+      >
+        <div aria-hidden className={`pointer-events-none absolute inset-y-0 left-0 w-1 ${danger ? "bg-status-red/65" : "bg-gradient-to-b from-signal-300 via-signal-500 to-cyan-600"}`} />
+        <div aria-hidden className={`pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full blur-3xl ${danger ? "bg-status-red/[0.06]" : "bg-signal-500/[0.07]"}`} />
+        <div className="relative flex items-start justify-between gap-4 pl-1">
+          <div className="min-w-0">
+            <div className="flex items-center gap-3">
+              {icon ? (
+                <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-[0.95rem] border ${danger ? "border-status-red/18 bg-status-red/[0.08] text-status-red" : "border-signal-500/16 bg-signal-500/[0.08] text-signal-600 dark:text-signal-300"}`} aria-hidden>
+                  <span className="[&_svg]:h-[1.05rem] [&_svg]:w-[1.05rem]">{icon}</span>
+                </span>
+              ) : null}
+              <div className="min-w-0">
+                <div className={`font-mono text-[10px] font-bold uppercase tracking-[0.16em] ${danger ? "text-status-red/70" : "text-slate-400 dark:text-slate-500"}`}>
+                  {watermark || "SET"} · Configuration area
+                </div>
+                <h3 id={titleId} className={`mt-1 font-display text-[1.05rem] font-semibold tracking-tight ${danger ? "text-status-red" : "text-slate-900 dark:text-white"}`}>{title}</h3>
+              </div>
+            </div>
+            <p className="mt-3 max-w-3xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">{description}</p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {helpDoc ? (
+              <>
+                <InfoIconPopover
+                  className="h-8 w-8 items-center justify-center rounded-full border border-black/[0.06] bg-black/[0.02] text-slate-500 transition-colors hover:border-signal-500/24 hover:bg-signal-500/[0.08] focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300"
+                  title={`${helpDoc.title} settings`}
+                  summary={helpDoc.summary}
+                  sections={toHelpSections(helpDoc)}
+                  label={`Show help for ${title}`}
+                />
+                <a href={helpDoc.docsHref} aria-label={`Open documentation for ${title}`} title={`Open documentation for ${title}`} className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-black/[0.06] bg-black/[0.02] text-slate-500 transition-colors hover:border-signal-500/24 hover:bg-signal-500/[0.08] hover:text-signal-600 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300">
+                  <BookOpenText className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+                </a>
+              </>
+            ) : null}
+            {badge ? <span className="rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-3 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-signal-600 dark:text-signal-300">{badge}</span> : null}
+          </div>
+        </div>
+
+        {highlights.length > 0 ? (
+          <div className="mt-5 grid gap-2 sm:grid-cols-3">
+            {highlights.slice(0, 3).map((highlight) => (
+              <div key={highlight.label} className={`rounded-[1.1rem] border px-3.5 py-3 ${highlight.tone === "active" ? "border-signal-500/20 bg-signal-500/[0.07]" : highlight.tone === "warning" ? "border-status-amber/20 bg-status-amber/[0.07]" : "border-[color:var(--border-hairline)] bg-[var(--settings-inset-surface)]"}`}>
+                <div className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400">{highlight.label}</div>
+                <div className="mt-1.5 break-words text-sm font-semibold text-slate-800 dark:text-slate-100">{highlight.value}</div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {overview ? <div className="mt-5">{overview}</div> : null}
+
+        <div className="mt-5 flex border-t border-[color:var(--border-hairline)] pt-4">
+          <button
+            ref={configureButtonRef}
+            type="button"
+            onClick={() => detailWorkspace.openSection(resolvedSectionId)}
+            aria-controls={detailsId}
+            aria-label={`${configureLabel} ${title}`}
+            className={`inline-flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border px-4 py-2.5 text-left text-xs font-bold transition-[background-color,border-color,color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] sm:min-h-10 sm:w-auto sm:min-w-[10rem] ${danger ? "border-status-red/20 bg-status-red/[0.06] text-status-red hover:bg-status-red/[0.1]" : "border-signal-500/20 bg-signal-500/[0.09] text-signal-800 hover:border-signal-500/30 hover:bg-signal-500/[0.15] hover:shadow-[0_8px_22px_rgba(var(--signal-rgb),0.1)] dark:text-signal-200"}`}
+          >
+            <span>{configureLabel}</span>
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none" strokeWidth={2.2} aria-hidden />
+          </button>
+        </div>
+      </section>
+    );
+  }
 
   return (
-    <section aria-labelledby={titleId} className={`relative overflow-hidden rounded-[1.75rem] border p-5 shadow-[var(--elevation-base)] backdrop-blur-sm ${
+    <section aria-labelledby={titleId} className={`relative overflow-hidden rounded-[1.75rem] border p-5 shadow-[var(--elevation-base)] backdrop-blur-sm ${featured || isFocusedDetail ? "xl:col-span-2 2xl:col-span-full" : ""} ${
     danger
       ? "border-status-red/20 bg-status-red/[0.03] dark:border-status-red/20 dark:bg-status-red/[0.04]"
       : "border-[color:var(--border-hairline)] bg-[var(--surface-glass)]"
   }`}>
     <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent" />
 
-    <div className="mb-4 flex items-center justify-between gap-3">
-      <div className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] ${danger ? "text-status-red/80" : "text-slate-500 dark:text-slate-300"}`}>
-        {icon ? <span className="inline-flex h-3.5 w-3.5 items-center justify-center [&_svg]:h-3.5 [&_svg]:w-3.5" aria-hidden>{icon}</span> : null}
-        <h3 id={titleId}>{title}</h3>
+    {isFocusedDetail ? (
+      <button
+        type="button"
+        onClick={() => {
+          detailWorkspace.closeSection();
+          window.setTimeout(() => configureButtonRef.current?.focus({ preventScroll: true }), 0);
+        }}
+        className="mb-5 inline-flex min-h-9 items-center gap-2 rounded-xl border border-[color:var(--border-hairline)] bg-black/[0.025] px-3.5 py-2 text-xs font-bold text-slate-600 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] dark:bg-white/[0.035] dark:text-slate-300"
+      >
+        <ArrowLeft className="h-4 w-4" strokeWidth={2.2} aria-hidden />
+        Back to category overview
+      </button>
+    ) : null}
+
+    <div className={`flex justify-between gap-3 ${isFocusedDetail ? "items-start" : "items-center"}`}>
+      <div className={`flex gap-2 ${isFocusedDetail ? "items-center" : "items-center text-[10px] font-bold uppercase tracking-[0.2em]"} ${danger ? "text-status-red/80" : "text-slate-500 dark:text-slate-300"}`}>
+        {icon ? <span className={`inline-flex items-center justify-center ${isFocusedDetail ? "h-9 w-9 rounded-xl border border-signal-500/20 bg-signal-500/[0.08] text-signal-500 [&_svg]:h-4.5 [&_svg]:w-4.5" : "h-3.5 w-3.5 [&_svg]:h-3.5 [&_svg]:w-3.5"}`} aria-hidden>{icon}</span> : null}
+        <div>
+          {isFocusedDetail ? <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-300">Focused settings</div> : null}
+          <h3 id={titleId} className={isFocusedDetail ? "mt-1 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white" : undefined}>{title}</h3>
+        </div>
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2">
         {actions ? actions : null}
@@ -61,8 +250,14 @@ export const SectionCard: FunctionComponent<{
       </div>
     </div>
 
-    <div className="flex flex-col gap-3">
-      {children}
+    <p className="mt-3 max-w-3xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+      {description}
+    </p>
+
+    <div id={detailsId} className="mt-4 flex flex-col gap-3">
+      <SettingsDetailWorkspaceContext.Provider value={DISABLED_SETTINGS_DETAIL_WORKSPACE}>
+        {children}
+      </SettingsDetailWorkspaceContext.Provider>
     </div>
   </section>
   );

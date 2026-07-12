@@ -4,7 +4,28 @@ Settings is the configuration hub for Code UX. It covers local runtime behavior,
 
 Use this section when you need more detail than the inline Settings-page help popovers provide. Configuration cards with dedicated reference pages link to the pages below, which explain what the controls affect, recommended defaults, common risks, and validation steps.
 
-On desktop, choose an area from the persistent category rail. On smaller screens, the sticky command bar shows the current category as one compact button; opening it reveals the same Smart Find-filtered categories and match previews in a keyboard-accessible drawer without pushing the active settings panel down the page.
+On desktop, choose an area from the persistent category rail. The sticky command surface keeps the active category name, description, scope, save state, and primary actions together while settings scroll beneath it. On smaller screens, the same surface shows the current category as one compact button; opening it reveals the Smart Find-filtered categories and match previews in a keyboard-accessible drawer without pushing the active settings panel down the page.
+
+The rail groups configuration into **Basics**, **AI & Knowledge**, **Delivery**, **Connections**, and **System** so unrelated categories no longer compete in one flat numbered list.
+
+Each category opens as a subsystem overview made from rich cards. Cards show their purpose plus up to three live values such as mode, provider, enabled state, safety posture, or capacity. **Configure** replaces the overview with one focused inline workspace; **Back to category overview** restores the card grid without changing the draft, inheritance, or saving.
+
+This is intentionally not an accordion stack. Local AI Runtime remains the reference pattern: speech input, speech output, and memory embedding status stay visible, while **Configure speech** and **Manage local models** open full-width inline workspaces instead of modal overlays.
+
+## Settings Surface Reduction Audit
+
+These items can move out of Settings without deleting persisted configuration:
+
+| Candidate | Why it can leave Settings | Destination |
+| --- | --- | --- |
+| Project id, source type, and base directory | Read-only project metadata. | Project details or workspace information. |
+| License and Open Source Software | Static legal references outside the Settings draft. | About / Help. |
+| Show onboarding again | Navigation command rather than configuration. | Help menu or command palette. |
+| Provider host config path and generated endpoint rows | Read-only or derived from provider mode. | Context below the owning selector. |
+| Generated Qwen/OpenCode config previews | Derived, masked troubleshooting output. | Provider-level **Troubleshoot** disclosure. |
+| MCP effective config preview | Derived from the server fields. | **Preview generated config** disclosure. |
+
+Automation, container runtime, QA reflection, and provider model controls can look duplicated, but currently represent different scopes or execution meanings. They should be consolidated before any entry is removed.
 
 ## Language-First Speech Setup
 

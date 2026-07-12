@@ -23,8 +23,17 @@ export const SettingsAppearancePanel: FunctionComponent<{
   const supportsNativeZoom = typeof window !== "undefined" && Boolean(window.codeUxDesktop?.setZoom);
 
   return (
-    <div className="flex flex-col gap-5">
-      <SectionCard title="Display Settings" watermark="UI" icon={<Monitor strokeWidth={2.4} />}>
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      <SectionCard
+        title="Display Settings"
+        watermark="UI"
+        icon={<Monitor strokeWidth={2.4} />}
+        highlights={[
+          { label: "Theme", value: (activeScope === "system" ? persistedTheme : appearance.theme).toLowerCase(), tone: "active" },
+          { label: "Navigation", value: appearance.navigationMode === "DOCK" ? "Floating dock" : "Sidebar" },
+          { label: "Motion", value: appearance.reducedMotion === "REDUCE" ? "Reduced" : appearance.reducedMotion === "NONE" ? "Full" : "System" },
+        ]}
+      >
         <Row
           label="Navigation Mode"
           description="Choose between a floating dock or a traditional sidebar."
@@ -141,7 +150,16 @@ export const SettingsAppearancePanel: FunctionComponent<{
         )}
       </SectionCard>
 
-      <SectionCard title="Background" watermark="BG" icon={<Image strokeWidth={2.4} />}>
+      <SectionCard
+        title="Background"
+        watermark="BG"
+        icon={<Image strokeWidth={2.4} />}
+        highlights={[
+          { label: "Mode", value: appearance.backgroundMode === "STATIC" ? "Static" : "Animated", tone: "active" },
+          { label: "Custom image", value: appearance.backgroundImage ? "Applied" : "None" },
+          { label: "Pattern", value: appearance.backgroundPattern === "NONE" ? "None" : appearance.backgroundPattern || "Grid" },
+        ]}
+      >
         <Row
           label="Background Image"
           description="Upload a custom background image."

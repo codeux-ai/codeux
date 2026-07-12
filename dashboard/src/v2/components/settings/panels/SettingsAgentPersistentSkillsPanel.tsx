@@ -145,8 +145,19 @@ export const SettingsAgentPersistentSkillsPanel: FunctionComponent<SettingsAgent
       : `${storages.length} ${storages.length === 1 ? "storage" : "storages"} available · ${projectAgentPresets.length} project ${projectAgentPresets.length === 1 ? "agent" : "agents"}`;
 
   return (
-    <SectionCard title="Persistent Skill Storage" watermark="SKL" icon={<Database strokeWidth={2.4} />}>
-      <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,0.7fr)_minmax(16rem,1.3fr)]">
+    <SectionCard
+      title="Persistent Skill Storage"
+      watermark="SKL"
+      icon={<Database strokeWidth={2.4} />}
+      summary="Attach curated project knowledge to selected agents and keep runtime retrieval explicitly controlled."
+      configureLabel="Manage skill storage"
+      highlights={[
+        { label: "Storages", value: loading ? "Loading" : storages.length, tone: storages.length > 0 ? "active" : "neutral" },
+        { label: "Project agents", value: projectAgentPresets.length },
+        { label: "Retrieval enabled", value: Object.values(agentState).filter((entry) => entry.enabled && entry.storageIds.length > 0).length },
+      ]}
+    >
+      <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,0.7fr)_minmax(16rem,1.3fr)]">
         <div className="min-w-0 rounded-[1.2rem] border border-black/[0.06] bg-black/[0.02] p-4 dark:border-white/[0.06] dark:bg-white/[0.025]">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">Storage status</span>

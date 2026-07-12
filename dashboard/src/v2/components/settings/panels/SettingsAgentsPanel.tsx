@@ -15,11 +15,11 @@ export const SettingsAgentsPanel: FunctionComponent<SettingsAgentsPanelProps> = 
   }
 
   return (
-    <div className="grid min-w-0 gap-5 2xl:grid-cols-2 2xl:items-start">
-      <SettingsAgentAuthoringPanel state={state} />
+    <div className="grid min-w-0 items-start gap-5 xl:grid-cols-2">
       <SettingsAgentRoutingPanel state={state} />
-      <SettingsAgentPersistentSkillsPanel state={state} />
       <SettingsAgentReflectionPanel state={state} />
+      <SettingsAgentPersistentSkillsPanel state={state} />
+      <SettingsAgentAuthoringPanel state={state} />
     </div>
   );
 };

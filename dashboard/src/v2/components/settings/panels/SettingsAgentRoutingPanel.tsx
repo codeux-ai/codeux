@@ -83,8 +83,20 @@ export const SettingsAgentRoutingPanel: FunctionComponent<SettingsAgentRoutingPa
   }));
 
   return (
-    <SectionCard title="Agent Routing" watermark="RTE" badge={sectionBadge} icon={<Route strokeWidth={2.4} />}>
-      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(14rem,17.5rem)_minmax(0,1fr)]">
+    <SectionCard
+      title="Agent Routing"
+      watermark="RTE"
+      badge={sectionBadge}
+      icon={<Route strokeWidth={2.4} />}
+      summary="See who handles each stage of a sprint, then refine only the routes that need a specialist."
+      configureLabel="Review routes"
+      highlights={[
+        { label: "Coding mode", value: routing.taskCoding.mode === "ORCHESTRATOR" ? "Orchestrator" : "Manual", tone: "active" },
+        { label: "Specialists", value: routing.taskCoding.mode === "ORCHESTRATOR" ? `${selectedCount} selected` : routing.taskCoding.agentPresetId ? "Custom agent" : "Built-in worker" },
+        { label: "Project agents", value: projectAgentPresetOptions.length },
+      ]}
+    >
+      <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(14rem,17.5rem)_minmax(0,1fr)]">
         <div className="min-w-0 rounded-[1.35rem] border border-black/[0.06] bg-black/[0.02] p-4 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
           <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Coding tasks</div>
           <div className="mt-2">Manual pins all coding work to one preset. Orchestrator gives the Planning agent a roster and lets it assign the best specialist per task.</div>

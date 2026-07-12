@@ -63,7 +63,18 @@ export const SettingsAgentReflectionPanel: FunctionComponent<SettingsAgentReflec
   const badgeFor = (path: string): string | undefined => getFieldBadge(activeScope, projectSources, path);
 
   return (
-    <SectionCard title="Self-Reflection" watermark="REF" icon={<Sparkles strokeWidth={2.4} />}>
+    <SectionCard
+      title="Self-Reflection"
+      watermark="REF"
+      icon={<Sparkles strokeWidth={2.4} />}
+      summary="Review planning and QA quality checks at a glance, then tune the criteria behind each reflection pass."
+      configureLabel="Tune self-reflection"
+      highlights={[
+        { label: "Planning", value: planning.enabled ? "Enabled" : "Off", tone: planning.enabled ? "active" : "neutral" },
+        { label: "Quality assurance", value: qualityAssurance.enabled ? "Enabled" : "Off", tone: qualityAssurance.enabled ? "active" : "neutral" },
+        { label: "Criteria", value: `${planning.criteria.length + qualityAssurance.criteria.length} total` },
+      ]}
+    >
       <SelfReflectionControls
         title="Planning self-reflection"
         description="Optionally rates sprint planning output against editable criteria and can request improved planning before accepting it."

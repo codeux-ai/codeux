@@ -21,8 +21,8 @@ export interface SettingsScopeControlsProps {
 const scopeStatusId = "settings-scope-status";
 
 const contextChipClassName = "min-w-0 max-w-full break-words rounded-[1rem] border border-black/[0.06] bg-white/70 px-4 py-2 text-xs font-semibold text-slate-500 backdrop-blur-2xl sm:rounded-full dark:border-white/[0.06] dark:bg-void-800/60 dark:text-slate-300";
-const projectSummaryChipClassName = "min-w-0 max-w-full break-words rounded-[1rem] border border-slate-500/15 bg-slate-500/[0.06] px-4 py-2 text-xs font-semibold text-slate-600 backdrop-blur-2xl sm:rounded-full dark:border-slate-300/15 dark:bg-slate-300/[0.08] dark:text-slate-300";
-const projectUnavailableChipClassName = "min-w-0 max-w-full break-words rounded-[1rem] border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-700 backdrop-blur-2xl sm:rounded-full dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-200";
+const projectSummaryChipClassName = "hidden min-w-0 max-w-full break-words rounded-[1rem] border border-slate-500/15 bg-slate-500/[0.06] px-4 py-2 text-xs font-semibold text-slate-600 backdrop-blur-2xl sm:rounded-full xl:block dark:border-slate-300/15 dark:bg-slate-300/[0.08] dark:text-slate-300";
+const unsavedChipClassName = "min-w-0 max-w-full break-words rounded-[1rem] border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-700 backdrop-blur-2xl sm:rounded-full dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-200";
 
 export function SettingsScopeControls({
   activeScope,
@@ -100,7 +100,7 @@ export function SettingsScopeControls({
         </div>
       ) : null}
       {!selectedProject ? (
-        <div id="settings-project-scope-disabled" className={projectUnavailableChipClassName}>
+        <div id="settings-project-scope-disabled" className="sr-only">
           Project scope unlocks after selecting a project.
         </div>
       ) : (
@@ -116,7 +116,7 @@ export function SettingsScopeControls({
       ) : null}
 
       {activeDirty ? (
-        <div className={projectUnavailableChipClassName}>
+        <div className={unsavedChipClassName}>
           Unsaved edits
         </div>
       ) : null}

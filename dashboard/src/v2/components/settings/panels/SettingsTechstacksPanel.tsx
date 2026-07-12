@@ -199,6 +199,11 @@ const SystemTechstacks: FunctionComponent<{
         watermark="STK"
         helpId="techstacks"
         icon={<Layers3 strokeWidth={2.4} />}
+        highlights={[
+          { label: "Stacks", value: entries.length, tone: "active" },
+          { label: "Default", value: entries.find((entry) => entry.id === defaultId)?.label ?? "Missing" },
+          { label: "Built-in", value: "Protected" },
+        ]}
         actions={(
           <ActionButton
             label="Add Stack"
@@ -397,7 +402,18 @@ const ProjectTechstacks: FunctionComponent<{
 
   return (
     <div className="flex flex-col gap-5">
-      <SectionCard title="Project Techstack" watermark="PRJ" helpId="techstacks" badge={getBadge("techstack")} icon={<Layers3 strokeWidth={2.4} />}>
+      <SectionCard
+        title="Project Techstack"
+        watermark="PRJ"
+        helpId="techstacks"
+        badge={getBadge("techstack")}
+        icon={<Layers3 strokeWidth={2.4} />}
+        highlights={[
+          { label: "Stack", value: entries.find((entry) => entry.id === selectedStackId)?.label ?? "Unassigned", tone: selectedStackId === UNASSIGNED_VALUE ? "warning" : "active" },
+          { label: "Application", value: applicationKind === UNSPECIFIED_KIND_VALUE ? "Unspecified" : applicationKind },
+          { label: "Catalog choices", value: entries.length },
+        ]}
+      >
         <NoticePanel title="Imported projects stay unassigned">
           Existing and imported projects keep `Unassigned` until you select a stack here or a setup/package scan detects one later.
         </NoticePanel>

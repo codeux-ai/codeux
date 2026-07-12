@@ -16,7 +16,7 @@ import { SettingsCategoryRail, CATEGORIES } from "../SettingsCategoryRail";
 import { SettingsCategoryPicker } from "../SettingsCategoryPicker";
 import { SettingsScopeControls } from "../SettingsScopeControls";
 import { ActionButton, NoticePanel } from "../SettingsSurface";
-import { OverrideBadge } from "../panels/SharedPanelComponents";
+import { OverrideBadge, SectionCard, SettingsDetailWorkspaceProvider } from "../panels/SharedPanelComponents";
 import { SettingsTechstacksPanel } from "../panels/SettingsTechstacksPanel";
 import { SlidersHorizontal } from "lucide-preact";
 import type { SettingsSearchMatches } from "../../../lib/settings-search-index";
@@ -162,7 +162,7 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
 
     const btn = screen.getByRole("button", { name: /Techstacks/ });
     expect(btn).toHaveAttribute("aria-current", "page");
-    expect(btn).toHaveAttribute("aria-selected", "true");
+    expect(btn).not.toHaveAttribute("aria-selected");
   });
 
   it("SettingsCategoryRail subtracts the measured page-top margin from its desktop height", async () => {
@@ -240,7 +240,7 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
     );
 
     const rail = screen.getByRole("navigation", { name: "Settings categories" });
-    expect(await screen.findByTestId("settings-category-scroll-hint")).toHaveClass("-bottom-4", "-mb-4", "pb-4");
+    expect(await screen.findByTestId("settings-category-scroll-hint")).toHaveClass("-bottom-4", "-mb-4", "h-12");
     expect(rail).toHaveClass("scrollbar-hide");
 
     scrollTopSpy.mockReturnValue(580);
@@ -428,7 +428,7 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
 
     const btn = screen.getByRole("button", { name: /General/ });
     expect(btn).toHaveAttribute("aria-current", "page");
-    expect(btn).toHaveAttribute("aria-selected", "true");
+    expect(btn).not.toHaveAttribute("aria-selected");
     expect(btn).toHaveAttribute("aria-busy", "true");
     expect(btn).toBeDisabled();
     expect(screen.queryByText("Selected")).not.toBeInTheDocument();
@@ -845,6 +845,33 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
 
 
 describe("SettingsControls Accessibility", () => {
+  it("SectionCard moves from a live-value overview into one focused detail workspace", async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsDetailWorkspaceProvider>
+        <SectionCard
+          title="Advanced Runtime"
+          summary="Defaults are suitable for most projects."
+          highlights={[{ label: "Runtime", value: "Managed", tone: "active" }]}
+        >
+          <button type="button">Detailed runtime control</button>
+        </SectionCard>
+        <SectionCard title="Secondary Area"><button type="button">Secondary control</button></SectionCard>
+      </SettingsDetailWorkspaceProvider>,
+    );
+
+    expect(screen.getByText("Defaults are suitable for most projects.")).toBeInTheDocument();
+    expect(screen.getByText("Managed")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Detailed runtime control" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Configure Advanced Runtime" }));
+
+    expect(screen.getByRole("button", { name: "Detailed runtime control" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Secondary Area" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Back to category overview" }));
+    expect(screen.getByRole("button", { name: "Configure Secondary Area" })).toBeInTheDocument();
+  });
+
   it("BranchNameSchemeEditor passes aria-label and aria-description", () => {
     render(
       <BranchNameSchemeEditor
@@ -1227,8 +1254,9 @@ describe("SettingsControls Accessibility", () => {
     const panelStatus = screen.getByText("General settings have local unsaved changes.");
     expect(panelStatus).toHaveAttribute("role", "status");
     expect(panelStatus).toHaveAttribute("aria-live", "polite");
-    expect(screen.getByText("General panel values stay mounted").parentElement).toHaveAttribute("data-motion-contract", "enterExit");
-    expect(screen.getByText("General panel values stay mounted").parentElement).toHaveClass("motion-reduce:animate-none");
+    const activePanelMotionRegion = screen.getByText("General panel values stay mounted").closest("[data-motion-contract]");
+    expect(activePanelMotionRegion).toHaveAttribute("data-motion-contract", "enterExit");
+    expect(activePanelMotionRegion).toHaveClass("motion-reduce:animate-none");
 
     rerender(
       <SettingsContentPanels
@@ -1398,30 +1426,33 @@ describe("SettingsControls Accessibility", () => {
     });
   });
 
-  it("SettingsPage keeps scope controls and active panel status in one unified sticky wrapping bar", () => {
+  it("SettingsPage keeps category context, scope controls, and actions in one unified sticky command surface", () => {
     const source = readFileSync("dashboard/src/v2/SettingsPage.tsx", "utf8");
     const commandStatusBarSource = source.match(
       /<div\s+data-settings-sticky="settings-command-status"[\s\S]*?<SettingsCategoryRail/,
     )?.[0] ?? "";
 
     expect(source).toContain('import { SettingsScopeControls } from "./components/settings/SettingsScopeControls.js";');
-    expect(source).toContain('import { SettingsActivePanelStatus } from "./components/settings/SettingsActivePanelStatus.js";');
     expect(source).toContain('import { SettingsCategoryPicker } from "./components/settings/SettingsCategoryPicker.js";');
     expect(source).toContain('data-settings-sticky="settings-command-status"');
     expect(commandStatusBarSource).toContain("sticky top-16 z-30");
     expect(commandStatusBarSource).toContain("flex min-w-0 max-w-full flex-wrap");
     expect(commandStatusBarSource).toContain("<SettingsCategoryPicker");
+    expect(commandStatusBarSource).toContain("activeCategoryConfig.description");
+    expect(commandStatusBarSource).toContain("Active category");
     expect(commandStatusBarSource).toContain("<SettingsScopeControls");
-    expect(commandStatusBarSource).toContain("<SettingsActivePanelStatus");
-    expect(commandStatusBarSource).toContain("sticky={false}");
     expect(commandStatusBarSource).toContain("ml-auto");
     expect(commandStatusBarSource).toContain("Save Changes");
     expect(commandStatusBarSource).toContain("Reset Project");
     expect(commandStatusBarSource).toContain("rounded-[1.75rem]");
-    expect(commandStatusBarSource).toContain("bg-void-950");
+    expect(commandStatusBarSource).toContain('background: "var(--settings-command-surface)"');
+    expect(commandStatusBarSource).toContain("shadow-[var(--settings-command-shadow)]");
+    expect(commandStatusBarSource).toContain("bg-signal-600 text-white");
+    expect(commandStatusBarSource).toContain("dark:bg-signal-500 dark:text-void-950");
+    expect(commandStatusBarSource).not.toContain("bg-white text-void-900");
     expect(commandStatusBarSource).not.toContain("bg-[var(--surface-glass)]");
     expect(source.match(/<SettingsContentPanels/g) ?? []).toHaveLength(1);
-    expect(source).toMatch(/<SettingsContentPanels\s+state=\{state\}\s+showActivePanelStatus=\{false\}\s+\/>/);
+    expect(source).toMatch(/<SettingsContentPanels\s+state=\{state\}\s+showActivePanelStatus=\{false\}\s+showFeedback=\{false\}\s+detailWorkspace\s+\/>/);
     expect(source).not.toContain("scopeSticky.getBoundingClientRect()");
     expect(source).not.toContain("panelStickyTop");
     expect(source).toMatch(/<SettingsCategoryRail[\s\S]*?desktopOnly/);

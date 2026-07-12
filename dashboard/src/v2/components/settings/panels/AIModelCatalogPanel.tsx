@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useCallback, useEffect, useState } from "preact/hooks";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { ArrowRight, Boxes, Check, Download, ExternalLink, Headphones, Loader2, Mic, Search, Settings2, Sparkles, Trash2, Volume2, Waves, X } from "lucide-preact";
 import type { SpeechModelStatus, SpeechProviderMode, SpeechSettings } from "../../../../types.js";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
@@ -18,10 +18,9 @@ import {
 import { deleteSpeechModel, downloadSpeechModel, listSpeechModels } from "../../../lib/speech-api.js";
 import { ModelBrowser } from "../../memory/ModelBrowser.js";
 import { NumberInput, Row, SecretInput, SelectInput, TextInput, Toggle } from "../SettingsFormFields.js";
-import { SectionCard } from "./SharedPanelComponents.js";
+import { SectionCard, useSettingsDetailWorkspace } from "./SharedPanelComponents.js";
 import { useConfirmDialog } from "../../../hooks/use-confirm-dialog.js";
 import { ConfirmDialog } from "../../ui/ConfirmDialog.js";
-import { Dialog } from "../../ui/Dialog.js";
 import {
   getRecommendedSynthesisModel,
   getRecommendedVoice,
@@ -159,12 +158,15 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
   const [error, setError] = useState<string | null>(null);
   const [speechSettingsOpen, setSpeechSettingsOpen] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
+  const speechSettingsButtonRef = useRef<HTMLButtonElement>(null);
+  const modelCatalogButtonRef = useRef<HTMLButtonElement>(null);
   const [catalogTab, setCatalogTab] = useState<CatalogTab>("all");
   const [catalogSearch, setCatalogSearch] = useState("");
   const [catalogLanguage, setCatalogLanguage] = useState("all");
   const [catalogInstallState, setCatalogInstallState] = useState("all");
-  const [embeddingConfirmationOpen, setEmbeddingConfirmationOpen] = useState(false);
+  const [, setEmbeddingConfirmationOpen] = useState(false);
   const { isOpen: isLicenseOpen, options: licenseOptions, requestConfirm: requestLicenseAcceptance, handleConfirm: acceptLicense, handleCancel: cancelLicense } = useConfirmDialog();
+  const detailWorkspace = useSettingsDetailWorkspace();
 
   const refresh = useCallback(async (): Promise<void> => {
     const [nextEmbedding, nextSpeech, nextStats] = await Promise.all([
@@ -290,7 +292,28 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
     setCatalogSearch("");
     setCatalogInstallState("all");
     setSpeechSettingsOpen(false);
-    window.setTimeout(() => setCatalogOpen(true), 0);
+    setCatalogOpen(true);
+    detailWorkspace.openSection("local-ai-model-catalog");
+  };
+
+  const openSpeechSettings = (): void => {
+    setCatalogOpen(false);
+    setSpeechSettingsOpen(true);
+    detailWorkspace.openSection("local-ai-speech-runtime");
+  };
+
+  const openModelCatalog = (): void => {
+    setSpeechSettingsOpen(false);
+    setCatalogOpen(true);
+    detailWorkspace.openSection("local-ai-model-catalog");
+  };
+
+  const closeLocalAiWorkspace = (): void => {
+    const returnFocusTo = catalogOpen ? modelCatalogButtonRef : speechSettingsButtonRef;
+    setSpeechSettingsOpen(false);
+    setCatalogOpen(false);
+    detailWorkspace.closeSection();
+    window.setTimeout(() => returnFocusTo.current?.focus({ preventScroll: true }), 0);
   };
 
   const speechInputSummary = editableSettings.speech.providerMode === "external_api"
@@ -327,34 +350,38 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
 
   return (
     <>
-      <SectionCard title="Local AI Runtime" watermark="MODELS" icon={<Boxes strokeWidth={2.3} />}>
+      <SectionCard
+        title="Local AI Runtime"
+        watermark="MODELS"
+        icon={<Boxes strokeWidth={2.3} />}
+        drilldown={false}
+        featured
+        summary="See what is active at a glance, then open only the focused speech or model controls you need."
+      >
         {error ? <div className="mb-1 rounded-xl border border-status-red/20 bg-status-red/[0.07] px-4 py-3 text-xs font-semibold text-status-red" role="alert">{error}</div> : null}
-        <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">
-          Runtime choices stay concise here. Open the focused controls only when you need to change speech providers, voices, or installed model bundles.
-        </p>
         <div className="grid gap-3 xl:grid-cols-3">
           <CatalogSummaryRow icon={Mic} title="Speech input" value={speechInputSummary} detail={editableSettings.speech.providerMode === "external_api" ? editableSettings.speech.externalTranscription.language || "Auto language" : editableSettings.speech.localLanguage || transcriptionModel?.language || "Auto language"} status={editableSettings.speech.enabled ? "Enabled" : "Off"} />
           <CatalogSummaryRow icon={Headphones} title="Speech output" value={speechOutputSummary} detail={editableSettings.speech.synthesis.providerMode === "external_api" ? editableSettings.speech.synthesis.externalSynthesis.voice : selectedSynthesisLanguageLabel} status={speechOutputStatus} />
           <CatalogSummaryRow icon={Waves} title="Memory embeddings" value={activeEmbeddingModel?.displayName || stats.activeModel || "Not configured"} detail={`${embeddingModels.filter((model) => model.downloaded).length} installed · ${stats.staleEmbeddings} stale`} status={activeEmbeddingModel ? "Active" : "Available"} />
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
-          <button type="button" onClick={() => setSpeechSettingsOpen(true)} aria-haspopup="dialog" aria-expanded={speechSettingsOpen} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[color:var(--border-hairline)] bg-black/[0.025] px-4 py-2 text-xs font-bold text-slate-700 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] dark:bg-white/[0.035] dark:text-slate-200">
+          <button ref={speechSettingsButtonRef} type="button" onClick={openSpeechSettings} aria-controls="speech-settings-workspace" aria-expanded={speechSettingsOpen} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[color:var(--border-hairline)] bg-black/[0.025] px-4 py-2 text-xs font-bold text-slate-700 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] dark:bg-white/[0.035] dark:text-slate-200">
             <Settings2 className="h-4 w-4" aria-hidden="true" /> Configure speech
           </button>
-          <button type="button" onClick={() => setCatalogOpen(true)} aria-haspopup="dialog" aria-expanded={catalogOpen} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-signal-500 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-signal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] focus-visible:ring-offset-2 dark:text-void-950">
+          <button ref={modelCatalogButtonRef} type="button" onClick={openModelCatalog} aria-controls="model-catalog-workspace" aria-expanded={catalogOpen} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-signal-500 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-signal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] focus-visible:ring-offset-2 dark:text-void-950">
             <Boxes className="h-4 w-4" aria-hidden="true" /> Manage local models
           </button>
         </div>
       </SectionCard>
 
-      <Dialog isOpen={speechSettingsOpen} suspendFocusTrap={isLicenseOpen} onClose={() => setSpeechSettingsOpen(false)} ariaLabelledBy="speech-settings-dialog-title" className="w-[min(1120px,calc(100vw-1rem))] p-4 sm:w-[min(1120px,calc(100vw-2rem))] sm:p-6">
+      {speechSettingsOpen ? <section id="speech-settings-workspace" aria-labelledby="speech-settings-dialog-title" className="rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-4 shadow-[var(--elevation-base)] sm:p-6">
         <header className="flex items-start justify-between gap-4 border-b border-[color:var(--border-hairline)] pb-4">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-300">AI Models</p>
             <h2 id="speech-settings-dialog-title" className="mt-1 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">Speech runtime</h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Choose a language first. Code UX prepares the preferred local model and voice for you.</p>
           </div>
-          <button type="button" onClick={() => setSpeechSettingsOpen(false)} aria-label="Close speech settings" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--border-hairline)] text-slate-500 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] dark:hover:bg-white/[0.05]"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={closeLocalAiWorkspace} aria-label="Back to AI Models overview" className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-xl border border-[color:var(--border-hairline)] px-3 text-xs font-bold text-slate-500 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] dark:hover:bg-white/[0.05]"><ArrowRight className="h-4 w-4 rotate-180" /> Back</button>
         </header>
         <div className="mt-5 grid gap-5 xl:grid-cols-2">
           <div className="order-2 overflow-hidden rounded-2xl border border-black/[0.06] xl:order-1 dark:border-white/[0.07]">
@@ -415,18 +442,18 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
         </div>
         <footer className="mt-5 flex flex-col-reverse gap-2 border-t border-[color:var(--border-hairline)] pt-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-slate-400">Changes are applied when you save Settings.</p>
-          <button type="button" onClick={() => setSpeechSettingsOpen(false)} className="inline-flex min-h-10 w-full items-center justify-center rounded-xl bg-signal-500 px-5 py-2 text-xs font-bold text-white hover:bg-signal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] sm:w-auto dark:text-void-950">Done</button>
+          <button type="button" onClick={closeLocalAiWorkspace} className="inline-flex min-h-10 w-full items-center justify-center rounded-xl bg-signal-500 px-5 py-2 text-xs font-bold text-white hover:bg-signal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] sm:w-auto dark:text-void-950">Back to overview</button>
         </footer>
-      </Dialog>
+      </section> : null}
 
-      <Dialog isOpen={catalogOpen} suspendFocusTrap={isLicenseOpen || embeddingConfirmationOpen} onClose={() => setCatalogOpen(false)} ariaLabelledBy="model-catalog-dialog-title" className="w-[min(1280px,calc(100vw-2rem))] p-4 sm:p-6">
+      {catalogOpen ? <section id="model-catalog-workspace" aria-labelledby="model-catalog-dialog-title" className="rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-4 shadow-[var(--elevation-base)] sm:p-6">
         <header className="flex items-start justify-between gap-4 border-b border-[color:var(--border-hairline)] pb-4">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-300">Local runtime</p>
             <h2 id="model-catalog-dialog-title" className="mt-1 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">Model catalog</h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Recommended choices appear first. Every download still requires your approval.</p>
           </div>
-          <button type="button" onClick={() => setCatalogOpen(false)} aria-label="Close model catalog" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--border-hairline)] text-slate-500 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] dark:hover:bg-white/[0.05]"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={closeLocalAiWorkspace} aria-label="Back to AI Models overview" className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-xl border border-[color:var(--border-hairline)] px-3 text-xs font-bold text-slate-500 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] dark:hover:bg-white/[0.05]"><ArrowRight className="h-4 w-4 rotate-180" /> Back</button>
         </header>
         <div className="sticky top-0 z-10 -mx-1 mt-4 space-y-3 bg-white/95 px-1 py-1 backdrop-blur-xl dark:bg-void-800/95">
           <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filter models by purpose">
@@ -510,7 +537,7 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
         onConfirmationOpenChange={setEmbeddingConfirmationOpen}
           /> : null}
         </div>
-      </Dialog>
+      </section> : null}
       <ConfirmDialog isOpen={isLicenseOpen} options={licenseOptions} onConfirm={acceptLicense} onCancel={cancelLicense} />
     </>
   );

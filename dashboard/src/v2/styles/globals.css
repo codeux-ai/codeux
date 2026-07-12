@@ -28,6 +28,13 @@
     --accent-focus-ring: var(--accent-primary);
     --text-metadata: #64748b; /* slate-500 */
 
+    /* Settings product surfaces */
+    --settings-command-surface: linear-gradient(135deg, rgba(255, 255, 255, 0.97), rgba(240, 253, 249, 0.94));
+    --settings-command-border: rgba(0, 75, 147, 0.12);
+    --settings-card-surface: rgba(255, 255, 255, 0.78);
+    --settings-inset-surface: rgba(15, 23, 42, 0.028);
+    --settings-command-shadow: 0 20px 55px rgba(15, 23, 42, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.86);
+
     /* Tailwind Typography Overrides */
     --tw-prose-links: var(--link-text);
     --tw-prose-quotes: var(--text-secondary);
@@ -69,6 +76,11 @@
     --border-hairline: rgba(250, 244, 237, 0.08); /* warm hairline */
     --accent-focus-ring: var(--accent-primary);
     --text-metadata: #94a3b8; /* slate-400 */
+    --settings-command-surface: linear-gradient(135deg, rgba(27, 24, 21, 0.97), rgba(17, 48, 41, 0.94));
+    --settings-command-border: rgba(128, 255, 214, 0.11);
+    --settings-card-surface: rgba(24, 20, 17, 0.74);
+    --settings-inset-surface: rgba(250, 244, 237, 0.038);
+    --settings-command-shadow: 0 24px 60px rgba(2, 8, 15, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.045);
   }
 
   html, body {

@@ -51,7 +51,10 @@ function run({ name, args }) {
   const isServer = name === "server";
   const child = spawn(isServer ? process.execPath : process.execPath, args, {
     cwd: root,
-    env: process.env,
+    // `vite build` defaults NODE_ENV to production even in watch mode. Mark the
+    // watched dashboard bundle as development so import.meta.env.DEV accurately
+    // reflects that it was launched through `pnpm run dev`.
+    env: isServer ? process.env : { ...process.env, NODE_ENV: "development" },
   });
   children.push(child);
 

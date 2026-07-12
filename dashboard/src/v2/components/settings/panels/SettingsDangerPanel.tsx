@@ -93,8 +93,19 @@ export const SettingsDangerPanel: FunctionComponent<{ state: SettingsPageState }
   };
 
   return (
-    <div className="flex flex-col gap-5">
-      <SectionCard title="Danger Zone" watermark="DGR" danger icon={<AlertTriangle strokeWidth={2.4} />}>
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      <SectionCard
+        title="Danger Zone"
+        watermark="DGR"
+        danger
+        icon={<AlertTriangle strokeWidth={2.4} />}
+        highlights={[
+          { label: "Scope", value: activeScope === "project" ? "Selected project" : "System", tone: "warning" },
+          { label: "Project", value: selectedProject ? "Selected" : "None" },
+          { label: "Confirmation", value: "Always required" },
+        ]}
+        configureLabel="Review destructive actions"
+      >
         {activeScope === "project" ? (
           <Row label="Reset project overrides" description="Clear this project's saved settings overrides and inherit the current system defaults again. Project tasks, sprints, memories, and history are kept.">
             <ActionButton
@@ -136,7 +147,7 @@ export const SettingsDangerPanel: FunctionComponent<{ state: SettingsPageState }
       </SectionCard>
 
       {selectedProject ? (
-        <SectionCard title="Project Memory" watermark="MEM" danger icon={<BrainCircuit strokeWidth={2.4} />}>
+        <SectionCard title="Project Memory" watermark="MEM" danger icon={<BrainCircuit strokeWidth={2.4} />} highlights={[{ label: "Scope", value: "Project", tone: "warning" }, { label: "Tiers", value: "3 choices" }, { label: "Reversible", value: "No" }]} configureLabel="Review memory cleanup">
           {PROJECT_MEMORY_OPTIONS(selectedProject.name).map((option, index, options) => (
             <Row key={option.tier} label={option.label.replace(/^Clear /, "")} description={option.description} last={index === options.length - 1}>
               <ActionButton
@@ -152,7 +163,7 @@ export const SettingsDangerPanel: FunctionComponent<{ state: SettingsPageState }
       ) : null}
 
       {activeScope === "system" ? (
-        <SectionCard title="System Memory" watermark="MEM" danger icon={<BrainCircuit strokeWidth={2.4} />}>
+        <SectionCard title="System Memory" watermark="MEM" danger icon={<BrainCircuit strokeWidth={2.4} />} highlights={[{ label: "Scope", value: "All projects", tone: "warning" }, { label: "Tiers", value: "3 choices" }, { label: "Reversible", value: "No" }]} configureLabel="Review memory cleanup">
           {SYSTEM_MEMORY_OPTIONS.map((option, index, options) => (
             <Row key={option.tier} label={option.label.replace(/^Clear /, "")} description={option.description} last={index === options.length - 1}>
               <ActionButton
@@ -168,7 +179,7 @@ export const SettingsDangerPanel: FunctionComponent<{ state: SettingsPageState }
       ) : null}
 
       {activeScope === "system" ? (
-        <SectionCard title="System Database" watermark="SYS" danger icon={<Database strokeWidth={2.4} />}>
+        <SectionCard title="System Database" watermark="SYS" danger icon={<Database strokeWidth={2.4} />} highlights={[{ label: "Impact", value: "All local state", tone: "warning" }, { label: "Rebuild", value: "On reload" }, { label: "Reversible", value: "No" }]} configureLabel="Review database reset">
           <Row label="Hard reset database" description="Delete all projects, tasks, sprints, and system history. This will cleanly reconstruct the local DB on the next reload." last>
             <ActionButton
               label="Wipe Database"
