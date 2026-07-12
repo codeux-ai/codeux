@@ -118,13 +118,13 @@ The governed built-ins with registered runtime handlers are:
 - control and transformation: `condition`, `switch`, `foreach`, `merge`, `delay`, and `execute_subflow`
 - governed effects and triggers: `approval`, `email_draft`, `email_send`, and `webhook_trigger`
 
-Validated custom definitions become executable only after their versioned manifest and immutable artifact are registered and the custom-node runtime is configured. Unknown types, legacy browser-only `trigger`/`agent`/`task` kinds, design mockups, and manifests marked non-executable are planned or unavailable definitions, not runtime handlers.
+Validated custom definitions become executable only after their versioned manifest and immutable artifact are registered and the custom-node runtime is configured. Raw legacy browser `trigger`/`agent`/`task` kinds are translated by the one-time import bridge and are not runtime handlers. Other unknown types, design mockups, and manifests marked non-executable remain planned or unavailable.
 
 Validation resolves definitions and checks configuration, handles, policies, graph limits, and cycles with field-level issues. Graph JSON rejects secret-shaped fields and generated/custom source fields. Persisted Graph v1 rows keep their original immutable snapshot and append deterministic Graph v2 as a new current version.
 
 ## Dashboard workspace and governance
 
-`/nodes` requires a selected project and loads that project's flow library from the backend. Draft writes carry `draftRevision`; a stale revision returns a conflict rather than replacing newer work. The former `codeux:nodes-canvas:v1` browser value is eligible for one project-specific import into a backend draft. Successful import records a marker and removes the graph value; local storage is not an ongoing workflow store.
+`/nodes` requires a selected project and loads that project's flow library from the backend. Draft writes carry `draftRevision`; a stale revision returns a conflict rather than replacing newer work. The former `codeux:nodes-canvas:v1` browser value is eligible for one project-specific import. Its legacy kinds and handles are translated to registered Graph v2 definitions before draft creation. Import failures remain retryable warnings and do not block the backend library; success records a marker and removes the graph value.
 
 Draft review combines structural validation, capability and side-effect policy findings, credential-slot status, and a non-executing dry run. The dashboard receives credential ids and status metadata only, never resolved secret values. Publication requires the current revision, a valid policy review, and all credential requirements bound. Runs resolve immutable pinned or latest-published snapshots.
 

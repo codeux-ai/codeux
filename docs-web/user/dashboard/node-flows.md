@@ -6,17 +6,17 @@ The **Nodes** page (`/nodes`) is the project-scoped backend authoring, publicati
 
 The flow library contains backend drafts and publications owned by the active project. Saves include the loaded draft revision, so a concurrent edit produces a visible conflict and never overwrites newer work.
 
-The former browser graph at `codeux:nodes-canvas:v1` is eligible for one import into the selected project. Code UX normalizes it to Graph v2, creates an **Imported Nodes Canvas** backend draft, and only then removes the legacy value and records a project-specific marker. A failed import remains retryable, while a successful marker prevents duplicates. Browser storage is never the ongoing workflow source of truth.
+The former browser graph at `codeux:nodes-canvas:v1` is eligible for one import into the selected project. The bridge maps `trigger`, `agent`, and `task` to registered `input`, `set_fields`, and `provider_prompt` definitions, retains `condition` and `output`, and remaps their ports before creating an **Imported Nodes Canvas** draft. A failed import remains retryable and does not block the normal library load; only success removes the old value and records the marker.
 
 ## Registry-Driven Editing And Credentials
 
-The versioned node-definition registry supplies palette entries, typed ports, configuration and widget schemas, execution availability, capabilities, side effects, policies, and credential requirements. Selecting a definition loads its manifest and renders the inspector from that contract. Graphs reference a definition version and store non-secret configuration and credential ids; they do not contain custom-node source or resolved credentials.
+The registry list returns flat versioned palette summaries. Selecting a definition loads the full manifest from the node-type detail endpoint, including nested `ui.widgetSchema`, configuration schema, policies, documentation, and deprecation metadata. The inspector renders from that full contract. Graphs reference a definition version and store non-secret configuration and credential ids; they do not contain custom-node source or resolved credentials.
 
 Credential slots display metadata-only states such as bound, missing, or denied and can request a binding. Secret values remain behind the credential broker and are excluded from graphs and browser output.
 
 The complete governed built-in set currently registered with executable handlers is `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, `condition`, `switch`, `foreach`, `merge`, `delay`, `approval`, `email_draft`, `email_send`, `execute_subflow`, `webhook_trigger`, and `output`.
 
-Registered custom definitions can execute only when their validated versioned manifest, immutable artifact, and custom-node runtime are available. Legacy `trigger`/`agent`/`task` canvas kinds, unknown or unregistered types, mockup entries, and definitions marked non-executable are planned or unavailable definitions, not executable handlers.
+Registered custom definitions can execute only when their validated versioned manifest, immutable artifact, and custom-node runtime are available. Raw legacy kinds are translated during import rather than executed directly. Unknown or unregistered types, mockup entries, and definitions marked non-executable remain planned or unavailable.
 
 ## Governance And Publication
 

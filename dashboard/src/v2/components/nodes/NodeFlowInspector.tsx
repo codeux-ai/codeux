@@ -65,7 +65,7 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
     );
   }
 
-  const widgetSchema = definition?.ui.widgetSchema ?? selectedNode.widgetSchema;
+  const widgetSchema = definition?.ui?.widgetSchema ?? selectedNode.widgetSchema;
   const data = applyWidgetDefaults(widgetSchema, selectedNode.data);
 
   const updateDataField = (fieldId: string, value: NodeFlowJsonValue): void => {
@@ -78,7 +78,7 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
   };
 
   return (
-    <aside className="flex flex-col gap-4 rounded-[1.6rem] border border-black/[0.08] bg-white/65 p-4 shadow-[0_18px_52px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.04] xl:w-[380px] xl:shrink-0">
+    <aside className="flex flex-col gap-4 rounded-[1.6rem] border border-black/[0.08] bg-white/90 p-4 shadow-[0_18px_52px_rgba(15,23,42,0.06)] dark:border-white/[0.08] dark:bg-void-800/90 xl:w-[380px] xl:shrink-0">
       <section className="flex flex-col gap-3" aria-labelledby="node-inspector-heading">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">Inspector</p>
@@ -95,7 +95,7 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
           />
         </label>
         <div className="rounded-xl border border-black/[0.06] bg-white/55 p-3 text-xs text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03]">
-          <p className="font-bold text-slate-800 dark:text-slate-100">{definition?.ui.label ?? selectedNode.type} · v{definition?.version ?? selectedNode.definition?.version ?? 1}</p>
+          <p className="font-bold text-slate-800 dark:text-slate-100">{definition?.ui?.label ?? selectedNode.type} · v{definition?.version ?? selectedNode.definition?.version ?? 1}</p>
           <p className="mt-1">{definition?.ports.length ?? selectedNode.ports?.length ?? 0} typed ports · {definition?.sideEffect ?? selectedNode.sideEffect ?? "none"} side effects</p>
           {(definition?.capabilities ?? selectedNode.capabilities ?? []).length ? <p className="mt-1 break-words">Capabilities: {(definition?.capabilities ?? selectedNode.capabilities ?? []).join(", ")}</p> : null}
         </div>

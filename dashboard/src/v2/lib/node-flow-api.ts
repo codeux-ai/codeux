@@ -89,9 +89,9 @@ export const patchNodeFlowDraft = async (flowId: string, input: PatchNodeFlowDra
     method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
   });
 
-export const validateNodeFlowDraft = async (projectId: string, flowId: string): Promise<NodeFlowDraftReview> =>
+export const validateNodeFlowDraft = async (projectId: string, flowId: string, signal?: AbortSignal): Promise<NodeFlowDraftReview> =>
   fetchJson<NodeFlowDraftReview>(`/api/node-flow-drafts/${encodeURIComponent(flowId)}/validate`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId }),
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId }), signal,
   });
 
 export const dryRunNodeFlowDraft = async (projectId: string, flowId: string, input: NodeFlowJsonObject = {}): Promise<NodeFlowDryRunResponse> =>

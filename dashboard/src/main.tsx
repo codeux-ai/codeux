@@ -7,6 +7,7 @@ import {
   createRootRoute,
   RouterProvider,
   Outlet,
+  useRouterState,
 } from "@tanstack/react-router";
 import { KineticDock } from "./v2/components/KineticDock.js";
 import { Sidebar } from "./v2/components/layout/Sidebar.js";
@@ -53,6 +54,7 @@ const BackgroundManager = lazy(() => import("./v2/components/backgrounds/Backgro
 // 0. AppLayout extracted to use context hooks
 const AppLayout = () => {
   const { selectedProject, createProject } = useProjectData();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
   const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
   const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
   const [appearancePreview, setAppearancePreview] = useState<DashboardSettings["appearance"] | null>(null);
@@ -257,6 +259,7 @@ const AppLayout = () => {
               animation={animatedBackground}
               staticColor={staticBackgroundColor}
               isDark={isDark}
+              suspendAnimation={pathname === "/nodes"}
             />
           )}
         </Suspense>

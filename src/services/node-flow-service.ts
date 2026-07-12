@@ -370,12 +370,28 @@ export class NodeFlowService {
 }
 
 function definitionSummary(definition: ReturnType<typeof listNodeDefinitions>[number], includeSchema = false): Record<string, unknown> {
+  if (includeSchema) {
+    return {
+      type: definition.type,
+      version: definition.version,
+      executable: definition.executable,
+      executionKind: definition.executionKind,
+      configurationSchema: definition.configurationSchema,
+      ui: definition.ui,
+      ports: definition.ports,
+      credentials: definition.credentials,
+      capabilities: definition.capabilities,
+      sideEffect: definition.sideEffect,
+      defaultPolicy: definition.defaultPolicy,
+      documentation: definition.documentation,
+      deprecation: definition.deprecation,
+    };
+  }
   return {
     type: definition.type, version: definition.version, executable: definition.executable,
     executionKind: definition.executionKind, label: definition.ui.label, description: definition.ui.description,
     category: definition.ui.category, credentials: definition.credentials, capabilities: definition.capabilities,
     sideEffect: definition.sideEffect, ports: definition.ports,
-    ...(includeSchema ? { configurationSchema: definition.configurationSchema, widgetSchema: definition.ui.widgetSchema, defaultPolicy: definition.defaultPolicy } : {}),
   };
 }
 

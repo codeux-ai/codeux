@@ -26,7 +26,7 @@ Draft review reports requested capabilities, side effects, credential status, po
 
 `/nodes` loads the selected project's backend flow library and does not request flow data without a selected project. Revision-checked saves return a conflict rather than replacing a newer draft.
 
-The former `codeux:nodes-canvas:v1` value can be imported once into a project draft. Successful import records a project-specific marker and removes the legacy graph value; local storage is not ongoing persistence. Persisted Graph v1 records retain their exact immutable version and append deterministic Graph v2.
+The former `codeux:nodes-canvas:v1` value can be imported once into a project draft. Legacy kinds and handles are translated to registered Graph v2 definitions before creation. Import failures remain retryable and do not block existing flows; success records a project marker and removes the old value. Persisted Graph v1 records retain their exact immutable version and append deterministic Graph v2.
 
 ## Operations and prerequisites
 

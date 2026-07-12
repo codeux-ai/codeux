@@ -6,7 +6,9 @@ The **Nodes** page (`/nodes`) is a project-scoped Graph v2 workspace backed by t
 
 New flows and saved edits are persisted in the selected project's backend flow library. Each save includes the `draftRevision` that was loaded. If another editor has advanced that revision, Code UX reports a conflict instead of overwriting the newer draft; reload the flow and reapply the intended edit.
 
-The former browser canvas is handled only as a one-time compatibility import. If `codeux:nodes-canvas:v1` exists when a project first loads, Code UX converts it to Graph v2 and creates an **Imported Nodes Canvas** draft. A successful import records a project-specific marker and removes the old graph value. A failed import leaves it available for retry. Local storage is not the workflow source of truth after this bridge.
+The former browser canvas is handled only as a one-time compatibility import. If `codeux:nodes-canvas:v1` exists when a project first loads, Code UX translates legacy kinds and ports to registered Graph v2 definitions and creates an **Imported Nodes Canvas** draft while preserving non-secret labels, positions, and configuration. A successful import records a project-specific marker and removes the old value. A failed import remains retryable and does not block existing backend flows.
+
+Canvas dragging is previewed locally and commits one position update on pointer release. The route uses a static, context-free background while the canvas is mounted to avoid WebGL compositor pressure.
 
 ## Registry-driven editing
 
@@ -20,7 +22,7 @@ The governed built-ins with runtime handlers are:
 | Control and transformation | `condition`, `switch`, `foreach`, `merge`, `delay`, `execute_subflow` |
 | Governed effects and triggers | `approval`, `email_draft`, `email_send`, `webhook_trigger` |
 
-Validated custom definitions can also execute after their immutable artifact and versioned manifest are registered and the custom-node runtime is available. Legacy `trigger`, `agent`, and `task` canvas kinds, unknown types, mockup entries, and definitions marked non-executable are planning or unavailable definitions, not executable handlers.
+Validated custom definitions can also execute after their immutable artifact and versioned manifest are registered and the custom-node runtime is available. Raw legacy `trigger`, `agent`, and `task` kinds are translated by the one-time import bridge and are not executed directly. Unknown types, mockup entries, and definitions marked non-executable remain planning or unavailable definitions.
 
 ## Credentials, review, and publication
 
