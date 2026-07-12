@@ -2,6 +2,8 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import * as pathPosix from "path/posix";
 import type {
+  CustomDashboardBuildManifest,
+  CustomDashboardBuildDependency,
   CustomDashboardJsonObject,
   CustomDashboardRevisionRecord,
 } from "../contracts/custom-dashboard-types.js";
@@ -9,6 +11,25 @@ import { isPathInside } from "../utils/path-validator.js";
 
 export const CUSTOM_DASHBOARD_VALIDATION_LOG_TAIL_LINES = 200;
 export const CUSTOM_DASHBOARD_VALIDATION_MAX_LOG_TAIL_LINES = 1000;
+export const CUSTOM_DASHBOARD_VALIDATION_MAX_LOG_BYTES = 256 * 1024;
+export const CUSTOM_DASHBOARD_MAX_SOURCE_FILES = 128;
+export const CUSTOM_DASHBOARD_MAX_SOURCE_FILE_BYTES = 512 * 1024;
+export const CUSTOM_DASHBOARD_MAX_SOURCE_TOTAL_BYTES = 2 * 1024 * 1024;
+
+const SUPPORTED_SOURCE_EXTENSION = /\.(?:ts|tsx|css)$/i;
+const TYPESCRIPT_ENTRY_EXTENSION = /\.(?:ts|tsx)$/i;
+const RESERVED_CONFIGURATION_FILE = /(^|\/)(?:package(?:-lock)?\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|\.npmrc|vite\.config\.[^/]+|tsconfig(?:\.[^/]+)?\.json|postcss\.config\.[^/]+|tailwind\.config\.[^/]+)$/i;
+const RAW_SECRET_LITERAL = /(?:api[_-]?key|client[_-]?secret|access[_-]?token|auth[_-]?token|password|secret)\s*(?::|=)\s*["'`](?!\s*(?:"|'|`))[^"'`\r\n]{4,}["'`]|\bBearer\s+[A-Za-z0-9._~+/=-]{8,}|\bsk-[A-Za-z0-9_-]{8,}/i;
+
+export const CUSTOM_DASHBOARD_BUILD_DEPENDENCIES: Record<CustomDashboardBuildDependency, string> = Object.freeze({
+  "@preact/preset-vite": "2.10.5",
+  "@preact/signals": "2.9.0",
+  "@tailwindcss/vite": "4.2.1",
+  preact: "10.29.0",
+  tailwindcss: "4.2.1",
+  typescript: "5.9.3",
+  vite: "8.0.8",
+});
 
 export interface CustomDashboardBridgeConfig {
   projectId: string;
@@ -26,6 +47,7 @@ export interface CustomDashboardBridgeConfig {
 export interface MaterializedCustomDashboardWorkspace {
   workspacePath: string;
   entryImportPath: string;
+  buildManifest: CustomDashboardBuildManifest;
 }
 
 declare const validatedCustomDashboardPathBrand: unique symbol;
@@ -90,6 +112,7 @@ export async function materializeCustomDashboardWorkspace(args: {
   workspacePath: ValidatedCustomDashboardPath;
   bridgeConfig: CustomDashboardBridgeConfig;
 }): Promise<MaterializedCustomDashboardWorkspace> {
+  const buildManifest = buildCustomDashboardBuildManifest(args.revision);
   // workspacePath is returned by resolveContainedCustomDashboardPath after
   // lexical and realpath containment checks against the project runtime root.
   // codeql[js/path-injection]
@@ -97,7 +120,15 @@ export async function materializeCustomDashboardWorkspace(args: {
   // codeql[js/path-injection]
   await fs.mkdir(args.workspacePath, { recursive: true });
 
-  for (const file of args.revision.fileBundle.files) {
+  const fileByPath = new Map(args.revision.fileBundle.files.map((file) => [
+    normalizeCustomDashboardBundlePath(file.path),
+    file,
+  ]));
+  for (const declaredPath of buildManifest.sourceFiles) {
+    const file = fileByPath.get(declaredPath);
+    if (!file) {
+      throw new Error(`Custom dashboard manifest declares a missing source file: ${declaredPath}`);
+    }
     const safeRelativePath = normalizeCustomDashboardBundlePath(file.path);
     const absolutePath = await resolveContainedCustomDashboardPath(
       args.workspacePath,
@@ -134,31 +165,132 @@ export async function materializeCustomDashboardWorkspace(args: {
   const harnessEntryPath = await resolveContainedCustomDashboardPath(args.workspacePath, path.join(harnessDir, "main.tsx"));
 
   await Promise.all([
-    writeJsonFile(packageJsonPath, buildPackageJson()),
+    writeJsonFile(packageJsonPath, buildPackageJson(buildManifest)),
     writeTextFile(indexHtmlPath, buildIndexHtml()),
     writeTextFile(viteConfigPath, buildViteConfig()),
     writeTextFile(tsConfigPath, buildTsConfig()),
     writeTextFile(dataBridgePath, buildDataBridgeModule(args.bridgeConfig)),
-    writeTextFile(harnessEntryPath, buildHarnessEntry(entryImportPath)),
+    writeTextFile(harnessEntryPath, buildHarnessEntry(buildManifest)),
   ]);
 
   return {
     workspacePath: args.workspacePath,
     entryImportPath,
+    buildManifest,
   };
 }
 
+export function buildCustomDashboardBuildManifest(
+  revision: CustomDashboardRevisionRecord,
+): CustomDashboardBuildManifest {
+  assertNoRawSecretJson({
+    manifestMetadata: revision.manifest.metadata ?? {},
+    runtimeMetadata: revision.runtimeMetadata,
+    styleguide: revision.styleguide,
+    sourceNodeGraph: revision.sourceNodeGraph,
+    routes: revision.routes,
+  });
+  const declaredPaths = revision.manifest.filePaths.map(normalizeCustomDashboardBundlePath);
+  if (declaredPaths.length === 0 || declaredPaths.length > CUSTOM_DASHBOARD_MAX_SOURCE_FILES) {
+    throw new Error(`Custom dashboard manifest must declare between 1 and ${CUSTOM_DASHBOARD_MAX_SOURCE_FILES} source files.`);
+  }
+  if (new Set(declaredPaths).size !== declaredPaths.length) {
+    throw new Error("Custom dashboard manifest contains duplicate source files.");
+  }
+
+  const bundlePaths = new Map<string, (typeof revision.fileBundle.files)[number]>();
+  let totalBytes = 0;
+  for (const file of revision.fileBundle.files) {
+    const filePath = normalizeCustomDashboardBundlePath(file.path);
+    if (bundlePaths.has(filePath)) {
+      throw new Error(`Custom dashboard bundle contains a duplicate file: ${filePath}`);
+    }
+    if (RESERVED_CONFIGURATION_FILE.test(filePath) || !SUPPORTED_SOURCE_EXTENSION.test(filePath)) {
+      throw new Error(`Unsupported custom dashboard source or package configuration: ${filePath}`);
+    }
+    if (!declaredPaths.includes(filePath)) {
+      throw new Error(`Custom dashboard bundle file is not declared in manifest.filePaths: ${filePath}`);
+    }
+    const size = Buffer.byteLength(file.content, "utf8");
+    if (size > CUSTOM_DASHBOARD_MAX_SOURCE_FILE_BYTES) {
+      throw new Error(`Custom dashboard source file is too large: ${filePath}`);
+    }
+    totalBytes += size;
+    if (totalBytes > CUSTOM_DASHBOARD_MAX_SOURCE_TOTAL_BYTES) {
+      throw new Error("Custom dashboard source bundle exceeds the maximum allowed size.");
+    }
+    if (RAW_SECRET_LITERAL.test(file.content)) {
+      throw new Error(`Custom dashboard source contains a raw secret literal: ${filePath}`);
+    }
+    bundlePaths.set(filePath, file);
+  }
+  for (const declaredPath of declaredPaths) {
+    if (!bundlePaths.has(declaredPath)) {
+      throw new Error(`Custom dashboard manifest declares a missing source file: ${declaredPath}`);
+    }
+  }
+
+  const entryFile = normalizeCustomDashboardBundlePath(revision.manifest.entryFile);
+  assertDeclaredTypeScriptEntry(entryFile, declaredPaths, "manifest entryFile");
+  const routes = revision.routes.map((route) => {
+    const routeEntry = normalizeCustomDashboardBundlePath(route.entryFile);
+    assertDeclaredTypeScriptEntry(routeEntry, declaredPaths, `route entryFile for ${route.path}`);
+    return { ...route, entryFile: routeEntry };
+  });
+
+  return {
+    entryFile,
+    sourceFiles: declaredPaths,
+    styleEntries: declaredPaths.filter((filePath) => /\.css$/i.test(filePath)),
+    routes,
+    dependencies: { ...CUSTOM_DASHBOARD_BUILD_DEPENDENCIES },
+  };
+}
+
+function assertNoRawSecretJson(value: unknown, pathSegments: string[] = []): void {
+  if (typeof value === "string") {
+    const field = pathSegments.at(-1) ?? "value";
+    const sensitiveField = /^(?:authorization|api[_-]?key|client[_-]?secret|access[_-]?token|auth[_-]?token|password|secret|credentialValue)$/i;
+    if ((sensitiveField.test(field) && value.trim().length > 0)
+      || /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}|\bsk-[A-Za-z0-9_-]{8,}/i.test(value)) {
+      throw new Error(`Custom dashboard metadata contains a raw secret literal at ${pathSegments.join(".") || "metadata"}.`);
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => assertNoRawSecretJson(entry, [...pathSegments, String(index)]));
+    return;
+  }
+  if (value && typeof value === "object") {
+    for (const [key, entry] of Object.entries(value)) {
+      assertNoRawSecretJson(entry, [...pathSegments, key]);
+    }
+  }
+}
+
+function assertDeclaredTypeScriptEntry(entryFile: string, declaredPaths: string[], label: string): void {
+  if (!TYPESCRIPT_ENTRY_EXTENSION.test(entryFile)) {
+    throw new Error(`Custom dashboard ${label} must be a TypeScript or TSX file: ${entryFile}`);
+  }
+  if (!declaredPaths.includes(entryFile)) {
+    throw new Error(`Custom dashboard ${label} must be declared in manifest.filePaths: ${entryFile}`);
+  }
+}
+
 export function normalizeCustomDashboardBundlePath(input: string): string {
-  const normalized = input.trim().replace(/\\/g, "/");
-  if (!normalized || normalized.startsWith("/") || normalized.includes("\0")) {
+  const normalized = input.trim();
+  if (!normalized || normalized.startsWith("/") || normalized.includes("\0") || normalized.includes("\\")) {
+    throw new Error(`Invalid custom dashboard bundle path: ${input}`);
+  }
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(normalized)) {
     throw new Error(`Invalid custom dashboard bundle path: ${input}`);
   }
   const collapsed = pathPosix.normalize(normalized);
-  if (collapsed === "." || collapsed.startsWith("../") || collapsed === "..") {
+  if (collapsed !== normalized || collapsed === "." || collapsed.startsWith("../") || collapsed === "..") {
     throw new Error(`Custom dashboard bundle path escapes the workspace: ${input}`);
   }
-  if (collapsed.split("/").includes("node_modules")) {
-    throw new Error(`Custom dashboard bundle path cannot target node_modules: ${input}`);
+  if (collapsed.split("/").some((segment) => segment === "node_modules" || segment === ".codeux-harness")) {
+    throw new Error(`Custom dashboard bundle path targets a server-controlled directory: ${input}`);
   }
   return collapsed;
 }
@@ -174,9 +306,26 @@ export async function appendValidationLog(logPath: ValidatedCustomDashboardPath,
   // after that realpath containment check.
   // codeql[js/path-injection]
   await fs.mkdir(path.dirname(logPath), { recursive: true });
-  const body = content.trim().length > 0 ? content.trimEnd() : "(no output)";
+  const body = sanitizeValidationOutput(content.trim().length > 0 ? content.trimEnd() : "(no output)");
+  let existing = "";
+  try {
+    existing = await fs.readFile(logPath, "utf8");
+  } catch {
+    // A missing first-run log is expected.
+  }
+  const next = `${existing}\n## ${section}\n${body}\n`;
+  const bounded = Buffer.byteLength(next, "utf8") <= CUSTOM_DASHBOARD_VALIDATION_MAX_LOG_BYTES
+    ? next
+    : Buffer.from(next, "utf8").subarray(-CUSTOM_DASHBOARD_VALIDATION_MAX_LOG_BYTES).toString("utf8");
   // codeql[js/path-injection]
-  await fs.appendFile(logPath, `\n## ${section}\n${body}\n`, "utf8");
+  await fs.writeFile(logPath, bounded, "utf8");
+}
+
+export function sanitizeValidationOutput(content: string): string {
+  return content
+    .replace(/(authorization\s*[:=]\s*(?:bearer\s+)?)[^\s,;]+/gi, "$1[REDACTED]")
+    .replace(/((?:api[_-]?key|client[_-]?secret|access[_-]?token|auth[_-]?token|password|secret)\s*[:=]\s*)[^\s,;]+/gi, "$1[REDACTED]")
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}/g, "[REDACTED]");
 }
 
 export async function readValidationLog(logPath: ValidatedCustomDashboardPath | null | undefined, tail: number): Promise<string> {
@@ -229,21 +378,15 @@ function toRelativeImportPath(fromPath: string, toPath: string): string {
   return relative.startsWith(".") ? relative : `./${relative}`;
 }
 
-function buildPackageJson(): Record<string, unknown> {
+function buildPackageJson(buildManifest: CustomDashboardBuildManifest): Record<string, unknown> {
   return {
     private: true,
     type: "module",
     scripts: {
-      build: "vite build",
+      build: "tsc --noEmit && vite build",
       start: "vite preview --host 0.0.0.0",
     },
-    dependencies: {
-      "@preact/preset-vite": "^2.10.5",
-      "@preact/signals": "^2.9.0",
-      "preact": "^10.29.0",
-      "typescript": "^5.9.3",
-      "vite": "^8.0.8",
-    },
+    dependencies: buildManifest.dependencies,
     devDependencies: {},
   };
 }
@@ -270,9 +413,11 @@ function buildViteConfig(): string {
   return [
     "import { defineConfig } from \"vite\";",
     "import preact from \"@preact/preset-vite\";",
+    "import tailwindcss from \"@tailwindcss/vite\";",
     "",
     "export default defineConfig({",
-    "  plugins: [preact()],",
+    "  plugins: [preact(), tailwindcss()],",
+    "  build: { sourcemap: false, emptyOutDir: true },",
     "  server: { host: \"0.0.0.0\" },",
     "  preview: { host: \"0.0.0.0\" },",
     "});",
@@ -321,13 +466,31 @@ function buildDataBridgeModule(config: CustomDashboardBridgeConfig): string {
   ].join("\n");
 }
 
-function buildHarnessEntry(entryImportPath: string): string {
+function buildHarnessEntry(buildManifest: CustomDashboardBuildManifest): string {
+  const entries = [buildManifest.entryFile, ...buildManifest.routes.map((route) => route.entryFile)]
+    .filter((entry, index, values) => values.indexOf(entry) === index);
+  const imports = entries.map((entry, index) =>
+    `import * as DashboardModule${index} from ${JSON.stringify(toRelativeImportPath(".codeux-harness/main.tsx", entry))};`
+  );
+  const styleImports = buildManifest.styleEntries.map((entry) =>
+    `import ${JSON.stringify(toRelativeImportPath(".codeux-harness/main.tsx", entry))};`
+  );
+  const moduleIndex = new Map(entries.map((entry, index) => [entry, index]));
+  const routes = buildManifest.routes.map((route) => ({
+    path: route.path,
+    moduleIndex: moduleIndex.get(route.entryFile) ?? 0,
+  }));
   return [
     "import { h, render } from \"preact\";",
     "import { codeUxDataBridge } from \"./codeux-data-bridge\";",
-    `import * as DashboardModule from ${JSON.stringify(entryImportPath)};`,
+    ...imports,
+    ...styleImports,
     "",
     "const root = document.getElementById(\"app\");",
+    `const dashboardModules = [${entries.map((_entry, index) => `DashboardModule${index}`).join(", ")}];`,
+    `const routes = ${JSON.stringify(routes)} as const;`,
+    "const route = [...routes].sort((left, right) => right.path.length - left.path.length).find((candidate) => window.location.pathname === candidate.path || window.location.pathname.startsWith(`${candidate.path}/`));",
+    "const DashboardModule = dashboardModules[route?.moduleIndex ?? 0];",
     "const Candidate = (DashboardModule.default ?? DashboardModule.Dashboard ?? DashboardModule.App) as unknown;",
     "",
     "if (root && typeof Candidate === \"function\") {",

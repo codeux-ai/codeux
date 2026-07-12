@@ -17,6 +17,8 @@ The source of truth is the Code UX database. Drafts stay mutable, revisions are 
 
 If validation fails, use the report and logs to create a new revision. Do not publish around the failure; the repository rejects failed, queued, running, cancelled, missing, or mismatched validation sessions before publication state changes. When a dashboard is already published, validating later drafts keeps the active published dashboard open, and validation sessions for the active published revision do not replace its published validation snapshot.
 
+Dashboard bundles can use individualized Preact components, strict TypeScript/TSX route entries, CSS, and Tailwind v4 utilities. List every source and stylesheet in `manifest.filePaths`; route `entryFile` values must name declared TypeScript/TSX files. Code UX supplies the package manifest and Vite, TypeScript, and Tailwind configuration. User package files, install scripts, build configuration, arbitrary dependencies, undeclared or oversized files, unsafe paths, and embedded credential literals fail validation before any build runs.
+
 ## Agent Workflow
 
 Project Manager agents should use the `manage_custom_dashboards` MCP surface rather than writing generated code into `dashboard/src`.
