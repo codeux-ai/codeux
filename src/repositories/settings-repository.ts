@@ -1,4 +1,4 @@
-import type { DashboardSettings, ExternalSettingsHints, VirtualWorkerProvider } from "../contracts/app-types.js";
+import type { DashboardSettings, ExternalSettingsHints } from "../contracts/app-types.js";
 import type { OnboardingStateRecord } from "../domain/user/onboarding-state.js";
 import type {
   EffectiveSettingsResponse,
@@ -19,7 +19,6 @@ import {
   toProjectSettingsOverride,
   toSprintSettingsOverride,
 } from "../services/settings-resolution-service.js";
-import { DEFAULT_VIRTUAL_WORKER_MODELS } from "./settings-defaults.js";
 import {
   DEFAULT_LOCAL_TRANSCRIPTION_MODEL_ID,
   LOCAL_TRANSCRIPTION_MODEL_IDS,
@@ -27,6 +26,7 @@ import {
 import { redactSettingsCredentialValues } from "../domain/settings/settings-sanitizers/credential-reference-sanitizer.js";
 
 const LOCAL_TRANSCRIPTION_MODEL_ID_SET = new Set<string>(LOCAL_TRANSCRIPTION_MODEL_IDS);
+const LEGACY_SECRET_KEY_PATTERN = /^(?:apiKey|apiToken|apiSecret|githubToken|gitlabToken|[a-zA-Z0-9]+ApiKey)$/;
 
 const LEGACY_DEFAULT_GUARDRAIL_SHAPE = {
   enabled: true,
@@ -43,6 +43,30 @@ const LEGACY_DEFAULT_GUARDRAIL_SHAPE = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * Copies only supported plaintext credential fields into an already-sanitized
+ * settings shape. This keeps the raw database row complete for the one-way
+ * broker handoff without allowing unknown legacy fields into runtime settings.
+ */
+function copyLegacyCredentialValues(source: unknown, target: unknown): void {
+  if (Array.isArray(source) && Array.isArray(target)) {
+    for (let index = 0; index < Math.min(source.length, target.length); index += 1) {
+      copyLegacyCredentialValues(source[index], target[index]);
+    }
+    return;
+  }
+  if (!isRecord(source) || !isRecord(target)) return;
+
+  for (const [key, sourceValue] of Object.entries(source)) {
+    if (!Object.hasOwn(target, key)) continue;
+    if (LEGACY_SECRET_KEY_PATTERN.test(key) && typeof sourceValue === "string") {
+      target[key] = sourceValue;
+      continue;
+    }
+    copyLegacyCredentialValues(sourceValue, target[key]);
+  }
 }
 
 function matchesLegacyDefaultGuardrails(value: unknown): boolean {
@@ -406,107 +430,67 @@ export class SettingsRepository {
         enableDebugLogFile?: boolean;
         consoleLogLevel?: unknown;
       };
-      const defaults = buildDefaultProjectSettings(this.externalHints);
+      const legacyProviders = legacySettings.aiProvider?.providers ?? {};
+      const integrationProviders = {
+        ...buildDefaultSystemSettings(this.externalHints).integrations.providers,
+        ...legacyProviders,
+      };
       const systemSettings = sanitizeSystemSettings({
         runtime: {
           dashboardPort: legacySettings.dashboardPort,
           debugLogFileLevel: legacySettings.enableDebugLogFile ? "error" : "off",
           consoleLogLevel: legacySettings.consoleLogLevel,
-          consoleLogMode: legacySettings.consoleLogLevel,
+          consoleLogMode: legacySettings.consoleLogMode,
+          dbAutoVacuumOnStartup: legacySettings.dbAutoVacuumOnStartup,
+          dbPruningEnabled: legacySettings.dbPruningEnabled,
+          dbRetentionDays: legacySettings.dbRetentionDays,
+          restartSprintPolicy: legacySettings.restartSprintPolicy,
+          restartInvocationPolicy: legacySettings.restartInvocationPolicy,
         },
         integrations: {
-          julesApiKey: legacySettings.aiProvider?.providers?.jules?.apiKey || "",
-          geminiApiKey: legacySettings.aiProvider?.providers?.gemini?.apiKey || "",
-          codexApiKey: legacySettings.aiProvider?.providers?.codex?.apiKey || "",
-          claudeCodeApiKey: legacySettings.aiProvider?.providers?.["claude-code"]?.apiKey || "",
+          providers: integrationProviders,
           githubToken: legacySettings.git?.githubToken || "",
           gitlabToken: legacySettings.git?.gitlabToken || "",
           jira: legacySettings.jira || undefined,
+          notion: legacySettings.notion,
+          asana: legacySettings.asana,
+          linear: legacySettings.linear,
+          miro: legacySettings.miro,
+          lucid: legacySettings.lucid,
+          figma: legacySettings.figma,
+          mural: legacySettings.mural,
         },
-        defaults: {
-          automationLevel: legacySettings.automationLevel,
-          automationInterventions: legacySettings.automationInterventions,
-          aiProvider: {
-            provider: legacySettings.aiProvider.provider,
-            strategy: legacySettings.aiProvider.strategy,
-            providers: {
-              jules: {
-                enabled: legacySettings.aiProvider.providers.jules.enabled,
-                model: legacySettings.aiProvider.providers.jules.model,
-                weight: legacySettings.aiProvider.providers.jules.weight,
-                thinkingMode: legacySettings.aiProvider.providers.jules.thinkingMode,
-              },
-              gemini: {
-                enabled: legacySettings.aiProvider.providers.gemini.enabled,
-                model: legacySettings.aiProvider.providers.gemini.model,
-                weight: legacySettings.aiProvider.providers.gemini.weight,
-                thinkingMode: legacySettings.aiProvider.providers.gemini.thinkingMode,
-              },
-              codex: {
-                enabled: legacySettings.aiProvider.providers.codex.enabled,
-                model: legacySettings.aiProvider.providers.codex.model,
-                weight: legacySettings.aiProvider.providers.codex.weight,
-                thinkingMode: legacySettings.aiProvider.providers.codex.thinkingMode,
-              },
-              "claude-code": {
-                enabled: legacySettings.aiProvider.providers["claude-code"].enabled,
-                model: legacySettings.aiProvider.providers["claude-code"].model,
-                weight: legacySettings.aiProvider.providers["claude-code"].weight,
-                thinkingMode: legacySettings.aiProvider.providers["claude-code"].thinkingMode,
-              },
-            },
-          },
-          git: {
-            githubMode: legacySettings.git.githubMode,
-            defaultBranch: legacySettings.git.defaultBranch,
-            autoCreatePr: legacySettings.git.autoCreatePr,
-            featureBranchPrefix: legacySettings.git.featureBranchPrefix,
-            sprintBranchScheme: legacySettings.git.sprintBranchScheme,
-          },
-          ciIntelligence: legacySettings.ciIntelligence,
-          sprintLoopSteps: legacySettings.sprintLoopSteps,
-          cliWorkflow: legacySettings.cliWorkflow,
-          workers: (() => {
-            const legacyWorkers = legacySettings.workers || {};
-            const provider = (legacyWorkers.virtualWorkerProvider || defaults.workers.virtualWorkerProvider) as VirtualWorkerProvider;
-            return {
-              ...defaults.workers,
-              ...legacyWorkers,
-              model: (legacyWorkers as { model?: string }).model
-                || DEFAULT_VIRTUAL_WORKER_MODELS[provider]
-                || defaults.workers.model,
-            };
-          })(),
-          agents: legacySettings.agents || defaults.agents,
-          skills: legacySettings.skills || defaults.skills,
-        },
+        techstackCatalog: legacySettings.techstackCatalog,
+        defaults: legacySettings,
         mcpTools: legacySettings.mcpTools,
+        customMcpServers: legacySettings.customMcpServers,
+        modelPricing: legacySettings.modelPricing,
       }, this.externalHints);
 
       // Preserve legacy values only in the raw migration hand-off. Public reads
       // use the sanitized object above, and startup immediately moves these
       // values into the credential broker before deleting the legacy row.
       const credentialMigrationPayload = structuredClone(systemSettings) as SystemSettings;
-      const legacyProviderSecrets: Array<[string, string]> = [
-        ["jules", legacySettings.aiProvider?.providers?.jules?.apiKey || ""],
-        ["gemini", legacySettings.aiProvider?.providers?.gemini?.apiKey || ""],
-        ["codex", legacySettings.aiProvider?.providers?.codex?.apiKey || ""],
-        ["claude-code", legacySettings.aiProvider?.providers?.["claude-code"]?.apiKey || ""],
-      ];
-      for (const [providerConfigId, secret] of legacyProviderSecrets) {
-        const provider = credentialMigrationPayload.integrations.providers[providerConfigId];
-        if (provider) provider.apiKey = secret;
-      }
+      copyLegacyCredentialValues(legacyProviders, credentialMigrationPayload.integrations.providers);
       credentialMigrationPayload.integrations.githubToken = legacySettings.git?.githubToken || "";
       credentialMigrationPayload.integrations.gitlabToken = legacySettings.git?.gitlabToken || "";
-      credentialMigrationPayload.integrations.jira.apiToken = legacySettings.jira?.apiToken || "";
+      copyLegacyCredentialValues(legacySettings.jira, credentialMigrationPayload.integrations.jira);
+      copyLegacyCredentialValues(legacySettings.notion, credentialMigrationPayload.integrations.notion);
+      copyLegacyCredentialValues(legacySettings.asana, credentialMigrationPayload.integrations.asana);
+      copyLegacyCredentialValues(legacySettings.linear, credentialMigrationPayload.integrations.linear);
+      copyLegacyCredentialValues(legacySettings.miro, credentialMigrationPayload.integrations.miro);
+      copyLegacyCredentialValues(legacySettings.lucid, credentialMigrationPayload.integrations.lucid);
+      copyLegacyCredentialValues(legacySettings.figma, credentialMigrationPayload.integrations.figma);
+      copyLegacyCredentialValues(legacySettings.mural, credentialMigrationPayload.integrations.mural);
+      copyLegacyCredentialValues(legacySettings.memory, credentialMigrationPayload.defaults.memory);
+      copyLegacyCredentialValues(legacySettings.speech, credentialMigrationPayload.defaults.speech);
       this.storage.writeSystemPayload(JSON.stringify(credentialMigrationPayload));
       this.storage.deleteLegacyPayload();
 
       // Warm up the cache with the migrated settings
       SettingsRepository.systemSettingsCache = systemSettings;
     } catch {
-      // Ignore migration failures and fall back to new defaults.
+      // Keep the legacy source intact so a later startup can retry safely.
     }
   }
 }
