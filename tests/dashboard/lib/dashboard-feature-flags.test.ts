@@ -59,7 +59,8 @@ describe("dashboard feature flags", () => {
   });
 
   it("honors explicit values outside development mode", () => {
-    expect(resolveDashboardFeatureFlags({ devMode: false, values: { nodes: "true", "custom-dashboards": "enabled" } })).toEqual({ nodes: true, "custom-dashboards": true });
+    expect(resolveDashboardFeatureFlags({ devMode: false, values: { nodes: "true", "custom-dashboards": "enabled" }, prerequisites: { nodeFlowBackend: "enabled", automationSecurity: "enabled" } })).toEqual({ nodes: true, "custom-dashboards": true });
+    expect(resolveDashboardFeatureFlags({ devMode: false, values: { nodes: "true" }, prerequisites: { nodeFlowBackend: "enabled", automationSecurity: "off" } }).nodes).toBe(false);
     expect(resolveDashboardFeatureFlags({ devMode: false, values: { nodes: "false", "custom-dashboards": "off" } })).toEqual({ nodes: false, "custom-dashboards": false });
   });
 

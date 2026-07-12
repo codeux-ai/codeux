@@ -139,6 +139,13 @@ import type {
   NodeFlowNodeRunListResponse,
   NodeFlowNodeRunRecord,
   NodeFlowNodeRunStatus,
+  NodeFlowNodeAttemptRecord,
+  NodeFlowDraftReview,
+  NodeFlowConcurrencyConflict,
+  NodeFlowRequiredCredential,
+  NodeFlowPolicyFinding,
+  PatchNodeFlowDraftInput,
+  NodeFlowPublicationRecord,
   NodeFlowRecord,
   NodeFlowRunListResponse,
   NodeFlowRunRecord,
@@ -154,6 +161,7 @@ import type {
   NodeWidgetSelectOption,
   UpdateNodeFlowInput,
 } from "../../../src/contracts/node-flow-types.js";
+import type { NodeDefinitionManifest } from "../../../src/contracts/node-definition-types.js";
 import type {
   CreateCustomDashboardDraftInput,
   CreateCustomDashboardRevisionInput,
@@ -483,6 +491,13 @@ export type {
   NodeFlowNodeRunListResponse,
   NodeFlowNodeRunRecord,
   NodeFlowNodeRunStatus,
+  NodeFlowNodeAttemptRecord,
+  NodeFlowDraftReview,
+  NodeFlowConcurrencyConflict,
+  NodeFlowRequiredCredential,
+  NodeFlowPolicyFinding,
+  PatchNodeFlowDraftInput,
+  NodeFlowPublicationRecord,
   NodeFlowRecord,
   NodeFlowRunListResponse,
   NodeFlowRunRecord,
@@ -497,6 +512,7 @@ export type {
   NodeWidgetSchema,
   NodeWidgetSelectOption,
   UpdateNodeFlowInput,
+  NodeDefinitionManifest,
 };
 
 export type { SprintReviewSummary };

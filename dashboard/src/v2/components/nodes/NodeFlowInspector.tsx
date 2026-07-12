@@ -7,6 +7,8 @@ import type {
   NodeFlowNode,
   NodeFlowSkillAttachment,
   NodeFlowValidationResponse,
+  NodeDefinitionManifest,
+  NodeFlowRequiredCredential,
 } from "../../types.js";
 import {
   applyWidgetDefaults,
@@ -25,6 +27,9 @@ interface NodeFlowInspectorProps {
   onAttachAgent: () => void;
   onDetachAgent: (agentPresetId: string) => void;
   onNodeChange: (nodeId: string, update: Partial<NodeFlowNode>) => void;
+  definition?: NodeDefinitionManifest | null;
+  requiredCredentials?: NodeFlowRequiredCredential[];
+  onRequestCredential?: (nodeId: string, slot: string) => void;
 }
 
 const inputClass = "w-full rounded-xl border border-black/[0.08] bg-white/75 px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition focus:border-signal-500/50 focus:ring-2 focus:ring-signal-500/20 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-100";
@@ -40,6 +45,9 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
   onAttachAgent,
   onDetachAgent,
   onNodeChange,
+  definition = null,
+  requiredCredentials = [],
+  onRequestCredential,
 }) => {
   const messagesByField = buildValidationMessagesByField(validation);
 
@@ -51,7 +59,8 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
     );
   }
 
-  const data = applyWidgetDefaults(selectedNode.widgetSchema, selectedNode.data);
+  const widgetSchema = definition?.ui.widgetSchema ?? selectedNode.widgetSchema;
+  const data = applyWidgetDefaults(widgetSchema, selectedNode.data);
 
   const updateDataField = (fieldId: string, value: NodeFlowJsonValue): void => {
     onNodeChange(selectedNode.id, {
@@ -79,14 +88,11 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
             onInput={(event) => onNodeChange(selectedNode.id, { title: event.currentTarget.value })}
           />
         </label>
-        <label className="flex flex-col gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-          Type
-          <input
-            className={inputClass}
-            value={selectedNode.type}
-            onInput={(event) => onNodeChange(selectedNode.id, { type: event.currentTarget.value })}
-          />
-        </label>
+        <div className="rounded-xl border border-black/[0.06] bg-white/55 p-3 text-xs text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03]">
+          <p className="font-bold text-slate-800 dark:text-slate-100">{definition?.ui.label ?? selectedNode.type} · v{definition?.version ?? selectedNode.definition?.version ?? 1}</p>
+          <p className="mt-1">{definition?.ports.length ?? selectedNode.ports?.length ?? 0} typed ports · {definition?.sideEffect ?? selectedNode.sideEffect ?? "none"} side effects</p>
+          {(definition?.capabilities ?? selectedNode.capabilities ?? []).length ? <p className="mt-1 break-words">Capabilities: {(definition?.capabilities ?? selectedNode.capabilities ?? []).join(", ")}</p> : null}
+        </div>
         <label className="flex flex-col gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
           Description
           <textarea
@@ -99,12 +105,12 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
 
       <section className="flex flex-col gap-4 border-t border-black/[0.06] pt-4 dark:border-white/[0.06]" aria-labelledby="node-widgets-heading">
         <h3 id="node-widgets-heading" className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Widgets</h3>
-        {(selectedNode.widgetSchema?.fields.length ?? 0) === 0 ? (
+        {(widgetSchema?.fields.length ?? 0) === 0 ? (
           <p className="rounded-xl border border-black/[0.06] bg-white/55 px-3 py-3 text-sm text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03]">
             No widgets configured for this node.
           </p>
         ) : (
-          selectedNode.widgetSchema!.fields.map((field) => (
+          widgetSchema!.fields.map((field) => (
             <NodeWidgetField
               key={field.id}
               field={field}
@@ -114,6 +120,17 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
             />
           ))
         )}
+      </section>
+
+      <section className="flex flex-col gap-3 border-t border-black/[0.06] pt-4 dark:border-white/[0.06]" aria-labelledby="node-credentials-heading">
+        <h3 id="node-credentials-heading" className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Credential bindings</h3>
+        {requiredCredentials.length === 0 ? <p className="text-xs text-slate-500">This node does not request credentials.</p> : requiredCredentials.map((credential) => (
+          <div key={credential.slot} className="rounded-xl border border-black/[0.06] bg-white/60 p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
+            <div className="flex items-center justify-between gap-3"><span className="text-sm font-bold text-slate-800 dark:text-slate-100">{credential.slot}</span><span className={`text-[10px] font-bold uppercase ${credential.status === "bound" ? "text-status-green" : "text-status-red"}`}>{credential.status}</span></div>
+            <p className="mt-1 text-xs text-slate-500">{credential.allowedKinds.join(", ")} · secret value never displayed</p>
+            {credential.status !== "bound" && onRequestCredential ? <button type="button" className="mt-2 rounded-lg border border-signal-500/30 px-2.5 py-1.5 text-xs font-bold text-signal-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40" onClick={() => onRequestCredential(selectedNode.id, credential.slot)}>Request binding</button> : null}
+          </div>
+        ))}
       </section>
 
       <section className="flex flex-col gap-3 border-t border-black/[0.06] pt-4 dark:border-white/[0.06]" aria-labelledby="node-agent-attachments-heading">
