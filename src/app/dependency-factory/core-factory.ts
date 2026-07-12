@@ -66,6 +66,11 @@ import { SprintFileBrowserRepository } from "../../repositories/sprint-file-brow
 import { DockerService } from "../../services/docker-service.js";
 import { CustomDashboardRepository } from "../../repositories/custom-dashboard-repository.js";
 import { CustomDashboardValidationService } from "../../services/custom-dashboard-validation-service.js";
+import { AutomationCredentialRepository } from "../../repositories/automation-credential-repository.js";
+import { CredentialBroker } from "../../services/credentials/credential-broker.js";
+import { MountedKeyFileProvider } from "../../infrastructure/security/mounted-key-file-provider.js";
+import { EncryptedSqliteSecretStore } from "../../infrastructure/security/encrypted-sqlite-secret-store.js";
+import { getProcessCredentialKeyProvider } from "../../services/credentials/key-provider-registry.js";
 
 export interface CoreDependencies {
   providerRunner: IProviderRunner;
@@ -125,6 +130,8 @@ export interface CoreDependencies {
   sprintFileBrowserRepository: SprintFileBrowserRepository;
   customDashboardRepository: CustomDashboardRepository;
   customDashboardValidationService: CustomDashboardValidationService;
+  automationCredentialRepository: AutomationCredentialRepository;
+  credentialBroker: CredentialBroker;
 }
 
 export function createCoreDependencies(
@@ -180,6 +187,14 @@ export function createCoreDependencies(
   const subtaskRepository = new SubtaskFileRepository();
   const sessionTracking = new SessionTrackingRepository();
   const appDbStorage = new AppDbStorage();
+  const automationCredentialRepository = new AutomationCredentialRepository(appDbStorage);
+  const credentialKeyProvider = getProcessCredentialKeyProvider()
+    ?? new MountedKeyFileProvider(process.env.CODE_UX_CREDENTIAL_KEY_FILE);
+  const credentialBroker = new CredentialBroker(
+    automationCredentialRepository,
+    new EncryptedSqliteSecretStore(automationCredentialRepository, credentialKeyProvider),
+    credentialKeyProvider,
+  );
   const dashboardRealtimeEventRepository = new DashboardRealtimeEventRepository(appDbStorage);
   const dashboardRealtimeService = new DashboardRealtimeService(
     dashboardRealtimeEventRepository,
@@ -391,5 +406,7 @@ export function createCoreDependencies(
     sprintFileBrowserRepository,
     customDashboardRepository,
     customDashboardValidationService,
+    automationCredentialRepository,
+    credentialBroker,
   };
 }

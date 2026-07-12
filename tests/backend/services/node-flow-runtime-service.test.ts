@@ -12,10 +12,11 @@ import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-d
 import { NodeFlowRuntimeService } from "../../../src/services/node-flow-runtime-service.js";
 import type { ProviderExecutionService } from "../../../src/services/provider-execution-service.js";
 import type { NodeFlowGraph } from "../../../src/contracts/node-flow-types.js";
+import type { CredentialBroker } from "../../../src/services/credentials/credential-broker.js";
 
 const tempDirs: string[] = [];
 
-async function createRuntime(providerExecutionService?: Partial<ProviderExecutionService>): Promise<{
+async function createRuntime(providerExecutionService?: Partial<ProviderExecutionService>,credentialBroker?:Partial<CredentialBroker>): Promise<{
   dir: string;
   projectRepository: ProjectManagementRepository;
   nodeFlowRepository: NodeFlowRepository;
@@ -34,6 +35,7 @@ async function createRuntime(providerExecutionService?: Partial<ProviderExecutio
     projectManagementRepository: projectRepository,
     settingsRepository: new SettingsRepository(path.join(dir, "settings.db")),
     providerExecutionService: providerExecutionService as ProviderExecutionService | undefined,
+    credentialBroker: credentialBroker as CredentialBroker | undefined,
     getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
   });
   return { dir, projectRepository, nodeFlowRepository, executionRepository, runtime };
@@ -90,14 +92,15 @@ describe("NodeFlowRuntimeService", () => {
         rawUsageJson: null,
       },
     });
-    const { dir, projectRepository, nodeFlowRepository, executionRepository, runtime } = await createRuntime({ executeProvider } as Partial<ProviderExecutionService>);
+    const resolveCredentialId=vi.fn().mockResolvedValue({credentialId:"credential-1",value:"bound-secret",version:1});
+    const { dir, projectRepository, nodeFlowRepository, executionRepository, runtime } = await createRuntime({ executeProvider } as Partial<ProviderExecutionService>,{resolveCredentialId});
     const project = projectRepository.createProject({ name: "Provider Project", sourceType: "local", sourceRef: dir });
     const flow = nodeFlowRepository.createFlow(project.id, {
       title: "Provider",
       graph: {
         nodes: [
           { id: "input", type: "input", title: "Input" },
-          { id: "prompt", type: "provider_prompt", title: "Prompt", data: { provider: "mockup-cli", prompt: "Answer {{input.question}}" } },
+          { id: "prompt", type: "provider_prompt", title: "Prompt", data: { provider: "mockup-cli", prompt: "Answer {{input.question}}" }, credentialBindings: [{slot:"provider",credentialId:"credential-1"}] },
           { id: "output", type: "output", title: "Output" },
         ],
         edges: [
@@ -113,10 +116,12 @@ describe("NodeFlowRuntimeService", () => {
       type: "node_flow_node",
       provider: "mockup-cli",
       prompt: "Answer now",
+      apiKey: "bound-secret",
       invocationId: expect.stringMatching(/^xi_/),
       trackPromptInInvocation: false,
       trackAssistantInInvocation: false,
     }));
+    expect(resolveCredentialId).toHaveBeenCalledWith(expect.objectContaining({projectId:project.id,credentialId:"credential-1",bindingKey:`${flow.id}:prompt:provider`,capability:"read"}));
     const promptRun = result.nodeRuns.find((nodeRun) => nodeRun.nodeId === "prompt");
     expect(promptRun?.executionInvocationId).toMatch(/^xi_/);
     expect(promptRun?.output).toMatchObject({ text: "provider answer", nativeSessionId: "native-1" });

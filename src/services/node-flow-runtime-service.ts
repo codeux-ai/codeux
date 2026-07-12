@@ -10,6 +10,7 @@ import type { SettingsRepository } from "../repositories/settings-repository.js"
 import type { ProviderExecutionService } from "./provider-execution-service.js";
 import type { CliProviderId } from "../infrastructure/providers/cli/provider-command-specs.js";
 import type { ProviderRunResult } from "../infrastructure/providers/cli/provider-runner.js";
+import type { CredentialBroker } from "./credentials/credential-broker.js";
 import { buildProviderInvocationWorkspaceOptions } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import type {
   DashboardSettings,
@@ -40,6 +41,7 @@ interface NodeFlowRuntimeDeps {
   settingsRepository: SettingsRepository;
   providerExecutionService?: ProviderExecutionService;
   getDashboardSettings?: (projectId: string) => DashboardSettings;
+  credentialBroker?: CredentialBroker;
 }
 
 interface RuntimeContext {
@@ -334,6 +336,7 @@ export class NodeFlowRuntimeService {
       throw new ValidationError(`Provider prompt node ${node.id} requires a prompt value.`);
     }
     const providerSettings = this.resolveProviderSettings(context.projectId, config);
+    const boundCredential = await this.resolveNodeCredential(context, node, "provider");
     if (!CLI_PROVIDER_IDS.has(providerSettings.provider)) {
       throw new ValidationError(`Provider prompt node ${node.id} requires a CLI provider.`);
     }
@@ -359,7 +362,7 @@ export class NodeFlowRuntimeService {
       maxConcurrentTasks: providerSettings.maxConcurrentTasks,
       prompt,
       model: readString(config.model) ?? providerSettings.model,
-      apiKey: providerSettings.apiKey,
+      apiKey: boundCredential ?? providerSettings.apiKey,
       providerMountAuth: providerSettings.mountAuth,
       providerAuthPath: providerSettings.authPath,
       providerConfigMode: providerSettings.providerConfigMode,
@@ -448,6 +451,8 @@ export class NodeFlowRuntimeService {
       }
     }
     const headers = normalizeHeaders(readJsonObject(config.headers));
+    const boundCredential = await this.resolveNodeCredential(context, node, "auth");
+    if (boundCredential) headers.Authorization = boundCredential;
     const timeoutMs = normalizeTimeout(config.timeout ?? config.timeoutMs);
     const controller = new AbortController();
     const abortListener = (): void => controller.abort(context.options.signal?.reason);
@@ -492,6 +497,14 @@ export class NodeFlowRuntimeService {
       clearTimeout(timeout);
       context.options.signal?.removeEventListener("abort", abortListener);
     }
+  }
+
+  private async resolveNodeCredential(context: RuntimeContext,node:NodeFlowNode,slot:string):Promise<string|undefined>{
+    const binding=node.credentialBindings?.find((candidate)=>candidate.slot===slot);
+    if (!binding) return undefined;
+    if (!this.deps.credentialBroker) throw new ValidationError("Credential broker is not configured for node flow runtime.");
+    const resolved=await this.deps.credentialBroker.resolveCredentialId({projectId:context.projectId,credentialId:binding.credentialId,bindingKey:`${context.flowId}:${node.id}:${slot}`,capability:"read",workspaceId:context.runId});
+    return resolved.value;
   }
 
   private executeOutputNode(context: RuntimeContext, node: NodeFlowNode): NodeFlowJsonObject {

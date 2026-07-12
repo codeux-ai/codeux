@@ -104,6 +104,7 @@ Use this page as the main entrypoint.
 6. [Secure Headless Server Mode](./operations/server-mode.md)
 7. [Operations Runbook](./operations/runbook.md)
 8. [Security Hardening](./operations/security-hardening.md)
+9. [Automation Credential Security](./operations/credential-security.md)
 9. [Logging and Correlation IDs](./operations/logging-and-correlation.md)
 10. [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, prompting, JSON payloads, and approvals
 11. [CLI Management Surface](./operations/management-cli.md)
@@ -211,6 +212,7 @@ Use this page as the main entrypoint.
 - [Operations Runbook](./operations/runbook.md)
 - [Secure Headless Server Mode](./operations/server-mode.md)
 - [Security Hardening](./operations/security-hardening.md)
+- [Automation Credential Security](./operations/credential-security.md)
 - [Logging and Correlation IDs](./operations/logging-and-correlation.md)
 - [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, prompting, JSON payloads, and approvals
 - [CLI Management Surface](./operations/management-cli.md)
