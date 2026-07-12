@@ -13,58 +13,91 @@ export interface NodeFlowMigrationResult<TLegacy = unknown> {
   legacySnapshot: TLegacy | null;
 }
 
-const cloneJson = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+function cloneUntrusted<T>(value: T, seen = new WeakMap<object, unknown>()): T {
+  if (!value || typeof value !== "object") return value;
+  const cached = seen.get(value);
+  if (cached !== undefined) return cached as T;
+  if (Array.isArray(value)) {
+    const clone: unknown[] = [];
+    seen.set(value, clone);
+    value.forEach((entry) => clone.push(cloneUntrusted(entry, seen)));
+    return clone as T;
+  }
+  const clone: Record<string, unknown> = {};
+  seen.set(value, clone);
+  Object.entries(value).forEach(([key, entry]) => {
+    clone[key] = cloneUntrusted(entry, seen);
+  });
+  return clone as T;
+}
 
 export function migrateNodeFlowGraph(graph: unknown): NodeFlowMigrationResult<NodeFlowGraph> {
   if (isRecord(graph) && graph.schemaVersion === NODE_FLOW_SCHEMA_VERSION) {
-    return { graph: cloneJson(graph as unknown as NodeFlowGraph), migrated: false, legacySnapshot: null };
+    return { graph: cloneUntrusted(graph) as unknown as NodeFlowGraph, migrated: false, legacySnapshot: null };
   }
 
-  const legacy = isRecord(graph) ? cloneJson(graph as unknown as NodeFlowGraph) : { nodes: [], edges: [] };
-  const nodes = Array.isArray(legacy.nodes) ? legacy.nodes.map(migrateNode) : [];
-  const definitionByNode = new Map(nodes.map((node) => [node.id, resolveLatestNodeDefinition(node.type)]));
-  const edges = Array.isArray(legacy.edges) ? legacy.edges.map((edge) => ({
-    ...edge,
-    ...(edge.fromHandle ? {} : { fromHandle: definitionByNode.get(edge.fromNodeId)?.ports.find((port) => port.direction === "output")?.id }),
-    ...(edge.toHandle ? {} : { toHandle: definitionByNode.get(edge.toNodeId)?.ports.find((port) => port.direction === "input")?.id }),
-  })) : [];
+  const legacy = isRecord(graph) ? cloneUntrusted(graph) : {};
+  const nodes = Array.isArray(legacy.nodes)
+    ? legacy.nodes.map((node) => isRecord(node) ? migrateNode(node) : node)
+    : legacy.nodes;
+  const definitionByNode = new Map(
+    (Array.isArray(nodes) ? nodes : [])
+      .filter(isRecord)
+      .map((node) => [stringValue(node.id), resolveLatestNodeDefinition(stringValue(node.type))]),
+  );
+  const edges = Array.isArray(legacy.edges) ? legacy.edges.map((edge) => {
+    if (!isRecord(edge)) return edge;
+    const fromNodeId = stringValue(edge.fromNodeId);
+    const toNodeId = stringValue(edge.toNodeId);
+    return {
+      ...edge,
+      ...(edge.fromHandle ? {} : { fromHandle: definitionByNode.get(fromNodeId)?.ports.find((port) => port.direction === "output")?.id }),
+      ...(edge.toHandle ? {} : { toHandle: definitionByNode.get(toNodeId)?.ports.find((port) => port.direction === "input")?.id }),
+    };
+  }) : legacy.edges;
 
   return {
     migrated: true,
-    legacySnapshot: legacy,
+    legacySnapshot: legacy as unknown as NodeFlowGraph,
     graph: {
       schemaVersion: NODE_FLOW_SCHEMA_VERSION,
       nodes,
       edges,
-      ...(legacy.inputSchema ? { inputSchema: legacy.inputSchema } : {}),
-      ...(legacy.schemas ? { schemas: legacy.schemas } : {}),
-      ...(legacy.metadata ? { metadata: legacy.metadata } : {}),
-      ...(legacy.publication ? { publication: legacy.publication } : {}),
-    },
+      ...(legacy.inputSchema !== undefined ? { inputSchema: legacy.inputSchema } : {}),
+      ...(legacy.schemas !== undefined ? { schemas: legacy.schemas } : {}),
+      ...(legacy.metadata !== undefined ? { metadata: legacy.metadata } : {}),
+      ...(legacy.publication !== undefined ? { publication: legacy.publication } : {}),
+    } as unknown as NodeFlowGraph,
   };
 }
 
-function migrateNode(node: NodeFlowNode): NodeFlowNode {
-  const definition = node.definition
-    ? resolveLatestNodeDefinition(node.definition.type)
-    : resolveLatestNodeDefinition(node.type);
+function migrateNode(node: Record<string, unknown>): NodeFlowNode {
+  const definition = isRecord(node.definition)
+    ? resolveLatestNodeDefinition(stringValue(node.definition.type))
+    : resolveLatestNodeDefinition(stringValue(node.type));
   return {
-    ...node,
-    definition: node.definition ?? { type: node.type, version: definition?.version ?? 1 },
-    ports: node.ports ?? definition?.ports.map((port) => cloneJson(port)) ?? [],
-    credentialBindings: node.credentialBindings ?? [],
-    policy: node.policy ?? (definition ? cloneJson(definition.defaultPolicy) : {}),
-    capabilities: node.capabilities ?? [...(definition?.capabilities ?? [])],
-    sideEffect: node.sideEffect ?? definition?.sideEffect ?? "none",
-    disabled: node.disabled ?? false,
-  };
+    ...node as unknown as NodeFlowNode,
+    definition: node.definition !== undefined
+      ? node.definition as NodeFlowNode["definition"]
+      : { type: stringValue(node.type), version: definition?.version ?? 1 },
+    ports: node.ports !== undefined
+      ? node.ports as NodeFlowNode["ports"]
+      : definition?.ports.map((port) => cloneUntrusted(port)) ?? [],
+    credentialBindings: node.credentialBindings !== undefined ? node.credentialBindings : [],
+    policy: node.policy !== undefined
+      ? node.policy as NodeFlowNode["policy"]
+      : definition ? cloneUntrusted(definition.defaultPolicy) : {},
+    capabilities: node.capabilities !== undefined ? node.capabilities : [...(definition?.capabilities ?? [])],
+    sideEffect: node.sideEffect !== undefined ? node.sideEffect : definition?.sideEffect ?? "none",
+    disabled: node.disabled !== undefined ? node.disabled : false,
+  } as NodeFlowNode;
 }
 
 export function migrateNodeCanvasGraphV1(graph: unknown): NodeFlowMigrationResult<unknown> {
   if (isRecord(graph) && graph.schemaVersion === NODE_FLOW_SCHEMA_VERSION && Array.isArray(graph.nodes) && graph.nodes.every(isCanonicalNode)) {
     return migrateNodeFlowGraph(graph);
   }
-  const legacySnapshot = cloneJson(graph);
+  const legacySnapshot = cloneUntrusted(graph);
   const legacy = isRecord(graph) ? graph : {};
   const nodes = Array.isArray(legacy.nodes) ? legacy.nodes.filter(isRecord).map((node): NodeFlowNode => ({
     id: stringValue(node.id),
@@ -87,7 +120,7 @@ export function migrateNodeCanvasGraphV1(graph: unknown): NodeFlowMigrationResul
   return {
     migrated: true,
     legacySnapshot,
-    graph: { schemaVersion: NODE_FLOW_SCHEMA_VERSION, nodes, edges, metadata: { canvasSelection: jsonValue(legacy.selection) } },
+    graph: { schemaVersion: NODE_FLOW_SCHEMA_VERSION, nodes, edges, metadata: { canvasSelection: untrustedJsonValue(legacy.selection) } },
   };
 }
 
@@ -98,11 +131,11 @@ function readPorts(value: unknown, direction: "input" | "output") {
 }
 
 function canvasNodeData(node: Record<string, unknown>): NodeFlowJsonObject {
-  const config = Array.isArray(node.config) ? Object.fromEntries(node.config.filter(isRecord).map((entry) => [stringValue(entry.id), jsonValue(entry.value)]).filter(([id]) => id)) : {};
-  return { config, canvasMetadata: jsonValue(node.metadata) };
+  const config = Array.isArray(node.config) ? Object.fromEntries(node.config.filter(isRecord).map((entry) => [stringValue(entry.id), untrustedJsonValue(entry.value)]).filter(([id]) => id)) : {};
+  return { config, canvasMetadata: untrustedJsonValue(node.metadata) };
 }
 
-const jsonValue = (value: unknown): NodeFlowJsonValue => JSON.parse(JSON.stringify(value ?? null)) as NodeFlowJsonValue;
+const untrustedJsonValue = (value: unknown): NodeFlowJsonValue => cloneUntrusted(value ?? null) as NodeFlowJsonValue;
 const endpointValue = (value: unknown, key: string): string => isRecord(value) ? stringValue(value[key]) : "";
 const stringValue = (value: unknown): string => typeof value === "string" ? value : "";
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
