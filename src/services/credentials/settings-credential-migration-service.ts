@@ -71,11 +71,11 @@ function safeKind(path: string): string {
   return `settings:${path.replace(/[^a-zA-Z0-9._:-]+/g, ".").slice(0, 110)}`;
 }
 
-function moveLegacyProviderReference(
+function setLegacyProviderReference(
   parentPath: string,
   parent: Record<string, unknown>,
   key: string,
-  reference: SettingsCredentialReference,
+  reference: SettingsCredentialReference | null,
 ): boolean {
   if (parentPath !== "integrations") return false;
   const providerByLegacyKey: Record<string, string> = {
@@ -129,16 +129,18 @@ export class SettingsCredentialMigrationService {
 
     for (const record of records) {
       let root: Record<string, unknown>;
+      let malformedPayload = false;
       try {
         root = asRecord(JSON.parse(record.payload)) ?? {};
       } catch {
         root = {};
+        malformedPayload = true;
       }
       const credentialMigrationComplete = root.credentialMigrationVersion === 1;
       if (record.scope === "system" && !credentialMigrationComplete) {
         seedExternalHints(root, this.deps.externalSettingsMigrationValues);
       }
-      let changed = false;
+      let changed = malformedPayload;
       const projectId = this.projectIdFor(record.scope, record.scopeId, managerProjectId);
       const visit = async (value: unknown, path: string): Promise<void> => {
         if (Array.isArray(value)) {
@@ -154,11 +156,14 @@ export class SettingsCredentialMigrationService {
             if (plaintext.length > 0) {
               const reference = await this.createReference(record.scope, projectId, managerProjectId, projectIds, fieldPath, plaintext, secureStorageAvailable);
               if (reference) {
-                if (!moveLegacyProviderReference(path, object, key, reference)) {
+                if (!setLegacyProviderReference(path, object, key, reference)) {
                   object[`${key}CredentialRef`] = reference;
                 }
                 migrated += 1;
               } else {
+                if (!setLegacyProviderReference(path, object, key, null)) {
+                  object[`${key}CredentialRef`] = null;
+                }
                 scrubbed += 1;
               }
             }

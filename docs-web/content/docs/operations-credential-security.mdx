@@ -17,7 +17,7 @@ Runtime validation bounds names, identifiers, capabilities, list counts, and sec
 
 Provider, nested Qwen provider, Git host, Jira, importer, speech, and embedding secrets are represented in settings by non-secret `{ credentialId, capability: "read" }` references. Dashboard and MCP settings reads keep legacy plaintext fields empty. Local-auth and dashboard-auth mounts remain non-secret configuration and continue to work independently.
 
-Startup migrates legacy settings and external hints into project credentials or explicitly allowlisted global credentials, then removes the original values. The migration is idempotent. If secure key custody or project scope is unavailable, values are scrubbed and runtime resolution fails closed rather than using plaintext settings.
+Startup migrates the complete supported legacy credential set—including all provider keys, nested Qwen model-provider keys, Git hosts, Jira, importer token/secret pairs, speech, and embedding keys—into project credentials or explicitly allowlisted global credentials, then removes the original values while preserving non-secret settings. The legacy database source is deleted only after those values enter the handoff. The migration is idempotent; malformed payloads and unavailable secure storage or project scope are scrubbed, and runtime resolution fails closed rather than using plaintext settings.
 
 The import-sources API and dashboard expose only boolean source, credential, and provider availability metadata. Raw values are never returned, rendered, pre-filled, or copied into settings; they exist only at the startup migration boundary.
 
