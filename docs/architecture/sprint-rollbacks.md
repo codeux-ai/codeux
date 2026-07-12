@@ -21,7 +21,7 @@ These checks are intentionally conservative. An ambiguous history is not an auto
 
 ## Automatic path
 
-`SprintRollbackService` fetches the default branch, creates a detached temporary worktree, creates a unique `rollback/<source>-<suffix>` branch, and runs `git revert -m 1` against the proven integration merge. The branch is pushed to `origin` only after the revert succeeds. The visible checkout and uncommitted user work are never changed.
+`SprintRollbackService` fetches the default branch, creates a detached temporary worktree, creates a unique `rollback/<source>-<suffix>` branch, and runs `git revert -m 1` against the proven integration merge. Temporary worktree commands remain rooted in the source repository and address the worktree with `git -C`, preserving the containerized Git helper's metadata paths. The branch is pushed to `origin` only after the revert succeeds. The visible checkout and uncommitted user work are never changed.
 
 The rollback sprint receives one already-settled audit task and starts normal finalization. Automatic rollbacks skip task/sprint provider work, completion QA, and memory-remediation invocation. They still use the normal remote main-merge gate for PR creation, CI observation, conflict repair, and final completion.
 
@@ -40,7 +40,7 @@ The generated task prompt includes the source sprint key and branch, rollback br
 
 ## Pull-request invariant
 
-Rollback finalization forces remote PR monitoring even if ordinary sprint monitoring is disabled. For a rollback sprint, `mainBranchAutoMergeMode=OFF` behaves as `CREATE_PR`: Code UX creates the PR and pauses until a human merges it. Other configured modes retain their normal CI and auto-merge behavior. A rollback run is not marked complete until the Git host reports the rollback PR merged.
+Rollback finalization forces remote PR monitoring even if ordinary sprint monitoring is disabled. Automatic rollbacks use `WHEN_GREEN` finalization unless the project already uses `ALWAYS`: Code UX creates the PR, waits for green checks, merges it automatically, and completes only after the Git host reports the merge. Agent-assisted rollbacks retain configured merge behavior; `mainBranchAutoMergeMode=OFF` becomes `CREATE_PR` so they still cannot bypass the PR boundary.
 
 ## Persistence
 
