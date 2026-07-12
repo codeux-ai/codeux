@@ -35,6 +35,8 @@ export function registerCustomDashboardRoutes(app: Express, deps: DashboardDepen
         status: dashboard.status,
         publishedRevisionId: dashboard.publishedRevisionId,
         sourceNodeGraph: dashboard.sourceNodeGraph,
+        credentialBindings: dashboard.credentialBindings,
+        routes: dashboard.routes,
       })),
       sources: dashboards.flatMap((dashboard) =>
         dashboard.sourceNodeGraph.nodes.map((node) => ({

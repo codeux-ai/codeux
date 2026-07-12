@@ -7,7 +7,7 @@ Custom dashboards are project-scoped dashboard apps generated and revised by age
 1. Ask the Project Manager for the dashboard you want. Include the purpose, target audience, data sources, layout preferences, review criteria, and whether it should be published after validation.
 2. Review the draft at `/custom-dashboards`. Drafts expose manifest JSON, generated file bundle content, source-node graph JSON, styleguide JSON, and data catalog selections.
 3. Ask for changes or edit the draft before creating a revision. Draft edits do not change previous revisions or the currently published dashboard.
-4. Create a revision when the draft is ready. A revision snapshots the current manifest, files, source graph, styleguide, and runtime metadata.
+4. Create a revision when the draft is ready. A revision snapshots the current manifest, files, source graph, credential bindings, route definitions, styleguide, and runtime metadata.
 5. Run detached validation. Code UX builds the revision in Docker, captures the browser-ready Vite artifact, starts a detached preview container, and health-checks the root URL.
 6. Inspect validation status, logs, and the proxied preview link. Validation passes only after install, build, artifact capture, container start, and root health checks succeed.
 7. Publish the validated revision. Publication is blocked unless the revision has a passed validation report.
@@ -28,6 +28,14 @@ Custom dashboards declare a `sourceNodeGraph` with nodes, edges, and optional me
 | `external_api` | Placeholder only. Arbitrary external calls are not proxied and return an unavailable-source error. |
 
 Generated dashboards should handle unavailable-source errors visibly. External API connectors are not fully available through the in-app viewer yet.
+
+### Credential slots and bindings
+
+Source nodes may declare up to 32 credential slots with a stable slot identifier, label, allowed credential kinds, and required capability. Draft bindings contain only a declared slot and a project-accessible credential ID. Code UX verifies project scope, active/configured status, kind, and capability, then records a stable `custom-dashboard:<dashboard-id>:<slot>` server binding. Responses expose non-secret credential metadata only, and revisions retain their binding snapshot when a draft is rebound.
+
+### Route definitions
+
+Drafts may declare up to 32 metadata-only routes. Every route has a normalized local path, label, bundle-relative entry file listed in the manifest, and optional bounded JSON metadata. Schemes, query strings, fragments, traversal, filesystem paths, script URLs, duplicate normalized paths, and host-app route prefixes are rejected. Revisions retain their route snapshot when draft routes change.
 
 ## Agent and API Notes
 

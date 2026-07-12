@@ -81,6 +81,48 @@ function passedReport(): CustomDashboardValidationReport {
   };
 }
 
+function insertCredential(
+  storage: AppDbStorage,
+  projectId: string,
+  options: { id?: string; capabilities?: string[]; kind?: string } = {},
+): string {
+  const id = options.id ?? `credential-${Math.random().toString(36).slice(2)}`;
+  const now = new Date().toISOString();
+  const db = storage.getDatabase();
+  db.prepare(`
+    INSERT INTO automation_credentials (
+      id, name, kind, scope, project_id, management_project_id, allowed_project_ids_json,
+      capabilities_json, status, key_id, key_version, version, created_at, updated_at
+    ) VALUES (?, 'Dashboard token', ?, 'project', ?, ?, '[]', ?, 'active', 'test', 1, 1, ?, ?)
+  `).run(id, options.kind ?? "api-token", projectId, projectId, JSON.stringify(options.capabilities ?? ["read"]), now, now);
+  const blob = Buffer.from("encrypted-not-plaintext");
+  db.prepare(`
+    INSERT INTO automation_credential_secrets (
+      credential_id, ciphertext, nonce, auth_tag, wrapped_data_key, wrap_nonce,
+      wrap_auth_tag, key_id, key_version, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'test', 1, ?)
+  `).run(id, blob, blob, blob, blob, blob, blob, now);
+  return id;
+}
+
+function credentialSourceNodeGraph(): CustomDashboardDataSourceNodeGraph {
+  return {
+    nodes: [{
+      id: "external",
+      type: "external_api",
+      title: "External API",
+      credentialSlots: [{
+        slot: "api_token",
+        label: "API token",
+        required: true,
+        allowedKinds: ["api-token"],
+        requiredCapability: "read",
+      }],
+    }],
+    edges: [],
+  };
+}
+
 afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
@@ -361,5 +403,122 @@ describe("CustomDashboardRepository", () => {
       manifest: manifest(),
       fileBundle: { files: [{ path: "src/dashboard.tsx", content: "one" }, { path: "src/dashboard.tsx", content: "two" }] },
     })).toThrow(ValidationError);
+  });
+
+  it("normalizes safe routes and snapshots credential metadata and bindings in revisions", async () => {
+    const { storage, dashboards, projectId } = await createFixture();
+    const firstCredentialId = insertCredential(storage, projectId, { id: "credential-first" });
+    const secondCredentialId = insertCredential(storage, projectId, { id: "credential-second" });
+    const dashboard = dashboards.createDraft(projectId, {
+      id: "dashboard-stable",
+      title: "Credential dashboard",
+      manifest: manifest(),
+      fileBundle: fileBundle(),
+      sourceNodeGraph: credentialSourceNodeGraph(),
+      credentialBindings: [{ slot: "api_token", credentialId: firstCredentialId }],
+      routes: [{ path: "delivery/", label: "Delivery", entryFile: "src/dashboard.tsx", metadata: { view: "summary" } }],
+    });
+    const revision = dashboards.createRevision(dashboard.id);
+
+    dashboards.updateDraft(dashboard.id, {
+      credentialBindings: [{ slot: "api_token", credentialId: secondCredentialId }],
+      routes: [{ path: "/quality", label: "Quality", entryFile: "src/dashboard.tsx" }],
+    });
+
+    expect(dashboard.routes[0]?.path).toBe("/delivery");
+    expect(dashboard.credentialBindings[0]).toMatchObject({
+      slot: "api_token",
+      credentialId: firstCredentialId,
+      capability: "read",
+      bindingKey: "custom-dashboard:dashboard-stable:api_token",
+      credential: { id: firstCredentialId, configured: true },
+    });
+    expect(dashboards.getRevisionById(revision.id)).toMatchObject({
+      routes: [{ path: "/delivery" }],
+      credentialBindings: [{ credentialId: firstCredentialId }],
+    });
+    expect(dashboards.getDashboardById(dashboard.id)).toMatchObject({
+      routes: [{ path: "/quality" }],
+      credentialBindings: [{ credentialId: secondCredentialId }],
+    });
+    expect(storage.getDatabase().prepare(`
+      SELECT credential_id, binding_key, required_capabilities_json
+      FROM automation_credential_bindings
+      WHERE project_id = ?
+    `).get(projectId)).toMatchObject({
+      credential_id: secondCredentialId,
+      binding_key: "custom-dashboard:dashboard-stable:api_token",
+      required_capabilities_json: '["read"]',
+    });
+    expect(JSON.stringify(dashboard)).not.toContain("encrypted-not-plaintext");
+  });
+
+  it("rejects duplicate or unsafe routes and inaccessible or insufficient credentials", async () => {
+    const { storage, projects, dashboards, projectId, dir } = await createFixture();
+    const missingCapability = insertCredential(storage, projectId, { capabilities: ["write"] });
+    const otherProject = projects.createProject({ name: "Other", sourceType: "local", sourceRef: dir });
+    const crossProjectCredential = insertCredential(storage, otherProject.id);
+    const base = {
+      title: "Credential dashboard",
+      manifest: manifest(),
+      fileBundle: fileBundle(),
+      sourceNodeGraph: credentialSourceNodeGraph(),
+    };
+
+    expect(() => dashboards.createDraft(projectId, {
+      ...base,
+      credentialBindings: [{ slot: "api_token", credentialId: missingCapability }],
+    })).toThrow(/does not grant capability/);
+    expect(() => dashboards.createDraft(projectId, {
+      ...base,
+      credentialBindings: [{ slot: "api_token", credentialId: crossProjectCredential }],
+    })).toThrow(/not accessible/);
+    expect(() => dashboards.createDraft(projectId, {
+      ...base,
+      credentialBindings: [{ slot: "api_token", credentialId: insertCredential(storage, projectId) }],
+      routes: [
+        { path: "/same", label: "One", entryFile: "src/dashboard.tsx" },
+        { path: "same/", label: "Two", entryFile: "src/dashboard.tsx" },
+      ],
+    })).toThrow(/duplicated/);
+    expect(() => dashboards.createDraft(projectId, {
+      ...base,
+      credentialBindings: [{ slot: "api_token", credentialId: insertCredential(storage, projectId) }],
+      routes: [{ path: "/api/secrets", label: "Unsafe", entryFile: "src/dashboard.tsx" }],
+    })).toThrow(/reserved host route/);
+    expect(() => dashboards.createDraft(projectId, {
+      ...base,
+      credentialBindings: [{
+        slot: "api_token",
+        credentialId: insertCredential(storage, projectId),
+        value: "raw-secret",
+      } as never],
+    })).toThrow(/cannot contain secret values/);
+    expect(() => dashboards.createDraft(projectId, {
+      ...base,
+      credentialBindings: [{ slot: "api_token", credentialId: insertCredential(storage, projectId) }],
+      routes: [{
+        path: "/unsafe-metadata",
+        label: "Unsafe metadata",
+        entryFile: "src/dashboard.tsx",
+        metadata: { script: "javascript:alert(1)" },
+      }],
+    })).toThrow(/cannot contain URLs or filesystem paths/);
+  });
+
+  it("loads legacy-style rows with empty route and binding defaults", async () => {
+    const { storage, dashboards, projectId } = await createFixture();
+    const now = new Date().toISOString();
+    storage.getDatabase().prepare(`
+      INSERT INTO custom_dashboards (
+        id, project_id, title, manifest_json, files_json, source_node_graph_json,
+        created_at, updated_at
+      ) VALUES ('legacy-dashboard', ?, 'Legacy', ?, ?, '{"nodes":[],"edges":[]}', ?, ?)
+    `).run(projectId, JSON.stringify(manifest()), JSON.stringify(fileBundle()), now, now);
+
+    expect(dashboards.getDashboardById("legacy-dashboard")).toMatchObject({
+      credentialBindings: [],
+      routes: [],
+    });
   });
 });

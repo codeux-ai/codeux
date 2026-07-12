@@ -8,8 +8,8 @@ The shared contracts live in `src/contracts/custom-dashboard-types.ts`.
 
 Primary records:
 
-- `CustomDashboardRecord` stores the mutable project-scoped draft state, status, manifest, generated file bundle, source node graph, styleguide JSON, runtime metadata JSON, and active published revision id.
-- `CustomDashboardRevisionRecord` stores immutable dashboard bundle snapshots. Manifest, files, source node graph, and styleguide data are copied into each revision so future draft edits do not mutate validation or publication history.
+- `CustomDashboardRecord` stores the mutable project-scoped draft state, status, manifest, generated file bundle, source node graph, safe routes, credential bindings, styleguide JSON, runtime metadata JSON, and active published revision id.
+- `CustomDashboardRevisionRecord` stores immutable dashboard bundle snapshots. Manifest, files, source node graph, safe routes, credential bindings, and styleguide data are copied into each revision so future draft edits do not mutate validation or publication history.
 - `CustomDashboardValidationSessionRecord` stores validation attempts for a revision, including queued/building/running/passed/failed/cancelled status, validation report JSON, runtime metadata, and timestamps.
 - `CustomDashboardManifest` describes the generated dashboard bundle with schema version, title, entry file, file paths, optional data-source graph, and metadata.
 
@@ -27,6 +27,8 @@ SQLite tables are created in both the initial schema and startup migrations:
 | `custom_dashboard_publications` | The active publication pointer for a dashboard. The table is keyed by `dashboard_id`, so each dashboard has at most one active published revision. |
 
 All dashboard JSON payloads are stored as text and hydrated through `CustomDashboardRepository`. Repository methods validate required fields, JSON-safety, project ownership, revision ownership, and publication invariants before writing.
+
+Credential slots live on source nodes. Bindings are authorized against credential metadata without resolving plaintext, persisted under stable dashboard/slot binding keys, and serialized with metadata only. Route definitions are normalized, bounded, bundle-relative metadata; executable URLs, traversal, and host-app route prefixes are rejected before persistence.
 
 ## Repository Boundary
 

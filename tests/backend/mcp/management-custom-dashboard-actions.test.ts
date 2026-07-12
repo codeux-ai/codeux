@@ -38,6 +38,7 @@ function passedReport(): CustomDashboardValidationReport {
 async function createFixture(): Promise<{
   handler: ManagementToolHandler;
   repository: CustomDashboardRepository;
+  storage: AppDbStorage;
   validationService: CustomDashboardValidationService;
   projectId: string;
 }> {
@@ -79,7 +80,25 @@ async function createFixture(): Promise<{
     planningAgentService: {},
     sprintIssueService: {},
   } as any);
-  return { handler, repository, validationService, projectId: project.id };
+  return { handler, repository, storage, validationService, projectId: project.id };
+}
+
+function insertCredential(storage: AppDbStorage, projectId: string): string {
+  const id = "mcp-dashboard-credential";
+  const now = new Date().toISOString();
+  const db = storage.getDatabase();
+  db.prepare(`INSERT INTO automation_credentials (
+    id, name, kind, scope, project_id, management_project_id, allowed_project_ids_json,
+    capabilities_json, status, key_id, key_version, version, created_at, updated_at
+  ) VALUES (?, 'MCP token', 'api-token', 'project', ?, ?, '[]', '["read"]', 'active', 'test', 1, 1, ?, ?)`)
+    .run(id, projectId, projectId, now, now);
+  const blob = Buffer.from("mcp-secret-ciphertext");
+  db.prepare(`INSERT INTO automation_credential_secrets (
+    credential_id, ciphertext, nonce, auth_tag, wrapped_data_key, wrap_nonce,
+    wrap_auth_tag, key_id, key_version, updated_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, 'test', 1, ?)`)
+    .run(id, blob, blob, blob, blob, blob, blob, now);
+  return id;
 }
 
 function parseResponse(response: { content: Array<{ text: string }> }): Record<string, any> {
@@ -130,6 +149,41 @@ describe("manage_custom_dashboards", () => {
     expect(catalog.result.sources).toEqual([
       expect.objectContaining({ id: "tasks", dashboardId }),
     ]);
+  });
+
+  it("parses routes and bindings and returns credential metadata only", async () => {
+    const { handler, storage, projectId } = await createFixture();
+    const credentialId = insertCredential(storage, projectId);
+    const created = parseResponse(await handler.handleManageCustomDashboards({
+      action: "create",
+      projectId,
+      title: "Integration view",
+      manifest: manifest(),
+      fileBundle: fileBundle(),
+      sourceNodeGraph: {
+        nodes: [{
+          id: "external",
+          type: "external_api",
+          title: "External",
+          credentialSlots: [{
+            slot: "api_token",
+            label: "API token",
+            required: true,
+            allowedKinds: ["api-token"],
+            requiredCapability: "read",
+          }],
+        }],
+        edges: [],
+      },
+      credentialBindings: [{ slot: "api_token", credentialId }],
+      routes: [{ path: "/integration", label: "Integration", entryFile: "src/dashboard.tsx" }],
+    }));
+
+    expect(created.result.dashboard).toMatchObject({
+      routes: [{ path: "/integration" }],
+      credentialBindings: [{ slot: "api_token", credential: { name: "MCP token" } }],
+    });
+    expect(JSON.stringify(created)).not.toContain("mcp-secret-ciphertext");
   });
 
   it("validates revisions and returns validation status and logs through the validation service", async () => {

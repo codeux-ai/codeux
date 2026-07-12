@@ -82,6 +82,8 @@ export class CustomDashboardActions {
       fileBundle: draft.fileBundle,
       description: draft.description,
       sourceNodeGraph: draft.sourceNodeGraph,
+      credentialBindings: draft.credentialBindings,
+      routes: draft.routes,
       styleguide: draft.styleguide,
       runtimeMetadata: draft.runtimeMetadata,
     });
@@ -168,6 +170,8 @@ export class CustomDashboardActions {
           status: dashboard.status,
           publishedRevisionId: dashboard.publishedRevisionId,
           sourceNodeGraph: dashboard.sourceNodeGraph,
+          credentialBindings: dashboard.credentialBindings,
+          routes: dashboard.routes,
         })),
         sources,
       },
@@ -196,6 +200,8 @@ function parseDashboardDraftPayload(
     ? parseRequiredObject<CreateCustomDashboardDraftInput["fileBundle"]>(payload, "fileBundle")
     : parseOptionalObject<UpdateCustomDashboardDraftInput["fileBundle"]>(payload, "fileBundle");
   const sourceNodeGraph = parseOptionalObject<UpdateCustomDashboardDraftInput["sourceNodeGraph"]>(payload, "sourceNodeGraph");
+  const credentialBindings = parseOptionalArray<UpdateCustomDashboardDraftInput["credentialBindings"]>(payload, "credentialBindings");
+  const routes = parseOptionalArray<UpdateCustomDashboardDraftInput["routes"]>(payload, "routes");
   const styleguide = parseOptionalObject<UpdateCustomDashboardDraftInput["styleguide"]>(payload, "styleguide");
   const runtimeMetadata = parseOptionalObject<UpdateCustomDashboardDraftInput["runtimeMetadata"]>(payload, "runtimeMetadata");
   return {
@@ -204,6 +210,8 @@ function parseDashboardDraftPayload(
     ...(manifest !== undefined ? { manifest } : {}),
     ...(fileBundle !== undefined ? { fileBundle } : {}),
     ...(sourceNodeGraph !== undefined ? { sourceNodeGraph } : {}),
+    ...(credentialBindings !== undefined ? { credentialBindings } : {}),
+    ...(routes !== undefined ? { routes } : {}),
     ...(styleguide !== undefined ? { styleguide } : {}),
     ...(runtimeMetadata !== undefined ? { runtimeMetadata } : {}),
   };
@@ -213,15 +221,33 @@ function parseRevisionPayload(payload: Record<string, unknown>): CreateCustomDas
   const manifest = parseOptionalObject<CreateCustomDashboardRevisionInput["manifest"]>(payload, "manifest");
   const fileBundle = parseOptionalObject<CreateCustomDashboardRevisionInput["fileBundle"]>(payload, "fileBundle");
   const sourceNodeGraph = parseOptionalObject<CreateCustomDashboardRevisionInput["sourceNodeGraph"]>(payload, "sourceNodeGraph");
+  const credentialBindings = parseOptionalArray<CreateCustomDashboardRevisionInput["credentialBindings"]>(payload, "credentialBindings");
+  const routes = parseOptionalArray<CreateCustomDashboardRevisionInput["routes"]>(payload, "routes");
   const styleguide = parseOptionalObject<CreateCustomDashboardRevisionInput["styleguide"]>(payload, "styleguide");
   const runtimeMetadata = parseOptionalObject<CreateCustomDashboardRevisionInput["runtimeMetadata"]>(payload, "runtimeMetadata");
   return {
     ...(manifest !== undefined ? { manifest } : {}),
     ...(fileBundle !== undefined ? { fileBundle } : {}),
     ...(sourceNodeGraph !== undefined ? { sourceNodeGraph } : {}),
+    ...(credentialBindings !== undefined ? { credentialBindings } : {}),
+    ...(routes !== undefined ? { routes } : {}),
     ...(styleguide !== undefined ? { styleguide } : {}),
     ...(runtimeMetadata !== undefined ? { runtimeMetadata } : {}),
   };
+}
+
+function parseOptionalArray<T extends unknown[] | undefined>(
+  payload: Record<string, unknown>,
+  field: string,
+): T {
+  const value = payload[field];
+  if (value === undefined || value === null) {
+    return undefined as T;
+  }
+  if (!Array.isArray(value)) {
+    throw managementValidationError(`${field} must be an array`, field);
+  }
+  return value as T;
 }
 
 function parseTail(payload: Record<string, unknown>): number | undefined {

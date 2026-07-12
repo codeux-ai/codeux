@@ -3,7 +3,9 @@ import type {
   CreateCustomDashboardDraftInput,
   CreateCustomDashboardRevisionInput,
   CustomDashboardDataSourceNodeGraph,
+  CustomDashboardCredentialBinding,
   CustomDashboardRecord,
+  CustomDashboardRouteDefinition,
   CustomDashboardRevisionRecord,
   CustomDashboardValidationSessionRecord,
   UpdateCustomDashboardDraftInput,
@@ -35,6 +37,8 @@ export interface CustomDashboardDataCatalogResponse {
     status: CustomDashboardRecord["status"];
     publishedRevisionId: string | null;
     sourceNodeGraph: CustomDashboardDataSourceNodeGraph;
+    credentialBindings: CustomDashboardCredentialBinding[];
+    routes: CustomDashboardRouteDefinition[];
   }>;
   sources: CustomDashboardCatalogSource[];
 }

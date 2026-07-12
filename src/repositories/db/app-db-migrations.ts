@@ -495,6 +495,8 @@ export function ensureCustomDashboardTables(db: DatabaseAdapter): void {
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     )
   `);
+  ensureColumn(db, "custom_dashboards", "credential_bindings_json", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, "custom_dashboards", "routes_json", "TEXT NOT NULL DEFAULT '[]'");
   db.exec(`
     CREATE TABLE IF NOT EXISTS custom_dashboard_revisions (
       id TEXT PRIMARY KEY,
@@ -516,6 +518,8 @@ export function ensureCustomDashboardTables(db: DatabaseAdapter): void {
       UNIQUE (dashboard_id, revision_number)
     )
   `);
+  ensureColumn(db, "custom_dashboard_revisions", "credential_bindings_json", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, "custom_dashboard_revisions", "routes_json", "TEXT NOT NULL DEFAULT '[]'");
   db.exec(`
     CREATE TABLE IF NOT EXISTS custom_dashboard_validation_sessions (
       id TEXT PRIMARY KEY,

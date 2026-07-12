@@ -166,6 +166,8 @@ import type { NodeDefinitionManifest } from "../../../src/contracts/node-definit
 import type {
   CreateCustomDashboardDraftInput,
   CreateCustomDashboardRevisionInput,
+  CustomDashboardCredentialBinding,
+  CustomDashboardCredentialSlot,
   CustomDashboardDataSourceNodeGraph,
   CustomDashboardFileBundle,
   CustomDashboardFileBundleEntry,
@@ -173,6 +175,7 @@ import type {
   CustomDashboardJsonValue,
   CustomDashboardManifest,
   CustomDashboardRecord,
+  CustomDashboardRouteDefinition,
   CustomDashboardRevisionRecord,
   CustomDashboardStatus,
   CustomDashboardValidationReport,
@@ -240,6 +243,8 @@ export type ChatDraftRecord = ConversationDraftRecord;
 export type {
   CreateCustomDashboardDraftInput,
   CreateCustomDashboardRevisionInput,
+  CustomDashboardCredentialBinding,
+  CustomDashboardCredentialSlot,
   CustomDashboardDataSourceNodeGraph,
   CustomDashboardFileBundle,
   CustomDashboardFileBundleEntry,
@@ -247,6 +252,7 @@ export type {
   CustomDashboardJsonValue,
   CustomDashboardManifest,
   CustomDashboardRecord,
+  CustomDashboardRouteDefinition,
   CustomDashboardRevisionRecord,
   CustomDashboardStatus,
   CustomDashboardValidationReport,

@@ -9,7 +9,7 @@ The source of truth is the Code UX database. Drafts stay mutable, revisions are 
 1. Ask the Project Manager for the dashboard you want. Include the purpose, target audience, data sources, layout preferences, review criteria, and whether the dashboard should be published after validation.
 2. Review the draft in the dashboard workspace at `/custom-dashboards`. The draft includes editable manifest JSON, generated file bundle content, source-node graph JSON, styleguide JSON, and data catalog selections.
 3. Ask for changes or edit the draft before creating a revision. Draft edits do not change previous revisions or the currently published dashboard.
-4. Create a revision when the draft is ready. A revision snapshots the current manifest, file bundle, source graph, styleguide, and runtime metadata.
+4. Create a revision when the draft is ready. A revision snapshots the current manifest, file bundle, source graph, credential bindings, route definitions, styleguide, and runtime metadata.
 5. Run detached validation for the revision. Code UX materializes the bundle under the project `.code-ux/runtime/custom-dashboards/...` directory, builds it in Docker, starts a detached preview container, and health-checks the root URL.
 6. Inspect validation status, logs, and the proxied preview link. Validation passes only after install, build, browser artifact capture, container start, and root health checks succeed. A passed validation does not publish by itself.
 7. Publish the validated revision. The UI and repository gate publication to revisions with `validationStatus: "passed"` and a valid validation report. Publishing another passed revision is the rollback path.
@@ -35,6 +35,10 @@ Recommended sequence:
 ## Data-Source Node Graph
 
 Each dashboard draft and revision can declare a `sourceNodeGraph`:
+
+Source nodes may declare up to 32 credential slots with a stable slot identifier, label, allowed credential kinds, and required capability. Draft bindings contain only a declared slot and a project-accessible credential ID. The repository verifies project scope, active/configured status, kind, and capability, then records a stable `custom-dashboard:<dashboard-id>:<slot>` server binding. Dashboard, revision, catalog, REST, and MCP responses expose non-secret credential metadata only; secret values are rejected and never copied into dashboard JSON. Revisions retain their binding snapshot when a draft is rebound.
+
+Drafts may also declare up to 32 metadata-only routes. Every route has a normalized local path, label, bundle-relative entry file listed in the manifest, and optional bounded JSON metadata. Schemes, query strings, fragments, traversal, filesystem paths, script URLs, duplicate normalized paths, and host-app route prefixes are rejected. Revisions retain their route snapshot when draft routes change.
 
 ```json
 {
