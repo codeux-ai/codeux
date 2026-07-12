@@ -2,19 +2,19 @@
 
 Run recovery drills only against the approved local test project and mocked job/email providers.
 
-Run the complete offline drill with one command. It uses a temporary SQLite database, the checked-in 20-record fixture, authenticated in-process HTTP routes, and mocked custom-node/job/email boundaries. It does not dispatch a sprint, invoke a live provider, start Docker, or require network access.
+Run the complete offline drill with one command. It uses a temporary file-backed SQLite database, the checked-in 20-record fixture, an authenticated MCP authoring context, authenticated in-process HTTP routes, and mocked job, email, and Docker command boundaries. Generated custom-node code is validated and executed only through the custom-node container service; the test never evaluates it in the Code UX process or starts Docker.
 
 ```bash
 pnpm run test:e2e:credentialed-automation
 ```
 
-1. Verify a viewer can read its project and receives `403` for another project; correlate both requests in audit export.
-2. Stop the key provider with encrypted rows present. `/health` stays live, `/ready` returns `503`, and a new process refuses startup.
-3. Process the 20-record fixture, approve selected drafts, and restart after outbox enqueue. Sent idempotency keys must not invoke the provider twice; unknown outcomes require attention.
-4. Rotate the external credential and confirm the binding resolves its next version; revoke it and confirm access is denied without secret canaries in exports, logs, prompts, traces, or diagnostics.
-5. Publish a later automation, then draft/publish the earlier immutable version. Existing runs remain pinned and new runs select the rollback publication.
-6. Restore SQLite/WAL plus key versions in isolation. Keep runners disabled until readiness, audit continuity, lease ownership, approvals, and outbox counts match the backup manifest.
+1. Use `manage_node_flows` with authenticated agent/conversation metadata to generate and validate the custom node and to create, patch, validate, and publish the flow. Supply credentials only through the credential broker.
+2. Start pinned version 2 through `NodeFlowRuntimeService.runFlow`, interrupt an active pre-invocation node, reopen the same SQLite database, recover, and call `resumeRun`. The run id, publication id, node run, and attempt must remain unchanged.
+3. Process exactly 20 mocked job records through the custom-node runtime, approve the five selected messages in sequence, and deliver them through the durable outbox.
+4. Confirm five unique provider idempotency keys, each used once. Exercise provider unavailability, missing and revoked credentials, rotation, and readiness failure without live external calls.
+5. Publish a rollback of version 1 as the latest publication while proving the completed run remains pinned to version 2.
+6. Verify unauthenticated and unauthorized project failures, `/health` liveness, and `/ready` failure when key material is unavailable.
 
 Record database integrity, key ids/versions (never key material), last audit id, lease/outbox counts, and rollback publication. A drill passes only with 20 processed fixtures, the expected selected delivery count, no duplicate provider/idempotency ids, and no secret canary.
 
-The executable drill additionally asserts five approved and delivered messages, one provider idempotency key per message, expired pre-invocation lease recovery after reopening the database, credential version 2 after rotation, pinned version 2 versus the latest rollback publication, authenticated route failures, unavailable mocked providers, and zero canary disclosure in responses, logs, audit export, or diagnostics.
+The drill checks zero canary disclosure across MCP responses, graphs, attempts, invocation messages, audit export, logs, custom-node diagnostics, and run summaries. Recovery replays only pre-invocation work; externally observable attempts with unknown outcomes remain attention-required.
