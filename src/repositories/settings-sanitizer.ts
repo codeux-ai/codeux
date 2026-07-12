@@ -32,6 +32,7 @@ import { sanitizeMemory } from "../domain/settings/settings-sanitizers/memory-sa
 import { sanitizeSpeech } from "../domain/settings/settings-sanitizers/speech-sanitizer.js";
 import { sanitizeModelPricing } from "../domain/settings/settings-sanitizers/model-pricing-sanitizer.js";
 import { sanitizePreviewEnvironmentVariables } from "../shared/preview-environment.js";
+import { sanitizeSettingsCredentialReference } from "../domain/settings/settings-sanitizers/credential-reference-sanitizer.js";
 import {
   buildDashboardProviderSettings,
   buildDefaultIntegrationProviders,
@@ -155,8 +156,10 @@ export const sanitizeExternalImporterSettings = (
 
   return {
     enabled: readBoolean(input.enabled, defaults.enabled),
-    apiToken: readString(input.apiToken, defaults.apiToken).trim(),
-    apiSecret: readString(input.apiSecret, defaults.apiSecret).trim(),
+    apiToken: "",
+    apiTokenCredentialRef: sanitizeSettingsCredentialReference(input.apiTokenCredentialRef),
+    apiSecret: "",
+    apiSecretCredentialRef: sanitizeSettingsCredentialReference(input.apiSecretCredentialRef),
     baseUrl: readString(input.baseUrl, defaults.baseUrl).trim().replace(/\/+$/, ""),
     workspaceId: readString(input.workspaceId, defaults.workspaceId).trim(),
     teamId: readString(input.teamId, defaults.teamId).trim(),
@@ -515,12 +518,15 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   googleDrive: { ...DEFAULT_DASHBOARD_SETTINGS.googleDrive },
   git: {
     ...DEFAULT_DASHBOARD_SETTINGS.git,
-    githubToken: externalHints?.resolved.githubToken || DEFAULT_DASHBOARD_SETTINGS.git.githubToken,
-    gitlabToken: externalHints?.resolved.gitlabToken || DEFAULT_DASHBOARD_SETTINGS.git.gitlabToken,
+    githubToken: "",
+    githubTokenCredentialRef: null,
+    gitlabToken: "",
+    gitlabTokenCredentialRef: null,
   },
   jira: {
     ...DEFAULT_DASHBOARD_SETTINGS.jira,
-    apiToken: externalHints?.resolved?.jiraToken || DEFAULT_DASHBOARD_SETTINGS.jira.apiToken,
+    apiToken: "",
+    apiTokenCredentialRef: null,
   },
   notion: { ...DEFAULT_DASHBOARD_SETTINGS.notion },
   asana: { ...DEFAULT_DASHBOARD_SETTINGS.asana },
@@ -683,9 +689,6 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   const googleDrive = sanitizeGoogleDriveSettings(input.googleDrive);
   const git = sanitizeGit(input, externalHints);
   const jira = sanitizeJira(input.jira, DEFAULT_DASHBOARD_SETTINGS.jira);
-  if (externalHints?.resolved?.jiraToken) {
-    jira.apiToken = externalHints.resolved.jiraToken;
-  }
   const notion = sanitizeExternalImporterSettings(input.notion, DEFAULT_DASHBOARD_SETTINGS.notion);
   const asana = sanitizeExternalImporterSettings(input.asana, DEFAULT_DASHBOARD_SETTINGS.asana);
   const linear = sanitizeExternalImporterSettings(input.linear, DEFAULT_DASHBOARD_SETTINGS.linear);

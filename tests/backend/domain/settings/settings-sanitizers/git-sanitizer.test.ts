@@ -8,7 +8,8 @@ describe("sanitizeGit", () => {
       env: {},
       settingsJson: {},
     });
-    expect(result.githubToken).toBe("gh-token");
+    expect(result.githubToken).toBe("");
+    expect(result.githubTokenCredentialRef).toBeNull();
   });
 
   it("prioritizes input token", () => {
@@ -17,7 +18,7 @@ describe("sanitizeGit", () => {
       env: {},
       settingsJson: {},
     });
-    expect(result.githubToken).toBe("explicit-gh-token");
+    expect(result.githubToken).toBe("");
   });
 
   it("defaults prDescription to all-enabled when not stored (backward compat)", () => {

@@ -35,6 +35,7 @@ import { sanitizeJira } from "../domain/settings/settings-sanitizers/jira-saniti
 import { sanitizeSprintLoopSteps } from "../domain/settings/settings-sanitizers/sprint-loop-sanitizer.js";
 import { sanitizeMemory } from "../domain/settings/settings-sanitizers/memory-sanitizer.js";
 import { sanitizeSpeech } from "../domain/settings/settings-sanitizers/speech-sanitizer.js";
+import { sanitizeSettingsCredentialReference } from "../domain/settings/settings-sanitizers/credential-reference-sanitizer.js";
 import { sanitizeModelPricing } from "../domain/settings/settings-sanitizers/model-pricing-sanitizer.js";
 import { sanitizeWorkers } from "../domain/settings/settings-sanitizers/worker-sanitizer.js";
 import { sanitizeExternalImporterSettings, sanitizeGoogleDriveSettings } from "../repositories/settings-sanitizer.js";
@@ -783,6 +784,7 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
             weight: provider.weight,
             thinkingMode: provider.thinkingMode,
             maxConcurrentTasks: provider.maxConcurrentTasks,
+            apiKeyCredentialRef: provider.apiKeyCredentialRef,
           },
         ]),
       ),
@@ -794,7 +796,9 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
     git: {
       githubMode: git.githubMode,
       githubToken: git.githubToken,
+      githubTokenCredentialRef: git.githubTokenCredentialRef,
       gitlabToken: git.gitlabToken ?? "",
+      gitlabTokenCredentialRef: git.gitlabTokenCredentialRef,
       defaultBranch: git.defaultBranch,
       autoCreatePr: git.autoCreatePr,
       autoCloseLinkedIssues: git.autoCloseLinkedIssues,
@@ -807,7 +811,7 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
     },
     jira: sanitizeJira(undefined, {
       ...DEFAULT_DASHBOARD_SETTINGS.jira,
-      apiToken: externalHints?.resolved.jiraToken || DEFAULT_DASHBOARD_SETTINGS.jira.apiToken,
+      apiToken: "",
     }),
     notion: { ...DEFAULT_DASHBOARD_SETTINGS.notion },
     asana: { ...DEFAULT_DASHBOARD_SETTINGS.asana },
@@ -865,11 +869,14 @@ export function buildDefaultSystemSettings(externalHints?: ExternalSettingsHints
     },
     integrations: {
       providers: buildDefaultIntegrationProviders(externalHints),
-      githubToken: externalHints?.resolved.githubToken || "",
-      gitlabToken: externalHints?.resolved.gitlabToken || "",
+      githubToken: "",
+      githubTokenCredentialRef: null,
+      gitlabToken: "",
+      gitlabTokenCredentialRef: null,
       jira: {
         ...DEFAULT_DASHBOARD_SETTINGS.jira,
-        apiToken: externalHints?.resolved.jiraToken || "",
+        apiToken: "",
+        apiTokenCredentialRef: null,
       },
       notion: { ...DEFAULT_DASHBOARD_SETTINGS.notion },
       asana: { ...DEFAULT_DASHBOARD_SETTINGS.asana },
@@ -910,7 +917,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
   // sanitizeSystemSettings. The integrations block is used as a last-resort fallback.
   const jira = sanitizeJira(input.jira ?? integrationsInput.jira, {
     ...DEFAULT_DASHBOARD_SETTINGS.jira,
-    apiToken: externalHints?.resolved.jiraToken || DEFAULT_DASHBOARD_SETTINGS.jira.apiToken,
+    apiToken: "",
   });
   const notion = sanitizeExternalImporterSettings(input.notion ?? integrationsInput.notion, DEFAULT_DASHBOARD_SETTINGS.notion);
   const asana = sanitizeExternalImporterSettings(input.asana ?? integrationsInput.asana, DEFAULT_DASHBOARD_SETTINGS.asana);
@@ -966,6 +973,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
             weight: provider.weight,
             thinkingMode: provider.thinkingMode,
             maxConcurrentTasks: provider.maxConcurrentTasks,
+            apiKeyCredentialRef: provider.apiKeyCredentialRef,
           },
         ]),
       ),
@@ -977,7 +985,9 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
     git: {
       githubMode: git.githubMode,
       githubToken: git.githubToken,
+      githubTokenCredentialRef: git.githubTokenCredentialRef,
       gitlabToken: git.gitlabToken ?? "",
+      gitlabTokenCredentialRef: git.gitlabTokenCredentialRef,
       defaultBranch: git.defaultBranch,
       autoCreatePr: git.autoCreatePr,
       autoCloseLinkedIssues: git.autoCloseLinkedIssues,
@@ -1046,7 +1056,7 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
   const techstackCatalog = sanitizeTechstackCatalog(input.techstackCatalog ?? defaults.techstackCatalog);
   const jiraSettings = sanitizeJira(integrationInput.jira, {
     ...DEFAULT_DASHBOARD_SETTINGS.jira,
-    apiToken: externalHints?.resolved.jiraToken || DEFAULT_DASHBOARD_SETTINGS.jira.apiToken,
+    apiToken: "",
   });
   const notionSettings = sanitizeExternalImporterSettings(integrationInput.notion, DEFAULT_DASHBOARD_SETTINGS.notion);
   const asanaSettings = sanitizeExternalImporterSettings(integrationInput.asana, DEFAULT_DASHBOARD_SETTINGS.asana);
@@ -1085,12 +1095,10 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
     defaults.runtime.restartInvocationPolicy,
   );
 
-  const systemGithubToken = typeof integrationInput.githubToken === "string"
-    ? integrationInput.githubToken
-    : defaults.integrations.githubToken;
-  const systemGitlabToken = typeof integrationInput.gitlabToken === "string"
-    ? integrationInput.gitlabToken
-    : defaults.integrations.gitlabToken;
+  const systemGithubToken = "";
+  const systemGitlabToken = "";
+  const systemGithubTokenCredentialRef = sanitizeSettingsCredentialReference(integrationInput.githubTokenCredentialRef);
+  const systemGitlabTokenCredentialRef = sanitizeSettingsCredentialReference(integrationInput.gitlabTokenCredentialRef);
 
   // Seed the project-settings base (defaults) with the resolved system GitHub/GitLab
   // tokens and Jira connection so every project inherits them unless it overrides.
@@ -1099,13 +1107,17 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
     git: {
       ...toRecord(toRecord(input.defaults).git),
       githubToken: systemGithubToken,
+      githubTokenCredentialRef: systemGithubTokenCredentialRef,
       gitlabToken: systemGitlabToken,
+      gitlabTokenCredentialRef: systemGitlabTokenCredentialRef,
     },
     jira: jiraSettings,
     integrations: {
       providers: integrations,
       githubToken: systemGithubToken,
+      githubTokenCredentialRef: systemGithubTokenCredentialRef,
       gitlabToken: systemGitlabToken,
+      gitlabTokenCredentialRef: systemGitlabTokenCredentialRef,
       jira: jiraSettings,
       notion: notionSettings,
       asana: asanaSettings,
@@ -1118,6 +1130,7 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
   }, externalHints);
 
   return {
+    ...(input.credentialMigrationVersion === 1 ? { credentialMigrationVersion: 1 as const } : {}),
     runtime: {
       dashboardPort,
       consoleLogLevel,
@@ -1133,7 +1146,9 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
     integrations: {
       providers: integrations,
       githubToken: systemGithubToken,
+      githubTokenCredentialRef: systemGithubTokenCredentialRef,
       gitlabToken: systemGitlabToken,
+      gitlabTokenCredentialRef: systemGitlabTokenCredentialRef,
       jira: jiraSettings,
       notion: notionSettings,
       asana: asanaSettings,
@@ -1360,8 +1375,8 @@ export function resolveDashboardSettings(args: {
   const resolvedAiProvider = applyIntegrations(sprintSettings, args.systemSettings.integrations);
   const systemAiProvider = applyIntegrations(baseProject, args.systemSettings.integrations);
   clampProviderConcurrencyToSystemCap(resolvedAiProvider, systemAiProvider);
-  const systemGithubToken = args.systemSettings.integrations.githubToken || "";
-  const systemGitlabToken = args.systemSettings.integrations.gitlabToken || "";
+  const systemGithubToken = "";
+  const systemGitlabToken = "";
   const systemJira = args.systemSettings.integrations.jira ?? DEFAULT_DASHBOARD_SETTINGS.jira;
   const dashboardSettings: DashboardSettings = {
     dashboardPort: args.systemSettings.runtime.dashboardPort,
@@ -1387,12 +1402,18 @@ export function resolveDashboardSettings(args: {
     git: {
       ...sprintSettings.git,
       githubToken: sprintSettings.git.githubToken || systemGithubToken,
+      githubTokenCredentialRef: sprintSettings.git.githubTokenCredentialRef
+        ?? args.systemSettings.integrations.githubTokenCredentialRef,
       gitlabToken: sprintSettings.git.gitlabToken || systemGitlabToken,
+      gitlabTokenCredentialRef: sprintSettings.git.gitlabTokenCredentialRef
+        ?? args.systemSettings.integrations.gitlabTokenCredentialRef,
     },
     jira: {
       host: sprintSettings.jira.host || systemJira.host,
       email: sprintSettings.jira.email || systemJira.email,
       apiToken: sprintSettings.jira.apiToken || systemJira.apiToken,
+      apiTokenCredentialRef: sprintSettings.jira.apiTokenCredentialRef
+        ?? systemJira.apiTokenCredentialRef,
       autoTransitionLinkedIssuesOnImport: sprintSettings.jira.autoTransitionLinkedIssuesOnImport,
       importTransitionName: sprintSettings.jira.importTransitionName || systemJira.importTransitionName,
       defaultProject: sprintSettings.jira.defaultProject || systemJira.defaultProject,

@@ -22,6 +22,7 @@ import type {
   SprintPreviewSettings,
   SkillToggle,
   ThinkingMode,
+  SettingsCredentialReference,
   WorkerSettings,
   ConsoleLogMode,
   RuntimeLogLevel,
@@ -46,6 +47,7 @@ export interface ProjectProviderSettings {
   weight: number;
   thinkingMode: ThinkingMode;
   maxConcurrentTasks: number;
+  apiKeyCredentialRef?: SettingsCredentialReference | null;
 }
 
 export interface ProjectAiProviderSettings {
@@ -67,7 +69,9 @@ export interface ProjectInvocationRoutingSettings {
 export interface ProjectGitSettings {
   githubMode: DashboardSettings["git"]["githubMode"];
   githubToken: string;
+  githubTokenCredentialRef?: SettingsCredentialReference | null;
   gitlabToken: string;
+  gitlabTokenCredentialRef?: SettingsCredentialReference | null;
   defaultBranch: string;
   autoCreatePr: boolean;
   autoCloseLinkedIssues: boolean;
@@ -127,6 +131,7 @@ export interface SystemProviderCredentialSettings {
   provider: ProviderId;
   name: string;
   apiKey: string;
+  apiKeyCredentialRef?: SettingsCredentialReference | null;
   mountAuth: boolean;
   authPath: string;
   providerConfigMode: ProviderConfigMode;
@@ -159,7 +164,9 @@ export interface SystemProviderCredentialSettings {
 export interface SystemIntegrationSettings {
   providers: Record<ProviderConfigId, SystemProviderCredentialSettings>;
   githubToken: string;
+  githubTokenCredentialRef?: SettingsCredentialReference | null;
   gitlabToken?: string;
+  gitlabTokenCredentialRef?: SettingsCredentialReference | null;
   jira: JiraSettings;
   notion: ExternalImporterSettings;
   asana: ExternalImporterSettings;
@@ -176,11 +183,13 @@ export interface QwenModelProviderSettings {
   authType: "openai" | "anthropic" | "gemini";
   envKey: string;
   apiKey: string;
+  apiKeyCredentialRef?: SettingsCredentialReference | null;
   baseUrl: string;
   description?: string;
 }
 
 export interface SystemSettings {
+  credentialMigrationVersion?: 1;
   runtime: SystemRuntimeSettings;
   integrations: SystemIntegrationSettings;
   techstackCatalog: TechstackCatalogSettings;

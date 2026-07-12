@@ -31,7 +31,7 @@ External hint env keys used for dashboard import:
 
 Code UX settings resolve through a scoped cascade: `system` (base) → `project` (inherits from system) → `sprint` (inherits from project effective). System settings are the base of the cascade.
 
-System settings hold global state, runtime behavior (e.g., ports, `consoleLogLevel`, `debugLogFileLevel`, `consoleLogMode`), and system integration credentials (Jira tokens, GitLab/GitHub tokens). They are also populated with defaults.
+System settings hold global state, runtime behavior (e.g., ports, `consoleLogLevel`, `debugLogFileLevel`, `consoleLogMode`), and non-secret references to broker-backed system integration credentials. They are also populated with defaults; plaintext credential values are never returned by settings reads.
 
 Effective settings API endpoints include a `sources` dictionary mapping each JSON path to its originating scope (`system`, `project`, or `sprint`).
 
@@ -190,7 +190,7 @@ Runtime resolution:
 
 System-level integrations are injected into effective dashboard settings at resolution time:
 - provider credentials are system-scoped under `integrations.providers`
-  - each entry is a named provider instance with `{ provider, name, apiKey, mountAuth, authPath, authType, providerConfigMode, providerConfigPath }`
+  - each entry is a named provider instance with `{ provider, name, apiKeyCredentialRef, mountAuth, authPath, authType, providerConfigMode, providerConfigPath }`; the compatibility `apiKey` field is always redacted in serialized settings
   - default instance ids intentionally match the base provider ids (`jules`, `gemini`, `codex`, `claude-code`) for compatibility with older settings payloads
   - additional instances can coexist under the same CLI type
   - for CLI providers, `mountAuth`, `authPath`, and `authType` are instance-specific Docker auth-copy/login settings. The `authType` property can be set to `"apiKey"` (uses API key text override), `"localAuth"` (mounts a custom local directory like `~/.gemini`), or `"dashboardAuth"` (launches an interactive terminal inside the container and saves tokens directly to a dedicated `~/.code-ux/credentials/<provider-name>` folder on the host). `providerConfigMode` is independent of auth mode and controls only Docker config-file materialization:

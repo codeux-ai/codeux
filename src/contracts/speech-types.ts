@@ -1,4 +1,5 @@
 import type { DownloadableModelLicense } from "./model-license-types.js";
+import type { SettingsCredentialReference } from "./app-types.js";
 
 export const SPEECH_PROVIDER_MODES = ["local_onnx", "external_api"] as const;
 export const LOCAL_TRANSCRIPTION_MODEL_IDS = [
@@ -15,6 +16,7 @@ export type SpeechTranscriptionProvider = SpeechProviderMode;
 export interface ExternalTranscriptionSettings {
   baseUrl: string;
   apiKey: string;
+  apiKeyCredentialRef?: SettingsCredentialReference | null;
   model: string;
   language?: string | null;
 }
@@ -22,6 +24,7 @@ export interface ExternalTranscriptionSettings {
 export interface ExternalSpeechSynthesisSettings {
   baseUrl: string;
   apiKey: string;
+  apiKeyCredentialRef?: SettingsCredentialReference | null;
   model: string;
   voice: string;
   format: "mp3" | "wav" | "opus" | "aac" | "flac";

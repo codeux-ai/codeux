@@ -236,6 +236,8 @@ export class CodeUxServer {
   private readonly localMcpCliConfigService = new LocalMcpCliConfigService();
   private readonly headlessAuthService: HeadlessAuthService;
   private readonly credentialBroker: CredentialBroker;
+  private readonly settingsCredentialMigrationService: import("../services/credentials/settings-credential-migration-service.js").SettingsCredentialMigrationService;
+  private readonly settingsCredentialResolver: import("../services/credentials/settings-credential-resolver.js").SettingsCredentialResolver;
   private readonly automationAuditService: AutomationAuditExportService;
   private readonly headlessReadinessService: HeadlessOperationalReadinessService;
   private readonly automationSloService: AutomationSloService;
@@ -289,6 +291,8 @@ export class CodeUxServer {
     this.managementToolHandler = deps.managementToolHandler;
     this.headlessAuthService = deps.headlessAuthService;
     this.credentialBroker = deps.credentialBroker;
+    this.settingsCredentialMigrationService = deps.settingsCredentialMigrationService;
+    this.settingsCredentialResolver = deps.settingsCredentialResolver;
     this.automationAuditService = deps.automationAuditService;
     this.headlessReadinessService = deps.headlessReadinessService;
     this.automationSloService = deps.automationSloService;
@@ -1450,6 +1454,8 @@ export class CodeUxServer {
         schedulerService: this.schedulerService,
         nodeFlowService: this.nodeFlowService,
         credentialBroker: this.credentialBroker,
+        settingsCredentialMigrationService: this.settingsCredentialMigrationService,
+        settingsCredentialResolver: this.settingsCredentialResolver,
         headlessAuthService: this.headlessAuthService,
         automationAuditService: this.automationAuditService,
         headlessReadinessService: this.headlessReadinessService,

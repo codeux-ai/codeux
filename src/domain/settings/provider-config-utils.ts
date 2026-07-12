@@ -23,6 +23,7 @@ import {
   normalizeProviderThinkingMode,
   VIRTUAL_WORKER_PROVIDERS,
 } from "../../repositories/settings-defaults.js";
+import { sanitizeSettingsCredentialReference } from "./settings-sanitizers/credential-reference-sanitizer.js";
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -62,7 +63,8 @@ export const buildDefaultIntegrationProviders = (
   [DEFAULT_PROVIDER_CONFIG_IDS.jules]: {
     provider: "jules",
     name: DEFAULT_PROVIDER_CONFIG_NAMES.jules,
-    apiKey: getHintApiKeyForProvider("jules", externalHints),
+    apiKey: "",
+    apiKeyCredentialRef: null,
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.jules,
     providerConfigMode: "none",
@@ -72,7 +74,8 @@ export const buildDefaultIntegrationProviders = (
   [DEFAULT_PROVIDER_CONFIG_IDS.gemini]: {
     provider: "gemini",
     name: DEFAULT_PROVIDER_CONFIG_NAMES.gemini,
-    apiKey: getHintApiKeyForProvider("gemini", externalHints),
+    apiKey: "",
+    apiKeyCredentialRef: null,
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.gemini,
     providerConfigMode: "copyHost",
@@ -82,7 +85,8 @@ export const buildDefaultIntegrationProviders = (
   [DEFAULT_PROVIDER_CONFIG_IDS.codex]: {
     provider: "codex",
     name: DEFAULT_PROVIDER_CONFIG_NAMES.codex,
-    apiKey: getHintApiKeyForProvider("codex", externalHints),
+    apiKey: "",
+    apiKeyCredentialRef: null,
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.codex,
     providerConfigMode: "copyHost",
@@ -92,7 +96,8 @@ export const buildDefaultIntegrationProviders = (
   [DEFAULT_PROVIDER_CONFIG_IDS["claude-code"]]: {
     provider: "claude-code",
     name: DEFAULT_PROVIDER_CONFIG_NAMES["claude-code"],
-    apiKey: getHintApiKeyForProvider("claude-code", externalHints),
+    apiKey: "",
+    apiKeyCredentialRef: null,
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS["claude-code"],
     providerConfigMode: "copyHost",
@@ -102,7 +107,8 @@ export const buildDefaultIntegrationProviders = (
   [DEFAULT_PROVIDER_CONFIG_IDS["qwen-code"]]: {
     provider: "qwen-code",
     name: DEFAULT_PROVIDER_CONFIG_NAMES["qwen-code"],
-    apiKey: getHintApiKeyForProvider("qwen-code", externalHints),
+    apiKey: "",
+    apiKeyCredentialRef: null,
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS["qwen-code"],
     providerConfigMode: "copyHost",
@@ -119,7 +125,8 @@ export const buildDefaultIntegrationProviders = (
   [DEFAULT_PROVIDER_CONFIG_IDS.opencode]: {
     provider: "opencode",
     name: DEFAULT_PROVIDER_CONFIG_NAMES.opencode,
-    apiKey: getHintApiKeyForProvider("opencode", externalHints),
+    apiKey: "",
+    apiKeyCredentialRef: null,
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.opencode,
     providerConfigMode: "copyHost",
@@ -135,7 +142,8 @@ export const buildDefaultIntegrationProviders = (
   [DEFAULT_PROVIDER_CONFIG_IDS.antigravity]: {
     provider: "antigravity",
     name: DEFAULT_PROVIDER_CONFIG_NAMES.antigravity,
-    apiKey: getHintApiKeyForProvider("antigravity", externalHints),
+    apiKey: "",
+    apiKeyCredentialRef: null,
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.antigravity,
     providerConfigMode: "copyHost",
@@ -146,6 +154,7 @@ export const buildDefaultIntegrationProviders = (
     provider: "mockup-cli",
     name: DEFAULT_PROVIDER_CONFIG_NAMES["mockup-cli"],
     apiKey: "",
+    apiKeyCredentialRef: null,
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS["mockup-cli"],
     providerConfigMode: "none",
@@ -277,7 +286,10 @@ export const normalizeSystemIntegrationProviders = (
     result[providerConfigId] = {
       provider: providerId,
       name: normalizeProviderName(providerId, rawValue.name),
-      apiKey: usesApiKeyAuth && typeof rawValue.apiKey === "string" ? rawValue.apiKey : "",
+      apiKey: "",
+      apiKeyCredentialRef: usesApiKeyAuth
+        ? sanitizeSettingsCredentialReference(rawValue.apiKeyCredentialRef)
+        : null,
       mountAuth: providerId === "jules"
         ? false
         // Dashboard login exists solely to mount the credentials it saves under
@@ -325,7 +337,8 @@ export const normalizeSystemIntegrationProviders = (
               name: typeof entry.name === "string" ? entry.name.trim() : "",
               authType: normalizeQwenProtocol(entry.authType),
               envKey: typeof entry.envKey === "string" ? entry.envKey.trim() : "",
-              apiKey: typeof entry.apiKey === "string" ? entry.apiKey : "",
+              apiKey: "",
+              apiKeyCredentialRef: sanitizeSettingsCredentialReference(entry.apiKeyCredentialRef),
               baseUrl: typeof entry.baseUrl === "string" ? entry.baseUrl.trim() : "",
               description: typeof entry.description === "string" ? entry.description.trim() : undefined,
             }))
@@ -365,7 +378,8 @@ export const normalizeSystemIntegrationProviders = (
       ...result[defaultId],
       provider: providerId,
       name: result[defaultId]?.name || DEFAULT_PROVIDER_CONFIG_NAMES[providerId],
-      apiKey: legacyApiKey,
+      apiKey: "",
+      apiKeyCredentialRef: result[defaultId]?.apiKeyCredentialRef ?? null,
       mountAuth: result[defaultId]?.mountAuth ?? false,
       authPath: result[defaultId]?.authPath || DEFAULT_PROVIDER_AUTH_PATHS[providerId],
       providerConfigMode: result[defaultId]?.providerConfigMode || (supportsProviderConfigFile(providerId) ? "copyHost" : "none"),
@@ -428,9 +442,10 @@ const collectProjectProviderIntegrations = (
       ...defaultIntegration,
       provider: providerId,
       name: normalizeProviderName(providerId, rawValue.name ?? defaultIntegration.name),
-      apiKey: authType === "apiKey" && typeof rawValue.apiKey === "string"
-        ? rawValue.apiKey
-        : defaultIntegration.apiKey,
+      apiKey: "",
+      apiKeyCredentialRef: authType === "apiKey"
+        ? sanitizeSettingsCredentialReference(rawValue.apiKeyCredentialRef) ?? defaultIntegration.apiKeyCredentialRef
+        : null,
       mountAuth: providerId === "jules"
         ? false
         : authType === "dashboardAuth"
@@ -470,6 +485,8 @@ export const buildProjectProviderSettings = (
       weight: normalizeWeight(directSource.weight, defaults.weight),
       thinkingMode: normalizeThinkingMode(integration.provider, directSource.thinkingMode, defaults.thinkingMode),
       maxConcurrentTasks: normalizeMaxConcurrentTasks(directSource.maxConcurrentTasks, defaults.maxConcurrentTasks),
+      apiKeyCredentialRef: sanitizeSettingsCredentialReference(directSource.apiKeyCredentialRef)
+        ?? integration.apiKeyCredentialRef,
     };
   }
 
@@ -496,7 +513,10 @@ export const buildDashboardProviderSettings = (
           weight: normalizeWeight(projectProvider.weight, defaults.weight),
           thinkingMode: normalizeThinkingMode(providerId, projectProvider.thinkingMode, defaults.thinkingMode),
           maxConcurrentTasks: normalizeMaxConcurrentTasks(projectProvider.maxConcurrentTasks, defaults.maxConcurrentTasks),
-          apiKey: integrationProviders[providerConfigId]?.apiKey || "",
+          apiKey: "",
+          apiKeyCredentialRef: projectProvider.apiKeyCredentialRef
+            ?? integrationProviders[providerConfigId]?.apiKeyCredentialRef
+            ?? null,
           mountAuth: integrationProviders[providerConfigId]?.mountAuth
             || false,
           authPath: integrationProviders[providerConfigId]?.authPath

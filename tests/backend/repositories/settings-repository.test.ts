@@ -129,12 +129,15 @@ describe("SettingsRepository", () => {
 
     const effectiveProject = repo.resolveProjectDashboardSettings("project-1");
     expect(effectiveProject.settings.aiProvider.providers.codex.apiKey).toBe("");
+    expect(effectiveProject.settings.aiProvider.providers.codex.apiKeyCredentialRef).toBeNull();
     expect(effectiveProject.settings.techstackCatalog.defaultTechstackId).toBe(BUILTIN_CODE_UX_TECHSTACK_ID);
     expect(effectiveProject.settings.techstack.selectedTechstackId).toBe(null);
     expect(effectiveProject.settings.techstack.applicationKind).toBe(null);
     expect(effectiveProject.settings.designGuidance.selectedTechStackId).toBe(DESIGN_GUIDANCE_NONE_ID);
     expect(effectiveProject.settings.designGuidance.selectedStyleguideId).toBe(DESIGN_GUIDANCE_NONE_ID);
     expect(effectiveProject.settings.git.githubToken).toBe("");
+    expect(effectiveProject.settings.git.githubTokenCredentialRef).toBeNull();
+    expect(JSON.stringify(system)).not.toMatch(/(?:apiKey|apiToken|apiSecret|githubToken|gitlabToken)":"[^\"]+/);
     expect(effectiveProject.sources["automationLevel"]).toBe("system");
     expect(effectiveProject.sources["designGuidance.selectedStyleguideId"]).toBe("system");
   });
@@ -416,8 +419,8 @@ describe("SettingsRepository", () => {
     expect(effectiveProject.settings.consoleLogMode).toBe("full");
     expect(effectiveProject.settings.restartSprintPolicy).toBe("pause");
     expect(effectiveProject.settings.restartInvocationPolicy).toBe("restart");
-    expect(effectiveProject.settings.aiProvider.providers.jules.apiKey).toBe("sys-jules");
-    expect(effectiveProject.settings.git.githubToken).toBe("sys-gh");
+    expect(effectiveProject.settings.aiProvider.providers.jules.apiKey).toBe("");
+    expect(effectiveProject.settings.git.githubToken).toBe("");
     expect(effectiveProject.settings.automationLevel).toBe("ALWAYS_ASK");
     expect(effectiveProject.settings.git.defaultBranch).toBe("develop");
     expect(effectiveProject.settings.agents.qualityAssurance.enabled).toBe(true);
@@ -1132,10 +1135,10 @@ describe("SettingsRepository", () => {
     expect(migrated.runtime.consoleLogLevel).toBe("info");
     expect(migrated.runtime.debugLogFileLevel).toBe("error");
     expect(migrated.runtime.consoleLogMode).toBe("standard");
-    expect(migrated.integrations.githubToken).toBe("legacy-gh");
+    expect(migrated.integrations.githubToken).toBe("");
     expect(migrated.defaults.automationLevel).toBe("ALWAYS_ASK");
     expect(migrated.defaults.git.defaultBranch).toBe("develop");
-    expect(repo.getDefaultDashboardSettings().git.githubToken).toBe("legacy-gh");
+    expect(repo.getDefaultDashboardSettings().git.githubToken).toBe("");
     expect(db.prepare("SELECT payload FROM app_settings WHERE id = 1").get()).toBeUndefined();
     db.close();
   });

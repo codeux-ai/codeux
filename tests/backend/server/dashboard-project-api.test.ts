@@ -1103,7 +1103,7 @@ describe("dashboard project management API", () => {
       automationLevel: "SEMI_AUTO",
       git: {
         defaultBranch: "develop",
-        githubToken: "gh-test-token",
+        githubToken: "",
       },
     });
     expect(effectiveProjectSettings.sources["git.defaultBranch"]).toBe("project");

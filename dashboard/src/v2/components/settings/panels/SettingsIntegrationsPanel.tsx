@@ -72,7 +72,10 @@ const DEFAULT_JIRA_SETTINGS: SystemSettings["integrations"]["jira"] = {
 
 type ImporterIntegrationId = Extract<IntegrationId, "notion" | "asana" | "linear" | "miro" | "lucid" | "figma" | "mural">;
 type ImporterSettings = SystemSettings["integrations"]["notion"];
-type ImporterTextField = Exclude<keyof ImporterSettings, "enabled" | "defaultSearchLimit">;
+type ImporterTextField = Exclude<
+  keyof ImporterSettings,
+  "enabled" | "defaultSearchLimit" | "apiTokenCredentialRef" | "apiSecretCredentialRef"
+>;
 
 const DEFAULT_IMPORTER_SETTINGS: ImporterSettings = {
   enabled: false,

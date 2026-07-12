@@ -71,6 +71,8 @@ import { AutomationApprovalRepository } from "../../repositories/automation-appr
 import { AutomationOutboxRepository } from "../../repositories/automation-outbox-repository.js";
 import { AutomationWebhookTriggerRepository } from "../../repositories/automation-webhook-trigger-repository.js";
 import { CredentialBroker } from "../../services/credentials/credential-broker.js";
+import { SettingsCredentialMigrationService } from "../../services/credentials/settings-credential-migration-service.js";
+import { SettingsCredentialResolver } from "../../services/credentials/settings-credential-resolver.js";
 import { MountedKeyFileProvider } from "../../infrastructure/security/mounted-key-file-provider.js";
 import { EncryptedSqliteSecretStore } from "../../infrastructure/security/encrypted-sqlite-secret-store.js";
 import { KmsKeyProviderAdapter, VaultKeyProviderAdapter } from "../../infrastructure/security/external-key-provider-adapters.js";
@@ -144,6 +146,8 @@ export interface CoreDependencies {
   automationOutboxRepository: AutomationOutboxRepository;
   automationWebhookTriggerRepository: AutomationWebhookTriggerRepository;
   credentialBroker: CredentialBroker;
+  settingsCredentialMigrationService: SettingsCredentialMigrationService;
+  settingsCredentialResolver: SettingsCredentialResolver;
   headlessAuthService: HeadlessAuthService;
   automationAuditService: AutomationAuditExportService;
   headlessReadinessService: HeadlessOperationalReadinessService;
@@ -236,6 +240,14 @@ export function createCoreDependencies(
     logger.child({ component: "dashboard-realtime-service" }),
   );
   const projectManagementRepository = new ProjectManagementRepository(appDbStorage, dashboardRealtimeService);
+  const settingsCredentialMigrationService = new SettingsCredentialMigrationService({
+    settingsRepository,
+    credentialBroker,
+    listProjectIds: () => projectManagementRepository.listProjects().projects.map((project) => project.id),
+    resolveSprintProjectId: (sprintId) => projectManagementRepository.getSprint(sprintId)?.projectId ?? null,
+    externalSettingsHints,
+  });
+  const settingsCredentialResolver = new SettingsCredentialResolver(credentialBroker);
   const projectRuntimeRepository = new ProjectRuntimeRepository(appDbStorage, dashboardRealtimeService);
   const workerEndpointRepository = new WorkerEndpointRepository(appDbStorage);
   const projectWorkerAssignmentRepository = new ProjectWorkerAssignmentRepository(appDbStorage);
@@ -446,6 +458,8 @@ export function createCoreDependencies(
     automationOutboxRepository,
     automationWebhookTriggerRepository,
     credentialBroker,
+    settingsCredentialMigrationService,
+    settingsCredentialResolver,
     headlessAuthService,
     automationAuditService,
     headlessReadinessService,

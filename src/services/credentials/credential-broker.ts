@@ -245,6 +245,29 @@ export class CredentialBroker {
     return this.deny(request, request.credentialId, "Credential changed repeatedly while access was being authorized.");
   }
 
+  async withResolvedCredentialId<T>(
+    request: CredentialResolutionRequest & { credentialId: string },
+    consumer: (plaintext: Buffer) => T | Promise<T>,
+  ): Promise<T> {
+    for (let attempt = 0; attempt < MAX_RESOLUTION_RETRIES; attempt += 1) {
+      const credential = this.repository.get(request.credentialId);
+      this.authorizeDirectResolution(request, credential);
+      const plaintext = await this.readSecretOrDeny(request, credential!);
+      const current = this.repository.get(request.credentialId);
+      if (current && sameCredentialSnapshot(credential!, current)) {
+        this.recordGrantedAccess(request, current);
+        try {
+          return await consumer(plaintext);
+        } finally {
+          plaintext.fill(0);
+        }
+      }
+      plaintext.fill(0);
+      this.authorizeDirectResolution(request, current);
+    }
+    return this.deny(request, request.credentialId, "Credential changed repeatedly while access was being authorized.");
+  }
+
   private async replaceValue(projectIdValue: string, credentialIdValue: string, valueValue: string, rotation: boolean): Promise<AutomationCredentialMetadata> {
     const projectId = boundedString(projectIdValue, "projectId", MAX_IDENTIFIER_LENGTH);
     const credentialId = boundedString(credentialIdValue, "credentialId", MAX_IDENTIFIER_LENGTH);
@@ -326,27 +349,31 @@ export class CredentialBroker {
 
   private grant(request: CredentialResolutionRequest, credential: AutomationCredentialMetadata, plaintext: Buffer): ResolvedCredential {
     try {
-      this.repository.recordAccess({
-        credentialId: credential.id,
-        projectId: request.projectId,
-        bindingKey: request.bindingKey,
-        capability: request.capability,
-        operation: "resolve",
-        outcome: "granted",
-        reason: null,
-      });
-      this.auditService?.recordSystem({
-        action: "credential.access",
-        resourceType: "automation_credential",
-        resourceId: credential.id,
-        projectId: request.projectId,
-        outcome: "succeeded",
-        metadata: { bindingKey: request.bindingKey, capability: request.capability, credentialVersion: credential.version },
-      });
+      this.recordGrantedAccess(request, credential);
       return { credentialId: credential.id, value: plaintext.toString("utf8"), version: credential.version };
     } finally {
       plaintext.fill(0);
     }
+  }
+
+  private recordGrantedAccess(request: CredentialResolutionRequest, credential: AutomationCredentialMetadata): void {
+    this.repository.recordAccess({
+      credentialId: credential.id,
+      projectId: request.projectId,
+      bindingKey: request.bindingKey,
+      capability: request.capability,
+      operation: "resolve",
+      outcome: "granted",
+      reason: null,
+    });
+    this.auditService?.recordSystem({
+      action: "credential.access",
+      resourceType: "automation_credential",
+      resourceId: credential.id,
+      projectId: request.projectId,
+      outcome: "succeeded",
+      metadata: { bindingKey: request.bindingKey, capability: request.capability, credentialVersion: credential.version },
+    });
   }
 
   private deny(request: CredentialResolutionRequest, credentialId: string | null, reason: string): never {

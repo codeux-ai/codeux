@@ -705,6 +705,12 @@ export interface TokenPricing {
   cachedInputTokens: number;
 }
 
+/** A non-secret pointer to credential material held by the credential broker. */
+export interface SettingsCredentialReference {
+  credentialId: string;
+  capability: "read";
+}
+
 export interface ProviderSettings {
   provider: ProviderId;
   name: string;
@@ -713,6 +719,7 @@ export interface ProviderSettings {
   weight: number;
   thinkingMode: ThinkingMode;
   apiKey: string;
+  apiKeyCredentialRef?: SettingsCredentialReference | null;
   mountAuth: boolean;
   authPath: string;
   providerConfigMode?: ProviderConfigMode;
@@ -754,6 +761,7 @@ export interface QwenModelProviderSettings {
   authType: "openai" | "anthropic" | "gemini";
   envKey: string;
   apiKey: string;
+  apiKeyCredentialRef?: SettingsCredentialReference | null;
   baseUrl: string;
   description?: string;
 }
@@ -860,7 +868,9 @@ export interface PrDescriptionSettings {
 export interface GitSettings {
   githubMode: "REMOTE" | "LOCAL";
   githubToken: string;
+  githubTokenCredentialRef?: SettingsCredentialReference | null;
   gitlabToken?: string;
+  gitlabTokenCredentialRef?: SettingsCredentialReference | null;
   defaultBranch: string;
   autoCreatePr: boolean;
   autoCloseLinkedIssues: boolean;
@@ -883,6 +893,7 @@ export interface JiraSettings {
   host: string;               // e.g. "https://company.atlassian.net"
   email: string;              // used for Basic Auth on Jira Cloud
   apiToken: string;
+  apiTokenCredentialRef?: SettingsCredentialReference | null;
   autoTransitionLinkedIssuesOnImport: boolean;
   importTransitionName: string; // transition name for imports, default "In Work"
   autoCloseLinkedIssues: boolean;
@@ -895,7 +906,9 @@ export type ExternalImporterProvider = "notion" | "asana" | "linear" | "miro" | 
 export interface ExternalImporterSettings {
   enabled: boolean;
   apiToken: string;
+  apiTokenCredentialRef?: SettingsCredentialReference | null;
   apiSecret: string;
+  apiSecretCredentialRef?: SettingsCredentialReference | null;
   baseUrl: string;
   workspaceId: string;
   teamId: string;

@@ -24,6 +24,7 @@ import {
   DEFAULT_LOCAL_TRANSCRIPTION_MODEL_ID,
   LOCAL_TRANSCRIPTION_MODEL_IDS,
 } from "../contracts/speech-types.js";
+import { redactSettingsCredentialValues } from "../domain/settings/settings-sanitizers/credential-reference-sanitizer.js";
 
 const LOCAL_TRANSCRIPTION_MODEL_ID_SET = new Set<string>(LOCAL_TRANSCRIPTION_MODEL_IDS);
 
@@ -167,7 +168,7 @@ export class SettingsRepository {
         this.storage.writeProjectPayload(projectId, JSON.stringify(parsed));
         this.invalidateResolutionCache();
       }
-      return parsed as ProjectSettingsOverride;
+      return redactSettingsCredentialValues(parsed as ProjectSettingsOverride);
     } catch {
       return {};
     }
@@ -199,7 +200,7 @@ export class SettingsRepository {
           this.storage.writeProjectPayload(row.project_id, JSON.stringify(parsed));
           this.invalidateResolutionCache();
         }
-        result.set(row.project_id, parsed as ProjectSettingsOverride);
+        result.set(row.project_id, redactSettingsCredentialValues(parsed as ProjectSettingsOverride));
       } catch {
         // Ignore
       }
@@ -245,7 +246,7 @@ export class SettingsRepository {
         this.storage.writeSprintPayload(sprintId, JSON.stringify(parsed));
         this.invalidateResolutionCache();
       }
-      return parsed as SprintSettingsOverride;
+      return redactSettingsCredentialValues(parsed as SprintSettingsOverride);
     } catch {
       return {};
     }
@@ -336,6 +337,36 @@ export class SettingsRepository {
 
   getDatabase(): DatabaseAdapter {
     return this.storage.getDatabase();
+  }
+
+  /** Raw access is intentionally limited to the one-way credential migration. */
+  getCredentialMigrationRecords(): Array<{
+    scope: "system" | "project" | "sprint";
+    scopeId: string | null;
+    payload: string;
+  }> {
+    const db = this.storage.getDatabase();
+    const system = db.prepare("SELECT payload FROM system_settings WHERE id = 1").get() as { payload: string } | undefined;
+    const projects = db.prepare("SELECT project_id AS scope_id, payload FROM project_settings").all() as Array<{ scope_id: string; payload: string }>;
+    const sprints = db.prepare("SELECT sprint_id AS scope_id, payload FROM sprint_settings").all() as Array<{ scope_id: string; payload: string }>;
+    return [
+      { scope: "system", scopeId: null, payload: system?.payload ?? "{}" },
+      ...projects.map((row) => ({ scope: "project" as const, scopeId: row.scope_id, payload: row.payload })),
+      ...sprints.map((row) => ({ scope: "sprint" as const, scopeId: row.scope_id, payload: row.payload })),
+    ];
+  }
+
+  replaceCredentialMigrationRecord(
+    scope: "system" | "project" | "sprint",
+    scopeId: string | null,
+    payload: string,
+  ): void {
+    if (scope === "system") this.storage.writeSystemPayload(payload);
+    else if (scope === "project" && scopeId) this.storage.writeProjectPayload(scopeId, payload);
+    else if (scope === "sprint" && scopeId) this.storage.writeSprintPayload(scopeId, payload);
+    else throw new Error("Credential migration record has an invalid scope identifier.");
+    SettingsRepository.systemSettingsCache = null;
+    this.invalidateResolutionCache();
   }
 
   close(): void {
@@ -452,7 +483,24 @@ export class SettingsRepository {
         mcpTools: legacySettings.mcpTools,
       }, this.externalHints);
 
-      this.storage.writeSystemPayload(JSON.stringify(systemSettings));
+      // Preserve legacy values only in the raw migration hand-off. Public reads
+      // use the sanitized object above, and startup immediately moves these
+      // values into the credential broker before deleting the legacy row.
+      const credentialMigrationPayload = structuredClone(systemSettings) as SystemSettings;
+      const legacyProviderSecrets: Array<[string, string]> = [
+        ["jules", legacySettings.aiProvider?.providers?.jules?.apiKey || ""],
+        ["gemini", legacySettings.aiProvider?.providers?.gemini?.apiKey || ""],
+        ["codex", legacySettings.aiProvider?.providers?.codex?.apiKey || ""],
+        ["claude-code", legacySettings.aiProvider?.providers?.["claude-code"]?.apiKey || ""],
+      ];
+      for (const [providerConfigId, secret] of legacyProviderSecrets) {
+        const provider = credentialMigrationPayload.integrations.providers[providerConfigId];
+        if (provider) provider.apiKey = secret;
+      }
+      credentialMigrationPayload.integrations.githubToken = legacySettings.git?.githubToken || "";
+      credentialMigrationPayload.integrations.gitlabToken = legacySettings.git?.gitlabToken || "";
+      credentialMigrationPayload.integrations.jira.apiToken = legacySettings.jira?.apiToken || "";
+      this.storage.writeSystemPayload(JSON.stringify(credentialMigrationPayload));
       this.storage.deleteLegacyPayload();
 
       // Warm up the cache with the migrated settings
