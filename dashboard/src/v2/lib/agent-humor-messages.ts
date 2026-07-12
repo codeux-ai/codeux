@@ -1,8 +1,10 @@
 export const STATUS_MESSAGE_MIN_INTERVAL_MS = 5_000;
+export const STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS = 20_000;
 
 export const AGENT_HUMOR_CATEGORIES = [
   "starting",
   "working",
+  "delegating",
   "planning",
   "qa_handoff",
   "completion",
@@ -24,11 +26,12 @@ export interface AgentHumorCycle {
   index: number;
   startsAtMs: number;
   endsAtMs: number;
-  durationMs: typeof STATUS_MESSAGE_MIN_INTERVAL_MS;
+  durationMs: number;
 }
 
 export interface SelectAgentHumorMessageOptions {
   category: AgentHumorCategory | string;
+  cycleDurationMs?: number;
   seed?: string | number | null;
   nowMs: number;
 }
@@ -80,6 +83,80 @@ export const AGENT_HUMOR_MESSAGES: Record<AgentHumorCategory, readonly string[]>
       "and reserving a conference room for the edge cases.",
     ],
   ),
+  delegating: [
+    "Delegating this with the confidence of a PM who just discovered the Assign button.",
+    "I delegated the work and retained the vital responsibility of asking how it’s going.",
+    "Sending this to a specialist so I can focus on moving its card to In Progress.",
+    "The team is doing the work; I’m protecting them from a meeting about the work.",
+    "I gave the task an owner, a deadline, and the emotional support of a colored label.",
+    "This could have been a meeting, so I heroically made it someone else’s ticket.",
+    "I’m not micromanaging; I’m refreshing the board with leadership intensity.",
+    "An expert is handling it. I’ll convert the progress into a tastefully optimistic slide.",
+    "We’re in the agency phase known as one tiny change with its own subproject.",
+    "Scope creep arrived quietly and already has a desk, a login, and strong opinions.",
+    "The deadline is fixed; reality has been asked to remain flexible.",
+    "The client requested more premium. I assigned that measurable unit to the team.",
+    "We skipped the pre-meeting about the meeting; productivity is at historic highs.",
+    "The standup is seated today while the actual work stands up for itself.",
+    "I’m circling back because going forward requires traditional PM choreography.",
+    "Everyone is aligned, which is agency for the calendar invite was accepted.",
+    "The brief says make it pop. Fortunately, our specialists are licensed in advanced popping.",
+    "The logo asked to be bigger. We’re negotiating airspace.",
+    "Version final-final-approved-3 has entered stakeholder review. Confidence is high-ish.",
+    "The Gantt chart says this is fine, and charts are famously calm under pressure.",
+    "I added a blocker to track the blocker blocking our blocker review.",
+    "We’re agile enough to move the deadline and organized enough to call it a roadmap update.",
+    "Resource allocation is complete: the busiest coworker has received the urgent task.",
+    "Good news: the feedback is consolidated. Bad news: it consolidated into a rewrite.",
+    "We have one source of truth and seven Slack threads discussing where it lives.",
+    "The project is on track. We are currently defining track.",
+    "I’m shielding the team from status requests with this tasteful status bubble.",
+    "The estimate was two days before everyone spent three days estimating it.",
+    "I assigned the action item and scheduled a follow-up to admire its journey.",
+    "The sprint has a goal, a board, and a surprisingly ambitious social calendar.",
+    "The agency triangle is intact: fast, good, cheap. Stakeholders selected all three.",
+    "We reached consensus: everyone agrees someone else should approve it.",
+    "I’m escalating this with the gentle urgency of a calendar invite marked Optional.",
+    "The task is in expert hands; mine are busy holding the roadmap straight.",
+    "I delegated decisively and will now contribute strategic nodding.",
+    "I matched this task by skill, availability, and who had not muted me yet.",
+    "I delegated this before it could become a recurring meeting.",
+    "A coworker has the task; I have the confidence and none of the merge conflicts.",
+    "I moved it to Doing, the ceremonial phase between Planning and Asking Again.",
+    "Our action items now have action items. Governance is thriving.",
+    "The brief is clear when read under the light of three follow-up calls.",
+    "I asked for an ETA and received a thoughtful position on the nature of time.",
+    "The creative review is booked; the creativity is finding an available slot.",
+    "We’re waiting for final approval from the stakeholder who joined today.",
+    "I converted uncertainty into a milestone. This is why they give me the clipboard.",
+    "The task was delegated vertically, horizontally, and at least once accidentally.",
+    "The project plan is current as of the meeting that changed the project plan.",
+    "I protected the deadline by moving everything else.",
+    "The ticket is perfectly groomed and emotionally unprepared for production.",
+    "Today’s synergy is two coworkers independently avoiding the same meeting.",
+    "I added buffer time; the calendar immediately ate it.",
+    "The client said surprise me, followed by a detailed list of acceptable surprises.",
+    "We’re brainstorming inside the approved brand weather system.",
+    "This review round is final in the same way the file is final.",
+    "I asked for blue-sky thinking under a low-ceiling budget.",
+    "The dependency has a dependency; they’re starting a podcast.",
+    "We’re doing async alignment, also known as reading the ticket.",
+    "I reassigned the task to the person who said they could take a quick look.",
+    "The meeting ended early. I’m filing it under operational miracles.",
+    "I captured the feedback, tagged the owners, and released the carrier pigeons.",
+    "The roadmap is directional, especially when the direction changes.",
+    "Our bandwidth is full, but the request was marked quick, so physics approved it.",
+    "I’m keeping stakeholders in the loop until the loop becomes a lasso.",
+    "The coworker accepted the handoff. A tiny brass band is on standby.",
+    "I made a RACI chart; four people now know exactly who should ask the fifth.",
+    "The blocker is under review by the committee that formed around the blocker.",
+    "This task is cross-functional: everyone can see it and nobody can close it.",
+    "I scheduled focus time between two meetings about protecting focus time.",
+    "The project is 90% done; the remaining 90% is stakeholder feedback.",
+    "I distilled twelve comments into one clear direction: try both.",
+    "Our single source of truth is currently out getting consensus.",
+    "I asked for an owner; the room developed excellent eye contact with the floor.",
+  ],
   planning: buildMessages(
     [
       "Mapping the work into sensible steps",
@@ -323,28 +400,57 @@ const normalizeSeed = (seed: SelectAgentHumorMessageOptions["seed"]): string => 
   seed === null || seed === undefined ? "" : String(seed)
 );
 
-export const getAgentHumorCycle = (nowMs: number): AgentHumorCycle => {
+const buildShuffledMessageDeck = (
+  category: AgentHumorCategory,
+  messages: readonly string[],
+  seed: string,
+  deckIndex: number,
+): string[] => (
+  [...messages].sort((left, right) => (
+    hashString(`${category}|${seed}|deck:${deckIndex}|${left}`)
+      - hashString(`${category}|${seed}|deck:${deckIndex}|${right}`)
+    || left.localeCompare(right)
+  ))
+);
+
+export const getAgentHumorCycle = (
+  nowMs: number,
+  cycleDurationMs = STATUS_MESSAGE_MIN_INTERVAL_MS,
+): AgentHumorCycle => {
   const normalizedNowMs = normalizeNowMs(nowMs);
-  const index = Math.floor(normalizedNowMs / STATUS_MESSAGE_MIN_INTERVAL_MS);
-  const startsAtMs = index * STATUS_MESSAGE_MIN_INTERVAL_MS;
+  const normalizedCycleDurationMs = Number.isFinite(cycleDurationMs)
+    ? Math.max(1, Math.floor(cycleDurationMs))
+    : STATUS_MESSAGE_MIN_INTERVAL_MS;
+  const index = Math.floor(normalizedNowMs / normalizedCycleDurationMs);
+  const startsAtMs = index * normalizedCycleDurationMs;
   return {
     index,
     startsAtMs,
-    endsAtMs: startsAtMs + STATUS_MESSAGE_MIN_INTERVAL_MS,
-    durationMs: STATUS_MESSAGE_MIN_INTERVAL_MS,
+    endsAtMs: startsAtMs + normalizedCycleDurationMs,
+    durationMs: normalizedCycleDurationMs,
   };
 };
 
 export const selectAgentHumorMessage = ({
   category,
+  cycleDurationMs,
   seed,
   nowMs,
 }: SelectAgentHumorMessageOptions): string => {
   const resolvedCategory = isAgentHumorCategory(category) ? category : "tool_generic";
   const messages = AGENT_HUMOR_MESSAGES[resolvedCategory];
-  const cycle = getAgentHumorCycle(nowMs);
-  const hash = hashString(`${resolvedCategory}|${normalizeSeed(seed)}|${cycle.index}`);
-  return messages[hash % messages.length];
+  const cycle = getAgentHumorCycle(nowMs, cycleDurationMs);
+  const normalizedSeed = normalizeSeed(seed);
+  const deckIndex = Math.floor(cycle.index / messages.length);
+  const position = cycle.index % messages.length;
+  const deck = buildShuffledMessageDeck(resolvedCategory, messages, normalizedSeed, deckIndex);
+  if (deckIndex > 0) {
+    const previousDeck = buildShuffledMessageDeck(resolvedCategory, messages, normalizedSeed, deckIndex - 1);
+    if (deck[0] === previousDeck[previousDeck.length - 1]) {
+      [deck[0], deck[1]] = [deck[1], deck[0]];
+    }
+  }
+  return deck[position];
 };
 
 export const classifyToolHumorCategory = (toolName: string | null | undefined): AgentToolHumorCategory => {

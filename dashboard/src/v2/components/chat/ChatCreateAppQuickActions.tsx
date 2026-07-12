@@ -2,7 +2,7 @@ import type { FunctionComponent } from "preact";
 import { BriefcaseBusiness, Gamepad2, Globe2, Monitor, ShoppingCart } from "lucide-preact";
 import type { DashboardCreateAppQuickactionKind } from "../../types.js";
 import { CREATE_APP_QUICKACTION_CATALOG } from "../../../../../src/domain/chat/create-app-quickaction-catalog.js";
-import { isInitialOnlyCreateAppQuickaction } from "../../lib/cinematic-quick-actions.js";
+import { isInitialProjectCreateAppQuickaction } from "../../lib/cinematic-quick-actions.js";
 
 const CREATE_APP_ACTION_ICONS: Record<DashboardCreateAppQuickactionKind, typeof Monitor> = {
   web_app: Globe2,
@@ -30,7 +30,7 @@ export const ChatCreateAppQuickActions: FunctionComponent<{
     <div className="min-w-0" aria-label="Create app quick actions">
       <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
         {CREATE_APP_QUICKACTION_CATALOG.filter(({ kind }) => (
-          showInitialCreateActions || !isInitialOnlyCreateAppQuickaction(kind)
+          showInitialCreateActions || !isInitialProjectCreateAppQuickaction(kind)
         )).map(({ kind, displayLabel, appKindLabel }) => {
           const Icon = CREATE_APP_ACTION_ICONS[kind];
           const label = displayLabel;

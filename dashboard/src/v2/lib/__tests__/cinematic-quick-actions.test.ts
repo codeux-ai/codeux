@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCinematicQuickActions,
-  isInitialOnlyCreateAppQuickaction,
+  isInitialProjectCreateAppQuickaction,
 } from "../cinematic-quick-actions.js";
 
 const ALL_LABELS = [
@@ -41,18 +41,20 @@ describe("cinematic quick action view model", () => {
     expect(new Set(actions.map(({ zone }) => zone))).toEqual(new Set(["create", "insight", "workflow"]));
   });
 
-  it("fails closed for initial-only actions while keeping other project actions", () => {
+  it("fails closed for every create-app action while keeping project prompt actions", () => {
     for (const options of [
       { initialEligibilityLoaded: false, canCreateInitialAppQuickactions: true },
       { initialEligibilityLoaded: true, canCreateInitialAppQuickactions: false },
     ]) {
       const actions = buildCinematicQuickActions({ hasProject: true, ...options });
-      expect(actions.map(({ label }) => label)).toEqual(ALL_LABELS.slice(2));
+      expect(actions.map(({ label }) => label)).toEqual(ALL_LABELS.slice(5));
     }
 
-    expect(isInitialOnlyCreateAppQuickaction("web_app")).toBe(true);
-    expect(isInitialOnlyCreateAppQuickaction("desktop_app")).toBe(true);
-    expect(isInitialOnlyCreateAppQuickaction("game")).toBe(false);
+    expect(isInitialProjectCreateAppQuickaction("web_app")).toBe(true);
+    expect(isInitialProjectCreateAppQuickaction("desktop_app")).toBe(true);
+    expect(isInitialProjectCreateAppQuickaction("online_shop")).toBe(true);
+    expect(isInitialProjectCreateAppQuickaction("portfolio")).toBe(true);
+    expect(isInitialProjectCreateAppQuickaction("game")).toBe(true);
   });
 
   it("does not expose generic quick actions without a selected project", () => {

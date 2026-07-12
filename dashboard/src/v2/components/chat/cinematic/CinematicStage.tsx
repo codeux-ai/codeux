@@ -32,7 +32,7 @@ import {
   getAgentResponseEffectCaption,
   resolveAgentResponseEffect,
 } from "../../../lib/agent-response-effects.js";
-import { STATUS_MESSAGE_MIN_INTERVAL_MS } from "../../../lib/agent-humor-messages.js";
+import { STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS } from "../../../lib/agent-humor-messages.js";
 import { resolveCinematicActivityDisplayState } from "../../../lib/cinematic-activity.js";
 import { StageActivityStrip } from "./StageActivityStrip.js";
 
@@ -102,6 +102,44 @@ const PROMPT_ACTION_ICONS: Record<string, typeof Monitor> = {
   "create-skill": WandSparkles,
   "list-skills": Wrench,
 };
+
+const QUICK_ACTION_ICON_STYLES: Record<string, string> = {
+  "create-web_app": "bg-sky-500/12 text-sky-600 ring-sky-500/20 dark:bg-sky-400/12 dark:text-sky-300",
+  "create-desktop_app": "bg-indigo-500/12 text-indigo-600 ring-indigo-500/20 dark:bg-indigo-400/12 dark:text-indigo-300",
+  "create-online_shop": "bg-amber-500/14 text-amber-700 ring-amber-500/25 dark:bg-amber-400/12 dark:text-amber-300",
+  "create-portfolio": "bg-rose-500/12 text-rose-600 ring-rose-500/20 dark:bg-rose-400/12 dark:text-rose-300",
+  "create-game": "bg-fuchsia-500/12 text-fuchsia-600 ring-fuchsia-500/20 dark:bg-fuchsia-400/12 dark:text-fuchsia-300",
+  "status-report": "bg-cyan-500/12 text-cyan-700 ring-cyan-500/20 dark:bg-cyan-400/12 dark:text-cyan-300",
+  "sprint-progress": "bg-violet-500/12 text-violet-600 ring-violet-500/20 dark:bg-violet-400/12 dark:text-violet-300",
+  "whats-failing": "bg-red-500/10 text-red-600 ring-red-500/20 dark:bg-red-400/10 dark:text-red-300",
+  "plan-next-steps": "bg-orange-500/12 text-orange-700 ring-orange-500/20 dark:bg-orange-400/12 dark:text-orange-300",
+  "add-nodes-workflow": "bg-lime-500/12 text-lime-700 ring-lime-500/20 dark:bg-lime-400/12 dark:text-lime-300",
+  "add-dashboard": "bg-blue-500/12 text-blue-600 ring-blue-500/20 dark:bg-blue-400/12 dark:text-blue-300",
+  "create-skill": "bg-purple-500/12 text-purple-600 ring-purple-500/20 dark:bg-purple-400/12 dark:text-purple-300",
+  "list-skills": "bg-teal-500/12 text-teal-700 ring-teal-500/20 dark:bg-teal-400/12 dark:text-teal-300",
+};
+
+const QUICK_ACTION_SCATTER_STYLES: Record<string, string> = {
+  "create-web_app": "md:ml-0 md:mt-0",
+  "create-desktop_app": "md:ml-3 md:-mt-1",
+  "create-online_shop": "md:ml-5 md:mt-1",
+  "create-portfolio": "md:ml-3 md:-mt-0.5",
+  "create-game": "md:ml-12 md:mt-1",
+  "status-report": "md:ml-1 md:mt-0",
+  "sprint-progress": "md:ml-5 md:-mt-1",
+  "whats-failing": "md:ml-8 md:mt-1",
+  "plan-next-steps": "md:ml-2 md:-mt-0.5",
+  "add-nodes-workflow": "md:ml-0 md:mt-0",
+  "add-dashboard": "md:ml-4 md:-mt-1",
+  "create-skill": "md:ml-8 md:mt-1",
+  "list-skills": "md:ml-6 md:-mt-0.5",
+};
+
+const QUICK_ACTION_GROUPS = [
+  { zone: "create", label: "Create" },
+  { zone: "insight", label: "Project pulse" },
+  { zone: "workflow", label: "Workflows" },
+] as const;
 
 /** Debug override: /chat?stageTool=wrench pins a specific tool on the stage. */
 const readForcedTool = (): AgentSceneTool | null => {
@@ -338,7 +376,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   const agentName = agentPreset?.name || activeConnection?.displayName || "Project Manager";
   const avatarConfig = agentPreset?.avatarConfig || DEFAULT_AGENT_AVATAR_CONFIG;
   useEffect(() => {
-    const timer = window.setInterval(() => setActivityNowMs(Date.now()), STATUS_MESSAGE_MIN_INTERVAL_MS);
+    const timer = window.setInterval(() => setActivityNowMs(Date.now()), STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, []);
   const activityState = resolveCinematicActivityDisplayState({
@@ -398,6 +436,12 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     initialEligibilityLoaded,
     canCreateInitialAppQuickactions,
   });
+  const quickActionGroups = QUICK_ACTION_GROUPS
+    .map((group) => ({
+      ...group,
+      actions: quickActions.filter((action) => action.zone === group.zone),
+    }))
+    .filter((group) => group.actions.length > 0);
 
   const sendStageMessage = async (overrideText?: string): Promise<void> => {
     expectingFreshAgentReplyRef.current = true;
@@ -600,38 +644,64 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
 
       {/* ── Center stage — the bot owns the middle of the screen ── */}
       <div className="pointer-events-none absolute inset-x-0 top-10 bottom-32 z-10 flex flex-col items-center justify-start md:justify-center">
-        {/* Mobile uses a compact two-row scroller; desktop balances actions in
-            a two-column grid in the open space left of the avatar. */}
+        {/* Mobile uses a compact two-row scroller per category; desktop groups
+            a lightly scattered action constellation left of the avatar. */}
         {!runtimeBusy && !sending && !error && quickActions.length > 0 && (
           <div
             aria-label="Project quick actions"
             role="group"
-            className="pointer-events-auto absolute inset-x-4 top-14 z-20 grid max-h-24 grid-flow-col grid-rows-2 auto-cols-[minmax(9rem,1fr)] gap-2 overflow-x-auto overscroll-x-contain pb-2 md:bottom-28 md:left-4 md:right-auto md:top-14 md:max-h-none md:w-[calc(50%-min(24vh,260px)-2rem)] md:grid-flow-row md:grid-cols-2 md:grid-rows-none md:auto-cols-auto md:content-center md:overflow-y-auto md:pr-2"
+            className="pointer-events-auto absolute inset-x-4 top-14 z-20 flex max-h-24 gap-4 overflow-x-auto overscroll-x-contain py-1.5 md:bottom-24 md:left-0 md:right-auto md:top-20 md:max-h-none md:w-[min(21rem,calc(50%-1.5rem))] md:flex-col md:justify-center md:gap-3 md:overflow-visible md:px-1.5 md:py-4"
           >
-            {quickActions.map((action) => {
-              const Icon = action.actionType === "create_app"
-                ? CREATE_APP_ACTION_ICONS[action.appKind]
-                : PROMPT_ACTION_ICONS[action.id];
-              return (
-                <button
-                  key={action.id}
-                  type="button"
-                  data-quick-action-zone={action.zone}
-                  onClick={() => {
-                    if (action.actionType === "create_app") {
-                      void handleCreateAppQuickaction(action.appKind);
-                      return;
-                    }
-                    void sendStageMessage(action.prompt);
-                  }}
-                  style={{ animationDelay: action.animationDelay }}
-                  className={`${mood.ambientMotionEnabled ? "stage-quick-float" : ""} inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-2xl border border-black/[0.07] bg-white/85 px-3 py-2 text-center text-[11px] font-semibold leading-4 text-slate-600 shadow-[0_4px_20px_rgba(0,0,0,0.08)] backdrop-blur-md transition-colors hover:border-signal-500/40 hover:text-signal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-2 dark:border-white/[0.09] dark:bg-void-800/85 dark:text-slate-300 dark:shadow-[0_4px_24px_rgba(0,0,0,0.35)] dark:hover:text-signal-400 dark:focus-visible:ring-offset-void-900`}
+            {quickActionGroups.map((group) => (
+              <div
+                key={group.zone}
+                role="group"
+                aria-label={`${group.label} quick actions`}
+                className="shrink-0 md:w-full"
+              >
+                <div className="mb-1.5 hidden items-center gap-2 px-2 md:flex" aria-hidden="true">
+                  <span className="h-px w-5 bg-gradient-to-r from-transparent to-black/15 dark:to-white/15" />
+                  <span className="font-mono text-[8px] font-bold uppercase tracking-[0.18em] text-slate-400/80 dark:text-slate-500/90">
+                    {group.label}
+                  </span>
+                </div>
+                <div
+                  data-quick-action-group={group.zone}
+                  className="grid grid-flow-col grid-rows-2 auto-cols-max gap-x-3 gap-y-1.5 md:flex md:flex-wrap md:items-center md:gap-x-2 md:gap-y-2"
                 >
-                  <Icon className="h-3.5 w-3.5 shrink-0 text-signal-500" aria-hidden="true" />
-                  <span className="min-w-0 whitespace-normal break-words">{action.label}</span>
-                </button>
-              );
-            })}
+                  {group.actions.map((action) => {
+                    const Icon = action.actionType === "create_app"
+                      ? CREATE_APP_ACTION_ICONS[action.appKind]
+                      : PROMPT_ACTION_ICONS[action.id];
+                    return (
+                      <button
+                        key={action.id}
+                        type="button"
+                        data-quick-action-zone={action.zone}
+                        onClick={() => {
+                          if (action.actionType === "create_app") {
+                            void handleCreateAppQuickaction(action.appKind);
+                            return;
+                          }
+                          void sendStageMessage(action.prompt);
+                        }}
+                        style={{ animationDelay: action.animationDelay }}
+                        className={`${mood.ambientMotionEnabled ? "stage-quick-float" : ""} ${QUICK_ACTION_SCATTER_STYLES[action.id]} group inline-flex min-h-9 w-fit min-w-0 self-center items-center justify-start gap-2 rounded-xl border border-black/[0.06] bg-white/78 px-2 py-1.5 text-left text-[10px] font-semibold leading-3.5 text-slate-600 shadow-[0_3px_14px_rgba(15,23,42,0.07)] backdrop-blur-xl transition-[border-color,background-color,color,box-shadow] hover:border-black/[0.13] hover:bg-white/95 hover:text-slate-900 hover:shadow-[0_5px_18px_rgba(15,23,42,0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-2 dark:border-white/[0.08] dark:bg-void-800/72 dark:text-slate-300 dark:shadow-[0_4px_18px_rgba(0,0,0,0.28)] dark:hover:border-white/[0.16] dark:hover:bg-void-700/92 dark:hover:text-white dark:focus-visible:ring-offset-void-900`}
+                      >
+                        <span
+                          aria-hidden="true"
+                          data-quick-action-icon={action.id}
+                          className={`grid h-6 w-6 shrink-0 place-items-center rounded-lg ring-1 ring-inset transition-transform group-hover:scale-105 ${QUICK_ACTION_ICON_STYLES[action.id]}`}
+                        >
+                          <Icon className="h-3.5 w-3.5" strokeWidth={2.15} />
+                        </span>
+                        <span className="min-w-0 whitespace-nowrap">{action.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
         <div className={`relative flex w-full flex-col items-center px-6 ${!runtimeBusy && !sending && !error && quickActions.length > 0 ? "pt-28 md:pt-0" : ""}`}>

@@ -727,13 +727,11 @@ export class ChatThreadRuntimeService {
       throw new Error("Create-app quickactions are not available until quicksprint launch is initialized.");
     }
 
-    if (quickaction.kind === "web_app" || quickaction.kind === "desktop_app") {
-      const initializationState = this.deps.getProjectInitializationState
-        ? await this.deps.getProjectInitializationState(projectId)
-        : await this.projectInitializationStateService.getProjectInitializationState(projectId);
-      if (!initializationState.canCreateInitialAppQuickactions) {
-        throw new Error(`${getCreateAppQuickactionSpec(quickaction.kind).displayLabel} is only available for an eligible initial project.`);
-      }
+    const initializationState = this.deps.getProjectInitializationState
+      ? await this.deps.getProjectInitializationState(projectId)
+      : await this.projectInitializationStateService.getProjectInitializationState(projectId);
+    if (!initializationState.canCreateInitialAppQuickactions) {
+      throw new Error(`${getCreateAppQuickactionSpec(quickaction.kind).displayLabel} is only available for an eligible initial project.`);
     }
 
     const launch = await this.quicksprintLauncher.launchDetachedQuicksprint(projectId, {

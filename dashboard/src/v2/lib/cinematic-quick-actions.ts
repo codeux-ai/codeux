@@ -22,6 +22,9 @@ export type CinematicQuickAction = {
 const INITIAL_ONLY_APP_KINDS = new Set<DashboardCreateAppQuickactionKind>([
   "web_app",
   "desktop_app",
+  "online_shop",
+  "portfolio",
+  "game",
 ]);
 
 const PROMPT_QUICK_ACTIONS = [
@@ -81,7 +84,7 @@ export interface CinematicQuickActionOptions {
   canCreateInitialAppQuickactions: boolean;
 }
 
-export function isInitialOnlyCreateAppQuickaction(kind: DashboardCreateAppQuickactionKind): boolean {
+export function isInitialProjectCreateAppQuickaction(kind: DashboardCreateAppQuickactionKind): boolean {
   return INITIAL_ONLY_APP_KINDS.has(kind);
 }
 
@@ -92,7 +95,7 @@ export function buildCinematicQuickActions(options: CinematicQuickActionOptions)
 
   const createActions: CinematicQuickAction[] = CREATE_APP_QUICKACTION_CATALOG
     .filter(({ kind }) => (
-      !isInitialOnlyCreateAppQuickaction(kind)
+      !isInitialProjectCreateAppQuickaction(kind)
       || (options.initialEligibilityLoaded && options.canCreateInitialAppQuickactions)
     ))
     .map(({ kind, displayLabel }, index) => ({

@@ -15,12 +15,11 @@ const toneClasses: Record<CinematicActivityCue["tone"], string> = {
 
 const CueCopy: FunctionComponent<{
   cue: CinematicActivityCue;
-  prefix?: string;
-}> = ({ cue, prefix }) => (
+}> = ({ cue }) => (
   <>
     <span className="flex items-center gap-1.5 font-mono text-[9px] font-bold uppercase tracking-[0.13em] text-slate-400 dark:text-slate-500">
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${toneClasses[cue.tone]}`} aria-hidden="true" />
-      {prefix ? `${prefix} · ` : ""}{cue.providerLabel ? `${cue.providerLabel} · ` : ""}{cue.label}
+      {cue.label}
     </span>
     <q className="mt-1 block text-[11px] font-medium leading-4 text-slate-600 no-underline dark:text-slate-300">
       {cue.quote}
@@ -45,11 +44,11 @@ export const StageActivityStrip: FunctionComponent<StageActivityStripProps> = ({
         aria-atomic="true"
         className="rounded-2xl border border-black/[0.06] bg-white/92 px-3.5 py-2.5 shadow-[0_8px_32px_rgba(0,0,0,0.10)] backdrop-blur-md dark:border-white/10 dark:bg-void-800/92"
       >
-        <CueCopy cue={primaryCue} prefix={foregroundCue ? undefined : "Background"} />
+        <CueCopy cue={primaryCue} />
         {foregroundCue && backgroundCue && (
           <div className="mt-2 border-t border-black/[0.05] pt-1.5 dark:border-white/[0.07]">
             <span className="block truncate font-mono text-[9px] uppercase tracking-[0.11em] text-slate-400 dark:text-slate-500">
-              Background · {backgroundActivityCount} active · {backgroundCue.providerLabel ? `${backgroundCue.providerLabel} · ` : ""}{backgroundCue.label}
+              {backgroundActivityCount} other active · {backgroundCue.label}
             </span>
           </div>
         )}

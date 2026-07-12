@@ -37,6 +37,7 @@ import { ChatPageShell } from "../../../dashboard/src/v2/components/chat/ChatPag
 import { ChatRail } from "../../../dashboard/src/v2/components/chat/ChatRail.js";
 import { ChatCreateAppQuickActions } from "../../../dashboard/src/v2/components/chat/ChatCreateAppQuickActions.js";
 import { CinematicStage } from "../../../dashboard/src/v2/components/chat/cinematic/CinematicStage.js";
+import { StageActivityStrip } from "../../../dashboard/src/v2/components/chat/cinematic/StageActivityStrip.js";
 import type { AgentPresetRecord, ExecutionInvocationRecord, Source } from "../../../dashboard/src/v2/types.js";
 
 const mockProject = {
@@ -204,6 +205,26 @@ describe("ChatPageShell", () => {
     expect(getByText("Network failure")).toBeInTheDocument();
   });
 
+  it("shows a clean planning label without background or provider prefixes", () => {
+    const { getByText, queryByText } = render(
+      <StageActivityStrip
+        backgroundActivityCount={1}
+        backgroundCue={{
+          id: "planning-1",
+          label: "Planning in progress",
+          phase: "planning",
+          providerLabel: "Codex",
+          quote: "The team is doing the work; I’m protecting them from a meeting about the work.",
+          tone: "active",
+        }}
+        foregroundCue={null}
+      />,
+    );
+
+    expect(getByText("Planning in progress")).toBeInTheDocument();
+    expect(queryByText(/Background|Codex/)).not.toBeInTheDocument();
+  });
+
   it("renders create-app quickactions with accessible labels and disabled status text", () => {
     const onSelect = vi.fn();
     const { getByRole, getByText, rerender } = render(
@@ -241,12 +262,12 @@ describe("ChatPageShell", () => {
     );
 
     expect(() => getByRole("button", { name: "Create Desktop App" })).toThrow();
-    expect(getByRole("button", { name: "Create Game" })).toBeDisabled();
+    expect(() => getByRole("button", { name: "Create Game" })).toThrow();
     expect(getByText("Create app quick actions are unavailable until a project is selected.")).toBeInTheDocument();
   });
 
-  it("omits initial-only app actions for an ineligible project", () => {
-    const { getByRole, queryByRole } = render(
+  it("omits every create-app action for an ineligible project", () => {
+    const { queryByRole } = render(
       <ChatCreateAppQuickActions
         hasProject
         showInitialCreateActions={false}
@@ -256,9 +277,9 @@ describe("ChatPageShell", () => {
 
     expect(queryByRole("button", { name: "Create Web App" })).not.toBeInTheDocument();
     expect(queryByRole("button", { name: "Create Desktop App" })).not.toBeInTheDocument();
-    expect(getByRole("button", { name: "Create Onlineshop" })).toBeEnabled();
-    expect(getByRole("button", { name: "Create Portfolio" })).toBeEnabled();
-    expect(getByRole("button", { name: "Create Game" })).toBeEnabled();
+    expect(queryByRole("button", { name: "Create Onlineshop" })).not.toBeInTheDocument();
+    expect(queryByRole("button", { name: "Create Portfolio" })).not.toBeInTheDocument();
+    expect(queryByRole("button", { name: "Create Game" })).not.toBeInTheDocument();
   });
 
   it("keeps the Project Manager idle while another agent has a running invocation", () => {
@@ -271,7 +292,8 @@ describe("ChatPageShell", () => {
     expect(getByTestId("cinematic-stage")).toHaveAttribute("data-background-activity-count", "1");
     expect(getByTestId("agent-avatar-scene")).not.toHaveAttribute("data-expression", "thinking");
     expect(getByTestId("agent-avatar-scene")).toHaveAttribute("data-tool", "");
-    expect(queryByText(/Background.*Container starting/)).toBeInTheDocument();
+    expect(queryByText("Container starting")).toBeInTheDocument();
+    expect(queryByText(/Background.*Codex/i)).not.toBeInTheDocument();
   });
 
   it("activates the Project Manager for its matching dashboard-reply invocation", () => {
