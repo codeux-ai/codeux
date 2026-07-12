@@ -257,7 +257,54 @@ export function ensureNodeFlowTables(db: DatabaseAdapter): void {
     )
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS node_flow_publications (
+      id TEXT PRIMARY KEY,
+      flow_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      graph_json TEXT NOT NULL,
+      policy_json TEXT NOT NULL,
+      published_by TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      UNIQUE (flow_id, version)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS node_flow_node_attempts (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL,
+      node_run_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      attempt_number INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      executor_id TEXT NOT NULL,
+      invocation_id TEXT,
+      artifact_digest TEXT,
+      input_json TEXT,
+      output_json TEXT,
+      credential_ids_json TEXT NOT NULL DEFAULT '[]',
+      failure_classification TEXT,
+      retry_decision TEXT,
+      error_message TEXT,
+      started_at TEXT NOT NULL,
+      finished_at TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (run_id) REFERENCES node_flow_runs(id) ON DELETE CASCADE,
+      FOREIGN KEY (node_run_id) REFERENCES node_flow_node_runs(id) ON DELETE CASCADE,
+      UNIQUE (run_id, node_id, attempt_number)
+    )
+  `);
+
   ensureColumn(db, "node_flow_runs", "execution_invocation_id", "TEXT");
+  ensureColumn(db, "node_flow_runs", "publication_id", "TEXT");
+  ensureColumn(db, "node_flow_runs", "policy_json", "TEXT NOT NULL DEFAULT '{}'");
+  ensureColumn(db, "node_flow_runs", "lease_owner", "TEXT");
+  ensureColumn(db, "node_flow_runs", "lease_expires_at", "TEXT");
+  ensureColumn(db, "node_flow_runs", "heartbeat_at", "TEXT");
+  ensureColumn(db, "node_flow_runs", "cancel_requested_at", "TEXT");
   ensureColumn(db, "node_flow_node_runs", "execution_invocation_id", "TEXT");
 
   ensureIndex(db, "idx_node_flows_project_updated", "node_flows", "project_id, updated_at DESC");
@@ -266,6 +313,10 @@ export function ensureNodeFlowTables(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_node_flow_runs_flow_created", "node_flow_runs", "flow_id, created_at DESC");
   ensureIndex(db, "idx_node_flow_runs_project_created", "node_flow_runs", "project_id, created_at DESC");
   ensureIndex(db, "idx_node_flow_node_runs_run_created", "node_flow_node_runs", "run_id, created_at ASC");
+  ensureIndex(db, "idx_node_flow_publications_latest", "node_flow_publications", "flow_id, version DESC");
+  ensureIndex(db, "idx_node_flow_runs_queue", "node_flow_runs", "status, lease_expires_at, created_at ASC");
+  ensureIndex(db, "idx_node_flow_runs_project_status", "node_flow_runs", "project_id, status");
+  ensureIndex(db, "idx_node_flow_attempts_run_node", "node_flow_node_attempts", "run_id, node_id, attempt_number");
 }
 
 interface LegacyNodeFlowRow {

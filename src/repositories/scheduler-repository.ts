@@ -364,8 +364,17 @@ export class SchedulerRepository {
         target.input = normalizedInput;
       }
       const flowVersion = this.normalizeOptionalPositiveInteger(input.nodeFlowTarget?.flowVersion, "nodeFlowTarget.flowVersion");
-      if (flowVersion !== undefined) {
+      const versionSelection = input.nodeFlowTarget?.versionSelection;
+      if (versionSelection?.mode === "pinned") {
+        target.versionSelection = { mode: "pinned", version: this.normalizeOptionalPositiveInteger(versionSelection.version, "nodeFlowTarget.versionSelection.version")! };
+        target.flowVersion = target.versionSelection.version;
+      } else if (versionSelection?.mode === "latest_published") {
+        target.versionSelection = { mode: "latest_published" };
+      } else if (flowVersion !== undefined) {
         target.flowVersion = flowVersion;
+        target.versionSelection = { mode: "pinned", version: flowVersion };
+      } else {
+        target.versionSelection = { mode: "latest_published" };
       }
       return { nodeFlowTarget: target };
     }

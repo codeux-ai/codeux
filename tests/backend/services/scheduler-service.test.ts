@@ -533,6 +533,7 @@ describe("SchedulerService", () => {
 
     expect(nodeFlowRuntimeService.runFlow).toHaveBeenCalledWith("project-1", "flow-1", { prompt: "Ship" }, {
       triggerType: "scheduler",
+      versionSelection: { mode: "pinned", version: 2 },
       triggerPayload: {
         schedulerEntryId: "entry-1",
         scheduledFor: "2026-05-18T09:00:00.000Z",

@@ -46,6 +46,51 @@ afterEach(async () => {
 });
 
 describe("NodeFlowRuntimeService", () => {
+  it("executes an explicitly pinned publication while latest selection follows the newest publication", async () => {
+    const { dir, projectRepository, nodeFlowRepository, runtime } = await createRuntime();
+    const project = projectRepository.createProject({ name: "Version Project", sourceType: "local", sourceRef: dir });
+    const flow = nodeFlowRepository.createFlow(project.id, { title: "Versioned", graph: { nodes: [{ id: "set", type: "set_fields", title: "Set", data: { fields: { release: "v1" } } }], edges: [] } });
+    nodeFlowRepository.updateFlow(flow.id, { graph: { nodes: [{ id: "set", type: "set_fields", title: "Set", data: { fields: { release: "v2" } } }], edges: [] } });
+
+    const pinned = await runtime.runFlow(project.id, flow.id, {}, { versionSelection: { mode: "pinned", version: 1 } });
+    const latest = await runtime.runFlow(project.id, flow.id, {}, { versionSelection: { mode: "latest_published" } });
+
+    expect(pinned.run.version).toBe(1);
+    expect(pinned.output).toEqual({ release: "v1" });
+    expect(latest.run.version).toBe(2);
+    expect(latest.output).toEqual({ release: "v2" });
+  });
+
+  it("retries classified transient failures and persists redacted numbered attempts", async () => {
+    const executeProvider = vi.fn()
+      .mockRejectedValueOnce(new Error("503 temporarily unavailable"))
+      .mockResolvedValue({ ok: true, stdout: "ok", stderr: "", code: 0, text: "ok", nativeSessionId: null, usageTelemetry: { transcriptText: "ok", inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, usageSource: "reported", rawUsageJson: null } });
+    const { dir, projectRepository, nodeFlowRepository, runtime } = await createRuntime({ executeProvider } as Partial<ProviderExecutionService>);
+    const project = projectRepository.createProject({ name: "Retry Project", sourceType: "local", sourceRef: dir });
+    const flow = nodeFlowRepository.createFlow(project.id, { title: "Retry", graph: { nodes: [{ id: "prompt", type: "provider_prompt", title: "Prompt", data: { provider: "mockup-cli", prompt: "{{input.apiToken}}" }, policy: { retry: { maxAttempts: 2, backoffMs: 0, maxBackoffMs: 0 } } }], edges: [] } });
+
+    const result = await runtime.runFlow(project.id, flow.id, { apiToken: "never-store" });
+
+    expect(result.run.status).toBe("succeeded");
+    expect(executeProvider).toHaveBeenCalledTimes(2);
+    expect(result.attempts?.map((attempt) => [attempt.attemptNumber, attempt.retryDecision])).toEqual([[1, "retry"], [2, "stop"]]);
+    expect(JSON.stringify(result.attempts)).not.toContain("never-store");
+  });
+
+  it("propagates node timeouts to the executor and classifies the attempt", async () => {
+    const executeProvider = vi.fn().mockImplementation(({ signal }: { signal?: AbortSignal }) => new Promise((_resolve, reject) => {
+      signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+    }));
+    const { dir, projectRepository, nodeFlowRepository, runtime } = await createRuntime({ executeProvider } as Partial<ProviderExecutionService>);
+    const project = projectRepository.createProject({ name: "Timeout Project", sourceType: "local", sourceRef: dir });
+    const flow = nodeFlowRepository.createFlow(project.id, { title: "Timeout", graph: { nodes: [{ id: "prompt", type: "provider_prompt", title: "Prompt", data: { provider: "mockup-cli", prompt: "wait" }, policy: { timeout: { timeoutMs: 5 } } }], edges: [] } });
+
+    const result = await runtime.runFlow(project.id, flow.id, {});
+
+    expect(result.run.status).toBe("failed");
+    expect(result.attempts?.[0]).toMatchObject({ failureClassification: "timeout", retryDecision: "stop" });
+  });
+
   it("executes deterministic nodes in topological order and persists the succeeded run", async () => {
     const { dir, projectRepository, nodeFlowRepository, runtime } = await createRuntime();
     const project = projectRepository.createProject({ name: "Runtime Project", sourceType: "local", sourceRef: dir });

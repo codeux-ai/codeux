@@ -11,10 +11,12 @@ Node-flow persistence is owned by `NodeFlowRepository` and stored in SQLite:
 | Table | Purpose |
 | --- | --- |
 | `node_flows` | Current project-scoped flow record: id, project id, title, description, normalized `graph_json`, current version, and timestamps. |
-| `node_flow_versions` | Immutable snapshots written on create and every update. Versions keep the graph saved at that point, even though current runtime execution uses the latest flow record. |
+| `node_flow_versions` | Immutable edit snapshots written on create and every update. |
+| `node_flow_publications` | Immutable executable graph and execution-policy snapshots selected by pinned or latest-published runs. |
 | `node_flow_agent_skills` | Agent attachment table keyed by flow and agent preset. It stores the skill display name and description used when exposing the flow as a repeatable agent capability. |
 | `node_flow_runs` | Flow run records with status, version, trigger type, redacted trigger payload, redacted input/output, error message, timestamps, and optional `execution_invocation_id`. |
 | `node_flow_node_runs` | Per-node run records with status, node id, redacted input/output, error message, timestamps, and optional `execution_invocation_id`. |
+| `node_flow_node_attempts` | Numbered attempts with executor/invocation identity, artifact digest, credential ids, redacted payloads, failure class, and retry decision. |
 
 All graphs, widget schemas, run inputs, outputs, and trigger payloads are stored as JSON text and hydrated into typed contracts at the repository boundary. Flow, version, run, and attachment records belong to a project. Agent attachment operations verify that the target agent preset belongs to the same project as the flow.
 
@@ -37,7 +39,7 @@ Dashboard-only editable canvas state lives in `dashboard/src/v2/lib/nodes-canvas
 
 ## Runtime
 
-`NodeFlowRuntimeService.runFlow(projectId, flowId, input, options)` revalidates the saved graph, checks project ownership, and then executes nodes in the validator's topological order.
+`NodeFlowRuntimeService.runFlow(projectId, flowId, input, options)` resolves an explicit pinned or latest-published snapshot, revalidates that immutable graph, claims a durable lease, and executes nodes in topological order. See [Node Flow Durable Execution](./node-flow-durable-execution.md) for queue, retry, lease, recovery, quota, and redaction guarantees.
 
 Runtime-supported node types are:
 
@@ -75,7 +77,7 @@ Cancellation records cancelled node rows for the current and remaining nodes. At
 
 ## Scheduling
 
-Scheduler entries with `targetType: "node_flow"` persist `nodeFlowTarget = { flowId, input?, flowVersion? }` inside `scheduler_entries.target_json`. Ownership is validated when entries are created or updated and again before due-run execution.
+Scheduler entries with `targetType: "node_flow"` persist an explicit `versionSelection`: pinned schedules continue to execute version N after N+1 is published, while latest-published schedules resolve the newest publication at dispatch time. Legacy `flowVersion` values normalize to pinned selection and are executable semantics, not audit-only metadata. Ownership is validated when entries are created or updated and again before due-run execution.
 
 Due runs call `NodeFlowRuntimeService.runFlow` with `triggerType = "scheduler"` and trigger payload metadata for the scheduler entry id, scheduled occurrence time, target type, and persisted flow version when present. Node-flow schedules advance only when `runFlow` returns a run status of `succeeded`. Returned `failed` or `cancelled` runs mark the scheduler entry `failed` with the run error and still count the attempted occurrence in `lastRunAt` and `runCount`; runtime startup rejections mark failure without creating a false successful schedule run.
 

@@ -66,6 +66,7 @@ export function registerNodeFlowRoutes(app: Express, deps: DashboardDependencies
       input?: Record<string, unknown>;
       triggerType?: string;
       triggerPayload?: NodeFlowJsonObject;
+      flowVersion?: number;
     };
     const result = await requireNodeFlowService(deps).runFlow(
       requireTrimmedString(body.projectId, "projectId"),
@@ -74,6 +75,9 @@ export function registerNodeFlowRoutes(app: Express, deps: DashboardDependencies
       {
         triggerType: body.triggerType,
         triggerPayload: body.triggerPayload,
+        versionSelection: body.flowVersion === undefined
+          ? { mode: "latest_published" }
+          : { mode: "pinned", version: body.flowVersion },
       },
     );
     res.status(201).json(result);
@@ -120,5 +124,8 @@ export function registerNodeFlowRoutes(app: Express, deps: DashboardDependencies
 
   app.get("/api/node-flow-runs/:runId/node-runs", syncRoute((req, res) => {
     res.json(requireNodeFlowService(deps).listNodeRuns(requireTrimmedString(req.params.runId, "runId")));
+  }));
+  app.get("/api/node-flow-runs/:runId/attempts", syncRoute((req, res) => {
+    res.json(requireNodeFlowService(deps).listNodeAttempts(requireTrimmedString(req.params.runId, "runId")));
   }));
 }

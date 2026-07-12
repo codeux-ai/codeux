@@ -138,6 +138,7 @@ describe("node flow routes", () => {
     expect(nodeFlowService.runFlow).toHaveBeenCalledWith("project-1", "flow-1", { prompt: "Ship" }, {
       triggerType: "manual",
       triggerPayload: undefined,
+      versionSelection: { mode: "latest_published" },
     });
   });
 });

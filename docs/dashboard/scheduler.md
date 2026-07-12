@@ -78,7 +78,7 @@ The target payload keys are:
 - `chatTarget`: `{ bodyMarkdown, threadId?, title?, connectionId? }`
 - `memoryRemediationTarget`: `{ mode, source? }`
 - `taskTarget`: `{ taskId, provider?, origin: "agent_scheduler", source: "agent_scheduler", createdByAgentId? }`
-- `nodeFlowTarget`: `{ flowId, input?, flowVersion? }`
+- `nodeFlowTarget`: `{ flowId, input?, versionSelection }`; legacy `flowVersion` normalizes to pinned selection
 - `agentWakeupTarget`: `{ bodyMarkdown, threadId?, title?, connectionId?, origin: "agent_scheduler", source: "agent_scheduler", createdByAgentId? }`
 
 `node_flow` entries keep their flow id and optional input in `target_json`; ownership is checked when entries are created or updated and again before due-run execution. The persisted `flowVersion` is target metadata and is passed in scheduler trigger payloads for auditability; the current runtime executes through the latest node-flow runtime API. Due-run handling treats the returned node-flow run status as authoritative: only `succeeded` advances the schedule as successful, while `failed` and `cancelled` mark the scheduler entry `failed`, persist the run error, and record the attempted occurrence in `lastRunAt` and `runCount`. `agent_wakeup` and `task` entries always normalize `origin` and `source` to `agent_scheduler` in `target_json`. When the creator supplies `createdByAgentId`, it is preserved with the target payload for later authorization, audit, and notification work. Existing sprint, quicksprint, chat, memory remediation, recurrence, pause/resume, and `after_sprint_end` anchor rows continue to hydrate from the same JSON payload without a schema migration.
@@ -156,7 +156,7 @@ For sprint targets, failures from either automatic planning or direct orchestrat
 
 ### Node-Flow Schedules
 
-Node-flow schedules use `targetType: "node_flow"` and `nodeFlowTarget = { flowId, input?, flowVersion? }`.
+Node-flow schedules use `targetType: "node_flow"` and `nodeFlowTarget = { flowId, input?, versionSelection }`. A pinned selection always executes that published graph and policy snapshot after newer versions are published; `latest_published` resolves the newest publication per occurrence.
 
 Behavior:
 

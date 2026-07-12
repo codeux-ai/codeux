@@ -16,6 +16,7 @@ import type { NodeFlowService } from "../../services/node-flow-service.js";
 import {
   managementValidationError,
   parseOptionalObject,
+  parseOptionalNumber,
   parseOptionalString,
   parseRequiredObject,
   parseRequiredString,
@@ -139,8 +140,12 @@ export class NodeFlowActions {
     const projectId = parseRequiredString(payload, "projectId");
     const flowId = parseRequiredString(payload, "flowId");
     const input = parseOptionalObject<NodeFlowJsonObject>(payload, "input") ?? {};
+    const flowVersion = parseOptionalNumber(payload, "flowVersion", 1);
     const result = await this.nodeFlowService.runFlow(projectId, flowId, input, {
       triggerType: "mcp_management",
+      versionSelection: flowVersion === undefined
+        ? { mode: "latest_published" }
+        : { mode: "pinned", version: Math.floor(flowVersion) },
     });
     return { result: formatRunSummary(result) };
   }

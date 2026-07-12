@@ -11,6 +11,11 @@ import type { ProviderExecutionService } from "./provider-execution-service.js";
 import type { CliProviderId } from "../infrastructure/providers/cli/provider-command-specs.js";
 import type { ProviderRunResult } from "../infrastructure/providers/cli/provider-runner.js";
 import type { CredentialBroker } from "./credentials/credential-broker.js";
+import { NodeFlowPublicationService } from "./node-flows/node-flow-publication-service.js";
+import { NodeFlowQueueService } from "./node-flows/node-flow-queue-service.js";
+import { NodeFlowAttemptService } from "./node-flows/node-flow-attempt-service.js";
+import { NodeFlowLeaseService } from "./node-flows/node-flow-lease-service.js";
+import type { NodeFlowFailureClassification } from "../contracts/node-flow-execution-policy-types.js";
 import { buildProviderInvocationWorkspaceOptions } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import type {
   DashboardSettings,
@@ -55,6 +60,8 @@ interface RuntimeContext {
   predecessors: Map<string, string[]>;
   descendants: Map<string, Set<string>>;
   options: RunNodeFlowOptions;
+  executorId: string;
+  currentAttemptId?: string;
 }
 
 interface NodeExecutionResult {
@@ -79,7 +86,9 @@ export class NodeFlowRuntimeService {
       throw new ValidationError("Node flow does not belong to the requested project.");
     }
 
-    const { graph, executionOrder } = normalizeNodeFlowGraph(flow.graph);
+    const selection = options.versionSelection ?? { mode: "latest_published" };
+    const publication = new NodeFlowPublicationService(this.deps.nodeFlowRepository).resolve(flow.id, selection);
+    const { graph, executionOrder } = normalizeNodeFlowGraph(publication.graph);
     this.requireSupportedNodes(graph);
     const sanitizedInput = maskSecrets(input);
     const startedAt = new Date().toISOString();
@@ -92,29 +101,39 @@ export class NodeFlowRuntimeService {
     });
     this.deps.executionRepository.appendExecutionInvocationMessage(parentInvocation.id, {
       role: "system",
-      contentMarkdown: `Node flow run started for flow ${flow.id} at version ${flow.version}.`,
+      contentMarkdown: `Node flow run started for flow ${flow.id} at published version ${publication.version}.`,
       metadata: {
         flowId: flow.id,
-        flowVersion: flow.version,
+        flowVersion: publication.version,
+        publicationId: publication.id,
       },
     });
 
     const run = this.deps.nodeFlowRepository.createRun({
       flowId: flow.id,
       projectId,
-      version: flow.version,
-      status: "running",
+      version: publication.version,
+      publicationId: publication.id,
+      policy: publication.policy,
+      status: "queued",
       executionInvocationId: parentInvocation.id,
       triggerType: options.triggerType,
       triggerPayload: options.triggerPayload ? maskSecrets(options.triggerPayload) : null,
       input: sanitizedInput,
-      startedAt,
+      startedAt: null,
     });
+    const executorId = options.executorId?.trim() || `node-flow-runtime:${process.pid}:${randomUUID()}`;
+    const claimedRun = new NodeFlowQueueService(this.deps.nodeFlowRepository).claim(run, executorId);
+    const leaseService = new NodeFlowLeaseService(this.deps.nodeFlowRepository);
+    const heartbeatTimer = setInterval(() => {
+      leaseService.heartbeat(claimedRun.id, executorId, publication.policy.leaseDurationMs);
+    }, publication.policy.heartbeatIntervalMs);
+    heartbeatTimer.unref?.();
 
     const context: RuntimeContext = {
       projectId,
       flowId: flow.id,
-      runId: run.id,
+      runId: claimedRun.id,
       graph,
       order: executionOrder,
       input,
@@ -122,6 +141,7 @@ export class NodeFlowRuntimeService {
       predecessors: buildPredecessors(graph),
       descendants: buildDescendants(graph),
       options,
+      executorId,
     };
 
     const blockedNodes = new Set<string>();
@@ -136,7 +156,7 @@ export class NodeFlowRuntimeService {
       }
       if (options.signal?.aborted) {
         terminalStatus = "cancelled";
-        terminalError = "Node flow run was cancelled.";
+        terminalError ??= "Node flow run was cancelled.";
         await this.persistSkippedNode(context, node, "cancelled", terminalError);
         for (const remainingNodeId of executionOrder.slice(executionOrder.indexOf(nodeId) + 1)) {
           const remaining = graph.nodes.find((candidate) => candidate.id === remainingNodeId);
@@ -155,28 +175,59 @@ export class NodeFlowRuntimeService {
         continue;
       }
 
+      const nodeInput = maskSecrets(this.buildNodeInput(context, node.id));
       const nodeRun = this.deps.nodeFlowRepository.createNodeRun({
         runId: run.id,
         flowId: flow.id,
         projectId,
         nodeId: node.id,
         status: "running",
-        input: maskSecrets(this.buildNodeInput(context, node.id)),
+        input: nodeInput,
         startedAt: new Date().toISOString(),
       });
 
-      try {
+      const attemptService = new NodeFlowAttemptService(this.deps.nodeFlowRepository);
+      const retryPolicy = {
+        ...publication.policy.retry,
+        ...(node.policy?.retry ?? {}),
+      };
+      let attemptNumber = 0;
+      while (attemptNumber < retryPolicy.maxAttempts) {
+        attemptNumber += 1;
+        const attempt = attemptService.start(nodeRun, executorId, nodeInput, (node.credentialBindings ?? []).map((binding) => binding.credentialId));
+        context.currentAttemptId = attempt.id;
+        const timeoutMs = node.policy?.timeout?.timeoutMs ?? publication.policy.defaultTimeoutMs;
+        const timeoutController = new AbortController();
+        const parentAbort = (): void => timeoutController.abort(options.signal?.reason);
+        options.signal?.addEventListener("abort", parentAbort, { once: true });
+        const timeout = setTimeout(() => timeoutController.abort(new Error(`Node ${node.id} timed out after ${timeoutMs}ms.`)), timeoutMs);
+        const previousOptions = context.options;
+        context.options = { ...options, signal: timeoutController.signal };
+        try {
         const result = await this.executeNode(context, node, nodeRun);
         context.outputs.set(node.id, result.output);
+        attemptService.succeed(attempt, maskSecrets(result.output), result.invocationId);
         this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, {
           status: "succeeded",
           executionInvocationId: result.invocationId ?? nodeRun.executionInvocationId,
           output: maskSecrets(result.output),
           finishedAt: new Date().toISOString(),
         });
+        clearTimeout(timeout); options.signal?.removeEventListener("abort", parentAbort); context.options = previousOptions;
+        break;
       } catch (error) {
+        clearTimeout(timeout); options.signal?.removeEventListener("abort", parentAbort); context.options = previousOptions;
         const message = error instanceof Error ? error.message : String(error);
-        const wasCancelled = options.signal?.aborted === true;
+        const classification = classifyFailure(error, options.signal?.aborted === true, timeoutController.signal.aborted);
+        const wasCancelled = classification === "cancelled";
+        const retryable = retryPolicy.retryableClasses.includes(classification) && attemptNumber < retryPolicy.maxAttempts;
+        attemptService.fail(attempt, classification, message, retryable, this.deps.nodeFlowRepository.listNodeAttempts(run.id).find((candidate) => candidate.id === attempt.id)?.invocationId);
+        if (retryable) {
+          this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, { status: "retry_waiting", errorMessage: message });
+          await delay(retryDelay(retryPolicy.backoffMs, retryPolicy.maxBackoffMs ?? retryPolicy.backoffMs, retryPolicy.jitterRatio ?? 0, attemptNumber), options.signal);
+          this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, { status: "running", errorMessage: null });
+          continue;
+        }
         const continueOnError = node.data?.continueOnError === true;
         const failureOutput = { error: message };
         context.outputs.set(node.id, failureOutput);
@@ -186,7 +237,10 @@ export class NodeFlowRuntimeService {
           errorMessage: message,
           finishedAt: new Date().toISOString(),
         });
-        if (wasCancelled) {
+        if (classification === "unknown_side_effect") {
+          terminalStatus = "attention_required";
+          terminalError = message;
+        } else if (wasCancelled) {
           terminalStatus = "cancelled";
           terminalError ??= message || "Node flow run was cancelled.";
           for (const remainingNodeId of executionOrder.slice(nodeIndex + 1)) {
@@ -204,6 +258,11 @@ export class NodeFlowRuntimeService {
             blockedNodes.add(descendant);
           }
         }
+        break;
+      }
+      }
+      if (terminalStatus === "cancelled" || terminalStatus === "attention_required") {
+        break;
       }
     }
 
@@ -214,9 +273,11 @@ export class NodeFlowRuntimeService {
       output: maskSecrets(output),
       errorMessage: terminalError,
       finishedAt,
+      leaseOwner: null,
+      leaseExpiresAt: null,
     });
     this.deps.executionRepository.updateExecutionInvocation(parentInvocation.id, {
-      status: terminalStatus === "succeeded" ? "completed" : terminalStatus,
+      status: terminalStatus === "succeeded" ? "completed" : terminalStatus === "attention_required" ? "failed" : terminalStatus,
       errorMessage: terminalError,
       finishedAt,
     });
@@ -232,9 +293,11 @@ export class NodeFlowRuntimeService {
       },
     });
 
+    clearInterval(heartbeatTimer);
     return {
       run: updatedRun,
       nodeRuns: this.deps.nodeFlowRepository.listNodeRuns(run.id),
+      attempts: this.deps.nodeFlowRepository.listNodeAttempts(run.id),
       output: updatedRun.output,
     };
   }
@@ -263,6 +326,9 @@ export class NodeFlowRuntimeService {
         startedAt: new Date().toISOString(),
       });
       this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, { executionInvocationId: invocation.id });
+      if (context.currentAttemptId) {
+        this.deps.nodeFlowRepository.updateNodeAttempt(context.currentAttemptId, { invocationId: invocation.id });
+      }
       try {
         const result = node.type === "provider_prompt"
           ? await this.executeProviderPromptNode(context, node, invocation.id)
@@ -759,6 +825,32 @@ function redactUrl(url: URL): string {
     }
   }
   return clone.toString();
+}
+
+function classifyFailure(error: unknown, parentAborted: boolean, attemptAborted: boolean): NodeFlowFailureClassification {
+  if (parentAborted) return "cancelled";
+  const message = error instanceof Error ? error.message : String(error);
+  if (attemptAborted || /timed? out|timeout/i.test(message)) return "timeout";
+  if (/quota|rate.?limit|429/i.test(message)) return "quota";
+  if (/credential|secret|access denied/i.test(message)) return "credential";
+  if (error instanceof ValidationError || /requires|unsupported|must /i.test(message)) return "validation";
+  if (/ECONNRESET|ECONNREFUSED|temporar|unavailable|502|503|504/i.test(message)) return "transient";
+  return "permanent";
+}
+
+function retryDelay(baseMs: number, maxMs: number, jitterRatio: number, attemptNumber: number): number {
+  const exponential = Math.min(maxMs, Math.max(0, baseMs) * (2 ** Math.max(0, attemptNumber - 1)));
+  const jitter = exponential * Math.max(0, Math.min(1, jitterRatio));
+  return Math.max(0, Math.round(exponential - jitter + (Math.random() * jitter * 2)));
+}
+
+async function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  if (ms <= 0) return;
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    const abort = (): void => { clearTimeout(timer); reject(new Error("Node flow run was cancelled.")); };
+    signal?.addEventListener("abort", abort, { once: true });
+  });
 }
 
 function providerFailureMessage(result: ProviderRunResult): string {
