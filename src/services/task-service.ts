@@ -15,6 +15,8 @@ import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import { buildTaskRunTag } from "./task-run-key.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
+import { withResolvedGitSettingsCredentials } from "./credentials/git-settings-credential-resolver.js";
+import type { SettingsCredentialResolver } from "./credentials/settings-credential-resolver.js";
 
 export interface TaskServiceDependencies {
   julesApi: JulesApiClient;
@@ -23,6 +25,7 @@ export interface TaskServiceDependencies {
   getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings;
   isJulesApiConfigured: () => boolean;
   cliWorkflowService: CliWorkflowService;
+  settingsCredentialResolver?: SettingsCredentialResolver;
   logger?: Logger;
 }
 
@@ -74,10 +77,13 @@ export class TaskService {
     }
 
     try {
-      await syncRemoteBranchIfAvailable(repoPath, branch, {
-        githubToken: settings.git.githubToken,
-        gitlabToken: settings.git.gitlabToken,
-      });
+      await withResolvedGitSettingsCredentials({
+        resolver: this.deps.settingsCredentialResolver,
+        projectId: scope?.projectId,
+        repoPath,
+        consumer: "git.task.remote-refresh",
+        git: settings.git,
+      }, async (auth) => await syncRemoteBranchIfAvailable(repoPath, branch, auth));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const branchLabel = branch?.trim() || settings.git.defaultBranch || "the requested branch";

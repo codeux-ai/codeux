@@ -296,6 +296,7 @@ export function createCoreDependencies(
     projectManagementRepository,
     executionRepository,
     settingsRepository,
+    settingsCredentialResolver,
     logger: logger.child({ component: "sprint-preview-service" }),
   });
   const sprintFileBrowserRepository = new SprintFileBrowserRepository(appDbStorage);
@@ -303,6 +304,7 @@ export function createCoreDependencies(
     sprintFileBrowserRepository,
     projectManagementRepository,
     settingsRepository,
+    settingsCredentialResolver,
     logger: logger.child({ component: "sprint-file-browser-service" }),
   });
   const customDashboardRepository = new CustomDashboardRepository(appDbStorage);
@@ -390,6 +392,7 @@ export function createCoreDependencies(
     logger: logger.child({ component: "agent-preset-sync-service" }),
     knowledgeService,
     skillService,
+    settingsCredentialResolver,
   });
   const instructionService = new InstructionService({
     settingsRepository,

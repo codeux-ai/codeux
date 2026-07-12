@@ -140,7 +140,10 @@ export class CliWorkflowService {
 
   constructor(private readonly deps: CliWorkflowServiceDependencies) {
     this.workspaceManager = new WorkspaceManager();
-    this.invocationWorkspacePreparer = new InvocationWorkspacePreparer(this.workspaceManager);
+    this.invocationWorkspacePreparer = new InvocationWorkspacePreparer(
+      this.workspaceManager,
+      deps.settingsCredentialResolver,
+    );
     this.workspaceArtifactService = new WorkspaceArtifactService(this.workspaceManager);
     this.prService = new PrService();
     this.providerRunner = new ProviderRunner(new DockerRunner());

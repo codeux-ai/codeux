@@ -49,6 +49,7 @@ import type { SkillService } from "./skill-service.js";
 import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
+import { withResolvedGitSettingsCredentials } from "./credentials/git-settings-credential-resolver.js";
 import { evaluateQaReviewBudget, isRecoveredStaleQaRun } from "../domain/qa-review/qa-review-budget.js";
 import { isQaReviewCancellationError, parseQaError } from "../domain/qa-review/qa-review-types.js";
 import { normalizeQaReviewResult } from "../domain/qa-review/qa-review-result-normalizer.js";
@@ -131,7 +132,7 @@ interface QualityAssuranceServiceDependencies {
 
 export class QualityAssuranceService {
   private readonly workspaceManager = new WorkspaceManager();
-  private readonly invocationWorkspacePreparer = new InvocationWorkspacePreparer(this.workspaceManager);
+  private readonly invocationWorkspacePreparer: InvocationWorkspacePreparer;
   private readonly workspaceArtifactService = new WorkspaceArtifactService(this.workspaceManager);
 
   private readonly prService = new PrService();
@@ -140,6 +141,10 @@ export class QualityAssuranceService {
   private readonly structuredAgentRequestService: StructuredAgentRequestService;
 
   constructor(private readonly deps: QualityAssuranceServiceDependencies) {
+    this.invocationWorkspacePreparer = new InvocationWorkspacePreparer(
+      this.workspaceManager,
+      deps.settingsCredentialResolver,
+    );
     this.providerExecutionService = new ProviderExecutionService({
       executionRepository: deps.executionRepository,
       providerRunner: deps.providerRunner,
@@ -182,10 +187,13 @@ export class QualityAssuranceService {
     }
 
     try {
-      await syncRemoteBranchIfAvailable(repoPath, branch, {
-        githubToken: settings.git.githubToken,
-        gitlabToken: settings.git.gitlabToken,
-      });
+      await withResolvedGitSettingsCredentials({
+        resolver: this.deps.settingsCredentialResolver,
+        projectId: scope.projectId,
+        repoPath,
+        consumer: "git.qa.remote-refresh",
+        git: settings.git,
+      }, async (auth) => await syncRemoteBranchIfAvailable(repoPath, branch, auth));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const branchLabel = branch?.trim() || settings.git.defaultBranch || "the requested branch";
@@ -1103,8 +1111,12 @@ export class QualityAssuranceService {
       const gitPolicy = buildInvocationGitPolicy({
         githubMode: settings.git.githubMode,
         defaultBranch: settings.git.defaultBranch,
+        projectId: args.scope.projectId,
+        workspaceId: `${args.scope.projectId || "project"}-qa-snapshot`,
         githubToken: settings.git.githubToken,
         gitlabToken: settings.git.gitlabToken,
+        githubTokenCredentialRef: settings.git.githubTokenCredentialRef,
+        gitlabTokenCredentialRef: settings.git.gitlabTokenCredentialRef,
       });
       const snapshotSessionId = `qa-review-${provider}-${randomUUID()}`;
       let snapshotWorkspace = args.repoPath;
@@ -1582,21 +1594,33 @@ export class QualityAssuranceService {
     featureBranch: string;
     scope: DashboardSettingsScope;
     followUpPrompt: string;
-  }): Promise<CliQaFollowUpResult> {
+  }, resolvedGitAuth?: GitHttpAuthOptions): Promise<CliQaFollowUpResult> {
     const settings = this.deps.getDashboardSettings(args.scope);
+    if (!resolvedGitAuth && settings.git.githubMode === "REMOTE") {
+      return await withResolvedGitSettingsCredentials({
+        resolver: this.deps.settingsCredentialResolver,
+        projectId: args.scope.projectId,
+        workspaceId: args.sessionId,
+        repoPath: args.repoPath,
+        consumer: "git.qa.continuation",
+        git: settings.git,
+      }, async (auth) => await this.continueCliTaskSession(args, auth));
+    }
     const workflowSettings = {
       ...DEFAULT_CLI_WORKFLOW_SETTINGS,
       ...settings.cliWorkflow,
     };
     const gitAuth: GitHttpAuthOptions = {
-      githubToken: settings.git.githubToken,
-      gitlabToken: settings.git.gitlabToken,
+      githubToken: resolvedGitAuth?.githubToken ?? settings.git.githubToken,
+      gitlabToken: resolvedGitAuth?.gitlabToken ?? settings.git.gitlabToken,
     };
     const gitPolicy = buildInvocationGitPolicy({
       githubMode: settings.git.githubMode,
       defaultBranch: settings.git.defaultBranch,
-      githubToken: settings.git.githubToken,
-      gitlabToken: settings.git.gitlabToken,
+      projectId: args.scope.projectId,
+      workspaceId: args.sessionId,
+      githubToken: gitAuth.githubToken,
+      gitlabToken: gitAuth.gitlabToken,
     });
     const {
       worktreePath,
@@ -1618,12 +1642,12 @@ export class QualityAssuranceService {
       if (prUrl) {
         try {
           const client = new GitStatusQueryClient(args.repoPath);
-          const remoteRes = await client.gitRemoteUrl("origin", settings.git.githubToken);
+          const remoteRes = await client.gitRemoteUrl("origin", gitAuth.githubToken || undefined);
           const remoteUrl = remoteRes.ok ? remoteRes.stdout.trim() : null;
           const { provider, hostDomain, repoTarget } = resolveRepositoryHost(remoteUrl);
           const hostTokens = {
-            githubToken: settings.git.githubToken,
-            gitlabToken: settings.git.gitlabToken,
+            githubToken: gitAuth.githubToken,
+            gitlabToken: gitAuth.gitlabToken,
           };
           const effectiveToken = selectHostToken(provider, hostTokens);
           client.setProvider(provider, hostDomain, repoTarget, Boolean(effectiveToken));
@@ -1958,7 +1982,7 @@ export class QualityAssuranceService {
             workerBranch,
           },
           args.repoPath,
-          this.deps.getGithubToken(),
+          gitAuth,
         )) ?? null;
       }
     }

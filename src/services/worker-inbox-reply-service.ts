@@ -23,6 +23,8 @@ import type { ExecutionRepository } from "../repositories/execution-repository.j
 import type { ProviderConcurrencyService } from "./provider-concurrency-service.js";
 import type { KnowledgeService } from "./knowledge-service.js";
 import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
+import { withResolvedGitSettingsCredentials } from "./credentials/git-settings-credential-resolver.js";
+import type { SettingsCredentialResolver } from "./credentials/settings-credential-resolver.js";
 import type { ResolvedProviderRoute } from "./provider-routing.js";
 import { resolveEffectiveModel } from "./provider-execution-service.js";
 import type { SkillService, PersistentSkillStorageRuntime } from "./skill-service.js";
@@ -78,6 +80,7 @@ interface WorkerInboxReplyServiceDependencies {
    */
   fetchSessionActivities?: (sessionName: string, pageSize?: number) => Promise<JulesActivity[]>;
   logger?: Logger;
+  settingsCredentialResolver?: SettingsCredentialResolver;
 }
 
 export class WorkerInboxReplyService {
@@ -96,10 +99,13 @@ export class WorkerInboxReplyService {
     const branchToSync = branch?.trim() || settings.git.defaultBranch?.trim() || undefined;
 
     try {
-      await syncRemoteBranchIfAvailable(repoPath, branchToSync, {
-        githubToken: settings.git.githubToken,
-        gitlabToken: settings.git.gitlabToken,
-      });
+      await withResolvedGitSettingsCredentials({
+        resolver: this.deps.settingsCredentialResolver,
+        projectId: scope?.projectId,
+        repoPath,
+        consumer: "git.worker-inbox.remote-refresh",
+        git: settings.git,
+      }, async (auth) => await syncRemoteBranchIfAvailable(repoPath, branchToSync, auth));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const branchLabel = branchToSync || "the requested branch";

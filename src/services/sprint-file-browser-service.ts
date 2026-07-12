@@ -34,6 +34,8 @@ import { fetchOriginIfAvailable } from "./git-branch-sync-service.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "./git-http-auth.js";
 import { resolveLanguageForPath } from "./file-browser-language.js";
 import { MAX_TREE_ENTRIES, MAX_FILE_BYTES, PRUNED_DIRECTORIES, normalizeAndValidatePath, isPrunedPath } from "./file-browser-scan-policy.js";
+import { withResolvedGitSettingsCredentials } from "./credentials/git-settings-credential-resolver.js";
+import type { SettingsCredentialResolver } from "./credentials/settings-credential-resolver.js";
 
 const FILE_BROWSER_LABEL = "code-ux.file-browser=true";
 const FILE_BROWSER_IMAGE = "alpine:3.20";
@@ -43,6 +45,7 @@ interface SprintFileBrowserServiceDeps {
   sprintFileBrowserRepository: SprintFileBrowserRepository;
   projectManagementRepository: ProjectManagementRepository;
   settingsRepository: SettingsRepository;
+  settingsCredentialResolver?: SettingsCredentialResolver;
   logger?: Logger;
 }
 
@@ -132,17 +135,21 @@ export class SprintFileBrowserService {
         await this.lifecycle.removeContainerIfPresent(existing?.containerId || existing?.containerName || containerName, project.baseDir);
         await this.lifecycle.removeContainerIfPresent(containerName, project.baseDir);
 
-        await this.materializeWorkspace(
+        await withResolvedGitSettingsCredentials({
+          resolver: this.deps.settingsCredentialResolver,
+          projectId,
+          workspaceId: `${projectId}-file-browser-${sprintId}`,
+          repoPath: project.baseDir,
+          consumer: "git.file-browser.materialize",
+          git: effectiveSettings.git,
+        }, async (auth) => await this.materializeWorkspace(
           project.baseDir,
           workspacePath,
           featureBranch,
           defaultBranch,
           effectiveSettings.git.githubMode === "REMOTE",
-          {
-            githubToken: effectiveSettings.git.githubToken,
-            gitlabToken: effectiveSettings.git.gitlabToken,
-          },
-        );
+          auth,
+        ));
 
         const volumeName = this.buildVolumeName(sprintId);
         await runCommandStrict("docker", ["volume", "rm", "-f", volumeName], project.baseDir).catch(() => undefined);
@@ -301,10 +308,14 @@ export class SprintFileBrowserService {
       files: [],
     });
 
-    await this.fetchOrigin(project.baseDir, settings.git.githubMode === "REMOTE", {
-      githubToken: settings.git.githubToken,
-      gitlabToken: settings.git.gitlabToken,
-    });
+    await withResolvedGitSettingsCredentials({
+      resolver: this.deps.settingsCredentialResolver,
+      projectId: session.projectId,
+      workspaceId: session.id,
+      repoPath: project.baseDir,
+      consumer: "git.file-browser.changes",
+      git: settings.git,
+    }, async (auth) => await this.fetchOrigin(project.baseDir, settings.git.githubMode === "REMOTE", auth));
 
     const featureRef = await this.resolveExistingRef(project.baseDir, featureBranch);
     if (!featureRef) {
@@ -342,10 +353,14 @@ export class SprintFileBrowserService {
     const settings = this.resolveSettings(session.projectId, session.sprintId);
     const relPath = normalizeAndValidatePath(requestedPath);
 
-    await this.fetchOrigin(project.baseDir, settings.git.githubMode === "REMOTE", {
-      githubToken: settings.git.githubToken,
-      gitlabToken: settings.git.gitlabToken,
-    });
+    await withResolvedGitSettingsCredentials({
+      resolver: this.deps.settingsCredentialResolver,
+      projectId: session.projectId,
+      workspaceId: session.id,
+      repoPath: project.baseDir,
+      consumer: "git.file-browser.diff",
+      git: settings.git,
+    }, async (auth) => await this.fetchOrigin(project.baseDir, settings.git.githubMode === "REMOTE", auth));
 
     const featureRef = await this.resolveExistingRef(project.baseDir, featureBranch);
     if (!featureRef) {

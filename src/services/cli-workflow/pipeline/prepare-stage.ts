@@ -1,6 +1,6 @@
 import { buildProviderSettingsOverride } from "../../provider-settings-override.js";
 import { buildProviderPrompt } from "../../cli-workflow-utils.js";
-import { withResolvedPipelineGitCredentials, type PipelineContext } from "./pipeline-context.js";
+import type { PipelineContext } from "./pipeline-context.js";
 import { resolveProviderForInvocation } from "../../provider-routing.js";
 import { resolveAgentMemoryInstructions } from "../../agent-memory-instructions.js";
 import { buildRelevantMemoryInjectionContext } from "../../memory-injection-context.js";
@@ -10,9 +10,6 @@ export async function executePrepareStage(
   ctx: PipelineContext,
   resumeFromFailedSessionId?: string
 ): Promise<{ worktreePath: string; initialHead: string; providerPrompt: string; resumed?: boolean }> {
-  if (ctx.deps.settingsCredentialResolver && (ctx.settings.git.githubTokenCredentialRef || ctx.settings.git.gitlabTokenCredentialRef)) {
-    return await withResolvedPipelineGitCredentials(ctx, async (resolved) => await executePrepareStage(resolved, resumeFromFailedSessionId));
-  }
   const resolvedProvider = resolveProviderForInvocation(ctx.settings, {
     invocation: "task_coding",
     task: ctx.task,
@@ -79,6 +76,12 @@ export async function executePrepareStage(
       defaultBranch: ctx.settings.git.defaultBranch,
       githubToken: ctx.settings.git.githubToken,
       gitlabToken: ctx.settings.git.gitlabToken,
+      ...(ctx.settings.git.githubMode === "REMOTE" ? {
+        projectId: ctx.task.project_id,
+        workspaceId: ctx.workspaceSessionId,
+        githubTokenCredentialRef: ctx.settings.git.githubTokenCredentialRef,
+        gitlabTokenCredentialRef: ctx.settings.git.gitlabTokenCredentialRef,
+      } : {}),
     },
   });
 

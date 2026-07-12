@@ -27,6 +27,9 @@ import { PrService } from "../infrastructure/providers/cli/pr-service.js";
 import { hasAgentAvatarConfig, resolveAgentAvatarConfig } from "../contracts/agent-avatar-style.js";
 import { defaultCodingAgentMcpAccess } from "./agent-mcp-access.js";
 import type { SkillService } from "./skill-service.js";
+import { buildGitHttpAuthEnvWithFallbacks } from "./git-http-auth.js";
+import { withResolvedGitSettingsCredentials } from "./credentials/git-settings-credential-resolver.js";
+import type { SettingsCredentialResolver } from "./credentials/settings-credential-resolver.js";
 import {
   BASE_AGENT_ROLE_DEFINITIONS,
   createBaseAgentInstructionState,
@@ -44,6 +47,7 @@ interface AgentPresetSyncServiceDeps {
   logger?: Logger;
   knowledgeService?: KnowledgeService;
   skillService?: Pick<SkillService, "listStorages" | "createStorage">;
+  settingsCredentialResolver?: SettingsCredentialResolver;
 }
 
 interface AgentSourceFile {
@@ -577,31 +581,40 @@ export class AgentPresetSyncService {
       return { committed: true };
     }
 
-    await runCommandStrict("git", ["push", "origin", branchToPush], project.baseDir);
-
-    if (options.mode === "commit_and_push") {
-      return { committed: true, pushedBranch: branchToPush };
-    }
-
-    const defaultBranch = this.resolveDefaultBranch(projectId);
     const effectiveSettings = this.deps.settingsRepository.resolveProjectDashboardSettings(projectId).settings;
-    const pullRequestUrl = await new PrService().resolveOrCreateFeaturePr({
-      taskId: `agent-preset-push:${projectId}`,
-      provider: "codex",
-      title: "Push agent presets",
-      featureBranch: defaultBranch,
-      workerBranch: branchToPush,
-      body: `Project: ${project.name}\n\nPush the project's .code-ux/agents markdown files into the repository.`,
-    }, project.baseDir, {
-      githubToken: this.deps.getGithubToken?.() || effectiveSettings.git.githubToken,
-      gitlabToken: effectiveSettings.git.gitlabToken,
-    });
+    return await withResolvedGitSettingsCredentials({
+      resolver: this.deps.settingsCredentialResolver,
+      projectId,
+      repoPath: project.baseDir,
+      consumer: "git.agent-preset.push",
+      git: {
+        ...effectiveSettings.git,
+        githubToken: effectiveSettings.git.githubToken || this.deps.getGithubToken?.() || "",
+      },
+    }, async (auth) => {
+      const gitEnv = await buildGitHttpAuthEnvWithFallbacks(originUrl, auth);
+      await runCommandStrict("git", ["push", "origin", branchToPush], project.baseDir, gitEnv ?? process.env);
 
-    return {
-      committed: true,
-      pushedBranch: branchToPush,
-      pullRequestUrl,
-    };
+      if (options.mode === "commit_and_push") {
+        return { committed: true, pushedBranch: branchToPush };
+      }
+
+      const defaultBranch = this.resolveDefaultBranch(projectId);
+      const pullRequestUrl = await new PrService().resolveOrCreateFeaturePr({
+        taskId: `agent-preset-push:${projectId}`,
+        provider: "codex",
+        title: "Push agent presets",
+        featureBranch: defaultBranch,
+        workerBranch: branchToPush,
+        body: `Project: ${project.name}\n\nPush the project's .code-ux/agents markdown files into the repository.`,
+      }, project.baseDir, auth);
+
+      return {
+        committed: true,
+        pushedBranch: branchToPush,
+        pullRequestUrl,
+      };
+    });
   }
 
   async getPlanningAgent(projectId: string): Promise<AgentPresetRecord> {

@@ -1,6 +1,8 @@
-import type { CliWorkflowSettings } from "../../../contracts/app-types.js";
+import type { CliWorkflowSettings, SettingsCredentialReference } from "../../../contracts/app-types.js";
 import { syncRemoteBranchIfAvailable } from "../../../services/git-branch-sync-service.js";
 import type { GitHttpAuthOptions } from "../../../services/git-http-auth.js";
+import { withResolvedGitSettingsCredentials } from "../../../services/credentials/git-settings-credential-resolver.js";
+import type { SettingsCredentialResolver } from "../../../services/credentials/settings-credential-resolver.js";
 import {
   WorkspaceManager,
   type IWorkspaceManager,
@@ -12,6 +14,10 @@ import {
 export interface InvocationWorkspaceGitPolicy extends GitHttpAuthOptions {
   githubMode: "REMOTE" | "LOCAL";
   defaultBranch?: string | null;
+  projectId?: string | null;
+  workspaceId?: string;
+  githubTokenCredentialRef?: SettingsCredentialReference | null;
+  gitlabTokenCredentialRef?: SettingsCredentialReference | null;
 }
 
 export interface SnapshotBranchRequest {
@@ -79,6 +85,10 @@ export function buildInvocationGitPolicy(args: InvocationWorkspaceGitPolicy): In
     defaultBranch: cleanBranch(args.defaultBranch) || args.defaultBranch,
     githubToken: args.githubToken,
     gitlabToken: args.gitlabToken,
+    projectId: args.projectId,
+    workspaceId: args.workspaceId,
+    githubTokenCredentialRef: args.githubTokenCredentialRef,
+    gitlabTokenCredentialRef: args.gitlabTokenCredentialRef,
   };
 }
 
@@ -139,7 +149,10 @@ export function buildProviderInvocationWorkspaceOptions(
 }
 
 export class InvocationWorkspacePreparer {
-  constructor(private readonly workspaceManager: IWorkspaceManager = new WorkspaceManager()) {}
+  constructor(
+    private readonly workspaceManager: IWorkspaceManager = new WorkspaceManager(),
+    private readonly settingsCredentialResolver?: SettingsCredentialResolver,
+  ) {}
 
   get manager(): IWorkspaceManager {
     return this.workspaceManager;
@@ -164,15 +177,28 @@ export class InvocationWorkspacePreparer {
   }
 
   async prepareWorktree(args: PrepareInvocationWorktreeRequest): Promise<{ worktreePath: string; resumed: boolean }> {
-    return await this.workspaceManager.prepareWorktree(
-      args.repoPath,
-      args.worktreePath,
-      args.workerBranch,
-      args.featureBranch,
-      args.resumeSessionId,
-      args.gitAuth,
-      resolvePrepareWorktreeOptions(args.gitPolicy),
+    const prepare = async (gitAuth: GitHttpAuthOptions): Promise<{ worktreePath: string; resumed: boolean }> => (
+      await this.workspaceManager.prepareWorktree(
+        args.repoPath,
+        args.worktreePath,
+        args.workerBranch,
+        args.featureBranch,
+        args.resumeSessionId,
+        gitAuth,
+        resolvePrepareWorktreeOptions(args.gitPolicy),
+      )
     );
+    if (!args.gitPolicy || args.gitPolicy.githubMode !== "REMOTE") {
+      return await prepare(args.gitAuth || {});
+    }
+    return await withResolvedGitSettingsCredentials({
+      resolver: this.settingsCredentialResolver,
+      projectId: args.gitPolicy.projectId,
+      workspaceId: args.gitPolicy.workspaceId,
+      repoPath: args.repoPath,
+      consumer: "git.workspace.prepare",
+      git: args.gitPolicy,
+    }, prepare);
   }
 
   async resolveContinuationWorkspace(args: ContinuationWorkspaceRequest): Promise<ContinuationWorkspaceTarget> {
@@ -208,12 +234,18 @@ export class InvocationWorkspacePreparer {
       .map(cleanBranch)
       .filter((branch): branch is string => Boolean(branch));
     const uniqueBranches = Array.from(new Set(branches));
-    for (const branch of uniqueBranches) {
-      await syncRemoteBranchIfAvailable(repoPath, branch, {
-        githubToken: gitPolicy.githubToken,
-        gitlabToken: gitPolicy.gitlabToken,
-      });
-    }
+    await withResolvedGitSettingsCredentials({
+      resolver: this.settingsCredentialResolver,
+      projectId: gitPolicy.projectId,
+      workspaceId: gitPolicy.workspaceId,
+      repoPath,
+      consumer: "git.workspace.snapshot-refresh",
+      git: gitPolicy,
+    }, async (auth) => {
+      for (const branch of uniqueBranches) {
+        await syncRemoteBranchIfAvailable(repoPath, branch, auth);
+      }
+    });
   }
 }
 

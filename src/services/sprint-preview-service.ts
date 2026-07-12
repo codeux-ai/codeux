@@ -51,6 +51,8 @@ import { ensureDefaultCodeUxAssetsInstalled } from "./code-ux-default-assets-ser
 import { fetchOriginIfAvailable } from "./git-branch-sync-service.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "./git-http-auth.js";
 import { mergePreviewEnvironmentVariables, sanitizePreviewEnvironmentVariables } from "../shared/preview-environment.js";
+import { withResolvedGitSettingsCredentials } from "./credentials/git-settings-credential-resolver.js";
+import type { SettingsCredentialResolver } from "./credentials/settings-credential-resolver.js";
 
 const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -72,6 +74,7 @@ interface SprintPreviewServiceDeps {
   settingsRepository: SettingsRepository;
   logger?: Logger;
   managedRuntimeService?: ManagedRuntimeService;
+  settingsCredentialResolver?: SettingsCredentialResolver;
 }
 
 interface PreparedStartupScript {
@@ -157,16 +160,20 @@ export class SprintPreviewService {
       const featureBranch = sprint.featureBranch?.trim() || this.resolveSprintFeatureBranch(projectId, sprintId);
       const defaultBranch = effectiveSettings.git.defaultBranch?.trim() || project.defaultBranch?.trim() || "main";
       const syncLatestFromOrigin = effectiveSettings.git.githubMode === "REMOTE";
-      const previewSourceRef = await this.resolvePreviewSourceRef(
+      const previewSourceRef = await withResolvedGitSettingsCredentials({
+        resolver: this.deps.settingsCredentialResolver,
+        projectId,
+        workspaceId: `${projectId}-preview-${sprintId}`,
+        repoPath: project.baseDir,
+        consumer: "git.preview.materialize",
+        git: effectiveSettings.git,
+      }, async (auth) => await this.resolvePreviewSourceRef(
         project.baseDir,
         featureBranch,
         defaultBranch,
         syncLatestFromOrigin,
-        {
-          githubToken: effectiveSettings.git.githubToken,
-          gitlabToken: effectiveSettings.git.gitlabToken,
-        },
-      );
+        auth,
+      ));
       const preparedScript = await this.prepareStartupScript(project.baseDir, settings, previewSourceRef);
       const projectRuntimeRoot = resolveDockerRuntimeRoot(project.baseDir);
       const runtimeRoot = path.join(projectRuntimeRoot, "preview", sprintId);
@@ -263,10 +270,7 @@ export class SprintPreviewService {
           featureBranch,
           defaultBranch,
           false,
-          {
-            githubToken: effectiveSettings.git.githubToken,
-            gitlabToken: effectiveSettings.git.gitlabToken,
-          },
+          undefined,
           previewSourceRef,
         );
         await fs.mkdir(path.dirname(startupRuntimePath), { recursive: true });
