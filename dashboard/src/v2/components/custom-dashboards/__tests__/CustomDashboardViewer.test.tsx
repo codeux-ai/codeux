@@ -234,6 +234,25 @@ describe("CustomDashboardViewer", () => {
     expect(await screen.findByRole("alert", { name: "Custom dashboard runtime failure" })).toHaveTextContent("Frame exploded");
   });
 
+  it("renders keyboard-accessible route controls and route-aware share state", () => {
+    const onRouteChange = vi.fn();
+    render(<CustomDashboardViewer dashboard={dashboard} revisions={[{ ...revision, routes: [{ path: "/", label: "Overview", entryFile: "index.html" }, { path: "/logs", label: "Logs", entryFile: "index.html" }] }]} routePath="/logs" onRouteChange={onRouteChange} onRefresh={onRefresh} onReturnToEditor={onReturnToEditor} />);
+
+    expect(screen.getByRole("navigation", { name: "Custom dashboard routes" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Logs" })).toHaveAttribute("aria-current", "page");
+    fireEvent.click(screen.getByRole("button", { name: "Overview" }));
+    expect(onRouteChange).toHaveBeenCalledWith("/");
+  });
+
+  it("offers explicit validated resume and rollback recovery when halted", () => {
+    const onResume = vi.fn();
+    render(<CustomDashboardViewer dashboard={{ ...dashboard, runtimeState: { ...dashboard.runtimeState, status: "halted", haltedReason: "Frame crashed", haltedRevisionId: revision.id, haltedAt: "2026-07-07T01:00:00.000Z" } }} revisions={[revision]} onResume={onResume} onRefresh={onRefresh} onReturnToEditor={onReturnToEditor} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Resume validated revision" }));
+    expect(onResume).toHaveBeenCalledOnce();
+    expect(screen.getByRole("button", { name: "Choose rollback revision" })).toBeInTheDocument();
+  });
+
   it("returns source errors to the isolated frame without throwing in the app shell", async () => {
     render(
       <CustomDashboardViewer

@@ -31,7 +31,9 @@ export const CustomDashboardList: FunctionComponent<CustomDashboardListProps> = 
     </div>
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
       {dashboards.map((dashboard) => {
-        const status = getDashboardStatusView(dashboard.status);
+        const status = dashboard.runtimeState.status === "halted"
+          ? { label: "Halted", className: "bg-status-red/10 text-status-red ring-status-red/25" }
+          : getDashboardStatusView(dashboard.status);
         const active = dashboard.id === selectedDashboardId;
         return (
           <button

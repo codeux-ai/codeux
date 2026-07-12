@@ -1,6 +1,6 @@
 import type { FunctionComponent } from "preact";
 import { useRef, useState } from "preact/hooks";
-import { CheckCircle2, ExternalLink, FileClock, MoreHorizontal, Play, RadioTower, Rocket, ScrollText, ShieldCheck } from "lucide-preact";
+import { AlertTriangle, CheckCircle2, ExternalLink, FileClock, MoreHorizontal, Play, RadioTower, Rocket, RotateCcw, ScrollText, ShieldCheck } from "lucide-preact";
 import { Button } from "../ui/Button.js";
 import { DropdownMenu, DropdownMenuItem } from "../ui/DropdownMenu.js";
 import type {
@@ -59,6 +59,7 @@ export const CustomDashboardValidationPanel: FunctionComponent<CustomDashboardVa
   const stages = getValidationStages(validationSession?.status ?? selectedRevision?.validationStatus ?? null);
   const previewPath = buildValidationPreviewPath(validationSession?.id);
   const publishEnabled = canPublishRevision(selectedRevision, validationSession);
+  const rollback = Boolean(dashboard.publishedRevisionId && selectedRevision && dashboard.publishedRevisionId !== selectedRevision.id);
 
   return (
     <aside
@@ -117,7 +118,7 @@ export const CustomDashboardValidationPanel: FunctionComponent<CustomDashboardVa
             {getRevisionValidationLabel(selectedRevision?.validationStatus ?? null)}
           </span>
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-2">
+        <div className="mt-3 grid grid-cols-3 gap-2" role="status" aria-live="polite" aria-label={`Validation ${validationSession?.status ?? selectedRevision?.validationStatus ?? "not started"}`}>
           {stages.map((stage) => (
             <div
               key={stage.id}
@@ -141,6 +142,13 @@ export const CustomDashboardValidationPanel: FunctionComponent<CustomDashboardVa
         </div>
       </div>
 
+      {dashboard.runtimeState.status === "halted" ? (
+        <div role="alert" className="rounded-[0.9rem] border border-status-red/20 bg-status-red/[0.06] p-3 text-sm text-status-red">
+          <div className="flex items-center gap-2 font-bold"><AlertTriangle aria-hidden="true" className="h-4 w-4" />Runtime halted</div>
+          <p className="mt-1 text-xs leading-relaxed">{dashboard.runtimeState.haltedReason ?? "The published frame failed."} Resume the validated publication or select an earlier passed revision for rollback.</p>
+        </div>
+      ) : null}
+
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
         <Button icon={FileClock} onClick={onCreateRevision} pending={creatingRevision} disabled={dashboard.status === "archived"}>
           Create Revision
@@ -149,14 +157,14 @@ export const CustomDashboardValidationPanel: FunctionComponent<CustomDashboardVa
           Validate
         </Button>
         <Button
-          icon={Rocket}
+          icon={rollback ? RotateCcw : Rocket}
           variant="signal"
           onClick={onPublish}
           pending={publishing}
           disabled={!publishEnabled || dashboard.status === "archived"}
           disabledReason="A selected revision must pass validation before it can be published."
         >
-          Publish
+          {rollback ? "Roll back" : "Publish"}
         </Button>
         <Button variant="danger" onClick={onArchive} pending={archiving} disabled={dashboard.status === "archived"}>
           Archive
@@ -173,6 +181,13 @@ export const CustomDashboardValidationPanel: FunctionComponent<CustomDashboardVa
           <ExternalLink aria-hidden="true" className="h-4 w-4" />
           Open validation preview
         </a>
+      ) : null}
+
+      {(validationSession?.status === "failed" || selectedRevision?.validationStatus === "failed") ? (
+        <div role="alert" className="rounded-[0.9rem] border border-status-red/20 bg-status-red/[0.06] p-3 text-xs text-status-red">
+          <p className="font-bold">Validation failed</p>
+          <p className="mt-1">Review the report and logs, update the draft, create a new immutable revision, then validate again.</p>
+        </div>
       ) : null}
 
       <div className="flex min-h-0 flex-1 flex-col">

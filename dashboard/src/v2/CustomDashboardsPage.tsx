@@ -20,17 +20,26 @@ import {
   fetchCustomDashboardValidationSession,
   fetchCustomDashboards,
   publishCustomDashboardRevision,
+  resumeCustomDashboardRuntime,
   startCustomDashboardValidation,
   updateCustomDashboardDraft,
   type CustomDashboardDataCatalogResponse,
 } from "./lib/custom-dashboard-api.js";
+import { fetchAutomationCredentials, revokeAutomationCredential, rotateAutomationCredential } from "./lib/automation-credential-api.js";
 import {
   createDefaultCustomDashboardDraft,
   hasDraftChanged,
   parseJsonDraft,
   selectLatestRevision,
   stableJsonStringify,
+  redactAutomationCredentialMetadata,
 } from "./lib/custom-dashboard-view-models.js";
+import {
+  normalizeCustomDashboardPath,
+  readCustomDashboardLocation,
+  updateCustomDashboardHistory,
+  type CustomDashboardPageMode,
+} from "./lib/custom-dashboard-router.js";
 import { CustomDashboardList } from "./components/custom-dashboards/CustomDashboardList.js";
 import {
   CustomDashboardEditorPanel,
@@ -46,25 +55,14 @@ import type {
   CustomDashboardJsonObject,
   CustomDashboardManifest,
   CustomDashboardRecord,
+  CustomDashboardRouteDefinition,
   CustomDashboardRevisionRecord,
   CustomDashboardValidationSessionRecord,
   UpdateCustomDashboardDraftInput,
 } from "./types.js";
+import type { AutomationCredentialMetadata } from "../../../src/contracts/automation-credential-types.js";
 
 const terminalValidationStatuses = new Set(["passed", "failed", "cancelled"]);
-
-type CustomDashboardPageMode = "editor" | "viewer";
-
-function getInitialDashboardPageState(): { dashboardId: string | null; mode: CustomDashboardPageMode } {
-  if (typeof window === "undefined") {
-    return { dashboardId: null, mode: "editor" };
-  }
-  const params = new URLSearchParams(window.location.search);
-  return {
-    dashboardId: params.get("dashboard"),
-    mode: params.get("mode") === "viewer" ? "viewer" : "editor",
-  };
-}
 
 function dashboardToDraft(dashboard: CustomDashboardRecord): CustomDashboardDraftState {
   return {
@@ -73,6 +71,8 @@ function dashboardToDraft(dashboard: CustomDashboardRecord): CustomDashboardDraf
     manifestText: stableJsonStringify(dashboard.manifest),
     fileBundleText: stableJsonStringify(dashboard.fileBundle),
     sourceGraphText: stableJsonStringify(dashboard.sourceNodeGraph),
+    routesText: stableJsonStringify(dashboard.routes),
+    credentialBindingsText: stableJsonStringify(dashboard.credentialBindings.map(({ slot, credentialId }) => ({ slot, credentialId }))),
     styleguideText: stableJsonStringify(dashboard.styleguide),
   };
 }
@@ -80,14 +80,17 @@ function dashboardToDraft(dashboard: CustomDashboardRecord): CustomDashboardDraf
 export const CustomDashboardsPage: FunctionComponent = () => {
   const { selectedProject, loading: projectLoading } = useProjectData();
   const projectId = selectedProject?.id ?? null;
-  const initialPageState = useMemo(() => getInitialDashboardPageState(), []);
+  const initialPageState = useMemo(() => readCustomDashboardLocation(), []);
   const [dashboards, setDashboards] = useState<CustomDashboardRecord[]>([]);
   const [selectedDashboardId, setSelectedDashboardId] = useState<string | null>(initialPageState.dashboardId);
   const [pageMode, setPageMode] = useState<CustomDashboardPageMode>(initialPageState.mode);
+  const [routePath, setRoutePath] = useState(initialPageState.routePath);
   const [selectedDashboard, setSelectedDashboard] = useState<CustomDashboardRecord | null>(null);
   const [revisions, setRevisions] = useState<CustomDashboardRevisionRecord[]>([]);
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<CustomDashboardDataCatalogResponse | null>(null);
+  const [credentials, setCredentials] = useState<AutomationCredentialMetadata[]>([]);
+  const [credentialsLoading, setCredentialsLoading] = useState(false);
   const [draft, setDraft] = useState<CustomDashboardDraftState | null>(null);
   const [activeTab, setActiveTab] = useState<CustomDashboardEditorTab>("manifest");
   const [selectedFilePath, setSelectedFilePath] = useState("src/dashboard.tsx");
@@ -101,6 +104,7 @@ export const CustomDashboardsPage: FunctionComponent = () => {
   const [refreshingLogs, setRefreshingLogs] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [resuming, setResuming] = useState(false);
   const {
     feedback,
     setError,
@@ -109,12 +113,51 @@ export const CustomDashboardsPage: FunctionComponent = () => {
     clearError,
   } = useActionFeedback();
   const archiveConfirm = useConfirmDialog();
+  const credentialConfirm = useConfirmDialog();
 
   const selectedRevision = useMemo(
     () => revisions.find((revision) => revision.id === selectedRevisionId) ?? null,
     [revisions, selectedRevisionId],
   );
   const dirty = useMemo(() => draft ? hasDraftChanged(selectedDashboard, draft) : false, [draft, selectedDashboard]);
+
+  const navigateWorkspace = useCallback((next: Partial<{ dashboardId: string | null; mode: CustomDashboardPageMode; routePath: string }>, replace = false): void => {
+    const location = readCustomDashboardLocation();
+    const state = {
+      dashboardId: next.dashboardId === undefined ? (selectedDashboardId ?? location.dashboardId) : next.dashboardId,
+      mode: next.mode ?? pageMode,
+      routePath: normalizeCustomDashboardPath(next.routePath ?? routePath),
+    };
+    setSelectedDashboardId(state.dashboardId);
+    setPageMode(state.mode);
+    setRoutePath(state.routePath);
+    updateCustomDashboardHistory(state, { replace });
+  }, [pageMode, routePath, selectedDashboardId]);
+
+  useEffect(() => {
+    const handlePopState = (): void => {
+      const state = readCustomDashboardLocation();
+      setSelectedDashboardId(state.dashboardId);
+      setPageMode(state.mode);
+      setRoutePath(state.routePath);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (!projectId) {
+      setCredentials([]);
+      return;
+    }
+    let cancelled = false;
+    setCredentialsLoading(true);
+    void fetchAutomationCredentials(projectId)
+      .then((items) => { if (!cancelled) setCredentials(items.map(redactAutomationCredentialMetadata)); })
+      .catch((error) => { if (!cancelled) setError(error instanceof Error ? error.message : "Failed to load credential metadata."); })
+      .finally(() => { if (!cancelled) setCredentialsLoading(false); });
+    return () => { cancelled = true; };
+  }, [projectId, setError]);
 
   const loadProjectDashboards = useCallback(async (nextProjectId: string, signal?: AbortSignal): Promise<void> => {
     setLoading(true);
@@ -223,12 +266,22 @@ export const CustomDashboardsPage: FunctionComponent = () => {
     if (!styleguide.ok) {
       throw new Error(styleguide.message);
     }
+    const routes = parseJsonDraft<CustomDashboardRouteDefinition[]>(draft.routesText, "Routes");
+    if (!routes.ok || !Array.isArray(routes.value)) {
+      throw new Error(routes.ok ? "Routes must be an array." : routes.message);
+    }
+    const credentialBindings = parseJsonDraft<Array<{ slot: string; credentialId: string }>>(draft.credentialBindingsText, "Credential bindings");
+    if (!credentialBindings.ok || !Array.isArray(credentialBindings.value)) {
+      throw new Error(credentialBindings.ok ? "Credential bindings must be an array." : credentialBindings.message);
+    }
     return {
       title: draft.title.trim() || manifest.value.title || "Untitled Dashboard",
       description: draft.description,
       manifest: manifest.value,
       fileBundle: fileBundle.value,
       sourceNodeGraph: sourceNodeGraph.value,
+      routes: routes.value,
+      credentialBindings: credentialBindings.value,
       styleguide: styleguide.value,
     };
   }, [draft]);
@@ -379,7 +432,12 @@ export const CustomDashboardsPage: FunctionComponent = () => {
     clearFeedback();
     try {
       const validationSessionId = validationSession?.revisionId === selectedRevision.id ? validationSession.id : undefined;
-      const published = await publishCustomDashboardRevision(selectedDashboard.id, selectedRevision.id, validationSessionId);
+      const published = await publishCustomDashboardRevision(
+        selectedDashboard.id,
+        selectedRevision.id,
+        validationSessionId,
+        selectedDashboard.runtimeState.status === "halted" ? selectedDashboard.publishedRevisionId : undefined,
+      );
       setSelectedDashboard(published);
       setDashboards((current) => current.map((dashboard) => dashboard.id === published.id ? published : dashboard));
       setSuccess("Custom dashboard revision published.");
@@ -389,6 +447,51 @@ export const CustomDashboardsPage: FunctionComponent = () => {
     } finally {
       setPublishing(false);
     }
+  };
+
+  const handleResume = async (): Promise<void> => {
+    if (!selectedDashboard?.publishedRevisionId) return;
+    setResuming(true);
+    clearFeedback();
+    try {
+      const resumed = await resumeCustomDashboardRuntime(
+        selectedDashboard.id,
+        selectedDashboard.publishedRevisionId,
+        validationSession?.revisionId === selectedDashboard.publishedRevisionId ? validationSession.id : undefined,
+      );
+      setSelectedDashboard(resumed);
+      setDashboards((current) => current.map((dashboard) => dashboard.id === resumed.id ? resumed : dashboard));
+      setSuccess("Validated custom dashboard runtime resumed.");
+      await refreshSelectedDashboard();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Failed to resume the custom dashboard runtime.");
+    } finally {
+      setResuming(false);
+    }
+  };
+
+  const handleRotateCredential = async (credentialId: string, value: string): Promise<void> => {
+    if (!projectId || !value) return;
+    await rotateAutomationCredential(projectId, credentialId, value);
+    setCredentials((await fetchAutomationCredentials(projectId)).map(redactAutomationCredentialMetadata));
+    setSuccess("Credential rotated. Secret material was not retained by the dashboard.");
+  };
+
+  const handleRevokeCredential = async (credentialId: string): Promise<boolean> => {
+    if (!projectId) return false;
+    const metadata = credentials.find((credential) => credential.id === credentialId);
+    const confirmed = await credentialConfirm.requestConfirm({
+      title: "Revoke credential?",
+      body: `Revoke ${metadata?.name ?? "this credential"}? Published sources using it will stop until another eligible credential is bound and published.`,
+      confirmLabel: "Revoke",
+      destructive: true,
+      tone: "danger",
+    });
+    if (!confirmed) return false;
+    await revokeAutomationCredential(projectId, credentialId);
+    setCredentials((await fetchAutomationCredentials(projectId)).map(redactAutomationCredentialMetadata));
+    setSuccess("Credential revoked.");
+    return true;
   };
 
   const handleArchive = async (): Promise<void> => {
@@ -437,7 +540,7 @@ export const CustomDashboardsPage: FunctionComponent = () => {
             </Button>
             <Button
               icon={ExternalLink}
-              onClick={() => setPageMode("viewer")}
+              onClick={() => navigateWorkspace({ mode: "viewer" })}
               disabled={!selectedDashboard}
               disabledReason="Select a dashboard with a published validated revision to open it."
             >
@@ -494,8 +597,7 @@ export const CustomDashboardsPage: FunctionComponent = () => {
             dashboards={dashboards}
             selectedDashboardId={selectedDashboardId}
             onSelect={(dashboardId) => {
-              setSelectedDashboardId(dashboardId);
-              setPageMode("editor");
+              navigateWorkspace({ dashboardId, mode: "editor", routePath: "/" });
               setValidationSession(null);
               setLogs("");
             }}
@@ -507,8 +609,15 @@ export const CustomDashboardsPage: FunctionComponent = () => {
               dashboard={selectedDashboard}
               revisions={revisions}
               onRefresh={() => void refreshSelectedDashboard()}
-              onReturnToEditor={() => setPageMode("editor")}
+              onReturnToEditor={() => navigateWorkspace({ mode: "editor" })}
               refreshing={loading}
+              routePath={routePath}
+              onRouteChange={(path) => {
+                const normalized = normalizeCustomDashboardPath(path);
+                if (normalized !== routePath) navigateWorkspace({ mode: "viewer", routePath: normalized });
+              }}
+              onResume={() => void handleResume()}
+              resuming={resuming}
             />
           ) : (
             <>
@@ -520,6 +629,10 @@ export const CustomDashboardsPage: FunctionComponent = () => {
                 selectedFilePath={selectedFilePath}
                 onSelectedFilePathChange={setSelectedFilePath}
                 catalog={catalog}
+                credentials={credentials}
+                credentialsLoading={credentialsLoading}
+                onRotateCredential={handleRotateCredential}
+                onRevokeCredential={handleRevokeCredential}
               />
               <CustomDashboardValidationPanel
                 dashboard={selectedDashboard}
@@ -561,6 +674,12 @@ export const CustomDashboardsPage: FunctionComponent = () => {
         options={archiveConfirm.options}
         onConfirm={archiveConfirm.handleConfirm}
         onCancel={archiveConfirm.handleCancel}
+      />
+      <ConfirmDialog
+        isOpen={credentialConfirm.isOpen}
+        options={credentialConfirm.options}
+        onConfirm={credentialConfirm.handleConfirm}
+        onCancel={credentialConfirm.handleCancel}
       />
     </PageContainer>
   );

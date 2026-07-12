@@ -174,15 +174,36 @@ export const publishCustomDashboardRevision = (
   dashboardId: string,
   revisionId: string,
   validationSessionId?: string,
+  expectedPublishedRevisionId?: string | null,
 ): Promise<CustomDashboardRecord> => (
   fetchJson<CustomDashboardRecord>(
     `/api/custom-dashboards/${encodeURIComponent(dashboardId)}/revisions/${encodeURIComponent(revisionId)}/publish`,
     {
       method: "POST",
       headers: jsonHeaders,
-      body: JSON.stringify({ revisionId, ...(validationSessionId ? { validationSessionId } : {}) }),
+      body: JSON.stringify({
+        revisionId,
+        ...(validationSessionId ? { validationSessionId } : {}),
+        ...(expectedPublishedRevisionId !== undefined ? { expectedPublishedRevisionId } : {}),
+      }),
     },
   )
+);
+
+export const resumeCustomDashboardRuntime = (
+  dashboardId: string,
+  revisionId: string,
+  validationSessionId?: string,
+): Promise<CustomDashboardRecord> => (
+  fetchJson<CustomDashboardRecord>(`/api/custom-dashboards/${encodeURIComponent(dashboardId)}/runtime/resume`, {
+    method: "POST",
+    headers: jsonHeaders,
+    body: JSON.stringify({
+      revisionId,
+      ...(validationSessionId ? { validationSessionId } : {}),
+      recoveryMetadata: { source: "dashboard_workspace" },
+    }),
+  })
 );
 
 export const archiveCustomDashboard = (dashboardId: string): Promise<CustomDashboardRecord> => (

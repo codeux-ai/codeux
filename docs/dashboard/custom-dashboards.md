@@ -7,7 +7,7 @@ The source of truth is the Code UX database. Drafts stay mutable, revisions are 
 ## User Workflow
 
 1. Ask the Project Manager for the dashboard you want. Include the purpose, target audience, data sources, layout preferences, review criteria, and whether the dashboard should be published after validation.
-2. Review the draft in the dashboard workspace at `/custom-dashboards`. The draft includes editable manifest JSON, generated file bundle content, source-node graph JSON, styleguide JSON, and data catalog selections.
+2. Review the draft in the dashboard workspace at `/custom-dashboards`. Typed tabs cover manifest fields, route definitions, TypeScript/TSX/CSS/legacy file entries, source nodes, credential slots and bindings, and catalog selections. Advanced JSON remains available for complete snapshots and metadata.
 3. Ask for changes or edit the draft before creating a revision. Draft edits do not change previous revisions or the currently published dashboard.
 4. Create a revision when the draft is ready. A revision snapshots the current manifest, file bundle, source graph, credential bindings, route definitions, styleguide, and runtime metadata.
 5. Run detached validation for the revision. Code UX materializes the bundle under the project `.code-ux/runtime/custom-dashboards/...` directory, builds it in Docker, starts a detached preview container, and health-checks the root URL.
@@ -42,7 +42,15 @@ Each dashboard draft and revision can declare a `sourceNodeGraph`:
 
 Source nodes may declare up to 32 credential slots with a stable slot identifier, label, allowed credential kinds, and required capability. Draft bindings contain only a declared slot and a project-accessible credential ID. The repository verifies project scope, active/configured status, kind, and capability, then records a stable `custom-dashboard:<dashboard-id>:<slot>` server binding. Dashboard, revision, catalog, REST, and MCP responses expose non-secret credential metadata only; secret values are rejected and never copied into dashboard JSON. Revisions retain their binding snapshot when a draft is rebound.
 
+The workspace lists only credential name, kind, scope, capability, status, configured state, and version metadata. Binding writes `{ slot, credentialId }` into the mutable draft. Rotate and revoke use the project credential broker endpoints; a rotated value is held only in the write-only password control until the request completes, then cleared. Revocation requires confirmation. Neither the credential value nor broker binding key is placed in generated code, the iframe configuration, share URLs, logs, or dashboard JSON.
+
 Drafts may also declare up to 32 metadata-only routes. Every route has a normalized local path, label, bundle-relative entry file listed in the manifest, and optional bounded JSON metadata. Schemes, query strings, fragments, traversal, filesystem paths, script URLs, duplicate normalized paths, and host-app route prefixes are rejected. Revisions retain their route snapshot when draft routes change.
+
+## Published Subpage Routing
+
+Published viewer links use `/custom-dashboards?dashboard=<id>&mode=viewer&route=<normalized-path>`. The host restores the dashboard, viewer mode, and subpage from that URL, updates history when route controls are used, and responds to browser back/forward navigation. Root is `/`; repeated separators, dot segments, query text, and fragments are removed before matching. An unknown path falls back to the declared root route and then the first declared route.
+
+The sandbox uses dependency-free hash history because a `srcdoc` frame has an opaque origin. Its frozen bridge exposes `routePath` and `navigate(path, { replace? })`, emits `codeux:dashboard-route` inside the frame, and reports normalized route changes to the host through the frame/session-checked message channel. Generated route links and controls must remain keyboard accessible and should call the bridge rather than importing Code UX host modules. Direct HTML and browser-JavaScript bundles remain supported; dashboards without routes use the root page.
 
 ```json
 {
@@ -135,5 +143,7 @@ Stopping a validation session removes the detached container. It does not invali
 ## Published Viewer and Rollback
 
 The in-app viewer renders only published dashboards whose active `publishedRevisionId` points to a revision with a passed validation report. For the default `src/dashboard.tsx` draft and other TSX/Preact revisions validated through the harness, the viewer uses the persisted Vite `dist` artifact instead of the source entry file, so publication does not depend on the detached validation container still running. Generated code runs inside a sandboxed iframe document and talks to the parent app through a constrained `postMessage` bridge. Validation previews and published frames use the same typed source gateway. It verifies ownership, declared source and route permissions, credential slot/capability, request IDs, and session context before serving data. External credentials resolve through the broker and egress policy without entering the iframe; browser authorization, cookies, dashboard session headers, sensitive upstream headers, and upstream error bodies are not forwarded.
+
+The viewer displays a loading status until the frame sends its session-bound readiness message. A crash, unhandled rejection, empty document, or readiness timeout produces a bounded visible error and one idempotent halt report for that frame. The Code UX shell stays mounted. A halted panel offers validated resume and returns to revision selection for rollback; failed validation points users back to logs, draft repair, a new revision, and revalidation. Archived and unpublished states remain non-executable.
 
 Rollback is publish-based: select an earlier passed revision and publish it again. The publication pointer moves back to that immutable revision. Archive is the safe removal path when no dashboard should be active; it clears the publication pointer while preserving history.

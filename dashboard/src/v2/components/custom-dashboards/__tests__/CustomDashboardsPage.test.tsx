@@ -21,6 +21,7 @@ import {
   fetchCustomDashboardValidationSession,
   fetchCustomDashboards,
   publishCustomDashboardRevision,
+  resumeCustomDashboardRuntime,
   startCustomDashboardValidation,
   updateCustomDashboardDraft,
 } from "../../../lib/custom-dashboard-api.js";
@@ -35,8 +36,15 @@ vi.mock("../../../lib/custom-dashboard-api.js", () => ({
   fetchCustomDashboardValidationSession: vi.fn(),
   fetchCustomDashboards: vi.fn(),
   publishCustomDashboardRevision: vi.fn(),
+  resumeCustomDashboardRuntime: vi.fn(),
   startCustomDashboardValidation: vi.fn(),
   updateCustomDashboardDraft: vi.fn(),
+}));
+
+vi.mock("../../../lib/automation-credential-api.js", () => ({
+  fetchAutomationCredentials: vi.fn().mockResolvedValue([]),
+  rotateAutomationCredential: vi.fn(),
+  revokeAutomationCredential: vi.fn(),
 }));
 
 vi.mock("../../../lib/motion/index.js", () => ({
@@ -234,6 +242,7 @@ describe("CustomDashboardsPage", () => {
     vi.mocked(fetchCustomDashboardValidationSession).mockResolvedValue(passedSession);
     vi.mocked(startCustomDashboardValidation).mockResolvedValue(passedSession);
     vi.mocked(publishCustomDashboardRevision).mockResolvedValue({ ...dashboard, status: "published", publishedRevisionId: "revision-1" });
+    vi.mocked(resumeCustomDashboardRuntime).mockResolvedValue(dashboard);
     vi.mocked(updateCustomDashboardDraft).mockResolvedValue(dashboard);
     vi.mocked(createCustomDashboard).mockResolvedValue(dashboard);
     vi.mocked(createCustomDashboardRevision).mockResolvedValue(revision);
@@ -272,7 +281,7 @@ describe("CustomDashboardsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Publish$/i }));
 
     await waitFor(() => {
-      expect(publishCustomDashboardRevision).toHaveBeenCalledWith("dashboard-1", "revision-1", "session-1");
+      expect(publishCustomDashboardRevision).toHaveBeenCalledWith("dashboard-1", "revision-1", "session-1", undefined);
     });
   });
 });
