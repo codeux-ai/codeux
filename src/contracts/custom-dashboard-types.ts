@@ -14,6 +14,8 @@ export type CustomDashboardValidationStatus =
   | "failed"
   | "cancelled";
 
+export type CustomDashboardRuntimeStatus = "active" | "halted";
+
 export type CustomDashboardJsonPrimitive = string | number | boolean | null;
 export type CustomDashboardJsonValue =
   | CustomDashboardJsonPrimitive
@@ -142,9 +144,32 @@ export interface CustomDashboardRecord {
   routes: CustomDashboardRouteDefinition[];
   styleguide: CustomDashboardJsonObject;
   runtimeMetadata: CustomDashboardJsonObject;
+  runtimeState: CustomDashboardRuntimeState;
   publishedRevisionId: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CustomDashboardRuntimeState {
+  status: CustomDashboardRuntimeStatus;
+  haltedReason: string | null;
+  haltedRevisionId: string | null;
+  haltedAt: string | null;
+  resumedAt: string | null;
+  updatedAt: string;
+  recoveryMetadata: CustomDashboardJsonObject;
+}
+
+export interface HaltCustomDashboardRuntimeInput {
+  revisionId: string;
+  reason: string;
+  recoveryMetadata?: CustomDashboardJsonObject;
+}
+
+export interface ResumeCustomDashboardRuntimeInput {
+  revisionId: string;
+  validationSessionId?: string;
+  recoveryMetadata?: CustomDashboardJsonObject;
 }
 
 export interface CustomDashboardRevisionRecord {

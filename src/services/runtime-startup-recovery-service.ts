@@ -22,6 +22,7 @@ import { InvocationRecoveryService } from "./runtime-recovery/invocation-recover
 import { calculateInvocationDurationMs, isTerminalTaskRunState } from "./runtime-recovery/recovery-utils.js";
 import { cancelStaleProviderInvocation, failStaleProviderInvocation } from "../domain/runtime/provider-invocation-recovery.js";
 import type { GuardrailService } from "./guardrail-service.js";
+import type { CustomDashboardRepository } from "../repositories/custom-dashboard-repository.js";
 import type { SprintRunLifecycleService } from "./sprint-run-lifecycle-service.js";
 import { runCommandStrict } from "./cli-process-runner.js";
 
@@ -74,6 +75,8 @@ export interface RuntimeStartupRecoveryResult {
   restartPolicySyncedPausedSprintIds: string[];
   restartPolicySyncedOrphanedSprintIds: string[];
   reconciledDuplicateDispatchIds: string[];
+  preservedHaltedCustomDashboardIds: string[];
+  failedCustomDashboardValidationSessionIds: string[];
 }
 
 interface RuntimeStartupRecoveryServiceDeps {
@@ -91,6 +94,7 @@ interface RuntimeStartupRecoveryServiceDeps {
   getDashboardSettings?: (scope?: DashboardSettingsScope) => DashboardSettings;
   isProcessAlive?: (pid: number) => boolean;
   logger?: Logger;
+  customDashboardRepository?: CustomDashboardRepository;
 }
 
 export class RuntimeStartupRecoveryService {
@@ -100,6 +104,7 @@ export class RuntimeStartupRecoveryService {
     this.releaseStaleSprintLeases();
     await this.identifyZombieWorkspaces();
     const activeContainerSessionIds = await this.listActiveContainerSessionIds();
+    const customDashboardRecovery = await this.reconcileCustomDashboardRuntimeState();
     const restartPolicies = this.resolveRestartPolicies();
     const qaReviewRecovery = new QaReviewRecoveryService({
       executionRepository: this.deps.executionRepository,
@@ -169,6 +174,8 @@ export class RuntimeStartupRecoveryService {
       || restartPolicyResult.cancelledSprintRunIds.length > 0
       || resumedSprintRunIds.length > 0
       || supersededSprintRunIds.length > 0
+      || customDashboardRecovery.preservedHaltedDashboardIds.length > 0
+      || customDashboardRecovery.failedValidationSessionIds.length > 0
     ) {
       this.deps.logger?.info("Recovered runtime state on startup", {
         recoveredCliSessions: recoveredCliSessionIds.length,
@@ -194,6 +201,8 @@ export class RuntimeStartupRecoveryService {
         restartPolicyCancelledSprintRuns: restartPolicyResult.cancelledSprintRunIds.length,
         resumedSprintRuns: resumedSprintRunIds.length,
         supersededSprintRuns: supersededSprintRunIds.length,
+        preservedHaltedCustomDashboards: customDashboardRecovery.preservedHaltedDashboardIds.length,
+        failedCustomDashboardValidationSessions: customDashboardRecovery.failedValidationSessionIds.length,
       });
     }
 
@@ -221,7 +230,58 @@ export class RuntimeStartupRecoveryService {
       restartPolicyCancelledSprintRunIds: restartPolicyResult.cancelledSprintRunIds,
       resumedSprintRunIds,
       supersededSprintRunIds,
+      preservedHaltedCustomDashboardIds: customDashboardRecovery.preservedHaltedDashboardIds,
+      failedCustomDashboardValidationSessionIds: customDashboardRecovery.failedValidationSessionIds,
     };
+  }
+
+  private async reconcileCustomDashboardRuntimeState(): Promise<{
+    preservedHaltedDashboardIds: string[];
+    failedValidationSessionIds: string[];
+  }> {
+    const repository = this.deps.customDashboardRepository;
+    if (!repository) {
+      return { preservedHaltedDashboardIds: [], failedValidationSessionIds: [] };
+    }
+    const preservedHaltedDashboardIds = repository.reconcileRuntimeStatesOnStartup();
+    const sessions = repository.listActiveValidationSessions();
+    if (sessions.length === 0) {
+      return { preservedHaltedDashboardIds, failedValidationSessionIds: [] };
+    }
+    const containers = await this.deps.dockerService?.listContainers().catch(() => []) ?? [];
+    const failedValidationSessionIds: string[] = [];
+    const now = new Date().toISOString();
+    for (const session of sessions) {
+      const validation = session.runtimeMetadata.validation;
+      const metadata = validation && typeof validation === "object" && !Array.isArray(validation)
+        ? validation as Record<string, unknown>
+        : {};
+      const containerId = typeof metadata.containerId === "string" ? metadata.containerId : "";
+      const containerName = typeof metadata.containerName === "string" ? metadata.containerName : "";
+      const container = containers.find((candidate) => candidate.labels?.["code-ux.session-id"] === session.id)
+        ?? containers.find((candidate) => candidate.id === containerId || candidate.names === containerName);
+      const healthy = container && container.state.toLowerCase() === "running"
+        && !container.status.toLowerCase().includes("unhealthy");
+      if (healthy) continue;
+      const reason = container
+        ? "Managed custom dashboard validation container was unhealthy during startup recovery."
+        : "Managed custom dashboard validation container was missing during startup recovery.";
+      repository.updateValidationSession(session.id, {
+        status: "failed",
+        validationReport: {
+          valid: false,
+          summary: reason,
+          issues: [{ field: "runtime", code: container ? "container_unhealthy" : "container_missing", message: reason }],
+        },
+        runtimeMetadata: {
+          ...session.runtimeMetadata,
+          recovery: { reconciledAt: now, reason: container ? "container_unhealthy" : "container_missing" },
+        },
+        finishedAt: now,
+      });
+      failedValidationSessionIds.push(session.id);
+    }
+    return { preservedHaltedDashboardIds, failedValidationSessionIds };
   }
 
   private async demotePrematureMergeConflictEscalations(): Promise<string[]> {

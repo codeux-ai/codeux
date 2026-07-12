@@ -26,6 +26,8 @@ SQLite tables are created in both the initial schema and startup migrations:
 | `custom_dashboard_validation_sessions` | Validation history for revisions, including status transitions, report JSON, runtime metadata, and start/finish timestamps. |
 | `custom_dashboard_publications` | The active publication pointer for a dashboard. The table is keyed by `dashboard_id`, so each dashboard has at most one active published revision. |
 
+`custom_dashboards` also carries runtime state independently from publication: `active` or `halted`, a bounded redacted halt reason, the halted revision, halt/resume/update timestamps, and JSON recovery metadata. Existing rows migrate to `active` without changing their publication pointer.
+
 All dashboard JSON payloads are stored as text and hydrated through `CustomDashboardRepository`. Repository methods validate required fields, JSON-safety, project ownership, revision ownership, and publication invariants before writing.
 
 Credential slots live on source nodes. Bindings are authorized against credential metadata without resolving plaintext, persisted under stable dashboard/slot binding keys, and serialized with metadata only. Route definitions are normalized, bounded, bundle-relative metadata; executable URLs, traversal, and host-app route prefixes are rejected before persistence.
@@ -39,9 +41,12 @@ Credential slots live on source nodes. Bindings are authorized against credentia
 - create immutable revisions from the current draft or explicit payloads
 - create/update/delete validation sessions and mark a revision validated
 - publish only validated revisions
+- halt the current published revision with compare-and-set revision checks, and explicitly resume or roll back only to a passed revision
 - archive or delete dashboards
 
 Publishing rejects unvalidated, failed, cancelled, or cross-dashboard revisions. Publishing a new validated revision replaces the prior `custom_dashboard_publications` row for the dashboard, preserving the single-active-publication invariant.
+
+A runtime halt never deletes or rewrites the immutable published revision. Source resolution and the browser viewer refuse to execute any halted dashboard, even when its publication remains valid. Repeated reports from the same frame revision are idempotent; stale-revision reports are rejected. Resume verifies the current publication and its passed validation report. A rollback from a halted revision additionally supplies the expected current publication, preventing a concurrent publication change from being overwritten.
 
 ## Validation Runtime
 
@@ -67,6 +72,7 @@ Dashboard HTTP routes live in `src/server/custom-dashboard-routes.ts` and are re
 - project routes list/create dashboards and expose a data catalog at `/api/projects/:projectId/custom-dashboards/data-catalog`
 - dashboard routes get/update/archive a dashboard and create revisions
 - validation routes start validation, read status/logs, stop/remove validation sessions, and publish revisions
+- same-origin runtime mutation routes halt and explicitly resume a published dashboard
 - validation proxy routes forward same-origin requests to a running validation host port when the session runtime metadata exposes one
 - `/api/custom-dashboard-runtime/source` is the shared typed data boundary for validation previews and active published revisions
 
@@ -93,6 +99,8 @@ The page manages mutable draft text for:
 Draft edits remain persisted bundle text sent back through API calls; generated dashboard code is not imported from `dashboard/src` at runtime. Revisions are created as immutable snapshots, then validated through a detached session. The validation panel shows build/start/health stage state, renders refreshed logs, links to the validation proxy preview, and disables publication until the selected revision has a passed validation report or a matching passed validation session. Once a dashboard has an active publication pointer, later validation sessions for draft revisions do not demote the dashboard from `published`, and later validation sessions for the active published revision do not replace its stored validation snapshot.
 
 Published dashboards open through `CustomDashboardViewer`, which resolves the active `publishedRevisionId` from the loaded dashboard detail and renders only when the dashboard status is `published`, the published revision exists, and that revision still has a valid passed validation report. Draft, rejected, archived, unvalidated, and missing-publication states render a local blocked panel with the last validation report and a return-to-editor action rather than executing the bundle.
+
+Each iframe instance reports readiness once and reports `error`, `unhandledrejection`, missing readiness, or an unusable document once. The parent bounds and redacts the reason, persists a halt against the exact published revision, and catches persistence failures so generated code cannot crash the Preact shell. Startup recovery preserves all halted rows and records recovery metadata; it marks stale active validation sessions failed when their managed container is missing, stopped, or unhealthy without invalidating an already valid publication.
 
 The viewer uses a sandboxed iframe `srcdoc` document so generated dashboard code never runs inside the main Preact bundle. For validated TSX/Preact revisions, it prefers the persisted Vite `dist` viewer artifact from revision runtime metadata and inlines the artifact's HTML, CSS, and JavaScript into the frame document. Older direct HTML or browser-ready JavaScript entry files still render through the previous entry-file path. The frame receives a frozen `codeUxDataBridge` / `CodeUXCustomDashboard` object and can request only declared sources or external routes. Published requests cross a frame-source, opaque-origin, per-frame-session `postMessage` boundary; validation harness requests carry their owning validation session. Both modes reach `CustomDashboardRuntimeService`, which verifies project/dashboard/revision ownership and active publication or session state. External credentials resolve inside `CredentialBroker.withResolvedCredentialId` and pass only as trusted headers to `EgressPolicyService`, which enforces explicit hosts, ports, methods, content types, timeouts, redirects, rate limits, and bounded bodies. Browser authorization, cookies, dashboard session headers, sensitive upstream headers, and upstream error bodies are not forwarded.
 

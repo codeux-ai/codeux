@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import type {
   CreateCustomDashboardDraftInput,
   CreateCustomDashboardRevisionInput,
+  CustomDashboardJsonObject,
   UpdateCustomDashboardDraftInput,
 } from "../contracts/custom-dashboard-types.js";
 import { HttpRouteError } from "./http-errors.js";
@@ -112,8 +113,9 @@ export function registerCustomDashboardRoutes(app: Express, deps: DashboardDepen
   }));
 
   app.post("/api/custom-dashboards/:dashboardId/revisions/:revisionId/publish", asyncRoute(async (req, res) => {
+    assertSafeRuntimeRequestOrigin(req);
     const repository = requireCustomDashboardRepository(deps);
-    const body = optionalObjectBody<{ revisionId?: unknown; validationSessionId?: unknown }>(req.body);
+    const body = optionalObjectBody<{ revisionId?: unknown; validationSessionId?: unknown; expectedPublishedRevisionId?: unknown }>(req.body);
     const revisionId = requireTrimmedString(body.revisionId ?? req.params.revisionId, "revisionId");
     const validationSessionId = typeof body.validationSessionId === "string"
       ? body.validationSessionId
@@ -122,6 +124,39 @@ export function registerCustomDashboardRoutes(app: Express, deps: DashboardDepen
       requireTrimmedString(req.params.dashboardId, "dashboardId"),
       revisionId,
       validationSessionId,
+      body.expectedPublishedRevisionId === null || typeof body.expectedPublishedRevisionId === "string"
+        ? body.expectedPublishedRevisionId
+        : undefined,
+    );
+    res.json(dashboard);
+  }));
+
+  app.post("/api/custom-dashboards/:dashboardId/runtime/halt", asyncRoute(async (req, res) => {
+    assertSafeRuntimeRequestOrigin(req);
+    const repository = requireCustomDashboardRepository(deps);
+    const body = requireObjectBody<{ revisionId?: unknown; reason?: unknown; recoveryMetadata?: unknown }>(req.body);
+    const dashboard = repository.haltRuntime(
+      requireTrimmedString(req.params.dashboardId, "dashboardId"),
+      requireTrimmedString(body.revisionId, "revisionId"),
+      body.reason,
+      body.recoveryMetadata && typeof body.recoveryMetadata === "object" && !Array.isArray(body.recoveryMetadata)
+        ? body.recoveryMetadata as CustomDashboardJsonObject
+        : undefined,
+    );
+    res.json(dashboard);
+  }));
+
+  app.post("/api/custom-dashboards/:dashboardId/runtime/resume", asyncRoute(async (req, res) => {
+    assertSafeRuntimeRequestOrigin(req);
+    const repository = requireCustomDashboardRepository(deps);
+    const body = requireObjectBody<{ revisionId?: unknown; validationSessionId?: unknown; recoveryMetadata?: unknown }>(req.body);
+    const dashboard = repository.resumeRuntime(
+      requireTrimmedString(req.params.dashboardId, "dashboardId"),
+      requireTrimmedString(body.revisionId, "revisionId"),
+      typeof body.validationSessionId === "string" ? body.validationSessionId : undefined,
+      body.recoveryMetadata && typeof body.recoveryMetadata === "object" && !Array.isArray(body.recoveryMetadata)
+        ? body.recoveryMetadata as CustomDashboardJsonObject
+        : undefined,
     );
     res.json(dashboard);
   }));

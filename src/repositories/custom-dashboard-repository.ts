@@ -15,6 +15,7 @@ import type {
   CustomDashboardManifest,
   CustomDashboardRecord,
   CustomDashboardRouteDefinition,
+  CustomDashboardRuntimeState,
   CustomDashboardRevisionRecord,
   CustomDashboardStatus,
   CustomDashboardValidationReport,
@@ -40,6 +41,13 @@ interface CustomDashboardRow {
   routes_json: string;
   styleguide_json: string;
   runtime_metadata_json: string;
+  runtime_status: string;
+  runtime_halt_reason: string | null;
+  runtime_halted_revision_id: string | null;
+  runtime_halted_at: string | null;
+  runtime_resumed_at: string | null;
+  runtime_state_updated_at: string | null;
+  runtime_recovery_metadata_json: string;
   published_revision_id: string | null;
   created_at: string;
   updated_at: string;
@@ -102,6 +110,7 @@ const MAX_ROUTES = 32;
 const MAX_IDENTIFIER_LENGTH = 64;
 const MAX_LABEL_LENGTH = 128;
 const MAX_ROUTE_PATH_LENGTH = 256;
+const MAX_RUNTIME_HALT_REASON_LENGTH = 320;
 const DASHBOARD_IDENTIFIER = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
 const ROUTE_SEGMENT = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 const RESERVED_ROUTE_PREFIXES = [
@@ -168,8 +177,8 @@ export class CustomDashboardRepository {
         INSERT INTO custom_dashboards (
           id, project_id, title, description, status, manifest_json, files_json,
           source_node_graph_json, credential_bindings_json, routes_json, styleguide_json,
-          runtime_metadata_json, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          runtime_metadata_json, runtime_status, runtime_state_updated_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
       `).run(
         id,
         projectId,
@@ -182,6 +191,7 @@ export class CustomDashboardRepository {
         this.serializeJson(routes),
         this.serializeJson(styleguide),
         this.serializeJson(runtimeMetadata),
+        now,
         now,
         now,
       );
@@ -468,10 +478,21 @@ export class CustomDashboardRepository {
     return this.requireRevision(revision.id);
   }
 
-  publishRevision(dashboardId: string, revisionId: string, validationSessionId?: string): CustomDashboardRecord {
+  publishRevision(
+    dashboardId: string,
+    revisionId: string,
+    validationSessionId?: string,
+    expectedPublishedRevisionId?: string | null,
+  ): CustomDashboardRecord {
     const dashboard = this.requireDashboard(dashboardId);
     if (dashboard.status === "archived") {
       throw new ValidationError("Archived custom dashboards cannot be published.");
+    }
+    if (expectedPublishedRevisionId !== undefined && dashboard.publishedRevisionId !== expectedPublishedRevisionId) {
+      throw new ValidationError("The custom dashboard publication changed before this transition completed.");
+    }
+    if (dashboard.runtimeState.status === "halted" && expectedPublishedRevisionId === undefined) {
+      throw new ValidationError("A halted custom dashboard requires the current published revision for an explicit publish or rollback.");
     }
     const revision = this.requireRevision(revisionId);
     if (revision.dashboardId !== dashboard.id || revision.projectId !== dashboard.projectId) {
@@ -518,9 +539,140 @@ export class CustomDashboardRepository {
         now,
       );
       this.setDashboardStatus(dashboard.id, "published", now);
+      this.db.prepare(`
+        UPDATE custom_dashboards
+        SET runtime_status = 'active',
+            runtime_halt_reason = NULL,
+            runtime_halted_revision_id = NULL,
+            runtime_halted_at = NULL,
+            runtime_resumed_at = CASE WHEN runtime_status = 'halted' THEN ? ELSE runtime_resumed_at END,
+            runtime_state_updated_at = ?,
+            runtime_recovery_metadata_json = CASE WHEN runtime_status = 'halted' THEN '{}' ELSE runtime_recovery_metadata_json END
+        WHERE id = ?
+      `).run(now, now, dashboard.id);
     });
 
     return this.requireDashboard(dashboard.id);
+  }
+
+  haltRuntime(
+    dashboardId: string,
+    revisionId: string,
+    reason: unknown,
+    recoveryMetadata?: CustomDashboardJsonObject,
+  ): CustomDashboardRecord {
+    const normalizedReason = this.normalizeRuntimeHaltReason(reason);
+    const normalizedRevisionId = revisionId.trim();
+    if (!normalizedRevisionId) {
+      throw new ValidationError("Custom dashboard halted revision id is required.");
+    }
+    const metadata = this.normalizeJsonObject(recoveryMetadata);
+    const now = new Date().toISOString();
+
+    this.db.transaction(() => {
+      const dashboard = this.requireDashboard(dashboardId);
+      if (dashboard.status === "archived") {
+        throw new ValidationError("Archived custom dashboards cannot be halted.");
+      }
+      if (dashboard.publishedRevisionId !== normalizedRevisionId) {
+        throw new ValidationError("The runtime halt report does not match the current published revision.");
+      }
+      if (dashboard.runtimeState.status === "halted") {
+        if (dashboard.runtimeState.haltedRevisionId !== normalizedRevisionId) {
+          throw new ValidationError("The custom dashboard is already halted for another revision.");
+        }
+        return;
+      }
+      this.db.prepare(`
+        UPDATE custom_dashboards
+        SET runtime_status = 'halted',
+            runtime_halt_reason = ?,
+            runtime_halted_revision_id = ?,
+            runtime_halted_at = ?,
+            runtime_state_updated_at = ?,
+            runtime_recovery_metadata_json = ?,
+            updated_at = ?
+        WHERE id = ?
+          AND runtime_status = 'active'
+      `).run(
+        normalizedReason,
+        normalizedRevisionId,
+        now,
+        now,
+        this.serializeJson(metadata),
+        now,
+        dashboard.id,
+      );
+    });
+
+    return this.requireDashboard(dashboardId);
+  }
+
+  resumeRuntime(
+    dashboardId: string,
+    revisionId: string,
+    validationSessionId?: string,
+    recoveryMetadata?: CustomDashboardJsonObject,
+  ): CustomDashboardRecord {
+    const now = new Date().toISOString();
+    const metadata = this.normalizeJsonObject(recoveryMetadata);
+    this.db.transaction(() => {
+      const dashboard = this.requireDashboard(dashboardId);
+      const revision = this.requirePublishableRevision(dashboard, revisionId, validationSessionId);
+      if (dashboard.publishedRevisionId !== revision.id) {
+        throw new ValidationError("The runtime resume revision does not match the current published revision.");
+      }
+      if (dashboard.runtimeState.status === "active") return;
+      if (dashboard.runtimeState.haltedRevisionId !== revision.id) {
+        throw new ValidationError("The custom dashboard halt does not belong to the requested revision.");
+      }
+      this.db.prepare(`
+        UPDATE custom_dashboards
+        SET runtime_status = 'active',
+            runtime_halt_reason = NULL,
+            runtime_halted_revision_id = NULL,
+            runtime_halted_at = NULL,
+            runtime_resumed_at = ?,
+            runtime_state_updated_at = ?,
+            runtime_recovery_metadata_json = ?,
+            updated_at = ?
+        WHERE id = ?
+          AND runtime_status = 'halted'
+          AND runtime_halted_revision_id = ?
+      `).run(now, now, this.serializeJson(metadata), now, dashboard.id, revision.id);
+    });
+    return this.requireDashboard(dashboardId);
+  }
+
+  reconcileRuntimeStatesOnStartup(): string[] {
+    const halted = this.db.prepare(`
+      SELECT id
+      FROM custom_dashboards
+      WHERE runtime_status = 'halted'
+    `).all() as unknown as Array<{ id: string }>;
+    const now = new Date().toISOString();
+    for (const { id } of halted) {
+      const dashboard = this.requireDashboard(id);
+      const previous = dashboard.runtimeState.recoveryMetadata;
+      const count = typeof previous.startupRecoveryCount === "number"
+        ? previous.startupRecoveryCount + 1
+        : 1;
+      this.db.prepare(`
+        UPDATE custom_dashboards
+        SET runtime_recovery_metadata_json = ?, runtime_state_updated_at = ?
+        WHERE id = ? AND runtime_status = 'halted'
+      `).run(this.serializeJson({ ...previous, lastStartupRecoveryAt: now, startupRecoveryCount: count }), now, id);
+    }
+    return halted.map(({ id }) => id);
+  }
+
+  listActiveValidationSessions(): CustomDashboardValidationSessionRecord[] {
+    const rows = this.db.prepare(`
+      SELECT * FROM custom_dashboard_validation_sessions
+      WHERE status IN ('queued', 'building', 'running')
+      ORDER BY created_at ASC
+    `).all() as unknown as CustomDashboardValidationSessionRow[];
+    return rows.map((row) => this.mapValidationSessionRow(row));
   }
 
   archiveDashboard(dashboardId: string): CustomDashboardRecord {
@@ -613,6 +765,47 @@ export class CustomDashboardRepository {
       WHERE dashboard_id = ?
     `).get(dashboardId) as { next_revision_number?: number | string } | undefined;
     return toNumber(row?.next_revision_number);
+  }
+
+  private requirePublishableRevision(
+    dashboard: CustomDashboardRecord,
+    revisionId: string,
+    validationSessionId?: string,
+  ): CustomDashboardRevisionRecord {
+    const revision = this.requireRevision(revisionId);
+    if (revision.dashboardId !== dashboard.id || revision.projectId !== dashboard.projectId) {
+      throw new ValidationError("Custom dashboard revision does not belong to the requested dashboard.");
+    }
+    if (revision.validationStatus !== "passed" || !revision.validatedAt || revision.validationReport?.valid !== true) {
+      throw new ValidationError("Only validated custom dashboard revisions can activate a runtime.");
+    }
+    if (validationSessionId !== undefined) {
+      const session = this.requireValidationSession(validationSessionId.trim());
+      if (session.dashboardId !== dashboard.id || session.revisionId !== revision.id || session.projectId !== dashboard.projectId) {
+        throw new ValidationError("Custom dashboard validation session does not belong to the requested revision.");
+      }
+      if (session.status !== "passed" || session.validationReport?.valid !== true) {
+        throw new ValidationError(`Only passed custom dashboard validation sessions can activate a runtime. Current validation status: ${session.status}.`);
+      }
+    }
+    return revision;
+  }
+
+  private normalizeRuntimeHaltReason(reason: unknown): string {
+    if (typeof reason !== "string") {
+      throw new ValidationError("Custom dashboard runtime halt reason must be a string.");
+    }
+    const normalized = reason
+      .replace(/[\u0000-\u001f\u007f]/g, " ")
+      .replace(/\b(Bearer)\s+[^\s]+/gi, "$1 [REDACTED]")
+      .replace(/\b(api[-_ ]?key|token|secret|password)\s*[:=]\s*[^\s,;]+/gi, "$1=[REDACTED]")
+      .replace(/\b[A-Za-z0-9_-]{40,}\b/g, "[REDACTED]")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!normalized) {
+      throw new ValidationError("Custom dashboard runtime halt reason is required.");
+    }
+    return normalized.slice(0, MAX_RUNTIME_HALT_REASON_LENGTH);
   }
 
   private requireProject(projectId: string): void {
@@ -1260,9 +1453,23 @@ export class CustomDashboardRepository {
       routes: this.parseRoutes(row.routes_json, manifest),
       styleguide: this.parseJsonObject(row.styleguide_json),
       runtimeMetadata: this.parseJsonObject(row.runtime_metadata_json),
+      runtimeState: this.mapRuntimeState(row),
       publishedRevisionId: row.published_revision_id,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+    };
+  }
+
+  private mapRuntimeState(row: CustomDashboardRow): CustomDashboardRuntimeState {
+    const status = row.runtime_status === "halted" ? "halted" : "active";
+    return {
+      status,
+      haltedReason: status === "halted" ? row.runtime_halt_reason : null,
+      haltedRevisionId: status === "halted" ? row.runtime_halted_revision_id : null,
+      haltedAt: status === "halted" ? row.runtime_halted_at : null,
+      resumedAt: row.runtime_resumed_at,
+      updatedAt: row.runtime_state_updated_at ?? row.updated_at,
+      recoveryMetadata: this.parseJsonObject(row.runtime_recovery_metadata_json),
     };
   }
 
