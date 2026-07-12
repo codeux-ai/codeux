@@ -11,6 +11,8 @@ export interface BuiltinExecutionContext {
   projectId: string; flowId: string; publicationId: string; runId: string; nodeId: string;
   config: NodeFlowJsonObject; upstream: NodeFlowJsonObject; flowInput: NodeFlowJsonObject;
   signal?: AbortSignal; subflowDepth: number;
+  redactJson?: (value: NodeFlowJsonObject) => NodeFlowJsonObject;
+  redactText?: (value: string) => string;
 }
 export interface BuiltinExecutionResult { output: NodeFlowJsonObject; selectedPorts?: string[] }
 export interface BuiltinExecutorDependencies {
@@ -48,16 +50,17 @@ export class BuiltinExecutors {
 
   private async executeEmailSend(context: BuiltinExecutionContext): Promise<BuiltinExecutionResult> {
     if (!this.deps.approvalService || !this.deps.outboxService) throw new ValidationError("Email side-effect services are not configured.");
-    const draft = buildEmail(context);
+    const rawDraft = buildEmail(context);
+    const draft = context.redactJson?.(rawDraft) ?? rawDraft;
     const logicalItem = readString(context.config.logicalItem) ?? "default";
     this.deps.approvalService.requireApproval({ projectId: context.projectId, flowId: context.flowId, runId: context.runId,
       nodeId: context.nodeId, logicalItem, request: { effectType: "email", draft } });
     const sent = await this.deps.outboxService.dispatch({ projectId: context.projectId, flowId: context.flowId,
       publicationId: context.publicationId, runId: context.runId, nodeId: context.nodeId, logicalItem,
       effectType: "email", payload: draft });
-    if (sent.status === "attention_required") throw new Error(sent.lastError ?? "Email provider outcome is unknown.");
-    if (sent.status !== "sent") throw new Error(sent.lastError ?? "Email send failed.");
-    return { output: { sent: true, outboxId: sent.id, providerMessageId: sent.providerMessageId } };
+    if (sent.status === "attention_required") throw new Error(context.redactText?.(sent.lastError ?? "Email provider outcome is unknown.") ?? sent.lastError ?? "Email provider outcome is unknown.");
+    if (sent.status !== "sent") throw new Error(context.redactText?.(sent.lastError ?? "Email send failed.") ?? sent.lastError ?? "Email send failed.");
+    return { output: context.redactJson?.({ sent: true, outboxId: sent.id, providerMessageId: sent.providerMessageId }) ?? { sent: true, outboxId: sent.id, providerMessageId: sent.providerMessageId } };
   }
 
   private async executeSubflow(context: BuiltinExecutionContext): Promise<BuiltinExecutionResult> {
@@ -66,8 +69,9 @@ export class BuiltinExecutors {
     if (flowId === context.flowId) throw new ValidationError("A node flow cannot directly execute itself.");
     if (context.subflowDepth >= MAX_SUBFLOW_DEPTH) throw new ValidationError(`Subflow depth exceeds ${MAX_SUBFLOW_DEPTH}.`);
     if (!this.deps.executeSubflow) throw new ValidationError("Subflow execution is not configured.");
-    return { output: await this.deps.executeSubflow({ projectId: context.projectId, flowId,
-      input: readObject(context.config.input) ?? context.upstream, depth: context.subflowDepth + 1, signal: context.signal }) };
+    const output = await this.deps.executeSubflow({ projectId: context.projectId, flowId,
+      input: readObject(context.config.input) ?? context.upstream, depth: context.subflowDepth + 1, signal: context.signal });
+    return { output: context.redactJson?.(output) ?? output };
   }
 }
 
