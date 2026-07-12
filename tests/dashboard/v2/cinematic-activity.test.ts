@@ -3,6 +3,10 @@ import {
   classifyCinematicActivityPhase,
   resolveCinematicActivityDisplayState,
 } from "../../../dashboard/src/v2/lib/cinematic-activity.js";
+import {
+  AGENT_HUMOR_MESSAGES,
+  STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS,
+} from "../../../dashboard/src/v2/lib/agent-humor-messages.js";
 import type { ChatThread, ExecutionInvocationRecord } from "../../../dashboard/src/v2/types.js";
 
 const invocation = (overrides: Partial<ExecutionInvocationRecord> = {}): ExecutionInvocationRecord => ({
@@ -90,13 +94,17 @@ describe("cinematic activity", () => {
     });
   });
 
-  it("keeps provider and phase copy stable throughout a five-second cycle", () => {
+  it("keeps delegated-work humor stable throughout a twenty-second stage cycle", () => {
     const first = resolve({ invocations: [invocation()], nowMs: 10_000 }).backgroundCue;
-    const rerendered = resolve({ invocations: [invocation()], nowMs: 14_999 }).backgroundCue;
+    const rerendered = resolve({
+      invocations: [invocation()],
+      nowMs: STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS - 1,
+    }).backgroundCue;
 
     expect(rerendered?.quote).toBe(first?.quote);
     expect(rerendered?.providerLabel).toBe("Codex");
     expect(rerendered?.phase).toBe("provider_work");
+    expect(AGENT_HUMOR_MESSAGES.delegating).toContain(first?.quote);
   });
 
   it("labels a current stage error without claiming completion", () => {

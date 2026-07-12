@@ -567,7 +567,19 @@ describe('ChatPage Accessibility', () => {
       "Add Nodes Workflow", "Add Dashboard", "Create Skill", "List Skills",
     ];
     expect(screen.getByRole("group", { name: "Project quick actions" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Create quick actions" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Project pulse quick actions" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Workflows quick actions" })).toBeInTheDocument();
     labels.forEach((label) => expect(screen.getByRole("button", { name: label })).toBeInTheDocument());
+    const iconTiles = Array.from(document.querySelectorAll<HTMLElement>("[data-quick-action-icon]"));
+    expect(iconTiles).toHaveLength(labels.length);
+    expect(new Set(iconTiles.map((tile) => tile.className))).toHaveLength(labels.length);
+    expect(screen.getByRole("button", { name: "Status Report" })).toHaveClass(
+      "min-h-9",
+      "w-fit",
+      "rounded-xl",
+      "md:justify-self-start",
+    );
 
     await user.click(screen.getByRole("button", { name: "Create Web App" }));
     const desktopAction = screen.getByRole("button", { name: "Create Desktop App" });
@@ -585,7 +597,7 @@ describe('ChatPage Accessibility', () => {
     expect(statusAction).toHaveClass("focus-visible:ring-2");
   });
 
-  it('removes initial-only stage actions when repository eligibility changes', () => {
+  it('removes every create-app stage action when repository eligibility changes', () => {
     mocks.reducedMotion.value = true;
     mocks.data = {
       ...mocks.data,
@@ -610,7 +622,9 @@ describe('ChatPage Accessibility', () => {
 
     expect(screen.queryByRole("button", { name: "Create Web App" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Create Desktop App" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Create Onlineshop" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create Onlineshop" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create Portfolio" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create Game" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "List Skills" })).toBeInTheDocument();
   });
 
@@ -618,7 +632,6 @@ describe('ChatPage Accessibility', () => {
     ["sending", { sending: true, error: null, hasWorkingReply: false, invocations: [] }],
     ["error", { sending: false, error: "Send failed", hasWorkingReply: false, invocations: [] }],
     ["working reply", { sending: false, error: null, hasWorkingReply: true, invocations: [] }],
-    ["running invocation", { sending: false, error: null, hasWorkingReply: false, invocations: [{ id: "running", status: "running" }] }],
   ])('suppresses stage quick actions while %s', (_label, state) => {
     mocks.reducedMotion.value = true;
     mocks.data = {

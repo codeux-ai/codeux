@@ -1,5 +1,9 @@
 import type { ChatThread, ExecutionInvocationRecord } from "../types.js";
-import { selectAgentHumorMessage, type AgentHumorCategory } from "./agent-humor-messages.js";
+import {
+  STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS,
+  selectAgentHumorMessage,
+  type AgentHumorCategory,
+} from "./agent-humor-messages.js";
 
 export type CinematicActivityPhase =
   | "container_startup"
@@ -112,6 +116,7 @@ const normalizeProviderLabel = (provider: string | null | undefined): string | n
 
 const buildCue = (options: {
   agentId: string | null | undefined;
+  humorCategory?: AgentHumorCategory;
   id: string;
   nowMs: number;
   phase: CinematicActivityPhase;
@@ -124,7 +129,8 @@ const buildCue = (options: {
     phase: options.phase,
     providerLabel,
     quote: selectAgentHumorMessage({
-      category: PHASE_CATEGORY[options.phase],
+      category: options.humorCategory ?? PHASE_CATEGORY[options.phase],
+      cycleDurationMs: STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS,
       seed: [options.agentId ?? "unassigned", options.provider ?? "local", options.phase, options.id].join("|"),
       nowMs: options.nowMs,
     }),
@@ -203,6 +209,9 @@ export const resolveCinematicActivityDisplayState = (
   const backgroundCue = backgroundInvocation && backgroundPhase
     ? buildCue({
       agentId: backgroundInvocation.agentPresetId,
+      humorCategory: backgroundPhase === "error" || backgroundPhase === "completion"
+        ? PHASE_CATEGORY[backgroundPhase]
+        : "delegating",
       id: backgroundInvocation.id,
       nowMs: options.nowMs,
       phase: backgroundPhase,

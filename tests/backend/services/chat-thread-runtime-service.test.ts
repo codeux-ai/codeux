@@ -323,7 +323,7 @@ describe("ChatThreadRuntimeService", () => {
     },
   );
 
-  it.each(["web_app", "desktop_app"] as const)(
+  it.each(CREATE_APP_QUICKACTION_CATALOG.map(({ kind }) => kind))(
     "fails %s safely when the project is not eligible for an initial app",
     async (kind) => {
       const spec = CREATE_APP_QUICKACTION_CATALOG.find((entry) => entry.kind === kind)!;
@@ -358,35 +358,6 @@ describe("ChatThreadRuntimeService", () => {
       expect(deps.connectionChatRepository.postSystemMessage).toHaveBeenCalledWith("p1", expect.objectContaining({
         bodyMarkdown: expect.stringContaining(`${spec.displayLabel} is only available for an eligible initial project.`),
       }));
-    },
-  );
-
-  it.each(CREATE_APP_QUICKACTION_CATALOG.filter((spec) => !["web_app", "desktop_app"].includes(spec.kind)))(
-    "allows $kind on a normal project chat path without the initial-project guard",
-    async (spec) => {
-      const metadata = {
-        quickaction: { type: "create_app", kind: spec.kind, requestId: `request-${spec.kind}`, templateId: spec.templateId },
-      };
-      const quicksprintLauncher = {
-        launchDetachedQuicksprint: vi.fn().mockResolvedValue({
-          sprint: { id: `sprint-${spec.kind}`, name: `QS: ${spec.displayLabel}` },
-          planningRequest: { clientRequestId: `request-${spec.kind}` },
-          planningPromise: new Promise(() => undefined),
-        }),
-      };
-      service.setQuicksprintLauncher(quicksprintLauncher);
-      deps.connectionChatRepository.postDashboardMessage.mockReturnValue({
-        id: `msg-${spec.kind}`,
-        threadId: "t-app",
-        bodyMarkdown: spec.displayLabel,
-        metadata,
-      });
-      deps.connectionChatRepository.getThread.mockReturnValue({ id: "t-app", projectId: "p1", runtimeState: {} });
-
-      await service.postMessage("p1", { bodyMarkdown: spec.displayLabel, metadata });
-
-      expect(deps.getProjectInitializationState).not.toHaveBeenCalled();
-      expect(quicksprintLauncher.launchDetachedQuicksprint).toHaveBeenCalledTimes(1);
     },
   );
 

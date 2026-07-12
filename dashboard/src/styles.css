@@ -463,7 +463,7 @@ html.is-electron.is-fullscreen .app-shell {
   /* Chat stage — gentle bob for the floating quick-action chips */
   @keyframes stage-quick-float {
     0%, 100% { transform: translateY(0); }
-    50%       { transform: translateY(-9px); }
+    50%       { transform: translateY(-4px); }
   }
 
   .stage-quick-float {

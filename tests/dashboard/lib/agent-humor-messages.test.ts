@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AGENT_HUMOR_CATEGORIES,
   AGENT_HUMOR_MESSAGES,
+  STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS,
   STATUS_MESSAGE_MIN_INTERVAL_MS,
   classifyToolHumorCategory,
   getAgentHumorCycle,
@@ -18,6 +19,7 @@ describe("agent humor messages", () => {
     expect(AGENT_HUMOR_CATEGORIES).toEqual([
       "starting",
       "working",
+      "delegating",
       "planning",
       "qa_handoff",
       "completion",
@@ -80,6 +82,47 @@ describe("agent humor messages", () => {
       ));
 
     expect(seedWithCycleChange).toBeDefined();
+  });
+
+  it("supports the slower twenty-second stage activity cycle", () => {
+    expect(getAgentHumorCycle(39_999, STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS)).toEqual({
+      index: 1,
+      startsAtMs: 20_000,
+      endsAtMs: 40_000,
+      durationMs: STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS,
+    });
+    expect(getAgentHumorCycle(40_000, STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS)).toEqual({
+      index: 2,
+      startsAtMs: 40_000,
+      endsAtMs: 60_000,
+      durationMs: STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS,
+    });
+  });
+
+  it("uses every message once in a seeded random order before reshuffling", () => {
+    const messages = AGENT_HUMOR_MESSAGES.delegating;
+    const sequence = messages.map((_, index) => selectAgentHumorMessage({
+      category: "delegating",
+      cycleDurationMs: STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS,
+      seed: "project-manager|delegated-run",
+      nowMs: index * STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS,
+    }));
+
+    expect(new Set(sequence)).toHaveLength(messages.length);
+    expect(sequence).not.toEqual(messages);
+  });
+
+  it("varies the shuffled order by runtime context", () => {
+    const sequenceFor = (seed: string): string[] => Array.from({ length: 12 }, (_, index) => (
+      selectAgentHumorMessage({
+        category: "delegating",
+        cycleDurationMs: STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS,
+        seed,
+        nowMs: index * STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS,
+      })
+    ));
+
+    expect(sequenceFor("worker-a")).not.toEqual(sequenceFor("worker-b"));
   });
 
   it("falls back to generic tool humor for unknown runtime categories", () => {
