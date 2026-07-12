@@ -1024,7 +1024,7 @@ describe("settings cloning helpers", () => {
   });
 
   const createMockProjectSettings = (): ProjectSettings => ({
-    appearance: { experienceMode: "STANDARD", theme: "system" },
+    appearance: { experienceMode: "STANDARD", theme: "system", accentColor: "CODEUX" },
     automationLevel: "FULL",
     automationInterventions: {},
     aiProvider: {
@@ -1148,6 +1148,7 @@ describe("settings cloning helpers", () => {
 
     // Mutate clone
     clone.appearance.experienceMode = "EASY";
+    clone.appearance.accentColor = "VIOLET";
     clone.memory.enabled = false;
     clone.jira.host = "new-host";
     clone.asana.workspaceId = "mutated-workspace";
@@ -1162,6 +1163,7 @@ describe("settings cloning helpers", () => {
 
     // Verify original is untouched
     expect(original.appearance.experienceMode).toBe("STANDARD");
+    expect(original.appearance.accentColor).toBe("CODEUX");
     expect(original.memory.enabled).toBe(true);
     expect(original.jira.host).toBe("h");
     expect(original.asana.workspaceId).toBe("");

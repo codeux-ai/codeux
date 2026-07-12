@@ -21,8 +21,18 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <SectionCard title="Workspace Visibility" watermark="WEB" badge={getBadge("sprintPreview")} icon={<Eye strokeWidth={2.4} />}>
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      <SectionCard
+        title="Workspace Visibility"
+        watermark="WEB"
+        badge={getBadge("sprintPreview")}
+        icon={<Eye strokeWidth={2.4} />}
+        highlights={[
+          { label: "Preview runtime", value: editableSettings.sprintPreview.enabled ? "Enabled" : "Off", tone: editableSettings.sprintPreview.enabled ? "active" : "warning" },
+          { label: "Browser workspace", value: editableSettings.sprintPreview.showInAppBrowser ? "Visible" : "Hidden" },
+          { label: "Sprint start", value: editableSettings.sprintPreview.autoStartOnRunningSprint ? "Auto-launch" : "Manual" },
+        ]}
+      >
         <Row label="Preview runtime enabled" description="Allow Code UX to launch, rebuild, and reconcile preview containers for this scope." badge={getFieldBadge("sprintPreview.enabled")}>
           <Toggle aria-label="Toggle setting" value={editableSettings.sprintPreview.enabled} onChange={() => updateEditableSettings((current) => ({
             ...current,
@@ -79,7 +89,17 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
         </Row>
       </SectionCard>
 
-      <SectionCard title="Runtime Limits" watermark="PORT" badge={getBadge("sprintPreview")} icon={<Gauge strokeWidth={2.4} />}>
+      <SectionCard
+        title="Runtime Limits"
+        watermark="PORT"
+        badge={getBadge("sprintPreview")}
+        icon={<Gauge strokeWidth={2.4} />}
+        highlights={[
+          { label: "Active previews", value: `${editableSettings.sprintPreview.maxConcurrentContainers} max`, tone: "active" },
+          { label: "Host ports", value: `${editableSettings.sprintPreview.hostPortRangeStart}–${editableSettings.sprintPreview.hostPortRangeEnd}` },
+          { label: "App port", value: editableSettings.sprintPreview.containerAppPort },
+        ]}
+      >
         <Row label="Maximum active preview containers" description="When this cap is exceeded, Code UX stops the oldest active previews before launching the next one." badge={getFieldBadge("sprintPreview.maxConcurrentContainers")}>
           <NumberInput
             value={editableSettings.sprintPreview.maxConcurrentContainers}
@@ -165,7 +185,17 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
         </Row>
       </SectionCard>
 
-      <SectionCard title="Docker Access" watermark="ROOT" badge={getBadge("sprintPreview.allowDockerAccess")} icon={<SquareTerminal strokeWidth={2.4} />}>
+      <SectionCard
+        title="Docker Access"
+        watermark="ROOT"
+        badge={getBadge("sprintPreview.allowDockerAccess")}
+        icon={<SquareTerminal strokeWidth={2.4} />}
+        highlights={[
+          { label: "Host daemon", value: editableSettings.sprintPreview.allowDockerAccess ? "Accessible" : "Blocked", tone: editableSettings.sprintPreview.allowDockerAccess ? "warning" : "active" },
+          { label: "Default", value: "Off" },
+          { label: "Risk", value: "Host-level control" },
+        ]}
+      >
         <Row
           label="Allow Docker access"
           description="Mount the host Docker daemon socket and a compatible local Docker CLI into preview containers. Disabled by default."
@@ -188,7 +218,17 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
         </Row>
       </SectionCard>
 
-      <SectionCard title="Preview Environment" watermark="ENV" badge={getBadge("sprintPreview.environmentVariables")} icon={<SlidersHorizontal strokeWidth={2.4} />}>
+      <SectionCard
+        title="Preview Environment"
+        watermark="ENV"
+        badge={getBadge("sprintPreview.environmentVariables")}
+        icon={<SlidersHorizontal strokeWidth={2.4} />}
+        highlights={[
+          { label: "Variables", value: `${editableSettings.sprintPreview.environmentVariables?.length ?? 0} configured`, tone: (editableSettings.sprintPreview.environmentVariables?.length ?? 0) > 0 ? "active" : "neutral" },
+          { label: "Scope", value: activeScope === "project" ? "Project" : "System" },
+          { label: "Overrides", value: "Per container" },
+        ]}
+      >
         <Row
           label="Default container variables"
           description="Environment variables injected into every preview container for this scope. Selected containers can override these from the Browser page."

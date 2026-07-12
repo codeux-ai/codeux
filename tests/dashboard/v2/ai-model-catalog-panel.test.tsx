@@ -138,7 +138,7 @@ describe("AIModelCatalogPanel", () => {
     expect(screen.queryByLabelText("Speech to text API endpoint")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Text to speech API endpoint")).not.toBeInTheDocument();
     expect(screen.queryByText(/Auto \(local, then API\)/i)).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    await userEvent.click(screen.getByRole("button", { name: "Back to overview" }));
     const manageModels = screen.getByRole("button", { name: "Manage local models" });
     await userEvent.click(manageModels);
     const activate = await screen.findByRole("button", { name: "Use for 3D Chat" });
@@ -218,12 +218,12 @@ describe("AIModelCatalogPanel", () => {
     expect(await screen.findByText("Repair required")).toBeInTheDocument();
     await userEvent.click(await screen.findByRole("button", { name: "Download Kokoro 82M v1.0 Q8" }));
     expect(screen.getByRole("dialog", { name: "Download Kokoro 82M v1.0 Q8" })).toHaveTextContent("Apache-2.0");
-    expect(screen.getByRole("dialog", { name: "Model catalog", hidden: true })).toHaveAttribute("inert");
+    expect(screen.getByRole("region", { name: "Model catalog" })).toBeInTheDocument();
     expect(speechApi.downloadSpeechModel).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Accept & Download" }));
     await waitFor(() => expect(speechApi.downloadSpeechModel).toHaveBeenCalledWith("kokoro-82m-v1.0-q8", "apache-v1"));
-    await waitFor(() => expect(screen.getByRole("dialog", { name: "Model catalog" })).not.toHaveAttribute("inert"));
-    await userEvent.click(screen.getByRole("button", { name: "Close model catalog" }));
+    await waitFor(() => expect(screen.getByRole("region", { name: "Model catalog" })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: "Back to AI Models overview" }));
     await waitFor(() => expect(manageModels).toHaveFocus());
   });
 
@@ -240,7 +240,7 @@ describe("AIModelCatalogPanel", () => {
     const search = screen.getByRole("searchbox", { name: "Search speech models" });
     fireEvent.input(search, { target: { value: "tiny" } });
 
-    const catalog = screen.getByRole("dialog", { name: "Model catalog" });
+    const catalog = screen.getByRole("region", { name: "Model catalog" });
     expect(within(catalog).getByText("Whisper Tiny English ONNX")).toBeInTheDocument();
     await waitFor(() => expect(within(catalog).queryByText("Whisper Base English ONNX")).not.toBeInTheDocument());
     expect(within(catalog).queryByRole("region", { name: "Text to speech models" })).not.toBeInTheDocument();
@@ -350,7 +350,7 @@ describe("AIModelCatalogPanel", () => {
     expect(updated.speech.localLanguage).toBeNull();
   });
 
-  it("keeps the speech dialog open when Escape dismisses its provider listbox", async () => {
+  it("keeps the speech workspace open when Escape dismisses its provider listbox", async () => {
     render(<AIModelCatalogPanel state={{
       editableSettings: DEFAULT_DASHBOARD_SETTINGS,
       selectedProject: null,
@@ -361,7 +361,7 @@ describe("AIModelCatalogPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "Speech to text provider" }));
     fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape" });
 
-    expect(screen.getByRole("dialog", { name: "Speech runtime" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Speech runtime" })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole("listbox")).not.toBeInTheDocument());
   });
 
@@ -390,7 +390,7 @@ describe("AIModelCatalogPanel", () => {
 
     const downloadName = "Download recommended Piper German MLS Medium for German (Germany)";
     await userEvent.click(screen.getByRole("button", { name: downloadName }));
-    expect(screen.getByRole("dialog", { name: "Speech runtime", hidden: true })).toHaveAttribute("inert");
+    expect(screen.getByRole("region", { name: "Speech runtime" })).toBeInTheDocument();
     expect(speechApi.downloadSpeechModel).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(speechApi.downloadSpeechModel).not.toHaveBeenCalled();

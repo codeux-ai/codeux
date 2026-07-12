@@ -1,5 +1,6 @@
 import type {
   BackgroundPattern,
+  DashboardAccentColor,
   DashboardSettings,
   DashboardExperienceMode,
   DesignGuidanceSettings,
@@ -45,6 +46,7 @@ import {
   DEFAULT_PROJECT_TECHSTACK,
   DEFAULT_SKILLS,
   DASHBOARD_EXPERIENCE_MODES,
+  DASHBOARD_ACCENT_COLORS,
   INTERNAL_SKILL_NAMES,
   INTERNAL_SKILL_SET,
   QA_EXHAUSTION_POLICIES,
@@ -278,11 +280,18 @@ const BACKGROUND_PATTERNS = new Set<BackgroundPattern>([
   "NOISE",
 ]);
 const DASHBOARD_EXPERIENCE_MODE_SET = new Set<DashboardExperienceMode>(DASHBOARD_EXPERIENCE_MODES);
+const DASHBOARD_ACCENT_COLOR_SET = new Set<DashboardAccentColor>(DASHBOARD_ACCENT_COLORS);
 
 const sanitizeDashboardExperienceMode = (value: unknown): DashboardExperienceMode => (
   typeof value === "string" && DASHBOARD_EXPERIENCE_MODE_SET.has(value as DashboardExperienceMode)
     ? value as DashboardExperienceMode
     : DEFAULT_DASHBOARD_EXPERIENCE_MODE
+);
+
+const sanitizeDashboardAccentColor = (value: unknown): DashboardAccentColor => (
+  typeof value === "string" && DASHBOARD_ACCENT_COLOR_SET.has(value as DashboardAccentColor)
+    ? value as DashboardAccentColor
+    : DEFAULT_DASHBOARD_SETTINGS.appearance.accentColor
 );
 
 const sanitizeBackgroundImage = (value: unknown): string | null => {
@@ -625,6 +634,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     navigationMode: appearanceInput.navigationMode === "DOCK" ? "DOCK" : "SIDEBAR" as "DOCK" | "SIDEBAR",
     experienceMode: sanitizeDashboardExperienceMode(appearanceInput.experienceMode),
     theme: appearanceInput.theme === "LIGHT" || appearanceInput.theme === "DARK" ? appearanceInput.theme : "SYSTEM" as "LIGHT" | "DARK" | "SYSTEM",
+    accentColor: sanitizeDashboardAccentColor(appearanceInput.accentColor),
     reducedMotion: appearanceInput.reducedMotion === "REDUCE" || appearanceInput.reducedMotion === "NONE" ? appearanceInput.reducedMotion : "AUTO" as "AUTO" | "REDUCE" | "NONE",
     backgroundMode: appearanceInput.backgroundMode === "STATIC" ? "STATIC" : "ANIMATED" as "ANIMATED" | "STATIC",
     animatedBackground: typeof appearanceInput.animatedBackground === "string" ? appearanceInput.animatedBackground : "deep-ocean",

@@ -94,7 +94,7 @@ export const SETTINGS_SUBCATEGORY_DOCS = {
     id: "display-settings",
     title: "Display Settings",
     docsHref: settingsDocsPath("display-settings"),
-    summary: "Controls the dashboard shell layout, theme, motion preference, and desktop zoom when available.",
+    summary: "Controls the dashboard shell layout, theme, accent color, motion preference, and desktop zoom when available.",
     controls: "Navigation mode switches dock/sidebar, theme sets color mode, reduced motion limits animation, and zoom scales Electron windows.",
     recommended: "Use System theme and Auto reduced motion unless you need a fixed accessibility preference.",
     risks: "High zoom or dense sidebars can reduce visible workspace on small screens.",

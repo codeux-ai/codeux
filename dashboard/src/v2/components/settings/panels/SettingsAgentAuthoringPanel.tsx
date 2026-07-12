@@ -20,6 +20,14 @@ export const SettingsAgentAuthoringPanel: FunctionComponent<SettingsAgentAuthori
       watermark="AGT"
       badge={getBadge(activeScope, projectSources, "agents")}
       icon={<FileText strokeWidth={2.4} />}
+      accent="sky"
+      summary="Keep dashboard-authored project agents reviewable in the repository when file-based collaboration matters."
+      configureLabel="Configure file sync"
+      highlights={[
+        { label: "Markdown mirror", value: mirrorEnabled ? "Enabled" : "Off", tone: mirrorEnabled ? "active" : "neutral" },
+        { label: "Directory", value: ".code-ux/agents" },
+        { label: "Scope", value: "Project agents" },
+      ]}
     >
       <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(12rem,0.45fr)]">
         <div className="min-w-0 rounded-[1.2rem] border border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs font-medium leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.025] dark:text-slate-400">

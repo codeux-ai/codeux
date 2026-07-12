@@ -388,7 +388,7 @@ export const SettingsMcpPanel: FunctionComponent<{ state: SettingsPageState }> =
   // ---- List view ----
   return (
     <>
-      <SectionCard title="MCP Servers" watermark="MCP" icon={<Server strokeWidth={2.4} />}>
+      <SectionCard title="MCP Servers" watermark="MCP" icon={<Server strokeWidth={2.4} />} drilldown={false}>
         <LocalHttpSetup />
 
         <div className="grid gap-3 md:grid-cols-2">
@@ -575,7 +575,7 @@ const CustomServerDetail: FunctionComponent<{
   };
 
   return (
-    <SectionCard title={server.label || server.name || "MCP server"} watermark="MCP" icon={<Server strokeWidth={2.4} />} helpId="custom-mcp-server">
+    <SectionCard sectionId={`custom-mcp-${server.id}`} title={server.label || server.name || "MCP server"} watermark="MCP" icon={<Server strokeWidth={2.4} />} helpId="custom-mcp-server">
       <NoticePanel title="HTTP / SSE setup">
         Choose HTTP / SSE for a remote MCP server that already exposes an HTTP or SSE endpoint. Paste the server URL below, add optional auth headers as a JSON object, and Code UX injects the updated config on the next CLI run.
       </NoticePanel>

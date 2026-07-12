@@ -120,9 +120,10 @@ describe("Settings Resolution Service", () => {
       expect(settings.agents.someFakeAgent).toBeUndefined();
     });
 
-    it("preserves valid appearance background image and pattern settings", () => {
+    it("preserves valid appearance background image, pattern, and accent settings", () => {
       const settings = sanitizeProjectSettings({
         appearance: {
+          accentColor: "VIOLET",
           backgroundMode: "STATIC",
           animatedBackground: "aurora-borealis",
           staticBackgroundColor: "#123456",
@@ -136,11 +137,13 @@ describe("Settings Resolution Service", () => {
       expect(settings.appearance.staticBackgroundColor).toBe("#123456");
       expect(settings.appearance.backgroundImage).toBe("data:image/jpeg;base64,abc123");
       expect(settings.appearance.backgroundPattern).toBe("DOTS");
+      expect(settings.appearance.accentColor).toBe("VIOLET");
     });
 
-    it("normalizes invalid appearance background image and pattern settings", () => {
+    it("normalizes invalid appearance background image, pattern, and accent settings", () => {
       const settings = sanitizeProjectSettings({
         appearance: {
+          accentColor: "RAINBOW",
           backgroundImage: "javascript:alert(1)",
           backgroundPattern: "SPIRAL",
         },
@@ -148,6 +151,7 @@ describe("Settings Resolution Service", () => {
 
       expect(settings.appearance.backgroundImage).toBe(null);
       expect(settings.appearance.backgroundPattern).toBe("NONE");
+      expect(settings.appearance.accentColor).toBe("CODEUX");
     });
   });
 

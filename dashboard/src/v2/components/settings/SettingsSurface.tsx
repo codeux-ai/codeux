@@ -75,7 +75,7 @@ export const ActionButton: FunctionComponent<{
   let toneClass = "border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white";
 
   if (tone === "primary") {
-    toneClass = "bg-slate-900 text-white shadow-[var(--elevation-raised)] hover:bg-slate-700 dark:bg-white dark:text-void-900 dark:hover:bg-slate-100";
+    toneClass = "border border-[rgb(var(--accent-action-rgb)/0.22)] bg-[var(--accent-action)] text-[var(--accent-on-solid)] shadow-[0_10px_28px_rgb(var(--accent-action-rgb)/0.18)] hover:border-[rgb(var(--accent-action-rgb)/0.34)] hover:bg-[var(--accent-action-hover)]";
   } else if (tone === "danger") {
     toneClass = "border border-status-red/30 bg-status-red/[0.06] text-status-red hover:bg-status-red/[0.12]";
   } else if (tone === "success") {

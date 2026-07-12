@@ -61,6 +61,7 @@ import type {
   UpdateChatProviderConnectionInput,
 } from "../../types.js";
 import type { AgentAvatarConfig, AgentPreset } from "../types.js";
+import type { SettingsDomainAccent } from "../lib/settings-domain-accents.js";
 import { AlertTriangle, Bot, BrainCircuit, Cpu, Plug, Settings, SlidersHorizontal, Target } from "lucide-preact";
 
 type SettingsScope = "system" | "project";
@@ -73,6 +74,7 @@ interface Category {
   label: string;
   description: string;
   icon: typeof Settings;
+  accent?: SettingsDomainAccent;
   danger?: boolean;
 }
 

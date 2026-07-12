@@ -3,10 +3,11 @@ import { useState } from "preact/hooks";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import { PillChoiceGroup, SelectInput } from "../SettingsFormFields.js";
 import { SectionCard, Row, getFieldBadge } from "./SharedPanelComponents.js";
-import { Image, Monitor } from "lucide-preact";
+import { Check, Image, Monitor } from "lucide-preact";
 import { applyAppearanceSettings } from "../../../lib/apply-appearance.js";
 import type { BackgroundPattern } from "../../../../types.js";
 import { useThemeSetting } from "../../../hooks/useThemeSetting.js";
+import { ACCENT_COLOR_PRESETS, getAccentColorPreset } from "../../../lib/accent-colors.js";
 
 export const SettingsAppearancePanel: FunctionComponent<{
   state: SettingsPageState;
@@ -21,10 +22,21 @@ export const SettingsAppearancePanel: FunctionComponent<{
   const { theme: persistedTheme, setTheme } = useThemeSetting();
   const [showSizeWarning, setShowSizeWarning] = useState(false);
   const supportsNativeZoom = typeof window !== "undefined" && Boolean(window.codeUxDesktop?.setZoom);
+  const activeAccent = getAccentColorPreset(appearance.accentColor);
 
   return (
-    <div className="flex flex-col gap-5">
-      <SectionCard title="Display Settings" watermark="UI" icon={<Monitor strokeWidth={2.4} />}>
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      <SectionCard
+        title="Display Settings"
+        watermark="UI"
+        icon={<Monitor strokeWidth={2.4} />}
+        accent="violet"
+        highlights={[
+          { label: "Theme", value: (activeScope === "system" ? persistedTheme : appearance.theme).toLowerCase(), tone: "active" },
+          { label: "Navigation", value: appearance.navigationMode === "DOCK" ? "Floating dock" : "Sidebar" },
+          { label: "Accent", value: activeAccent.label },
+        ]}
+      >
         <Row
           label="Navigation Mode"
           description="Choose between a floating dock or a traditional sidebar."
@@ -75,6 +87,53 @@ export const SettingsAppearancePanel: FunctionComponent<{
               { value: "SYSTEM", label: "System" },
             ]}
           />
+        </Row>
+
+        <Row
+          label="Accent Color"
+          description="Personalize primary actions, active navigation, links, selection, and focus states. Provider and status colors remain unchanged."
+          badge={getFieldBadge(activeScope, projectSources, "appearance.accentColor")}
+        >
+          <div role="radiogroup" aria-label="Accent color" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {ACCENT_COLOR_PRESETS.map((preset) => {
+              const selected = preset.id === (appearance.accentColor || "CODEUX");
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  aria-label={`${preset.label}. ${preset.description}`}
+                  onClick={() => {
+                    state.updateEditableSettings((current) => ({
+                      ...current,
+                      appearance: {
+                        ...current.appearance,
+                        accentColor: preset.id,
+                      },
+                    }));
+                    applyAppearanceSettings({ accentColor: preset.id });
+                  }}
+                  className={`group relative min-h-20 rounded-xl border p-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-focus-ring)] ${
+                    selected
+                      ? "border-[color:var(--accent-action)] bg-[rgb(var(--accent-action-rgb)/0.08)] shadow-[0_0_0_1px_rgb(var(--accent-action-rgb)/0.12)]"
+                      : "border-black/[0.08] bg-white/55 hover:border-black/[0.15] hover:bg-white/80 dark:border-white/[0.08] dark:bg-white/[0.035] dark:hover:border-white/[0.16] dark:hover:bg-white/[0.06]"
+                  }`}
+                >
+                  <span className="flex items-center justify-between gap-2">
+                    <span aria-hidden="true" className="flex h-7 w-7 overflow-hidden rounded-full border border-black/10 shadow-sm dark:border-white/15">
+                      <span className="h-full w-1/2" style={{ backgroundColor: preset.lightSwatch }} />
+                      <span className="h-full w-1/2" style={{ backgroundColor: preset.darkSwatch }} />
+                    </span>
+                    <span className={`flex h-5 w-5 items-center justify-center rounded-full transition ${selected ? "bg-[var(--accent-action)] text-[var(--accent-on-solid)]" : "border border-black/10 text-transparent dark:border-white/15"}`}>
+                      <Check aria-hidden="true" className="h-3 w-3" strokeWidth={3} />
+                    </span>
+                  </span>
+                  <span className="mt-2 block text-xs font-bold text-slate-800 dark:text-slate-100">{preset.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </Row>
 
         <Row
@@ -141,7 +200,17 @@ export const SettingsAppearancePanel: FunctionComponent<{
         )}
       </SectionCard>
 
-      <SectionCard title="Background" watermark="BG" icon={<Image strokeWidth={2.4} />}>
+      <SectionCard
+        title="Background"
+        watermark="BG"
+        icon={<Image strokeWidth={2.4} />}
+        accent="fuchsia"
+        highlights={[
+          { label: "Mode", value: appearance.backgroundMode === "STATIC" ? "Static" : "Animated", tone: "active" },
+          { label: "Custom image", value: appearance.backgroundImage ? "Applied" : "None" },
+          { label: "Pattern", value: appearance.backgroundPattern === "NONE" ? "None" : appearance.backgroundPattern || "Grid" },
+        ]}
+      >
         <Row
           label="Background Image"
           description="Upload a custom background image."

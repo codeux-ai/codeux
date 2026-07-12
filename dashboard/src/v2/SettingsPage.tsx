@@ -8,7 +8,6 @@ import { useSettingsPageState, type Category, type CategoryId } from "./hooks/us
 import { SettingsCategoryRail, CATEGORIES } from "./components/settings/SettingsCategoryRail.js";
 import { SettingsCategoryPicker } from "./components/settings/SettingsCategoryPicker.js";
 import { SettingsContentPanels } from "./components/settings/SettingsContentPanels.js";
-import { SettingsActivePanelStatus } from "./components/settings/SettingsActivePanelStatus.js";
 import { SettingsScopeControls } from "./components/settings/SettingsScopeControls.js";
 import { useReducedMotion } from "./hooks/use-reduced-motion.js";
 import { useGsapInteractionTokens } from "./lib/motion/constants.js";
@@ -443,7 +442,8 @@ export const SettingsPage: FunctionComponent = () => {
       <div className="grid grid-cols-1 items-start gap-x-8 gap-y-6 lg:grid-cols-[280px_minmax(0,1fr)]">
         <div
           data-settings-sticky="settings-command-status"
-          className="sticky top-16 z-30 -mx-2 flex min-w-0 max-w-full flex-wrap items-center gap-3 overflow-visible rounded-[1.75rem] border border-white/[0.08] bg-void-950 p-3 shadow-[0_20px_50px_rgba(2,6,23,0.32)] lg:col-start-2 lg:row-start-1"
+          style={{ background: "var(--settings-command-surface)" }}
+          className="sticky top-16 z-30 -mx-2 flex min-w-0 max-w-full flex-wrap items-start gap-2.5 overflow-visible rounded-[1.75rem] border border-[color:var(--settings-command-border)] p-3 shadow-[var(--settings-command-shadow)] backdrop-blur-2xl lg:col-start-2 lg:row-start-1"
         >
           <SettingsCategoryPicker
             activeCategory={activeCategory}
@@ -454,6 +454,26 @@ export const SettingsPage: FunctionComponent = () => {
             onSwitchCategory={switchCategory}
             pendingCategory={pendingCategory}
           />
+          <div data-settings-accent={activeCategoryConfig.accent || "sky"} className={`hidden min-w-[15rem] flex-1 items-center gap-3 rounded-[1.25rem] border px-3.5 py-3 lg:flex ${
+            activeCategoryConfig.danger
+              ? "border-status-red/15 bg-status-red/[0.055]"
+              : "border-[rgb(var(--settings-accent-rgb)/0.13)] bg-white/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] dark:bg-white/[0.045] dark:shadow-none"
+          }`}>
+            <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-[0.95rem] border ${
+              activeCategoryConfig.danger
+                ? "border-status-red/20 bg-status-red/10 text-status-red"
+                : "border-[rgb(var(--settings-accent-rgb)/0.2)] bg-[rgb(var(--settings-accent-rgb)/0.1)] text-[var(--settings-accent-text)]"
+            }`}>
+              <activeCategoryConfig.icon className="h-[1.1rem] w-[1.1rem]" strokeWidth={2.1} aria-hidden="true" />
+            </span>
+            <span className="min-w-0">
+              <span className={`block font-mono text-[9px] font-bold uppercase tracking-[0.18em] ${activeCategoryConfig.danger ? "text-status-red/75" : "text-[var(--settings-accent-text)]"}`}>
+                {activeCategoryConfig.num} · Active category
+              </span>
+              <span className="mt-0.5 block text-sm font-bold text-slate-900 dark:text-white">{activeCategoryConfig.label}</span>
+              <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-500 dark:text-slate-400">{activeCategoryConfig.description}</span>
+            </span>
+          </div>
           <SettingsScopeControls
             activeScope={activeScope}
             setActiveScope={setActiveScope}
@@ -467,11 +487,6 @@ export const SettingsPage: FunctionComponent = () => {
             saveMessage={saveMessage}
             error={error}
             interactionStyle={scopeControlStyle}
-          />
-          <SettingsActivePanelStatus
-            state={state}
-            sticky={false}
-            className="mb-0"
           />
           <div className="ml-auto flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2">
             {activeScope === "project" ? (
@@ -493,10 +508,10 @@ export const SettingsPage: FunctionComponent = () => {
               aria-describedby={saveDisabledReason ? saveDisabledReasonId : undefined}
               title={saveDisabledReason}
               data-motion-contract="controlFeedback"
-              className={`group inline-flex h-10 items-center gap-2.5 rounded-2xl px-4 text-sm font-bold transition-[background-color,box-shadow,transform] duration-300 hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`group inline-flex h-10 items-center gap-2.5 rounded-xl border px-4 text-sm font-bold transition-[background-color,border-color,box-shadow,transform] duration-300 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-[#10282a] ${
                 saveMessage && !error
-                  ? "bg-status-green text-white shadow-[var(--elevation-raised)]"
-                  : "bg-white text-void-900 shadow-[var(--elevation-raised)] hover:bg-slate-100"
+                  ? "border-status-green/25 bg-status-green text-white shadow-[0_10px_28px_rgba(16,185,129,0.2)]"
+                  : "border-[rgb(var(--accent-action-rgb)/0.22)] bg-[var(--accent-action)] text-[var(--accent-on-solid)] shadow-[0_10px_28px_rgb(var(--accent-action-rgb)/0.2)] hover:border-[rgb(var(--accent-action-rgb)/0.34)] hover:bg-[var(--accent-action-hover)]"
               }`}
             >
               {activeSaving ? (
@@ -544,23 +559,6 @@ export const SettingsPage: FunctionComponent = () => {
           data-motion-contract="enterExit"
           className="flex min-w-0 flex-col gap-5 lg:col-start-2 lg:row-start-2"
         >
-          <div className="mb-1 flex flex-wrap items-center gap-3">
-            <activeCategoryConfig.icon
-              className={`h-4 w-4 ${activeCategoryConfig.danger ? "text-status-red" : "text-signal-500"}`}
-              strokeWidth={2}
-            />
-            <span className={`font-mono text-[10px] font-bold uppercase tracking-[0.2em] ${
-              activeCategoryConfig.danger ? "text-status-red/70" : "text-signal-500"
-            }`}
-            >
-              {activeCategoryConfig.label}
-            </span>
-            <span className="max-w-full break-words rounded-full border border-black/[0.06] bg-black/[0.03] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
-              {activeCategoryConfig.description}
-            </span>
-            <div className="h-px flex-1 bg-gradient-to-r from-black/[0.06] to-transparent dark:from-white/[0.06]" />
-          </div>
-
           <div className="flex flex-col gap-3">
             {loading ? (
               <div role="status" aria-label="Loading settings" aria-live="polite" aria-busy="true" className="sr-only">
@@ -577,7 +575,7 @@ export const SettingsPage: FunctionComponent = () => {
             />
           </div>
 
-          <SettingsContentPanels state={state} showActivePanelStatus={false} />
+          <SettingsContentPanels state={state} showActivePanelStatus={false} showFeedback={false} detailWorkspace />
         </div>
       </div>
 

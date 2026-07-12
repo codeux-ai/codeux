@@ -367,6 +367,7 @@ Disable a tool to hide it from `ListTools` and reject `CallTool` invocations.
 {
   "experienceMode": "EASY" | "STANDARD" | "EXPERT",
   "theme": "SYSTEM" | "LIGHT" | "DARK",
+  "accentColor": "CODEUX" | "OCEAN" | "VIOLET" | "CYAN" | "MAGENTA" | "GRAPHITE",
   "navigationMode": "DOCK" | "SIDEBAR"
 }
 ```

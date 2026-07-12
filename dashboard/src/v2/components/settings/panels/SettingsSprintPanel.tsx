@@ -124,12 +124,17 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
   };
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
       <SectionCard
         title="Git Flow"
         watermark="GIT"
         badge={getBadge("git")}
         icon={<GitBranch strokeWidth={2.4} />}
+        highlights={[
+          { label: "Mode", value: editableSettings.git.githubMode === "LOCAL" ? "Local" : "Remote", tone: "active" },
+          { label: "Default branch", value: editableSettings.git.defaultBranch },
+          { label: "Pull requests", value: editableSettings.git.githubMode === "LOCAL" ? "Unavailable" : editableSettings.git.autoCreatePr ? "Automatic" : "Manual" },
+        ]}
         actions={
           <>
             <button
@@ -284,9 +289,15 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
 
       <SectionCard
         title={editableSettings.git.githubMode === "LOCAL" ? "Merge Gates & Autofix (Unavailable in Local Mode)" : "Merge Gates & Autofix"}
+        sectionId="merge-gates-autofix"
         watermark="CI"
         badge={editableSettings.git.githubMode === "LOCAL" ? "Disabled in Local Mode" : getBadge("ciIntelligence")}
         icon={<GitMerge strokeWidth={2.4} />}
+        highlights={[
+          { label: "Availability", value: editableSettings.git.githubMode === "LOCAL" ? "Local mode" : "Active", tone: editableSettings.git.githubMode === "LOCAL" ? "warning" : "active" },
+          { label: "Feature merge", value: editableSettings.git.githubMode === "LOCAL" ? "Off" : editableSettings.ciIntelligence.featurePrAutoMergeMode.toLowerCase() },
+          { label: "Main merge", value: editableSettings.git.githubMode === "LOCAL" ? "Off" : editableSettings.ciIntelligence.mainBranchAutoMergeMode.toLowerCase() },
+        ]}
       >
         <Row label="Resolve comments before main merge" description="Require review comments to be resolved before finishing the main merge." badge={getFieldBadge("ciIntelligence.resolveAllCommentsBeforeMainMerge")}>
           <Toggle aria-label="Toggle setting"             value={editableSettings.git.githubMode === "LOCAL" ? false : editableSettings.ciIntelligence.resolveAllCommentsBeforeMainMerge}
@@ -401,7 +412,17 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
         updateSelfReflection={(settings) => updateQaSelfReflectionSettings(() => settings)}
       />
 
-      <SectionCard title="Guardrails" watermark="CAP" badge={getBadge("guardrails")} icon={<ShieldAlert strokeWidth={2.4} />}>
+      <SectionCard
+        title="Guardrails"
+        watermark="CAP"
+        badge={getBadge("guardrails")}
+        icon={<ShieldAlert strokeWidth={2.4} />}
+        highlights={[
+          { label: "Protection", value: editableSettings.guardrails.enabled ? "Enabled" : "Off", tone: editableSettings.guardrails.enabled ? "active" : "warning" },
+          { label: "Job types", value: `${GUARDRAIL_JOB_META.length} capped` },
+          { label: "Task ceiling", value: editableSettings.guardrails.perTaskTotalCeiling || "Unlimited" },
+        ]}
+      >
           <Row label="Guardrails enabled" description="Cap how many times each agent job type runs per task to stop runaway loops. Counts persist per task across restarts." badge={getFieldBadge("guardrails.enabled")}>
             <Toggle aria-label="Toggle setting"               value={editableSettings.guardrails.enabled}
               onChange={() => updateEditableSettings((current) => ({
@@ -474,7 +495,17 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
           ) : null}
         </SectionCard>
 
-        <SectionCard title="Rate Limit" watermark="RATE" badge={getBadge("cliWorkflow")} icon={<Timer strokeWidth={2.4} />}>
+        <SectionCard
+          title="Rate Limit"
+          watermark="RATE"
+          badge={getBadge("cliWorkflow")}
+          icon={<Timer strokeWidth={2.4} />}
+          highlights={[
+            { label: "Rate retries", value: editableSettings.cliWorkflow.retryOnRateLimit ? "Enabled" : "Off", tone: editableSettings.cliWorkflow.retryOnRateLimit ? "active" : "neutral" },
+            { label: "Delay", value: `${editableSettings.cliWorkflow.rateLimitRetryDelaySeconds}s` },
+            { label: "Max retries", value: editableSettings.cliWorkflow.maxRateLimitRetries },
+          ]}
+        >
           <Row label="Retry after quota reset" description="When a provider reports a concrete quota reset time, wait for that reset and retry automatically." badge={getFieldBadge("cliWorkflow.retryOnQuotaReset")}>
             <Toggle aria-label="Toggle setting" value={editableSettings.cliWorkflow.retryOnQuotaReset} onChange={() => updateEditableSettings((current) => ({
               ...current,
@@ -537,7 +568,17 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
           </Row>
         </SectionCard>
 
-        <SectionCard title="Watch Loop" watermark="LOOP" badge={getBadge("sprintLoopSteps")} icon={<Eye strokeWidth={2.4} />}>
+        <SectionCard
+          title="Watch Loop"
+          watermark="LOOP"
+          badge={getBadge("sprintLoopSteps")}
+          icon={<Eye strokeWidth={2.4} />}
+          highlights={[
+            { label: "Loop", value: editableSettings.sprintLoopSteps.watchLoop ? "Running" : "Off", tone: editableSettings.sprintLoopSteps.watchLoop ? "active" : "warning" },
+            { label: "Evaluation", value: `${editableSettings.sprintLoopSteps.watchLoopIntervalSeconds}s` },
+            { label: "Output", value: `${editableSettings.sprintLoopSteps.watchLoopOutputIntervalSeconds}s` },
+          ]}
+        >
           <Row label="Watch loop" description="Keep the live watch loop running between orchestration ticks." badge={getFieldBadge("sprintLoopSteps.watchLoop")}>
             <Toggle aria-label="Toggle setting" value={editableSettings.sprintLoopSteps.watchLoop} onChange={() => updateEditableSettings((current) => ({
               ...current,
@@ -577,7 +618,17 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
           </Row>
         </SectionCard>
 
-        <SectionCard title="Workspace Hygiene" watermark="CLI" badge={getBadge("cliWorkflow")} icon={<Sparkles strokeWidth={2.4} />}>
+        <SectionCard
+          title="Workspace Hygiene"
+          watermark="CLI"
+          badge={getBadge("cliWorkflow")}
+          icon={<Sparkles strokeWidth={2.4} />}
+          highlights={[
+            { label: "On success", value: editableSettings.cliWorkflow.cleanupWorktreeOnSuccess ? "Clean" : "Keep" },
+            { label: "On failure", value: editableSettings.cliWorkflow.cleanupWorktreeOnFailure ? "Clean" : "Keep" },
+            { label: "Policy", value: editableSettings.cliWorkflow.cleanupWorktreeOnSuccess && editableSettings.cliWorkflow.cleanupWorktreeOnFailure ? "Automatic" : "Selective", tone: "active" },
+          ]}
+        >
           <Row label="Cleanup worktree on success" description="Remove temporary worktree state after successful CLI execution." badge={getFieldBadge("cliWorkflow.cleanupWorktreeOnSuccess")}>
             <Toggle aria-label="Toggle setting" value={editableSettings.cliWorkflow.cleanupWorktreeOnSuccess} onChange={() => updateEditableSettings((current) => ({
               ...current,

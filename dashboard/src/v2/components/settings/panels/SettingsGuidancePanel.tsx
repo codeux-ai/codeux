@@ -245,6 +245,11 @@ const GuidanceManagementSection: FunctionComponent<{
       helpId="guidance"
       badge={getBadge("designGuidance", selectedPath, customPath)}
       icon={<Icon strokeWidth={2.4} />}
+      highlights={[
+        { label: "Selected", value: getVisibleDesignGuidanceEntries(guidance, kind).find((entry) => entry.id === selectedId)?.name ?? "None", tone: selectedId === DESIGN_GUIDANCE_NONE_ID ? "neutral" : "active" },
+        { label: "Available", value: getVisibleDesignGuidanceEntries(guidance, kind).length },
+        { label: "Custom", value: getCustomDesignGuidanceEntries(guidance, kind).length },
+      ]}
       actions={(
         <ActionButton
           label={`Add ${copy.title}`}
@@ -377,7 +382,7 @@ export const SettingsGuidancePanel: FunctionComponent<{ state: SettingsPageState
   const guidance = editableSettings.designGuidance;
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
       <GuidanceManagementSection state={state} guidance={guidance} kind="techStack" />
       <GuidanceManagementSection state={state} guidance={guidance} kind="styleguide" />
     </div>

@@ -413,6 +413,9 @@ describe("useSettingsPageState", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: /Agents/ }).at(-1)!);
 
+    const configureReflection = await screen.findByRole("button", { name: "Tune self-reflection Self-Reflection" });
+    fireEvent.click(configureReflection);
+
     await waitFor(() => {
       expect(screen.getByText("Planning self-reflection")).toBeInTheDocument();
       expect(screen.getAllByText("Off by default").length).toBeGreaterThan(0);
