@@ -200,9 +200,12 @@ Agents should build Code UX-adapted node flows rather than cloning n8n workflows
 should include dynamic widget schemas for editable graph inputs and node fields; callers can provide
 `widgets` as a graph-level `{ fields: [...] }` schema or as node-id keys mapped to node widget schemas.
 
-Executable node types are currently `input`, `set_fields`, `template`, `provider_prompt`,
-`http_request`, and `output`. Graph validation accepts structured drafts, but runtime execution rejects
-unsupported node types.
+The governed built-ins currently registered with executable handlers are `input`, `set_fields`,
+`template`, `provider_prompt`, `http_request`, `condition`, `switch`, `foreach`, `merge`, `delay`,
+`approval`, `email_draft`, `email_send`, `execute_subflow`, `webhook_trigger`, and `output`. A
+registered custom definition can execute only when its validated versioned manifest, immutable
+artifact, and custom-node runtime are available. Unknown, legacy, mockup, and non-executable
+definitions remain planned or unavailable and are rejected by runtime dispatch.
 
 Minimal create payload:
 
