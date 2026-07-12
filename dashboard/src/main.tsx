@@ -158,6 +158,7 @@ const AppLayout = () => {
 
   const appearanceSettings = appearancePreview || effectiveSettings?.settings.appearance || systemSettings?.defaults.appearance;
   const appearanceTheme = appearanceSettings?.theme || "SYSTEM";
+  const accentColor = appearanceSettings?.accentColor || "CODEUX";
   const reducedMotion = appearanceSettings?.reducedMotion || "AUTO";
   const backgroundPattern = appearanceSettings?.backgroundPattern || "NONE";
   const backgroundImage = appearanceSettings?.backgroundImage;
@@ -201,8 +202,8 @@ const AppLayout = () => {
   }, [appearanceTheme]);
 
   useEffect(() => {
-    applyAppearanceSettings({ theme: isDark ? "DARK" : "LIGHT" });
-  }, [isDark]);
+    applyAppearanceSettings({ theme: isDark ? "DARK" : "LIGHT", accentColor });
+  }, [accentColor, isDark]);
 
   useEffect(() => {
     applyAppearanceSettings({ backgroundImage });

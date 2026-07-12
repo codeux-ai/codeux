@@ -20,6 +20,7 @@ export const SettingsAgentAuthoringPanel: FunctionComponent<SettingsAgentAuthori
       watermark="AGT"
       badge={getBadge(activeScope, projectSources, "agents")}
       icon={<FileText strokeWidth={2.4} />}
+      accent="sky"
       summary="Keep dashboard-authored project agents reviewable in the repository when file-based collaboration matters."
       configureLabel="Configure file sync"
       highlights={[

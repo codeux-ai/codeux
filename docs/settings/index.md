@@ -8,6 +8,8 @@ On desktop, choose an area from the persistent category rail. The sticky command
 
 The rail groups configuration into **Basics**, **AI & Knowledge**, **Delivery**, **Connections**, and **System** so unrelated categories no longer compete in one flat numbered list.
 
+Colored category and card icons provide stable visual landmarks, while the preferred accent selected under **Appearance → Display Settings** independently personalizes primary actions, links, focus, and selected controls. Provider and status colors keep their established meaning.
+
 Each category opens as a modern overview made from subsystem cards. A card combines a plain-language purpose with up to three live values such as current mode, provider, safety posture, capacity, or enabled state. The most important low-risk choice may stay directly editable in the overview; **Configure** moves the category into one focused inline workspace for the full control set. **Back to category overview** restores the card grid without changing the Settings draft, scope inheritance, or saving.
 
 This is a drill-down workspace, not a stack of accordions: only the selected subsystem's detailed controls remain on screen. Local AI Runtime is the reference pattern. It keeps speech input, speech output, and memory embedding status visible, while **Configure speech** and **Manage local models** open full-width inline workspaces instead of modal overlays.
@@ -68,7 +70,7 @@ The OS Software catalog is a static reference. It does not participate in Settin
 
 | Area | What it covers |
 | --- | --- |
-| [Display Settings](./display-settings.md) | Controls the dashboard shell layout, theme, motion preference, and desktop zoom when available. |
+| [Display Settings](./display-settings.md) | Controls the dashboard shell layout, theme, accent color, motion preference, and desktop zoom when available. |
 | [Background](./background.md) | Customizes the dashboard background image, animation mode, static color, and pattern overlay. |
 | [Techstacks](./techstacks.md) | Manages the system techstack catalog and per-project techstack/application-kind assignment. |
 | [Guidance](./guidance.md) | Manages selected tech-stack and styleguide guidance plus custom instruction entries for the active settings scope. |

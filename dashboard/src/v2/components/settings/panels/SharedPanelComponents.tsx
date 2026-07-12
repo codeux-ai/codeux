@@ -5,6 +5,7 @@ import type { SettingsValueSource } from "../../../../types.js";
 import { getSettingsSubcategoryDoc, toHelpSections, type SettingsSubcategoryId } from "../../../lib/settings-subcategory-docs.js";
 import { getFieldSourceLabel } from "../../../lib/settings-view-models.js";
 import { InfoIconPopover } from "../../ui/InfoIconPopover.js";
+import type { SettingsDomainAccent } from "../../../lib/settings-domain-accents.js";
 
 interface SettingsDetailWorkspaceContextValue {
   enabled: boolean;
@@ -81,6 +82,7 @@ export const SectionCard: FunctionComponent<{
   configureLabel?: string;
   sectionId?: string;
   featured?: boolean;
+  accent?: SettingsDomainAccent;
 }> = ({
   title,
   watermark,
@@ -97,6 +99,7 @@ export const SectionCard: FunctionComponent<{
   configureLabel = "Configure",
   sectionId,
   featured = false,
+  accent,
 }) => {
   const titleId = useId();
   const detailsId = useId();
@@ -117,19 +120,20 @@ export const SectionCard: FunctionComponent<{
       <section
         aria-labelledby={titleId}
         data-settings-overview-card={resolvedSectionId}
+        data-settings-accent={danger ? "red" : accent}
         className={`group relative flex h-auto min-w-0 self-start flex-col overflow-hidden rounded-[1.75rem] border p-5 shadow-[var(--elevation-base)] transition-[border-color,box-shadow,transform] duration-300 hover:-translate-y-0.5 hover:shadow-[var(--elevation-raised)] motion-reduce:transform-none ${featured ? "xl:col-span-2" : ""} ${
           danger
             ? "border-status-red/20 bg-status-red/[0.03] dark:border-status-red/20 dark:bg-status-red/[0.04]"
-            : "border-[color:var(--border-hairline)] bg-[var(--settings-card-surface)] hover:border-signal-500/20"
+            : "border-[color:var(--border-hairline)] bg-[var(--settings-card-surface)] hover:border-[rgb(var(--settings-accent-rgb)/0.24)]"
         }`}
       >
-        <div aria-hidden className={`pointer-events-none absolute inset-y-0 left-0 w-1 ${danger ? "bg-status-red/65" : "bg-gradient-to-b from-signal-300 via-signal-500 to-cyan-600"}`} />
-        <div aria-hidden className={`pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full blur-3xl ${danger ? "bg-status-red/[0.06]" : "bg-signal-500/[0.07]"}`} />
+        <div aria-hidden className="pointer-events-none absolute bottom-5 left-0 top-5 w-[3px] rounded-r-full bg-[rgb(var(--settings-accent-rgb)/0.88)]" />
+        <div aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-[rgb(var(--settings-accent-rgb)/0.055)] blur-3xl" />
         <div className="relative flex items-start justify-between gap-4 pl-1">
           <div className="min-w-0">
             <div className="flex items-center gap-3">
               {icon ? (
-                <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-[0.95rem] border ${danger ? "border-status-red/18 bg-status-red/[0.08] text-status-red" : "border-signal-500/16 bg-signal-500/[0.08] text-signal-600 dark:text-signal-300"}`} aria-hidden>
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[0.95rem] border border-[rgb(var(--settings-accent-rgb)/0.2)] bg-[rgb(var(--settings-accent-rgb)/0.1)] text-[var(--settings-accent-text)]" aria-hidden>
                   <span className="[&_svg]:h-[1.05rem] [&_svg]:w-[1.05rem]">{icon}</span>
                 </span>
               ) : null}
@@ -164,7 +168,7 @@ export const SectionCard: FunctionComponent<{
         {highlights.length > 0 ? (
           <div className="mt-5 grid gap-2 sm:grid-cols-3">
             {highlights.slice(0, 3).map((highlight) => (
-              <div key={highlight.label} className={`rounded-[1.1rem] border px-3.5 py-3 ${highlight.tone === "active" ? "border-signal-500/20 bg-signal-500/[0.07]" : highlight.tone === "warning" ? "border-status-amber/20 bg-status-amber/[0.07]" : "border-[color:var(--border-hairline)] bg-[var(--settings-inset-surface)]"}`}>
+              <div key={highlight.label} className={`rounded-[1.1rem] border px-3.5 py-3 ${highlight.tone === "active" ? "border-[rgb(var(--settings-accent-rgb)/0.22)] bg-[rgb(var(--settings-accent-rgb)/0.075)]" : highlight.tone === "warning" ? "border-status-amber/20 bg-status-amber/[0.07]" : "border-[color:var(--border-hairline)] bg-[var(--settings-inset-surface)]"}`}>
                 <div className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400">{highlight.label}</div>
                 <div className="mt-1.5 break-words text-sm font-semibold text-slate-800 dark:text-slate-100">{highlight.value}</div>
               </div>
@@ -181,10 +185,10 @@ export const SectionCard: FunctionComponent<{
             onClick={() => detailWorkspace.openSection(resolvedSectionId)}
             aria-controls={detailsId}
             aria-label={`${configureLabel} ${title}`}
-            className={`inline-flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border px-4 py-2.5 text-left text-xs font-bold transition-[background-color,border-color,color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] sm:min-h-10 sm:w-auto sm:min-w-[10rem] ${danger ? "border-status-red/20 bg-status-red/[0.06] text-status-red hover:bg-status-red/[0.1]" : "border-signal-500/20 bg-signal-500/[0.09] text-signal-800 hover:border-signal-500/30 hover:bg-signal-500/[0.15] hover:shadow-[0_8px_22px_rgba(var(--signal-rgb),0.1)] dark:text-signal-200"}`}
+            className={`inline-flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border px-4 py-2.5 text-left text-xs font-bold transition-[background-color,border-color,color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-focus-ring)] sm:min-h-10 sm:w-auto sm:min-w-[10rem] ${danger ? "border-status-red/20 bg-status-red/[0.06] text-status-red hover:bg-status-red/[0.1]" : "border-[color:var(--border-hairline)] bg-[var(--settings-inset-surface)] text-slate-700 hover:border-[rgb(var(--settings-accent-rgb)/0.28)] hover:bg-[rgb(var(--settings-accent-rgb)/0.07)] dark:text-slate-200"}`}
           >
             <span>{configureLabel}</span>
-            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none" strokeWidth={2.2} aria-hidden />
+            <ArrowRight className="h-4 w-4 text-[var(--settings-accent-text)] transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none" strokeWidth={2.2} aria-hidden />
           </button>
         </div>
       </section>
@@ -192,7 +196,7 @@ export const SectionCard: FunctionComponent<{
   }
 
   return (
-    <section aria-labelledby={titleId} className={`relative overflow-hidden rounded-[1.75rem] border p-5 shadow-[var(--elevation-base)] backdrop-blur-sm ${featured || isFocusedDetail ? "xl:col-span-2 2xl:col-span-full" : ""} ${
+    <section aria-labelledby={titleId} data-settings-accent={danger ? "red" : accent} className={`relative overflow-hidden rounded-[1.75rem] border p-5 shadow-[var(--elevation-base)] backdrop-blur-sm ${featured || isFocusedDetail ? "xl:col-span-2 2xl:col-span-full" : ""} ${
     danger
       ? "border-status-red/20 bg-status-red/[0.03] dark:border-status-red/20 dark:bg-status-red/[0.04]"
       : "border-[color:var(--border-hairline)] bg-[var(--surface-glass)]"
@@ -215,9 +219,9 @@ export const SectionCard: FunctionComponent<{
 
     <div className={`flex justify-between gap-3 ${isFocusedDetail ? "items-start" : "items-center"}`}>
       <div className={`flex gap-2 ${isFocusedDetail ? "items-center" : "items-center text-[10px] font-bold uppercase tracking-[0.2em]"} ${danger ? "text-status-red/80" : "text-slate-500 dark:text-slate-300"}`}>
-        {icon ? <span className={`inline-flex items-center justify-center ${isFocusedDetail ? "h-9 w-9 rounded-xl border border-signal-500/20 bg-signal-500/[0.08] text-signal-500 [&_svg]:h-4.5 [&_svg]:w-4.5" : "h-3.5 w-3.5 [&_svg]:h-3.5 [&_svg]:w-3.5"}`} aria-hidden>{icon}</span> : null}
+        {icon ? <span className={`inline-flex items-center justify-center ${isFocusedDetail ? "h-9 w-9 rounded-xl border border-[rgb(var(--settings-accent-rgb)/0.2)] bg-[rgb(var(--settings-accent-rgb)/0.1)] text-[var(--settings-accent-text)] [&_svg]:h-4.5 [&_svg]:w-4.5" : "h-3.5 w-3.5 [&_svg]:h-3.5 [&_svg]:w-3.5"}`} aria-hidden>{icon}</span> : null}
         <div>
-          {isFocusedDetail ? <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-300">Focused settings</div> : null}
+          {isFocusedDetail ? <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--settings-accent-text)]">Focused settings</div> : null}
           <h3 id={titleId} className={isFocusedDetail ? "mt-1 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white" : undefined}>{title}</h3>
         </div>
       </div>

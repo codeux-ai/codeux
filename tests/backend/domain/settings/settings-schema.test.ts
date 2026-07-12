@@ -72,6 +72,32 @@ describe("validateSettingsPayload", () => {
     });
   });
 
+  it("validates dashboard accent color presets", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    payload.appearance.accentColor = "VIOLET";
+
+    expect(validateSettingsPayload(payload).success).toBe(true);
+
+    payload.appearance.accentColor = "RAINBOW" as never;
+    const invalidResult = validateSettingsPayload(payload);
+
+    expect(invalidResult.success).toBe(false);
+    expect(invalidResult.issues).toContainEqual({
+      path: "appearance.accentColor",
+      message: "Expected one of: CODEUX, OCEAN, VIOLET, CYAN, MAGENTA, GRAPHITE",
+    });
+  });
+
+  it("upgrades payloads saved before accent preferences were introduced", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    delete (payload.appearance as Partial<typeof payload.appearance>).accentColor;
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(true);
+    expect(result.data?.appearance.accentColor).toBe("CODEUX");
+  });
+
   it("accepts CREATE_PR for featurePrAutoMergeMode", () => {
     const payload = structuredClone(cloneDefaults({
       env: {},

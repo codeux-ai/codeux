@@ -4,11 +4,11 @@ Dashboard feature flags hide unfinished dashboard surfaces without deleting thei
 
 Flags live in `dashboard/src/v2/lib/dashboard-feature-flags.ts`. They are resolved at dashboard bundle time through Vite `import.meta.env` values:
 
-- Development builds always enable all flagged unfinished features so every in-progress surface remains available for local testing.
+- Development and test builds enable all flagged unfinished features by default.
 - Production builds disable flagged unfinished features by default.
-- Explicit env values enable or disable features in production builds. Development mode intentionally overrides disabled values.
+- Explicit env values override the mode default.
 
-Supported values are `true`, `1`, `yes`, `on`, `enabled`, `false`, `0`, `no`, `off`, and `disabled`. In production, empty or unrecognized values fall back to disabled. Development mode enables every registered feature regardless of these values.
+Supported values are `true`, `1`, `yes`, `on`, `enabled`, `false`, `0`, `no`, `off`, and `disabled`. Empty or unrecognized values fall back to the mode default.
 
 ## Current Flags
 
@@ -17,7 +17,7 @@ Supported values are `true`, `1`, `yes`, `on`, `enabled`, `false`, `0`, `no`, `o
 | `nodes` | `VITE_CODEUX_FEATURE_NODES` | enabled | disabled | Hides the unfinished `/nodes` surface from route registration, shared navigation, route prefetch, and the guided dashboard tour. |
 | `custom-dashboards` | `VITE_CODEUX_FEATURE_CUSTOM_DASHBOARDS` | enabled | disabled | Hides the unfinished `/custom-dashboards` surface from route registration, shared navigation, route prefetch, and the guided dashboard tour. |
 
-When a feature is disabled in a production build, its page module remains in source for local development and tests, but the route is not added to the TanStack route tree. Direct navigation falls through to the dashboard not-found route.
+When a feature is disabled, its page module remains in source for local development and tests, but the route is not added to the TanStack route tree. Direct navigation falls through to the dashboard not-found route.
 
 ## Adding a Flag
 
@@ -26,5 +26,5 @@ When a feature is disabled in a production build, its page module remains in sou
 3. Gate route registration in `dashboard/src/main.tsx`.
 4. Gate route prefetch entries in `dashboard/src/v2/router/route-prefetch.ts`.
 5. Gate guided tour steps or other entry points that reference the hidden surface.
-6. Add focused tests for the development visibility override, production defaults and explicit overrides, and every hidden entry point.
+6. Add focused tests for default behavior, explicit overrides, and every hidden entry point.
 7. Update this page and the matching canonical `docs/` page.

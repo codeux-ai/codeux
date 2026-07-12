@@ -8,6 +8,7 @@ describe('applyAppearanceSettings', () => {
     document.documentElement.style.background = '';
     document.body.style.background = '';
     delete document.documentElement.dataset.reducedMotion;
+    delete document.documentElement.dataset.accent;
   });
 
   it('applies DARK theme correctly', () => {
@@ -27,6 +28,16 @@ describe('applyAppearanceSettings', () => {
   it('applies reducedMotion correctly', () => {
     applyAppearanceSettings({ reducedMotion: 'REDUCE' });
     expect(document.documentElement.dataset.reducedMotion).toBe('REDUCE');
+  });
+
+  it('applies a validated accent preset to the document root', () => {
+    applyAppearanceSettings({ accentColor: 'VIOLET' });
+    expect(document.documentElement.dataset.accent).toBe('violet');
+  });
+
+  it('falls back to the default accent when an invalid runtime value is received', () => {
+    applyAppearanceSettings({ accentColor: 'RAINBOW' as never });
+    expect(document.documentElement.dataset.accent).toBe('codeux');
   });
 
   it('applies backgroundPattern correctly when not NONE', () => {

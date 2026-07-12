@@ -88,6 +88,7 @@ export const SettingsAgentRoutingPanel: FunctionComponent<SettingsAgentRoutingPa
       watermark="RTE"
       badge={sectionBadge}
       icon={<Route strokeWidth={2.4} />}
+      accent="indigo"
       summary="See who handles each stage of a sprint, then refine only the routes that need a specialist."
       configureLabel="Review routes"
       highlights={[

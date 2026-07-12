@@ -12,18 +12,18 @@ import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { AlertTriangle, Bot, BrainCircuit, Compass, Cpu, Layers3, Monitor, Palette, Plug, Server, SlidersHorizontal, Target } from "lucide-preact";
 
 export const CATEGORIES: Category[] = [
-  { id: "general", num: "01", label: "General", icon: SlidersHorizontal, description: "Scope, runtime, and automation posture" },
-  { id: "appearance", num: "02", label: "Appearance", icon: Monitor, description: "Dashboard layout and theme preferences" },
-  { id: "models", num: "03", label: "AI Models", icon: Cpu, description: "Provider routing, models, and weighting" },
-  { id: "agents", num: "04", label: "Agents", icon: Bot, description: "Agent routing, skill storage, reflection, and authoring behavior" },
-  { id: "memory", num: "05", label: "Memory", icon: BrainCircuit, description: "Embedding models, auto-capture, and promotion policy" },
-  { id: "techstacks", num: "06", label: "Techstacks", icon: Layers3, description: "Catalog stacks, application kind, and project assignment" },
-  { id: "guidance", num: "07", label: "Guidance", icon: Palette, description: "Tech stack guidance, styleguides, and custom instructions" },
-  { id: "sprint", num: "08", label: "Sprint & Git", icon: Target, description: "Git flow, branch naming, merge rules, and execution runtime" },
-  { id: "browser", num: "09", label: "Browser Preview", icon: Compass, description: "Preview runtime, browser visibility, and container policy" },
-  { id: "integrations", num: "10", label: "Integrations", icon: Plug, description: "Provider keys, Git hosts, and external connection policy" },
-  { id: "mcp", num: "11", label: "MCP", icon: Server, description: "MCP servers injected into CLIs and built-in tool access" },
-  { id: "danger", num: "12", label: "Danger Zone", icon: AlertTriangle, description: "Reset project overrides only when needed", danger: true },
+  { id: "general", num: "01", label: "General", icon: SlidersHorizontal, accent: "sky", description: "Scope, runtime, and automation posture" },
+  { id: "appearance", num: "02", label: "Appearance", icon: Monitor, accent: "violet", description: "Dashboard layout and theme preferences" },
+  { id: "models", num: "03", label: "AI Models", icon: Cpu, accent: "indigo", description: "Provider routing, models, and weighting" },
+  { id: "agents", num: "04", label: "Agents", icon: Bot, accent: "cyan", description: "Agent routing, skill storage, reflection, and authoring behavior" },
+  { id: "memory", num: "05", label: "Memory", icon: BrainCircuit, accent: "purple", description: "Embedding models, auto-capture, and promotion policy" },
+  { id: "techstacks", num: "06", label: "Techstacks", icon: Layers3, accent: "blue", description: "Catalog stacks, application kind, and project assignment" },
+  { id: "guidance", num: "07", label: "Guidance", icon: Palette, accent: "fuchsia", description: "Tech stack guidance, styleguides, and custom instructions" },
+  { id: "sprint", num: "08", label: "Sprint & Git", icon: Target, accent: "orange", description: "Git flow, branch naming, merge rules, and execution runtime" },
+  { id: "browser", num: "09", label: "Browser Preview", icon: Compass, accent: "teal", description: "Preview runtime, browser visibility, and container policy" },
+  { id: "integrations", num: "10", label: "Integrations", icon: Plug, accent: "blue", description: "Provider keys, Git hosts, and external connection policy" },
+  { id: "mcp", num: "11", label: "MCP", icon: Server, accent: "cyan", description: "MCP servers injected into CLIs and built-in tool access" },
+  { id: "danger", num: "12", label: "Danger Zone", icon: AlertTriangle, accent: "red", description: "Reset project overrides only when needed", danger: true },
 ];
 
 const CATEGORY_GROUPS: ReadonlyArray<{ label: string; categoryIds: ReadonlyArray<CategoryId> }> = [
@@ -199,6 +199,7 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
           ) : null}
           <button
             key={category.id}
+            data-settings-accent={category.accent || "sky"}
             type="button"
             ref={el => {
               buttonsRef.current[index] = el;
@@ -218,37 +219,25 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
             style={selectionTransitionStyle}
             className={`group relative flex min-h-11 w-full min-w-0 items-center gap-3 rounded-[1.1rem] px-3 py-2.5 text-left transition-[background-color,border-color,box-shadow,color,transform] motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-60 ${SHARED_INTERACTION_CLASSES} ${isDanger ? "focus-visible:ring-status-red" : ""} ${
               isActive
-                ? isDanger
-                  ? "bg-status-red/[0.07] dark:bg-status-red/[0.08]"
-                  : "bg-signal-500/10"
+                ? "bg-[rgb(var(--settings-accent-rgb)/0.085)]"
                 : "hover:bg-[var(--fill-muted-hover)]"
             } ${
               isSearchMatch && !isActive ? (isDanger ? "ring-1 ring-status-red/30 bg-status-red/[0.03] dark:ring-status-red/40 dark:bg-status-red/[0.04]" : "ring-1 ring-signal-500/30 bg-signal-500/[0.03] dark:ring-signal-500/40 dark:bg-signal-500/[0.04]") : ""
             }`}
           >
             {isActive ? (
-              <div className={`absolute left-0 top-3 bottom-3 w-[3px] rounded-r-full ${isDanger ? "bg-status-red" : "bg-signal-500 dark:bg-signal-400"}`} />
+              <div className="absolute bottom-2.5 left-0 top-2.5 w-[3px] rounded-r-full bg-[rgb(var(--settings-accent-rgb)/0.88)]" />
             ) : null}
 
-            <category.icon
-              className={`h-4 w-4 shrink-0 transition-colors ${
-                isActive
-                  ? isDanger
-                    ? "text-status-red"
-                    : "text-signal-600 dark:text-signal-400"
-                  : "text-slate-400 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300"
-              }`}
-              strokeWidth={1.75}
-              style={selectionTransitionStyle}
-            />
+            <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-[0.7rem] border border-[rgb(var(--settings-accent-rgb)/0.14)] bg-[rgb(var(--settings-accent-rgb)/0.06)] text-[var(--settings-accent-text)] transition-[background-color,opacity] ${isActive ? "opacity-100" : "opacity-75 group-hover:bg-[rgb(var(--settings-accent-rgb)/0.1)] group-hover:opacity-100"}`}>
+              <category.icon className="h-3.5 w-3.5" strokeWidth={1.9} style={selectionTransitionStyle} aria-hidden="true" />
+            </span>
 
             <div className="min-w-0 flex-1">
               <div
                 className={`text-sm font-semibold transition-colors ${
                 isActive
-                  ? isDanger
-                    ? "text-status-red"
-                    : "text-signal-700 dark:text-signal-300"
+                  ? "text-[var(--settings-accent-text)]"
                   : "text-slate-700 group-hover:text-slate-900 dark:text-slate-300 dark:group-hover:text-slate-100"
               }`}
                 style={selectionTransitionStyle}

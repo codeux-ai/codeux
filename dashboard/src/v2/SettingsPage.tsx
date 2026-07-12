@@ -454,20 +454,20 @@ export const SettingsPage: FunctionComponent = () => {
             onSwitchCategory={switchCategory}
             pendingCategory={pendingCategory}
           />
-          <div className={`hidden min-w-[15rem] flex-1 items-center gap-3 rounded-[1.25rem] border px-3.5 py-3 lg:flex ${
+          <div data-settings-accent={activeCategoryConfig.accent || "sky"} className={`hidden min-w-[15rem] flex-1 items-center gap-3 rounded-[1.25rem] border px-3.5 py-3 lg:flex ${
             activeCategoryConfig.danger
               ? "border-status-red/15 bg-status-red/[0.055]"
-              : "border-signal-600/12 bg-white/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] dark:border-signal-300/12 dark:bg-white/[0.045] dark:shadow-none"
+              : "border-[rgb(var(--settings-accent-rgb)/0.13)] bg-white/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] dark:bg-white/[0.045] dark:shadow-none"
           }`}>
             <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-[0.95rem] border ${
               activeCategoryConfig.danger
                 ? "border-status-red/20 bg-status-red/10 text-status-red"
-                : "border-signal-500/18 bg-signal-500/10 text-signal-700 dark:text-signal-300"
+                : "border-[rgb(var(--settings-accent-rgb)/0.2)] bg-[rgb(var(--settings-accent-rgb)/0.1)] text-[var(--settings-accent-text)]"
             }`}>
               <activeCategoryConfig.icon className="h-[1.1rem] w-[1.1rem]" strokeWidth={2.1} aria-hidden="true" />
             </span>
             <span className="min-w-0">
-              <span className={`block font-mono text-[9px] font-bold uppercase tracking-[0.18em] ${activeCategoryConfig.danger ? "text-status-red/75" : "text-signal-700/75 dark:text-signal-300/80"}`}>
+              <span className={`block font-mono text-[9px] font-bold uppercase tracking-[0.18em] ${activeCategoryConfig.danger ? "text-status-red/75" : "text-[var(--settings-accent-text)]"}`}>
                 {activeCategoryConfig.num} · Active category
               </span>
               <span className="mt-0.5 block text-sm font-bold text-slate-900 dark:text-white">{activeCategoryConfig.label}</span>
@@ -511,7 +511,7 @@ export const SettingsPage: FunctionComponent = () => {
               className={`group inline-flex h-10 items-center gap-2.5 rounded-xl border px-4 text-sm font-bold transition-[background-color,border-color,box-shadow,transform] duration-300 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-[#10282a] ${
                 saveMessage && !error
                   ? "border-status-green/25 bg-status-green text-white shadow-[0_10px_28px_rgba(16,185,129,0.2)]"
-                  : "border-signal-700/20 bg-signal-600 text-white shadow-[0_10px_28px_rgba(var(--signal-rgb),0.2)] hover:border-signal-700/30 hover:bg-signal-700 dark:border-signal-600/20 dark:bg-signal-500 dark:text-void-950 dark:hover:bg-signal-400"
+                  : "border-[rgb(var(--accent-action-rgb)/0.22)] bg-[var(--accent-action)] text-[var(--accent-on-solid)] shadow-[0_10px_28px_rgb(var(--accent-action-rgb)/0.2)] hover:border-[rgb(var(--accent-action-rgb)/0.34)] hover:bg-[var(--accent-action-hover)]"
               }`}
             >
               {activeSaving ? (

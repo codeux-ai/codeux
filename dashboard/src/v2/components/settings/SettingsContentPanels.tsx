@@ -71,6 +71,7 @@ export const SettingsContentPanels: FunctionComponent<{
       <div
         key={activeCategory}
         data-active-category={activeCategory}
+        data-settings-accent={state.activeCategoryConfig?.accent || "sky"}
         data-motion-contract="enterExit"
         className="mt-3 motion-safe:animate-form-slide-down motion-reduce:animate-none"
         style={{

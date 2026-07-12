@@ -462,6 +462,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
         watermark="DEF"
         badge={getBadge("aiProvider", "workers")}
         icon={<Anchor strokeWidth={2.4} />}
+        accent="indigo"
         highlights={[
           { label: "Global", value: globalProviderSettings ? getProviderInstanceLabel(globalProviderSettings) : "None", tone: "active" },
           { label: "Worker", value: workerProviderSettings ? getProviderInstanceLabel(workerProviderSettings) : "None" },
@@ -562,6 +563,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
         watermark="BASE"
         badge={getBadge("aiProvider.providers")}
         icon={<Layers strokeWidth={2.4} />}
+        accent="blue"
         highlights={[
           { label: "Instances", value: providerEntries.length },
           { label: "Eligible", value: enabledProviderCount, tone: enabledProviderCount > 0 ? "active" : "warning" },
@@ -682,6 +684,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
         watermark="MAP"
         badge={getBadge("aiProvider.invocationRouting")}
         icon={<GitBranch strokeWidth={2.4} />}
+        accent="indigo"
         highlights={[
           { label: "Selected route", value: activeRouteDefinition.label, tone: "active" },
           { label: "Strategy", value: activeRoute.strategy.toLowerCase() },

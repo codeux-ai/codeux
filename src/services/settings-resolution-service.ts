@@ -1,5 +1,6 @@
 import type {
   BackgroundPattern,
+  DashboardAccentColor,
   ConsoleLogMode,
   CustomMcpServer,
   DashboardSettings,
@@ -53,6 +54,7 @@ import {
   DEFAULT_PROJECT_TECHSTACK,
   DEFAULT_SKILLS,
   DASHBOARD_EXPERIENCE_MODES,
+  DASHBOARD_ACCENT_COLORS,
   INTERNAL_SKILL_NAMES,
   INTERNAL_SKILL_SET,
 } from "../repositories/settings-defaults.js";
@@ -130,6 +132,13 @@ const sanitizeDashboardExperienceMode = (value: unknown): DashboardExperienceMod
   typeof value === "string" && DASHBOARD_EXPERIENCE_MODE_SET.has(value as DashboardExperienceMode)
     ? value as DashboardExperienceMode
     : DEFAULT_DASHBOARD_EXPERIENCE_MODE
+);
+
+const DASHBOARD_ACCENT_COLOR_SET = new Set<DashboardAccentColor>(DASHBOARD_ACCENT_COLORS);
+const sanitizeDashboardAccentColor = (value: unknown): DashboardAccentColor => (
+  typeof value === "string" && DASHBOARD_ACCENT_COLOR_SET.has(value as DashboardAccentColor)
+    ? value as DashboardAccentColor
+    : DEFAULT_DASHBOARD_SETTINGS.appearance.accentColor
 );
 
 function cloneMcpTools(tools: McpToolToggle[]): McpToolToggle[] {
@@ -925,6 +934,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       navigationMode: appearanceInput.navigationMode === "DOCK" ? "DOCK" : "SIDEBAR",
       experienceMode: sanitizeDashboardExperienceMode(appearanceInput.experienceMode),
       theme: appearanceInput.theme === "LIGHT" || appearanceInput.theme === "DARK" ? appearanceInput.theme : "SYSTEM",
+      accentColor: sanitizeDashboardAccentColor(appearanceInput.accentColor),
       reducedMotion: appearanceInput.reducedMotion === "REDUCE" || appearanceInput.reducedMotion === "NONE" ? appearanceInput.reducedMotion : "AUTO",
       backgroundMode: appearanceInput.backgroundMode === "STATIC" ? "STATIC" : "ANIMATED",
       animatedBackground: typeof appearanceInput.animatedBackground === "string" ? appearanceInput.animatedBackground : "deep-ocean",

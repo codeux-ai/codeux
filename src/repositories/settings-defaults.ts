@@ -723,6 +723,8 @@ export const DEFAULT_INVOCATION_ROUTING: Record<InvocationRoutingId, InvocationR
   },
 };
 
+export const DASHBOARD_ACCENT_COLORS = ["CODEUX", "OCEAN", "VIOLET", "CYAN", "MAGENTA", "GRAPHITE"] as const;
+
 export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   dashboardPort: 4444,
   consoleLogLevel: "info",
@@ -737,6 +739,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     navigationMode: "SIDEBAR",
     experienceMode: DEFAULT_DASHBOARD_EXPERIENCE_MODE,
     theme: "SYSTEM",
+    accentColor: "CODEUX",
     reducedMotion: "AUTO",
     backgroundMode: "ANIMATED",
     animatedBackground: "deep-ocean",

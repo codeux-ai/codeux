@@ -45,6 +45,7 @@ export const SettingsModelPricingPanel: FunctionComponent<{ state: SettingsPageS
         title="Model Pricing"
         watermark="USD"
         icon={<Banknote strokeWidth={2.4} />}
+        accent="purple"
         highlights={[
           { label: "Models in use", value: relevantRefs.size, tone: "active" },
           { label: "Overrides", value: Object.keys(normalizedOverrides).length },

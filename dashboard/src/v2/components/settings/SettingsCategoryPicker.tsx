@@ -75,7 +75,7 @@ export const SettingsCategoryPicker: FunctionComponent<SettingsCategoryPickerPro
   };
 
   return (
-    <div className="w-full lg:hidden">
+    <div data-settings-accent={activeCategoryConfig.accent || "sky"} className="w-full lg:hidden">
       <button
         type="button"
         aria-label={`Change settings category. Current category: ${activeCategoryConfig.label}`}
@@ -91,7 +91,7 @@ export const SettingsCategoryPicker: FunctionComponent<SettingsCategoryPickerPro
         }}
         className={`${SHARED_INTERACTION_CLASSES} flex min-h-14 w-full min-w-0 items-center gap-3 rounded-2xl border border-signal-600/12 bg-white/65 px-3.5 py-3 text-left text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)] hover:bg-white/85 focus-visible:ring-offset-white dark:border-signal-300/12 dark:bg-white/[0.05] dark:text-white dark:shadow-none dark:hover:bg-white/[0.085] dark:focus-visible:ring-offset-[#10282a]`}
       >
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-signal-500/20 bg-signal-500/10 text-signal-700 dark:text-signal-300">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-[rgb(var(--settings-accent-rgb)/0.2)] bg-[rgb(var(--settings-accent-rgb)/0.1)] text-[var(--settings-accent-text)]">
           <activeCategoryConfig.icon className="h-4 w-4" strokeWidth={2.1} aria-hidden="true" />
         </span>
         <span className="min-w-0 flex-1">

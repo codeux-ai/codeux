@@ -354,6 +354,7 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
         title="Local AI Runtime"
         watermark="MODELS"
         icon={<Boxes strokeWidth={2.3} />}
+        accent="cyan"
         drilldown={false}
         featured
         summary="See what is active at a glance, then open only the focused speech or model controls you need."

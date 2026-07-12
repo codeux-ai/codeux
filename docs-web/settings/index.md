@@ -47,7 +47,7 @@ The OS Software catalog is a static reference. It does not participate in Settin
 
 | Area | What it covers |
 | --- | --- |
-| [Display Settings](/docs/settings-display-settings) | Controls the dashboard shell layout, theme, motion preference, and desktop zoom when available. |
+| [Display Settings](/docs/settings-display-settings) | Controls the dashboard shell layout, theme, accent color, motion preference, and desktop zoom when available. |
 | [Background](/docs/settings-background) | Customizes the dashboard background image, animation mode, static color, and pattern overlay. |
 | [Techstacks](/docs/settings-techstacks) | Manages the system techstack catalog and per-project techstack/application-kind assignment. |
 | [Guidance](/docs/settings-guidance) | Manages selected tech-stack and styleguide guidance plus custom instruction entries for the active settings scope. |

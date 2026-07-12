@@ -67,6 +67,7 @@ export const SettingsAgentReflectionPanel: FunctionComponent<SettingsAgentReflec
       title="Self-Reflection"
       watermark="REF"
       icon={<Sparkles strokeWidth={2.4} />}
+      accent="fuchsia"
       summary="Review planning and QA quality checks at a glance, then tune the criteria behind each reflection pass."
       configureLabel="Tune self-reflection"
       highlights={[

@@ -31,7 +31,7 @@ The desktop rail and mobile category drawer include these Expert-mode categories
 | Category | What it covers |
 | --- | --- |
 | **General** | Scope context, experience mode, automation posture, runtime logging, Docker runtime, restart behavior, onboarding, and System legal actions. |
-| **Appearance** | Theme, navigation mode, motion preference, background, and desktop zoom. |
+| **Appearance** | Theme, accessible accent preset, navigation mode, motion preference, background, and desktop zoom. |
 | **AI Models** | Language-first local speech setup, downloadable embedding/STT/TTS catalogs, API speech settings, provider anchors, routing, model choices, thinking mode, weighting, and pricing. |
 | **Sprint & Git** | Git flow, PR behavior, merge gates, QA, guardrails, branch naming, and execution runtime controls. |
 | **Browser Preview** | Preview runtime, in-app browser visibility, container limits, port allocation, and startup scripts. |

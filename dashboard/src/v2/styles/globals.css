@@ -13,8 +13,12 @@
     --signal-600: #004b93;
     --signal-700: #003a70;
     --signal-rgb: 0 94 184;
-    --accent-primary: var(--signal-600);
-    --accent-hover: var(--signal-700);
+    --accent-action: var(--signal-600);
+    --accent-action-hover: var(--signal-700);
+    --accent-action-rgb: var(--signal-rgb);
+    --accent-on-solid: #ffffff;
+    --accent-primary: var(--accent-action);
+    --accent-hover: var(--accent-action-hover);
     --link-text: var(--signal-600);
     --link-text-hover: var(--signal-700);
     --radius-ui: 8px;
@@ -29,8 +33,8 @@
     --text-metadata: #64748b; /* slate-500 */
 
     /* Settings product surfaces */
-    --settings-command-surface: linear-gradient(135deg, rgba(255, 255, 255, 0.97), rgba(240, 253, 249, 0.94));
-    --settings-command-border: rgba(0, 75, 147, 0.12);
+    --settings-command-surface: linear-gradient(135deg, rgba(255, 255, 255, 0.97), rgba(248, 250, 252, 0.94));
+    --settings-command-border: rgba(15, 23, 42, 0.08);
     --settings-card-surface: rgba(255, 255, 255, 0.78);
     --settings-inset-surface: rgba(15, 23, 42, 0.028);
     --settings-command-shadow: 0 20px 55px rgba(15, 23, 42, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.86);
@@ -63,8 +67,12 @@
     --signal-600: #00e0a0;
     --signal-700: #008f65;
     --signal-rgb: 0 224 160;
-    --accent-primary: var(--signal-500);
-    --accent-hover: var(--signal-400);
+    --accent-action: var(--signal-500);
+    --accent-action-hover: var(--signal-400);
+    --accent-action-rgb: var(--signal-rgb);
+    --accent-on-solid: #0e0c0a;
+    --accent-primary: var(--accent-action);
+    --accent-hover: var(--accent-action-hover);
     --link-text: var(--signal-300);
     --link-text-hover: var(--signal-400);
 
@@ -76,12 +84,130 @@
     --border-hairline: rgba(250, 244, 237, 0.08); /* warm hairline */
     --accent-focus-ring: var(--accent-primary);
     --text-metadata: #94a3b8; /* slate-400 */
-    --settings-command-surface: linear-gradient(135deg, rgba(27, 24, 21, 0.97), rgba(17, 48, 41, 0.94));
-    --settings-command-border: rgba(128, 255, 214, 0.11);
+    --settings-command-surface: linear-gradient(135deg, rgba(29, 25, 22, 0.97), rgba(21, 19, 17, 0.95));
+    --settings-command-border: rgba(250, 244, 237, 0.09);
     --settings-card-surface: rgba(24, 20, 17, 0.74);
     --settings-inset-surface: rgba(250, 244, 237, 0.038);
     --settings-command-shadow: 0 24px 60px rgba(2, 8, 15, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.045);
   }
+
+  /*
+   * User-selectable dashboard accents. These only override the shared signal
+   * system; provider, status, chart, and domain identity colors stay stable.
+   * Each light palette uses a dark 600/700 for readable links and white text,
+   * while dark palettes expose a brighter 300/500 for dark-surface contrast.
+   */
+  :root[data-accent="ocean"] {
+    --signal-300: #93c5fd;
+    --signal-400: #2563eb;
+    --signal-500: #1d4ed8;
+    --signal-600: #1d4ed8;
+    --signal-700: #1e40af;
+    --signal-rgb: 29 78 216;
+  }
+
+  :root.dark[data-accent="ocean"] {
+    --signal-300: #dbeafe;
+    --signal-400: #93c5fd;
+    --signal-500: #60a5fa;
+    --signal-600: #60a5fa;
+    --signal-700: #3b82f6;
+    --signal-rgb: 96 165 250;
+  }
+
+  :root[data-accent="violet"] {
+    --signal-300: #c4b5fd;
+    --signal-400: #8b5cf6;
+    --signal-500: #6d28d9;
+    --signal-600: #6d28d9;
+    --signal-700: #5b21b6;
+    --signal-rgb: 109 40 217;
+  }
+
+  :root.dark[data-accent="violet"] {
+    --signal-300: #ede9fe;
+    --signal-400: #ddd6fe;
+    --signal-500: #c4b5fd;
+    --signal-600: #c4b5fd;
+    --signal-700: #a78bfa;
+    --signal-rgb: 196 181 253;
+  }
+
+  :root[data-accent="cyan"] {
+    --signal-300: #67e8f9;
+    --signal-400: #0891b2;
+    --signal-500: #0e7490;
+    --signal-600: #0e7490;
+    --signal-700: #155e75;
+    --signal-rgb: 14 116 144;
+  }
+
+  :root.dark[data-accent="cyan"] {
+    --signal-300: #cffafe;
+    --signal-400: #a5f3fc;
+    --signal-500: #67e8f9;
+    --signal-600: #67e8f9;
+    --signal-700: #22d3ee;
+    --signal-rgb: 103 232 249;
+  }
+
+  :root[data-accent="magenta"] {
+    --signal-300: #f0abfc;
+    --signal-400: #c026d3;
+    --signal-500: #a21caf;
+    --signal-600: #a21caf;
+    --signal-700: #86198f;
+    --signal-rgb: 162 28 175;
+  }
+
+  :root.dark[data-accent="magenta"] {
+    --signal-300: #fae8ff;
+    --signal-400: #f5d0fe;
+    --signal-500: #f0abfc;
+    --signal-600: #f0abfc;
+    --signal-700: #e879f9;
+    --signal-rgb: 240 171 252;
+  }
+
+  :root[data-accent="graphite"] {
+    --signal-300: #cbd5e1;
+    --signal-400: #64748b;
+    --signal-500: #475569;
+    --signal-600: #475569;
+    --signal-700: #334155;
+    --signal-rgb: 71 85 105;
+  }
+
+  :root.dark[data-accent="graphite"] {
+    --signal-300: #f1f5f9;
+    --signal-400: #e2e8f0;
+    --signal-500: #cbd5e1;
+    --signal-600: #cbd5e1;
+    --signal-700: #94a3b8;
+    --signal-rgb: 203 213 225;
+  }
+
+  [data-settings-accent="sky"] { --settings-accent-rgb: 14 165 233; --settings-accent-text: #0369a1; }
+  [data-settings-accent="blue"] { --settings-accent-rgb: 59 130 246; --settings-accent-text: #1d4ed8; }
+  [data-settings-accent="indigo"] { --settings-accent-rgb: 99 102 241; --settings-accent-text: #4338ca; }
+  [data-settings-accent="violet"] { --settings-accent-rgb: 139 92 246; --settings-accent-text: #6d28d9; }
+  [data-settings-accent="purple"] { --settings-accent-rgb: 168 85 247; --settings-accent-text: #7e22ce; }
+  [data-settings-accent="cyan"] { --settings-accent-rgb: 6 182 212; --settings-accent-text: #0e7490; }
+  [data-settings-accent="teal"] { --settings-accent-rgb: 20 184 166; --settings-accent-text: #0f766e; }
+  [data-settings-accent="fuchsia"] { --settings-accent-rgb: 217 70 239; --settings-accent-text: #a21caf; }
+  [data-settings-accent="orange"] { --settings-accent-rgb: 249 115 22; --settings-accent-text: #c2410c; }
+  [data-settings-accent="red"] { --settings-accent-rgb: 239 68 68; --settings-accent-text: #b91c1c; }
+
+  .dark [data-settings-accent="sky"] { --settings-accent-text: #7dd3fc; }
+  .dark [data-settings-accent="blue"] { --settings-accent-text: #93c5fd; }
+  .dark [data-settings-accent="indigo"] { --settings-accent-text: #a5b4fc; }
+  .dark [data-settings-accent="violet"] { --settings-accent-text: #c4b5fd; }
+  .dark [data-settings-accent="purple"] { --settings-accent-text: #d8b4fe; }
+  .dark [data-settings-accent="cyan"] { --settings-accent-text: #67e8f9; }
+  .dark [data-settings-accent="teal"] { --settings-accent-text: #5eead4; }
+  .dark [data-settings-accent="fuchsia"] { --settings-accent-text: #f0abfc; }
+  .dark [data-settings-accent="orange"] { --settings-accent-text: #fdba74; }
+  .dark [data-settings-accent="red"] { --settings-accent-text: #fca5a5; }
 
   html, body {
     min-height: 100dvh;

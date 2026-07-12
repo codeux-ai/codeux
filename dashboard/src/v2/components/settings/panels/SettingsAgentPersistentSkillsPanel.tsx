@@ -149,6 +149,7 @@ export const SettingsAgentPersistentSkillsPanel: FunctionComponent<SettingsAgent
       title="Persistent Skill Storage"
       watermark="SKL"
       icon={<Database strokeWidth={2.4} />}
+      accent="teal"
       summary="Attach curated project knowledge to selected agents and keep runtime retrieval explicitly controlled."
       configureLabel="Manage skill storage"
       highlights={[

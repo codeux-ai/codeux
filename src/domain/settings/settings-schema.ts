@@ -39,6 +39,7 @@ import {
   RUNTIME_LOG_LEVELS,
   EXTERNAL_IMPORTER_PROVIDERS,
   DASHBOARD_EXPERIENCE_MODES,
+  DASHBOARD_ACCENT_COLORS,
   GUARDRAIL_JOB_TYPES,
   GUARDRAIL_ON_LIMIT_ACTIONS,
   QA_EXHAUSTION_POLICIES,
@@ -76,6 +77,7 @@ const isValidPort = (value: unknown): value is number => (
 );
 
 const DASHBOARD_EXPERIENCE_MODE_SET = new Set<DashboardExperienceMode>(DASHBOARD_EXPERIENCE_MODES);
+const DASHBOARD_ACCENT_COLOR_SET = new Set(DASHBOARD_ACCENT_COLORS);
 
 const validateAppearanceSettings = (
   value: unknown,
@@ -91,6 +93,15 @@ const validateAppearanceSettings = (
     || !DASHBOARD_EXPERIENCE_MODE_SET.has(value.experienceMode as DashboardExperienceMode)
   ) {
     issues.push({ path: `${path}.experienceMode`, message: `Expected one of: ${DASHBOARD_EXPERIENCE_MODES.join(", ")}` });
+  }
+  if (
+    value.accentColor !== undefined
+    && (
+      typeof value.accentColor !== "string"
+      || !DASHBOARD_ACCENT_COLOR_SET.has(value.accentColor as (typeof DASHBOARD_ACCENT_COLORS)[number])
+    )
+  ) {
+    issues.push({ path: `${path}.accentColor`, message: `Expected one of: ${DASHBOARD_ACCENT_COLORS.join(", ")}` });
   }
 };
 
@@ -1157,5 +1168,16 @@ export const validateSettingsPayload = (payload: unknown): ValidationResult<Dash
     return { success: false, issues };
   }
 
-  return { success: true, issues: [], data: payload as unknown as DashboardSettings };
+  const appearance = payload.appearance as Record<string, unknown>;
+  return {
+    success: true,
+    issues: [],
+    data: {
+      ...payload,
+      appearance: {
+        ...appearance,
+        accentColor: appearance.accentColor ?? "CODEUX",
+      },
+    } as unknown as DashboardSettings,
+  };
 };

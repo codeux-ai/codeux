@@ -35,6 +35,7 @@ const ExperienceModeCard: FunctionComponent<{
     title="Experience Mode"
     watermark="MODE"
     icon={<SlidersHorizontal strokeWidth={2.4} />}
+    accent="violet"
     summary="Choose how much operational detail Code UX shows while keeping every saved setting intact."
     highlights={[
       { label: "Current mode", value: getDashboardExperienceModeLabel(settings.appearance.experienceMode), tone: "active" },
@@ -147,6 +148,7 @@ const ProjectContextCard: FunctionComponent<{
       title="Project Context"
       watermark="PRJ"
       icon={<FolderOpen strokeWidth={2.4} />}
+      accent="sky"
       highlights={[
         { label: "Project", value: projectName, tone: "active" },
         { label: "Source", value: sourceTypeLabel },
@@ -227,6 +229,7 @@ const AutomationCard: FunctionComponent<{
     watermark="AUTO"
     badge={getBadge("automationLevel", "automationInterventions")}
     icon={<Bot strokeWidth={2.4} />}
+    accent="orange"
     highlights={[
       { label: "Level", value: settings.automationLevel === "SEMI_AUTO" ? "Semi-auto" : settings.automationLevel === "ALWAYS_ASK" ? "Always ask" : "Full", tone: "active" },
       { label: "Plan approval", value: settings.automationInterventions.autoApprovePlan ? "Automatic" : "Manual" },
@@ -280,6 +283,7 @@ const DockerRuntimeCard: FunctionComponent<{
     watermark="DKR"
     badge={getBadge("cliWorkflow")}
     icon={<Cog strokeWidth={2.4} />}
+    accent="blue"
     highlights={[
       { label: "Image", value: settings.cliWorkflow.containerImageMode === "custom" ? "Custom" : "Managed", tone: settings.cliWorkflow.containerImageMode === "managed" ? "active" : "warning" },
       { label: "Memory", value: settings.cliWorkflow.containerMemoryLimitMb > 0 ? `${settings.cliWorkflow.containerMemoryLimitMb} MiB` : "Unlimited" },
@@ -430,6 +434,7 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
             title="System Runtime"
             watermark="SYS"
             icon={<Cog strokeWidth={2.4} />}
+            accent="sky"
             highlights={[
               { label: "Dashboard", value: `Port ${systemSettings?.runtime.dashboardPort ?? 4444}`, tone: "active" },
               { label: "Console", value: systemSettings?.runtime.consoleLogLevel ?? "info" },
@@ -510,6 +515,7 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
             title="Restart Behavior"
             watermark="RST"
             icon={<RotateCcw strokeWidth={2.4} />}
+            accent="orange"
             highlights={[
               { label: "Active sprints", value: systemSettings?.runtime.restartSprintPolicy ?? "continue", tone: "active" },
               { label: "Invocations", value: systemSettings?.runtime.restartInvocationPolicy ?? "continue" },
@@ -556,6 +562,7 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
             title="Database Settings"
             watermark="DBM"
             icon={<Database strokeWidth={2.4} />}
+            accent="purple"
             highlights={[
               { label: "Pruning", value: (systemSettings?.runtime.dbPruningEnabled ?? true) ? "Enabled" : "Off", tone: (systemSettings?.runtime.dbPruningEnabled ?? true) ? "active" : "warning" },
               { label: "Retention", value: `${systemSettings?.runtime.dbRetentionDays ?? 14} days` },
@@ -611,7 +618,7 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
             />
           ) : null}
 
-          <SectionCard title="Onboarding" watermark="ONB" icon={<Sparkles strokeWidth={2.4} />}>
+          <SectionCard title="Onboarding" watermark="ONB" icon={<Sparkles strokeWidth={2.4} />} accent="fuchsia">
             <Row label="Show onboarding again" description="Launch the interactive setup flow from the beginning." last>
               <ActionButton label="Open Onboarding" tone="primary" onClick={openOnboarding} />
             </Row>

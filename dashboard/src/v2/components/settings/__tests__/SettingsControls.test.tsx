@@ -165,6 +165,19 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
     expect(btn).not.toHaveAttribute("aria-selected");
   });
 
+  it("Settings categories expose stable domain colors independently from the user accent", () => {
+    expect(Object.fromEntries(CATEGORIES.map((category) => [category.id, category.accent]))).toMatchObject({
+      general: "sky",
+      appearance: "violet",
+      models: "indigo",
+      agents: "cyan",
+      guidance: "fuchsia",
+      sprint: "orange",
+      browser: "teal",
+      danger: "red",
+    });
+  });
+
   it("SettingsCategoryRail subtracts the measured page-top margin from its desktop height", async () => {
     Object.defineProperty(window, "innerHeight", { configurable: true, value: 900 });
     vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
@@ -851,6 +864,7 @@ describe("SettingsControls Accessibility", () => {
       <SettingsDetailWorkspaceProvider>
         <SectionCard
           title="Advanced Runtime"
+          accent="violet"
           summary="Defaults are suitable for most projects."
           highlights={[{ label: "Runtime", value: "Managed", tone: "active" }]}
         >
@@ -862,6 +876,8 @@ describe("SettingsControls Accessibility", () => {
 
     expect(screen.getByText("Defaults are suitable for most projects.")).toBeInTheDocument();
     expect(screen.getByText("Managed")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Configure Advanced Runtime" }).closest("section")).toHaveAttribute("data-settings-accent", "violet");
+    expect(screen.getByRole("button", { name: "Configure Advanced Runtime" })).toHaveClass("bg-[var(--settings-inset-surface)]");
     expect(screen.queryByRole("button", { name: "Detailed runtime control" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Configure Advanced Runtime" }));
@@ -1447,8 +1463,8 @@ describe("SettingsControls Accessibility", () => {
     expect(commandStatusBarSource).toContain("rounded-[1.75rem]");
     expect(commandStatusBarSource).toContain('background: "var(--settings-command-surface)"');
     expect(commandStatusBarSource).toContain("shadow-[var(--settings-command-shadow)]");
-    expect(commandStatusBarSource).toContain("bg-signal-600 text-white");
-    expect(commandStatusBarSource).toContain("dark:bg-signal-500 dark:text-void-950");
+    expect(commandStatusBarSource).toContain("bg-[var(--accent-action)] text-[var(--accent-on-solid)]");
+    expect(commandStatusBarSource).toContain("hover:bg-[var(--accent-action-hover)]");
     expect(commandStatusBarSource).not.toContain("bg-white text-void-900");
     expect(commandStatusBarSource).not.toContain("bg-[var(--surface-glass)]");
     expect(source.match(/<SettingsContentPanels/g) ?? []).toHaveLength(1);
