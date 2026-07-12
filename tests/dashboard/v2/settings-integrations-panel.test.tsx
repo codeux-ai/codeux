@@ -631,8 +631,8 @@ describe("SettingsIntegrationsPanel", () => {
       fireEvent.click(screen.getByLabelText(`Enable ${label} importer`));
       expect(updatedSystem.integrations[id].enabled).toBe(true);
 
-      fireEvent.input(screen.getByLabelText(`${label} API token`), { target: { value: "token-value" } });
-      expect(updatedSystem.integrations[id].apiToken).toBe("token-value");
+      expect(screen.getByLabelText(`${label} API token credential`)).toBeDefined();
+      expect(screen.queryByLabelText(`${label} API token`)).toBeNull();
 
       fireEvent.input(screen.getByPlaceholderText("https://api.example.com"), { target: { value: "https://api.example.test" } });
       expect(updatedSystem.integrations[id].baseUrl).toBe("https://api.example.test");
@@ -659,7 +659,7 @@ describe("SettingsIntegrationsPanel", () => {
           sprintBranchScheme: "feature/sprint{sprint}",
           autoCreatePr: true,
         },
-        asana: createImporterSettings({ enabled: true, apiToken: "project-token", workspaceId: "workspace" }),
+        asana: createImporterSettings({ enabled: true, apiToken: "project-token", apiTokenCredentialRef: { credentialId: "credential-1", capability: "read" }, workspaceId: "workspace" }),
       };
       let updatedProject: any = null;
       const state = createImporterState({
@@ -685,8 +685,11 @@ describe("SettingsIntegrationsPanel", () => {
       });
       expect(container.textContent).toContain("Project override");
 
-      fireEvent.input(screen.getByLabelText("Asana API token"), { target: { value: "override-token" } });
-      expect(updatedProject.asana.apiToken).toBe("override-token");
+      expect(screen.getByLabelText("Asana API token credential")).toBeDefined();
+      expect(document.body.textContent).not.toContain("project-token");
+      fireEvent.click(screen.getAllByRole("button", { name: "Unbind" })[0]);
+      expect(updatedProject.asana.apiToken).toBe("");
+      expect(updatedProject.asana.apiTokenCredentialRef).toBeNull();
     });
   });
 

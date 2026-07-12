@@ -30,6 +30,7 @@ import { UnsavedChangesModal } from "../../ui/UnsavedChangesModal";
 import { ProviderInstanceCard } from "../ProviderInstanceCard";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../lib/settings";
 import { dashboardSettingsToProjectSettings } from "../../../lib/settings-view-models";
+import { sanitizeSettingsSavePayload } from "../../../lib/settings-api";
 import type { ProjectSettings, SystemSettings, TechstackCatalogEntrySettings } from "../../../../types";
 import { SettingsSmartFindSearch } from "../../../SettingsPage";
 
@@ -1527,5 +1528,67 @@ describe("SettingsControls Accessibility", () => {
     expect(confirmButton).toHaveAttribute("aria-busy", "true");
     await waitFor(() => expect(document.activeElement).toBe(fallback));
     fallback.remove();
+  });
+
+  it("ProviderInstanceCard renders a credential reference instead of legacy secret text", async () => {
+    render(
+      <ProviderInstanceCard
+        providerConfigId="codex"
+        provider={{
+          provider: "codex",
+          name: "Codex Primary",
+          apiKey: "legacy-provider-secret",
+          apiKeyCredentialRef: { credentialId: "credential-1", capability: "read" },
+          authType: "apiKey",
+          mountAuth: false,
+          authPath: "",
+        } as any}
+        providerModel="gpt-5"
+        dockerExecutionEnabled
+        onUpdate={() => {}}
+      />
+    );
+
+    expect(screen.getByLabelText("Codex Primary API key credential")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Codex Primary API key")).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("legacy-provider-secret");
+    expect(screen.getByRole("alert")).toHaveTextContent("legacy secret value was detected");
+  });
+
+  it("sanitizes legacy secrets while preserving credential references in settings save payloads", () => {
+    const payload = sanitizeSettingsSavePayload({
+      integrations: {
+        githubToken: "github-secret",
+        githubTokenCredentialRef: { credentialId: "github-credential", capability: "read" },
+        providers: {
+          codex: {
+            apiKey: "provider-secret",
+            apiKeyCredentialRef: { credentialId: "provider-credential", capability: "read" },
+          },
+        },
+      },
+      jira: {
+        apiToken: "jira-secret",
+        apiTokenCredentialRef: { credentialId: "jira-credential", capability: "read" },
+      },
+    });
+
+    expect(payload).toEqual({
+      integrations: {
+        githubToken: "",
+        githubTokenCredentialRef: { credentialId: "github-credential", capability: "read" },
+        providers: {
+          codex: {
+            apiKey: "",
+            apiKeyCredentialRef: { credentialId: "provider-credential", capability: "read" },
+          },
+        },
+      },
+      jira: {
+        apiToken: "",
+        apiTokenCredentialRef: { credentialId: "jira-credential", capability: "read" },
+      },
+    });
+    expect(JSON.stringify(payload)).not.toMatch(/github-secret|provider-secret|jira-secret/);
   });
 });

@@ -13,11 +13,12 @@ Use it when you are configuring a new project, auditing inherited settings, or d
 
 ## Controls And Runtime Effect
 
-Cards show connection state, auth hints, active/configured importer status, and management entry points; host hints can import detected local settings.
+Cards show connection state, credential-reference status, active/configured importer status, and management entry points. Git-host, Jira, and importer secrets are selected from metadata-only broker records; ordinary settings saves carry credential IDs and non-secret configuration only.
 
 | Control Surface | Runtime Effect | Review Before Saving |
 | --- | --- | --- |
 | Settings card fields | Updates the active Settings scope after you save the page. | Confirm whether you are editing System or Project scope. |
+| Credential selector | Explicitly binds or unbinds an encrypted project/global credential with `read` capability. | Select a project and verify that secure storage reports ready. |
 | Inherited values | Values can flow from system defaults into project and sprint behavior. | Check the source badge before assuming a value is project-specific. |
 | Related runtime paths | The affected service reads the saved settings during planning, dispatch, dashboard rendering, or maintenance work. | Re-run the affected workflow after changing operational settings. |
 
@@ -35,7 +36,7 @@ A practical review flow is:
 
 ## Risks And Gotchas
 
-Imported hints can reveal local auth paths; broad importer tokens can expose external workspaces to search.
+Imported hints can reveal local auth paths; broad importer tokens can expose external workspaces to search. Secret values are accepted only by the credential manager's create, rotate, and replace controls and are cleared after a successful request.
 
 Before applying changes, check:
 
