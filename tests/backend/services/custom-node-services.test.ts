@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import { createConnection } from "node:net";
 import type { CustomNodeArtifact, CustomNodeManifest, CustomNodeValidationReport } from "../../../src/contracts/custom-node-types.js";
 import { resolveNodeDefinition } from "../../../src/domain/node-flows/node-definition-registry.js";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
@@ -11,6 +12,7 @@ import { CustomNodeBuildService } from "../../../src/services/custom-nodes/custo
 import { CustomNodeProjectService } from "../../../src/services/custom-nodes/custom-node-project-service.js";
 import { buildCustomNodeDockerRunArgs, CustomNodeRuntimeService } from "../../../src/services/custom-nodes/custom-node-runtime-service.js";
 import type { CommandResult } from "../../../src/services/cli-process-runner.js";
+import { EgressPolicyService } from "../../../src/services/node-flows/egress-policy-service.js";
 
 const temporaryDirectories: string[] = [];
 const result = (stdout = "", stderr = ""): CommandResult => ({ ok: true, code: 0, stdout, stderr });
@@ -54,6 +56,9 @@ describe("custom node project and build services", () => {
     expect(resolveNodeDefinition("custom.fixture-node", 1)?.executionKind).toBe("custom");
     expect(artifact.digest).toBe(validation.artifact?.digest);
     await expect(fs.readFile(path.join(setup.root, ".code-ux", "nodes", "fixture-node", "src", "sdk.ts"), "utf8")).resolves.toContain("NodeExecutionContext");
+    const runner = await fs.readFile(path.join(setup.root, ".code-ux", "nodes", "fixture-node", "src", "runner.ts"), "utf8");
+    expect(runner).toContain("net.createConnection");
+    expect(runner).not.toContain("HTTP requires the Code UX egress broker and is unavailable");
     setup.storage.close();
   });
 
@@ -86,6 +91,20 @@ describe("custom node project and build services", () => {
     const validation = await new CustomNodeBuildService({ repository: setup.repository, commandRunner })
       .validateAndBuild({ projectRoot: setup.root, nodeId: "resource-node", creator: "test", invocationId: "invocation", correlationId: "correlation" });
     expect(validation.report.issues.some((issue) => issue.check === "resource-policy")).toBe(true);
+    expect(commandRunner).not.toHaveBeenCalled();
+    setup.storage.close();
+  });
+
+  it("rejects a modified generated runner before Docker execution", async () => {
+    const setup = await fixture("runner-tamper");
+    const runnerPath = path.join(setup.root, ".code-ux", "nodes", "runner-tamper", "src", "runner.ts");
+    await fs.appendFile(runnerPath, "\n// untrusted modification\n");
+    const commandRunner = vi.fn(async (): Promise<CommandResult> => result());
+    const validation = await new CustomNodeBuildService({ repository: setup.repository, projectService: setup.projectService, commandRunner })
+      .validateAndBuild({ projectRoot: setup.root, nodeId: "runner-tamper", creator: "test", invocationId: "invocation", correlationId: "correlation" });
+    expect(validation.report.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ check: "trusted-build-recipe", message: expect.stringMatching(/trusted generated bridge/i) }),
+    ]));
     expect(commandRunner).not.toHaveBeenCalled();
     setup.storage.close();
   });
@@ -137,7 +156,228 @@ describe("custom node Docker plan and runtime security", () => {
     await expect(runtime.execute({ projectId: setup.projectId, nodeType: "custom.gated-node", version: 1, input: {}, config: {}, credentialBindings: {}, workspaceId: "run", invocationId: "invocation", correlationId: "correlation" })).rejects.toThrow(/feature gate/i);
     setup.storage.close();
   });
+
+  it("bridges declared HTTP through the shared egress policy while retaining network-none isolation", async () => {
+    const fetchMock = vi.fn(async () => new Response("accepted", { status: 200, headers: { "content-type": "text/plain" } }));
+    const scenario = await networkRuntime("allowed-http", fetchMock);
+    const execution = await scenario.execute({ url: "https://api.example.test/jobs" });
+
+    expect(execution.output).toEqual({ status: 200, body: "accepted" });
+    expect(scenario.dockerArgs).toEqual(expect.arrayContaining(["--network", "none", "--mount"]));
+    expect(scenario.dockerArgs.join(" ")).not.toContain("--network bridge");
+    expect(fetchMock).toHaveBeenCalledOnce();
+    scenario.storage.close();
+  });
+
+  it("permits plain HTTP only when the manifest explicitly opts in", async () => {
+    const fetchMock = vi.fn(async () => new Response("accepted", { status: 200, headers: { "content-type": "text/plain" } }));
+    const scenario = await networkRuntime("allowed-plain-http", fetchMock, { allowHttp: true, allowedPorts: [80] });
+    await expect(scenario.execute({ url: "http://api.example.test/jobs" })).resolves.toMatchObject({ output: { status: 200, body: "accepted" } });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    scenario.storage.close();
+  });
+
+  it.each([
+    {
+      name: "SSRF to a loopback address",
+      request: { url: "https://127.0.0.1/data" },
+      policy: { allowedHosts: ["127.0.0.1"] },
+      error: /private|loopback|metadata/i,
+    },
+    {
+      name: "plain HTTP without opt-in",
+      request: { url: "http://api.example.test/data" },
+      policy: { allowedPorts: [80] },
+      error: /HTTPS unless HTTP is explicitly enabled/i,
+    },
+    {
+      name: "a restricted authorization header",
+      request: { url: "https://api.example.test/data", headers: { Authorization: "Bearer secret" } },
+      error: /header is restricted/i,
+    },
+  ])("fails closed for $name", async ({ request, policy, error }) => {
+    const fetchMock = vi.fn(async () => new Response("should not run", { headers: { "content-type": "text/plain" } }));
+    const scenario = await networkRuntime(`blocked-${temporaryDirectories.length}`, fetchMock, policy);
+    await expect(scenario.execute(request)).rejects.toThrow(error);
+    expect(fetchMock).not.toHaveBeenCalled();
+    scenario.storage.close();
+  });
+
+  it("revalidates redirects and rejects a redirect to a private destination", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 302, headers: { location: "https://127.0.0.1/metadata" } }));
+    const scenario = await networkRuntime("blocked-redirect", fetchMock, { allowedHosts: ["api.example.test", "127.0.0.1"] });
+    await expect(scenario.execute({ url: "https://api.example.test/start" })).rejects.toThrow(/private|loopback|metadata/i);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    scenario.storage.close();
+  });
+
+  it("rejects DNS rebinding before a bridged request reaches the network", async () => {
+    let lookups = 0;
+    const fetchMock = vi.fn(async () => new Response("should not run", { headers: { "content-type": "text/plain" } }));
+    const scenario = await networkRuntime(
+      "blocked-rebinding",
+      fetchMock,
+      {},
+      async () => [{ address: ++lookups === 1 ? "8.8.8.8" : "127.0.0.1", family: 4 }],
+    );
+    await expect(scenario.execute({ url: "https://api.example.test/data" })).rejects.toThrow(/rebinding/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+    scenario.storage.close();
+  });
+
+  it.each([
+    {
+      name: "an oversized response",
+      fetch: async () => new Response("12345", { headers: { "content-type": "text/plain", "content-length": "5" } }),
+      policy: { maxResponseBytes: 4 },
+      error: /size limit/i,
+    },
+    {
+      name: "a disallowed response content type",
+      fetch: async () => new Response("<html>", { headers: { "content-type": "text/html" } }),
+      policy: { allowedContentTypes: ["application/json"] },
+      error: /content type is not allowed/i,
+    },
+  ])("fails closed for $name", async ({ fetch, policy, error }) => {
+    const scenario = await networkRuntime(`response-${temporaryDirectories.length}`, vi.fn(fetch), policy);
+    await expect(scenario.execute({ url: "https://api.example.test/data" })).rejects.toThrow(error);
+    scenario.storage.close();
+  });
+
+  it("propagates request timeouts through the bridge", async () => {
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+    }));
+    const scenario = await networkRuntime("timeout-http", fetchMock, { timeoutMs: 5 });
+    await expect(scenario.execute({ url: "https://api.example.test/slow" })).rejects.toThrow(/timed out/i);
+    scenario.storage.close();
+  });
+
+  it("bounds retries and fails closed after the declared retry count", async () => {
+    const fetchMock = vi.fn(async () => { throw new Error("upstream unavailable"); });
+    const scenario = await networkRuntime("retry-http", fetchMock, { maxRetries: 2 });
+    await expect(scenario.execute({ url: "https://api.example.test/jobs" })).rejects.toThrow(/upstream unavailable/i);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    scenario.storage.close();
+  });
+
+  it("enforces the declared per-minute request rate", async () => {
+    const fetchMock = vi.fn(async () => new Response("ok", { headers: { "content-type": "text/plain" } }));
+    const scenario = await networkRuntime("rate-http", fetchMock, { maxRequests: 1 });
+    await scenario.execute({ url: "https://api.example.test/first" });
+    await expect(scenario.execute({ url: "https://api.example.test/second" })).rejects.toThrow(/rate limit/i);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    scenario.storage.close();
+  });
+
+  it("does not create a broker or mount for undeclared network access", async () => {
+    const setup = await fixture("undeclared-http");
+    const artifact = artifactFixture("undeclared-http", `sha256:${"f".repeat(64)}`, setup.projectId);
+    publishArtifact(setup.repository, artifact);
+    const fetchMock = vi.fn();
+    const commandRunner = vi.fn(async (_command: string, args: string[], _cwd: string, options: { stdinFile?: string }): Promise<CommandResult> => {
+      expect(args).not.toContain("--mount");
+      const envelope = JSON.parse(await fs.readFile(options.stdinFile!, "utf8")) as { egress?: unknown };
+      expect(envelope.egress).toBeUndefined();
+      throw new Error("network.http capability is not declared");
+    });
+    const runtime = new CustomNodeRuntimeService({ repository: setup.repository, credentialBroker: {} as never, egressPolicyService: new EgressPolicyService({ fetch: fetchMock }), featureEnabled: true, commandRunner });
+    await expect(runtime.execute(executionRequest(setup.projectId, "undeclared-http"))).rejects.toThrow(/not declared/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+    setup.storage.close();
+  });
+
+  it("redacts the per-invocation bridge token from outputs, logs, diagnostics, and errors", async () => {
+    const setup = await fixture("bridge-redaction");
+    const artifact = artifactFixture("bridge-redaction", `sha256:${"f".repeat(64)}`, setup.projectId);
+    artifact.manifest.capabilities = ["network.http"];
+    artifact.manifest.http = { allowedHosts: ["api.example.test"], maxRequests: 1, timeoutMs: 1_000, maxResponseBytes: 1_024 };
+    publishArtifact(setup.repository, artifact);
+    let fail = false;
+    const commandRunner = vi.fn(async (_command: string, _args: string[], _cwd: string, options: { stdinFile?: string }): Promise<CommandResult> => {
+      const envelope = JSON.parse(await fs.readFile(options.stdinFile!, "utf8")) as { egress: { token: string } };
+      if (fail) throw new Error(`runner failed with ${envelope.egress.token}`);
+      return result(JSON.stringify({ token: envelope.egress.token }), `log ${envelope.egress.token}`);
+    });
+    const runtime = new CustomNodeRuntimeService({ repository: setup.repository, credentialBroker: {} as never, egressPolicyService: new EgressPolicyService(), featureEnabled: true, commandRunner });
+    const request = executionRequest(setup.projectId, "bridge-redaction");
+    await expect(runtime.execute(request)).resolves.toMatchObject({
+      output: { token: "[REDACTED]" },
+      logs: "log [REDACTED]",
+      diagnostics: "{\"token\":\"[REDACTED]\"}",
+    });
+    fail = true;
+    await expect(runtime.execute({ ...request, invocationId: "invocation-bridge-redaction-error" })).rejects.toThrow("runner failed with [REDACTED]");
+    setup.storage.close();
+  });
 });
+
+type HttpRequestFixture = { url: string; method?: string; headers?: Record<string, string>; body?: string };
+
+async function networkRuntime(
+  nodeId: string,
+  fetchMock: typeof fetch,
+  policyOverrides: Partial<NonNullable<CustomNodeManifest["http"]>> = {},
+  lookup: (hostname: string) => Promise<Array<{ address: string; family: number }>> = async () => [{ address: "8.8.8.8", family: 4 }],
+): Promise<{
+  storage: AppDbStorage;
+  dockerArgs: string[];
+  execute(request: HttpRequestFixture): Promise<Awaited<ReturnType<CustomNodeRuntimeService["execute"]>>>;
+}> {
+  const setup = await fixture(nodeId);
+  const artifact = artifactFixture(nodeId, `sha256:${"f".repeat(64)}`, setup.projectId);
+  artifact.manifest.capabilities = ["network.http"];
+  artifact.manifest.http = {
+    allowedHosts: ["api.example.test"], maxRequests: 10, timeoutMs: 1_000, maxResponseBytes: 1_024,
+    ...policyOverrides,
+  };
+  publishArtifact(setup.repository, artifact);
+  let dockerArgs: string[] = [];
+  const commandRunner = vi.fn(async (_command: string, args: string[], _cwd: string, options: { stdinFile?: string }): Promise<CommandResult> => {
+    dockerArgs = args;
+    const envelope = JSON.parse(await fs.readFile(options.stdinFile!, "utf8")) as { input: { request: HttpRequestFixture }; egress?: { token: string } };
+    if (!envelope.egress) throw new Error("network.http capability is not declared");
+    const mount = args.find((arg) => arg.startsWith("type=bind,src=") && arg.includes(`dst=/run/codeux-egress`));
+    if (!mount) throw new Error("egress socket mount is unavailable");
+    const socketDirectory = mount.slice("type=bind,src=".length, mount.indexOf(",dst="));
+    const bridge = await bridgeRequest(path.join(socketDirectory, "egress.sock"), envelope.egress.token, envelope.input.request);
+    if (!bridge.ok || !bridge.response) throw new Error(bridge.error ?? "HTTP bridge request failed");
+    return result(JSON.stringify({ status: bridge.response.status, body: bridge.response.body }));
+  });
+  const runtime = new CustomNodeRuntimeService({
+    repository: setup.repository,
+    credentialBroker: {} as never,
+    egressPolicyService: new EgressPolicyService({ fetch: fetchMock, lookup }),
+    featureEnabled: true,
+    commandRunner,
+  });
+  return {
+    storage: setup.storage,
+    get dockerArgs() { return dockerArgs; },
+    execute: (request) => runtime.execute({ ...executionRequest(setup.projectId, nodeId), input: { request } }),
+  };
+}
+
+async function bridgeRequest(socketPath: string, token: string, request: HttpRequestFixture): Promise<{ ok: boolean; response?: { status: number; headers: Record<string, string>; body: string }; error?: string }> {
+  return new Promise((resolve, reject) => {
+    const socket = createConnection(socketPath);
+    const chunks: Buffer[] = [];
+    socket.on("connect", () => socket.end(JSON.stringify({ token, request })));
+    socket.on("data", (chunk) => chunks.push(chunk));
+    socket.on("end", () => resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")) as { ok: boolean; response?: { status: number; headers: Record<string, string>; body: string }; error?: string }));
+    socket.on("error", reject);
+  });
+}
+
+function publishArtifact(repository: CustomNodeRepository, artifact: CustomNodeArtifact): void {
+  repository.beginValidation(artifact.nodeId);
+  repository.completeValidation(artifact.nodeId, artifact.validationReport, artifact);
+  repository.publish(artifact.nodeId, "publisher");
+}
+
+function executionRequest(projectId: string, nodeId: string) {
+  return { projectId, nodeType: `custom.${nodeId}`, version: 1, input: {}, config: {}, credentialBindings: {}, workspaceId: "run", invocationId: `invocation-${nodeId}`, correlationId: "correlation" };
+}
 
 function artifactFixture(nodeId: string, runtimeImageDigest: string, projectId = "project"): CustomNodeArtifact {
   const generatedManifest: CustomNodeManifest = {
