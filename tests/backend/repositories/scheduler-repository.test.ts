@@ -390,6 +390,7 @@ describe("SchedulerRepository", () => {
       flowId: "flow-1",
       input: { prompt: "Ship it", count: 2, nested: { ok: true } },
       flowVersion: 3,
+      versionSelection: { mode: "pinned", version: 3 },
     });
     expect(schedulerRepository.getEntry(entry.id)?.nodeFlowTarget).toEqual(entry.nodeFlowTarget);
 
@@ -411,6 +412,7 @@ describe("SchedulerRepository", () => {
     expect(updated.nodeFlowTarget).toEqual({
       flowId: "flow-2",
       input: { next: true },
+      versionSelection: { mode: "latest_published" },
     });
   });
 

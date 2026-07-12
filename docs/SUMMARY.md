@@ -39,6 +39,7 @@
 - [Agent Knowledge Base](./architecture/agent-knowledge-base.md)
 - [Node Flow Foundation](./architecture/node-flow-foundation.md)
 - [Node Flows](./architecture/node-flows.md)
+- [Node Flow Durable Execution](./architecture/node-flow-durable-execution.md)
 - [Custom Dashboard Foundation](./architecture/custom-dashboard-foundation.md)
 - [Memory Claims and Evidence](./architecture/memory-claims.md)
 - [Speech Input Architecture](./architecture/speech-input.md)

@@ -22,10 +22,12 @@ Each scheduler entry has a **target** — the thing that runs when it fires:
 | **Message** | Posts a project message (for example, a recurring planning or status prompt). |
 | **Memory remediation** | Runs the long-term memory cleanup workflow on a schedule. |
 
-Node-flow entries store `nodeFlowTarget = { flowId, input?, flowVersion? }` inside the existing
+Node-flow entries store `nodeFlowTarget = { flowId, input?, versionSelection }` inside the existing
 target JSON payload, validate that the flow belongs to the selected project, and run through the
 node-flow runtime with scheduler trigger metadata when due. Blank dashboard input is omitted, and
 supplied input must be a JSON object.
+
+Choose a pinned published version when every occurrence must execute the same immutable snapshot, or latest published when each occurrence should pick up the newest publication. A legacy `flowVersion` is treated as a pinned version and affects execution, not just audit metadata.
 
 The backend scheduler contract also supports agent-created wakeups.
 Agent wakeups are stored in the target JSON payload with `origin` and `source` set to

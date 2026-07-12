@@ -31,6 +31,7 @@ import { SpeechSynthesisService } from "../../services/speech-synthesis-service.
 import { SpeechModelManager } from "../../services/speech-model-manager.js";
 import { NodeFlowRuntimeService } from "../../services/node-flow-runtime-service.js";
 import { NodeFlowService } from "../../services/node-flow-service.js";
+import { NodeFlowRecoveryService } from "../../services/node-flows/node-flow-recovery-service.js";
 import { resolveEffectiveDashboardSettings } from "../../services/settings-resolution-service.js";
 
 export interface DashboardDependencies {
@@ -230,6 +231,9 @@ export function createDashboardDependencies(
     credentialBroker: coreDeps.credentialBroker,
     getDashboardSettings: (projectId) => resolveDashboardSettings({ projectId }),
   });
+  if (coreDeps.nodeFlowRepository) {
+    new NodeFlowRecoveryService(coreDeps.nodeFlowRepository).recover();
+  }
   const nodeFlowService = new NodeFlowService(coreDeps.nodeFlowRepository, nodeFlowRuntimeService);
 
   const activityCacheService = new ActivityCacheService(

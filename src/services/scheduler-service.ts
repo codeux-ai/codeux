@@ -38,7 +38,7 @@ export interface SchedulerServiceDeps {
   taskRerunService?: TaskRerunService;
   memoryRemediationService?: MemoryRemediationService;
   nodeFlowRuntimeService?: NodeFlowRuntimeService;
-  nodeFlowRepository?: Pick<NodeFlowRepository, "getFlow">;
+  nodeFlowRepository?: Pick<NodeFlowRepository, "getFlow" | "getPublication">;
   logger: Logger;
   tickIntervalMs?: number;
 }
@@ -403,6 +403,9 @@ export class SchedulerService {
       target.input ?? {},
       {
         triggerType: "scheduler",
+        versionSelection: target.versionSelection ?? (target.flowVersion !== undefined
+          ? { mode: "pinned", version: target.flowVersion }
+          : { mode: "latest_published" }),
         triggerPayload: {
           schedulerEntryId: entry.id,
           scheduledFor: occurrenceIso,
@@ -440,6 +443,12 @@ export class SchedulerService {
         throw new Error("nodeFlowTarget.flowId is required.");
       }
       this.validateNodeFlowTargetOwnership(projectId, flowId);
+      const selection = input.nodeFlowTarget?.versionSelection
+        ?? (input.nodeFlowTarget?.flowVersion !== undefined ? { mode: "pinned" as const, version: input.nodeFlowTarget.flowVersion } : { mode: "latest_published" as const });
+      if (selection.mode === "pinned" && typeof this.deps.nodeFlowRepository?.getPublication === "function"
+        && !this.deps.nodeFlowRepository.getPublication(flowId, selection.version)) {
+          throw new Error("Scheduled node flow version must reference a published version.");
+      }
       return;
     }
 

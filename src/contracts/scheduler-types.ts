@@ -1,6 +1,7 @@
 import type { QuicksprintExecutionInput } from "./quicksprint-types.js";
 import type { ProviderId } from "./app-types.js";
 import type { NodeFlowJsonObject } from "./node-flow-types.js";
+import type { NodeFlowVersionSelection } from "./node-flow-execution-policy-types.js";
 
 export type ScheduleTargetType = "sprint" | "quicksprint" | "chat" | "memory_remediation" | "agent_wakeup" | "task" | "node_flow";
 export type ScheduleStatus = "scheduled" | "paused" | "completed" | "failed" | "cancelled";
@@ -79,6 +80,7 @@ export interface ScheduleNodeFlowTarget {
   flowId: string;
   input?: NodeFlowJsonObject;
   flowVersion?: number;
+  versionSelection?: NodeFlowVersionSelection;
 }
 
 export interface SchedulerEntryRecord {

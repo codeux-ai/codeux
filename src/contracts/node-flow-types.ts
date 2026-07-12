@@ -160,6 +160,17 @@ export interface NodeFlowVersionRecord {
   createdAt: string;
 }
 
+export interface NodeFlowPublicationRecord {
+  id: string;
+  flowId: string;
+  projectId: string;
+  version: number;
+  graph: NodeFlowGraph;
+  policy: import("./node-flow-execution-policy-types.js").NodeFlowExecutionPolicySnapshot;
+  publishedBy: string;
+  createdAt: string;
+}
+
 export interface CreateNodeFlowInput {
   id?: string;
   title: string;
@@ -202,15 +213,25 @@ export interface AttachNodeFlowSkillInput {
   description?: string;
 }
 
-export type NodeFlowRunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
-export type NodeFlowNodeRunStatus = "pending" | "running" | "succeeded" | "failed" | "skipped" | "cancelled";
+export type NodeFlowRunStatus =
+  | "queued" | "running" | "approval_waiting" | "retry_waiting"
+  | "attention_required" | "succeeded" | "failed" | "cancelled";
+export type NodeFlowNodeRunStatus =
+  | "pending" | "running" | "retry_waiting" | "attention_required"
+  | "succeeded" | "failed" | "skipped" | "cancelled";
 
 export interface NodeFlowRunRecord {
   id: string;
   flowId: string;
   projectId: string;
   version: number;
+  publicationId: string | null;
   status: NodeFlowRunStatus;
+  policy: import("./node-flow-execution-policy-types.js").NodeFlowExecutionPolicySnapshot;
+  leaseOwner: string | null;
+  leaseExpiresAt: string | null;
+  heartbeatAt: string | null;
+  cancelRequestedAt: string | null;
   executionInvocationId: string | null;
   triggerType: string;
   triggerPayload: NodeFlowJsonObject | null;
@@ -240,6 +261,27 @@ export interface NodeFlowNodeRunRecord {
   updatedAt: string;
 }
 
+export interface NodeFlowNodeAttemptRecord {
+  id: string;
+  runId: string;
+  nodeRunId: string;
+  nodeId: string;
+  attemptNumber: number;
+  status: NodeFlowNodeRunStatus;
+  executorId: string;
+  invocationId: string | null;
+  artifactDigest: string | null;
+  input: NodeFlowJsonObject | null;
+  output: NodeFlowJsonObject | null;
+  credentialIds: string[];
+  failureClassification: import("./node-flow-execution-policy-types.js").NodeFlowFailureClassification | null;
+  retryDecision: "retry" | "stop" | "attention_required" | null;
+  errorMessage: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  createdAt: string;
+}
+
 export interface NodeFlowListResponse {
   flows: NodeFlowRecord[];
 }
@@ -256,6 +298,8 @@ export interface CreateNodeFlowRunInput {
   flowId: string;
   projectId: string;
   version: number;
+  publicationId?: string | null;
+  policy?: import("./node-flow-execution-policy-types.js").NodeFlowExecutionPolicySnapshot;
   status?: NodeFlowRunStatus;
   executionInvocationId?: string | null;
   triggerType?: string;
@@ -274,6 +318,10 @@ export interface UpdateNodeFlowRunInput {
   errorMessage?: string | null;
   startedAt?: string | null;
   finishedAt?: string | null;
+  leaseOwner?: string | null;
+  leaseExpiresAt?: string | null;
+  heartbeatAt?: string | null;
+  cancelRequestedAt?: string | null;
 }
 
 export interface CreateNodeFlowNodeRunInput {
@@ -304,10 +352,13 @@ export interface RunNodeFlowOptions {
   triggerType?: string;
   triggerPayload?: NodeFlowJsonObject;
   signal?: AbortSignal;
+  versionSelection?: import("./node-flow-execution-policy-types.js").NodeFlowVersionSelection;
+  executorId?: string;
 }
 
 export interface NodeFlowRunSummaryResponse {
   run: NodeFlowRunRecord;
   nodeRuns: NodeFlowNodeRunRecord[];
+  attempts?: NodeFlowNodeAttemptRecord[];
   output: NodeFlowJsonObject | null;
 }

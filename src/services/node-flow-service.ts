@@ -107,6 +107,10 @@ export class NodeFlowService {
     return { nodeRuns: this.repository.listNodeRuns(runId) };
   }
 
+  listNodeAttempts(runId: string) {
+    return { attempts: this.repository.listNodeAttempts(runId) };
+  }
+
   async runFlow(
     projectId: string,
     flowId: string,

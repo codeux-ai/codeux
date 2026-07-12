@@ -112,6 +112,7 @@ describe("manage_node_flows", () => {
 
     expect(nodeFlowService.runFlow).toHaveBeenCalledWith("project-1", "flow-1", { prompt: "Ship" }, {
       triggerType: "mcp_management",
+      versionSelection: { mode: "latest_published" },
     });
     expect(parsed.result.run.id).toBe("run-1");
     expect(parsed.result.output).toEqual({ ok: true });
