@@ -4,6 +4,7 @@ import {
   createInitialNodeCanvasGraph,
   deserializeNodeCanvasGraph,
   layoutNodeCanvasGraph,
+  migrateNodeCanvasGraph,
   nodesCanvasReducer,
   serializeNodeCanvasGraph,
   validateNodeCanvasGraph,
@@ -194,6 +195,20 @@ describe("nodes canvas state", () => {
     expect(recovered.nodes[0]?.config.find((field) => field.id === "agentPresetId")?.value).toBeNull();
     expect(recovered.edges).toHaveLength(1);
     expect(recovered.selection).toEqual({ nodeIds: ["agent-9"], edgeIds: ["edge-1"] });
+  });
+
+  it("migrates legacy canvas snapshots deterministically without embedding the original", () => {
+    const current = createInitialNodeCanvasGraph();
+    const { schemaVersion: _schemaVersion, ...legacy } = current;
+    const first = migrateNodeCanvasGraph(legacy);
+    const second = migrateNodeCanvasGraph(legacy);
+
+    expect(first).toEqual(second);
+    expect(first.migrated).toBe(true);
+    expect(first.graph.schemaVersion).toBe(2);
+    expect(first.legacySnapshot).toEqual(legacy);
+    expect(JSON.stringify(first.graph)).not.toContain("legacySnapshot");
+    expect(migrateNodeCanvasGraph(first.graph)).toMatchObject({ migrated: false, legacySnapshot: null });
   });
 
   it("lays out graphs deterministically from ids and edges", () => {

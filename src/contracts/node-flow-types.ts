@@ -15,6 +15,66 @@ export type NodeFlowJsonValue =
   | { [key: string]: NodeFlowJsonValue };
 export type NodeFlowJsonObject = { [key: string]: NodeFlowJsonValue };
 
+export const NODE_FLOW_SCHEMA_VERSION = 2 as const;
+export type NodeFlowSchemaVersion = typeof NODE_FLOW_SCHEMA_VERSION;
+
+export type NodeFlowPortDirection = "input" | "output";
+export type NodeFlowPortCardinality = "one" | "many";
+export type NodeFlowSideEffect = "none" | "read" | "write" | "external";
+
+export interface NodeFlowValueSchema {
+  type: "any" | "object" | "array" | "string" | "number" | "boolean" | "null";
+  description?: string;
+  required?: string[];
+  properties?: Record<string, NodeFlowValueSchema>;
+  items?: NodeFlowValueSchema;
+}
+
+export interface NodeFlowDefinitionReference {
+  type: string;
+  version: number;
+}
+
+export interface NodeFlowPort {
+  id: string;
+  direction: NodeFlowPortDirection;
+  schema: NodeFlowValueSchema;
+  required?: boolean;
+  cardinality?: NodeFlowPortCardinality;
+}
+
+export interface NodeFlowCredentialBinding {
+  slot: string;
+  credentialId: string;
+}
+
+export interface NodeFlowRetryPolicy {
+  maxAttempts: number;
+  backoffMs: number;
+  maxBackoffMs?: number;
+}
+
+export interface NodeFlowTimeoutPolicy {
+  timeoutMs: number;
+}
+
+export interface NodeFlowExecutionPolicy {
+  retry?: NodeFlowRetryPolicy;
+  timeout?: NodeFlowTimeoutPolicy;
+}
+
+export interface NodeFlowPublicationMetadata {
+  publicationId: string;
+  publishedAt: string;
+  publishedBy: string;
+  sourceVersion: number;
+}
+
+export interface NodeFlowSchemas {
+  input?: NodeFlowValueSchema;
+  output?: NodeFlowValueSchema;
+}
+
 export interface NodeWidgetSelectOption {
   label: string;
   value: string | number | boolean;
@@ -51,6 +111,13 @@ export interface NodeFlowNode {
   widgetSchema?: NodeWidgetSchema;
   position?: NodeFlowNodePosition;
   data?: NodeFlowJsonObject;
+  definition?: NodeFlowDefinitionReference;
+  ports?: NodeFlowPort[];
+  credentialBindings?: NodeFlowCredentialBinding[];
+  policy?: NodeFlowExecutionPolicy;
+  capabilities?: string[];
+  sideEffect?: NodeFlowSideEffect;
+  disabled?: boolean;
 }
 
 export interface NodeFlowEdge {
@@ -62,10 +129,13 @@ export interface NodeFlowEdge {
 }
 
 export interface NodeFlowGraph {
+  schemaVersion?: NodeFlowSchemaVersion;
   nodes: NodeFlowNode[];
   edges: NodeFlowEdge[];
   inputSchema?: NodeWidgetSchema;
+  schemas?: NodeFlowSchemas;
   metadata?: NodeFlowJsonObject;
+  publication?: Readonly<NodeFlowPublicationMetadata>;
 }
 
 export interface NodeFlowRecord {

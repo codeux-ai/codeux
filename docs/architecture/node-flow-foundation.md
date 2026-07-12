@@ -77,3 +77,11 @@ Dashboard routes are registered through `registerNodeFlowRoutes`:
 - `GET /api/node-flow-runs/:runId/node-runs`
 
 Handlers stay thin and delegate behavior to `NodeFlowService`.
+
+## Canonical Graph v2
+
+Normalized graphs carry `schemaVersion: 2`. Nodes reference a stable definition type and version and carry typed ports, credential-id bindings, bounded retry/timeout policies, capabilities, side-effect classification, and disabled state. Graphs may declare typed input/output schemas and immutable publication metadata.
+
+The typed registry includes configuration and UI schemas, ports, credential slots, capabilities, side effects, default policies, documentation, deprecation, and execution kind. Only `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, and `output` are executable. Other palette ideas are planned concepts without runtime handlers.
+
+Validation resolves definitions and checks configuration, handles, policies, graph limits, and cycles with field-level issues. Graph JSON rejects secret-shaped fields and generated/custom source fields. Persisted Graph v1 rows keep their original immutable snapshot and append deterministic Graph v2 as a new current version.

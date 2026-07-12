@@ -91,3 +91,7 @@ Nodes must stay usable on desktop and mobile:
 - validation and run errors must be text, not color-only
 - focus order should follow library -> canvas -> inspector -> run/attachment panels
 - JSON editors and textareas should preserve visible labels and error messages on small screens
+
+## Graph v2 boundary
+
+The dashboard edits the shared Graph v2 contract rather than owning a second execution model. A graph is executable only when every node resolves to `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, or `output`. Planning palette concepts are not runtime handlers.

@@ -15,8 +15,8 @@ const validGraph = (): NodeFlowGraph => ({
     ],
   },
   nodes: [
-    { id: "start", type: "prompt", title: "Start" },
-    { id: "finish", type: "agent", title: "Finish" },
+    { id: "start", type: "input", title: "Start" },
+    { id: "finish", type: "output", title: "Finish" },
   ],
   edges: [
     { fromNodeId: "start", toNodeId: "finish" },
@@ -43,7 +43,7 @@ describe("node flow validation", () => {
 
   it("rejects duplicate node ids and invalid edge endpoints", () => {
     const graph = validGraph();
-    graph.nodes.push({ id: "start", type: "agent", title: "Duplicate" });
+    graph.nodes.push({ id: "start", type: "output", title: "Duplicate" });
     graph.edges.push({ fromNodeId: "missing", toNodeId: "finish" });
 
     const result = validateNodeFlowGraph(graph);
@@ -80,5 +80,36 @@ describe("node flow validation", () => {
       "invalid_default_type",
       "invalid_select_default",
     ]));
+  });
+
+  it("rejects unknown definitions, invalid policies, and unsafe graph values with field paths", () => {
+    const graph = validGraph();
+    graph.nodes[0] = {
+      ...graph.nodes[0]!,
+      definition: { type: "planned_only", version: 1 },
+      policy: { retry: { maxAttempts: 0, backoffMs: -1 }, timeout: { timeoutMs: 0 } },
+      data: { generatedSource: "not allowed" },
+    };
+
+    const result = validateNodeFlowGraph(graph);
+
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: "nodes[0].definition", code: "unknown_node_definition" }),
+      expect.objectContaining({ field: "nodes[0].policy.retry.maxAttempts", code: "invalid_retry_policy" }),
+      expect.objectContaining({ field: "nodes[0].policy.timeout.timeoutMs", code: "invalid_timeout_policy" }),
+      expect.objectContaining({ field: "nodes[0].data", code: "unsafe_graph_data" }),
+    ]));
+  });
+
+  it("orders independent nodes deterministically by stable id", () => {
+    const graph: NodeFlowGraph = {
+      nodes: [
+        { id: "z", type: "input", title: "Z" },
+        { id: "a", type: "input", title: "A" },
+      ],
+      edges: [],
+    };
+
+    expect(validateNodeFlowGraph(graph).executionOrder).toEqual(["a", "z"]);
   });
 });

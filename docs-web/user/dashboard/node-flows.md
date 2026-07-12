@@ -39,3 +39,7 @@ A flow can be attached to a project agent preset as a repeatable skill with a na
 ## Scheduling
 
 Use the [Scheduler](./scheduler.md) page to run a saved node flow once or on a recurrence. Scheduled node-flow entries select a project-owned flow and may include optional JSON object input. Pause, resume, failure handling, and due-run behavior match the normal scheduler model.
+
+## Graph v2 boundary
+
+The dashboard edits the shared Graph v2 contract. The executable registry is limited to `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, and `output`; planned palette concepts are not runtime handlers.

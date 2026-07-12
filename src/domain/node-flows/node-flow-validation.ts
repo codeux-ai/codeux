@@ -2,14 +2,23 @@ import { ValidationError } from "../../repositories/repository-utils.js";
 import type {
   NodeFlowEdge,
   NodeFlowGraph,
+  NodeFlowJsonObject,
   NodeFlowJsonValue,
   NodeFlowNode,
   NodeFlowValidationIssue,
   NodeFlowValidationResponse,
+  NodeFlowValueSchema,
   NodeWidgetField,
   NodeWidgetFieldType,
   NodeWidgetSchema,
 } from "../../contracts/node-flow-types.js";
+import { NODE_FLOW_SCHEMA_VERSION } from "../../contracts/node-flow-types.js";
+import { migrateNodeFlowGraph } from "./node-flow-migrators.js";
+import { resolveNodeDefinition } from "./node-definition-registry.js";
+
+const MAX_GRAPH_NODES = 250;
+const MAX_GRAPH_EDGES = 1_000;
+const FORBIDDEN_GRAPH_KEY = /^(?:sourceCode|generatedSource|code|script|apiKey|authorization|cookie|password|secret|token)$/i;
 
 const WIDGET_FIELD_TYPES = new Set<NodeWidgetFieldType>([
   "text",
@@ -243,6 +252,78 @@ function normalizeWidgetSchema(
   return { fields: normalizedFields };
 }
 
+function containsForbiddenGraphValue(value: NodeFlowJsonValue): boolean {
+  if (Array.isArray(value)) return value.some(containsForbiddenGraphValue);
+  if (!value || typeof value !== "object") return false;
+  return Object.entries(value).some(([key, entry]) => FORBIDDEN_GRAPH_KEY.test(key) || containsForbiddenGraphValue(entry));
+}
+
+function validatePolicy(
+  policy: NodeFlowNode["policy"],
+  path: string,
+  issues: NodeFlowValidationIssue[],
+): void {
+  if (!policy) return;
+  const retry = policy.retry;
+  if (retry && (!Number.isInteger(retry.maxAttempts) || retry.maxAttempts < 1 || retry.maxAttempts > 10)) {
+    issues.push(issue(`${path}.retry.maxAttempts`, "invalid_retry_policy", "Retry maxAttempts must be an integer from 1 to 10."));
+  }
+  if (retry && (!Number.isFinite(retry.backoffMs) || retry.backoffMs < 0 || retry.backoffMs > 300_000)) {
+    issues.push(issue(`${path}.retry.backoffMs`, "invalid_retry_policy", "Retry backoffMs must be between 0 and 300000."));
+  }
+  if (retry?.maxBackoffMs !== undefined && (!Number.isFinite(retry.maxBackoffMs) || retry.maxBackoffMs < retry.backoffMs)) {
+    issues.push(issue(`${path}.retry.maxBackoffMs`, "invalid_retry_policy", "Retry maxBackoffMs must be at least backoffMs."));
+  }
+  if (policy.timeout && (!Number.isInteger(policy.timeout.timeoutMs) || policy.timeout.timeoutMs < 1 || policy.timeout.timeoutMs > 300_000)) {
+    issues.push(issue(`${path}.timeout.timeoutMs`, "invalid_timeout_policy", "Timeout must be an integer from 1 to 300000 milliseconds."));
+  }
+}
+
+function validateCredentialBindings(
+  node: NodeFlowNode,
+  nodePath: string,
+  allowedSlots: string[],
+  issues: NodeFlowValidationIssue[],
+): void {
+  const slots = new Set<string>();
+  (node.credentialBindings ?? []).forEach((binding, index) => {
+    const path = `${nodePath}.credentialBindings[${index}]`;
+    if (!trimmedString(binding.slot)) issues.push(issue(`${path}.slot`, "required", "Credential slot is required."));
+    if (!trimmedString(binding.credentialId)) issues.push(issue(`${path}.credentialId`, "required", "Credential binding must reference a credential id."));
+    if (slots.has(binding.slot)) issues.push(issue(`${path}.slot`, "duplicate_credential_slot", `Duplicate credential slot: ${binding.slot}`));
+    if (!allowedSlots.includes(binding.slot)) issues.push(issue(`${path}.slot`, "unknown_credential_slot", `Definition does not declare credential slot: ${binding.slot}`));
+    slots.add(binding.slot);
+  });
+}
+
+function validateConfiguration(
+  data: NodeFlowJsonObject,
+  schema: NodeFlowValueSchema,
+  nodePath: string,
+  issues: NodeFlowValidationIssue[],
+): void {
+  const values = isPlainJsonObject(data.values) ? data.values : {};
+  for (const key of schema.required ?? []) {
+    const aliases = key === "template" || key === "prompt" ? ["template", "prompt"] : [key];
+    const present = aliases.some((alias) => data[alias] !== undefined || values[alias] !== undefined);
+    if (!present) issues.push(issue(`${nodePath}.data.${key}`, "required_configuration", `Node configuration requires ${key}.`));
+  }
+  for (const [key, propertySchema] of Object.entries(schema.properties ?? {})) {
+    const value = data[key] ?? values[key];
+    if (value !== undefined && !matchesValueSchema(value, propertySchema.type)) {
+      issues.push(issue(`${nodePath}.data.${key}`, "invalid_configuration_type", `Node configuration ${key} must be ${propertySchema.type}.`));
+    }
+  }
+}
+
+function matchesValueSchema(value: NodeFlowJsonValue, type: NodeFlowValueSchema["type"]): boolean {
+  if (type === "any") return true;
+  if (type === "null") return value === null;
+  if (type === "array") return Array.isArray(value);
+  if (type === "object") return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  return typeof value === type;
+}
+
 function normalizeNode(rawNode: NodeFlowNode, index: number, issues: NodeFlowValidationIssue[]): NodeFlowNode | null {
   const nodePath = `nodes[${index}]`;
   if (!rawNode || typeof rawNode !== "object" || Array.isArray(rawNode)) {
@@ -280,6 +361,36 @@ function normalizeNode(rawNode: NodeFlowNode, index: number, issues: NodeFlowVal
     issues.push(issue(`${nodePath}.data`, "invalid_data", `Node ${id} data must be a JSON object.`));
   }
 
+  const definitionRef = rawNode.definition ?? { type, version: 1 };
+  const definition = resolveNodeDefinition(definitionRef.type, definitionRef.version);
+  if (definitionRef.type !== type) {
+    issues.push(issue(`${nodePath}.definition.type`, "definition_type_mismatch", "Node type must match its definition reference."));
+  }
+  if (!definition) {
+    issues.push(issue(`${nodePath}.definition`, "unknown_node_definition", `Unknown node definition: ${definitionRef.type}@${definitionRef.version}`));
+  }
+  if (definition && rawNode.sideEffect !== undefined && rawNode.sideEffect !== definition.sideEffect) {
+    issues.push(issue(`${nodePath}.sideEffect`, "definition_metadata_mismatch", "Node side effect must match its definition."));
+  }
+  if (definition && rawNode.capabilities !== undefined && [...rawNode.capabilities].sort().join("\0") !== [...definition.capabilities].sort().join("\0")) {
+    issues.push(issue(`${nodePath}.capabilities`, "definition_metadata_mismatch", "Node capabilities must match its definition."));
+  }
+  const ports = rawNode.ports ?? definition?.ports ?? [];
+  const portIds = new Set<string>();
+  ports.forEach((port, portIndex) => {
+    const portPath = `${nodePath}.ports[${portIndex}]`;
+    if (!trimmedString(port.id)) issues.push(issue(`${portPath}.id`, "required", "Port id is required."));
+    if (portIds.has(port.id)) issues.push(issue(`${portPath}.id`, "duplicate_port_id", `Duplicate port id: ${port.id}`));
+    portIds.add(port.id);
+    if (port.direction !== "input" && port.direction !== "output") issues.push(issue(`${portPath}.direction`, "invalid_port_direction", "Port direction must be input or output."));
+  });
+  validatePolicy(rawNode.policy, `${nodePath}.policy`, issues);
+  validateCredentialBindings(rawNode, nodePath, definition?.credentials.map((credential) => credential.slot) ?? [], issues);
+  if (rawNode.data && containsForbiddenGraphValue(rawNode.data)) {
+    issues.push(issue(`${nodePath}.data`, "unsafe_graph_data", "Graph data cannot contain raw secrets or custom source code."));
+  }
+  if (definition) validateConfiguration(isPlainJsonObject(rawNode.data) ? rawNode.data : {}, definition.configurationSchema, nodePath, issues);
+
   return {
     id,
     type,
@@ -288,6 +399,13 @@ function normalizeNode(rawNode: NodeFlowNode, index: number, issues: NodeFlowVal
     ...(widgetSchema ? { widgetSchema } : {}),
     ...(position ? { position } : {}),
     ...(rawNode.data !== undefined && isPlainJsonObject(rawNode.data) ? { data: rawNode.data } : {}),
+    definition: definitionRef,
+    ports,
+    credentialBindings: rawNode.credentialBindings ?? [],
+    policy: rawNode.policy ?? definition?.defaultPolicy ?? {},
+    capabilities: definition?.capabilities ?? rawNode.capabilities ?? [],
+    sideEffect: definition?.sideEffect ?? rawNode.sideEffect ?? "none",
+    disabled: rawNode.disabled ?? false,
   };
 }
 
@@ -329,16 +447,17 @@ function computeExecutionOrder(
     inDegree.set(edge.toNodeId, (inDegree.get(edge.toNodeId) ?? 0) + 1);
   }
 
-  const ready = nodes.filter((node) => inDegree.get(node.id) === 0).map((node) => node.id);
+  const ready = nodes.filter((node) => inDegree.get(node.id) === 0).map((node) => node.id).sort();
   const order: string[] = [];
   while (ready.length > 0) {
     const nodeId = ready.shift()!;
     order.push(nodeId);
-    for (const nextId of outgoing.get(nodeId) ?? []) {
+    for (const nextId of [...(outgoing.get(nodeId) ?? [])].sort()) {
       const nextInDegree = (inDegree.get(nextId) ?? 0) - 1;
       inDegree.set(nextId, nextInDegree);
       if (nextInDegree === 0) {
         ready.push(nextId);
+        ready.sort();
       }
     }
   }
@@ -363,12 +482,19 @@ export function validateNodeFlowGraph(graph: unknown): NodeFlowValidationRespons
     };
   }
 
-  const rawGraph = graph as NodeFlowGraph;
+  const migration = migrateNodeFlowGraph(graph);
+  const rawGraph = migration.graph;
   if (!Array.isArray(rawGraph.nodes)) {
     issues.push(issue("nodes", "required", "Node flow graph requires a nodes array."));
   }
   if (!Array.isArray(rawGraph.edges)) {
     issues.push(issue("edges", "required", "Node flow graph requires an edges array."));
+  }
+  if (Array.isArray(rawGraph.nodes) && rawGraph.nodes.length > MAX_GRAPH_NODES) {
+    issues.push(issue("nodes", "graph_limit_exceeded", `Node flow graph supports at most ${MAX_GRAPH_NODES} nodes.`));
+  }
+  if (Array.isArray(rawGraph.edges) && rawGraph.edges.length > MAX_GRAPH_EDGES) {
+    issues.push(issue("edges", "graph_limit_exceeded", `Node flow graph supports at most ${MAX_GRAPH_EDGES} edges.`));
   }
 
   const nodes = Array.isArray(rawGraph.nodes)
@@ -397,18 +523,33 @@ export function validateNodeFlowGraph(graph: unknown): NodeFlowValidationRespons
     if (!nodeIds.has(edge.toNodeId)) {
       issues.push(issue(`edges[${index}].toNodeId`, "invalid_edge_endpoint", `Edge target node does not exist: ${edge.toNodeId}`));
     }
+    const source = nodes.find((node) => node.id === edge.fromNodeId);
+    const target = nodes.find((node) => node.id === edge.toNodeId);
+    if (source && edge.fromHandle && !source.ports?.some((port) => port.id === edge.fromHandle && port.direction === "output")) {
+      issues.push(issue(`edges[${index}].fromHandle`, "invalid_source_port", `Source port does not exist or is not an output: ${edge.fromHandle}`));
+    }
+    if (target && edge.toHandle && !target.ports?.some((port) => port.id === edge.toHandle && port.direction === "input")) {
+      issues.push(issue(`edges[${index}].toHandle`, "invalid_target_port", `Target port does not exist or is not an input: ${edge.toHandle}`));
+    }
   });
 
   const inputSchema = normalizeWidgetSchema(rawGraph.inputSchema, "inputSchema", issues);
   if (rawGraph.metadata !== undefined && !isPlainJsonObject(rawGraph.metadata)) {
     issues.push(issue("metadata", "invalid_metadata", "Node flow graph metadata must be a JSON object."));
   }
+  if (rawGraph.metadata && containsForbiddenGraphValue(rawGraph.metadata)) {
+    issues.push(issue("metadata", "unsafe_graph_metadata", "Graph metadata cannot contain raw secrets or custom source code."));
+  }
+  validatePublication(rawGraph.publication, issues);
 
   const normalizedGraph: NodeFlowGraph = {
+    schemaVersion: NODE_FLOW_SCHEMA_VERSION,
     nodes,
     edges,
     ...(inputSchema ? { inputSchema } : {}),
+    ...(rawGraph.schemas ? { schemas: rawGraph.schemas } : {}),
     ...(rawGraph.metadata !== undefined && isPlainJsonObject(rawGraph.metadata) ? { metadata: rawGraph.metadata } : {}),
+    ...(rawGraph.publication ? { publication: rawGraph.publication } : {}),
   };
   const executionOrder = computeExecutionOrder(nodes, edges, issues);
   const valid = issues.length === 0;
@@ -417,6 +558,21 @@ export function validateNodeFlowGraph(graph: unknown): NodeFlowValidationRespons
     errors: issues,
     ...(valid ? { graph: normalizedGraph, executionOrder } : {}),
   };
+}
+
+function validatePublication(
+  publication: NodeFlowGraph["publication"],
+  issues: NodeFlowValidationIssue[],
+): void {
+  if (!publication) return;
+  if (!trimmedString(publication.publicationId)) issues.push(issue("publication.publicationId", "required", "Publication id is required."));
+  if (!trimmedString(publication.publishedBy)) issues.push(issue("publication.publishedBy", "required", "Publication author is required."));
+  if (!trimmedString(publication.publishedAt) || !Number.isFinite(Date.parse(publication.publishedAt))) {
+    issues.push(issue("publication.publishedAt", "invalid_publication", "Publication timestamp must be ISO-compatible."));
+  }
+  if (!Number.isInteger(publication.sourceVersion) || publication.sourceVersion < 1) {
+    issues.push(issue("publication.sourceVersion", "invalid_publication", "Publication sourceVersion must be a positive integer."));
+  }
 }
 
 export function normalizeNodeFlowGraph(graph: unknown): NormalizedNodeFlowValidation {

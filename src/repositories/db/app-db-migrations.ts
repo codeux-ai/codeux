@@ -1,4 +1,5 @@
 import { DatabaseAdapter } from "./database-adapter.js";
+import { migrateNodeFlowGraph } from "../../domain/node-flows/node-flow-migrators.js";
 
 export function ensureColumn(db: DatabaseAdapter, tableName: string, columnName: string, columnDefinition: string): void {
   // Using direct sqlite PRAGMA for now, until we abstract schema reflections
@@ -265,6 +266,50 @@ export function ensureNodeFlowTables(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_node_flow_runs_flow_created", "node_flow_runs", "flow_id, created_at DESC");
   ensureIndex(db, "idx_node_flow_runs_project_created", "node_flow_runs", "project_id, created_at DESC");
   ensureIndex(db, "idx_node_flow_node_runs_run_created", "node_flow_node_runs", "run_id, created_at ASC");
+}
+
+interface LegacyNodeFlowRow {
+  id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  graph_json: string;
+  version: number | string;
+  updated_at: string;
+}
+
+export function migratePersistedNodeFlowGraphs(db: DatabaseAdapter): void {
+  const rows = db.prepare("SELECT id, project_id, title, description, graph_json, version, updated_at FROM node_flows ORDER BY id ASC")
+    .all() as unknown as LegacyNodeFlowRow[];
+  for (const row of rows) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(row.graph_json);
+    } catch {
+      continue;
+    }
+    const migration = migrateNodeFlowGraph(parsed);
+    if (!migration.migrated) continue;
+    const currentVersion = Number(row.version);
+    const nextVersion = currentVersion + 1;
+    const migratedJson = JSON.stringify(migration.graph);
+    db.transaction(() => {
+      const originalExists = db.prepare("SELECT id FROM node_flow_versions WHERE flow_id = ? AND version = ?")
+        .get(row.id, currentVersion);
+      if (!originalExists) {
+        db.prepare(`
+          INSERT INTO node_flow_versions (id, flow_id, project_id, version, title, description, graph_json, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(`${row.id}:v${currentVersion}:legacy`, row.id, row.project_id, currentVersion, row.title, row.description ?? "", row.graph_json, row.updated_at);
+      }
+      db.prepare(`
+        INSERT INTO node_flow_versions (id, flow_id, project_id, version, title, description, graph_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(`${row.id}:v${nextVersion}:schema-v2`, row.id, row.project_id, nextVersion, row.title, row.description ?? "", migratedJson, row.updated_at);
+      db.prepare("UPDATE node_flows SET graph_json = ?, version = ? WHERE id = ?")
+        .run(migratedJson, nextVersion, row.id);
+    });
+  }
 }
 
 export function ensureCustomDashboardTables(db: DatabaseAdapter): void {
@@ -580,6 +625,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureTaskSelfReflectionRatingTables(db);
   ensureConversationDraftTables(db);
   ensureNodeFlowTables(db);
+  migratePersistedNodeFlowGraphs(db);
   ensureCustomDashboardTables(db);
 
   ensureColumn(db, "projects", "initialization_mode", "TEXT NOT NULL DEFAULT 'existing'");

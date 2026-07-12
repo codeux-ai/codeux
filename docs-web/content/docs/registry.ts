@@ -107,6 +107,8 @@ export type DocsSlug =
   | 'user-dashboard-custom-dashboards'
   | 'architecture-custom-dashboard-foundation'
   | 'architecture-managed-container-runtime'
+  | 'architecture-node-flow-foundation'
+  | 'architecture-node-flows'
   | 'architecture-speech-input'
   | 'architecture-speech-output'
   | 'architecture-worker-clarification-contract'
@@ -848,6 +850,20 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Managed Container Runtime",
     description: "The managed container runtime removes first-invocation Docker builds while keeping provider binaries local to each user's Docker host.",
   },
+  'architecture-node-flow-foundation': {
+    id: 'architecture-node-flow-foundation',
+    path: '/docs/architecture-node-flow-foundation',
+    section: 'Architecture',
+    title: "Node Flow Foundation",
+    description: "Code UX uses one canonical Graph v2 contract across backend, MCP, runtime, and dashboard. Graphs carry schemaVersion: 2, versioned definitions, typed ports, credential-id bindings, bounded policies, capabilities, side...",
+  },
+  'architecture-node-flows': {
+    id: 'architecture-node-flows',
+    path: '/docs/architecture-node-flows',
+    section: 'Architecture',
+    title: "Node Flows",
+    description: "Node flows are project-owned, versioned Graph v2 workflows.",
+  },
   'architecture-speech-input': {
     id: 'architecture-speech-input',
     path: '/docs/architecture-speech-input',
@@ -976,6 +992,8 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['user-dashboard-custom-dashboards'],
   docsRegistry['architecture-custom-dashboard-foundation'],
   docsRegistry['architecture-managed-container-runtime'],
+  docsRegistry['architecture-node-flow-foundation'],
+  docsRegistry['architecture-node-flows'],
   docsRegistry['architecture-speech-input'],
   docsRegistry['architecture-speech-output'],
   docsRegistry['architecture-worker-clarification-contract'],
