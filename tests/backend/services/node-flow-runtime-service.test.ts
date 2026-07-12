@@ -13,6 +13,7 @@ import type { ProviderExecutionService } from "../../../src/services/provider-ex
 import type { NodeFlowGraph } from "../../../src/contracts/node-flow-types.js";
 import type { CredentialBroker } from "../../../src/services/credentials/credential-broker.js";
 import { EgressPolicyService } from "../../../src/services/node-flows/egress-policy-service.js";
+import { AutomationAuditExportService } from "../../../src/services/automation-audit-export-service.js";
 
 const tempDirs: string[] = [];
 
@@ -21,6 +22,7 @@ async function createRuntime(providerExecutionService?: Partial<ProviderExecutio
   projectRepository: ProjectManagementRepository;
   nodeFlowRepository: NodeFlowRepository;
   executionRepository: ExecutionRepository;
+  auditService: AutomationAuditExportService;
   runtime: NodeFlowRuntimeService;
 }> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "node-flow-runtime-"));
@@ -29,6 +31,7 @@ async function createRuntime(providerExecutionService?: Partial<ProviderExecutio
   const projectRepository = new ProjectManagementRepository(storage);
   const nodeFlowRepository = new NodeFlowRepository(storage);
   const executionRepository = new ExecutionRepository(storage);
+  const auditService = new AutomationAuditExportService(storage);
   const runtime = new NodeFlowRuntimeService({
     nodeFlowRepository,
     executionRepository,
@@ -37,9 +40,10 @@ async function createRuntime(providerExecutionService?: Partial<ProviderExecutio
     providerExecutionService: providerExecutionService as ProviderExecutionService | undefined,
     credentialBroker: credentialBroker as CredentialBroker | undefined,
     egressPolicyService,
+    auditService,
     getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
   });
-  return { dir, projectRepository, nodeFlowRepository, executionRepository, runtime };
+  return { dir, projectRepository, nodeFlowRepository, executionRepository, auditService, runtime };
 }
 
 afterEach(async () => {
@@ -198,6 +202,95 @@ describe("NodeFlowRuntimeService", () => {
     expect(executionRepository.getExecutionInvocation(promptRun!.executionInvocationId!)?.type).toBe("node_flow_node");
   });
 
+  it("redacts a resolved credential echoed by provider output and retry errors from every runtime record", async () => {
+    const credentialCanary = "CODEUX_PROVIDER_CANARY_X9Q7";
+    const persistedBoundaryValues: unknown[] = [];
+    let providerAttempt = 0;
+    const providerResult = {
+        ok: true,
+        stdout: `stdout ${credentialCanary}`,
+        stderr: "",
+        code: 0,
+        text: `answer ${credentialCanary}`,
+        nativeSessionId: `session-${credentialCanary}`,
+        usageTelemetry: {
+          transcriptText: `transcript ${credentialCanary}`,
+          inputTokens: 0,
+          cachedInputTokens: 0,
+          outputTokens: 0,
+          reasoningOutputTokens: 0,
+          totalTokens: 0,
+          usageSource: "reported",
+          rawUsageJson: { echoed: credentialCanary },
+        },
+      };
+    const executeProvider = vi.fn().mockImplementation(async (args: {
+      redactTextForPersistence?: (value: string) => string;
+      redactJsonForPersistence?: (value: Record<string, unknown>) => Record<string, unknown> | null;
+      onActivity?: (description: string) => void;
+    }) => {
+      providerAttempt += 1;
+      persistedBoundaryValues.push(
+        args.redactTextForPersistence?.(`retry ${credentialCanary}`),
+        args.redactJsonForPersistence?.({ echoed: credentialCanary }),
+        typeof args.onActivity,
+      );
+      if (providerAttempt === 1) throw new Error(`503 retry echoed ${credentialCanary}`);
+      return providerResult;
+    });
+    const resolveCredentialId = vi.fn().mockResolvedValue({
+      credentialId: "credential-provider",
+      value: credentialCanary,
+      version: 3,
+    });
+    const { dir, projectRepository, nodeFlowRepository, executionRepository, auditService, runtime } = await createRuntime(
+      { executeProvider } as Partial<ProviderExecutionService>,
+      { resolveCredentialId },
+    );
+    const project = projectRepository.createProject({ name: "Provider Canary Project", sourceType: "local", sourceRef: dir });
+    const flow = nodeFlowRepository.createFlow(project.id, {
+      title: "Provider canary",
+      graph: {
+        nodes: [{
+          id: "prompt",
+          type: "provider_prompt",
+          title: "Prompt",
+          data: { provider: "mockup-cli", prompt: "Answer safely" },
+          credentialBindings: [{ slot: "provider", credentialId: "credential-provider" }],
+          policy: { retry: { maxAttempts: 2, backoffMs: 0, maxBackoffMs: 0 } },
+        }],
+        edges: [],
+      },
+    });
+
+    const result = await runtime.runFlow(project.id, flow.id, {});
+    const invocations = executionRepository.listExecutionInvocations({ projectId: project.id, limit: 20 });
+    const invocationMessages = invocations.flatMap((invocation) => executionRepository.listExecutionInvocationMessages(invocation.id));
+    const persisted = JSON.stringify({
+      summary: result,
+      attempts: nodeFlowRepository.listNodeAttempts(result.run.id),
+      invocations,
+      invocationMessages,
+      audit: auditService.list({ projectId: project.id }),
+      logs: invocationMessages,
+      diagnostics: result.nodeRuns.map((nodeRun) => ({ output: nodeRun.output, error: nodeRun.errorMessage })),
+    });
+
+    expect(executeProvider).toHaveBeenCalledTimes(2);
+    expect(persistedBoundaryValues).toEqual([
+      "retry [REDACTED]", { echoed: "[REDACTED]" }, "function",
+      "retry [REDACTED]", { echoed: "[REDACTED]" }, "function",
+    ]);
+    expect(result.output).toMatchObject({ text: "answer [REDACTED]", nativeSessionId: "session-[REDACTED]" });
+    expect(result.attempts?.[0]).toMatchObject({
+      credentialIds: ["credential-provider"],
+      errorMessage: "503 retry echoed [REDACTED]",
+      retryDecision: "retry",
+    });
+    expect(persisted).not.toContain(credentialCanary);
+    expect(persisted).toContain("credential-provider");
+  });
+
   it("executes governed HTTP request nodes with query, body, timeout, and JSON response extraction", async () => {
       const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { message: "hello" } }), {
         status: 200, headers: { "content-type": "application/json" },
@@ -233,6 +326,63 @@ describe("NodeFlowRuntimeService", () => {
       expect(result.output).toMatchObject({ status: 200, extracted: "hello" });
       expect(result.nodeRuns[0]?.executionInvocationId).toMatch(/^xi_/);
       expect(fetchMock).toHaveBeenCalledWith(expect.objectContaining({ search: "?name=Ada" }), expect.objectContaining({ redirect: "manual" }));
+  });
+
+  it("redacts a resolved HTTP credential echoed by the mock boundary from bodies and persisted diagnostics", async () => {
+    const credentialCanary = "CODEUX_HTTP_CANARY_X9Q7";
+    const fetchMock = vi.fn().mockImplementation(async (_url: URL, init?: RequestInit) => {
+      expect(init?.headers).toMatchObject({ authorization: credentialCanary });
+      return new Response(JSON.stringify({ echoed: credentialCanary, detail: `Authorization: ${credentialCanary}` }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const egressPolicyService = new EgressPolicyService({ fetch: fetchMock, lookup: async () => [{ address: "8.8.8.8", family: 4 }] });
+    const resolveCredentialId = vi.fn().mockResolvedValue({
+      credentialId: "credential-http",
+      value: credentialCanary,
+      version: 2,
+    });
+    const { dir, projectRepository, nodeFlowRepository, executionRepository, auditService, runtime } = await createRuntime(
+      undefined,
+      { resolveCredentialId },
+      egressPolicyService,
+    );
+    const project = projectRepository.createProject({ name: "HTTP Canary Project", sourceType: "local", sourceRef: dir });
+    const flow = nodeFlowRepository.createFlow(project.id, {
+      title: "HTTP canary",
+      graph: {
+        nodes: [{
+          id: "http",
+          type: "http_request",
+          title: "HTTP",
+          data: { method: "GET", url: "https://api.example.test/echo" },
+          credentialBindings: [{ slot: "auth", credentialId: "credential-http" }],
+        }],
+        edges: [],
+      },
+    });
+
+    const result = await runtime.runFlow(project.id, flow.id, {});
+    const invocations = executionRepository.listExecutionInvocations({ projectId: project.id, limit: 20 });
+    const invocationMessages = invocations.flatMap((invocation) => executionRepository.listExecutionInvocationMessages(invocation.id));
+    const persisted = JSON.stringify({
+      summary: result,
+      attempts: nodeFlowRepository.listNodeAttempts(result.run.id),
+      invocations,
+      invocationMessages,
+      audit: auditService.list({ projectId: project.id }),
+      logs: invocationMessages,
+      diagnostics: result.nodeRuns.map((nodeRun) => ({ output: nodeRun.output, error: nodeRun.errorMessage })),
+    });
+
+    expect(result.output).toMatchObject({
+      body: { echoed: "[REDACTED]", detail: "Authorization: [REDACTED]" },
+      extracted: { echoed: "[REDACTED]", detail: "Authorization: [REDACTED]" },
+    });
+    expect(result.attempts?.[0]?.credentialIds).toEqual(["credential-http"]);
+    expect(persisted).not.toContain(credentialCanary);
+    expect(persisted).toContain("credential-http");
   });
 
   it("fails HTTP nodes clearly and skips downstream nodes without continueOnError", async () => {
