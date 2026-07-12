@@ -40,6 +40,7 @@
 - [Node Flow Foundation](./architecture/node-flow-foundation.md)
 - [Node Flows](./architecture/node-flows.md)
 - [Node Flow Durable Execution](./architecture/node-flow-durable-execution.md)
+- [Node Flow Built-ins and External-Effect Security](./architecture/node-flow-builtins-and-security.md)
 - [Custom Dashboard Foundation](./architecture/custom-dashboard-foundation.md)
 - [Memory Claims and Evidence](./architecture/memory-claims.md)
 - [Speech Input Architecture](./architecture/speech-input.md)

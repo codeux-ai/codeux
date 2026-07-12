@@ -34,6 +34,7 @@ import { registerChatProviderRoutes } from "./chat-provider-routes.js";
 import { registerChatProviderIngressRoutes } from "./chat-provider-ingress-routes.js";
 import { registerSpeechRoutes } from "./speech-routes.js";
 import { registerNodeFlowRoutes } from "./node-flow-routes.js";
+import { registerNodeFlowWebhookRoutes } from "./node-flow-webhook-routes.js";
 import { registerCustomDashboardRoutes } from "./custom-dashboard-routes.js";
 
 export interface DashboardRouteRegistrationOptions {
@@ -121,6 +122,7 @@ const registerProjectConfigurationRouteGroup = (app: Express, deps: DashboardDep
   registerAgentPresetRoutes(app, deps);
   registerInstructionFileRoutes(app, deps);
   registerNodeFlowRoutes(app, deps);
+  registerNodeFlowWebhookRoutes(app, deps);
   registerCustomDashboardRoutes(app, deps);
 };
 

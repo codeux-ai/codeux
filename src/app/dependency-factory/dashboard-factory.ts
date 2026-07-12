@@ -33,6 +33,12 @@ import { NodeFlowRuntimeService } from "../../services/node-flow-runtime-service
 import { NodeFlowService } from "../../services/node-flow-service.js";
 import { NodeFlowRecoveryService } from "../../services/node-flows/node-flow-recovery-service.js";
 import { resolveEffectiveDashboardSettings } from "../../services/settings-resolution-service.js";
+import { ApprovalService } from "../../services/node-flows/approval-service.js";
+import { MockSideEffectProvider, OutboxService } from "../../services/node-flows/outbox-service.js";
+import { EgressPolicyService } from "../../services/node-flows/egress-policy-service.js";
+import { AutomationApprovalRepository } from "../../repositories/automation-approval-repository.js";
+import { AutomationOutboxRepository } from "../../repositories/automation-outbox-repository.js";
+import { AutomationWebhookTriggerRepository } from "../../repositories/automation-webhook-trigger-repository.js";
 
 export interface DashboardDependencies {
   credentialBroker: CoreDependencies["credentialBroker"];
@@ -44,6 +50,8 @@ export interface DashboardDependencies {
   speechSynthesisService: SpeechSynthesisService;
   speechModelManager: SpeechModelManager;
   nodeFlowService: CoreDependencies["nodeFlowService"];
+  approvalService: ApprovalService;
+  automationWebhookTriggerRepository: CoreDependencies["automationWebhookTriggerRepository"];
   activityCacheService: ActivityCacheService;
   taskRerunService: TaskRerunService;
   executionControlService: ExecutionControlService;
@@ -222,6 +230,13 @@ export function createDashboardDependencies(
   const speechModelManager = new SpeechModelManager(
     logger.child({ component: "speech-model-manager" }),
   );
+  const approvalRepository = coreDeps.automationApprovalRepository
+    ?? new AutomationApprovalRepository(coreDeps.appDbStorage);
+  const outboxRepository = coreDeps.automationOutboxRepository
+    ?? new AutomationOutboxRepository(coreDeps.appDbStorage);
+  const webhookTriggerRepository = coreDeps.automationWebhookTriggerRepository
+    ?? new AutomationWebhookTriggerRepository(coreDeps.appDbStorage);
+  const approvalService = new ApprovalService(approvalRepository);
   const nodeFlowRuntimeService = new NodeFlowRuntimeService({
     nodeFlowRepository: coreDeps.nodeFlowRepository,
     executionRepository,
@@ -229,6 +244,9 @@ export function createDashboardDependencies(
     settingsRepository,
     providerExecutionService,
     credentialBroker: coreDeps.credentialBroker,
+    egressPolicyService: new EgressPolicyService(),
+    approvalService,
+    outboxService: new OutboxService(outboxRepository, new MockSideEffectProvider()),
     getDashboardSettings: (projectId) => resolveDashboardSettings({ projectId }),
   });
   if (coreDeps.nodeFlowRepository) {
@@ -564,6 +582,8 @@ export function createDashboardDependencies(
     speechSynthesisService,
     speechModelManager,
     nodeFlowService,
+    approvalService,
+    automationWebhookTriggerRepository: webhookTriggerRepository,
     activityCacheService,
     taskRerunService,
     executionControlService,

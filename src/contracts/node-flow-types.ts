@@ -217,7 +217,7 @@ export type NodeFlowRunStatus =
   | "queued" | "running" | "approval_waiting" | "retry_waiting"
   | "attention_required" | "succeeded" | "failed" | "cancelled";
 export type NodeFlowNodeRunStatus =
-  | "pending" | "running" | "retry_waiting" | "attention_required"
+  | "pending" | "running" | "approval_waiting" | "retry_waiting" | "attention_required"
   | "succeeded" | "failed" | "skipped" | "cancelled";
 
 export interface NodeFlowRunRecord {
@@ -353,6 +353,8 @@ export interface RunNodeFlowOptions {
   triggerPayload?: NodeFlowJsonObject;
   signal?: AbortSignal;
   versionSelection?: import("./node-flow-execution-policy-types.js").NodeFlowVersionSelection;
+  /** Internal recursion guard propagated only by Execute Subflow. */
+  subflowDepth?: number;
   executorId?: string;
 }
 

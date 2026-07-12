@@ -50,11 +50,19 @@ Runtime-supported node types are:
 | `template` | Renders `template` or `prompt` into `outputKey` (default `text`). |
 | `provider_prompt` | Renders a prompt and calls an existing CLI provider configuration through `ProviderExecutionService`. |
 | `http_request` | Performs bounded HTTP/HTTPS requests with method, URL, headers, query, body, timeout, and optional JSON path extraction. |
+| `condition`, `switch` | Select one explicit output branch; non-selected branches are persisted as skipped. |
+| `foreach` | Validates and emits a bounded item list. |
+| `merge` | Combines active inputs with `object`, `array`, or `first` strategy. |
+| `delay` | Waits for a bounded cancellable duration. |
+| `approval` | Persists an operator decision gate. |
+| `email_draft`, `email_send` | Creates a draft, or sends only after approval through the idempotent outbox. |
+| `execute_subflow` | Executes a same-project published subflow with recursion bounds. |
+| `webhook_trigger` | Emits authenticated webhook input. |
 | `output` | Selects final output from a path, configured fields, or upstream output. |
 
 Template interpolation reads from `{{ input.path }}` and `{{ nodes.nodeId.path }}`. Node config is built from widget defaults, node `data`, and optional `data.values`, with later values overriding defaults.
 
-Provider prompt nodes require a configured CLI provider. HTTP nodes require `http` or `https` URLs and support `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `HEAD`. HTTP timeout defaults to 30 seconds and is capped at 60 seconds.
+Provider prompt nodes require a configured CLI provider. HTTP nodes require HTTPS unless HTTP is explicitly enabled and support `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `HEAD`. Requests pass through the shared SSRF, redirect, DNS, response-size, content-type, retry, timeout, and rate-limit policy described in [Node Flow Built-ins and External-Effect Security](./node-flow-builtins-and-security.md).
 
 ## Invocation Tracking
 
@@ -105,6 +113,6 @@ Use these rules:
 
 Graph v2 is the single workflow model used by backend, MCP, runtime, and dashboard. It adds `schemaVersion: 2`, stable definition references, typed ports and flow schemas, credential-id bindings, retry and timeout policies, capability and side-effect metadata, disabled state, and optional immutable publication metadata. Plaintext credentials, secret-shaped fields, generated source, and custom code are not valid graph data.
 
-The executable registry is exactly `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, and `output`. Planned trigger, agent-router, task, condition, notification, and integration entries are not executable until handlers exist.
+The executable registry contains the original deterministic/provider/HTTP nodes plus `condition`, `switch`, `foreach`, `merge`, `delay`, `approval`, `email_draft`, `email_send`, `execute_subflow`, and `webhook_trigger`. Unregistered custom types remain non-executable.
 
 Backend Graph v1 migration retains the exact prior version and appends deterministic v2. Browser canvas v1 migration returns the untouched legacy snapshot separately from the normalized graph.
