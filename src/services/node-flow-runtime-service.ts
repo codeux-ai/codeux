@@ -20,6 +20,7 @@ import { BuiltinExecutors } from "./node-flows/builtins/builtin-executors.js";
 import type { ApprovalService } from "./node-flows/approval-service.js";
 import { ApprovalRequiredError } from "./node-flows/approval-service.js";
 import type { OutboxService } from "./node-flows/outbox-service.js";
+import type { CustomNodeRuntimeService } from "./custom-nodes/custom-node-runtime-service.js";
 import type { NodeFlowFailureClassification } from "../contracts/node-flow-execution-policy-types.js";
 import { buildProviderInvocationWorkspaceOptions } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import type {
@@ -55,6 +56,7 @@ interface NodeFlowRuntimeDeps {
   egressPolicyService?: EgressPolicyService;
   approvalService?: ApprovalService;
   outboxService?: OutboxService;
+  customNodeRuntimeService?: CustomNodeRuntimeService;
 }
 
 interface RuntimeContext {
@@ -362,7 +364,9 @@ export class NodeFlowRuntimeService {
     node: NodeFlowNode,
     nodeRun: NodeFlowNodeRunRecord,
   ): Promise<NodeExecutionResult> {
-    if (EXTERNALLY_OBSERVABLE_NODE_TYPES.has(node.type)) {
+    const reference = node.definition ?? { type: node.type, version: 1 };
+    const definition = resolveNodeDefinition(reference.type, reference.version);
+    if (EXTERNALLY_OBSERVABLE_NODE_TYPES.has(node.type) || definition?.executionKind === "custom") {
       const invocation = this.deps.executionRepository.createExecutionInvocation({
         projectId: context.projectId,
         skipValidation: true,
@@ -375,9 +379,11 @@ export class NodeFlowRuntimeService {
         this.deps.nodeFlowRepository.updateNodeAttempt(context.currentAttemptId, { invocationId: invocation.id });
       }
       try {
-        const result = node.type === "provider_prompt"
-          ? await this.executeProviderPromptNode(context, node, invocation.id)
-          : await this.executeHttpRequestNode(context, node, invocation.id);
+        const result = definition?.executionKind === "custom"
+          ? await this.executeCustomNode(context, node, invocation.id, reference.type, reference.version)
+          : node.type === "provider_prompt"
+            ? await this.executeProviderPromptNode(context, node, invocation.id)
+            : await this.executeHttpRequestNode(context, node, invocation.id);
         this.deps.executionRepository.updateExecutionInvocation(invocation.id, {
           status: "completed",
           finishedAt: new Date().toISOString(),
@@ -417,6 +423,37 @@ export class NodeFlowRuntimeService {
           signal: context.options.signal, subflowDepth: context.subflowDepth,
         });
     }
+  }
+
+  private async executeCustomNode(
+    context: RuntimeContext,
+    node: NodeFlowNode,
+    invocationId: string,
+    nodeType: string,
+    version: number,
+  ): Promise<NodeExecutionResult> {
+    if (!this.deps.customNodeRuntimeService) throw new ValidationError("Custom node runtime service is not configured.");
+    const result = await this.deps.customNodeRuntimeService.execute({
+      projectId: context.projectId,
+      nodeType,
+      version,
+      input: this.buildNodeInput(context, node.id),
+      config: evaluateTemplates(readNodeConfig(node), context) as NodeFlowJsonObject,
+      credentialBindings: Object.fromEntries((node.credentialBindings ?? []).map((binding) => [binding.slot, binding.credentialId])),
+      workspaceId: context.runId,
+      invocationId,
+      correlationId: context.runId,
+      signal: context.options.signal,
+    });
+    if (context.currentAttemptId) {
+      this.deps.nodeFlowRepository.updateNodeAttempt(context.currentAttemptId, { artifactDigest: result.artifactDigest });
+    }
+    this.deps.executionRepository.appendExecutionInvocationMessage(invocationId, {
+      role: "assistant",
+      contentMarkdown: "Custom node container execution completed.",
+      metadata: { flowId: context.flowId, runId: context.runId, nodeId: node.id, artifactDigest: result.artifactDigest },
+    });
+    return { output: result.output };
   }
 
   private executeSetFieldsNode(context: RuntimeContext, node: NodeFlowNode): NodeFlowJsonObject {

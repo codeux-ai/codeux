@@ -6,7 +6,7 @@ import type {
   NodeWidgetSchema,
 } from "./node-flow-types.js";
 
-export type NodeDefinitionExecutionKind = "local" | "provider" | "http" | "unavailable";
+export type NodeDefinitionExecutionKind = "local" | "provider" | "http" | "custom" | "unavailable";
 
 export interface NodeDefinitionCredentialRequirement {
   slot: string;

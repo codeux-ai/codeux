@@ -107,6 +107,7 @@ export type DocsSlug =
   | 'settings-google-drive-mount'
   | 'user-dashboard-custom-dashboards'
   | 'architecture-custom-dashboard-foundation'
+  | 'architecture-custom-nodes'
   | 'architecture-managed-container-runtime'
   | 'architecture-node-flow-builtins-and-security'
   | 'architecture-node-flow-durable-execution'
@@ -853,6 +854,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Custom Dashboard Foundation",
     description: "Custom dashboards are a persisted domain model for project-scoped dashboard generation. The foundation stores manifests, generated file bundles, data-source node graphs, validation history, and publication state, and...",
   },
+  'architecture-custom-nodes': {
+    id: 'architecture-custom-nodes',
+    path: '/docs/architecture-custom-nodes',
+    section: 'Architecture',
+    title: "Custom Node Architecture and Security",
+    description: "Custom nodes are project-owned TypeScript packages that pass explicit validation and publication gates before Code UX can execute them. Generated code is never imported or evaluated by the Code UX server.",
+  },
   'architecture-managed-container-runtime': {
     id: 'architecture-managed-container-runtime',
     path: '/docs/architecture-managed-container-runtime',
@@ -1016,6 +1024,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['settings-google-drive-mount'],
   docsRegistry['user-dashboard-custom-dashboards'],
   docsRegistry['architecture-custom-dashboard-foundation'],
+  docsRegistry['architecture-custom-nodes'],
   docsRegistry['architecture-managed-container-runtime'],
   docsRegistry['architecture-node-flow-builtins-and-security'],
   docsRegistry['architecture-node-flow-durable-execution'],

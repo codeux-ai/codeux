@@ -22,6 +22,7 @@ It is for contributors and integrators who need to reason about *how* Code UX ma
 | 12 | [Speech input](./speech-input.md) | Persisted transcription settings, privacy boundary, provider fallback contract |
 | 13 | [Security model](./security.md) | Authentication, authorisation, secrets, network surface |
 | 14 | [Worker clarification contract](./worker-clarification-contract.md) | Durable human-owned worker questions, idempotent replies, and continuation boundary |
+| 15 | [Custom nodes](./custom-nodes.md) | Generated TypeScript packages, validation/publication gates, and hardened container execution |
 
 ## Runtime Notes
 

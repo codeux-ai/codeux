@@ -131,7 +131,7 @@ const manifests: NodeDefinitionManifest[] = [
 const keyFor = (type: string, version: number): string => `${type}@${version}`;
 const registry = new Map(manifests.map((manifest) => [keyFor(manifest.type, manifest.version), manifest]));
 
-export const listNodeDefinitions = (): readonly NodeDefinitionManifest[] => manifests;
+export const listNodeDefinitions = (): readonly NodeDefinitionManifest[] => [...manifests];
 
 export const resolveNodeDefinition = (type: string, version: number): NodeDefinitionManifest | null => (
   registry.get(keyFor(type, version)) ?? null
@@ -140,3 +140,17 @@ export const resolveNodeDefinition = (type: string, version: number): NodeDefini
 export const resolveLatestNodeDefinition = (type: string): NodeDefinitionManifest | null => (
   manifests.filter((manifest) => manifest.type === type).sort((left, right) => right.version - left.version)[0] ?? null
 );
+
+export const registerCustomNodeDefinition = (manifest: NodeDefinitionManifest): void => {
+  if (manifest.executionKind !== "custom" || !manifest.type.startsWith("custom.") || manifest.executable !== true) {
+    throw new Error("Only executable custom node definitions can be registered dynamically.");
+  }
+  const key = keyFor(manifest.type, manifest.version);
+  const existing = registry.get(key);
+  if (existing) {
+    if (JSON.stringify(existing) !== JSON.stringify(manifest)) throw new Error(`Node definition is immutable once registered: ${key}.`);
+    return;
+  }
+  registry.set(key, manifest);
+  manifests.push(manifest);
+};

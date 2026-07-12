@@ -596,6 +596,55 @@ export function ensureAutomationCredentialTables(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_automation_credential_rotations_credential", "automation_credential_rotations", "credential_id, rotated_at DESC");
 }
 
+export function ensureCustomNodeTables(db: DatabaseAdapter): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS custom_nodes (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft',
+      source_revision TEXT NOT NULL,
+      manifest_json TEXT NOT NULL,
+      validation_report_json TEXT,
+      artifact_digest TEXT,
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS custom_node_artifacts (
+      digest TEXT PRIMARY KEY,
+      node_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      artifact_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (node_id) REFERENCES custom_nodes(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS custom_node_publications (
+      id TEXT PRIMARY KEY,
+      node_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      node_type TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      artifact_digest TEXT NOT NULL,
+      published_by TEXT NOT NULL,
+      published_at TEXT NOT NULL,
+      FOREIGN KEY (node_id) REFERENCES custom_nodes(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (artifact_digest) REFERENCES custom_node_artifacts(digest),
+      UNIQUE (node_type, version)
+    )
+  `);
+  ensureIndex(db, "idx_custom_nodes_project_status", "custom_nodes", "project_id, status, updated_at DESC");
+  ensureIndex(db, "idx_custom_node_artifacts_node", "custom_node_artifacts", "node_id, version DESC");
+  ensureIndex(db, "idx_custom_node_publications_project", "custom_node_publications", "project_id, published_at DESC");
+}
+
 export function migrateSprintLinkedIssuesExternalSources(db: DatabaseAdapter): void {
   ensureColumn(db, "sprint_linked_issues", "project_key", "TEXT");
   ensureColumn(db, "sprint_linked_issues", "external_id", "TEXT");
@@ -833,6 +882,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   migratePersistedNodeFlowGraphs(db);
   ensureCustomDashboardTables(db);
   ensureAutomationCredentialTables(db);
+  ensureCustomNodeTables(db);
 
   ensureColumn(db, "projects", "initialization_mode", "TEXT NOT NULL DEFAULT 'existing'");
   ensureColumn(db, "provider_invocations", "tool_call_count", "INTEGER NOT NULL DEFAULT 0");
