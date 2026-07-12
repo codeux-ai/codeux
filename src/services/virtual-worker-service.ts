@@ -59,6 +59,7 @@ import {
 } from "../domain/workers/virtual-worker-scheduling-policy.js";
 import { planVirtualWorkerCycle } from "../domain/workers/virtual-worker-cycle-plan.js";
 import { getFailedJobLabels, getFailedLogSnippets, selectNewestCiRun } from "../sprint/ci-status-utils.js";
+import { withResolvedGitSettingsCredentials } from "./credentials/git-settings-credential-resolver.js";
 
 const VIRTUAL_WORKER_RECONCILE_MS = 3_000;
 const VIRTUAL_WORKER_SESSION_POLL_MS = 2_000;
@@ -198,7 +199,7 @@ export interface VirtualWorkerServiceDependencies {
 
 export class VirtualWorkerService {
   private readonly workspaceManager = new WorkspaceManager();
-  private readonly invocationWorkspacePreparer = new InvocationWorkspacePreparer(this.workspaceManager);
+  private readonly invocationWorkspacePreparer: InvocationWorkspacePreparer;
   private readonly workspaceArtifactService = new WorkspaceArtifactService(this.workspaceManager);
   private readonly dockerService = new DockerService();
   private readonly prService = new PrService();
@@ -216,6 +217,10 @@ export class VirtualWorkerService {
   private readonly providerExecutionService: ProviderExecutionService;
 
   constructor(private readonly deps: VirtualWorkerServiceDependencies) {
+    this.invocationWorkspacePreparer = new InvocationWorkspacePreparer(
+      this.workspaceManager,
+      deps.settingsCredentialResolver,
+    );
     this.providerExecutionService = new ProviderExecutionService({
       executionRepository: deps.executionRepository,
       providerRunner: this.providerRunner,
@@ -870,7 +875,11 @@ export class VirtualWorkerService {
     }
   }
 
-  private async resolveMergeConflictAttention(workerEndpointId: string, item: ProjectAttentionItemRecord): Promise<void> {
+  private async resolveMergeConflictAttention(
+    workerEndpointId: string,
+    item: ProjectAttentionItemRecord,
+    resolvedGitAuth?: GitHttpAuthOptions,
+  ): Promise<void> {
     const settings = this.resolveDashboardSettings(item.projectId, item.sprintId);
     const guardrailScope = { projectId: item.projectId, sprintId: item.sprintId };
     const workerAgent = await this.deps.agentPresetSyncService?.resolveTargetedCodingAgent(
@@ -904,6 +913,15 @@ export class VirtualWorkerService {
     };
     const payload = item.payload || {};
     const repoPath = this.readRequiredString(payload.repoPath, "repoPath");
+    if (!resolvedGitAuth && settings.git.githubMode === "REMOTE") {
+      return await withResolvedGitSettingsCredentials({
+        resolver: this.deps.settingsCredentialResolver,
+        projectId: item.projectId,
+        repoPath,
+        consumer: "git.virtual-worker.merge-conflict",
+        git: settings.git,
+      }, async (auth) => await this.resolveMergeConflictAttention(workerEndpointId, item, auth));
+    }
     const conflictingBranches = this.asRecord(payload.conflictingBranches);
     const sourceBranchRaw = conflictingBranches?.source ?? payload.workerBranch;
     if (typeof sourceBranchRaw !== "string" || !sourceBranchRaw.trim()) {
@@ -929,8 +947,8 @@ export class VirtualWorkerService {
     // selection below.)
     const targetRef = settings.git.githubMode === "LOCAL" ? targetBranch : `origin/${targetBranch}`;
     const gitAuth: GitHttpAuthOptions = {
-      githubToken: settings.git.githubToken,
-      gitlabToken: settings.git.gitlabToken,
+      githubToken: resolvedGitAuth?.githubToken ?? settings.git.githubToken,
+      gitlabToken: resolvedGitAuth?.gitlabToken ?? settings.git.gitlabToken,
     };
 
     // A previous cycle may already have merged the source branch into the target branch while
@@ -1030,8 +1048,10 @@ export class VirtualWorkerService {
         gitPolicy: buildInvocationGitPolicy({
           githubMode: settings.git.githubMode,
           defaultBranch: settings.git.defaultBranch,
-          githubToken: settings.git.githubToken,
-          gitlabToken: settings.git.gitlabToken,
+          projectId: item.projectId,
+          workspaceId: sessionId,
+          githubToken: gitAuth.githubToken,
+          gitlabToken: gitAuth.gitlabToken,
         }),
       });
       const finalWorktreePath = prepared.worktreePath;
@@ -1088,7 +1108,7 @@ export class VirtualWorkerService {
           providerConfigPath: providerSettings.providerConfigPath,
           customBaseUrl: providerSettings.customBaseUrl,
           customModel: providerSettings.customModel,
-          githubToken: settings.git.githubToken,
+          githubToken: gitAuth.githubToken || "",
           agentMcpAccess: workerAgent ? workerClarificationAgentMcpAccess(workerAgent.mcpAccess) : null,
           mcpAgentId: workerAgent?.id ?? null,
         });
@@ -1300,7 +1320,11 @@ export class VirtualWorkerService {
     item.payload = updated.payload;
   }
 
-  private async resolveCiFixAttention(workerEndpointId: string, item: ProjectAttentionItemRecord): Promise<void> {
+  private async resolveCiFixAttention(
+    workerEndpointId: string,
+    item: ProjectAttentionItemRecord,
+    resolvedGitAuth?: GitHttpAuthOptions,
+  ): Promise<void> {
     const settings = this.resolveDashboardSettings(item.projectId, item.sprintId);
     const taskContinuation = await this.resolveTaskCiFixContinuation(item, settings);
     const workerAgent = taskContinuation?.workerAgent
@@ -1337,6 +1361,15 @@ export class VirtualWorkerService {
     };
     const payload = item.payload || {};
     const repoPath = this.readRequiredString(payload.repoPath, "repoPath");
+    if (!resolvedGitAuth && settings.git.githubMode === "REMOTE") {
+      return await withResolvedGitSettingsCredentials({
+        resolver: this.deps.settingsCredentialResolver,
+        projectId: item.projectId,
+        repoPath,
+        consumer: "git.virtual-worker.ci-fix",
+        git: settings.git,
+      }, async (auth) => await this.resolveCiFixAttention(workerEndpointId, item, auth));
+    }
     const branchName = this.readRequiredString(
       payload.workerBranch ?? payload.branchName,
       "branchName",
@@ -1410,8 +1443,8 @@ export class VirtualWorkerService {
 
     let cleanedUp = false;
     const gitAuth: GitHttpAuthOptions = {
-      githubToken: settings.git.githubToken,
-      gitlabToken: settings.git.gitlabToken,
+      githubToken: resolvedGitAuth?.githubToken ?? settings.git.githubToken,
+      gitlabToken: resolvedGitAuth?.gitlabToken ?? settings.git.gitlabToken,
     };
     try {
       const effectiveWorkflowSettings = await this.resolveVirtualWorkerWorkflowSettings({
@@ -1430,8 +1463,10 @@ export class VirtualWorkerService {
         gitPolicy: buildInvocationGitPolicy({
           githubMode: settings.git.githubMode,
           defaultBranch: settings.git.defaultBranch,
-          githubToken: settings.git.githubToken,
-          gitlabToken: settings.git.gitlabToken,
+          projectId: item.projectId,
+          workspaceId: sessionId,
+          githubToken: gitAuth.githubToken,
+          gitlabToken: gitAuth.gitlabToken,
         }),
       });
       const finalWorktreePath = prepared.worktreePath;
@@ -1492,7 +1527,7 @@ export class VirtualWorkerService {
         openCodeBaselineRawUsageJson: provider === "opencode"
           ? taskContinuation?.previousInvocation?.rawUsageJson ?? null
           : null,
-        githubToken: settings.git.githubToken,
+        githubToken: gitAuth.githubToken || "",
         agentMcpAccess: workerAgent ? workerClarificationAgentMcpAccess(workerAgent.mcpAccess) : null,
         mcpAgentId: workerAgent?.id ?? null,
       });

@@ -25,6 +25,8 @@ Authorized runtime consumers resolve references with an active project and expli
 
 Provider invocations resolve provider, nested Qwen, and Git host references at the CLI request boundary for every attempt. The next invocation sees rotations, while revocation, scope denial, or missing `read` capability prevents execution. Mounted local-auth providers retain their existing behavior.
 
+Remote repository operations resolve credentials independently at their execution boundary. Task and QA refreshes, preview and file-browser snapshots, provider and virtual-worker workspace preparation, project setup, agent-preset pushes, and pull-request queries resolve only the credential for the detected GitHub or GitLab origin. Legacy token fields remain empty, and a configured invalid or inaccessible reference fails closed rather than using ambient authentication. Environment or Git CLI authentication remains compatible only when no broker reference is configured.
+
 Jira, external importers, speech, and external embeddings use the same bounded callback around each HTTP request. Temporary environments and request headers receive the value, while telemetry, errors, and invocation messages are exact-value redacted before the broker clears its buffer.
 
 ## Runtime redaction boundary

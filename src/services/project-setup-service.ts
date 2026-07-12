@@ -289,6 +289,8 @@ export class ProjectSetupService {
         model: providerConfig.model,
         apiKey: "",
         apiKeyCredentialRef: providerConfig.apiKeyCredentialRef,
+        githubTokenCredentialRef: providerConfig.githubTokenCredentialRef,
+        gitlabTokenCredentialRef: providerConfig.gitlabTokenCredentialRef,
         maxConcurrentTasks: providerConfig.maxConcurrentTasks,
         qwenAuthMode: providerConfig.qwenAuthMode,
 

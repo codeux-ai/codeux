@@ -25,6 +25,8 @@ Runtime settings consumers resolve a reference with the active project, an expli
 
 Provider invocations resolve the selected provider reference, nested Qwen provider references, and Git host references at the CLI request boundary for every attempt. Rotation is therefore visible to the next invocation, while revocation, project-scope denial, or missing `read` capability prevents the subprocess or Docker workspace request from starting. Mounted local-auth providers bypass API-key resolution and retain their existing mount behavior.
 
+Every remote repository boundary applies the same rule independently. Task and QA branch refreshes, preview and file-browser snapshots, invocation and virtual-worker workspace preparation, project setup, agent-preset pushes, and pull-request queries resolve only the credential for the detected GitHub or GitLab origin immediately around that operation. Sanitized settings keep the legacy token fields empty; explicit environment/CLI Git authentication remains available only when no broker reference is configured. A configured malformed, missing, revoked, or out-of-scope reference fails closed instead of falling back to those ambient credentials.
+
 Jira, external importers, speech transcription/synthesis, and external embeddings use the same bounded callback immediately around their HTTP request. Effective settings remain metadata-only; request headers and temporary provider environments receive the resolved value, and returned telemetry, provider errors, and invocation messages are exact-value redacted before the broker releases and clears its buffer.
 
 ## Runtime redaction boundary

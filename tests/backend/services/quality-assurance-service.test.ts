@@ -3746,7 +3746,10 @@ describe("QualityAssuranceService", () => {
         workerBranch: "task/feature-sprint-1-t1-codex",
       }),
       "/repo",
-      "gh-token",
+      {
+        githubToken: "",
+        gitlabToken: "",
+      },
     );
     expect(updateTaskRun).toHaveBeenCalledWith("task-run-1", {
       workerBranch: "task/feature-sprint-1-t1-codex",

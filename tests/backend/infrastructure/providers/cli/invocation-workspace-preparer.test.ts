@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
 import type { IWorkspaceManager } from "../../../../../src/infrastructure/providers/cli/workspace-manager.js";
 import {
   buildProviderInvocationWorkspaceOptions,
   InvocationWorkspacePreparer,
 } from "../../../../../src/infrastructure/providers/cli/invocation-workspace-preparer.js";
+import type { SettingsCredentialResolver } from "../../../../../src/services/credentials/settings-credential-resolver.js";
 
 describe("invocation workspace helpers", () => {
   it("builds fresh remote Docker invocation options from the effective default branch", () => {
@@ -119,5 +123,54 @@ describe("invocation workspace helpers", () => {
     });
     expect(workspaceManager.buildWorktreePath).toHaveBeenCalledWith("/repo", "session-1", "DOCKER");
     expect(workspaceManager.resolveCurrentBranch).not.toHaveBeenCalled();
+  });
+
+  it("resolves a sanitized Git credential reference immediately around worktree preparation", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-workspace-credential-"));
+    await fs.mkdir(path.join(repoPath, ".git"));
+    await fs.writeFile(path.join(repoPath, ".git", "config"), '[remote "origin"]\n  url = https://github.com/example/repo.git\n');
+    let observedAuth: unknown;
+    const workspaceManager = {
+      prepareWorktree: vi.fn().mockImplementation(async (...args: unknown[]) => {
+        observedAuth = { ...(args[5] as Record<string, unknown>) };
+        return { worktreePath: "/worktree", resumed: false };
+      }),
+    } as unknown as IWorkspaceManager;
+    const withCredential = vi.fn(async (_reference, _context, consumer) => await consumer(Buffer.from("broker-token")));
+    const preparer = new InvocationWorkspacePreparer(
+      workspaceManager,
+      { withCredential } as unknown as SettingsCredentialResolver,
+    );
+
+    try {
+      await preparer.prepareWorktree({
+        repoPath,
+        worktreePath: "/worktree",
+        workerBranch: "task/one",
+        featureBranch: "feature/one",
+        gitPolicy: {
+          githubMode: "REMOTE",
+          projectId: "project-1",
+          workspaceId: "workspace-1",
+          githubToken: "",
+          gitlabToken: "",
+          githubTokenCredentialRef: { credentialId: "credential-1", capability: "read" },
+        },
+      });
+    } finally {
+      await fs.rm(repoPath, { recursive: true, force: true });
+    }
+
+    expect(withCredential).toHaveBeenCalledWith(
+      { credentialId: "credential-1", capability: "read" },
+      {
+        projectId: "project-1",
+        workspaceId: "workspace-1",
+        consumer: "git.workspace.prepare.github",
+      },
+      expect.any(Function),
+    );
+    expect(observedAuth).toEqual({ githubToken: "broker-token" });
+    expect(workspaceManager.prepareWorktree).toHaveBeenCalledTimes(1);
   });
 });

@@ -126,6 +126,7 @@ export function createSprintDependencies(
     getDashboardSettings: resolveDashboardSettings,
     isJulesApiConfigured: () => context.isJulesApiConfigured(),
     cliWorkflowService,
+    settingsCredentialResolver: coreDeps.settingsCredentialResolver,
     logger: logger.child({ component: "task-service" }),
   });
 
@@ -152,6 +153,7 @@ export function createSprintDependencies(
     fetchSessionActivities: (sessionName, pageSize) =>
       coreDeps.julesApi.fetchRecentActivitiesLite(sessionName, pageSize ?? 15),
     logger: logger.child({ component: "worker-inbox-reply-service" }),
+    settingsCredentialResolver: coreDeps.settingsCredentialResolver,
   });
 
   const qualityAssuranceService = new QualityAssuranceService({
