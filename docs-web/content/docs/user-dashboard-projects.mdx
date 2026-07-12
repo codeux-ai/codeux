@@ -68,7 +68,7 @@ On save, Code UX:
 1. Imports or initializes the repository through the backend project creation flow.
 2. Initialises `<repo>/.code-ux/` with project-local subdirectories (settings, sprints, agents, memory).
 3. Applies only the settings overrides appropriate to the source: local git mode for imported local projects, explicit techstack for new apps, and both for new local apps.
-4. Reads any external settings hints (Jules / Gemini / Codex / Claude / Qwen / OpenCode CLI auth) and pre-populates provider settings.
+4. Shows metadata-only provider availability after any legacy environment/JSON credentials have passed through the one-way broker migration; raw values never enter project settings.
 
 For imported projects, setup techstack detection inspects dependency manifests, especially `package.json`, plus lockfiles and framework config files. When the detection is valid, Code UX adds the stack to the system catalog if needed and writes the project selection to `techstack.selectedTechstackId`. Invalid or empty detections are ignored without blocking other selected setup artifacts, so imported projects are not classified until evidence or an operator assigns them.
 

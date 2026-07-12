@@ -28,7 +28,6 @@ import {
   getDefaultRouteOptionLabel,
   getProviderDisplayMetadata,
   getVirtualProviderDisplayMetadata,
-  applyExternalHintsToSystemSettings,
   formatModelPrice,
   getRelevantModelPricingRefs,
   normalizeModelPricingOverrideId,
@@ -433,20 +432,20 @@ describe("model pricing view model helpers", () => {
 
 describe("provider availability helpers", () => {
   const mockHints: ExternalSettingsHints = {
-    env: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
-    settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
-    resolved: {
-      julesApiKey: "hint-jules",
-      geminiApiKey: "",
-      codexApiKey: "",
-      claudeCodeApiKey: "",
-      githubToken: "",
+    sourceAvailability: { environment: true, settingsJson: false },
+    credentialAvailability: {
+      julesApiKey: true, geminiApiKey: false, codexApiKey: false, claudeCodeApiKey: false,
+      qwenCodeApiKey: false, openCodeApiKey: false, antigravityApiKey: false,
+      githubToken: false, gitlabToken: false, jiraToken: false,
     },
     providerAvailability: {
-      jules: { hasApiKey: true, hasLocalAuth: false },
-      gemini: { hasApiKey: false, hasLocalAuth: false },
-      codex: { hasApiKey: false, hasLocalAuth: true },
-      claudeCode: { hasApiKey: false, hasLocalAuth: false },
+      jules: { hasApiKey: true, hasLocalAuth: false, hasDashboardAuth: false },
+      gemini: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
+      codex: { hasApiKey: false, hasLocalAuth: true, hasDashboardAuth: false },
+      claudeCode: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
+      qwenCode: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
+      openCode: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
+      antigravity: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
     },
   };
 
@@ -515,43 +514,6 @@ describe("provider availability helpers", () => {
     // codex local auth alone should not activate it
     // claude-code is activated via auth mount and enabled
     expect(eligible).toEqual(["jules", "claude-code"]);
-  });
-});
-
-describe("external hint project override helpers", () => {
-  it("fills only inherited empty provider keys from external hints", () => {
-    const settings = {
-      runtime: { dashboardPort: 5173, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
-      integrations: {
-        providers: {
-          jules: { provider: "jules", name: "Jules Primary", apiKey: "", mountAuth: false, authPath: "" },
-          gemini: { provider: "gemini", name: "Gemini Primary", apiKey: "project-gemini", mountAuth: false, authPath: "~/.gemini" },
-        },
-        githubToken: "",
-      },
-      defaults: DEFAULT_DASHBOARD_SETTINGS as ProjectSettings,
-      mcpTools: [],
-      customMcpServers: [],
-      modelPricing: { overrides: {} },
-    } as SystemSettings;
-    const hints: ExternalSettingsHints = {
-      env: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
-      settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
-      resolved: {
-        julesApiKey: "hint-jules",
-        geminiApiKey: "hint-gemini",
-        codexApiKey: "",
-        claudeCodeApiKey: "",
-        githubToken: "hint-gh",
-      },
-      providerAvailability: {},
-    };
-
-    const next = applyExternalHintsToSystemSettings(settings, hints);
-
-    expect(next.integrations.providers.jules.apiKey).toBe("hint-jules");
-    expect(next.integrations.providers.gemini.apiKey).toBe("project-gemini");
-    expect(next.integrations.githubToken).toBe("hint-gh");
   });
 });
 

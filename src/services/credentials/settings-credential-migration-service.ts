@@ -1,4 +1,5 @@
-import type { ExternalSettingsHints, SettingsCredentialReference } from "../../contracts/app-types.js";
+import type { SettingsCredentialReference } from "../../contracts/app-types.js";
+import type { ExternalSettingsMigrationValues } from "../../config/external-settings.js";
 import type { SettingsRepository } from "../../repositories/settings-repository.js";
 import type { CredentialBroker } from "./credential-broker.js";
 
@@ -16,7 +17,7 @@ export interface SettingsCredentialMigrationDependencies {
   credentialBroker: CredentialBroker;
   listProjectIds: () => string[];
   resolveSprintProjectId?: (sprintId: string) => string | null;
-  externalSettingsHints?: ExternalSettingsHints;
+  externalSettingsMigrationValues?: ExternalSettingsMigrationValues;
 }
 
 const SECRET_KEY_PATTERN = /^(?:apiKey|apiToken|apiSecret|githubToken|gitlabToken|[a-zA-Z0-9]+ApiKey)$/;
@@ -34,11 +35,11 @@ function containsPlaintextCredential(value: unknown): boolean {
   ) || containsPlaintextCredential(nested));
 }
 
-function containsExternalHintCredential(hints: ExternalSettingsHints | undefined): boolean {
+function containsExternalHintCredential(hints: ExternalSettingsMigrationValues | undefined): boolean {
   return Boolean(hints && Object.values(hints.resolved).some((value) => typeof value === "string" && value.length > 0));
 }
 
-function seedExternalHints(root: Record<string, unknown>, hints: ExternalSettingsHints | undefined): void {
+function seedExternalHints(root: Record<string, unknown>, hints: ExternalSettingsMigrationValues | undefined): void {
   if (!hints) return;
   const integrations = asRecord(root.integrations) ?? {};
   root.integrations = integrations;
@@ -115,7 +116,7 @@ export class SettingsCredentialMigrationService {
       } catch {
         return false;
       }
-    }) || (systemRequiresHintMigration && containsExternalHintCredential(this.deps.externalSettingsHints));
+    }) || (systemRequiresHintMigration && containsExternalHintCredential(this.deps.externalSettingsMigrationValues));
     const health = requiresSecureStorage
       ? await this.deps.credentialBroker.health().catch(() => ({ available: false, secure: false }))
       : { available: true, secure: true };
@@ -137,7 +138,7 @@ export class SettingsCredentialMigrationService {
       }
       const credentialMigrationComplete = root.credentialMigrationVersion === 1;
       if (record.scope === "system" && !credentialMigrationComplete) {
-        seedExternalHints(root, this.deps.externalSettingsHints);
+        seedExternalHints(root, this.deps.externalSettingsMigrationValues);
       }
       let changed = malformedPayload;
       const projectId = this.projectIdFor(record.scope, record.scopeId, managerProjectId);

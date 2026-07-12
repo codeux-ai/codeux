@@ -8,6 +8,7 @@ import { getModelCatalog, getModelCatalogProviders } from "../domain/model-catal
 import type { LocalMcpCliProvider } from "../services/local-mcp-cli-config-service.js";
 import { getActiveProviderTypes, providerToolManager } from "../services/provider-tool-manager.js";
 import { playwrightBrowserManager } from "../services/playwright-browser-manager.js";
+import { serializeExternalSettingsHints } from "../config/external-settings.js";
 
 const LOCAL_MCP_PROVIDERS = new Set<LocalMcpCliProvider>([
   "claude-code",
@@ -89,7 +90,7 @@ export function registerSettingsRoutes(router: Express, deps: DashboardDependenc
   }));
 
   router.get("/api/settings/import-sources", syncRoute((req, res) => {
-    res.json(deps.getExternalSettingsHints());
+    res.json(serializeExternalSettingsHints(deps.getExternalSettingsHints()));
   }));
 
   router.get("/api/settings/local-mcp", syncRoute((req, res) => {

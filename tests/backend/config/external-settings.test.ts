@@ -3,7 +3,10 @@ import os from "os";
 import fs from "fs";
 import type { PathLike } from "fs";
 import * as path from "path";
-import { loadExternalSettingsHints } from "../../../src/config/external-settings.js";
+import {
+  loadExternalSettingsHints,
+  loadExternalSettingsMigrationValues,
+} from "../../../src/config/external-settings.js";
 
 vi.mock("os");
 vi.mock("fs");
@@ -46,7 +49,7 @@ describe("external-settings", () => {
     });
     vi.spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify(mockSettings));
 
-    const hints = loadExternalSettingsHints(MOCK_PROJECT_ROOT);
+    const hints = loadExternalSettingsMigrationValues(MOCK_PROJECT_ROOT);
 
     expect(hints.resolved.julesApiKey).toBe("json-jules-key");
     expect(hints.resolved.geminiApiKey).toBe("json-gemini-key");
@@ -61,7 +64,7 @@ describe("external-settings", () => {
     vi.spyOn(fs, "existsSync").mockReturnValue(true);
     vi.spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify(mockSettings));
 
-    const hints = loadExternalSettingsHints(MOCK_PROJECT_ROOT);
+    const hints = loadExternalSettingsMigrationValues(MOCK_PROJECT_ROOT);
 
     expect(hints.resolved.julesApiKey).toBe("env-jules-key");
   });
@@ -79,7 +82,7 @@ describe("external-settings", () => {
     process.env.GH_TOKEN = "gh-token";
     process.env.DASHSCOPE_API_KEY = "dashscope-key";
 
-    const hints = loadExternalSettingsHints(MOCK_PROJECT_ROOT);
+    const hints = loadExternalSettingsMigrationValues(MOCK_PROJECT_ROOT);
 
     expect(hints.resolved.julesApiKey).toBe("jules-key-alt");
     expect(hints.resolved.claudeCodeApiKey).toBe("anthropic-key");
@@ -100,7 +103,7 @@ describe("external-settings", () => {
     });
     vi.spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify(mockSettings));
 
-    const hints = loadExternalSettingsHints(MOCK_PROJECT_ROOT);
+    const hints = loadExternalSettingsMigrationValues(MOCK_PROJECT_ROOT);
 
     expect(hints.resolved.julesApiKey).toBe("json-jules-caps");
     expect(hints.resolved.claudeCodeApiKey).toBe("json-claude-caps");
@@ -118,6 +121,22 @@ describe("external-settings", () => {
     expect(hints.providerAvailability.claudeCode).toEqual({ hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false });
     expect(hints.providerAvailability.qwenCode).toEqual({ hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false });
     expect(hints.providerAvailability.openCode).toEqual({ hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false });
+  });
+
+  it("returns metadata only and never serializes sentinel credential values", () => {
+    const sentinel = "SENTINEL_EXTERNAL_SECRET_DO_NOT_EXPOSE";
+    process.env.JULES_API_KEY = sentinel;
+    vi.spyOn(fs, "existsSync").mockReturnValue(false);
+
+    const hints = loadExternalSettingsHints(MOCK_PROJECT_ROOT);
+    const serialized = JSON.stringify(hints);
+
+    expect(hints.sourceAvailability.environment).toBe(true);
+    expect(hints.credentialAvailability.julesApiKey).toBe(true);
+    expect(hints.providerAvailability.jules.hasApiKey).toBe(true);
+    expect(serialized).not.toContain(sentinel);
+    expect(serialized).not.toContain('"resolved"');
+    expect(serialized).not.toContain('"env"');
   });
 
   it("should correctly report hasApiKey when keys are available", () => {

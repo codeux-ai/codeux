@@ -101,15 +101,15 @@ You can also fetch effective settings programmatically:
 - `GET /api/projects/:projectId/settings/effective`
 - `GET /api/projects/:projectId/sprints/:sprintId/settings/effective`
 
-## External settings hints
+## Legacy credential migration
 
-The **AI providers** category includes a **Detected** column. Code UX inspects:
+At startup, Code UX can detect legacy credentials from:
 
 - `JULES_API_KEY` / `JULES_KEY` env vars.
 - `~/.gemini/`, `~/.codex/`, `~/.claude/`, `~/.qwen/`, `~/.local/share/opencode/` for installed-CLI auth.
 - `GITHUB_TOKEN` / `GH_TOKEN` env vars and `gh auth status`.
 
-If a hint is detected, the panel offers a one-click **Use detected value** button so you don't paste secrets manually.
+Detected values pass directly into the one-way credential-broker migration and are then removed from legacy storage. Dashboard APIs and rendered settings receive only configured/available metadata, never the values. Settings shows migration status and guidance; add or replace new secrets through the credential manager rather than copying detected values into settings.
 
 ## Google Drive mount
 

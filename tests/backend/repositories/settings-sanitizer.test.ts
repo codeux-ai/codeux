@@ -9,10 +9,11 @@ import {
 import { DESIGN_GUIDANCE_NONE_ID } from "../../../src/domain/settings/design-guidance-catalog.js";
 
 describe("settings-sanitizer", () => {
-  it("clones defaults using resolved external hints", () => {
+  it("ignores raw external hints when serializing default settings", () => {
+    const sentinel = "SENTINEL_SETTINGS_PAYLOAD_SECRET";
     const settings = cloneDefaults({
       env: {
-        julesApiKey: "env-jules",
+        julesApiKey: sentinel,
         geminiApiKey: "env-gemini",
         codexApiKey: "env-codex",
         claudeCodeApiKey: "env-claude",
@@ -26,7 +27,7 @@ describe("settings-sanitizer", () => {
         githubToken: "",
       },
       resolved: {
-        julesApiKey: "resolved-jules",
+        julesApiKey: sentinel,
         geminiApiKey: "resolved-gemini",
         codexApiKey: "resolved-codex",
         claudeCodeApiKey: "resolved-claude",
@@ -45,6 +46,7 @@ describe("settings-sanitizer", () => {
     expect(settings.aiProvider.providers.codex.apiKey).toBe("");
     expect(settings.aiProvider.providers["claude-code"].apiKey).toBe("");
     expect(settings.git.githubToken).toBe("");
+    expect(JSON.stringify(settings)).not.toContain(sentinel);
     expect(settings.notion).toEqual({
       enabled: false,
       apiToken: "",

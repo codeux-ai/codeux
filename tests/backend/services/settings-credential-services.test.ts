@@ -12,7 +12,7 @@ import { CredentialBroker } from "../../../src/services/credentials/credential-b
 import { SettingsCredentialMigrationService } from "../../../src/services/credentials/settings-credential-migration-service.js";
 import { SettingsCredentialResolver } from "../../../src/services/credentials/settings-credential-resolver.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
-import type { ExternalSettingsHints } from "../../../src/contracts/app-types.js";
+import type { ExternalSettingsMigrationValues } from "../../../src/config/external-settings.js";
 
 const dirs: string[] = [];
 
@@ -37,7 +37,7 @@ async function fixture(prepareSettings?: (repository: SettingsRepository) => voi
   return { appStorage, projects, first, second, broker, settingsRepository };
 }
 
-function externalHints(sentinel: (name: string) => string): ExternalSettingsHints {
+function externalHints(sentinel: (name: string) => string): ExternalSettingsMigrationValues {
   const values = {
     julesApiKey: sentinel("jules"),
     geminiApiKey: sentinel("gemini"),
@@ -54,15 +54,6 @@ function externalHints(sentinel: (name: string) => string): ExternalSettingsHint
     env: { ...values },
     settingsJson: { ...values },
     resolved: { ...values },
-    providerAvailability: {
-      jules: { hasApiKey: true, hasLocalAuth: false, hasDashboardAuth: false },
-      gemini: { hasApiKey: true, hasLocalAuth: false, hasDashboardAuth: false },
-      codex: { hasApiKey: true, hasLocalAuth: false, hasDashboardAuth: false },
-      claudeCode: { hasApiKey: true, hasLocalAuth: false, hasDashboardAuth: false },
-      qwenCode: { hasApiKey: true, hasLocalAuth: false, hasDashboardAuth: false },
-      openCode: { hasApiKey: true, hasLocalAuth: false, hasDashboardAuth: false },
-      antigravity: { hasApiKey: true, hasLocalAuth: false, hasDashboardAuth: false },
-    },
   };
 }
 
@@ -231,7 +222,7 @@ describe("settings credential migration and resolution", () => {
       settingsRepository: f.settingsRepository,
       credentialBroker: f.broker,
       listProjectIds: () => [f.first.id, f.second.id],
-      externalSettingsHints: hints,
+      externalSettingsMigrationValues: hints,
     });
 
     await expect(migration.migrate()).resolves.toMatchObject({ migrated: 10, scrubbed: 0 });

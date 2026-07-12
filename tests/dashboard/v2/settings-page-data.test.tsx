@@ -220,14 +220,20 @@ describe("SettingsPage data interactions", () => {
       { id: "qa-agent-1", name: "Risk Reviewer", labels: ["quality-assurance"] },
     ] as any);
     vi.mocked(fetchExternalSettingsHints).mockResolvedValue({
-      env: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
-      settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
-      resolved: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+      sourceAvailability: { environment: false, settingsJson: false },
+      credentialAvailability: {
+        julesApiKey: false, geminiApiKey: false, codexApiKey: false, claudeCodeApiKey: false,
+        qwenCodeApiKey: false, openCodeApiKey: false, antigravityApiKey: false,
+        githubToken: false, gitlabToken: false, jiraToken: false,
+      },
       providerAvailability: {
-        jules: { hasApiKey: false, hasLocalAuth: false },
-        gemini: { hasApiKey: false, hasLocalAuth: false },
-        codex: { hasApiKey: false, hasLocalAuth: false },
-        claudeCode: { hasApiKey: false, hasLocalAuth: false },
+        jules: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
+        gemini: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
+        codex: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
+        claudeCode: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
+        qwenCode: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
+        openCode: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
+        antigravity: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
       },
     });
 

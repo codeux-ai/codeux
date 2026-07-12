@@ -204,18 +204,24 @@ describe("SettingsIntegrationsPanel", () => {
       integrations: [
         { id: "github", label: "GitHub", description: "Git provider" },
       ],
-      importingHints: false,
       externalHints: {
-        resolved: {
-          julesApiKey: "",
-          geminiApiKey: "",
-          codexApiKey: "",
-          claudeCodeApiKey: "",
-          githubToken: "",
-          gitlabToken: "",
+        sourceAvailability: { environment: true, settingsJson: false },
+        credentialAvailability: {
+          julesApiKey: true, geminiApiKey: false, codexApiKey: false, claudeCodeApiKey: false,
+          qwenCodeApiKey: false, openCodeApiKey: false, antigravityApiKey: false,
+          githubToken: false, gitlabToken: false, jiraToken: false,
         },
+        providerAvailability: {
+          jules: { hasApiKey: true, hasLocalAuth: false, hasDashboardAuth: false },
+          gemini: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
+          codex: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
+          claudeCode: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
+          qwenCode: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
+          openCode: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
+          antigravity: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
+        },
+        legacyRawValue: "SENTINEL_DASHBOARD_SECRET_DO_NOT_RENDER",
       },
-      handleImportHints: vi.fn(),
       updateEditableSettings: vi.fn(),
       updateSystem: vi.fn(),
     } as any;
@@ -271,18 +277,16 @@ describe("SettingsIntegrationsPanel", () => {
         { id: "github", label: "GitHub", description: "Git provider" },
         { id: "jira", label: "Jira", description: "Issue tracker" },
       ],
-      importingHints: false,
       externalHints: {
-        resolved: {
-          julesApiKey: "",
-          geminiApiKey: "",
-          codexApiKey: "",
-          claudeCodeApiKey: "",
-          githubToken: "",
-          gitlabToken: "",
+        sourceAvailability: { environment: true, settingsJson: false },
+        credentialAvailability: {
+          julesApiKey: true, geminiApiKey: false, codexApiKey: false, claudeCodeApiKey: false,
+          qwenCodeApiKey: false, openCodeApiKey: false, antigravityApiKey: false,
+          githubToken: false, gitlabToken: false, jiraToken: false,
         },
+        providerAvailability: {},
+        legacyRawValue: "SENTINEL_DASHBOARD_SECRET_DO_NOT_RENDER",
       },
-      handleImportHints: vi.fn(),
       updateEditableSettings: vi.fn(),
       updateSystem: vi.fn(),
     } as any;
@@ -294,7 +298,8 @@ describe("SettingsIntegrationsPanel", () => {
     });
     expect(container.textContent).toContain("GIT");
     expect(container.textContent).toContain("PM");
-    expect(container.textContent).toContain("Import host hints");
+    expect(container.textContent).toContain("Legacy credentials migrate securely at startup");
+    expect(container.textContent).not.toContain("SENTINEL_DASHBOARD_SECRET_DO_NOT_RENDER");
     expect(container.textContent).not.toContain("Integration catalog");
     expect(container.textContent).not.toContain("Provider credentials and source-control auth in one place");
   });

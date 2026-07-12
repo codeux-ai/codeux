@@ -4,7 +4,6 @@ import type {
   DashboardSettings,
   DashboardExperienceMode,
   DesignGuidanceSettings,
-  ExternalSettingsHints,
   McpToolToggle,
   RuntimeLogLevel,
   ConsoleLogMode,
@@ -490,7 +489,7 @@ const sanitizeAgentRouting = (value: unknown): DashboardSettings["agents"]["rout
   };
 };
 
-export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardSettings => ({
+export const cloneDefaults = (_legacyExternalHints?: unknown): DashboardSettings => ({
   dashboardPort: DEFAULT_DASHBOARD_SETTINGS.dashboardPort,
   consoleLogLevel: DEFAULT_DASHBOARD_SETTINGS.consoleLogLevel,
   debugLogFileLevel: DEFAULT_DASHBOARD_SETTINGS.debugLogFileLevel,
@@ -509,7 +508,7 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
     ...DEFAULT_DASHBOARD_SETTINGS.aiProvider,
     providers: buildDashboardProviderSettings(
       DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers,
-      buildDefaultIntegrationProviders(externalHints),
+      buildDefaultIntegrationProviders(),
     ),
   },
   techstackCatalog: cloneTechstackCatalog(DEFAULT_DASHBOARD_SETTINGS.techstackCatalog),
@@ -607,7 +606,7 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   modelPricing: { overrides: { ...DEFAULT_DASHBOARD_SETTINGS.modelPricing.overrides } },
 });
 
-export const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints): DashboardSettings => {
+export const sanitizeSettings = (value: unknown, _legacyExternalHints?: unknown): DashboardSettings => {
   const input = (value && typeof value === "object" ? value : {}) as Partial<DashboardSettings> & {
     enableDebugLogFile?: unknown;
     consoleLogMode?: unknown;
@@ -682,12 +681,12 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     ),
   };
 
-  const aiProvider = sanitizeAiProvider(input, { externalHints });
+  const aiProvider = sanitizeAiProvider(input, {});
   const techstackCatalog = sanitizeTechstackCatalog(input.techstackCatalog ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog);
   const techstack = sanitizeTechstackSelection(input.techstack);
   const designGuidance = sanitizeDesignGuidanceSettings(input.designGuidance);
   const googleDrive = sanitizeGoogleDriveSettings(input.googleDrive);
-  const git = sanitizeGit(input, externalHints);
+  const git = sanitizeGit(input);
   const jira = sanitizeJira(input.jira, DEFAULT_DASHBOARD_SETTINGS.jira);
   const notion = sanitizeExternalImporterSettings(input.notion, DEFAULT_DASHBOARD_SETTINGS.notion);
   const asana = sanitizeExternalImporterSettings(input.asana, DEFAULT_DASHBOARD_SETTINGS.asana);
@@ -827,7 +826,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
       strategy: aiProvider.strategy,
       providers: buildDashboardProviderSettings(
         aiProvider.providers,
-        buildDefaultIntegrationProviders(externalHints),
+        buildDefaultIntegrationProviders(),
       ),
       invocationRouting: aiProvider.invocationRouting,
     },

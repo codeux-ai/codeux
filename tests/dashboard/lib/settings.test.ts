@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyExternalSettingsHints, cloneDefaultSettings } from "../../../dashboard/src/lib/settings.js";
+import { cloneDefaultSettings } from "../../../dashboard/src/lib/settings.js";
 
 describe("dashboard settings helpers", () => {
   it("returns fresh default objects", () => {
@@ -58,45 +58,6 @@ describe("dashboard settings helpers", () => {
     expect(second.techstackCatalog.entries[0]!.items[0]!.label).toBe("Preact");
     expect(second.techstack.selectedTechstackId).toBe(null);
     expect(second.techstack.applicationKind).toBe(null);
-  });
-
-  it("imports only missing external secrets", () => {
-    const settings = cloneDefaultSettings();
-    settings.aiProvider.providers.jules.apiKey = "manual-jules";
-    settings.aiProvider.providers.gemini.apiKey = "";
-    settings.aiProvider.providers.codex.apiKey = "";
-    settings.aiProvider.providers["claude-code"].apiKey = "";
-    settings.git.githubToken = "";
-
-    const merged = applyExternalSettingsHints(settings, {
-      env: {
-        julesApiKey: "",
-        geminiApiKey: "",
-        codexApiKey: "",
-        claudeCodeApiKey: "",
-        githubToken: "",
-      },
-      settingsJson: {
-        julesApiKey: "",
-        geminiApiKey: "",
-        codexApiKey: "",
-        claudeCodeApiKey: "",
-        githubToken: "",
-      },
-      resolved: {
-        julesApiKey: "resolved-jules",
-        geminiApiKey: "resolved-gemini",
-        codexApiKey: "resolved-codex",
-        claudeCodeApiKey: "resolved-claude",
-        githubToken: "resolved-gh",
-      },
-    });
-
-    expect(merged.aiProvider.providers.jules.apiKey).toBe("manual-jules");
-    expect(merged.aiProvider.providers.gemini.apiKey).toBe("resolved-gemini");
-    expect(merged.aiProvider.providers.codex.apiKey).toBe("resolved-codex");
-    expect(merged.aiProvider.providers["claude-code"].apiKey).toBe("resolved-claude");
-    expect(merged.git.githubToken).toBe("resolved-gh");
   });
 
   it("preserves autoApprovePlan: true in cloneDefaultSettings and allows manual toggling to false", () => {

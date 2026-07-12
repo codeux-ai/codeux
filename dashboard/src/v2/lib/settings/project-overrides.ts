@@ -2,7 +2,6 @@ import type {
   CustomMcpServer,
   DashboardSettings,
   EffectiveSettingsResponse,
-  ExternalSettingsHints,
   McpToolToggle,
   ProjectSettings,
   SettingsValueSource,
@@ -10,7 +9,6 @@ import type {
   SystemSettings,
 } from "../../../types.js";
 import { cloneGuardrails, cloneTechstackCatalog, DEFAULT_DASHBOARD_SETTINGS } from "../../../lib/settings.js";
-import { getHintApiKey } from "./provider-instances.js";
 import { cloneDesignGuidanceSettings } from "../../../../../src/domain/settings/design-guidance-catalog.js";
 
 const cloneMemorySettings = (memory: ProjectSettings["memory"]): ProjectSettings["memory"] => ({
@@ -311,38 +309,6 @@ export const applyEffectiveProjectSettings = (effectiveProject: EffectiveSetting
   return {
     settings: cloneProjectSettings(nextProject),
     sources: effectiveProject.sources,
-  };
-};
-
-export const applyExternalHintsToSystemSettings = (
-  settings: SystemSettings,
-  hints: ExternalSettingsHints,
-): SystemSettings => {
-  const nextProviders = cloneIntegrationProviders(settings.integrations.providers);
-  for (const [providerConfigId, provider] of Object.entries(nextProviders)) {
-    if (!provider.apiKey.trim()) {
-      nextProviders[providerConfigId] = {
-        ...provider,
-        apiKey: getHintApiKey(provider.provider, hints),
-      };
-    }
-  }
-
-  const currentJira = settings.integrations.jira || defaultJiraSettings();
-  const clonedSettings = cloneSystemSettings(settings);
-
-  return {
-    ...clonedSettings,
-    integrations: {
-      ...clonedSettings.integrations,
-      providers: nextProviders,
-      githubToken: settings.integrations.githubToken || hints.resolved.githubToken || "",
-      gitlabToken: settings.integrations.gitlabToken || hints.resolved.gitlabToken || "",
-      jira: {
-        ...currentJira,
-        apiToken: currentJira.apiToken || hints.resolved.jiraToken || "",
-      },
-    },
   };
 };
 

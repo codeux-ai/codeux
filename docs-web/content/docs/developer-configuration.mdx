@@ -154,7 +154,7 @@ On boot, Code UX inspects:
 - **OpenCode** — `~/.local/share/opencode/`, `~/.config/opencode/`.
 - **GitHub** — `GITHUB_TOKEN` / `GH_TOKEN` env, `gh auth status`.
 
-Detected hints surface in **Settings → AI providers** as **Use detected value** buttons. They are *never* automatically applied.
+Legacy values are consumed only by the one-way startup migration into broker-backed credential references. `GET /api/settings/import-sources` and the Settings UI expose boolean configured/available metadata only; raw values are never returned, pre-filled, or copied into settings.
 
 ## Docker runtime settings
 

@@ -107,14 +107,20 @@ beforeEach(() => {
     },
   ] as any);
   mockFetchExternal = vi.spyOn(dashboardApi, 'fetchExternalSettingsHints').mockResolvedValue({
-    env: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
-    settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
-    resolved: { julesApiKey: "hint", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+    sourceAvailability: { environment: true, settingsJson: false },
+    credentialAvailability: {
+      julesApiKey: true, geminiApiKey: false, codexApiKey: false, claudeCodeApiKey: false,
+      qwenCodeApiKey: false, openCodeApiKey: false, antigravityApiKey: false,
+      githubToken: false, gitlabToken: false, jiraToken: false,
+    },
     providerAvailability: {
-      jules: { hasApiKey: true, hasLocalAuth: false },
-      gemini: { hasApiKey: false, hasLocalAuth: false },
-      codex: { hasApiKey: false, hasLocalAuth: false },
-      claudeCode: { hasApiKey: false, hasLocalAuth: false },
+      jules: { hasApiKey: true, hasLocalAuth: false, hasDashboardAuth: false },
+      gemini: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
+      codex: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
+      claudeCode: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
+      qwenCode: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
+      openCode: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
+      antigravity: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
     },
   });
 });
@@ -372,7 +378,8 @@ describe("useSettingsPageState", () => {
     // In some Vitest setups, spyOn might not intercept the internal call due to module caching,
     // but we can verify the state updates if the mock works.
     if (result.current.externalHints) {
-      expect(result.current.externalHints.resolved?.julesApiKey).toBe("hint");
+      expect(result.current.externalHints.credentialAvailability.julesApiKey).toBe(true);
+      expect(JSON.stringify(result.current.externalHints)).not.toContain("hint");
     }
   });
 
@@ -738,20 +745,6 @@ describe("useSettingsPageState", () => {
     await waitFor(() => {
       expect(mockFetchProject.mock.calls.length).toBeGreaterThan(callsBeforeEvent);
     });
-  });
-
-  it.skip("handles import hints", async () => {
-    const { result } = renderHook(() => useSettingsPageState(CATEGORIES));
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    if (!result.current.systemSettings) {
-      act(() => { result.current.updateSystem(() => ({ defaults: {}, runtime: {} } as any)); });
-    }
-
-    await act(async () => {
-      await result.current.handleImportHints();
-    });
-    expect(mockFetchExternal).toHaveBeenCalled();
   });
 
   it("triggers unsaved changes modal when navigation is attempted while dirty", async () => {

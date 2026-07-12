@@ -34,7 +34,6 @@ import { AgentPresetRepository } from "../repositories/agent-preset-repository.j
 import { GitStatusService, type GitSettingsCredentialContext, type GitTrackingRequest } from "../services/git-status-service.js";
 import { defaultRunner } from "../infrastructure/git/git-status-query-client.js";
 import type { GitHostTokens } from "../infrastructure/git/repository-host-resolver.js";
-import { loadExternalSettingsHints } from "../config/external-settings.js";
 import { InstructionService } from "../instructions/instruction-template-service.js";
 import { buildMissingJulesApiKeyMessage } from "../mcp/api-key-guidance.js";
 import { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";

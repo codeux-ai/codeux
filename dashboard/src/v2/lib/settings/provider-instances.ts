@@ -157,32 +157,32 @@ export const getProviderInstanceLabel = (provider: { provider: ProviderId; name:
   `${provider.name} · ${getProviderTypeLabel(provider.provider)}`
 );
 
-export const getHintApiKey = (
+export const hasExternalProviderApiKey = (
   providerId: ProviderId,
   hints: ExternalSettingsHints | null,
-): string => {
+): boolean => {
   if (providerId === "jules") {
-    return hints?.resolved.julesApiKey || "";
+    return hints?.credentialAvailability?.julesApiKey === true;
   }
   if (providerId === "gemini") {
-    return hints?.resolved.geminiApiKey || "";
+    return hints?.credentialAvailability?.geminiApiKey === true;
   }
   if (providerId === "codex") {
-    return hints?.resolved.codexApiKey || "";
+    return hints?.credentialAvailability?.codexApiKey === true;
   }
   if (providerId === "claude-code") {
-    return hints?.resolved.claudeCodeApiKey || "";
+    return hints?.credentialAvailability?.claudeCodeApiKey === true;
   }
   if (providerId === "qwen-code") {
-    return hints?.resolved.qwenCodeApiKey || "";
+    return hints?.credentialAvailability?.qwenCodeApiKey === true;
   }
   if (providerId === "antigravity") {
-    return hints?.resolved.antigravityApiKey || "";
+    return hints?.credentialAvailability?.antigravityApiKey === true;
   }
   if (providerId === "mockup-cli") {
-    return "";
+    return false;
   }
-  return hints?.resolved.openCodeApiKey || "";
+  return hints?.credentialAvailability?.openCodeApiKey === true;
 };
 
 export const getLegacyIntegrationApiKey = (
@@ -277,7 +277,7 @@ const hasAnyProviderApiKey = (
 ): boolean => (
   getSystemProvidersByType(systemSettings, providerId).some(([, provider]) => Boolean(provider.apiKeyCredentialRef?.credentialId) || provider.apiKey.trim().length > 0)
   || Boolean(getLegacyIntegrationApiKey(systemSettings, providerId).trim())
-  || Boolean(getHintApiKey(providerId, hints).trim())
+  || hasExternalProviderApiKey(providerId, hints)
 );
 
 export const providerSupportsModelSelection = (providerId: ProviderId): boolean => providerId !== "jules";
@@ -366,7 +366,7 @@ export const getEligibleProviders = (
         return false;
       }
       return provider.enabled && (isProviderInstanceAvailable(providerConfigId, systemSettings)
-        || Boolean(getHintApiKey(providerType, hints)));
+        || hasExternalProviderApiKey(providerType, hints));
     })
     .map(([providerConfigId]) => providerConfigId)
 );
@@ -379,5 +379,5 @@ export const countConnectedProviders = (
   const stored = getSystemProvidersByType(systemSettings, providerId)
     .filter(([, provider]) => Boolean(provider.apiKeyCredentialRef?.credentialId) || provider.apiKey.trim().length > 0 || (provider.provider !== "jules" && provider.mountAuth))
     .length;
-  return Math.max(stored, hints && getHintApiKey(providerId, hints).trim() ? 1 : 0);
+  return Math.max(stored, hasExternalProviderApiKey(providerId, hints) ? 1 : 0);
 };

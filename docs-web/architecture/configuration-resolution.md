@@ -10,7 +10,7 @@ Code UX has three configuration layers, each loaded at a different time:
 
 1. **Bootstrap config** — read once at process start. Drives port binding, transport selection, API key default.
 2. **Settings tree** — stored in the database, hot-reloadable, evaluated as a cascade per project/sprint.
-3. **External hints** — detected from env variables and known CLI auth directories. Surfaced in the UI as "Use detected value" suggestions; never auto-applied.
+3. **External migration hints** — legacy values detected from environment/JSON only at startup, migrated one way into broker-backed credential references, and exposed to the UI as availability metadata only.
 
 ## Bootstrap config
 
