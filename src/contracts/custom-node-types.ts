@@ -32,6 +32,10 @@ export interface CustomNodeResourceLimits {
 export interface CustomNodeHttpPolicy {
   allowedHosts: string[];
   allowedPorts?: number[];
+  allowHttp?: boolean;
+  maxRedirects?: number;
+  allowedContentTypes?: string[];
+  maxRetries?: number;
   maxRequests: number;
   timeoutMs: number;
   maxResponseBytes: number;
