@@ -10,6 +10,7 @@ import {
   Pause,
   Pencil,
   Play,
+  RotateCcw,
   Sparkles,
   Square,
   XCircle,
@@ -38,6 +39,7 @@ export interface SprintActionMenuProps {
   onToggleShowcase?: () => void;
   onOverrides?: () => void;
   onMarkCompleted?: () => void;
+  onRollback?: () => void;
   onDelete?: () => void;
   onClose?: () => void;
   markCompletedIcon?: "square" | "circle";
@@ -68,6 +70,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
   onToggleShowcase,
   onOverrides,
   onMarkCompleted,
+  onRollback,
   onDelete,
   onClose,
   markCompletedIcon = "circle",
@@ -299,6 +302,20 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
             <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2.1} />
           )}
           Mark Completed
+        </button>
+      )}
+      {isCompleted && sprint.kind !== "rollback" && onRollback && (
+        <button
+          type="button"
+          role={role}
+          onClick={() => {
+            onClose?.();
+            onRollback();
+          }}
+          className={`${buttonClassName} text-orange-600 hover:bg-orange-500/10 dark:text-orange-300`}
+        >
+          <RotateCcw className="h-3.5 w-3.5" strokeWidth={2.1} />
+          Rollback Sprint
         </button>
       )}
       <button

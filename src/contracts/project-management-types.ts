@@ -6,6 +6,8 @@ import type { ProjectWorkerAssignmentRecord } from "./worker-types.js";
 export type ProjectStatus = "running" | "failed" | "intervention" | "idle";
 export type ProjectSourceType = "local" | "git";
 export type SprintStatus = "running" | "paused" | "completed" | "failed" | "cancelled" | "idle";
+export type SprintKind = "standard" | "rollback";
+export type SprintRollbackMode = "automatic" | "agent_assisted";
 export type TaskStatus = "pending" | "in_progress" | "coding_completed" | "completed" | "QA_REVIEW_FAILED";
 export type TaskPriority = "critical" | "high" | "medium" | "low";
 export type TaskExecutorType = "auto" | "docker_cli" | "jules" | "mcp_worker";
@@ -274,6 +276,11 @@ export interface SprintRecord {
   endDate: string | null;
   featureBranch: string | null;
   baseCommitSha: string | null;
+  kind: SprintKind;
+  rollbackSourceSprintId: string | null;
+  rollbackMode: SprintRollbackMode | null;
+  rollbackInstructions: string | null;
+  rollbackSafetyReason: string | null;
   tasksCount: number;
   completion: number;
   linkedIssues: SprintLinkedIssueRecord[];
@@ -361,6 +368,29 @@ export interface CreateSprintInput {
   endDate?: string | null;
   featureBranch?: string | null;
   baseCommitSha?: string | null;
+  /** Internal metadata used by SprintRollbackService. Dashboard create parsing does not expose it. */
+  kind?: SprintKind;
+  rollbackSourceSprintId?: string | null;
+  rollbackMode?: SprintRollbackMode | null;
+  rollbackInstructions?: string | null;
+  rollbackSafetyReason?: string | null;
+}
+
+export interface SprintRollbackAssessment {
+  sourceSprintId: string;
+  eligible: boolean;
+  recommendedMode: SprintRollbackMode;
+  reasons: string[];
+}
+
+export interface CreateSprintRollbackInput {
+  instructions?: string;
+}
+
+export interface CreateSprintRollbackResult {
+  rollbackSprint: SprintRecord;
+  mode: SprintRollbackMode;
+  assessment: SprintRollbackAssessment;
 }
 
 export interface UpdateSprintInput {
@@ -376,6 +406,9 @@ export interface UpdateSprintInput {
   endDate?: string | null;
   featureBranch?: string | null;
   baseCommitSha?: string | null;
+  /** Internal rollback metadata; public request parsing intentionally omits these fields. */
+  rollbackMode?: SprintRollbackMode | null;
+  rollbackSafetyReason?: string | null;
 }
 
 export interface PlanningOverrides {

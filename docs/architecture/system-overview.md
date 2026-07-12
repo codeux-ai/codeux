@@ -43,6 +43,7 @@ Code UX is a container-first multi-provider runtime with an integrated dashboard
 - `src/domain/sprint/ci/*`
 - Atomic step modules in `src/sprint/steps/*`
 - Git-mode behavior is split at the final merge gate. REMOTE mode waits for the hosted completion PR to be observed as merged before marking a run complete. LOCAL mode performs the final `feature -> default` merge in the host repository, restores the user's prior checkout afterward, and keeps the run active or paused with merge attention when the local merge fails.
+- Completed REMOTE-mode sprints can be reversed through the [Sprint Rollback](./sprint-rollbacks.md) subsystem. It creates a dedicated rollback sprint and chooses a deterministic detached-worktree revert only when history is provably isolated; otherwise it routes a dependency-aware rollback task through an agent. Both paths end at a required remote PR gate.
 
 ### 4. Instruction template system
 - `src/instructions/instruction-template-service.ts`

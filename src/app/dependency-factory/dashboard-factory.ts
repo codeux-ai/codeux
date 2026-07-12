@@ -29,6 +29,7 @@ import { ChatProviderOutboundService } from "../../services/chat-provider-outbou
 import { SpeechTranscriptionService } from "../../services/speech-transcription-service.js";
 import { SpeechSynthesisService } from "../../services/speech-synthesis-service.js";
 import { SpeechModelManager } from "../../services/speech-model-manager.js";
+import { SprintRollbackService } from "../../services/sprint-rollback-service.js";
 import { NodeFlowRuntimeService } from "../../services/node-flow-runtime-service.js";
 import { NodeFlowService } from "../../services/node-flow-service.js";
 import { NodeFlowRecoveryService } from "../../services/node-flows/node-flow-recovery-service.js";
@@ -72,6 +73,7 @@ export interface DashboardDependencies {
   projectSetupService: ProjectSetupService;
   sprintIssueService: CoreDependencies["sprintIssueService"];
   schedulerService: SchedulerService;
+  sprintRollbackService: SprintRollbackService;
   searchJiraIssues: CoreDependencies["sprintIssueService"]["searchJiraIssues"];
   searchJiraProjectStatuses: CoreDependencies["sprintIssueService"]["searchJiraProjectStatuses"];
   replaceSprintLinkedIssues: CoreDependencies["projectManagementRepository"]["replaceSprintLinkedIssues"];
@@ -131,6 +133,16 @@ export function createDashboardDependencies(
     projectManagementRepository,
     activeDispatchRegistry,
     logger: logger.child({ component: "execution-invocation-control-service" }),
+  });
+  const sprintRollbackService = new SprintRollbackService({
+    projectManagementRepository,
+    settingsRepository,
+    orchestrateSprint: (projectId, sprintId) => executionControlService.orchestrateSprint(projectId, sprintId),
+    getGitAuth: () => ({
+      githubToken: context.getEffectiveGithubToken(),
+      gitlabToken: context.getEffectiveGitlabToken(),
+    }),
+    logger: logger.child({ component: "sprint-rollback-service" }),
   });
 
   const managementToolHandler = new ManagementToolHandler({
@@ -635,6 +647,7 @@ export function createDashboardDependencies(
     projectSetupService,
     sprintIssueService: coreDeps.sprintIssueService,
     schedulerService,
+    sprintRollbackService,
     searchJiraIssues: coreDeps.sprintIssueService.searchJiraIssues.bind(coreDeps.sprintIssueService),
     searchJiraProjectStatuses: coreDeps.sprintIssueService.searchJiraProjectStatuses?.bind(coreDeps.sprintIssueService)
       ?? (() => {

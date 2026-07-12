@@ -1,6 +1,7 @@
 import type {
   CreateProjectInput,
   CreateSprintInput,
+  CreateSprintRollbackResult,
   CreateTaskInput,
   IssuePromptContext,
   IssuePromptContextInput,
@@ -21,6 +22,7 @@ import type {
   SprintLinkedIssueInput,
   SprintLinkedIssueRecord,
   SprintRecord,
+  SprintRollbackAssessment,
   TaskRecord,
   UpdateProjectInput,
   UpdateSprintInput,
@@ -361,6 +363,28 @@ export const createSprint = async (projectId: string, input: CreateSprintInput):
     body: JSON.stringify(input),
   });
 };
+
+export const assessSprintRollback = async (
+  projectId: string,
+  sprintId: string,
+  signal?: AbortSignal,
+): Promise<SprintRollbackAssessment> => fetchJson<SprintRollbackAssessment>(
+  `/api/projects/${encodeURIComponent(projectId)}/sprints/${encodeURIComponent(sprintId)}/rollback/assessment`,
+  { signal },
+);
+
+export const createSprintRollback = async (
+  projectId: string,
+  sprintId: string,
+  instructions: string,
+): Promise<CreateSprintRollbackResult> => fetchJson<CreateSprintRollbackResult>(
+  `/api/projects/${encodeURIComponent(projectId)}/sprints/${encodeURIComponent(sprintId)}/rollback`,
+  {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ instructions: instructions.trim() || undefined }),
+  },
+);
 
 export const improveSprintPrompt = async (
   projectId: string,

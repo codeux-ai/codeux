@@ -95,6 +95,7 @@ export type DocsSlug =
   | 'architecture-system-overview'
   | 'architecture-mcp-server'
   | 'architecture-sprint-engine'
+  | 'architecture-sprint-rollbacks'
   | 'architecture-virtual-workers'
   | 'architecture-ci-integration'
   | 'architecture-dashboard-architecture'
@@ -773,6 +774,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Sprint engine",
     description: "The sprint engine is the heart of Code UX. It schedules, dispatches, monitors, gates, and finalises every unit of work.",
   },
+  'architecture-sprint-rollbacks': {
+    id: 'architecture-sprint-rollbacks',
+    path: '/docs/architecture-sprint-rollbacks',
+    section: 'Architecture',
+    title: "Sprint rollbacks",
+    description: "How Code UX assesses, executes, tracks, and PR-gates automatic and agent-assisted sprint rollbacks.",
+  },
   'architecture-virtual-workers': {
     id: 'architecture-virtual-workers',
     path: '/docs/architecture-virtual-workers',
@@ -1036,6 +1044,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-system-overview'],
   docsRegistry['architecture-mcp-server'],
   docsRegistry['architecture-sprint-engine'],
+  docsRegistry['architecture-sprint-rollbacks'],
   docsRegistry['architecture-virtual-workers'],
   docsRegistry['architecture-ci-integration'],
   docsRegistry['architecture-dashboard-architecture'],

@@ -1,5 +1,5 @@
 import type { TaskPrTemplateSections, SprintPrTemplateSections, TaskPrSectionKey, SprintPrSectionKey } from "../../../contracts/app-types.js";
-import type { LinkedIssueProvider } from "../../../contracts/project-management-types.js";
+import type { LinkedIssueProvider, SprintKind } from "../../../contracts/project-management-types.js";
 import { formatTaskPrTitle } from "../../git/task-pr-title-template.js";
 import { formatCostUsd, formatDurationMs, formatIsoTimestamp, formatTokenCount, providerDisplayName } from "./pr-description-format-utils.js";
 
@@ -102,6 +102,8 @@ export interface SprintPrLinkedIssueSummary {
 }
 
 export interface SprintPrComposerInput {
+  sprintKind?: SprintKind;
+  rollbackSourceSprintId?: string | null;
   sprintId: string;
   sprintNumber?: number | null;
   sprintName?: string | null;
@@ -371,8 +373,11 @@ export function composeTaskPrTitle(input: TaskPrTitleComposerInput): string {
 }
 
 export function composeSprintPrTitle(
-  input: Pick<SprintPrComposerInput, "sprintNumber" | "sprintName" | "featureBranch" | "defaultBranch">,
+  input: Pick<SprintPrComposerInput, "sprintNumber" | "sprintName" | "featureBranch" | "defaultBranch" | "sprintKind">,
 ): string {
+  if (input.sprintKind === "rollback") {
+    return `${input.sprintName || `Rollback Sprint ${input.sprintNumber ?? "?"}`} — merge ${input.featureBranch} into ${input.defaultBranch}`;
+  }
   const label = input.sprintName
     ? `Sprint ${input.sprintNumber ?? "?"}: ${input.sprintName}`
     : `Sprint ${input.sprintNumber ?? "?"}`;
@@ -395,7 +400,9 @@ export function composeTaskPrBody(input: TaskPrComposerInput): string {
 export function composeSprintPrBody(input: SprintPrComposerInput): string {
   const order = resolveSectionOrder(input.sectionOrder, DEFAULT_SPRINT_SECTION_ORDER);
   const label = sprintLabel(input.sprintNumber, input.sprintName);
-  const parts: string[] = [`## 🚀 Sprint Completion: ${label}\n> Automated sprint completion PR opened by Code UX.`];
+  const parts: string[] = input.sprintKind === "rollback"
+    ? [`## Sprint Rollback: ${label}\n> Dedicated rollback PR opened by Code UX. Source sprint: \`${input.rollbackSourceSprintId || "unknown"}\`.`]
+    : [`## 🚀 Sprint Completion: ${label}\n> Automated sprint completion PR opened by Code UX.`];
 
   for (const key of order) {
     if (!input.sections[key]) continue;

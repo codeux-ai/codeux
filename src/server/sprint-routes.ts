@@ -28,6 +28,37 @@ export function registerSprintRoutes(router: Express, deps: DashboardDependencie
     }
   }));
 
+  router.get("/api/projects/:projectId/sprints/:sprintId/rollback/assessment", asyncRoute(async (req, res) => {
+    try {
+      res.json(await deps.assessSprintRollback(
+        requireTrimmedString(req.params.projectId, "projectId"),
+        requireTrimmedString(req.params.sprintId, "sprintId"),
+      ));
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to assess sprint rollback"));
+    }
+  }));
+
+  router.post("/api/projects/:projectId/sprints/:sprintId/rollback", asyncRoute(async (req, res) => {
+    try {
+      if (
+        req.body?.instructions !== undefined
+        && req.body.instructions !== null
+        && typeof req.body.instructions !== "string"
+      ) {
+        throw new Error("Invalid field: instructions must be a string.");
+      }
+      const instructions = parseTrimmedString(req.body?.instructions);
+      res.status(202).json(await deps.createSprintRollback(
+        requireTrimmedString(req.params.projectId, "projectId"),
+        requireTrimmedString(req.params.sprintId, "sprintId"),
+        { instructions },
+      ));
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to create sprint rollback"));
+    }
+  }));
+
   router.get("/api/projects/:projectId/jira/search", asyncRoute(async (req, res) => {
     try {
       const projectId = requireTrimmedString(req.params.projectId, "projectId");
