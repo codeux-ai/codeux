@@ -23,9 +23,12 @@ interface NodeFlowInspectorProps {
   attachments: NodeFlowSkillAttachment[];
   attachAgentId: string;
   attaching?: boolean;
+  attachmentsLoading?: boolean;
+  attachmentError?: string | null;
   onAttachAgentIdChange: (agentPresetId: string) => void;
   onAttachAgent: () => void;
   onDetachAgent: (agentPresetId: string) => void;
+  onRetryAttachments?: () => void;
   onNodeChange: (nodeId: string, update: Partial<NodeFlowNode>) => void;
   definition?: NodeDefinitionManifest | null;
   requiredCredentials?: NodeFlowRequiredCredential[];
@@ -41,9 +44,12 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
   attachments,
   attachAgentId,
   attaching = false,
+  attachmentsLoading = false,
+  attachmentError = null,
   onAttachAgentIdChange,
   onAttachAgent,
   onDetachAgent,
+  onRetryAttachments,
   onNodeChange,
   definition = null,
   requiredCredentials = [],
@@ -133,13 +139,14 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
         ))}
       </section>
 
-      <section className="flex flex-col gap-3 border-t border-black/[0.06] pt-4 dark:border-white/[0.06]" aria-labelledby="node-agent-attachments-heading">
+      <section className="flex flex-col gap-3 border-t border-black/[0.06] pt-4 dark:border-white/[0.06]" aria-labelledby="node-agent-attachments-heading" aria-busy={attachmentsLoading || attaching}>
         <h3 id="node-agent-attachments-heading" className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Agent Attachments</h3>
         <div className="flex gap-2">
           <select
             aria-label="Agent preset"
             className={inputClass}
             value={attachAgentId}
+            disabled={attachmentsLoading || attaching}
             onChange={(event) => onAttachAgentIdChange(event.currentTarget.value)}
           >
             <option value="">Select agent</option>
@@ -150,16 +157,23 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
           <button
             type="button"
             aria-label="Attach node flow to agent"
-            disabled={!attachAgentId || attaching}
+            disabled={!attachAgentId || attachmentsLoading || attaching}
             onClick={onAttachAgent}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-signal-500 text-white transition hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 disabled:opacity-50 dark:text-void-900"
           >
             <Link2 className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
-        {attachments.length === 0 ? (
+        {attachmentsLoading ? <p role="status" className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">Loading agent attachments…</p> : null}
+        {attachmentError ? (
+          <div role="alert" className="rounded-xl border border-status-red/20 bg-status-red/[0.06] p-3 text-xs text-status-red">
+            <p>{attachmentError}</p>
+            {onRetryAttachments ? <button type="button" className="mt-2 font-bold underline focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40" onClick={onRetryAttachments}>Retry attachments</button> : null}
+          </div>
+        ) : null}
+        {!attachmentsLoading && !attachmentError && attachments.length === 0 ? (
           <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">No agents attached.</p>
-        ) : (
+        ) : !attachmentsLoading && !attachmentError ? (
           <div className="flex flex-col gap-2">
             {attachments.map((attachment) => {
               const agent = agents.find((entry) => entry.id === attachment.agentPresetId);
@@ -172,6 +186,7 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
                   <button
                     type="button"
                     aria-label={`Detach ${agent?.name ?? attachment.agentPresetId}`}
+                    disabled={attaching}
                     className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-status-red/[0.08] hover:text-status-red focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40"
                     onClick={() => onDetachAgent(attachment.agentPresetId)}
                   >
@@ -181,7 +196,7 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
               );
             })}
           </div>
-        )}
+        ) : null}
       </section>
     </aside>
   );

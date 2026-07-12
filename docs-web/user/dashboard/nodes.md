@@ -22,6 +22,8 @@ Validation and dry run report structural errors, requested capabilities, credent
 
 The debugger reads persisted flow runs, node runs, attempts, retry decisions, approvals, invocation links, timing, and redacted input and output. Cancellation, safe retry, and approval decisions update the same durable pinned run rather than creating an unrelated execution. Scheduling targets a pinned or latest-published version from the [Scheduler](./scheduler.md).
 
+The inspector loads project-owned agent presets and the selected flow's current skill attachments. Attach and detach operations refresh those bindings through the governed backend routes, while project and flow transitions clear stale UI state and cancel or ignore obsolete reads. Only agent and skill metadata is rendered; agent instructions, custom source, credentials, and decrypted values remain outside this surface.
+
 Outside development builds, the workspace requires the Nodes feature flag plus the node-flow backend and automation-security prerequisites. A definition can also require a configured provider, credential broker, allowed egress, approval/outbox services, webhook ingress, or custom-node runtime. Registry presence and feature visibility do not assert that an integration is configured or production-ready.
 
 For the detailed editing contract, see [Nodes Canvas](./nodes-canvas.md). For API behavior, publication, execution, and scheduling, see [Node Flows](./node-flows.md).

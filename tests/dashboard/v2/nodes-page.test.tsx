@@ -8,17 +8,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NODES_CANVAS_STORAGE_KEY, NodesPage } from "../../../dashboard/src/v2/NodesPage.js";
 import { ProjectDataContext } from "../../../dashboard/src/v2/context/project-data.js";
 
-const api = vi.hoisted(() => ({ fetchNodeFlows: vi.fn(), fetchNodeFlowCatalog: vi.fn(), createNodeFlowDraft: vi.fn(), fetchNodeFlow: vi.fn(), fetchNodeFlowRuns: vi.fn(), fetchNodeFlowNodeRuns: vi.fn(), fetchNodeFlowAttempts: vi.fn(), fetchNodeFlowApprovals: vi.fn(), decideNodeFlowApproval: vi.fn(), patchNodeFlowDraft: vi.fn(), fetchNodeDefinition: vi.fn(), validateNodeFlowDraft: vi.fn(), deleteNodeFlow: vi.fn() }));
+const api = vi.hoisted(() => ({ fetchNodeFlows: vi.fn(), fetchNodeFlowCatalog: vi.fn(), createNodeFlowDraft: vi.fn(), fetchNodeFlow: vi.fn(), fetchNodeFlowRuns: vi.fn(), fetchNodeFlowNodeRuns: vi.fn(), fetchNodeFlowAttempts: vi.fn(), fetchNodeFlowApprovals: vi.fn(), fetchNodeFlowAgentSkills: vi.fn(), attachNodeFlowToAgent: vi.fn(), detachNodeFlowFromAgent: vi.fn(), decideNodeFlowApproval: vi.fn(), patchNodeFlowDraft: vi.fn(), fetchNodeDefinition: vi.fn(), validateNodeFlowDraft: vi.fn(), deleteNodeFlow: vi.fn() }));
+const agentApi = vi.hoisted(() => ({ fetchAgentPresets: vi.fn() }));
 vi.mock("../../../dashboard/src/v2/lib/node-flow-api.js", async (original) => ({ ...(await original()), ...api }));
+vi.mock("../../../dashboard/src/v2/lib/agent-preset-api.js", async (original) => ({ ...(await original()), ...agentApi }));
 vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({ useReducedMotion: () => true, useResolvedMotionDuration: <T,>(value: T): T => value }));
 
 const flow = { id: "flow-1", projectId: "project-1", title: "Release automation", description: "Governed", graph: { schemaVersion: 2 as const, nodes: [{ id: "input-1", type: "input", title: "Input", definition: { type: "input", version: 1 }, position: { x: 40, y: 40 } }], edges: [] }, version: 2, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" };
+const agent = { id: "agent-1", projectId: "project-1", name: "Release Agent", description: "Release helper", instructionMarkdown: "PRIVATE AGENT INSTRUCTIONS", labels: [], sourcePath: null, sourceScope: null, sourceUpdatedAt: null, sourceImportedAt: null, sourceExists: false, syncStatus: "manual", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" };
+const attachment = { flowId: "flow-1", projectId: "project-1", agentPresetId: "agent-1", skillName: "Release skill", description: "Governed", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" };
 const context = { projects: [{ id: "project-1", name: "Test project" }], selectedProjectId: "project-1", selectedProject: { id: "project-1", name: "Test project" }, loading: false, error: null, refreshProjects: async () => undefined, selectProject: async () => undefined, createProject: async () => { throw new Error("unused"); }, updateProject: async () => { throw new Error("unused"); }, deleteProject: async () => undefined };
 
 describe("NodesPage governed workspace", () => {
   const review = { flowId: "flow-1", projectId: "project-1", name: "Release automation", description: "Governed", draftRevision: 2, nodeCount: 1, edgeCount: 0, valid: true, validationIssues: [], policyFindings: [], requiredCredentials: [], requestedCapabilities: [], sideEffectDiffs: [], publishedVersion: 1 };
   beforeEach(() => { api.validateNodeFlowDraft.mockResolvedValue(review); });
-  beforeEach(() => { window.localStorage.clear(); api.fetchNodeFlows.mockResolvedValue({ flows: [flow] }); api.fetchNodeFlowCatalog.mockResolvedValue({ nodes: [{ type: "input", version: 1, executable: true, executionKind: "local", label: "Input", description: "Input", category: "Core", credentials: [], capabilities: [], sideEffect: "none", ports: [] }] }); api.fetchNodeFlowRuns.mockResolvedValue({ runs: [] }); api.fetchNodeFlowNodeRuns.mockResolvedValue({ nodeRuns: [] }); api.fetchNodeFlowAttempts.mockResolvedValue({ attempts: [] }); api.fetchNodeFlowApprovals.mockResolvedValue({ approvals: [] }); api.fetchNodeDefinition.mockResolvedValue({ type: "input", version: 1, executable: true, executionKind: "local", configurationSchema: { type: "object" }, ui: { label: "Input", description: "Input", category: "Core", widgetSchema: { fields: [] } }, ports: [], credentials: [], capabilities: [], sideEffect: "none", defaultPolicy: {}, documentation: "", deprecation: { deprecated: false } }); });
+  beforeEach(() => { window.localStorage.clear(); api.fetchNodeFlows.mockResolvedValue({ flows: [flow] }); api.fetchNodeFlowCatalog.mockResolvedValue({ nodes: [{ type: "input", version: 1, executable: true, executionKind: "local", label: "Input", description: "Input", category: "Core", credentials: [], capabilities: [], sideEffect: "none", ports: [] }] }); api.fetchNodeFlowRuns.mockResolvedValue({ runs: [] }); api.fetchNodeFlowNodeRuns.mockResolvedValue({ nodeRuns: [] }); api.fetchNodeFlowAttempts.mockResolvedValue({ attempts: [] }); api.fetchNodeFlowApprovals.mockResolvedValue({ approvals: [] }); api.fetchNodeFlowAgentSkills.mockResolvedValue([]); api.attachNodeFlowToAgent.mockResolvedValue(attachment); api.detachNodeFlowFromAgent.mockResolvedValue(undefined); agentApi.fetchAgentPresets.mockResolvedValue([agent]); api.fetchNodeDefinition.mockResolvedValue({ type: "input", version: 1, executable: true, executionKind: "local", configurationSchema: { type: "object" }, ui: { label: "Input", description: "Input", category: "Core", widgetSchema: { fields: [] } }, ports: [], credentials: [], capabilities: [], sideEffect: "none", defaultPolicy: {}, documentation: "", deprecation: { deprecated: false } }); });
   afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
   it("loads a project flow library and registry-backed editor", async () => {
@@ -28,6 +32,109 @@ describe("NodesPage governed workspace", () => {
     expect(screen.getByRole("heading", { name: "Node catalog" })).toBeInTheDocument();
     expect(screen.getByText("Run debugger")).toBeInTheDocument();
     expect(api.fetchNodeFlows).toHaveBeenCalledWith("project-1", expect.any(AbortSignal));
+    expect(agentApi.fetchAgentPresets).toHaveBeenCalledWith("project-1", expect.any(AbortSignal));
+    expect(api.fetchNodeFlowAgentSkills).toHaveBeenCalledWith("flow-1", expect.any(AbortSignal));
+  });
+
+  it("loads existing metadata-only flow attachments", async () => {
+    api.fetchNodeFlowAgentSkills.mockResolvedValue([attachment]);
+    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+
+    expect(await screen.findByText("Release skill")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Detach Release Agent" })).toBeInTheDocument();
+    expect(screen.queryByText("PRIVATE AGENT INSTRUCTIONS")).not.toBeInTheDocument();
+  });
+
+  it("attaches the selected agent from the keyboard and refreshes attachments", async () => {
+    const user = userEvent.setup();
+    let isAttached = false;
+    api.fetchNodeFlowAgentSkills.mockImplementation(async () => isAttached ? [attachment] : []);
+    api.attachNodeFlowToAgent.mockImplementation(async () => { isAttached = true; return attachment; });
+    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+
+    const select = await screen.findByRole("combobox", { name: "Agent preset" });
+    await waitFor(() => expect(select).toBeEnabled());
+    await user.selectOptions(select, "agent-1");
+    const attachButton = screen.getByRole("button", { name: "Attach node flow to agent" });
+    attachButton.focus();
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => expect(api.attachNodeFlowToAgent).toHaveBeenCalledWith("flow-1", { agentPresetId: "agent-1" }));
+    expect(await screen.findByText("Release skill")).toBeInTheDocument();
+    expect(select).toHaveValue("");
+  });
+
+  it("detaches an existing agent and refreshes the empty state", async () => {
+    const user = userEvent.setup();
+    let isAttached = true;
+    api.fetchNodeFlowAgentSkills.mockImplementation(async () => isAttached ? [attachment] : []);
+    api.detachNodeFlowFromAgent.mockImplementation(async () => { isAttached = false; });
+    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+
+    const detachButton = await screen.findByRole("button", { name: "Detach Release Agent" });
+    await waitFor(() => expect(detachButton).toBeEnabled());
+    await user.click(detachButton);
+
+    await waitFor(() => expect(api.detachNodeFlowFromAgent).toHaveBeenCalledWith("flow-1", "agent-1"));
+    expect(await screen.findByText("No agents attached.")).toBeInTheDocument();
+  });
+
+  it("clears stale attachment state when the selected project changes", async () => {
+    let firstAgentSignal: AbortSignal | undefined;
+    let firstAttachmentSignal: AbortSignal | undefined;
+    const secondFlow = { ...flow, id: "flow-2", projectId: "project-2", title: "Quality automation" };
+    const secondAgent = { ...agent, id: "agent-2", projectId: "project-2", name: "Quality Agent" };
+    const secondAttachment = { ...attachment, flowId: "flow-2", projectId: "project-2", agentPresetId: "agent-2", skillName: "Quality skill" };
+    api.fetchNodeFlows.mockImplementation(async (projectId: string) => ({ flows: [projectId === "project-1" ? flow : secondFlow] }));
+    agentApi.fetchAgentPresets.mockImplementation(async (projectId: string, signal?: AbortSignal) => {
+      if (projectId === "project-1") firstAgentSignal = signal;
+      return [projectId === "project-1" ? agent : secondAgent];
+    });
+    api.fetchNodeFlowAgentSkills.mockImplementation(async (flowId: string, signal?: AbortSignal) => {
+      if (flowId === "flow-1") firstAttachmentSignal = signal;
+      return [flowId === "flow-1" ? attachment : secondAttachment];
+    });
+    const rendered = render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+    expect(await screen.findByText("Release skill")).toBeInTheDocument();
+
+    const secondContext = { ...context, projects: [{ id: "project-2", name: "Second project" }], selectedProjectId: "project-2", selectedProject: { id: "project-2", name: "Second project" } };
+    rendered.rerender(<ProjectDataContext.Provider value={secondContext as never}><NodesPage /></ProjectDataContext.Provider>);
+
+    expect(await screen.findByText("Quality skill")).toBeInTheDocument();
+    expect(screen.queryByText("Release skill")).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Quality Agent" })).toBeInTheDocument();
+    expect(firstAgentSignal?.aborted).toBe(true);
+    expect(firstAttachmentSignal?.aborted).toBe(true);
+  });
+
+  it("shows attachment loading and recovers from failed agent API calls", async () => {
+    const user = userEvent.setup();
+    let resolveAttachments: ((value: typeof attachment[]) => void) | undefined;
+    api.fetchNodeFlowAgentSkills.mockReturnValueOnce(new Promise((resolve) => { resolveAttachments = resolve; }));
+    agentApi.fetchAgentPresets.mockRejectedValueOnce(new Error("Agent service unavailable")).mockResolvedValueOnce([agent]);
+    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+
+    expect(await screen.findByText("Loading agent attachments…")).toBeInTheDocument();
+    resolveAttachments?.([]);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Agent service unavailable");
+    await user.click(screen.getByRole("button", { name: "Retry attachments" }));
+
+    expect(await screen.findByRole("option", { name: "Release Agent" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Agent service unavailable")).not.toBeInTheDocument());
+  });
+
+  it("keeps a failed mutation visible and preserves the selected agent for retry", async () => {
+    const user = userEvent.setup();
+    api.attachNodeFlowToAgent.mockRejectedValueOnce(new Error("Attachment denied"));
+    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+
+    const select = await screen.findByRole("combobox", { name: "Agent preset" });
+    await waitFor(() => expect(select).toBeEnabled());
+    await user.selectOptions(select, "agent-1");
+    await user.click(screen.getByRole("button", { name: "Attach node flow to agent" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Attachment denied");
+    expect(select).toHaveValue("agent-1");
   });
 
   it("imports legacy localStorage once and removes it as a source of truth", async () => {
