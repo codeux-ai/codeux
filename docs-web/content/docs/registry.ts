@@ -266,8 +266,8 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     id: 'user-dashboard-nodes-canvas',
     path: '/docs/user-dashboard-nodes-canvas',
     section: 'User Guide',
-    title: "Nodes Automation Workspace",
-    description: "The Nodes page (/nodes) is a project-scoped automation workspace backed by the canonical node-flow repository. Browser storage is not a workflow database and edits are never auto-saved locally.",
+    title: "Nodes Canvas",
+    description: "The Nodes Canvas page (/nodes) is a browser-local workspace for drafting Code UX workflow graphs. It combines the canvas, palette, inspector, validation panel, JSON exchange controls, and agent command summary without...",
   },
   'user-dashboard-node-flows': {
     id: 'user-dashboard-node-flows',

@@ -1,7 +1,7 @@
 import { ValidationError } from "../../../repositories/repository-utils.js";
 import type { NodeFlowJsonObject, NodeFlowJsonValue } from "../../../contracts/node-flow-types.js";
 import type { ApprovalService } from "../approval-service.js";
-import type { OutboxService } from "../outbox-service.js";
+import { UnknownSideEffectOutcomeError, type OutboxService } from "../outbox-service.js";
 
 export const MAX_FOREACH_ITEMS = 1_000;
 export const MAX_SUBFLOW_DEPTH = 8;
@@ -58,7 +58,7 @@ export class BuiltinExecutors {
     const sent = await this.deps.outboxService.dispatch({ projectId: context.projectId, flowId: context.flowId,
       publicationId: context.publicationId, runId: context.runId, nodeId: context.nodeId, logicalItem,
       effectType: "email", payload: draft });
-    if (sent.status === "attention_required") throw new Error(context.redactText?.(sent.lastError ?? "Email provider outcome is unknown.") ?? sent.lastError ?? "Email provider outcome is unknown.");
+    if (sent.status === "attention_required") throw new UnknownSideEffectOutcomeError(context.redactText?.(sent.lastError ?? "Email provider outcome is unknown.") ?? sent.lastError ?? "Email provider outcome is unknown.");
     if (sent.status !== "sent") throw new Error(context.redactText?.(sent.lastError ?? "Email send failed.") ?? sent.lastError ?? "Email send failed.");
     return { output: context.redactJson?.({ sent: true, outboxId: sent.id, providerMessageId: sent.providerMessageId }) ?? { sent: true, outboxId: sent.id, providerMessageId: sent.providerMessageId } };
   }

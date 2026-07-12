@@ -1,4 +1,4 @@
-import type { NodeFlowGraph, NodeFlowJsonObject, NodeFlowJsonValue } from "../../../../src/contracts/node-flow-types.js";
+import type { NodeFlowGraph, NodeFlowJsonObject, NodeFlowJsonValue, NodeFlowPort } from "../../../../src/contracts/node-flow-types.js";
 
 export type NodeCanvasNodeKind = "trigger" | "agent" | "task" | "condition" | "output";
 export type NodeCanvasPortDirection = "input" | "output";
@@ -132,19 +132,6 @@ const NODE_CANVAS_START_Y = 80;
 const NODE_KINDS: readonly NodeCanvasNodeKind[] = ["trigger", "agent", "task", "condition", "output"];
 const AGENT_INTENTS: readonly NodeCanvasAgentIntent[] = ["plan", "implement", "review", "qa"];
 const TASK_INTENTS: readonly NodeCanvasTaskIntent[] = ["feature", "refactor", "test", "docs", "ops"];
-
-interface CanonicalCanvasDefinition {
-  type: string;
-  handles: Readonly<Record<string, string>>;
-}
-
-const CANONICAL_CANVAS_DEFINITIONS: Readonly<Record<NodeCanvasNodeKind, CanonicalCanvasDefinition>> = {
-  trigger: { type: "input", handles: { event: "output" } },
-  agent: { type: "set_fields", handles: { in: "input", agent: "output" } },
-  task: { type: "template", handles: { agent: "input", task: "output" } },
-  condition: { type: "condition", handles: { task: "input", pass: "true", fail: "false" } },
-  output: { type: "output", handles: { result: "input" } },
-};
 
 interface NodeTemplate {
   label: string;
@@ -513,60 +500,47 @@ export const serializeNodeCanvasGraph = (graph: NodeCanvasGraph): string => (
   JSON.stringify(toStableJson(toCanonicalNodeFlowGraph(graph)), null, 2)
 );
 
-export const toCanonicalNodeFlowGraph = (graph: NodeCanvasGraph, legacySnapshot?: unknown): NodeFlowGraph => {
+export const toCanonicalNodeFlowGraph = (graph: NodeCanvasGraph): NodeFlowGraph => {
   const normalized = normalizeNodeCanvasGraph(graph);
   return {
     schemaVersion: 2,
-    nodes: normalized.nodes.map(toCanonicalNode),
-    edges: normalized.edges.map((edge) => {
-      const source = normalized.nodes.find((node) => node.id === edge.source.nodeId);
-      const target = normalized.nodes.find((node) => node.id === edge.target.nodeId);
-      return {
-        id: edge.id,
-        fromNodeId: edge.source.nodeId,
-        toNodeId: edge.target.nodeId,
-        ...(source ? { fromHandle: CANONICAL_CANVAS_DEFINITIONS[source.kind].handles[edge.source.portId] } : {}),
-        ...(target ? { toHandle: CANONICAL_CANVAS_DEFINITIONS[target.kind].handles[edge.target.portId] } : {}),
-      };
-    }),
-    metadata: {
-      canvasSelection: normalized.selection as unknown as NodeFlowJsonObject,
-      ...(legacySnapshot !== undefined ? {
-        migration: {
-          source: "browser_canvas_v1",
-          legacySnapshot: toStableJson(cloneStableValue(legacySnapshot)) as NodeFlowJsonValue,
+    nodes: normalized.nodes.map((node) => ({
+      id: node.id,
+      type: node.kind,
+      title: node.label,
+      description: node.description,
+      position: node.position,
+      definition: { type: node.kind, version: 1 },
+      ports: [...node.inputPorts, ...node.outputPorts].map(toCanonicalPort),
+      credentialBindings: [],
+      policy: {},
+      capabilities: [],
+      sideEffect: "none",
+      disabled: false,
+      data: {
+        canvas: {
+          config: node.config as unknown as NodeFlowJsonValue,
+          metadata: node.metadata as unknown as NodeFlowJsonValue,
         },
-      } : {}),
-    },
+      },
+    })),
+    edges: normalized.edges.map((edge) => ({
+      id: edge.id,
+      fromNodeId: edge.source.nodeId,
+      toNodeId: edge.target.nodeId,
+      fromHandle: edge.source.portId,
+      toHandle: edge.target.portId,
+    })),
+    metadata: { canvasSelection: normalized.selection as unknown as NodeFlowJsonObject },
   };
 };
 
-const toCanonicalNode = (node: NodeCanvasNode): NodeFlowGraph["nodes"][number] => {
-  const definition = CANONICAL_CANVAS_DEFINITIONS[node.kind];
-  const config = Object.fromEntries(node.config.map((field) => [field.id, field.value]));
-  const prompt = typeof config.prompt === "string" && config.prompt.trim()
-    ? config.prompt
-    : "Use the selected agent to complete the task.";
-  return {
-    id: node.id,
-    type: definition.type,
-    title: node.label,
-    description: node.description,
-    position: node.position,
-    definition: { type: definition.type, version: 1 },
-    disabled: false,
-    data: {
-      ...(node.kind === "agent" ? { fields: { legacyAgent: config } } : {}),
-      ...(node.kind === "task" ? { template: prompt, outputKey: "task" } : {}),
-      canvas: {
-        kind: node.kind,
-        config: toStableJson(node.config) as NodeFlowJsonValue,
-        values: toStableJson(config) as NodeFlowJsonValue,
-        metadata: toStableJson(node.metadata) as NodeFlowJsonValue,
-      },
-    },
-  };
-};
+const toCanonicalPort = (port: NodeCanvasPort): NodeFlowPort => ({
+  id: port.id,
+  direction: port.direction,
+  schema: { type: "object", description: port.type },
+  required: port.required,
+});
 
 export const deserializeNodeCanvasGraph = (serialized: string): NodeCanvasGraph => {
   return deserializeNodeCanvasGraphWithMigration(serialized).graph;
@@ -603,11 +577,9 @@ export const normalizeNodeCanvasGraph = (input: unknown): NodeCanvasGraph => {
     return createInitialNodeCanvasGraph();
   }
 
-  const rawParsedEdges = Array.isArray(input.edges)
+  const parsedEdges = Array.isArray(input.edges)
     ? input.edges.map(parseEdge).filter((edge): edge is NodeCanvasEdge => edge !== null)
     : [];
-  const nodeById = new Map(parsedNodes.map((node) => [node.id, node]));
-  const parsedEdges = rawParsedEdges.map((edge) => normalizeCanvasEdgeHandles(edge, nodeById));
 
   const validNodeIds = new Set(parsedNodes.map((node) => node.id));
   const canvasSelection = isRecord(input.metadata) ? input.metadata.canvasSelection : undefined;
@@ -716,8 +688,7 @@ const normalizeMetadata = (metadata: NodeCanvasNodeMetadata): NodeCanvasNodeMeta
 });
 
 const parseNode = (value: unknown): NodeCanvasNode | null => {
-  const canvasData = isRecord(value) ? readCanonicalCanvasData(value.data) : null;
-  const kindValue = isRecord(value) ? value.kind ?? canvasData?.kind ?? value.type : undefined;
+  const kindValue = isRecord(value) ? value.kind ?? value.type : undefined;
   if (!isRecord(value) || !isString(value.id) || !isNodeKind(kindValue)) {
     return null;
   }
@@ -729,6 +700,7 @@ const parseNode = (value: unknown): NodeCanvasNode | null => {
       }
     : template.position;
 
+  const canvasData = readCanonicalCanvasData(value.data);
   const canonicalPorts = Array.isArray(value.ports) ? value.ports : undefined;
   return {
     ...template,
@@ -846,26 +818,6 @@ const parseEdge = (value: unknown): NodeCanvasEdge | null => {
     source: { nodeId: sourceNodeId, portId: sourcePortId },
     target: { nodeId: targetNodeId, portId: targetPortId },
     ...(isString(value.label) ? { label: value.label } : {}),
-  };
-};
-
-const normalizeCanvasEdgeHandles = (
-  edge: NodeCanvasEdge,
-  nodeById: ReadonlyMap<string, NodeCanvasNode>,
-): NodeCanvasEdge => {
-  const source = nodeById.get(edge.source.nodeId);
-  const target = nodeById.get(edge.target.nodeId);
-  const legacyHandle = (node: NodeCanvasNode | undefined, handle: string): string => {
-    if (!node) return handle;
-    const ports = [...node.inputPorts, ...node.outputPorts];
-    if (ports.some((port) => port.id === handle)) return handle;
-    return Object.entries(CANONICAL_CANVAS_DEFINITIONS[node.kind].handles)
-      .find(([, canonical]) => canonical === handle)?.[0] ?? handle;
-  };
-  return {
-    ...edge,
-    source: { ...edge.source, portId: legacyHandle(source, edge.source.portId) },
-    target: { ...edge.target, portId: legacyHandle(target, edge.target.portId) },
   };
 };
 

@@ -2,26 +2,12 @@ import { randomUUID } from "node:crypto";
 import { AppDbStorage } from "./app-db-storage.js";
 import type { DatabaseAdapter } from "./db/database-adapter.js";
 import { EntityNotFoundError, ValidationError } from "./repository-utils.js";
-import type { NodeFlowJsonObject } from "../contracts/node-flow-types.js";
+import type { AutomationApprovalRecord, AutomationApprovalStatus, NodeFlowJsonObject } from "../contracts/node-flow-types.js";
+export type { AutomationApprovalRecord, AutomationApprovalStatus } from "../contracts/node-flow-types.js";
 
-export type AutomationApprovalStatus = "pending" | "approved" | "rejected" | "expired";
-
-export interface AutomationApprovalRecord {
-  id: string;
-  projectId: string;
-  flowId: string;
-  runId: string;
-  nodeId: string;
-  logicalItem: string;
-  status: AutomationApprovalStatus;
-  request: NodeFlowJsonObject;
-  decision: NodeFlowJsonObject | null;
-  requestedAt: string;
-  decidedAt: string | null;
-  decidedBy: string | null;
-  expiresAt: string | null;
-  createdAt: string;
-  updatedAt: string;
+export interface AutomationApprovalMutationResult {
+  approval: AutomationApprovalRecord;
+  changed: boolean;
 }
 
 interface ApprovalRow {
@@ -42,18 +28,27 @@ export class AutomationApprovalRepository {
     projectId: string; flowId: string; runId: string; nodeId: string;
     logicalItem: string; request: NodeFlowJsonObject; expiresAt?: string | null;
   }): AutomationApprovalRecord {
+    return this.requestIdempotently(input).approval;
+  }
+
+  requestIdempotently(input: {
+    projectId: string; flowId: string; runId: string; nodeId: string;
+    logicalItem: string; request: NodeFlowJsonObject; expiresAt?: string | null;
+  }): AutomationApprovalMutationResult {
     const logicalItem = input.logicalItem.trim() || "default";
     const existing = this.getForItem(input.runId, input.nodeId, logicalItem);
-    if (existing) return existing;
+    if (existing) return { approval: existing, changed: false };
     const id = randomUUID();
     const now = new Date().toISOString();
-    this.db.prepare(`INSERT INTO automation_approvals
+    const result = this.db.prepare(`INSERT OR IGNORE INTO automation_approvals
       (id, project_id, flow_id, run_id, node_id, logical_item, status, request_json,
        requested_at, expires_at, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`)
       .run(id, input.projectId, input.flowId, input.runId, input.nodeId, logicalItem,
         JSON.stringify(input.request), now, input.expiresAt ?? null, now, now);
-    return this.require(id);
+    const approval = result.changes > 0 ? this.require(id) : this.getForItem(input.runId, input.nodeId, logicalItem);
+    if (!approval) throw new EntityNotFoundError("Automation approval request could not be persisted.");
+    return { approval, changed: result.changes > 0 };
   }
 
   get(id: string): AutomationApprovalRecord | null {
@@ -73,18 +68,26 @@ export class AutomationApprovalRepository {
   }
 
   decide(id: string, input: { status: "approved" | "rejected"; decidedBy: string; decision?: NodeFlowJsonObject }): AutomationApprovalRecord {
+    return this.decideIdempotently(id, input).approval;
+  }
+
+  decideIdempotently(id: string, input: { status: "approved" | "rejected"; decidedBy: string; decision?: NodeFlowJsonObject }): AutomationApprovalMutationResult {
     const current = this.require(id);
     if (current.status !== "pending") {
-      if (current.status === input.status) return current;
+      if (current.status === input.status) return { approval: current, changed: false };
       throw new ValidationError(`Approval ${id} has already been decided.`);
     }
     const decidedBy = input.decidedBy.trim();
     if (!decidedBy) throw new ValidationError("decidedBy is required.");
     const now = new Date().toISOString();
-    this.db.prepare(`UPDATE automation_approvals SET status = ?, decision_json = ?, decided_at = ?,
+    const result = this.db.prepare(`UPDATE automation_approvals SET status = ?, decision_json = ?, decided_at = ?,
       decided_by = ?, updated_at = ? WHERE id = ? AND status = 'pending'`)
       .run(input.status, JSON.stringify(input.decision ?? {}), now, decidedBy, now, id);
-    return this.require(id);
+    const approval = this.require(id);
+    if (result.changes === 0 && approval.status !== input.status) {
+      throw new ValidationError(`Approval ${id} has already been decided.`);
+    }
+    return { approval, changed: result.changes > 0 };
   }
 
   expireDue(now = new Date()): number {

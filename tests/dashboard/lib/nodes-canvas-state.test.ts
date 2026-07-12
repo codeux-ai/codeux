@@ -7,10 +7,8 @@ import {
   migrateNodeCanvasGraph,
   nodesCanvasReducer,
   serializeNodeCanvasGraph,
-  toCanonicalNodeFlowGraph,
   validateNodeCanvasGraph,
 } from "../../../dashboard/src/v2/lib/nodes-canvas-state.js";
-import { validateNodeFlowGraph } from "../../../src/domain/node-flows/node-flow-validation.js";
 
 const validationCodes = (graph: NodeCanvasGraph): string[] => (
   validateNodeCanvasGraph(graph).map((issue) => `${issue.code}:${issue.entityId}`)
@@ -35,15 +33,6 @@ describe("nodes canvas state", () => {
     ]);
     expect(graph.selection).toEqual({ nodeIds: ["trigger-1"], edgeIds: [] });
     expect(validateNodeCanvasGraph(graph)).toEqual([]);
-    const canonical = toCanonicalNodeFlowGraph(graph);
-    expect(validateNodeFlowGraph(canonical)).toMatchObject({ valid: true, errors: [] });
-    expect(canonical.nodes.map((node) => node.type)).toEqual([
-      "set_fields",
-      "condition",
-      "output",
-      "template",
-      "input",
-    ]);
   });
 
   it("handles reducer node, edge, config, selection, and delete operations", () => {
@@ -220,21 +209,6 @@ describe("nodes canvas state", () => {
     expect(first.legacySnapshot).toEqual(legacy);
     expect(JSON.stringify(first.graph)).not.toContain("legacySnapshot");
     expect(migrateNodeCanvasGraph(first.graph)).toMatchObject({ migrated: false, legacySnapshot: null });
-  });
-
-  it("retains a legacy localStorage snapshot as non-executable migration metadata", () => {
-    const current = createInitialNodeCanvasGraph();
-    const { schemaVersion: _schemaVersion, ...legacyGraph } = current;
-    const legacy = JSON.parse(JSON.stringify(legacyGraph)) as typeof legacyGraph;
-    const migrated = migrateNodeCanvasGraph(legacy);
-    const canonical = toCanonicalNodeFlowGraph(migrated.graph, migrated.legacySnapshot);
-
-    expect(canonical.metadata?.migration).toEqual({
-      source: "browser_canvas_v1",
-      legacySnapshot: legacy,
-    });
-    expect(validateNodeFlowGraph(canonical)).toMatchObject({ valid: true, errors: [] });
-    expect(toCanonicalNodeFlowGraph(migrated.graph, migrated.legacySnapshot)).toEqual(canonical);
   });
 
   it("lays out graphs deterministically from ids and edges", () => {

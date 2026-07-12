@@ -1,19 +1,47 @@
-# Nodes Automation Workspace
+# Nodes Canvas
 
-The **Nodes** page (`/nodes`) is a project-scoped automation workspace backed by the canonical node-flow repository. Browser storage is not a workflow database and edits are never auto-saved locally.
+The **Nodes Canvas** page (`/nodes`) is a browser-local workspace for drafting Code UX workflow graphs. It combines the canvas, palette, inspector, validation panel, JSON exchange controls, and agent command summary without calling backend APIs or writing to the database.
 
-## Legacy canvas import
+This page does not synchronize graphs to projects, execute n8n workflows, or run node flows through the Code UX runtime.
 
-On the first load for a selected project, the dashboard checks the former `codeux:nodes-canvas:v1` key. When present, it normalizes the payload to Graph v2, creates an **Imported Nodes Canvas** backend draft, records a project-specific migration marker, and removes the legacy graph value. A failed import leaves the value available for retry. The marker prevents duplicates, so browser storage is a one-time migration source rather than a second workflow database.
+## Local persistence
 
-Legacy planning nodes map to registered definitions and handles: `trigger` becomes `input`, `agent` becomes `set_fields`, `task` becomes `template`, and `condition` and `output` use their matching definitions. The original JSON-safe browser snapshot is retained in non-executable graph migration metadata for review. Secret-shaped keys and custom source fields remain visible to backend validation and cause the import to be rejected instead of being silently discarded.
+The page saves the current graph to browser `localStorage` under `codeux:nodes-canvas:v1`. Reloading `/nodes` restores that graph when it can be parsed through the canvas contract. Malformed persisted data falls back to the starter graph.
 
-## Governed editing
+The inspector's enabled switch is an editing-session flag only and is not persisted in the graph JSON.
 
-The registry supplies executable state, typed ports, widget schemas, capabilities, credential slots, side-effect classification, and default policy. The graph stores only a type/version reference and configuration; it never stores custom source or credential values.
+## Node types
 
-Draft saves use `draftRevision`. A concurrent update returns a visible conflict. Validation, policy findings, credential status, dry runs, publication, version comparison, and rollback use the governed draft APIs.
+| Type | Purpose |
+| --- | --- |
+| `trigger` | Starts the graph from a manual or scheduled event source. |
+| `agent` | Routes downstream work to a planning, implementation, review, or QA agent intent. |
+| `task` | Captures a concrete task prompt and task intent. |
+| `condition` | Branches based on an expression such as a validation result. |
+| `output` | Collects the final graph result. |
 
-## Operations
+## Validation behavior
 
-Only published versions run. The debugger shows redacted run output, graph and node states, attempts, retry classifications and decisions, invocation links, timing, cancellation, and safe retry controls. Scheduling is entered through the Scheduler page.
+Validation runs locally after each graph change. It checks duplicate node ids, missing edge nodes or ports, self-connections, input/output direction mismatches, incompatible port types, empty required values, and invalid agent or task intent metadata.
+
+The status strip reports the issue count. The validation panel groups issues by node or edge and provides select/focus actions. Valid JSON imports can still contain validation issues so users can repair them on the canvas.
+
+## Import and export format
+
+`Export JSON` writes the deterministic graph JSON into the exchange textarea. The JSON contains `nodes`, `edges`, and `selection`.
+
+`Import JSON` applies the textarea content through the agent `replace_graph` command helper. Invalid JSON leaves the current graph unchanged and reports a live error. Valid JSON is normalized, loaded into the canvas, saved locally, and revalidated.
+
+## Agent command surface
+
+Agents should use the node canvas agent helper contract rather than driving the UI. Supported commands are `add_node`, `patch_node`, `connect_ports`, `delete_entities`, `select_entities`, and `replace_graph`.
+
+The page displays a deterministic graph summary for command workflows, including node and edge counts, selected ids, ports, config values, and validation blockers.
+
+## Empty and reset states
+
+`Clear` empties the canvas while keeping the palette available. `Reset` restores the starter trigger -> agent -> task -> condition -> output graph. The layout collapses to a single column at smaller widths so controls remain reachable without overlapping.
+
+## Graph v2 migration
+
+Serialization writes `schemaVersion: 2`. Legacy browser v1 values migrate deterministically with their untouched snapshot retained separately. Trigger, agent, task, condition, and output are planning concepts; executable definitions are limited to `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, and `output`.

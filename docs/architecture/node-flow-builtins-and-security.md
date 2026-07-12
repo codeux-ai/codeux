@@ -33,7 +33,7 @@ Refresh happens shortly before expiry and rotates the stored refresh token when 
 
 ## Approvals and outbox
 
-`automation_approvals` persists pending and terminal decisions. Repeating the same run, node, and logical item returns the existing decision, so restarts do not create a second prompt. Email sending is approval-gated by default; `email_draft` is the non-irreversible default.
+`automation_approvals` persists pending and terminal decisions. Repeating the same run, node, and logical item returns the existing decision, so restarts do not create a second prompt. Repeating an identical decision is also idempotent. Approval or rejection through the decision endpoint resumes or terminates the exact waiting run; approval preserves its publication, run id, logical item, and attempt number. Email sending is approval-gated by default; `email_draft` is the non-irreversible default.
 
 `automation_outbox` has a unique SHA-256 idempotency key derived from publication id, run id, node id, and logical item. Provider message ids are stored after success. A process restart while an entry is `sending` changes it to `attention_required`, because the provider may have accepted the operation; Code UX does not replay an unknown external outcome automatically.
 

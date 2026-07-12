@@ -33,6 +33,22 @@ describe("automation governance repositories", () => {
     storage.close();
   });
 
+  it("deduplicates approval requests and repeated identical decisions", async () => {
+    const { storage, project, flow, run } = await fixture();
+    const repository = new AutomationApprovalRepository(storage);
+    const input = { projectId: project.id, flowId: flow.id, runId: run.id, nodeId: "send", logicalItem: "message-1", request: { effectType: "email" } };
+    const first = repository.requestIdempotently(input);
+    const duplicate = repository.requestIdempotently(input);
+    const decided = repository.decideIdempotently(first.approval.id, { status: "approved", decidedBy: "operator" });
+    const repeated = repository.decideIdempotently(first.approval.id, { status: "approved", decidedBy: "operator" });
+    expect(first.changed).toBe(true);
+    expect(duplicate).toMatchObject({ changed: false, approval: { id: first.approval.id } });
+    expect(decided.changed).toBe(true);
+    expect(repeated).toMatchObject({ changed: false, approval: { status: "approved" } });
+    expect(repository.listForRun(run.id)).toHaveLength(1);
+    storage.close();
+  });
+
   it("deduplicates outbox sends and marks restart-unknown outcomes for attention", async () => {
     const { storage, project, flow, publication, run } = await fixture();
     const repository = new AutomationOutboxRepository(storage); const provider = new MockSideEffectProvider();

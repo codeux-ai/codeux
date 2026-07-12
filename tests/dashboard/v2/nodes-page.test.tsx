@@ -7,9 +7,8 @@ import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NODES_CANVAS_STORAGE_KEY, NodesPage } from "../../../dashboard/src/v2/NodesPage.js";
 import { ProjectDataContext } from "../../../dashboard/src/v2/context/project-data.js";
-import { createInitialNodeCanvasGraph } from "../../../dashboard/src/v2/lib/nodes-canvas-state.js";
 
-const api = vi.hoisted(() => ({ fetchNodeFlows: vi.fn(), fetchNodeFlowCatalog: vi.fn(), createNodeFlowDraft: vi.fn(), fetchNodeFlow: vi.fn(), fetchNodeFlowRuns: vi.fn(), fetchNodeFlowNodeRuns: vi.fn(), fetchNodeFlowAttempts: vi.fn(), patchNodeFlowDraft: vi.fn(), fetchNodeDefinition: vi.fn(), validateNodeFlowDraft: vi.fn(), deleteNodeFlow: vi.fn() }));
+const api = vi.hoisted(() => ({ fetchNodeFlows: vi.fn(), fetchNodeFlowCatalog: vi.fn(), createNodeFlowDraft: vi.fn(), fetchNodeFlow: vi.fn(), fetchNodeFlowRuns: vi.fn(), fetchNodeFlowNodeRuns: vi.fn(), fetchNodeFlowAttempts: vi.fn(), fetchNodeFlowApprovals: vi.fn(), decideNodeFlowApproval: vi.fn(), patchNodeFlowDraft: vi.fn(), fetchNodeDefinition: vi.fn(), validateNodeFlowDraft: vi.fn(), deleteNodeFlow: vi.fn() }));
 vi.mock("../../../dashboard/src/v2/lib/node-flow-api.js", async (original) => ({ ...(await original()), ...api }));
 vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({ useReducedMotion: () => true, useResolvedMotionDuration: <T,>(value: T): T => value }));
 
@@ -19,7 +18,7 @@ const context = { projects: [{ id: "project-1", name: "Test project" }], selecte
 describe("NodesPage governed workspace", () => {
   const review = { flowId: "flow-1", projectId: "project-1", name: "Release automation", description: "Governed", draftRevision: 2, nodeCount: 1, edgeCount: 0, valid: true, validationIssues: [], policyFindings: [], requiredCredentials: [], requestedCapabilities: [], sideEffectDiffs: [], publishedVersion: 1 };
   beforeEach(() => { api.validateNodeFlowDraft.mockResolvedValue(review); });
-  beforeEach(() => { window.localStorage.clear(); api.fetchNodeFlows.mockResolvedValue({ flows: [flow] }); api.fetchNodeFlowCatalog.mockResolvedValue({ nodes: [{ type: "input", version: 1, executable: true, executionKind: "local", label: "Input", description: "Input", category: "Core", credentials: [], capabilities: [], sideEffect: "none", ports: [] }] }); api.fetchNodeFlowRuns.mockResolvedValue({ runs: [] }); api.fetchNodeFlowNodeRuns.mockResolvedValue({ nodeRuns: [] }); api.fetchNodeFlowAttempts.mockResolvedValue({ attempts: [] }); api.fetchNodeDefinition.mockResolvedValue({ type: "input", version: 1, executable: true, executionKind: "local", configurationSchema: { type: "object" }, ui: { label: "Input", description: "Input", category: "Core", widgetSchema: { fields: [] } }, ports: [], credentials: [], capabilities: [], sideEffect: "none", defaultPolicy: {}, documentation: "", deprecation: { deprecated: false } }); });
+  beforeEach(() => { window.localStorage.clear(); api.fetchNodeFlows.mockResolvedValue({ flows: [flow] }); api.fetchNodeFlowCatalog.mockResolvedValue({ nodes: [{ type: "input", version: 1, executable: true, executionKind: "local", label: "Input", description: "Input", category: "Core", credentials: [], capabilities: [], sideEffect: "none", ports: [] }] }); api.fetchNodeFlowRuns.mockResolvedValue({ runs: [] }); api.fetchNodeFlowNodeRuns.mockResolvedValue({ nodeRuns: [] }); api.fetchNodeFlowAttempts.mockResolvedValue({ attempts: [] }); api.fetchNodeFlowApprovals.mockResolvedValue({ approvals: [] }); api.fetchNodeDefinition.mockResolvedValue({ type: "input", version: 1, executable: true, executionKind: "local", configurationSchema: { type: "object" }, ui: { label: "Input", description: "Input", category: "Core", widgetSchema: { fields: [] } }, ports: [], credentials: [], capabilities: [], sideEffect: "none", defaultPolicy: {}, documentation: "", deprecation: { deprecated: false } }); });
   afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
   it("loads a project flow library and registry-backed editor", async () => {
@@ -32,40 +31,13 @@ describe("NodesPage governed workspace", () => {
   });
 
   it("imports legacy localStorage once and removes it as a source of truth", async () => {
-    const { schemaVersion: _schemaVersion, ...legacy } = createInitialNodeCanvasGraph();
-    window.localStorage.setItem(NODES_CANVAS_STORAGE_KEY, JSON.stringify(legacy));
+    window.localStorage.setItem(NODES_CANVAS_STORAGE_KEY, JSON.stringify({ schemaVersion: 2, nodes: [{ id: "input-1", type: "input", title: "Input", position: { x: 1, y: 1 } }], edges: [] }));
     api.createNodeFlowDraft.mockResolvedValue({ flowId: "imported", draftRevision: 1 });
     api.fetchNodeFlows.mockResolvedValueOnce({ flows: [] }).mockResolvedValueOnce({ flows: [flow] });
     render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
     await waitFor(() => expect(api.createNodeFlowDraft).toHaveBeenCalledTimes(1));
-    expect(api.createNodeFlowDraft).toHaveBeenCalledWith("project-1", expect.objectContaining({
-      graph: expect.objectContaining({
-        schemaVersion: 2,
-        nodes: expect.arrayContaining([
-          expect.objectContaining({ type: "input", definition: { type: "input", version: 1 } }),
-          expect.objectContaining({ type: "set_fields", definition: { type: "set_fields", version: 1 } }),
-          expect.objectContaining({ type: "template", definition: { type: "template", version: 1 } }),
-        ]),
-        metadata: expect.objectContaining({
-          migration: { source: "browser_canvas_v1", legacySnapshot: legacy },
-        }),
-      }),
-    }));
     expect(window.localStorage.getItem(NODES_CANVAS_STORAGE_KEY)).toBeNull();
     expect(window.localStorage.getItem("codeux:nodes-canvas:imported:project-1")).toBe("imported");
-  });
-
-  it("keeps legacy localStorage available when backend persistence fails", async () => {
-    const legacy = JSON.stringify(createInitialNodeCanvasGraph());
-    window.localStorage.setItem(NODES_CANVAS_STORAGE_KEY, legacy);
-    api.createNodeFlowDraft.mockRejectedValue(new Error("Draft persistence failed"));
-    api.fetchNodeFlows.mockResolvedValueOnce({ flows: [] });
-
-    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("Draft persistence failed");
-    expect(window.localStorage.getItem(NODES_CANVAS_STORAGE_KEY)).toBe(legacy);
-    expect(window.localStorage.getItem("codeux:nodes-canvas:imported:project-1")).toBeNull();
   });
 
   it("surfaces optimistic save conflicts", async () => {

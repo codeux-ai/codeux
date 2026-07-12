@@ -20,6 +20,6 @@ T06 draft endpoints provide structural validation, policy findings, requested pe
 
 ## Run debugger and scheduling
 
-The debugger reads persisted runs, node runs, and attempt history. It overlays node state, shows retry reasons and decisions, links invocation ids, reports timing, supports cancellation and safe retry, and redacts secret-shaped values before rendering. Scheduling is entered through `/scheduler`; scheduler execution also resolves published versions.
+The debugger reads persisted runs, node runs, attempt history, and approval decisions. Pending approvals expose keyboard-accessible **Approve & continue** and **Reject** actions. A decision continues or terminates the same pinned run, and repeated clicks return its current durable state without duplicating the governed attempt or external send. The debugger also overlays node state, shows retry reasons and decisions, links invocation ids, reports timing, supports cancellation and safe retry, and redacts secret-shaped values before rendering. Scheduling is entered through `/scheduler`; scheduler execution also resolves published versions.
 
 The layout stacks on small screens, preserves keyboard-visible focus, labels loading/error/empty states, and bounds long histories and JSON output with scrolling.
