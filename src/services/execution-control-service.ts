@@ -41,11 +41,19 @@ interface ExecutionControlServiceDeps {
   sprintRunLifecycleService: SprintRunLifecycleService;
   qaReviewRepository?: QaReviewRepository;
   stopProviderContainers?: (sessionIds: string[]) => Promise<string[]>;
+  withJulesCredentialContext?: <T>(projectId: string, consumer: string, callback: () => T | Promise<T>) => Promise<T>;
   logger?: Logger;
 }
 
 export class ExecutionControlService {
   constructor(private readonly deps: ExecutionControlServiceDeps) {}
+
+  private async sendJulesMessage(projectId: string, sessionId: string, message: string, consumer: string): Promise<unknown> {
+    const send = () => this.deps.julesApi.sendSessionMessage(sessionId, message);
+    return this.deps.withJulesCredentialContext
+      ? await this.deps.withJulesCredentialContext(projectId, consumer, send)
+      : await send();
+  }
 
   async forceCompleteTask(projectId: string, taskId: string, reason: string): Promise<void> {
     await forceCompleteTask(
@@ -141,9 +149,11 @@ export class ExecutionControlService {
       if ((dispatch.status === "running" || dispatch.status === "cancel_requested") && dispatch.executorType === "jules") {
         const taskRun = this.deps.executionRepository.getTaskRunByDispatchId(dispatch.id);
         if (taskRun?.sessionId) {
-          await this.deps.julesApi.sendSessionMessage(
+          await this.sendJulesMessage(
+            sprintRun.projectId,
             taskRun.sessionId,
             "Sprint paused. Please halt this task until the sprint is resumed.",
+            "jules.execution.sprint-pause",
           ).catch(() => undefined);
         }
       }
@@ -526,9 +536,11 @@ export class ExecutionControlService {
     if (dispatch.executorType === "jules") {
       if (taskRun?.sessionId) {
         try {
-          await this.deps.julesApi.sendSessionMessage(
+          await this.sendJulesMessage(
+            dispatch.projectId,
             taskRun.sessionId,
             "Task paused. Please halt your implementation.",
+            "jules.execution.task-pause",
           );
           this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "jules_pause_requested", "user", {
             dispatchId: dispatch.id,
@@ -652,9 +664,11 @@ export class ExecutionControlService {
     if (dispatch.executorType === "jules") {
       if (taskRun?.sessionId) {
         try {
-          await this.deps.julesApi.sendSessionMessage(
+          await this.sendJulesMessage(
+            dispatch.projectId,
             taskRun.sessionId,
             "Task cancelled, please close this task now. Do not continue implementation.",
+            "jules.execution.task-stop",
           );
           this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "jules_stop_requested", "user", {
             dispatchId: dispatch.id,
@@ -726,9 +740,11 @@ export class ExecutionControlService {
     }
 
     if (dispatch.executorType === "jules" && taskRun?.sessionId && !options.skipJulesStop) {
-      await this.deps.julesApi.sendSessionMessage(
+      await this.sendJulesMessage(
+        dispatch.projectId,
         taskRun.sessionId,
         "Task cancelled. Please close this task now.",
+        "jules.execution.task-cancel",
       ).catch(() => undefined);
     }
 

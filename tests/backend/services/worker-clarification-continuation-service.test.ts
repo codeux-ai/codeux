@@ -120,7 +120,7 @@ describe("WorkerClarificationContinuationService", () => {
   it("delivers a Jules answer before restoring runtime state and settling the clarification", async () => {
     const result = await reply();
 
-    expect(sendJulesSessionMessage).toHaveBeenCalledWith("session-1", "Yes, preserve them.");
+    expect(sendJulesSessionMessage).toHaveBeenCalledWith("project-1", "session-1", "Yes, preserve them.");
     expect(sendJulesSessionMessage.mock.invocationCallOrder[0]).toBeLessThan(completeReply.mock.invocationCallOrder[0]);
     expect(updateTaskRun).toHaveBeenCalledWith("task-run-1", expect.objectContaining({ state: "RUNNING" }));
     expect(updateTaskDispatch).toHaveBeenCalledWith("dispatch-1", expect.objectContaining({ status: "running" }));

@@ -17,6 +17,7 @@ import type { Logger } from "../shared/logging/logger.js";
 import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
 import { withResolvedGitSettingsCredentials } from "./credentials/git-settings-credential-resolver.js";
 import type { SettingsCredentialResolver } from "./credentials/settings-credential-resolver.js";
+import { withJulesSettingsCredentialContext } from "./credentials/jules-settings-credential-context.js";
 
 export interface TaskServiceDependencies {
   julesApi: JulesApiClient;
@@ -214,30 +215,30 @@ export class TaskService {
         sprintNumber: 0,
       });
     }
-    const sourceId = await this.deps.resolveJulesSourceId({
-      repoPath: args.repo_path,
-      sourceId: args.source_id,
+    return await withJulesSettingsCredentialContext({
+      julesApi: this.deps.julesApi,
+      settings: this.deps.getDashboardSettings(),
+      consumer: "jules.task.adhoc",
+      providerConfigId: selectedProviderConfigId,
+    }, async () => {
+      const sourceId = await this.deps.resolveJulesSourceId({
+        repoPath: args.repo_path,
+        sourceId: args.source_id,
+      });
+      const fullPrompt = await this.buildPrompt(args.repo_path, "TASK TO EXECUTE", args.prompt);
+
+      const data: JulesCreateSessionRequest = {
+        prompt: fullPrompt,
+        sourceContext: { source: sourceId },
+        automationMode: "AUTO_CREATE_PR",
+      };
+      if (args.branch) data.sourceContext.githubRepoContext = { startingBranch: args.branch };
+      if (args.title) data.title = args.title;
+
+      const session = await this.deps.julesApi.createSession(data);
+      session.provider = "jules";
+      return session;
     });
-    const fullPrompt = await this.buildPrompt(args.repo_path, "TASK TO EXECUTE", args.prompt);
-
-    const data: JulesCreateSessionRequest = {
-      prompt: fullPrompt,
-      sourceContext: {
-        source: sourceId,
-      },
-      automationMode: "AUTO_CREATE_PR",
-    };
-
-    if (args.branch) {
-      data.sourceContext.githubRepoContext = { startingBranch: args.branch };
-    }
-    if (args.title) {
-      data.title = args.title;
-    }
-
-    const session = await this.deps.julesApi.createSession(data);
-    session.provider = "jules";
-    return session;
   }
 
   async startSprintTask(
@@ -318,30 +319,34 @@ export class TaskService {
       session.provider = provider;
       return session;
     }
-    const resolvedSourceId = await this.deps.resolveJulesSourceId({
-      repoPath,
-      sourceId,
+    return await withJulesSettingsCredentialContext({
+      julesApi: this.deps.julesApi,
+      settings,
+      projectId: settingsScope?.projectId,
+      providerConfigId: selectedProviderConfigId,
+      consumer: "jules.task.sprint",
+      workspaceId: settingsScope?.projectId,
+    }, async () => {
+      const resolvedSourceId = await this.deps.resolveJulesSourceId({ repoPath, sourceId });
+      const fullPrompt = await this.buildPrompt(
+        repoPath,
+        "SUBTASK TO EXECUTE",
+        task.prompt,
+        settingsScope?.projectId,
+        task.agentPresetId,
+      );
+      const data: JulesCreateSessionRequest = {
+        prompt: fullPrompt,
+        title: `Sprint ${sprintNumber}: ${buildTaskRunTag(repoPath, sprintNumber, task.id)} [${task.id}] ${task.title}`,
+        sourceContext: {
+          source: resolvedSourceId,
+          githubRepoContext: { startingBranch: baseBranch },
+        },
+        automationMode: "AUTO_CREATE_PR",
+      };
+      const session = await this.deps.julesApi.createSession(data);
+      session.provider = "jules";
+      return session;
     });
-    const fullPrompt = await this.buildPrompt(
-      repoPath,
-      "SUBTASK TO EXECUTE",
-      task.prompt,
-      settingsScope?.projectId,
-      task.agentPresetId,
-    );
-
-    const data: JulesCreateSessionRequest = {
-      prompt: fullPrompt,
-      title: `Sprint ${sprintNumber}: ${buildTaskRunTag(repoPath, sprintNumber, task.id)} [${task.id}] ${task.title}`,
-      sourceContext: {
-        source: resolvedSourceId,
-        githubRepoContext: { startingBranch: baseBranch },
-      },
-      automationMode: "AUTO_CREATE_PR",
-    };
-
-    const session = await this.deps.julesApi.createSession(data);
-    session.provider = "jules";
-    return session;
   }
 }

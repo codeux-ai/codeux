@@ -195,15 +195,6 @@ export function createCoreDependencies(
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : undefined;
   };
-  const julesApi = new JulesApiClient({
-    apiKey: context.getEffectiveJulesApiKey(),
-    baseUrl: options.appConfig.baseUrl,
-    requestTimeoutMs: parseEnvInt(process.env.JULES_API_TIMEOUT_MS),
-    maxTransientRetries: parseEnvInt(process.env.JULES_API_MAX_RETRIES),
-    sessionsCacheTtlMs: parseEnvInt(process.env.JULES_SESSIONS_CACHE_TTL_MS),
-    maxSnapshotSessions: parseEnvInt(process.env.JULES_MAX_SNAPSHOT_SESSIONS),
-  });
-
   const subtaskRepository = new SubtaskFileRepository();
   const sessionTracking = new SessionTrackingRepository();
   const appDbStorage = new AppDbStorage();
@@ -248,6 +239,15 @@ export function createCoreDependencies(
     externalSettingsHints,
   });
   const settingsCredentialResolver = new SettingsCredentialResolver(credentialBroker);
+  const julesApi = new JulesApiClient({
+    getApiKey: context.getEffectiveJulesApiKey,
+    settingsCredentialResolver,
+    baseUrl: options.appConfig.baseUrl,
+    requestTimeoutMs: parseEnvInt(process.env.JULES_API_TIMEOUT_MS),
+    maxTransientRetries: parseEnvInt(process.env.JULES_API_MAX_RETRIES),
+    sessionsCacheTtlMs: parseEnvInt(process.env.JULES_SESSIONS_CACHE_TTL_MS),
+    maxSnapshotSessions: parseEnvInt(process.env.JULES_MAX_SNAPSHOT_SESSIONS),
+  });
   const projectRuntimeRepository = new ProjectRuntimeRepository(appDbStorage, dashboardRealtimeService);
   const workerEndpointRepository = new WorkerEndpointRepository(appDbStorage);
   const projectWorkerAssignmentRepository = new ProjectWorkerAssignmentRepository(appDbStorage);

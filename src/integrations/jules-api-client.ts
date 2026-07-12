@@ -1,7 +1,10 @@
 import axios from "axios";
 import type { AxiosInstance } from "axios";
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { JulesActivity, JulesSession, JulesSource } from "../contracts/app-types.js";
+import type { SettingsCredentialReference } from "../contracts/app-types.js";
 import type { JulesClient } from "../domain/jules/jules-client.js";
+import type { SettingsCredentialResolver } from "../services/credentials/settings-credential-resolver.js";
 
 export class JulesNotFoundError extends Error {
   readonly status = 404;
@@ -35,7 +38,9 @@ export function isNotFoundError(error: unknown): boolean {
 }
 
 export interface JulesApiClientOptions {
-  apiKey?: string | null;
+  /** Compatibility-only environment/CLI credential lookup. Never backed by settings. */
+  getApiKey?: () => string | null | undefined;
+  settingsCredentialResolver?: SettingsCredentialResolver;
   baseUrl: string;
   /**
    * Minimum spacing between outgoing request starts, in milliseconds. Acts as a
@@ -72,6 +77,13 @@ export interface JulesApiClientOptions {
   maxSnapshotSessions?: number;
   /** Injectable clock for deterministic tests. Defaults to `Date.now`. */
   now?: () => number;
+}
+
+export interface JulesCredentialContext {
+  projectId: string;
+  reference: SettingsCredentialReference;
+  consumer: string;
+  workspaceId?: string;
 }
 
 export interface JulesPageRequest {
@@ -179,18 +191,21 @@ const isTransientNetworkError = (error: unknown): boolean => {
 
 export class JulesApiClient implements JulesClient {
   private readonly axiosInstance: AxiosInstance;
-  private apiKey: string | null;
+  private readonly credentialContext = new AsyncLocalStorage<JulesCredentialContext>();
+  private readonly getApiKey?: () => string | null | undefined;
+  private readonly settingsCredentialResolver?: SettingsCredentialResolver;
   private readonly minRequestIntervalMs: number;
   private readonly maxTransientRetries: number;
   private readonly sessionsCacheTtlMs: number;
   private readonly maxSnapshotSessions: number;
   private readonly now: () => number;
   private nextRequestSlot = 0;
-  private sessionSnapshot: { at: number; sessions: JulesSession[] } | null = null;
-  private sessionSnapshotInFlight: Promise<JulesSession[]> | null = null;
+  private readonly sessionSnapshots = new Map<string, { at: number; sessions: JulesSession[] }>();
+  private readonly sessionSnapshotInFlights = new Map<string, Promise<JulesSession[]>>();
 
   constructor(options: JulesApiClientOptions) {
-    this.apiKey = this.normalizeApiKey(options.apiKey);
+    this.getApiKey = options.getApiKey;
+    this.settingsCredentialResolver = options.settingsCredentialResolver;
     this.minRequestIntervalMs = Math.max(0, options.minRequestIntervalMs ?? 250);
     this.maxTransientRetries = Math.max(0, options.maxTransientRetries ?? 4);
     this.sessionsCacheTtlMs = Math.max(0, options.sessionsCacheTtlMs ?? 12_000);
@@ -206,10 +221,22 @@ export class JulesApiClient implements JulesClient {
 
     this.axiosInstance.interceptors.request.use(async (config) => {
       const headers = config.headers ?? {};
-      if (this.apiKey) {
-        headers["X-Goog-Api-Key"] = this.apiKey;
+      delete headers["X-Goog-Api-Key"];
+      const context = this.credentialContext.getStore();
+      if (context) {
+        if (!this.settingsCredentialResolver) {
+          throw new Error("Broker-resolved Jules credentials are unavailable.");
+        }
+        await this.settingsCredentialResolver.withCredential(context.reference, {
+          projectId: context.projectId,
+          workspaceId: context.workspaceId,
+          consumer: context.consumer,
+        }, (secret) => {
+          headers["X-Goog-Api-Key"] = secret.toString("utf8");
+        });
       } else {
-        delete headers["X-Goog-Api-Key"];
+        const apiKey = this.normalizeApiKey(this.getApiKey?.());
+        if (apiKey) headers["X-Goog-Api-Key"] = apiKey;
       }
       config.headers = headers;
       await this.acquireRequestSlot();
@@ -219,11 +246,20 @@ export class JulesApiClient implements JulesClient {
     const retryCounts = new WeakMap<object, number>();
 
     this.axiosInstance.interceptors.response.use(
-      (response) => response,
+      (response) => {
+        if (response.config?.headers) delete response.config.headers["X-Goog-Api-Key"];
+        return response;
+      },
       async (error) => {
         const config = error.config;
         if (!config) {
           return Promise.reject(error);
+        }
+
+        const resolvedApiKey = config.headers?.["X-Goog-Api-Key"];
+        if (config.headers) delete config.headers["X-Goog-Api-Key"];
+        if (typeof resolvedApiKey === "string" && resolvedApiKey.length > 0 && typeof error.message === "string") {
+          error.message = error.message.split(resolvedApiKey).join("[REDACTED]");
         }
 
         const is429 = Boolean(error.response && error.response.status === 429);
@@ -254,6 +290,17 @@ export class JulesApiClient implements JulesClient {
           }
         }
 
+        if (typeof resolvedApiKey === "string" && resolvedApiKey.length > 0) {
+          const safeError = new Error(
+            typeof error.message === "string"
+              ? error.message.split(resolvedApiKey).join("[REDACTED]")
+              : "Jules API request failed.",
+          ) as Error & { status?: number; code?: string };
+          safeError.name = typeof error.name === "string" ? error.name : "JulesApiRequestError";
+          safeError.status = error.response?.status;
+          safeError.code = typeof error.code === "string" ? error.code : undefined;
+          return Promise.reject(safeError);
+        }
         return Promise.reject(error);
       }
     );
@@ -299,18 +346,38 @@ export class JulesApiClient implements JulesClient {
     return null;
   }
 
-  setApiKey(apiKey?: string | null): void {
-    this.apiKey = this.normalizeApiKey(apiKey);
+  async withCredentialContext<T>(context: JulesCredentialContext, consumer: () => T | Promise<T>): Promise<T> {
+    return await this.credentialContext.run(context, consumer);
   }
 
   hasApiKey(): boolean {
-    return this.apiKey !== null;
+    return Boolean(this.credentialContext.getStore() || this.normalizeApiKey(this.getApiKey?.()));
   }
 
   private ensureApiKey(): void {
-    if (!this.hasApiKey()) {
+    const context = this.credentialContext.getStore();
+    if (context && (!context.projectId.trim() || !context.consumer.trim())) {
+      throw new Error("Broker-resolved Jules credentials require an active project scope.");
+    }
+    if (!context && !this.hasApiKey()) {
       throw new Error("Jules API key is not configured.");
     }
+  }
+
+  private async assertCredentialAvailable(): Promise<void> {
+    const context = this.credentialContext.getStore();
+    if (!context) {
+      this.ensureApiKey();
+      return;
+    }
+    if (!this.settingsCredentialResolver) {
+      throw new Error("Broker-resolved Jules credentials are unavailable.");
+    }
+    await this.settingsCredentialResolver.withCredential(context.reference, {
+      projectId: context.projectId,
+      workspaceId: context.workspaceId,
+      consumer: `${context.consumer}.availability`,
+    }, () => undefined);
   }
 
   private normalizeApiKey(apiKey?: string | null): string | null {
@@ -431,24 +498,34 @@ export class JulesApiClient implements JulesClient {
    * snapshot rather than disrupting every sprint's sync.
    */
   async getCachedSessions(): Promise<JulesSession[]> {
-    const fresh = this.sessionSnapshot && (this.now() - this.sessionSnapshot.at) < this.sessionsCacheTtlMs;
+    await this.assertCredentialAvailable();
+    const cacheKey = this.getSessionCacheKey();
+    const snapshot = this.sessionSnapshots.get(cacheKey);
+    const fresh = snapshot && (this.now() - snapshot.at) < this.sessionsCacheTtlMs;
     if (fresh) {
-      return this.sessionSnapshot!.sessions;
+      return snapshot.sessions;
     }
-    if (this.sessionSnapshotInFlight) {
-      return this.sessionSnapshotInFlight;
+    const inFlight = this.sessionSnapshotInFlights.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
     }
-    this.sessionSnapshotInFlight = this.refreshSessionSnapshot()
-      .finally(() => { this.sessionSnapshotInFlight = null; });
-    return this.sessionSnapshotInFlight;
+    const refresh = this.refreshSessionSnapshot(cacheKey)
+      .finally(() => { this.sessionSnapshotInFlights.delete(cacheKey); });
+    this.sessionSnapshotInFlights.set(cacheKey, refresh);
+    return refresh;
   }
 
   /** Drops the cached session snapshot so the next read re-fetches fresh state. */
   invalidateSessionsCache(): void {
-    this.sessionSnapshot = null;
+    this.sessionSnapshots.delete(this.getSessionCacheKey());
   }
 
-  private async refreshSessionSnapshot(): Promise<JulesSession[]> {
+  private getSessionCacheKey(): string {
+    const context = this.credentialContext.getStore();
+    return context ? `${context.projectId}:${context.reference.credentialId}` : "compatibility";
+  }
+
+  private async refreshSessionSnapshot(cacheKey: string): Promise<JulesSession[]> {
     try {
       const all: JulesSession[] = [];
       let pageToken: string | undefined = undefined;
@@ -458,13 +535,14 @@ export class JulesApiClient implements JulesClient {
         all.push(...sessions);
         pageToken = sessions.length > 0 ? response.nextPageToken : undefined;
       } while (pageToken && all.length < this.maxSnapshotSessions);
-      this.sessionSnapshot = { at: this.now(), sessions: all };
+      this.sessionSnapshots.set(cacheKey, { at: this.now(), sessions: all });
       return all;
     } catch (error) {
-      if (this.sessionSnapshot) {
+      const snapshot = this.sessionSnapshots.get(cacheKey);
+      if (snapshot) {
         // Serve stale rather than failing every sprint's sync on a blip; the
         // timestamp is left untouched so the next call retries promptly.
-        return this.sessionSnapshot.sessions;
+        return snapshot.sessions;
       }
       throw error;
     }

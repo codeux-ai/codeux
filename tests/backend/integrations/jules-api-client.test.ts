@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { JulesApiClient, JulesNotFoundError } from "../../../src/integrations/jules-api-client.js";
 import axios from "axios";
+import { SettingsCredentialResolver } from "../../../src/services/credentials/settings-credential-resolver.js";
+import type { CredentialBroker } from "../../../src/services/credentials/credential-broker.js";
 
 const mockInstance = Object.assign(
   vi.fn(),
@@ -33,12 +35,98 @@ vi.mock("axios", () => {
 });
 
 describe("JulesApiClient coverage", () => {
+    it("resolves broker credentials for every request so rotation is immediate", async () => {
+        let value = "first-secret";
+        const resolver = {
+          withCredential: vi.fn(async (_reference, _context, consumer) => await consumer(Buffer.from(value))),
+        } as unknown as SettingsCredentialResolver;
+        const client = new JulesApiClient({ baseUrl: "http://url", settingsCredentialResolver: resolver });
+        const requestInterceptor = (mockInstance.interceptors.request as any)._cb;
+        const context = {
+          projectId: "project-1",
+          reference: { credentialId: "credential-1", capability: "read" as const },
+          consumer: "jules.test",
+        };
+
+        await client.withCredentialContext(context, async () => {
+          expect((await requestInterceptor({ headers: {} })).headers["X-Goog-Api-Key"]).toBe("first-secret");
+          value = "rotated-secret";
+          expect((await requestInterceptor({ headers: {} })).headers["X-Goog-Api-Key"]).toBe("rotated-secret");
+        });
+
+        expect(resolver.withCredential).toHaveBeenCalledTimes(2);
+    });
+
+    it.each(["denied", "revoked", "missing"])("fails closed when a broker reference is %s", async (reason) => {
+        const resolver = {
+          withCredential: vi.fn(async () => { throw new Error(`Credential ${reason}.`); }),
+        } as unknown as SettingsCredentialResolver;
+        const client = new JulesApiClient({
+          baseUrl: "http://url",
+          getApiKey: () => "ambient-fallback-must-not-run",
+          settingsCredentialResolver: resolver,
+        });
+        const requestInterceptor = (mockInstance.interceptors.request as any)._cb;
+
+        await expect(client.withCredentialContext({
+          projectId: "project-1",
+          reference: { credentialId: "credential-1", capability: "read" },
+          consumer: "jules.test",
+        }, () => requestInterceptor({ headers: {} }))).rejects.toThrow(`Credential ${reason}.`);
+    });
+
+    it("rejects a malformed configured reference without using the compatibility key", async () => {
+        const broker = { withResolvedCredentialId: vi.fn() } as unknown as CredentialBroker;
+        const client = new JulesApiClient({
+          baseUrl: "http://url",
+          getApiKey: () => "ambient-fallback-must-not-run",
+          settingsCredentialResolver: new SettingsCredentialResolver(broker),
+        });
+        const requestInterceptor = (mockInstance.interceptors.request as any)._cb;
+
+        await expect(client.withCredentialContext({
+          projectId: "project-1",
+          reference: { credentialId: "", capability: "read" },
+          consumer: "jules.test",
+        }, () => requestInterceptor({ headers: {} }))).rejects.toThrow("reference is malformed");
+        expect(broker.withResolvedCredentialId).not.toHaveBeenCalled();
+    });
+
+    it("rechecks broker availability before serving a cached session snapshot", async () => {
+        let revoked = false;
+        const resolver = {
+          withCredential: vi.fn(async (_reference, _context, consumer) => {
+            if (revoked) throw new Error("Credential revoked.");
+            return await consumer(Buffer.from("active-secret"));
+          }),
+        } as unknown as SettingsCredentialResolver;
+        vi.mocked(mockInstance.get).mockReset().mockResolvedValue({ data: { sessions: [{ id: "1" }] } });
+        const client = new JulesApiClient({
+          baseUrl: "http://url",
+          settingsCredentialResolver: resolver,
+          sessionsCacheTtlMs: 60_000,
+          now: () => 0,
+        });
+        const context = {
+          projectId: "project-1",
+          reference: { credentialId: "credential-1", capability: "read" as const },
+          consumer: "jules.sessions.sync",
+        };
+
+        await expect(client.withCredentialContext(context, () => client.getCachedSessions()))
+          .resolves.toEqual([{ id: "1" }]);
+        revoked = true;
+        await expect(client.withCredentialContext(context, () => client.getCachedSessions()))
+          .rejects.toThrow("Credential revoked.");
+        expect(mockInstance.get).toHaveBeenCalledTimes(1);
+    });
+
     it("handles listAllSources pagination", async () => {
         vi.mocked(mockInstance.get)
             .mockResolvedValueOnce({ data: { sources: [{ id: "1" }], nextPageToken: "token" } })
             .mockResolvedValueOnce({ data: { sources: [{ id: "2" }] } });
 
-        const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key" });
+        const client = new JulesApiClient({ baseUrl: "http://url", getApiKey: () => "key" });
         const res = await client.listAllSources();
         expect(res).toHaveLength(2);
     });
@@ -48,22 +136,21 @@ describe("JulesApiClient coverage", () => {
             .mockResolvedValueOnce({ data: { activities: [{ id: "1" }], nextPageToken: "token" } })
             .mockResolvedValueOnce({ data: { activities: [{ id: "2" }] } });
 
-        const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key" });
+        const client = new JulesApiClient({ baseUrl: "http://url", getApiKey: () => "key" });
         const res = await client.listAllActivities("sess");
         expect(res).toHaveLength(2);
     });
 
-    it("hasApiKey and setApiKey normalize", () => {
-        const client = new JulesApiClient({ baseUrl: "http://url" });
+    it("reads and normalizes the compatibility API key without retaining it", () => {
+        let apiKey = "  ";
+        const client = new JulesApiClient({ baseUrl: "http://url", getApiKey: () => apiKey });
         expect(client.hasApiKey()).toBe(false);
-        client.setApiKey("  ");
-        expect(client.hasApiKey()).toBe(false);
-        client.setApiKey("key");
+        apiKey = "key";
         expect(client.hasApiKey()).toBe(true);
     });
 
     it("extractSessionId handling", () => {
-        const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key" });
+        const client = new JulesApiClient({ baseUrl: "http://url", getApiKey: () => "key" });
         expect(client.extractSessionId({})).toBeUndefined();
         expect(client.extractSessionId({ name: "sessions/1" })).toBe("1");
         expect(client.extractSessionId({ id: "sessions/1" })).toBe("1");
@@ -72,7 +159,7 @@ describe("JulesApiClient coverage", () => {
     });
 
     it("resolveSessionName handling", () => {
-        const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key" });
+        const client = new JulesApiClient({ baseUrl: "http://url", getApiKey: () => "key" });
         expect(client.resolveSessionName({})).toBeUndefined();
         expect(client.resolveSessionName({ name: "" })).toBeUndefined();
         expect(client.resolveSessionName({ id: "" })).toBeUndefined();
@@ -81,7 +168,7 @@ describe("JulesApiClient coverage", () => {
     });
 
     it("interceptor adds api key if present", async () => {
-        const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key" });
+        const client = new JulesApiClient({ baseUrl: "http://url", getApiKey: () => "key" });
         const cb = (mockInstance.interceptors.request as any)._cb;
         const config = await cb({ headers: {} });
         expect(config.headers["X-Goog-Api-Key"]).toBe("key");
@@ -96,7 +183,7 @@ describe("JulesApiClient coverage", () => {
 
     it("interceptor retries on 429", async () => {
         vi.useFakeTimers();
-        const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key" });
+        const client = new JulesApiClient({ baseUrl: "http://url", getApiKey: () => "key" });
         const errorCb = (mockInstance.interceptors.response as any)._errorCb;
         
         mockInstance.mockResolvedValue({ data: "success" });
@@ -120,7 +207,7 @@ describe("JulesApiClient coverage", () => {
     it("interceptor honors Retry-After on 429", async () => {
         vi.useFakeTimers();
         const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
-        const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key" });
+        const client = new JulesApiClient({ baseUrl: "http://url", getApiKey: () => "key" });
         const errorCb = (mockInstance.interceptors.response as any)._errorCb;
 
         mockInstance.mockResolvedValue({ data: "ok" });
@@ -141,7 +228,7 @@ describe("JulesApiClient coverage", () => {
 
     it("throttles request starts by the minimum interval", async () => {
         vi.useFakeTimers();
-        const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key", minRequestIntervalMs: 200 });
+        const client = new JulesApiClient({ baseUrl: "http://url", getApiKey: () => "key", minRequestIntervalMs: 200 });
         const cb = (mockInstance.interceptors.request as any)._cb;
 
         await cb({ headers: {} });
@@ -164,7 +251,7 @@ describe("JulesApiClient coverage", () => {
             .mockResolvedValueOnce({ data: { activities: [{ id: "a1", createTime: "2026-01-02T00:00:00Z", agentMessaged: { agentMessage: "second" } }], nextPageToken: "t" } })
             .mockResolvedValueOnce({ data: { activities: [{ id: "a0", createTime: "2026-01-01T00:00:00Z", agentMessaged: { agentMessage: "first" } }] } });
 
-        const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key", minRequestIntervalMs: 0 });
+        const client = new JulesApiClient({ baseUrl: "http://url", getApiKey: () => "key", minRequestIntervalMs: 0 });
         const res = await client.fetchRecentActivitiesLite("sessions/x", 5);
 
         // Sorted ascending by createTime, and only the two list calls (no getActivity hydration).
@@ -177,7 +264,7 @@ describe("JulesApiClient coverage", () => {
         let resolveGet: (v: unknown) => void = () => {};
         vi.mocked(mockInstance.get).mockReturnValueOnce(new Promise((r) => { resolveGet = r; }));
 
-        const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key", minRequestIntervalMs: 0, now: () => 0 });
+        const client = new JulesApiClient({ baseUrl: "http://url", getApiKey: () => "key", minRequestIntervalMs: 0, now: () => 0 });
         const p1 = client.getCachedSessions();
         const p2 = client.getCachedSessions();
         resolveGet({ data: { sessions: [{ id: "1" }] } });
@@ -195,7 +282,7 @@ describe("JulesApiClient coverage", () => {
             .mockResolvedValueOnce({ data: { sessions: [{ id: "2" }] } });
 
         let t = 0;
-        const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key", minRequestIntervalMs: 0, sessionsCacheTtlMs: 1000, now: () => t });
+        const client = new JulesApiClient({ baseUrl: "http://url", getApiKey: () => "key", minRequestIntervalMs: 0, sessionsCacheTtlMs: 1000, now: () => t });
 
         expect((await client.getCachedSessions()).map((s) => s.id)).toEqual(["1"]);
         t = 500; // within TTL -> cached
@@ -212,7 +299,7 @@ describe("JulesApiClient coverage", () => {
             .mockResolvedValueOnce({ data: { sessions: [{ id: "1" }, { id: "2" }], nextPageToken: "t" } })
             .mockResolvedValueOnce({ data: { sessions: [{ id: "3" }] } });
 
-        const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key", minRequestIntervalMs: 0, now: () => 0 });
+        const client = new JulesApiClient({ baseUrl: "http://url", getApiKey: () => "key", minRequestIntervalMs: 0, now: () => 0 });
         expect((await client.getCachedSessions()).map((s) => s.id)).toEqual(["1", "2", "3"]);
     });
 
@@ -225,7 +312,7 @@ describe("JulesApiClient coverage", () => {
         vi.mocked(mockInstance.post).mockResolvedValueOnce({ data: {} });
 
         // Long TTL so a re-fetch can only happen via invalidation.
-        const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key", minRequestIntervalMs: 0, sessionsCacheTtlMs: 1_000_000, now: () => 0 });
+        const client = new JulesApiClient({ baseUrl: "http://url", getApiKey: () => "key", minRequestIntervalMs: 0, sessionsCacheTtlMs: 1_000_000, now: () => 0 });
         expect((await client.getCachedSessions()).map((s) => s.id)).toEqual(["1"]);
         await client.sendSessionMessage("s", "hello");
         expect((await client.getCachedSessions()).map((s) => s.id)).toEqual(["2"]);
@@ -239,7 +326,7 @@ describe("JulesApiClient coverage", () => {
             .mockRejectedValueOnce(Object.assign(new Error("connect ETIMEDOUT"), { code: "ETIMEDOUT" }));
 
         let t = 0;
-        const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key", minRequestIntervalMs: 0, sessionsCacheTtlMs: 1000, now: () => t });
+        const client = new JulesApiClient({ baseUrl: "http://url", getApiKey: () => "key", minRequestIntervalMs: 0, sessionsCacheTtlMs: 1000, now: () => t });
         expect((await client.getCachedSessions()).map((s) => s.id)).toEqual(["1"]);
         t = 2000; // expired -> refresh fails -> serve stale
         expect((await client.getCachedSessions()).map((s) => s.id)).toEqual(["1"]);
@@ -247,7 +334,7 @@ describe("JulesApiClient coverage", () => {
 
     it("retries transient network errors (ETIMEDOUT) then resolves", async () => {
         vi.useFakeTimers();
-        new JulesApiClient({ baseUrl: "http://url", apiKey: "key", minRequestIntervalMs: 0, maxTransientRetries: 2 });
+        new JulesApiClient({ baseUrl: "http://url", getApiKey: () => "key", minRequestIntervalMs: 0, maxTransientRetries: 2 });
         const errorCb = (mockInstance.interceptors.response as any)._errorCb;
 
         (mockInstance as any).mockReset();
@@ -263,7 +350,7 @@ describe("JulesApiClient coverage", () => {
     });
 
     it("does not retry non-transient HTTP errors", async () => {
-        new JulesApiClient({ baseUrl: "http://url", apiKey: "key", minRequestIntervalMs: 0 });
+        new JulesApiClient({ baseUrl: "http://url", getApiKey: () => "key", minRequestIntervalMs: 0 });
         const errorCb = (mockInstance.interceptors.response as any)._errorCb;
         const err = { response: { status: 404 }, config: { url: "/x" }, message: "Request failed with status code 404" };
         await expect(errorCb(err)).rejects.toBe(err);
@@ -277,7 +364,7 @@ describe("JulesApiClient coverage", () => {
         });
         vi.mocked(mockInstance.get).mockRejectedValueOnce(err);
 
-        const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key", minRequestIntervalMs: 0 });
+        const client = new JulesApiClient({ baseUrl: "http://url", getApiKey: () => "key", minRequestIntervalMs: 0 });
         
         const promise = client.listAllActivities("sess");
         await expect(promise).rejects.toThrow("Jules activities not found for session: sess");

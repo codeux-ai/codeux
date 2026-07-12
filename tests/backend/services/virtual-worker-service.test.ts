@@ -2648,7 +2648,7 @@ describe("VirtualWorkerService", () => {
 
     await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
 
-    expect(approveSpy).toHaveBeenCalledWith("sess-1");
+    expect(approveSpy).toHaveBeenCalledWith(project.id, "sess-1");
     const updatedItem = projectAttentionService.getItem(item.id);
     expect(updatedItem?.status).toBe("resolved");
     expect(updatedItem?.payload?.resolutionReason).toBe("virtual_worker_auto_approved_plan");
@@ -2701,7 +2701,7 @@ describe("VirtualWorkerService", () => {
     await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
 
     expect(replySpy).toHaveBeenCalled();
-    expect(sendSpy).toHaveBeenCalledWith("sess-2", "Test Reply");
+    expect(sendSpy).toHaveBeenCalledWith(project.id, "sess-2", "Test Reply");
     const updatedItem = projectAttentionService.getItem(item.id);
     expect(updatedItem?.status).toBe("resolved");
     expect(updatedItem?.payload?.resolutionReason).toBe("virtual_worker_auto_answered_clarification");

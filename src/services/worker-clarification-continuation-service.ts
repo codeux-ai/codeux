@@ -38,7 +38,7 @@ export interface WorkerClarificationContinuationServiceDependencies {
   taskRerunService: TaskRerunService;
   executionRepository: ExecutionRepository;
   projectManagementRepository: ProjectManagementRepository;
-  sendJulesSessionMessage: (sessionId: string, answerMarkdown: string) => Promise<void>;
+  sendJulesSessionMessage: (projectId: string, sessionId: string, answerMarkdown: string) => Promise<void>;
   isAuthorizedProjectManager: (projectId: string, agentId: string) => boolean;
   resolveProviderConfigId?: (projectId: string, taskAgentPresetId: string | null) => string | undefined;
   now?: () => string;
@@ -110,7 +110,7 @@ export class WorkerClarificationContinuationService {
     }
 
     if (taskRun.provider === "jules") {
-      await this.deps.sendJulesSessionMessage(sessionId, continuation.answerMarkdown);
+      await this.deps.sendJulesSessionMessage(continuation.projectId, sessionId, continuation.answerMarkdown);
       this.markJulesContinuationRunning(continuation, taskRun.id);
       this.appendDeliveryEvent(continuation, "jules_message", taskRun.provider, sessionId);
       return "jules_message";

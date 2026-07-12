@@ -105,6 +105,7 @@ import type { AutomationAuditExportService } from "../services/automation-audit-
 import type { HeadlessOperationalReadinessService } from "../services/headless-operational-readiness-service.js";
 import type { AutomationSloService } from "../services/automation-slo-service.js";
 import type { CredentialBroker } from "../services/credentials/credential-broker.js";
+import { withJulesSettingsCredentialContext } from "../services/credentials/jules-settings-credential-context.js";
 import { ProjectInitializationStateService } from "../services/project-initialization-state-service.js";
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
@@ -787,20 +788,6 @@ export class CodeUxServer {
   }
 
   private getEffectiveJulesApiKey(): string | undefined {
-    const settings = this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
-    const providerEntries = Object.entries(settings.aiProvider?.providers || {});
-    const uiProviderKey = providerEntries
-      .find(([providerConfigId, provider]) => {
-        const providerType = provider.provider
-          || (providerConfigId === "jules" || providerConfigId.startsWith("jules-") ? "jules" : null);
-        return providerType === "jules" && provider.apiKey.trim().length > 0;
-      })
-      ?.[1]
-      ?.apiKey
-      ?.trim();
-    if (uiProviderKey && uiProviderKey.length > 0) {
-      return uiProviderKey;
-    }
     const liveEnvKey = process.env.JULES_API_KEY?.trim() || process.env.JULES_KEY?.trim();
     if (liveEnvKey && liveEnvKey.length > 0) {
       return liveEnvKey;
@@ -813,11 +800,15 @@ export class CodeUxServer {
   }
 
   private refreshJulesApiKey(): void {
-    this.julesApi.setApiKey(this.getEffectiveJulesApiKey());
+    // Credentials are resolved per request; settings refresh retains no value.
   }
 
   private isJulesApiConfigured(): boolean {
-    return this.julesApi.hasApiKey();
+    const settings = this.getSelectedProjectDashboardSettings();
+    const hasReference = Object.values(settings.aiProvider.providers).some((provider) => (
+      provider.provider === "jules" && Boolean(provider.apiKeyCredentialRef)
+    ));
+    return hasReference || this.julesApi.hasApiKey();
   }
 
   private getDashboardPort(): number {
@@ -1027,7 +1018,13 @@ export class CodeUxServer {
         // Shared, coalesced, TTL-cached snapshot: every sprint watch loop reads
         // from one fetch per window instead of each calling listSessions per
         // cycle (which drove the account into 429s/timeouts on high throughput).
-        const remote = await this.julesApi.getCachedSessions();
+        const projectId = this.projectManagementRepository.getSelectedProjectId();
+        const remote = await withJulesSettingsCredentialContext({
+          julesApi: this.julesApi,
+          settings: this.getSelectedProjectDashboardSettings(),
+          projectId,
+          consumer: "jules.sessions.sync",
+        }, () => this.julesApi.getCachedSessions());
         julesSessions = remote.map((session) => ({ ...session, provider: "jules" }));
       } catch {
         // Keep tracked sessions available even if Jules API is unavailable.
@@ -1053,7 +1050,12 @@ export class CodeUxServer {
     if (!this.isJulesApiConfigured()) {
       return [];
     }
-    return this.julesApi.fetchRecentActivities(sessionName, pageSize);
+    return await withJulesSettingsCredentialContext({
+      julesApi: this.julesApi,
+      settings: this.getSelectedProjectDashboardSettings(),
+      projectId: this.projectManagementRepository.getSelectedProjectId(),
+      consumer: "jules.activities.recent",
+    }, () => this.julesApi.fetchRecentActivities(sessionName, pageSize));
   }
 
   private async fetchGitStatusForRepo(repoPath: string, cacheTtlMs?: number): Promise<GitTrackingStatus> {

@@ -185,8 +185,8 @@ export interface VirtualWorkerServiceDependencies {
   sprintExecutionStateService: SprintExecutionStateService;
   workerInboxReplyService: WorkerInboxReplyService;
   instructionService: InstructionService;
-  approveSessionPlan: (sessionId: string) => Promise<unknown>;
-  sendSessionMessage: (sessionId: string, prompt: string) => Promise<unknown>;
+  approveSessionPlan: (projectId: string, sessionId: string) => Promise<unknown>;
+  sendSessionMessage: (projectId: string, sessionId: string, prompt: string) => Promise<unknown>;
   providerConcurrencyService: ProviderConcurrencyService;
   memoryService?: MemoryService;
   skillService?: SkillService;
@@ -810,7 +810,7 @@ export class VirtualWorkerService {
 
     try {
       if (sessionState === "AWAITING_PLAN_APPROVAL" && settings.automationInterventions.autoApprovePlan) {
-        await this.deps.approveSessionPlan(sessionId);
+        await this.deps.approveSessionPlan(item.projectId, sessionId);
         this.deps.projectAttentionService.resolveItem(item.id, {
           status: "resolved",
           reason: "virtual_worker_auto_approved_plan",
@@ -849,7 +849,7 @@ export class VirtualWorkerService {
           task: task as unknown as Subtask,
         });
 
-        await this.deps.sendSessionMessage(sessionId, reply);
+        await this.deps.sendSessionMessage(item.projectId, sessionId, reply);
         if (item.taskId) {
           this.deps.guardrailService?.record(guardrailScope, item.taskId, "clarification_reply");
         }

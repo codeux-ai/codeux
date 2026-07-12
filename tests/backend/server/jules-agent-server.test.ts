@@ -106,7 +106,7 @@ describe("CodeUxServer", () => {
   });
 
   describe("getEffectiveJulesApiKey", () => {
-    it("should return the key from dashboard settings if available", () => {
+    it("does not read legacy plaintext keys from dashboard settings", () => {
       const runtimeContext = (server as any).runtimeContext;
       runtimeContext.dashboardSettings = {
         ...DEFAULT_DASHBOARD_SETTINGS,
@@ -116,7 +116,7 @@ describe("CodeUxServer", () => {
           }
         }
       };
-      expect((server as any).getEffectiveJulesApiKey()).toBe("dashboard-key");
+      expect((server as any).getEffectiveJulesApiKey()).toBeUndefined();
     });
 
     it("should fallback to environment variable if dashboard settings are missing", () => {
