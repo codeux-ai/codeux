@@ -33,11 +33,44 @@ export interface CustomDashboardFileBundle {
   metadata?: CustomDashboardJsonObject;
 }
 
+export interface CustomDashboardCredentialSlot {
+  slot: string;
+  label: string;
+  required: boolean;
+  allowedKinds: string[];
+  requiredCapability: string;
+  metadata?: CustomDashboardJsonObject;
+}
+
+export interface CustomDashboardCredentialBinding {
+  slot: string;
+  credentialId: string;
+  capability: string;
+  bindingKey: string;
+  credential: {
+    id: string;
+    name: string;
+    kind: string;
+    scope: "project" | "global";
+    capabilities: string[];
+    status: "active" | "revoked" | "unavailable";
+    configured: boolean;
+  };
+}
+
+export interface CustomDashboardRouteDefinition {
+  path: string;
+  label: string;
+  entryFile: string;
+  metadata?: CustomDashboardJsonObject;
+}
+
 export interface CustomDashboardDataSourceNode {
   id: string;
   type: string;
   title: string;
   config?: CustomDashboardJsonObject;
+  credentialSlots?: CustomDashboardCredentialSlot[];
 }
 
 export interface CustomDashboardDataSourceEdge {
@@ -84,6 +117,8 @@ export interface CustomDashboardRecord {
   manifest: CustomDashboardManifest;
   fileBundle: CustomDashboardFileBundle;
   sourceNodeGraph: CustomDashboardDataSourceNodeGraph;
+  credentialBindings: CustomDashboardCredentialBinding[];
+  routes: CustomDashboardRouteDefinition[];
   styleguide: CustomDashboardJsonObject;
   runtimeMetadata: CustomDashboardJsonObject;
   publishedRevisionId: string | null;
@@ -99,6 +134,8 @@ export interface CustomDashboardRevisionRecord {
   manifest: CustomDashboardManifest;
   fileBundle: CustomDashboardFileBundle;
   sourceNodeGraph: CustomDashboardDataSourceNodeGraph;
+  credentialBindings: CustomDashboardCredentialBinding[];
+  routes: CustomDashboardRouteDefinition[];
   styleguide: CustomDashboardJsonObject;
   validationStatus: CustomDashboardValidationStatus | null;
   validationReport: CustomDashboardValidationReport | null;
@@ -129,6 +166,8 @@ export interface CreateCustomDashboardDraftInput {
   manifest: CustomDashboardManifest;
   fileBundle: CustomDashboardFileBundle;
   sourceNodeGraph?: CustomDashboardDataSourceNodeGraph;
+  credentialBindings?: Array<Pick<CustomDashboardCredentialBinding, "slot" | "credentialId">>;
+  routes?: CustomDashboardRouteDefinition[];
   styleguide?: CustomDashboardJsonObject;
   runtimeMetadata?: CustomDashboardJsonObject;
 }
@@ -139,6 +178,8 @@ export interface UpdateCustomDashboardDraftInput {
   manifest?: CustomDashboardManifest;
   fileBundle?: CustomDashboardFileBundle;
   sourceNodeGraph?: CustomDashboardDataSourceNodeGraph;
+  credentialBindings?: Array<Pick<CustomDashboardCredentialBinding, "slot" | "credentialId">>;
+  routes?: CustomDashboardRouteDefinition[];
   styleguide?: CustomDashboardJsonObject;
   runtimeMetadata?: CustomDashboardJsonObject;
 }
@@ -147,6 +188,8 @@ export interface CreateCustomDashboardRevisionInput {
   manifest?: CustomDashboardManifest;
   fileBundle?: CustomDashboardFileBundle;
   sourceNodeGraph?: CustomDashboardDataSourceNodeGraph;
+  credentialBindings?: Array<Pick<CustomDashboardCredentialBinding, "slot" | "credentialId">>;
+  routes?: CustomDashboardRouteDefinition[];
   styleguide?: CustomDashboardJsonObject;
   runtimeMetadata?: CustomDashboardJsonObject;
 }

@@ -41,6 +41,7 @@ async function createFixture(fetchImpl: typeof fetch = fetch): Promise<{
   app: express.Express;
   dir: string;
   repository: CustomDashboardRepository;
+  storage: AppDbStorage;
   validationService: CustomDashboardValidationService;
   projectId: string;
 }> {
@@ -68,7 +69,25 @@ async function createFixture(fetchImpl: typeof fetch = fetch): Promise<{
     customDashboardRepository: repository,
     customDashboardValidationService: validationService,
   } as any);
-  return { app, dir, repository, validationService, projectId: project.id };
+  return { app, dir, repository, storage, validationService, projectId: project.id };
+}
+
+function insertCredential(storage: AppDbStorage, projectId: string): string {
+  const id = "route-credential";
+  const now = new Date().toISOString();
+  const db = storage.getDatabase();
+  db.prepare(`INSERT INTO automation_credentials (
+    id, name, kind, scope, project_id, management_project_id, allowed_project_ids_json,
+    capabilities_json, status, key_id, key_version, version, created_at, updated_at
+  ) VALUES (?, 'Route token', 'api-token', 'project', ?, ?, '[]', '["read"]', 'active', 'test', 1, 1, ?, ?)`)
+    .run(id, projectId, projectId, now, now);
+  const blob = Buffer.from("route-secret-ciphertext");
+  db.prepare(`INSERT INTO automation_credential_secrets (
+    credential_id, ciphertext, nonce, auth_tag, wrapped_data_key, wrap_nonce,
+    wrap_auth_tag, key_id, key_version, updated_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, 'test', 1, ?)`)
+    .run(id, blob, blob, blob, blob, blob, blob, now);
+  return id;
 }
 
 afterEach(async () => {
@@ -113,6 +132,49 @@ describe("custom dashboard routes", () => {
     const deleteResponse = await request(app).delete(`/api/custom-dashboards/${createResponse.body.id}`);
     expect(deleteResponse.status).toBe(200);
     expect(deleteResponse.body.status).toBe("archived");
+  });
+
+  it("returns route and credential metadata without credential secret material", async () => {
+    const { app, storage, projectId } = await createFixture();
+    const credentialId = insertCredential(storage, projectId);
+    const response = await request(app)
+      .post(`/api/projects/${projectId}/custom-dashboards`)
+      .send({
+        title: "Integration view",
+        manifest: manifest(),
+        fileBundle: fileBundle(),
+        sourceNodeGraph: {
+          nodes: [{
+            id: "external",
+            type: "external_api",
+            title: "External",
+            credentialSlots: [{
+              slot: "api_token",
+              label: "API token",
+              required: true,
+              allowedKinds: ["api-token"],
+              requiredCapability: "read",
+            }],
+          }],
+          edges: [],
+        },
+        credentialBindings: [{ slot: "api_token", credentialId }],
+        routes: [{ path: "/integration", label: "Integration", entryFile: "src/dashboard.tsx" }],
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      routes: [{ path: "/integration" }],
+      credentialBindings: [{ slot: "api_token", credential: { name: "Route token" } }],
+    });
+    expect(JSON.stringify(response.body)).not.toContain("route-secret-ciphertext");
+
+    const catalog = await request(app).get(`/api/projects/${projectId}/custom-dashboards/data-catalog`);
+    expect(catalog.body.dashboards[0]).toMatchObject({
+      routes: [{ path: "/integration" }],
+      credentialBindings: [{ credentialId }],
+    });
+    expect(JSON.stringify(catalog.body)).not.toContain("route-secret-ciphertext");
   });
 
   it("creates revisions, starts validation through the service, and denies unsafe publication", async () => {
