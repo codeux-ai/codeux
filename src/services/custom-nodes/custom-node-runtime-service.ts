@@ -14,6 +14,7 @@ import { DOCKER_DROP_ALL_CAPS_ARGS, DOCKER_NETWORK_NONE_ARGS, DOCKER_NO_NEW_PRIV
 import { runCommandStrict, type CommandResult } from "../cli-process-runner.js";
 import type { CredentialBroker } from "../credentials/credential-broker.js";
 import type { EgressPolicyService } from "../node-flows/egress-policy-service.js";
+import { CUSTOM_NODE_EGRESS_SOCKET_DIRECTORY, CustomNodeEgressBroker } from "./custom-node-egress-broker.js";
 
 export const CUSTOM_NODE_CONTAINER_SCRATCH = "/tmp/codeux";
 
@@ -22,6 +23,7 @@ export interface CustomNodeDockerPlanInput {
   containerName: string;
   seccompProfile?: string;
   appArmorProfile?: string;
+  egressSocketDirectory?: string;
 }
 
 export function buildCustomNodeDockerRunArgs(input: CustomNodeDockerPlanInput): string[] {
@@ -45,6 +47,9 @@ export function buildCustomNodeDockerRunArgs(input: CustomNodeDockerPlanInput): 
   ];
   if (input.seccompProfile) args.push("--security-opt", `seccomp=${input.seccompProfile}`);
   if (input.appArmorProfile) args.push("--security-opt", `apparmor=${input.appArmorProfile}`);
+  if (input.egressSocketDirectory) {
+    args.push("--mount", `type=bind,src=${input.egressSocketDirectory},dst=${CUSTOM_NODE_EGRESS_SOCKET_DIRECTORY},readonly`);
+  }
   args.push(input.artifact.runtimeImageDigest);
   return args;
 }
@@ -71,12 +76,23 @@ export class CustomNodeRuntimeService {
       throw new EntityNotFoundError(`Published custom node not found: ${request.nodeType}@${request.version}`);
     }
     const { artifact } = resolved;
-    await this.validateDeclaredEgress(artifact.manifest);
+    const httpPolicy = artifact.manifest.capabilities.includes("network.http")
+      ? requireHttpPolicy(artifact.manifest)
+      : undefined;
     const credentials = await this.resolveCredentials(artifact.manifest, request);
-    const secrets = Object.values(credentials);
     const runDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-custom-node-run-"));
+    const egressBroker = httpPolicy
+      ? new CustomNodeEgressBroker({
+        service: this.deps.egressPolicyService,
+        policy: httpPolicy,
+        socketDirectory: path.join(runDirectory, "egress"),
+        rateLimitKey: `${request.projectId}:${request.nodeType}`,
+      })
+      : undefined;
+    const secrets = [...Object.values(credentials), ...(egressBroker ? [egressBroker.token] : [])];
     try {
       if (process.platform !== "win32") await fs.chmod(runDirectory, 0o700);
+      await egressBroker?.start();
       const envelope = {
         input: request.input,
         config: request.config,
@@ -84,6 +100,7 @@ export class CustomNodeRuntimeService {
         invocationId: request.invocationId,
         credentials,
         now: new Date().toISOString(),
+        egress: egressBroker ? { socketPath: egressBroker.containerSocketPath, token: egressBroker.token } : undefined,
       };
       const inputPath = path.join(runDirectory, "input.json");
       await fs.writeFile(inputPath, JSON.stringify(envelope), { mode: 0o600 });
@@ -93,6 +110,7 @@ export class CustomNodeRuntimeService {
         containerName: containerName(request.invocationId),
         seccompProfile: this.deps.seccompProfile,
         appArmorProfile: this.deps.appArmorProfile,
+        egressSocketDirectory: egressBroker ? path.join(runDirectory, "egress") : undefined,
       });
       const runner = this.deps.commandRunner ?? (async (command, args, cwd, options) => runCommandStrict(command, args, cwd, process.env, options));
       const result = await runner("docker", dockerArgs, process.cwd(), {
@@ -117,43 +135,41 @@ export class CustomNodeRuntimeService {
       };
     } finally {
       for (const key of Object.keys(credentials)) credentials[key] = "";
+      await egressBroker?.close();
       await fs.rm(runDirectory, { recursive: true, force: true });
     }
   }
 
   private async resolveCredentials(manifest: CustomNodeManifest, request: CustomNodeExecutionRequest): Promise<Record<string, string>> {
     const resolved: Record<string, string> = {};
-    for (const slot of manifest.credentials) {
-      const bindingKey = request.credentialBindings[slot.slot];
-      if (!bindingKey) {
-        if (slot.required) throw new ValidationError(`Required custom node credential slot is not bound: ${slot.slot}`);
-        continue;
+    try {
+      for (const slot of manifest.credentials) {
+        const bindingKey = request.credentialBindings[slot.slot];
+        if (!bindingKey) {
+          if (slot.required) throw new ValidationError(`Required custom node credential slot is not bound: ${slot.slot}`);
+          continue;
+        }
+        const credential = await this.deps.credentialBroker.resolveCredentialId({
+          projectId: request.projectId,
+          bindingKey,
+          credentialId: bindingKey,
+          capability: slot.requiredCapability,
+          workspaceId: request.workspaceId,
+        });
+        resolved[slot.slot] = credential.value;
       }
-      const credential = await this.deps.credentialBroker.resolveCredentialId({
-        projectId: request.projectId,
-        bindingKey,
-        credentialId: bindingKey,
-        capability: slot.requiredCapability,
-        workspaceId: request.workspaceId,
-      });
-      resolved[slot.slot] = credential.value;
+      return resolved;
+    } catch (error) {
+      for (const key of Object.keys(resolved)) resolved[key] = "";
+      throw error;
     }
-    return resolved;
   }
 
-  private async validateDeclaredEgress(manifest: CustomNodeManifest): Promise<void> {
-    if (!manifest.capabilities.includes("network.http")) return;
-    if (!manifest.http) throw new ValidationError("Published custom node is missing its bounded HTTP policy.");
-    for (const host of manifest.http.allowedHosts) {
-      await this.deps.egressPolicyService.validateUrl(`https://${host}`, {
-        allowedHosts: manifest.http.allowedHosts,
-        allowedPorts: manifest.http.allowedPorts ?? [443],
-        timeoutMs: manifest.http.timeoutMs,
-        maxResponseBytes: manifest.http.maxResponseBytes,
-        requestsPerMinute: manifest.http.maxRequests,
-      });
-    }
-  }
+}
+
+function requireHttpPolicy(manifest: CustomNodeManifest): NonNullable<CustomNodeManifest["http"]> {
+  if (!manifest.http) throw new ValidationError("Published custom node is missing its bounded HTTP policy.");
+  return manifest.http;
 }
 
 function containerName(invocationId: string): string {

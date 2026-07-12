@@ -21,9 +21,11 @@ The existing `input`, `set_fields`, `template`, `provider_prompt`, `http_request
 
 ## Governed egress
 
-`EgressPolicyService` is the single request boundary for HTTP nodes and future custom-node network calls. HTTPS is required by default. A node must explicitly opt into HTTP, and even then private networking remains blocked. The service rejects credentials embedded in URLs; loopback, private, link-local, carrier-grade NAT, benchmarking, multicast, and cloud-metadata addresses; metadata hostnames; restricted raw headers; and ports or hosts outside configured allowlists.
+`EgressPolicyService` is the single request boundary for HTTP nodes and custom-node network calls. HTTPS is required by default. A node must explicitly opt into HTTP, and even then private networking remains blocked. The service rejects credentials embedded in URLs; loopback, private, link-local, carrier-grade NAT, benchmarking, multicast, and cloud-metadata addresses; metadata hostnames; restricted raw headers; and ports or hosts outside configured allowlists.
 
 Each redirect is handled manually and fully revalidated. DNS is resolved twice before dispatch, and a changed or newly private result is treated as rebinding. Cross-origin redirects remove credential headers. Response bodies are streamed into a bounded buffer, content types are allowlisted, timeouts and caller cancellation propagate, retry counts are capped, unsafe methods require an idempotency key before retry, and an in-process rate window bounds requests per project and host.
+
+Custom-node containers retain `--network none`. When `network.http` is declared, a per-invocation authenticated Unix socket exposes only this policy service; the socket directory is the sole additional read-only mount. Undeclared nodes receive no socket or bridge token. The broker accepts bounded typed messages and applies the published custom-node HTTP policy to every request.
 
 ## OAuth boundary
 

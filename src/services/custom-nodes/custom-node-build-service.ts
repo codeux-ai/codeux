@@ -92,6 +92,7 @@ export class CustomNodeBuildService {
       runCheck("lockfile-verification", checks, issues, () => verifyLockfile(bundle.get("pnpm-lock.yaml"), dependencies));
       runCheck("trusted-build-recipe", checks, issues, () => {
         if (bundle.get("Dockerfile") !== createCustomNodeDockerfile()) throw new ValidationError("Custom node Dockerfile must match the trusted generated build recipe.");
+        if (bundle.get("src/runner.ts") !== this.projectService.generatedRunnerSource()) throw new ValidationError("Custom node runner must match the trusted generated bridge.");
       });
       runCheck("resource-policy", checks, issues, () => validateResourcePolicy(manifest));
 
@@ -288,7 +289,15 @@ function validateResourcePolicy(manifest: CustomNodeManifest): void {
   if (!Number.isInteger(resources.scratchMb) || resources.scratchMb < 1 || resources.scratchMb > 256) throw new ValidationError("Custom node scratch limit is invalid.");
   if (manifest.http) {
     if (!manifest.http.allowedHosts.length || manifest.http.allowedHosts.some((host) => !/^[a-z0-9.-]+$/i.test(host))) throw new ValidationError("Custom node HTTP hosts must be explicit DNS names.");
-    if (manifest.http.maxRequests < 1 || manifest.http.maxRequests > 100 || manifest.http.timeoutMs > resources.timeoutMs || manifest.http.maxResponseBytes > resources.maxOutputBytes) throw new ValidationError("Custom node HTTP policy exceeds resource bounds.");
+    if (manifest.http.allowedPorts?.some((port) => !Number.isInteger(port) || port < 1 || port > 65_535)) throw new ValidationError("Custom node HTTP ports must be valid TCP ports.");
+    if (manifest.http.allowedContentTypes?.some((contentType) => !/^[a-z0-9!#$&^_.+-]+\/(?:[a-z0-9!#$&^_.+-]+)?$/i.test(contentType))) throw new ValidationError("Custom node HTTP content types are invalid.");
+    if (manifest.http.maxRedirects !== undefined && (!Number.isInteger(manifest.http.maxRedirects) || manifest.http.maxRedirects < 0 || manifest.http.maxRedirects > 10)) throw new ValidationError("Custom node HTTP redirect limit is invalid.");
+    if (manifest.http.maxRetries !== undefined && (!Number.isInteger(manifest.http.maxRetries) || manifest.http.maxRetries < 0 || manifest.http.maxRetries > 5)) throw new ValidationError("Custom node HTTP retry limit is invalid.");
+    if (!Number.isInteger(manifest.http.maxRequests) || manifest.http.maxRequests < 1 || manifest.http.maxRequests > 100
+      || !Number.isInteger(manifest.http.timeoutMs) || manifest.http.timeoutMs < 1 || manifest.http.timeoutMs > resources.timeoutMs
+      || !Number.isInteger(manifest.http.maxResponseBytes) || manifest.http.maxResponseBytes < 1 || manifest.http.maxResponseBytes > resources.maxOutputBytes) {
+      throw new ValidationError("Custom node HTTP policy exceeds resource bounds.");
+    }
   }
 }
 
