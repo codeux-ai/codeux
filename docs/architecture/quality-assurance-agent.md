@@ -222,6 +222,7 @@ Behavior:
 - if QA requests follow-up work and Code UX can continue that task session, sprint completion is held open
 - if sprint-completion QA targets a task that is already merged, Code UX does not reopen that settled session; it records the target for traceability and creates follow-up sprint tasks so repair work goes through a new tracked task branch
 - if QA creates follow-up tasks, sprint completion is held open until those new tasks finish and sprint QA passes on a later run
+- automatic follow-up creation is allowed only before the final configured sprint review cycle. The final cycle is reserved for verification: if it still requests changes, Code UX records the findings, creates one sprint-scoped human handoff, and does not create another unreviewable task batch
 - sprint QA runs once for the finished sprint, then only runs again after a prior `changes_requested` or failed result and meaningful sprint task state changes have occurred
 - a passing sprint QA result is final for that sprint state and is not retriggered by another orchestration cycle with no real work changes
 - sprint task state changes are detected purely by serializing all current subtasks into a `SprintQaSnapshot` (including status, prompt, and merge indicators) and comparing it with the payload of the latest QA run; if a historical QA run lacks a saved snapshot, Code UX falls back to comparing the newest task modification timestamp against the QA run's finish timestamp
@@ -230,11 +231,13 @@ Behavior:
   - later runs are only used to check QA-requested fixes or follow-up work
   - `maxSprintReviewRuns = 3` is the default sprint QA budget for new or unset settings
   - `maxSprintReviewRuns = 1` means sprint fixes are not re-checked by QA
+- an exhausted sprint QA budget is authoritative even when completed follow-up work changed the task snapshot. Snapshot changes cannot start an over-budget review or suppress the required human handoff
 - if every reviewer in the latest sprint QA cycle passes, Code UX proceeds to main-merge evaluation and eventual completion
 - if any reviewer is still running, failed, requested changes, or waiting on follow-up work, the main merge stays blocked
 - reviewer rows remain visible per agent, while the shared `run_index` spends one sprint QA budget cycle
 - while a sprint QA review is running, Code UX now refreshes the parent sprint-run heartbeat and lease so long reviews are not mistaken for stalled orchestration and failed by runtime cleanup
 - stale sprint-level `running` QA rows are also reconciled against execution invocation state before gating; if the backing invocation already ended, Code UX reclassifies the stale row and immediately allows a retry instead of keeping sprint completion blocked forever
+- `maxSprintReviewRuns` limits review cycles, not the number of defects that an earlier review can split into tracked work. Keeping task-completion QA enabled catches task-local defects before merge and reduces the amount of remediation deferred to the full integrated-sprint review
 
 ## Session Continuation
 

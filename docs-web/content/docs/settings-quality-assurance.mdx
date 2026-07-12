@@ -35,6 +35,8 @@ A practical review flow is:
 
 Disabling QA removes an important last check before merge automation continues.
 
+Disabling task-completion QA while leaving sprint-completion QA enabled moves task-local defect discovery to the integrated sprint review. That review can split several distinct blockers into separate tracked follow-up tasks, so this configuration can make the sprint task list grow sharply near completion.
+
 Before applying changes, check:
 
 - Whether the value affects provider credentials, Docker runtime behavior, Git automation, memory retention, or destructive cleanup.
@@ -52,6 +54,7 @@ If the saved setting does not appear to take effect:
 - If a task exhausts QA and enters `QA_REVIEW_FAILED`, resolve or dismiss its QA handoff after reviewing or correcting the work. Code UX clears that task's QA history and retry guardrail, returns a still-parked task to code-complete review state, and lets the active sprint run one fresh QA cycle. Restarting alone intentionally preserves the QA hold.
 - A fix continuation created by the review that reaches the configured cap gets one final verification review. A CLI continuation with no patch and no commits ahead is treated as `follow_up_no_progress` and applies the exhaustion policy immediately; repeated continuations cannot extend the budget indefinitely.
 - Recovered failed, cancelled, or errored QA attempts retry only within the bounded infrastructure grace. All terminal attempts count toward the hard ceiling, so repeated container loss eventually opens the configured handoff.
+- Sprint QA review limits count review cycles, not the number of findings in each earlier cycle. The final configured cycle is verification-only: if it does not pass, Code UX opens one sprint-scoped human handoff and does not create another automatic follow-up batch. Completed follow-up work cannot bypass that exhausted-budget handoff merely because it changed the task snapshot.
 
 ## Related Documentation
 

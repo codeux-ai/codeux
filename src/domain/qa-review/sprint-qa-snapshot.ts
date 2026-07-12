@@ -51,8 +51,8 @@ export function shouldRunSprintQaReview(args: EvaluateSprintQaReviewNeedArgs): b
 
 export type SprintQaReviewDecision =
   | { action: "run_review"; reason: "no_prior_review" | "needs_review" }
-  | { action: "block_completion"; reason: "review_running" | "awaiting_follow_up" }
-  | { action: "skip_review"; reason: "already_passed" | "retry_budget_exhausted" };
+  | { action: "block_completion"; reason: "review_running" | "awaiting_follow_up" | "retry_budget_exhausted" }
+  | { action: "skip_review"; reason: "already_passed" };
 
 export interface EvaluateSprintQaReviewDecisionArgs {
   latestRun: QaReviewRunRecord | null;
@@ -88,7 +88,7 @@ export function evaluateSprintQaReviewDecision(
     && latestRun.runIndex >= args.maxSprintReviewRuns;
 
   if (retryBudgetExhausted) {
-    return { action: "skip_review", reason: "retry_budget_exhausted" };
+    return { action: "block_completion", reason: "retry_budget_exhausted" };
   }
 
   if (
@@ -138,17 +138,20 @@ export function evaluateSprintQaReviewCycleDecision(
     return { action: "run_review", reason: "needs_review" };
   }
 
+  const retryBudgetExhausted = latestRunIndex >= args.maxSprintReviewRuns
+    && args.latestRuns.every((run) => run.status !== "running");
+
+  // The review budget is a hard guardrail. Once it is spent, a changed task
+  // snapshot means completed follow-up work is waiting for human disposition;
+  // it must not bypass the escalation path or start another review cycle.
+  if (retryBudgetExhausted) {
+    return { action: "block_completion", reason: "retry_budget_exhausted" };
+  }
+
   if (
     args.latestRuns.some((run) => run.outcome === "changes_requested" || run.status === "failed")
     && !args.shouldRunReview
   ) {
-    return { action: "block_completion", reason: "awaiting_follow_up" };
-  }
-
-  const retryBudgetExhausted = latestRunIndex >= args.maxSprintReviewRuns
-    && args.latestRuns.every((run) => run.status !== "running");
-
-  if (retryBudgetExhausted) {
     return { action: "block_completion", reason: "awaiting_follow_up" };
   }
 

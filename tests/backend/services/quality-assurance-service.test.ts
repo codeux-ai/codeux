@@ -530,6 +530,73 @@ describe("QualityAssuranceService", () => {
       continuationSkippedReason: "target_task_already_merged",
       createdFollowUpTaskKeys: ["T02"],
     });
+
+    projectRepository.updateTask(tasks[1]!.id, {
+      status: "completed",
+      isMerged: true,
+      mergeIndicator: "MERGED",
+    });
+    const completedFollowUp = projectRepository.getTask(tasks[1]!.id)!;
+    const preFinalSubtasks = [
+      {
+        record_id: task.id,
+        project_id: project.id,
+        sprint_id: sprint.id,
+        id: "T1",
+        title: "Merged task",
+        prompt: "Implement the merged task.",
+        depends_on: [],
+        is_independent: true,
+        status: "COMPLETED",
+        is_merged: true,
+        merge_indicator: "MERGED",
+      },
+      {
+        record_id: completedFollowUp.id,
+        project_id: project.id,
+        sprint_id: sprint.id,
+        id: completedFollowUp.taskKey,
+        title: completedFollowUp.title,
+        prompt: completedFollowUp.promptMarkdown,
+        depends_on: ["T1"],
+        is_independent: false,
+        status: "COMPLETED",
+        is_merged: true,
+        merge_indicator: "MERGED",
+      },
+    ] as any;
+    const secondRun = qaReviewRepository.createRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      triggerType: "sprint_completion",
+      runIndex: 2,
+      payload: { taskSnapshot: buildSprintQaSnapshot(preFinalSubtasks) },
+    });
+    qaReviewRepository.updateRun(secondRun.id, {
+      status: "completed",
+      outcome: "changes_requested",
+      summaryMarkdown: "One final verification is required.",
+      payload: { taskSnapshot: buildSprintQaSnapshot(preFinalSubtasks) },
+      finishedAt: new Date().toISOString(),
+    });
+    preFinalSubtasks[1].prompt = `${preFinalSubtasks[1].prompt}\nVerified implementation evidence.`;
+
+    const finalOutcome = await service.reviewSprintCompletion({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      repoPath: dir,
+      subtasks: preFinalSubtasks,
+    });
+
+    expect(finalOutcome.reportText).toContain("No additional automatic follow-up tasks were created");
+    expect(projectRepository.listTasks(project.id, sprint.id)).toHaveLength(2);
+    expect(qaReviewRepository.getLatestSprintRun(sprint.id)?.payload).toMatchObject({
+      continuationSkippedReason: "sprint_qa_retry_budget_exhausted",
+      automaticFollowUpSuppressedReason: "sprint_qa_retry_budget_exhausted",
+      createdFollowUpTaskKeys: [],
+    });
   });
 
   it("does not rerun sprint QA after a passing result with no meaningful sprint changes", async () => {
@@ -661,6 +728,7 @@ describe("QualityAssuranceService", () => {
     const projectRepository = new ProjectManagementRepository(storage);
     const executionRepository = new ExecutionRepository(storage);
     const qaReviewRepository = new QaReviewRepository(storage);
+    const attentionRepository = new ProjectAttentionRepository(storage);
     const providerRunner = {
       runProviderForText: vi.fn(),
       runProvider: vi.fn(),
@@ -716,6 +784,15 @@ describe("QualityAssuranceService", () => {
       }),
       getGithubToken: () => undefined,
       sendSessionMessage: async () => ({}),
+      projectAttentionService: {
+        listActiveProjectItems: (projectId: string) => attentionRepository.listProjectAttentionItems(projectId, {
+          statuses: ["open", "claimed"],
+          limit: 500,
+        }),
+        openItem: (input: Parameters<ProjectAttentionRepository["openOrRefreshItem"]>[0]) => (
+          attentionRepository.openOrRefreshItem(input)
+        ),
+      } as any,
     });
 
     const initialSubtasks = [
@@ -788,6 +865,23 @@ describe("QualityAssuranceService", () => {
       reportText: expect.stringContaining("Sprint QA is still waiting on follow-up work"),
     });
     expect(providerRunner.runProviderForText).not.toHaveBeenCalled();
+    expect(attentionRepository.listProjectAttentionItems(project.id, {
+      statuses: ["open", "claimed"],
+    })).toEqual([
+      expect.objectContaining({
+        sprintId: sprint.id,
+        taskId: null,
+        attentionType: "human_escalation_required",
+        ownerType: "human",
+        payload: expect.objectContaining({
+          sourceAttentionType: "qa_review",
+          qaScope: "sprint",
+          qaReason: "retry_budget_exhausted",
+          attempts: 1,
+          maxAttempts: 1,
+        }),
+      }),
+    ]);
   });
 
   it("recovers stale running task QA rows when the backing invocation already finished", async () => {
