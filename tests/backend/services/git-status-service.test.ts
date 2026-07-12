@@ -634,6 +634,45 @@ describe("GitStatusService", () => {
     expect(executionCount).toBe(1);
   });
 
+  it("resolves rotated Git credentials at each status request and fails closed on denial", async () => {
+    let secret = "git-secret-v1";
+    const observedTokens: string[] = [];
+    const credentialResolver = {
+      withCredentials: vi.fn(async (_references, _context, consumer) => await consumer(new Map([
+        ["github", Buffer.from(secret)],
+      ]))),
+    } as any;
+    const credentialRunner = vi.fn(async (command: string, args: string[], options?: { hostToken?: string }) => {
+      if (command === "gh" && options?.hostToken) observedTokens.push(options.hostToken);
+      const fullCmd = `${command} ${args.join(" ")}`;
+      const responses: Record<string, any> = {
+        "git rev-parse --is-inside-work-tree": { ok: true, stdout: "true\n" },
+        "git rev-parse --show-toplevel": { ok: true, stdout: "/repo\n" },
+        "git branch --show-current": { ok: true, stdout: "main\n" },
+        "git remote": { ok: true, stdout: "origin\n" },
+        "git remote get-url origin": { ok: true, stdout: "https://github.com/owner/repo.git\n" },
+        "git status --porcelain": { ok: true, stdout: "" },
+      };
+      return responses[fullCmd] ?? { ok: true, stdout: "[]", stderr: "" };
+    });
+    const credentialService = new GitStatusService("/repo", credentialRunner as any, false, credentialResolver);
+    const context = {
+      projectId: "project-1",
+      githubTokenCredentialRef: { credentialId: "git-credential", capability: "read" as const },
+    };
+
+    await credentialService.getStatus("REMOTE", context);
+    secret = "git-secret-v2";
+    await credentialService.getStatus("REMOTE", context);
+
+    expect(observedTokens).toContain("git-secret-v1");
+    expect(observedTokens).toContain("git-secret-v2");
+    credentialResolver.withCredentials.mockRejectedValueOnce(new Error("Required capability is not approved."));
+    const callsBeforeDenial = credentialRunner.mock.calls.length;
+    await expect(credentialService.getStatus("REMOTE", context)).rejects.toThrow("Required capability is not approved.");
+    expect(credentialRunner).toHaveBeenCalledTimes(callsBeforeDenial);
+  });
+
   it("invalidates cache on mergePullRequest", async () => {
     let executionCount = 0;
     const service = new GitStatusService("/tmp/repo", async (command, args) => {

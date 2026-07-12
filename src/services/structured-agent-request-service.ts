@@ -8,6 +8,7 @@ import type {
   ProviderConfigMode,
   ProviderId,
   QwenModelProviderSettings,
+  SettingsCredentialReference,
   VirtualWorkerProvider,
 } from "../contracts/app-types.js";
 import type { ProviderInvocationPurpose } from "../contracts/execution-types.js";
@@ -28,6 +29,7 @@ export interface StructuredRequestArgs<T> {
   provider: ProviderId;
   model: string;
   apiKey: string;
+  apiKeyCredentialRef?: SettingsCredentialReference | null;
   maxConcurrentTasks?: number;
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
   qwenRegion?: "china" | "international";
@@ -64,6 +66,8 @@ export interface StructuredRequestArgs<T> {
   systemRoutingMessage?: string;
   maxRetries?: number;
   githubToken?: string;
+  githubTokenCredentialRef?: SettingsCredentialReference | null;
+  gitlabTokenCredentialRef?: SettingsCredentialReference | null;
   signal?: AbortSignal;
   onActivity?: (description: string, originator?: string) => void;
   agentMcpAccess?: AgentMcpAccessConfig | null;
@@ -165,6 +169,7 @@ export class StructuredAgentRequestService {
       cwd: args.cwd,
       model: args.model,
       apiKey: args.apiKey,
+      apiKeyCredentialRef: args.apiKeyCredentialRef,
       qwenAuthMode: args.qwenAuthMode,
       qwenRegion: args.qwenRegion,
       qwenBaseUrl: args.qwenBaseUrl,
@@ -189,6 +194,8 @@ export class StructuredAgentRequestService {
       workflowSettings: args.settings.cliWorkflow,
       repoPath: args.repoPath,
       githubToken: args.githubToken,
+      githubTokenCredentialRef: args.githubTokenCredentialRef,
+      gitlabTokenCredentialRef: args.gitlabTokenCredentialRef,
       signal: args.signal,
       invocationId,
       continueSessionId: args.continueSessionId,
@@ -442,6 +449,7 @@ export class StructuredAgentRequestService {
       cwd: args.cwd,
       model: args.model,
       apiKey: args.apiKey,
+      apiKeyCredentialRef: args.apiKeyCredentialRef,
       qwenAuthMode: args.qwenAuthMode,
       qwenRegion: args.qwenRegion,
       qwenBaseUrl: args.qwenBaseUrl,
@@ -464,6 +472,8 @@ export class StructuredAgentRequestService {
       workflowSettings: args.settings.cliWorkflow,
       repoPath: args.repoPath,
       githubToken: args.githubToken,
+      githubTokenCredentialRef: args.githubTokenCredentialRef,
+      gitlabTokenCredentialRef: args.gitlabTokenCredentialRef,
       signal: args.signal,
       invocationId,
       continueSessionId,

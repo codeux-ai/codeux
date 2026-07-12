@@ -126,6 +126,7 @@ interface QualityAssuranceServiceDependencies {
   dockerService?: Pick<{ listContainers: () => Promise<DockerContainer[]> }, "listContainers">;
   sprintRunLifecycleService?: Pick<SprintRunLifecycleService, "updateRun">;
   projectAttentionService?: Pick<ProjectAttentionService, "listActiveProjectItems" | "openItem">;
+  settingsCredentialResolver?: import("./credentials/settings-credential-resolver.js").SettingsCredentialResolver;
 }
 
 export class QualityAssuranceService {
@@ -150,6 +151,7 @@ export class QualityAssuranceService {
       skillService: deps.skillService,
       agentPresetRepository: deps.agentPresetRepository,
       getDashboardSettings: deps.getDashboardSettings,
+      settingsCredentialResolver: deps.settingsCredentialResolver,
     });
 
     if (deps.structuredAgentRequestService) {

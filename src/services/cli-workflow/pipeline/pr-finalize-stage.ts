@@ -1,4 +1,4 @@
-import type { PipelineContext } from "./pipeline-context.js";
+import { withResolvedPipelineGitCredentials, type PipelineContext } from "./pipeline-context.js";
 import { formatTaskPrTitle } from "../../../domain/git/task-pr-title-template.js";
 import { buildTaskPrComposerInput } from "../../../domain/sprint/composer/task-pr-input-builder.js";
 import { composeTaskPrBody } from "../../../domain/sprint/composer/pr-description-composer.js";
@@ -8,6 +8,9 @@ export interface PrFinalizeStageOptions {
 }
 
 export async function executePrFinalizeStage(ctx: PipelineContext, options: PrFinalizeStageOptions = {}): Promise<{ prUrl?: string }> {
+  if (ctx.deps.settingsCredentialResolver && (ctx.settings.git.githubTokenCredentialRef || ctx.settings.git.gitlabTokenCredentialRef)) {
+    return await withResolvedPipelineGitCredentials(ctx, async (resolved) => await executePrFinalizeStage(resolved, options));
+  }
   let prUrl: string | undefined;
 
   // In LOCAL git mode there is no remote host to open a PR against — the worker

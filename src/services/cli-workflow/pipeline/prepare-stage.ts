@@ -1,6 +1,6 @@
 import { buildProviderSettingsOverride } from "../../provider-settings-override.js";
 import { buildProviderPrompt } from "../../cli-workflow-utils.js";
-import type { PipelineContext } from "./pipeline-context.js";
+import { withResolvedPipelineGitCredentials, type PipelineContext } from "./pipeline-context.js";
 import { resolveProviderForInvocation } from "../../provider-routing.js";
 import { resolveAgentMemoryInstructions } from "../../agent-memory-instructions.js";
 import { buildRelevantMemoryInjectionContext } from "../../memory-injection-context.js";
@@ -10,6 +10,9 @@ export async function executePrepareStage(
   ctx: PipelineContext,
   resumeFromFailedSessionId?: string
 ): Promise<{ worktreePath: string; initialHead: string; providerPrompt: string; resumed?: boolean }> {
+  if (ctx.deps.settingsCredentialResolver && (ctx.settings.git.githubTokenCredentialRef || ctx.settings.git.gitlabTokenCredentialRef)) {
+    return await withResolvedPipelineGitCredentials(ctx, async (resolved) => await executePrepareStage(resolved, resumeFromFailedSessionId));
+  }
   const resolvedProvider = resolveProviderForInvocation(ctx.settings, {
     invocation: "task_coding",
     task: ctx.task,

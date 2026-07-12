@@ -33,6 +33,7 @@ export interface PipelineContextDeps {
   getGithubToken: () => string | undefined;
   getMcpConnectionInfo?: () => McpConnectionInfo | null;
   logger?: Logger;
+  settingsCredentialResolver?: import("../../credentials/settings-credential-resolver.js").SettingsCredentialResolver;
 }
 
 export interface PipelineContext {
@@ -75,4 +76,37 @@ export interface PipelineContext {
   providerRunner: IProviderRunner;
   deps: PipelineContextDeps;
   runCommand: (command: string, args: string[], cwd: string, env?: NodeJS.ProcessEnv) => Promise<CommandResult>;
+}
+
+export async function withResolvedPipelineGitCredentials<T>(
+  ctx: PipelineContext,
+  consumer: (resolvedContext: PipelineContext) => Promise<T>,
+): Promise<T> {
+  const resolver = ctx.deps.settingsCredentialResolver;
+  const references = [
+    ctx.settings.git.githubTokenCredentialRef
+      ? { name: "github", reference: ctx.settings.git.githubTokenCredentialRef, consumer: "git.pipeline.github" }
+      : null,
+    ctx.settings.git.gitlabTokenCredentialRef
+      ? { name: "gitlab", reference: ctx.settings.git.gitlabTokenCredentialRef, consumer: "git.pipeline.gitlab" }
+      : null,
+  ].filter((value): value is NonNullable<typeof value> => value !== null);
+  if (!resolver || references.length === 0) return await consumer(ctx);
+  const projectId = ctx.task.project_id?.trim();
+  if (!projectId) throw new Error("Git credential resolution requires the task project scope.");
+  return await resolver.withCredentials(references, {
+    projectId,
+    workspaceId: ctx.workspaceSessionId,
+  }, async (resolved) => await consumer({
+    ...ctx,
+    deps: { ...ctx.deps, settingsCredentialResolver: undefined },
+    settings: {
+      ...ctx.settings,
+      git: {
+        ...ctx.settings.git,
+        githubToken: resolved.get("github")?.toString("utf8") ?? "",
+        gitlabToken: resolved.get("gitlab")?.toString("utf8") ?? "",
+      },
+    },
+  }));
 }

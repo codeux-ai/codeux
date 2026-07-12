@@ -23,6 +23,10 @@ Fresh settings startup initializes secure key custody only when plaintext creden
 
 Authorized runtime consumers resolve references with an active project and explicit consumer key. Existing scope, allowlist, capability, audit, revocation, and concurrent-change checks apply, and the decrypted buffer is zeroed after the consumer callback.
 
+Provider invocations resolve provider, nested Qwen, and Git host references at the CLI request boundary for every attempt. The next invocation sees rotations, while revocation, scope denial, or missing `read` capability prevents execution. Mounted local-auth providers retain their existing behavior.
+
+Jira, external importers, speech, and external embeddings use the same bounded callback around each HTTP request. Temporary environments and request headers receive the value, while telemetry, errors, and invocation messages are exact-value redacted before the broker clears its buffer.
+
 ## Runtime redaction boundary
 
 Node-flow credentials exist in plaintext only for the active node attempt. Exact resolved values are replaced with `[REDACTED]` before provider responses, HTTP bodies, retry errors, external-effect payloads, diagnostics, invocation messages, attempts, node outputs, or run summaries are stored. Credential IDs and non-secret metadata remain available for auditability.

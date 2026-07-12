@@ -84,6 +84,7 @@ interface ProjectSetupServiceDeps {
   logger?: Logger;
   projectRoot?: string;
   getGithubToken?: () => string | undefined;
+  settingsCredentialResolver?: import("./credentials/settings-credential-resolver.js").SettingsCredentialResolver;
 }
 
 type ProjectSetupProviderConfig = ReturnType<ProjectSetupService["resolveProvider"]>;
@@ -122,6 +123,7 @@ export class ProjectSetupService {
           ? resolveEffectiveDashboardSettings(deps.settingsRepository, projectId, sprintId).settings
           : deps.settingsRepository.getDefaultDashboardSettings()
       ),
+      settingsCredentialResolver: deps.settingsCredentialResolver,
     });
   }
 
@@ -285,7 +287,8 @@ export class ProjectSetupService {
         cwd: project.baseDir,
         repoPath: project.baseDir,
         model: providerConfig.model,
-        apiKey: providerConfig.apiKey,
+        apiKey: "",
+        apiKeyCredentialRef: providerConfig.apiKeyCredentialRef,
         maxConcurrentTasks: providerConfig.maxConcurrentTasks,
         qwenAuthMode: providerConfig.qwenAuthMode,
 
@@ -465,6 +468,9 @@ export class ProjectSetupService {
     provider: Exclude<ProviderId, "jules">;
     model: string;
     apiKey: string;
+    apiKeyCredentialRef?: import("../contracts/app-types.js").SettingsCredentialReference | null;
+    githubTokenCredentialRef?: import("../contracts/app-types.js").SettingsCredentialReference | null;
+    gitlabTokenCredentialRef?: import("../contracts/app-types.js").SettingsCredentialReference | null;
     maxConcurrentTasks: number;
     qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
     qwenRegion?: "china" | "international";
@@ -509,7 +515,10 @@ export class ProjectSetupService {
     return {
       provider: providerSettings.provider as Exclude<ProviderId, "jules">,
       model: providerSettings.model,
-      apiKey: providerSettings.apiKey,
+      apiKey: "",
+      apiKeyCredentialRef: providerSettings.apiKeyCredentialRef,
+      githubTokenCredentialRef: settings.git.githubTokenCredentialRef,
+      gitlabTokenCredentialRef: settings.git.gitlabTokenCredentialRef,
       maxConcurrentTasks: providerSettings.maxConcurrentTasks,
       qwenAuthMode: providerSettings.qwenAuthMode,
       qwenRegion: providerSettings.qwenRegion,

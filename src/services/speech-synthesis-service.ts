@@ -29,6 +29,7 @@ export interface SpeechSynthesisServiceDependencies {
   requestTimeoutMs?: number;
   logger?: Logger;
   phonemize?: (text: string, voice: string) => Promise<string>;
+  settingsCredentialResolver?: import("./credentials/settings-credential-resolver.js").SettingsCredentialResolver;
 }
 
 const failure = (
@@ -110,7 +111,7 @@ export class SpeechSynthesisService {
     const synthesis = settings.synthesis;
     if (!synthesis.enabled) return failure("permission_denied", "Text-to-speech is disabled for this scope.");
 
-    if (synthesis.providerMode === "external_api") return await this.synthesizeExternal(text, input.voice, settings);
+    if (synthesis.providerMode === "external_api") return await this.synthesizeExternal(text, input.voice, settings, input.projectId, input.sprintId);
     return await this.synthesizeLocal(text, input.voice, settings);
   }
 
@@ -126,7 +127,7 @@ export class SpeechSynthesisService {
 
   private isExternalConfigured(settings: SpeechSettings): boolean {
     const external = settings.synthesis.externalSynthesis;
-    return Boolean(external.baseUrl.trim() && external.apiKey.trim() && external.model.trim() && external.voice.trim());
+    return Boolean(external.baseUrl.trim() && (external.apiKeyCredentialRef || external.apiKey.trim()) && external.model.trim() && external.voice.trim());
   }
 
   private async synthesizeLocal(text: string, requestedVoice: string | null | undefined, settings: SpeechSettings): Promise<SpeechSynthesisResult> {
@@ -250,21 +251,40 @@ export class SpeechSynthesisService {
     }
   }
 
-  private async synthesizeExternal(text: string, requestedVoice: string | null | undefined, settings: SpeechSettings): Promise<SpeechSynthesisResult> {
+  private async synthesizeExternal(text: string, requestedVoice: string | null | undefined, settings: SpeechSettings, projectId?: string | null, sprintId?: string | null): Promise<SpeechSynthesisResult> {
     const external = settings.synthesis.externalSynthesis;
     if (!this.isExternalConfigured(settings)) return failure("client_error", "External TTS API settings are incomplete.", "external_api");
+    if (!this.deps.settingsCredentialResolver) {
+      return await this.synthesizeExternalRequest(text, requestedVoice, settings, external.apiKey);
+    }
+    if (!projectId || !external.apiKeyCredentialRef) {
+      return failure("client_error", "External TTS credential is not configured.", "external_api");
+    }
+    try {
+      return await this.deps.settingsCredentialResolver.withCredential(external.apiKeyCredentialRef, {
+        projectId,
+        workspaceId: sprintId ?? projectId,
+        consumer: "speech.synthesis",
+      }, async (secret) => await this.synthesizeExternalRequest(text, requestedVoice, settings, secret.toString("utf8")));
+    } catch (error) {
+      return failure("permission_denied", redactText(error instanceof Error ? error.message : String(error)), "external_api");
+    }
+  }
+
+  private async synthesizeExternalRequest(text: string, requestedVoice: string | null | undefined, settings: SpeechSettings, apiKey: string): Promise<SpeechSynthesisResult> {
+    const external = settings.synthesis.externalSynthesis;
     const voice = requestedVoice?.trim() || external.voice;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
       const response = await this.fetchImpl(resolveExternalSynthesisUrl(external.baseUrl), {
         method: "POST",
-        headers: { Authorization: `Bearer ${external.apiKey}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({ model: external.model, input: text, voice, response_format: external.format, speed: settings.synthesis.speed }),
         signal: controller.signal,
       });
       if (!response.ok) {
-        const body = (await response.text().catch(() => "")).slice(0, 500).split(external.apiKey).join("[REDACTED]");
+        const body = (await response.text().catch(() => "")).slice(0, 500).split(apiKey).join("[REDACTED]");
         return failure("provider_failure", redactText(body || `External TTS provider returned HTTP ${response.status}.`), "external_api", response.status >= 500);
       }
       return {

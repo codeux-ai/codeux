@@ -33,6 +33,8 @@ import {
 } from "../infrastructure/git/git-status-policy.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks } from "./git-http-auth.js";
 import { commandRunner, type CommandResult } from "../shared/subprocess/command-runner.js";
+import type { SettingsCredentialReference } from "../contracts/app-types.js";
+import type { SettingsCredentialResolver } from "./credentials/settings-credential-resolver.js";
 
 export type { GitTrackingRequest };
 
@@ -41,6 +43,12 @@ export interface ResolvePullRequestResult {
   prNumber: number | null;
   prUrl: string | null;
   errorMessage?: string;
+}
+
+export interface GitSettingsCredentialContext {
+  projectId: string;
+  githubTokenCredentialRef?: SettingsCredentialReference | null;
+  gitlabTokenCredentialRef?: SettingsCredentialReference | null;
 }
 
 interface RepoPlumbing {
@@ -185,6 +193,7 @@ export class GitStatusService {
     private readonly repoPath: string,
     private readonly runner: CommandRunner = defaultRunner,
     private readonly preferApi = false,
+    private readonly settingsCredentialResolver?: SettingsCredentialResolver,
   ) {
     this.queryClient = new GitStatusQueryClient(this.repoPath, this.runner);
   }
@@ -337,13 +346,54 @@ export class GitStatusService {
     return tokens ?? {};
   }
 
-  async getStatus(mode: "REMOTE" | "LOCAL", tokens: GitHostTokens | string = {}, trackingRequest?: GitTrackingRequest, cacheTtlMs?: number): Promise<GitTrackingStatus> {
+  private async withCredentialTokens<T>(
+    tokens: GitHostTokens | string | GitSettingsCredentialContext,
+    consumer: (resolved: GitHostTokens | string) => Promise<T>,
+  ): Promise<T> {
+    if (!(typeof tokens === "object" && "projectId" in tokens)) return await consumer(tokens);
+    const references = [
+      tokens.githubTokenCredentialRef ? { name: "github", reference: tokens.githubTokenCredentialRef, consumer: "git.github.operation" } : null,
+      tokens.gitlabTokenCredentialRef ? { name: "gitlab", reference: tokens.gitlabTokenCredentialRef, consumer: "git.gitlab.operation" } : null,
+    ].filter((value): value is NonNullable<typeof value> => value !== null);
+    if (references.length === 0) return await consumer({});
+    if (!this.settingsCredentialResolver) throw new Error("Git host credential resolution is unavailable.");
+    return await this.settingsCredentialResolver.withCredentials(references, {
+      projectId: tokens.projectId,
+      workspaceId: tokens.projectId,
+    }, async (resolved) => await consumer({
+      githubToken: resolved.get("github")?.toString("utf8"),
+      gitlabToken: resolved.get("gitlab")?.toString("utf8"),
+    }));
+  }
+
+  async getStatus(mode: "REMOTE" | "LOCAL", tokens: GitHostTokens | string | GitSettingsCredentialContext = {}, trackingRequest?: GitTrackingRequest, cacheTtlMs?: number): Promise<GitTrackingStatus> {
+    if (typeof tokens === "object" && "projectId" in tokens) {
+      const references = [
+        tokens.githubTokenCredentialRef ? { name: "github", reference: tokens.githubTokenCredentialRef, consumer: "git.status.github" } : null,
+        tokens.gitlabTokenCredentialRef ? { name: "gitlab", reference: tokens.gitlabTokenCredentialRef, consumer: "git.status.gitlab" } : null,
+      ].filter((value): value is NonNullable<typeof value> => value !== null);
+      if (references.length === 0 || !this.settingsCredentialResolver) {
+        throw new Error("Git host credential resolution is unavailable.");
+      }
+      return await this.settingsCredentialResolver.withCredentials(references, {
+        projectId: tokens.projectId,
+        workspaceId: tokens.projectId,
+      }, async (resolved) => await this.getStatusResolved(mode, {
+        githubToken: resolved.get("github")?.toString("utf8"),
+        gitlabToken: resolved.get("gitlab")?.toString("utf8"),
+      }, trackingRequest, cacheTtlMs, references.map((item) => (item.reference as SettingsCredentialReference).credentialId)));
+    }
+    return await this.getStatusResolved(mode, tokens, trackingRequest, cacheTtlMs);
+  }
+
+  private async getStatusResolved(mode: "REMOTE" | "LOCAL", tokens: GitHostTokens | string = {}, trackingRequest?: GitTrackingRequest, cacheTtlMs?: number, credentialIds: string[] = []): Promise<GitTrackingStatus> {
     const normalizedTokens = this.normalizeTokens(tokens);
     const cacheKey = JSON.stringify({
       repoPath: this.repoPath,
       mode,
-      githubToken: normalizedTokens.githubToken?.trim() || undefined,
-      gitlabToken: normalizedTokens.gitlabToken?.trim() || undefined,
+      credentialIds,
+      hasGithubCredential: Boolean(normalizedTokens.githubToken?.trim()),
+      hasGitlabCredential: Boolean(normalizedTokens.gitlabToken?.trim()),
       trackingRequest,
     });
 
@@ -492,7 +542,11 @@ export class GitStatusService {
     return fetchPromise;
   }
 
-  async mergePullRequest(prNumber: number, tokens: GitHostTokens | string = {}): Promise<AutoMergeFeaturePrResult> {
+  async mergePullRequest(prNumber: number, tokens: GitHostTokens | string | GitSettingsCredentialContext = {}): Promise<AutoMergeFeaturePrResult> {
+    return await this.withCredentialTokens(tokens, async (resolved) => await this.mergePullRequestResolved(prNumber, resolved));
+  }
+
+  private async mergePullRequestResolved(prNumber: number, tokens: GitHostTokens | string): Promise<AutoMergeFeaturePrResult> {
     const { token: effectiveToken } = await this.resolveProviderAndToken(this.normalizeTokens(tokens));
     const result = await this.queryClient.ghPrMerge(prNumber, effectiveToken);
     if (!result.ok) {
@@ -542,7 +596,16 @@ export class GitStatusService {
     headBranch: string;
     title: string;
     body: string;
-  }, tokens: GitHostTokens | string = {}): Promise<ResolvePullRequestResult | null> {
+  }, tokens: GitHostTokens | string | GitSettingsCredentialContext = {}): Promise<ResolvePullRequestResult | null> {
+    return await this.withCredentialTokens(tokens, async (resolved) => await this.resolveOrCreatePullRequestResolved(args, resolved));
+  }
+
+  private async resolveOrCreatePullRequestResolved(args: {
+    baseBranch: string;
+    headBranch: string;
+    title: string;
+    body: string;
+  }, tokens: GitHostTokens | string): Promise<ResolvePullRequestResult | null> {
     const normalizedTokens = this.normalizeTokens(tokens);
     const { token: effectiveToken } = await this.resolveProviderAndToken(normalizedTokens);
 

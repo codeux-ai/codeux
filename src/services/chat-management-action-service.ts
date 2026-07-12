@@ -1,7 +1,7 @@
 import type { ManageCodeUxArgs, ManagementResponseEnvelope } from "../contracts/internal-management-types.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
-import type { DashboardSettings, ProviderConfigMode, ProviderId, QwenModelProviderSettings, ThinkingMode } from "../contracts/app-types.js";
+import type { DashboardSettings, ProviderConfigMode, ProviderId, QwenModelProviderSettings, SettingsCredentialReference, ThinkingMode } from "../contracts/app-types.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { ManagementToolHandler } from "../mcp/management-tool-handler.js";
 import type { StructuredProviderResponseService } from "./structured-provider-response-service.js";
@@ -194,6 +194,7 @@ export interface ProcessManagementActionArgs {
   model: string;
   thinkingMode?: ThinkingMode;
   apiKey: string;
+  apiKeyCredentialRef?: SettingsCredentialReference | null;
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
   qwenRegion?: "china" | "international";
   qwenBaseUrl?: string;
@@ -336,6 +337,7 @@ export class ChatManagementActionService {
         model: args.model,
         thinkingMode: args.thinkingMode,
         apiKey: args.apiKey,
+        apiKeyCredentialRef: args.apiKeyCredentialRef,
         qwenAuthMode: args.qwenAuthMode,
         qwenRegion: args.qwenRegion,
         qwenBaseUrl: args.qwenBaseUrl,
@@ -363,6 +365,8 @@ export class ChatManagementActionService {
         snapshotCheckout: args.snapshotCheckout,
         gitPolicy: args.gitPolicy,
         workspaceLifecycle: args.workspaceLifecycle,
+        githubTokenCredentialRef: args.settings.git.githubTokenCredentialRef,
+        gitlabTokenCredentialRef: args.settings.git.gitlabTokenCredentialRef,
         invocationId: execInvocationId,
         trackPromptInInvocation: false,
         finalizeExecutionInvocation: false,
@@ -453,6 +457,7 @@ export class ChatManagementActionService {
         prompt: args.prompt,
         model: args.model,
         apiKey: args.apiKey,
+        apiKeyCredentialRef: args.apiKeyCredentialRef,
         qwenAuthMode: args.qwenAuthMode,
         qwenRegion: args.qwenRegion,
         qwenBaseUrl: args.qwenBaseUrl,
@@ -480,6 +485,8 @@ export class ChatManagementActionService {
         snapshotCheckout: args.snapshotCheckout,
         gitPolicy: args.gitPolicy,
         workspaceLifecycle: args.workspaceLifecycle,
+        githubTokenCredentialRef: args.settings.git.githubTokenCredentialRef,
+        gitlabTokenCredentialRef: args.settings.git.gitlabTokenCredentialRef,
         settings: args.settings,
         providerLabel: args.provider,
         invocationId: execInvocationId,

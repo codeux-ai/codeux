@@ -75,6 +75,7 @@ interface ChatThreadRuntimeServiceDependencies {
   runDueSchedulerEntriesAfterReply?: () => Promise<void>;
   getProjectInitializationState?: (projectId: string) => Promise<ProjectInitializationState>;
   logger?: Logger;
+  settingsCredentialResolver?: import("./credentials/settings-credential-resolver.js").SettingsCredentialResolver;
 }
 
 interface ChatCreateAppQuicksprintLauncher {
@@ -96,6 +97,7 @@ export interface ThreadRouteResolution {
   providerId?: Exclude<ProviderId, "jules">;
   model?: string;
   apiKey?: string;
+  apiKeyCredentialRef?: import("../contracts/app-types.js").SettingsCredentialReference | null;
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
   qwenRegion?: "china" | "international";
   qwenBaseUrl?: string;
@@ -405,7 +407,8 @@ export class ChatThreadRuntimeService {
       mode: "VIRTUAL",
       providerId,
       model: providerSettings.model,
-      apiKey: providerSettings.apiKey,
+      apiKey: "",
+      apiKeyCredentialRef: providerSettings.apiKeyCredentialRef,
       qwenAuthMode: providerSettings.qwenAuthMode,
       qwenRegion: providerSettings.qwenRegion,
       qwenBaseUrl: providerSettings.qwenBaseUrl,
@@ -495,7 +498,7 @@ export class ChatThreadRuntimeService {
     const assignments = this.deps.projectWorkerAssignmentRepository.listAssignmentsForProject(thread.projectId, { activeOnly: true });
     const settings = this.deps.getDashboardSettings({ projectId: thread.projectId });
     const route = await this.resolveThreadRoute(thread, assignments, settings, messages[messages.length - 1]?.bodyMarkdown || thread.title);
-    if (!route.providerId || !route.model || typeof route.apiKey !== "string") {
+    if (!route.providerId || !route.model) {
       throw new Error("Failed to resolve a chat worker for thread compaction.");
     }
     const continueSessionId = activeSessionId || resolveLogicalCompactionContinuationId(route.providerId, thread.id);
@@ -1223,7 +1226,6 @@ export class ChatThreadRuntimeService {
       openCodeProviderId: route.openCodeProviderId,
       openCodeModelId: route.openCodeModelId,
     });
-    const apiKey = route.apiKey!;
     const thinkingMode = route.thinkingMode;
     const dashboardSettings = this.deps.getDashboardSettings({ projectId });
     const defaultBranch = resolveEffectiveDefaultBranch(project, dashboardSettings);
@@ -1364,7 +1366,8 @@ export class ChatThreadRuntimeService {
       provider,
       model,
       thinkingMode,
-      apiKey,
+      apiKey: "",
+      apiKeyCredentialRef: route.apiKeyCredentialRef,
       qwenAuthMode: route.qwenAuthMode,
       qwenRegion: route.qwenRegion,
       qwenBaseUrl: route.qwenBaseUrl,
@@ -1530,7 +1533,6 @@ export class ChatThreadRuntimeService {
       openCodeProviderId: route.openCodeProviderId,
       openCodeModelId: route.openCodeModelId,
     });
-    const apiKey = route.apiKey!;
     const dashboardSettings = this.deps.getDashboardSettings({ projectId });
     const workflowSettings = dashboardSettings.cliWorkflow;
     const project = this.deps.projectManagementRepository.getProject(projectId);
@@ -1570,7 +1572,8 @@ export class ChatThreadRuntimeService {
         cwd: repoPath,
         model,
         thinkingMode: route.thinkingMode,
-        apiKey,
+        apiKey: "",
+        apiKeyCredentialRef: route.apiKeyCredentialRef,
         qwenAuthMode: route.qwenAuthMode,
         qwenRegion: route.qwenRegion,
         qwenBaseUrl: route.qwenBaseUrl,
@@ -1599,6 +1602,8 @@ export class ChatThreadRuntimeService {
         trackPromptInInvocation: false,
         trackAssistantInInvocation: false,
         finalizeExecutionInvocation: false,
+        githubTokenCredentialRef: dashboardSettings.git?.githubTokenCredentialRef,
+        gitlabTokenCredentialRef: dashboardSettings.git?.gitlabTokenCredentialRef,
         ...buildProviderInvocationWorkspaceOptions({
           workflowSettings,
           gitPolicy: {

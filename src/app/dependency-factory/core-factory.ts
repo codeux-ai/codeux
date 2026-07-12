@@ -320,6 +320,7 @@ export function createCoreDependencies(
       : settingsRepository.getDefaultDashboardSettings(),
     logger: logger.child({ component: "sprint-issue-service" }),
     jiraApiClient,
+    settingsCredentialResolver,
   });
   const activeDispatchRegistry = new ActiveDispatchRegistry();
   const dockerRuntimePruneService = new DockerRuntimePruneService(
@@ -349,7 +350,7 @@ export function createCoreDependencies(
   const skillRepository = new SkillRepository(appDbStorage);
   const nodeFlowRepository = new NodeFlowRepository(appDbStorage, dashboardRealtimeService);
   const nodeFlowService = new NodeFlowService(nodeFlowRepository, undefined, credentialBroker);
-  const embeddingService = new EmbeddingService();
+  const embeddingService = new EmbeddingService(settingsCredentialResolver);
   const embeddingModelManager = new EmbeddingModelManager(
     embeddingService,
     memoryRepository,

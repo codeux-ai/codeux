@@ -1,4 +1,4 @@
-import type { CustomMcpServer, DashboardSettings, DashboardSettingsScope, ThinkingMode } from "../contracts/app-types.js";
+import type { CustomMcpServer, DashboardSettings, DashboardSettingsScope, SettingsCredentialReference, ThinkingMode } from "../contracts/app-types.js";
 import type { ProviderConfigMode, QwenModelProviderSettings } from "../contracts/app-types.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
@@ -34,6 +34,8 @@ import { ActivityWriteCoalescer } from "./activity-write-coalescer.js";
 import { SERVER_SHUTDOWN_STOP_REASON } from "./active-dispatch-registry.js";
 import { isRuntimeShutdownInProgress } from "./shutdown-state.js";
 import { composeGoogleDrivePrompt, resolveGoogleDriveMount } from "./google-drive-mount-service.js";
+import type { SettingsCredentialResolver, NamedSettingsCredentialReference } from "./credentials/settings-credential-resolver.js";
+import { redactText } from "../shared/security/redaction.js";
 
 /** Counts tool-call turns in a parsed provider conversation, for tool-call stats. */
 function countConversationToolCalls(conversation: ParsedConversationTurn[] | undefined | null): number {
@@ -159,6 +161,7 @@ export interface ProviderExecutionServiceDeps {
   agentPresetRepository?: AgentPresetRepository;
   skillService?: SkillService;
   getDashboardSettings?: (scope: DashboardSettingsScope) => DashboardSettings;
+  settingsCredentialResolver?: SettingsCredentialResolver;
 }
 
 export interface ExecutionProviderRunArgs {
@@ -182,7 +185,9 @@ export interface ExecutionProviderRunArgs {
   cwd?: string;
   model: string;
   thinkingMode?: ThinkingMode;
-  apiKey: string;
+  /** Compatibility-only direct credential. Settings-backed callers must use apiKeyCredentialRef. */
+  apiKey?: string;
+  apiKeyCredentialRef?: SettingsCredentialReference | null;
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
   qwenRegion?: "china" | "international";
   qwenBaseUrl?: string;
@@ -210,7 +215,9 @@ export interface ExecutionProviderRunArgs {
   gitPolicy?: InvocationWorkspaceGitPolicy;
   workspaceLifecycle?: "fresh" | "continue";
   githubToken?: string;
+  githubTokenCredentialRef?: SettingsCredentialReference | null;
   gitlabToken?: string;
+  gitlabTokenCredentialRef?: SettingsCredentialReference | null;
 
   onActivity?: (description: string, originator?: string) => void;
   signal?: AbortSignal;
@@ -270,8 +277,102 @@ export function resolveEffectiveModel(args: Pick<ExecutionProviderRunArgs, "prov
   return model;
 }
 
+function redactResolvedText(value: string, secrets: readonly string[]): string {
+  let redacted = value;
+  for (const secret of secrets) {
+    if (secret) redacted = redacted.split(secret).join("[REDACTED]");
+  }
+  return redactText(redacted);
+}
+
+function redactResolvedValue(value: unknown, secrets: readonly string[]): unknown {
+  if (typeof value === "string") return redactResolvedText(value, secrets);
+  if (Array.isArray(value)) return value.map((item) => redactResolvedValue(item, secrets));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactResolvedValue(item, secrets)]));
+  }
+  return value;
+}
+
 export class ProviderExecutionService {
   constructor(private readonly deps: ProviderExecutionServiceDeps) {}
+
+  private async atProviderCredentialBoundary<T>(
+    args: ExecutionProviderRunArgs,
+    consumer: (credentials: {
+      apiKey: string;
+      githubToken?: string;
+      gitlabToken?: string;
+      qwenAdditionalModelProviders?: QwenModelProviderSettings[];
+      transient: boolean;
+      redactText: (value: string) => string;
+      redactJson: (value: Record<string, unknown> | null) => Record<string, unknown> | null;
+    }) => Promise<T>,
+  ): Promise<T> {
+    const references: NamedSettingsCredentialReference[] = [];
+    if (!args.providerMountAuth && args.apiKeyCredentialRef) {
+      references.push({ name: "provider", reference: args.apiKeyCredentialRef, consumer: `provider.${args.provider}.${args.purpose}` });
+    }
+    if (args.githubTokenCredentialRef) {
+      references.push({ name: "github", reference: args.githubTokenCredentialRef, consumer: `git.github.${args.purpose}` });
+    }
+    if (args.gitlabTokenCredentialRef) {
+      references.push({ name: "gitlab", reference: args.gitlabTokenCredentialRef, consumer: `git.gitlab.${args.purpose}` });
+    }
+    if (!args.providerMountAuth && args.provider === "qwen-code") {
+      for (const provider of args.qwenAdditionalModelProviders ?? []) {
+        if (provider.apiKeyCredentialRef) {
+          references.push({
+            name: `qwen:${provider.id}`,
+            reference: provider.apiKeyCredentialRef,
+            consumer: `provider.qwen.additional.${provider.id}.${args.purpose}`,
+          });
+        }
+      }
+    }
+
+    const invoke = async (resolved: ReadonlyMap<string, Buffer>): Promise<T> => {
+      const secrets = [...resolved.values()].map((value) => value.toString("utf8"));
+      const redactForPersistence = (value: string): string => {
+        const exact = redactResolvedText(value, secrets);
+        return args.redactTextForPersistence?.(exact) ?? exact;
+      };
+      const redactJsonForPersistence = (value: Record<string, unknown> | null): Record<string, unknown> | null => {
+        if (!value) return null;
+        const exact = redactResolvedValue(value, secrets) as Record<string, unknown>;
+        return args.redactJsonForPersistence?.(exact) ?? exact;
+      };
+      const additional = args.qwenAdditionalModelProviders?.map((provider) => ({
+        ...provider,
+        apiKey: resolved.get(`qwen:${provider.id}`)?.toString("utf8") ?? provider.apiKey,
+      }));
+      try {
+        return await consumer({
+          apiKey: resolved.get("provider")?.toString("utf8") ?? args.apiKey ?? "",
+          githubToken: resolved.get("github")?.toString("utf8")
+            ?? args.githubToken
+            ?? (this.deps.settingsCredentialResolver ? undefined : this.deps.getGithubToken?.()),
+          gitlabToken: resolved.get("gitlab")?.toString("utf8") ?? args.gitlabToken,
+          qwenAdditionalModelProviders: additional,
+          transient: references.length > 0,
+          redactText: redactForPersistence,
+          redactJson: redactJsonForPersistence,
+        });
+      } finally {
+        if (additional) for (const provider of additional) provider.apiKey = "";
+        secrets.fill("");
+      }
+    };
+
+    if (references.length === 0) return await invoke(new Map());
+    if (!this.deps.settingsCredentialResolver) {
+      throw new Error("Credential resolution is unavailable for this provider invocation.");
+    }
+    return await this.deps.settingsCredentialResolver.withCredentials(references, {
+      projectId: args.projectId,
+      workspaceId: args.workspaceSessionId ?? args.sessionId,
+    }, invoke);
+  }
 
   async executeProvider(args: ExecutionProviderRunArgs & { expectTextOutput: true }): Promise<ProviderRunResult & { text: string }>;
   async executeProvider(args: ExecutionProviderRunArgs): Promise<ProviderRunResult>;
@@ -430,7 +531,7 @@ export class ProviderExecutionService {
         cwd: args.cwd || args.repoPath,
         model: effectiveModel,
         thinkingMode: args.thinkingMode,
-        apiKey: args.apiKey,
+        apiKey: args.apiKey ?? "",
         qwenAuthMode: args.qwenAuthMode,
         qwenRegion: args.qwenRegion,
         qwenBaseUrl: args.qwenBaseUrl,
@@ -548,9 +649,58 @@ export class ProviderExecutionService {
 
       const result = await (async (): Promise<ProviderRunResult> => {
         try {
-          return args.expectTextOutput
-            ? await this.deps.providerRunner.runProviderForText(runnerOpts)
-            : await this.deps.providerRunner.runProvider(runnerOpts);
+          return await this.atProviderCredentialBoundary(args, async (credentials) => {
+            if (!credentials.transient) {
+              return args.expectTextOutput
+                ? await this.deps.providerRunner.runProviderForText(runnerOpts)
+                : await this.deps.providerRunner.runProvider(runnerOpts);
+            }
+            const transientRunnerOpts = {
+              ...runnerOpts,
+              apiKey: credentials.apiKey,
+              githubToken: credentials.githubToken,
+              gitlabToken: credentials.gitlabToken,
+              gitPolicy: runnerOpts.gitPolicy ? {
+                ...runnerOpts.gitPolicy,
+                githubToken: credentials.githubToken,
+                gitlabToken: credentials.gitlabToken,
+              } : runnerOpts.gitPolicy,
+              qwenAdditionalModelProviders: credentials.qwenAdditionalModelProviders,
+              onActivity: (description: string, originator?: string) => runnerOpts.onActivity(
+                credentials.redactText(description),
+                originator,
+              ),
+              onTelemetry: (telemetry: ProviderUsageTelemetry) => runnerOpts.onTelemetry({
+                ...telemetry,
+                transcriptText: credentials.redactText(telemetry.transcriptText),
+                nativeSessionId: telemetry.nativeSessionId ? credentials.redactText(telemetry.nativeSessionId) : telemetry.nativeSessionId,
+                rawUsageJson: telemetry.rawUsageJson
+                  ? credentials.redactJson(telemetry.rawUsageJson)
+                  : telemetry.rawUsageJson,
+                conversation: telemetry.conversation?.map((turn) => ({
+                  ...turn,
+                  text: credentials.redactText(turn.text),
+                })),
+              }),
+            };
+            try {
+              const rawResult = args.expectTextOutput
+                ? await this.deps.providerRunner.runProviderForText(transientRunnerOpts)
+                : await this.deps.providerRunner.runProvider(transientRunnerOpts);
+              return credentials.redactJson(rawResult as unknown as Record<string, unknown>) as unknown as ProviderRunResult;
+            } catch (error) {
+              const message = credentials.redactText(error instanceof Error ? error.message : String(error));
+              const sanitized = new Error(message, error instanceof Error && error.cause !== undefined
+                ? { cause: credentials.redactText(String(error.cause)) }
+                : undefined);
+              sanitized.name = error instanceof Error ? error.name : "Error";
+              throw sanitized;
+            } finally {
+              transientRunnerOpts.apiKey = "";
+              transientRunnerOpts.githubToken = undefined;
+              transientRunnerOpts.gitlabToken = undefined;
+            }
+          });
         } catch (error) {
           const wasCancelled = isRuntimeShutdownInProgress() || Boolean(args.signal?.aborted);
           const preserveForStartupRecovery = isServerShutdownAbort(args.signal)
