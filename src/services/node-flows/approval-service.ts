@@ -39,5 +39,6 @@ export class ApprovalService {
     this.auditService?.recordSystem({ action: "approval.rejected", resourceType: "automation_approval", resourceId: approval.id, projectId: approval.projectId, outcome: "succeeded", principalId: decidedBy, metadata: { flowId: approval.flowId, runId: approval.runId, nodeId: approval.nodeId } });
     return approval;
   }
+  resolveProjectId(id: string): string | null { return this.repository.get(id)?.projectId ?? null; }
   listForRun(runId: string): AutomationApprovalRecord[] { return this.repository.listForRun(runId); }
 }
