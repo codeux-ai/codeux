@@ -10,9 +10,11 @@ The former browser canvas is eligible for one project-specific import. After a s
 
 ## Registry and credentials
 
-`GET /api/node-flow-catalog` is the T01 source for palette entries, typed ports, widget schemas, execution availability, capabilities, side effects, policies, and credential requirements. Selecting a definition loads its full versioned manifest. Graphs reference a definition version and do not contain custom-node source.
+`GET /api/node-flow-catalog` is the registry source for palette entries, typed ports, configuration and widget schemas, execution availability, capabilities, side effects, policies, and credential requirements. Selecting a definition loads its full versioned manifest. Graphs reference a definition version and do not contain custom-node source.
 
 The inspector displays credential slots as bound, missing, or denied and can request a binding. It displays credential metadata only; secret values never enter the graph or dashboard output.
+
+The registered governed built-ins are `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, `condition`, `switch`, `foreach`, `merge`, `delay`, `approval`, `email_draft`, `email_send`, `execute_subflow`, `webhook_trigger`, and `output`. Registered, validated custom definitions can execute when their immutable artifact and runtime are available. Legacy canvas kinds, unregistered names, and definitions marked non-executable remain planning or unavailable definitions and cannot run.
 
 ## Governance and publication
 
@@ -23,3 +25,5 @@ T06 draft endpoints provide structural validation, policy findings, requested pe
 The debugger reads persisted runs, node runs, attempt history, and approval decisions. Pending approvals expose keyboard-accessible **Approve & continue** and **Reject** actions. A decision continues or terminates the same pinned run, and repeated clicks return its current durable state without duplicating the governed attempt or external send. The debugger also overlays node state, shows retry reasons and decisions, links invocation ids, reports timing, supports cancellation and safe retry, and redacts secret-shaped values before rendering. Scheduling is entered through `/scheduler`; scheduler execution also resolves published versions.
 
 The layout stacks on small screens, preserves keyboard-visible focus, labels loading/error/empty states, and bounds long histories and JSON output with scrolling.
+
+Outside development, `/nodes` requires the Nodes feature flag plus the node-flow backend and automation-security prerequisites. Individual definitions can require additional provider, credential-broker, egress, approval/outbox, webhook, or custom-runtime configuration; catalog presence alone does not assert production readiness for an integration.

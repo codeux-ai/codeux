@@ -35,9 +35,11 @@ A `NodeFlowGraph` contains:
 
 Validation is owned by `src/domain/node-flows/node-flow-validation.ts`. It normalizes ids, labels, positions, widget defaults, and graph shape; rejects missing node/edge arrays; rejects duplicate node ids; rejects edges that point at missing nodes; requires at least one node; and rejects cycles. Widget validation supports `text`, `textarea`, `number`, `boolean`, `select`, `json`, `secretRef`, and `keyValue` fields.
 
-Validation intentionally permits arbitrary string node types at graph-save time so future node libraries can be drafted and stored. Runtime execution separately enforces the executable allowlist.
+Validation requires every node's type/version reference to resolve through the registry and rejects unknown definitions. Runtime execution then dispatches according to the registered definition's executable state and execution kind; a planning concept is not runnable merely because it has a string type.
 
-Dashboard-only editable canvas state lives in `dashboard/src/v2/lib/nodes-canvas-state.ts`. It is a pure TypeScript layer for in-progress graph editing: typed node kinds, input/output ports, port-based edges, config fields, selection state, reducer actions, deterministic layout helpers, validation issue codes, stable JSON serialization, and recovery from malformed persisted canvas drafts. The seed graph uses trigger, agent, task, condition, and output nodes so UI tasks can start from a meaningful workflow without depending on a rendering library.
+The dashboard uses the same backend-owned Graph v2 record as the runtime. The selected project controls library loading; no project means no flow, credential, publication, or run requests. The versioned registry drives palette entries, typed ports, configuration widgets, credential slots, capabilities, side-effect review, and policies. Draft saves use optimistic `draftRevision` checks and surface conflicts without overwriting the newer record.
+
+`dashboard/src/v2/lib/nodes-canvas-state.ts` remains only a compatibility and pure graph-state layer. Its legacy browser graph can be imported once into a project draft, after which the old graph key is removed and a project marker prevents duplicates. It is not the workflow source of truth.
 
 ## Runtime
 
@@ -104,7 +106,7 @@ Specialist agents designing node flows should adapt workflows to Code UX instead
 Use these rules:
 
 - Model the repeatable outcome first, then choose the smallest Code UX graph that captures the inputs, provider calls, HTTP calls, transformations, and final output.
-- Prefer `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, and `output` nodes only when the workflow needs to execute today. Other node types may be saved for future design drafts, but they will fail at runtime until implemented.
+- Use the governed executable built-ins listed in the runtime table when the workflow needs to execute today. A registered custom definition is executable only when its validated immutable artifact and custom runtime are available. Treat unknown types, legacy browser-only kinds, and non-executable manifests as planned or unavailable definitions.
 - Put operator-editable values in `inputSchema` or per-node `widgetSchema` fields. Do not bury frequently changed values in opaque JSON blobs.
 - Use `secretRef` widgets and secret reference strings for credentials. Do not place raw API keys, bearer tokens, cookies, passwords, or private headers in graph metadata, node data, widget defaults, run input, or examples.
 - Validate every node field before saving: required prompt/template/url fields, finite numeric limits, supported HTTP method, JSON object input, and select defaults that match options.
@@ -118,3 +120,9 @@ Graph v2 is the single workflow model used by backend, MCP, runtime, and dashboa
 The executable registry contains the original deterministic/provider/HTTP nodes plus `condition`, `switch`, `foreach`, `merge`, `delay`, `approval`, `email_draft`, `email_send`, `execute_subflow`, and `webhook_trigger`. Unregistered custom types remain non-executable.
 
 Backend Graph v1 migration retains the exact prior version and appends deterministic v2. Browser canvas v1 migration returns the untouched legacy snapshot separately from the normalized graph.
+
+## Dashboard and security prerequisites
+
+Outside development builds, the Nodes workspace is enabled only when `VITE_CODEUX_FEATURE_NODES`, `VITE_CODEUX_NODE_FLOW_BACKEND`, and `VITE_CODEUX_AUTOMATION_SECURITY` are true. These flags expose the surface; they do not replace runtime dependencies. Provider execution, credential resolution, outbound HTTP, approval-gated email, webhook ingress, and custom-node containers each require their corresponding configured service and security policy.
+
+The dashboard exposes credential binding ids, declared kinds, scopes, and status metadata only. Resolved values stay at the credential broker/runtime boundary and are redacted before invocation messages, attempt payloads, diagnostics, and route responses are persisted or rendered. Policy review must surface requested capabilities and external side effects before publication, and publication requires a valid current draft with all required bindings satisfied.
