@@ -88,19 +88,22 @@ Validation proxy requests reuse the preview proxy boundary: request bodies are c
 
 The Preact workspace is reachable at `/custom-dashboards` and is lazy-loaded from `dashboard/src/v2/CustomDashboardsPage.tsx`. It is project-scoped through the existing selected-project context and uses typed helpers in `dashboard/src/v2/lib/custom-dashboard-api.ts` for list/get/create/update, revision creation, detached validation sessions, logs, publication, archiving, and data catalog lookup.
 
-The page manages mutable draft text for:
+The page manages typed mutable controls for:
 
-- manifest JSON
-- generated file bundle entries and file content
-- source node graph JSON
-- styleguide JSON
+- manifest fields and declared file paths
+- generated TypeScript, TSX, CSS, direct HTML, and browser-JavaScript file entries
+- normalized route definitions
+- source nodes, credential slots, capability requirements, and metadata-only credential bindings
 - data catalog source selection
+- complete manifest, routes, bindings, graph, file bundle, and styleguide JSON through the advanced escape hatch
 
 Draft edits remain persisted bundle text sent back through API calls; generated dashboard code is not imported from `dashboard/src` at runtime. Revisions are created as immutable snapshots, then validated through a detached session. The validation panel shows build/start/health stage state, renders refreshed logs, links to the validation proxy preview, and disables publication until the selected revision has a passed validation report or a matching passed validation session. Once a dashboard has an active publication pointer, later validation sessions for draft revisions do not demote the dashboard from `published`, and later validation sessions for the active published revision do not replace its stored validation snapshot.
 
 Published dashboards open through `CustomDashboardViewer`, which resolves the active `publishedRevisionId` from the loaded dashboard detail and renders only when the dashboard status is `published`, the published revision exists, and that revision still has a valid passed validation report. Draft, rejected, archived, unvalidated, and missing-publication states render a local blocked panel with the last validation report and a return-to-editor action rather than executing the bundle.
 
 Each iframe instance reports readiness once and reports `error`, `unhandledrejection`, missing readiness, or an unusable document once. The parent bounds and redacts the reason, persists a halt against the exact published revision, and catches persistence failures so generated code cannot crash the Preact shell. Startup recovery preserves all halted rows and records recovery metadata; it marks stale active validation sessions failed when their managed container is missing, stopped, or unhealthy without invalidating an already valid publication.
+
+`custom-dashboard-router.ts` owns host-side normalization, query-state parsing, route selection, deep-link creation, and history updates. Viewer URLs carry dashboard, mode, and normalized route state; `popstate` restores back/forward navigation. Inside the opaque-origin `srcdoc` frame, the bootstrap uses dependency-free hash history, exposes frozen `routePath`/`navigate` bridge members, and exchanges route changes only through the existing frame-window, opaque-origin, and bridge-session checks. Unknown routes fall back to root or the first declared route, and route-less legacy bundles continue at `/`.
 
 The viewer uses a sandboxed iframe `srcdoc` document so generated dashboard code never runs inside the main Preact bundle. For validated TSX/Preact revisions, it prefers the persisted Vite `dist` viewer artifact from revision runtime metadata and inlines the artifact's HTML, CSS, and JavaScript into the frame document. Older direct HTML or browser-ready JavaScript entry files still render through the previous entry-file path. The frame receives a frozen `codeUxDataBridge` / `CodeUXCustomDashboard` object and can request only declared sources or external routes. Published requests cross a frame-source, opaque-origin, per-frame-session `postMessage` boundary; validation harness requests carry their owning validation session. Both modes reach `CustomDashboardRuntimeService`, which verifies project/dashboard/revision ownership and active publication or session state. External credentials resolve inside `CredentialBroker.withResolvedCredentialId` and pass only as trusted headers to `EgressPolicyService`, which enforces explicit hosts, ports, methods, content types, timeouts, redirects, rate limits, and bounded bodies. Browser authorization, cookies, dashboard session headers, sensitive upstream headers, and upstream error bodies are not forwarded.
 

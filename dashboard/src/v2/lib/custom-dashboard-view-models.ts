@@ -10,6 +10,7 @@ import type {
   CustomDashboardValidationSessionRecord,
   CustomDashboardValidationStatus,
 } from "../types.js";
+import type { AutomationCredentialMetadata } from "../../../../src/contracts/automation-credential-types.js";
 
 export type JsonDraftResult<T> =
   | { ok: true; value: T }
@@ -82,6 +83,7 @@ export function createDefaultCustomDashboardDraft(title = "Untitled Dashboard"):
     manifest,
     fileBundle: DEFAULT_CUSTOM_DASHBOARD_FILE_BUNDLE,
     sourceNodeGraph: DEFAULT_CUSTOM_DASHBOARD_SOURCE_GRAPH,
+    routes: [{ path: "/", label: "Overview", entryFile: manifest.entryFile }],
     styleguide: DEFAULT_CUSTOM_DASHBOARD_STYLEGUIDE,
     runtimeMetadata: {},
   };
@@ -198,6 +200,8 @@ export function hasDraftChanged(
     manifestText: string;
     fileBundleText: string;
     sourceGraphText: string;
+    routesText: string;
+    credentialBindingsText: string;
     styleguideText: string;
   },
 ): boolean {
@@ -209,7 +213,32 @@ export function hasDraftChanged(
     || stableJsonStringify(dashboard.manifest) !== draft.manifestText.trim()
     || stableJsonStringify(dashboard.fileBundle) !== draft.fileBundleText.trim()
     || stableJsonStringify(dashboard.sourceNodeGraph) !== draft.sourceGraphText.trim()
+    || stableJsonStringify(dashboard.routes) !== draft.routesText.trim()
+    || stableJsonStringify(dashboard.credentialBindings.map(({ slot, credentialId }) => ({ slot, credentialId }))) !== draft.credentialBindingsText.trim()
     || stableJsonStringify(dashboard.styleguide) !== draft.styleguideText.trim();
+}
+
+/** Retains the explicit metadata contract even if a compromised endpoint adds secret-shaped fields. */
+export function redactAutomationCredentialMetadata(value: AutomationCredentialMetadata): AutomationCredentialMetadata {
+  return {
+    id: value.id,
+    name: value.name,
+    kind: value.kind,
+    scope: value.scope,
+    projectId: value.projectId,
+    managementProjectId: value.managementProjectId,
+    allowedProjectIds: [...value.allowedProjectIds],
+    capabilities: [...value.capabilities],
+    status: value.status,
+    configured: value.configured,
+    keyId: value.keyId,
+    keyVersion: value.keyVersion,
+    version: value.version,
+    lastValidatedAt: value.lastValidatedAt,
+    validationStatus: value.validationStatus,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  };
 }
 
 function sortJsonValue(value: unknown): unknown {

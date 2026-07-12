@@ -255,5 +255,8 @@ describe("custom dashboard runtime", () => {
     expect(buildPublishedCustomDashboardLink("dashboard 1", "http://localhost:4444")).toBe(
       "http://localhost:4444/custom-dashboards?dashboard=dashboard+1&mode=viewer",
     );
+    expect(buildPublishedCustomDashboardLink("dashboard 1", "http://localhost:4444", "/logs")).toBe(
+      "http://localhost:4444/custom-dashboards?dashboard=dashboard+1&mode=viewer&route=%2Flogs",
+    );
   });
 });

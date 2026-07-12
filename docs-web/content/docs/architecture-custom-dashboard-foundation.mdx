@@ -30,6 +30,8 @@ All dashboard JSON payloads are stored as text and hydrated through `CustomDashb
 
 Credential slots live on source nodes. Bindings are authorized against credential metadata without resolving plaintext, persisted under stable dashboard/slot binding keys, and serialized with metadata only. Route definitions are normalized, bounded, bundle-relative metadata; executable URLs, traversal, and host-app route prefixes are rejected before persistence.
 
+Runtime state is independent from publication. A bounded, redacted halt records the exact published revision and is idempotent for repeated reports from one failed frame. Resume rechecks the current publication and passed validation; rollback republishes an earlier passed revision with the expected current publication so concurrent changes fail safely.
+
 ## Repository Boundary
 
 `src/repositories/custom-dashboard-repository.ts` owns persistence. It can:
@@ -67,6 +69,7 @@ Dashboard HTTP routes live in `src/server/custom-dashboard-routes.ts` and are re
 - project routes list/create dashboards and expose a data catalog at `/api/projects/:projectId/custom-dashboards/data-catalog`
 - dashboard routes get/update/archive a dashboard and create revisions
 - validation routes start validation, read status/logs, stop/remove validation sessions, and publish revisions
+- same-origin runtime mutation routes halt and explicitly resume published revisions
 - validation proxy routes forward same-origin requests to a running validation host port when the session runtime metadata exposes one
 - `/api/custom-dashboard-runtime/source` is shared by validation previews and active published revisions and verifies ownership plus declared sources/routes before serving data
 
@@ -82,17 +85,21 @@ Validation proxy requests reuse the preview proxy boundary: request bodies are c
 
 The Preact workspace is reachable at `/custom-dashboards` and is lazy-loaded from `dashboard/src/v2/CustomDashboardsPage.tsx`. It is project-scoped through the existing selected-project context and uses typed helpers in `dashboard/src/v2/lib/custom-dashboard-api.ts` for list/get/create/update, revision creation, detached validation sessions, logs, publication, archiving, and data catalog lookup.
 
-The page manages mutable draft text for:
+The page manages typed controls for:
 
-- manifest JSON
-- generated file bundle entries and file content
-- source node graph JSON
-- styleguide JSON
+- manifest fields and declared file paths
+- TypeScript, TSX, CSS, direct HTML, and browser-JavaScript entries
+- normalized routes, source nodes, credential slots, capabilities, and metadata-only credential bindings
 - data catalog source selection
+- complete snapshot JSON through the advanced escape hatch
 
 Draft edits remain persisted bundle text sent back through API calls; generated dashboard code is not imported from `dashboard/src` at runtime. Revisions are created as immutable snapshots, then validated through a detached session. The validation panel shows build/start/health stage state, renders refreshed logs, links to the validation proxy preview, and disables publication until the selected revision has a passed validation report or a matching passed validation session. Once a dashboard has an active publication pointer, later validation sessions for draft revisions do not demote the dashboard from `published`, and later validation sessions for the active published revision do not replace its stored validation snapshot.
 
 Published dashboards open through `CustomDashboardViewer`, which resolves the active `publishedRevisionId` from the loaded dashboard detail and renders only when the dashboard status is `published`, the published revision exists, and that revision still has a valid passed validation report. Draft, rejected, archived, unvalidated, and missing-publication states render a local blocked panel with the last validation report and a return-to-editor action rather than executing the bundle.
+
+`custom-dashboard-router.ts` owns host normalization, query state, route selection, deep-link creation, and history updates. Browser `popstate` restores back/forward navigation. The opaque-origin iframe uses dependency-free hash history and frozen `routePath`/`navigate` bridge members; route messages pass the same frame-window, opaque-origin, and per-frame-session checks as source messages. Unknown routes fall back to root or the first route, while route-less legacy bundles remain at `/`.
+
+Each iframe reports readiness once and reports a runtime error, unhandled rejection, readiness timeout, or unusable document at most once. The parent bounds and redacts the reason, persists one halt for the exact revision, and catches persistence failure so generated code cannot crash the host shell. Recovery explicitly resumes the validated publication or republishes an earlier passed revision.
 
 The viewer remains isolated in a sandboxed `srcdoc` iframe. Published requests cross a frame-source, opaque-origin, per-frame-session message boundary, while validation requests carry their owning validation session. Both reach `CustomDashboardRuntimeService`, which authorizes the revision and declared source/route before built-in access or external egress. Credentials resolve only inside the broker callback and flow as trusted egress headers; they are never serialized into the bridge.
 

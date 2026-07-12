@@ -13,6 +13,7 @@ import {
   getValidationStages,
   hasDraftChanged,
   parseJsonDraft,
+  redactAutomationCredentialMetadata,
   stableJsonStringify,
 } from "../../../dashboard/src/v2/lib/custom-dashboard-view-models.js";
 
@@ -32,8 +33,14 @@ const dashboard: CustomDashboardRecord = {
     files: [{ path: "src/dashboard.tsx", content: "export default function Dashboard() { return null; }" }],
   },
   sourceNodeGraph: { nodes: [], edges: [] },
+  credentialBindings: [],
+  routes: [],
   styleguide: { tone: "operational" },
   runtimeMetadata: {},
+  runtimeState: {
+    status: "active", haltedReason: null, haltedRevisionId: null, haltedAt: null, resumedAt: null,
+    updatedAt: "2026-07-07T00:00:00.000Z", recoveryMetadata: {},
+  },
   publishedRevisionId: null,
   createdAt: "2026-07-07T00:00:00.000Z",
   updatedAt: "2026-07-07T00:00:00.000Z",
@@ -47,6 +54,8 @@ const revision: CustomDashboardRevisionRecord = {
   manifest: dashboard.manifest,
   fileBundle: dashboard.fileBundle,
   sourceNodeGraph: dashboard.sourceNodeGraph,
+  credentialBindings: [],
+  routes: [],
   styleguide: dashboard.styleguide,
   validationStatus: null,
   validationReport: null,
@@ -107,10 +116,23 @@ describe("custom dashboard view models", () => {
       manifestText: stableJsonStringify(dashboard.manifest),
       fileBundleText: stableJsonStringify(dashboard.fileBundle),
       sourceGraphText: stableJsonStringify(dashboard.sourceNodeGraph),
+      routesText: stableJsonStringify(dashboard.routes),
+      credentialBindingsText: stableJsonStringify([]),
       styleguideText: stableJsonStringify(dashboard.styleguide),
     };
 
     expect(hasDraftChanged(dashboard, draft)).toBe(false);
     expect(hasDraftChanged(dashboard, { ...draft, title: "Changed" })).toBe(true);
+  });
+
+  it("copies only the credential metadata allowlist", () => {
+    const metadata = {
+      id: "credential-1", name: "Build token", kind: "api-token", scope: "project" as const,
+      projectId: "project-1", managementProjectId: "project-1", allowedProjectIds: ["project-1"], capabilities: ["read"],
+      status: "active" as const, configured: true, keyId: "key-1", keyVersion: 1, version: 2,
+      lastValidatedAt: null, validationStatus: "valid" as const, createdAt: "now", updatedAt: "now",
+      value: "must-not-render",
+    };
+    expect(JSON.stringify(redactAutomationCredentialMetadata(metadata))).not.toContain("must-not-render");
   });
 });

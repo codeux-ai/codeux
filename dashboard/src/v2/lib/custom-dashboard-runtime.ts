@@ -5,6 +5,7 @@ import type {
   CustomDashboardRevisionRecord,
   CustomDashboardValidationReport,
 } from "../types.js";
+import { buildCustomDashboardLocation, normalizeCustomDashboardPath } from "./custom-dashboard-router.js";
 
 type CustomDashboardDataSourceNode = CustomDashboardRevisionRecord["sourceNodeGraph"]["nodes"][number];
 
@@ -39,7 +40,7 @@ export type CustomDashboardRuntimeResolution =
   };
 
 export interface CustomDashboardRuntimeMessage {
-  type: "codeux-custom-dashboard:source-request" | "codeux-custom-dashboard:source-cancel" | "codeux-custom-dashboard:runtime-error" | "codeux-custom-dashboard:runtime-ready";
+  type: "codeux-custom-dashboard:source-request" | "codeux-custom-dashboard:source-cancel" | "codeux-custom-dashboard:runtime-error" | "codeux-custom-dashboard:runtime-ready" | "codeux-custom-dashboard:route-change";
   requestId?: string;
   sourceId?: string;
   bridgeSessionId?: string;
@@ -69,6 +70,7 @@ export const CUSTOM_DASHBOARD_SOURCE_RESPONSE_TYPE = "codeux-custom-dashboard:so
 export function resolvePublishedCustomDashboardRuntime(
   dashboard: CustomDashboardRecord,
   revisions: CustomDashboardRevisionRecord[],
+  routePath = "/",
 ): CustomDashboardRuntimeResolution {
   const publishedRevision = dashboard.publishedRevisionId
     ? revisions.find((revision) => revision.id === dashboard.publishedRevisionId) ?? null
@@ -119,7 +121,7 @@ export function resolvePublishedCustomDashboardRuntime(
     runtime: {
       dashboard,
       revision: publishedRevision,
-      document: buildCustomDashboardFrameDocument(dashboard, publishedRevision, bridgeSessionId),
+      document: buildCustomDashboardFrameDocument(dashboard, publishedRevision, bridgeSessionId, routePath),
       bridgeSessionId,
     },
   };
@@ -129,6 +131,7 @@ export function buildCustomDashboardFrameDocument(
   dashboard: CustomDashboardRecord,
   revision: CustomDashboardRevisionRecord,
   bridgeSessionId = createBridgeSessionId(),
+  routePath = "/",
 ): string {
   const entryFile = revision.fileBundle.files.find((file) => file.path === revision.manifest.entryFile) ?? null;
   const bridgeConfig = {
@@ -139,6 +142,8 @@ export function buildCustomDashboardFrameDocument(
     sourceNodeGraph: revision.sourceNodeGraph,
     styleguide: revision.styleguide,
     runtimeMetadata: revision.runtimeMetadata,
+    routes: revision.routes,
+    routePath: normalizeCustomDashboardPath(routePath),
     bridgeSessionId,
   };
   const bootstrap = buildBridgeBootstrapScript(bridgeConfig);
@@ -221,6 +226,8 @@ export function createCustomDashboardRuntimeMessageHandler(args: {
   frameWindow: Window | null;
   runtime: CustomDashboardPublishedRuntime;
   onRuntimeError: (message: string) => void;
+  onRuntimeReady?: () => void;
+  onRouteChange?: (path: string) => void;
   readinessTimeoutMs?: number;
   signal?: AbortSignal;
 }): (event: MessageEvent) => void {
@@ -252,6 +259,11 @@ export function createCustomDashboardRuntimeMessageHandler(args: {
     if (event.data.type === "codeux-custom-dashboard:runtime-ready") {
       ready = true;
       globalThis.clearTimeout(readinessTimer);
+      args.onRuntimeReady?.();
+      return;
+    }
+    if (event.data.type === "codeux-custom-dashboard:route-change") {
+      args.onRouteChange?.(normalizeCustomDashboardPath(event.data.route));
       return;
     }
     if (event.data.type === "codeux-custom-dashboard:runtime-error") {
@@ -330,11 +342,8 @@ export async function persistCustomDashboardRuntimeHalt(
   }
 }
 
-export function buildPublishedCustomDashboardLink(dashboardId: string, origin = window.location.origin): string {
-  const url = new URL("/custom-dashboards", origin);
-  url.searchParams.set("dashboard", dashboardId);
-  url.searchParams.set("mode", "viewer");
-  return url.toString();
+export function buildPublishedCustomDashboardLink(dashboardId: string, origin = window.location.origin, routePath = "/"): string {
+  return buildCustomDashboardLocation({ dashboardId, mode: "viewer", routePath }, origin).toString();
 }
 
 function getLastValidationReport(revisions: CustomDashboardRevisionRecord[]): CustomDashboardValidationReport | null {
@@ -354,6 +363,7 @@ function isRuntimeMessage(value: unknown): value is CustomDashboardRuntimeMessag
         || (value as { type?: unknown }).type === "codeux-custom-dashboard:source-cancel"
         || (value as { type?: unknown }).type === "codeux-custom-dashboard:runtime-error"
         || (value as { type?: unknown }).type === "codeux-custom-dashboard:runtime-ready"
+        || (value as { type?: unknown }).type === "codeux-custom-dashboard:route-change"
       ),
   );
 }
@@ -395,16 +405,26 @@ function buildBridgeBootstrapScript(config: Record<string, unknown>): string {
     "    ...config,",
     "    listSources: () => config.sourceNodeGraph?.nodes ? [...config.sourceNodeGraph.nodes] : [],",
     "    readSource,",
+    "    get routePath() { return currentRoute; },",
+    "    navigate: (path, options = {}) => navigate(path, options),",
     "  });",
     "  Object.defineProperty(window, 'codeUxDataBridge', { value: bridge, writable: false, configurable: false });",
     "  Object.defineProperty(window, 'CodeUXCustomDashboard', { value: bridge, writable: false, configurable: false });",
+    "  const normalizePath = (value) => { const parts = String(value || '/').split(/[?#]/, 1)[0].replace(/\\\\/g, '/').split('/').filter(Boolean); const out = []; for (const part of parts) { if (part === '.') continue; if (part === '..') out.pop(); else out.push(part); } return `/${out.join('/')}`; };",
+    "  let currentRoute = normalizePath(config.routePath);",
+    "  const declaredRoutes = Array.isArray(config.routes) ? config.routes : [];",
+    "  const isDeclared = (path) => declaredRoutes.length === 0 || declaredRoutes.some((route) => normalizePath(route.path) === path);",
+    "  const emitRoute = () => window.parent.postMessage({ type: 'codeux-custom-dashboard:route-change', bridgeSessionId: config.bridgeSessionId, route: currentRoute }, parentOrigin);",
+    "  const navigate = (path, options = {}) => { const next = normalizePath(path); if (!isDeclared(next)) throw new Error(`Custom dashboard route is not declared: ${next}`); currentRoute = next; const hash = `#${next}`; if (options.replace) history.replaceState({ route: next }, '', hash); else history.pushState({ route: next }, '', hash); emitRoute(); window.dispatchEvent(new CustomEvent('codeux:dashboard-route', { detail: { path: next } })); return next; };",
+    "  window.addEventListener('popstate', () => { currentRoute = normalizePath(location.hash.slice(1) || config.routePath); emitRoute(); window.dispatchEvent(new CustomEvent('codeux:dashboard-route', { detail: { path: currentRoute } })); });",
+    "  if (location.hash) currentRoute = normalizePath(location.hash.slice(1)); else history.replaceState({ route: currentRoute }, '', `#${currentRoute}`);",
     "  let runtimeStateReported = false;",
     "  const report = (message) => { if (runtimeStateReported) return; runtimeStateReported = true; window.parent.postMessage({ type: 'codeux-custom-dashboard:runtime-error', bridgeSessionId: config.bridgeSessionId, message: String(message).slice(0, 320) }, parentOrigin); };",
     "  window.addEventListener('error', (event) => report(event.message || 'Custom dashboard runtime error.'));",
     "  window.addEventListener('unhandledrejection', (event) => report(event.reason?.message || String(event.reason || 'Unhandled custom dashboard rejection.')));",
     "  window.addEventListener('DOMContentLoaded', () => {",
     "    if (!document.body || document.body.childElementCount === 0) { report('Custom dashboard runtime produced no usable document body.'); return; }",
-    "    if (!runtimeStateReported) window.parent.postMessage({ type: 'codeux-custom-dashboard:runtime-ready', bridgeSessionId: config.bridgeSessionId }, parentOrigin);",
+    "    if (!runtimeStateReported) { window.parent.postMessage({ type: 'codeux-custom-dashboard:runtime-ready', bridgeSessionId: config.bridgeSessionId }, parentOrigin); emitRoute(); }",
     "  }, { once: true });",
     "})();",
   ].join("\n");
