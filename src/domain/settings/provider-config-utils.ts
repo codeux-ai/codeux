@@ -1,5 +1,4 @@
 import type {
-  ExternalSettingsHints,
   InvocationProviderOverrideSettings,
   ProviderConfigId,
   ProviderId,
@@ -29,37 +28,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === "object" && value !== null && !Array.isArray(value)
 );
 
-export const getHintApiKeyForProvider = (
-  providerId: ProviderId,
-  externalHints?: ExternalSettingsHints,
-): string => {
-  if (providerId === "jules") {
-    return externalHints?.resolved.julesApiKey || "";
-  }
-  if (providerId === "gemini") {
-    return externalHints?.resolved.geminiApiKey || "";
-  }
-  if (providerId === "codex") {
-    return externalHints?.resolved.codexApiKey || "";
-  }
-  if (providerId === "claude-code") {
-    return externalHints?.resolved.claudeCodeApiKey || "";
-  }
-  if (providerId === "qwen-code") {
-    return externalHints?.resolved.qwenCodeApiKey || "";
-  }
-  if (providerId === "antigravity") {
-    return externalHints?.resolved.antigravityApiKey || "";
-  }
-  if (providerId === "mockup-cli") {
-    return "";
-  }
-  return externalHints?.resolved.openCodeApiKey || "";
-};
-
-export const buildDefaultIntegrationProviders = (
-  externalHints?: ExternalSettingsHints,
-): Record<ProviderConfigId, SystemProviderCredentialSettings> => ({
+export const buildDefaultIntegrationProviders = (_legacyExternalHints?: unknown): Record<ProviderConfigId, SystemProviderCredentialSettings> => ({
   [DEFAULT_PROVIDER_CONFIG_IDS.jules]: {
     provider: "jules",
     name: DEFAULT_PROVIDER_CONFIG_NAMES.jules,
@@ -247,9 +216,9 @@ const normalizeNonEmptyString = (value: unknown, fallback: string): string => (
 
 export const normalizeSystemIntegrationProviders = (
   integrationsInput: unknown,
-  externalHints?: ExternalSettingsHints,
+  _legacyExternalHints?: unknown,
 ): Record<ProviderConfigId, SystemProviderCredentialSettings> => {
-  const defaults = buildDefaultIntegrationProviders(externalHints);
+  const defaults = buildDefaultIntegrationProviders();
   const input = isRecord(integrationsInput) ? integrationsInput : {};
   const hasModernProviders = isRecord(input.providers);
   const result: Record<ProviderConfigId, SystemProviderCredentialSettings> = {};

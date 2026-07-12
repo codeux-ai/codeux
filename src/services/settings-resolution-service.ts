@@ -6,7 +6,6 @@ import type {
   DashboardSettings,
   DashboardExperienceMode,
   DesignGuidanceSettings,
-  ExternalSettingsHints,
   McpToolToggle,
   RestartInvocationPolicy,
   RestartSprintPolicy,
@@ -755,13 +754,12 @@ function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintP
   };
 }
 
-export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHints): ProjectSettings {
-  const integrationProviders = buildDefaultIntegrationProviders(externalHints);
+export function buildDefaultProjectSettings(_legacyExternalHints?: unknown): ProjectSettings {
+  const integrationProviders = buildDefaultIntegrationProviders();
   const aiProvider = sanitizeAiProvider(DEFAULT_DASHBOARD_SETTINGS, {
-    externalHints,
     integrationProviders,
   });
-  const git = sanitizeGit(DEFAULT_DASHBOARD_SETTINGS, externalHints);
+  const git = sanitizeGit(DEFAULT_DASHBOARD_SETTINGS);
   const workers = sanitizeWorkers(DEFAULT_DASHBOARD_SETTINGS, { providers: aiProvider.providers });
 
   return {
@@ -853,7 +851,7 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
   };
 }
 
-export function buildDefaultSystemSettings(externalHints?: ExternalSettingsHints): SystemSettings {
+export function buildDefaultSystemSettings(_legacyExternalHints?: unknown): SystemSettings {
   return {
     runtime: {
       dashboardPort: DEFAULT_DASHBOARD_SETTINGS.dashboardPort,
@@ -868,7 +866,7 @@ export function buildDefaultSystemSettings(externalHints?: ExternalSettingsHints
       restartInvocationPolicy: DEFAULT_DASHBOARD_SETTINGS.restartInvocationPolicy,
     },
     integrations: {
-      providers: buildDefaultIntegrationProviders(externalHints),
+      providers: buildDefaultIntegrationProviders(),
       githubToken: "",
       githubTokenCredentialRef: null,
       gitlabToken: "",
@@ -887,7 +885,7 @@ export function buildDefaultSystemSettings(externalHints?: ExternalSettingsHints
       mural: { ...DEFAULT_DASHBOARD_SETTINGS.mural },
     },
     techstackCatalog: cloneTechstackCatalog(DEFAULT_DASHBOARD_SETTINGS.techstackCatalog),
-    defaults: buildDefaultProjectSettings(externalHints),
+    defaults: buildDefaultProjectSettings(),
     mcpTools: cloneMcpTools(DEFAULT_DASHBOARD_SETTINGS.mcpTools),
     customMcpServers: sanitizeCustomMcpServersWithDefaults(
       DEFAULT_DASHBOARD_SETTINGS.customMcpServers,
@@ -897,12 +895,12 @@ export function buildDefaultSystemSettings(externalHints?: ExternalSettingsHints
   };
 }
 
-export function sanitizeProjectSettings(value: unknown, externalHints?: ExternalSettingsHints): ProjectSettings {
+export function sanitizeProjectSettings(value: unknown, _legacyExternalHints?: unknown): ProjectSettings {
   const input = toRecord(value);
   const integrationsInput = toRecord(input.integrations);
   const integrationProviders = input.integrations && typeof input.integrations === "object"
-    ? normalizeSystemIntegrationProviders(input.integrations, externalHints)
-    : buildDefaultIntegrationProviders(externalHints);
+    ? normalizeSystemIntegrationProviders(input.integrations)
+    : buildDefaultIntegrationProviders();
   const aiInput = {
     ...DEFAULT_DASHBOARD_SETTINGS,
     aiProvider: deepMerge(DEFAULT_DASHBOARD_SETTINGS.aiProvider, input.aiProvider),
@@ -911,7 +909,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
     ...DEFAULT_DASHBOARD_SETTINGS,
     git: deepMerge(DEFAULT_DASHBOARD_SETTINGS.git, input.git),
   };
-  const git = sanitizeGit(gitInput, externalHints);
+  const git = sanitizeGit(gitInput);
   // GitHub/GitLab/Jira are scoped settings: a project may override them, otherwise
   // they inherit the system integration values seeded into the base by
   // sanitizeSystemSettings. The integrations block is used as a last-resort fallback.
@@ -927,7 +925,6 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
   const figma = sanitizeExternalImporterSettings(input.figma ?? integrationsInput.figma, DEFAULT_DASHBOARD_SETTINGS.figma);
   const mural = sanitizeExternalImporterSettings(input.mural ?? integrationsInput.mural, DEFAULT_DASHBOARD_SETTINGS.mural);
   const aiProvider = sanitizeAiProvider(aiInput, {
-    externalHints,
     integrationProviders,
   });
   const appearanceInput = toRecord(input.appearance);
@@ -1047,11 +1044,11 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
   };
 }
 
-export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalSettingsHints): SystemSettings {
-  const defaults = buildDefaultSystemSettings(externalHints);
+export function sanitizeSystemSettings(value: unknown, _legacyExternalHints?: unknown): SystemSettings {
+  const defaults = buildDefaultSystemSettings();
   const input = toRecord(value);
   const runtime = toRecord(input.runtime);
-  const integrations = normalizeSystemIntegrationProviders(input.integrations, externalHints);
+  const integrations = normalizeSystemIntegrationProviders(input.integrations);
   const integrationInput = toRecord(input.integrations);
   const techstackCatalog = sanitizeTechstackCatalog(input.techstackCatalog ?? defaults.techstackCatalog);
   const jiraSettings = sanitizeJira(integrationInput.jira, {
@@ -1127,7 +1124,7 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
       figma: figmaSettings,
       mural: muralSettings,
     },
-  }, externalHints);
+  });
 
   return {
     ...(input.credentialMigrationVersion === 1 ? { credentialMigrationVersion: 1 as const } : {}),
@@ -1497,14 +1494,13 @@ export function toProjectSettingsOverride(
   base: ProjectSettings,
   patch: unknown,
   integrations?: SystemSettings["integrations"],
-  externalHints?: ExternalSettingsHints,
+  _legacyExternalHints?: unknown,
 ): ProjectSettingsOverride {
   const merged = sanitizeProjectSettings(
     {
       ...mergeSettingsPatch(base, patch),
       integrations,
     },
-    externalHints
   );
   return (deepDiff(base, merged) || {}) as ProjectSettingsOverride;
 }
@@ -1513,14 +1509,13 @@ export function toSprintSettingsOverride(
   base: ProjectSettings,
   patch: unknown,
   integrations?: SystemSettings["integrations"],
-  externalHints?: ExternalSettingsHints,
+  _legacyExternalHints?: unknown,
 ): SprintSettingsOverride {
   const merged = sanitizeProjectSettings(
     {
       ...mergeSettingsPatch(base, patch),
       integrations,
     },
-    externalHints
   );
   return (deepDiff(base, merged) || {}) as SprintSettingsOverride;
 }

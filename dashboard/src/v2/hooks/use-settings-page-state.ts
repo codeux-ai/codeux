@@ -27,7 +27,6 @@ import {
 } from "../lib/chat-provider-api.js";
 import { registerNavigationBlocker } from "../router/navigation-blocker.js";
 import {
-  applyExternalHintsToSystemSettings,
   cloneProjectSettings,
   cloneSystemSettings,
   dashboardSettingsToProjectSettings,
@@ -262,7 +261,6 @@ export const useSettingsPageState = (
   const [deletingProject, setDeletingProject] = useState(false);
   const [resettingDatabase, setResettingDatabase] = useState(false);
   const [memoryClearBusy, setMemoryClearBusy] = useState<string | null>(null);
-  const [importingHints, setImportingHints] = useState(false);
   const [externalHints, setExternalHints] = useState<import("../../types.js").ExternalSettingsHints | null>(null);
   const [projectAgentPresets, setProjectAgentPresets] = useState<AgentPreset[]>([]);
   const [projectAgentPresetOptions, setProjectAgentPresetOptions] = useState<Array<{ value: string; label: string; avatarConfig?: AgentAvatarConfig }>>([]);
@@ -567,24 +565,6 @@ export const useSettingsPageState = (
     }
     updateProject(recipe);
   }, [activeScope, updateProject, updateSystem]);
-
-  const handleImportHints = useCallback(async (): Promise<void> => {
-    if (!systemSettings) {
-      return;
-    }
-    setImportingHints(true);
-    try {
-      const hints = await fetchExternalSettingsHints();
-      const nextSettings = applyExternalHintsToSystemSettings(systemSettings, hints);
-      setSystemSettings(nextSettings);
-      setSaveMessage("Imported missing integration secrets from env/settings.json.");
-      setError(null);
-    } catch (hintError) {
-      setError(hintError instanceof Error ? hintError.message : String(hintError));
-    } finally {
-      setImportingHints(false);
-    }
-  }, [systemSettings]);
 
   const handleSave = useCallback(async (): Promise<boolean> => {
     let systemSaved = true;
@@ -966,7 +946,7 @@ export const useSettingsPageState = (
     editableSettings,
     loading, error, saveMessage,
     savingSystem, savingProject, activeSaving, activeDirty,
-    resettingProject, deletingProject, resettingDatabase, memoryClearBusy, importingHints,
+    resettingProject, deletingProject, resettingDatabase, memoryClearBusy,
     externalHints,
     activeCategoryConfig, filteredCategories, settingsSearchMatches,
     categories: categories,
@@ -997,7 +977,7 @@ export const useSettingsPageState = (
     selectedProject,
     projects,
     updateSystem, updateProject, updateEditableSettings,
-    handleImportHints, handleSave, handleResetProject,
+    handleSave, handleResetProject,
     handleDeleteProject, handleResetDatabase, handleClearMemory,
     loadSettings,
     isDirtyRef,

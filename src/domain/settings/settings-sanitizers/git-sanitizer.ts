@@ -1,4 +1,4 @@
-import type { DashboardSettings, ExternalSettingsHints, PrDescriptionSettings, SprintPrSectionKey, SprintPrTemplateSections, TaskPrSectionKey, TaskPrTemplateSections } from "../../../contracts/app-types.js";
+import type { DashboardSettings, PrDescriptionSettings, SprintPrSectionKey, SprintPrTemplateSections, TaskPrSectionKey, TaskPrTemplateSections } from "../../../contracts/app-types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../repositories/settings-defaults.js";
 import { resolveSectionOrder } from "../../sprint/composer/pr-description-composer.js";
 import { sanitizeSettingsCredentialReference } from "./credential-reference-sanitizer.js";
@@ -47,7 +47,7 @@ export const sanitizePrDescriptionSections = (
 
 export const sanitizeGit = (
   input: Partial<DashboardSettings> | undefined,
-  externalHints?: ExternalSettingsHints
+  _legacyExternalHints?: unknown,
 ): DashboardSettings["git"] => {
   const gitInput = (input?.git && typeof input.git === "object" ? input.git : {}) as Partial<DashboardSettings["git"]>;
 

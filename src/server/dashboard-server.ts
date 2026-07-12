@@ -7,7 +7,6 @@ import type {
   ExecutionAssignedWorkerSummary,
   DockerContainer,
   ExecutionDashboardSnapshot,
-  ExternalSettingsHints,
   GitTrackingStatus,
   JulesActivity,
   OnboardingDependencyInstallerResult,
@@ -241,7 +240,7 @@ export interface DashboardServerOptions {
   getDashboardNotifications?: () => DashboardNotificationFeed;
   getLiveActivities: () => Promise<Record<string, JulesActivity[]>>;
   getGitStatus: () => Promise<GitTrackingStatus>;
-  getExternalSettingsHints: () => ExternalSettingsHints;
+  getExternalSettingsHints: () => unknown;
   getLocalMcpSetup?: () => LocalMcpSetupInfo;
   regenerateLocalMcpAuthToken?: () => LocalMcpSetupInfo;
   installLocalMcpProvider?: (provider: LocalMcpCliProvider) => Promise<LocalMcpInstallResult> | LocalMcpInstallResult;

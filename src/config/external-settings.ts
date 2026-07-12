@@ -47,6 +47,12 @@ const PROVIDER_KEY_MAP = {
 
 type ProviderKey = keyof typeof PROVIDER_KEY_MAP;
 
+export interface ExternalSettingsMigrationValues {
+  env: Record<ProviderKey, string>;
+  settingsJson: Record<ProviderKey, string>;
+  resolved: Record<ProviderKey, string>;
+}
+
 const readSettingsJson = (projectRoot: string): Record<string, unknown> => {
   const settingsRelativePath = getRelativeCodeUxPath("settings.json");
   const searchPaths = buildCandidatePaths(settingsRelativePath, projectRoot);
@@ -82,7 +88,7 @@ const resolveFromSource = (source: Record<string, unknown>, keys: readonly strin
   return "";
 };
 
-export const loadExternalSettingsHints = (projectRoot: string): ExternalSettingsHints => {
+export const loadExternalSettingsMigrationValues = (projectRoot: string): ExternalSettingsMigrationValues => {
   const parsedSettings = readSettingsJson(projectRoot);
   const envSource = process.env as Record<string, unknown>;
 
@@ -99,6 +105,16 @@ export const loadExternalSettingsHints = (projectRoot: string): ExternalSettings
     resolvedHints[provider] = envValue || jsonValue;
   }
 
+  return {
+    env: envHints as ExternalSettingsMigrationValues["env"],
+    settingsJson: jsonHints as ExternalSettingsMigrationValues["settingsJson"],
+    resolved: resolvedHints as ExternalSettingsMigrationValues["resolved"],
+  };
+};
+
+export const buildExternalSettingsHints = (
+  values: ExternalSettingsMigrationValues,
+): ExternalSettingsHints => {
   const homedir = os.homedir();
   const providerAvailability: ExternalSettingsHints["providerAvailability"] = {
     jules: { hasApiKey: false, hasLocalAuth: false, hasDashboardAuth: false },
@@ -128,7 +144,7 @@ export const loadExternalSettingsHints = (projectRoot: string): ExternalSettings
   };
 
   for (const [key, provider] of Object.entries(keyToProvider)) {
-    providerAvailability[provider].hasApiKey = !!resolvedHints[key];
+    providerAvailability[provider].hasApiKey = Boolean(values.resolved[key as ProviderKey]);
 
     const localAuthFiles = PROVIDER_LOCAL_AUTH_MAP[provider];
     providerAvailability[provider].hasLocalAuth = localAuthFiles.some((segments) =>
@@ -151,9 +167,71 @@ export const loadExternalSettingsHints = (projectRoot: string): ExternalSettings
   }
 
   return {
-    env: envHints as ExternalSettingsHints["env"],
-    settingsJson: jsonHints as ExternalSettingsHints["settingsJson"],
-    resolved: resolvedHints as ExternalSettingsHints["resolved"],
+    sourceAvailability: {
+      environment: Object.values(values.env).some(Boolean),
+      settingsJson: Object.values(values.settingsJson).some(Boolean),
+    },
+    credentialAvailability: Object.fromEntries(
+      Object.keys(PROVIDER_KEY_MAP).map((key) => [key, Boolean(values.resolved[key as ProviderKey])]),
+    ) as ExternalSettingsHints["credentialAvailability"],
     providerAvailability,
+  };
+};
+
+export const loadExternalSettingsHints = (projectRoot: string): ExternalSettingsHints => (
+  buildExternalSettingsHints(loadExternalSettingsMigrationValues(projectRoot))
+);
+
+export const serializeExternalSettingsHints = (input: unknown): ExternalSettingsHints => {
+  const hints = input && typeof input === "object" ? input as Record<string, unknown> : {};
+  const sourceAvailability = hints.sourceAvailability && typeof hints.sourceAvailability === "object"
+    ? hints.sourceAvailability as Record<string, unknown>
+    : {};
+  const credentialAvailability = hints.credentialAvailability && typeof hints.credentialAvailability === "object"
+    ? hints.credentialAvailability as Record<string, unknown>
+    : {};
+  const legacyEnv = hints.env && typeof hints.env === "object" ? hints.env as Record<string, unknown> : {};
+  const legacySettingsJson = hints.settingsJson && typeof hints.settingsJson === "object"
+    ? hints.settingsJson as Record<string, unknown>
+    : {};
+  const legacyResolved = hints.resolved && typeof hints.resolved === "object"
+    ? hints.resolved as Record<string, unknown>
+    : {};
+  const rawProviderAvailability = hints.providerAvailability && typeof hints.providerAvailability === "object"
+    ? hints.providerAvailability as Record<string, unknown>
+    : {};
+  const credentialConfigured = (key: ProviderKey): boolean => (
+    credentialAvailability[key] === true || Boolean(legacyResolved[key])
+  );
+  const providerMetadata = (
+    provider: keyof ExternalSettingsHints["providerAvailability"],
+    key: ProviderKey,
+  ): ExternalSettingsHints["providerAvailability"][typeof provider] => {
+    const raw = rawProviderAvailability[provider];
+    const availability = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+    return {
+      hasApiKey: availability.hasApiKey === true || credentialConfigured(key),
+      hasLocalAuth: availability.hasLocalAuth === true,
+      hasDashboardAuth: availability.hasDashboardAuth === true,
+    };
+  };
+
+  return {
+    sourceAvailability: {
+      environment: sourceAvailability.environment === true || Object.values(legacyEnv).some(Boolean),
+      settingsJson: sourceAvailability.settingsJson === true || Object.values(legacySettingsJson).some(Boolean),
+    },
+    credentialAvailability: Object.fromEntries(
+      Object.keys(PROVIDER_KEY_MAP).map((key) => [key, credentialConfigured(key as ProviderKey)]),
+    ) as ExternalSettingsHints["credentialAvailability"],
+    providerAvailability: {
+      jules: providerMetadata("jules", "julesApiKey"),
+      gemini: providerMetadata("gemini", "geminiApiKey"),
+      codex: providerMetadata("codex", "codexApiKey"),
+      claudeCode: providerMetadata("claudeCode", "claudeCodeApiKey"),
+      qwenCode: providerMetadata("qwenCode", "qwenCodeApiKey"),
+      openCode: providerMetadata("openCode", "openCodeApiKey"),
+      antigravity: providerMetadata("antigravity", "antigravityApiKey"),
+    },
   };
 };

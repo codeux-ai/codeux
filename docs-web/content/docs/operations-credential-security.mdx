@@ -19,6 +19,8 @@ Provider, nested Qwen provider, Git host, Jira, importer, speech, and embedding 
 
 Startup migrates legacy settings and external hints into project credentials or explicitly allowlisted global credentials, then removes the original values. The migration is idempotent. If secure key custody or project scope is unavailable, values are scrubbed and runtime resolution fails closed rather than using plaintext settings.
 
+The import-sources API and dashboard expose only boolean source, credential, and provider availability metadata. Raw values are never returned, rendered, pre-filled, or copied into settings; they exist only at the startup migration boundary.
+
 Fresh settings startup initializes secure key custody only when plaintext credentials or external hints actually need migration, so Electron does not contact the OS keychain unnecessarily.
 
 Authorized runtime consumers resolve references with an active project and explicit consumer key. Existing scope, allowlist, capability, audit, revocation, and concurrent-change checks apply, and the decrypted buffer is zeroed after the consumer callback.

@@ -1,4 +1,4 @@
-import type { DashboardSettings, ExternalSettingsHints, GuardrailSettings, TechstackCatalogSettings } from "../types.js";
+import type { DashboardSettings, GuardrailSettings, TechstackCatalogSettings } from "../types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import { cloneDesignGuidanceSettings } from "../../../src/domain/settings/design-guidance-catalog.js";
 
@@ -134,44 +134,4 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
     },
   },
   modelPricing: { overrides: { ...DEFAULT_DASHBOARD_SETTINGS.modelPricing.overrides } },
-});
-
-export const applyExternalSettingsHints = (
-  settings: DashboardSettings,
-  hints: ExternalSettingsHints
-): DashboardSettings => ({
-  ...settings,
-  aiProvider: {
-    ...settings.aiProvider,
-    providers: Object.fromEntries(
-      Object.entries(settings.aiProvider.providers).map(([providerConfigId, provider]) => [
-        providerConfigId,
-        {
-          ...provider,
-          apiKey: (provider.apiKey || "").trim().length > 0
-            ? provider.apiKey
-            : provider.provider === "jules"
-              ? hints.resolved.julesApiKey
-              : provider.provider === "gemini"
-                ? hints.resolved.geminiApiKey
-                : provider.provider === "codex"
-                  ? hints.resolved.codexApiKey
-                  : provider.provider === "claude-code"
-                    ? hints.resolved.claudeCodeApiKey
-                    : provider.provider === "qwen-code"
-                      ? hints.resolved.qwenCodeApiKey
-                      : hints.resolved.openCodeApiKey,
-        },
-      ]),
-    ),
-  },
-  git: {
-    ...settings.git,
-    githubToken: settings.git.githubToken.trim().length > 0 ? settings.git.githubToken : hints.resolved.githubToken,
-    gitlabToken: settings.git.gitlabToken?.trim().length ? settings.git.gitlabToken : hints.resolved.gitlabToken || "",
-  },
-  jira: {
-    ...settings.jira,
-    apiToken: settings.jira.apiToken.trim().length > 0 ? settings.jira.apiToken : hints.resolved.jiraToken || "",
-  },
 });

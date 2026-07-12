@@ -490,9 +490,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
     selectedIntegration,
     setSelectedIntegration,
     integrations,
-    importingHints,
     externalHints,
-    handleImportHints,
     updateEditableSettings,
     updateSystem,
     updateProject,
@@ -1866,7 +1864,9 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
             <>
               <IntegrationPill label={`${integrations.length} integrations`} />
               <IntegrationPill label={dockerExecutionEnabled ? "Docker auth copy" : "Host execution"} tone={dockerExecutionEnabled ? "active" : "neutral"} />
-              <ActionButton label="Import host hints" onClick={() => void handleImportHints()} busy={importingHints} />
+              {externalHints?.sourceAvailability?.environment || externalHints?.sourceAvailability?.settingsJson
+                ? <IntegrationPill label="Legacy credentials migrate securely at startup" tone="active" />
+                : null}
             </>
           )
         }

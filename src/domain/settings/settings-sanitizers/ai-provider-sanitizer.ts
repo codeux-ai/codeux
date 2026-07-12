@@ -1,6 +1,5 @@
 import type {
   DashboardSettings,
-  ExternalSettingsHints,
   InvocationRoutingId,
   InvocationRoutingProfile,
   ProviderStrategy,
@@ -26,7 +25,6 @@ import {
 } from "../../../repositories/settings-defaults.js";
 
 interface SanitizeAiProviderOptions {
-  externalHints?: ExternalSettingsHints;
   integrationProviders?: Record<string, SystemProviderCredentialSettings>;
 }
 
@@ -104,7 +102,7 @@ export const sanitizeAiProvider = (
     ? input.aiProvider
     : {}) as Record<string, unknown>;
 
-  const integrationProviders = options.integrationProviders || buildDefaultIntegrationProviders(options.externalHints);
+  const integrationProviders = options.integrationProviders || buildDefaultIntegrationProviders();
   const providers = buildProjectProviderSettings(aiProviderInput.providers, integrationProviders);
   const dashboardDefaultProviderId = DEFAULT_DASHBOARD_SETTINGS.aiProvider.provider;
   const defaultProviderId = dashboardDefaultProviderId && dashboardDefaultProviderId in providers

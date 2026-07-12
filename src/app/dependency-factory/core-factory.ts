@@ -49,7 +49,7 @@ import { KnowledgeService } from "../../services/knowledge-service.js";
 import { NodeFlowService } from "../../services/node-flow-service.js";
 import { ProviderConcurrencyService } from "../../services/provider-concurrency-service.js";
 import { DashboardSettings, ExternalSettingsHints } from "../../contracts/app-types.js";
-import { loadExternalSettingsHints } from "../../config/external-settings.js";
+import { buildExternalSettingsHints, loadExternalSettingsMigrationValues } from "../../config/external-settings.js";
 import { createLogger, type Logger } from "../../shared/logging/logger.js";
 import { ServerContext } from "../dependency-factory.js";
 import { getRepoDebugLogPath, CODE_UX_SERVICE_NAME, CODE_UX_VERSION } from "../../shared/config/code-ux-paths.js";
@@ -158,8 +158,9 @@ export function createCoreDependencies(
   options: { projectRoot: string; appConfig: AppConfig },
   context: ServerContext
 ): CoreDependencies {
-  const externalSettingsHints = loadExternalSettingsHints(options.projectRoot);
-  const settingsRepository = new SettingsRepository(undefined, externalSettingsHints);
+  const externalSettingsMigrationValues = loadExternalSettingsMigrationValues(options.projectRoot);
+  const externalSettingsHints = buildExternalSettingsHints(externalSettingsMigrationValues);
+  const settingsRepository = new SettingsRepository();
   const dashboardSettings = settingsRepository.getDefaultDashboardSettings();
   context.runtimeContext.dashboardSettings = dashboardSettings;
   const resolveWorkerExecutionMode = (projectId: string, sprintId?: string | null) => (
@@ -245,7 +246,7 @@ export function createCoreDependencies(
     credentialBroker,
     listProjectIds: () => projectManagementRepository.listProjects().projects.map((project) => project.id),
     resolveSprintProjectId: (sprintId) => projectManagementRepository.getSprint(sprintId)?.projectId ?? null,
-    externalSettingsHints,
+    externalSettingsMigrationValues,
   });
   const settingsCredentialResolver = new SettingsCredentialResolver(credentialBroker);
   const projectRuntimeRepository = new ProjectRuntimeRepository(appDbStorage, dashboardRealtimeService);

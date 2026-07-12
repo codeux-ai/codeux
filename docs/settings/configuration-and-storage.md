@@ -614,14 +614,11 @@ Defined in:
 - `src/repositories/settings-db-storage.ts` (sqlite persistence and migration path resolution)
 - `dashboard/src/lib/settings.ts` (frontend default clone)
 
-## External Settings Hints
+## External Credential Migration Hints
 
-`src/config/external-settings.ts` loads hints from:
-- environment
-- settings json
+`src/config/external-settings.ts` reads legacy credential values from the environment and legacy `settings.json` only for the one-way startup migration boundary. The migration writes secrets to the credential broker, replaces legacy settings fields with credential references, and scrubs plaintext when secure custody or valid scope is unavailable.
 
-Used to prefill missing values in dashboard import flow:
-- `GET /api/settings/import-sources`
+`GET /api/settings/import-sources` returns detection metadata only: source availability, per-credential configured flags, and provider auth availability. It never returns or pre-fills raw values. The dashboard uses that metadata for status and startup-migration guidance; it has no copy-to-settings action.
 
 ## Skill Enablement
 
@@ -633,7 +630,7 @@ Git manager skill toggles are mode-aware:
 
 ## Recommended Policy
 
-- Keep secrets in environment or local secured settings.
+- Store new secrets through the dashboard credential manager. Environment and legacy JSON values are migration inputs, not runtime settings fallbacks.
 - Use system settings for secrets/runtime behavior and project or sprint overrides for execution behavior.
 - Treat sqlite DB as local runtime state, not source-of-truth config for production deployment.
 

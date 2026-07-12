@@ -1461,41 +1461,21 @@ export interface GitTrackingStatus {
 }
 
 export interface ExternalSettingsHints {
-  env: {
-    julesApiKey: string;
-    geminiApiKey: string;
-    codexApiKey: string;
-    claudeCodeApiKey: string;
-    qwenCodeApiKey: string;
-    openCodeApiKey: string;
-    antigravityApiKey: string;
-    githubToken: string;
-    gitlabToken?: string;
-    jiraToken?: string;
+  sourceAvailability: {
+    environment: boolean;
+    settingsJson: boolean;
   };
-  settingsJson: {
-    julesApiKey: string;
-    geminiApiKey: string;
-    codexApiKey: string;
-    claudeCodeApiKey: string;
-    qwenCodeApiKey: string;
-    openCodeApiKey: string;
-    antigravityApiKey: string;
-    githubToken: string;
-    gitlabToken?: string;
-    jiraToken?: string;
-  };
-  resolved: {
-    julesApiKey: string;
-    geminiApiKey: string;
-    codexApiKey: string;
-    claudeCodeApiKey: string;
-    qwenCodeApiKey: string;
-    openCodeApiKey: string;
-    antigravityApiKey: string;
-    githubToken: string;
-    gitlabToken?: string;
-    jiraToken?: string;
+  credentialAvailability: {
+    julesApiKey: boolean;
+    geminiApiKey: boolean;
+    codexApiKey: boolean;
+    claudeCodeApiKey: boolean;
+    qwenCodeApiKey: boolean;
+    openCodeApiKey: boolean;
+    antigravityApiKey: boolean;
+    githubToken: boolean;
+    gitlabToken: boolean;
+    jiraToken: boolean;
   };
   providerAvailability: {
     jules: { hasApiKey: boolean; hasLocalAuth: boolean; hasDashboardAuth: boolean };

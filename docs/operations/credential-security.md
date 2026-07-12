@@ -19,6 +19,8 @@ Sensitive provider, nested Qwen provider, Git host, Jira, importer, speech, and 
 
 At dashboard startup, the one-way migration reads legacy values from raw settings storage, creates project credentials for project/sprint overrides or explicitly allowlisted global credentials for system integrations, and rewrites the source record without the original value. Repeated startup is idempotent because migrated records contain references only. Environment and legacy `settings.json` hints enter through this same migration boundary instead of being copied into settings responses. If the secure key provider or a valid project scope is unavailable, plaintext is scrubbed and resolution fails closed; there is no settings fallback.
 
+The dashboard import-sources endpoint exposes only boolean source, credential, and provider availability metadata. Raw migration values never enter system, project, effective-settings, MCP, snapshot, log, or rendered dashboard payloads, and the dashboard does not offer secret-prefill or copy-to-settings controls.
+
 Fresh settings startup does not initialize the secure key provider unless plaintext credentials or external credential hints actually require migration. This keeps Electron startup independent of OS keychain availability until encrypted storage is needed.
 
 Runtime settings consumers resolve a reference with the active project, an explicit consumer binding key, and the `read` capability. The broker reuses its scope, allowlist, status, capability, audit, and compare-and-swap checks, and the decrypted buffer is zeroed immediately after the bounded consumer callback completes or throws.

@@ -1,4 +1,4 @@
-import type { DashboardSettings, ExternalSettingsHints, VirtualWorkerProvider } from "../contracts/app-types.js";
+import type { DashboardSettings, VirtualWorkerProvider } from "../contracts/app-types.js";
 import type { OnboardingStateRecord } from "../domain/user/onboarding-state.js";
 import type {
   EffectiveSettingsResponse,
@@ -99,13 +99,11 @@ export class SettingsRepository {
   private static resolutionRevision = 0;
 
   private readonly storage: SettingsDbStorage;
-  private readonly externalHints: ExternalSettingsHints | undefined;
   private readonly resolutionCache = new SettingsResolutionCache();
   private resolutionCacheRevision = SettingsRepository.resolutionRevision;
 
-  constructor(dbPath?: string, externalHints?: ExternalSettingsHints) {
+  constructor(dbPath?: string, _legacyExternalHints?: unknown) {
     this.storage = new SettingsDbStorage(dbPath);
-    this.externalHints = externalHints;
   }
 
   getSystemSettings(): SystemSettings {
@@ -120,7 +118,7 @@ export class SettingsRepository {
 
     const payload = this.storage.readSystemPayload();
     if (!payload) {
-      SettingsRepository.systemSettingsCache = buildDefaultSystemSettings(this.externalHints);
+      SettingsRepository.systemSettingsCache = buildDefaultSystemSettings();
       return SettingsRepository.systemSettingsCache;
     }
 
@@ -136,16 +134,16 @@ export class SettingsRepository {
         // the new 5/5 profile.
         this.invalidateResolutionCache();
       }
-      SettingsRepository.systemSettingsCache = sanitizeSystemSettings(parsed, this.externalHints);
+      SettingsRepository.systemSettingsCache = sanitizeSystemSettings(parsed);
       return SettingsRepository.systemSettingsCache;
     } catch {
-      SettingsRepository.systemSettingsCache = buildDefaultSystemSettings(this.externalHints);
+      SettingsRepository.systemSettingsCache = buildDefaultSystemSettings();
       return SettingsRepository.systemSettingsCache;
     }
   }
 
   saveSystemSettings(input: SystemSettings): SystemSettings {
-    const normalized = sanitizeSystemSettings(input, this.externalHints);
+    const normalized = sanitizeSystemSettings(input);
     this.storage.writeSystemPayload(JSON.stringify(normalized));
     SettingsRepository.systemSettingsCache = normalized;
     this.invalidateResolutionCache();
@@ -219,7 +217,7 @@ export class SettingsRepository {
   saveProjectSettings(projectId: string, patch: ProjectSettingsOverride): ProjectSettingsOverride {
     const systemSettings = this.getSystemSettings();
     const base = systemSettings.defaults;
-    const normalized = toProjectSettingsOverride(base, patch, systemSettings.integrations, this.externalHints);
+    const normalized = toProjectSettingsOverride(base, patch, systemSettings.integrations);
     this.storage.writeProjectPayload(projectId, JSON.stringify(normalized));
     this.invalidateResolutionCache();
     return normalized;
@@ -254,7 +252,7 @@ export class SettingsRepository {
 
   saveSprintSettings(sprintId: string, baseProjectSettings: ProjectSettings, patch: SprintSettingsOverride): SprintSettingsOverride {
     const systemSettings = this.getSystemSettings();
-    const normalized = toSprintSettingsOverride(baseProjectSettings, patch, systemSettings.integrations, this.externalHints);
+    const normalized = toSprintSettingsOverride(baseProjectSettings, patch, systemSettings.integrations);
     this.storage.writeSprintPayload(sprintId, JSON.stringify(normalized));
     this.invalidateResolutionCache();
     return normalized;
@@ -406,7 +404,7 @@ export class SettingsRepository {
         enableDebugLogFile?: boolean;
         consoleLogLevel?: unknown;
       };
-      const defaults = buildDefaultProjectSettings(this.externalHints);
+      const defaults = buildDefaultProjectSettings();
       const systemSettings = sanitizeSystemSettings({
         runtime: {
           dashboardPort: legacySettings.dashboardPort,
@@ -481,7 +479,7 @@ export class SettingsRepository {
           skills: legacySettings.skills || defaults.skills,
         },
         mcpTools: legacySettings.mcpTools,
-      }, this.externalHints);
+      });
 
       // Preserve legacy values only in the raw migration hand-off. Public reads
       // use the sanitized object above, and startup immediately moves these

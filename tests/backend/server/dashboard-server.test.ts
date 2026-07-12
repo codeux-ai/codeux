@@ -387,6 +387,29 @@ describe("setupDashboardServer", () => {
     }
   });
 
+  it("returns metadata-only external credential hints", async () => {
+    const sentinel = "SENTINEL_ENDPOINT_SECRET_DO_NOT_EXPOSE";
+    const app = express();
+    configureDashboardApp(buildDashboardTestOptions({
+      app,
+      getExternalSettingsHints: () => ({
+        env: { julesApiKey: sentinel },
+        settingsJson: { githubToken: sentinel },
+        resolved: { julesApiKey: sentinel, githubToken: sentinel },
+      }),
+    }));
+
+    const response = await httpRequestMock(app).get("/api/settings/import-sources");
+    const serialized = JSON.stringify(response.body);
+
+    expect(response.status).toBe(200);
+    expect(response.body.sourceAvailability).toEqual({ environment: true, settingsJson: true });
+    expect(response.body.credentialAvailability).toMatchObject({ julesApiKey: true, githubToken: true });
+    expect(serialized).not.toContain(sentinel);
+    expect(serialized).not.toContain('"resolved"');
+    expect(serialized).not.toContain('"env"');
+  });
+
   it("returns sanitized validation errors for crafted instruction file ids", async () => {
     const app = express();
     const readInstructionFile = vi.fn((_projectId: string, fileId: string) => {

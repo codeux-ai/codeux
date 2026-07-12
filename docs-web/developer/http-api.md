@@ -108,7 +108,7 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 | `PUT` | `/api/sprints/:sprintId/settings` | Replace sprint settings. |
 | `DELETE` | `/api/sprints/:sprintId/settings` | Reset sprint settings. |
 | `GET` | `/api/projects/:projectId/sprints/:sprintId/settings/effective` | Merged effective. |
-| `GET` | `/api/settings/import-sources` | External settings hints (env, gh CLI). |
+| `GET` | `/api/settings/import-sources` | Metadata-only legacy credential source and provider availability. |
 | `GET` | `/api/onboarding/readiness` | First-run Docker readiness checks and installer metadata. |
 | `GET` | `/api/runtime-assets/status` | Managed runtime and provider CLI preparation/update status. |
 | `POST` | `/api/provider-tools/:provider/prepare` | Idempotently begin or join preparation for a supported local CLI provider. |
