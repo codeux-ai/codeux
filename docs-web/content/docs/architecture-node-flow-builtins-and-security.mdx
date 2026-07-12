@@ -12,9 +12,11 @@ The governed catalog adds deterministic branches, bounded collection processing,
 
 ## Network policy
 
-HTTP nodes and future custom nodes use the same `EgressPolicyService`. HTTPS is required unless HTTP is explicitly enabled. Private, loopback, link-local, metadata, multicast, and other non-public addresses remain blocked in both modes. Credentials in URLs and raw restricted headers are rejected.
+HTTP nodes and custom nodes use the same `EgressPolicyService`. HTTPS is required unless HTTP is explicitly enabled. Private, loopback, link-local, metadata, multicast, and other non-public addresses remain blocked in both modes. Credentials in URLs and raw restricted headers are rejected.
 
 Every redirect is manually revalidated. DNS is checked for private results and rebinding. Host and port allowlists, response-size and content-type limits, propagated cancellation and timeouts, capped retries, idempotency requirements for unsafe retry, normalized headers, and per-key rate windows keep requests bounded.
+
+Custom-node containers remain network-none. A declared `network.http` capability adds only a per-invocation authenticated Unix-socket mount that delegates typed requests to this policy service; undeclared nodes receive neither the socket nor its token.
 
 ## OAuth, approvals, and outbox
 
