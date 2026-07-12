@@ -49,26 +49,16 @@ const renderInspector = (node: NodeCanvasNode | null, graph = createInitialNodeC
 };
 
 describe("nodes inspector panels", () => {
-  it("emits typed add-node actions from the palette", async () => {
+  it("emits governed registry definitions from the palette", async () => {
     const user = userEvent.setup();
     const onCreateNode = vi.fn();
 
-    render(<NodePalette onCreateNode={onCreateNode} />);
+    const definitions = [{ type: "output", version: 1, executable: true, executionKind: "local" as const, label: "Output", description: "Return output", category: "Core", credentials: [], capabilities: [], sideEffect: "none" as const, ports: [] }];
+    render(<NodePalette definitions={definitions} onCreateNode={onCreateNode} />);
 
-    await user.click(screen.getByRole("button", { name: "Add Agent node" }));
     await user.click(screen.getByRole("button", { name: "Add Output node" }));
 
-    expect(onCreateNode).toHaveBeenNthCalledWith(1, {
-      type: "add_node",
-      kind: "agent",
-      label: "Agent Node",
-      metadata: { agentIntent: "implement" },
-    });
-    expect(onCreateNode).toHaveBeenNthCalledWith(2, {
-      type: "add_node",
-      kind: "output",
-      label: "Output Node",
-    });
+    expect(onCreateNode).toHaveBeenCalledWith(definitions[0]);
   });
 
   it("renders an accessible empty-selection state", () => {

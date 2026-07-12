@@ -74,6 +74,14 @@ Code UX is a container-first multi-provider runtime with an integrated dashboard
 - `src/shared/logging/logger.ts`
 - `src/shared/logging/correlation-id.ts`
 
+### 9. Authenticated headless automation boundary
+
+- `src/services/headless-auth-service.ts` resolves local, trusted-proxy, or digest-backed service principals and applies role/project authorization before dashboard administrative routes.
+- `src/services/headless-operational-readiness-service.ts` combines encrypted-data key recovery, durable audit storage, and runner identity checks. The server asserts key recovery before binding listeners.
+- `src/services/automation-audit-export-service.ts` persists correlation-linked, recursively redacted audit rows and exports bounded NDJSON.
+- `src/services/distributed-node-flow-runner-service.ts` grants compare-and-set leases only to project-scoped `automation_runner` service principals.
+- `src/services/automation-slo-service.ts` publishes bounded management latency/error and delivery baselines.
+
 ## Runtime Architecture Diagram
 
 ```mermaid

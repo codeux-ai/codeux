@@ -1,5 +1,28 @@
 # Operations Runbook
 
+## Authenticated automation recovery drills
+
+Run these drills against the approved local test project with mocked job/email boundaries only:
+
+Run the complete offline drill with one command. It uses a temporary file-backed SQLite database, the checked-in 20-record fixture, an authenticated MCP authoring context, authenticated in-process HTTP routes, and mocked job, email, and Docker command boundaries. Generated custom-node code is validated and executed only through the custom-node container service; the test never evaluates it in the Code UX process, starts Docker, dispatches a sprint, invokes a live provider, or requires network access.
+
+```bash
+pnpm run test:e2e:credentialed-automation
+```
+
+1. In the authenticated agent/conversation context, call `manage_node_flows` to generate and validate the custom node, then create, patch, validate, and publish the flow through the governed approval handshake. Configure the jobs credential separately through the credential broker; graph JSON contains only its opaque id.
+2. Start pinned version 2 through `NodeFlowRuntimeService.runFlow`, interrupt it at an active pre-invocation node, expire its lease, close SQLite, and reopen the same database. Recovery must requeue that run, and `resumeRun` must retain its run id, publication id, node run, and attempt instead of creating a duplicate attempt.
+3. Let the custom-node runtime cross the mocked Docker command boundary and have the mocked jobs API return exactly 20 records. Approve each of the five selected messages in sequence; pending approvals cannot resume, while approved decisions continue the same run and deliver through the durable outbox.
+4. Confirm the mocked email provider receives five unique idempotency keys, exactly once each. Exercise mocked job/email unavailability, a missing credential id, credential rotation, and revocation without allowing a live external request.
+5. Roll back to the earlier publication and publish it as the latest version. The completed run must remain pinned to version 2 while latest selection resolves the new rollback publication.
+6. Stop the key provider with encrypted rows present. `/health` must remain live, `/ready` must return `503`, and startup readiness must refuse execution. Confirm unauthorized and unauthenticated project requests fail.
+
+The executable drill checks zero canary disclosure across MCP responses, stored graphs, node attempts, invocation messages, audit export, structured logs, custom-node diagnostics, and final run summaries. Recovery automatically replays only an attempt that has no external invocation id; an expired externally observable attempt remains attention-required because its outcome is unknown.
+
+Record the backup timestamp, database integrity result, key ids/versions (never key material), last audit id, active lease count, outbox status counts, and rollback publication id. A drill passes only with 20 processed fixture records, the expected selected-message count, no duplicate provider ids/idempotency keys, and no secret canary in any exported artifact.
+
+Alert response starts by disabling runner identities, preserving the database/WAL and audit export, and checking `/api/admin/readiness` plus `/api/admin/metrics/slo`. Do not delete attention-required attempts or manually mark uncertain outbox rows sent; reconcile them with the mocked/provider idempotency record first.
+
 This runbook covers day-to-day operation and incident handling for the MCP server and dashboard.
 
 ## Normal Startup Procedure

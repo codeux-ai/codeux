@@ -143,14 +143,17 @@ Runtime behavior:
 
 ## Node Flow Tools
 
-`manage_node_flows` uses `NodeFlowService` as the MCP backend boundary. The action layer parses MCP payloads, applies optional widget schemas into the graph, masks secret-shaped response fields, and delegates graph validation, persistence, run inspection, runtime execution, and agent skill attachments to the service.
+`manage_node_flows` uses `NodeFlowService` as the MCP backend boundary. The thin action layer parses MCP payloads and delegates catalog lookup, optimistic drafts, validation/policy review, credential metadata, publication/version operations, run controls, custom-node authoring, and attachments. Governed responses use graph summaries unless a legacy project-manager `get` explicitly requests the stored flow.
 
 Runtime behavior:
 
-- `create` and `update` validate graph specs before repository writes.
+- `create_draft` and `patch_draft` append immutable versions without auto-publication; stale `draftRevision` values return structured conflicts without writes. Legacy `create` and `update` retain auto-publication compatibility.
+- `dry_run` never invokes the runtime; it reports validation, policy, credential, capability, and side-effect findings with redacted simulated output.
+- `publish` and `rollback` use the stateful exact-payload approval handshake. Runtime execution always resolves a publication.
 - `run` calls the configured node-flow runtime through `NodeFlowService.runFlow`.
+- `cancel`, `retry`, and `inspect_run` operate on project-owned durable run records.
 - `delete` uses the same stateful approval handshake as other destructive management actions.
-- `attach_to_agent` and `detach_from_agent` manage flow-backed skill attachments for agent presets; the agent still needs explicit MCP access if it should call `manage_node_flows` itself.
+- Attachments automatically expose only `run_attached_flow` to the owning agent. That operation verifies project, attachment, publication, and credential policy and records initiating agent/conversation metadata; it does not grant `manage_node_flows` or expose graphs/secrets.
 
 ## Custom MCP Defaults
 

@@ -546,25 +546,45 @@ describe("ManagementToolHandler", () => {
     const properties = schema?.properties ?? {};
 
     expect(properties.action?.enum).toEqual([
+      "catalog",
+      "get_node_definition",
+      "create_draft",
+      "patch_draft",
+      "validate_draft",
+      "create_custom_node",
+      "update_custom_node",
+      "validate_custom_node",
+      "request_credential",
+      "inspect_bindings",
+      "dry_run",
+      "publish",
+      "compare_versions",
+      "rollback",
+      "run",
+      "cancel",
+      "retry",
+      "inspect_run",
+      "list_runs",
       "list",
       "get",
       "create",
       "update",
       "delete",
       "validate",
-      "run",
-      "list_runs",
       "get_run",
       "attach_to_agent",
       "detach_from_agent",
+      "attach",
+      "detach",
     ]);
     expect(properties.graph).toMatchObject({ type: "object" });
     expect(properties.widgets).toMatchObject({ type: "object" });
     expect(properties.input).toMatchObject({ type: "object" });
     expect(properties.agentPresetId).toMatchObject({ type: "string" });
     expect(properties.skillAlias).toMatchObject({ type: "string" });
-    expect(tool?.description).toContain("Code UX-adapted flows");
-    expect(tool?.description).toContain("dynamic widget schemas");
+    expect(properties.draftRevision).toMatchObject({ type: "integer", minimum: 1 });
+    expect(properties.operations).toMatchObject({ type: "array" });
+    expect(tool?.description).toContain("Govern node-flow authoring");
   });
 
   it("exposes the dedicated long-term-memory MCP schema", () => {

@@ -1,5 +1,5 @@
 import type { ToolName as ContractToolName } from "../../contracts/mcp-tool-definitions.js";
-import type { ManageCodeUxArgs, ManageProjectsArgs, ManageSprintsArgs, ManageTasksArgs, ManageQuicksprintsArgs, ManageSchedulerArgs, SchedulerArgs, ManageAgentsArgs, ManageNodeFlowsArgs, ManageMemoryArgs, AddLongTermMemoryArgs, ManageSkillsArgs, ManageSettingsArgs, ManagePreviewArgs, ManageCustomDashboardsArgs, ManageChatProvidersArgs, ManageTelemetryArgs, SearchKnowledgeArgs, SearchSkillsArgs, RequestClarificationArgs, ReplyToClarificationArgs } from "../../contracts/internal-management-types.js";
+import type { ManageCodeUxArgs, ManageProjectsArgs, ManageSprintsArgs, ManageTasksArgs, ManageQuicksprintsArgs, ManageSchedulerArgs, SchedulerArgs, ManageAgentsArgs, ManageNodeFlowsArgs, ManageMemoryArgs, AddLongTermMemoryArgs, ManageSkillsArgs, ManageSettingsArgs, ManagePreviewArgs, ManageCustomDashboardsArgs, ManageChatProvidersArgs, ManageTelemetryArgs, SearchKnowledgeArgs, SearchSkillsArgs, RequestClarificationArgs, ReplyToClarificationArgs, RunAttachedFlowArgs } from "../../contracts/internal-management-types.js";
 import type { PullWorkerTaskDispatchArgs, RegisterExternalWorkerEndpointArgs, UpdateWorkerTaskDispatchArgs } from "../../services/worker-task-dispatch-service.js";
 
 export interface McpToolArgsByName {
@@ -14,6 +14,7 @@ export interface McpToolArgsByName {
   scheduler_code_ux: SchedulerArgs;
   manage_agents: ManageAgentsArgs;
   manage_node_flows: ManageNodeFlowsArgs;
+  run_attached_flow: RunAttachedFlowArgs;
   manage_memory: ManageMemoryArgs;
   add_long_term_memory: AddLongTermMemoryArgs;
   manage_skills: ManageSkillsArgs;

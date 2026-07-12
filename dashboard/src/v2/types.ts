@@ -126,6 +126,7 @@ import type {
   UpdateSchedulerEntryInput,
 } from "../../../src/contracts/scheduler-types.js";
 import type {
+  AutomationApprovalRecord,
   AttachNodeFlowSkillInput,
   CreateNodeFlowInput,
   NodeFlowEdge,
@@ -139,6 +140,13 @@ import type {
   NodeFlowNodeRunListResponse,
   NodeFlowNodeRunRecord,
   NodeFlowNodeRunStatus,
+  NodeFlowNodeAttemptRecord,
+  NodeFlowDraftReview,
+  NodeFlowConcurrencyConflict,
+  NodeFlowRequiredCredential,
+  NodeFlowPolicyFinding,
+  PatchNodeFlowDraftInput,
+  NodeFlowPublicationRecord,
   NodeFlowRecord,
   NodeFlowRunListResponse,
   NodeFlowRunRecord,
@@ -154,6 +162,7 @@ import type {
   NodeWidgetSelectOption,
   UpdateNodeFlowInput,
 } from "../../../src/contracts/node-flow-types.js";
+import type { NodeDefinitionManifest } from "../../../src/contracts/node-definition-types.js";
 import type {
   CreateCustomDashboardDraftInput,
   CreateCustomDashboardRevisionInput,
@@ -470,6 +479,7 @@ export type {
   SpeechTranscriptionProvider,
   SpeechTranscriptionRequestMetadata,
   SpeechTranscriptionResult,
+  AutomationApprovalRecord,
   AttachNodeFlowSkillInput,
   CreateNodeFlowInput,
   NodeFlowEdge,
@@ -483,6 +493,13 @@ export type {
   NodeFlowNodeRunListResponse,
   NodeFlowNodeRunRecord,
   NodeFlowNodeRunStatus,
+  NodeFlowNodeAttemptRecord,
+  NodeFlowDraftReview,
+  NodeFlowConcurrencyConflict,
+  NodeFlowRequiredCredential,
+  NodeFlowPolicyFinding,
+  PatchNodeFlowDraftInput,
+  NodeFlowPublicationRecord,
   NodeFlowRecord,
   NodeFlowRunListResponse,
   NodeFlowRunRecord,
@@ -497,6 +514,7 @@ export type {
   NodeWidgetSchema,
   NodeWidgetSelectOption,
   UpdateNodeFlowInput,
+  NodeDefinitionManifest,
 };
 
 export type { SprintReviewSummary };

@@ -1,75 +1,29 @@
-# Nodes Canvas
+# Nodes Automation Workspace
 
-The **Nodes Canvas** page (`/nodes`) is a browser-local workspace for drafting Code UX workflow graphs. It composes the in-house node canvas, palette, inspector, validation panel, and agent command helpers without calling backend APIs or writing to the database.
+The **Nodes** page (`/nodes`) is a project-scoped Graph v2 authoring and operations workspace backed by the canonical node-flow repository. Select a project before using it: the page does not request a flow library, credential metadata, publications, or run history without an active project. Browser storage is not a workflow database and edits are never auto-saved locally.
 
-This page is a draft and exchange surface. It does not synchronize graphs to projects, execute n8n workflows, or run node flows through the Code UX runtime.
+The selected project's library is loaded from the backend. Creating and saving drafts writes to that project, and changing projects clears the current workspace before loading the next library. Saves include `draftRevision`; if another editor has advanced the draft, the backend returns a conflict and the page asks the operator to reload and reapply the change instead of overwriting it.
 
-## Local persistence
+## Legacy canvas import
 
-The page saves the current graph to browser `localStorage` under:
+On the first load for a selected project, the dashboard checks the former `codeux:nodes-canvas:v1` key. When present, it normalizes the payload to Graph v2, creates an **Imported Nodes Canvas** backend draft, records a project-specific migration marker, and removes the legacy graph value. A failed import leaves the value available for retry. The marker prevents duplicates. After this one-time bridge, local storage is not read or written as the workflow source of truth.
 
-```text
-codeux:nodes-canvas:v1
-```
+## Governed editing
 
-The stored value is the deterministic JSON produced by `serializeNodeCanvasGraph`. Reloading `/nodes` restores that graph when it can be parsed through the same canvas contract. Malformed persisted data falls back to the starter graph.
+The versioned definition registry supplies the palette, executable state, typed ports, configuration and widget schemas, capabilities, credential slots, side-effect classification, and default retry/timeout policy. The inspector is rendered from the selected definition rather than a hard-coded node form. The graph stores a type/version reference, non-secret configuration, and credential ids; it never stores custom source or credential values.
 
-The enabled switch in the inspector is an editing-session flag only. It is not part of the persisted graph contract.
+Credential slots show metadata-only states such as bound, missing, or denied and can submit a binding request. Secret material stays behind the credential broker and is excluded from graphs, browser output, logs, and examples.
 
-## Node types
+Validation and dry run report structural issues, requested capabilities, credential requirements, side-effect differences, and policy findings. Dry run is review-only and does not execute nodes. Publication requires the current draft revision, a valid graph with no error-level policy findings, and all declared credential requirements bound. Publications are immutable; comparison and rollback operate on versioned snapshots.
 
-The palette creates five node templates:
+## Executable definitions
 
-| Type | Purpose |
-| --- | --- |
-| `trigger` | Starts the graph from a manual or scheduled event source. |
-| `agent` | Routes downstream work to a planning, implementation, review, or QA agent intent. |
-| `task` | Captures a concrete task prompt and task intent. |
-| `condition` | Branches based on an expression such as a validation result. |
-| `output` | Collects the final graph result. |
+The governed built-ins currently registered with runtime handlers are `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, `condition`, `switch`, `foreach`, `merge`, `delay`, `approval`, `email_draft`, `email_send`, `execute_subflow`, `webhook_trigger`, and `output`.
 
-Each node has stable input and output ports, editable labels and descriptions, typed config fields, metadata intents where applicable, and a fixed canvas position.
+Validated custom definitions may also execute after their versioned manifest and immutable artifact are registered and the custom-node runtime is configured. A palette mockup, legacy `trigger`/`agent`/`task` canvas kind, unknown type, or definition marked non-executable is a planning or unavailable definition, not an executable handler.
 
-## Validation behavior
+## Operations
 
-The page runs `validateNodeCanvasGraph` after every graph change. Validation is local and structural. It checks for:
+Only published versions run. The debugger shows redacted run output, graph and node states, attempts, retry classifications and decisions, approval state, invocation links, timing, cancellation, and safe retry controls. Approval decisions resume or terminate the same pinned durable run. Scheduling is entered through the Scheduler page and targets a pinned or latest-published version.
 
-- duplicate node ids
-- missing edge source or target nodes
-- missing edge source or target ports
-- self-connections
-- input/output direction mismatches
-- incompatible port types
-- empty required labels or config values
-- invalid agent or task intent metadata
-
-The status strip reports the current issue count. The validation panel groups issues by affected node or edge and exposes select/focus actions so operators can move directly to the problem entity. Validation errors do not prevent export; invalid imported graphs can be loaded when the JSON shape is valid so users can repair them on the canvas.
-
-## Import and export format
-
-`Export JSON` writes the current serialized graph into the exchange textarea. The JSON contains:
-
-- `nodes`: node ids, kinds, labels, descriptions, positions, ports, config fields, and metadata
-- `edges`: edge ids plus source and target node/port endpoints
-- `selection`: selected node and edge ids
-
-`Import JSON` routes the textarea content through the agent helper `replace_graph` command. Invalid JSON leaves the current graph unchanged and reports a live error. Valid JSON is normalized before it replaces the canvas and is immediately revalidated.
-
-## Agent command surface
-
-Agents should use `dashboard/src/v2/lib/nodes-agent-surface.ts` instead of driving the UI. The supported command names are:
-
-- `add_node`
-- `patch_node`
-- `connect_ports`
-- `delete_entities`
-- `select_entities`
-- `replace_graph`
-
-The page displays the deterministic `buildNodeCanvasAgentSummary` output so agents can inspect node counts, edge counts, selected ids, ports, config values, and validation blockers in a command-friendly shape. Import uses the same command path, so autonomous graph changes and human JSON exchange share reducer-backed normalization and validation.
-
-## Empty, reset, and no-selection states
-
-`Clear` replaces the graph with an empty canvas. The canvas and inspector show empty/no-selection states, while the palette remains available for recovery. `Reset` restores the starter trigger -> agent -> task -> condition -> output graph and refreshes the exchange JSON.
-
-The page uses responsive grid columns that collapse into a single column at smaller widths so the palette, canvas, inspector, validation panel, and JSON exchange controls remain reachable without overlapping.
+Outside development builds, the workspace is exposed only when the Nodes feature flag and both node-flow backend and automation-security prerequisites are enabled. Execution also depends on the services required by a definition: for example, a configured provider for `provider_prompt`, allowed egress for `http_request`, approval and outbox services for governed email sending, webhook configuration for webhook ingress, and the custom-node runtime for registered custom definitions. Availability is not a claim that every integration is configured for production.

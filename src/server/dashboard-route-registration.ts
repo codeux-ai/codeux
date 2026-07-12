@@ -29,10 +29,13 @@ import { registerUpdateStatusRoutes } from "./update-status-routes.js";
 import { registerMemoryRoutes } from "./memory-routes.js";
 import { registerKnowledgeRoutes } from "./knowledge-routes.js";
 import { registerDocsWebRoutes } from "./docs-web-routes.js";
+import { registerHeadlessOperationsRoutes } from "./headless-operations-routes.js";
+import { registerAutomationCredentialRoutes } from "./automation-credential-routes.js";
 import { registerChatProviderRoutes } from "./chat-provider-routes.js";
 import { registerChatProviderIngressRoutes } from "./chat-provider-ingress-routes.js";
 import { registerSpeechRoutes } from "./speech-routes.js";
 import { registerNodeFlowRoutes } from "./node-flow-routes.js";
+import { registerNodeFlowWebhookRoutes } from "./node-flow-webhook-routes.js";
 import { registerCustomDashboardRoutes } from "./custom-dashboard-routes.js";
 
 export interface DashboardRouteRegistrationOptions {
@@ -110,6 +113,7 @@ const registerPreviewRouteGroup = (app: Express, deps: DashboardDependencies): v
 
 const registerSettingsRouteGroup = (app: Express, deps: DashboardDependencies, liveActivityCacheMs: number): void => {
   registerSettingsRoutes(app, deps, liveActivityCacheMs);
+  registerAutomationCredentialRoutes(app, deps);
   registerChatProviderRoutes(app, deps);
   registerChatProviderIngressRoutes(app, deps);
 };
@@ -119,6 +123,7 @@ const registerProjectConfigurationRouteGroup = (app: Express, deps: DashboardDep
   registerAgentPresetRoutes(app, deps);
   registerInstructionFileRoutes(app, deps);
   registerNodeFlowRoutes(app, deps);
+  registerNodeFlowWebhookRoutes(app, deps);
   registerCustomDashboardRoutes(app, deps);
 };
 
@@ -133,6 +138,7 @@ const registerSystemIntegrationRouteGroup = (app: Express, deps: DashboardDepend
   registerGitProviderRoutes(app, deps);
   registerUpdateStatusRoutes(app, deps);
   registerDocsWebRoutes(app);
+  registerHeadlessOperationsRoutes(app, deps);
 };
 
 const registerSpeechRouteGroup = (app: Express, deps: DashboardDependencies): void => {

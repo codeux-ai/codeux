@@ -49,6 +49,7 @@ import type {
 } from "../../../lib/chat-provider-api.js";
 import { isDeprecatedProvider, providerLifecycle } from "../../../lib/provider-lifecycle.js";
 import { LocalFilePickerField } from "../LocalFilePickerField.js";
+import { AutomationCredentialManager } from "../AutomationCredentialManager.js";
 
 type PublicProviderId = Exclude<ProviderId, "mockup-cli">;
 
@@ -1823,6 +1824,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
 
   return (
     <div className="flex flex-col gap-5">
+      {state.selectedProject?.id ? <AutomationCredentialManager projectId={state.selectedProject.id} /> : null}
       <SectionCard
         title="Integrations"
         watermark="INT"

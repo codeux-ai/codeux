@@ -12,6 +12,7 @@ import type {
   NodeCanvasValidationIssue,
 } from "./nodes-canvas-state.js";
 import {
+  deserializeNodeCanvasGraphWithMigration,
   nodesCanvasReducer,
   normalizeNodeCanvasGraph,
   validateNodeCanvasGraph,
@@ -278,8 +279,8 @@ const applyParsedCommand = (
       return nextGraph;
     }
     case "replace_graph": {
-      const parsed = JSON.parse(command.serializedGraph) as unknown;
-      return nodesCanvasReducer(graph, { type: "replace_graph", graph: normalizeNodeCanvasGraph(parsed) });
+      const migration = deserializeNodeCanvasGraphWithMigration(command.serializedGraph);
+      return nodesCanvasReducer(graph, { type: "replace_graph", graph: migration.graph });
     }
   }
 };

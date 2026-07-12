@@ -62,6 +62,10 @@ import type { SpeechTranscriptionService } from "../../services/speech-transcrip
 import type { SpeechSynthesisService } from "../../services/speech-synthesis-service.js";
 import type { SpeechModelManager } from "../../services/speech-model-manager.js";
 import type { NodeFlowService } from "../../services/node-flow-service.js";
+import type { HeadlessAuthService } from "../../services/headless-auth-service.js";
+import type { AutomationAuditExportService } from "../../services/automation-audit-export-service.js";
+import type { HeadlessOperationalReadinessService } from "../../services/headless-operational-readiness-service.js";
+import type { AutomationSloService } from "../../services/automation-slo-service.js";
 import type { MemoryService } from "../../services/memory-service.js";
 import type { KnowledgeService } from "../../services/knowledge-service.js";
 import type { MemoryPromotionService } from "../../services/memory-promotion-service.js";
@@ -139,6 +143,10 @@ export interface BootDashboardDeps {
   speechModelManager: SpeechModelManager;
   chatProviderOutboundService?: ChatProviderOutboundService;
   nodeFlowService?: NodeFlowService;
+  headlessAuthService: HeadlessAuthService;
+  automationAuditService: AutomationAuditExportService;
+  headlessReadinessService: HeadlessOperationalReadinessService;
+  automationSloService: AutomationSloService;
   customDashboardRepository?: CustomDashboardRepository;
   customDashboardValidationService?: CustomDashboardValidationService;
   skillService: SkillService;
@@ -494,6 +502,10 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     speechSynthesisService: deps.speechSynthesisService,
     speechModelManager: deps.speechModelManager,
     nodeFlowService: deps.nodeFlowService,
+    headlessAuthService: deps.headlessAuthService,
+    automationAuditService: deps.automationAuditService,
+    headlessReadinessService: deps.headlessReadinessService,
+    automationSloService: deps.automationSloService,
     customDashboardRepository: deps.customDashboardRepository,
     customDashboardValidationService: deps.customDashboardValidationService,
     skillService: deps.skillService,

@@ -7,6 +7,8 @@ import type {
   NodeFlowNode,
   NodeFlowSkillAttachment,
   NodeFlowValidationResponse,
+  NodeDefinitionManifest,
+  NodeFlowRequiredCredential,
 } from "../../types.js";
 import {
   applyWidgetDefaults,
@@ -21,10 +23,16 @@ interface NodeFlowInspectorProps {
   attachments: NodeFlowSkillAttachment[];
   attachAgentId: string;
   attaching?: boolean;
+  attachmentsLoading?: boolean;
+  attachmentError?: string | null;
   onAttachAgentIdChange: (agentPresetId: string) => void;
   onAttachAgent: () => void;
   onDetachAgent: (agentPresetId: string) => void;
+  onRetryAttachments?: () => void;
   onNodeChange: (nodeId: string, update: Partial<NodeFlowNode>) => void;
+  definition?: NodeDefinitionManifest | null;
+  requiredCredentials?: NodeFlowRequiredCredential[];
+  onRequestCredential?: (nodeId: string, slot: string) => void;
 }
 
 const inputClass = "w-full rounded-xl border border-black/[0.08] bg-white/75 px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition focus:border-signal-500/50 focus:ring-2 focus:ring-signal-500/20 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-100";
@@ -36,10 +44,16 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
   attachments,
   attachAgentId,
   attaching = false,
+  attachmentsLoading = false,
+  attachmentError = null,
   onAttachAgentIdChange,
   onAttachAgent,
   onDetachAgent,
+  onRetryAttachments,
   onNodeChange,
+  definition = null,
+  requiredCredentials = [],
+  onRequestCredential,
 }) => {
   const messagesByField = buildValidationMessagesByField(validation);
 
@@ -51,7 +65,8 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
     );
   }
 
-  const data = applyWidgetDefaults(selectedNode.widgetSchema, selectedNode.data);
+  const widgetSchema = definition?.ui.widgetSchema ?? selectedNode.widgetSchema;
+  const data = applyWidgetDefaults(widgetSchema, selectedNode.data);
 
   const updateDataField = (fieldId: string, value: NodeFlowJsonValue): void => {
     onNodeChange(selectedNode.id, {
@@ -79,14 +94,11 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
             onInput={(event) => onNodeChange(selectedNode.id, { title: event.currentTarget.value })}
           />
         </label>
-        <label className="flex flex-col gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-          Type
-          <input
-            className={inputClass}
-            value={selectedNode.type}
-            onInput={(event) => onNodeChange(selectedNode.id, { type: event.currentTarget.value })}
-          />
-        </label>
+        <div className="rounded-xl border border-black/[0.06] bg-white/55 p-3 text-xs text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03]">
+          <p className="font-bold text-slate-800 dark:text-slate-100">{definition?.ui.label ?? selectedNode.type} · v{definition?.version ?? selectedNode.definition?.version ?? 1}</p>
+          <p className="mt-1">{definition?.ports.length ?? selectedNode.ports?.length ?? 0} typed ports · {definition?.sideEffect ?? selectedNode.sideEffect ?? "none"} side effects</p>
+          {(definition?.capabilities ?? selectedNode.capabilities ?? []).length ? <p className="mt-1 break-words">Capabilities: {(definition?.capabilities ?? selectedNode.capabilities ?? []).join(", ")}</p> : null}
+        </div>
         <label className="flex flex-col gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
           Description
           <textarea
@@ -99,12 +111,12 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
 
       <section className="flex flex-col gap-4 border-t border-black/[0.06] pt-4 dark:border-white/[0.06]" aria-labelledby="node-widgets-heading">
         <h3 id="node-widgets-heading" className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Widgets</h3>
-        {(selectedNode.widgetSchema?.fields.length ?? 0) === 0 ? (
+        {(widgetSchema?.fields.length ?? 0) === 0 ? (
           <p className="rounded-xl border border-black/[0.06] bg-white/55 px-3 py-3 text-sm text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03]">
             No widgets configured for this node.
           </p>
         ) : (
-          selectedNode.widgetSchema!.fields.map((field) => (
+          widgetSchema!.fields.map((field) => (
             <NodeWidgetField
               key={field.id}
               field={field}
@@ -116,13 +128,25 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
         )}
       </section>
 
-      <section className="flex flex-col gap-3 border-t border-black/[0.06] pt-4 dark:border-white/[0.06]" aria-labelledby="node-agent-attachments-heading">
+      <section className="flex flex-col gap-3 border-t border-black/[0.06] pt-4 dark:border-white/[0.06]" aria-labelledby="node-credentials-heading">
+        <h3 id="node-credentials-heading" className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Credential bindings</h3>
+        {requiredCredentials.length === 0 ? <p className="text-xs text-slate-500">This node does not request credentials.</p> : requiredCredentials.map((credential) => (
+          <div key={credential.slot} className="rounded-xl border border-black/[0.06] bg-white/60 p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
+            <div className="flex items-center justify-between gap-3"><span className="text-sm font-bold text-slate-800 dark:text-slate-100">{credential.slot}</span><span className={`text-[10px] font-bold uppercase ${credential.status === "bound" ? "text-status-green" : "text-status-red"}`}>{credential.status}</span></div>
+            <p className="mt-1 text-xs text-slate-500">{credential.allowedKinds.join(", ")} · secret value never displayed</p>
+            {credential.status !== "bound" && onRequestCredential ? <button type="button" className="mt-2 rounded-lg border border-signal-500/30 px-2.5 py-1.5 text-xs font-bold text-signal-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40" onClick={() => onRequestCredential(selectedNode.id, credential.slot)}>Request binding</button> : null}
+          </div>
+        ))}
+      </section>
+
+      <section className="flex flex-col gap-3 border-t border-black/[0.06] pt-4 dark:border-white/[0.06]" aria-labelledby="node-agent-attachments-heading" aria-busy={attachmentsLoading || attaching}>
         <h3 id="node-agent-attachments-heading" className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Agent Attachments</h3>
         <div className="flex gap-2">
           <select
             aria-label="Agent preset"
             className={inputClass}
             value={attachAgentId}
+            disabled={attachmentsLoading || attaching}
             onChange={(event) => onAttachAgentIdChange(event.currentTarget.value)}
           >
             <option value="">Select agent</option>
@@ -133,16 +157,23 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
           <button
             type="button"
             aria-label="Attach node flow to agent"
-            disabled={!attachAgentId || attaching}
+            disabled={!attachAgentId || attachmentsLoading || attaching}
             onClick={onAttachAgent}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-signal-500 text-white transition hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 disabled:opacity-50 dark:text-void-900"
           >
             <Link2 className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
-        {attachments.length === 0 ? (
+        {attachmentsLoading ? <p role="status" className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">Loading agent attachments…</p> : null}
+        {attachmentError ? (
+          <div role="alert" className="rounded-xl border border-status-red/20 bg-status-red/[0.06] p-3 text-xs text-status-red">
+            <p>{attachmentError}</p>
+            {onRetryAttachments ? <button type="button" className="mt-2 font-bold underline focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40" onClick={onRetryAttachments}>Retry attachments</button> : null}
+          </div>
+        ) : null}
+        {!attachmentsLoading && !attachmentError && attachments.length === 0 ? (
           <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">No agents attached.</p>
-        ) : (
+        ) : !attachmentsLoading && !attachmentError ? (
           <div className="flex flex-col gap-2">
             {attachments.map((attachment) => {
               const agent = agents.find((entry) => entry.id === attachment.agentPresetId);
@@ -155,6 +186,7 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
                   <button
                     type="button"
                     aria-label={`Detach ${agent?.name ?? attachment.agentPresetId}`}
+                    disabled={attaching}
                     className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-status-red/[0.08] hover:text-status-red focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40"
                     onClick={() => onDetachAgent(attachment.agentPresetId)}
                   >
@@ -164,7 +196,7 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
               );
             })}
           </div>
-        )}
+        ) : null}
       </section>
     </aside>
   );

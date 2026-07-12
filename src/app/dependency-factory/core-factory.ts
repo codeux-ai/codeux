@@ -66,6 +66,20 @@ import { SprintFileBrowserRepository } from "../../repositories/sprint-file-brow
 import { DockerService } from "../../services/docker-service.js";
 import { CustomDashboardRepository } from "../../repositories/custom-dashboard-repository.js";
 import { CustomDashboardValidationService } from "../../services/custom-dashboard-validation-service.js";
+import { AutomationCredentialRepository } from "../../repositories/automation-credential-repository.js";
+import { AutomationApprovalRepository } from "../../repositories/automation-approval-repository.js";
+import { AutomationOutboxRepository } from "../../repositories/automation-outbox-repository.js";
+import { AutomationWebhookTriggerRepository } from "../../repositories/automation-webhook-trigger-repository.js";
+import { CredentialBroker } from "../../services/credentials/credential-broker.js";
+import { MountedKeyFileProvider } from "../../infrastructure/security/mounted-key-file-provider.js";
+import { EncryptedSqliteSecretStore } from "../../infrastructure/security/encrypted-sqlite-secret-store.js";
+import { KmsKeyProviderAdapter, VaultKeyProviderAdapter } from "../../infrastructure/security/external-key-provider-adapters.js";
+import { getProcessCredentialKeyProvider } from "../../services/credentials/key-provider-registry.js";
+import type { KeyProvider } from "../../services/credentials/key-provider.js";
+import { HeadlessAuthService, loadHeadlessSecurityConfiguration } from "../../services/headless-auth-service.js";
+import { AutomationAuditExportService } from "../../services/automation-audit-export-service.js";
+import { HeadlessOperationalReadinessService } from "../../services/headless-operational-readiness-service.js";
+import { AutomationSloService } from "../../services/automation-slo-service.js";
 
 export interface CoreDependencies {
   providerRunner: IProviderRunner;
@@ -125,6 +139,15 @@ export interface CoreDependencies {
   sprintFileBrowserRepository: SprintFileBrowserRepository;
   customDashboardRepository: CustomDashboardRepository;
   customDashboardValidationService: CustomDashboardValidationService;
+  automationCredentialRepository: AutomationCredentialRepository;
+  automationApprovalRepository: AutomationApprovalRepository;
+  automationOutboxRepository: AutomationOutboxRepository;
+  automationWebhookTriggerRepository: AutomationWebhookTriggerRepository;
+  credentialBroker: CredentialBroker;
+  headlessAuthService: HeadlessAuthService;
+  automationAuditService: AutomationAuditExportService;
+  headlessReadinessService: HeadlessOperationalReadinessService;
+  automationSloService: AutomationSloService;
 }
 
 export function createCoreDependencies(
@@ -180,6 +203,33 @@ export function createCoreDependencies(
   const subtaskRepository = new SubtaskFileRepository();
   const sessionTracking = new SessionTrackingRepository();
   const appDbStorage = new AppDbStorage();
+  const automationCredentialRepository = new AutomationCredentialRepository(appDbStorage);
+  const automationApprovalRepository = new AutomationApprovalRepository(appDbStorage);
+  const automationOutboxRepository = new AutomationOutboxRepository(appDbStorage);
+  const automationWebhookTriggerRepository = new AutomationWebhookTriggerRepository(appDbStorage);
+  const securityConfiguration = loadHeadlessSecurityConfiguration();
+  const configuredKeyProvider = (): KeyProvider => {
+    const provider = process.env.CODE_UX_CREDENTIAL_KEY_PROVIDER?.trim().toLowerCase();
+    if (provider === "vault") return new VaultKeyProviderAdapter();
+    if (provider === "kms") return new KmsKeyProviderAdapter();
+    return new MountedKeyFileProvider(process.env.CODE_UX_CREDENTIAL_KEY_FILE);
+  };
+  const credentialKeyProvider = getProcessCredentialKeyProvider() ?? configuredKeyProvider();
+  const automationAuditService = new AutomationAuditExportService(appDbStorage);
+  const credentialBroker = new CredentialBroker(
+    automationCredentialRepository,
+    new EncryptedSqliteSecretStore(automationCredentialRepository, credentialKeyProvider),
+    credentialKeyProvider,
+    automationAuditService,
+  );
+  const headlessAuthService = new HeadlessAuthService(securityConfiguration);
+  const automationSloService = new AutomationSloService();
+  const headlessReadinessService = new HeadlessOperationalReadinessService({
+    credentialRepository: automationCredentialRepository,
+    keyProvider: credentialKeyProvider,
+    auditService: automationAuditService,
+    security: securityConfiguration,
+  });
   const dashboardRealtimeEventRepository = new DashboardRealtimeEventRepository(appDbStorage);
   const dashboardRealtimeService = new DashboardRealtimeService(
     dashboardRealtimeEventRepository,
@@ -286,7 +336,7 @@ export function createCoreDependencies(
   const schedulerRepository = new SchedulerRepository(appDbStorage, dashboardRealtimeService);
   const skillRepository = new SkillRepository(appDbStorage);
   const nodeFlowRepository = new NodeFlowRepository(appDbStorage, dashboardRealtimeService);
-  const nodeFlowService = new NodeFlowService(nodeFlowRepository);
+  const nodeFlowService = new NodeFlowService(nodeFlowRepository, undefined, credentialBroker);
   const embeddingService = new EmbeddingService();
   const embeddingModelManager = new EmbeddingModelManager(
     embeddingService,
@@ -391,5 +441,14 @@ export function createCoreDependencies(
     sprintFileBrowserRepository,
     customDashboardRepository,
     customDashboardValidationService,
+    automationCredentialRepository,
+    automationApprovalRepository,
+    automationOutboxRepository,
+    automationWebhookTriggerRepository,
+    credentialBroker,
+    headlessAuthService,
+    automationAuditService,
+    headlessReadinessService,
+    automationSloService,
   };
 }

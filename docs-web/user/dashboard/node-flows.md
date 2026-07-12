@@ -1,41 +1,53 @@
 # Node Flows
 
-The **Nodes** page (`/nodes`) is where dashboard users create and operate saved node-flow workflows for the active project. A node flow is a repeatable graph that can be validated, run manually, scheduled, inspected through persisted runs, and attached to project agents as a reusable skill.
+The **Nodes** page (`/nodes`) is the project-scoped backend authoring, publication, and operations surface for canonical node flows. No selected project means no flow library, credential metadata, publications, or durable run history are requested.
 
-## Flow Library And Canvas
+## Library, Drafts, And Migration
 
-The flow library lists project-owned flows. Selecting one opens an editable graph canvas with nodes, directed edges, positions, and node JSON data. The canvas is built into Code UX and is not a generic n8n importer; runtime execution supports Code UX node types rather than arbitrary external workflow nodes.
+The flow library contains backend drafts and publications owned by the active project. Saves include the loaded draft revision, so a concurrent edit produces a visible conflict and never overwrites newer work.
 
-New editable canvas surfaces use a pure dashboard state module for typed nodes, ports, edges, config fields, selection, deterministic layout, validation issues, JSON serialization, and malformed-draft recovery. Its starter graph lays out trigger, agent, task, condition, and output nodes so workflows begin from a useful Code UX shape.
+The former browser graph at `codeux:nodes-canvas:v1` is eligible for one import into the selected project. Code UX normalizes it to Graph v2, creates an **Imported Nodes Canvas** backend draft, and only then removes the legacy value and records a project-specific marker. A failed import remains retryable, while a successful marker prevents duplicates. Browser storage is never the ongoing workflow source of truth.
 
-Agent-driven graph edits use a separate UI-free helper that accepts structured JSON commands for adding nodes, patching node fields, connecting ports, deleting graph entities, selecting entities, and replacing a graph from serialized JSON. The helper applies commands through the canvas reducer and returns deterministic summaries, diffs, and validation blockers.
+## Registry-Driven Editing And Credentials
 
-Side panels stay controlled by the page shell: the palette emits typed create-node actions, the inspector
-emits field/config/metadata changes for the selected node, edge details are read-only, and validation
-issues expose select/focus callbacks for the affected node or edge.
+The versioned node-definition registry supplies palette entries, typed ports, configuration and widget schemas, execution availability, capabilities, side effects, policies, and credential requirements. Selecting a definition loads its manifest and renders the inspector from that contract. Graphs reference a definition version and store non-secret configuration and credential ids; they do not contain custom-node source or resolved credentials.
 
-## Dynamic Widgets
+Credential slots display metadata-only states such as bound, missing, or denied and can request a binding. Secret values remain behind the credential broker and are excluded from graphs and browser output.
 
-The inspector renders widget schemas attached to the selected node. Supported field types are text, textarea, number, boolean, select, JSON, secret reference, and key-value entries. Graph-level input widgets describe manual or scheduled run input.
+The complete governed built-in set currently registered with executable handlers is `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, `condition`, `switch`, `foreach`, `merge`, `delay`, `approval`, `email_draft`, `email_send`, `execute_subflow`, `webhook_trigger`, and `output`.
 
-Use secret reference fields for credentials. Do not paste raw tokens, API keys, cookies, passwords, or private headers into widget defaults, node data, metadata, or run input.
+Registered custom definitions can execute only when their validated versioned manifest, immutable artifact, and custom-node runtime are available. Legacy `trigger`/`agent`/`task` canvas kinds, unknown or unregistered types, mockup entries, and definitions marked non-executable are planned or unavailable definitions, not executable handlers.
 
-## Validation
+## Governance And Publication
 
-Validation checks graph shape before saving: unique node ids, valid edge endpoints, acyclic edges, JSON-safe data, and valid widget field definitions. Validation issues are shown as field-level messages so you can repair the draft before saving.
+Draft review provides structural validation, policy findings, requested permissions, side-effect review, and a non-executing dry run. Publication requires the current draft revision, a valid governed review, and all required credentials. Each publication is an immutable snapshot; comparison and rollback operate on versioned history, and only a pinned or latest-published version can execute.
 
-A graph can be structurally valid even when it contains a future node type that the runtime cannot execute yet. Current executable node types are `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, and `output`.
+## Durable Debugger And Scheduling
 
-## Running And Inspection
+The debugger reads persisted flow runs, node runs, attempt history, retry classifications and decisions, approval records, invocation links, timing, and redacted input and output. Pending approvals offer **Approve & continue** and **Reject** actions. A decision continues or terminates the same pinned run, and repeated decisions return its current durable state without duplicating a governed attempt or external send. The debugger also supports cancellation and safe retry.
 
-The manual run panel accepts JSON object input and starts a node-flow run. Runs persist both the parent flow result and per-node rows, including status, error messages, redacted input/output, and linked execution invocation ids when a provider or HTTP node is externally observable.
+Use the [Scheduler](./scheduler.md) to target a pinned or latest-published version. A flow can also be attached to a project agent preset as a reusable skill; removing the attachment does not remove the flow, publications, schedules, or run history.
 
 Rendered run payloads redact secret-shaped keys such as `apiKey`, `authorization`, `cookie`, `password`, `secret`, and `token`.
 
+The run debugger lists durable approvals beside node attempts. A pending item offers **Approve & continue** and **Reject** actions. The decision applies to the same pinned run, and repeated clicks return its current state without sending an approved external effect twice.
+
+Foreach executes the selected downstream branch once per deterministic logical item. The node's `concurrency` setting bounds active items, `maxItems` rejects oversized inputs, and zero items explicitly select the `empty` branch. Item-specific inputs, retries, cancellation, approvals, and external-effect identity are persisted so restart continuation does not replay completed items or duplicate sends.
+
 ## Agent Attachment
+
+A selected project loads its agent presets, and selecting a flow loads that flow's current bindings. The inspector exposes only agent names and attachment skill metadata; it never renders agent instructions, custom source, credential values, or decrypted material.
+
+Attaching and detaching use the governed node-flow attachment routes, then refresh the selected flow's bindings. Project or flow changes clear the prior selection and visible bindings, abort in-flight reads where possible, and ignore stale responses. Loading, failure, retry, empty, and mutation states remain keyboard accessible. The backend independently enforces project ownership and the attached-flow capability boundary; dashboard state does not grant authorization.
 
 A flow can be attached to a project agent preset as a repeatable skill with a name and description. Detaching removes only that binding; the flow, its graph, schedules, and run history remain in the project.
 
 ## Scheduling
 
 Use the [Scheduler](./scheduler.md) page to run a saved node flow once or on a recurrence. Scheduled node-flow entries select a project-owned flow and may include optional JSON object input. Pause, resume, failure handling, and due-run behavior match the normal scheduler model.
+
+## Graph v2 boundary
+
+The dashboard edits the shared Graph v2 contract. The initial executable registry was `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, and `output`; the current governed catalog extends it with `condition`, `switch`, `foreach`, `merge`, `delay`, `approval`, `email_draft`, `email_send`, `execute_subflow`, and `webhook_trigger`. Planned palette concepts are not runtime handlers.
+
+Outside development builds, `/nodes` requires the Nodes feature flag plus the node-flow backend and automation-security prerequisites. Individual definitions can additionally require provider, credential-broker, egress, approval/outbox, webhook, or custom-runtime configuration. Catalog presence and feature visibility do not assert that an integration is configured or production-ready.

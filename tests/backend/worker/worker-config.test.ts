@@ -7,6 +7,7 @@ beforeEach(() => {
   vi.stubEnv("MCP_HTTP_SERVER_URL", undefined);
   vi.stubEnv("MCP_HTTP_AUTH_TOKEN", undefined);
   vi.stubEnv("MCP_HTTPS_AUTH_TOKEN", undefined);
+  vi.stubEnv("CODE_UX_WORKER_SERVICE_ID", undefined);
 });
 
 afterEach(() => {
@@ -24,6 +25,7 @@ describe("loadWorkerConfig", () => {
     expect(config.serverArgs).toContain("worker-host");
     expect(config.controlPlaneUrl).toBeUndefined();
     expect(config.controlPlaneAuthToken).toBeUndefined();
+    expect(config.serviceIdentityId).toBeUndefined();
   });
 
   it("parses explicit worker flags", () => {
@@ -92,6 +94,14 @@ describe("loadWorkerConfig", () => {
 
     expect(config.controlPlaneUrl).toBe("http://127.0.0.1:4445/mcp");
     expect(config.controlPlaneAuthToken).toBe("worker-env-token");
+  });
+
+  it("loads a runner service identity without exposing it as the bearer token", () => {
+    vi.stubEnv("CODE_UX_WORKER_SERVICE_ID", "runner-prod-1");
+    vi.stubEnv("CODE_UX_WORKER_AUTH_TOKEN", "service-token");
+    const config = loadWorkerConfig(["node", "worker.js"]);
+    expect(config.serviceIdentityId).toBe("runner-prod-1");
+    expect(config.controlPlaneAuthToken).toBe("service-token");
   });
 
   it("keeps explicit auth token flags ahead of environment fallbacks", () => {

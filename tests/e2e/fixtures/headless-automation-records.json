@@ -1,0 +1,22 @@
+[
+  { "id": "job-01", "name": "Candidate 01", "selected": true },
+  { "id": "job-02", "name": "Candidate 02", "selected": true },
+  { "id": "job-03", "name": "Candidate 03", "selected": true },
+  { "id": "job-04", "name": "Candidate 04", "selected": true },
+  { "id": "job-05", "name": "Candidate 05", "selected": true },
+  { "id": "job-06", "name": "Candidate 06", "selected": false },
+  { "id": "job-07", "name": "Candidate 07", "selected": false },
+  { "id": "job-08", "name": "Candidate 08", "selected": false },
+  { "id": "job-09", "name": "Candidate 09", "selected": false },
+  { "id": "job-10", "name": "Candidate 10", "selected": false },
+  { "id": "job-11", "name": "Candidate 11", "selected": false },
+  { "id": "job-12", "name": "Candidate 12", "selected": false },
+  { "id": "job-13", "name": "Candidate 13", "selected": false },
+  { "id": "job-14", "name": "Candidate 14", "selected": false },
+  { "id": "job-15", "name": "Candidate 15", "selected": false },
+  { "id": "job-16", "name": "Candidate 16", "selected": false },
+  { "id": "job-17", "name": "Candidate 17", "selected": false },
+  { "id": "job-18", "name": "Candidate 18", "selected": false },
+  { "id": "job-19", "name": "Candidate 19", "selected": false },
+  { "id": "job-20", "name": "Candidate 20", "selected": false }
+]

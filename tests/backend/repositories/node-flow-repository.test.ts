@@ -42,6 +42,24 @@ afterEach(async () => {
 });
 
 describe("NodeFlowRepository", () => {
+  it("persists a deterministic v2 migration as a new version and preserves v1 history", async () => {
+    const { dir, storage, projectRepository, nodeFlowRepository } = await createRepositories();
+    const project = projectRepository.createProject({ name: "Migration fixture", sourceType: "local", sourceRef: dir });
+    const flow = nodeFlowRepository.createFlow(project.id, { title: "Legacy flow", graph: graph() });
+    const original = JSON.stringify(graph());
+    storage.getDatabase().prepare("UPDATE node_flows SET graph_json = ?, version = 1 WHERE id = ?").run(original, flow.id);
+    storage.getDatabase().prepare("UPDATE node_flow_versions SET graph_json = ? WHERE flow_id = ? AND version = 1").run(original, flow.id);
+
+    const migratedRepository = new NodeFlowRepository(storage);
+    const migrated = migratedRepository.getFlow(flow.id);
+    const versions = migratedRepository.listVersions(flow.id);
+
+    expect(migrated).toMatchObject({ version: 2, graph: { schemaVersion: 2 } });
+    expect(versions.map((version) => version.version)).toEqual([2, 1]);
+    expect(versions[1]?.graph).toEqual(graph());
+    expect(new NodeFlowRepository(storage).getFlow(flow.id)).toEqual(migrated);
+  });
+
   it("creates, updates, versions, lists, and deletes node flows", async () => {
     const { dir, projectRepository, nodeFlowRepository } = await createRepositories();
     const project = projectRepository.createProject({

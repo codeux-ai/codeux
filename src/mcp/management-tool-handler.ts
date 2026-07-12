@@ -20,10 +20,11 @@ import type {
   SearchKnowledgeArgs,
   SearchSkillsArgs,
   RequestClarificationArgs,
-  ReplyToClarificationArgs
+  ReplyToClarificationArgs,
+  RunAttachedFlowArgs,
 } from "../contracts/internal-management-types.js";
 import type { KnowledgeService } from "../services/knowledge-service.js";
-import { getCurrentMcpAgentId } from "../server/mcp-agent-context.js";
+import { getCurrentMcpAgentId, getCurrentMcpThreadId } from "../server/mcp-agent-context.js";
 import type { SprintPreviewService } from "../services/sprint-preview-service.js";
 import type { CustomDashboardRepository } from "../repositories/custom-dashboard-repository.js";
 import type { CustomDashboardValidationService } from "../services/custom-dashboard-validation-service.js";
@@ -46,6 +47,7 @@ import type {
 } from "../services/worker-task-dispatch-service.js";
 import type { SkillService } from "../services/skill-service.js";
 import type { NodeFlowService } from "../services/node-flow-service.js";
+import { NodeFlowAgentSkillService } from "../services/node-flow-agent-skill-service.js";
 import type { WorkerClarificationService } from "../services/worker-clarification-service.js";
 import type { WorkerClarificationContinuationService } from "../services/worker-clarification-continuation-service.js";
 
@@ -70,7 +72,7 @@ import { SchedulerActions } from "./management/scheduler-actions.js";
 import { AgentSchedulerActions } from "./management/agent-scheduler-actions.js";
 import { SettingsActions } from "./management/settings-actions.js";
 import { AgentActions } from "./management/agent-actions.js";
-import { NodeFlowActions } from "./management/node-flow-actions.js";
+import { NodeFlowActions, formatRunSummary } from "./management/node-flow-actions.js";
 import { MemoryActions } from "./management/memory-actions.js";
 import { SkillActions } from "./management/skill-actions.js";
 import { ChatProviderActions } from "./management/chat-provider-actions.js";
@@ -116,6 +118,7 @@ export class ManagementToolHandler {
   private readonly settingsActions: SettingsActions;
   private readonly agentActions: AgentActions;
   private readonly nodeFlowActions: NodeFlowActions;
+  private readonly nodeFlowAgentSkillService: NodeFlowAgentSkillService;
   private readonly memoryActions: MemoryActions;
   private readonly skillActions: SkillActions;
   private readonly previewActions: PreviewActions;
@@ -126,6 +129,7 @@ export class ManagementToolHandler {
     this.settingsActions = new SettingsActions(deps.settingsRepository);
     this.agentActions = new AgentActions(deps.agentPresetSyncService);
     this.nodeFlowActions = new NodeFlowActions(deps.nodeFlowService);
+    this.nodeFlowAgentSkillService = new NodeFlowAgentSkillService(deps.nodeFlowService);
     this.memoryActions = new MemoryActions(deps.memoryService, deps.memoryPromotionService, deps.embeddingModelManager);
     this.skillActions = new SkillActions(deps.skillService);
     this.previewActions = new PreviewActions(deps.sprintPreviewService);
@@ -239,6 +243,8 @@ export class ManagementToolHandler {
       || args.action.startsWith("replace_")
       || args.action === "remove_session"
       || args.action === "archive"
+      || args.action === "publish"
+      || args.action === "rollback"
       || args.action === "deprecate_claim";
   }
 
@@ -453,6 +459,23 @@ export class ManagementToolHandler {
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("node_flows", args.action, error);
+    }
+  }
+
+  async handleRunAttachedFlow(args: RunAttachedFlowArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      const agentPresetId = getCurrentMcpAgentId();
+      if (!agentPresetId) throw new Error("An authenticated agent is required to run an attached flow.");
+      const result = await this.nodeFlowAgentSkillService.runAttachedFlow({
+        projectId: args.projectId,
+        flowId: args.flowId,
+        agentPresetId,
+        conversationId: getCurrentMcpThreadId(),
+        parameters: args.input,
+      });
+      return { content: [{ type: "text", text: JSON.stringify({ result: formatRunSummary(result) }, null, 2) }] };
+    } catch (error) {
+      return this.formatError("node_flows", "run_attached_flow", error);
     }
   }
 

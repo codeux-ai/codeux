@@ -1,5 +1,15 @@
 # Security Hardening
 
+## Headless identity boundary
+
+Remote dashboard/API access must use either digest-backed service identities or an OIDC-capable trusted reverse proxy as documented in [Secure Headless Server Mode](./server-mode.md). Never expose credential management by setting only `DASHBOARD_HOST`; it also requires the `credential_admin` role, project scope, TLS, and `CODE_UX_REMOTE_CREDENTIAL_MANAGEMENT=true`.
+
+Treat trusted identity headers as credentials: the proxy must remove inbound copies, inject its own values, authenticate to the loopback backend with `CODE_UX_TRUSTED_PROXY_SECRET`, and emit `X-Forwarded-Proto: https`. Keep `/health` and `/ready` free of authorization headers. Keep webhook and chat-provider ingress secrets separate from dashboard identities.
+
+Service identity JSON stores only SHA-256 token digests. Give automation runners only `automation_runner` plus the exact project ids they lease. Split authoring, publishing, approval/running, credential administration, and viewing identities where operational separation matters. Audit export is secret-redacted but still security-sensitive operational data; restrict and retain it according to incident policy.
+
+Encrypted credential rows make key recovery a startup invariant. Backups are incomplete without the referenced KMS/Vault versions or owner-only mounted key. A missing key must produce `/ready` 503 and startup failure, never metadata-only success or an unencrypted fallback.
+
 This page documents the concrete security posture of Code UX. Code UX operates as a single-user trusted process designed for local development or isolated execution. It explicitly does not feature multi-tenant RBAC, full authentication for standard UI flows, or protection from hostile users with existing network access to the application.
 
 ## Dependency Audit Enforcement

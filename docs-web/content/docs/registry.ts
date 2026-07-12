@@ -103,10 +103,19 @@ export type DocsSlug =
   | 'architecture-external-chat-providers'
   | 'architecture-configuration-resolution'
   | 'architecture-security'
+  | 'operations-credential-security'
+  | 'operations-runbook'
+  | 'operations-security-hardening'
+  | 'operations-server-mode'
   | 'settings-google-drive-mount'
   | 'user-dashboard-custom-dashboards'
   | 'architecture-custom-dashboard-foundation'
+  | 'architecture-custom-nodes'
   | 'architecture-managed-container-runtime'
+  | 'architecture-node-flow-builtins-and-security'
+  | 'architecture-node-flow-durable-execution'
+  | 'architecture-node-flow-foundation'
+  | 'architecture-node-flows'
   | 'architecture-speech-input'
   | 'architecture-speech-output'
   | 'architecture-worker-clarification-contract'
@@ -251,21 +260,21 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-nodes',
     section: 'User Guide',
     title: "Nodes",
-    description: "The Nodes page (/nodes) opens the browser-local Nodes Canvas workspace for drafting Code UX workflow graphs. It does not require a selected project and does not call the node-flow backend APIs.",
+    description: "The Nodes page (/nodes) is the project-scoped backend workspace for authoring and operating governed node flows. Select a project to load its flow library, credential metadata, publications, and durable run history; w...",
   },
   'user-dashboard-nodes-canvas': {
     id: 'user-dashboard-nodes-canvas',
     path: '/docs/user-dashboard-nodes-canvas',
     section: 'User Guide',
     title: "Nodes Canvas",
-    description: "The Nodes Canvas page (/nodes) is a browser-local workspace for drafting Code UX workflow graphs. It combines the canvas, palette, inspector, validation panel, JSON exchange controls, and agent command summary without...",
+    description: "The Nodes page (/nodes) is a project-scoped Graph v2 workspace backed by the Code UX node-flow APIs. Select a project to load its flow library, credential metadata, publications, and run history. Changing projects cle...",
   },
   'user-dashboard-node-flows': {
     id: 'user-dashboard-node-flows',
     path: '/docs/user-dashboard-node-flows',
     section: 'User Guide',
     title: "Node Flows",
-    description: "The Nodes page (/nodes) is where dashboard users create and operate saved node-flow workflows for the active project. A node flow is a repeatable graph that can be validated, run manually, scheduled, inspected through...",
+    description: "The Nodes page (/nodes) is the project-scoped backend authoring, publication, and operations surface for canonical node flows. No selected project means no flow library, credential metadata, publications, or durable r...",
   },
   'user-dashboard-scheduler': {
     id: 'user-dashboard-scheduler',
@@ -820,6 +829,34 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Security model",
     description: "Code UX is designed to run as a single-user trusted process on a developer's workstation or a dedicated server. This page documents what is and is not protected, the threat model, and the recommended deployment posture.",
   },
+  'operations-credential-security': {
+    id: 'operations-credential-security',
+    path: '/docs/operations-credential-security',
+    section: 'User Guide',
+    title: "Automation Credential Security",
+    description: "Code UX resolves canonical node credential IDs and named project binding keys through the credential broker. Stored values are not exposed to nodes, dashboard reads, MCP payloads, agent context, run inspection records...",
+  },
+  'operations-runbook': {
+    id: 'operations-runbook',
+    path: '/docs/operations-runbook',
+    section: 'User Guide',
+    title: "Authenticated Automation Runbook",
+    description: "Run recovery drills only against the approved local test project and mocked job/email providers.",
+  },
+  'operations-security-hardening': {
+    id: 'operations-security-hardening',
+    path: '/docs/operations-security-hardening',
+    section: 'User Guide',
+    title: "Headless Security Hardening",
+    description: "Remote dashboard/API access requires a service-token or trusted OIDC reverse-proxy boundary, TLS, project-scoped roles, and request correlation. A non-loopback DASHBOARD_HOST does not make credential routes public: ca...",
+  },
+  'operations-server-mode': {
+    id: 'operations-server-mode',
+    path: '/docs/operations-server-mode',
+    section: 'User Guide',
+    title: "Authenticated Headless Server Mode",
+    description: "Code UX separates MCP bearer access from the authenticated dashboard administrative API. Remote dashboard/API deployments must use digest-backed service identities or terminate OIDC at a trusted reverse proxy; loopbac...",
+  },
   'settings-google-drive-mount': {
     id: 'settings-google-drive-mount',
     path: '/docs/settings-google-drive-mount',
@@ -841,12 +878,47 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Custom Dashboard Foundation",
     description: "Custom dashboards are a persisted domain model for project-scoped dashboard generation. The foundation stores manifests, generated file bundles, data-source node graphs, validation history, and publication state, and...",
   },
+  'architecture-custom-nodes': {
+    id: 'architecture-custom-nodes',
+    path: '/docs/architecture-custom-nodes',
+    section: 'Architecture',
+    title: "Custom Node Architecture and Security",
+    description: "Custom nodes are project-owned TypeScript packages that pass explicit validation and publication gates before Code UX can execute them. Generated code is never imported or evaluated by the Code UX server.",
+  },
   'architecture-managed-container-runtime': {
     id: 'architecture-managed-container-runtime',
     path: '/docs/architecture-managed-container-runtime',
     section: 'Architecture',
     title: "Managed Container Runtime",
     description: "The managed container runtime removes first-invocation Docker builds while keeping provider binaries local to each user's Docker host.",
+  },
+  'architecture-node-flow-builtins-and-security': {
+    id: 'architecture-node-flow-builtins-and-security',
+    path: '/docs/architecture-node-flow-builtins-and-security',
+    section: 'Architecture',
+    title: "Node Flow Built-ins and External-Effect Security",
+    description: "The governed catalog adds deterministic branches, bounded collection processing, durable approvals, and replay-safe external effects while keeping the versioned definition registry as the executable authority.",
+  },
+  'architecture-node-flow-durable-execution': {
+    id: 'architecture-node-flow-durable-execution',
+    path: '/docs/architecture-node-flow-durable-execution',
+    section: 'Architecture',
+    title: "Node Flow Durable Execution",
+    description: "Node flows execute immutable published snapshots. A run explicitly pins a published version or follows the latest published version; later edits cannot change a pinned run.",
+  },
+  'architecture-node-flow-foundation': {
+    id: 'architecture-node-flow-foundation',
+    path: '/docs/architecture-node-flow-foundation',
+    section: 'Architecture',
+    title: "Node Flow Foundation",
+    description: "Code UX uses one project-owned Graph v2 contract across the dashboard, backend, MCP surface, scheduler, and runtime. Graphs carry schemaVersion: 2, stable versioned definition references, typed ports and flow schemas,...",
+  },
+  'architecture-node-flows': {
+    id: 'architecture-node-flows',
+    path: '/docs/architecture-node-flows',
+    section: 'Architecture',
+    title: "Node Flows",
+    description: "Node flows are project-owned, versioned Graph v2 workflows.",
   },
   'architecture-speech-input': {
     id: 'architecture-speech-input',
@@ -972,10 +1044,19 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-external-chat-providers'],
   docsRegistry['architecture-configuration-resolution'],
   docsRegistry['architecture-security'],
+  docsRegistry['operations-credential-security'],
+  docsRegistry['operations-runbook'],
+  docsRegistry['operations-security-hardening'],
+  docsRegistry['operations-server-mode'],
   docsRegistry['settings-google-drive-mount'],
   docsRegistry['user-dashboard-custom-dashboards'],
   docsRegistry['architecture-custom-dashboard-foundation'],
+  docsRegistry['architecture-custom-nodes'],
   docsRegistry['architecture-managed-container-runtime'],
+  docsRegistry['architecture-node-flow-builtins-and-security'],
+  docsRegistry['architecture-node-flow-durable-execution'],
+  docsRegistry['architecture-node-flow-foundation'],
+  docsRegistry['architecture-node-flows'],
   docsRegistry['architecture-speech-input'],
   docsRegistry['architecture-speech-output'],
   docsRegistry['architecture-worker-clarification-contract'],

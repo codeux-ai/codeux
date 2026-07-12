@@ -1,4 +1,5 @@
 import { DatabaseAdapter } from "./database-adapter.js";
+import { migrateNodeFlowGraph } from "../../domain/node-flows/node-flow-migrators.js";
 
 export function ensureColumn(db: DatabaseAdapter, tableName: string, columnName: string, columnDefinition: string): void {
   // Using direct sqlite PRAGMA for now, until we abstract schema reflections
@@ -240,6 +241,7 @@ export function ensureNodeFlowTables(db: DatabaseAdapter): void {
       flow_id TEXT NOT NULL,
       project_id TEXT NOT NULL,
       node_id TEXT NOT NULL,
+      logical_item TEXT NOT NULL DEFAULT 'default',
       status TEXT NOT NULL,
       execution_invocation_id TEXT,
       input_json TEXT,
@@ -256,8 +258,58 @@ export function ensureNodeFlowTables(db: DatabaseAdapter): void {
     )
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS node_flow_publications (
+      id TEXT PRIMARY KEY,
+      flow_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      graph_json TEXT NOT NULL,
+      policy_json TEXT NOT NULL,
+      published_by TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      UNIQUE (flow_id, version)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS node_flow_node_attempts (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL,
+      node_run_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      logical_item TEXT NOT NULL DEFAULT 'default',
+      attempt_number INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      executor_id TEXT NOT NULL,
+      invocation_id TEXT,
+      artifact_digest TEXT,
+      input_json TEXT,
+      output_json TEXT,
+      credential_ids_json TEXT NOT NULL DEFAULT '[]',
+      failure_classification TEXT,
+      retry_decision TEXT,
+      error_message TEXT,
+      started_at TEXT NOT NULL,
+      finished_at TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (run_id) REFERENCES node_flow_runs(id) ON DELETE CASCADE,
+      FOREIGN KEY (node_run_id) REFERENCES node_flow_node_runs(id) ON DELETE CASCADE,
+      UNIQUE (run_id, node_id, logical_item, attempt_number)
+    )
+  `);
+
   ensureColumn(db, "node_flow_runs", "execution_invocation_id", "TEXT");
+  ensureColumn(db, "node_flow_runs", "publication_id", "TEXT");
+  ensureColumn(db, "node_flow_runs", "policy_json", "TEXT NOT NULL DEFAULT '{}'");
+  ensureColumn(db, "node_flow_runs", "lease_owner", "TEXT");
+  ensureColumn(db, "node_flow_runs", "lease_expires_at", "TEXT");
+  ensureColumn(db, "node_flow_runs", "heartbeat_at", "TEXT");
+  ensureColumn(db, "node_flow_runs", "cancel_requested_at", "TEXT");
   ensureColumn(db, "node_flow_node_runs", "execution_invocation_id", "TEXT");
+  ensureColumn(db, "node_flow_node_runs", "logical_item", "TEXT NOT NULL DEFAULT 'default'");
+  migrateNodeFlowAttemptsLogicalItems(db);
 
   ensureIndex(db, "idx_node_flows_project_updated", "node_flows", "project_id, updated_at DESC");
   ensureIndex(db, "idx_node_flow_versions_flow_version", "node_flow_versions", "flow_id, version DESC");
@@ -265,6 +317,164 @@ export function ensureNodeFlowTables(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_node_flow_runs_flow_created", "node_flow_runs", "flow_id, created_at DESC");
   ensureIndex(db, "idx_node_flow_runs_project_created", "node_flow_runs", "project_id, created_at DESC");
   ensureIndex(db, "idx_node_flow_node_runs_run_created", "node_flow_node_runs", "run_id, created_at ASC");
+  ensureIndex(db, "idx_node_flow_publications_latest", "node_flow_publications", "flow_id, version DESC");
+  ensureIndex(db, "idx_node_flow_runs_queue", "node_flow_runs", "status, lease_expires_at, created_at ASC");
+  ensureIndex(db, "idx_node_flow_runs_project_status", "node_flow_runs", "project_id, status");
+  db.exec("DROP INDEX IF EXISTS idx_node_flow_attempts_run_node");
+  ensureIndex(db, "idx_node_flow_attempts_run_node", "node_flow_node_attempts", "run_id, node_id, logical_item, attempt_number");
+}
+
+function migrateNodeFlowAttemptsLogicalItems(db: DatabaseAdapter): void {
+  const columns = getTableColumns(db, "node_flow_node_attempts");
+  if (columns.has("logical_item")) return;
+  db.exec("PRAGMA foreign_keys = OFF");
+  try {
+    db.exec("BEGIN");
+    db.exec(`
+      CREATE TABLE node_flow_node_attempts_new (
+        id TEXT PRIMARY KEY, run_id TEXT NOT NULL, node_run_id TEXT NOT NULL, node_id TEXT NOT NULL,
+        logical_item TEXT NOT NULL DEFAULT 'default', attempt_number INTEGER NOT NULL, status TEXT NOT NULL,
+        executor_id TEXT NOT NULL, invocation_id TEXT, artifact_digest TEXT, input_json TEXT, output_json TEXT,
+        credential_ids_json TEXT NOT NULL DEFAULT '[]', failure_classification TEXT, retry_decision TEXT,
+        error_message TEXT, started_at TEXT NOT NULL, finished_at TEXT, created_at TEXT NOT NULL,
+        FOREIGN KEY (run_id) REFERENCES node_flow_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY (node_run_id) REFERENCES node_flow_node_runs(id) ON DELETE CASCADE,
+        UNIQUE (run_id, node_id, logical_item, attempt_number)
+      )
+    `);
+    db.exec(`
+      INSERT INTO node_flow_node_attempts_new (
+        id, run_id, node_run_id, node_id, logical_item, attempt_number, status, executor_id,
+        invocation_id, artifact_digest, input_json, output_json, credential_ids_json,
+        failure_classification, retry_decision, error_message, started_at, finished_at, created_at
+      ) SELECT id, run_id, node_run_id, node_id, 'default', attempt_number, status, executor_id,
+        invocation_id, artifact_digest, input_json, output_json, credential_ids_json,
+        failure_classification, retry_decision, error_message, started_at, finished_at, created_at
+      FROM node_flow_node_attempts
+    `);
+    db.exec("DROP TABLE node_flow_node_attempts");
+    db.exec("ALTER TABLE node_flow_node_attempts_new RENAME TO node_flow_node_attempts");
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  } finally {
+    db.exec("PRAGMA foreign_keys = ON");
+  }
+}
+
+export function ensureAutomationGovernanceTables(db: DatabaseAdapter): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS automation_approvals (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      flow_id TEXT NOT NULL,
+      run_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      logical_item TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      request_json TEXT NOT NULL DEFAULT '{}',
+      decision_json TEXT,
+      requested_at TEXT NOT NULL,
+      decided_at TEXT,
+      decided_by TEXT,
+      expires_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+      FOREIGN KEY (run_id) REFERENCES node_flow_runs(id) ON DELETE CASCADE,
+      UNIQUE (run_id, node_id, logical_item)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS automation_outbox (
+      id TEXT PRIMARY KEY,
+      idempotency_key TEXT NOT NULL UNIQUE,
+      project_id TEXT NOT NULL,
+      flow_id TEXT NOT NULL,
+      publication_id TEXT NOT NULL,
+      run_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      logical_item TEXT NOT NULL,
+      effect_type TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      payload_json TEXT NOT NULL,
+      provider_message_id TEXT,
+      attempt_count INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      sent_at TEXT,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+      FOREIGN KEY (run_id) REFERENCES node_flow_runs(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS automation_webhook_triggers (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      flow_id TEXT NOT NULL,
+      path_token_hash TEXT NOT NULL UNIQUE,
+      secret_hash TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      last_triggered_at TEXT,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+      UNIQUE (project_id, flow_id)
+    )
+  `);
+  ensureIndex(db, "idx_automation_approvals_run_status", "automation_approvals", "run_id, status, created_at");
+  ensureIndex(db, "idx_automation_outbox_status", "automation_outbox", "status, updated_at");
+  ensureIndex(db, "idx_automation_outbox_run", "automation_outbox", "run_id, node_id");
+  ensureIndex(db, "idx_automation_webhooks_flow", "automation_webhook_triggers", "flow_id, enabled");
+}
+
+interface LegacyNodeFlowRow {
+  id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  graph_json: string;
+  version: number | string;
+  updated_at: string;
+}
+
+export function migratePersistedNodeFlowGraphs(db: DatabaseAdapter): void {
+  const rows = db.prepare("SELECT id, project_id, title, description, graph_json, version, updated_at FROM node_flows ORDER BY id ASC")
+    .all() as unknown as LegacyNodeFlowRow[];
+  for (const row of rows) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(row.graph_json);
+    } catch {
+      continue;
+    }
+    const migration = migrateNodeFlowGraph(parsed);
+    if (!migration.migrated) continue;
+    const currentVersion = Number(row.version);
+    const nextVersion = currentVersion + 1;
+    const migratedJson = JSON.stringify(migration.graph);
+    db.transaction(() => {
+      const originalExists = db.prepare("SELECT id FROM node_flow_versions WHERE flow_id = ? AND version = ?")
+        .get(row.id, currentVersion);
+      if (!originalExists) {
+        db.prepare(`
+          INSERT INTO node_flow_versions (id, flow_id, project_id, version, title, description, graph_json, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(`${row.id}:v${currentVersion}:legacy`, row.id, row.project_id, currentVersion, row.title, row.description ?? "", row.graph_json, row.updated_at);
+      }
+      db.prepare(`
+        INSERT INTO node_flow_versions (id, flow_id, project_id, version, title, description, graph_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(`${row.id}:v${nextVersion}:schema-v2`, row.id, row.project_id, nextVersion, row.title, row.description ?? "", migratedJson, row.updated_at);
+      db.prepare("UPDATE node_flows SET graph_json = ?, version = ? WHERE id = ?")
+        .run(migratedJson, nextVersion, row.id);
+    });
+  }
 }
 
 export function ensureCustomDashboardTables(db: DatabaseAdapter): void {
@@ -345,6 +555,159 @@ export function ensureCustomDashboardTables(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_custom_dashboard_validation_sessions_revision", "custom_dashboard_validation_sessions", "revision_id, created_at DESC");
   ensureIndex(db, "idx_custom_dashboard_validation_sessions_dashboard", "custom_dashboard_validation_sessions", "dashboard_id, created_at DESC");
   ensureIndex(db, "idx_custom_dashboard_publications_project", "custom_dashboard_publications", "project_id, published_at DESC");
+}
+
+export function ensureAutomationCredentialTables(db: DatabaseAdapter): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS automation_credentials (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      scope TEXT NOT NULL CHECK (scope IN ('project', 'global')),
+      project_id TEXT,
+      allowed_project_ids_json TEXT NOT NULL DEFAULT '[]',
+      capabilities_json TEXT NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'active',
+      key_id TEXT NOT NULL,
+      key_version INTEGER NOT NULL,
+      version INTEGER NOT NULL DEFAULT 1,
+      last_validated_at TEXT,
+      validation_status TEXT NOT NULL DEFAULT 'untested',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      CHECK ((scope = 'project' AND project_id IS NOT NULL) OR (scope = 'global' AND project_id IS NULL))
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS automation_credential_secrets (
+      credential_id TEXT PRIMARY KEY,
+      ciphertext BLOB NOT NULL,
+      nonce BLOB NOT NULL,
+      auth_tag BLOB NOT NULL,
+      wrapped_data_key BLOB NOT NULL,
+      wrap_nonce BLOB NOT NULL,
+      wrap_auth_tag BLOB NOT NULL,
+      key_id TEXT NOT NULL,
+      key_version INTEGER NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (credential_id) REFERENCES automation_credentials(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS automation_credential_bindings (
+      id TEXT PRIMARY KEY,
+      credential_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      binding_key TEXT NOT NULL,
+      required_capabilities_json TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (credential_id) REFERENCES automation_credentials(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      UNIQUE (project_id, binding_key)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS automation_credential_access_events (
+      id TEXT PRIMARY KEY,
+      credential_id TEXT,
+      project_id TEXT NOT NULL,
+      binding_key TEXT,
+      capability TEXT,
+      operation TEXT NOT NULL,
+      outcome TEXT NOT NULL,
+      reason TEXT,
+      created_at TEXT NOT NULL
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS automation_credential_rotations (
+      id TEXT PRIMARY KEY,
+      credential_id TEXT NOT NULL,
+      from_version INTEGER NOT NULL,
+      to_version INTEGER NOT NULL,
+      key_id TEXT NOT NULL,
+      key_version INTEGER NOT NULL,
+      rotated_at TEXT NOT NULL,
+      FOREIGN KEY (credential_id) REFERENCES automation_credentials(id) ON DELETE CASCADE
+    )
+  `);
+  ensureIndex(db, "idx_automation_credentials_project", "automation_credentials", "project_id, status, updated_at DESC");
+  ensureIndex(db, "idx_automation_credentials_global", "automation_credentials", "scope, status, updated_at DESC");
+  ensureIndex(db, "idx_automation_credential_bindings_credential", "automation_credential_bindings", "credential_id, project_id");
+  ensureIndex(db, "idx_automation_credential_access_events_project", "automation_credential_access_events", "project_id, created_at DESC");
+  ensureIndex(db, "idx_automation_credential_rotations_credential", "automation_credential_rotations", "credential_id, rotated_at DESC");
+}
+
+export function ensureAutomationAuditTables(db: DatabaseAdapter): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS automation_audit_records (
+      id TEXT PRIMARY KEY,
+      occurred_at TEXT NOT NULL,
+      correlation_id TEXT NOT NULL,
+      principal_id TEXT NOT NULL,
+      principal_kind TEXT NOT NULL,
+      action TEXT NOT NULL,
+      resource_type TEXT NOT NULL,
+      resource_id TEXT,
+      project_id TEXT,
+      outcome TEXT NOT NULL,
+      metadata_json TEXT NOT NULL DEFAULT '{}'
+    )
+  `);
+  ensureIndex(db, "idx_automation_audit_occurred", "automation_audit_records", "occurred_at DESC, id DESC");
+  ensureIndex(db, "idx_automation_audit_project", "automation_audit_records", "project_id, occurred_at DESC");
+  ensureIndex(db, "idx_automation_audit_principal", "automation_audit_records", "principal_id, occurred_at DESC");
+}
+
+export function ensureCustomNodeTables(db: DatabaseAdapter): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS custom_nodes (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft',
+      source_revision TEXT NOT NULL,
+      manifest_json TEXT NOT NULL,
+      validation_report_json TEXT,
+      artifact_digest TEXT,
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS custom_node_artifacts (
+      digest TEXT PRIMARY KEY,
+      node_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      artifact_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (node_id) REFERENCES custom_nodes(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS custom_node_publications (
+      id TEXT PRIMARY KEY,
+      node_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      node_type TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      artifact_digest TEXT NOT NULL,
+      published_by TEXT NOT NULL,
+      published_at TEXT NOT NULL,
+      FOREIGN KEY (node_id) REFERENCES custom_nodes(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (artifact_digest) REFERENCES custom_node_artifacts(digest),
+      UNIQUE (node_type, version)
+    )
+  `);
+  ensureIndex(db, "idx_custom_nodes_project_status", "custom_nodes", "project_id, status, updated_at DESC");
+  ensureIndex(db, "idx_custom_node_artifacts_node", "custom_node_artifacts", "node_id, version DESC");
+  ensureIndex(db, "idx_custom_node_publications_project", "custom_node_publications", "project_id, published_at DESC");
 }
 
 export function migrateSprintLinkedIssuesExternalSources(db: DatabaseAdapter): void {
@@ -580,7 +943,12 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureTaskSelfReflectionRatingTables(db);
   ensureConversationDraftTables(db);
   ensureNodeFlowTables(db);
+  ensureAutomationGovernanceTables(db);
+  migratePersistedNodeFlowGraphs(db);
   ensureCustomDashboardTables(db);
+  ensureAutomationCredentialTables(db);
+  ensureAutomationAuditTables(db);
+  ensureCustomNodeTables(db);
 
   ensureColumn(db, "projects", "initialization_mode", "TEXT NOT NULL DEFAULT 'existing'");
   ensureColumn(db, "provider_invocations", "tool_call_count", "INTEGER NOT NULL DEFAULT 0");

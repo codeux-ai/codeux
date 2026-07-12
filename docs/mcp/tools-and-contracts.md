@@ -425,9 +425,13 @@ The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicks
 
 ## Node Flow Tools
 
-`manage_node_flows` exposes project node workflows through the project-manager MCP surface. It supports `list`, `get`, `create`, `update`, `delete`, `validate`, `run`, `list_runs`, `get_run`, `attach_to_agent`, and `detach_from_agent`.
+`manage_node_flows` is the project-manager automation-authoring surface. Governed actions are `catalog`, `get_node_definition`, `create_draft`, `patch_draft`, `validate_draft`, `create_custom_node`, `update_custom_node`, `validate_custom_node`, `request_credential`, `inspect_bindings`, `dry_run`, `publish`, `compare_versions`, `rollback`, `run`, `cancel`, `retry`, `inspect_run`, and `list_runs`. Compatibility aliases remain for `list`, `get`, `create`, `update`, `delete`, `validate`, `get_run`, `attach_to_agent`/`attach`, and `detach_from_agent`/`detach`.
 
-Node-flow management always delegates graph validation and persistence to `NodeFlowService`; `run` delegates execution through the configured node-flow runtime service. Create and update calls reject malformed graph specs before repository writes. `delete` uses the standard stateful approval handshake.
+New drafts are not executable until published. `patch_draft` requires the last observed positive integer `draftRevision`; stale revisions return a `draft_revision_conflict` containing expected and actual revisions without writing. Draft review responses are summaries rather than full graphs: they include validation issues, policy findings, credential requirements, requested capabilities, side-effect diffs, node/edge counts, and the active published version. `publish`, `rollback`, and `delete` use the exact-payload, one-use approval handshake.
+
+`dry_run` performs validation and policy simulation without executing nodes or side effects. It returns `executed: false`, redacted result metadata, and blockers such as missing or denied credential bindings. Credential actions return metadata only; decrypted credential values never cross the service or MCP response boundary. Custom-node validation reuses the governed project generator/build pipeline and returns checks, issues, capabilities, and credential slots rather than source bundles.
+
+Operational `run`, `retry`, and `inspect_run` responses include durable node-attempt history. Each governed attempt projection contains its attempt number and status, failure classification and retry decision, executor and execution-invocation identifiers, artifact digest, timestamps, and redacted input/output. Credential values, credential bindings, and custom-node source are excluded. `inspect_run` reloads attempts from durable storage, so successful attempts, retries, terminal failures, and `attention_required` decisions remain inspectable after the original call or a runtime restart.
 
 The graph payload is the shared `NodeFlowGraph` contract:
 
@@ -436,7 +440,7 @@ The graph payload is the shared `NodeFlowGraph` contract:
 - `inputSchema`: optional graph-level widget schema for run input
 - `metadata`: optional JSON object
 
-Validation checks graph shape, unique node ids, edge endpoints, acyclicity, JSON-safe node data, widget schema fields, select options, finite numeric constraints, and default values that match field types. Runtime support is narrower than graph storage: executable node types are currently `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, and `output`.
+Validation checks graph shape, unique node ids, edge endpoints, acyclicity, JSON-safe node data, widget schema fields, select options, finite numeric constraints, and default values that match field types. The governed built-ins currently registered with executable handlers are `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, `condition`, `switch`, `foreach`, `merge`, `delay`, `approval`, `email_draft`, `email_send`, `execute_subflow`, `webhook_trigger`, and `output`. A registered custom definition can execute only when its validated versioned manifest, immutable artifact, and custom-node runtime are available; unknown, legacy, mockup, and non-executable definitions remain planned or unavailable and are rejected by runtime dispatch.
 
 Agents should build Code UX-adapted flows from structured graph specs instead of cloning n8n workflows one-to-one. A good flow exposes the values an operator or agent should edit, keeps runtime behavior repeatable, names nodes by Code UX behavior, and validates every required field before saving. MCP callers can provide `widgets` as a graph-level `{ fields: [...] }` schema or as node-id keys mapped to each node's `widgetSchema`.
 
@@ -446,6 +450,7 @@ Secret-safe widget guidance:
 - do not put API keys, bearer tokens, cookies, passwords, or private headers in `graph.metadata`, `node.data`, widget defaults, run `input`, or examples
 - use placeholder references such as `settings.provider.default` or `secret://service/token`
 - treat MCP responses as redacted summaries; flow and run responses mask secret-shaped graph data, inputs, trigger payloads, node payloads, and outputs before returning them through MCP
+- treat attempt history as an operational summary: it exposes invocation links and artifact identity, but never credential values, credential-binding ids, or custom-node source
 
 Attach a flow as an agent skill:
 
@@ -458,6 +463,8 @@ Attach a flow as an agent skill:
   "description": "Runs the reusable review node flow."
 }
 ```
+
+An attachment also gives that authenticated agent the narrow `run_attached_flow` capability. Its catalog entry contains only `flowId`, name, description, input schema, and `operation: "run_attached_flow"`; it never includes the graph or credentials. Execution verifies project ownership, the attachment, current publication, and credential policy, then records `initiatingAgentId`, the originating conversation id when present, and `triggerType: "attached_flow"` in run audit metadata.
 
 Run a flow:
 

@@ -141,6 +141,13 @@ import type { NodeFlowService } from "../services/node-flow-service.js";
 import type { CustomDashboardRepository } from "../repositories/custom-dashboard-repository.js";
 import type { CustomDashboardValidationService } from "../services/custom-dashboard-validation-service.js";
 import type { SkillService } from "../services/skill-service.js";
+import type { CredentialBroker } from "../services/credentials/credential-broker.js";
+import type { ApprovalService } from "../services/node-flows/approval-service.js";
+import type { AutomationWebhookTriggerRepository } from "../repositories/automation-webhook-trigger-repository.js";
+import type { HeadlessAuthService } from "../services/headless-auth-service.js";
+import type { AutomationAuditExportService } from "../services/automation-audit-export-service.js";
+import type { HeadlessOperationalReadinessService } from "../services/headless-operational-readiness-service.js";
+import type { AutomationSloService } from "../services/automation-slo-service.js";
 import type { ManagedRuntimeService } from "../services/managed-runtime-service.js";
 import type { ProviderToolManager } from "../services/provider-tool-manager.js";
 import {
@@ -186,9 +193,16 @@ export interface DashboardServerOptions {
   speechSynthesisService?: SpeechSynthesisService;
   speechModelManager?: SpeechModelManager;
   nodeFlowService?: NodeFlowService;
+  approvalService?: ApprovalService;
+  automationWebhookTriggerRepository?: AutomationWebhookTriggerRepository;
   customDashboardRepository?: CustomDashboardRepository;
   customDashboardValidationService?: CustomDashboardValidationService;
   skillService?: SkillService;
+  credentialBroker?: CredentialBroker;
+  headlessAuthService?: HeadlessAuthService;
+  automationAuditService?: AutomationAuditExportService;
+  headlessReadinessService?: HeadlessOperationalReadinessService;
+  automationSloService?: AutomationSloService;
   managedRuntimeService?: ManagedRuntimeService;
   providerToolManager?: ProviderToolManager;
   playwrightBrowserManager?: PlaywrightBrowserManager;
@@ -411,12 +425,20 @@ export const configureDashboardApp = (options: DashboardServerOptions): Logger =
     }
   });
 
-  app.get("/ready", (req, res) => {
+  app.get("/ready", async (req, res) => {
     const ready = isReady ? isReady() : { status: "READY" as const };
-    if (ready.status === "READY" || ready.status === "UP") {
-      res.json(ready);
+    const operational = options.headlessReadinessService
+      ? await options.headlessReadinessService.refresh()
+      : null;
+    const response = operational
+      ? { ...operational, runtime: ready }
+      : ready;
+    const isRuntimeReady = ready.status === "READY" || ready.status === "UP";
+    const isOperationallyReady = operational === null || operational.status === "READY";
+    if (isRuntimeReady && isOperationallyReady) {
+      res.json(response);
     } else {
-      res.status(503).json(ready);
+      res.status(503).json(response);
     }
   });
 
@@ -522,6 +544,7 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     port,
     getSprintPreviewSession,
   } = options;
+  await options.headlessReadinessService?.assertStartupReady();
   const dashboardLogger = configureDashboardApp(options);
   if (process.env.NODE_ENV !== "test") {
     const runtime = options.managedRuntimeService ?? managedRuntimeService;

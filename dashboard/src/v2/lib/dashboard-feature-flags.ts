@@ -9,6 +9,7 @@ export type DashboardFeatureFlagValues = Partial<Record<DashboardFeatureId, unkn
 export interface DashboardFeatureFlagSource {
   devMode?: boolean;
   values?: DashboardFeatureFlagValues;
+  prerequisites?: Partial<Record<"nodeFlowBackend" | "automationSecurity", unknown>>;
 }
 
 export const DASHBOARD_FEATURE_ENV_KEYS: Record<DashboardFeatureId, string> = {
@@ -48,6 +49,10 @@ const readDashboardFeatureFlagSource = (): DashboardFeatureFlagSource => {
       nodes: env[DASHBOARD_FEATURE_ENV_KEYS.nodes],
       "custom-dashboards": env[DASHBOARD_FEATURE_ENV_KEYS["custom-dashboards"]],
     },
+    prerequisites: {
+      nodeFlowBackend: env.VITE_CODEUX_NODE_FLOW_BACKEND,
+      automationSecurity: env.VITE_CODEUX_AUTOMATION_SECURITY,
+    },
   };
 };
 
@@ -67,7 +72,13 @@ export const resolveDashboardFeatureFlags = (
 
   return DASHBOARD_FEATURE_IDS.reduce<DashboardFeatureFlagMap>((flags, feature) => {
     const explicitValue = parseDashboardFeatureFlagValue(source.values?.[feature]);
-    flags[feature] = explicitValue ?? false;
+    if (feature === "nodes") {
+      const backendReady = parseDashboardFeatureFlagValue(source.prerequisites?.nodeFlowBackend) === true;
+      const securityReady = parseDashboardFeatureFlagValue(source.prerequisites?.automationSecurity) === true;
+      flags[feature] = explicitValue === true && backendReady && securityReady;
+    } else {
+      flags[feature] = explicitValue ?? false;
+    }
     return flags;
   }, {} as DashboardFeatureFlagMap);
 };
