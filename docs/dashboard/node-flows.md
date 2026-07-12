@@ -1,30 +1,36 @@
 # Node Flows Dashboard
 
-The **Nodes** page (`/nodes`) is the project-scoped authoring and operations surface for canonical node flows. No selected project means no flow library, credentials, publications, or run history are requested.
+The **Nodes** page (`/nodes`) is the project-scoped backend authoring, publication, and operations surface for canonical node flows. No selected project means no flow library, credential metadata, publications, or durable run history are requested.
 
-## Library and drafts
+## Library, drafts, and migration
 
 The library loads through `GET /api/projects/:projectId/node-flows`. Drafts are created through `POST /api/projects/:projectId/node-flow-drafts` and saved through revision-checked `PATCH /api/node-flow-drafts/:flowId`. A stale revision produces a visible conflict and never overwrites newer work.
 
-The former browser canvas is eligible for one project-specific import. After a successful backend draft creation, its graph value is removed and a migration marker prevents duplicates. Browser storage is never used for ongoing persistence.
+The former browser graph at `codeux:nodes-canvas:v1` is eligible for one import into the selected project. Code UX normalizes it to Graph v2, creates an **Imported Nodes Canvas** backend draft, and only then removes the legacy value and records a project-specific marker. A failed import remains retryable, while a successful marker prevents duplicates. Browser storage is never the ongoing workflow source of truth.
 
-## Registry and credentials
+## Registry-driven editing and credentials
 
-`GET /api/node-flow-catalog` is the registry source for palette entries, typed ports, configuration and widget schemas, execution availability, capabilities, side effects, policies, and credential requirements. Selecting a definition loads its full versioned manifest. Graphs reference a definition version and do not contain custom-node source.
+`GET /api/node-flow-catalog` is the versioned registry source for palette entries, typed ports, configuration and widget schemas, execution availability, capabilities, side effects, policies, and credential requirements. Selecting a definition loads its manifest and renders the inspector from that contract. Graphs reference a definition version and store non-secret configuration and credential ids; they do not contain custom-node source or resolved credentials.
 
-The inspector displays credential slots as bound, missing, or denied and can request a binding. It displays credential metadata only; secret values never enter the graph or dashboard output.
+Credential slots display metadata-only states such as bound, missing, or denied and can request a binding. Secret values remain behind the credential broker and are excluded from graphs, browser output, logs, and documentation examples.
 
-The registered governed built-ins are `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, `condition`, `switch`, `foreach`, `merge`, `delay`, `approval`, `email_draft`, `email_send`, `execute_subflow`, `webhook_trigger`, and `output`. Registered, validated custom definitions can execute when their immutable artifact and runtime are available. Legacy canvas kinds, unregistered names, and definitions marked non-executable remain planning or unavailable definitions and cannot run.
+The complete governed built-in set currently registered with executable handlers is `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, `condition`, `switch`, `foreach`, `merge`, `delay`, `approval`, `email_draft`, `email_send`, `execute_subflow`, `webhook_trigger`, and `output`.
+
+Registered custom definitions can execute only when their validated versioned manifest, immutable artifact, and custom-node runtime are available. Legacy `trigger`/`agent`/`task` canvas kinds, unknown or unregistered types, mockup entries, and definitions marked non-executable are planned or unavailable definitions, not executable handlers.
 
 ## Governance and publication
 
-T06 draft endpoints provide structural validation, policy findings, requested permissions, side-effect review, dry runs, immutable publication, version comparison, and rollback. Dry runs never execute nodes. Only a valid draft with satisfied required credentials can publish, and only published versions execute.
+Draft review provides structural validation, policy findings, requested permissions, side-effect review, and a non-executing dry run. Publication requires the current draft revision, a valid governed review, and all required credentials. Each publication is an immutable snapshot; comparison and rollback operate on versioned history, and only a pinned or latest-published version can execute.
 
-## Run debugger and scheduling
+## Durable debugger and scheduling
 
-The debugger reads persisted runs, node runs, attempt history, and approval decisions. Pending approvals expose keyboard-accessible **Approve & continue** and **Reject** actions. A decision continues or terminates the same pinned run, and repeated clicks return its current durable state without duplicating the governed attempt or external send. The debugger also overlays node state, shows retry reasons and decisions, links invocation ids, reports timing, supports cancellation and safe retry, and redacts secret-shaped values before rendering. Scheduling is entered through `/scheduler`; scheduler execution also resolves published versions.
+The debugger reads persisted flow runs, node runs, attempt history, retry classifications and decisions, approval records, invocation links, timing, and redacted input and output. Pending approvals expose keyboard-accessible **Approve & continue** and **Reject** actions. A decision continues or terminates the same pinned run, and repeated decisions return its current durable state without duplicating a governed attempt or external send. The debugger also supports cancellation and safe retry.
 
-The layout stacks on small screens, preserves keyboard-visible focus, labels loading/error/empty states, and bounds long histories and JSON output with scrolling.
+Scheduling is entered through `/scheduler` and targets a pinned or latest-published version. A flow can also be attached to a project agent preset as a reusable skill; removing the attachment does not remove the flow, publications, schedules, or run history.
+
+Rendered run payloads redact secret-shaped keys such as `apiKey`, `authorization`, `cookie`, `password`, `secret`, and `token`.
+
+The run debugger lists durable approvals beside node attempts. A pending item offers **Approve & continue** and **Reject** actions. The decision applies to the same pinned run, and repeated clicks return its current state without sending an approved external effect twice.
 
 ## Agent attachments
 
@@ -32,4 +38,4 @@ For the selected flow, the workspace loads project-owned agent presets and exist
 
 The inspector receives agent names and attachment metadata only. An attachment exposes only the narrow `run_attached_flow` capability to that project agent; execution continues to verify ownership, the binding, an immutable publication, and credential policy without exposing graph or secret material.
 
-Outside development, `/nodes` requires the Nodes feature flag plus the node-flow backend and automation-security prerequisites. Individual definitions can require additional provider, credential-broker, egress, approval/outbox, webhook, or custom-runtime configuration; catalog presence alone does not assert production readiness for an integration.
+Outside development builds, `/nodes` requires the Nodes feature flag plus the node-flow backend and automation-security prerequisites. Individual definitions can additionally require provider, credential-broker, egress, approval/outbox, webhook, or custom-runtime configuration. Catalog presence and feature visibility do not assert that an integration is configured or production-ready.
