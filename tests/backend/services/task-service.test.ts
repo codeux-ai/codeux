@@ -240,7 +240,8 @@ describe("TaskService", () => {
       provider: "gemini",
       providerSettingsOverride: expect.objectContaining({
         model: "gemini-custom",
-        apiKey: "secondary",
+        apiKey: "",
+        apiKeyCredentialRef: undefined,
         thinkingMode: "MEDIUM",
       }),
     }));
