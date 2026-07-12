@@ -4,7 +4,7 @@ The **Stats** page (`/stats`) is the analytics surface for the active project. I
 
 Stats metric cards, chips, filters, tables, and ledger rows use warm void surfaces, hairline borders, compact typography, subtle depth, and quiet selected states. Data colors are reserved for telemetry meaning such as chart series, status, source confidence, and token/churn breakdowns.
 
-The top command band shows the selected project, generated snapshot time, sprint lens, time-window controls, and analysis mode controls before the mode-specific metric deck and workspace.
+Stats uses the same page width and spacing rhythm as the rest of the dashboard. An unboxed introduction shows the selected project, generated snapshot time, and sprint lens; one compact command rail holds the time-window and analysis-mode controls. On wide screens the window and view controls sit side by side, while narrow screens wrap them into a readable vertical flow.
 
 The top dashboard header also shows a compact app-wide token-throughput summary alongside running and queued task counts near the runtime controls. It uses a rolling 20-second live activity window, updates once per second, and renders a 20-point stats-card-style sparkline that rises on increases, slopes down on decreases, stabilizes near the 90% band while throughput remains nonzero, and drops to baseline when throughput reaches zero. Use it for a live pulse check; use the Stats page for detailed analysis.
 
@@ -37,12 +37,13 @@ A full-width interactive **Usage Graph** displays usage over time for the series
 ### Composition
 Explains where usage comes from with provider share, token anatomy, cache behavior, source quality, purpose lanes, Git-blocker context, and low-data fallbacks.
 
-Interactive donut charts slice by:
-- Token anatomy
-- Provider distribution
-- Telemetry source mix
+The detailed workspace is organized for a top-to-bottom read:
+- **Token anatomy** separates input, cached input, output, and reasoning around an accessible flow bar and cache-efficiency summary.
+- **Provider distribution** ranks exact token volume and share beside a proportional strip.
+- **Purpose and runtime context** connect intent with calls, active time, wall time, utilization, and optional priced cost.
+- **Provider detail** keeps each provider's token flow, calls, cache rate, tokens per call, active time, and cost in a compact ledger.
 
-Charts keep data accent colors inside segments and token bars while compact badges remain neutral.
+Data accents stay inside distribution strips, token bars, and small swatches, with the exact values always available as text.
 
 ### Models
 Ranks model activity by token volume and tracks invocation volume, latency, reliability, cache efficiency, reasoning share, pricing signals, output velocity, and low-data states for each model used during the active timeframe.
@@ -52,6 +53,8 @@ Focuses on provider reliability, telemetry confidence, fallback usage, failure p
 
 ### Ledgers
 Provides tabbed telemetry tables for **Task Telemetry**, **Sprint Telemetry**, and **Git Telemetry**.
+- Summary values and search/sort controls are integrated into one compact workbench.
+- Task and sprint records form continuous hairline-separated rows, with status badges reserved for semantic state and provider/purpose context shown as readable metadata.
 - Supports searching and sorting by recency, tokens, time, input/output volume, or name.
 - Richer token and time breakdowns compared to standard views.
 - Task and sprint rows include status, provider, purpose, recency, visible share, leader share, token-flow anatomy, and optional duration percentile chips.
