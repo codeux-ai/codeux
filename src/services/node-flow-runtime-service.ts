@@ -165,6 +165,27 @@ export class NodeFlowRuntimeService {
     return await this.executeRun(run, publication, graph, executionOrder, input, options, "queued");
   }
 
+  async resumeRun(
+    projectId: string,
+    runId: string,
+    options: Pick<RunNodeFlowOptions, "signal" | "executorId"> = {},
+  ): Promise<NodeFlowRunSummaryResponse> {
+    const run = this.deps.nodeFlowRepository.getRun(runId);
+    if (!run) throw new EntityNotFoundError(`Node flow run not found: ${runId}`);
+    if (run.projectId !== projectId) throw new ValidationError("Node flow run does not belong to the requested project.");
+    if (run.status !== "queued") return this.summarizeRun(run.id);
+    const publication = new NodeFlowPublicationService(this.deps.nodeFlowRepository).resolve(run.flowId, {
+      mode: "pinned",
+      version: run.version,
+    });
+    if (run.publicationId && publication.id !== run.publicationId) {
+      throw new ValidationError("The recoverable run no longer matches its pinned publication.");
+    }
+    const { graph, executionOrder } = normalizeNodeFlowGraph(publication.graph);
+    this.requireSupportedNodes(graph);
+    return await this.executeRun(run, publication, graph, executionOrder, run.input ?? {}, options, "queued");
+  }
+
   async resumeApproval(projectId: string, approvalId: string, expectedRunId?: string, options: Pick<RunNodeFlowOptions, "signal" | "executorId"> = {}): Promise<NodeFlowRunSummaryResponse> {
     if (!this.deps.approvalService) throw new ValidationError("Approval service is not configured.");
     const approval = this.deps.approvalService.get(approvalId);
@@ -288,7 +309,8 @@ export class NodeFlowRuntimeService {
       }
 
       const nodeInput = maskSecrets(this.buildNodeInput(context, node.id));
-      const nodeRun = persistedNodeRun?.status === "approval_waiting"
+      const resumableNodeRun = persistedNodeRun && ["running", "retry_waiting", "approval_waiting"].includes(persistedNodeRun.status);
+      const nodeRun = resumableNodeRun
         ? this.deps.nodeFlowRepository.updateNodeRun(persistedNodeRun.id, { status: "running", errorMessage: null })
         : this.deps.nodeFlowRepository.createNodeRun({
           runId: run.id,
@@ -308,13 +330,18 @@ export class NodeFlowRuntimeService {
       let executionAttempt = 0;
       let waitingAttempt = this.deps.nodeFlowRepository.listNodeAttempts(run.id)
         .find((candidate) => candidate.nodeRunId === nodeRun.id && candidate.status === "approval_waiting");
+      let interruptedAttempt = this.deps.nodeFlowRepository.listNodeAttempts(run.id)
+        .find((candidate) => candidate.nodeRunId === nodeRun.id && candidate.status === "running" && candidate.invocationId === null);
       while (executionAttempt < retryPolicy.maxAttempts) {
         executionAttempt += 1;
         clearResolvedCredentials(context);
         const attempt = waitingAttempt
           ? this.deps.nodeFlowRepository.updateNodeAttempt(waitingAttempt.id, { status: "running", errorMessage: null, finishedAt: null })
-          : attemptService.start(nodeRun, executorId, nodeInput, (node.credentialBindings ?? []).map((binding) => binding.credentialId));
+          : interruptedAttempt
+            ? this.deps.nodeFlowRepository.updateNodeAttempt(interruptedAttempt.id, { status: "running", errorMessage: null, finishedAt: null })
+            : attemptService.start(nodeRun, executorId, nodeInput, (node.credentialBindings ?? []).map((binding) => binding.credentialId));
         waitingAttempt = undefined;
+        interruptedAttempt = undefined;
         context.currentAttemptId = attempt.id;
         const timeoutMs = node.policy?.timeout?.timeoutMs ?? publication.policy.defaultTimeoutMs;
         const timeoutController = new AbortController();
