@@ -39,6 +39,10 @@ import { EgressPolicyService } from "../../services/node-flows/egress-policy-ser
 import { AutomationApprovalRepository } from "../../repositories/automation-approval-repository.js";
 import { AutomationOutboxRepository } from "../../repositories/automation-outbox-repository.js";
 import { AutomationWebhookTriggerRepository } from "../../repositories/automation-webhook-trigger-repository.js";
+import { CustomNodeRepository } from "../../repositories/custom-node-repository.js";
+import { CustomNodeRuntimeService } from "../../services/custom-nodes/custom-node-runtime-service.js";
+import { customNodeDefinitionFromArtifact } from "../../contracts/custom-node-types.js";
+import { registerCustomNodeDefinition } from "../../domain/node-flows/node-definition-registry.js";
 
 export interface DashboardDependencies {
   credentialBroker: CoreDependencies["credentialBroker"];
@@ -237,6 +241,16 @@ export function createDashboardDependencies(
   const webhookTriggerRepository = coreDeps.automationWebhookTriggerRepository
     ?? new AutomationWebhookTriggerRepository(coreDeps.appDbStorage);
   const approvalService = new ApprovalService(approvalRepository);
+  const egressPolicyService = new EgressPolicyService();
+  const customNodeRepository = new CustomNodeRepository(coreDeps.appDbStorage);
+  for (const { artifact } of customNodeRepository.listPublications()) {
+    registerCustomNodeDefinition(customNodeDefinitionFromArtifact(artifact));
+  }
+  const customNodeRuntimeService = new CustomNodeRuntimeService({
+    repository: customNodeRepository,
+    credentialBroker: coreDeps.credentialBroker,
+    egressPolicyService,
+  });
   const nodeFlowRuntimeService = new NodeFlowRuntimeService({
     nodeFlowRepository: coreDeps.nodeFlowRepository,
     executionRepository,
@@ -244,7 +258,8 @@ export function createDashboardDependencies(
     settingsRepository,
     providerExecutionService,
     credentialBroker: coreDeps.credentialBroker,
-    egressPolicyService: new EgressPolicyService(),
+    egressPolicyService,
+    customNodeRuntimeService,
     approvalService,
     outboxService: new OutboxService(outboxRepository, new MockSideEffectProvider()),
     getDashboardSettings: (projectId) => resolveDashboardSettings({ projectId }),
