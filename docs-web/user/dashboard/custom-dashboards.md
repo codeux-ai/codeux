@@ -15,6 +15,8 @@ Custom dashboards are project-scoped dashboard apps generated and revised by age
 
 If validation fails, use the report and logs to create a new revision. Code UX rejects failed, queued, running, cancelled, missing, or mismatched validation sessions before publication state changes. When a dashboard is already published, validating later drafts keeps the active published dashboard open, and validation sessions for the active published revision do not replace its published validation snapshot.
 
+Dashboard bundles can use individualized Preact components, strict TypeScript/TSX route entries, CSS, and Tailwind v4 utilities. List every source and stylesheet in `manifest.filePaths`; route `entryFile` values must name declared TypeScript/TSX files. Code UX supplies the package manifest and Vite, TypeScript, and Tailwind configuration. User package files, install scripts, build configuration, arbitrary dependencies, undeclared or oversized files, unsafe paths, and embedded credential literals fail validation before any build runs.
+
 ## Data Sources
 
 Custom dashboards declare a `sourceNodeGraph` with nodes, edges, and optional metadata. Nodes have `id`, `type`, `title`, and optional JSON `config`.

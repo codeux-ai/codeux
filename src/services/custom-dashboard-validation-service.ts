@@ -2,7 +2,6 @@ import * as fs from "fs/promises";
 import * as net from "net";
 import * as os from "os";
 import * as path from "path";
-import { fileURLToPath } from "url";
 import type {
   CustomDashboardJsonObject,
   CustomDashboardRevisionRecord,
@@ -15,9 +14,8 @@ import type { SettingsRepository } from "../repositories/settings-repository.js"
 import { CustomDashboardRepository } from "../repositories/custom-dashboard-repository.js";
 import { EntityNotFoundError } from "../repositories/repository-utils.js";
 import type { Logger } from "../shared/logging/logger.js";
-import { getDockerUserSpec, mapPathPrefix, resolveConfiguredPath } from "./cli-docker-utils.js";
+import { getDockerUserSpec, mapPathPrefix } from "./cli-docker-utils.js";
 import { runCommandStrict } from "./cli-process-runner.js";
-import { CONTAINER_SETUP_SCRIPT } from "./cli-workflow-utils.js";
 import {
   buildCustomDashboardValidationDockerCreateArgs,
   buildCustomDashboardValidationDockerRunArgs,
@@ -33,6 +31,7 @@ import {
   materializeCustomDashboardWorkspace,
   readValidationLog,
   resolveContainedCustomDashboardPath,
+  sanitizeValidationOutput,
   tailLogLines,
   type ValidatedCustomDashboardPath,
 } from "./custom-dashboard-validation-utils.js";
@@ -41,17 +40,22 @@ import { DockerBootstrapBuilder } from "../infrastructure/providers/cli/docker-b
 import { assertSafePathSegment, isPathInside } from "../utils/path-validator.js";
 import { managedRuntimeService, type ManagedRuntimeService } from "./managed-runtime-service.js";
 
-const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../../.code-ux/container/setup.sh",
-);
 const VALIDATION_READINESS_TIMEOUT_MS = 300_000;
 const VALIDATION_READINESS_POLL_MS = 1000;
 const VALIDATION_URL_PREFIX = "/api/custom-dashboard-validations";
-const INSTALL_AND_BUILD_COMMAND = "npm install --no-audit --no-fund && npm run build";
+const INSTALL_AND_BUILD_COMMAND = "npm install --ignore-scripts --no-audit --no-fund --package-lock=false && npm run build --ignore-scripts";
 const START_COMMAND = `npm run start -- --host 0.0.0.0 --port ${CUSTOM_DASHBOARD_VALIDATION_CONTAINER_PORT}`;
+const VALIDATION_BUILD_TIMEOUT_MS = 300_000;
+const VALIDATION_DOCKER_COMMAND_TIMEOUT_MS = 30_000;
+const VALIDATION_MAX_COMMAND_OUTPUT_CHARS = 256 * 1024;
 const VIEWER_ARTIFACT_MAX_FILE_BYTES = 2 * 1024 * 1024;
 const VIEWER_ARTIFACT_MAX_TOTAL_BYTES = 8 * 1024 * 1024;
+const VIEWER_ARTIFACT_MAX_FILES = 128;
+const VIEWER_ARTIFACT_CONTENT_TYPES = new Map([
+  [".html", "text/html"],
+  [".js", "text/javascript"],
+  [".css", "text/css"],
+]);
 
 export interface CustomDashboardValidationServiceDeps {
   customDashboardRepository: CustomDashboardRepository;
@@ -146,10 +150,6 @@ export class CustomDashboardValidationService {
         const settings = this.deps.settingsRepository.resolveProjectDashboardSettings(projectId).settings;
         const cliWorkflow = settings.cliWorkflow;
         const resolvedImage = await (this.deps.managedRuntimeService ?? managedRuntimeService).resolveImage(cliWorkflow, "base");
-        const setupScriptPath = cliWorkflow.containerImageMode === "managed" && !cliWorkflow.containerSetupScriptPath.trim()
-          ? undefined
-          : await this.resolveContainerSetupScriptPath(project.baseDir, cliWorkflow.containerSetupScriptPath);
-
         this.deps.customDashboardRepository.updateValidationSession(session.id, {
           status: "building",
           startedAt: new Date().toISOString(),
@@ -178,14 +178,11 @@ export class CustomDashboardValidationService {
         const bootstrapScript = new DockerBootstrapBuilder().build({
           runtimeNpmPrefix: CUSTOM_DASHBOARD_VALIDATION_CONTAINER_NPM_PREFIX,
           runtimeNpmCache: CUSTOM_DASHBOARD_VALIDATION_CONTAINER_NPM_CACHE,
-          runSetupScript: Boolean(setupScriptPath),
+          runSetupScript: false,
         });
-        const userSpec = cliWorkflow.containerRunAsRoot ? null : await this.resolveDockerUserSpec(workspacePath);
+        const userSpec = await this.resolveDockerUserSpec(workspacePath);
         const mappedWorkspacePath = this.mapDockerSourcePathForDaemon(workspacePath, project.baseDir);
         const mappedRuntimeHomePath = this.mapDockerSourcePathForDaemon(runtimeHomePath, project.baseDir);
-        const mappedSetupScriptPath = setupScriptPath
-          ? this.mapDockerSourcePathForDaemon(setupScriptPath, project.baseDir)
-          : null;
 
         const buildResult = await runCommandStrict(
           "docker",
@@ -197,15 +194,17 @@ export class CustomDashboardValidationService {
             workspacePath: mappedWorkspacePath,
             runtimeHomePath: mappedRuntimeHomePath,
             userSpec,
-            setupScriptSource: mappedSetupScriptPath,
-            shouldRunSetupScriptAtRuntime: Boolean(setupScriptPath),
             resolvedImage,
             bootstrapScript,
             command: INSTALL_AND_BUILD_COMMAND,
           }),
           project.baseDir,
           process.env,
-          { trimOutput: false, maxStdoutChars: 1024 * 1024 },
+          {
+            timeout: VALIDATION_BUILD_TIMEOUT_MS,
+            trimOutput: false,
+            maxStdoutChars: VALIDATION_MAX_COMMAND_OUTPUT_CHARS,
+          },
         );
         await appendValidationLog(logPath, "install-build stdout", buildResult.stdout);
         await appendValidationLog(logPath, "install-build stderr", buildResult.stderr);
@@ -230,20 +229,26 @@ export class CustomDashboardValidationService {
             hostPort,
             containerName,
             userSpec,
-            setupScriptSource: mappedSetupScriptPath,
-            shouldRunSetupScriptAtRuntime: Boolean(setupScriptPath),
             resolvedImage,
             bootstrapScript,
             startCommand: START_COMMAND,
           }),
           project.baseDir,
+          process.env,
+          { timeout: VALIDATION_DOCKER_COMMAND_TIMEOUT_MS, maxStdoutChars: VALIDATION_MAX_COMMAND_OUTPUT_CHARS },
         );
         const containerId = createResult.stdout.trim();
         if (!containerId) {
           throw new Error("Custom dashboard validation container did not return a container id.");
         }
         await appendValidationLog(logPath, "docker-create", containerId);
-        await runCommandStrict("docker", ["start", containerName], project.baseDir);
+        await runCommandStrict(
+          "docker",
+          ["start", containerName],
+          project.baseDir,
+          process.env,
+          { timeout: VALIDATION_DOCKER_COMMAND_TIMEOUT_MS, maxStdoutChars: VALIDATION_MAX_COMMAND_OUTPUT_CHARS },
+        );
 
         const runningSession = this.deps.customDashboardRepository.updateValidationSession(session.id, {
           status: "running",
@@ -288,7 +293,7 @@ export class CustomDashboardValidationService {
           }),
         });
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = sanitizeValidationOutput(error instanceof Error ? error.message : String(error));
         await appendValidationLog(logPath, "validation-error", message).catch(() => undefined);
         const current = this.deps.customDashboardRepository.getValidationSessionById(session.id);
         const runtimeMetadata = this.mergeRuntimeMetadata(current?.runtimeMetadata, {
@@ -794,7 +799,10 @@ export class CustomDashboardValidationService {
           continue;
         }
         if (!entry.isFile()) {
-          continue;
+          throw new Error(`Custom dashboard viewer artifact contains an unsupported filesystem entry: ${entry.name}`);
+        }
+        if (files.length >= VIEWER_ARTIFACT_MAX_FILES) {
+          throw new Error("Custom dashboard viewer artifact contains too many files.");
         }
         // absolutePath is a viewer artifact path that passed root containment
         // before this metadata read.
@@ -808,25 +816,21 @@ export class CustomDashboardValidationService {
           throw new Error("Custom dashboard viewer artifact exceeds the maximum persisted size.");
         }
         const relativePath = path.relative(rootPath, absolutePath).split(path.sep).join("/");
+        const extension = path.extname(relativePath).toLowerCase();
+        const contentType = VIEWER_ARTIFACT_CONTENT_TYPES.get(extension);
+        if (!contentType) {
+          throw new Error(`Custom dashboard viewer artifact contains an unsupported file: ${relativePath}`);
+        }
         files.push({
           path: relativePath,
           // codeql[js/path-injection]
           content: await fs.readFile(absolutePath, "utf8"),
-          contentType: this.inferViewerArtifactContentType(relativePath),
+          contentType,
         });
       }
     };
     await visit(rootPath);
     return files.sort((left, right) => left.path.localeCompare(right.path));
-  }
-
-  private inferViewerArtifactContentType(filePath: string): string {
-    if (filePath.endsWith(".html")) return "text/html";
-    if (filePath.endsWith(".js") || filePath.endsWith(".mjs")) return "text/javascript";
-    if (filePath.endsWith(".css")) return "text/css";
-    if (filePath.endsWith(".json")) return "application/json";
-    if (filePath.endsWith(".svg")) return "image/svg+xml";
-    return "text/plain";
   }
 
   private requireProject(projectId: string) {
@@ -1074,22 +1078,4 @@ export class CustomDashboardValidationService {
     return getDockerUserSpec();
   }
 
-  private async resolveContainerSetupScriptPath(
-    repoPath: string,
-    configuredSetupScriptPath: string,
-  ): Promise<string | null> {
-    const configured = configuredSetupScriptPath.trim();
-    const candidates = configured
-      ? [resolveConfiguredPath(repoPath, configured)]
-      : [path.join(repoPath, ".code-ux", "container", "setup.sh"), BUNDLED_CONTAINER_SETUP_SCRIPT];
-    for (const candidate of candidates) {
-      try {
-        await fs.access(candidate);
-        return candidate;
-      } catch {
-        continue;
-      }
-    }
-    return null;
-  }
 }

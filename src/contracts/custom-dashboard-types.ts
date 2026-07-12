@@ -95,6 +95,27 @@ export interface CustomDashboardManifest {
   metadata?: CustomDashboardJsonObject;
 }
 
+export type CustomDashboardBuildDependency =
+  | "@preact/preset-vite"
+  | "@preact/signals"
+  | "@tailwindcss/vite"
+  | "preact"
+  | "tailwindcss"
+  | "typescript"
+  | "vite";
+
+/**
+ * Ephemeral validation input derived and controlled by the server. It is never
+ * accepted as user package configuration or persisted as executable state.
+ */
+export interface CustomDashboardBuildManifest {
+  entryFile: string;
+  sourceFiles: string[];
+  styleEntries: string[];
+  routes: CustomDashboardRouteDefinition[];
+  dependencies: Record<CustomDashboardBuildDependency, string>;
+}
+
 export interface CustomDashboardValidationIssue {
   field: string;
   code: string;

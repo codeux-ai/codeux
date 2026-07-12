@@ -1,4 +1,3 @@
-import { CONTAINER_SETUP_SCRIPT } from "./cli-workflow-utils.js";
 import {
   DOCKER_BRIDGE_NETWORK_ARGS,
   DOCKER_NO_NEW_PRIVILEGES_ARGS,
@@ -11,6 +10,9 @@ export const CUSTOM_DASHBOARD_VALIDATION_CONTAINER_WORKSPACE = "/code-ux-custom-
 export const CUSTOM_DASHBOARD_VALIDATION_CONTAINER_HOME = "/code-ux-custom-dashboard/home";
 export const CUSTOM_DASHBOARD_VALIDATION_CONTAINER_NPM_PREFIX = "/code-ux-custom-dashboard/npm-global";
 export const CUSTOM_DASHBOARD_VALIDATION_CONTAINER_NPM_CACHE = "/code-ux-custom-dashboard/npm-cache";
+export const CUSTOM_DASHBOARD_VALIDATION_CPUS = "1";
+export const CUSTOM_DASHBOARD_VALIDATION_MEMORY = "768m";
+export const CUSTOM_DASHBOARD_VALIDATION_PIDS_LIMIT = "128";
 
 interface CustomDashboardValidationDockerBaseArgs {
   projectId: string;
@@ -22,8 +24,6 @@ interface CustomDashboardValidationDockerBaseArgs {
   hostPort?: number | null;
   containerName?: string;
   userSpec: string | null;
-  setupScriptSource?: string | null;
-  shouldRunSetupScriptAtRuntime: boolean;
   resolvedImage: string;
   bootstrapScript: string;
 }
@@ -136,15 +136,18 @@ function appendCommonDockerArgs(
   dockerArgs: string[],
   args: CustomDashboardValidationDockerBaseArgs,
 ): void {
+  dockerArgs.push(
+    "--cap-drop", "ALL",
+    "--cpus", CUSTOM_DASHBOARD_VALIDATION_CPUS,
+    "--memory", CUSTOM_DASHBOARD_VALIDATION_MEMORY,
+    "--memory-swap", CUSTOM_DASHBOARD_VALIDATION_MEMORY,
+    "--pids-limit", CUSTOM_DASHBOARD_VALIDATION_PIDS_LIMIT,
+    "--ulimit", "nofile=1024:1024",
+    "--init",
+  );
+
   if (args.userSpec) {
     dockerArgs.push("--user", args.userSpec);
   }
 
-  if (args.setupScriptSource && args.shouldRunSetupScriptAtRuntime) {
-    dockerArgs.push("--mount", toDockerMountArg({
-      source: args.setupScriptSource,
-      destination: CONTAINER_SETUP_SCRIPT,
-      readonly: true,
-    }));
-  }
 }
