@@ -10,6 +10,8 @@ Alternatively, set `CODE_UX_DASHBOARD_AUTH_MODE=trusted_proxy`, configure `CODE_
 
 Roles are `credential_admin`, `automation_author`, `automation_publisher`, `automation_runner`, and `viewer`. Credential routes additionally require `CODE_UX_REMOTE_CREDENTIAL_MANAGEMENT=true`; enabling it without a healthy secure key provider makes readiness fail. Host/origin checks, no-store responses, and administrative rate limits remain active.
 
+The `credential_admin` role can still read administrative readiness, audit export, and SLO metrics while remote credential management is disabled. The feature flag gates credential-management and credential-health routes only.
+
 ## Probes, audit, and SLOs
 
 `/health` is liveness. `/ready` also checks credential-key recovery, the audit store, and distributed-runner identities and returns `503` when required components are unavailable. If encrypted credential rows exist and their key cannot be recovered, startup aborts before listeners bind.

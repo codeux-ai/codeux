@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { applyDashboardPreRouteMiddleware } from "../../../src/server/dashboard-middleware.js";
 import type { DashboardServerOptions } from "../../../src/server/dashboard-server.js";
 import { configureDashboardApp } from "../../../src/server/dashboard-server.js";
+import { registerHeadlessOperationsRoutes } from "../../../src/server/headless-operations-routes.js";
 import type { HeadlessOperationalReadinessService } from "../../../src/services/headless-operational-readiness-service.js";
 import { HeadlessAuthService } from "../../../src/services/headless-auth-service.js";
 import { createLogger } from "../../../src/shared/logging/logger.js";
@@ -53,6 +54,65 @@ describe("headless dashboard API authentication", () => {
       .expect(200);
     expect(response.body).toEqual({ projectId: "project-one" });
     expect(response.headers["x-correlation-id"]).toMatch(/^[a-f\d-]+$/i);
+  });
+
+  it("permits authenticated admin operations when remote credential management is disabled", async () => {
+    const adminToken = "headless-dashboard-admin-token";
+    const application = express();
+    applyDashboardPreRouteMiddleware(application, {
+      headlessAuthService: new HeadlessAuthService({
+        mode: "service_token",
+        serviceIdentities: [{
+          id: "admin",
+          displayName: "Operations administrator",
+          tokenSha256: createHash("sha256").update(adminToken).digest("hex"),
+          roles: ["credential_admin"],
+          projectIds: ["*"],
+          enabled: true,
+        }],
+        allowInsecureHttp: false,
+        remoteCredentialManagement: false,
+      }),
+    } as DashboardServerOptions, createLogger({ level: "error" }));
+    registerHeadlessOperationsRoutes(application, {
+      automationAuditService: { exportNdjson: () => "{\"status\":\"ok\"}\n" },
+      headlessReadinessService: { refresh: async () => ({ status: "READY" }) },
+      automationSloService: { snapshot: () => ({ managementRequestCount: 1 }) },
+    } as never);
+
+    const authorized = (path: string) => request(application).get(path)
+      .set("Host", "localhost")
+      .set("X-Forwarded-Proto", "https")
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    await authorized("/api/admin/readiness").expect(200);
+    await authorized("/api/admin/audit/export").expect(200);
+    await authorized("/api/admin/metrics/slo").expect(200);
+  });
+
+  it("keeps webhook ingress on its secret boundary while enforcing host and origin protections", async () => {
+    const application = express();
+    applyDashboardPreRouteMiddleware(application, {
+      headlessAuthService: authService,
+    } as DashboardServerOptions, createLogger({ level: "error" }));
+    application.post("/api/webhooks/node-flows/path-token", (_req, res) => res.json({ accepted: true }));
+
+    await request(application).post("/api/webhooks/node-flows/path-token")
+      .set("Host", "localhost")
+      .set("X-Codeux-Webhook-Secret", "webhook-secret")
+      .send({ event: "test" })
+      .expect(200, { accepted: true });
+    await request(application).post("/api/webhooks/node-flows/path-token")
+      .set("Host", "untrusted.example")
+      .set("X-Codeux-Webhook-Secret", "webhook-secret")
+      .send({ event: "test" })
+      .expect(403, /Untrusted host/);
+    await request(application).post("/api/webhooks/node-flows/path-token")
+      .set("Host", "localhost")
+      .set("Origin", "https://untrusted.example")
+      .set("X-Codeux-Webhook-Secret", "webhook-secret")
+      .send({ event: "test" })
+      .expect(403, /Cross-site/);
   });
 
   it("keeps health live while key-backed readiness fails closed", async () => {

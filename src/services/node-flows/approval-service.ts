@@ -48,4 +48,5 @@ export class ApprovalService {
   }
   listForRun(runId: string): AutomationApprovalRecord[] { this.repository.expireDue(); return this.repository.listForRun(runId); }
   get(id: string): AutomationApprovalRecord | null { this.repository.expireDue(); return this.repository.get(id); }
+  resolveProjectId(id: string): string | null { return this.get(id)?.projectId ?? null; }
 }

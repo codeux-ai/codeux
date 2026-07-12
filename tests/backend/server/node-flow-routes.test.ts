@@ -1,8 +1,12 @@
+import { createHash } from "node:crypto";
 import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import { registerNodeFlowRoutes } from "../../../src/server/node-flow-routes.js";
 import { NodeFlowValidationError } from "../../../src/domain/node-flows/node-flow-validation.js";
+import { applyDashboardPreRouteMiddleware } from "../../../src/server/dashboard-middleware.js";
+import { HeadlessAuthService } from "../../../src/services/headless-auth-service.js";
+import { createLogger } from "../../../src/shared/logging/logger.js";
 
 describe("node flow routes", () => {
   it("creates project-scoped node flows through the service", async () => {
@@ -188,5 +192,71 @@ describe("node flow routes", () => {
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({ status: "expired", run: { status: "failed" } });
     expect(approvalService.approve).not.toHaveBeenCalled();
+  });
+
+  it("denies project-scoped principals access to another project's flow and run resources", async () => {
+    const token = "project-one-node-flow-token";
+    const forbiddenHandler = vi.fn(() => {
+      throw new Error("A forbidden node-flow handler must not run.");
+    });
+    const nodeFlowService = {
+      resolveFlowProjectId: vi.fn((flowId: string) => flowId === "flow-two" ? "project-two" : null),
+      resolveRunProjectId: vi.fn((runId: string) => runId === "run-two" ? "project-two" : null),
+      get: forbiddenHandler,
+      runFlow: forbiddenHandler,
+      patchDraft: forbiddenHandler,
+      publishDraft: forbiddenHandler,
+      rollback: forbiddenHandler,
+      cancelRun: forbiddenHandler,
+      getRun: forbiddenHandler,
+      listNodeRuns: forbiddenHandler,
+      listNodeAttempts: forbiddenHandler,
+      list: forbiddenHandler,
+      delete: forbiddenHandler,
+    };
+    const approvalService = {
+      resolveProjectId: vi.fn((approvalId: string) => approvalId === "approval-two" ? "project-two" : null),
+      approve: forbiddenHandler,
+      reject: forbiddenHandler,
+    };
+    const app = express();
+    applyDashboardPreRouteMiddleware(app, {
+      nodeFlowService,
+      approvalService,
+      headlessAuthService: new HeadlessAuthService({
+        mode: "service_token",
+        serviceIdentities: [{
+          id: "project-one-automation",
+          displayName: "Project one automation principal",
+          tokenSha256: createHash("sha256").update(token).digest("hex"),
+          roles: ["viewer", "automation_author", "automation_publisher", "automation_runner"],
+          projectIds: ["project-one"],
+          enabled: true,
+        }],
+        allowInsecureHttp: false,
+        remoteCredentialManagement: false,
+      }),
+    } as never, createLogger({ level: "error" }));
+    registerNodeFlowRoutes(app, { nodeFlowService, approvalService } as any);
+
+    const authorized = (method: "get" | "post" | "patch" | "delete", path: string) => request(app)[method](path)
+      .set("Host", "localhost")
+      .set("X-Forwarded-Proto", "https")
+      .set("Authorization", `Bearer ${token}`);
+
+    await authorized("get", "/api/node-flows/flow-two").expect(403);
+    await authorized("post", "/api/node-flows/flow-two/run").send({ projectId: "project-one" }).expect(403);
+    await authorized("patch", "/api/node-flow-drafts/flow-two").send({ projectId: "project-one", draftRevision: 1 }).expect(403);
+    await authorized("post", "/api/node-flow-drafts/flow-two/publish").send({ projectId: "project-one", draftRevision: 1, publishedBy: "principal" }).expect(403);
+    await authorized("post", "/api/node-flows/flow-two/rollback").send({ projectId: "project-one", version: 1, draftRevision: 1 }).expect(403);
+    await authorized("post", "/api/node-flow-runs/run-two/cancel").send({ projectId: "project-one" }).expect(403);
+    await authorized("get", "/api/node-flow-runs/run-two").expect(403);
+    await authorized("get", "/api/node-flow-runs/run-two/node-runs").expect(403);
+    await authorized("get", "/api/node-flow-runs/run-two/attempts").expect(403);
+    await authorized("get", "/api/node-flows/flow-two/webhook").expect(403);
+    await authorized("post", "/api/automation-approvals/approval-two/decision").send({ decision: "approve", decidedBy: "principal" }).expect(403);
+    await authorized("get", "/API/PROJECTS/project-two/NODE-FLOWS").expect(403);
+    await authorized("delete", "/API/NODE-FLOWS/flow-two").expect(403);
+    expect(forbiddenHandler).not.toHaveBeenCalled();
   });
 });

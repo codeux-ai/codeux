@@ -231,6 +231,10 @@ export interface ExecutionProviderRunArgs {
   trackPromptInInvocation?: boolean;
   trackAssistantInInvocation?: boolean;
   finalizeExecutionInvocation?: boolean;
+  /** Sanitizes provider-controlled text before node-flow callers allow it to reach durable records. */
+  redactTextForPersistence?: (value: string) => string;
+  /** Sanitizes provider-controlled usage payloads before durable telemetry writes. */
+  redactJsonForPersistence?: (value: Record<string, unknown> | null) => Record<string, unknown> | null;
 
   /** MCP server connection info for injecting management tools into the CLI provider. */
   mcpConnection?: McpConnectionInfo | null;
@@ -485,7 +489,9 @@ export class ProviderExecutionService {
             this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
               status: "running",
               model: effectiveModel,
-              nativeSessionId: telemetry.nativeSessionId || undefined,
+              nativeSessionId: telemetry.nativeSessionId
+                ? args.redactTextForPersistence?.(telemetry.nativeSessionId) ?? telemetry.nativeSessionId
+                : undefined,
               durationMs,
               transcriptChars: telemetry.transcriptText.length,
               inputTokens: telemetry.inputTokens,
@@ -495,7 +501,11 @@ export class ProviderExecutionService {
               totalTokens: telemetry.totalTokens,
               toolCallCount: countConversationToolCalls(telemetry.conversation),
               usageSource: telemetry.usageSource,
-              rawUsageJson: telemetry.rawUsageJson || undefined,
+              rawUsageJson: telemetry.rawUsageJson
+                ? args.redactJsonForPersistence
+                  ? args.redactJsonForPersistence(telemetry.rawUsageJson)
+                  : telemetry.rawUsageJson
+                : undefined,
             });
             this.refreshLinkedDispatchHeartbeat(args.dispatchId);
             lastPersistedUsageSignature = usageSignature;
@@ -594,7 +604,9 @@ export class ProviderExecutionService {
           this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
             status: (args.signal?.aborted || isRuntimeShutdownInProgress()) ? "cancelled" : (result.ok ? "completed" : "failed"),
             model: effectiveModel,
-            nativeSessionId: result.nativeSessionId,
+            nativeSessionId: result.nativeSessionId
+              ? args.redactTextForPersistence?.(result.nativeSessionId) ?? result.nativeSessionId
+              : result.nativeSessionId,
             finishedAt,
             durationMs,
             transcriptChars: result.usageTelemetry.transcriptText.length,
@@ -605,7 +617,11 @@ export class ProviderExecutionService {
             totalTokens: result.usageTelemetry.totalTokens,
             toolCallCount: countConversationToolCalls(result.usageTelemetry.conversation),
             usageSource: result.usageTelemetry.usageSource,
-            rawUsageJson: result.usageTelemetry.rawUsageJson,
+            rawUsageJson: result.usageTelemetry.rawUsageJson
+              ? args.redactJsonForPersistence
+                ? args.redactJsonForPersistence(result.usageTelemetry.rawUsageJson)
+                : result.usageTelemetry.rawUsageJson
+              : result.usageTelemetry.rawUsageJson,
           });
         }
 
@@ -736,6 +752,7 @@ export class ProviderExecutionService {
       }
 
       const classification = classifyProviderError(args.provider, providerResult);
+      const persistedUserMessage = args.redactTextForPersistence?.(classification.userMessage) ?? classification.userMessage;
       const retryDecision = resolveProviderRetryDecision(classification, args.workflowSettings);
       const retryAfterIso = retryDecision
         && !(retryDecision.kind === "rate_limit" && rateLimitRetryCount >= args.workflowSettings.maxRateLimitRetries)
@@ -744,12 +761,12 @@ export class ProviderExecutionService {
       if (execInvocationId) {
         this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
           lastErrorCategory: classification.category,
-          lastErrorMessage: classification.userMessage,
+          lastErrorMessage: persistedUserMessage,
           lastRetryAfterIso: retryAfterIso,
         });
         this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
           role: "system",
-          contentMarkdown: `Provider error (${classification.category}): ${classification.userMessage}`,
+          contentMarkdown: `Provider error (${classification.category}): ${persistedUserMessage}`,
           metadata: {
             provider: args.provider,
             model: args.model,

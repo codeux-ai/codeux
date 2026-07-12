@@ -25,6 +25,8 @@ Choose one boundary:
 
 Roles are `credential_admin`, `automation_author`, `automation_publisher`, `automation_runner`, and `viewer`. Project ids are explicit; `*` is an operator-only all-project grant. Credential routes additionally require `CODE_UX_REMOTE_CREDENTIAL_MANAGEMENT=true`. Enabling that flag without a healthy secure key provider makes readiness fail.
 
+The `credential_admin` role can read `/api/admin/readiness`, `/api/admin/audit/export`, and `/api/admin/metrics/slo` even when remote credential management is disabled. The feature flag gates credential creation, binding, testing, rotation, replacement, revocation, promotion, restriction, and credential-health routes; it does not disable operational readiness, audit, or SLO inspection.
+
 TLS is assumed at the reverse proxy. Authenticated remote requests must arrive with HTTPS or a trusted `X-Forwarded-Proto: https`; `CODE_UX_ALLOW_INSECURE_HTTP=true` is limited to isolated test networks. Same-origin browser checks, no-store headers, host validation, and a 600-request/minute administrative API limiter remain active. Webhook and provider-ingress endpoints retain their dedicated authentication schemes.
 
 Example identity generation (the JSON stores only the digest):

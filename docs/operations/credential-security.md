@@ -11,6 +11,12 @@ Code UX stores automation credentials through a broker rather than exposing secr
 
 The dashboard accepts secret values only on create, rotate, and replace requests. Responses contain configuration, scope, status, key-version, and validation metadata but never stored values. Access-event rows contain identifiers, binding keys, capabilities, outcomes, and denial reasons; they never contain secret material.
 
+## Runtime redaction boundary
+
+Node-flow execution resolves credential values only for the active node attempt. Before any provider response, HTTP body, retry error, external-effect payload, diagnostic, invocation message, attempt, node output, or run summary is persisted, the runtime replaces exact resolved values with `[REDACTED]` in addition to masking secret-shaped keys. Credential IDs and non-secret metadata remain available for audit and attempt correlation.
+
+Provider activity persistence uses the same invocation-scoped redactor, including raw usage telemetry and provider session identifiers. Temporary credential references are cleared after each attempt and are never included in redaction logs or diagnostics. Custom-node containers apply the equivalent policy to structured output, stderr logs, and diagnostics before returning control to the flow runtime.
+
 ## Encryption and key custody
 
 The SQLite secret store uses AES-256-GCM envelope encryption. Each write generates a unique 256-bit data key, payload nonce, and key-wrapping nonce. Credential ownership and workspace context are authenticated as additional data. SQLite stores only ciphertext, authentication tags, wrapped keys, nonces, and key identifiers/versions.

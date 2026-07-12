@@ -78,6 +78,7 @@ interface RuntimeContext {
   currentAttemptId?: string;
   publicationId: string;
   subflowDepth: number;
+  resolvedCredentialValues: string[];
 }
 
 interface NodeExecutionResult {
@@ -233,6 +234,7 @@ export class NodeFlowRuntimeService {
       executorId,
       publicationId: publication.id,
       subflowDepth: options.subflowDepth ?? 0,
+      resolvedCredentialValues: [],
     };
 
     const persistedNodeRuns = this.deps.nodeFlowRepository.listNodeRuns(run.id);
@@ -308,6 +310,7 @@ export class NodeFlowRuntimeService {
         .find((candidate) => candidate.nodeRunId === nodeRun.id && candidate.status === "approval_waiting");
       while (executionAttempt < retryPolicy.maxAttempts) {
         executionAttempt += 1;
+        clearResolvedCredentials(context);
         const attempt = waitingAttempt
           ? this.deps.nodeFlowRepository.updateNodeAttempt(waitingAttempt.id, { status: "running", errorMessage: null, finishedAt: null })
           : attemptService.start(nodeRun, executorId, nodeInput, (node.credentialBindings ?? []).map((binding) => binding.credentialId));
@@ -322,21 +325,20 @@ export class NodeFlowRuntimeService {
         context.options = { ...options, signal: timeoutController.signal };
         try {
         const result = await this.executeNode(context, node, nodeRun);
-        context.outputs.set(node.id, result.output);
+        const safeOutput = redactCredentialJson(result.output, context.resolvedCredentialValues);
+        context.outputs.set(node.id, safeOutput);
         if (result.selectedPorts) context.selectedPorts.set(node.id, new Set(result.selectedPorts));
-        attemptService.succeed(attempt, maskSecrets(result.output), result.invocationId);
+        attemptService.succeed(attempt, safeOutput, result.invocationId);
         this.deps.auditService?.recordSystem({ action: "automation.attempt.succeeded", resourceType: "node_flow_attempt", resourceId: attempt.id, projectId, outcome: "succeeded", metadata: { runId: run.id, flowId, nodeId: node.id, attemptNumber: attempt.attemptNumber } });
         this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, {
           status: "succeeded",
           executionInvocationId: result.invocationId ?? nodeRun.executionInvocationId,
-          output: maskSecrets(result.output),
+          output: safeOutput,
           finishedAt: new Date().toISOString(),
         });
-        clearTimeout(timeout); options.signal?.removeEventListener("abort", parentAbort); context.options = previousOptions;
         break;
       } catch (error) {
-        clearTimeout(timeout); options.signal?.removeEventListener("abort", parentAbort); context.options = previousOptions;
-        const message = error instanceof Error ? error.message : String(error);
+        const message = redactCredentialText(error instanceof Error ? error.message : String(error), context.resolvedCredentialValues);
         const classification = classifyFailure(error, options.signal?.aborted === true, timeoutController.signal.aborted);
         if (error instanceof ApprovalRequiredError) {
           this.deps.nodeFlowRepository.updateNodeAttempt(attempt.id, { status: "approval_waiting", errorMessage: message, retryDecision: null, finishedAt: null });
@@ -388,6 +390,11 @@ export class NodeFlowRuntimeService {
           }
         }
         break;
+      } finally {
+        clearTimeout(timeout);
+        options.signal?.removeEventListener("abort", parentAbort);
+        context.options = previousOptions;
+        clearResolvedCredentials(context);
       }
       }
       if (terminalStatus === "cancelled" || terminalStatus === "attention_required" || terminalStatus === "approval_waiting") {
@@ -499,12 +506,18 @@ export class NodeFlowRuntimeService {
           status: "completed",
           finishedAt: new Date().toISOString(),
         });
-        return { ...result, invocationId: invocation.id };
+        return {
+          ...result,
+          output: redactCredentialJson(result.output, context.resolvedCredentialValues),
+          invocationId: invocation.id,
+        };
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = redactCredentialText(error instanceof Error ? error.message : String(error), context.resolvedCredentialValues);
+        this.deps.executionRepository.clearExecutionInvocationMessages(invocation.id);
         this.deps.executionRepository.updateExecutionInvocation(invocation.id, {
           status: context.options.signal?.aborted ? "cancelled" : "failed",
           errorMessage: message,
+          lastErrorMessage: message,
           finishedAt: new Date().toISOString(),
         });
         this.deps.executionRepository.appendExecutionInvocationMessage(invocation.id, {
@@ -532,6 +545,8 @@ export class NodeFlowRuntimeService {
           config: evaluateTemplates(readNodeConfig(node), context) as NodeFlowJsonObject,
           upstream: this.buildUpstreamObject(context, node.id), flowInput: context.input,
           signal: context.options.signal, subflowDepth: context.subflowDepth,
+          redactJson: (value) => redactCredentialJson(value, context.resolvedCredentialValues),
+          redactText: (value) => redactCredentialText(value, context.resolvedCredentialValues),
         });
     }
   }
@@ -666,11 +681,21 @@ export class NodeFlowRuntimeService {
       trackPromptInInvocation: false,
       trackAssistantInInvocation: false,
       finalizeExecutionInvocation: false,
+      onActivity: () => undefined,
+      redactTextForPersistence: (value) => redactCredentialText(value, context.resolvedCredentialValues),
+      redactJsonForPersistence: (value) => {
+        if (!value) return null;
+        return readJsonObject(redactCredentialJson(toJsonValue(value), context.resolvedCredentialValues));
+      },
     });
+    this.redactProviderInvocationUsage(invocationId, result, context.resolvedCredentialValues);
     if (!result.ok) {
-      throw new Error(providerFailureMessage(result));
+      throw new Error(redactCredentialText(providerFailureMessage(result), context.resolvedCredentialValues));
     }
-    const text = result.text ?? result.stdout ?? result.usageTelemetry.transcriptText ?? "";
+    const text = redactCredentialText(
+      result.text ?? result.stdout ?? result.usageTelemetry.transcriptText ?? "",
+      context.resolvedCredentialValues,
+    );
     this.deps.executionRepository.appendExecutionInvocationMessage(invocationId, {
       role: "assistant",
       contentMarkdown: "Node flow provider prompt completed.",
@@ -679,7 +704,9 @@ export class NodeFlowRuntimeService {
     return {
       output: {
         text,
-        nativeSessionId: result.nativeSessionId,
+        nativeSessionId: result.nativeSessionId
+          ? redactCredentialText(result.nativeSessionId, context.resolvedCredentialValues)
+          : result.nativeSessionId,
       },
       invocationId,
     };
@@ -755,22 +782,26 @@ export class NodeFlowRuntimeService {
       if (!response.ok) {
         throw new Error(`HTTP node ${node.id} failed with status ${response.status}.`);
       }
+      const safeBody = redactCredentialJson(toJsonValue(body), context.resolvedCredentialValues);
       const responsePath = readString(config.responsePath) ?? readString(config.extractJsonPath);
-      const extracted = responsePath ? readPath(body, responsePath) : body;
+      const extracted = responsePath ? readPath(safeBody, responsePath) : safeBody;
       return {
         output: {
           status: response.status,
           ok: response.ok,
-          body: toJsonValue(body),
+          body: safeBody,
           extracted: toJsonValue(extracted),
         },
         invocationId,
       };
     } catch (error) {
-      if (controller.signal.aborted) {
-        throw new Error(error instanceof Error ? error.message : `HTTP node ${node.id} timed out.`);
-      }
-      throw error;
+      const message = redactCredentialText(
+        error instanceof Error ? error.message : `HTTP node ${node.id} request failed.`,
+        context.resolvedCredentialValues,
+      );
+      if (controller.signal.aborted) throw new Error(message || `HTTP node ${node.id} timed out.`);
+      if (error instanceof Error && message === error.message) throw error;
+      throw new Error(message);
     } finally {
       clearTimeout(timeout);
       context.options.signal?.removeEventListener("abort", abortListener);
@@ -782,6 +813,7 @@ export class NodeFlowRuntimeService {
     if (!binding) return undefined;
     if (!this.deps.credentialBroker) throw new ValidationError("Credential broker is not configured for node flow runtime.");
     const resolved=await this.deps.credentialBroker.resolveCredentialId({projectId:context.projectId,credentialId:binding.credentialId,bindingKey:`${context.flowId}:${node.id}:${slot}`,capability:"read",workspaceId:context.runId});
+    if (resolved.value) context.resolvedCredentialValues.push(resolved.value);
     return resolved.value;
   }
 
@@ -880,6 +912,24 @@ export class NodeFlowRuntimeService {
       throw new ValidationError(`Provider prompt node references unknown provider config: ${providerConfigId}.`);
     }
     return providerSettings;
+  }
+
+  private redactProviderInvocationUsage(
+    invocationId: string,
+    result: ProviderRunResult,
+    credentials: readonly string[],
+  ): void {
+    const providerInvocationId = this.deps.executionRepository.getExecutionInvocation(invocationId)?.providerInvocationId;
+    if (!providerInvocationId) return;
+    const rawUsageJson = result.usageTelemetry.rawUsageJson
+      ? redactCredentialJson(toJsonValue(result.usageTelemetry.rawUsageJson), credentials)
+      : null;
+    this.deps.executionRepository.updateProviderInvocationUsage(providerInvocationId, {
+      nativeSessionId: result.nativeSessionId
+        ? redactCredentialText(result.nativeSessionId, credentials)
+        : result.nativeSessionId,
+      rawUsageJson: readJsonObject(rawUsageJson),
+    });
   }
 }
 
@@ -1034,6 +1084,35 @@ function maskSecrets(value: NodeFlowJsonValue): NodeFlowJsonValue {
     );
   }
   return value;
+}
+
+function redactCredentialText(value: string, credentials: readonly string[]): string {
+  let redacted = value;
+  for (const credential of [...credentials].filter(Boolean).sort((left, right) => right.length - left.length)) {
+    redacted = redacted.split(credential).join("[REDACTED]");
+  }
+  return redacted;
+}
+
+function redactCredentialJson<T extends NodeFlowJsonValue>(value: T, credentials: readonly string[]): T;
+function redactCredentialJson(value: NodeFlowJsonObject, credentials: readonly string[]): NodeFlowJsonObject;
+function redactCredentialJson(value: NodeFlowJsonValue, credentials: readonly string[]): NodeFlowJsonValue {
+  const masked = maskSecrets(value);
+  if (typeof masked === "string") return redactCredentialText(masked, credentials);
+  if (Array.isArray(masked)) return masked.map((entry) => redactCredentialJson(entry, credentials));
+  if (masked && typeof masked === "object") {
+    return Object.fromEntries(
+      Object.entries(masked).map(([key, entry]) => [key, redactCredentialJson(entry, credentials)]),
+    );
+  }
+  return masked;
+}
+
+function clearResolvedCredentials(context: RuntimeContext): void {
+  for (let index = 0; index < context.resolvedCredentialValues.length; index += 1) {
+    context.resolvedCredentialValues[index] = "";
+  }
+  context.resolvedCredentialValues.length = 0;
 }
 
 function normalizeHeaders(headers: NodeFlowJsonObject | null): Record<string, string> {

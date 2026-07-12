@@ -62,6 +62,14 @@ export class NodeFlowService {
     return this.repository.getFlow(flowId);
   }
 
+  resolveFlowProjectId(flowId: string): string | null {
+    return this.repository.getFlow(flowId)?.projectId ?? null;
+  }
+
+  resolveRunProjectId(runId: string): string | null {
+    return this.repository.getRun(runId)?.projectId ?? null;
+  }
+
   create(projectId: string, input: CreateNodeFlowInput): NodeFlowRecord {
     const title = normalizeRequiredText(input.title, "Node flow title");
     const description = normalizeOptionalText(input.description);
