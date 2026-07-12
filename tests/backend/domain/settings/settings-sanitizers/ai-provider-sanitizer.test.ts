@@ -23,8 +23,8 @@ describe("sanitizeAiProvider", () => {
     });
 
     expect(result.provider).toBe("gemini");
-    expect(integrationProviders.jules.apiKey).toBe("jules-key");
-    expect(integrationProviders.gemini.apiKey).toBe("gemini-key");
+    expect(integrationProviders.jules.apiKey).toBe("");
+    expect(integrationProviders.gemini.apiKey).toBe("");
     expect(result.providers.jules.provider).toBe("jules");
     expect(result.providers.gemini.provider).toBe("gemini");
   });
@@ -51,7 +51,7 @@ describe("sanitizeAiProvider", () => {
       settingsJson: {},
     });
 
-    expect(integrationProviders.jules.apiKey).toBe("jules-key");
+    expect(integrationProviders.jules.apiKey).toBe("");
   });
 
   it("normalizes invocation routing with sparse provider overrides", () => {
@@ -427,7 +427,7 @@ describe("sanitizeAiProvider", () => {
       expect(result.codex.customBaseUrl).toBeUndefined();
       expect(result.codex.customModel).toBeUndefined();
       expect(result.codex.model).toBe("gpt-5.5");
-      expect(result["codex-local"].apiKey).toBe("sk-local");
+      expect(result["codex-local"].apiKey).toBe("");
       expect(result["codex-local"].customBaseUrl).toBe("http://192.168.0.38:1234/v1");
       expect(result["codex-local"].customModel).toBe("local-model");
     });

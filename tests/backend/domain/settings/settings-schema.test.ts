@@ -619,7 +619,8 @@ describe("validateSettingsPayload", () => {
       maxAudioSeconds: 600,
       externalTranscription: {
         baseUrl: "https://api.example/v1/audio/transcriptions",
-        apiKey: "test-key",
+        apiKey: "",
+        apiKeyCredentialRef: null,
         model: "custom-transcribe",
         language: null,
       },
@@ -691,7 +692,7 @@ describe("validateSettingsPayload", () => {
       localModelId: "onnx-community/whisper-base.en",
       externalTranscription: {
         baseUrl: "https://speech.example.test/v1/audio/transcriptions",
-        apiKey: "secret-key",
+        apiKey: "",
         model: "multilingual-model",
         language: "de",
       },

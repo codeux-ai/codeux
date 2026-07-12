@@ -1,4 +1,5 @@
 import type { DownloadableModelLicense } from "./model-license-types.js";
+import type { SettingsCredentialReference } from "./app-types.js";
 
 /**
  * Types for the memory + local embedding system.
@@ -102,6 +103,7 @@ export type MemoryRemediationMode = "off" | "deterministic" | "ai";
 export interface ExternalEmbeddingSettings {
   baseUrl: string;
   apiKey: string;
+  apiKeyCredentialRef?: SettingsCredentialReference | null;
   model: string;
   dimensions: number | null;
 }

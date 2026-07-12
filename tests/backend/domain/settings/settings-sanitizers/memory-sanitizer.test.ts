@@ -41,7 +41,8 @@ describe("sanitizeMemory", () => {
     expect(result.embeddingModel).toBe("custom-embedding-model");
     expect(result.externalEmbedding).toEqual({
       baseUrl: "https://embeddings.example/v1/embeddings",
-      apiKey: "key",
+      apiKey: "",
+      apiKeyCredentialRef: null,
       model: "custom-embedding-model",
       dimensions: 768,
     });

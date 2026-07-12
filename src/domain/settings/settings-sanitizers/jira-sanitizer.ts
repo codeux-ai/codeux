@@ -1,5 +1,6 @@
 import type { JiraSettings } from "../../../contracts/app-types.js";
 import { readBoolean, readString } from "../../../shared/config/value-readers.js";
+import { sanitizeSettingsCredentialReference } from "./credential-reference-sanitizer.js";
 
 export const sanitizeJira = (
   input: unknown,
@@ -9,7 +10,7 @@ export const sanitizeJira = (
 
   const host = readString(jiraInput.host, defaults.host).trim().replace(/\/+$/, "");
   const email = readString(jiraInput.email, defaults.email).trim();
-  const apiToken = readString(jiraInput.apiToken, defaults.apiToken).trim();
+  const apiToken = "";
 
   let autoTransitionLinkedIssuesOnImport = readBoolean(
     jiraInput.autoTransitionLinkedIssuesOnImport,
@@ -39,6 +40,7 @@ export const sanitizeJira = (
     host,
     email,
     apiToken,
+    apiTokenCredentialRef: sanitizeSettingsCredentialReference(jiraInput.apiTokenCredentialRef),
     autoTransitionLinkedIssuesOnImport,
     importTransitionName,
     autoCloseLinkedIssues,

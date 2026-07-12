@@ -1369,7 +1369,7 @@ describe("PlanningAgentService", () => {
     expect(providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
       provider: "opencode",
       model: "ollama/glm-4.7-flash",
-      apiKey: "opencode-custom-key",
+      apiKey: "",
       openCodeAuthMode: "CUSTOM_PROVIDER",
       openCodeProviderId: "ollama",
       openCodeModelId: "glm-4.7-flash",

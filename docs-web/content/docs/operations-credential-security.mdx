@@ -13,6 +13,16 @@ Create, rotate, and replace requests are write-only. API responses contain confi
 
 Runtime validation bounds names, identifiers, capabilities, list counts, and secret size (64 KiB UTF-8). Malformed arrays and control characters are rejected rather than coerced.
 
+## Settings credential references
+
+Provider, nested Qwen provider, Git host, Jira, importer, speech, and embedding secrets are represented in settings by non-secret `{ credentialId, capability: "read" }` references. Dashboard and MCP settings reads keep legacy plaintext fields empty. Local-auth and dashboard-auth mounts remain non-secret configuration and continue to work independently.
+
+Startup migrates legacy settings and external hints into project credentials or explicitly allowlisted global credentials, then removes the original values. The migration is idempotent. If secure key custody or project scope is unavailable, values are scrubbed and runtime resolution fails closed rather than using plaintext settings.
+
+Fresh settings startup initializes secure key custody only when plaintext credentials or external hints actually need migration, so Electron does not contact the OS keychain unnecessarily.
+
+Authorized runtime consumers resolve references with an active project and explicit consumer key. Existing scope, allowlist, capability, audit, revocation, and concurrent-change checks apply, and the decrypted buffer is zeroed after the consumer callback.
+
 ## Runtime redaction boundary
 
 Node-flow credentials exist in plaintext only for the active node attempt. Exact resolved values are replaced with `[REDACTED]` before provider responses, HTTP bodies, retry errors, external-effect payloads, diagnostics, invocation messages, attempts, node outputs, or run summaries are stored. Credential IDs and non-secret metadata remain available for auditability.

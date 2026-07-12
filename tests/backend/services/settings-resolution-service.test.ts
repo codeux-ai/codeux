@@ -290,8 +290,10 @@ describe("Settings Resolution Service", () => {
         systemSettings,
         projectOverride: null,
       });
-      expect(resolved.settings.aiProvider.providers.jules?.apiKey).toBe("fake-jules-key");
-      expect(resolved.settings.git.githubToken).toBe("fake-github-token");
+      expect(resolved.settings.aiProvider.providers.jules?.apiKey).toBe("");
+      expect(resolved.settings.git.githubToken).toBe("");
+      expect(JSON.stringify(resolved.settings)).not.toContain("fake-jules-key");
+      expect(JSON.stringify(resolved.settings)).not.toContain("fake-github-token");
     });
 
     it("preserves explicit project overrides for CI, memory, and QA settings", () => {

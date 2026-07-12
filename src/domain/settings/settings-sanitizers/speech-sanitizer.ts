@@ -7,6 +7,7 @@ import {
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../repositories/settings-defaults.js";
 import { resolveCompatibleSynthesisVoice } from "../../../services/speech-model-catalog.js";
 import { readBoolean, readInteger, readString } from "../../../shared/config/value-readers.js";
+import { sanitizeSettingsCredentialReference } from "./credential-reference-sanitizer.js";
 
 export const MIN_SPEECH_AUDIO_SECONDS = 1;
 export const MAX_SPEECH_AUDIO_SECONDS = 600;
@@ -84,7 +85,8 @@ export const sanitizeSpeech = (
     ),
     externalTranscription: {
       baseUrl: readRequiredTrimmedString(externalInput.baseUrl, defaults.externalTranscription.baseUrl),
-      apiKey: readString(externalInput.apiKey, defaults.externalTranscription.apiKey).trim(),
+      apiKey: "",
+      apiKeyCredentialRef: sanitizeSettingsCredentialReference(externalInput.apiKeyCredentialRef),
       model: readRequiredTrimmedString(externalInput.model, defaults.externalTranscription.model),
       language: readOptionalLanguage(externalInput.language),
     },
@@ -98,7 +100,8 @@ export const sanitizeSpeech = (
         : defaults.synthesis.speed)),
       externalSynthesis: {
         baseUrl: readRequiredTrimmedString(externalSynthesisInput.baseUrl, defaults.synthesis.externalSynthesis.baseUrl),
-        apiKey: readString(externalSynthesisInput.apiKey, defaults.synthesis.externalSynthesis.apiKey).trim(),
+        apiKey: "",
+        apiKeyCredentialRef: sanitizeSettingsCredentialReference(externalSynthesisInput.apiKeyCredentialRef),
         model: readRequiredTrimmedString(externalSynthesisInput.model, defaults.synthesis.externalSynthesis.model),
         voice: readRequiredTrimmedString(externalSynthesisInput.voice, defaults.synthesis.externalSynthesis.voice),
         format: typeof externalSynthesisInput.format === "string" && SPEECH_FORMATS.has(externalSynthesisInput.format as never)

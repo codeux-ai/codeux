@@ -1047,7 +1047,7 @@ describe("AgentPresetSyncService", () => {
     const prSpy = vi.spyOn(PrService.prototype, "resolveOrCreateFeaturePr").mockResolvedValue(prUrl);
 
     const { syncService, project, settingsRepository } = await createRepoProject(dir, repoPath, () => "runtime-github-token");
-    const settings = settingsRepository.saveProjectSettings(project.id, {
+    settingsRepository.saveProjectSettings(project.id, {
       git: {
         githubToken: "settings-github-token",
         gitlabToken: "settings-gitlab-token",
@@ -1077,7 +1077,7 @@ describe("AgentPresetSyncService", () => {
       body: `Project: ${project.name}\n\nPush the project's .code-ux/agents markdown files into the repository.`,
     }, repoPath, {
       githubToken: "runtime-github-token",
-      gitlabToken: settings.git.gitlabToken,
+      gitlabToken: "",
     });
     const remoteHead = await runCommandStrict("git", ["ls-remote", "--heads", "origin", pushedBranch!], repoPath);
     expect(remoteHead.stdout.trim()).toContain(`refs/heads/${pushedBranch}`);

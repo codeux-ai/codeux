@@ -13,6 +13,16 @@ The dashboard accepts secret values only on create, rotate, and replace requests
 
 Management inputs are validated at runtime rather than trusted from TypeScript types. Names, kinds, binding keys, project ids, capabilities, and list counts are bounded; malformed arrays and control characters are rejected instead of being silently coerced. A stored value is limited to 64 KiB of UTF-8 data. Global allowlists must explicitly retain the management owner.
 
+## Settings credential references
+
+Sensitive provider, nested Qwen provider, Git host, Jira, importer, speech, and embedding settings use non-secret `{ credentialId, capability: "read" }` references. Settings repository reads, dashboard responses, snapshots, and MCP exports keep legacy plaintext-shaped fields redacted and expose only these references. Local-auth and dashboard-auth mount paths remain ordinary non-secret settings and do not pass through the broker.
+
+At dashboard startup, the one-way migration reads legacy values from raw settings storage, creates project credentials for project/sprint overrides or explicitly allowlisted global credentials for system integrations, and rewrites the source record without the original value. Repeated startup is idempotent because migrated records contain references only. Environment and legacy `settings.json` hints enter through this same migration boundary instead of being copied into settings responses. If the secure key provider or a valid project scope is unavailable, plaintext is scrubbed and resolution fails closed; there is no settings fallback.
+
+Fresh settings startup does not initialize the secure key provider unless plaintext credentials or external credential hints actually require migration. This keeps Electron startup independent of OS keychain availability until encrypted storage is needed.
+
+Runtime settings consumers resolve a reference with the active project, an explicit consumer binding key, and the `read` capability. The broker reuses its scope, allowlist, status, capability, audit, and compare-and-swap checks, and the decrypted buffer is zeroed immediately after the bounded consumer callback completes or throws.
+
 ## Runtime redaction boundary
 
 Node-flow execution resolves credential values only for the active node attempt. Before any provider response, HTTP body, retry error, external-effect payload, diagnostic, invocation message, attempt, node output, or run summary is persisted, the runtime replaces exact resolved values with `[REDACTED]` in addition to masking secret-shaped keys. Credential IDs and non-secret metadata remain available for audit and attempt correlation.

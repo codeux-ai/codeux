@@ -10,6 +10,7 @@ import { EMBEDDING_MODEL_IDS } from "../../../contracts/memory-types.js";
 import { readBoolean, readInteger } from "../../../shared/config/value-readers.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../repositories/settings-defaults.js";
 import { sanitizeCustomEmbeddingModelDefinitions } from "../../../services/embedding-model-catalog.js";
+import { sanitizeSettingsCredentialReference } from "./credential-reference-sanitizer.js";
 
 const readEmbeddingModelId = (
   value: unknown,
@@ -73,7 +74,8 @@ export const sanitizeMemory = (
     customEmbeddingModels,
     externalEmbedding: {
       baseUrl: readTrimmedString(externalInput.baseUrl, defaults.externalEmbedding.baseUrl),
-      apiKey: readTrimmedString(externalInput.apiKey, defaults.externalEmbedding.apiKey),
+      apiKey: "",
+      apiKeyCredentialRef: sanitizeSettingsCredentialReference(externalInput.apiKeyCredentialRef),
       model: readTrimmedString(externalInput.model, defaults.externalEmbedding.model),
       dimensions: readNullablePositiveInteger(externalInput.dimensions, defaults.externalEmbedding.dimensions),
     },

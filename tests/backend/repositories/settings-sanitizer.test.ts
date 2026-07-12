@@ -40,15 +40,17 @@ describe("settings-sanitizer", () => {
       },
     });
 
-    expect(settings.aiProvider.providers.jules.apiKey).toBe("resolved-jules");
-    expect(settings.aiProvider.providers.gemini.apiKey).toBe("resolved-gemini");
-    expect(settings.aiProvider.providers.codex.apiKey).toBe("resolved-codex");
-    expect(settings.aiProvider.providers["claude-code"].apiKey).toBe("resolved-claude");
-    expect(settings.git.githubToken).toBe("resolved-github");
+    expect(settings.aiProvider.providers.jules.apiKey).toBe("");
+    expect(settings.aiProvider.providers.gemini.apiKey).toBe("");
+    expect(settings.aiProvider.providers.codex.apiKey).toBe("");
+    expect(settings.aiProvider.providers["claude-code"].apiKey).toBe("");
+    expect(settings.git.githubToken).toBe("");
     expect(settings.notion).toEqual({
       enabled: false,
       apiToken: "",
+      apiTokenCredentialRef: null,
       apiSecret: "",
+      apiSecretCredentialRef: null,
       baseUrl: "",
       workspaceId: "",
       teamId: "",
@@ -270,7 +272,7 @@ describe("settings-sanitizer", () => {
     });
     expect(settings.figma).toMatchObject({
       enabled: true,
-      apiToken: "figma-token",
+      apiToken: "",
       fileKey: "file-key",
       defaultSearchLimit: 25,
     });
