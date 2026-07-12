@@ -8,20 +8,22 @@ import {
   fetchSystemSettings,
   fillRowNumber,
   openSettingsCategory,
+  openSettingsSection,
   saveSettings,
   settingsRow,
 } from './settings-test-helpers';
 
 async function openAppearance(page: Page): Promise<void> {
-  await openSettingsCategory(page, 'appearance', /Appearance Dashboard layout and theme preferences/i);
+  await openSettingsCategory(page, 'appearance', 'Appearance');
+  await openSettingsSection(page, 'Display Settings');
 }
 
 async function openIntegrations(page: Page): Promise<void> {
-  await openSettingsCategory(page, 'integrations', /Integrations Provider keys, Git hosts, and external connection policy/i);
+  await openSettingsCategory(page, 'integrations', 'Integrations');
 }
 
 async function openMcp(page: Page): Promise<void> {
-  await openSettingsCategory(page, 'mcp', /MCP MCP servers injected into CLIs and built-in tool access/i);
+  await openSettingsCategory(page, 'mcp', 'MCP');
 }
 
 function integrationCard(page: Page, label: string) {
@@ -92,6 +94,7 @@ test.describe('settings appearance integrations and mcp panels', () => {
 
     await page.getByRole('button', { name: 'Add MCP server' }).click();
     await expect(page.getByRole('heading', { name: 'MCP server' })).toBeVisible();
+    await openSettingsSection(page, 'MCP server');
     await settingsRow(page, 'Display name').getByRole('textbox').fill(serverLabel);
     await settingsRow(page, 'Server key').getByRole('textbox').fill(serverKey);
     await settingsRow(page, 'Server URL').getByRole('textbox').fill('https://example.test/mcp');

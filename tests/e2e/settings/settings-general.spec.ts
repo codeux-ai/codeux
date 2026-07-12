@@ -9,6 +9,7 @@ import {
   fetchSystemSettings,
   fillRowNumber,
   openSettingsCategory,
+  openSettingsSection,
   saveSettings,
   settingsRow,
 } from './settings-test-helpers';
@@ -23,8 +24,9 @@ const consoleLogLevelLabels: Record<ConsoleLogLevel, RegExp> = {
   off: /Off Silence console logging/i,
 };
 
-async function openGeneral(page: Page): Promise<void> {
-  await openSettingsCategory(page, 'general', /General Scope, runtime, and automation posture/i);
+async function openGeneral(page: Page, sectionTitle: string): Promise<void> {
+  await openSettingsCategory(page, 'general', 'General');
+  await openSettingsSection(page, sectionTitle);
 }
 
 test.describe('settings general panel', () => {
@@ -41,7 +43,7 @@ test.describe('settings general panel', () => {
     const currentLevel = (await fetchSystemSettings(request)).runtime.consoleLogLevel;
     const nextLevel: ConsoleLogLevel = currentLevel === 'debug' ? 'warn' : 'debug';
 
-    await openGeneral(page);
+    await openGeneral(page, 'System Runtime');
 
     await chooseRadio(page, consoleLogLevelLabels[nextLevel]);
     await expectUnsavedIndicator(page);
@@ -51,14 +53,14 @@ test.describe('settings general panel', () => {
 
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Settings & Integration' })).toBeVisible();
-    await openGeneral(page);
+    await openGeneral(page, 'System Runtime');
     await expect(settingsRow(page, 'Console log level').getByRole('radio', { name: consoleLogLevelLabels[nextLevel] }))
       .toHaveAttribute('aria-checked', 'true');
   });
 
   test('rejects an invalid dashboard port before saving', async ({ page, request }) => {
     const originalPort = (await fetchSystemSettings(request)).runtime.dashboardPort;
-    await openGeneral(page);
+    await openGeneral(page, 'System Runtime');
 
     await fillRowNumber(page, 'Dashboard port', 70000);
     await page.getByRole('button', { name: 'Save Changes' }).click();
@@ -69,7 +71,7 @@ test.describe('settings general panel', () => {
   });
 
   test('persists a database retention value after reload', async ({ page, request }) => {
-    await openGeneral(page);
+    await openGeneral(page, 'Database Settings');
 
     const pruningToggle = page.getByText('Automatic pruning', { exact: true })
       .locator('xpath=ancestor::div[contains(@class, "md:flex-row")][1]')
@@ -85,12 +87,12 @@ test.describe('settings general panel', () => {
     await expect.poll(async () => (await fetchSystemSettings(request)).runtime.dbRetentionDays).toBe(33);
 
     await page.reload();
-    await openGeneral(page);
+    await openGeneral(page, 'Database Settings');
     await expectRowNumberValue(page, 'Log retention period (days)', 33);
   });
 
   test('opens the system legal surfaces without creating unsaved settings', async ({ page }) => {
-    await openGeneral(page);
+    await openGeneral(page, 'License & Open Source');
 
     const saveButton = page.getByRole('button', { name: 'Save Changes' });
     const unsavedIndicator = page.getByText('Unsaved edits');
