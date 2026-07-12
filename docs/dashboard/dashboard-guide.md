@@ -346,7 +346,7 @@ Legacy runtime:
 ### Custom Dashboards
 - The Dashboards page is available at `/custom-dashboards` when `VITE_CODEUX_FEATURE_CUSTOM_DASHBOARDS` is enabled and is scoped to the selected project. It manages project-specific generated dashboard drafts, immutable revisions, detached validation sessions, and publication state.
 - Users can ask the Project Manager to create or revise a dashboard, review the generated manifest/files/source graph/styleguide in the editor, create a revision, run validation, inspect logs and the validation preview, and publish only a passed revision.
-- The data-source graph supports Code UX execution data, project stats, overview telemetry, non-secret integration metadata, and placeholder `external_api` nodes. External API nodes are declared but return unavailable-source errors in the in-app viewer until a dedicated sanitized proxy exists.
+- The data-source graph supports Code UX execution data, project stats, overview telemetry, non-secret integration metadata, and `external_api` nodes. Validation previews and published viewers send declared external routes through the typed server source gateway, which authorizes source/route access, enforces bounded egress policy, and resolves credential values through the server-side broker without placing them in iframe payloads.
 - Published dashboards render from the active `publishedRevisionId` inside a sandboxed iframe. The frame can request only declared source nodes through the constrained Code UX bridge.
 - For the full workflow, contracts, validation lifecycle, and rollback expectations, see [Custom Dashboards](./custom-dashboards.md).
 

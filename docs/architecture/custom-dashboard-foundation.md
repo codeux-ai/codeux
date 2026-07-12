@@ -74,7 +74,7 @@ Dashboard HTTP routes live in `src/server/custom-dashboard-routes.ts` and are re
 - validation routes start validation, read status/logs, stop/remove validation sessions, and publish revisions
 - same-origin runtime mutation routes halt and explicitly resume a published dashboard
 - validation proxy routes forward same-origin requests to a running validation host port when the session runtime metadata exposes one
-- `/api/custom-dashboard-runtime/source` is the shared typed data boundary for validation previews and active published revisions
+- `/api/custom-dashboard-runtime/source` is the shared typed server source gateway for validation previews and active published revisions; it authorizes declared sources/routes, enforces bounded external egress policy, and resolves credential values through the server-side broker without placing them in iframe payloads
 
 The MCP management surface is `manage_custom_dashboards` in `src/mcp/management/custom-dashboard-actions.ts`. It supports `list`, `get`, `create`, `update`, `create_revision`, `validate_revision`, `validation_status`, `validation_logs`, `publish_revision`, `archive`, and `data_catalog`. `archive` follows the same approval fingerprint flow as other destructive management actions.
 

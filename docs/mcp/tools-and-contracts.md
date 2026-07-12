@@ -264,7 +264,7 @@ Validation sessions move through `queued`, `building`, `running`, `passed`, `fai
 
 `publish_revision` is gated by repository state. The revision must belong to the dashboard, have `validationStatus: "passed"`, have `validatedAt`, and have `validationReport.valid === true`. Failed, queued, running, cancelled, missing, or cross-revision validation sessions are rejected before publication state changes, so the prior published revision remains active.
 
-The generated dashboard data-source graph is user-declared JSON with `nodes`, `edges`, and optional `metadata`. Runtime viewer source types currently map to Code UX project execution data, project stats, overview telemetry, non-secret integration metadata, and unavailable `external_api` placeholders. Do not claim arbitrary external API connectors are available through this surface until a dedicated sanitized proxy contract exists.
+The generated dashboard data-source graph is user-declared JSON with `nodes`, `edges`, and optional `metadata`. Runtime viewer source types map to Code UX project execution data, project stats, overview telemetry, non-secret integration metadata, and declared `external_api` routes. Validation previews and published viewers use the typed server source gateway, which authorizes declared source/route access, enforces bounded egress policy, and resolves credential values through the server-side broker without placing them in iframe payloads. This contract does not permit arbitrary URLs or undeclared routes.
 
 For the user workflow, REST route list, detached runtime details, and rollback expectations, see [Custom Dashboards](../dashboard/custom-dashboards.md).
 
