@@ -102,6 +102,10 @@ export class NodeFlowRuntimeService {
     });
   }
 
+  requestCancellation(runId: string): NodeFlowRunRecord {
+    return this.deps.nodeFlowRepository.requestCancellation(runId);
+  }
+
   async runFlow(
     projectId: string,
     flowId: string,
@@ -187,7 +191,7 @@ export class NodeFlowRuntimeService {
       if (!node) {
         continue;
       }
-      if (options.signal?.aborted) {
+      if (options.signal?.aborted || this.deps.nodeFlowRepository.getRun(run.id)?.cancelRequestedAt) {
         terminalStatus = "cancelled";
         terminalError ??= "Node flow run was cancelled.";
         await this.persistSkippedNode(context, node, "cancelled", terminalError);

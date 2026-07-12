@@ -13,11 +13,13 @@ import type {
   NodeWidgetSchema,
 } from "../../contracts/node-flow-types.js";
 import type { NodeFlowService } from "../../services/node-flow-service.js";
+import { getCurrentMcpAgentId } from "../../server/mcp-agent-context.js";
 import {
   managementValidationError,
   parseOptionalObject,
   parseOptionalNumber,
   parseOptionalString,
+  parseOptionalIntegerStrict,
   parseRequiredObject,
   parseRequiredString,
 } from "./payload-parsers.js";
@@ -33,6 +35,28 @@ export class NodeFlowActions {
     switch (args.action) {
       case "list":
         return this.listFlows(payload);
+      case "catalog":
+        return { result: this.nodeFlowService.catalog() };
+      case "get_node_definition":
+        return this.getNodeDefinition(payload);
+      case "create_draft":
+        return this.createDraft(payload);
+      case "patch_draft":
+        return this.patchDraft(payload);
+      case "validate_draft":
+        return this.validateDraft(payload);
+      case "request_credential":
+        return this.requestCredential(payload);
+      case "inspect_bindings":
+        return this.inspectBindings(payload);
+      case "dry_run":
+        return this.dryRun(payload);
+      case "publish":
+        return this.publishDraft(args, payload);
+      case "compare_versions":
+        return this.compareVersions(payload);
+      case "rollback":
+        return this.rollback(args, payload);
       case "get":
         return this.getFlow(payload);
       case "create":
@@ -45,17 +69,131 @@ export class NodeFlowActions {
         return this.validateFlow(payload);
       case "run":
         return await this.runFlow(payload);
+      case "cancel":
+        return this.cancelRun(payload);
+      case "retry":
+        return await this.retryRun(payload);
       case "list_runs":
         return this.listRuns(payload);
       case "get_run":
-        return this.getRun(payload);
+      case "inspect_run":
+        return this.getRun(payload, args.action === "inspect_run");
       case "attach_to_agent":
+      case "attach":
         return this.attachToAgent(payload);
       case "detach_from_agent":
+      case "detach":
         return this.detachFromAgent(payload);
+      case "create_custom_node":
+        return await this.createCustomNode(payload);
+      case "update_custom_node":
+        return await this.updateCustomNode(payload);
+      case "validate_custom_node":
+        return await this.validateCustomNode(payload);
       default:
         throw new Error(`Unknown node flow action: ${args.action}`);
     }
+  }
+
+  private getNodeDefinition(payload: Record<string, unknown>): ManagementResponseEnvelope {
+    const nodeType = parseRequiredString(payload, "nodeType");
+    const version = parseOptionalIntegerStrict(payload, "nodeVersion", { min: 1 });
+    const definition = this.nodeFlowService.nodeDefinition(nodeType, version);
+    if (!definition) throw managementValidationError(`Node definition not found: ${nodeType}${version ? `@${version}` : ""}`, "nodeType");
+    return { result: { definition } };
+  }
+
+  private createDraft(payload: Record<string, unknown>): ManagementResponseEnvelope {
+    const graph = this.parseGraphWithWidgets(payload, true);
+    if (!graph) throw managementValidationError("graph object is required", "graph");
+    const validation = this.nodeFlowService.validate(graph);
+    if (!validation.valid || !validation.graph) return { result: { status: "invalid", validationIssues: validation.errors } };
+    return { result: { draft: this.nodeFlowService.createDraft(parseRequiredString(payload, "projectId"), {
+      title: parseRequiredString(payload, "name"), description: parseOptionalText(payload, "description"), graph: validation.graph,
+    }) } };
+  }
+
+  private patchDraft(payload: Record<string, unknown>): ManagementResponseEnvelope {
+    const projectId = parseRequiredString(payload, "projectId");
+    const flowId = parseRequiredString(payload, "flowId");
+    const draftRevision = requiredInteger(payload, "draftRevision");
+    const patch = parseOptionalObject<Record<string, unknown>>(payload, "patch") ?? {};
+    const graph = this.parseGraphWithWidgets(patch, false) ?? this.parseGraphWithWidgets(payload, false);
+    const operations = Array.isArray(patch.operations) ? patch.operations : Array.isArray(payload.operations) ? payload.operations : undefined;
+    return { result: this.nodeFlowService.patchDraft(flowId, {
+      projectId, draftRevision, graph,
+      operations: operations as import("../../contracts/node-flow-types.js").NodeFlowGraphPatchOperation[] | undefined,
+      title: parseOptionalString(patch, "name") ?? parseOptionalString(payload, "name"),
+      description: parseOptionalText(patch, "description") ?? parseOptionalText(payload, "description"),
+    }) };
+  }
+
+  private validateDraft(payload: Record<string, unknown>): ManagementResponseEnvelope {
+    return { result: { draft: this.nodeFlowService.validateDraft(parseRequiredString(payload, "projectId"), parseRequiredString(payload, "flowId")) } };
+  }
+
+  private requestCredential(payload: Record<string, unknown>): ManagementResponseEnvelope {
+    return { result: { request: this.nodeFlowService.requestCredential(parseRequiredString(payload, "projectId"), parseRequiredString(payload, "flowId"), parseRequiredString(payload, "nodeId"), parseRequiredString(payload, "slot")) } };
+  }
+
+  private inspectBindings(payload: Record<string, unknown>): ManagementResponseEnvelope {
+    return { result: this.nodeFlowService.inspectBindings(parseRequiredString(payload, "projectId"), parseRequiredString(payload, "flowId")) };
+  }
+
+  private dryRun(payload: Record<string, unknown>): ManagementResponseEnvelope {
+    return { result: this.nodeFlowService.dryRun(parseRequiredString(payload, "projectId"), parseRequiredString(payload, "flowId"), parseOptionalObject<NodeFlowJsonObject>(payload, "input") ?? {}) };
+  }
+
+  private publishDraft(args: ManageCodeUxArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
+    const flowId = parseRequiredString(payload, "flowId");
+    const draftRevision = requiredInteger(payload, "draftRevision");
+    if (args.approval?.confirmed !== true) return { approvalRequired: true, approvalMessage: `Publish node flow ${flowId} draft revision ${draftRevision} after reviewing validation, credentials, capabilities, and side effects.` };
+    return { result: { draft: this.nodeFlowService.publishDraft(parseRequiredString(payload, "projectId"), flowId, draftRevision, parseOptionalString(payload, "publishedBy") ?? "project-manager-mcp") } };
+  }
+
+  private compareVersions(payload: Record<string, unknown>): ManagementResponseEnvelope {
+    return { result: this.nodeFlowService.compareVersions(parseRequiredString(payload, "projectId"), parseRequiredString(payload, "flowId"), requiredInteger(payload, "fromVersion"), requiredInteger(payload, "toVersion")) };
+  }
+
+  private rollback(args: ManageCodeUxArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
+    const flowId = parseRequiredString(payload, "flowId");
+    const version = requiredInteger(payload, "version");
+    if (args.approval?.confirmed !== true) return { approvalRequired: true, approvalMessage: `Create a new draft of node flow ${flowId} from version ${version}. The current draft remains in immutable history.` };
+    return { result: { draft: this.nodeFlowService.rollback(parseRequiredString(payload, "projectId"), flowId, version, requiredInteger(payload, "draftRevision")) } };
+  }
+
+  private cancelRun(payload: Record<string, unknown>): ManagementResponseEnvelope {
+    return { result: { run: formatRun(this.nodeFlowService.cancelRun(parseRequiredString(payload, "projectId"), parseRequiredString(payload, "runId"))) } };
+  }
+
+  private async retryRun(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
+    return { result: formatRunSummary(await this.nodeFlowService.retryRun(parseRequiredString(payload, "projectId"), parseRequiredString(payload, "runId"))) };
+  }
+
+  private async createCustomNode(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
+    const node = await this.nodeFlowService.createCustomNode(parseRequiredString(payload, "projectId"), {
+      nodeId: parseRequiredString(payload, "nodeId"), name: parseRequiredString(payload, "name"),
+      description: parseOptionalText(payload, "description"), sourceRevision: parseRequiredString(payload, "sourceRevision"),
+      createdBy: parseOptionalString(payload, "actor") ?? "project-manager-mcp",
+    });
+    return { result: { node } };
+  }
+
+  private async updateCustomNode(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
+    const node = await this.nodeFlowService.updateCustomNode(
+      parseRequiredString(payload, "projectId"), parseRequiredString(payload, "nodeId"),
+      parseRequiredObject(payload, "manifest"), parseRequiredString(payload, "sourceRevision"),
+    );
+    return { result: { node } };
+  }
+
+  private async validateCustomNode(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
+    return { result: await this.nodeFlowService.validateCustomNode(
+      parseRequiredString(payload, "projectId"), parseRequiredString(payload, "nodeId"),
+      parseOptionalString(payload, "actor") ?? "project-manager-mcp",
+      parseOptionalString(payload, "invocationId") ?? `mcp-custom-node-${Date.now()}`,
+      parseOptionalString(payload, "correlationId") ?? `mcp-custom-node-${Date.now()}`,
+    ) };
   }
 
   private listFlows(payload: Record<string, unknown>): ManagementResponseEnvelope {
@@ -70,7 +208,8 @@ export class NodeFlowActions {
     this.assertProjectMatch(payload, flow);
     return {
       result: {
-        flow: formatFlow(flow),
+        flow: formatFlowForCaller(flow),
+        ...(getCurrentMcpAgentId() ? { draft: this.nodeFlowService.validateDraft(flow.projectId, flow.id) } : {}),
         agentSkills: this.nodeFlowService.listAgentSkills(flow.id),
       },
     };
@@ -92,7 +231,7 @@ export class NodeFlowActions {
       description: parseOptionalText(payload, "description"),
       graph: validation.graph,
     });
-    return { result: { flow: formatFlow(flow) } };
+    return { result: { flow: formatFlowForCaller(flow) } };
   }
 
   private updateFlow(payload: Record<string, unknown>): ManagementResponseEnvelope {
@@ -110,7 +249,7 @@ export class NodeFlowActions {
       ...(description !== undefined ? { description } : {}),
       ...(validation?.graph ? { graph: validation.graph } : {}),
     });
-    return { result: { flow: formatFlow(flow) } };
+    return { result: { flow: formatFlowForCaller(flow) } };
   }
 
   private deleteFlow(args: ManageCodeUxArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
@@ -152,16 +291,20 @@ export class NodeFlowActions {
 
   private listRuns(payload: Record<string, unknown>): ManagementResponseEnvelope {
     const flowId = parseRequiredString(payload, "flowId");
+    const projectId = parseOptionalString(payload, "projectId");
+    if (projectId) this.assertProjectMatch(payload, this.requireFlow(flowId));
     const runs = this.nodeFlowService.listRuns(flowId).runs.map(formatRun);
     return { result: { runs } };
   }
 
-  private getRun(payload: Record<string, unknown>): ManagementResponseEnvelope {
+  private getRun(payload: Record<string, unknown>, requireProject = false): ManagementResponseEnvelope {
     const runId = parseRequiredString(payload, "runId");
+    const projectId = requireProject ? parseRequiredString(payload, "projectId") : parseOptionalString(payload, "projectId");
     const run = this.nodeFlowService.getRun(runId);
     if (!run) {
       throw new Error(`Node flow run not found: ${runId}`);
     }
+    if (projectId && run.projectId !== projectId) throw managementValidationError("Node flow run does not belong to the requested project.", "projectId");
     return {
       result: {
         run: formatRun(run),
@@ -219,6 +362,12 @@ export class NodeFlowActions {
       throw managementValidationError("Node flow does not belong to the requested project.", "projectId");
     }
   }
+}
+
+function requiredInteger(payload: Record<string, unknown>, key: string): number {
+  const value = parseOptionalIntegerStrict(payload, key, { min: 1 });
+  if (value === undefined) throw managementValidationError(`${key} is required`, key);
+  return value;
 }
 
 function parseOptionalText(payload: Record<string, unknown>, key: string): string | undefined {
@@ -287,6 +436,10 @@ function formatFlow(flow: NodeFlowRecord): Record<string, unknown> {
     ...formatFlowSummary(flow),
     graph: maskGraph(flow.graph),
   };
+}
+
+function formatFlowForCaller(flow: NodeFlowRecord): Record<string, unknown> {
+  return getCurrentMcpAgentId() ? formatFlowSummary(flow) : formatFlow(flow);
 }
 
 function formatRun(run: NodeFlowRunRecord): Record<string, unknown> {

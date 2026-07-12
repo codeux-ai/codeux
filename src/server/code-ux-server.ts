@@ -49,6 +49,7 @@ import {
   isProjectManagerClarificationAgent,
   isWorkerClarificationAgent,
   toAgentCodeUxToolAccess,
+  withAttachedFlowAccess,
   withClarificationAudienceAccess,
 } from "../services/agent-mcp-access.js";
 import { JulesSourceResolver } from "../services/jules-source-resolver.js";
@@ -525,6 +526,9 @@ export class CodeUxServer {
           : persistentSkillRetrievalEnabled
             ? toAgentCodeUxToolAccess({ codeUxEnabled: false, codeUxToolToggles: [] }, true)
             : { codeUxEnabled: false, codeUxToolToggles: [] };
+        if (this.nodeFlowService.listAgentSkillsForAgent(agent.projectId, agent.id).length > 0) {
+          resolvedAccess = withAttachedFlowAccess(resolvedAccess);
+        }
         if (workerEligible) {
           resolvedAccess = withClarificationAudienceAccess(resolvedAccess, "worker", "request_clarification");
         }

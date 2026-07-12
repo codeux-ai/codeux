@@ -117,6 +117,18 @@ export const withClarificationAudienceAccess = (
   audienceToolNames: Array.from(new Set([...(access.audienceToolNames ?? []), toolName])),
 });
 
+/** Expose only the narrow attached-flow runner when an agent owns at least one flow attachment. */
+export const withAttachedFlowAccess = (access: AgentCodeUxToolAccess): AgentCodeUxToolAccess => {
+  const byName = new Map(access.codeUxToolToggles.map((toggle) => [toggle.name, toggle]));
+  byName.set("run_attached_flow", { name: "run_attached_flow", enabled: true, isInternal: true });
+  return {
+    ...access,
+    codeUxEnabled: true,
+    audiences: Array.from(new Set([...(access.audiences ?? []), "worker" as const])),
+    codeUxToolToggles: Array.from(byName.values()),
+  };
+};
+
 const clarificationGatewayAccess = (
   access: AgentMcpAccessConfig | null | undefined,
   toolName: Extract<ToolName, "request_clarification" | "reply_to_clarification">,

@@ -41,6 +41,8 @@ import { AutomationOutboxRepository } from "../../repositories/automation-outbox
 import { AutomationWebhookTriggerRepository } from "../../repositories/automation-webhook-trigger-repository.js";
 import { CustomNodeRepository } from "../../repositories/custom-node-repository.js";
 import { CustomNodeRuntimeService } from "../../services/custom-nodes/custom-node-runtime-service.js";
+import { CustomNodeProjectService } from "../../services/custom-nodes/custom-node-project-service.js";
+import { CustomNodeBuildService } from "../../services/custom-nodes/custom-node-build-service.js";
 import { customNodeDefinitionFromArtifact } from "../../contracts/custom-node-types.js";
 import { registerCustomNodeDefinition } from "../../domain/node-flows/node-definition-registry.js";
 
@@ -243,6 +245,8 @@ export function createDashboardDependencies(
   const approvalService = new ApprovalService(approvalRepository);
   const egressPolicyService = new EgressPolicyService();
   const customNodeRepository = new CustomNodeRepository(coreDeps.appDbStorage);
+  const customNodeProjectService = new CustomNodeProjectService();
+  const customNodeBuildService = new CustomNodeBuildService({ repository: customNodeRepository, projectService: customNodeProjectService });
   for (const { artifact } of customNodeRepository.listPublications()) {
     registerCustomNodeDefinition(customNodeDefinitionFromArtifact(artifact));
   }
@@ -267,7 +271,16 @@ export function createDashboardDependencies(
   if (coreDeps.nodeFlowRepository) {
     new NodeFlowRecoveryService(coreDeps.nodeFlowRepository).recover();
   }
-  const nodeFlowService = new NodeFlowService(coreDeps.nodeFlowRepository, nodeFlowRuntimeService);
+  const nodeFlowService = new NodeFlowService(coreDeps.nodeFlowRepository, nodeFlowRuntimeService, coreDeps.credentialBroker, {
+    repository: customNodeRepository,
+    projectService: customNodeProjectService,
+    buildService: customNodeBuildService,
+    resolveProjectRoot: (projectId) => {
+      const project = coreDeps.projectManagementRepository.getProject(projectId);
+      if (!project) throw new Error(`Project not found: ${projectId}`);
+      return project.baseDir;
+    },
+  });
 
   const activityCacheService = new ActivityCacheService(
     {

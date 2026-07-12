@@ -61,6 +61,12 @@ export class CustomNodeProjectService {
     return parsed as CustomNodeManifest;
   }
 
+  async writeManifest(projectRoot: string, nodeId: string, manifest: CustomNodeManifest): Promise<void> {
+    const root = this.resolveNodeRoot(projectRoot, nodeId);
+    if (manifest.id !== nodeId || manifest.nodeType !== `custom.${nodeId}`) throw new ValidationError("Custom node manifest identity does not match its project.");
+    await fs.writeFile(path.join(root, "node.json"), `${JSON.stringify(manifest, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+  }
+
   resolveNodeRoot(projectRoot: string, nodeId: string): string {
     if (!NODE_ID_PATTERN.test(nodeId)) throw new ValidationError("Invalid custom node id.");
     const base = path.resolve(projectRoot);
