@@ -2,6 +2,8 @@
 
 Code UX is a single Node process that hosts multiple cooperating services. This page describes that process model, the major services, and how data flows through them.
 
+Authenticated headless automation is composed from a fail-closed principal/role boundary, key/audit/runner readiness, durable redacted audit export, SLO sampling, and project-scoped runner lease ownership. The dashboard API enforces these controls before route handlers; startup verifies recovery keys before binding listeners when encrypted data exists.
+
 ## Process topology
 
 ```

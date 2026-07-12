@@ -13,6 +13,8 @@ import {
 import { createPreviewHostMiddleware } from "./preview-host-middleware.js";
 import { parsePreviewSessionIdFromHost } from "./preview-host-utils.js";
 import { createHttpRateLimiter } from "../shared/http/rate-limit.js";
+import { getCorrelationId } from "../shared/logging/correlation-id.js";
+import { HeadlessAuthenticationError, HeadlessAuthService } from "../services/headless-auth-service.js";
 import type { DashboardServerOptions } from "./dashboard-server.js";
 import {
   DASHBOARD_DEFAULT_JSON_BODY_LIMIT,
@@ -53,6 +55,72 @@ export const applyDashboardPreRouteMiddleware = (
       res.setHeader("Surrogate-Control", "no-store");
     }
     next();
+  });
+
+  const authService = options.headlessAuthService ?? new HeadlessAuthService();
+  app.use("/api", createHttpRateLimiter({
+    windowMs: 60_000,
+    max: 600,
+    onLimited: (req) => dashboardLogger.warn("Dashboard API request rate limit exceeded", {
+      logPurpose: "security",
+      method: req.method,
+      path: req.path,
+    }),
+  }));
+  app.use("/api", (req, res, next) => {
+    if (req.path.startsWith("/webhooks/") || req.path.includes("/ingress/")) {
+      next();
+      return;
+    }
+    const startedAt = Date.now();
+    try {
+      const principal = authService.authenticate(req);
+      authService.authorize(req, principal);
+      res.locals.codeUxPrincipal = principal;
+      res.on("finish", () => {
+        options.automationSloService?.observeManagementRequest(Date.now() - startedAt, res.statusCode);
+        options.automationAuditService?.record({
+          correlationId: getCorrelationId() ?? String(res.getHeader("x-correlation-id") ?? "unknown"),
+          principal,
+          action: `${req.method} ${req.path}`,
+          resourceType: "dashboard_api",
+          projectId: extractProjectId(req.path),
+          outcome: res.statusCode < 400 ? "succeeded" : res.statusCode === 401 || res.statusCode === 403 ? "denied" : "failed",
+          metadata: { statusCode: res.statusCode, durationMs: Date.now() - startedAt },
+        });
+      });
+      next();
+    } catch (error) {
+      const authenticationError = error instanceof HeadlessAuthenticationError
+        ? error
+        : new HeadlessAuthenticationError("Authentication configuration is invalid.", 403);
+      dashboardLogger.warn("Dashboard API access denied", {
+        logPurpose: "security",
+        method: req.method,
+        path: req.path,
+        statusCode: authenticationError.statusCode,
+        reason: authenticationError.message,
+      });
+      options.automationSloService?.observeManagementRequest(Date.now() - startedAt, authenticationError.statusCode);
+      options.automationAuditService?.record({
+        correlationId: getCorrelationId() ?? String(res.getHeader("x-correlation-id") ?? "unknown"),
+        principal: {
+          id: "unauthenticated",
+          displayName: "Unauthenticated request",
+          kind: "user",
+          roles: [],
+          projectIds: [],
+          authenticatedAt: new Date().toISOString(),
+          authenticationMethod: "service_token",
+        },
+        action: `${req.method} ${req.path}`,
+        resourceType: "dashboard_api",
+        projectId: extractProjectId(req.path),
+        outcome: "denied",
+        metadata: { statusCode: authenticationError.statusCode, reason: authenticationError.message },
+      });
+      res.status(authenticationError.statusCode).json({ error: authenticationError.message });
+    }
   });
   app.use((req, res, next) => {
     const startedAt = Date.now();
@@ -115,6 +183,11 @@ export const applyDashboardPreRouteMiddleware = (
   }));
   app.use(createDashboardJsonBodyErrorHandler(dashboardLogger));
 };
+
+function extractProjectId(pathname: string): string | null {
+  const match = pathname.match(/^\/projects\/([^/]+)/);
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
+}
 
 function captureRawJsonBody(req: IncomingMessage, _res: unknown, buf: Buffer): void {
   (req as IncomingMessage & { rawBody?: string }).rawBody = buf.toString("utf8");

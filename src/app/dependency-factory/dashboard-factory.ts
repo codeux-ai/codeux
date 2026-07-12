@@ -48,6 +48,10 @@ import { registerCustomNodeDefinition } from "../../domain/node-flows/node-defin
 
 export interface DashboardDependencies {
   credentialBroker: CoreDependencies["credentialBroker"];
+  headlessAuthService: CoreDependencies["headlessAuthService"];
+  automationAuditService: CoreDependencies["automationAuditService"];
+  headlessReadinessService: CoreDependencies["headlessReadinessService"];
+  automationSloService: CoreDependencies["automationSloService"];
   chatThreadRuntimeService: ChatThreadRuntimeService;
   chatProviderRepository: CoreDependencies["chatProviderRepository"];
   chatProviderIngressService: ChatProviderIngressService;
@@ -242,7 +246,7 @@ export function createDashboardDependencies(
     ?? new AutomationOutboxRepository(coreDeps.appDbStorage);
   const webhookTriggerRepository = coreDeps.automationWebhookTriggerRepository
     ?? new AutomationWebhookTriggerRepository(coreDeps.appDbStorage);
-  const approvalService = new ApprovalService(approvalRepository);
+  const approvalService = new ApprovalService(approvalRepository, coreDeps.automationAuditService);
   const egressPolicyService = new EgressPolicyService();
   const customNodeRepository = new CustomNodeRepository(coreDeps.appDbStorage);
   const customNodeProjectService = new CustomNodeProjectService();
@@ -265,7 +269,8 @@ export function createDashboardDependencies(
     egressPolicyService,
     customNodeRuntimeService,
     approvalService,
-    outboxService: new OutboxService(outboxRepository, new MockSideEffectProvider()),
+    outboxService: new OutboxService(outboxRepository, new MockSideEffectProvider(), coreDeps.automationAuditService),
+    auditService: coreDeps.automationAuditService,
     getDashboardSettings: (projectId) => resolveDashboardSettings({ projectId }),
   });
   if (coreDeps.nodeFlowRepository) {
@@ -602,6 +607,10 @@ export function createDashboardDependencies(
 
   return {
     credentialBroker: coreDeps.credentialBroker,
+    headlessAuthService: coreDeps.headlessAuthService,
+    automationAuditService: coreDeps.automationAuditService,
+    headlessReadinessService: coreDeps.headlessReadinessService,
+    automationSloService: coreDeps.automationSloService,
     chatProviderRepository,
     chatThreadRuntimeService,
     chatProviderIngressService,

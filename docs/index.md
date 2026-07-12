@@ -104,7 +104,7 @@ Use this page as the main entrypoint.
 3. [Custom Dashboard MCP Contract](./mcp/tools-and-contracts.md#custom-dashboard-management)
 4. [MCP Issue Importer Contract](./mcp/tools-and-contracts.md#manage_sprints-import_issues)
 5. [MCP Runtime and Dispatch](./mcp/runtime-and-dispatch.md)
-6. [Secure Headless Server Mode](./operations/server-mode.md)
+6. [Secure Headless Server Mode](./operations/server-mode.md) — dashboard/API identities, key readiness, audit, recovery, and SLOs
 7. [Operations Runbook](./operations/runbook.md)
 8. [Security Hardening](./operations/security-hardening.md)
 9. [Automation Credential Security](./operations/credential-security.md)

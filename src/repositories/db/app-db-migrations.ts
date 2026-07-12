@@ -596,6 +596,27 @@ export function ensureAutomationCredentialTables(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_automation_credential_rotations_credential", "automation_credential_rotations", "credential_id, rotated_at DESC");
 }
 
+export function ensureAutomationAuditTables(db: DatabaseAdapter): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS automation_audit_records (
+      id TEXT PRIMARY KEY,
+      occurred_at TEXT NOT NULL,
+      correlation_id TEXT NOT NULL,
+      principal_id TEXT NOT NULL,
+      principal_kind TEXT NOT NULL,
+      action TEXT NOT NULL,
+      resource_type TEXT NOT NULL,
+      resource_id TEXT,
+      project_id TEXT,
+      outcome TEXT NOT NULL,
+      metadata_json TEXT NOT NULL DEFAULT '{}'
+    )
+  `);
+  ensureIndex(db, "idx_automation_audit_occurred", "automation_audit_records", "occurred_at DESC, id DESC");
+  ensureIndex(db, "idx_automation_audit_project", "automation_audit_records", "project_id, occurred_at DESC");
+  ensureIndex(db, "idx_automation_audit_principal", "automation_audit_records", "principal_id, occurred_at DESC");
+}
+
 export function ensureCustomNodeTables(db: DatabaseAdapter): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS custom_nodes (
@@ -882,6 +903,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   migratePersistedNodeFlowGraphs(db);
   ensureCustomDashboardTables(db);
   ensureAutomationCredentialTables(db);
+  ensureAutomationAuditTables(db);
   ensureCustomNodeTables(db);
 
   ensureColumn(db, "projects", "initialization_mode", "TEXT NOT NULL DEFAULT 'existing'");

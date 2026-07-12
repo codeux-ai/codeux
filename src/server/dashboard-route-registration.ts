@@ -29,6 +29,7 @@ import { registerUpdateStatusRoutes } from "./update-status-routes.js";
 import { registerMemoryRoutes } from "./memory-routes.js";
 import { registerKnowledgeRoutes } from "./knowledge-routes.js";
 import { registerDocsWebRoutes } from "./docs-web-routes.js";
+import { registerHeadlessOperationsRoutes } from "./headless-operations-routes.js";
 import { registerAutomationCredentialRoutes } from "./automation-credential-routes.js";
 import { registerChatProviderRoutes } from "./chat-provider-routes.js";
 import { registerChatProviderIngressRoutes } from "./chat-provider-ingress-routes.js";
@@ -137,6 +138,7 @@ const registerSystemIntegrationRouteGroup = (app: Express, deps: DashboardDepend
   registerGitProviderRoutes(app, deps);
   registerUpdateStatusRoutes(app, deps);
   registerDocsWebRoutes(app);
+  registerHeadlessOperationsRoutes(app, deps);
 };
 
 const registerSpeechRouteGroup = (app: Express, deps: DashboardDependencies): void => {

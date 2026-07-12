@@ -106,7 +106,7 @@
   - [Mockup Sprint Pentest Scenarios](./development/mockup-sprint-pentest-scenarios.md)
   - [Documentation Standards](./development/documentation-standards.md)
 - [Operations Runbook](./operations/runbook.md)
-- [Secure Headless Server Mode](./operations/server-mode.md)
+- [Secure Headless Server Mode](./operations/server-mode.md) (authenticated automation operations)
 - [Security Hardening](./operations/security-hardening.md)
 - [Automation Credential Security](./operations/credential-security.md)
 - [Logging and Correlation IDs](./operations/logging-and-correlation.md)
