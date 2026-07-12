@@ -6,7 +6,7 @@ The **Nodes** page (`/nodes`) is the project-scoped backend workspace for author
 
 Creating or saving a draft persists it in the selected project's canonical node-flow repository. Saves include the loaded draft revision, so a concurrent edit produces a visible conflict instead of overwriting newer work. Changing projects clears the current workspace before loading the next project's records.
 
-The former browser graph at `codeux:nodes-canvas:v1` is only a one-time migration source. On the first eligible load for a selected project, Code UX converts that graph to Graph v2 and creates an **Imported Nodes Canvas** backend draft. It removes the legacy value and records a project-specific marker only after creation succeeds; failed imports remain available for retry, and the marker prevents duplicate imports. Browser storage is not used for ongoing workflow persistence.
+The former browser graph at `codeux:nodes-canvas:v1` is only a one-time migration source. On the first eligible load for a selected project, Code UX translates legacy `trigger`, `agent`, and `task` concepts to governed `input`, `set_fields`, and `provider_prompt` definitions, retains `condition` and `output`, remaps their ports, and preserves legacy labels, positions, and configuration as non-secret metadata. It then creates an **Imported Nodes Canvas** backend draft. The legacy value is removed and a project-specific marker is recorded only after creation succeeds. A failed import remains available for retry and appears as a warning without blocking the backend flow library.
 
 ## Registry-driven editing and execution
 
@@ -14,7 +14,9 @@ The versioned node-definition registry drives palette entries, executable state,
 
 The complete governed built-in set currently registered with executable handlers is `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, `condition`, `switch`, `foreach`, `merge`, `delay`, `approval`, `email_draft`, `email_send`, `execute_subflow`, `webhook_trigger`, and `output`.
 
-Registered custom definitions can execute only when their validated versioned manifest, immutable artifact, and custom-node runtime are available. Legacy `trigger`/`agent`/`task` canvas kinds, unknown or unregistered types, mockup entries, and definitions marked non-executable are planned or unavailable definitions, not executable handlers.
+Registered custom definitions can execute only when their validated versioned manifest, immutable artifact, and custom-node runtime are available. Raw legacy `trigger`/`agent`/`task` kinds are not executable handlers; the one-time browser bridge translates them to governed definitions before persistence. Other unknown or unregistered types, mockup entries, and definitions marked non-executable remain planned or unavailable.
+
+Canvas dragging is previewed in component-local state and commits one graph position update on pointer release, avoiding whole-workspace updates for every raw pointer event. The Nodes route uses a static context-free shell background so the large canvas does not composite over a continuously animated WebGL surface.
 
 ## Review, publication, and debugging
 

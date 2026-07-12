@@ -36,6 +36,18 @@ describe("NodesPage governed workspace", () => {
     expect(api.fetchNodeFlowAgentSkills).toHaveBeenCalledWith("flow-1", expect.any(AbortSignal));
   });
 
+  it("keeps the inspector renderable if an older backend returns a flattened definition", async () => {
+    api.fetchNodeDefinition.mockResolvedValueOnce({
+      type: "input", version: 1, executable: true, executionKind: "local", label: "Input",
+      description: "Input", category: "Core", ports: [], credentials: [], capabilities: [], sideEffect: "none",
+    });
+
+    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+
+    expect(await screen.findByRole("heading", { name: "Input" })).toBeInTheDocument();
+    expect(screen.getByText("input · v1")).toBeInTheDocument();
+  });
+
   it("loads existing metadata-only flow attachments", async () => {
     api.fetchNodeFlowAgentSkills.mockResolvedValue([attachment]);
     render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
@@ -143,8 +155,44 @@ describe("NodesPage governed workspace", () => {
     api.fetchNodeFlows.mockResolvedValueOnce({ flows: [] }).mockResolvedValueOnce({ flows: [flow] });
     render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
     await waitFor(() => expect(api.createNodeFlowDraft).toHaveBeenCalledTimes(1));
+    expect(api.createNodeFlowDraft.mock.calls[0]?.[1].graph.nodes.map((node: { type: string }) => node.type)).toEqual([
+      "set_fields", "condition", "output", "provider_prompt", "input",
+    ]);
     expect(window.localStorage.getItem(NODES_CANVAS_STORAGE_KEY)).toBeNull();
     expect(window.localStorage.getItem("codeux:nodes-canvas:imported:project-1")).toBe("imported");
+  });
+
+  it("keeps backend flows usable when a legacy canvas import fails", async () => {
+    window.localStorage.setItem(NODES_CANVAS_STORAGE_KEY, JSON.stringify({ nodes: [{ id: "trigger-1", kind: "trigger" }], edges: [] }));
+    api.createNodeFlowDraft.mockRejectedValueOnce(new Error("Legacy import rejected"));
+
+    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+
+    expect(await screen.findByText("Release automation")).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Existing backend flows remain available");
+    expect(window.localStorage.getItem(NODES_CANVAS_STORAGE_KEY)).not.toBeNull();
+  });
+
+  it("ignores a stale validation response after selecting another flow", async () => {
+    const user = userEvent.setup();
+    const secondFlow = { ...flow, id: "flow-2", title: "Quality automation", version: 7 };
+    let resolveSecondReview: ((value: typeof review) => void) | undefined;
+    api.fetchNodeFlows.mockResolvedValue({ flows: [flow, secondFlow] });
+    api.validateNodeFlowDraft
+      .mockResolvedValueOnce(review)
+      .mockReturnValueOnce(new Promise((resolve) => { resolveSecondReview = resolve; }))
+      .mockResolvedValueOnce({ ...review, draftRevision: 9 });
+
+    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+    await user.click((await screen.findByText("Quality automation")).closest("button")!);
+    await user.click(screen.getByText("Release automation").closest("button")!);
+
+    expect(await screen.findByText(/Draft r9/)).toBeInTheDocument();
+    resolveSecondReview?.({ ...review, flowId: "flow-2", name: "Quality automation", draftRevision: 7 });
+    await Promise.resolve();
+
+    expect(screen.queryByText(/Draft r7/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Draft r9/)).toBeInTheDocument();
   });
 
   it("surfaces optimistic save conflicts", async () => {

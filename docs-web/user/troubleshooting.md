@@ -162,7 +162,7 @@ Current preview routing fixes **Forbidden: Untrusted host** without weakening ap
 
 For packaged Windows builds, `spawn ENAMETOOLONG` during Docker provider launch indicates an outdated build or a launch path still passing a large prompt through the host command line. Current Docker provider runs mount provider arguments from a generated file so large prompts do not become `docker run` arguments.
 
-Chromium `tile_manager.cc` warnings about tile memory limits in the packaged Windows app indicate renderer memory pressure. Current Windows desktop builds use an opaque shell and GPU memory hints to mitigate this. All animated backgrounds remain enabled. If these warnings persist on older builds, try switching to a lighter animation style or setting background mode to Static in Settings > Appearance.
+Chromium `tile_manager.cc` warnings about tile memory limits indicate renderer pressure. Current builds use an opaque desktop shell and GPU memory hints; hidden dashboard tabs also release animated WebGL and realtime resources, and the Nodes canvas uses a static background automatically. Returning to a tab reconnects realtime data and performs a fallback refresh. If warnings persist on older builds, switch to a lighter animation or set background mode to Static in Settings > Appearance.
 
 ## Memory & embeddings
 

@@ -38,6 +38,28 @@ afterEach(async () => {
 });
 
 describe("NodeFlowService", () => {
+  it("returns a full manifest for definition details and flat summaries for the catalog", async () => {
+    const { service } = await createService();
+
+    expect(service.catalog().nodes.find((node) => node.type === "input")).toMatchObject({
+      type: "input",
+      label: "Input",
+      category: "control",
+    });
+    expect(service.nodeDefinition("input", 1)).toMatchObject({
+      type: "input",
+      version: 1,
+      ui: {
+        label: "Input",
+        category: "control",
+        widgetSchema: { fields: [] },
+      },
+      configurationSchema: { type: "object" },
+      documentation: expect.any(String),
+      deprecation: { deprecated: false },
+    });
+  });
+
   it("normalizes create/update input before persistence", async () => {
     const { dir, projectRepository, service } = await createService();
     const project = projectRepository.createProject({

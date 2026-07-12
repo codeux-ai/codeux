@@ -1,5 +1,5 @@
 import type { FunctionComponent, JSX } from "preact";
-import { useMemo, useRef, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { NodeFlowGraph } from "../../types.js";
 import {
   layoutNodeFlowGraph,
@@ -22,37 +22,71 @@ export const NodeFlowCanvas: FunctionComponent<NodeFlowCanvasProps> = ({
   onMoveNode,
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
+  const dragFrameRef = useRef<number | null>(null);
+  const pendingDragRef = useRef<{ nodeId: string; position: { x: number; y: number } } | null>(null);
   const [drag, setDrag] = useState<{
     nodeId: string;
     offsetX: number;
     offsetY: number;
+    position: { x: number; y: number } | null;
   } | null>(null);
   const canvasGraph = useMemo(() => layoutNodeFlowGraph(graph), [graph]);
-  const nodeById = useMemo(() => new Map(canvasGraph.nodes.map((node) => [node.id, node])), [canvasGraph.nodes]);
-  const maxX = Math.max(720, ...canvasGraph.nodes.map((node) => node.position.x + NODE_FLOW_NODE_WIDTH + 80));
-  const maxY = Math.max(420, ...canvasGraph.nodes.map((node) => node.position.y + NODE_FLOW_NODE_HEIGHT + 80));
+  const displayedNodes = useMemo(() => canvasGraph.nodes.map((node) => (
+    drag?.nodeId === node.id && drag.position ? { ...node, position: drag.position } : node
+  )), [canvasGraph.nodes, drag]);
+  const nodeById = useMemo(() => new Map(displayedNodes.map((node) => [node.id, node])), [displayedNodes]);
+  const maxX = Math.max(720, ...displayedNodes.map((node) => node.position.x + NODE_FLOW_NODE_WIDTH + 80));
+  const maxY = Math.max(420, ...displayedNodes.map((node) => node.position.y + NODE_FLOW_NODE_HEIGHT + 80));
+
+  useEffect(() => () => {
+    if (dragFrameRef.current !== null) cancelAnimationFrame(dragFrameRef.current);
+  }, []);
 
   const handlePointerMove = (event: JSX.TargetedPointerEvent<HTMLDivElement>): void => {
     if (!drag || !canvasRef.current) {
       return;
     }
     const bounds = canvasRef.current.getBoundingClientRect();
-    onMoveNode(drag.nodeId, {
+    const position = {
       x: Math.max(24, event.clientX - bounds.left + canvasRef.current.scrollLeft - drag.offsetX),
       y: Math.max(24, event.clientY - bounds.top + canvasRef.current.scrollTop - drag.offsetY),
-    });
+    };
+    pendingDragRef.current = { nodeId: drag.nodeId, position };
+    if (dragFrameRef.current === null) {
+      dragFrameRef.current = requestAnimationFrame(() => {
+        dragFrameRef.current = null;
+        const pending = pendingDragRef.current;
+        pendingDragRef.current = null;
+        if (pending) {
+          const { nodeId, position: pendingPosition } = pending;
+          setDrag((current) => current?.nodeId === nodeId ? { ...current, position: pendingPosition } : current);
+        }
+      });
+    }
   };
 
-  const stopDrag = (): void => setDrag(null);
+  const finishDrag = (): void => {
+    const pending = pendingDragRef.current;
+    const position = pending && pending.nodeId === drag?.nodeId ? pending.position : drag?.position;
+    if (dragFrameRef.current !== null) cancelAnimationFrame(dragFrameRef.current);
+    dragFrameRef.current = null; pendingDragRef.current = null;
+    if (drag && position) onMoveNode(drag.nodeId, position);
+    setDrag(null);
+  };
+
+  const cancelDrag = (): void => {
+    if (dragFrameRef.current !== null) cancelAnimationFrame(dragFrameRef.current);
+    dragFrameRef.current = null; pendingDragRef.current = null; setDrag(null);
+  };
 
   return (
     <section
       aria-label="Node flow canvas"
-      className="relative min-h-[26rem] overflow-auto rounded-[1.6rem] border border-black/[0.08] bg-white/55 shadow-[0_18px_52px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.035]"
+      className="relative min-h-[26rem] overflow-auto rounded-[1.6rem] border border-black/[0.08] bg-white/85 shadow-[0_18px_52px_rgba(15,23,42,0.06)] dark:border-white/[0.08] dark:bg-void-800/90"
       ref={canvasRef}
       onPointerMove={handlePointerMove}
-      onPointerUp={stopDrag}
-      onPointerCancel={stopDrag}
+      onPointerUp={finishDrag}
+      onPointerCancel={cancelDrag}
     >
       <div className="relative" style={{ width: `${maxX}px`, height: `${maxY}px` }}>
         <svg
@@ -89,7 +123,7 @@ export const NodeFlowCanvas: FunctionComponent<NodeFlowCanvasProps> = ({
           })}
         </svg>
 
-        {canvasGraph.nodes.map((node) => (
+        {displayedNodes.map((node) => (
           <CanvasNode
             key={node.id}
             node={node}
@@ -100,10 +134,12 @@ export const NodeFlowCanvas: FunctionComponent<NodeFlowCanvasProps> = ({
               target.setPointerCapture(event.pointerId);
               const bounds = target.getBoundingClientRect();
               onSelectNode(node.id);
+              pendingDragRef.current = null;
               setDrag({
                 nodeId: node.id,
                 offsetX: event.clientX - bounds.left,
                 offsetY: event.clientY - bounds.top,
+                position: null,
               });
             }}
           />
@@ -124,7 +160,7 @@ const CanvasNode: FunctionComponent<{
       type="button"
       aria-label={`Select node ${node.title}`}
       aria-pressed={selected}
-      className={`absolute flex flex-col items-start justify-between rounded-[1.35rem] border p-4 text-left shadow-sm transition-[border-color,box-shadow,transform,background-color] motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 ${
+      className={`absolute flex touch-none select-none flex-col items-start justify-between rounded-[1.35rem] border p-4 text-left shadow-sm transition-[border-color,box-shadow,transform,background-color] motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 ${
         selected
           ? "border-signal-500/60 bg-signal-500/[0.10] shadow-[0_0_0_1px_rgba(0,224,160,0.26),0_18px_40px_rgba(0,224,160,0.10)]"
           : "border-black/[0.08] bg-white/88 hover:border-signal-500/35 dark:border-white/[0.08] dark:bg-void-800/88"

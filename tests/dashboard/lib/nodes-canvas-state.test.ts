@@ -7,8 +7,10 @@ import {
   migrateNodeCanvasGraph,
   nodesCanvasReducer,
   serializeNodeCanvasGraph,
+  toCanonicalNodeFlowGraph,
   validateNodeCanvasGraph,
 } from "../../../dashboard/src/v2/lib/nodes-canvas-state.js";
+import { validateNodeFlowGraph } from "../../../src/domain/node-flows/node-flow-validation.js";
 
 const validationCodes = (graph: NodeCanvasGraph): string[] => (
   validateNodeCanvasGraph(graph).map((issue) => `${issue.code}:${issue.entityId}`)
@@ -209,6 +211,27 @@ describe("nodes canvas state", () => {
     expect(first.legacySnapshot).toEqual(legacy);
     expect(JSON.stringify(first.graph)).not.toContain("legacySnapshot");
     expect(migrateNodeCanvasGraph(first.graph)).toMatchObject({ migrated: false, legacySnapshot: null });
+  });
+
+  it("converts every legacy canvas kind into a valid executable Graph v2 definition", () => {
+    const graph = toCanonicalNodeFlowGraph(createInitialNodeCanvasGraph());
+    const validation = validateNodeFlowGraph(graph);
+
+    expect(validation.errors).toEqual([]);
+    expect(validation.valid).toBe(true);
+    expect(graph.nodes.map((node) => [node.id, node.type])).toEqual([
+      ["agent-1", "set_fields"],
+      ["condition-1", "condition"],
+      ["output-1", "output"],
+      ["task-1", "provider_prompt"],
+      ["trigger-1", "input"],
+    ]);
+    expect(graph.edges.map((edge) => [edge.fromHandle, edge.toHandle])).toEqual([
+      ["output", "input"],
+      ["true", "input"],
+      ["output", "input"],
+      ["output", "input"],
+    ]);
   });
 
   it("lays out graphs deterministically from ids and edges", () => {

@@ -39,9 +39,9 @@ Migration and validation treat persisted Graph v1 and canonical Graph v2 as untr
 
 Validation requires every node's type/version reference to resolve through the registry and rejects unknown definitions. Runtime execution then dispatches according to the registered definition's executable state and execution kind; a planning concept is not runnable merely because it has a string type.
 
-The dashboard uses the same backend-owned Graph v2 record as the runtime. The selected project controls library loading; no project means no flow, credential, publication, or run requests. The versioned registry drives palette entries, typed ports, configuration widgets, credential slots, capabilities, side-effect review, and policies. Draft saves use optimistic `draftRevision` checks and surface conflicts without overwriting the newer record.
+The dashboard uses the same backend-owned Graph v2 record as the runtime. The selected project controls library loading; no project means no flow, credential, publication, or run requests. The registry list endpoint returns flat palette summaries, while the node-type detail endpoint returns a complete `NodeDefinitionManifest` with nested `ui`, schemas, policies, documentation, and deprecation metadata. The inspector consumes that full manifest. Draft saves use optimistic `draftRevision` checks and surface conflicts without overwriting the newer record.
 
-`dashboard/src/v2/lib/nodes-canvas-state.ts` remains only a compatibility and pure graph-state layer. Its legacy browser graph can be imported once into a project draft, after which the old graph key is removed and a project marker prevents duplicates. It is not the workflow source of truth.
+`dashboard/src/v2/lib/nodes-canvas-state.ts` remains only a compatibility and pure graph-state layer. Its legacy browser graph can be imported once into a project draft. The adapter translates `trigger`/`agent`/`task` into registered `input`/`set_fields`/`provider_prompt` nodes, remaps legacy handles to governed ports, and retains non-secret canvas metadata. Import failure is isolated from the normal library load; only a successful draft creation removes the old graph key and records the project marker. Browser storage is not the workflow source of truth.
 
 ## Runtime
 

@@ -6,13 +6,15 @@ The selected project's library is loaded from the backend. Creating and saving d
 
 ## Legacy canvas import
 
-On the first load for a selected project, the dashboard checks the former `codeux:nodes-canvas:v1` key. When present, it normalizes the payload to Graph v2, creates an **Imported Nodes Canvas** backend draft, records a project-specific migration marker, and removes the legacy graph value. A failed import leaves the value available for retry. The marker prevents duplicates. After this one-time bridge, local storage is not read or written as the workflow source of truth.
+On the first load for a selected project, the dashboard checks the former `codeux:nodes-canvas:v1` key. When present, it translates legacy `trigger`, `agent`, and `task` kinds to `input`, `set_fields`, and `provider_prompt`, retains `condition` and `output`, remaps legacy ports, and preserves labels, positions, and non-secret canvas configuration. It then creates an **Imported Nodes Canvas** backend draft, records a project-specific migration marker, and removes the legacy graph value. A failed import leaves the value available for retry and shows a warning without preventing existing backend flows from loading.
 
 ## Governed editing
 
 The versioned definition registry supplies the palette, executable state, typed ports, configuration and widget schemas, capabilities, credential slots, side-effect classification, and default retry/timeout policy. The inspector is rendered from the selected definition rather than a hard-coded node form. The graph stores a type/version reference, non-secret configuration, and credential ids; it never stores custom source or credential values.
 
 Credential slots show metadata-only states such as bound, missing, or denied and can submit a binding request. Secret material stays behind the credential broker and is excluded from graphs, browser output, logs, and examples.
+
+Pointer dragging uses local preview state inside the canvas and persists the final position only on pointer release. The workspace also suspends the global animated WebGL background while `/nodes` is active, which keeps canvas interaction on a bounded compositor path without changing the configured appearance on other visible routes.
 
 Validation and dry run report structural issues, requested capabilities, credential requirements, side-effect differences, and policy findings. Dry run is review-only and does not execute nodes. Publication requires the current draft revision, a valid graph with no error-level policy findings, and all declared credential requirements bound. Publications are immutable; comparison and rollback operate on versioned snapshots.
 

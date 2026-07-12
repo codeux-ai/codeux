@@ -437,6 +437,38 @@ describe("dashboard-realtime-client", () => {
     unsubscribe();
   });
 
+  it("releases the socket while hidden and reconnects from the last watermark when visible", async () => {
+    let hidden = false;
+    let visibilityListener: () => void = () => {};
+    vi.stubGlobal("document", {
+      get hidden() { return hidden; },
+      addEventListener: (type: string, listener: () => void) => { if (type === "visibilitychange") visibilityListener = listener; },
+      removeEventListener: vi.fn(),
+    });
+    const { subscribeToDashboardRealtime } = await import("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js");
+    const unsubscribe = subscribeToDashboardRealtime(["overview"], () => {});
+    const firstSocket = MockWebSocket.instances[0]!;
+    firstSocket.emit("open");
+    vi.advanceTimersByTime(25);
+    firstSocket.emit("message", { type: "subscribed", scopes: ["overview"], lastSequence: 33 });
+
+    hidden = true;
+    visibilityListener();
+
+    expect(firstSocket.readyState).toBe(MockWebSocket.CLOSED);
+    vi.advanceTimersByTime(5_000);
+    expect(MockWebSocket.instances).toHaveLength(1);
+
+    hidden = false;
+    visibilityListener();
+    const secondSocket = MockWebSocket.instances[1]!;
+    secondSocket.emit("open");
+    vi.advanceTimersByTime(25);
+
+    expect(JSON.parse(secondSocket.sentMessages[0] || "{}")).toMatchObject({ lastSequence: 33 });
+    unsubscribe();
+  });
+
   it("updates lastSequence when a subscribed message arrives", async () => {
     const { subscribeToDashboardRealtime } = await import("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js");
     const unsubscribe = subscribeToDashboardRealtime(["overview"], () => {});
