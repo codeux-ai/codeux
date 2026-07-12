@@ -4,7 +4,7 @@ The **Stats** page (`/stats`) is the analytics surface for the active project. I
 
 Stats metric cards, chips, filters, tables, and ledger rows use warm void surfaces, hairline borders, compact typography, subtle depth, and quiet selected states. Data colors are reserved for telemetry meaning such as chart series, status, source confidence, and token/churn breakdowns.
 
-The top command band shows the selected project, generated snapshot time, sprint lens, time-window controls, and analysis mode controls before the mode-specific metric deck and workspace.
+The compact command band shows the selected project, generated snapshot time, sprint lens, time-window controls, and analysis mode controls before the mode-specific metric deck and workspace. On wide screens the window and view controls sit side by side; on narrow screens they wrap into a readable vertical flow.
 
 The top dashboard header also shows a compact app-wide token-throughput summary alongside running and queued task counts near the runtime controls. It uses a rolling 20-second live activity window, updates once per second, and renders a 20-point stats-card-style sparkline that rises on increases, slopes down on decreases, stabilizes near the 90% band while throughput remains nonzero, and drops to baseline when throughput reaches zero. Use it for a live pulse check; use the Stats page for detailed analysis.
 
@@ -37,12 +37,13 @@ A full-width interactive **Usage Graph** displays usage over time for the series
 ### Composition
 Explains where usage comes from with provider share, token anatomy, cache behavior, source quality, purpose lanes, Git-blocker context, and low-data fallbacks.
 
-Interactive donut charts slice by:
-- Token anatomy
-- Provider distribution
-- Telemetry source mix
+The detailed workspace is organized for a top-to-bottom read:
+- **Token anatomy** separates input, cached input, output, and reasoning around an accessible flow bar and cache-efficiency summary.
+- **Provider distribution** ranks exact token volume and share beside a proportional strip.
+- **Purpose and runtime context** connect intent with calls, active time, wall time, utilization, and optional priced cost.
+- **Provider detail** keeps each provider's token flow, calls, cache rate, tokens per call, active time, and cost in a compact ledger.
 
-Charts keep data accent colors inside segments and token bars while compact badges remain neutral.
+Data accents stay inside distribution strips, token bars, and small swatches, with the exact values always available as text.
 
 ### Models
 Ranks model activity by token volume and tracks invocation volume, latency, reliability, cache efficiency, reasoning share, pricing signals, output velocity, and low-data states for each model used during the active timeframe.

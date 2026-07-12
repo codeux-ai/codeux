@@ -23,8 +23,8 @@ Do not document or render speculative metrics. Missing telemetry is a first-clas
 The redesigned Stats page uses a stable top-to-bottom shell:
 
 1. Header command band
-   - The hero names the Stats workspace with a Stats-native command masthead rather than the generic dashboard page header. It uses warm void panel, subpanel, chip, and input primitives, a compact current-state pill, active lens chips for the selected time window and mode, and context chips for selected project, generated snapshot time, and sprint lens.
-   - The command controls are flat administrative rows inside the subpanel surface. Avoid nested framed material panels, decorative gradients, or extra wrappers around the preset, custom range, and mode controls.
+   - The hero names the Stats workspace with a compact Stats-native command masthead rather than the generic dashboard page header. Page identity, active lens, and project context use a restrained typographic hierarchy with hairline separation instead of a stack of status pills.
+   - The command controls are a single flat administrative band. On wide screens, snapshot-window and analysis-view controls sit side by side with a hairline divider; on narrow screens they stack and wrap without horizontal page overflow. Avoid nested framed material panels, decorative gradients, or extra wrappers around the preset, custom range, and mode controls.
    - Keep only selected project, generated snapshot time, sprint lens, time window, and active visual mode controls visible in the command band.
    - Time presets are `1h`, `24h`, `7d`, `30d`, `All time`, and `Custom`.
    - Choosing `Custom` opens start and end date fields. The selected range changes only after `Apply` succeeds.
@@ -79,12 +79,13 @@ Trend is the chart-first workspace for time-series telemetry.
 Composition explains where usage comes from.
 
 - Lead with provider share, token mix, cache rate, output/reasoning proportions, source mix, purpose lanes, and available Git-blocker context.
-- Token anatomy can show input, cached input, output, reasoning, cache-hit rate, output ratio, and total cost when `totalCostUsd` is greater than zero.
-- Provider and purpose donuts rank visible segments, handle long labels with wrapping, and render explicit empty states when segment data is absent.
-- Provider share, token anatomy, purpose lanes, token flight, cache efficiency, and provider activity use the same flat panel/subpanel grammar with compact neutral badges. Keep semantic data colors inside donut segments, token bars, and source-quality tracks rather than on decorative mode tags.
-- Purpose lanes show invocation count, active time, token share, and dominant purpose without creating a second conflicting purpose summary.
+- The mode metric deck remains the only executive KPI band. The Composition workspace begins with a two-column analytical canvas instead of repeating provider, token, cache, output, and reasoning summary cards.
+- Token anatomy shows total volume, the accessible token-flow bar, separate input/cached/output/reasoning lanes, and a plain-language cache-efficiency callout. Total cost appears in runtime context only when `totalCostUsd` is greater than zero.
+- Provider distribution uses a compact proportional strip and ranked rows with exact token/share text. Segment colors stay inside the data strip and swatches; long labels wrap and empty segments render an explicit no-data state.
+- Purpose lanes rank intent in rows with invocation count, active time, token volume, and share. Runtime context keeps active time, wall time, utilization, and optional spend adjacent without creating another KPI deck.
+- Provider activity is a compact ledger ordered by token volume. Each row keeps provider identity, accessible token-flow anatomy, share, calls, cache rate, tokens per call, active time, and optional cost in a stable responsive layout.
 - Source-confidence cards distinguish reported, estimated, unavailable, unsupported, and defensive unknown buckets without inventing alternate totals.
-- Donuts, ribbons, and flow bars need nearby text or `role="img"` labels so color is never the only signal.
+- Distribution strips and flow bars need nearby text or `role="img"` labels so color is never the only signal.
 
 ### Models
 

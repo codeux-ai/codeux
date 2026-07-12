@@ -246,7 +246,6 @@ describe('StatsPage visual tests', () => {
     render(<StatsPage />);
 
     const analysisPanel = screen.getByRole('region', { name: 'Stats analysis panel' });
-    expect(within(analysisPanel).getByText('Usage mix')).toBeTruthy();
     expect(within(analysisPanel).getAllByText('Composition').length).toBeGreaterThan(0);
     expect(within(analysisPanel).getByText('Provider, token, purpose, and source mix for the current telemetry window.')).toBeTruthy();
   });
@@ -269,7 +268,7 @@ describe('StatsPage visual tests', () => {
       />,
     );
 
-    expect(screen.getByRole('region', { name: 'Stats analysis panel' })).toHaveTextContent('Time-series lens');
+    expect(screen.getByRole('region', { name: 'Stats analysis panel' })).toHaveTextContent('Trend');
     expect(screen.getByRole('status')).toHaveTextContent('Waiting for Telemetry');
     expect(screen.getByRole('status')).toHaveTextContent('Select a time window to see Trend data.');
   });
