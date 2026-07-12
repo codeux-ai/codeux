@@ -6,14 +6,11 @@ import type { ProjectExecutionStatsSnapshot } from "../../../types.js";
 import { TelemetryLedger } from "./TelemetryLedger.js";
 import { GitTelemetryTab } from "./GitTelemetryTab.js";
 import {
-  CHIP_CLASS,
   CONTROL_FOCUS_CLASS,
   TAB_ACTIVE_CLASS,
   TAB_COUNT_ACTIVE_CLASS,
   TAB_COUNT_IDLE_CLASS,
   TAB_IDLE_CLASS,
-  SUBPANEL_CLASS,
-  TEXT_DETAIL_CLASS,
 } from "./StatsShared.js";
 import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
 import { useGsapInteractionTokens, useInteractionTokens } from "../../../lib/motion/index.js";
@@ -87,7 +84,7 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
   const activeTabDetails = tabs.find((tab) => tab.id === activeTab);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {activeTabDetails
           ? `${activeTabDetails.label} selected, ${activeTabDetails.count.toLocaleString()} ${activeTabDetails.count === 1 ? "entry" : "entries"}.`
@@ -97,7 +94,7 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
         role="tablist"
         aria-orientation="horizontal"
         aria-label="Telemetry ledgers"
-        className={`${SUBPANEL_CLASS} sticky top-3 z-20 grid w-full max-w-full min-w-0 grid-cols-1 gap-1 !p-1 sm:grid-cols-2 xl:grid-cols-3`}
+        className="stats-surface-subpanel grid w-full max-w-full min-w-0 grid-cols-1 gap-1 rounded-[var(--stats-control-radius)] p-1 sm:grid-cols-2 xl:grid-cols-3"
         onKeyDown={(e) => {
           if (tabs.length === 0) {
             return;
@@ -140,22 +137,17 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
               tabIndex={isActive ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
               aria-label={`${tab.label}, ${tab.count.toLocaleString()} ${tab.count === 1 ? "entry" : "entries"}`}
-              className={`grid min-h-16 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--stats-control-radius)] px-3 py-2 text-left transition-[background-color,border-color,color] motion-reduce:transition-none ${CONTROL_FOCUS_CLASS} ${
+              className={`grid min-h-11 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[calc(var(--stats-control-radius)-0.125rem)] px-3 py-2 text-left transition-[background-color,border-color,color] motion-reduce:transition-none ${CONTROL_FOCUS_CLASS} ${
                 isActive ? TAB_ACTIVE_CLASS : TAB_IDLE_CLASS
               }`}
               style={{ transitionDuration: interactionTokens.selectionMovement.duration, transitionTimingFunction: interactionTokens.selectionMovement.ease }}
             >
               <Icon className="h-4 w-4 shrink-0" strokeWidth={2.2} aria-hidden="true" />
               <span className="min-w-0">
-                <span className="block truncate text-[11px] font-semibold uppercase tracking-[0.14em]">{tab.label}</span>
-                <span className={`mt-0.5 block truncate text-[10px] font-bold normal-case tracking-normal ${
-                  isActive ? TEXT_DETAIL_CLASS : TEXT_DETAIL_CLASS
-                }`}>
-                  {tab.detail}
-                </span>
+                <span className="block truncate text-xs font-semibold">{tab.label}</span>
               </span>
-              <span className={`inline-flex min-w-10 justify-center rounded-full px-2 py-1 text-[10px] font-semibold tabular-nums tracking-wider ${CHIP_CLASS} ${
-                  isActive ? TAB_COUNT_ACTIVE_CLASS : TAB_COUNT_IDLE_CLASS
+              <span className={`inline-flex min-w-8 justify-center px-1.5 py-0.5 font-mono text-[10px] font-semibold tabular-nums ${
+                isActive ? TAB_COUNT_ACTIVE_CLASS : TAB_COUNT_IDLE_CLASS
               }`}>
                 {formatCompactCount(tab.count)}
               </span>

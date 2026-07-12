@@ -309,16 +309,6 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
           sparkline={topPurpose ? extractPurposeInvocationSeries(stats, topPurpose.id) : []}
           signalLabel="Purpose"
         />
-        <StatsMetricCard
-          label="Merge Conflicts"
-          value={formatMaybeCount(stats.mergeConflictCount || stats.git?.totals?.mergeConflictCount, Boolean(stats.git?.totals))}
-          detail={`${formatCount(stats.git?.totals?.filesChanged)} files changed in git telemetry`}
-          secondaryDetail={`${formatCount(stats.git?.totals?.prCount)} PRs · ${formatCount(stats.git?.totals?.mergedCount)} merged`}
-          qualityHint={(stats.mergeConflictCount || stats.git?.totals?.mergeConflictCount || 0) > 0 ? "Review" : "Clear"}
-          accentHex={STATS_COLORS.rose}
-          sparkline={metricSeries.gitMergeConflicts}
-          signalLabel="Git"
-        />
       </>
     );
   };

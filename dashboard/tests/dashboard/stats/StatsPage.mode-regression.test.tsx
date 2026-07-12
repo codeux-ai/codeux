@@ -139,7 +139,6 @@ describe("TopCardsModeRenderer mode regression", () => {
     expect(screen.getByText("Provider Share")).toBeInTheDocument();
     expect(screen.getByText("Token Anatomy")).toBeInTheDocument();
     expect(screen.getByText("Purpose Activity")).toBeInTheDocument();
-    expect(screen.getByText("Merge Conflicts")).toBeInTheDocument();
 
     cleanup();
     render(<TopCardsModeRenderer mode="models" {...baseProps} />);

@@ -188,12 +188,12 @@ describe("StatsCard", () => {
 
     expect(themeCss).toContain("--stats-surface-panel: #fffdfa");
     expect(themeCss).toContain("--stats-surface-chip: #f4ede4");
-    expect(themeCss).toContain("--stats-card-shadow: 0 1px 2px rgba(61, 49, 37, 0.05)");
-    expect(themeCss).toContain("--stats-panel-shadow: 0 1px 2px rgba(61, 49, 37, 0.05)");
+    expect(themeCss).toContain("--stats-card-shadow: 0 1px 2px rgba(61, 49, 37, 0.035)");
+    expect(themeCss).toContain("--stats-panel-shadow: 0 1px 2px rgba(61, 49, 37, 0.04)");
     expect(themeCss).not.toContain("surface-glass");
     expect(`${themeCss}\n${cardCss}\n${primitiveClasses}`).not.toMatch(/backdrop-filter|-webkit-backdrop-filter|backdrop-blur|stats-card-flat/);
-    expect(cardCss).toContain("translateY(-1px)");
-    expect(cardCss).toContain("linear-gradient");
+    expect(cardCss).not.toContain("translateY(-1px)");
+    expect(cardCss).not.toContain("linear-gradient");
     expect(primitiveClasses).not.toContain("shadow-[var(--stats-control-shadow");
 
     render(<SeriesLegendButton series={CHART_SERIES[0]} active={false} currentValue={0} onToggle={vi.fn()} />);
