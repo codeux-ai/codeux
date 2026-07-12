@@ -2,6 +2,12 @@
 
 Run recovery drills only against the approved local test project and mocked job/email providers.
 
+Run the complete offline drill with one command. It uses a temporary SQLite database, the checked-in 20-record fixture, authenticated in-process HTTP routes, and mocked custom-node/job/email boundaries. It does not dispatch a sprint, invoke a live provider, start Docker, or require network access.
+
+```bash
+pnpm run test:e2e:credentialed-automation
+```
+
 1. Verify a viewer can read its project and receives `403` for another project; correlate both requests in audit export.
 2. Stop the key provider with encrypted rows present. `/health` stays live, `/ready` returns `503`, and a new process refuses startup.
 3. Process the 20-record fixture, approve selected drafts, and restart after outbox enqueue. Sent idempotency keys must not invoke the provider twice; unknown outcomes require attention.
@@ -10,3 +16,5 @@ Run recovery drills only against the approved local test project and mocked job/
 6. Restore SQLite/WAL plus key versions in isolation. Keep runners disabled until readiness, audit continuity, lease ownership, approvals, and outbox counts match the backup manifest.
 
 Record database integrity, key ids/versions (never key material), last audit id, lease/outbox counts, and rollback publication. A drill passes only with 20 processed fixtures, the expected selected delivery count, no duplicate provider/idempotency ids, and no secret canary.
+
+The executable drill additionally asserts five approved and delivered messages, one provider idempotency key per message, expired pre-invocation lease recovery after reopening the database, credential version 2 after rotation, pinned version 2 versus the latest rollback publication, authenticated route failures, unavailable mocked providers, and zero canary disclosure in responses, logs, audit export, or diagnostics.
