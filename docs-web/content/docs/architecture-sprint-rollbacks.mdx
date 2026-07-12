@@ -1,0 +1,22 @@
+# Sprint Rollbacks
+
+Code UX models a rollback as a new sprint, not as destructive history editing. The original sprint remains auditable, while the rollback receives its own branch, tasks, execution history, visual identity, and remote pull request.
+
+## Choosing the execution path
+
+Before creation, Code UX checks the completed source sprint, remote Git configuration, later sprint activity, and the source merge at the tip of the default branch.
+
+- **Automatic rollback** is offered only for a proven isolated latest merge with no later sprint work. Code UX reverts that merge in a detached worktree and pushes a dedicated rollback branch without starting a coding invocation.
+- **Agent-assisted rollback** is used when later work may depend on the source, merge history is ambiguous, a deterministic revert conflicts, or you enter custom instructions.
+
+Entering instructions always selects the agent path. This is how you request a partial rollback such as “remove only feature XY but keep the migration.” The agent is told to inspect dependencies, preserve compatible work, update tests, and push only to the rollback branch.
+
+## Pull-request guarantee
+
+Every rollback is delivered through a remote pull request. Rollback sprints force live PR tracking even when ordinary sprint PR monitoring is disabled. If the normal main-PR mode is `OFF`, rollback uses `CREATE_PR` behavior and pauses for a human merge. The rollback sprint is completed only after the Git host reports the PR merged.
+
+## Dashboard identity
+
+Rollback gallery cells and ledger rows use an orange treatment, a rollback badge, and distinct action copy. Their normal run status, task progress, CI state, review state, and human-attention indicators remain visible.
+
+See [Sprints](/docs/user-dashboard-sprints) for the operator workflow.

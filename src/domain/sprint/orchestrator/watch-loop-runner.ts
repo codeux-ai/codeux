@@ -41,6 +41,7 @@ import type { HeartbeatService } from "../../../services/heartbeat-service.js";
 import type { SprintIssueService } from "../../../services/sprint-issue-service.js";
 import type { SprintRunLifecycleService } from "../../../services/sprint-run-lifecycle-service.js";
 import { getFailedJobLabels, getFailedLogSnippets } from "../../../sprint/ci-status-utils.js";
+import { resolveRollbackFinalizationCiIntelligence } from "./rollback-finalization-policy.js";
 
 
 export type WatchLoopExecutionDependencies = Pick<ExecutionRepository, "appendSprintRunEvent" | "getSprintRun" | "getLatestTaskRun" | "getTaskRunByDispatchId" | "listTaskDispatches" | "listTaskRunEvents">;
@@ -516,10 +517,18 @@ export class WatchLoopRunner {
   }): Promise<{ status: "continue" | "exit" | "wait"; report: string }> {
     const {
       scopedExecutionContext, sprintRunId, repoPath, defaultFeatureBranch, defaultBranch,
-      featureBranchPrefix, githubMode, ciIntelligence, subtasks, runningTasks, readyTasks,
+      featureBranchPrefix, githubMode, ciIntelligence: configuredCiIntelligence, subtasks, runningTasks, readyTasks,
       manualMergeTasks, needsManualMerge, allTasksSettled, allTerminal, noMoreActionPossible,
       activeMainMergeAttentionItems,
     } = params;
+
+    // Rollbacks are never allowed to bypass the remote PR boundary, even when the
+    // project has disabled normal sprint PR monitoring. OFF becomes CREATE_PR so
+    // the rollback pauses for a human merge instead of completing on branch push.
+    const ciIntelligence = resolveRollbackFinalizationCiIntelligence(
+      configuredCiIntelligence,
+      scopedExecutionContext.sprint.kind === "rollback",
+    );
 
     let report = "";
     const mainMergeScope = {
@@ -542,6 +551,8 @@ export class WatchLoopRunner {
         githubMode,
       }).settledTasks.length === subtasks.length
     );
+    const isAutomaticRollback = scopedExecutionContext.sprint.kind === "rollback"
+      && scopedExecutionContext.sprint.rollbackMode === "automatic";
 
     this.deps.projectAttentionService.resolveItemsForSprintRun(
       scopedExecutionContext.project.id,
@@ -571,7 +582,7 @@ export class WatchLoopRunner {
 
     if (allTasksSettledForFinalization) {
       try {
-        if (this.deps.qualityAssuranceService) {
+        if (this.deps.qualityAssuranceService && !isAutomaticRollback) {
           const qaOutcome = await this.deps.qualityAssuranceService.reviewSprintCompletion({
             projectId: scopedExecutionContext.project.id,
             sprintId: scopedExecutionContext.sprint.id,
@@ -1050,14 +1061,16 @@ export class WatchLoopRunner {
           sprintRunId,
           "sprint_completed",
         );
-        this.triggerMemoryRemediation({
-          projectId: scopedExecutionContext.project.id,
-          sprintId: scopedExecutionContext.sprint.id,
-          sprintRunId,
-          repoPath,
-          sprintName: scopedExecutionContext.sprint.name,
-          sprintGoal: scopedExecutionContext.sprint.goal,
-        });
+        if (!isAutomaticRollback) {
+          this.triggerMemoryRemediation({
+            projectId: scopedExecutionContext.project.id,
+            sprintId: scopedExecutionContext.sprint.id,
+            sprintRunId,
+            repoPath,
+            sprintName: scopedExecutionContext.sprint.name,
+            sprintGoal: scopedExecutionContext.sprint.goal,
+          });
+        }
         const issueCloseOutcome = await this.deps.sprintIssueService?.closeLinkedIssues(
           scopedExecutionContext.project.id,
           scopedExecutionContext.sprint.id,

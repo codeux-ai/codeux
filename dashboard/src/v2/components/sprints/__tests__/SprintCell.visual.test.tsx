@@ -38,6 +38,11 @@ const sprint: Sprint = {
   endDate: null,
   featureBranch: null,
   baseCommitSha: null,
+  kind: "standard",
+  rollbackSourceSprintId: null,
+  rollbackMode: null,
+  rollbackInstructions: null,
+  rollbackSafetyReason: null,
   latestReview: undefined,
   id: "sprint-1",
   number: 1,
@@ -156,5 +161,26 @@ describe("SprintCell visuals", () => {
 
     expect(container.querySelector("[data-sprint-attention]")).not.toBeInTheDocument();
     expect(container.querySelector("[data-sprint-attention-indicator]")).not.toBeInTheDocument();
+  });
+
+  it("renders rollback sprints with a dedicated orange treatment", () => {
+    const { container } = render(
+      <SprintCell
+        sprint={{
+          ...sprint,
+          kind: "rollback",
+          rollbackSourceSprintId: "source-sprint",
+          rollbackMode: "automatic",
+          rollbackSafetyReason: "Safe isolated merge.",
+          name: "Rollback Sprint 1",
+        }}
+        isEven={false}
+        accentColor="text-signal-600 dark:text-signal-300"
+      />,
+    );
+
+    expect(container.querySelector('[data-sprint-kind="rollback"]')).toBeInTheDocument();
+    expect(screen.getByText("Rollback")).toHaveClass("text-orange-700");
+    expect(container.querySelector(".border-orange-400\\/35")).toBeInTheDocument();
   });
 });

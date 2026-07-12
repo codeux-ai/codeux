@@ -255,6 +255,12 @@ pnpm run test:backend
 pnpm run lint
 ```
 
+## Rollback finalization
+
+Rollback sprints use the same dependency, Git, CI, conflict-repair, and final merge gates as standard sprints. An automatic rollback enters the loop with a settled audit task, skips completion QA and memory-remediation provider work, and proceeds directly to its required remote PR. Agent-assisted rollbacks run their generated rollback task normally. Rollback finalization always enables remote PR tracking; an otherwise disabled main-PR mode becomes `CREATE_PR` for that rollback only.
+
+See [Sprint Rollbacks](../architecture/sprint-rollbacks.md) for safety classification and persistence details.
+
 ## Files and Data Used
 
 - Subtasks directory:

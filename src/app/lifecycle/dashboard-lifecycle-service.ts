@@ -57,6 +57,7 @@ import type { ChatProviderOutboundService } from "../../services/chat-provider-o
 import type { QuicksprintService } from "../../services/quicksprint-service.js";
 import type { ProjectSetupService } from "../../services/project-setup-service.js";
 import type { SchedulerService } from "../../services/scheduler-service.js";
+import type { SprintRollbackService } from "../../services/sprint-rollback-service.js";
 import type { ChatProviderIngressService } from "../../services/chat-provider-ingress-service.js";
 import type { SpeechTranscriptionService } from "../../services/speech-transcription-service.js";
 import type { SpeechSynthesisService } from "../../services/speech-synthesis-service.js";
@@ -136,6 +137,7 @@ export interface BootDashboardDeps {
   quicksprintService: QuicksprintService;
   projectSetupService: ProjectSetupService;
   schedulerService: SchedulerService;
+  sprintRollbackService: SprintRollbackService;
   sprintIssueService: SprintIssueService;
   chatThreadRuntimeService: ChatThreadRuntimeService;
   chatProviderIngressService: ChatProviderIngressService;
@@ -727,6 +729,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     createSprint: (projectId, input) => deps.projectManagementRepository.createSprint(projectId, input),
     updateSprint: (sprintId, input) => deps.projectManagementRepository.updateSprint(sprintId, input),
     deleteSprint: (sprintId) => deps.projectManagementRepository.deleteSprint(sprintId),
+    assessSprintRollback: (projectId, sprintId) => deps.sprintRollbackService.assess(projectId, sprintId),
+    createSprintRollback: (projectId, sprintId, input) => deps.sprintRollbackService.create(projectId, sprintId, input),
     importSprintFromMarkdown: (projectId, input) => deps.sprintMarkdownService.importSprint(projectId, input),
     exportSprintToMarkdown: (projectId, sprintId) => deps.sprintMarkdownService.exportSprint(projectId, sprintId),
     listTasks: (projectId, sprintId) => deps.projectManagementRepository.listTasks(projectId, sprintId),

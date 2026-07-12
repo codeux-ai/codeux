@@ -61,6 +61,7 @@
   - [MCP Issue Importer Contract](./mcp/tools-and-contracts.md#manage_sprints-import_issues)
 - [MCP Runtime and Dispatch](./mcp/runtime-and-dispatch.md)
 - [Atomic Sprint Loop](./sprint-loop/atomic-loop.md)
+- [Sprint Rollbacks](./architecture/sprint-rollbacks.md)
 - [Instruction Template System](./instructions/markdown-template-system.md)
 - [Dashboard Guide](./dashboard/dashboard-guide.md)
 - [Dashboard Accessibility Patterns](./dashboard/dashboard-guide.md#accessibility-patterns)

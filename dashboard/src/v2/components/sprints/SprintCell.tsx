@@ -13,6 +13,7 @@ import {
   Maximize2,
   MoreVertical,
   Play,
+  RotateCcw,
   Sparkles,
   Square,
   XCircle,
@@ -81,6 +82,7 @@ interface SprintCellProps {
   onOverrides?: () => void;
   onToggleShowcase?: () => void;
   onMarkCompleted?: () => void;
+  onRollback?: () => void;
 }
 
 const formatSprintKey = (sprint: Sprint, prefix: string = "SPR"): string => (
@@ -114,6 +116,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   onOverrides,
   onToggleShowcase,
   onMarkCompleted,
+  onRollback,
 }) => {
   const reducedMotion = useReducedMotion();
   const interactionTokens = useInteractionTokens();
@@ -122,6 +125,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   const bubbleRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const state = statusMap[sprint.status];
+  const isRollback = sprint.kind === "rollback";
   const statusPresentation = getSprintStatusPresentation({
     state: sprint.status,
     humanInterventionTitle: humanIntervention?.title ?? null,
@@ -139,7 +143,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
 
   let effectiveLabel = statusPresentation.statusLabel;
   let effectiveTextTone = state.text;
-  let effectiveAccentHex = state.accentHex;
+  let effectiveAccentHex = isRollback ? "#F97316" : state.accentHex;
   let StatusIcon = state.icon;
 
   if (effectiveLabel === "QA") {
@@ -226,6 +230,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
     <div
       ref={bubbleRef}
       data-sprint-attention={attentionIndicatorState?.kind}
+      data-sprint-kind={sprint.kind}
       onMouseEnter={handleHoverEnter}
       onMouseLeave={handleHoverLeave}
       className="group relative flex h-72 w-72 shrink-0 cursor-pointer items-center justify-center perspective-1000 transition-transform duration-150 [@media(hover:hover)]:hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:transform-none lg:h-80 lg:w-80"
@@ -237,7 +242,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
         style={listReorderStyle}
       >
         <div
-          className={`absolute inset-0 overflow-hidden rounded-[inherit] border border-white/70 backdrop-blur-md transition-colors dark:border-white/[0.06] ${isRunning ? "bg-white/72 dark:bg-void-800/82" : "bg-white/55 dark:bg-void-800/65"}`}
+          className={`absolute inset-0 overflow-hidden rounded-[inherit] border backdrop-blur-md transition-colors ${isRollback ? "border-orange-400/35 bg-orange-50/78 dark:border-orange-400/25 dark:bg-orange-950/24" : `border-white/70 dark:border-white/[0.06] ${isRunning ? "bg-white/72 dark:bg-void-800/82" : "bg-white/55 dark:bg-void-800/65"}`}`}
           style={{
             ...listReorderStyle,
             WebkitMaskImage: "-webkit-radial-gradient(white, black)",
@@ -245,8 +250,8 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
           }}
         >
           <div className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.5)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]" />
-          <WaveFluid accentHex={state.accentHex} />
-          <BorderTrace accentHex={state.accentHex} />
+          <WaveFluid accentHex={effectiveAccentHex} />
+          <BorderTrace accentHex={effectiveAccentHex} />
         </div>
       </div>
 
@@ -302,6 +307,12 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
       )}
 
       <div className="relative z-20 flex h-full w-full flex-col items-center justify-center p-8 text-center">
+        {isRollback && (
+          <div className="absolute left-1/2 top-5 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-orange-500/25 bg-orange-500/10 px-3 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-orange-700 dark:text-orange-300">
+            <RotateCcw className="h-3 w-3" strokeWidth={2.2} />
+            Rollback
+          </div>
+        )}
         {attentionIndicatorState && (
           <SprintAttentionIndicator
             state={attentionIndicatorState}
@@ -441,6 +452,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
                 onToggleShowcase={onToggleShowcase}
                 onOverrides={onOverrides}
                 onMarkCompleted={onMarkCompleted}
+                onRollback={onRollback}
                 onDelete={onDelete}
                 onClose={() => setMenuOpen(false)}
                 markCompletedIcon="circle"

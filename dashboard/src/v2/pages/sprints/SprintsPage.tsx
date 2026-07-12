@@ -38,6 +38,7 @@ import { SprintIssueImportModal } from "../../components/sprints/SprintIssueImpo
 import { SprintJiraImportModal } from "../../components/sprints/SprintJiraImportModal.js";
 import { SprintProjectManagementImportModal } from "../../components/sprints/SprintProjectManagementImportModal.js";
 import { SprintCanvasImportModal } from "../../components/sprints/SprintCanvasImportModal.js";
+import { SprintRollbackModal } from "../../components/sprints/SprintRollbackModal.js";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ActionFeedbackRegion } from "../../components/ui/ActionFeedbackRegion.js";
@@ -49,7 +50,7 @@ import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useRouteProjectSelection } from "../../hooks/use-route-project-selection.js";
 import { PageContainer } from "../../components/layout/PageContainer.js";
 import { PageHeader } from "../../components/layout/PageHeader.js";
-import type { SprintLinkedIssueInput } from "../../types.js";
+import type { Sprint, SprintLinkedIssueInput } from "../../types.js";
 import type { SprintImportedTaskInput } from "../../types.js";
 
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
@@ -181,6 +182,7 @@ export const SprintsPage: FunctionComponent = () => {
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
   const [showSprintGallery, setShowSprintGallery] = useState(readStoredSprintGalleryVisibility);
   const [showIssueImportModal, setShowIssueImportModal] = useState(false);
+  const [rollbackSprint, setRollbackSprint] = useState<Sprint | null>(null);
   const [issueImportProvider, setIssueImportProvider] = useState<RepositoryIssueImportProvider>("github");
   const [isJiraModalOpen, setIsJiraModalOpen] = useState(false);
   const [linkedIssues, setLinkedIssues] = useState<SprintLinkedIssueInput[]>([]);
@@ -401,6 +403,7 @@ export const SprintsPage: FunctionComponent = () => {
     setEditingSprint(null);
     setShowQuicksprint(false);
     setRowMenu(null);
+    setRollbackSprint(null);
     setLinkedIssues([]);
     clearImportedTaskDrafts();
   }, [
@@ -794,6 +797,7 @@ export const SprintsPage: FunctionComponent = () => {
                         onPauseResume={pauseResumeRun ? () => { handleSprintPauseResume(sprint.id); } : undefined}
                         onAddTasks={() => { void handleOpenAppendTasks(sprint); }}
                         onMarkCompleted={() => { void handleMarkCompleted(sprint.id); }}
+                        onRollback={() => setRollbackSprint(sprint)}
                         onEdit={() => {
                       setEditingSprint(sprint);
                       setShowCreateComposer(false);
@@ -966,6 +970,7 @@ export const SprintsPage: FunctionComponent = () => {
                 onExportSprint={handleExportSprintFromLedger}
                 onOverridesSprint={handleOverridesSprintFromLedger}
                 onMarkCompletedSprint={handleMarkCompletedFromLedger}
+                onRollbackSprint={setRollbackSprint}
                 onDeleteSprint={handleDeleteSprintFromLedger}
                 onBulkStart={handleBulkStart}
                 onBulkDelete={handleBulkDelete}
@@ -1142,6 +1147,7 @@ export const SprintsPage: FunctionComponent = () => {
               onMarkCompleted={() => {
                 void handleMarkCompleted(activeRowMenuSprint.id);
               }}
+              onRollback={() => setRollbackSprint(activeRowMenuSprint)}
               onDelete={() => {
                 void requestConfirm({
                   title: "Delete Sprint?",
@@ -1163,6 +1169,13 @@ export const SprintsPage: FunctionComponent = () => {
         </div>,
         document.body
       )}
+      <SprintRollbackModal
+        sprint={rollbackSprint}
+        onClose={() => setRollbackSprint(null)}
+        onCreated={async () => {
+          await Promise.all([refreshSprints(), refreshExecution()]);
+        }}
+      />
     </ExecutionTimelineProvider>
   );
 };

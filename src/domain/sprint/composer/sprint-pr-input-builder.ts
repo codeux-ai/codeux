@@ -72,6 +72,8 @@ export function buildSprintPrComposerInput(args: BuildSprintPrComposerInputArgs)
     : null;
 
   return {
+    sprintKind: sprint.kind,
+    rollbackSourceSprintId: sprint.rollbackSourceSprintId,
     sprintId: sprint.id,
     sprintNumber: sprint.number,
     sprintName: sprint.name,

@@ -88,6 +88,11 @@ interface SprintRow {
   end_date: string | null;
   feature_branch: string | null;
   base_commit_sha: string | null;
+  kind: SprintRecord["kind"] | null;
+  rollback_source_sprint_id: string | null;
+  rollback_mode: SprintRecord["rollbackMode"];
+  rollback_instructions: string | null;
+  rollback_safety_reason: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -366,8 +371,9 @@ export class ProjectManagementRepository {
 
       this.db.prepare(`
         INSERT INTO sprints (
-          id, project_id, number, slug, name, is_generated_name, original_prompt, goal, status, showcase_pinned, start_date, end_date, feature_branch, base_commit_sha, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          id, project_id, number, slug, name, is_generated_name, original_prompt, goal, status, showcase_pinned, start_date, end_date, feature_branch, base_commit_sha,
+          kind, rollback_source_sprint_id, rollback_mode, rollback_instructions, rollback_safety_reason, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         projectId,
@@ -383,6 +389,11 @@ export class ProjectManagementRepository {
         input.endDate || null,
         input.featureBranch || null,
         input.baseCommitSha || null,
+        input.kind || "standard",
+        input.rollbackSourceSprintId || null,
+        input.rollbackMode || null,
+        input.rollbackInstructions?.trim() || null,
+        input.rollbackSafetyReason?.trim() || null,
         now,
         now
       );
@@ -416,7 +427,8 @@ export class ProjectManagementRepository {
 
       this.db.prepare(`
         UPDATE sprints
-        SET number = ?, slug = ?, name = ?, is_generated_name = ?, original_prompt = ?, goal = ?, status = ?, showcase_pinned = ?, start_date = ?, end_date = ?, feature_branch = ?, base_commit_sha = ?, updated_at = ?
+        SET number = ?, slug = ?, name = ?, is_generated_name = ?, original_prompt = ?, goal = ?, status = ?, showcase_pinned = ?, start_date = ?, end_date = ?, feature_branch = ?, base_commit_sha = ?,
+            rollback_mode = ?, rollback_safety_reason = ?, updated_at = ?
         WHERE id = ?
       `).run(
         input.number === undefined ? current.number : input.number,
@@ -431,6 +443,8 @@ export class ProjectManagementRepository {
         input.endDate === undefined ? current.endDate : input.endDate,
         input.featureBranch === undefined ? current.featureBranch : input.featureBranch,
         input.baseCommitSha === undefined ? current.baseCommitSha : input.baseCommitSha,
+        input.rollbackMode === undefined ? current.rollbackMode : input.rollbackMode,
+        input.rollbackSafetyReason === undefined ? current.rollbackSafetyReason : input.rollbackSafetyReason,
         now,
         sprintId
       );
@@ -454,6 +468,15 @@ export class ProjectManagementRepository {
   deleteSprint(sprintId: string): void {
     try {
       const sprint = this.requireSprint(sprintId);
+      const rollbackReference = this.db.prepare(`
+        SELECT id
+        FROM sprints
+        WHERE rollback_source_sprint_id = ?
+        LIMIT 1
+      `).get(sprintId) as { id: string } | undefined;
+      if (rollbackReference) {
+        throw new ValidationError(`Sprint ${sprintId} is retained as the source of rollback sprint ${rollbackReference.id}.`);
+      }
       const activeRun = this.db.prepare(`
         SELECT id, status
         FROM sprint_runs
@@ -1340,6 +1363,13 @@ export class ProjectManagementRepository {
       endDate: row.end_date,
       featureBranch: row.feature_branch,
       baseCommitSha: row.base_commit_sha,
+      kind: row.kind === "rollback" ? "rollback" : "standard",
+      rollbackSourceSprintId: row.rollback_source_sprint_id,
+      rollbackMode: row.rollback_mode === "automatic" || row.rollback_mode === "agent_assisted"
+        ? row.rollback_mode
+        : null,
+      rollbackInstructions: row.rollback_instructions,
+      rollbackSafetyReason: row.rollback_safety_reason,
       tasksCount,
       completion,
       linkedIssues,
