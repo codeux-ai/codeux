@@ -35,6 +35,8 @@ A `NodeFlowGraph` contains:
 
 Validation is owned by `src/domain/node-flows/node-flow-validation.ts`. It normalizes ids, labels, positions, widget defaults, and graph shape; rejects missing node/edge arrays; rejects duplicate node ids; rejects edges that point at missing nodes; requires at least one node; and rejects cycles. Widget validation supports `text`, `textarea`, `number`, `boolean`, `select`, `json`, `secretRef`, and `keyValue` fields.
 
+Migration and validation treat persisted Graph v1 and canonical Graph v2 as untrusted input. Malformed collection members are rejected at their original index, such as `nodes[1].ports[0]` or `edges[2]`, while structurally valid siblings remain available to the rest of normalization. Definition references, credential bindings, capabilities, policies, port and graph schemas, and JSON metadata emit deterministic field-level issues instead of throwing. Revalidating the same graph produces the same ordered issue list.
+
 Validation requires every node's type/version reference to resolve through the registry and rejects unknown definitions. Runtime execution then dispatches according to the registered definition's executable state and execution kind; a planning concept is not runnable merely because it has a string type.
 
 The dashboard uses the same backend-owned Graph v2 record as the runtime. The selected project controls library loading; no project means no flow, credential, publication, or run requests. The versioned registry drives palette entries, typed ports, configuration widgets, credential slots, capabilities, side-effect review, and policies. Draft saves use optimistic `draftRevision` checks and surface conflicts without overwriting the newer record.
@@ -119,7 +121,7 @@ Graph v2 is the single workflow model used by backend, MCP, runtime, and dashboa
 
 The executable registry contains the original deterministic/provider/HTTP nodes plus `condition`, `switch`, `foreach`, `merge`, `delay`, `approval`, `email_draft`, `email_send`, `execute_subflow`, and `webhook_trigger`. Unregistered custom types remain non-executable.
 
-Backend Graph v1 migration retains the exact prior version and appends deterministic v2. Browser canvas v1 migration returns the untouched legacy snapshot separately from the normalized graph.
+Backend Graph v1 migration retains the exact prior version and appends deterministic v2. Invalid legacy members are carried across the migration boundary so validation can report their original paths rather than silently dropping them. Browser canvas v1 migration returns the untouched legacy snapshot separately from the normalized graph.
 
 ## Dashboard and security prerequisites
 

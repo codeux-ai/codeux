@@ -194,15 +194,20 @@ memory remediation, or global scheduler destructive controls.
 
 `manage_node_flows` exposes governed project automation authoring through MCP. Draft patches require an optimistic `draftRevision`; conflicts return expected/actual revisions without writes. Validation and dry-run responses contain policy findings, required credentials, requested capabilities, side-effect diffs, and redacted summaries. Publication and rollback require exact-payload approval. Legacy CRUD/run/attach aliases remain compatible.
 
+Operational run, retry, and inspection responses include durable, numbered node attempts with statuses, failure classifications, retry decisions, executor and execution-invocation identifiers, artifact digests, timestamps, and redacted input/output. Credential values, credential-binding ids, and custom-node source are omitted. Attached agents still receive summary-only flow metadata and never complete graphs.
+
 Attached flows appear to the owning authenticated agent only as name, description, input schema, flow id, and the `run_attached_flow` operation. Calls enforce project ownership, attachment, publication, and credential policy and record agent/conversation provenance without exposing complete graphs or credential material.
 
 Agents should build Code UX-adapted node flows rather than cloning n8n workflows one-to-one. Graphs
 should include dynamic widget schemas for editable graph inputs and node fields; callers can provide
 `widgets` as a graph-level `{ fields: [...] }` schema or as node-id keys mapped to node widget schemas.
 
-Executable node types are currently `input`, `set_fields`, `template`, `provider_prompt`,
-`http_request`, and `output`. Graph validation accepts structured drafts, but runtime execution rejects
-unsupported node types.
+The governed built-ins currently registered with executable handlers are `input`, `set_fields`,
+`template`, `provider_prompt`, `http_request`, `condition`, `switch`, `foreach`, `merge`, `delay`,
+`approval`, `email_draft`, `email_send`, `execute_subflow`, `webhook_trigger`, and `output`. A
+registered custom definition can execute only when its validated versioned manifest, immutable
+artifact, and custom-node runtime are available. Unknown, legacy, mockup, and non-executable
+definitions remain planned or unavailable and are rejected by runtime dispatch.
 
 Minimal create payload:
 

@@ -122,9 +122,11 @@ Task create/update fields include `title`, `name`, `promptMarkdown`, `descriptio
 | Custom nodes | – | `create_custom_node`, `update_custom_node`, and `validate_custom_node` reuse the governed project/build services. |
 | Credentials | – | `request_credential` and `inspect_bindings` expose metadata and permission findings only. |
 | Review | – / ✅ | `dry_run` is side-effect free; `publish` and `rollback` require exact-payload approval; `compare_versions` returns structural summaries. |
-| Operations | – | `run`, `cancel`, `retry`, `inspect_run`, and `list_runs` enforce project ownership and publication selection. |
+| Operations | – | `run`, `cancel`, `retry`, `inspect_run`, and `list_runs` enforce project ownership and publication selection. Run, retry, and inspection summaries include durable redacted node attempts with attempt/retry outcomes, executor and invocation links, and artifact digests. |
 
 Compatibility aliases remain for legacy list/get/create/update/delete/validate/run/attach/detach calls. Legacy create/update auto-publish for backward compatibility; governed draft actions do not. Attachments grant the agent only `run_attached_flow`, never the full management surface.
+
+Attempt projections expose numbered status history, failure classifications, retry decisions, executor and execution-invocation identifiers, artifact digests, timestamps, and redacted input/output. They exclude credential values, credential-binding ids, and custom-node source. Attached agents continue to receive summary-only flow metadata rather than complete graphs.
 
 ---
 

@@ -26,8 +26,11 @@ Run records are persisted as `NodeFlowRunRecord` and `NodeFlowNodeRunRecord`. Bo
 - the graph is acyclic and has a deterministic execution order
 - widget fields have required id, label, type, and select option metadata
 - widget default values are JSON-safe and match the field type
+- malformed v1 and v2 node, edge, port, credential-binding, definition-reference, capability, policy, schema, and metadata members produce stable issues at their original paths
 
 Invalid graphs throw a `ValidationError` with field-level details when persistence is attempted. The validation route returns the same structured issue list without writing data.
+
+Normalization is fail closed and entry oriented. It retains safe siblings, does not renumber issue paths after rejecting an earlier array member, and returns issues in deterministic traversal order so repeated validation is stable.
 
 ## Runtime
 
