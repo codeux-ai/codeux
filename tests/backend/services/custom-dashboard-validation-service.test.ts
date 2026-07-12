@@ -191,7 +191,12 @@ describe("CustomDashboardValidationService", () => {
 
     const workspacePath = path.join(dir, ".code-ux", "runtime", "custom-dashboards", dashboardId, revisionId, "workspace");
     await expect(fs.readFile(path.join(workspacePath, "src", "dashboard.tsx"), "utf8")).resolves.toContain("Dashboard");
-    await expect(fs.readFile(path.join(workspacePath, ".codeux-harness", "codeux-data-bridge.ts"), "utf8")).resolves.toContain("externalApiNodes");
+    const bridge = await fs.readFile(path.join(workspacePath, ".codeux-harness", "codeux-data-bridge.ts"), "utf8");
+    expect(bridge).toContain("externalApiNodes");
+    expect(bridge).toContain("/api/custom-dashboard-runtime/source");
+    expect(bridge).toContain(`\"sessionId\": \"${session.id}\"`);
+    expect(bridge).not.toContain("credentialId");
+    expect(bridge).not.toContain("route-secret");
 
     const dockerCalls = vi.mocked(runCommandStrict).mock.calls.filter(([command]) => command === "docker");
     expect(dockerCalls.some(([, args]) => args[0] === "run" && args.includes("npm install --no-audit --no-fund && npm run build"))).toBe(true);

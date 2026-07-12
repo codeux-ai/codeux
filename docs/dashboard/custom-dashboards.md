@@ -61,9 +61,11 @@ Supported user-level source types:
 | `stats`, `project_stats` | Reads project stats from `GET /api/projects/:projectId/stats`; `config.window` selects the stats window when present, otherwise `7d` is used. |
 | `telemetry`, `overview_telemetry` | Reads overview telemetry from `GET /api/telemetry/overview`. |
 | `integrations_metadata`, `integrations` | Returns only the non-secret metadata declared on the source node. It does not expose provider credentials or effective settings secrets. |
-| `external_api` | Placeholder only in the in-app viewer. It is declared in the graph and validation bridge, but arbitrary external calls are not proxied and return an unavailable-source error. |
+| `external_api` | Reads only declared routes through the server source gateway. Nodes declare a base URL, allowlisted hosts, and route/method policies; optional credentials remain server-side. |
 
 Unsupported source types return an explicit unavailable-source error. Generated dashboards should handle these errors visibly instead of assuming all declared data is available.
+
+External source configuration is declarative. `baseUrl` fixes the upstream origin; `allowedHosts` must explicitly include it; `routes` contains local paths and allowed methods. Optional `allowedPorts`, `allowedContentTypes`, `timeoutMs`, `maxRedirects`, `maxResponseBytes`, and `requestsPerMinute` values can only narrow the server's bounded policy. A generated dashboard calls `readSource(sourceId, { route, method, credentialSlot, capability, body, signal })`; it cannot supply an arbitrary URL. Credential slot metadata may declare `headerName` and `scheme` (for example, `authorization` and `Bearer`), but the secret value is resolved only during the server request.
 
 ## REST API Surface
 
@@ -86,6 +88,7 @@ Custom dashboard routes are registered with the dashboard server:
 | `DELETE` | `/api/custom-dashboard-validations/:sessionId` | Remove a validation session after cleanup. |
 | `ALL` | `/api/custom-dashboard-validations/:sessionId/proxy{*rest}` | Same-origin proxy to the detached validation runtime. |
 | `ALL` | `/api/custom-dashboards/validation-sessions/:sessionId/proxy{*rest}` | Backward-compatible validation proxy route. |
+| `POST` | `/api/custom-dashboard-runtime/source` | Serve a declared source for an owned validation session or active published revision. |
 
 Publication is gated in `CustomDashboardRepository.publishRevision`. The requested revision must belong to the dashboard, must be marked `passed`, must have `validatedAt`, and must have `validationReport.valid === true`. If `validationSessionId` is supplied, that session must also belong to the same dashboard/revision/project and be passed with a valid report. Active publications remain the opening source of truth while later validation sessions run.
 
@@ -123,6 +126,6 @@ Stopping a validation session removes the detached container. It does not invali
 
 ## Published Viewer and Rollback
 
-The in-app viewer renders only published dashboards whose active `publishedRevisionId` points to a revision with a passed validation report. For the default `src/dashboard.tsx` draft and other TSX/Preact revisions validated through the harness, the viewer uses the persisted Vite `dist` artifact instead of the source entry file, so publication does not depend on the detached validation container still running. Generated code runs inside a sandboxed iframe document and talks to the parent app through a constrained `postMessage` bridge. The parent serves only declared source-node requests.
+The in-app viewer renders only published dashboards whose active `publishedRevisionId` points to a revision with a passed validation report. For the default `src/dashboard.tsx` draft and other TSX/Preact revisions validated through the harness, the viewer uses the persisted Vite `dist` artifact instead of the source entry file, so publication does not depend on the detached validation container still running. Generated code runs inside a sandboxed iframe document and talks to the parent app through a constrained `postMessage` bridge. Validation previews and published frames use the same typed source gateway. It verifies ownership, declared source and route permissions, credential slot/capability, request IDs, and session context before serving data. External credentials resolve through the broker and egress policy without entering the iframe; browser authorization, cookies, dashboard session headers, sensitive upstream headers, and upstream error bodies are not forwarded.
 
 Rollback is publish-based: select an earlier passed revision and publish it again. The publication pointer moves back to that immutable revision. Archive is the safe removal path when no dashboard should be active; it clears the publication pointer while preserving history.

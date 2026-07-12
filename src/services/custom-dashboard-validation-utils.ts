@@ -20,6 +20,7 @@ export interface CustomDashboardBridgeConfig {
   runtimeMetadata: CustomDashboardJsonObject;
   integrations: CustomDashboardJsonObject;
   externalApiNodes: CustomDashboardJsonObject[];
+  runtimeAccess: { kind: "validation"; sessionId: string };
 }
 
 export interface MaterializedCustomDashboardWorkspace {
@@ -192,7 +193,10 @@ export async function readValidationLog(logPath: ValidatedCustomDashboardPath | 
   }
 }
 
-export function buildBridgeConfig(revision: CustomDashboardRevisionRecord): CustomDashboardBridgeConfig {
+export function buildBridgeConfig(
+  revision: CustomDashboardRevisionRecord,
+  validationSessionId: string,
+): CustomDashboardBridgeConfig {
   return {
     projectId: revision.projectId,
     dashboardId: revision.dashboardId,
@@ -210,6 +214,7 @@ export function buildBridgeConfig(revision: CustomDashboardRevisionRecord): Cust
         title: node.title,
         config: extractJsonObject(node.config),
       })),
+    runtimeAccess: { kind: "validation", sessionId: validationSessionId },
   };
 }
 
@@ -294,9 +299,22 @@ function buildTsConfig(): string {
 
 function buildDataBridgeModule(config: CustomDashboardBridgeConfig): string {
   return [
-    "export const codeUxDataBridge = Object.freeze(",
-    `${JSON.stringify(config, null, 2)}`,
-    ");",
+    `const config = Object.freeze(${JSON.stringify(config, null, 2)});`,
+    "let sequence = 0;",
+    "const readSource = async (sourceId: string, options: { route?: string; method?: string; credentialSlot?: string; capability?: string; headers?: Record<string, string>; body?: unknown; signal?: AbortSignal } = {}) => {",
+    "  const requestId = `validation-${Date.now()}-${++sequence}`;",
+    "  const response = await fetch('/api/custom-dashboard-runtime/source', {",
+    "    method: 'POST',",
+    "    headers: { 'content-type': 'application/json', 'x-request-id': requestId },",
+    "    credentials: 'same-origin',",
+    "    signal: options.signal,",
+    "    body: JSON.stringify({ requestId, projectId: config.projectId, dashboardId: config.dashboardId, revisionId: config.revisionId, access: config.runtimeAccess, sourceId, route: options.route, method: options.method, credentialSlot: options.credentialSlot, capability: options.capability, headers: options.headers, body: options.body }),",
+    "  });",
+    "  const payload = await response.json().catch(() => null);",
+    "  if (!response.ok) throw new Error(payload?.error?.message || 'Custom dashboard source request failed.');",
+    "  return payload.data;",
+    "};",
+    "export const codeUxDataBridge = Object.freeze({ ...config, listSources: () => [...config.sourceNodeGraph.nodes], readSource });",
     "",
     "export type CodeUxDataBridge = typeof codeUxDataBridge;",
     "",

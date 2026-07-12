@@ -15,6 +15,10 @@ import { CustomDashboardRepository } from "../../../src/repositories/custom-dash
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { SettingsRepository } from "../../../src/repositories/settings-repository.js";
 import { CustomDashboardValidationService } from "../../../src/services/custom-dashboard-validation-service.js";
+import { CustomDashboardRuntimeService } from "../../../src/services/custom-dashboard-runtime-service.js";
+import type { EgressPolicyService } from "../../../src/services/node-flows/egress-policy-service.js";
+import type { CredentialBroker } from "../../../src/services/credentials/credential-broker.js";
+import { ValidationError } from "../../../src/repositories/repository-utils.js";
 
 const tempDirs: string[] = [];
 
@@ -44,6 +48,8 @@ async function createFixture(fetchImpl: typeof fetch = fetch): Promise<{
   storage: AppDbStorage;
   validationService: CustomDashboardValidationService;
   projectId: string;
+  credentialBroker: { withResolvedCredentialId: ReturnType<typeof vi.fn> };
+  egressPolicyService: { request: ReturnType<typeof vi.fn> };
 }> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "custom-dashboard-routes-"));
   tempDirs.push(dir);
@@ -63,13 +69,37 @@ async function createFixture(fetchImpl: typeof fetch = fetch): Promise<{
     readinessPollMs: 1,
     readinessTimeoutMs: 1,
   });
+  const credentialBroker = {
+    withResolvedCredentialId: vi.fn(async (_request, consumer: (secret: Buffer) => unknown) => consumer(Buffer.from("route-secret"))),
+  };
+  const egressPolicyService = {
+    request: vi.fn(async () => ({
+      url: "https://api.example.com/incidents",
+      status: 200,
+      ok: true,
+      headers: { "content-type": "application/json", "set-cookie": "upstream=secret" },
+      contentType: "application/json",
+      body: new TextEncoder().encode(JSON.stringify({ incidents: 2 })),
+      text: () => JSON.stringify({ incidents: 2 }),
+      json: () => ({ incidents: 2 }),
+    })),
+  };
+  const runtimeService = new CustomDashboardRuntimeService({
+    customDashboardRepository: repository,
+    credentialBroker: credentialBroker as unknown as CredentialBroker,
+    egressPolicyService: egressPolicyService as unknown as EgressPolicyService,
+    getProjectExecutionSnapshot: (id) => ({ projectId: id, executions: [] }),
+    getProjectStatsSnapshot: (id, query) => ({ projectId: id, window: query?.window }),
+    getOverviewTelemetrySnapshot: () => ({ activeProjects: 1 }),
+  });
   const app = express();
   app.use(express.json());
   registerCustomDashboardRoutes(app, {
     customDashboardRepository: repository,
     customDashboardValidationService: validationService,
+    customDashboardRuntimeService: runtimeService,
   } as any);
-  return { app, dir, repository, storage, validationService, projectId: project.id };
+  return { app, dir, repository, storage, validationService, projectId: project.id, credentialBroker, egressPolicyService };
 }
 
 function insertCredential(storage: AppDbStorage, projectId: string): string {
@@ -95,6 +125,178 @@ afterEach(async () => {
 });
 
 describe("custom dashboard routes", () => {
+  it("serves built-in and credentialed sources only through declared published bindings", async () => {
+    const { app, repository, storage, projectId, credentialBroker, egressPolicyService } = await createFixture();
+    const credentialId = insertCredential(storage, projectId);
+    const dashboard = repository.createDraft(projectId, {
+      title: "Source gateway",
+      manifest: manifest(),
+      fileBundle: fileBundle(),
+      sourceNodeGraph: {
+        nodes: [
+          { id: "stats", type: "stats", title: "Stats", config: { window: "24h" } },
+          {
+            id: "incidents",
+            type: "external_api",
+            title: "Incidents",
+            config: {
+              baseUrl: "https://api.example.com/v1/",
+              allowedHosts: ["api.example.com"],
+              allowedPorts: [443],
+              allowedContentTypes: ["application/json"],
+              routes: [{ path: "/incidents", methods: ["GET"] }],
+            },
+            credentialSlots: [{
+              slot: "api_token",
+              label: "API token",
+              required: true,
+              allowedKinds: ["api-token"],
+              requiredCapability: "read",
+              metadata: { headerName: "authorization", scheme: "Bearer" },
+            }],
+          },
+        ],
+        edges: [],
+      },
+      credentialBindings: [{ slot: "api_token", credentialId }],
+    });
+    const revision = repository.createRevision(dashboard.id);
+    const validation = repository.createValidationSession(revision.id, {
+      status: "passed",
+      validationReport: passedReport(),
+      finishedAt: "2026-07-07T00:00:00.000Z",
+    });
+    repository.publishRevision(dashboard.id, revision.id, validation.id);
+
+    const builtIn = await request(app).post("/api/custom-dashboard-runtime/source").send({
+      requestId: "request-stats",
+      projectId,
+      dashboardId: dashboard.id,
+      revisionId: revision.id,
+      access: { kind: "published" },
+      sourceId: "stats",
+    });
+    expect(builtIn.status).toBe(200);
+    expect(builtIn.body.data).toMatchObject({ projectId, window: "24h" });
+
+    const external = await request(app).post("/api/custom-dashboard-runtime/source").send({
+      requestId: "request-external",
+      projectId,
+      dashboardId: dashboard.id,
+      revisionId: revision.id,
+      access: { kind: "published" },
+      sourceId: "incidents",
+      route: "/incidents",
+      credentialSlot: "api_token",
+      capability: "read",
+    });
+    expect(external.status).toBe(200);
+    expect(external.body).toMatchObject({ requestId: "request-external", data: { incidents: 2 } });
+    expect(external.body.headers["set-cookie"]).toBeUndefined();
+    expect(credentialBroker.withResolvedCredentialId).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId, credentialId, capability: "read" }),
+      expect.any(Function),
+    );
+    expect(egressPolicyService.request).toHaveBeenCalledWith(expect.objectContaining({
+      url: expect.objectContaining({ hostname: "api.example.com", pathname: "/v1/incidents" }),
+      credentialHeaders: { authorization: "Bearer route-secret" },
+      policy: expect.objectContaining({ allowedHosts: ["api.example.com"], maxResponseBytes: 1024 * 1024 }),
+    }));
+    expect(JSON.stringify(external.body)).not.toContain("route-secret");
+
+    const denied = await request(app).post("/api/custom-dashboard-runtime/source").send({
+      requestId: "request-denied",
+      projectId,
+      dashboardId: dashboard.id,
+      revisionId: revision.id,
+      access: { kind: "published" },
+      sourceId: "incidents",
+      route: "/undeclared",
+      credentialSlot: "api_token",
+    });
+    expect(denied.status).toBe(403);
+    expect(JSON.stringify(denied.body)).not.toContain("route-secret");
+
+    const unsupported = await request(app).post("/api/custom-dashboard-runtime/source").send({
+      requestId: "request-unsupported",
+      projectId,
+      dashboardId: dashboard.id,
+      revisionId: revision.id,
+      access: { kind: "published" },
+      sourceId: "not-declared",
+    });
+    expect(unsupported.status).toBe(404);
+    expect(unsupported.body.error.code).toBe("source_not_declared");
+  });
+
+  it("isolates validation sessions and redacts credential and egress failures", async () => {
+    const { app, repository, storage, projectId, credentialBroker, egressPolicyService } = await createFixture();
+    const credentialId = insertCredential(storage, projectId);
+    const dashboard = repository.createDraft(projectId, {
+      title: "Validation gateway",
+      manifest: manifest(),
+      fileBundle: fileBundle(),
+      sourceNodeGraph: {
+        nodes: [{
+          id: "external",
+          type: "external_api",
+          title: "External",
+          config: { baseUrl: "https://api.example.com", allowedHosts: ["api.example.com"], routes: [{ path: "/data", methods: ["GET"] }] },
+          credentialSlots: [{ slot: "token", label: "Token", required: true, allowedKinds: ["api-token"], requiredCapability: "read" }],
+        }],
+        edges: [],
+      },
+      credentialBindings: [{ slot: "token", credentialId }],
+    });
+    const revision = repository.createRevision(dashboard.id);
+    const session = repository.createValidationSession(revision.id, { status: "running" });
+    const otherDashboard = repository.createDraft(projectId, { title: "Other", manifest: manifest(), fileBundle: fileBundle() });
+    const otherRevision = repository.createRevision(otherDashboard.id);
+    const otherSession = repository.createValidationSession(otherRevision.id, { status: "running" });
+    const payload = {
+      projectId,
+      dashboardId: dashboard.id,
+      revisionId: revision.id,
+      access: { kind: "validation", sessionId: otherSession.id },
+      sourceId: "external",
+      route: "/data",
+      credentialSlot: "token",
+    };
+    const isolated = await request(app).post("/api/custom-dashboard-runtime/source").send({ requestId: "isolated", ...payload });
+    expect(isolated.status).toBe(403);
+
+    for (const reason of ["missing", "revoked", "out-of-scope"] as const) {
+      credentialBroker.withResolvedCredentialId.mockRejectedValueOnce(new Error(`${reason} route-secret`));
+      const deniedCredential = await request(app).post("/api/custom-dashboard-runtime/source").send({
+        requestId: `credential-${reason}`,
+        ...payload,
+        access: { kind: "validation", sessionId: session.id },
+      });
+      expect(deniedCredential.status).toBe(403);
+      expect(deniedCredential.body.error.code).toBe("credential_denied");
+      expect(JSON.stringify(deniedCredential.body)).not.toContain("route-secret");
+    }
+
+    egressPolicyService.request.mockRejectedValueOnce(new ValidationError("Egress host is not allowlisted: private.example."));
+    const egressDenied = await request(app).post("/api/custom-dashboard-runtime/source").send({
+      requestId: "egress-denied",
+      ...payload,
+      access: { kind: "validation", sessionId: session.id },
+    });
+    expect(egressDenied.status).toBe(502);
+    expect(egressDenied.body.error.code).toBe("egress_denied");
+
+    egressPolicyService.request.mockRejectedValueOnce(new ValidationError("Egress response exceeds the configured size limit. route-secret"));
+    const oversized = await request(app).post("/api/custom-dashboard-runtime/source").send({
+      requestId: "oversized",
+      ...payload,
+      access: { kind: "validation", sessionId: session.id },
+    });
+    expect(oversized.status).toBe(502);
+    expect(oversized.body.error.code).toBe("egress_denied");
+    expect(JSON.stringify(oversized.body)).not.toContain("route-secret");
+  });
+
   it("creates, lists, updates, archives, and exposes a data catalog", async () => {
     const { app, projectId } = await createFixture();
 

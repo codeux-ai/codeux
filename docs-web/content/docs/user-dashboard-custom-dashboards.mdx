@@ -25,7 +25,7 @@ Custom dashboards declare a `sourceNodeGraph` with nodes, edges, and optional me
 | `stats`, `project_stats` | Reads project stats. `config.window` selects the stats window when present. |
 | `telemetry`, `overview_telemetry` | Reads overview telemetry. |
 | `integrations_metadata`, `integrations` | Returns only non-secret metadata declared on the source node. |
-| `external_api` | Placeholder only. Arbitrary external calls are not proxied and return an unavailable-source error. |
+| `external_api` | Reads declared routes through the server source gateway. Egress policy and credential resolution remain server-side, and credential values never enter the viewer. |
 
 Generated dashboards should handle unavailable-source errors visibly. External API connectors are not fully available through the in-app viewer yet.
 
