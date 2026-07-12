@@ -45,9 +45,10 @@ export const applyDashboardPreRouteMiddleware = (
       applyDashboardSecurityHeaders(res);
     }
 
-    const isRuntimeDataPath = req.path.startsWith("/api/")
-      || req.path === "/health"
-      || req.path === "/ready";
+    const requestPath = req.path.toLowerCase();
+    const isRuntimeDataPath = requestPath.startsWith("/api/")
+      || requestPath === "/health"
+      || requestPath === "/ready";
     if (isRuntimeDataPath) {
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
       res.setHeader("Pragma", "no-cache");
@@ -68,14 +69,15 @@ export const applyDashboardPreRouteMiddleware = (
     }),
   }));
   app.use("/api", (req, res, next) => {
-    if (req.path.startsWith("/webhooks/") || req.path.includes("/ingress/")) {
+    const requestPath = req.path.toLowerCase();
+    if (requestPath.startsWith("/webhooks/") || requestPath.includes("/ingress/")) {
       next();
       return;
     }
     const startedAt = Date.now();
     try {
       const principal = authService.authenticate(req);
-      authService.authorize(req, principal);
+      authService.authorize(req, principal, resolveNodeFlowProjectId(req.path, options));
       res.locals.codeUxPrincipal = principal;
       res.on("finish", () => {
         options.automationSloService?.observeManagementRequest(Date.now() - startedAt, res.statusCode);
@@ -137,9 +139,10 @@ export const applyDashboardPreRouteMiddleware = (
   });
 
   app.use((req, res, next) => {
-    const isRuntimeDataPath = req.path.startsWith("/api/")
-      || req.path === "/health"
-      || req.path === "/ready";
+    const requestPath = req.path.toLowerCase();
+    const isRuntimeDataPath = requestPath.startsWith("/api/")
+      || requestPath === "/health"
+      || requestPath === "/ready";
 
     if (isRuntimeDataPath && !isTrustedDashboardHost(req.headers.host, req.headers["x-forwarded-host"])) {
       dashboardLogger.warn("Blocked runtime request with untrusted Host header", {
@@ -185,8 +188,27 @@ export const applyDashboardPreRouteMiddleware = (
 };
 
 function extractProjectId(pathname: string): string | null {
-  const match = pathname.match(/^\/projects\/([^/]+)/);
+  const match = pathname.match(/^\/projects\/([^/]+)/i);
   return match?.[1] ? decodeURIComponent(match[1]) : null;
+}
+
+function resolveNodeFlowProjectId(pathname: string, options: DashboardServerOptions): string | null | undefined {
+  const runMatch = pathname.match(/^\/node-flow-runs\/([^/]+)(?:\/|$)/i);
+  if (runMatch?.[1]) {
+    return options.nodeFlowService?.resolveRunProjectId(decodeURIComponent(runMatch[1])) ?? null;
+  }
+
+  const flowMatch = pathname.match(/^\/(?:node-flow-drafts|node-flows)\/([^/]+)(?:\/|$)/i);
+  if (flowMatch?.[1]) {
+    return options.nodeFlowService?.resolveFlowProjectId(decodeURIComponent(flowMatch[1])) ?? null;
+  }
+
+  const approvalMatch = pathname.match(/^\/automation-approvals\/([^/]+)(?:\/|$)/i);
+  if (approvalMatch?.[1]) {
+    return options.approvalService?.resolveProjectId(decodeURIComponent(approvalMatch[1])) ?? null;
+  }
+
+  return undefined;
 }
 
 function captureRawJsonBody(req: IncomingMessage, _res: unknown, buf: Buffer): void {

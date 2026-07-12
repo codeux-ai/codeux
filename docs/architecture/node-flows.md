@@ -20,6 +20,8 @@ Node-flow persistence is owned by `NodeFlowRepository` and stored in SQLite:
 
 All graphs, widget schemas, run inputs, outputs, and trigger payloads are stored as JSON text and hydrated into typed contracts at the repository boundary. Flow, version, run, and attachment records belong to a project. Agent attachment operations verify that the target agent preset belongs to the same project as the flow.
 
+Authenticated dashboard requests resolve project ownership from the persisted flow, run, or approval record before role and project authorization. This applies to ID-only draft, publication, comparison, rollback, attachment, webhook-configuration, run debugger, attempt, cancellation, retry, and approval routes; a caller-supplied body or query project id is not treated as proof of ownership. Webhook ingress is the exception to dashboard bearer authentication and continues to use its path-token and webhook-secret scheme, while dashboard host and browser-origin protections still apply.
+
 ## Graph Contract
 
 The shared contract lives in `src/contracts/node-flow-types.ts`.

@@ -97,7 +97,7 @@ function constantTimeHexEqual(left: string, right: string): boolean {
 function projectIdFromRequest(req: Request): string | null {
   const routeId = req.params?.projectId;
   if (typeof routeId === "string" && routeId.trim()) return routeId.trim();
-  const match = req.path.match(/^\/(?:api\/)?projects\/([^/]+)/);
+  const match = req.path.match(/^\/(?:api\/)?projects\/([^/]+)/i);
   if (match?.[1]) return decodeURIComponent(match[1]);
   const bodyProjectId = req.body && typeof req.body === "object" && typeof (req.body as Record<string, unknown>).projectId === "string"
     ? String((req.body as Record<string, unknown>).projectId).trim()
@@ -105,12 +105,20 @@ function projectIdFromRequest(req: Request): string | null {
   return bodyProjectId || null;
 }
 
+function isCredentialManagementRequest(req: Request): boolean {
+  const pathname = req.path.toLowerCase();
+  return pathname.startsWith("/api/credentials")
+    || pathname.startsWith("/credentials")
+    || /\/credentials(?:\/|$)/.test(pathname);
+}
+
 export function requiredRoleForDashboardRequest(req: Request): CodeUxRole {
-  if (req.path.startsWith("/admin/") || req.path.startsWith("/api/admin/")) return "credential_admin";
-  if (req.path.startsWith("/api/credentials") || /\/credentials(?:\/|$)/.test(req.path)) return "credential_admin";
-  if (/\/node-flows?\//.test(req.path) || req.path.includes("/node-flows")) {
-    if (/\/(publish|rollback)(?:\/|$)/.test(req.path)) return "automation_publisher";
-    if (/\/(run|retry|cancel|approve|approvals)(?:\/|$)/.test(req.path)) return "automation_runner";
+  const pathname = req.path.toLowerCase();
+  if (pathname.startsWith("/admin/") || pathname.startsWith("/api/admin/")) return "credential_admin";
+  if (isCredentialManagementRequest(req)) return "credential_admin";
+  if (/\/(?:node-flow(?:s|-drafts|-runs)?|automation-approvals)(?:\/|$)/.test(pathname)) {
+    if (/\/(publish|rollback)(?:\/|$)/.test(pathname)) return "automation_publisher";
+    if (/\/(run|retry|cancel|decision|approve|approvals)(?:\/|$)/.test(pathname)) return "automation_runner";
     return MUTATING_METHODS.has(req.method) ? "automation_author" : "viewer";
   }
   return MUTATING_METHODS.has(req.method) ? "automation_author" : "viewer";
@@ -141,18 +149,18 @@ export class HeadlessAuthService {
       : this.authenticateServiceToken(req);
   }
 
-  authorize(req: Request, principal: CodeUxPrincipal): void {
+  authorize(req: Request, principal: CodeUxPrincipal, resolvedProjectId?: string | null): void {
     const requiredRole = requiredRoleForDashboardRequest(req);
     if (!principal.roles.includes(requiredRole)) {
       throw new HeadlessAuthenticationError(`Role ${requiredRole} is required.`, 403);
     }
-    const projectId = projectIdFromRequest(req);
+    const projectId = resolvedProjectId ?? projectIdFromRequest(req);
     if (projectId && !principal.projectIds.includes("*") && !principal.projectIds.includes(projectId)) {
       throw new HeadlessAuthenticationError("The authenticated principal is not authorized for this project.", 403);
     }
     if (
       this.configuration.mode !== "local"
-      && requiredRole === "credential_admin"
+      && isCredentialManagementRequest(req)
       && !this.configuration.remoteCredentialManagement
     ) {
       throw new HeadlessAuthenticationError("Remote credential management is disabled.", 403);

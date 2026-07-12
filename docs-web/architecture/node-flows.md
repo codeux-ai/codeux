@@ -2,6 +2,8 @@
 
 Node flows are project-owned, versioned Graph v2 workflows.
 
+Authenticated dashboard routes resolve persisted project ownership from flow, run, or approval ids before authorizing the request. Drafts, publications, comparisons, rollbacks, attachments, webhook configuration, debugger data, attempts, cancellation, retry, and approvals cannot be accessed by presenting a different body or query project id. Webhook ingress remains on its path-token and webhook-secret scheme, with dashboard host and browser-origin protections still enforced.
+
 ## Implemented runtime nodes
 
 | Type | Execution |
