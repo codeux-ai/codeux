@@ -402,6 +402,9 @@ describe("GitHub workflow health", () => {
     expect(runnerScript).toContain("expected QA follow-up for");
     expect(runnerScript).toContain('resolveExpectedQaOutcomes(sprintReviews, expected.sprintOutcomes || [], "sprint completion")');
     expect(runnerScript).toContain("expected command ${commandExpectation.command} to exit");
+    expect(runnerScript).toContain("main().then(() => {");
+    expect(runnerScript).toContain("process.exit(0);");
+    expect(runnerScript).toContain("process.exit(1);");
 
     const qaDagValidationTask = scenarioScript.slice(
       scenarioScript.indexOf('key: "qa-dag-validation"'),
