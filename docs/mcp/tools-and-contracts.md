@@ -425,9 +425,11 @@ The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicks
 
 ## Node Flow Tools
 
-`manage_node_flows` exposes project node workflows through the project-manager MCP surface. It supports `list`, `get`, `create`, `update`, `delete`, `validate`, `run`, `list_runs`, `get_run`, `attach_to_agent`, and `detach_from_agent`.
+`manage_node_flows` is the project-manager automation-authoring surface. Governed actions are `catalog`, `get_node_definition`, `create_draft`, `patch_draft`, `validate_draft`, `create_custom_node`, `update_custom_node`, `validate_custom_node`, `request_credential`, `inspect_bindings`, `dry_run`, `publish`, `compare_versions`, `rollback`, `run`, `cancel`, `retry`, `inspect_run`, and `list_runs`. Compatibility aliases remain for `list`, `get`, `create`, `update`, `delete`, `validate`, `get_run`, `attach_to_agent`/`attach`, and `detach_from_agent`/`detach`.
 
-Node-flow management always delegates graph validation and persistence to `NodeFlowService`; `run` delegates execution through the configured node-flow runtime service. Create and update calls reject malformed graph specs before repository writes. `delete` uses the standard stateful approval handshake.
+New drafts are not executable until published. `patch_draft` requires the last observed positive integer `draftRevision`; stale revisions return a `draft_revision_conflict` containing expected and actual revisions without writing. Draft review responses are summaries rather than full graphs: they include validation issues, policy findings, credential requirements, requested capabilities, side-effect diffs, node/edge counts, and the active published version. `publish`, `rollback`, and `delete` use the exact-payload, one-use approval handshake.
+
+`dry_run` performs validation and policy simulation without executing nodes or side effects. It returns `executed: false`, redacted result metadata, and blockers such as missing or denied credential bindings. Credential actions return metadata only; decrypted credential values never cross the service or MCP response boundary. Custom-node validation reuses the governed project generator/build pipeline and returns checks, issues, capabilities, and credential slots rather than source bundles.
 
 The graph payload is the shared `NodeFlowGraph` contract:
 
@@ -458,6 +460,8 @@ Attach a flow as an agent skill:
   "description": "Runs the reusable review node flow."
 }
 ```
+
+An attachment also gives that authenticated agent the narrow `run_attached_flow` capability. Its catalog entry contains only `flowId`, name, description, input schema, and `operation: "run_attached_flow"`; it never includes the graph or credentials. Execution verifies project ownership, the attachment, current publication, and credential policy, then records `initiatingAgentId`, the originating conversation id when present, and `triggerType: "attached_flow"` in run audit metadata.
 
 Run a flow:
 

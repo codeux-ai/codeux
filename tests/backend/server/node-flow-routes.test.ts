@@ -141,4 +141,14 @@ describe("node flow routes", () => {
       versionSelection: { mode: "latest_published" },
     });
   });
+
+  it("returns HTTP 409 for optimistic draft conflicts", async () => {
+    const nodeFlowService = { patchDraft: vi.fn(() => ({ conflict: { code: "draft_revision_conflict", expectedDraftRevision: 1, actualDraftRevision: 2 } })) };
+    const app = express();
+    app.use(express.json());
+    registerNodeFlowRoutes(app, { nodeFlowService } as any);
+    const response = await request(app).patch("/api/node-flow-drafts/flow-1").send({ projectId: "project-1", draftRevision: 1, operations: [] });
+    expect(response.status).toBe(409);
+    expect(response.body.conflict).toMatchObject({ code: "draft_revision_conflict", actualDraftRevision: 2 });
+  });
 });

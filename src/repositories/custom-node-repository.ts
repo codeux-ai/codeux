@@ -65,6 +65,16 @@ export class CustomNodeRepository {
       .map((row) => this.mapNode(row));
   }
 
+  updateDraft(nodeId: string, manifest: CustomNodeManifest, sourceRevision: string): CustomNodeRecord {
+    const node = this.requireNode(nodeId);
+    if (node.status === "published" || node.status === "validating") throw new ValidationError("Published or validating custom node revisions are immutable.");
+    if (manifest.id !== node.id || manifest.nodeType !== node.manifest.nodeType) throw new ValidationError("Custom node identity cannot be changed.");
+    if (!sourceRevision.trim()) throw new ValidationError("Custom node source revision is required.");
+    this.db.prepare("UPDATE custom_nodes SET status = 'draft', source_revision = ?, manifest_json = ?, validation_report_json = NULL, artifact_digest = NULL, updated_at = ? WHERE id = ?")
+      .run(sourceRevision.trim(), JSON.stringify(manifest), new Date().toISOString(), nodeId);
+    return this.requireNode(nodeId);
+  }
+
   beginValidation(nodeId: string): CustomNodeRecord {
     const node = this.requireNode(nodeId);
     if (node.status === "published") throw new ValidationError("Published custom node revisions are immutable.");

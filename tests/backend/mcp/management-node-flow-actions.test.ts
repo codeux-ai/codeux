@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ManagementToolHandler } from "../../../src/mcp/management-tool-handler.js";
 import type { NodeFlowGraph, NodeFlowRecord } from "../../../src/contracts/node-flow-types.js";
+import { runWithMcpAgentContext } from "../../../src/server/mcp-agent-context.js";
 
 const validGraph: NodeFlowGraph = {
   nodes: [
@@ -204,5 +205,51 @@ describe("manage_node_flows", () => {
       apiToken: "[REDACTED]",
       visible: "ok",
     });
+  });
+
+  it("returns governed draft conflicts and structured dry-run findings", async () => {
+    const nodeFlowService = {
+      patchDraft: vi.fn(() => ({ conflict: { code: "draft_revision_conflict", expectedDraftRevision: 1, actualDraftRevision: 2 } })),
+      dryRun: vi.fn(() => ({ status: "blocked", validationIssues: [], policyFindings: [{ code: "missing_credential" }], requiredCredentials: [{ status: "missing" }], result: { executed: false } })),
+    };
+    const handler = createHandler(nodeFlowService);
+    const conflict = parseResponse(await handler.handleManageNodeFlows({ action: "patch_draft", projectId: "project-1", flowId: "flow-1", draftRevision: 1, operations: [{ op: "set_metadata", metadata: {} }] }));
+    const dryRun = parseResponse(await handler.handleManageNodeFlows({ action: "dry_run", projectId: "project-1", flowId: "flow-1", input: { token: "never-returned" } }));
+    expect(conflict.result.conflict).toMatchObject({ code: "draft_revision_conflict", actualDraftRevision: 2 });
+    expect(dryRun.result).toMatchObject({ status: "blocked", result: { executed: false } });
+  });
+
+  it("requires exact approval for publish and rollback", async () => {
+    const nodeFlowService = { publishDraft: vi.fn(() => ({ draftRevision: 2 })), rollback: vi.fn(() => ({ draftRevision: 3 })) };
+    const handler = createHandler(nodeFlowService);
+    const publishArgs = { action: "publish" as const, projectId: "project-1", flowId: "flow-1", draftRevision: 2, approval: { confirmed: true } };
+    expect(parseResponse(await handler.handleManageNodeFlows(publishArgs)).approvalRequired).toBe(true);
+    expect(parseResponse(await handler.handleManageNodeFlows(publishArgs)).result.draft.draftRevision).toBe(2);
+    const rollbackArgs = { action: "rollback" as const, projectId: "project-1", flowId: "flow-1", draftRevision: 2, version: 1, approval: { confirmed: true } };
+    expect(parseResponse(await handler.handleManageNodeFlows(rollbackArgs)).approvalRequired).toBe(true);
+    expect(parseResponse(await handler.handleManageNodeFlows(rollbackArgs)).result.draft.draftRevision).toBe(3);
+  });
+
+  it("validates required optimistic and operational fields", async () => {
+    const handler = createHandler({});
+    const patch = await handler.handleManageNodeFlows({ action: "patch_draft", projectId: "project-1", flowId: "flow-1" });
+    const cancel = await handler.handleManageNodeFlows({ action: "cancel", projectId: "project-1" });
+    expect(parseResponse(patch).result).toMatchObject({ errorType: "validation", field: "draftRevision" });
+    expect(parseResponse(cancel).result).toMatchObject({ errorType: "validation", field: "runId" });
+  });
+
+  it("executes an attached flow with authenticated agent and conversation metadata", async () => {
+    const runFlow = vi.fn(async () => ({ run: { id: "run-1" }, nodeRuns: [], output: { ok: true } }));
+    const handler = createHandler({
+      listAgentSkillsForAgent: () => [{ flowId: "flow-1", skillName: "Review", description: "" }],
+      get: () => ({ id: "flow-1", projectId: "project-1", graph: { nodes: [], edges: [] } }),
+      validateDraft: () => ({ publishedVersion: 1, requiredCredentials: [] }),
+      runFlow,
+    });
+    const response = await runWithMcpAgentContext("agent-1", "thread-1", () => handler.handleRunAttachedFlow({ projectId: "project-1", flowId: "flow-1", input: { prompt: "review" } }));
+    expect(parseResponse(response).result.run.id).toBe("run-1");
+    expect(runFlow).toHaveBeenCalledWith("project-1", "flow-1", { prompt: "review" }, expect.objectContaining({
+      triggerPayload: expect.objectContaining({ initiatingAgentId: "agent-1", conversationId: "thread-1" }),
+    }));
   });
 });

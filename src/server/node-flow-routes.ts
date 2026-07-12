@@ -19,6 +19,102 @@ function requireNodeFlowService(deps: DashboardDependencies): NonNullable<Dashbo
 }
 
 export function registerNodeFlowRoutes(app: Express, deps: DashboardDependencies): void {
+  app.get("/api/node-flow-catalog", syncRoute((_req, res) => {
+    res.json(requireNodeFlowService(deps).catalog());
+  }));
+
+  app.get("/api/node-flow-catalog/:nodeType", syncRoute((req, res) => {
+    const definition = requireNodeFlowService(deps).nodeDefinition(
+      requireTrimmedString(req.params.nodeType, "nodeType"),
+      parseOptionalInteger(req.query.version, 1, Number.MAX_SAFE_INTEGER, "version"),
+    );
+    if (!definition) throw new HttpRouteError(404, "Node definition not found.");
+    res.json(definition);
+  }));
+
+  app.post("/api/projects/:projectId/node-flow-drafts", syncRoute((req, res) => {
+    res.status(201).json(requireNodeFlowService(deps).createDraft(
+      requireTrimmedString(req.params.projectId, "projectId"), req.body as CreateNodeFlowInput,
+    ));
+  }));
+
+  app.patch("/api/node-flow-drafts/:flowId", syncRoute((req, res) => {
+    const result = requireNodeFlowService(deps).patchDraft(
+      requireTrimmedString(req.params.flowId, "flowId"), req.body,
+    );
+    res.status(result.conflict ? 409 : 200).json(result);
+  }));
+
+  app.post("/api/node-flow-drafts/:flowId/validate", syncRoute((req, res) => {
+    res.json(requireNodeFlowService(deps).validateDraft(
+      requireTrimmedString(req.body?.projectId, "projectId"), requireTrimmedString(req.params.flowId, "flowId"),
+    ));
+  }));
+
+  app.post("/api/node-flow-drafts/:flowId/dry-run", syncRoute((req, res) => {
+    res.json(requireNodeFlowService(deps).dryRun(
+      requireTrimmedString(req.body?.projectId, "projectId"), requireTrimmedString(req.params.flowId, "flowId"), req.body?.input ?? {},
+    ));
+  }));
+
+  app.get("/api/node-flow-drafts/:flowId/bindings", syncRoute((req, res) => {
+    res.json(requireNodeFlowService(deps).inspectBindings(
+      requireTrimmedString(req.query.projectId, "projectId"), requireTrimmedString(req.params.flowId, "flowId"),
+    ));
+  }));
+
+  app.post("/api/node-flow-drafts/:flowId/credential-requests", syncRoute((req, res) => {
+    res.status(201).json(requireNodeFlowService(deps).requestCredential(
+      requireTrimmedString(req.body?.projectId, "projectId"), requireTrimmedString(req.params.flowId, "flowId"),
+      requireTrimmedString(req.body?.nodeId, "nodeId"), requireTrimmedString(req.body?.slot, "slot"),
+    ));
+  }));
+
+  app.post("/api/projects/:projectId/custom-nodes", asyncRoute(async (req, res) => {
+    res.status(201).json(await requireNodeFlowService(deps).createCustomNode(requireTrimmedString(req.params.projectId, "projectId"), req.body));
+  }));
+
+  app.put("/api/projects/:projectId/custom-nodes/:nodeId", asyncRoute(async (req, res) => {
+    res.json(await requireNodeFlowService(deps).updateCustomNode(
+      requireTrimmedString(req.params.projectId, "projectId"), requireTrimmedString(req.params.nodeId, "nodeId"), req.body?.manifest, requireTrimmedString(req.body?.sourceRevision, "sourceRevision"),
+    ));
+  }));
+
+  app.post("/api/projects/:projectId/custom-nodes/:nodeId/validate", asyncRoute(async (req, res) => {
+    res.json(await requireNodeFlowService(deps).validateCustomNode(
+      requireTrimmedString(req.params.projectId, "projectId"), requireTrimmedString(req.params.nodeId, "nodeId"),
+      requireTrimmedString(req.body?.actor, "actor"), requireTrimmedString(req.body?.invocationId, "invocationId"), requireTrimmedString(req.body?.correlationId, "correlationId"),
+    ));
+  }));
+
+  app.post("/api/node-flow-drafts/:flowId/publish", syncRoute((req, res) => {
+    res.json(requireNodeFlowService(deps).publishDraft(
+      requireTrimmedString(req.body?.projectId, "projectId"), requireTrimmedString(req.params.flowId, "flowId"),
+      parseRequiredBodyInteger(req.body?.draftRevision, "draftRevision"), requireTrimmedString(req.body?.publishedBy, "publishedBy"),
+    ));
+  }));
+
+  app.get("/api/node-flows/:flowId/compare", syncRoute((req, res) => {
+    res.json(requireNodeFlowService(deps).compareVersions(
+      requireTrimmedString(req.query.projectId, "projectId"), requireTrimmedString(req.params.flowId, "flowId"),
+      parseRequiredBodyInteger(req.query.fromVersion, "fromVersion"), parseRequiredBodyInteger(req.query.toVersion, "toVersion"),
+    ));
+  }));
+
+  app.post("/api/node-flows/:flowId/rollback", syncRoute((req, res) => {
+    res.json(requireNodeFlowService(deps).rollback(
+      requireTrimmedString(req.body?.projectId, "projectId"), requireTrimmedString(req.params.flowId, "flowId"),
+      parseRequiredBodyInteger(req.body?.version, "version"), parseRequiredBodyInteger(req.body?.draftRevision, "draftRevision"),
+    ));
+  }));
+
+  app.post("/api/node-flow-runs/:runId/cancel", syncRoute((req, res) => {
+    res.json(requireNodeFlowService(deps).cancelRun(requireTrimmedString(req.body?.projectId, "projectId"), requireTrimmedString(req.params.runId, "runId")));
+  }));
+
+  app.post("/api/node-flow-runs/:runId/retry", asyncRoute(async (req, res) => {
+    res.status(201).json(await requireNodeFlowService(deps).retryRun(requireTrimmedString(req.body?.projectId, "projectId"), requireTrimmedString(req.params.runId, "runId")));
+  }));
   app.get("/api/projects/:projectId/node-flows", syncRoute((req, res) => {
     res.json(requireNodeFlowService(deps).list(requireTrimmedString(req.params.projectId, "projectId")));
   }));
@@ -157,4 +253,10 @@ export function registerNodeFlowRoutes(app: Express, deps: DashboardDependencies
     const configured = deps.automationWebhookTriggerRepository.create(flow.projectId, flow.id);
     res.status(201).json({ ...configured.trigger, pathToken: configured.pathToken, secret: configured.secret });
   }));
+}
+
+function parseRequiredBodyInteger(value: unknown, label: string): number {
+  const parsed = typeof value === "string" && value.trim() ? Number(value) : value;
+  if (typeof parsed !== "number" || !Number.isInteger(parsed) || parsed < 1) throw new HttpRouteError(400, `${label} must be a positive integer.`);
+  return parsed;
 }

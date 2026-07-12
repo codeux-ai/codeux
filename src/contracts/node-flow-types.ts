@@ -184,6 +184,65 @@ export interface UpdateNodeFlowInput {
   graph?: NodeFlowGraph;
 }
 
+export type NodeFlowGraphPatchOperation =
+  | { op: "upsert_node"; node: NodeFlowNode }
+  | { op: "remove_node"; nodeId: string }
+  | { op: "upsert_edge"; edge: NodeFlowEdge }
+  | { op: "remove_edge"; edgeId?: string; fromNodeId?: string; toNodeId?: string }
+  | { op: "set_input_schema"; inputSchema: NodeWidgetSchema | null }
+  | { op: "set_metadata"; metadata: NodeFlowJsonObject | null };
+
+export interface PatchNodeFlowDraftInput {
+  projectId: string;
+  draftRevision: number;
+  graph?: NodeFlowGraph;
+  operations?: NodeFlowGraphPatchOperation[];
+  title?: string;
+  description?: string;
+}
+
+export interface NodeFlowConcurrencyConflict {
+  code: "draft_revision_conflict";
+  flowId: string;
+  expectedDraftRevision: number;
+  actualDraftRevision: number;
+  message: string;
+}
+
+export interface NodeFlowPolicyFinding {
+  severity: "info" | "warning" | "error";
+  code: string;
+  nodeId?: string;
+  message: string;
+}
+
+export interface NodeFlowRequiredCredential {
+  nodeId: string;
+  slot: string;
+  allowedKinds: string[];
+  requiredCapabilities: string[];
+  required: boolean;
+  credentialId: string | null;
+  status: "bound" | "missing" | "denied";
+}
+
+export interface NodeFlowDraftReview {
+  flowId: string;
+  projectId: string;
+  name: string;
+  description: string;
+  draftRevision: number;
+  nodeCount: number;
+  edgeCount: number;
+  valid: boolean;
+  validationIssues: NodeFlowValidationIssue[];
+  policyFindings: NodeFlowPolicyFinding[];
+  requiredCredentials: NodeFlowRequiredCredential[];
+  requestedCapabilities: string[];
+  sideEffectDiffs: Array<{ nodeId: string; sideEffect: NodeFlowSideEffect; description: string }>;
+  publishedVersion: number | null;
+}
+
 export interface NodeFlowValidationIssue {
   field: string;
   code: string;

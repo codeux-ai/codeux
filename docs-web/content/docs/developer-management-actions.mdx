@@ -113,6 +113,21 @@ Task create/update fields include `title`, `name`, `promptMarkdown`, `descriptio
 
 ---
 
+## `node_flows`
+
+| Action group | Approval | Behavior |
+| --- | --- | --- |
+| Catalog | – | `catalog` and `get_node_definition` return executable manifests and schemas without complete flow graphs. |
+| Drafts | – | `create_draft`, `patch_draft`, and `validate_draft` return validation, policy, credential, capability, and side-effect summaries. `patch_draft` requires `draftRevision`. |
+| Custom nodes | – | `create_custom_node`, `update_custom_node`, and `validate_custom_node` reuse the governed project/build services. |
+| Credentials | – | `request_credential` and `inspect_bindings` expose metadata and permission findings only. |
+| Review | – / ✅ | `dry_run` is side-effect free; `publish` and `rollback` require exact-payload approval; `compare_versions` returns structural summaries. |
+| Operations | – | `run`, `cancel`, `retry`, `inspect_run`, and `list_runs` enforce project ownership and publication selection. |
+
+Compatibility aliases remain for legacy list/get/create/update/delete/validate/run/attach/detach calls. Legacy create/update auto-publish for backward compatibility; governed draft actions do not. Attachments grant the agent only `run_attached_flow`, never the full management surface.
+
+---
+
 ## `scheduler`
 
 | Action | Destructive | Required payload | Description |

@@ -54,7 +54,8 @@ action-specific fields, and an optional `approval` object for destructive action
 | `manage_scheduler` | orchestration | Create and run scheduled sprints, quicksprints, messages, and node flows. |
 | `scheduler_code_ux` | orchestration | Agent-owned wakeups with restricted list/schedule/cancel actions. |
 | `manage_agents` | agents & memory | Manage agent presets and sync them to project markdown. |
-| `manage_node_flows` | agents & memory | Manage reusable node workflows, run them, and attach them as agent skills. |
+| `manage_node_flows` | agents & memory | Govern draft automation graphs, credentials, publication, versions, and runs. |
+| `run_attached_flow` | agents & memory | Run one published flow attached to the authenticated agent without exposing its graph or credentials. |
 | `manage_memory` | agents & memory | Inspect, search, promote, and re-embed short/long-term memory. |
 | `add_long_term_memory` | agents & memory | Store one canonical durable project memory and return rich confirmation-widget data. |
 | `manage_skills` | agents & memory | Manage persistent skill storages, skill markdown, and agent storage attachments. |
@@ -126,7 +127,7 @@ Clarification states are `pending`, `replied`, `expired`, and `cancelled`. Repea
 | `manage_scheduler` | `list`, `create`, `update`, `delete`, `run_due`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `schedule_node_flow` |
 | `scheduler_code_ux` | `list`, `schedule_wakeup`, `cancel` |
 | `manage_agents` | `list`, `get`, `create`, `update`, `delete`, `sync` |
-| `manage_node_flows` | `list`, `get`, `create`, `update`, `delete`, `validate`, `run`, `list_runs`, `get_run`, `attach_to_agent`, `detach_from_agent` |
+| `manage_node_flows` | `catalog`, `get_node_definition`, `create_draft`, `patch_draft`, `validate_draft`, custom-node and credential actions, `dry_run`, `publish`, `compare_versions`, `rollback`, `run`, `cancel`, `retry`, `inspect_run`, plus compatibility aliases |
 | `manage_memory` | `list`, `get`, `count`, `create`, `update`, `delete`, `search`, `promote`, `get_map`, `model_status`, `start_reembed` |
 | `manage_skills` | `authoring_prompt`, `list_storages`, `get_storage`, `create_storage`, `update_storage`, `delete_storage`, `reset_storage`, `list_agent_storages`, `attach_storage`, `detach_storage`, `list_skills`, `get_skill`, `create_skill`, `update_skill`, `delete_skill`, `import_markdown`, `export_markdown` |
 | `manage_settings` | `get_system`, `get_project_override`, `resolve_project_effective`, `get_sprint_override`, `resolve_sprint_effective`, `replace_system_settings`, `patch_system_setting`, `replace_project_settings`, `patch_project_setting`, `reset_project_settings`, `replace_sprint_settings`, `patch_sprint_setting`, `reset_sprint_settings`, `export_settings_bundle`, `apply_settings_bundle` |
@@ -191,13 +192,9 @@ memory remediation, or global scheduler destructive controls.
 
 ## Node flows
 
-`manage_node_flows` exposes project node workflows through MCP. It supports graph validation, CRUD,
-runtime execution, run inspection, and flow-backed agent skill attachments.
+`manage_node_flows` exposes governed project automation authoring through MCP. Draft patches require an optimistic `draftRevision`; conflicts return expected/actual revisions without writes. Validation and dry-run responses contain policy findings, required credentials, requested capabilities, side-effect diffs, and redacted summaries. Publication and rollback require exact-payload approval. Legacy CRUD/run/attach aliases remain compatible.
 
-Create and update calls validate the structured graph before repository writes. `run` delegates to the
-node-flow runtime through `NodeFlowService.runFlow`, and `delete` requires the normal approval
-handshake. Responses mask secret-shaped graph data, inputs, and outputs before returning them to MCP
-clients.
+Attached flows appear to the owning authenticated agent only as name, description, input schema, flow id, and the `run_attached_flow` operation. Calls enforce project ownership, attachment, publication, and credential policy and record agent/conversation provenance without exposing complete graphs or credential material.
 
 Agents should build Code UX-adapted node flows rather than cloning n8n workflows one-to-one. Graphs
 should include dynamic widget schemas for editable graph inputs and node fields; callers can provide

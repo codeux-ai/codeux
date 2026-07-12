@@ -310,7 +310,7 @@ export function createCoreDependencies(
   const schedulerRepository = new SchedulerRepository(appDbStorage, dashboardRealtimeService);
   const skillRepository = new SkillRepository(appDbStorage);
   const nodeFlowRepository = new NodeFlowRepository(appDbStorage, dashboardRealtimeService);
-  const nodeFlowService = new NodeFlowService(nodeFlowRepository);
+  const nodeFlowService = new NodeFlowService(nodeFlowRepository, undefined, credentialBroker);
   const embeddingService = new EmbeddingService();
   const embeddingModelManager = new EmbeddingModelManager(
     embeddingService,

@@ -90,4 +90,39 @@ describe("NodeFlowService", () => {
       expect.objectContaining({ code: "invalid_edge_endpoint" }),
     ]));
   });
+
+  it("applies optimistic draft patches without overwriting conflicting edits", async () => {
+    const { dir, projectRepository, service } = await createService();
+    const project = projectRepository.createProject({ name: "Draft Project", sourceType: "local", sourceRef: dir });
+    const draft = service.createDraft(project.id, { title: "Draft", graph: validGraph() });
+
+    const updated = service.patchDraft(draft.flowId, {
+      projectId: project.id,
+      draftRevision: draft.draftRevision,
+      operations: [{ op: "set_metadata", metadata: { purpose: "review" } }],
+    });
+    const conflict = service.patchDraft(draft.flowId, {
+      projectId: project.id,
+      draftRevision: draft.draftRevision,
+      operations: [{ op: "set_metadata", metadata: { purpose: "overwrite" } }],
+    });
+
+    expect(updated.draft?.draftRevision).toBe(2);
+    expect(conflict.conflict).toMatchObject({ code: "draft_revision_conflict", expectedDraftRevision: 1, actualDraftRevision: 2 });
+    expect(service.get(draft.flowId)?.graph.metadata).toEqual({ purpose: "review" });
+  });
+
+  it("publishes reviewed drafts and creates rollback drafts without replacing history", async () => {
+    const { dir, projectRepository, service } = await createService();
+    const project = projectRepository.createProject({ name: "Publish Project", sourceType: "local", sourceRef: dir });
+    const draft = service.createDraft(project.id, { title: "Draft", graph: validGraph() });
+    expect(draft.publishedVersion).toBeNull();
+    const published = service.publishDraft(project.id, draft.flowId, 1, "reviewer");
+    expect(published.publishedVersion).toBe(1);
+    const second = service.patchDraft(draft.flowId, { projectId: project.id, draftRevision: 1, title: "Second" });
+    const rollback = service.rollback(project.id, draft.flowId, 1, second.draft!.draftRevision);
+    expect(rollback.draftRevision).toBe(3);
+    expect(rollback.name).toBe("Draft");
+    expect(service.compareVersions(project.id, draft.flowId, 1, 3)).toMatchObject({ fromVersion: 1, toVersion: 3 });
+  });
 });

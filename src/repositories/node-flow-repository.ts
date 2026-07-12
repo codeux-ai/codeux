@@ -144,7 +144,7 @@ export class NodeFlowRepository {
     return row ? this.mapFlowRow(row) : null;
   }
 
-  createFlow(projectId: string, input: CreateNodeFlowInput): NodeFlowRecord {
+  createFlow(projectId: string, input: CreateNodeFlowInput, options: { publish?: boolean; publishedBy?: string } = {}): NodeFlowRecord {
     this.requireProject(projectId);
     const now = new Date().toISOString();
     const id = input.id?.trim() || randomUUID();
@@ -166,7 +166,9 @@ export class NodeFlowRepository {
         graphJson,
         createdAt: now,
       });
-      this.insertPublication(id, projectId, 1, graphJson, DEFAULT_NODE_FLOW_EXECUTION_POLICY, "system");
+      if (options.publish !== false) {
+        this.insertPublication(id, projectId, 1, graphJson, DEFAULT_NODE_FLOW_EXECUTION_POLICY, options.publishedBy ?? "system");
+      }
     });
 
     const created = this.requireFlow(id);
@@ -174,7 +176,7 @@ export class NodeFlowRepository {
     return created;
   }
 
-  updateFlow(flowId: string, input: UpdateNodeFlowInput): NodeFlowRecord {
+  updateFlow(flowId: string, input: UpdateNodeFlowInput, options: { publish?: boolean; publishedBy?: string } = {}): NodeFlowRecord {
     const current = this.requireFlow(flowId);
     const now = new Date().toISOString();
     const title = input.title === undefined ? current.title : this.requireTitle(input.title);
@@ -198,7 +200,9 @@ export class NodeFlowRepository {
         graphJson,
         createdAt: now,
       });
-      this.insertPublication(flowId, current.projectId, nextVersion, graphJson, DEFAULT_NODE_FLOW_EXECUTION_POLICY, "system");
+      if (options.publish !== false) {
+        this.insertPublication(flowId, current.projectId, nextVersion, graphJson, DEFAULT_NODE_FLOW_EXECUTION_POLICY, options.publishedBy ?? "system");
+      }
     });
 
     const updated = this.requireFlow(flowId);
