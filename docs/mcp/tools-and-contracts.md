@@ -431,6 +431,8 @@ New drafts are not executable until published. `patch_draft` requires the last o
 
 `dry_run` performs validation and policy simulation without executing nodes or side effects. It returns `executed: false`, redacted result metadata, and blockers such as missing or denied credential bindings. Credential actions return metadata only; decrypted credential values never cross the service or MCP response boundary. Custom-node validation reuses the governed project generator/build pipeline and returns checks, issues, capabilities, and credential slots rather than source bundles.
 
+Operational `run`, `retry`, and `inspect_run` responses include durable node-attempt history. Each governed attempt projection contains its attempt number and status, failure classification and retry decision, executor and execution-invocation identifiers, artifact digest, timestamps, and redacted input/output. Credential values, credential bindings, and custom-node source are excluded. `inspect_run` reloads attempts from durable storage, so successful attempts, retries, terminal failures, and `attention_required` decisions remain inspectable after the original call or a runtime restart.
+
 The graph payload is the shared `NodeFlowGraph` contract:
 
 - `nodes`: `{ id, type, title, description?, position?, widgetSchema?, data? }`
@@ -448,6 +450,7 @@ Secret-safe widget guidance:
 - do not put API keys, bearer tokens, cookies, passwords, or private headers in `graph.metadata`, `node.data`, widget defaults, run `input`, or examples
 - use placeholder references such as `settings.provider.default` or `secret://service/token`
 - treat MCP responses as redacted summaries; flow and run responses mask secret-shaped graph data, inputs, trigger payloads, node payloads, and outputs before returning them through MCP
+- treat attempt history as an operational summary: it exposes invocation links and artifact identity, but never credential values, credential-binding ids, or custom-node source
 
 Attach a flow as an agent skill:
 

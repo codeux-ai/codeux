@@ -194,6 +194,8 @@ memory remediation, or global scheduler destructive controls.
 
 `manage_node_flows` exposes governed project automation authoring through MCP. Draft patches require an optimistic `draftRevision`; conflicts return expected/actual revisions without writes. Validation and dry-run responses contain policy findings, required credentials, requested capabilities, side-effect diffs, and redacted summaries. Publication and rollback require exact-payload approval. Legacy CRUD/run/attach aliases remain compatible.
 
+Operational run, retry, and inspection responses include durable, numbered node attempts with statuses, failure classifications, retry decisions, executor and execution-invocation identifiers, artifact digests, timestamps, and redacted input/output. Credential values, credential-binding ids, and custom-node source are omitted. Attached agents still receive summary-only flow metadata and never complete graphs.
+
 Attached flows appear to the owning authenticated agent only as name, description, input schema, flow id, and the `run_attached_flow` operation. Calls enforce project ownership, attachment, publication, and credential policy and record agent/conversation provenance without exposing complete graphs or credential material.
 
 Agents should build Code UX-adapted node flows rather than cloning n8n workflows one-to-one. Graphs
