@@ -45,6 +45,23 @@ describe("git-status-mappers", () => {
       expect(res.data[1].comments).toBe(3);
       expect(res.data[1].checks[0].name).toBe("test");
     });
+
+    it("keeps only the latest run for each workflow check", () => {
+      const res = parseOpenPrs(JSON.stringify([{
+        statusCheckRollup: [
+          { name: "Build", workflowName: "CI", status: "COMPLETED", conclusion: "CANCELLED", startedAt: "2026-07-12T08:21:07Z" },
+          { name: "Build", workflowName: "CI", status: "COMPLETED", conclusion: "SUCCESS", startedAt: "2026-07-12T08:24:04Z" },
+          { name: "Build", workflowName: "Nightly", status: "COMPLETED", conclusion: "FAILURE", startedAt: "2026-07-12T08:25:00Z" },
+          { name: "Lint", workflowName: "CI", status: "IN_PROGRESS", conclusion: null, startedAt: "2026-07-12T08:26:00Z" },
+        ],
+      }]));
+
+      expect(res.data[0].checks).toEqual([
+        { name: "Build", status: "COMPLETED", conclusion: "SUCCESS" },
+        { name: "Build", status: "COMPLETED", conclusion: "FAILURE" },
+        { name: "Lint", status: "IN_PROGRESS", conclusion: null },
+      ]);
+    });
   });
 
   describe("parseCiRuns", () => {

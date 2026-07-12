@@ -43,6 +43,17 @@ describe("ci-status-utils", () => {
     expect(selectFailedCiRuns(status, "task/x")).toEqual([]);
   });
 
+  it("does not attach a historical failure after a newer branch run succeeds", () => {
+    const status = {
+      ciRuns: [
+        { id: 1, name: "CI", workflowName: "CI", status: "completed", conclusion: "failure", event: "push", headBranch: "task/x", url: "old", updatedAt: "2026-07-12T08:21:37Z" },
+        { id: 2, name: "CI", workflowName: "CI", status: "completed", conclusion: "success", event: "push", headBranch: "task/x", url: "new", updatedAt: "2026-07-12T08:28:47Z" },
+      ],
+    } as GitTrackingStatus;
+
+    expect(selectFailedCiRuns(status, "task/x")).toEqual([]);
+  });
+
   it("selects only the newest failed run after ordering and duplicate suppression", () => {
     const status = {
       ciRuns: [

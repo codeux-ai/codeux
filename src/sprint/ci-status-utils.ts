@@ -56,9 +56,9 @@ export const deriveChecksFromCiRuns = (
 
 export const selectFailedCiRuns = (gitStatus: GitTrackingStatus, branchName: string): GitCiRunStatus[] => {
   const runs = Array.isArray(gitStatus.ciRuns) ? gitStatus.ciRuns : [];
-  const failedRuns = runs.filter((run) => isCiFailure(run.status, run.conclusion));
-  const branchMatched = failedRuns.filter((run) => run.headBranch === branchName);
-  return selectNewestCiRun(branchMatched);
+  const branchMatched = runs.filter((run) => run.headBranch === branchName);
+  return selectNewestCiRun(branchMatched)
+    .filter((run) => isCiFailure(run.status, run.conclusion));
 };
 
 export const selectNewestCiRun = (runs: GitCiRunStatus[]): GitCiRunStatus[] => {

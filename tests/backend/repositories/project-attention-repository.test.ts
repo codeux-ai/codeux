@@ -149,6 +149,48 @@ describe("ProjectAttentionRepository", () => {
     }));
   });
 
+  it("keeps guardrail handoffs with different deduplication keys separate", async () => {
+    const { attention, project, sprint, task, sprintRun } = await buildFixture();
+    const baseInput = {
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      attentionType: "human_escalation_required" as const,
+      severity: "high" as const,
+      ownerType: "human" as const,
+      summaryMarkdown: "Guardrail reached",
+    };
+
+    const ciFix = attention.openOrRefreshItem({
+      ...baseInput,
+      title: "CI repair guardrail",
+      deduplicationKey: `guardrail:ci_fix:${task.id}`,
+      payload: { sourceAttentionType: "ci_fix" },
+    });
+    const coding = attention.openOrRefreshItem({
+      ...baseInput,
+      title: "Coding guardrail",
+      deduplicationKey: `guardrail:task_coding:${task.id}`,
+      payload: { sourceAttentionType: "task_coding" },
+    });
+    const refreshedCiFix = attention.openOrRefreshItem({
+      ...baseInput,
+      title: "CI repair guardrail refreshed",
+      deduplicationKey: `guardrail:ci_fix:${task.id}`,
+      payload: { sourceAttentionType: "ci_fix", guardrailAttempts: 5 },
+    });
+
+    expect(coding.id).not.toBe(ciFix.id);
+    expect(refreshedCiFix.id).toBe(ciFix.id);
+    expect(attention.listProjectAttentionItems(project.id)).toHaveLength(2);
+    expect(refreshedCiFix.payload).toEqual(expect.objectContaining({
+      deduplicationKey: `guardrail:ci_fix:${task.id}`,
+      sourceAttentionType: "ci_fix",
+      guardrailAttempts: 5,
+    }));
+  });
+
 
   it("creates or updates multiple attention items within a single transaction using openOrRefreshItems", async () => {
     const { attention, project, sprint, task, sprintRun } = await buildFixture();

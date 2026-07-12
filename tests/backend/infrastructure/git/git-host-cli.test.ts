@@ -204,7 +204,7 @@ describe("GithubApiHostCli", () => {
         headRefName: "f", baseRefName: "main", mergeStateStatus: "CLEAN",
         reviewDecision: null, updatedAt: "2024-01-01T00:00:00Z", comments: { totalCount: 0 },
         commits: { nodes: [{ commit: { statusCheckRollup: { state: "FAILURE", contexts: { nodes: [
-          { __typename: "CheckRun", name: "build", status: "COMPLETED", conclusion: "SUCCESS" },
+          { __typename: "CheckRun", name: "build", status: "COMPLETED", conclusion: "SUCCESS", checkSuite: { workflowRun: { workflow: { name: "CI" } } } },
           { __typename: "CheckRun", name: "test", status: "IN_PROGRESS", conclusion: null },
           { __typename: "StatusContext", context: "ci/legacy", state: "FAILURE" },
           { __typename: "StatusContext", context: "ci/pending", state: "PENDING" },
@@ -215,10 +215,10 @@ describe("GithubApiHostCli", () => {
       expect(res.ok).toBe(true);
       const parsed = JSON.parse(res.stdout);
       expect(parsed[0].statusCheckRollup).toEqual([
-        { name: "build", status: "COMPLETED", conclusion: "SUCCESS" },
-        { name: "test", status: "IN_PROGRESS", conclusion: null },
-        { name: "ci/legacy", status: "COMPLETED", conclusion: "FAILURE" },
-        { name: "ci/pending", status: "IN_PROGRESS", conclusion: null },
+        { name: "build", status: "COMPLETED", conclusion: "SUCCESS", workflowName: "CI", startedAt: null, completedAt: null },
+        { name: "test", status: "IN_PROGRESS", conclusion: null, workflowName: null, startedAt: null, completedAt: null },
+        { name: "ci/legacy", status: "COMPLETED", conclusion: "FAILURE", workflowName: null, startedAt: null, completedAt: null },
+        { name: "ci/pending", status: "IN_PROGRESS", conclusion: null, workflowName: null, startedAt: null, completedAt: null },
       ]);
       // Still a single GraphQL POST — checks ride along with the PR list.
       expect(fetchMock).toHaveBeenCalledTimes(1);

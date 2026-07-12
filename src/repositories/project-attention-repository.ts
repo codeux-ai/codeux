@@ -316,6 +316,10 @@ export class ProjectAttentionRepository {
 
       for (const input of inputs) {
         const existing = this.findActiveDuplicate(input);
+        const inputPayload = {
+          ...(input.payload || {}),
+          ...(input.deduplicationKey ? { deduplicationKey: input.deduplicationKey } : {}),
+        };
         let itemId: string;
 
         if (existing) {
@@ -323,7 +327,7 @@ export class ProjectAttentionRepository {
           if (input.refreshOnDuplicate !== false) {
             const nextPayload = {
               ...(existing.payload || {}),
-              ...(input.payload || {}),
+              ...inputPayload,
             };
             this.db.prepare(`
               UPDATE project_attention_items
@@ -380,7 +384,7 @@ export class ProjectAttentionRepository {
             input.assignedWorkerEndpointId ?? null,
             input.title.trim(),
             input.summaryMarkdown.trim(),
-            serializePayload(input.payload),
+            serializePayload(inputPayload),
             now,
             now,
           );

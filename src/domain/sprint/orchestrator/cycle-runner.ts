@@ -385,6 +385,7 @@ export class CycleRunner {
             taskId,
             sprintRunId: args.sprintRunId,
             attentionType: "human_escalation_required",
+            deduplicationKey: `guardrail:ci_fix:${taskId}`,
             severity: "high",
             ownerType: "human" as ProjectAttentionOwnerType,
             title: `CI autofix guardrail reached for ${task.id}`,
@@ -527,7 +528,7 @@ export class CycleRunner {
         // Failed CI is not merge work. Once its repair guardrail is exhausted,
         // the CI gate owns a human handoff and the merge protocol must not open
         // a misleading worker merge_required item for the same task.
-        || (task.status === "BLOCKED" && task.merge_indicator === "CI"),
+        || task.merge_indicator === "CI",
       renderInstruction: (templateId, variables) => this.deps.renderInstruction(templateId, variables, args.repoPath),
       onTaskEvent: ({ task, eventType, payload, sourceEventKey }) => {
         appendTaskEvent(task, eventType, payload, sourceEventKey);
@@ -791,6 +792,7 @@ export class CycleRunner {
       taskId,
       sprintRunId: args.sprintRunId,
       attentionType: "human_escalation_required",
+      deduplicationKey: `guardrail:task_coding:${taskId}`,
       severity: "high",
       ownerType: "human" as ProjectAttentionOwnerType,
       title: `Coding guardrail reached for ${task.id}`,

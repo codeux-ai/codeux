@@ -199,7 +199,7 @@ describe("CycleStateCoordinator", () => {
       expect(openedItems[1].taskId).toBe("rec-2");
     });
 
-    it("does not convert CI merge waits into human-owned CI-fix attention", async () => {
+    it("does not churn merge attention while CI owns the task", async () => {
       const deps = {
         projectAttentionService: {
           openItems: vi.fn(),
@@ -255,23 +255,11 @@ describe("CycleStateCoordinator", () => {
         new Set(),
       );
 
-      expect(deps.projectAttentionService.openItems).toHaveBeenCalledWith([
-        expect.objectContaining({
-          attentionType: "merge_required",
-          ownerType: "worker",
-          severity: "medium",
-          title: "Merge required for task-1",
-          taskId: "rec-1",
-          payload: expect.objectContaining({
-            mergeIndicator: "CI",
-            prNumber: 1,
-          }),
-        }),
-      ]);
+      expect(deps.projectAttentionService.openItems).not.toHaveBeenCalled();
       expect(deps.projectAttentionService.resolveItems).toHaveBeenCalledWith(expect.arrayContaining([
         {
-          filter: { projectId: "proj-1", taskId: "rec-1", attentionTypes: ["merge_conflict"] },
-          resolution: { status: "resolved", reason: "merge_required_attention_replaced" },
+          filter: { projectId: "proj-1", taskId: "rec-1", attentionTypes: ["merge_required", "merge_conflict"] },
+          resolution: { status: "resolved", reason: "merge_attention_cleared" },
         },
       ]));
     });
@@ -292,7 +280,7 @@ describe("CycleStateCoordinator", () => {
           title: "Task 1",
           prompt: "Prompt 1",
           status: "CODING_COMPLETED",
-          merge_indicator: "CI",
+          merge_indicator: "MERGE_BLOCKED",
           pr_url: "https://example.com/pr/1",
         },
       ] as any[];
@@ -375,6 +363,65 @@ describe("CycleStateCoordinator", () => {
       expect(actionItem).toBeDefined();
       // Bare id (sessions/ prefix stripped) is what julesApi.sendSessionMessage expects.
       expect(actionItem.payload.sessionId).toBe("3478292433877515748");
+    });
+
+    it("resolves guardrail handoffs after the task settles", async () => {
+      const deps = {
+        projectAttentionService: {
+          openItems: vi.fn(),
+          resolveItems: vi.fn(),
+          resolveItem: vi.fn(),
+        },
+      } as any;
+      const coordinator = new CycleStateCoordinator(deps);
+      const subtasks = [{
+        id: "T01",
+        record_id: "task-1",
+        status: "COMPLETED",
+        is_merged: true,
+        merge_indicator: "MERGED",
+      }] as any[];
+      const attentionItem = {
+        id: "guardrail-handoff-1",
+        projectId: "proj-1",
+        sprintId: "sprint-1",
+        taskId: "task-1",
+        sprintRunId: "run-1",
+        attentionType: "human_escalation_required",
+        ownerType: "human",
+        status: "open",
+        payload: {
+          sourceAttentionType: "ci_fix",
+          guardrailPurpose: "ci_fix",
+          guardrailAction: "human_handoff",
+        },
+      } as any;
+
+      coordinator.syncProtocolAttentionItems(
+        subtasks,
+        { awaitingMerge: [], actionRequiredTasks: [] },
+        {
+          executionContext: { project: { id: "proj-1" }, sprint: { id: "sprint-1" } },
+          sprintRunId: "run-1",
+          defaultFeatureBranch: "feature/sprint-1",
+          defaultBranch: "main",
+          repoPath: "/repo",
+          githubMode: "REMOTE",
+          ciIntelligence: { resolveMergeConflicts: false },
+        } as any,
+        null,
+        new Set(),
+        new Set(),
+        undefined,
+        new Set(),
+        new Set(),
+        [attentionItem],
+      );
+
+      expect(deps.projectAttentionService.resolveItem).toHaveBeenCalledWith(
+        "guardrail-handoff-1",
+        { status: "resolved", reason: "settled_task_guardrail_handoff_cleared" },
+      );
     });
 
     it("dismisses stale task-level human merge-conflict handoffs after the task marker is cleared", async () => {

@@ -69,6 +69,28 @@ describe("runStatusDerivationStep", () => {
     expect(result[0].status).toBe("BLOCKED");
   });
 
+  it("preserves a CI guardrail handoff after its coding session completed", () => {
+    const subtasks: Subtask[] = [
+      {
+        id: "task-1",
+        title: "Task 1",
+        prompt: "",
+        depends_on: [],
+        is_independent: true,
+        is_merged: false,
+        status: "BLOCKED",
+        session_state: "COMPLETED",
+        merge_indicator: "CI",
+        intervention_owner: "HUMAN",
+        worker_branch: "worker/task-1",
+        pr_url: "https://example.com/pr/1",
+      },
+    ];
+
+    const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState });
+    expect(result[0].status).toBe("BLOCKED");
+  });
+
   it("preserves QA_REVIEW_FAILED tasks instead of requeueing them when dependencies are met", () => {
     const subtasks: Subtask[] = [
       { id: "task-1", title: "Task 1", prompt: "", depends_on: [], is_independent: true, is_merged: true, status: "COMPLETED" },

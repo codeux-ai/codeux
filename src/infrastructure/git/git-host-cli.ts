@@ -120,7 +120,7 @@ async function cachedApiPost(cacheKey: string, url: string, init: RequestInit): 
  * legacy commit-status contexts only expose a single `state`, which is normalized so the
  * existing `isCiPending`/`isCiFailure` policies interpret them correctly.
  */
-function mapGraphqlStatusCheckRollup(pr: Record<string, any>): Array<{ name: string; status: string; conclusion: string | null }> {
+function mapGraphqlStatusCheckRollup(pr: Record<string, any>): Array<Record<string, string | null>> {
   const commitNodes = pr?.commits?.nodes;
   const rollup = Array.isArray(commitNodes) && commitNodes.length > 0
     ? commitNodes[0]?.commit?.statusCheckRollup
@@ -129,7 +129,7 @@ function mapGraphqlStatusCheckRollup(pr: Record<string, any>): Array<{ name: str
   if (!Array.isArray(contexts)) {
     return [];
   }
-  const checks: Array<{ name: string; status: string; conclusion: string | null }> = [];
+  const checks: Array<Record<string, string | null>> = [];
   for (const node of contexts) {
     if (!node || typeof node !== "object") continue;
     const context = node as Record<string, unknown>;
@@ -141,13 +141,28 @@ function mapGraphqlStatusCheckRollup(pr: Record<string, any>): Array<{ name: str
         name: context.context,
         status: settled ? "COMPLETED" : "IN_PROGRESS",
         conclusion: settled ? state : null,
+        workflowName: null,
+        startedAt: null,
+        completedAt: null,
       });
       continue;
     }
+    const checkSuite = context.checkSuite && typeof context.checkSuite === "object"
+      ? context.checkSuite as Record<string, unknown>
+      : null;
+    const workflowRun = checkSuite?.workflowRun && typeof checkSuite.workflowRun === "object"
+      ? checkSuite.workflowRun as Record<string, unknown>
+      : null;
+    const workflow = workflowRun?.workflow && typeof workflowRun.workflow === "object"
+      ? workflowRun.workflow as Record<string, unknown>
+      : null;
     checks.push({
       name: typeof context.name === "string" ? context.name : "check",
       status: typeof context.status === "string" ? context.status : "UNKNOWN",
       conclusion: typeof context.conclusion === "string" ? context.conclusion : null,
+      workflowName: typeof workflow?.name === "string" ? workflow.name : null,
+      startedAt: typeof context.startedAt === "string" ? context.startedAt : null,
+      completedAt: typeof context.completedAt === "string" ? context.completedAt : null,
     });
   }
   return checks;
@@ -387,7 +402,7 @@ export class GithubApiHostCli implements GitHostCli {
   private async fetchPullRequestsGraphql(token: string): Promise<{ open: unknown[]; merged: unknown[] } | null> {
     const query = `query($owner:String!,$repo:String!){repository(owner:$owner,name:$repo){`
       + `open:pullRequests(states:OPEN,first:50,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{number title url isDraft headRefName baseRefName mergeStateStatus reviewDecision updatedAt comments{totalCount} `
-      + `commits(last:1){nodes{commit{statusCheckRollup{state contexts(first:100){nodes{__typename ... on CheckRun{name status conclusion} ... on StatusContext{context state}}}}}}}`
+      + `commits(last:1){nodes{commit{statusCheckRollup{state contexts(first:100){nodes{__typename ... on CheckRun{name status conclusion startedAt completedAt checkSuite{workflowRun{workflow{name}}}} ... on StatusContext{context state}}}}}}}`
       + `}}`
       + `merged:pullRequests(states:MERGED,first:100,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{number title url headRefName baseRefName mergedAt mergedBy{login}}}`
       + `}}`;
