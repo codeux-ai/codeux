@@ -522,12 +522,14 @@ export class WatchLoopRunner {
       activeMainMergeAttentionItems,
     } = params;
 
-    // Rollbacks are never allowed to bypass the remote PR boundary, even when the
-    // project has disabled normal sprint PR monitoring. OFF becomes CREATE_PR so
-    // the rollback pauses for a human merge instead of completing on branch push.
+    // Rollbacks are never allowed to bypass the remote PR boundary. Automatic
+    // rollbacks force green-check auto-merge; agent-assisted rollbacks retain the
+    // configured policy, with OFF promoted to a human CREATE_PR handoff.
     const ciIntelligence = resolveRollbackFinalizationCiIntelligence(
       configuredCiIntelligence,
-      scopedExecutionContext.sprint.kind === "rollback",
+      scopedExecutionContext.sprint.kind === "rollback"
+        ? scopedExecutionContext.sprint.rollbackMode
+        : null,
     );
 
     let report = "";

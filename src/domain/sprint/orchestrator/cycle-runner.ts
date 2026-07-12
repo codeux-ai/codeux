@@ -97,6 +97,8 @@ export class CycleRunner {
       projectId: args.executionContext.project.id,
       sprintId: args.executionContext.sprint.id,
     });
+    const isAutomaticRollback = args.executionContext.sprint.kind === "rollback"
+      && args.executionContext.sprint.rollbackMode === "automatic";
 
     // Advance the conflict debouncer once per cycle so per-PR `DIRTY` streaks are
     // counted per cycle even though several call sites observe the same PR below.
@@ -109,6 +111,23 @@ export class CycleRunner {
           args.sprintRunId,
         )
       : [];
+    if (isAutomaticRollback) {
+      for (const task of subtasks) {
+        const needsRepair = task.status !== "COMPLETED"
+          || !task.is_merged
+          || task.merge_indicator !== "MERGED";
+        task.status = "COMPLETED";
+        task.is_merged = true;
+        task.merge_indicator = "MERGED";
+        if (needsRepair && task.record_id) {
+          this.deps.projectManagementRepository.updateTask(task.record_id, {
+            status: "completed",
+            isMerged: true,
+            mergeIndicator: "MERGED",
+          });
+        }
+      }
+    }
     let activeProjectAttentionItems = typeof this.deps.projectAttentionService?.listActiveProjectItems === "function"
       ? this.deps.projectAttentionService.listActiveProjectItems(args.executionContext.project.id)
       : [];
@@ -198,7 +217,7 @@ export class CycleRunner {
     let reportText = "";
     let qaFinishedTaskIds = new Set<string>();
     if (subtasks.length > 0) {
-      if (args.loopSteps.statusDerivation) {
+      if (args.loopSteps.statusDerivation && !isAutomaticRollback) {
         qaFinishedTaskIds = await this.reviewCompletedTasks(subtasks, cycleEntryStates, args, dashboardSettings);
       }
       const taskStateBeforeFastBranchGate = snapshotTaskState(subtasks);
@@ -225,13 +244,13 @@ export class CycleRunner {
       }
     }
 
-    if (args.loopSteps.startReadyTasks && subtasks.length > 0) {
+    if (args.loopSteps.startReadyTasks && subtasks.length > 0 && !isAutomaticRollback) {
       const startResult = await this.runStartReadyTasks(subtasks, args, dashboardSettings);
       subtasks = startResult.subtasks;
       reportText += startResult.reportText;
     }
 
-    if (subtasks.length > 0) {
+    if (subtasks.length > 0 && !isAutomaticRollback) {
       const preAutomationTasks = new Map<string, TaskActionRequiredSnapshot>(
         subtasks.map((task) => [
           task.id,
@@ -450,7 +469,7 @@ export class CycleRunner {
         });
       }
 
-      if (ciGateRefreshNeeded && args.loopSteps.startReadyTasks) {
+      if (ciGateRefreshNeeded && args.loopSteps.startReadyTasks && !isAutomaticRollback) {
         const startResult = await this.runStartReadyTasks(subtasks, args, dashboardSettings);
         subtasks = startResult.subtasks;
         reportText += startResult.reportText;

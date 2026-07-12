@@ -93,8 +93,25 @@ describe("SprintRollbackService", () => {
       expect.objectContaining({ status: "completed", isMerged: true, sourceType: "sprint_rollback" }),
     ]);
     expect(calls.some(({ args }) => args.includes("revert") && args.includes("-m") && args.includes("merge-sha"))).toBe(true);
-    expect(calls.some(({ args }) => args[0] === "push" && args.some((arg) => arg.startsWith("HEAD:refs/heads/rollback/")))).toBe(true);
+    expect(calls.some(({ args }) => args.includes("push") && args.some((arg) => arg.startsWith("HEAD:refs/heads/rollback/")))).toBe(true);
     expect(orchestrateSprint).toHaveBeenCalledWith(project.id, result.rollbackSprint.id);
+  });
+
+  it("keeps temporary worktree commands in the source repository Git context", async () => {
+    const { project, sourceSprint, service, calls } = await createHarness();
+
+    const result = await service.create(project.id, sourceSprint.id);
+
+    expect(result.mode).toBe("automatic");
+    const worktreeCommands = calls.filter(({ args }) => (
+      args.includes("switch") || args.includes("revert") || args.includes("push")
+    ));
+    expect(worktreeCommands).toHaveLength(3);
+    for (const call of worktreeCommands) {
+      expect(call.cwd).toBe(project.baseDir);
+      expect(call.args[0]).toBe("-C");
+      expect(call.args[1]).toContain("code-ux-rollback-");
+    }
   });
 
   it("always routes custom rollback instructions through an agent task", async () => {

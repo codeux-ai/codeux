@@ -276,14 +276,22 @@ export class SprintRollbackService {
         `refs/remotes/origin/${args.defaultBranch}`,
       ], args.repoPath);
       worktreeAdded = true;
-      await this.gitRunner("git", ["switch", "-c", args.rollbackBranch], worktreePath);
+      // Keep every worktree command rooted at the source repository. Git commands
+      // run in the containerized Git helper, where the source checkout is always
+      // mounted at /workspace. Running a later command with the host worktree as
+      // cwd remounts that directory as /workspace and invalidates the .git pointer
+      // written by `git worktree add` (for example /workspace/.git/worktrees/0).
+      // `git -C` preserves one mount context while still operating on the worktree.
+      await this.gitRunner("git", ["-C", worktreePath, "switch", "-c", args.rollbackBranch], args.repoPath);
       await this.gitRunner("git", [
+        "-C", worktreePath,
         ...GIT_IDENTITY_ARGS,
         "revert", "--no-edit", "-m", "1", args.integrationCommitSha,
-      ], worktreePath);
+      ], args.repoPath);
       await this.gitRunner("git", [
+        "-C", worktreePath,
         "push", "--set-upstream", "origin", `HEAD:refs/heads/${args.rollbackBranch}`,
-      ], worktreePath, authEnv);
+      ], args.repoPath, authEnv);
     } finally {
       if (worktreeAdded) {
         await this.gitRunner("git", ["worktree", "remove", "--force", worktreePath], args.repoPath).catch(() => undefined);
