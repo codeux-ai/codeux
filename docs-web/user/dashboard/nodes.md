@@ -1,17 +1,27 @@
 # Nodes
 
-The **Nodes** page (`/nodes`) opens the browser-local Nodes Canvas workspace for drafting Code UX workflow graphs. It does not require a selected project and does not call the node-flow backend APIs.
+The **Nodes** page (`/nodes`) is the project-scoped backend workspace for authoring and operating governed node flows. Select a project to load its flow library, credential metadata, publications, and durable run history; without an active project, the page does not request node-flow data.
 
-Use it to:
+## Backend Workspace And Legacy Import
 
-- add trigger, agent, task, condition, and output nodes from the palette
-- select and move nodes on the canvas
-- edit selected node labels, descriptions, metadata intents, and config fields in the inspector
-- inspect selected edge source and target wiring
-- review local structural validation issues
-- import and export deterministic graph JSON
-- view command-friendly graph metadata for agent workflows
+Creating or saving a draft persists it in the selected project's canonical node-flow repository. Saves include the loaded draft revision, so a concurrent edit produces a visible conflict instead of overwriting newer work. Changing projects clears the current workspace before loading the next project's records.
 
-The graph is saved to browser `localStorage` under `codeux:nodes-canvas:v1`. There is no cloud sync, database persistence, or real workflow execution on this page.
+The former browser graph at `codeux:nodes-canvas:v1` is only a one-time migration source. On the first eligible load for a selected project, Code UX converts that graph to Graph v2 and creates an **Imported Nodes Canvas** backend draft. It removes the legacy value and records a project-specific marker only after creation succeeds; failed imports remain available for retry, and the marker prevents duplicate imports. Browser storage is not used for ongoing workflow persistence.
 
-For the full local canvas contract, see [Nodes Canvas](./nodes-canvas.md). For saved project-scoped node-flow runtime behavior, see [Node Flows](./node-flows.md).
+## Registry-Driven Editing And Execution
+
+The versioned node-definition registry drives palette entries, executable state, typed ports, configuration and widget schemas, credential slots, capabilities, side-effect classifications, and default policies. The inspector renders the selected manifest, while the graph stores its type/version reference, non-secret configuration, policies, and credential ids rather than custom source or secret values.
+
+The complete governed built-in set currently registered with executable handlers is `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, `condition`, `switch`, `foreach`, `merge`, `delay`, `approval`, `email_draft`, `email_send`, `execute_subflow`, `webhook_trigger`, and `output`.
+
+Registered custom definitions can execute only when their validated versioned manifest, immutable artifact, and custom-node runtime are available. Legacy `trigger`/`agent`/`task` canvas kinds, unknown or unregistered types, mockup entries, and definitions marked non-executable are planned or unavailable definitions, not executable handlers.
+
+## Review, Publication, And Debugging
+
+Validation and dry run report structural errors, requested capabilities, credential requirements, side-effect changes, and policy findings; dry run does not invoke handlers. Publication requires the current draft revision, a valid governed review, and every required credential binding. Published snapshots are immutable, and version comparison and rollback preserve that history. Only published versions run.
+
+The debugger reads persisted flow runs, node runs, attempts, retry decisions, approvals, invocation links, timing, and redacted input and output. Cancellation, safe retry, and approval decisions update the same durable pinned run rather than creating an unrelated execution. Scheduling targets a pinned or latest-published version from the [Scheduler](./scheduler.md).
+
+Outside development builds, the workspace requires the Nodes feature flag plus the node-flow backend and automation-security prerequisites. A definition can also require a configured provider, credential broker, allowed egress, approval/outbox services, webhook ingress, or custom-node runtime. Registry presence and feature visibility do not assert that an integration is configured or production-ready.
+
+For the detailed editing contract, see [Nodes Canvas](./nodes-canvas.md). For API behavior, publication, execution, and scheduling, see [Node Flows](./node-flows.md).

@@ -438,7 +438,7 @@ The graph payload is the shared `NodeFlowGraph` contract:
 - `inputSchema`: optional graph-level widget schema for run input
 - `metadata`: optional JSON object
 
-Validation checks graph shape, unique node ids, edge endpoints, acyclicity, JSON-safe node data, widget schema fields, select options, finite numeric constraints, and default values that match field types. Runtime support is narrower than graph storage: executable node types are currently `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, and `output`.
+Validation checks graph shape, unique node ids, edge endpoints, acyclicity, JSON-safe node data, widget schema fields, select options, finite numeric constraints, and default values that match field types. The governed built-ins currently registered with executable handlers are `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, `condition`, `switch`, `foreach`, `merge`, `delay`, `approval`, `email_draft`, `email_send`, `execute_subflow`, `webhook_trigger`, and `output`. A registered custom definition can execute only when its validated versioned manifest, immutable artifact, and custom-node runtime are available; unknown, legacy, mockup, and non-executable definitions remain planned or unavailable and are rejected by runtime dispatch.
 
 Agents should build Code UX-adapted flows from structured graph specs instead of cloning n8n workflows one-to-one. A good flow exposes the values an operator or agent should edit, keeps runtime behavior repeatable, names nodes by Code UX behavior, and validates every required field before saving. MCP callers can provide `widgets` as a graph-level `{ fields: [...] }` schema or as node-id keys mapped to each node's `widgetSchema`.
 

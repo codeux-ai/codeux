@@ -260,7 +260,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-nodes',
     section: 'User Guide',
     title: "Nodes",
-    description: "The Nodes page (/nodes) opens the browser-local Nodes Canvas workspace for drafting Code UX workflow graphs. It does not require a selected project and does not call the node-flow backend APIs.",
+    description: "The Nodes page (/nodes) is the project-scoped backend workspace for authoring and operating governed node flows. Select a project to load its flow library, credential metadata, publications, and durable run history; w...",
   },
   'user-dashboard-nodes-canvas': {
     id: 'user-dashboard-nodes-canvas',
@@ -274,7 +274,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-node-flows',
     section: 'User Guide',
     title: "Node Flows",
-    description: "The Nodes page (/nodes) is where dashboard users create and operate saved node-flow workflows for the active project. A node flow is a repeatable graph that can be validated, run manually, scheduled, inspected through...",
+    description: "The Nodes page (/nodes) is the project-scoped backend authoring, publication, and operations surface for canonical node flows. No selected project means no flow library, credential metadata, publications, or durable r...",
   },
   'user-dashboard-scheduler': {
     id: 'user-dashboard-scheduler',
