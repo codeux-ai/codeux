@@ -29,7 +29,7 @@ Custom dashboards declare a `sourceNodeGraph` with nodes, edges, and optional me
 | `integrations_metadata`, `integrations` | Returns only non-secret metadata declared on the source node. |
 | `external_api` | Reads declared routes through the server source gateway. Hosts, methods, ports, content types, redirects, timeouts, rate limits, and response sizes remain server-controlled; credential values never enter the viewer. |
 
-Generated dashboards should handle unavailable-source errors visibly. External API connectors are not fully available through the in-app viewer yet.
+Generated dashboards should handle unavailable-source errors visibly, including requests for unsupported source types or undeclared external routes.
 
 ### Credential slots and bindings
 
@@ -47,7 +47,7 @@ Share links use `/custom-dashboards?dashboard=<id>&mode=viewer&route=<normalized
 
 The sandbox uses dependency-free hash history because its `srcdoc` has an opaque origin. The frozen bridge exposes `routePath` and `navigate(path, { replace? })`, emits `codeux:dashboard-route` in the frame, and sends route changes through the existing frame/session-checked message channel. Generated code must use this bridge and cannot import host application modules. Route-less direct HTML and browser-JavaScript bundles remain compatible at `/`.
 
-Validation previews and published viewers use the same `/api/custom-dashboard-runtime/source` boundary. Requests must identify the owning project/dashboard/revision, an active publication or matching validation session, a declared source, and any requested route, credential slot, and capability. External credentials resolve only on the server and are never included in generated bridge payloads.
+Validation previews and published viewers use the same typed server source gateway at `/api/custom-dashboard-runtime/source`. Requests must identify the owning project/dashboard/revision, an active publication or matching validation session, a declared source, and any requested route, credential slot, and capability. The gateway authorizes the declared source and route, enforces the bounded egress policy for external requests, and resolves credential values through the server-side broker. Credential values are never included in iframe or generated bridge payloads.
 
 An external node declares its fixed `baseUrl`, explicit `allowedHosts`, and `routes` with allowed methods. Optional port, content-type, timeout, redirect, response-size, and rate-limit settings remain bounded by the runtime. Dashboard code calls `readSource` with the declared source and route; it cannot ask the gateway to fetch an arbitrary URL.
 
