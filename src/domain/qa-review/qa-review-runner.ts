@@ -22,6 +22,7 @@ export interface QaReviewRunnerArgs {
   provider: ProviderId;
   model: string;
   apiKey: string;
+  apiKeyCredentialRef?: import("../../contracts/app-types.js").SettingsCredentialReference | null;
   qwenAuthMode?: string;
   qwenRegion?: "china" | "international";
   qwenBaseUrl?: string;
@@ -68,6 +69,7 @@ export class QaReviewRunner {
         provider: args.provider,
         model: args.model,
         apiKey: args.apiKey,
+        apiKeyCredentialRef: args.apiKeyCredentialRef,
         qwenAuthMode: args.qwenAuthMode as any,
         qwenRegion: args.qwenRegion,
         qwenBaseUrl: args.qwenBaseUrl,

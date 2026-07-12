@@ -23,6 +23,10 @@ Fresh settings startup does not initialize the secure key provider unless plaint
 
 Runtime settings consumers resolve a reference with the active project, an explicit consumer binding key, and the `read` capability. The broker reuses its scope, allowlist, status, capability, audit, and compare-and-swap checks, and the decrypted buffer is zeroed immediately after the bounded consumer callback completes or throws.
 
+Provider invocations resolve the selected provider reference, nested Qwen provider references, and Git host references at the CLI request boundary for every attempt. Rotation is therefore visible to the next invocation, while revocation, project-scope denial, or missing `read` capability prevents the subprocess or Docker workspace request from starting. Mounted local-auth providers bypass API-key resolution and retain their existing mount behavior.
+
+Jira, external importers, speech transcription/synthesis, and external embeddings use the same bounded callback immediately around their HTTP request. Effective settings remain metadata-only; request headers and temporary provider environments receive the resolved value, and returned telemetry, provider errors, and invocation messages are exact-value redacted before the broker releases and clears its buffer.
+
 ## Runtime redaction boundary
 
 Node-flow execution resolves credential values only for the active node attempt. Before any provider response, HTTP body, retry error, external-effect payload, diagnostic, invocation message, attempt, node output, or run summary is persisted, the runtime replaces exact resolved values with `[REDACTED]` in addition to masking secret-shaped keys. Credential IDs and non-secret metadata remain available for audit and attempt correlation.

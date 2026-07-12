@@ -88,6 +88,7 @@ export function createSprintDependencies(
     getMcpConnectionInfo: () => context.getMcpConnectionInfo?.() ?? null,
 
     logger: logger.child({ component: "cli-workflow-service" }),
+    settingsCredentialResolver: coreDeps.settingsCredentialResolver,
   });
 
   const providerExecutionService = new ProviderExecutionService({
@@ -101,6 +102,7 @@ export function createSprintDependencies(
     skillService: coreDeps.skillService,
     agentPresetRepository: coreDeps.agentPresetRepository,
     getDashboardSettings: resolveDashboardSettings,
+    settingsCredentialResolver: coreDeps.settingsCredentialResolver,
   });
   const structuredProviderResponseService = new StructuredProviderResponseService({
     providerExecutionService,
@@ -141,6 +143,7 @@ export function createSprintDependencies(
     getDashboardSettings: resolveDashboardSettings,
     getGithubToken: () => context.getEffectiveGithubToken(),
     providerRunner: coreDeps.providerRunner,
+    providerExecutionService,
     providerConcurrencyService: coreDeps.providerConcurrencyService,
     knowledgeService: coreDeps.knowledgeService,
     skillService: coreDeps.skillService,
@@ -173,6 +176,7 @@ export function createSprintDependencies(
     dockerService: new DockerService(),
     sprintRunLifecycleService: coreDeps.sprintRunLifecycleService,
     projectAttentionService,
+    settingsCredentialResolver: coreDeps.settingsCredentialResolver,
   });
 
   const workerTaskDispatchService = new WorkerTaskDispatchService(
@@ -235,6 +239,7 @@ export function createSprintDependencies(
     getMcpConnectionInfo: () => context.getMcpConnectionInfo?.() ?? null,
     agentPresetSyncService,
     logger: logger.child({ component: "virtual-worker-service" }),
+    settingsCredentialResolver: coreDeps.settingsCredentialResolver,
   });
 
   const sprintTaskDispatchService = new SprintTaskDispatchService(

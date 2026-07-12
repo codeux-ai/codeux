@@ -149,6 +149,95 @@ describe("ProviderExecutionService", () => {
     );
   });
 
+  it("resolves the current credential version for every invocation and redacts provider telemetry", async () => {
+    let currentSecret = "provider-secret-v1";
+    const withCredentials = vi.fn(async (_references, _context, consumer) => await consumer(new Map([
+      ["provider", Buffer.from(currentSecret)],
+    ])));
+    service = new ProviderExecutionService({
+      providerRunner,
+      executionRepository,
+      logger: logger as any,
+      settingsCredentialResolver: { withCredentials } as any,
+    });
+    const observedSecrets: string[] = [];
+    providerRunner.runProvider.mockImplementation(async (input) => {
+      observedSecrets.push(input.apiKey);
+      return {
+        ...mockResult,
+        stdout: `completed with ${input.apiKey}`,
+        stderr: `diagnostic ${input.apiKey}`,
+        usageTelemetry: {
+          ...mockResult.usageTelemetry,
+          transcriptText: `telemetry ${input.apiKey}`,
+        },
+      };
+    });
+    const credentialArgs = {
+      ...defaultArgs,
+      apiKey: "",
+      apiKeyCredentialRef: { credentialId: "provider-credential", capability: "read" as const },
+    };
+
+    const first = await service.executeProvider(credentialArgs);
+    currentSecret = "provider-secret-v2";
+    const second = await service.executeProvider(credentialArgs);
+
+    expect(providerRunner.runProvider.mock.calls[0]![0].apiKey).toBe("");
+    expect(providerRunner.runProvider.mock.calls[1]![0].apiKey).toBe("");
+    expect(first.stdout).toBe("completed with [REDACTED]");
+    expect(second.stdout).toBe("completed with [REDACTED]");
+    expect(second.usageTelemetry.transcriptText).toBe("telemetry [REDACTED]");
+    expect(observedSecrets).toEqual(["provider-secret-v1", "provider-secret-v2"]);
+    expect(withCredentials).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    "Credential is missing.",
+    "Credential is not active.",
+    "Credential is outside the project scope.",
+    "Required capability is not approved.",
+  ])("fails closed before provider execution when credential resolution reports: %s", async (denialMessage) => {
+    const denial = new Error(denialMessage);
+    service = new ProviderExecutionService({
+      providerRunner,
+      executionRepository,
+      logger: logger as any,
+      settingsCredentialResolver: {
+        withCredentials: vi.fn().mockRejectedValue(denial),
+      } as any,
+    });
+
+    await expect(service.executeProvider({
+      ...defaultArgs,
+      apiKey: "",
+      apiKeyCredentialRef: { credentialId: "revoked-credential", capability: "read" },
+    })).rejects.toThrow(denialMessage);
+    expect(providerRunner.runProvider).not.toHaveBeenCalled();
+  });
+
+  it("redacts a resolved credential from provider exceptions before persistence or propagation", async () => {
+    const rawSecret = "resolved-provider-secret";
+    service = new ProviderExecutionService({
+      providerRunner,
+      executionRepository,
+      logger: logger as any,
+      settingsCredentialResolver: {
+        withCredentials: vi.fn(async (_references, _context, consumer) => await consumer(new Map([
+          ["provider", Buffer.from(rawSecret)],
+        ]))),
+      } as any,
+    });
+    providerRunner.runProvider.mockRejectedValue(new Error(`provider rejected ${rawSecret}`));
+
+    await expect(service.executeProvider({
+      ...defaultArgs,
+      apiKey: "",
+      apiKeyCredentialRef: { credentialId: "provider-credential", capability: "read" },
+    })).rejects.toThrow("provider rejected [REDACTED]");
+    expect(logger.error).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ error: expect.stringContaining(rawSecret) }));
+  });
+
   it("bounds provider concurrency waits when the caller supplies a timeout", async () => {
     providerRunner.runProvider.mockResolvedValue(mockResult);
     const waitForSlotAndClaim = vi.fn().mockResolvedValue({ id: "prov-inv-bounded" });

@@ -5,6 +5,7 @@ import { EMBEDDING_MODEL_CATALOG } from "./embedding-model-catalog.js";
 import { EmbeddingTokenizer } from "./embedding-tokenizer.js";
 import type { EmbeddingModelId, EmbeddingModelInfo, ExternalEmbeddingSettings, InAppEmbeddingModelId } from "../contracts/memory-types.js";
 import type { InferenceSession } from "onnxruntime-node";
+import type { SettingsCredentialResolver } from "./credentials/settings-credential-resolver.js";
 
 const MODELS_DIR = getHomeCodeUxPath("models");
 
@@ -26,14 +27,20 @@ export class EmbeddingService {
   private currentModelDimension: number | null = null;
   private externalSettings: ExternalEmbeddingSettings | null = null;
   private externalDimension: number | null = null;
+  private externalProjectId: string | null = null;
 
-  configureExternal(settings: ExternalEmbeddingSettings): void {
+  constructor(
+    private readonly settingsCredentialResolver?: SettingsCredentialResolver,
+    private readonly fetchImpl: typeof fetch = fetch,
+  ) {}
+
+  configureExternal(settings: ExternalEmbeddingSettings, projectId: string): void {
     const baseUrl = settings.baseUrl.trim();
     const model = settings.model.trim();
-    const apiKey = settings.apiKey.trim();
-    if (!baseUrl || !model || !apiKey) {
+    if (!baseUrl || !model || !settings.apiKeyCredentialRef || !projectId.trim()) {
       this.externalSettings = null;
       this.externalDimension = null;
+      this.externalProjectId = null;
       return;
     }
 
@@ -45,10 +52,12 @@ export class EmbeddingService {
     this.externalSettings = {
       baseUrl,
       model,
-      apiKey,
+      apiKey: "",
+      apiKeyCredentialRef: settings.apiKeyCredentialRef,
       dimensions: settings.dimensions && settings.dimensions > 0 ? settings.dimensions : null,
     };
     this.externalDimension = this.externalSettings.dimensions;
+    this.externalProjectId = projectId.trim();
     this.currentModelId = model;
     this.currentModelDimension = this.externalSettings.dimensions;
   }
@@ -56,6 +65,7 @@ export class EmbeddingService {
   useInAppEmbeddings(): void {
     this.externalSettings = null;
     this.externalDimension = null;
+    this.externalProjectId = null;
   }
 
   async loadModel(modelId: EmbeddingModelId, modelInfo?: EmbeddingModelInfo): Promise<void> {
@@ -246,9 +256,19 @@ export class EmbeddingService {
   }
 
   private async embedExternal(text: string): Promise<Float32Array> {
-    if (!this.externalSettings) {
+    if (!this.externalSettings || !this.externalProjectId || !this.externalSettings.apiKeyCredentialRef || !this.settingsCredentialResolver) {
       throw new Error("External embedding provider is not configured.");
     }
+
+    return await this.settingsCredentialResolver.withCredential(this.externalSettings.apiKeyCredentialRef, {
+      projectId: this.externalProjectId,
+      consumer: "embedding.external",
+      workspaceId: this.externalProjectId,
+    }, async (secret) => await this.embedExternalRequest(text, secret.toString("utf8")));
+  }
+
+  private async embedExternalRequest(text: string, apiKey: string): Promise<Float32Array> {
+    if (!this.externalSettings) throw new Error("External embedding provider is not configured.");
 
     const body: Record<string, unknown> = {
       model: this.externalSettings.model,
@@ -258,10 +278,10 @@ export class EmbeddingService {
       body.dimensions = this.externalSettings.dimensions;
     }
 
-    const response = await fetch(this.externalSettings.baseUrl, {
+    const response = await this.fetchImpl(this.externalSettings.baseUrl, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${this.externalSettings.apiKey}`,
+        "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
@@ -269,7 +289,7 @@ export class EmbeddingService {
 
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
-      throw new Error(`External embedding request failed (${response.status}): ${detail.slice(0, 500)}`);
+      throw new Error(`External embedding request failed (${response.status}): ${detail.slice(0, 500).split(apiKey).join("[REDACTED]")}`);
     }
 
     const payload = await response.json() as {

@@ -1527,7 +1527,7 @@ describe("ChatThreadRuntimeService", () => {
       expect.objectContaining({
         provider: "opencode",
         model: "openai/gpt-5",
-        apiKey: "opencode-key",
+        apiKey: "",
         sessionId: "t1",
         continueSessionId: null,
       })

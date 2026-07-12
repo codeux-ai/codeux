@@ -115,7 +115,7 @@ export class MemoryService {
       return;
     }
     if (settings.embeddingProvider === "external_api") {
-      this.embeddingService.configureExternal(settings.externalEmbedding);
+      this.embeddingService.configureExternal(settings.externalEmbedding, projectId);
       return;
     }
     this.embeddingService.useInAppEmbeddings();

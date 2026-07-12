@@ -83,6 +83,7 @@ interface IssueServiceDeps {
   lucidApiClient?: typeof lucidApiClient;
   figmaApiClient?: typeof figmaApiClient;
   muralApiClient?: typeof muralApiClient;
+  settingsCredentialResolver?: import("./credentials/settings-credential-resolver.js").SettingsCredentialResolver;
 }
 
 interface LocalCommandResult {
@@ -109,6 +110,51 @@ export class SprintIssueService {
     this.logger = deps.logger ?? createLogger({ bindings: { component: "sprint-issue-service" } });
   }
 
+  private async withSettingsCredential<T>(
+    projectId: string,
+    reference: import("../contracts/app-types.js").SettingsCredentialReference | null | undefined,
+    consumer: string,
+    callback: (value: string) => Promise<T>,
+    legacyValue = "",
+  ): Promise<T> {
+    if (!this.deps.settingsCredentialResolver) return await callback(legacyValue);
+    if (!reference) {
+      throw new Error("The required integration credential is not configured.");
+    }
+    return await this.deps.settingsCredentialResolver.withCredential(reference, {
+      projectId,
+      consumer,
+      workspaceId: projectId,
+    }, async (secret) => await callback(secret.toString("utf8")));
+  }
+
+  private hasSettingsCredential(reference: unknown, legacyValue: string): boolean {
+    return Boolean(reference) || (!this.deps.settingsCredentialResolver && Boolean(legacyValue.trim()));
+  }
+
+  private async withImporterSettings<T>(
+    projectId: string,
+    settings: DashboardSettings,
+    provider: "notion" | "asana" | "linear" | "miro" | "lucid" | "figma" | "mural",
+    callback: (resolvedSettings: DashboardSettings) => Promise<T>,
+  ): Promise<T> {
+    const integration = settings[provider];
+    return await this.withSettingsCredential(projectId, integration.apiTokenCredentialRef, `importer.${provider}`, async (apiToken) =>
+      await callback({
+        ...settings,
+        [provider]: { ...integration, apiToken },
+      } as DashboardSettings), integration.apiToken);
+  }
+
+  private async withGitToken<T>(projectId: string, settings: DashboardSettings, provider: "github" | "gitlab", callback: (token: string) => Promise<T>): Promise<T> {
+    const reference = provider === "github" ? settings.git.githubTokenCredentialRef : settings.git.gitlabTokenCredentialRef;
+    const legacyValue = provider === "github" ? settings.git.githubToken : settings.git.gitlabToken ?? "";
+    if (!this.deps.settingsCredentialResolver && !legacyValue.trim()) {
+      throw new Error(`${provider === "github" ? "GitHub" : "GitLab"} token is not configured.`);
+    }
+    return await this.withSettingsCredential(projectId, reference, `git.${provider}.issues`, callback, legacyValue);
+  }
+
   async searchJiraIssues(
     host: string,
     email: string,
@@ -133,25 +179,38 @@ export class SprintIssueService {
     return this.deps.jiraApiClient.searchIssues(host, email, apiToken, searchInput);
   }
 
+  async searchConfiguredJiraIssues(projectId: string, input: string | JiraIssueSearchInput): Promise<JiraIssueSearchResult[]> {
+    this.requireProject(projectId);
+    const settings = this.deps.getDashboardSettings({ projectId });
+    if (!this.deps.jiraApiClient || !settings.jira.host.trim() || !this.hasSettingsCredential(settings.jira.apiTokenCredentialRef, settings.jira.apiToken)) {
+      throw new Error("Jira site URL and API token must be configured in Settings -> Integrations.");
+    }
+    const searchInput = typeof input === "string"
+      ? input
+      : normalizeJiraIssueSearchInput({
+        ...input,
+        projectKey: input.projectKey || settings.jira.defaultProject,
+        inProgressStatusName: input.inProgressStatusName || settings.jira.importTransitionName?.trim() || "In Work",
+      });
+    return await this.withSettingsCredential(projectId, settings.jira.apiTokenCredentialRef, "jira.search", async (apiToken) =>
+      await this.deps.jiraApiClient!.searchIssues(settings.jira.host, settings.jira.email, apiToken, searchInput), settings.jira.apiToken);
+  }
+
   async searchJiraProjectStatuses(projectId: string, projectKey: string | undefined): Promise<jiraApiClient.JiraProjectStatus[]> {
     this.requireProject(projectId);
     if (!this.deps.jiraApiClient) {
       throw new Error("Jira API client is not injected.");
     }
     const settings = this.deps.getDashboardSettings({ projectId });
-    if (!settings.jira.host.trim() || !settings.jira.apiToken.trim()) {
+    if (!settings.jira.host.trim() || !this.hasSettingsCredential(settings.jira.apiTokenCredentialRef, settings.jira.apiToken)) {
       throw new Error("Jira site URL and API token must be configured in Settings -> Integrations.");
     }
     const effectiveProjectKey = projectKey?.trim() || settings.jira.defaultProject.trim();
     if (!effectiveProjectKey) {
       throw new Error("Jira project key is required.");
     }
-    return this.deps.jiraApiClient.listProjectStatuses(
-      settings.jira.host,
-      settings.jira.email,
-      settings.jira.apiToken,
-      effectiveProjectKey,
-    );
+    return await this.withSettingsCredential(projectId, settings.jira.apiTokenCredentialRef, "jira.project-statuses", async (apiToken) =>
+      await this.deps.jiraApiClient!.listProjectStatuses(settings.jira.host, settings.jira.email, apiToken, effectiveProjectKey), settings.jira.apiToken);
   }
 
   replaceLinkedIssues(sprintId: string, projectId: string, issues: SprintLinkedIssueInput[]): SprintLinkedIssueRecord[] {
@@ -182,7 +241,7 @@ export class SprintIssueService {
     const warnings: LinkedIssueImportTransitionWarning[] = [];
     for (const issue of jiraIssues) {
       try {
-        await this.transitionImportedJiraIssue(issue, settings);
+        await this.transitionImportedJiraIssue(projectId, issue, settings);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         warnings.push({
@@ -223,38 +282,38 @@ export class SprintIssueService {
     }
 
     if (provider === "notion") {
-      return this.searchNotionSources(searchInput, settings, limit);
+      return await this.withImporterSettings(projectId, settings, "notion", async (resolved) => await this.searchNotionSources(searchInput, resolved, limit));
     }
 
     if (provider === "asana") {
-      return this.searchAsanaTasks(searchInput, settings, limit);
+      return await this.withImporterSettings(projectId, settings, "asana", async (resolved) => await this.searchAsanaTasks(searchInput, resolved, limit));
     }
 
     if (provider === "linear") {
-      return this.searchLinearIssues(searchInput, settings, limit);
+      return await this.withImporterSettings(projectId, settings, "linear", async (resolved) => await this.searchLinearIssues(searchInput, resolved, limit));
     }
 
     if (provider === "miro") {
-      return this.searchMiroSources(searchInput, settings, limit);
+      return await this.withImporterSettings(projectId, settings, "miro", async (resolved) => await this.searchMiroSources(searchInput, resolved, limit));
     }
 
     if (provider === "lucid") {
-      return this.searchLucidDocuments(searchInput, settings, limit);
+      return await this.withImporterSettings(projectId, settings, "lucid", async (resolved) => await this.searchLucidDocuments(searchInput, resolved, limit));
     }
 
     if (provider === "figma") {
-      return this.searchFigmaFiles(searchInput, settings, limit);
+      return await this.withImporterSettings(projectId, settings, "figma", async (resolved) => await this.searchFigmaFiles(searchInput, resolved, limit));
     }
 
     if (provider === "mural") {
-      return this.searchMuralSources(searchInput, settings, limit);
+      return await this.withImporterSettings(projectId, settings, "mural", async (resolved) => await this.searchMuralSources(searchInput, resolved, limit));
     }
 
     const target = resolveIssueTarget(project, searchInput, provider);
     if (target.provider === "github") {
-      return this.searchGitHubIssues({
+      return await this.withGitToken(projectId, settings, "github", async (token) => await this.searchGitHubIssues({
         ...target,
-        token: settings.git.githubToken,
+        token,
         search: searchInput.search,
         state: normalizeRepositoryIssueStateValue(searchInput.state) || "open",
         labels: searchInput.labels || [],
@@ -270,12 +329,12 @@ export class SprintIssueService {
         sortField: normalizeRepositorySearchSortField(searchInput.sortField),
         sortDirection: normalizeRepositorySearchSortDirection(searchInput.sortDirection),
         limit,
-      });
+      }));
     }
 
-    return this.searchGitLabIssues({
+    return await this.withGitToken(projectId, settings, "gitlab", async (token) => await this.searchGitLabIssues({
       ...target,
-      token: settings.git.gitlabToken || "",
+      token,
       search: searchInput.search,
       state: normalizeRepositoryIssueStateValue(searchInput.state) || "open",
       labels: searchInput.labels || [],
@@ -291,7 +350,7 @@ export class SprintIssueService {
       sortField: normalizeRepositorySearchSortField(searchInput.sortField),
       sortDirection: normalizeRepositorySearchSortDirection(searchInput.sortDirection),
       limit,
-    });
+    }));
   }
 
   async getIssuePromptContextsForReferences(projectId: string, input: IssueSearchInput): Promise<IssuePromptContext[]> {
@@ -300,7 +359,7 @@ export class SprintIssueService {
     const provider = resolveIssueProvider(project, searchInput);
     const settings = this.deps.getDashboardSettings({ projectId });
     const hasJiraReferences = shouldResolveJiraReferences(searchInput, provider) && collectJiraIssueKeys(searchInput).length > 0;
-    if (hasJiraReferences && (!settings.jira.host.trim() || !settings.jira.apiToken.trim())) {
+    if (hasJiraReferences && (!settings.jira.host.trim() || !this.hasSettingsCredential(settings.jira.apiTokenCredentialRef, settings.jira.apiToken))) {
       throw new Error("Jira site URL and API token must be configured in Settings -> Integrations.");
     }
     const issueInputs = buildExplicitIssuePromptInputs(project, searchInput, provider, settings);
@@ -318,25 +377,25 @@ export class SprintIssueService {
     const contexts: IssuePromptContext[] = [];
     for (const issue of normalized) {
       if (issue.provider === "github") {
-        contexts.push(await this.getGitHubIssuePromptContext(issue, settings.git.githubToken || ""));
+        contexts.push(await this.withGitToken(projectId, settings, "github", async (token) => await this.getGitHubIssuePromptContext(issue, token)));
       } else if (issue.provider === "gitlab") {
-        contexts.push(await this.getGitLabIssuePromptContext(issue, settings.git.gitlabToken || ""));
+        contexts.push(await this.withGitToken(projectId, settings, "gitlab", async (token) => await this.getGitLabIssuePromptContext(issue, token)));
       } else if (issue.provider === "notion") {
-        contexts.push(await this.getNotionPromptContext(issue, settings));
+        contexts.push(await this.withImporterSettings(projectId, settings, "notion", async (resolved) => await this.getNotionPromptContext(issue, resolved)));
       } else if (issue.provider === "asana") {
-        contexts.push(await this.getAsanaPromptContext(issue, settings));
+        contexts.push(await this.withImporterSettings(projectId, settings, "asana", async (resolved) => await this.getAsanaPromptContext(issue, resolved)));
       } else if (issue.provider === "linear") {
-        contexts.push(await this.getLinearPromptContext(issue, settings));
+        contexts.push(await this.withImporterSettings(projectId, settings, "linear", async (resolved) => await this.getLinearPromptContext(issue, resolved)));
       } else if (issue.provider === "miro") {
-        contexts.push(await this.getMiroPromptContext(issue, settings));
+        contexts.push(await this.withImporterSettings(projectId, settings, "miro", async (resolved) => await this.getMiroPromptContext(issue, resolved)));
       } else if (issue.provider === "lucid") {
-        contexts.push(await this.getLucidPromptContext(issue, settings));
+        contexts.push(await this.withImporterSettings(projectId, settings, "lucid", async (resolved) => await this.getLucidPromptContext(issue, resolved)));
       } else if (issue.provider === "figma") {
-        contexts.push(await this.getFigmaPromptContext(issue, settings));
+        contexts.push(await this.withImporterSettings(projectId, settings, "figma", async (resolved) => await this.getFigmaPromptContext(issue, resolved)));
       } else if (issue.provider === "mural") {
-        contexts.push(await this.getMuralPromptContext(issue, settings));
+        contexts.push(await this.withImporterSettings(projectId, settings, "mural", async (resolved) => await this.getMuralPromptContext(issue, resolved)));
       } else {
-        contexts.push(await this.getJiraIssuePromptContext(issue, settings));
+        contexts.push(await this.getJiraIssuePromptContext(projectId, issue, settings));
       }
     }
     return contexts;
@@ -378,7 +437,7 @@ export class SprintIssueService {
     }
     for (const issue of closableIssues) {
       try {
-        await this.closeRemoteIssue(issue, settings);
+        await this.closeRemoteIssue(projectId, issue, settings);
         this.deps.projectManagementRepository.updateSprintLinkedIssueCloseState(issue.id, {
           closeState: "closed",
           closedAt: new Date().toISOString(),
@@ -410,88 +469,49 @@ export class SprintIssueService {
     return { reportText: `${lines.join("\n")}\n`, closed, failed, skipped };
   }
 
-  private async closeRemoteIssue(issue: SprintLinkedIssueRecord, settings: DashboardSettings): Promise<void> {
+  private async closeRemoteIssue(projectId: string, issue: SprintLinkedIssueRecord, settings: DashboardSettings): Promise<void> {
     if (issue.provider === "jira") {
       if (!this.deps.jiraApiClient) {
         throw new Error("Jira API client is not injected.");
       }
       const closeTransitionName = settings.jira.closeTransitionName?.trim() || "Done";
-      const transitions = await this.deps.jiraApiClient.getTransitions(
-        settings.jira.host,
-        settings.jira.email,
-        settings.jira.apiToken,
-        issue.issueKey
-      );
-      const closeTransition = transitions.find((t: jiraApiClient.JiraTransition) =>
-        t.name.toLowerCase() === closeTransitionName.toLowerCase()
-      );
-      if (!closeTransition) {
-        throw new Error(`Transition '${closeTransitionName}' not found for Jira issue ${issue.issueKey}`);
-      }
-      await this.deps.jiraApiClient.transitionIssue(
-        settings.jira.host,
-        settings.jira.email,
-        settings.jira.apiToken,
-        issue.issueKey,
-        closeTransition.id
-      );
+      await this.withSettingsCredential(projectId, settings.jira.apiTokenCredentialRef, "jira.close-issue", async (apiToken) => {
+        const transitions = await this.deps.jiraApiClient!.getTransitions(settings.jira.host, settings.jira.email, apiToken, issue.issueKey);
+        const closeTransition = transitions.find((t: jiraApiClient.JiraTransition) => t.name.toLowerCase() === closeTransitionName.toLowerCase());
+        if (!closeTransition) throw new Error(`Transition '${closeTransitionName}' not found for Jira issue ${issue.issueKey}`);
+        await this.deps.jiraApiClient!.transitionIssue(settings.jira.host, settings.jira.email, apiToken, issue.issueKey, closeTransition.id);
+      }, settings.jira.apiToken);
       return;
     }
 
     if (issue.provider === "github") {
-      const token = settings.git.githubToken?.trim();
-      if (!token) {
-        throw new Error("GitHub token is not configured.");
-      }
-      await requestJson(`https://api.github.com/repos/${issue.repository}/issues/${issue.issueNumber}`, {
-        method: "PATCH",
-        token,
-        body: { state: "closed" },
-      });
+      await this.withGitToken(projectId, settings, "github", async (token) => await requestJson(`https://api.github.com/repos/${issue.repository}/issues/${issue.issueNumber}`, {
+        method: "PATCH", token, body: { state: "closed" },
+      }));
       return;
     }
 
-    const token = settings.git.gitlabToken?.trim();
-    if (!token) {
-      throw new Error("GitLab token is not configured.");
-    }
     const baseUrl = `https://${issue.hostDomain.replace(/\/+$/, "")}/api/v4`;
-    await requestJson(`${baseUrl}/projects/${encodeURIComponent(issue.repository)}/issues/${issue.issueNumber}`, {
-      method: "PUT",
-      token,
-      gitlab: true,
-      body: { state_event: "close" },
-    });
+    await this.withGitToken(projectId, settings, "gitlab", async (token) => await requestJson(`${baseUrl}/projects/${encodeURIComponent(issue.repository)}/issues/${issue.issueNumber}`, {
+      method: "PUT", token, gitlab: true, body: { state_event: "close" },
+    }));
   }
 
-  private async transitionImportedJiraIssue(issue: SprintLinkedIssueRecord, settings: DashboardSettings): Promise<void> {
+  private async transitionImportedJiraIssue(projectId: string, issue: SprintLinkedIssueRecord, settings: DashboardSettings): Promise<void> {
     if (!this.deps.jiraApiClient) {
       throw new Error("Jira API client is not injected.");
     }
-    if (!settings.jira.host.trim() || !settings.jira.apiToken.trim()) {
+    if (!settings.jira.host.trim() || !this.hasSettingsCredential(settings.jira.apiTokenCredentialRef, settings.jira.apiToken)) {
       throw new Error("Jira site URL and API token must be configured in Settings -> Integrations.");
     }
 
     const importTransitionName = settings.jira.importTransitionName?.trim() || "In Work";
-    const transitions = await this.deps.jiraApiClient.getTransitions(
-      settings.jira.host,
-      settings.jira.email,
-      settings.jira.apiToken,
-      issue.issueKey,
-    );
-    const importTransition = transitions.find((transition: jiraApiClient.JiraTransition) =>
-      transition.name.toLowerCase() === importTransitionName.toLowerCase()
-    );
-    if (!importTransition) {
-      throw new Error(`Transition '${importTransitionName}' not found for Jira issue ${issue.issueKey}`);
-    }
-    await this.deps.jiraApiClient.transitionIssue(
-      settings.jira.host,
-      settings.jira.email,
-      settings.jira.apiToken,
-      issue.issueKey,
-      importTransition.id,
-    );
+    await this.withSettingsCredential(projectId, settings.jira.apiTokenCredentialRef, "jira.import-transition", async (apiToken) => {
+      const transitions = await this.deps.jiraApiClient!.getTransitions(settings.jira.host, settings.jira.email, apiToken, issue.issueKey);
+      const importTransition = transitions.find((transition: jiraApiClient.JiraTransition) => transition.name.toLowerCase() === importTransitionName.toLowerCase());
+      if (!importTransition) throw new Error(`Transition '${importTransitionName}' not found for Jira issue ${issue.issueKey}`);
+      await this.deps.jiraApiClient!.transitionIssue(settings.jira.host, settings.jira.email, apiToken, issue.issueKey, importTransition.id);
+    }, settings.jira.apiToken);
   }
 
   private async searchGitHubIssues(args: ResolvedIssueTarget & SearchRuntimeOptions): Promise<RepositoryIssueSearchResult[]> {
@@ -561,7 +581,7 @@ export class SprintIssueService {
     if (!this.deps.jiraApiClient) {
       throw new Error("Jira API client is not injected.");
     }
-    if (!settings.jira.host.trim() || !settings.jira.apiToken.trim()) {
+    if (!settings.jira.host.trim() || !this.hasSettingsCredential(settings.jira.apiTokenCredentialRef, settings.jira.apiToken)) {
       throw new Error("Jira site URL and API token must be configured in Settings -> Integrations.");
     }
 
@@ -585,13 +605,8 @@ export class SprintIssueService {
       jiraInput.issueKey = explicitIssueKeys[0];
     }
 
-    const issues = await this.deps.jiraApiClient.searchIssues(
-      settings.jira.host,
-      settings.jira.email,
-      settings.jira.apiToken,
-      jiraInput,
-      limit,
-    );
+    const issues = await this.withSettingsCredential(project.id, settings.jira.apiTokenCredentialRef, "jira.search", async (apiToken) =>
+      await this.deps.jiraApiClient!.searchIssues(settings.jira.host, settings.jira.email, apiToken, jiraInput, limit), settings.jira.apiToken);
     const hostDomain = jiraHostDomain(settings.jira.host);
     return issues.map((issue) => normalizeJiraIssueSummary(issue, hostDomain, project));
   }
@@ -944,20 +959,16 @@ export class SprintIssueService {
     });
   }
 
-  private async getJiraIssuePromptContext(input: IssuePromptContextInput, settings: DashboardSettings): Promise<IssuePromptContext> {
+  private async getJiraIssuePromptContext(projectId: string, input: IssuePromptContextInput, settings: DashboardSettings): Promise<IssuePromptContext> {
     if (!this.deps.jiraApiClient) {
       throw new Error("Jira API client is not injected.");
     }
-    if (!settings.jira.host.trim() || !settings.jira.apiToken.trim()) {
+    if (!settings.jira.host.trim() || !this.hasSettingsCredential(settings.jira.apiTokenCredentialRef, settings.jira.apiToken)) {
       throw new Error("Jira site URL and API token must be configured in Settings -> Integrations.");
     }
 
-    const issue = await this.deps.jiraApiClient.getIssue(
-      settings.jira.host,
-      settings.jira.email,
-      settings.jira.apiToken,
-      input.issueKey || input.title,
-    );
+    const issue = await this.withSettingsCredential(projectId, settings.jira.apiTokenCredentialRef, "jira.issue-detail", async (apiToken) =>
+      await this.deps.jiraApiClient!.getIssue(settings.jira.host, settings.jira.email, apiToken, input.issueKey || input.title), settings.jira.apiToken);
 
     return buildIssuePromptContext(input, {
       title: issue.title,

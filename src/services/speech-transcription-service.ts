@@ -58,6 +58,7 @@ export interface SpeechTranscriptionServiceDependencies {
   dataDir?: string;
   requestTimeoutMs?: number;
   logger?: Logger;
+  settingsCredentialResolver?: import("./credentials/settings-credential-resolver.js").SettingsCredentialResolver;
 }
 
 const DEFAULT_EXTERNAL_TIMEOUT_MS = 30_000;
@@ -102,7 +103,7 @@ function resolveExternalTranscriptionUrl(rawBaseUrl: string): string {
 function isExternalConfigured(settings: SpeechSettings): boolean {
   return Boolean(
     settings.externalTranscription.baseUrl.trim()
-    && settings.externalTranscription.apiKey.trim()
+    && Boolean(settings.externalTranscription.apiKeyCredentialRef || settings.externalTranscription.apiKey.trim())
     && settings.externalTranscription.model.trim()
   );
 }
@@ -328,6 +329,34 @@ export class SpeechTranscriptionService {
       });
     }
 
+    if (!this.deps.settingsCredentialResolver) {
+      return await this.transcribeExternalRequest(input, settings, durationSeconds, url, external.apiKey.trim());
+    }
+    if (!input.metadata.projectId || !external.apiKeyCredentialRef) {
+      return errorResult("client_error", "External transcription credential is not configured.", {
+        provider: "external_api",
+        retryable: false,
+      });
+    }
+    try {
+      return await this.deps.settingsCredentialResolver.withCredential(external.apiKeyCredentialRef, {
+        projectId: input.metadata.projectId,
+        workspaceId: input.metadata.sprintId ?? input.metadata.projectId,
+        consumer: "speech.transcription",
+      }, async (secret) => await this.transcribeExternalRequest(input, settings, durationSeconds, url, secret.toString("utf8")));
+    } catch (error) {
+      return errorResult("permission_denied", sanitizeProviderMessage(error), { provider: "external_api", retryable: false });
+    }
+  }
+
+  private async transcribeExternalRequest(
+    input: SpeechTranscriptionInput,
+    settings: SpeechSettings,
+    durationSeconds: number | null,
+    url: string,
+    apiKey: string,
+  ): Promise<SpeechTranscriptionResult> {
+    const external = settings.externalTranscription;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
     try {
@@ -344,14 +373,14 @@ export class SpeechTranscriptionService {
       const response = await this.fetchImpl(url, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${external.apiKey.trim()}`,
+          Authorization: `Bearer ${apiKey}`,
         },
         body: formData,
         signal: controller.signal,
       });
 
       if (!response.ok) {
-        const message = await parseExternalError(response, external.apiKey);
+        const message = await parseExternalError(response, apiKey);
         return providerFailure("external_api", message, response.status >= 500 || response.status === 429);
       }
 
@@ -379,7 +408,7 @@ export class SpeechTranscriptionService {
     } catch (error) {
       const message = error instanceof Error && error.name === "AbortError"
         ? "External transcription provider timed out."
-        : sanitizeProviderMessage(error, external.apiKey);
+        : sanitizeProviderMessage(error, apiKey);
       return providerFailure("external_api", message);
     } finally {
       clearTimeout(timeout);

@@ -174,6 +174,7 @@ export function createDashboardDependencies(
     skillService: coreDeps.skillService,
     agentPresetRepository: coreDeps.agentPresetRepository,
     getDashboardSettings: resolveDashboardSettings,
+    settingsCredentialResolver: coreDeps.settingsCredentialResolver,
   });
 
   const structuredProviderResponseService = new StructuredProviderResponseService({
@@ -206,6 +207,7 @@ export function createDashboardDependencies(
     taskService,
     getDashboardSettings: resolveDashboardSettings,
     getGithubToken: () => context.getEffectiveGithubToken(),
+    settingsCredentialResolver: coreDeps.settingsCredentialResolver,
     agentPresetSyncService,
     projectManagementRepository,
     providerRunner,
@@ -231,10 +233,12 @@ export function createDashboardDependencies(
   });
   const speechTranscriptionService = new SpeechTranscriptionService({
     settingsRepository,
+    settingsCredentialResolver: coreDeps.settingsCredentialResolver,
     logger: logger.child({ component: "speech-transcription-service" }),
   });
   const speechSynthesisService = new SpeechSynthesisService({
     settingsRepository,
+    settingsCredentialResolver: coreDeps.settingsCredentialResolver,
     logger: logger.child({ component: "speech-synthesis-service" }),
   });
   const speechModelManager = new SpeechModelManager(
@@ -589,6 +593,7 @@ export function createDashboardDependencies(
     projectDocsAutoEmbedService: new ProjectDocsAutoEmbedService(coreDeps.knowledgeService),
     projectRoot: typeof context.getProjectRoot === "function" ? context.getProjectRoot() : process.cwd(),
     getGithubToken: () => context.getEffectiveGithubToken(),
+    settingsCredentialResolver: coreDeps.settingsCredentialResolver,
     logger: logger.child({ component: "project-setup-service" }),
   });
   projectSetupServiceRef.set(projectSetupService);

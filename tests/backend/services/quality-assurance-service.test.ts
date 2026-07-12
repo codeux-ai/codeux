@@ -4326,7 +4326,8 @@ describe("QualityAssuranceService", () => {
 
     // Assert correct provider settings resolution (qwen-local instead of falling back to qwen primary)
     expect(callArgs.model).toBe("qwen-local-model");
-    expect(callArgs.apiKey).toBe("local-key");
+    expect(callArgs.apiKey).toBe("");
+    expect(callArgs.apiKeyCredentialRef).toBeUndefined();
   });
 
   it("runs every configured task reviewer and blocks when one requests changes", async () => {

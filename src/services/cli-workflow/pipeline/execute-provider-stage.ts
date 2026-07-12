@@ -61,6 +61,7 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
     skillService: ctx.deps.skillService,
     agentPresetRepository: ctx.deps.agentPresetRepository,
     getDashboardSettings: ctx.deps.getDashboardSettings,
+    settingsCredentialResolver: ctx.deps.settingsCredentialResolver,
   });
 
   // The provider concurrency cap is a provider-level setting (already clamped to the system
@@ -83,7 +84,8 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
     cwd: ctx.worktreePath,
     model: effectiveModel,
     thinkingMode: providerSettings.thinkingMode,
-    apiKey: providerSettings.apiKey,
+    apiKey: "",
+    apiKeyCredentialRef: providerSettings.apiKeyCredentialRef,
     qwenAuthMode: providerSettings.qwenAuthMode,
     qwenRegion: providerSettings.qwenRegion,
     qwenBaseUrl: providerSettings.qwenBaseUrl,
@@ -115,8 +117,8 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
       githubToken: ctx.settings.git.githubToken,
       gitlabToken: ctx.settings.git.gitlabToken,
     },
-    githubToken: ctx.deps.getGithubToken(),
-    gitlabToken: ctx.settings.git.gitlabToken,
+    githubTokenCredentialRef: ctx.settings.git.githubTokenCredentialRef,
+    gitlabTokenCredentialRef: ctx.settings.git.gitlabTokenCredentialRef,
     signal: ctx.abortSignal,
     customMcpServers: ctx.settings.customMcpServers,
     agentMcpAccess: ctx.agentMcpAccess,

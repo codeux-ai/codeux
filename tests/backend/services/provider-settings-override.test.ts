@@ -39,7 +39,8 @@ describe("buildProviderSettingsOverride", () => {
     expect(override).toEqual({
       model: "resolved-model",
       thinkingMode: { type: "disabled" },
-      apiKey: "sk-test",
+      apiKey: "",
+      apiKeyCredentialRef: undefined,
       maxConcurrentTasks: 3,
       qwenAuthMode: "LOCAL_AUTH",
       qwenRegion: "international",

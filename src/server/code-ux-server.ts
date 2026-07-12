@@ -31,7 +31,7 @@ import { ChatProviderRepository } from "../repositories/chat-provider-repository
 import { ExecutionRepository } from "../repositories/execution-repository.js";
 import { QaReviewRepository } from "../repositories/qa-review-repository.js";
 import { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
-import { GitStatusService, type GitTrackingRequest } from "../services/git-status-service.js";
+import { GitStatusService, type GitSettingsCredentialContext, type GitTrackingRequest } from "../services/git-status-service.js";
 import { defaultRunner } from "../infrastructure/git/git-status-query-client.js";
 import type { GitHostTokens } from "../infrastructure/git/repository-host-resolver.js";
 import { loadExternalSettingsHints } from "../config/external-settings.js";
@@ -808,8 +808,7 @@ export class CodeUxServer {
     if (configKey && configKey.length > 0) {
       return configKey;
     }
-    const fallback = this.externalSettingsHints?.resolved?.julesApiKey?.trim();
-    return (fallback && fallback.length > 0) ? fallback : undefined;
+    return undefined;
   }
 
   private refreshJulesApiKey(): void {
@@ -848,8 +847,7 @@ export class CodeUxServer {
     if (liveEnvToken && liveEnvToken.length > 0) {
       return liveEnvToken;
     }
-    const fallback = this.externalSettingsHints?.resolved?.githubToken?.trim();
-    return (fallback && fallback.length > 0) ? fallback : undefined;
+    return undefined;
   }
 
   private getEffectiveGitlabToken(): string | undefined {
@@ -862,8 +860,7 @@ export class CodeUxServer {
     if (liveEnvToken && liveEnvToken.length > 0) {
       return liveEnvToken;
     }
-    const fallback = this.externalSettingsHints?.resolved?.gitlabToken?.trim();
-    return (fallback && fallback.length > 0) ? fallback : undefined;
+    return undefined;
   }
 
   /**
@@ -875,6 +872,18 @@ export class CodeUxServer {
     return {
       githubToken: this.getEffectiveGithubToken(),
       gitlabToken: this.getEffectiveGitlabToken(),
+    };
+  }
+
+  private getSelectedProjectGitCredentialContext(): GitHostTokens | GitSettingsCredentialContext {
+    const projectId = this.projectManagementRepository.getSelectedProjectId();
+    if (!projectId) return this.getEffectiveGitHostTokens();
+    const git = resolveEffectiveDashboardSettings(this.settingsRepository, projectId).settings.git;
+    if (!git.githubTokenCredentialRef && !git.gitlabTokenCredentialRef) return {};
+    return {
+      projectId,
+      githubTokenCredentialRef: git.githubTokenCredentialRef,
+      gitlabTokenCredentialRef: git.gitlabTokenCredentialRef,
     };
   }
 
@@ -1047,11 +1056,11 @@ export class CodeUxServer {
   }
 
   private async fetchGitStatusForRepo(repoPath: string, cacheTtlMs?: number): Promise<GitTrackingStatus> {
-    const gitStatusService = new GitStatusService(repoPath, defaultRunner, true);
+    const gitStatusService = new GitStatusService(repoPath, defaultRunner, true, this.settingsCredentialResolver);
     const settings = this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
     return await gitStatusService.getStatus(
       settings.git.githubMode,
-      this.getEffectiveGitHostTokens(),
+      this.getSelectedProjectGitCredentialContext(),
       this.resolveGitTrackingRequest(),
       cacheTtlMs
     );
@@ -1109,10 +1118,10 @@ export class CodeUxServer {
     }
 
     try {
-      const gitStatusService = new GitStatusService(this.resolveGitStatusRepoPath(), defaultRunner, true);
+      const gitStatusService = new GitStatusService(this.resolveGitStatusRepoPath(), defaultRunner, true, this.settingsCredentialResolver);
       return await gitStatusService.getStatus(
         "REMOTE",
-        this.getEffectiveGitHostTokens(),
+        this.getSelectedProjectGitCredentialContext(),
         { scope: "REPOSITORY" },
         CodeUxServer.GIT_STATUS_CACHE_MS,
       );
@@ -1178,7 +1187,7 @@ export class CodeUxServer {
   }
 
   private async getCiStatusForScope(args: GetCiStatusForScopeArgs): Promise<GitTrackingStatus | null> {
-    const gitStatusService = new GitStatusService(args.repoPath, defaultRunner, true);
+    const gitStatusService = new GitStatusService(args.repoPath, defaultRunner, true, this.settingsCredentialResolver);
     try {
       const trackingRequest = {
         scope: args.scope,
@@ -1190,13 +1199,13 @@ export class CodeUxServer {
       return typeof args.cacheTtlMs === "number"
         ? await gitStatusService.getStatus(
             "REMOTE",
-            this.getEffectiveGitHostTokens(),
+            this.getSelectedProjectGitCredentialContext(),
             trackingRequest,
             args.cacheTtlMs,
           )
         : await gitStatusService.getStatus(
             "REMOTE",
-            this.getEffectiveGitHostTokens(),
+            this.getSelectedProjectGitCredentialContext(),
             trackingRequest,
           );
     } catch {
@@ -1205,9 +1214,9 @@ export class CodeUxServer {
   }
 
   private async autoMergeFeaturePr(args: AutoMergeFeaturePrArgs): Promise<AutoMergeFeaturePrResult> {
-    const gitStatusService = new GitStatusService(args.repoPath, defaultRunner, true);
+    const gitStatusService = new GitStatusService(args.repoPath, defaultRunner, true, this.settingsCredentialResolver);
     try {
-      const result = await gitStatusService.mergePullRequest(args.prNumber, this.getEffectiveGitHostTokens());
+      const result = await gitStatusService.mergePullRequest(args.prNumber, this.getSelectedProjectGitCredentialContext());
       return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -1226,14 +1235,14 @@ export class CodeUxServer {
     title: string;
     body: string;
   }): Promise<{ created: boolean; prNumber: number | null; prUrl: string | null; errorMessage?: string } | null> {
-    const gitStatusService = new GitStatusService(args.repoPath, defaultRunner, true);
+    const gitStatusService = new GitStatusService(args.repoPath, defaultRunner, true, this.settingsCredentialResolver);
     try {
       return await gitStatusService.resolveOrCreatePullRequest({
         baseBranch: args.defaultBranch,
         headBranch: args.featureBranch,
         title: args.title,
         body: args.body,
-      }, this.getEffectiveGitHostTokens());
+      }, this.getSelectedProjectGitCredentialContext());
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn("Failed to resolve or create main branch PR", {

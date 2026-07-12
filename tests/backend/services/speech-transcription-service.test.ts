@@ -71,6 +71,12 @@ function createLocalRuntime(overrides: Partial<LocalOnnxSpeechRuntime> = {}): Lo
   };
 }
 
+function createCredentialResolver(value: string) {
+  return {
+    withCredential: vi.fn(async (_reference, _context, consumer) => await consumer(Buffer.from(value))),
+  } as any;
+}
+
 describe("SpeechTranscriptionService", () => {
   it("normalizes whitespace without changing Whisper punctuation or casing", () => {
     expect(formatLocalTranscript("  Hello,   world.  ")).toBe("Hello, world.");
@@ -224,13 +230,15 @@ describe("SpeechTranscriptionService", () => {
         providerMode: "external_api",
         externalTranscription: {
           baseUrl: "https://transcribe.example.test/v1/audio/transcriptions",
-          apiKey: "sk-test-secret-1234567890123456",
+          apiKey: "",
+          apiKeyCredentialRef: { credentialId: "speech-credential", capability: "read" },
           model: "whisper-1",
           language: "en",
         },
       }),
       localRuntime: createLocalRuntime(),
       fetchImpl,
+      settingsCredentialResolver: createCredentialResolver("sk-test-secret-1234567890123456"),
     });
 
     const result = await service.transcribe({ audio, fileName: "prompt.webm", metadata: createMetadata() });
@@ -291,13 +299,15 @@ describe("SpeechTranscriptionService", () => {
         providerMode: "external_api",
         externalTranscription: {
           baseUrl: "https://transcribe.example.test/v1",
-          apiKey: rawApiKey,
+          apiKey: "",
+          apiKeyCredentialRef: { credentialId: "speech-credential", capability: "read" },
           model: "whisper-1",
           language: null,
         },
       }),
       localRuntime: createLocalRuntime(),
       fetchImpl,
+      settingsCredentialResolver: createCredentialResolver(rawApiKey),
     });
 
     const result = await service.transcribe({ audio, metadata: createMetadata() });

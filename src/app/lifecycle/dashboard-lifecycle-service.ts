@@ -256,12 +256,7 @@ function mapAttentionItem(item: NonNullable<ReturnType<ProjectAttentionRepositor
 }
 
 function resolveGithubToken(deps: BootDashboardDeps): string | undefined {
-  const dashboardToken = deps.runtimeContext.dashboardSettings?.git?.githubToken?.trim();
-  if (dashboardToken) {
-    return dashboardToken;
-  }
-  const fallback = deps.externalSettingsHints.resolved?.githubToken?.trim();
-  return fallback || undefined;
+  return deps.runtimeContext.dashboardSettings?.git?.githubToken?.trim() || undefined;
 }
 
 function resolveGitlabToken(deps: BootDashboardDeps): string | undefined {
@@ -269,8 +264,7 @@ function resolveGitlabToken(deps: BootDashboardDeps): string | undefined {
   if (dashboardToken) {
     return dashboardToken;
   }
-  const fallback = deps.externalSettingsHints.resolved?.gitlabToken?.trim();
-  return fallback || undefined;
+  return undefined;
 }
 
 function requireProjectAttentionItem(
@@ -778,18 +772,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     updateTask: (taskId, input) => deps.projectManagementRepository.updateTask(taskId, input),
     deleteTask: (taskId) => deps.projectManagementRepository.deleteTask(taskId),
     searchJiraIssues: (projectId, input) => {
-      const settings = deps.settingsRepository.resolveProjectDashboardSettings(projectId);
-      if (!settings.settings.jira) {
-        throw new Error("Jira is not configured for this project.");
-      }
-      return deps.sprintIssueService.searchJiraIssues(
-        settings.settings.jira.host,
-        settings.settings.jira.email,
-        settings.settings.jira.apiToken,
-        input,
-        settings.settings.jira.defaultProject,
-        settings.settings.jira.importTransitionName?.trim() || "In Work",
-      );
+      return deps.sprintIssueService.searchConfiguredJiraIssues(projectId, input);
     },
     searchJiraProjectStatuses: (projectId, projectKey) => deps.sprintIssueService.searchJiraProjectStatuses(projectId, projectKey),
     listSprintLinkedIssues: (sprintId) => deps.sprintIssueService.getLinkedIssues(sprintId),

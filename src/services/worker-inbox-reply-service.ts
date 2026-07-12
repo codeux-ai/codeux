@@ -65,6 +65,7 @@ interface WorkerInboxReplyServiceDependencies {
   getDashboardSettings: (scope?: { projectId?: string; sprintId?: string }) => DashboardSettings;
   getGithubToken: () => string | undefined;
   providerRunner: IProviderRunner;
+  providerExecutionService?: import("./provider-execution-service.js").ProviderExecutionService;
   providerConcurrencyService: ProviderConcurrencyService;
   knowledgeService: KnowledgeService;
   skillService?: SkillService;
@@ -217,7 +218,8 @@ export class WorkerInboxReplyService {
         repoPath: project.baseDir,
         model: providerSettings.model,
         thinkingMode: providerSettings.thinkingMode,
-        apiKey: providerSettings.apiKey,
+        apiKey: this.deps.providerExecutionService ? "" : providerSettings.apiKey,
+        apiKeyCredentialRef: providerSettings.apiKeyCredentialRef,
         qwenAuthMode: providerSettings.qwenAuthMode,
         qwenRegion: providerSettings.qwenRegion,
         qwenBaseUrl: providerSettings.qwenBaseUrl,
@@ -427,7 +429,8 @@ export class WorkerInboxReplyService {
         repoPath: project.baseDir,
         model: providerSettings.model,
         thinkingMode: providerSettings.thinkingMode,
-        apiKey: providerSettings.apiKey,
+        apiKey: this.deps.providerExecutionService ? "" : providerSettings.apiKey,
+        apiKeyCredentialRef: providerSettings.apiKeyCredentialRef,
         qwenAuthMode: providerSettings.qwenAuthMode,
         qwenRegion: providerSettings.qwenRegion,
         qwenBaseUrl: providerSettings.qwenBaseUrl,
@@ -638,6 +641,7 @@ export class WorkerInboxReplyService {
     model: string;
     thinkingMode?: import("../contracts/app-types.js").ThinkingMode;
     apiKey: string;
+    apiKeyCredentialRef?: import("../contracts/app-types.js").SettingsCredentialReference | null;
     qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
     qwenRegion?: "china" | "international";
     qwenBaseUrl?: string;
@@ -698,13 +702,19 @@ export class WorkerInboxReplyService {
       openCodeModelId: input.openCodeModelId,
     });
 
-    return await this.deps.providerRunner.runProviderForText({
+    if (!input.projectId) throw new Error("Worker reply provider execution requires a project scope.");
+    const runInput = {
+      projectId: input.projectId,
+      sprintId: input.sprintId,
+      purpose: "clarification_reply" as const,
+      type: "worker_inbox_reply",
       provider: input.provider,
       prompt: input.prompt,
       cwd: input.repoPath,
       model: effectiveModel,
       thinkingMode: input.thinkingMode,
       apiKey: input.apiKey,
+      apiKeyCredentialRef: input.apiKeyCredentialRef,
       qwenAuthMode: input.qwenAuthMode,
       qwenRegion: input.qwenRegion,
       qwenBaseUrl: input.qwenBaseUrl,
@@ -727,6 +737,9 @@ export class WorkerInboxReplyService {
       sessionId: "worker-reply-" + randomUUID(),
       workflowSettings,
       repoPath: input.repoPath,
+      githubTokenCredentialRef: gitSettings.githubTokenCredentialRef,
+      gitlabTokenCredentialRef: gitSettings.gitlabTokenCredentialRef,
+      expectTextOutput: true as const,
       ...buildProviderInvocationWorkspaceOptions({
         workflowSettings,
         gitPolicy: {
@@ -738,10 +751,16 @@ export class WorkerInboxReplyService {
       }),
       mcpConnection: resolvedMcp.mcpConnection,
       customMcpServers: resolvedMcp.customMcpServers,
-      persistentSkillStorageMounts: persistentSkillRuntime?.mounts,
-      googleDriveMount: input.googleDriveMount ?? undefined,
       onActivity: () => {},
-    });
+    };
+    if (!this.deps.providerExecutionService) {
+      return await this.deps.providerRunner.runProviderForText({
+        ...runInput,
+        persistentSkillStorageMounts: persistentSkillRuntime?.mounts,
+        googleDriveMount: input.googleDriveMount ?? undefined,
+      } as import("../infrastructure/providers/cli/provider-runner.js").ProviderRunInput);
+    }
+    return await this.deps.providerExecutionService.executeProvider(runInput);
   }
 
   private resolveDashboardReplyMcpAccess(

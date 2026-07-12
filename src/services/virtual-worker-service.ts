@@ -193,6 +193,7 @@ export interface VirtualWorkerServiceDependencies {
   getMcpConnectionInfo?: () => McpConnectionInfo | null;
   agentPresetSyncService?: Pick<AgentPresetSyncService, "getOptionalWorkerAgentForRepoPath" | "resolveTargetedCodingAgent">;
   logger?: Logger;
+  settingsCredentialResolver?: import("./credentials/settings-credential-resolver.js").SettingsCredentialResolver;
 }
 
 export class VirtualWorkerService {
@@ -227,6 +228,7 @@ export class VirtualWorkerService {
       getDashboardSettings: ({ projectId, sprintId }) => (
         projectId ? this.resolveDashboardSettings(projectId, sprintId) : deps.settingsRepository.getDefaultDashboardSettings()
       ),
+      settingsCredentialResolver: deps.settingsCredentialResolver,
     });
   }
 
@@ -1062,7 +1064,10 @@ export class VirtualWorkerService {
           purpose: "merge_conflict",
           model: providerSettings.model,
           thinkingMode: providerSettings.thinkingMode,
-          apiKey: providerSettings.apiKey,
+          apiKey: "",
+          apiKeyCredentialRef: providerSettings.apiKeyCredentialRef,
+          githubTokenCredentialRef: settings.git.githubTokenCredentialRef,
+          gitlabTokenCredentialRef: settings.git.gitlabTokenCredentialRef,
           maxConcurrentTasks: providerSettings.maxConcurrentTasks,
           qwenAuthMode: providerSettings.qwenAuthMode,
           qwenRegion: providerSettings.qwenRegion,
@@ -1457,7 +1462,10 @@ export class VirtualWorkerService {
         purpose: "ci_fix",
         model: providerSettings.model,
         thinkingMode: providerSettings.thinkingMode,
-        apiKey: providerSettings.apiKey,
+        apiKey: "",
+        apiKeyCredentialRef: providerSettings.apiKeyCredentialRef,
+        githubTokenCredentialRef: settings.git.githubTokenCredentialRef,
+        gitlabTokenCredentialRef: settings.git.gitlabTokenCredentialRef,
         maxConcurrentTasks: providerSettings.maxConcurrentTasks,
         qwenAuthMode: providerSettings.qwenAuthMode,
 
@@ -1818,6 +1826,9 @@ export class VirtualWorkerService {
     model: string;
     thinkingMode?: ThinkingMode;
     apiKey: string;
+    apiKeyCredentialRef?: import("../contracts/app-types.js").SettingsCredentialReference | null;
+    githubTokenCredentialRef?: import("../contracts/app-types.js").SettingsCredentialReference | null;
+    gitlabTokenCredentialRef?: import("../contracts/app-types.js").SettingsCredentialReference | null;
     maxConcurrentTasks?: number;
     qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
     qwenRegion?: "china" | "international";
@@ -1873,6 +1884,7 @@ export class VirtualWorkerService {
       model: effectiveModel,
       thinkingMode: args.thinkingMode,
       apiKey: args.apiKey,
+      apiKeyCredentialRef: args.apiKeyCredentialRef,
       maxConcurrentTasks: args.maxConcurrentTasks,
       qwenAuthMode: args.qwenAuthMode,
       qwenRegion: args.qwenRegion,
@@ -1899,6 +1911,8 @@ export class VirtualWorkerService {
       workflowSettings: args.workflowSettings,
       repoPath: args.repoPath,
       githubToken: args.githubToken,
+      githubTokenCredentialRef: args.githubTokenCredentialRef,
+      gitlabTokenCredentialRef: args.gitlabTokenCredentialRef,
       agentMcpAccess: args.agentMcpAccess,
       mcpAgentId: args.mcpAgentId,
       concurrencyWaitTimeoutMs: VIRTUAL_WORKER_PROVIDER_SLOT_WAIT_MS,

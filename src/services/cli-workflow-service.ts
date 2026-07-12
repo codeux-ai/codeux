@@ -57,6 +57,7 @@ import type { AgentPresetRepository } from "../repositories/agent-preset-reposit
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
 import { parseTaskExecutionOutcomeFromProviderOutput, type TaskExecutionOutcome } from "../domain/sprint/task-execution-outcome.js";
+import type { SettingsCredentialResolver } from "./credentials/settings-credential-resolver.js";
 
 interface CliWorkflowServiceDependencies {
   sessionTracking: SessionTrackingRepository;
@@ -74,6 +75,7 @@ interface CliWorkflowServiceDependencies {
   getGithubToken: () => string | undefined;
   getMcpConnectionInfo?: () => McpConnectionInfo | null;
   logger?: Logger;
+  settingsCredentialResolver?: SettingsCredentialResolver;
 }
 
 interface StartCliTaskInput {

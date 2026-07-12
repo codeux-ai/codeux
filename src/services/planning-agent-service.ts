@@ -83,6 +83,7 @@ interface PlanningResultContext {
   workflowSettings: CliWorkflowSettings;
   providerSettings: {
     model: string;
+    apiKeyCredentialRef?: import("../contracts/app-types.js").SettingsCredentialReference | null;
     apiKey: string;
     thinkingMode?: unknown;
     qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
@@ -781,7 +782,8 @@ export class PlanningAgentService {
         type: "planning",
         provider,
         model: effectiveModel,
-        apiKey: providerSettings.apiKey,
+        apiKey: "",
+        apiKeyCredentialRef: providerSettings.apiKeyCredentialRef,
         maxConcurrentTasks: providerSettings.maxConcurrentTasks,
         qwenAuthMode: providerSettings.qwenAuthMode,
         qwenRegion: providerSettings.qwenRegion,
@@ -822,6 +824,8 @@ export class PlanningAgentService {
         agentMcpAccess: planningAgent?.mcpAccess ?? null,
         mcpAgentId: planningAgent?.id ?? null,
         githubToken: args.settings.git.githubToken,
+        githubTokenCredentialRef: args.settings.git.githubTokenCredentialRef,
+        gitlabTokenCredentialRef: args.settings.git.gitlabTokenCredentialRef,
         signal: args.signal,
         onActivity: (description, originator) => {
           this.deps.logger?.debug("Virtual planning worker activity", {
@@ -843,7 +847,8 @@ export class PlanningAgentService {
         cleanupWorkspace,
         providerSettings: {
           model: providerSettings.model,
-          apiKey: providerSettings.apiKey,
+          apiKey: "",
+          apiKeyCredentialRef: providerSettings.apiKeyCredentialRef,
           qwenAuthMode: providerSettings.qwenAuthMode,
           qwenRegion: providerSettings.qwenRegion,
           qwenBaseUrl: providerSettings.qwenBaseUrl,

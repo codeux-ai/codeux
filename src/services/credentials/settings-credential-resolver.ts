@@ -7,6 +7,12 @@ export interface SettingsCredentialRuntimeContext {
   workspaceId?: string;
 }
 
+export interface NamedSettingsCredentialReference {
+  name: string;
+  reference: unknown;
+  consumer: string;
+}
+
 export class MalformedSettingsCredentialReferenceError extends Error {
   constructor() {
     super("The settings credential reference is malformed.");
@@ -46,5 +52,36 @@ export class SettingsCredentialResolver {
       bindingKey,
       workspaceId: context.workspaceId?.trim() || projectId,
     }, consumer);
+  }
+
+  /**
+   * Resolves several references for one execution boundary while keeping every
+   * broker-owned buffer alive only for the duration of the final callback.
+   */
+  async withCredentials<T>(
+    references: NamedSettingsCredentialReference[],
+    context: Omit<SettingsCredentialRuntimeContext, "consumer">,
+    consumer: (secrets: ReadonlyMap<string, Buffer>) => T | Promise<T>,
+  ): Promise<T> {
+    const resolved = new Map<string, Buffer>();
+    const visit = async (index: number): Promise<T> => {
+      const item = references[index];
+      if (!item) return await consumer(resolved);
+      if (!item.name.trim() || resolved.has(item.name)) {
+        throw new MalformedSettingsCredentialReferenceError();
+      }
+      return await this.withCredential(item.reference, {
+        ...context,
+        consumer: item.consumer,
+      }, async (secret) => {
+        resolved.set(item.name, secret);
+        try {
+          return await visit(index + 1);
+        } finally {
+          resolved.delete(item.name);
+        }
+      });
+    };
+    return await visit(0);
   }
 }

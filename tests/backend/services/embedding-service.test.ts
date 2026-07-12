@@ -37,6 +37,32 @@ describe("EmbeddingService", () => {
     it("throws when no model loaded", async () => {
       await expect(service.embed("test")).rejects.toThrow("No model loaded");
     });
+
+    it("uses a rotated broker credential on the next external request", async () => {
+      let secret = "embedding-secret-v1";
+      const resolver = {
+        withCredential: vi.fn(async (_reference, _context, consumer) => await consumer(Buffer.from(secret))),
+      } as any;
+      const fetchImpl = vi.fn().mockImplementation(async () => new Response(JSON.stringify({
+        data: [{ embedding: [1, 0] }],
+      }), { status: 200, headers: { "content-type": "application/json" } }));
+      service = new EmbeddingService(resolver, fetchImpl as any);
+      service.configureExternal({
+        baseUrl: "https://embedding.example.test/v1/embeddings",
+        apiKey: "",
+        apiKeyCredentialRef: { credentialId: "embedding-credential", capability: "read" },
+        model: "embedding-model",
+        dimensions: 2,
+      }, "project-1");
+
+      await service.embed("first");
+      secret = "embedding-secret-v2";
+      await service.embed("second");
+
+      expect(fetchImpl.mock.calls[0]![1]?.headers).toEqual(expect.objectContaining({ Authorization: "Bearer embedding-secret-v1" }));
+      expect(fetchImpl.mock.calls[1]![1]?.headers).toEqual(expect.objectContaining({ Authorization: "Bearer embedding-secret-v2" }));
+      expect(resolver.withCredential).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe("embedBatch", () => {

@@ -1,4 +1,4 @@
-import type { PipelineContext } from "./pipeline-context.js";
+import { withResolvedPipelineGitCredentials, type PipelineContext } from "./pipeline-context.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "../../git-http-auth.js";
 import { isRuntimeShutdownInProgress } from "../../shutdown-state.js";
 
@@ -13,6 +13,9 @@ export async function executeGitFinalizeStage(ctx: PipelineContext): Promise<{
     deletions: number;
   };
 }> {
+  if (ctx.deps.settingsCredentialResolver && (ctx.settings.git.githubTokenCredentialRef || ctx.settings.git.gitlabTokenCredentialRef)) {
+    return await withResolvedPipelineGitCredentials(ctx, executeGitFinalizeStage);
+  }
   const gitAuth: GitHttpAuthOptions = {
     githubToken: ctx.settings.git.githubToken,
     gitlabToken: ctx.settings.git.gitlabToken,

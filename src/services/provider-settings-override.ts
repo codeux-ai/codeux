@@ -3,12 +3,14 @@ import type {
   QwenModelProviderSettings,
   ProviderSettings,
   ProviderConfigMode,
+  SettingsCredentialReference,
 } from "../contracts/app-types.js";
 
 export interface ProviderSettingsOverride {
   model: string;
   thinkingMode: ThinkingMode;
   apiKey: string;
+  apiKeyCredentialRef?: SettingsCredentialReference | null;
   maxConcurrentTasks: number;
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
   qwenRegion?: "china" | "international";
@@ -40,7 +42,8 @@ export function buildProviderSettingsOverride(
   return {
     model: resolvedModel,
     thinkingMode: providerSettings.thinkingMode,
-    apiKey: usesMountedAuth ? "" : providerSettings.apiKey,
+    apiKey: "",
+    apiKeyCredentialRef: usesMountedAuth ? null : providerSettings.apiKeyCredentialRef,
     maxConcurrentTasks: providerSettings.maxConcurrentTasks,
     qwenAuthMode: usesMountedAuth && providerSettings.provider === "qwen-code"
       ? "LOCAL_AUTH"
