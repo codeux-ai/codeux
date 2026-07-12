@@ -82,8 +82,19 @@ async function openAppearanceSettings(page: Page, request: APIRequestContext): P
   await hideOnboardingAndTours(page, request);
   await page.goto('/config');
   await expect(page.getByRole('heading', { name: 'Settings & Integration' })).toBeVisible();
-  await page.getByRole('button', { name: /Appearance(?: Dashboard layout and theme preferences)?/i }).click();
-  await expect(page.getByText('Background Image', { exact: true })).toBeVisible();
+  const appearancePanel = page.locator('[data-active-category="appearance"]');
+  if (!await appearancePanel.isVisible()) {
+    await page
+      .getByRole('navigation', { name: 'Settings categories' })
+      .getByRole('button', { name: 'Appearance', exact: true })
+      .click();
+  }
+  await expect(appearancePanel).toBeVisible();
+  const configureBackground = page.getByRole('button', { name: 'Configure Background', exact: true });
+  if (await configureBackground.isVisible()) {
+    await configureBackground.click();
+  }
+  await expect(page.getByRole('region', { name: 'Background', exact: true })).toBeVisible();
 }
 
 test.describe('filesystem persistence', () => {
@@ -189,8 +200,7 @@ test.describe('filesystem persistence', () => {
     }).toBe(expectedDataUrl);
 
     await page.reload();
-    await expect(page.getByRole('heading', { name: 'Settings & Integration' })).toBeVisible();
-    await page.getByRole('button', { name: /Appearance(?: Dashboard layout and theme preferences)?/i }).click();
+    await openAppearanceSettings(page, request);
     await expect(page.getByRole('img', { name: 'Background Thumbnail' })).toHaveAttribute('src', expectedDataUrl);
 
     const savedSettings = await fetchSystemSettings(request);

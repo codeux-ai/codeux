@@ -1,15 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const validateSafeRepoName = vi.fn();
+const validateSafeRepoName = vi.fn((name: string) => name);
 const validateSafeClonePath = vi.fn((dir: string) => dir);
 const validateNonEmptyDir = vi.fn((dir: string) => dir);
 const runCommandStrict = vi.fn(async () => ({ stdout: "", stderr: "", code: 0 }));
 const buildGitHttpAuthEnvWithFallbacks = vi.fn(async () => ({ GIT_TOKEN: "x" }));
 const mkdirSync = vi.fn();
+const openSync = vi.fn(() => 17);
 const writeFileSync = vi.fn();
+const closeSync = vi.fn();
 const ensureCodeUxGitignoreEntry = vi.fn(async () => true);
+const fsConstants = {
+  O_CREAT: 0x40,
+  O_TRUNC: 0x200,
+  O_WRONLY: 0x1,
+  O_NOFOLLOW: 0x20000,
+};
 
 vi.mock("../../../../src/utils/path-validator.js", () => ({
+  isPathInside: () => true,
   validateSafeRepoName: (...a: unknown[]) => validateSafeRepoName(...a),
   validateSafeClonePath: (...a: unknown[]) => validateSafeClonePath(...(a as [string])),
   validateNonEmptyDir: (...a: unknown[]) => validateNonEmptyDir(...a),
@@ -24,8 +33,16 @@ vi.mock("../../../../src/services/git-http-auth.js", () => ({
 }));
 
 vi.mock("fs", () => ({
+  constants: {
+    O_CREAT: 0x40,
+    O_TRUNC: 0x200,
+    O_WRONLY: 0x1,
+    O_NOFOLLOW: 0x20000,
+  },
   mkdirSync: (...a: unknown[]) => mkdirSync(...a),
+  openSync: (...a: unknown[]) => openSync(...a),
   writeFileSync: (...a: unknown[]) => writeFileSync(...a),
+  closeSync: (...a: unknown[]) => closeSync(...a),
 }));
 
 vi.mock("../../../../src/infrastructure/git/code-ux-gitignore.js", () => ({
@@ -40,8 +57,10 @@ afterEach(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  validateSafeRepoName.mockImplementation((name: string) => name);
   validateSafeClonePath.mockImplementation((dir: string) => dir);
   validateNonEmptyDir.mockImplementation((dir: string) => dir);
+  openSync.mockImplementation(() => 17);
   buildGitHttpAuthEnvWithFallbacks.mockResolvedValue({ GIT_TOKEN: "x" });
 });
 
@@ -75,6 +94,17 @@ describe("createGitHubRepo", () => {
       { GIT_TOKEN: "x" },
     );
     expect(ensureCodeUxGitignoreEntry).toHaveBeenCalledWith("/tmp/parent/my-repo");
+    expect(openSync).toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: "/tmp/parent/my-repo/README.md" }),
+      fsConstants.O_CREAT | fsConstants.O_TRUNC | fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW,
+      0o666,
+    );
+    expect(writeFileSync).toHaveBeenCalledWith(
+      17,
+      "# my-repo\n\nInitialized with Code UX.\n",
+      "utf8",
+    );
+    expect(closeSync).toHaveBeenCalledWith(17);
     expect(runCommandStrict).toHaveBeenCalledWith("git", ["checkout", "-B", "main"], "/tmp/parent/my-repo");
     expect(runCommandStrict).toHaveBeenCalledWith("git", ["add", "README.md", ".gitignore"], "/tmp/parent/my-repo");
     expect(runCommandStrict).toHaveBeenCalledWith("git", ["commit", "-m", "Initial commit"], "/tmp/parent/my-repo");
@@ -128,6 +158,25 @@ describe("createGitHubRepo", () => {
     await expect(
       createGitHubRepo({ repoName: "../evil", isPrivate: false, cloneParentDir: "/tmp/p", hostToken: "t" }),
     ).rejects.toThrow(/Failed to create GitHub repository: bad repo name/);
+  });
+
+  it("fails closed when the seed README resolves through a symlink", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ clone_url: "https://github.com/me/my-repo.git" }), { status: 201 })),
+    );
+    openSync.mockImplementationOnce(() => {
+      throw Object.assign(new Error("symlink refused"), { code: "ELOOP" });
+    });
+
+    await expect(createGitHubRepo({
+      repoName: "my-repo",
+      isPrivate: false,
+      cloneParentDir: "/tmp/parent",
+      hostToken: "token",
+    })).rejects.toThrow(/README path must stay inside the repository/);
+    expect(writeFileSync).not.toHaveBeenCalled();
+    expect(closeSync).not.toHaveBeenCalled();
   });
 });
 

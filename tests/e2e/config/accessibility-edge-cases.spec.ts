@@ -7,8 +7,11 @@ import {
 import {
   openConfigPage,
   openSettingsCategory,
+  openSettingsSection,
   prepareConfigPage,
+  returnToSettingsCategoryOverview,
   saveButton,
+  settingRow,
   setRowSwitch,
   fetchSystemSettings,
   settingsPanel,
@@ -85,10 +88,13 @@ test.describe('configuration accessibility edge cases', () => {
     await expect(page.getByLabel('Search settings categories')).toHaveAccessibleName('Search settings categories');
     await expect(saveButton(page)).toHaveAccessibleName(/Save Changes/i);
 
-    await openSettingsCategory(page, /Memory Embedding models, auto-capture, and promotion policy/i, 'Memory System');
+    await openSettingsCategory(page, 'Memory', 'Memory System');
+    await openSettingsSection(page, 'Memory System');
     await setRowSwitch(page, 'Enable memory', true);
     await expect(settingsPanel(page).getByRole('switch', { name: 'Toggle setting' }).first()).toHaveAccessibleName('Toggle setting');
-    const promotionThreshold = settingsPanel(page).getByRole('spinbutton').first();
+    await returnToSettingsCategoryOverview(page);
+    await openSettingsSection(page, 'Limits');
+    const promotionThreshold = settingRow(page, 'Promotion threshold').getByRole('spinbutton');
     await promotionThreshold.fill('2');
     await saveButton(page).click();
 
@@ -98,6 +104,8 @@ test.describe('configuration accessibility edge cases', () => {
     await expect(promotionThreshold).toHaveAttribute('aria-invalid', 'true');
 
     await promotionThreshold.fill(dirtyThreshold);
+    await returnToSettingsCategoryOverview(page);
+    await openSettingsSection(page, 'Memory System');
     await setRowSwitch(page, 'Enable memory', false);
     await page.getByRole('link', { name: /Overview/i }).click();
 
