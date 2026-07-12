@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   applyBaseAgentUpdate,
   createAgentPreset,
+  fetchAgentPresets,
   fetchBaseAgentUpdateNotices,
   pushAgentPresetsToRepository,
   updateAgentPreset,
@@ -59,6 +60,20 @@ describe("createAgentPreset", () => {
       instructionMarkdown: "Install dependencies before coding.",
       containerRunAsRoot: false,
     });
+  });
+});
+
+describe("fetchAgentPresets", () => {
+  it("forwards the project-transition abort signal", async () => {
+    const controller = new AbortController();
+    vi.mocked(fetchJson).mockResolvedValueOnce([]);
+
+    await expect(fetchAgentPresets("project/one", controller.signal)).resolves.toEqual([]);
+
+    expect(fetchJson).toHaveBeenCalledWith(
+      "/api/projects/project%2Fone/agent-presets",
+      { signal: controller.signal },
+    );
   });
 });
 

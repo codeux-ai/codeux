@@ -36,6 +36,10 @@ The run debugger lists durable approvals beside node attempts. A pending item of
 
 ## Agent attachment
 
+A selected project loads its agent presets, and selecting a flow loads that flow's current bindings. The inspector exposes only agent names and attachment skill metadata; it never renders agent instructions, custom source, credential values, or decrypted material.
+
+Attaching and detaching use the governed node-flow attachment routes, then refresh the selected flow's bindings. Project or flow changes clear the prior selection and visible bindings, abort in-flight reads where possible, and ignore stale responses. Loading, failure, retry, empty, and mutation states remain keyboard accessible. The backend independently enforces project ownership and the attached-flow capability boundary; dashboard state does not grant authorization.
+
 A flow can be attached to a project agent preset as a repeatable skill with a name and description. Detaching removes only that binding; the flow, its graph, schedules, and run history remain in the project.
 
 Scheduling is entered through `/scheduler` and targets a pinned or latest-published version. A flow can also be attached to a project agent preset as a reusable skill; removing the attachment does not remove the flow, publications, schedules, or run history.

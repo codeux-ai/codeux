@@ -26,6 +26,8 @@ Validated custom definitions can also execute after their immutable artifact and
 
 Credential slots display metadata-only status such as bound, missing, or denied and can submit a binding request. Secret values remain behind the credential broker and are not returned to the graph or browser.
 
+Agent attachments are also metadata-only. The selected project supplies the available preset names, and the selected flow supplies its current skill names and descriptions. Attach and detach refresh that governed backend state; project or flow transitions clear previous bindings and ignore obsolete requests. Agent instructions, custom source, credentials, and decrypted values are never rendered by the attachment controls.
+
 Validation and dry run report graph issues, requested capabilities, credential requirements, side-effect differences, and policy findings. Dry run does not execute nodes. Publication requires the current draft revision, a valid graph and policy review, and all required credentials bound. Published snapshots are immutable; the workspace can compare versions or restore a prior version into a new draft revision.
 
 ## Runs and schedules
