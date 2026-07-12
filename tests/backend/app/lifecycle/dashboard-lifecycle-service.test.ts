@@ -240,6 +240,7 @@ describe("dashboard-lifecycle-service", () => {
       embeddingService: {} as any,
       memoryRepository: {} as any,
       knowledgeService: {} as any,
+      credentialBroker: { health: vi.fn() } as any,
       chatProviderOutboundService: {
         start: vi.fn(),
         stop: vi.fn(),
@@ -284,6 +285,7 @@ describe("dashboard-lifecycle-service", () => {
           dashboardDir: path.join("/project-root", "dashboard"),
           port: 3000,
           liveActivityCacheMs: 500,
+          credentialBroker: mockDeps.credentialBroker,
           realtimeService: mockDeps.dashboardRealtimeService,
           getUpdateStatus: expect.any(Function),
           cancelThreadTurn: expect.any(Function),

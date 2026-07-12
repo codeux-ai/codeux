@@ -565,6 +565,7 @@ export function ensureAutomationCredentialTables(db: DatabaseAdapter): void {
       kind TEXT NOT NULL,
       scope TEXT NOT NULL CHECK (scope IN ('project', 'global')),
       project_id TEXT,
+      management_project_id TEXT NOT NULL,
       allowed_project_ids_json TEXT NOT NULL DEFAULT '[]',
       capabilities_json TEXT NOT NULL DEFAULT '[]',
       status TEXT NOT NULL DEFAULT 'active',
@@ -576,8 +577,31 @@ export function ensureAutomationCredentialTables(db: DatabaseAdapter): void {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (management_project_id) REFERENCES projects(id) ON DELETE CASCADE,
       CHECK ((scope = 'project' AND project_id IS NOT NULL) OR (scope = 'global' AND project_id IS NULL))
     )
+  `);
+  ensureColumn(db, "automation_credentials", "management_project_id", "TEXT");
+  db.exec(`
+    UPDATE automation_credentials
+    SET management_project_id = CASE
+      WHEN project_id IS NOT NULL THEN project_id
+      ELSE (
+        SELECT projects.id
+        FROM json_each(automation_credentials.allowed_project_ids_json)
+        JOIN projects ON projects.id = json_each.value
+        ORDER BY CAST(json_each.key AS INTEGER)
+        LIMIT 1
+      )
+    END
+    WHERE management_project_id IS NULL
+  `);
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS delete_automation_credentials_for_management_project
+    AFTER DELETE ON projects
+    BEGIN
+      DELETE FROM automation_credentials WHERE management_project_id = OLD.id;
+    END
   `);
   db.exec(`
     CREATE TABLE IF NOT EXISTS automation_credential_secrets (

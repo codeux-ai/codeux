@@ -917,6 +917,7 @@ describe("CodeUxServer", () => {
 
       expect(bootDashboardArgs).toBeDefined();
       expect(bootDashboardArgs.getDashboardPort()).toBeDefined();
+      expect(bootDashboardArgs.credentialBroker).toBe((runServer as any).credentialBroker);
 
       try { await bootDashboardArgs.getLiveActivitiesForActiveTasks(); } catch (e) {}
       try { await bootDashboardArgs.getGitStatus(); } catch (e) {}

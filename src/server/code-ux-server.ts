@@ -104,6 +104,7 @@ import type { HeadlessAuthService } from "../services/headless-auth-service.js";
 import type { AutomationAuditExportService } from "../services/automation-audit-export-service.js";
 import type { HeadlessOperationalReadinessService } from "../services/headless-operational-readiness-service.js";
 import type { AutomationSloService } from "../services/automation-slo-service.js";
+import type { CredentialBroker } from "../services/credentials/credential-broker.js";
 import { ProjectInitializationStateService } from "../services/project-initialization-state-service.js";
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
@@ -234,6 +235,7 @@ export class CodeUxServer {
   private readonly mcpApprovalTracker = new McpApprovalTracker();
   private readonly localMcpCliConfigService = new LocalMcpCliConfigService();
   private readonly headlessAuthService: HeadlessAuthService;
+  private readonly credentialBroker: CredentialBroker;
   private readonly automationAuditService: AutomationAuditExportService;
   private readonly headlessReadinessService: HeadlessOperationalReadinessService;
   private readonly automationSloService: AutomationSloService;
@@ -286,6 +288,7 @@ export class CodeUxServer {
     this.cliWorkflowService = deps.cliWorkflowService;
     this.managementToolHandler = deps.managementToolHandler;
     this.headlessAuthService = deps.headlessAuthService;
+    this.credentialBroker = deps.credentialBroker;
     this.automationAuditService = deps.automationAuditService;
     this.headlessReadinessService = deps.headlessReadinessService;
     this.automationSloService = deps.automationSloService;
@@ -1446,6 +1449,7 @@ export class CodeUxServer {
         projectSetupService: this.projectSetupService,
         schedulerService: this.schedulerService,
         nodeFlowService: this.nodeFlowService,
+        credentialBroker: this.credentialBroker,
         headlessAuthService: this.headlessAuthService,
         automationAuditService: this.automationAuditService,
         headlessReadinessService: this.headlessReadinessService,

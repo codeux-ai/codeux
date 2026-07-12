@@ -17,7 +17,7 @@ export interface StoredSecretEnvelope {
 }
 
 export interface SecretStore {
-  put(context: SecretContext, plaintext: Buffer): Promise<StoredSecretEnvelope>;
+  /** Encrypts a value without persisting it so callers can commit it atomically with metadata. */
+  seal(context: SecretContext, plaintext: Buffer): Promise<StoredSecretEnvelope>;
   get(context: SecretContext): Promise<Buffer>;
-  delete(credentialId: string): Promise<void>;
 }

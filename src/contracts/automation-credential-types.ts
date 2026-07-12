@@ -8,6 +8,8 @@ export interface AutomationCredentialMetadata {
   kind: string;
   scope: AutomationCredentialScope;
   projectId: string | null;
+  /** Project whose credential administrators may mutate this record. */
+  managementProjectId: string | null;
   allowedProjectIds: string[];
   capabilities: AutomationCredentialCapability[];
   status: AutomationCredentialStatus;
