@@ -160,9 +160,11 @@ export function useSprintsPageData() {
 
   const { feedback, setError, clearFeedback, clearError } = useActionFeedback();
 
-  const { projects, selectedProject, createProject } = useProjectData();
+  const { projects, selectedProject, selectProject, createProject } = useProjectData();
   const {
     data: sprints,
+    selectedSprintId,
+    selectSprint,
     refetch: refresh,
     loading: sprintsLoading,
   } = useSprints(selectedProject?.id || null);
@@ -459,7 +461,10 @@ export function useSprintsPageData() {
     ...actions,
     projects,
     selectedProject,
+    selectProject,
     sprints,
+    selectedSprintId,
+    selectSprint,
     sortedSprints,
     showcaseSprints,
     execution,

@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createAgentPreset, pushAgentPresetsToRepository, updateAgentPreset } from "../agent-preset-api.js";
+import {
+  applyBaseAgentUpdate,
+  createAgentPreset,
+  fetchBaseAgentUpdateNotices,
+  pushAgentPresetsToRepository,
+  updateAgentPreset,
+} from "../agent-preset-api.js";
 import { fetchJson } from "../../../lib/api/fetch-json.js";
 
 vi.mock("../../../lib/api/fetch-json.js", () => ({
@@ -53,6 +59,40 @@ describe("createAgentPreset", () => {
       instructionMarkdown: "Install dependencies before coding.",
       containerRunAsRoot: false,
     });
+  });
+});
+
+describe("base-agent updates", () => {
+  it("fetches route-aware notices without changing the preset list contract", async () => {
+    const notices = [{
+      projectId: "project/one",
+      role: "planning_agent" as const,
+      baseAgentPresetId: "planning-base",
+      selectedAgentPresetId: "planning-custom",
+      selectedAgentName: "Product planner",
+      reason: "alternate_route" as const,
+      currentRevision: "old-revision",
+      availableRevision: "new-revision",
+    }];
+    vi.mocked(fetchJson).mockResolvedValueOnce(notices);
+
+    await expect(fetchBaseAgentUpdateNotices("project/one")).resolves.toEqual(notices);
+
+    expect(fetchJson).toHaveBeenCalledWith(
+      "/api/projects/project%2Fone/agent-presets/base-updates",
+    );
+  });
+
+  it("posts an explicit role-specific apply request", async () => {
+    const updated = { id: "manager-custom", name: "Delivery lead" };
+    vi.mocked(fetchJson).mockResolvedValueOnce(updated);
+
+    await expect(applyBaseAgentUpdate("project/one", "project_manager")).resolves.toEqual(updated);
+
+    expect(fetchJson).toHaveBeenCalledWith(
+      "/api/projects/project%2Fone/agent-presets/base-updates/project_manager/apply",
+      { method: "POST" },
+    );
   });
 });
 

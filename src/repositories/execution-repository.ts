@@ -116,6 +116,8 @@ import {
 } from "./execution/execution-pr-usage-query.js";
 import { ExecutionWallTimeQuery } from "./execution/execution-wall-time-query.js";
 import { OverviewTelemetryQuery } from "./execution/overview-telemetry-query.js";
+import { DashboardNotificationQuery } from "./execution/dashboard-notification-query.js";
+import type { DashboardNotificationFeed } from "../contracts/dashboard-notification-types.js";
 import { createUsageBuckets, createEmptyUsageTotals } from "./execution/stats-buckets.js";
 import { claimNextTaskDispatchTransaction } from "./execution/task-dispatch-claim-query.js";
 import { ExecutionLeaseStore } from "./execution/execution-lease-store.js";
@@ -262,6 +264,16 @@ function stripMarkdown(value: string): string {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+const DASHBOARD_NOTIFICATION_TASK_EVENT_TYPES = new Set([
+  "dispatch_error",
+  "dispatch_failed",
+  "cli_error",
+  "cli_workflow_failed",
+  "jules_pause_request_failed",
+  "jules_stop_request_failed",
+  "action_required_auto_failed",
+]);
 
 function cloneUsageTotals(input?: ExecutionUsageTotals | null): ExecutionUsageTotals {
   return {
@@ -1163,6 +1175,10 @@ export class ExecutionRepository {
     return new OverviewTelemetryQuery(this.db, this.storage).getOverviewTelemetrySnapshot();
   }
 
+  getDashboardNotifications(input: { limit?: number } = {}): DashboardNotificationFeed {
+    return new DashboardNotificationQuery(this.db).getDashboardNotifications(input);
+  }
+
   getHeaderTokenThroughputSnapshot(input: HeaderTokenThroughputQuery = { window: "24h" }): HeaderTokenThroughputSnapshot {
     return queryHeaderTokenThroughputSnapshot(this.db, input);
   }
@@ -1411,7 +1427,7 @@ export class ExecutionRepository {
     if (inserted) {
       if (taskRun.taskId) this.wallTimeQuery.invalidateTask(taskRun.projectId, taskRun.taskId);
       if (taskRun.sprintRunId) this.wallTimeQuery.invalidateSprintRun(taskRun.projectId, taskRun.sprintRunId);
-      this.notifyRealtime(taskRun.projectId, false);
+      this.notifyRealtime(taskRun.projectId, DASHBOARD_NOTIFICATION_TASK_EVENT_TYPES.has(eventType));
     }
     return inserted;
   }
@@ -1474,6 +1490,8 @@ export class ExecutionRepository {
     ownerKey?: string;
     leaseToken?: string;
     leaseExpiresAt?: string;
+    dispatchId?: string;
+    taskId?: string;
     sprintId?: string;
     sprintRunId?: string;
   }): ClaimedTaskDispatchRecord | null {

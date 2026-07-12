@@ -10,6 +10,8 @@ Quicksprint templates are scoped to a **project**. They are stored in the databa
 
 The dashboard surface for them is the **Quicksprint panel** on the **Sprints** page.
 
+The bundled catalog includes repository-aware **Create Web App**, **Create Desktop App**, **Create Onlineshop**, **Create Portfolio**, and **Create Game** templates. Their prompts inspect the selected repository, apply the experience guidance chosen by the create-app catalog, and produce an implementation-ready dependency DAG without assuming a generic stack.
+
 ## Anatomy of a template
 
 A template has:

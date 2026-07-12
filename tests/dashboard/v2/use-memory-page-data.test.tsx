@@ -13,6 +13,7 @@ import {
   type MemoryStats,
 } from "../../../dashboard/src/v2/lib/memory-api.js";
 import type { MemoryRecord, MemoryScope } from "../../../dashboard/src/v2/memory-types.js";
+import { fetchSkillCatalog } from "../../../dashboard/src/v2/lib/agent-preset-api.js";
 
 vi.mock("../../../dashboard/src/v2/lib/memory-api.js", () => ({
   createMemory: vi.fn(),
@@ -22,6 +23,10 @@ vi.mock("../../../dashboard/src/v2/lib/memory-api.js", () => ({
   getMemoryStats: vi.fn(),
   listEmbeddingModels: vi.fn(),
   listMemories: vi.fn(),
+}));
+
+vi.mock("../../../dashboard/src/v2/lib/agent-preset-api.js", () => ({
+  fetchSkillCatalog: vi.fn(),
 }));
 
 interface Deferred<T> {
@@ -88,6 +93,7 @@ describe("useMemoryPageData", () => {
     vi.resetAllMocks();
     vi.mocked(listEmbeddingModels).mockResolvedValue([]);
     vi.mocked(getMemoryStats).mockResolvedValue(stats);
+    vi.mocked(fetchSkillCatalog).mockResolvedValue([]);
   });
 
   it("applies only the latest request data when older memory and map responses resolve last", async () => {
@@ -173,5 +179,41 @@ describe("useMemoryPageData", () => {
       expect(result.current.loading).toBe(false);
       expect(result.current.graphData?.map?.nodes[0]?.id).toBe("latest-memory");
     });
+  });
+
+  it("loads skill descriptors into a read-only graph without requesting memory embeddings", async () => {
+    vi.mocked(fetchSkillCatalog).mockResolvedValue([{
+      id: "skill-1",
+      projectId: "project-1",
+      storageId: "storage-1",
+      storageName: "Engineering",
+      name: "Architecture Review",
+      description: "Review system boundaries.",
+      tags: ["architecture", "review"],
+      appliesTo: ["src/**"],
+      version: "1.0.0",
+      updatedAt: "2026-07-10T00:00:00.000Z",
+      contentPreview: "Inspect boundaries before implementation.",
+    }]);
+
+    const { result } = renderHook(() => useMemoryPageData(
+      "project-1",
+      "project",
+      "skills",
+      undefined,
+      "agent-1",
+    ));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(fetchSkillCatalog).toHaveBeenCalledWith("project-1", "agent-1");
+    expect(listMemories).not.toHaveBeenCalled();
+    expect(getEmbeddingMap).not.toHaveBeenCalled();
+    expect(result.current.skillCount).toBe(1);
+    expect(result.current.graphData?.graph.nodes[0]).toMatchObject({
+      id: "skill-1",
+      category: "architecture",
+      scope: "project",
+    });
+    expect(result.current.records[0]?.content).toContain("Storage: Engineering");
   });
 });

@@ -50,6 +50,7 @@ import type { TaskRerunService } from "../../services/task-rerun-service.js";
 import type { ExecutionControlService } from "../../services/execution-control-service.js";
 import type { DashboardRealtimeService } from "../../services/dashboard-realtime-service.js";
 import type { PlanningAgentService } from "../../services/planning-agent-service.js";
+import type { AgentBaseUpdateService } from "../../services/agent-base-update-service.js";
 import type { ExecutionInvocationControlService } from "../../services/execution-invocation-control-service.js";
 import type { ChatThreadRuntimeService } from "../../services/chat-thread-runtime-service.js";
 import type { ChatProviderOutboundService } from "../../services/chat-provider-outbound-service.js";
@@ -58,6 +59,8 @@ import type { ProjectSetupService } from "../../services/project-setup-service.j
 import type { SchedulerService } from "../../services/scheduler-service.js";
 import type { ChatProviderIngressService } from "../../services/chat-provider-ingress-service.js";
 import type { SpeechTranscriptionService } from "../../services/speech-transcription-service.js";
+import type { SpeechSynthesisService } from "../../services/speech-synthesis-service.js";
+import type { SpeechModelManager } from "../../services/speech-model-manager.js";
 import type { NodeFlowService } from "../../services/node-flow-service.js";
 import type { MemoryService } from "../../services/memory-service.js";
 import type { KnowledgeService } from "../../services/knowledge-service.js";
@@ -92,6 +95,7 @@ import type {
   LocalMcpInstallResult,
   LocalMcpSetupInfo,
 } from "../../services/local-mcp-cli-config-service.js";
+import type { ProjectInitializationStateService } from "../../services/project-initialization-state-service.js";
 
 const updateCheckerService = new UpdateCheckerService();
 
@@ -104,8 +108,10 @@ export interface BootDashboardDeps {
   appDbStorage: AppDbStorage;
   settingsRepository: SettingsRepository;
   projectManagementRepository: ProjectManagementRepository;
+  projectInitializationStateService: ProjectInitializationStateService;
   projectRuntimeRepository: ProjectRuntimeRepository;
   executionRepository: ExecutionRepository;
+  getDashboardNotifications?: () => ReturnType<ExecutionRepository["getDashboardNotifications"]>;
   connectionChatRepository: ConnectionChatRepository;
   chatProviderRepository: ChatProviderRepository;
   projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
@@ -121,6 +127,7 @@ export interface BootDashboardDeps {
   executionControlService: ExecutionControlService;
   executionInvocationControlService: ExecutionInvocationControlService;
   planningAgentService: PlanningAgentService;
+  agentBaseUpdateService: AgentBaseUpdateService;
   quicksprintService: QuicksprintService;
   projectSetupService: ProjectSetupService;
   schedulerService: SchedulerService;
@@ -128,6 +135,8 @@ export interface BootDashboardDeps {
   chatThreadRuntimeService: ChatThreadRuntimeService;
   chatProviderIngressService: ChatProviderIngressService;
   speechTranscriptionService: SpeechTranscriptionService;
+  speechSynthesisService: SpeechSynthesisService;
+  speechModelManager: SpeechModelManager;
   chatProviderOutboundService?: ChatProviderOutboundService;
   nodeFlowService?: NodeFlowService;
   customDashboardRepository?: CustomDashboardRepository;
@@ -155,6 +164,8 @@ export interface BootDashboardDeps {
   getSprintPreviewScript: (projectId: string, sprintId: string) => Promise<SprintPreviewScript>;
   saveSprintPreviewScript: (projectId: string, sprintId: string, content: string) => Promise<SprintPreviewScript>;
   updateSprintPreviewEnvironmentOverrides: (projectId: string, sprintId: string, sessionId: string, environmentOverrides: PreviewEnvironmentVariable[]) => Promise<SprintPreviewSession>;
+  updateSprintPreviewStartupCommandOverride: (projectId: string, sprintId: string, sessionId: string, startupCommandOverride: string | null) => Promise<SprintPreviewSession>;
+  updateSprintPreviewDockerAccessOverride: (projectId: string, sprintId: string, sessionId: string, dockerAccessOverride: boolean | null) => Promise<SprintPreviewSession>;
   getSprintPreviewLogs: (sessionId: string, tail?: number) => Promise<{ logs: string }>;
   getSprintPreviewLogsForProjectSprint: (projectId: string, sprintId: string, sessionId: string, tail?: number) => Promise<{ logs: string }>;
   proxySprintPreviewRequest: (args: {
@@ -262,7 +273,7 @@ function requireProjectAttentionItem(
 }
 
 function resetGuardrailForResolvedHumanAttention(
-  deps: Pick<BootDashboardDeps, "guardrailService" | "qaReviewRepository" | "logger">,
+  deps: Pick<BootDashboardDeps, "guardrailService" | "projectManagementRepository" | "qaReviewRepository" | "logger">,
   item: NonNullable<ReturnType<ProjectAttentionRepository["getAttentionItem"]>>,
 ): void {
   if (
@@ -297,6 +308,14 @@ function resetGuardrailForResolvedHumanAttention(
   if (sourceAttentionType === "qa_review" || isQaReviewHumanEscalation(item)) {
     const clearedRuns = deps.qaReviewRepository.resetTaskReviewRuns(item.taskId);
     deps.guardrailService.resetPurpose(item.taskId, "qa_review");
+    const task = deps.projectManagementRepository.getTask(item.taskId);
+    const requeuedForQa = task?.status === "QA_REVIEW_FAILED";
+    if (requeuedForQa) {
+      deps.projectManagementRepository.updateTask(item.taskId, {
+        status: "coding_completed",
+        mergeIndicator: null,
+      });
+    }
     deps.logger.info("Reset QA review budget after human attention resolution", {
       projectId: item.projectId,
       sprintId: item.sprintId,
@@ -304,6 +323,7 @@ function resetGuardrailForResolvedHumanAttention(
       taskId: item.taskId,
       attentionItemId: item.id,
       clearedRuns,
+      requeuedForQa,
     });
     return;
   }
@@ -471,6 +491,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     chatProviderRepository: deps.chatProviderRepository,
     chatProviderIngressService: deps.chatProviderIngressService,
     speechTranscriptionService: deps.speechTranscriptionService,
+    speechSynthesisService: deps.speechSynthesisService,
+    speechModelManager: deps.speechModelManager,
     nodeFlowService: deps.nodeFlowService,
     customDashboardRepository: deps.customDashboardRepository,
     customDashboardValidationService: deps.customDashboardValidationService,
@@ -502,6 +524,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
         };
     },
     getOverviewTelemetrySnapshot: cache.getOverviewTelemetrySnapshot,
+    getDashboardNotifications: deps.getDashboardNotifications
+      ?? (() => deps.executionRepository.getDashboardNotifications()),
     // `/api/projects/:id/execution` is the public REST snapshot and includes
     // recent events/invocations; realtime execution pushes stay feed-less above.
     getProjectExecutionSnapshot: cache.getProjectExecutionSnapshot,
@@ -657,6 +681,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
       }),
     ),
     getProject: (projectId) => deps.projectManagementRepository.getProject(projectId),
+    getProjectInitializationState: (projectId) => deps.projectInitializationStateService.getProjectInitializationState(projectId),
     updateProject: (projectId, input) => deps.projectManagementRepository.updateProject(projectId, input),
     deleteProject: (projectId) => deps.projectManagementRepository.deleteProject(projectId),
     selectProject: (projectId) => {
@@ -733,6 +758,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     createAgentPreset: async (projectId, input) => await deps.agentPresetSyncService.createAgentPreset(projectId, input),
     updateAgentPreset: async (agentPresetId, input) => await deps.agentPresetSyncService.updateAgentPreset(agentPresetId, input),
     deleteAgentPreset: async (agentPresetId) => await deps.agentPresetSyncService.deleteAgentPreset(agentPresetId),
+    listBaseAgentUpdateNotices: async (projectId) => await deps.agentBaseUpdateService.listUpdates(projectId),
+    applyBaseAgentUpdate: async (projectId, role) => await deps.agentBaseUpdateService.applyUpdate(projectId, role),
     importAgentPresetFromMarkdown: async (agentPresetId) => await deps.agentPresetSyncService.importAgentPresetFromMarkdown(agentPresetId),
     syncAllAgentPresetsFromMarkdown: async (projectId) => await deps.agentPresetSyncService.syncAllAgentPresetsFromMarkdown(projectId),
     pullAgentPresetsFromMarkdown: async (projectId) => await deps.agentPresetSyncService.pullAgentPresetsFromMarkdown(projectId),
@@ -854,6 +881,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     getSprintPreviewScript: deps.getSprintPreviewScript,
     saveSprintPreviewScript: deps.saveSprintPreviewScript,
     updateSprintPreviewEnvironmentOverrides: deps.updateSprintPreviewEnvironmentOverrides,
+    updateSprintPreviewStartupCommandOverride: deps.updateSprintPreviewStartupCommandOverride,
+    updateSprintPreviewDockerAccessOverride: deps.updateSprintPreviewDockerAccessOverride,
     getSprintPreviewLogs: deps.getSprintPreviewLogs,
     getSprintPreviewLogsForProjectSprint: deps.getSprintPreviewLogsForProjectSprint,
     proxySprintPreviewRequest: deps.proxySprintPreviewRequest,

@@ -86,6 +86,7 @@ import type {
   PlanningOverrides,
   PlanSprintOptions,
   ProjectCollectionResponse,
+  ProjectInitializationState,
   ProjectSetupOptions,
   ProjectSetupRequestInput,
   ProjectSetupResult,
@@ -199,6 +200,8 @@ import type {
   ExternalTranscriptionSettings,
   SpeechProviderMode,
   SpeechSettings,
+  SpeechModelStatus,
+  SpeechModelVoice,
   SpeechTranscriptionError,
   SpeechTranscriptionErrorCode,
   SpeechTranscriptionProvider,
@@ -214,7 +217,12 @@ export interface SegmentDefinition {
 }
 
 export type SourceStatus = ProjectStatus;
-export type Source = ProjectSummary;
+// Keep dashboard project fixtures compatible with responses from before the
+// initialization provenance field was introduced. Runtime project responses
+// still include the field, while presentation-only consumers do not depend on it.
+export type Source = Omit<ProjectSummary, "initializationMode"> & {
+  initializationMode?: ProjectSummary["initializationMode"];
+};
 export type AgentConnection = McpConnectionRecord;
 export type AgentPreset = AgentPresetRecord;
 export type ChatThread = ConversationThreadRecord;
@@ -360,6 +368,7 @@ export type {
   PullInboxInput,
   RecordConversationMessageHistoryInput,
   ProjectCollectionResponse,
+  ProjectInitializationState,
   ProjectSetupOptions,
   ProjectSetupRequestInput,
   ProjectSetupResult,
@@ -454,6 +463,8 @@ export type {
   ExternalTranscriptionSettings,
   SpeechProviderMode,
   SpeechSettings,
+  SpeechModelStatus,
+  SpeechModelVoice,
   SpeechTranscriptionError,
   SpeechTranscriptionErrorCode,
   SpeechTranscriptionProvider,

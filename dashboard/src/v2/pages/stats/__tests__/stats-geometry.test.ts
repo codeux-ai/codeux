@@ -93,6 +93,14 @@ describe("stats-geometry", () => {
       expect(path).toContain("A");
       expect(path).toContain("Z");
     });
+
+    it("splits a full ring into two drawable arcs per edge", () => {
+      const path = buildDonutArcPath(120, 120, 104, 58, -90, 270);
+
+      expect(path.match(/\bA\b/g)).toHaveLength(4);
+      expect(path).toContain("A 104 104 0 0 1");
+      expect(path).toContain("A 58 58 0 0 0");
+    });
   });
 
   describe("buildDonutSlices", () => {
@@ -109,6 +117,26 @@ describe("stats-geometry", () => {
       expect(slices.length).toBe(2);
       expect(slices[0]!.share).toBe(25);
       expect(slices[1]!.share).toBe(75);
+    });
+
+    it("keeps a near-total provider share visible beside a tiny slice", () => {
+      const slices = buildDonutSlices([
+        { label: "Dominant", value: 407_000_000, color: "#f00" } as any,
+        { label: "Tiny", value: 2_400, color: "#0f0" } as any,
+      ]);
+
+      expect(slices[0]!.share).toBeGreaterThan(99.999);
+      expect(slices[0]!.path.match(/\bA\b/g)).toHaveLength(4);
+      expect(slices[1]!.path.match(/\bA\b/g)).toHaveLength(2);
+    });
+
+    it("draws a single-segment donut as a complete ring", () => {
+      const [slice] = buildDonutSlices([
+        { label: "Only provider", value: 407_000_000, color: "#f00" } as any,
+      ]);
+
+      expect(slice?.share).toBe(100);
+      expect(slice?.path.match(/\bA\b/g)).toHaveLength(4);
     });
   });
 });

@@ -6,6 +6,7 @@ import { NoticePanel } from "../SettingsSurface.js";
 import { NumberInput, PillChoiceGroup, ProviderLogo, Row, SelectInput, Toggle } from "../SettingsFormFields.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
 import { SettingsModelPricingPanel } from "./SettingsModelPricingPanel.js";
+import { AIModelCatalogPanel } from "./AIModelCatalogPanel.js";
 import { ProviderBrandIcon } from "../../providers/ProviderBrandIcon.js";
 import type {
   InvocationRoutingId,
@@ -392,8 +393,8 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
   const enabledProviderCount = providerEntries.filter(([, provider]) => provider.enabled).length;
 
   return (
-    <div className="flex flex-col gap-5">
-      <section className="relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      <section data-settings-overview-only className="relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl xl:col-span-2 dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
         <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent" />
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div>
@@ -454,7 +455,20 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
         </div>
       </section>
 
-      <SectionCard title="Default Routing Anchors" watermark="DEF" badge={getBadge("aiProvider", "workers")} icon={<Anchor strokeWidth={2.4} />}>
+      <AIModelCatalogPanel state={state} />
+
+      <SectionCard
+        title="Default Routing Anchors"
+        watermark="DEF"
+        badge={getBadge("aiProvider", "workers")}
+        icon={<Anchor strokeWidth={2.4} />}
+        accent="indigo"
+        highlights={[
+          { label: "Global", value: globalProviderSettings ? getProviderInstanceLabel(globalProviderSettings) : "None", tone: "active" },
+          { label: "Worker", value: workerProviderSettings ? getProviderInstanceLabel(workerProviderSettings) : "None" },
+          { label: "Concurrency", value: `${editableSettings.workers.maxConcurrency} workers` },
+        ]}
+      >
         {providerEntries.length === 0 ? (
           <NoticePanel title="No provider credentials">
             Add provider credentials in Integrations before configuring AI routes.
@@ -544,7 +558,18 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
         </Row>
       </SectionCard>
 
-      <SectionCard title="Base Provider Configuration" watermark="BASE" badge={getBadge("aiProvider.providers")} icon={<Layers strokeWidth={2.4} />}>
+      <SectionCard
+        title="Base Provider Configuration"
+        watermark="BASE"
+        badge={getBadge("aiProvider.providers")}
+        icon={<Layers strokeWidth={2.4} />}
+        accent="blue"
+        highlights={[
+          { label: "Instances", value: providerEntries.length },
+          { label: "Eligible", value: enabledProviderCount, tone: enabledProviderCount > 0 ? "active" : "warning" },
+          { label: "Paused", value: providerEntries.length - enabledProviderCount },
+        ]}
+      >
         <div className="mb-4 rounded-[1.25rem] border border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
           These values are the inheritance baseline for every route. Route mapping owns manual, weighted, or agent-based selection; this section defines each provider instance’s default model, reasoning depth, weight, and capacity.
         </div>
@@ -654,7 +679,18 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
         </div>
       </SectionCard>
 
-      <SectionCard title="Route Mapping" watermark="MAP" badge={getBadge("aiProvider.invocationRouting")} icon={<GitBranch strokeWidth={2.4} />}>
+      <SectionCard
+        title="Route Mapping"
+        watermark="MAP"
+        badge={getBadge("aiProvider.invocationRouting")}
+        icon={<GitBranch strokeWidth={2.4} />}
+        accent="indigo"
+        highlights={[
+          { label: "Selected route", value: activeRouteDefinition.label, tone: "active" },
+          { label: "Strategy", value: activeRoute.strategy.toLowerCase() },
+          { label: "Provider pool", value: `${routePool.length} active` },
+        ]}
+      >
         <div className="grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
           <div className="rounded-[1.6rem] border border-black/[0.06] bg-[linear-gradient(180deg,rgba(15,23,42,0.028),rgba(15,23,42,0.012))] p-3 dark:border-white/[0.06] dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.02))]">
             <div className="mb-3 px-2.5 pt-1">

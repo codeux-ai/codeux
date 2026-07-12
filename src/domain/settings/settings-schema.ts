@@ -39,6 +39,7 @@ import {
   RUNTIME_LOG_LEVELS,
   EXTERNAL_IMPORTER_PROVIDERS,
   DASHBOARD_EXPERIENCE_MODES,
+  DASHBOARD_ACCENT_COLORS,
   GUARDRAIL_JOB_TYPES,
   GUARDRAIL_ON_LIMIT_ACTIONS,
   QA_EXHAUSTION_POLICIES,
@@ -76,6 +77,7 @@ const isValidPort = (value: unknown): value is number => (
 );
 
 const DASHBOARD_EXPERIENCE_MODE_SET = new Set<DashboardExperienceMode>(DASHBOARD_EXPERIENCE_MODES);
+const DASHBOARD_ACCENT_COLOR_SET = new Set(DASHBOARD_ACCENT_COLORS);
 
 const validateAppearanceSettings = (
   value: unknown,
@@ -91,6 +93,15 @@ const validateAppearanceSettings = (
     || !DASHBOARD_EXPERIENCE_MODE_SET.has(value.experienceMode as DashboardExperienceMode)
   ) {
     issues.push({ path: `${path}.experienceMode`, message: `Expected one of: ${DASHBOARD_EXPERIENCE_MODES.join(", ")}` });
+  }
+  if (
+    value.accentColor !== undefined
+    && (
+      typeof value.accentColor !== "string"
+      || !DASHBOARD_ACCENT_COLOR_SET.has(value.accentColor as (typeof DASHBOARD_ACCENT_COLORS)[number])
+    )
+  ) {
+    issues.push({ path: `${path}.accentColor`, message: `Expected one of: ${DASHBOARD_ACCENT_COLORS.join(", ")}` });
   }
 };
 
@@ -622,6 +633,10 @@ const validateSprintPreview = (
       issues.push({ path: `${path}.startupScriptPath`, message: "Expected a safe relative path without traversal or environment variables" });
     }
   }
+  if (typeof value.startupCommand !== "string" || value.startupCommand.length > 8_192 || value.startupCommand.includes("\0")) {
+    issues.push({ path: `${path}.startupCommand`, message: "Expected a command string no longer than 8192 characters without null bytes" });
+  }
+  if (typeof value.allowDockerAccess !== "boolean") issues.push({ path: `${path}.allowDockerAccess`, message: "Expected a boolean" });
 };
 
 const validateDesignGuidanceEntry = (
@@ -1001,6 +1016,13 @@ const validateSpeech = (
     issues.push({ path: `${path}.localModelId`, message: "Expected a non-empty string" });
   }
   if (
+    value.localLanguage !== undefined
+    && value.localLanguage !== null
+    && typeof value.localLanguage !== "string"
+  ) {
+    issues.push({ path: `${path}.localLanguage`, message: "Expected null or a string" });
+  }
+  if (
     typeof value.maxAudioSeconds !== "number"
     || !Number.isFinite(value.maxAudioSeconds)
     || value.maxAudioSeconds < 1
@@ -1027,6 +1049,51 @@ const validateSpeech = (
     && typeof value.externalTranscription.language !== "string"
   ) {
     issues.push({ path: `${path}.externalTranscription.language`, message: "Expected null or a string" });
+  }
+  // Older persisted/project payloads predate TTS. Sanitization supplies the
+  // current synthesis defaults before runtime use, while explicitly supplied
+  // synthesis settings remain strictly validated.
+  if (value.synthesis === undefined) {
+    return;
+  }
+  if (!isRecord(value.synthesis)) {
+    issues.push({ path: `${path}.synthesis`, message: "Expected an object" });
+    return;
+  }
+  if (typeof value.synthesis.enabled !== "boolean") {
+    issues.push({ path: `${path}.synthesis.enabled`, message: "Expected a boolean" });
+  }
+  if (typeof value.synthesis.providerMode !== "string" || !SPEECH_PROVIDER_MODES.includes(value.synthesis.providerMode as SpeechProviderMode)) {
+    issues.push({ path: `${path}.synthesis.providerMode`, message: `Expected one of: ${SPEECH_PROVIDER_MODES.join(", ")}` });
+  }
+  if (typeof value.synthesis.localModelId !== "string" || value.synthesis.localModelId.trim().length === 0) {
+    issues.push({ path: `${path}.synthesis.localModelId`, message: "Expected a non-empty string" });
+  }
+  if (typeof value.synthesis.voice !== "string" || value.synthesis.voice.trim().length === 0) {
+    issues.push({ path: `${path}.synthesis.voice`, message: "Expected a non-empty string" });
+  }
+  if (typeof value.synthesis.speed !== "number" || !Number.isFinite(value.synthesis.speed) || value.synthesis.speed < 0.5 || value.synthesis.speed > 2) {
+    issues.push({ path: `${path}.synthesis.speed`, message: "Expected a finite number between 0.5 and 2" });
+  }
+  if (!isRecord(value.synthesis.externalSynthesis)) {
+    issues.push({ path: `${path}.synthesis.externalSynthesis`, message: "Expected an object" });
+    return;
+  }
+  const externalSynthesis = value.synthesis.externalSynthesis;
+  if (typeof externalSynthesis.baseUrl !== "string" || externalSynthesis.baseUrl.trim().length === 0) {
+    issues.push({ path: `${path}.synthesis.externalSynthesis.baseUrl`, message: "Expected a non-empty string" });
+  }
+  if (typeof externalSynthesis.apiKey !== "string") {
+    issues.push({ path: `${path}.synthesis.externalSynthesis.apiKey`, message: "Expected a string" });
+  }
+  if (typeof externalSynthesis.model !== "string" || externalSynthesis.model.trim().length === 0) {
+    issues.push({ path: `${path}.synthesis.externalSynthesis.model`, message: "Expected a non-empty string" });
+  }
+  if (typeof externalSynthesis.voice !== "string" || externalSynthesis.voice.trim().length === 0) {
+    issues.push({ path: `${path}.synthesis.externalSynthesis.voice`, message: "Expected a non-empty string" });
+  }
+  if (typeof externalSynthesis.format !== "string" || !["mp3", "wav", "opus", "aac", "flac"].includes(externalSynthesis.format)) {
+    issues.push({ path: `${path}.synthesis.externalSynthesis.format`, message: "Expected one of: mp3, wav, opus, aac, flac" });
   }
 };
 
@@ -1101,5 +1168,16 @@ export const validateSettingsPayload = (payload: unknown): ValidationResult<Dash
     return { success: false, issues };
   }
 
-  return { success: true, issues: [], data: payload as unknown as DashboardSettings };
+  const appearance = payload.appearance as Record<string, unknown>;
+  return {
+    success: true,
+    issues: [],
+    data: {
+      ...payload,
+      appearance: {
+        ...appearance,
+        accentColor: appearance.accentColor ?? "CODEUX",
+      },
+    } as unknown as DashboardSettings,
+  };
 };

@@ -23,6 +23,10 @@ import { BorderTrace } from "../ui/BorderTrace.js";
 import { HumanInterventionBadge } from "../ui/HumanInterventionBadge.js";
 import { SprintReviewBadge } from "./SprintReviewBadge.js";
 import { SprintActionMenu } from "./SprintActionMenu.js";
+import {
+  resolveSprintAttentionIndicatorState,
+  SprintAttentionIndicator,
+} from "./SprintAttentionIndicator.js";
 import { DropdownMenu } from "../ui/DropdownMenu.js";
 import { getSprintStatusPresentation } from "../../lib/sprint-status-presentation.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
@@ -30,6 +34,7 @@ import { MOTION_TOKENS, useInteractionTokens } from "../../lib/motion/tokens.js"
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { computeSprintActionMenuPosition } from "../../lib/sprint-menu-positioning.js";
 import { ORGANIC_CELL_SHADOW_CLASS } from "../ui/organic-cell-styles.js";
+import { formatSprintCompletion } from "../../lib/sprint-progress-display.js";
 
 const CARD_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -157,7 +162,13 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
 
   const isCompleted = sprint.status === "completed";
   const isRunning = sprint.status === "running";
+  const completionLabel = formatSprintCompletion(sprint.completion);
   const showInterventionBadge = Boolean(humanIntervention) && statusPresentation.showHumanInterventionBadge;
+  const attentionIndicatorState = resolveSprintAttentionIndicatorState({
+    sprintStatus: sprint.status,
+    statusPresentation,
+    humanIntervention,
+  });
   const animationClass = isCompleted ? "" : isEven ? "animate-organic" : "animate-organic-reverse";
   const controlFeedbackStyle = {
     transitionDuration: interactionTokens.controlFeedback.duration,
@@ -214,6 +225,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   return (
     <div
       ref={bubbleRef}
+      data-sprint-attention={attentionIndicatorState?.kind}
       onMouseEnter={handleHoverEnter}
       onMouseLeave={handleHoverLeave}
       className="group relative flex h-72 w-72 shrink-0 cursor-pointer items-center justify-center perspective-1000 transition-transform duration-150 [@media(hover:hover)]:hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:transform-none lg:h-80 lg:w-80"
@@ -237,6 +249,14 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
           <BorderTrace accentHex={state.accentHex} />
         </div>
       </div>
+
+      {attentionIndicatorState && (
+        <div
+          data-sprint-attention-border
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-[11] rounded-[1.75rem] border-2 border-status-red/70 shadow-[0_0_28px_rgba(227,0,15,0.24),inset_0_0_18px_rgba(227,0,15,0.08)] motion-reduce:shadow-none"
+        />
+      )}
 
       {state.ring && !isCompleted && (
         <div
@@ -282,7 +302,14 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
       )}
 
       <div className="relative z-20 flex h-full w-full flex-col items-center justify-center p-8 text-center">
-        <div className={`absolute top-5 flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:opacity-100 ${effectiveTextTone}`} style={controlFeedbackStyle}>
+        {attentionIndicatorState && (
+          <SprintAttentionIndicator
+            state={attentionIndicatorState}
+            className="absolute left-1/2 top-4 -translate-x-1/2"
+          />
+        )}
+
+        <div className={`absolute ${attentionIndicatorState ? "top-14" : "top-5"} flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:opacity-100 ${effectiveTextTone}`} style={controlFeedbackStyle}>
           <StatusIcon className={`h-3.5 w-3.5 ${isRunning ? "animate-pulse motion-reduce:animate-none" : ""}`} strokeWidth={2.5} />
           <span className="text-[10px] font-bold uppercase tracking-[0.14em]">{effectiveLabel}</span>
         </div>
@@ -327,7 +354,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
           </div>
           <div className="h-10 w-px bg-black/[0.08] dark:bg-white/[0.08]" />
           <div className="flex flex-col items-center">
-            <div className="font-mono text-2xl font-semibold text-[var(--text-primary)]">{sprint.completion}%</div>
+            <div className="font-mono text-2xl font-semibold text-[var(--text-primary)]">{completionLabel}</div>
             <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Done</div>
           </div>
         </div>

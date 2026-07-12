@@ -26,6 +26,7 @@ vi.mock("../../../dashboard/src/v2/lib/project-api.js", () => ({
 }));
 vi.mock("../../../dashboard/src/v2/lib/agent-preset-api.js", () => ({
     fetchAgentPresets: vi.fn().mockResolvedValue([]),
+    fetchSkillCatalog: vi.fn().mockResolvedValue([]),
 }));
 vi.mock("../../../dashboard/src/v2/lib/api/fetch-json.js", () => ({
     fetchJson: vi.fn()
@@ -292,7 +293,7 @@ describe("MemoryPage destructive mode", () => {
             expect(screen.getByText("Long Term: showing 1 memory of 1 memory · Project-wide · All Agents")).toBeInTheDocument();
         });
         expect(screen.getByRole("group", { name: "Memory scope filters" })).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "Show embedding model catalog" })).toHaveAccessibleDescription("No active model");
+        expect(screen.queryByRole("button", { name: /embedding model catalog/i })).not.toBeInTheDocument();
 
         await userEvent.click(screen.getByRole("button", { name: "Enable danger delete mode" }));
 

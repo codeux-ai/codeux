@@ -20,6 +20,7 @@ interface UseSprintsResult {
 interface SprintResourceState {
   cache: Map<string, SprintCollectionResponse>;
   inflightRequests: Map<string, Promise<SprintCollectionResponse>>;
+  selectionVersions: Map<string, number>;
 }
 
 const sprintResourceState = ((globalThis as typeof globalThis & {
@@ -27,7 +28,12 @@ const sprintResourceState = ((globalThis as typeof globalThis & {
 }).__CODE_UX_SPRINT_RESOURCE_STATE__ ||= {
   cache: new Map<string, SprintCollectionResponse>(),
   inflightRequests: new Map<string, Promise<SprintCollectionResponse>>(),
+  selectionVersions: new Map<string, number>(),
 });
+
+// Preserve compatibility with an already-created hot-reload singleton from an
+// older dashboard bundle that did not yet carry selection versions.
+sprintResourceState.selectionVersions ||= new Map<string, number>();
 
 const areNullableSprintCollectionsEqual = (
   prev: SprintCollectionResponse | null,
@@ -50,6 +56,8 @@ const stabilizeSprintCollection = (
 );
 
 export function useSprints(projectId: string | null): UseSprintsResult {
+  const activeProjectIdRef = useRef(projectId);
+  activeProjectIdRef.current = projectId;
   const cachedCollection = projectId ? sprintResourceState.cache.get(projectId) || null : null;
   const projectCacheEntryRef = useRef<{ projectId: string | null; hadInitialCache: boolean }>({
     projectId: null,
@@ -108,8 +116,15 @@ export function useSprints(projectId: string | null): UseSprintsResult {
     stabilizeNext: stabilizeSprintCollection,
     realtime: projectId ? {
       scopes: [`project:${projectId}`],
-      eventType: "project.structure.updated",
-      updateDirectlyFromEvent: false, // Refetch to allow cache populating
+      shouldRefetch: (message) => {
+        if (message.type === "snapshot_required") {
+          return true;
+        }
+        return message.type === "event" && (
+          message.event.eventType === "project.structure.updated"
+          || message.event.eventType === "project.execution.updated"
+        );
+      },
     } : undefined,
     pollIntervalMs: projectId ? 15000 : 0,
     isAlreadyLoaded: projectCacheEntryRef.current.hadInitialCache || !projectId,
@@ -118,12 +133,31 @@ export function useSprints(projectId: string | null): UseSprintsResult {
 
   const selectSprint = useCallback(async (sprintId: string | null) => {
     if (!projectId) return;
+    const selectionVersion = (sprintResourceState.selectionVersions.get(projectId) ?? 0) + 1;
+    sprintResourceState.selectionVersions.set(projectId, selectionVersion);
     try {
       const nextSelectedSprintId = await apiSelectSprint(projectId, sprintId);
+      if (sprintResourceState.selectionVersions.get(projectId) !== selectionVersion) {
+        return;
+      }
+
+      const cached = sprintResourceState.cache.get(projectId);
+      if (!cached || cached.selectedSprintId !== nextSelectedSprintId) {
+        invalidateLivePayloadCache(projectId);
+      }
+      if (cached) {
+        sprintResourceState.cache.set(projectId, {
+          ...cached,
+          selectedSprintId: nextSelectedSprintId,
+        });
+      }
+
+      if (activeProjectIdRef.current !== projectId) {
+        return;
+      }
       updateDataLocally((current) => {
-        if (!current) return current;
-        if (current.selectedSprintId !== nextSelectedSprintId) {
-          invalidateLivePayloadCache(projectId);
+        if (!current || activeProjectIdRef.current !== projectId) {
+          return current;
         }
         const nextCollection = { ...current, selectedSprintId: nextSelectedSprintId };
         sprintResourceState.cache.set(projectId, nextCollection);
@@ -139,14 +173,23 @@ export function useSprints(projectId: string | null): UseSprintsResult {
     try {
       const created = await apiCreateSprint(projectId, input);
       invalidateLivePayloadCache(projectId);
+      const appendCreatedSprint = (current: SprintCollectionResponse): SprintCollectionResponse => ({
+        ...current,
+        sprints: current.sprints.some((sprint) => sprint.id === created.id)
+          ? current.sprints.map((sprint) => sprint.id === created.id ? created : sprint)
+          : [...current.sprints, created],
+      });
+      const cached = sprintResourceState.cache.get(projectId);
+      if (cached) {
+        sprintResourceState.cache.set(projectId, appendCreatedSprint(cached));
+      }
+
+      if (activeProjectIdRef.current !== projectId) {
+        return toSprintViewModel(created);
+      }
       updateDataLocally((current) => {
-        if (!current) return current;
-        const nextCollection = {
-          ...current,
-          sprints: current.sprints.some((sprint) => sprint.id === created.id)
-            ? current.sprints.map((sprint) => sprint.id === created.id ? created : sprint)
-            : [...current.sprints, created],
-        };
+        if (!current || activeProjectIdRef.current !== projectId) return current;
+        const nextCollection = appendCreatedSprint(current);
         sprintResourceState.cache.set(projectId, nextCollection);
         return nextCollection;
       });

@@ -64,6 +64,8 @@ export interface FocusTrapOptions {
   onClose?: () => void;
   initialFocusRef?: { current: HTMLElement | null };
   restoreFocus?: boolean;
+  /** Temporarily yield keyboard handling without losing the original opener. */
+  paused?: boolean;
 }
 
 export function useFocusTrap(
@@ -77,12 +79,17 @@ export function useFocusTrap(
     ? { onClose: optionsOrOnClose }
     : (optionsOrOnClose || {});
 
-  const { onClose, initialFocusRef, restoreFocus = true } = options;
+  const { onClose, initialFocusRef, restoreFocus = true, paused = false } = options;
   const onCloseRef = useRef(onClose);
+  const pausedRef = useRef(paused);
 
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
+
+  useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
 
   useEffect(() => {
     if (!active) return;
@@ -111,7 +118,9 @@ export function useFocusTrap(
     }, 50);
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (pausedRef.current) return;
       if (event.key === "Escape") {
+        if (event.defaultPrevented) return;
         event.preventDefault();
         event.stopPropagation();
         onCloseRef.current?.();

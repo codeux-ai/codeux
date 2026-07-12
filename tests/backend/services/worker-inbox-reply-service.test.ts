@@ -1,3 +1,6 @@
+import * as fs from "fs/promises";
+import * as os from "os";
+import * as path from "path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkerInboxReplyService } from "../../../src/services/worker-inbox-reply-service.js";
 
@@ -24,6 +27,14 @@ describe("WorkerInboxReplyService", () => {
       githubMode: "REMOTE",
       defaultBranch: "dev",
     },
+    cliWorkflow: {
+      executionMode: "DOCKER",
+    },
+    googleDrive: {
+      enabled: false,
+      hostPath: "",
+      accessMode: "read-only",
+    },
   } as any;
   const geminiRoute = {
     provider: "gemini",
@@ -31,6 +42,63 @@ describe("WorkerInboxReplyService", () => {
     enabledProviders: ["gemini"],
     strategy: "MANUAL",
     manualProvider: "gemini",
+  };
+
+  const createDirectReplyService = (options: {
+    repoPath: string;
+    scopedSettings: typeof settings;
+    executionId: string;
+    persistentSkillRuntime?: { instructionMarkdown: string; mounts: unknown[] };
+  }): { service: WorkerInboxReplyService; appendMessage: ReturnType<typeof vi.fn> } => {
+    const appendMessage = vi.fn();
+    const service = new WorkerInboxReplyService({
+      projectManagementRepository: {
+        getProject: vi.fn().mockReturnValue({ id: "project-1", name: "Test Project", baseDir: options.repoPath }),
+      } as any,
+      connectionChatRepository: {
+        getThread: vi.fn().mockReturnValue({ id: "thread-1", title: "Drive", runtimeState: null }),
+        listMessages: vi.fn().mockReturnValue([]),
+      } as any,
+      taskService: { resolveInvocationProvider: vi.fn().mockReturnValue(geminiRoute) } as any,
+      agentPresetSyncService: {
+        resolveDashboardReplyAgent: vi.fn().mockResolvedValue({
+          id: "reply-agent",
+          instructionMarkdown: "Answer directly.",
+          mcpAccess: { codeUxEnabled: false, codeUxToolToggles: [], linkedServerIds: [] },
+        }),
+        getProjectManagerAgent: vi.fn().mockResolvedValue({
+          id: "project-manager",
+          instructionMarkdown: "Answer clarifications directly.",
+        }),
+      } as any,
+      executionRepository: {
+        createExecutionInvocation: vi.fn().mockReturnValue({ id: options.executionId }),
+        appendExecutionInvocationMessage: appendMessage,
+        updateExecutionInvocation: vi.fn(),
+        updateProviderInvocationUsage: vi.fn(),
+      } as any,
+      getDashboardSettings: () => options.scopedSettings,
+      getGithubToken: () => undefined,
+      providerRunner: { runProviderForText: mockRunProviderForText } as any,
+      providerConcurrencyService: {
+        waitForSlotAndClaim: vi.fn().mockImplementation((p, l, input) => ({ ...input, id: "inv-drive" })),
+      } as any,
+      agentPresetRepository: options.persistentSkillRuntime ? {
+        getAgentPreset: vi.fn().mockReturnValue({
+          id: "reply-agent",
+          projectId: "project-1",
+          persistentSkillStorage: { enabled: true },
+        }),
+      } as any : undefined,
+      skillService: options.persistentSkillRuntime ? {
+        resolvePersistentSkillStorageRuntime: vi.fn().mockResolvedValue({
+          projectId: "project-1",
+          agentPresetId: "reply-agent",
+          ...options.persistentSkillRuntime,
+        }),
+      } as any : undefined,
+    });
+    return { service, appendMessage };
   };
 
   beforeEach(() => {
@@ -241,6 +309,7 @@ describe("WorkerInboxReplyService", () => {
       storageName: "Reply Skills",
       hostPath: "/home/test/.code-ux/persistent-skill-storages/project-1/reply-agent/reply-skills",
       containerPath: "/code-ux/persistent-skills/reply-skills",
+      revision: "0123456789abcdef0123456789abcdef01234567",
     }];
     const executionRepository = {
       createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-skills" }),
@@ -544,6 +613,140 @@ describe("WorkerInboxReplyService", () => {
     });
   });
 
+  it("passes a valid read-only Drive mount to dashboard replies with duplicate-safe persistent-skill prompts", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-inbox-drive-"));
+    const drivePath = path.join(repoPath, "linked-drive");
+    await fs.mkdir(drivePath);
+    mockRunProviderForText.mockResolvedValue({ text: "Drive context applied." });
+    const mounts = [{
+      storageId: "reply-skills",
+      storageName: "Reply Skills",
+      hostPath: path.join(repoPath, "skills"),
+      containerPath: "/code-ux/persistent-skills/reply-skills",
+      revision: "0123456789abcdef0123456789abcdef01234567",
+    }];
+    const scopedSettings = {
+      ...settings,
+      agents: { routing: { dashboardReply: { agentPresetId: "reply-agent" } } },
+      googleDrive: { enabled: true, hostPath: "linked-drive", accessMode: "read-only" },
+    } as any;
+    const { service, appendMessage } = createDirectReplyService({
+      repoPath,
+      scopedSettings,
+      executionId: "exec-drive-reply",
+      persistentSkillRuntime: {
+        instructionMarkdown: "## PERSISTENT SKILL STORAGE (Opt-in)\nUse saved practices.",
+        mounts,
+      },
+    });
+
+    try {
+      await service.generateReply({
+        projectId: "project-1",
+        threadId: "thread-1",
+        bodyMarkdown: [
+          "Use the linked files.",
+          "",
+          "## LINKED GOOGLE DRIVE",
+          "A linked Google Drive directory is available at `/mnt/code-ux/google-drive` with read-only access.",
+        ].join("\n"),
+      });
+
+      const providerInput = mockRunProviderForText.mock.calls[0]![0];
+      expect(providerInput.googleDriveMount).toEqual({
+        source: drivePath,
+        destination: "/mnt/code-ux/google-drive",
+        readonly: true,
+      });
+      expect(providerInput.prompt.match(/## LINKED GOOGLE DRIVE/g)).toHaveLength(1);
+      expect(providerInput.prompt).toContain("read-only access");
+      expect(providerInput.prompt.match(/## PERSISTENT SKILL STORAGE/g)).toHaveLength(1);
+      expect(providerInput.persistentSkillStorageMounts).toEqual(mounts);
+      expect(appendMessage).toHaveBeenCalledWith("exec-drive-reply", {
+        role: "user",
+        contentMarkdown: expect.stringMatching(/## LINKED GOOGLE DRIVE/),
+      });
+      const persistedPrompt = appendMessage.mock.calls.find((call) => call[1]?.role === "user")?.[1].contentMarkdown;
+      expect(providerInput.prompt.endsWith(persistedPrompt)).toBe(true);
+    } finally {
+      await fs.rm(repoPath, { recursive: true, force: true });
+    }
+  });
+
+  it("passes a valid read-write Drive mount and one notice to compact-thread runs", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-compact-drive-"));
+    const drivePath = path.join(repoPath, "drive");
+    await fs.mkdir(drivePath);
+    mockRunProviderForText.mockResolvedValue({ text: "## Current Objective\nCompact summary" });
+    const scopedSettings = {
+      ...settings,
+      googleDrive: { enabled: true, hostPath: drivePath, accessMode: "read-write" },
+    } as any;
+    const { service, appendMessage } = createDirectReplyService({
+      repoPath,
+      scopedSettings,
+      executionId: "exec-drive-compact",
+    });
+
+    try {
+      await service.generateReply({
+        projectId: "project-1",
+        threadId: "thread-1",
+        bodyMarkdown: "Compact this thread.",
+        mode: "compact_thread",
+      });
+
+      const providerInput = mockRunProviderForText.mock.calls[0]![0];
+      expect(providerInput.googleDriveMount).toEqual({
+        source: drivePath,
+        destination: "/mnt/code-ux/google-drive",
+        readonly: false,
+      });
+      expect(providerInput.prompt.match(/## LINKED GOOGLE DRIVE/g)).toHaveLength(1);
+      expect(providerInput.prompt).toContain("read-write access");
+      expect(appendMessage).toHaveBeenCalledWith("exec-drive-compact", {
+        role: "user",
+        contentMarkdown: expect.stringContaining("/mnt/code-ux/google-drive"),
+      });
+    } finally {
+      await fs.rm(repoPath, { recursive: true, force: true });
+    }
+  });
+
+  it("omits Drive mounts and notices for invalid sources and host execution", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-disabled-drive-"));
+    const validDrivePath = path.join(repoPath, "drive");
+    const missingDrivePath = path.join(repoPath, "private-missing-drive");
+    await fs.mkdir(validDrivePath);
+    mockRunProviderForText.mockResolvedValue({ text: "No Drive mount used." });
+
+    try {
+      for (const [executionMode, hostPath] of [["DOCKER", missingDrivePath], ["HOST", validDrivePath]] as const) {
+        const scopedSettings = {
+          ...settings,
+          cliWorkflow: { ...settings.cliWorkflow, executionMode },
+          googleDrive: { enabled: true, hostPath, accessMode: "read-only" },
+        } as any;
+        const { service } = createDirectReplyService({
+          repoPath,
+          scopedSettings,
+          executionId: `exec-drive-${executionMode.toLowerCase()}`,
+        });
+        await service.generateReply({
+          projectId: "project-1",
+          threadId: "thread-1",
+          bodyMarkdown: "Summarize status.",
+        });
+        const providerInput = mockRunProviderForText.mock.calls.at(-1)![0];
+        expect(providerInput.googleDriveMount).toBeUndefined();
+        expect(providerInput.prompt).not.toContain("## LINKED GOOGLE DRIVE");
+        expect(providerInput.prompt).not.toContain(hostPath);
+      }
+    } finally {
+      await fs.rm(repoPath, { recursive: true, force: true });
+    }
+  });
+
   it("replays connected worker replies from the stored compaction summary", async () => {
     mockRunProviderForText.mockResolvedValue({ text: "Use the compact handoff." });
 
@@ -749,7 +952,7 @@ describe("WorkerInboxReplyService", () => {
     });
   });
 
-  it("does not grant scheduler-only Code UX access to clarification replies without explicit MCP access", async () => {
+  it("injects the scoped reply gateway without custom MCP servers for clarification replies", async () => {
     mockRunProviderForText.mockResolvedValue({ text: "Only the clarification answer." });
 
     const service = new WorkerInboxReplyService({
@@ -823,9 +1026,73 @@ describe("WorkerInboxReplyService", () => {
     });
 
     expect(mockRunProviderForText).toHaveBeenCalledWith(expect.objectContaining({
-      mcpConnection: null,
+      mcpConnection: {
+        url: "http://127.0.0.1:3000/mcp",
+        authToken: "token",
+        agentId: "project-manager",
+      },
       customMcpServers: [],
     }));
+  });
+
+  it("passes sprint-scoped Drive context to clarification replies without exposing the host path", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-clarification-drive-"));
+    const drivePath = path.join(repoPath, "sprint-drive");
+    await fs.mkdir(drivePath);
+    mockRunProviderForText.mockResolvedValue({ text: "Use the linked specification." });
+    const scopedSettings = {
+      ...settings,
+      googleDrive: { enabled: true, hostPath: drivePath, accessMode: "read-write" },
+    } as any;
+    const { service, appendMessage } = createDirectReplyService({
+      repoPath,
+      scopedSettings,
+      executionId: "exec-drive-clarification",
+    });
+
+    try {
+      const reply = await service.generateClarificationReply({
+        projectId: "project-1",
+        sprintGoal: "Ship the fix",
+        subtasks: [{
+          id: "T1",
+          sprint_id: "sprint-1",
+          title: "Use the linked specification",
+          prompt: "Answer from the linked specification.",
+          depends_on: [],
+          is_independent: true,
+          status: "BLOCKED",
+          activities: [{ agentMessaged: { agentMessage: "Which behavior should I implement?" } }],
+        }],
+        task: {
+          id: "T1",
+          sprint_id: "sprint-1",
+          title: "Use the linked specification",
+          prompt: "Answer from the linked specification.",
+          depends_on: [],
+          is_independent: true,
+          status: "BLOCKED",
+          activities: [{ agentMessaged: { agentMessage: "Which behavior should I implement?" } }],
+        },
+      });
+
+      const providerInput = mockRunProviderForText.mock.calls[0]![0];
+      expect(reply).toBe("Use the linked specification.");
+      expect(providerInput.googleDriveMount).toEqual({
+        source: drivePath,
+        destination: "/mnt/code-ux/google-drive",
+        readonly: false,
+      });
+      expect(providerInput.prompt.match(/## LINKED GOOGLE DRIVE/g)).toHaveLength(1);
+      expect(providerInput.prompt).not.toContain(drivePath);
+      expect(reply).not.toContain(drivePath);
+      expect(appendMessage).toHaveBeenCalledWith("exec-drive-clarification", {
+        role: "user",
+        contentMarkdown: expect.stringContaining("/mnt/code-ux/google-drive"),
+      });
+    } finally {
+      await fs.rm(repoPath, { recursive: true, force: true });
+    }
   });
 
   it("refreshes the task worker branch before clarification replies when one is recorded", async () => {

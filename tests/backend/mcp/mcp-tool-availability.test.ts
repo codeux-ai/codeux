@@ -21,6 +21,8 @@ describe("tool availability", () => {
     expect(projectManagerTools.some((tool) => tool.name === "register_worker_endpoint")).toBe(true);
     expect(projectManagerTools.some((tool) => tool.name === "pull_task_dispatch")).toBe(true);
     expect(projectManagerTools.some((tool) => tool.name === "update_task_dispatch")).toBe(true);
+    expect(projectManagerTools.some((tool) => tool.name === "reply_to_clarification")).toBe(true);
+    expect(projectManagerTools.some((tool) => tool.name === "request_clarification")).toBe(false);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_code_ux", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_projects", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_sprints", "project_manager")).toBe(true);
@@ -36,6 +38,49 @@ describe("tool availability", () => {
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "update_task_dispatch", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "claim_attention_item", "project_manager" as any)).toBe(false);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "execute_worker_dispatch", "project_manager" as any)).toBe(false);
+  });
+
+  it("exposes clarification tools only to their granted agent audience", () => {
+    const workerAccess = {
+      codeUxEnabled: false,
+      codeUxToolToggles: [],
+      audiences: ["worker" as const],
+      audienceToolNames: ["request_clarification" as const],
+    };
+    const projectManagerAccess = {
+      codeUxEnabled: false,
+      codeUxToolToggles: [],
+      audiences: ["project_manager" as const],
+      audienceToolNames: ["reply_to_clarification" as const],
+    };
+
+    expect(getEnabledToolDefinitions(DEFAULT_DASHBOARD_SETTINGS, "project_manager", workerAccess).map((tool) => tool.name))
+      .toEqual(["request_clarification"]);
+    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "request_clarification", "project_manager", workerAccess)).toBe(true);
+    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "reply_to_clarification", "project_manager", workerAccess)).toBe(false);
+    expect(getEnabledToolDefinitions(DEFAULT_DASHBOARD_SETTINGS, "project_manager", projectManagerAccess).map((tool) => tool.name))
+      .toEqual(["reply_to_clarification"]);
+  });
+
+  it("preserves system and explicit agent disables for audience grants", () => {
+    const settings = {
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      mcpTools: DEFAULT_DASHBOARD_SETTINGS.mcpTools.map((tool) =>
+        tool.name === "request_clarification" ? { ...tool, enabled: false } : tool),
+    };
+    const workerAccess = {
+      codeUxEnabled: false,
+      codeUxToolToggles: [],
+      audiences: ["worker" as const],
+      audienceToolNames: ["request_clarification" as const],
+    };
+    const explicitlyDisabled = {
+      ...workerAccess,
+      codeUxToolToggles: [{ name: "request_clarification", enabled: false, isInternal: true }],
+    };
+
+    expect(isToolEnabled(settings, "request_clarification", "project_manager", workerAccess)).toBe(false);
+    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "request_clarification", "project_manager", explicitlyDisabled)).toBe(false);
   });
 
   it("no longer exposes the deprecated listening-loop tools", () => {
@@ -117,25 +162,25 @@ describe("sanitizeCustomMcpServers", () => {
       name: "playwright",
       enabled: true,
       transport: "stdio",
-      command: "playwright-mcp",
-      args: [],
+      command: "npx",
+      args: ["@playwright/mcp@latest"],
       providers: ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"],
     });
   });
 
-  it("migrates the untouched npx Playwright server to the baked executable", () => {
+  it("migrates the legacy baked Playwright executable to the published package", () => {
     const result = sanitizeCustomMcpServersWithDefaults([
       {
         id: "playwright",
         name: "playwright",
         enabled: true,
         transport: "stdio",
-        command: "npx",
-        args: ["@playwright/mcp@latest"],
+        command: "playwright-mcp",
+        args: [],
         providers: ["codex"],
       },
     ], DEFAULT_DASHBOARD_SETTINGS.customMcpServers);
-    expect(result[0]).toMatchObject({ command: "playwright-mcp", args: [] });
+    expect(result[0]).toMatchObject({ command: "npx", args: ["@playwright/mcp@latest"] });
   });
 
   it("keeps valid HTTP servers and normalizes optional fields", () => {

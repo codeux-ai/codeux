@@ -9,15 +9,18 @@ import {
   fillRowNumber,
   fillRowText,
   openSettingsCategory,
+  openSettingsSection,
   saveSettings,
 } from './settings-test-helpers';
 
-async function openSprint(page: Page): Promise<void> {
-  await openSettingsCategory(page, 'sprint', /Sprint & Git Git flow, branch naming, merge rules, and execution runtime/i);
+async function openSprint(page: Page, sectionTitle: string): Promise<void> {
+  await openSettingsCategory(page, 'sprint', 'Sprint & Git');
+  await openSettingsSection(page, sectionTitle);
 }
 
 async function openBrowser(page: Page): Promise<void> {
-  await openSettingsCategory(page, 'browser', /Browser Preview Preview runtime, browser visibility, and container policy/i);
+  await openSettingsCategory(page, 'browser', 'Browser Preview');
+  await openSettingsSection(page, 'Runtime Limits');
 }
 
 test.describe('settings sprint and browser panels', () => {
@@ -32,7 +35,7 @@ test.describe('settings sprint and browser panels', () => {
   test('persists sprint git settings across reload and the system settings endpoint', async ({ page, request }, testInfo) => {
     expect(project.id).toBeTruthy();
     const prefix = `e2e/${testInfo.workerIndex}-${testInfo.retry}/`;
-    await openSprint(page);
+    await openSprint(page, 'Git Flow');
 
     await fillRowText(page, 'Feature branch prefix', prefix);
     await expectUnsavedIndicator(page);
@@ -41,13 +44,13 @@ test.describe('settings sprint and browser panels', () => {
     await expect.poll(async () => (await fetchSystemSettings(request)).defaults.git.featureBranchPrefix).toBe(prefix);
 
     await page.reload();
-    await openSprint(page);
+    await openSprint(page, 'Git Flow');
     await expectRowTextValue(page, 'Feature branch prefix', prefix);
   });
 
   test('rejects invalid watch loop intervals before saving', async ({ page, request }) => {
     const originalInterval = (await fetchSystemSettings(request)).defaults.sprintLoopSteps.watchLoopIntervalSeconds;
-    await openSprint(page);
+    await openSprint(page, 'Watch Loop');
 
     await fillRowNumber(page, 'Watch loop interval', 0);
     await page.getByRole('button', { name: 'Save Changes' }).click();

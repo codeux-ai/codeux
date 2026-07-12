@@ -327,13 +327,15 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
   app.post("/api/embedding-models/:modelId/download", asyncRoute(async (req, res) => {
     try {
       const modelId = String(req.params.modelId) as EmbeddingModelId;
+      const acceptedLicenseId = typeof req.body?.acceptedLicenseId === "string" ? req.body.acceptedLicenseId : undefined;
       if (!embeddingModelManager.hasModel(modelId)) {
         res.status(400).json({ error: `Unknown model: ${modelId}` });
         return;
       }
 
+      embeddingModelManager.validateDownloadAcceptance(modelId, acceptedLicenseId);
       // Start download in background, return immediately
-      embeddingModelManager.downloadModel(modelId).catch(() => {
+      embeddingModelManager.downloadModel(modelId, acceptedLicenseId).catch(() => {
         // Error is persisted to DB status
       });
 

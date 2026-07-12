@@ -1,3 +1,5 @@
+import type { DownloadableModelLicense } from "./model-license-types.js";
+
 /**
  * Types for the memory + local embedding system.
  *
@@ -251,6 +253,7 @@ export interface EmbeddingModelInfo {
   huggingFaceRepo?: string;
   onnxModelFile?: string;
   validationStatus?: CustomEmbeddingModelValidationStatus;
+  license: DownloadableModelLicense;
 }
 
 export interface EmbeddingModelStatus {
@@ -275,6 +278,7 @@ export interface CustomEmbeddingModelDefinition {
   approximateSizeBytes: number;
   language: string;
   validationStatus: CustomEmbeddingModelValidationStatus;
+  license: DownloadableModelLicense;
 }
 
 export interface CreateCustomEmbeddingModelInput {
@@ -287,6 +291,9 @@ export interface CreateCustomEmbeddingModelInput {
   approximateSizeBytes?: unknown;
   sizeBytes?: unknown;
   language?: unknown;
+  licenseName?: unknown;
+  licenseUrl?: unknown;
+  commercialUseAllowed?: unknown;
 }
 
 export type MemoryPromotionRiskFlag =

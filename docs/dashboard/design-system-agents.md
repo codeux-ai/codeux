@@ -20,8 +20,17 @@ The Agents management surface leans into a premium "Workshop" feel. We use a lot
 
 ## Avatar Scene Motion
 - The 3D agent avatar uses standard Three.js materials, studio lights, pointer-aware head movement, and runtime tool props. Do not add flashlight beams, target glows, low-battery flicker overlays, or shell/screen emissive boosts that recolor the avatar.
-- Reduced-motion and fallback SVG paths continue to render the static avatar without requiring WebGL.
-- New avatar scene geometries, materials, textures, and lights must follow the existing `AgentAvatarScene` WebGL lifecycle split: renderer and persistent scene resources are created once, avatar/config resources rebuild independently, animation reads refs per frame, and all reachable Three.js resources are disposed on unmount.
+- The shared SVG/WebGL expression vocabulary is exactly `happy`, `sad`, `angry`, `sleepy`, `bored`, `hyped`, `shake_head`, `nod`, `curious`, `thinking`, `excited`, `laughing`, `surprised`, `wink`, `dance`, and `proud`. Response metadata separates semantic `emotion` from choreography `animation`: the supported animation identifiers map to expressions as `hyped` → `hyped`, `shake_head` → `shake_head`, `nod` → `nod`, `laughing` → `laughing`, `wink` → `wink`, and `dance` → `dance`; while an animation is active, that mapped expression drives choreography without changing the stored semantic emotion.
+- Runtime props use the typed `agent-scene-tools` catalog for the stable `screwdriver`, `jackhammer`, `wrench`, `hammer`, and `torch` identifiers. Their user-facing labels are **Power screwdriver**, **Jackhammer**, **Open-end wrench**, **Claw hammer**, and **Welding torch**. The catalog owns each prop's stage anchor, contrast palette, geometry parts, animation references, and elapsed-time motion kind (`spin`, `piston`, `ratchet`, `tap`, or `flicker`); `?stageTool=<identifier>` remains the design-review override and ignores unsupported values.
+- Tool swaps animate the previous prop out and the next prop in without rebuilding the renderer. Once an exit completes, the scene removes the old subtree and disposes every reachable geometry, material, and texture exactly once.
+- Reduced-motion and explicit fallback paths do not load or create WebGL and render the static SVG avatar instead. WebGL construction failure switches to the same SVG fallback. When a runtime tool is active, the fallback exposes both a visible tool label and a `role="img"` accessible label, so tool state is not communicated by motion alone.
+- `LazyAgentAvatarScene` waits until the host approaches the viewport (`IntersectionObserver` with a 160px root margin) unless `eager` is true; lack of `IntersectionObserver` loads immediately. Suspense, offscreen, reduced-motion, and explicit fallback states all use the same semantic SVG placeholder.
+- New avatar scene geometries, materials, textures, and lights must follow the existing `AgentAvatarScene` lifecycle split. Mount creates one renderer, scene, camera, persistent light set, resize/pointer listeners, and animation frame loop. Avatar configuration changes dispose and rebuild only the avatar group, particles, and environment map. Tool changes independently move the prior tool to its exit phase and build the next tool. Animation reads refs so configuration swaps do not restart the WebGL context.
+- Cleanup cancels animation frames and gaze timers, removes listeners and the canvas, disposes each reachable geometry/material/texture once, disposes particle resources and completed tool subtrees, calls `forceContextLoss()` when available, and disposes the renderer. Shared materials/textures are de-duplicated during traversal to avoid double disposal.
+
+## Avatar Surface Validation
+
+Run `pnpm run typecheck:dashboard` when expression, animation, work tool, fallback, or linked contract examples change. Run `pnpm run check:docs-web` after matching public documentation is updated. Reduced-motion and WebGL fallback reviews must confirm that the static expression, work-tool label, accessible image name, and surrounding controls remain available without animation.
 
 ## Badges and Sync States
 Use explicit badging inside `.code-ux/agents` lists:
@@ -29,7 +38,15 @@ Use explicit badging inside `.code-ux/agents` lists:
 - **Synced:** `border-black/[0.08] bg-white/80 text-slate-500 shadow-sm`.
 - **Out of Sync:** `border-amber-400/30 bg-amber-400/15 text-amber-600`.
 - **Missing Source:** `border-status-red/20 bg-status-red/8 text-status-red`.
-- **Persistent Skills:** show `Default off` until the agent has at least one attached skill storage and retrieval is explicitly enabled. Do not reuse memory colors or place this status inside memory filter controls.
+- **Persistent Skills:** show `Default off` until the agent has at least one attached skill storage and retrieval is explicitly enabled. The built-in Project Manager is seeded with one enabled default storage, while a later opt-out remains authoritative. Do not reuse memory colors or place this status inside memory filter controls.
+
+## Base-Agent Update Notices
+- Render one amber `role="alert"` notice per pending Planning agent or Project manager compatibility update. Do not extend this notice system to Worker, Quality assurance agent, or Project Setup Agent.
+- While notices load, show the polite status copy **Checking for base-agent updates...**. A notice-discovery failure is fail-soft: keep the roster usable, log the failure, and do not replace the page with an error state.
+- The heading copy is **Planning agent base update available** or **Project manager base update available**. Customized targets say **<selected agent> has customized <role> instructions and must be updated.** Alternate targets say **<selected agent> is assigned to the <role> route and must be updated.** Always use the selected routed preset's name, not the built-in fallback's name.
+- Keep the explanatory guarantee visible: **Updating invokes an agent to compare both base files and apply only important system-compatibility instructions. Your main prompt, custom instructions, and behavior are preserved.** The action label is **Update with AI**, with an accessible name of **Update <selected agent> with AI**.
+- Activation is explicit and provider-assisted; loading the page never invokes the provider. While an update runs, disable all base-update actions and show **Updating...**. On success, refresh both presets and notices. On failure, keep the notice visible and expose the existing retry feedback.
+- The backend guard is part of the UX contract: only compatibility-critical instruction additions are accepted, every original selected-preset line must remain in order, and Code UX—not the provider—owns the write. Avatar, labels, routing, provider/model, memory, MCP access, persistent skills, source metadata, the user's main prompt, and custom behavior are preserved.
 
 ## Persistent Skills
 - Persistent skill storage is a separate agent capability from workspace memory and knowledge subscriptions. The editor/detail panels must present it as storage attachments with durable storage names, not as ordinary memory filters.

@@ -103,10 +103,13 @@ export type DocsSlug =
   | 'architecture-external-chat-providers'
   | 'architecture-configuration-resolution'
   | 'architecture-security'
+  | 'settings-google-drive-mount'
   | 'user-dashboard-custom-dashboards'
   | 'architecture-custom-dashboard-foundation'
   | 'architecture-managed-container-runtime'
   | 'architecture-speech-input'
+  | 'architecture-speech-output'
+  | 'architecture-worker-clarification-contract'
 
 export interface DocsRegistryEntry extends Partial<Omit<PageMeta, 'title' | 'description'>> {
   id: DocsSlug
@@ -206,7 +209,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-projects',
     section: 'User Guide',
     title: "Projects",
-    description: "The Projects page (/projects) lists every project Code UX manages and lets you create, edit, select, and delete them. Each card now surfaces the source badge, repository URL, local workspace directory, creation and up...",
+    description: "The Projects page (/projects) presents every managed repository in a low-noise gallery and lets you create, select, configure, set up, and delete projects. The restrained project cards use quiet surfaces and semantic...",
   },
   'user-dashboard-sprints': {
     id: 'user-dashboard-sprints',
@@ -276,7 +279,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-memory',
     section: 'User Guide',
     title: "Memory",
-    description: "The Memory page (/memory) manages Code UX's two-tier semantic memory system and the embedding models that power it.",
+    description: "The Memory page (/memory) manages Code UX's two-tier semantic memory system. Embedding and speech models are installed from Settings -&gt; AI Models.",
   },
   'user-dashboard-knowledge': {
     id: 'user-dashboard-knowledge',
@@ -381,7 +384,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/settings-display-settings',
     section: 'User Guide',
     title: "Display Settings",
-    description: "Controls the dashboard shell layout, theme, motion preference, and desktop zoom when available.",
+    description: "Controls the dashboard shell layout, theme, accent color, motion preference, and desktop zoom when available.",
   },
   'settings-background': {
     id: 'settings-background',
@@ -479,7 +482,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/settings-runtime-limits',
     section: 'User Guide',
     title: "Runtime Limits",
-    description: "Sets preview container concurrency, host port range, app port, and startup script path.",
+    description: "Sets preview container concurrency, ports, startup behavior, and optional Docker daemon access.",
   },
   'settings-techstacks': {
     id: 'settings-techstacks',
@@ -817,6 +820,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Security model",
     description: "Code UX is designed to run as a single-user trusted process on a developer's workstation or a dedicated server. This page documents what is and is not protected, the threat model, and the recommended deployment posture.",
   },
+  'settings-google-drive-mount': {
+    id: 'settings-google-drive-mount',
+    path: '/docs/settings-google-drive-mount',
+    section: 'User Guide',
+    title: "Google Drive Project Mount",
+    description: "The Google Drive project mount makes an existing local Google Drive sync or mount directory available to Docker-backed provider runs. Code UX does not connect to the Google Drive API, manage Google credentials, or syn...",
+  },
   'user-dashboard-custom-dashboards': {
     id: 'user-dashboard-custom-dashboards',
     path: '/docs/user-dashboard-custom-dashboards',
@@ -843,7 +853,21 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/architecture-speech-input',
     section: 'Architecture',
     title: "Speech Input Architecture",
-    description: "Speech input turns dashboard microphone or uploaded audio into prompt text through POST /api/speech/transcriptions. The current implementation includes persisted settings, the backend transcription route and service,...",
+    description: "Speech input turns dashboard microphone or uploaded audio into prompt text through POST /api/speech/transcriptions. Install and activate local models, or configure the API variant, under Settings -&gt; AI Models.",
+  },
+  'architecture-speech-output': {
+    id: 'architecture-speech-output',
+    path: '/docs/architecture-speech-output',
+    section: 'Architecture',
+    title: "Speech Output Architecture",
+    description: "Speech output turns project-manager replies into audio through POST /api/speech/synthesis. Code UX supports local ONNX synthesis and OpenAI-compatible TTS APIs, and 3D Chat provides playback plus a voice on/off control.",
+  },
+  'architecture-worker-clarification-contract': {
+    id: 'architecture-worker-clarification-contract',
+    path: '/docs/architecture-worker-clarification-contract',
+    section: 'Architecture',
+    title: "Worker clarification contract",
+    description: "Worker clarification requests use the existing project attention ledger as their durable store. They do not create a parallel table.",
   },
 }
 
@@ -948,10 +972,13 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-external-chat-providers'],
   docsRegistry['architecture-configuration-resolution'],
   docsRegistry['architecture-security'],
+  docsRegistry['settings-google-drive-mount'],
   docsRegistry['user-dashboard-custom-dashboards'],
   docsRegistry['architecture-custom-dashboard-foundation'],
   docsRegistry['architecture-managed-container-runtime'],
   docsRegistry['architecture-speech-input'],
+  docsRegistry['architecture-speech-output'],
+  docsRegistry['architecture-worker-clarification-contract'],
 ]
 
 export const groupedDocs = orderedDocs.reduce<Record<DocsSection, DocsRegistryEntry[]>>(

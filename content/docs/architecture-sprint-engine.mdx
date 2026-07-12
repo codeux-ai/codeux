@@ -106,6 +106,8 @@ Behaviour per state:
 - `CHECKPOINT` → Internal report boundary used for heartbeat and lease renewals. Keeps the same sprint run alive, emits the progress report, resets the checkpoint window, and sleeps one interval. Does not exit the run.
 - `RUNNING` → Sleep one interval, no output.
 
+During normal iterations the loop suppresses dashboard status writes when the sprint/task payload is semantically identical to the previous snapshot for that sprint run. Timestamp-only repeats are skipped, but finalisation blockers are force-published so merge or pause feedback appears immediately. The loop also reuses the active attention rows already loaded by the cycle runner instead of issuing a second attention query after every cycle.
+
 Default tunables (`sprintLoopSteps`):
 
 | Setting | Default | Min | Max |
@@ -152,9 +154,11 @@ Override: `maxFailures` setting or `JULES_API_MAX_FAILS` env. Recommended floor:
 
 ## CI autofix retries
 
-Per task, the CI gate tracks attempted CI fix dispatches in `ciAutofixRetryCounts: Map<taskId, number>`. The cap is configured by the legacy setting `julesCiAutofixMaxRetries` (default 3, min 0, max 20).
+Per task, the CI gate tracks attempted CI fix dispatches in the durable guardrail ledger. The legacy `julesCiAutofixMaxRetries` mirror defaults to 5 (min 0, max 20); the generic CI-fix guardrail is authoritative and creates a human handoff at its cap.
 
-Beyond the cap, the gate emits an attention item rather than dispatching another fix worker.
+The ordinary task-coding guardrail also creates a deduplicated human handoff when exhausted, including its attempt count and task/session context. Resolving the handoff clears the `task_coding` ledger and permits one fresh dispatch cycle instead of leaving the sprint in a silent heartbeat loop.
+
+Beyond the cap, the gate emits or refreshes a human-owned handoff rather than dispatching another fix worker. This also applies when restart recovery encounters an already-exhausted legacy ledger. The handoff includes only the newest branch-matched failed CI run, while preserving every failed job and step, exact actionable assertion/error excerpt, and fallback log command from that run; older matching failures are excluded. Stale worker CI and merge attention is resolved while the task remains durably code-complete with its CI marker.
 
 ## Finalisation
 
@@ -182,6 +186,8 @@ Per provider, `maxConcurrentTasks` caps active sessions. The start-ready step ho
 - Emergency stop.
 
 Within a cycle, ready tasks are dispatched in dependency-order, then by priority, then by task ID.
+
+Provider load for start-ready admission combines running provider invocations with active task runs that have not yet produced terminal provider evidence. This prevents wide DAG cycles from creating a large queue of running Docker dispatches that all wait inside the provider-slot gate before their provider invocation rows exist. Provider-cap deferrals are logged once per provider per cycle, and provider-slot wait logs are throttled per provider across concurrent waiters.
 
 ## Cycle telemetry
 

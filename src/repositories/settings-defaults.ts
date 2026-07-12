@@ -269,8 +269,8 @@ export const DEFAULT_PLAYWRIGHT_MCP_SERVER = {
   description: "Browser automation MCP server for coding agents.",
   enabled: true,
   transport: "stdio",
-  command: "playwright-mcp",
-  args: [],
+  command: "npx",
+  args: ["@playwright/mcp@latest"],
   providers: ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"],
 } satisfies DashboardSettings["customMcpServers"][number];
 export const DEFAULT_PROVIDER_CONFIG_NAMES: Record<ProviderId, string> = {
@@ -723,6 +723,8 @@ export const DEFAULT_INVOCATION_ROUTING: Record<InvocationRoutingId, InvocationR
   },
 };
 
+export const DASHBOARD_ACCENT_COLORS = ["CODEUX", "OCEAN", "VIOLET", "CYAN", "MAGENTA", "GRAPHITE"] as const;
+
 export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   dashboardPort: 4444,
   consoleLogLevel: "info",
@@ -737,6 +739,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     navigationMode: "SIDEBAR",
     experienceMode: DEFAULT_DASHBOARD_EXPERIENCE_MODE,
     theme: "SYSTEM",
+    accentColor: "CODEUX",
     reducedMotion: "AUTO",
     backgroundMode: "ANIMATED",
     animatedBackground: "deep-ocean",
@@ -777,6 +780,11 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   },
   techstack: { ...DEFAULT_PROJECT_TECHSTACK },
   designGuidance: cloneDesignGuidanceSettings(DEFAULT_PROJECT_DESIGN_GUIDANCE),
+  googleDrive: {
+    enabled: false,
+    hostPath: "",
+    accessMode: "read-only",
+  },
   git: {
     githubMode: "REMOTE",
     githubToken: "",
@@ -899,6 +907,8 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     containerAppPort: 3000,
     containerAppPorts: [3000],
     startupScriptPath: ".code-ux/browser/start-preview.sh",
+    startupCommand: "",
+    allowDockerAccess: false,
     environmentVariables: [],
   },
   workers: {
@@ -1016,14 +1026,29 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   },
   speech: {
     enabled: false,
-    providerMode: "auto",
+    providerMode: "local_onnx",
     localModelId: "onnx-community/whisper-base.en",
+    localLanguage: "en",
     maxAudioSeconds: 120,
     externalTranscription: {
       baseUrl: "https://api.openai.com/v1/audio/transcriptions",
       apiKey: "",
       model: "whisper-1",
       language: null,
+    },
+    synthesis: {
+      enabled: false,
+      providerMode: "local_onnx",
+      localModelId: "kokoro-82m-v1.0-q8",
+      voice: "af_heart",
+      speed: 1,
+      externalSynthesis: {
+        baseUrl: "https://api.openai.com/v1/audio/speech",
+        apiKey: "",
+        model: "gpt-4o-mini-tts",
+        voice: "coral",
+        format: "mp3",
+      },
     },
   },
   modelPricing: {

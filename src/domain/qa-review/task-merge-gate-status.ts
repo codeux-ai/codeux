@@ -5,7 +5,7 @@ import type { QualityAssuranceSettings } from "../../contracts/app-types.js";
 
 export interface TaskQaMergeGateStatus {
   mergeAllowed: boolean;
-  reason: "not_required" | "pending_review" | "review_running" | "passed" | "changes_requested" | "review_failed" | "retries_exhausted";
+  reason: "not_required" | "pending_review" | "review_running" | "passed" | "changes_requested" | "review_failed" | "retries_exhausted" | "follow_up_no_progress";
   summary: string;
   latestRun: QaReviewRunRecord | null;
   runsUsed: number;
@@ -69,12 +69,30 @@ export function computeTaskMergeGateStatus(input: {
   }
 
   const recoveredStaleLatestRun = isRecoveredStaleQaRun(latestRun);
+  const infraCeiling = maxRuns + QA_INFRA_FAILURE_GRACE;
 
-  if (latestRun?.status === "failed" && recoveredStaleLatestRun) {
+  if (
+    recoveredStaleLatestRun
+    && latestRun
+    && (latestRun.status === "failed" || latestRun.status === "cancelled" || latestRun.status === "errored")
+    && runsUsed < infraCeiling
+  ) {
     return {
       mergeAllowed: false,
       reason: "review_failed",
       summary: latestRun.summaryMarkdown || "QA review failed and must be retried before merge.",
+      latestRun,
+      runsUsed,
+      maxRuns,
+    };
+  }
+
+  if (latestRun?.payload?.followUpNoProgress === true) {
+    return {
+      mergeAllowed: false,
+      reason: "follow_up_no_progress",
+      summary: latestRun.summaryMarkdown
+        || "The QA follow-up completed without producing mergeable changes. Human attention is required.",
       latestRun,
       runsUsed,
       maxRuns,
@@ -86,7 +104,6 @@ export function computeTaskMergeGateStatus(input: {
   // failures) are infra noise that produced no judgement, so they are retried
   // — bounded by an infra ceiling so a permanently broken reviewer still
   // stops and escalates instead of looping or failing open.
-  const infraCeiling = maxRuns + QA_INFRA_FAILURE_GRACE;
   const budgetExhausted = (maxRuns > 0 && decisiveRuns >= maxRuns) || runsUsed >= infraCeiling;
 
   // Exhaustion is checked BEFORE the changes_requested verdict on purpose: a

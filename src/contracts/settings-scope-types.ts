@@ -8,6 +8,7 @@ import type {
   CustomMcpServer,
   DesignGuidanceSettings,
   GuardrailSettings,
+  GoogleDriveSettings,
   ProviderConfigId,
   ProviderConfigMode,
   DashboardSettings,
@@ -85,6 +86,7 @@ export interface ProjectSettings {
   aiProvider: ProjectAiProviderSettings;
   techstack: TechstackSelectionSettings;
   designGuidance: DesignGuidanceSettings;
+  googleDrive: GoogleDriveSettings;
   git: ProjectGitSettings;
   jira: JiraSettings;
   notion: ExternalImporterSettings;

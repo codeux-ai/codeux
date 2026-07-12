@@ -404,6 +404,10 @@ describe("QuicksprintService", () => {
       const planningOverrides = {
         virtualProvider: "codex",
         virtualModel: "gpt-5",
+        designGuidance: {
+          selectedTechStackId: "code-ux-product-stack",
+          selectedStyleguideId: "game-experience",
+        },
       } as const;
 
       await service.launchDetachedQuicksprint(projectId, {

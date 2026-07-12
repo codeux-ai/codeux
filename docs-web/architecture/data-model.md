@@ -97,6 +97,8 @@ Unique key: `(userId, projectId, bodyMarkdown)`. The dashboard keeps only the ne
 
 Has-many: subtasks, sprint runs, preview sessions, settings overrides.
 
+Sprint progress can be derived without storing another column. The pure domain weighting gives pending tasks `0`, active coding tasks `0.005` per task-coding provider tool call up to `0.5`, code-complete tasks `0.5`, CI/QA/merge-gated tasks `0.75`, and completed or settled tasks `1.0`; the sprint percentage is the average rounded to one decimal place.
+
 ## Subtask (Task)
 
 | Field | Type | Notes |
@@ -194,7 +196,7 @@ Persistent skills are stored separately from project workspaces, memories, knowl
 | `skill_embeddings` | Embedding model, dimension, chunk index, content hash, and optional vector blob for skill search. |
 | `agent_skill_storage_bindings` | Normalized agent-to-storage attachments keyed by `(agent_preset_id, storage_id)`. |
 
-Skill markdown is imported from YAML-like frontmatter plus a body. Frontmatter maps to metadata; the body remains the authoritative agent instruction. Backend retrieval can search all project storages, one storage, or the storages attached to an agent preset. A shared invocation resolver verifies project ownership and the default-off opt-in before enabled attached agents receive one idempotent provider prompt section, agent-scoped `search_skills` MCP access where eligible, and writable persistent-skill mounts outside the project workspace. The same composition applies to canonical task/provider runs and direct dashboard or clarification replies; disabled, unattached, mismatched, and unscoped runs remain unchanged.
+Skill markdown is imported from YAML-like frontmatter plus a body. Frontmatter maps to metadata; the body remains the authoritative agent instruction. Backend retrieval can search all project storages, one storage, or the storages attached to an agent preset. A shared invocation resolver verifies project ownership and the default-off opt-in before enabled attached agents receive one idempotent provider prompt section containing the complete linked-skill descriptor inventory (name, description, and version), agent-scoped `search_skills` MCP access where eligible, and read-only versioned persistent-skill snapshots outside the project workspace. The agent is instructed to use that inventory first when a user asks about available skills and to route mutations through `manage_skills`. The same composition applies to canonical task/provider runs and direct dashboard or clarification replies; disabled, unattached, mismatched, and unscoped runs remain unchanged.
 
 ## NodeFlow
 

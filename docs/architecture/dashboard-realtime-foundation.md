@@ -99,6 +99,8 @@ The dashboard server now exposes:
 
 - `GET /api/realtime` (served by `bootDashboardRealtimeWebSocketServer` in `src/server/dashboard-realtime-websocket-server.ts` and wired from `src/server/dashboard-server.ts`)
 
+The shared dashboard client serializes subscription-set changes until the server acknowledges the current scope set. The acknowledgement's sequence is authoritative, including when it is lower than the client's previous cursor after a server restart. A `snapshot_required` response clears the unusable cursor before REST-backed resources refresh. Navigation-driven scope changes therefore resume from the restarted server's accepted watermark instead of repeatedly requesting recovery with a stale higher sequence.
+
 The protocol is intentionally small:
 
 - browser opens websocket
@@ -142,8 +144,8 @@ Behavior:
 - after hydration, the v2 Live page treats `project.live.updated` as the only authoritative websocket payload for selected-project runtime state
 - websocket updates replace stale wait time for execution and overview telemetry
 - project collection and selected-project context now refresh over websocket too
-- sprint and task pages now react to project-structure invalidation events
-- sprint and task hooks now treat realtime invalidation as silent background refresh, which avoids foreground loading flicker while the browser is already showing current data
+- sprint collections react to both project-structure and project-execution invalidation events, while task structure continues to refresh from project-structure changes
+- sprint and task hooks treat realtime invalidation as silent background refresh, which avoids foreground loading flicker while the browser is already showing current data; sprint summaries remain on the lightweight project scope instead of subscribing to the heavy live snapshot channel
 - execution snapshot consumers now diff snapshots semantically instead of treating every fetch-time `updatedAt` stamp as a meaningful change
 - git status is now kept off the hot `/api/live` contract and streams only on the `project:<projectId>:git` sub-scope, so base project pages do not parse large Git/CI payloads they ignore
 - reconnect recovery for the Live page now means re-fetching `/api/live` on `snapshot_required`, not running parallel status/execution repair logic in the browser

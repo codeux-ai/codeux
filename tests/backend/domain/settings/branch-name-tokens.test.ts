@@ -238,6 +238,8 @@ function makeBasePayload() {
       containerAppPort: 3000,
       containerAppPorts: [3000],
       startupScriptPath: "",
+      startupCommand: "",
+      allowDockerAccess: false,
     },
     workers: {
       executionMode: "VIRTUAL",
@@ -309,7 +311,7 @@ function makeBasePayload() {
     },
     speech: {
       enabled: false,
-      providerMode: "auto",
+      providerMode: "local_onnx",
       localModelId: "onnx-community/whisper-base.en",
       maxAudioSeconds: 120,
       externalTranscription: {

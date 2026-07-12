@@ -48,6 +48,17 @@ const createProjectState = () => ({
   projectSources: {},
 });
 
+const createSystemState = () => ({
+  activeScope: "system",
+  systemSettings: { runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard", dbPruningEnabled: true, dbRetentionDays: 14, dbAutoVacuumOnStartup: true } },
+  projectSettings: null,
+  selectedProject: null,
+  updateSystem: vi.fn(),
+  editableSettings: cloneSettings(),
+  updateEditableSettings: vi.fn(),
+  projectSources: {},
+});
+
 describe("SettingsGeneralPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -84,6 +95,53 @@ describe("SettingsGeneralPanel", () => {
 
     expect(updateEditableSettings).toHaveBeenCalled();
     expect(capturedSettings.appearance.experienceMode).toBe("STANDARD");
+  });
+
+  it("shows safe legal actions in system scope without changing settings", async () => {
+    const state = createSystemState();
+    const initialDraft = structuredClone(state.editableSettings);
+
+    render(<SettingsGeneralPanel state={state as any} />);
+
+    expect(screen.getByRole("heading", { name: "License & Open Source" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open the Code UX license in a new tab" })).toHaveAttribute(
+      "href",
+      "https://github.com/codeux-ai/codeux/blob/main/LICENSE",
+    );
+    expect(screen.getByRole("link", { name: "Open the Code UX license in a new tab" })).toHaveAttribute("target", "_blank");
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Source Software" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Open Source Software" });
+    expect(within(dialog).getByRole("list", { name: "Open-source software catalog" })).toBeInTheDocument();
+    expect(within(dialog).getByText("Ajv")).toBeInTheDocument();
+
+    fireEvent.input(within(dialog).getByRole("searchbox", { name: "Search software catalog" }), {
+      target: { value: "Electron" },
+    });
+    expect(within(dialog).getByText("Electron")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Ajv")).not.toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Open Source Software" })).not.toBeInTheDocument());
+
+    expect(state.updateSystem).not.toHaveBeenCalled();
+    expect(state.updateEditableSettings).not.toHaveBeenCalled();
+    expect(state.editableSettings).toEqual(initialDraft);
+    expect(screen.queryByText("Unsaved edits")).not.toBeInTheDocument();
+  });
+
+  it("does not expose system legal actions in project scope", () => {
+    vi.mocked(useProjectData).mockReturnValue({ updateProject: vi.fn() } as any);
+    const state = createProjectState();
+
+    render(<SettingsGeneralPanel state={state as any} />);
+
+    expect(screen.queryByRole("heading", { name: "License & Open Source" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open the Code UX license in a new tab" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open Source Software" })).not.toBeInTheDocument();
+    expect(state.updateSystem).not.toHaveBeenCalled();
+    expect(state.updateEditableSettings).not.toHaveBeenCalled();
   });
 
   it("updates the selected project name from project settings", async () => {

@@ -1,6 +1,8 @@
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import type { CustomMcpServer, McpToolToggle } from "../contracts/app-types.js";
 import { TOOL_DEFINITIONS } from "../contracts/mcp-tool-definitions.js";
+import type { McpToolAudience, ToolName } from "../contracts/mcp-tool-definitions.js";
+import type { DashboardSettings } from "../contracts/app-types.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import { sanitizeCustomMcpServers } from "../mcp/mcp-tool-availability.js";
 import { DEFAULT_PLAYWRIGHT_MCP_SERVER_ID } from "../repositories/settings-defaults.js";
@@ -76,6 +78,70 @@ export const dashboardReplyAgentMcpAccess = (access: AgentMcpAccessConfig | null
     codeUxToolToggles: Array.from(byName.values()),
   };
 };
+
+export const isWorkerClarificationAgent = (args: {
+  agentId: string;
+  assignedTaskAgentIds: readonly string[];
+  settings: DashboardSettings;
+}): boolean => {
+  const routing = args.settings.agents.routing.taskCoding;
+  return args.assignedTaskAgentIds.includes(args.agentId)
+    || (routing.mode === "MANUAL" && routing.agentPresetId === args.agentId)
+    || routing.orchestratorAgentPresetIds.includes(args.agentId);
+};
+
+export const isProjectManagerClarificationAgent = (args: {
+  agentId: string;
+  agentName: string;
+  settings: DashboardSettings;
+}): boolean => {
+  const routing = args.settings.agents.routing;
+  if (routing.dashboardReply.agentPresetId === args.agentId || routing.clarificationReply.agentPresetId === args.agentId) {
+    return true;
+  }
+  if (routing.dashboardReply.agentPresetId && routing.clarificationReply.agentPresetId) {
+    return false;
+  }
+  const normalizedName = args.agentName.trim().toLowerCase();
+  return normalizedName === "project manager" || normalizedName === "iris";
+};
+
+/** Add one audience-scoped clarification grant without enabling unrelated tools. */
+export const withClarificationAudienceAccess = (
+  access: AgentCodeUxToolAccess,
+  audience: McpToolAudience,
+  toolName: Extract<ToolName, "request_clarification" | "reply_to_clarification">,
+): AgentCodeUxToolAccess => ({
+  ...access,
+  audiences: Array.from(new Set([...(access.audiences ?? []), audience])),
+  audienceToolNames: Array.from(new Set([...(access.audienceToolNames ?? []), toolName])),
+});
+
+const clarificationGatewayAccess = (
+  access: AgentMcpAccessConfig | null | undefined,
+  toolName: Extract<ToolName, "request_clarification" | "reply_to_clarification">,
+): AgentMcpAccessConfig => {
+  if (access?.codeUxEnabled) return access;
+  return {
+    ...(access ?? defaultAgentMcpAccess()),
+    codeUxEnabled: true,
+    codeUxToolToggles: TOOL_DEFINITIONS.map((tool) => ({
+      name: tool.name,
+      enabled: tool.name === toolName,
+      isInternal: true,
+    })),
+  };
+};
+
+/** Ensure an already-selected coding worker receives the gateway connection for its narrow request grant. */
+export const workerClarificationAgentMcpAccess = (
+  access: AgentMcpAccessConfig | null | undefined,
+): AgentMcpAccessConfig => clarificationGatewayAccess(access, "request_clarification");
+
+/** Ensure an already-selected clarification reply agent receives the gateway connection for its narrow reply grant. */
+export const projectManagerClarificationAgentMcpAccess = (
+  access: AgentMcpAccessConfig | null | undefined,
+): AgentMcpAccessConfig => clarificationGatewayAccess(access, "reply_to_clarification");
 
 export const isSchedulerOnlyAgentMcpAccess = (
   access: Pick<AgentMcpAccessConfig, "codeUxEnabled" | "codeUxToolToggles">,

@@ -35,6 +35,19 @@ describe("SprintCell", () => {
     expect(screen.getByText("5")).toBeDefined();
   });
 
+  it("renders whole and fractional completion without rounding", () => {
+    render(
+      <>
+        <SprintCell sprint={{ ...defaultSprint, id: "sprint-5", tasksCount: 10, completion: 5 }} isEven={true} accentColor="text-blue-500" />
+        <SprintCell sprint={{ ...defaultSprint, id: "sprint-7-5", tasksCount: 10, completion: 7.5 }} isEven={false} accentColor="text-blue-500" />
+      </>
+    );
+
+    expect(screen.getByText("5%")).toBeDefined();
+    expect(screen.getByText("7.5%")).toBeDefined();
+    expect(screen.queryByText("8%")).toBeNull();
+  });
+
   it("links to project-aware tasks and live routes", () => {
     render(<SprintCell sprint={defaultSprint} isEven={true} accentColor="text-blue-500" />);
 
@@ -145,8 +158,32 @@ describe("SprintCell", () => {
 
     // Canonical badge should be present
     expect(screen.getByText("Needs you")).toBeDefined();
+    expect(screen.getByRole("status", { name: "Sprint waiting for human intervention" })).toBeDefined();
+    expect(screen.getByText("zZZ")).toBeDefined();
 
     // Redundant inline alert should be absent
     expect(screen.queryByText("Human intervention required")).toBeNull();
+  });
+
+  it("does not label a worker-owned pause as human intervention", () => {
+    render(
+      <SprintCell
+        sprint={{ ...defaultSprint, status: "paused" }}
+        isEven={true}
+        accentColor="text-blue-500"
+        humanIntervention={{
+          title: "Worker retry",
+          reason: "The worker is retrying execution",
+          instructions: "Wait for the worker",
+          attentionType: null,
+          severity: "medium",
+          ownerType: "worker",
+        }}
+      />,
+    );
+
+    expect(screen.queryByRole("status", { name: "Sprint waiting for human intervention" })).toBeNull();
+    expect(screen.queryByText("zZZ")).toBeNull();
+    expect(screen.queryByText("Needs you")).toBeNull();
   });
 });

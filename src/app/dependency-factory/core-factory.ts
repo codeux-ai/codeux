@@ -326,6 +326,7 @@ export function createCoreDependencies(
     projectRoot: options.projectRoot,
     logger: logger.child({ component: "agent-preset-sync-service" }),
     knowledgeService,
+    skillService,
   });
   const instructionService = new InstructionService({
     settingsRepository,

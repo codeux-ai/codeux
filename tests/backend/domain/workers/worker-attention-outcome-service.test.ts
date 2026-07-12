@@ -64,6 +64,7 @@ async function createFixture() {
     projectRepository,
     connectionRepository,
     projectAttentionRepository,
+    projectAttentionService,
     service,
     project,
     sprint,
@@ -199,5 +200,57 @@ describe("WorkerAttentionOutcomeService", () => {
       deliveryStatus: "processed",
     });
     expect(messages[0].bodyMarkdown).toContain("Needs human escalation");
+  });
+
+  it("settles duplicate worker attention against an existing manager clarification", async () => {
+    const {
+      service,
+      projectAttentionRepository,
+      projectAttentionService,
+      project,
+      sprint,
+      task,
+      connection,
+      workerEndpoint,
+    } = await createFixture();
+    const workerItem = projectAttentionRepository.openOrRefreshItem({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      attentionType: "action_required",
+      severity: "high",
+      ownerType: "worker",
+      assignedWorkerEndpointId: workerEndpoint.id,
+      title: "Worker blocked",
+      summaryMarkdown: "The coding worker needs a decision.",
+    });
+    const clarification = projectAttentionService.openItem({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      attentionType: "worker_clarification",
+      severity: "high",
+      ownerType: "human",
+      title: "Worker clarification requested",
+      summaryMarkdown: "Should compatibility be preserved?",
+      payload: { type: "worker_clarification", status: "pending" },
+    });
+
+    const result = service.reportOutcome({
+      attentionItemId: workerItem.id,
+      workerEndpointId: workerEndpoint.id,
+      connectionId: connection.id,
+      outcome: "needs_dashboard_reply",
+      summaryMarkdown: "A dashboard reply is needed.",
+    });
+
+    expect(result.sourceItem).toMatchObject({
+      status: "resolved",
+      payload: expect.objectContaining({ workerClarificationAttentionItemId: clarification.id }),
+    });
+    expect(result.handoffItem?.id).toBe(clarification.id);
+    expect(projectAttentionService.listActiveProjectItems(project.id)).toEqual([
+      expect.objectContaining({ id: clarification.id, ownerType: "human", status: "open" }),
+    ]);
   });
 });

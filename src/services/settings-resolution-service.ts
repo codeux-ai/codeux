@@ -1,5 +1,6 @@
 import type {
   BackgroundPattern,
+  DashboardAccentColor,
   ConsoleLogMode,
   CustomMcpServer,
   DashboardSettings,
@@ -36,7 +37,7 @@ import { sanitizeMemory } from "../domain/settings/settings-sanitizers/memory-sa
 import { sanitizeSpeech } from "../domain/settings/settings-sanitizers/speech-sanitizer.js";
 import { sanitizeModelPricing } from "../domain/settings/settings-sanitizers/model-pricing-sanitizer.js";
 import { sanitizeWorkers } from "../domain/settings/settings-sanitizers/worker-sanitizer.js";
-import { sanitizeExternalImporterSettings } from "../repositories/settings-sanitizer.js";
+import { sanitizeExternalImporterSettings, sanitizeGoogleDriveSettings } from "../repositories/settings-sanitizer.js";
 import {
   buildDashboardProviderSettings,
   buildDefaultIntegrationProviders,
@@ -53,6 +54,7 @@ import {
   DEFAULT_PROJECT_TECHSTACK,
   DEFAULT_SKILLS,
   DASHBOARD_EXPERIENCE_MODES,
+  DASHBOARD_ACCENT_COLORS,
   INTERNAL_SKILL_NAMES,
   INTERNAL_SKILL_SET,
 } from "../repositories/settings-defaults.js";
@@ -130,6 +132,13 @@ const sanitizeDashboardExperienceMode = (value: unknown): DashboardExperienceMod
   typeof value === "string" && DASHBOARD_EXPERIENCE_MODE_SET.has(value as DashboardExperienceMode)
     ? value as DashboardExperienceMode
     : DEFAULT_DASHBOARD_EXPERIENCE_MODE
+);
+
+const DASHBOARD_ACCENT_COLOR_SET = new Set<DashboardAccentColor>(DASHBOARD_ACCENT_COLORS);
+const sanitizeDashboardAccentColor = (value: unknown): DashboardAccentColor => (
+  typeof value === "string" && DASHBOARD_ACCENT_COLOR_SET.has(value as DashboardAccentColor)
+    ? value as DashboardAccentColor
+    : DEFAULT_DASHBOARD_SETTINGS.appearance.accentColor
 );
 
 function cloneMcpTools(tools: McpToolToggle[]): McpToolToggle[] {
@@ -735,6 +744,12 @@ function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintP
       }
       return raw;
     })(),
+    startupCommand: typeof input.startupCommand === "string" && !input.startupCommand.includes("\0")
+      ? input.startupCommand.trim().slice(0, 8_192)
+      : defaults.startupCommand,
+    allowDockerAccess: typeof input.allowDockerAccess === "boolean"
+      ? input.allowDockerAccess
+      : defaults.allowDockerAccess,
     environmentVariables: sanitizePreviewEnvironmentVariables(input.environmentVariables),
   };
 }
@@ -775,6 +790,7 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
     },
     techstack: cloneTechstackSelection(DEFAULT_PROJECT_TECHSTACK),
     designGuidance: cloneDesignGuidance(DEFAULT_DASHBOARD_SETTINGS.designGuidance),
+    googleDrive: { ...DEFAULT_DASHBOARD_SETTINGS.googleDrive },
     git: {
       githubMode: git.githubMode,
       githubToken: git.githubToken,
@@ -825,6 +841,10 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
     speech: {
       ...DEFAULT_DASHBOARD_SETTINGS.speech,
       externalTranscription: { ...DEFAULT_DASHBOARD_SETTINGS.speech.externalTranscription },
+      synthesis: {
+        ...DEFAULT_DASHBOARD_SETTINGS.speech.synthesis,
+        externalSynthesis: { ...DEFAULT_DASHBOARD_SETTINGS.speech.synthesis.externalSynthesis },
+      },
     },
   };
 }
@@ -914,6 +934,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       navigationMode: appearanceInput.navigationMode === "DOCK" ? "DOCK" : "SIDEBAR",
       experienceMode: sanitizeDashboardExperienceMode(appearanceInput.experienceMode),
       theme: appearanceInput.theme === "LIGHT" || appearanceInput.theme === "DARK" ? appearanceInput.theme : "SYSTEM",
+      accentColor: sanitizeDashboardAccentColor(appearanceInput.accentColor),
       reducedMotion: appearanceInput.reducedMotion === "REDUCE" || appearanceInput.reducedMotion === "NONE" ? appearanceInput.reducedMotion : "AUTO",
       backgroundMode: appearanceInput.backgroundMode === "STATIC" ? "STATIC" : "ANIMATED",
       animatedBackground: typeof appearanceInput.animatedBackground === "string" ? appearanceInput.animatedBackground : "deep-ocean",
@@ -952,6 +973,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
     },
     techstack: sanitizeTechstackSelection(input.techstack),
     designGuidance: sanitizeDesignGuidanceSettings(input.designGuidance),
+    googleDrive: sanitizeGoogleDriveSettings(input.googleDrive),
     git: {
       githubMode: git.githubMode,
       githubToken: git.githubToken,
@@ -1358,6 +1380,7 @@ export function resolveDashboardSettings(args: {
     techstackCatalog: cloneTechstackCatalog(techstackCatalog),
     techstack: cloneTechstackSelection(sprintSettings.techstack),
     designGuidance: cloneDesignGuidance(sprintSettings.designGuidance),
+    googleDrive: { ...sprintSettings.googleDrive },
     // GitHub/GitLab/Jira resolve through the scoped project/sprint settings, which
     // inherit the system integration values unless a project or sprint overrides
     // them. A blank scoped value falls back to the system integration value.
@@ -1417,7 +1440,14 @@ export function resolveDashboardSettings(args: {
       })),
       externalEmbedding: { ...sprintSettings.memory.externalEmbedding },
     },
-    speech: { ...sprintSettings.speech, externalTranscription: { ...sprintSettings.speech.externalTranscription } },
+    speech: {
+      ...sprintSettings.speech,
+      externalTranscription: { ...sprintSettings.speech.externalTranscription },
+      synthesis: {
+        ...sprintSettings.speech.synthesis,
+        externalSynthesis: { ...sprintSettings.speech.synthesis.externalSynthesis },
+      },
+    },
     modelPricing: { overrides: { ...args.systemSettings.modelPricing?.overrides } },
   };
 

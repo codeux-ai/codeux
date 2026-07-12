@@ -1,4 +1,4 @@
-import type { CustomMcpServer, DashboardSettings, ThinkingMode } from "../contracts/app-types.js";
+import type { CustomMcpServer, DashboardSettings, DashboardSettingsScope, ThinkingMode } from "../contracts/app-types.js";
 import type { ProviderConfigMode, QwenModelProviderSettings } from "../contracts/app-types.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
@@ -13,6 +13,7 @@ import type { IProviderRunner, ProviderRunResult } from "../infrastructure/provi
 import type { SnapshotCheckout } from "../infrastructure/providers/cli/workspace-manager.js";
 import type { InvocationWorkspaceGitPolicy } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import type { CliProviderId } from "../infrastructure/providers/cli/provider-command-specs.js";
+import type { NativeSessionOperation } from "../infrastructure/providers/cli/provider-command-specs.js";
 import type { ParsedConversationTurn, ProviderUsageTelemetry } from "../infrastructure/providers/cli/provider-usage.js";
 import type {
   AppendExecutionInvocationMessageInput,
@@ -32,6 +33,7 @@ import { conversationTurnToMessage } from "./provider-conversation-message-mappe
 import { ActivityWriteCoalescer } from "./activity-write-coalescer.js";
 import { SERVER_SHUTDOWN_STOP_REASON } from "./active-dispatch-registry.js";
 import { isRuntimeShutdownInProgress } from "./shutdown-state.js";
+import { composeGoogleDrivePrompt, resolveGoogleDriveMount } from "./google-drive-mount-service.js";
 
 /** Counts tool-call turns in a parsed provider conversation, for tool-call stats. */
 function countConversationToolCalls(conversation: ParsedConversationTurn[] | undefined | null): number {
@@ -156,6 +158,7 @@ export interface ProviderExecutionServiceDeps {
   getMcpConnectionInfo?: () => McpConnectionInfo | null;
   agentPresetRepository?: AgentPresetRepository;
   skillService?: SkillService;
+  getDashboardSettings?: (scope: DashboardSettingsScope) => DashboardSettings;
 }
 
 export interface ExecutionProviderRunArgs {
@@ -212,6 +215,8 @@ export interface ExecutionProviderRunArgs {
   onActivity?: (description: string, originator?: string) => void;
   signal?: AbortSignal;
   continueSessionId?: string | null;
+  /** Native in-session operation forwarded through the shared provider boundary. */
+  nativeSessionOperation?: NativeSessionOperation;
   /** The previous invocation's raw opencode export snapshot for this session,
    *  when `continueSessionId` resumes it. Ignored for other providers. See
    *  {@link https://opencode.ai} `export` semantics: totals are cumulative for
@@ -264,10 +269,29 @@ export function resolveEffectiveModel(args: Pick<ExecutionProviderRunArgs, "prov
 export class ProviderExecutionService {
   constructor(private readonly deps: ProviderExecutionServiceDeps) {}
 
+  async executeProvider(args: ExecutionProviderRunArgs & { expectTextOutput: true }): Promise<ProviderRunResult & { text: string }>;
+  async executeProvider(args: ExecutionProviderRunArgs): Promise<ProviderRunResult>;
   async executeProvider(args: ExecutionProviderRunArgs): Promise<ProviderRunResult> {
     let execInvocationId: string | null = args.invocationId || null;
     let lastPersistedMessagesSignature: string | null = null;
     const effectiveModel = resolveEffectiveModel(args);
+    const scopedSettings = args.projectId.trim() && this.deps.getDashboardSettings
+      ? this.deps.getDashboardSettings({
+        projectId: args.projectId,
+        sprintId: args.sprintId,
+      })
+      : null;
+    const googleDriveMount = scopedSettings?.googleDrive
+      ? await resolveGoogleDriveMount(
+        scopedSettings.googleDrive,
+        args.repoPath,
+        args.workflowSettings.executionMode,
+        {
+          logger: this.deps.logger,
+          onActivity: args.onActivity,
+        },
+      )
+      : null;
     const persistentSkillContext = await resolvePersistentSkillContext({
       projectId: args.projectId,
       agentPresetId: args.mcpAgentId,
@@ -433,6 +457,7 @@ export class ProviderExecutionService {
         gitlabToken: args.gitlabToken,
         signal: args.signal,
         continueSessionId,
+        nativeSessionOperation: args.nativeSessionOperation,
         openCodeBaselineUsage: openCodeBaselineRawUsageJson,
         invocationId: execInvocationId,
         providerInvocationId: invocation?.id,
@@ -440,6 +465,7 @@ export class ProviderExecutionService {
         mcpConnection: resolvedMcp.mcpConnection,
         customMcpServers: resolvedMcp.customMcpServers,
         persistentSkillStorageMounts: persistentSkillRuntime?.mounts,
+        googleDriveMount: googleDriveMount ?? undefined,
         onActivity: (desc: string, originator?: string) => {
           if (args.onActivity) {
             args.onActivity(desc, originator);
@@ -621,7 +647,12 @@ export class ProviderExecutionService {
       return result;
     };
 
-    const initialPrompt = persistentSkillContext.prompt;
+    const initialPrompt = googleDriveMount
+      ? composeGoogleDrivePrompt(
+        persistentSkillContext.prompt,
+        googleDriveMount.readonly ? "read-only" : "read-write",
+      )
+      : persistentSkillContext.prompt;
     let currentPrompt = initialPrompt;
     let providerResult: ProviderRunResult;
     let usedReadFileRetry = false;
@@ -830,7 +861,13 @@ export class ProviderExecutionService {
           });
         }
       }
-      return providerResult;
+      return {
+        ...providerResult,
+        // Downstream workflows historically preferred stderr, where Codex emits
+        // only its benign stdin notice. Preserve raw stdout for audit/telemetry,
+        // but give callers the classifier's actionable diagnostic.
+        stderr: classification.userMessage,
+      };
     }
   }
 

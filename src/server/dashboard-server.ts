@@ -31,6 +31,7 @@ import type {
   HeaderTokenThroughputSnapshot,
 } from "../contracts/app-types.js";
 import type { OnboardingStateRecord } from "../domain/user/onboarding-state.js";
+import type { DashboardNotificationFeed } from "../contracts/dashboard-notification-types.js";
 import type {
   EffectiveSettingsResponse,
   ProjectSettingsOverride,
@@ -54,6 +55,8 @@ import type {
 } from "../contracts/instruction-file-types.js";
 import type {
   AgentPresetRecord,
+  BaseAgentRole,
+  BaseAgentUpdateNotice,
   CreateAgentPresetInput,
   PushAgentPresetsToMarkdownOptions,
   UpdateAgentPresetInput,
@@ -86,6 +89,7 @@ import type {
   ImprovePromptInput,
   PlanSprintOptions,
   ProjectCollectionResponse,
+  ProjectInitializationState,
   ProjectSetupRequestInput,
   ProjectSetupResult,
   ProjectSetupStartResult,
@@ -131,6 +135,8 @@ import type { LocalMcpCliProvider, LocalMcpInstallResult, LocalMcpSetupInfo } fr
 import { resolveDashboardBindHost } from "../config/app-config.js";
 import type { ChatProviderIngressService } from "../services/chat-provider-ingress-service.js";
 import type { SpeechTranscriptionService } from "../services/speech-transcription-service.js";
+import type { SpeechSynthesisService } from "../services/speech-synthesis-service.js";
+import type { SpeechModelManager } from "../services/speech-model-manager.js";
 import type { NodeFlowService } from "../services/node-flow-service.js";
 import type { CustomDashboardRepository } from "../repositories/custom-dashboard-repository.js";
 import type { CustomDashboardValidationService } from "../services/custom-dashboard-validation-service.js";
@@ -152,11 +158,13 @@ export type DashboardDependencies = Omit<
   | "port"
   | "liveActivityCacheMs"
   | "getUpdateStatus"
+  | "getDashboardNotifications"
 > & {
   getUpdateStatus: () => Promise<UpdateStatus>;
   getLocalMcpSetup: () => LocalMcpSetupInfo;
   regenerateLocalMcpAuthToken: () => LocalMcpSetupInfo;
   installLocalMcpProvider: (provider: LocalMcpCliProvider) => Promise<LocalMcpInstallResult> | LocalMcpInstallResult;
+  getDashboardNotifications: () => DashboardNotificationFeed;
 };
 
 export interface DashboardServerOptions {
@@ -175,6 +183,8 @@ export interface DashboardServerOptions {
   chatProviderRepository?: ChatProviderRepository;
   chatProviderIngressService?: ChatProviderIngressService;
   speechTranscriptionService?: SpeechTranscriptionService;
+  speechSynthesisService?: SpeechSynthesisService;
+  speechModelManager?: SpeechModelManager;
   nodeFlowService?: NodeFlowService;
   customDashboardRepository?: CustomDashboardRepository;
   customDashboardValidationService?: CustomDashboardValidationService;
@@ -212,6 +222,7 @@ export interface DashboardServerOptions {
     input?: { status?: "resolved" | "dismissed"; reason?: string; resolutionSummaryMarkdown?: string },
   ) => ExecutionAttentionItemSummary;
   getOverviewTelemetrySnapshot: () => OverviewTelemetrySnapshot;
+  getDashboardNotifications?: () => DashboardNotificationFeed;
   getLiveActivities: () => Promise<Record<string, JulesActivity[]>>;
   getGitStatus: () => Promise<GitTrackingStatus>;
   getExternalSettingsHints: () => ExternalSettingsHints;
@@ -235,6 +246,7 @@ export interface DashboardServerOptions {
   setupProject?: (projectId: string, input?: ProjectSetupRequestInput, signal?: AbortSignal) => Promise<ProjectSetupResult>;
   startProjectSetup?: (projectId: string, input?: ProjectSetupRequestInput) => Promise<ProjectSetupStartResult>;
   getProject: (projectId: string) => ProjectSummary | null;
+  getProjectInitializationState?: (projectId: string) => Promise<ProjectInitializationState>;
   updateProject: (projectId: string, input: UpdateProjectInput) => ProjectSummary;
   deleteProject: (projectId: string) => void;
   selectProject: (projectId: string | null) => string | null;
@@ -262,6 +274,8 @@ export interface DashboardServerOptions {
   createAgentPreset: (projectId: string, input: CreateAgentPresetInput) => Promise<AgentPresetRecord> | AgentPresetRecord;
   updateAgentPreset: (agentPresetId: string, input: UpdateAgentPresetInput) => Promise<AgentPresetRecord> | AgentPresetRecord;
   deleteAgentPreset: (agentPresetId: string) => Promise<void> | void;
+  listBaseAgentUpdateNotices?: (projectId: string) => Promise<BaseAgentUpdateNotice[]> | BaseAgentUpdateNotice[];
+  applyBaseAgentUpdate?: (projectId: string, role: BaseAgentRole) => Promise<AgentPresetRecord> | AgentPresetRecord;
   importAgentPresetFromMarkdown?: (agentPresetId: string) => Promise<AgentPresetRecord> | AgentPresetRecord;
   syncAllAgentPresetsFromMarkdown?: (projectId: string) => Promise<AgentPresetRecord[]> | AgentPresetRecord[];
   pullAgentPresetsFromMarkdown?: (projectId: string) => Promise<AgentPresetRecord[]> | AgentPresetRecord[];
@@ -340,6 +354,8 @@ export interface DashboardServerOptions {
   getSprintPreviewLogs?: (sessionId: string, tail?: number) => Promise<{ logs: string }> | { logs: string };
   getSprintPreviewLogsForProjectSprint?: (projectId: string, sprintId: string, sessionId: string, tail?: number) => Promise<{ logs: string }> | { logs: string };
   updateSprintPreviewEnvironmentOverrides?: (projectId: string, sprintId: string, sessionId: string, environmentOverrides: PreviewEnvironmentVariable[]) => Promise<SprintPreviewSession> | SprintPreviewSession;
+  updateSprintPreviewStartupCommandOverride?: (projectId: string, sprintId: string, sessionId: string, startupCommandOverride: string | null) => Promise<SprintPreviewSession> | SprintPreviewSession;
+  updateSprintPreviewDockerAccessOverride?: (projectId: string, sprintId: string, sessionId: string, dockerAccessOverride: boolean | null) => Promise<SprintPreviewSession> | SprintPreviewSession;
   proxySprintPreviewRequest?: (args: {
     sessionId: string;
     method: string;

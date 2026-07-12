@@ -8,7 +8,7 @@ import type {
 export async function openSettingsCategory(
   page: Page,
   categoryId: string,
-  categoryName: RegExp,
+  categoryName: string,
   scope: 'System' | 'Project' = 'System',
 ): Promise<void> {
   await page.goto('/config');
@@ -17,8 +17,22 @@ export async function openSettingsCategory(
   if (await page.locator(`[data-active-category="${categoryId}"]`).isVisible()) {
     return;
   }
-  await page.getByRole('button', { name: categoryName }).click();
+  await page
+    .getByRole('navigation', { name: 'Settings categories' })
+    .getByRole('button', { name: categoryName, exact: true })
+    .click();
   await expect(page.locator(`[data-active-category="${categoryId}"]`)).toBeVisible();
+}
+
+export async function openSettingsSection(
+  page: Page,
+  title: string,
+  configureName = `Configure ${title}`,
+): Promise<void> {
+  const panel = page.getByRole('region', { name: 'Settings category panel' });
+  await panel.getByRole('button', { name: configureName, exact: true }).click();
+  await expect(panel.getByRole('heading', { name: title, exact: true })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Back to category overview', exact: true })).toBeVisible();
 }
 
 export async function selectSettingsScope(page: Page, scope: 'System' | 'Project'): Promise<void> {

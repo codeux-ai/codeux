@@ -101,6 +101,10 @@ Today virtual workers handle:
 - worker-owned `ci_fix_required` attention
 - worker-owned `action_required` attention that can be auto-answered or auto-approved
 
+Worker-originated MCP clarifications are a separate, project-manager-owned lane. `request_clarification` creates a human-owned `worker_clarification` attention item, so virtual workers do not claim it through repair or `action_required` automation. While that item is pending, the scheduling policy suppresses another dispatch or duplicate worker attention for the same task or dispatch scope. Unrelated queued tasks and dispatches remain eligible, and a taskless general clarification does not pause coding dispatches. The configured clarification-reply/dashboard-reply Project manager agent (or an unscoped project-manager MCP client) answers through `reply_to_clarification`; arbitrary worker agents cannot answer and do not receive project-manager management tools.
+
+The reply continuation is provider-specific. Jules receives a session message and only then has its runtime projection restored to running. Local CLI providers reuse the task-rerun path with the preserved workspace, worker branch, provider/model, task agent, and native session lineage. Acceptance of that continuation does not assert task completion. Taskless general questions are recorded without scheduling a worker, and missing task-run/session/workspace context leaves a task-backed clarification pending.
+
 For planning flows, Code UX (`src/services/planning-agent-service.ts`):
 
 - runs the Planning agent prompt through the configured virtual worker CLI

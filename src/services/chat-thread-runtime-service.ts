@@ -16,6 +16,7 @@ import type {
   ConversationMessageRecord,
   ConversationRuntimeState,
   PromptSuggestionsMetadata,
+  AgentResponseEffectMetadata,
   DashboardAppProgressPlanningStage,
   DashboardAppProgressWidgetMetadata,
   DashboardCreateAppQuickactionKind,
@@ -26,13 +27,17 @@ import type {
   UpdateConversationThreadInput,
   UpdateConversationThreadRouteInput,
 } from "../contracts/connection-chat-types.js";
-import { DASHBOARD_APP_PROGRESS_WIDGET_TYPE } from "../contracts/connection-chat-types.js";
+import type { PlanningDesignGuidanceSelection, ProjectInitializationState } from "../contracts/project-management-types.js";
+import {
+  DASHBOARD_APP_PROGRESS_WIDGET_TYPE,
+  DASHBOARD_CREATE_APP_QUICKACTION_KINDS,
+} from "../contracts/connection-chat-types.js";
 import type {
   DetachedQuicksprintLaunchInput,
   DetachedQuicksprintLaunchResult,
 } from "../contracts/quicksprint-types.js";
 import { buildProviderPrompt } from "./cli-workflow-utils.js";
-import { resolveEffectiveModel } from "./provider-execution-service.js";
+import { resolveEffectiveModel, type ProviderExecutionService } from "./provider-execution-service.js";
 import { getRepoCodeUxDir, getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
 import {
   buildChatContinuationPrompt,
@@ -48,6 +53,8 @@ import { getCorrelationId } from "../shared/logging/correlation-id.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import { dashboardReplyAgentMcpAccess, isSchedulerOnlyAgentMcpAccess } from "./agent-mcp-access.js";
 import { buildProviderInvocationWorkspaceOptions } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
+import { getCreateAppQuickactionSpec } from "../domain/chat/create-app-quickaction-catalog.js";
+import { ProjectInitializationStateService } from "./project-initialization-state-service.js";
 
 interface ChatThreadRuntimeServiceDependencies {
   connectionChatRepository: ConnectionChatRepository;
@@ -59,12 +66,14 @@ interface ChatThreadRuntimeServiceDependencies {
   agentPresetSyncService: AgentPresetSyncService;
   projectManagementRepository: ProjectManagementRepository;
   providerRunner: IProviderRunner;
+  providerExecutionService: ProviderExecutionService;
   chatManagementActionService: ChatManagementActionService;
   chatProviderOutboundService?: ChatProviderOutboundService;
   knowledgeService: KnowledgeService;
   getMcpConnectionInfo?: () => McpConnectionInfo | null;
   getMcpApprovalTracker?: () => McpApprovalTracker;
   runDueSchedulerEntriesAfterReply?: () => Promise<void>;
+  getProjectInitializationState?: (projectId: string) => Promise<ProjectInitializationState>;
   logger?: Logger;
 }
 
@@ -76,6 +85,7 @@ interface NormalizedCreateAppQuickaction {
   kind: DashboardCreateAppQuickactionKind;
   requestId: string;
   templateId: string;
+  designGuidance: PlanningDesignGuidanceSelection;
   taskCount: number;
   stackSummary: DashboardCreateAppQuickactionStackSummary | null;
   suggestionTags: string[];
@@ -168,13 +178,16 @@ function readString(value: unknown): string | null {
 
 function normalizeCreateAppQuickactionKind(value: unknown): DashboardCreateAppQuickactionKind | null {
   const normalized = readString(value);
-  if (normalized === "web_app" || normalized === "web") {
-    return "web_app";
+  const aliases: Record<string, DashboardCreateAppQuickactionKind> = {
+    web: "web_app",
+    desktop: "desktop_app",
+    shop: "online_shop",
+    online_store: "online_shop",
+  };
+  if (normalized && DASHBOARD_CREATE_APP_QUICKACTION_KINDS.includes(normalized as DashboardCreateAppQuickactionKind)) {
+    return normalized as DashboardCreateAppQuickactionKind;
   }
-  if (normalized === "desktop_app" || normalized === "desktop") {
-    return "desktop_app";
-  }
-  return null;
+  return normalized ? aliases[normalized] ?? null : null;
 }
 
 function readStringList(value: unknown): string[] {
@@ -230,6 +243,27 @@ function readPositiveInteger(value: unknown, fallback: number): number {
   return Math.floor(value);
 }
 
+function readCreateAppDesignGuidance(
+  value: unknown,
+  expected: PlanningDesignGuidanceSelection,
+): PlanningDesignGuidanceSelection {
+  if (value === undefined) {
+    return { ...expected };
+  }
+  const selection = readRecord(value);
+  const selectedTechStackId = readString(selection?.selectedTechStackId);
+  const selectedStyleguideId = readString(selection?.selectedStyleguideId);
+  if (
+    !selectedTechStackId
+    || !selectedStyleguideId
+    || selectedTechStackId !== expected.selectedTechStackId
+    || selectedStyleguideId !== expected.selectedStyleguideId
+  ) {
+    throw new Error("Create app quickaction design guidance does not match its catalog entry.");
+  }
+  return { selectedTechStackId, selectedStyleguideId };
+}
+
 function parseCreateAppQuickactionMetadata(metadata: Record<string, unknown> | null | undefined): NormalizedCreateAppQuickaction | null {
   const root = readRecord(metadata);
   if (!root) {
@@ -252,15 +286,23 @@ function parseCreateAppQuickactionMetadata(metadata: Record<string, unknown> | n
   if (!requestId) {
     throw new Error("Create app quickaction metadata is missing requestId.");
   }
-  const templateId = readString(quickaction.templateId ?? root.templateId);
-  if (!templateId) {
+  const suppliedTemplateId = readString(quickaction.templateId ?? root.templateId);
+  if (!suppliedTemplateId) {
     throw new Error("Create app quickaction metadata is missing templateId.");
+  }
+  const spec = getCreateAppQuickactionSpec(kind);
+  if (suppliedTemplateId !== spec.templateId) {
+    throw new Error(`Create app quickaction template does not match ${kind}.`);
   }
 
   return {
     kind,
     requestId,
-    templateId,
+    templateId: spec.templateId,
+    designGuidance: readCreateAppDesignGuidance(
+      quickaction.designGuidance ?? quickaction.guidanceSelection ?? root.designGuidance ?? root.guidanceSelection,
+      spec.designGuidance,
+    ),
     taskCount: readPositiveInteger(quickaction.taskCount ?? root.taskCount, 5),
     stackSummary: readCreateAppStackSummary(quickaction.stackSummary ?? root.stackSummary, kind),
     suggestionTags: readStringList(quickaction.suggestionTags ?? root.suggestionTags),
@@ -295,9 +337,14 @@ async function writeThreadSessionTitleFile(repoPath: string, threadId: string, t
 
 export class ChatThreadRuntimeService {
   private readonly inFlightTurns = new Map<string, InFlightChatTurn>();
+  private readonly projectInitializationStateService: ProjectInitializationStateService;
   private quicksprintLauncher: ChatCreateAppQuicksprintLauncher | null = null;
 
-  constructor(private readonly deps: ChatThreadRuntimeServiceDependencies) {}
+  constructor(private readonly deps: ChatThreadRuntimeServiceDependencies) {
+    this.projectInitializationStateService = new ProjectInitializationStateService(
+      (projectId) => this.deps.projectManagementRepository.getProject(projectId),
+    );
+  }
 
   public setQuicksprintLauncher(launcher: ChatCreateAppQuicksprintLauncher): void {
     this.quicksprintLauncher = launcher;
@@ -680,11 +727,21 @@ export class ChatThreadRuntimeService {
       throw new Error("Create-app quickactions are not available until quicksprint launch is initialized.");
     }
 
+    const initializationState = this.deps.getProjectInitializationState
+      ? await this.deps.getProjectInitializationState(projectId)
+      : await this.projectInitializationStateService.getProjectInitializationState(projectId);
+    if (!initializationState.canCreateInitialAppQuickactions) {
+      throw new Error(`${getCreateAppQuickactionSpec(quickaction.kind).displayLabel} is only available for an eligible initial project.`);
+    }
+
     const launch = await this.quicksprintLauncher.launchDetachedQuicksprint(projectId, {
       templateId: quickaction.templateId,
       taskCount: quickaction.taskCount,
       submitMode: "plan_and_start",
       clientRequestId: quickaction.requestId,
+      planningOverrides: {
+        designGuidance: quickaction.designGuidance,
+      },
       additionalPrompt: this.buildCreateAppAdditionalPrompt(userMessage.bodyMarkdown, quickaction),
     });
 
@@ -692,7 +749,7 @@ export class ChatThreadRuntimeService {
       upToMessageId: userMessage.id,
     });
 
-    const appLabel = quickaction.kind === "web_app" ? "web app" : "desktop app";
+    const appLabel = getCreateAppQuickactionSpec(quickaction.kind).appKindLabel.toLowerCase();
     const progressMessage = this.deps.connectionChatRepository.postSystemMessage(projectId, {
       threadId: thread.id,
       bodyMarkdown: `Started a ${appLabel} sprint: **${launch.sprint.name}**. Planning is running now; add any directional details here and they can be appended after planning finishes.`,
@@ -1070,7 +1127,9 @@ export class ChatThreadRuntimeService {
   }
 
   private buildCreateAppAdditionalPrompt(bodyMarkdown: string, quickaction: NormalizedCreateAppQuickaction): string {
-    const appLabel = quickaction.kind === "web_app" ? "web application" : "desktop application";
+    const spec = getCreateAppQuickactionSpec(quickaction.kind);
+    const appLabel = spec.appKindLabel.toLowerCase();
+    const appArticle = /^[aeiou]/i.test(appLabel) ? "an" : "a";
     const stackLines = this.formatCreateAppStackSummary(quickaction.stackSummary);
     const suggestionLine = quickaction.suggestionTags.length > 0
       ? `Suggestion tags from the dashboard: ${quickaction.suggestionTags.join(", ")}.`
@@ -1079,7 +1138,7 @@ export class ChatThreadRuntimeService {
     return [
       "Dashboard create-app quickaction.",
       `Quickaction request id: ${quickaction.requestId}.`,
-      `Create an app sprint for a ${appLabel}.`,
+      `Create an app sprint for ${appArticle} ${appLabel}.`,
       stackLines ? `Suggested stack summary:\n${stackLines}` : "No suggested stack summary was provided; infer the right stack from the selected project before planning.",
       suggestionLine,
       `Original dashboard message:\n${bodyMarkdown.trim()}`,
@@ -1247,7 +1306,10 @@ export class ChatThreadRuntimeService {
 
     let promptContent = "";
     let continueSessionId: string | null = null;
-    const mcpConnection = this.deps.getMcpConnectionInfo?.() ?? null;
+    const baseMcpConnection = this.deps.getMcpConnectionInfo?.() ?? null;
+    const mcpConnection = baseMcpConnection
+      ? { ...baseMcpConnection, threadId: thread.id }
+      : null;
 
     const allMessages = this.deps.connectionChatRepository.listMessages(thread.id) ?? [];
     const suppressRichWidgets = isChatProviderSourcedThread(thread, allMessages, latestMessage);
@@ -1375,11 +1437,17 @@ export class ChatThreadRuntimeService {
     const promptSuggestionsMetadata: PromptSuggestionsMetadata | undefined = result.promptSuggestions?.length
       ? { promptSuggestions: result.promptSuggestions }
       : undefined;
+    const agentEffectMetadata: AgentResponseEffectMetadata | undefined = result.agentEffect
+      ? { agentEffect: result.agentEffect }
+      : undefined;
+    const replyMetadata = promptSuggestionsMetadata || agentEffectMetadata
+      ? { ...promptSuggestionsMetadata, ...agentEffectMetadata }
+      : undefined;
 
     const replyMessage = this.deps.connectionChatRepository.postSystemMessage(projectId, {
       threadId: thread.id,
       bodyMarkdown: systemReply.trim(),
-      ...(promptSuggestionsMetadata ? { metadata: promptSuggestionsMetadata } : {}),
+      ...(replyMetadata ? { metadata: replyMetadata } : {}),
     });
     await this.deliverChatProviderReplyIfNeeded(projectId, thread, latestMessage, replyMessage);
 
@@ -1493,7 +1561,10 @@ export class ChatThreadRuntimeService {
     });
 
     try {
-      const result = await this.deps.providerRunner.runProviderForText({
+      const result = await this.deps.providerExecutionService.executeProvider({
+        projectId,
+        purpose: "chat_compaction",
+        type: "chat_compaction",
         provider,
         prompt: "Native CLI session operation: compact",
         cwd: repoPath,
@@ -1523,6 +1594,11 @@ export class ChatThreadRuntimeService {
         workspaceSessionId: thread.id,
         workflowSettings,
         repoPath,
+        expectTextOutput: true,
+        invocationId: execInvocation.id,
+        trackPromptInInvocation: false,
+        trackAssistantInInvocation: false,
+        finalizeExecutionInvocation: false,
         ...buildProviderInvocationWorkspaceOptions({
           workflowSettings,
           gitPolicy: {

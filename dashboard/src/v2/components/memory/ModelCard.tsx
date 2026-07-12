@@ -182,6 +182,12 @@ export const ModelCard: FunctionComponent<{
         </div>
 
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <a href={model.license.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[10px] font-bold text-signal-600 hover:underline dark:text-signal-300">
+            <ExternalLink className="h-3 w-3" /> {model.license.name} · {model.source === "custom" ? "operator asserted" : "commercial use"}
+          </a>
+        </div>
+
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           {!model.downloaded && !model.downloading && (
             <button type="button" onClick={() => { void runAction("download", () => onDownload(model.id)); }}
               data-model-action="download"

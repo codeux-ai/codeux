@@ -18,10 +18,18 @@ const cloneMemorySettings = (memory: ProjectSettings["memory"]): ProjectSettings
   externalEmbedding: { ...memory.externalEmbedding },
 });
 
-const cloneSpeechSettings = (speech: ProjectSettings["speech"]): ProjectSettings["speech"] => ({
-  ...speech,
-  externalTranscription: { ...speech.externalTranscription },
-});
+const cloneSpeechSettings = (speech: ProjectSettings["speech"]): ProjectSettings["speech"] => {
+  return {
+    ...speech,
+    externalTranscription: { ...speech.externalTranscription },
+    ...(speech.synthesis ? {
+      synthesis: {
+        ...speech.synthesis,
+        externalSynthesis: { ...speech.synthesis.externalSynthesis },
+      },
+    } : {}),
+  };
+};
 
 const cloneJiraSettings = (jira: SystemSettings["integrations"]["jira"]): SystemSettings["integrations"]["jira"] => ({ ...jira });
 const cloneImporterSettings = (
@@ -175,6 +183,7 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
   aiProvider: cloneProjectAiProviderSettings(settings.aiProvider),
   techstack: cloneTechstackSelection(settings.techstack) ?? { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
   designGuidance: cloneDesignGuidance(settings.designGuidance),
+  googleDrive: { ...settings.googleDrive },
   git: {
     githubMode: settings.git.githubMode,
     githubToken: settings.git.githubToken,
@@ -234,6 +243,7 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
   aiProvider: cloneProjectAiProviderSettings(settings.aiProvider),
   techstack: cloneTechstackSelection(settings.techstack) ?? { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
   designGuidance: cloneDesignGuidance(settings.designGuidance),
+  googleDrive: { ...settings.googleDrive },
   git: {
     ...settings.git,
   },

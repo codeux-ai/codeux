@@ -1,13 +1,22 @@
 import type { DashboardSettings } from "../../../contracts/app-types.js";
 import type { SpeechProviderMode, SpeechSettings } from "../../../contracts/speech-types.js";
-import { SPEECH_PROVIDER_MODES } from "../../../contracts/speech-types.js";
+import {
+  LOCAL_TRANSCRIPTION_MODEL_IDS,
+  SPEECH_PROVIDER_MODES,
+} from "../../../contracts/speech-types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../repositories/settings-defaults.js";
+import { resolveCompatibleSynthesisVoice } from "../../../services/speech-model-catalog.js";
 import { readBoolean, readInteger, readString } from "../../../shared/config/value-readers.js";
 
 export const MIN_SPEECH_AUDIO_SECONDS = 1;
 export const MAX_SPEECH_AUDIO_SECONDS = 600;
 
 const SPEECH_PROVIDER_MODE_SET = new Set<SpeechProviderMode>(SPEECH_PROVIDER_MODES);
+const LOCAL_TRANSCRIPTION_MODEL_ID_SET = new Set<string>(LOCAL_TRANSCRIPTION_MODEL_IDS);
+const LEGACY_TTS_MODELS: Record<string, { modelId: string; voice: string }> = {
+  "piper-en-us-lessac-medium": { modelId: "piper-en-us-ljspeech-medium", voice: "ljspeech" },
+  "piper-en-gb-alba-medium": { modelId: "piper-en-gb-cori-medium", voice: "cori" },
+};
 
 const readSpeechProviderMode = (value: unknown, fallback: SpeechProviderMode): SpeechProviderMode => (
   typeof value === "string" && SPEECH_PROVIDER_MODE_SET.has(value as SpeechProviderMode)
@@ -28,6 +37,8 @@ const readOptionalLanguage = (value: unknown): string | null => {
   return trimmed || null;
 };
 
+const SPEECH_FORMATS = new Set(["mp3", "wav", "opus", "aac", "flac"] as const);
+
 export const sanitizeSpeech = (
   input: Partial<DashboardSettings> | undefined,
 ): SpeechSettings => {
@@ -38,11 +49,35 @@ export const sanitizeSpeech = (
   const externalInput = speechInput.externalTranscription && typeof speechInput.externalTranscription === "object"
     ? speechInput.externalTranscription as Partial<SpeechSettings["externalTranscription"]>
     : {};
+  const synthesisInput = speechInput.synthesis && typeof speechInput.synthesis === "object"
+    ? speechInput.synthesis as Partial<SpeechSettings["synthesis"]>
+    : {};
+  const externalSynthesisInput = synthesisInput.externalSynthesis && typeof synthesisInput.externalSynthesis === "object"
+    ? synthesisInput.externalSynthesis as Partial<SpeechSettings["synthesis"]["externalSynthesis"]>
+    : {};
+  const providerMode = readSpeechProviderMode(speechInput.providerMode, defaults.providerMode);
+  const requestedLocalModelId = readRequiredTrimmedString(speechInput.localModelId, defaults.localModelId);
+  const localModelId = LOCAL_TRANSCRIPTION_MODEL_ID_SET.has(requestedLocalModelId)
+    ? requestedLocalModelId
+    : defaults.localModelId;
+  const requestedSynthesisModelId = readRequiredTrimmedString(synthesisInput.localModelId, defaults.synthesis.localModelId);
+  const legacySynthesis = LEGACY_TTS_MODELS[requestedSynthesisModelId];
+  const synthesisModelId = legacySynthesis?.modelId ?? requestedSynthesisModelId;
+  const requestedSynthesisVoice = legacySynthesis?.voice
+    ?? readRequiredTrimmedString(synthesisInput.voice, defaults.synthesis.voice);
+  let synthesisVoice = requestedSynthesisVoice;
+  try {
+    synthesisVoice = resolveCompatibleSynthesisVoice(synthesisModelId, requestedSynthesisVoice);
+  } catch {
+    // Preserve unknown model ids so the synthesis endpoint can return its
+    // existing structured configuration error.
+  }
 
   return {
     enabled: readBoolean(speechInput.enabled, defaults.enabled),
-    providerMode: readSpeechProviderMode(speechInput.providerMode, defaults.providerMode),
-    localModelId: readRequiredTrimmedString(speechInput.localModelId, defaults.localModelId),
+    providerMode,
+    localModelId,
+    localLanguage: localModelId.endsWith(".en") ? "en" : readOptionalLanguage(speechInput.localLanguage),
     maxAudioSeconds: Math.max(
       MIN_SPEECH_AUDIO_SECONDS,
       Math.min(MAX_SPEECH_AUDIO_SECONDS, readInteger(speechInput.maxAudioSeconds, defaults.maxAudioSeconds)),
@@ -52,6 +87,24 @@ export const sanitizeSpeech = (
       apiKey: readString(externalInput.apiKey, defaults.externalTranscription.apiKey).trim(),
       model: readRequiredTrimmedString(externalInput.model, defaults.externalTranscription.model),
       language: readOptionalLanguage(externalInput.language),
+    },
+    synthesis: {
+      enabled: readBoolean(synthesisInput.enabled, defaults.synthesis.enabled),
+      providerMode: readSpeechProviderMode(synthesisInput.providerMode, defaults.synthesis.providerMode),
+      localModelId: synthesisModelId,
+      voice: synthesisVoice,
+      speed: Math.max(0.5, Math.min(2, typeof synthesisInput.speed === "number" && Number.isFinite(synthesisInput.speed)
+        ? synthesisInput.speed
+        : defaults.synthesis.speed)),
+      externalSynthesis: {
+        baseUrl: readRequiredTrimmedString(externalSynthesisInput.baseUrl, defaults.synthesis.externalSynthesis.baseUrl),
+        apiKey: readString(externalSynthesisInput.apiKey, defaults.synthesis.externalSynthesis.apiKey).trim(),
+        model: readRequiredTrimmedString(externalSynthesisInput.model, defaults.synthesis.externalSynthesis.model),
+        voice: readRequiredTrimmedString(externalSynthesisInput.voice, defaults.synthesis.externalSynthesis.voice),
+        format: typeof externalSynthesisInput.format === "string" && SPEECH_FORMATS.has(externalSynthesisInput.format as never)
+          ? externalSynthesisInput.format as SpeechSettings["synthesis"]["externalSynthesis"]["format"]
+          : defaults.synthesis.externalSynthesis.format,
+      },
     },
   };
 };

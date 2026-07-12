@@ -27,7 +27,7 @@ const createImporterSettings = () => ({
 
 const createSpeechSettings = () => ({
   enabled: false,
-  providerMode: "auto" as const,
+  providerMode: "local_onnx" as const,
   localModelId: "onnx-community/whisper-base.en",
   maxAudioSeconds: 120,
   externalTranscription: {
@@ -112,6 +112,7 @@ describe("onboarding-provider-settings", () => {
         cliWorkflow: { executionMode: "HOST" },
         sprintPreview: { enabled: false },
         techstack: { applicationKind: null, selectedTechstackId: null },
+        googleDrive: { enabled: false, hostPath: "", accessMode: "read-only" },
         aiProvider: {
           provider: "jules",
           strategy: "MANUAL",
@@ -174,6 +175,7 @@ describe("onboarding-provider-settings", () => {
     expect(cloned).toEqual(settings);
     expect(cloned).not.toBe(settings);
     expect(cloned.integrations.providers).not.toBe(settings.integrations.providers);
+    expect(cloned.defaults.googleDrive).not.toBe(settings.defaults.googleDrive);
   });
 
   it("getSystemProvidersByType sorts and filters integration providers by type", () => {

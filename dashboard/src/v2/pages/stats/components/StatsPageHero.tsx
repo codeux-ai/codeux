@@ -1,7 +1,6 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import {
-  BarChart3,
   CalendarDays,
   CheckCircle2,
   Clock3,
@@ -16,7 +15,6 @@ import type {
 } from "../../../types.js";
 import { formatDateTime, isValidCustomRange } from "../stats-utils.js";
 import {
-  PANEL_CLASS,
   CHIP_CLASS,
   INPUT_CLASS,
   SUBPANEL_CLASS,
@@ -45,14 +43,14 @@ const MODE_LABELS: Record<StatsVisualMode, string> = {
   system: "System",
 };
 
-const HERO_PANEL_CLASS = PANEL_CLASS.replace("overflow-hidden", "overflow-visible");
+const HERO_PANEL_CLASS = "relative overflow-visible";
 
 const ContextBadge: FunctionComponent<{
   icon: LucideIcon;
   label: string;
   value: string;
 }> = ({ icon: Icon, label, value }) => (
-  <div className={`${CHIP_CLASS} ${styles.heroContextBadge}`}>
+  <div className={styles.heroContextBadge}>
     <Icon className={styles.heroContextBadgeIcon} strokeWidth={2.2} aria-hidden="true" />
     <span className={styles.heroContextBadgeLabel}>{label}</span>
     <span aria-hidden="true" className={styles.heroContextBadgeDivider}>/</span>
@@ -193,18 +191,9 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
         <div className={styles.heroIntro}>
           <div className={styles.heroTitleBlock}>
             <div className={styles.heroHeader}>
-              <div className={`${CHIP_CLASS} ${styles.heroKicker}`}>
-                <span className={styles.heroKickerIcon} aria-hidden="true">
-                  <BarChart3 strokeWidth={2.2} />
-                </span>
-                <span>Project Analytics</span>
-              </div>
+              <div className={styles.heroKicker}>Project analytics</div>
               <div className={styles.heroTitleRow}>
                 <h1 id="stats-hero-title" className={styles.heroTitle}>Stats</h1>
-                <span className={`${CHIP_CLASS} ${styles.heroStatusPill}`}>
-                  <span className={styles.heroStatusDot} aria-hidden="true" />
-                  Current
-                </span>
               </div>
               <p className={styles.heroSubtitle}>
                 Telemetry, usage movement, and operational ledgers for the selected project.
@@ -212,13 +201,11 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
             </div>
 
             <div className={styles.heroSignalRow} aria-label="Stats active lens">
-              <div className={`${CHIP_CLASS} ${styles.heroSignalBadge}`}>
-                <CalendarDays className={styles.heroSignalIcon} strokeWidth={2.1} aria-hidden="true" />
+              <div className={styles.heroSignalBadge}>
                 <span>Window</span>
                 <strong>{rangeScopeLabel}</strong>
               </div>
-              <div className={`${CHIP_CLASS} ${styles.heroSignalBadge}`}>
-                <CheckCircle2 className={styles.heroSignalIcon} strokeWidth={2.1} aria-hidden="true" />
+              <div className={styles.heroSignalBadge}>
                 <span>Mode</span>
                 <strong>{activeModeLabel}</strong>
               </div>
@@ -241,15 +228,11 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
             <div className={styles.heroControlHeader}>
               <div className={styles.heroControlHeaderText}>
                 <div className={styles.heroControlEyebrow}>
-                  Time window
+                  Snapshot window
                 </div>
                 <div className={styles.heroControlDescription}>
-                  Select the telemetry range for every analysis mode.
+                  Set the range for every analysis view.
                 </div>
-              </div>
-              <div className={`${CHIP_CLASS} ${styles.heroControlSummary}`} aria-label={`Current time window ${rangeScopeLabel}`}>
-                <span>Current</span>
-                <strong>{rangeScopeLabel}</strong>
               </div>
               <CalendarDays className={styles.heroControlIcon} strokeWidth={2.2} aria-hidden="true" />
             </div>
@@ -347,15 +330,11 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
             <div className={styles.heroControlHeader}>
               <div className={styles.heroControlHeaderText}>
                 <div className={styles.heroControlEyebrow}>
-                  Analysis mode
+                  Analysis view
                 </div>
                 <div className={styles.heroControlDescription}>
                   {activeModeDescription}
                 </div>
-              </div>
-              <div className={`${CHIP_CLASS} ${styles.heroControlSummary}`} aria-label={`Active analysis mode ${activeModeLabel}`}>
-                <span>Mode</span>
-                <strong>{activeModeLabel}</strong>
               </div>
               <CheckCircle2 className={styles.heroModeIcon} strokeWidth={2.2} aria-hidden="true" />
             </div>

@@ -21,6 +21,8 @@ import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import type { ChatWidgetLiveData, ParsedTurnTokens, RichWidgetDescriptor } from "../../lib/chat-widget-view-models.js";
 import type { ChatLiveEntityWidget } from "../../lib/chat-live-entities.js";
 import { getPromptSuggestionViewModels } from "../../lib/chat-suggestion-view-models.js";
+import { isAgentScheduledWakeup, ScheduledWakeupWidget } from "./widgets/ScheduledWakeupWidget.js";
+import { SpeechReplayButton } from "../speech/SpeechReplayButton.js";
 
 export interface ChatMessageBubbleProps {
   message: ChatMessageRecord;
@@ -31,6 +33,8 @@ export interface ChatMessageBubbleProps {
   widgetLiveData?: ChatWidgetLiveData;
   liveEntities?: readonly ChatLiveEntityWidget[];
   onPromptSuggestionSelect?: (prompt: string) => void;
+  onReplay?: (message: ChatMessageRecord) => void;
+  replaying?: boolean;
 }
 
 export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
@@ -42,8 +46,11 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
   widgetLiveData,
   liveEntities = [],
   onPromptSuggestionSelect,
+  onReplay,
+  replaying = false,
 }) => {
   const fromDashboard = message.direction === "dashboard_to_connection";
+  const isScheduledWakeup = fromDashboard && isAgentScheduledWakeup(message.metadata);
   const widgetData = getChatWidgetData(message, widgetLiveData);
   const richWidget = resolveRichWidget({
     metadata: message.metadata,
@@ -116,7 +123,7 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
   }
 
   const senderName = fromDashboard
-    ? "User"
+    ? isScheduledWakeup ? "Project Manager" : "User"
     : agentName || (message.metadata?.agentName as string) || "Assistant";
   const providerLabel = message.metadata?.provider as string | undefined;
   const createdAtLabel = formatChatTime(message.createdAt);
@@ -149,7 +156,9 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
         </div>
 
         <div className={`flex flex-col min-w-0 w-full max-w-[calc(100%-3rem)] rounded-2xl border backdrop-blur-md p-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] ${
-          fromDashboard
+          isScheduledWakeup
+            ? "rounded-tr-sm border-violet-500/25 bg-violet-500/[0.05] dark:bg-violet-400/[0.08]"
+            : fromDashboard
             ? "rounded-tr-sm border-signal-500/20 bg-signal-500/[0.08] dark:bg-signal-500/[0.1]"
             : "rounded-tl-sm border-slate-200/60 dark:border-white/10 bg-slate-100/80 dark:bg-white/5"
         }`}>
@@ -162,10 +171,23 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
               </span>
             )}
             {createdAtLabel && <span>{createdAtLabel}</span>}
+            {!fromDashboard && onReplay && !widgetData.suppressBodyMarkdown && message.bodyMarkdown.trim() && (
+              <SpeechReplayButton
+                busy={replaying}
+                label={`Replay message from ${senderName}`}
+                onReplay={() => onReplay(message)}
+              />
+            )}
           </div>
 
           {/* Message Body */}
-          {!widgetData.suppressBodyMarkdown && (
+          {isScheduledWakeup ? (
+            <ScheduledWakeupWidget
+              instruction={message.bodyMarkdown}
+              status={displayDeliveryStatus}
+              scheduledFor={typeof message.metadata?.scheduledFor === "string" ? message.metadata.scheduledFor : null}
+            />
+          ) : !widgetData.suppressBodyMarkdown && (
             <div className="prose prose-sm max-w-none text-[14px] leading-7 text-slate-800 dark:text-slate-200 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit prose-pre:overflow-x-auto break-words overflow-wrap-anywhere min-w-0"
               dangerouslySetInnerHTML={{ __html: renderMarkdown(message.bodyMarkdown) }}
             />
@@ -208,7 +230,7 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
             </div>
           )}
 
-          {fromDashboard && (
+          {fromDashboard && !isScheduledWakeup && (
              <div className="mt-2 flex items-center justify-end gap-1.5 text-[10px] font-mono">
                {displayDeliveryStatus === "pending" && (
                  <>

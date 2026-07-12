@@ -91,8 +91,18 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
     }
 
     return (
-      <div className="flex flex-col gap-5">
-        <SectionCard title="Memory System" watermark="MEM" badge={getBadge("memory")} icon={<Brain strokeWidth={2.4} />}>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <SectionCard
+          title="Memory System"
+          watermark="MEM"
+          badge={getBadge("memory")}
+          icon={<Brain strokeWidth={2.4} />}
+          highlights={[
+            { label: "Memory", value: editableSettings.memory.enabled ? "Enabled" : "Off", tone: editableSettings.memory.enabled ? "active" : "warning" },
+            { label: "Capture", value: editableSettings.memory.autoCaptureSprint || editableSettings.memory.autoCaptureAgent ? "Automatic" : "Manual" },
+            { label: "Remediation", value: editableSettings.memory.remediationMode === "ai" ? "AI" : editableSettings.memory.remediationMode === "deterministic" ? "Deterministic" : "Off" },
+          ]}
+        >
           <Row label="Enable memory" description="Turn on the memory system for automatic capture, storage, and semantic search of sprint knowledge." badge={getFieldBadge("memory.enabled")}>
             <Toggle aria-label="Toggle setting"               value={editableSettings.memory.enabled}
               onChange={() => updateEditableSettings((current) => ({
@@ -148,7 +158,17 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
           </Row>
         </SectionCard>
 
-        <SectionCard title="Long-Term Remediation Schedule" watermark="SCH" badge={getBadge("memory")} icon={<CalendarClock strokeWidth={2.4} />}>
+        <SectionCard
+          title="Long-Term Remediation Schedule"
+          watermark="SCH"
+          badge={getBadge("memory")}
+          icon={<CalendarClock strokeWidth={2.4} />}
+          highlights={[
+            { label: "Cadence", value: activeScope === "project" ? scheduleCadence : "Project only", tone: scheduleCadence !== "off" ? "active" : "neutral" },
+            { label: "Mode", value: scheduleMode === "ai" ? "AI" : "Deterministic" },
+            { label: "Local time", value: scheduleTime },
+          ]}
+        >
           {activeScope !== "project" || !selectedProject ? (
             <NoticePanel title="Project schedule" tone="neutral">
               Long-term memory remediation schedules are project-specific. Select a project scope to create a recurring cleanup and claim-maintenance job.
@@ -206,7 +226,17 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
           )}
         </SectionCard>
 
-        <SectionCard title="Limits" watermark="CAP" badge={getBadge("memory")} icon={<Gauge strokeWidth={2.4} />}>
+        <SectionCard
+          title="Limits"
+          watermark="CAP"
+          badge={getBadge("memory")}
+          icon={<Gauge strokeWidth={2.4} />}
+          highlights={[
+            { label: "Sprint memories", value: `${editableSettings.memory.maxSprintMemories} max` },
+            { label: "Project memories", value: `${editableSettings.memory.maxProjectMemories} max`, tone: "active" },
+            { label: "Promotion score", value: editableSettings.memory.promotionThreshold },
+          ]}
+        >
           <Row label="Promotion threshold" description="Minimum score (0.0-1.0) for deterministic promotion. AI remediation may review lower-scored candidates before selecting durable memories." badge={getFieldBadge("memory.promotionThreshold")}>
             <NumberInput
               value={editableSettings.memory.promotionThreshold}
@@ -274,7 +304,17 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
           </Row>
         </SectionCard>
 
-        <SectionCard title="Embedding Provider" watermark="EMB" badge={getBadge("memory")} icon={<Brain strokeWidth={2.4} />}>
+        <SectionCard
+          title="Embedding Provider"
+          watermark="EMB"
+          badge={getBadge("memory")}
+          icon={<Brain strokeWidth={2.4} />}
+          highlights={[
+            { label: "Backend", value: editableSettings.memory.embeddingProvider === "in_app" ? "Local model" : "External API", tone: "active" },
+            { label: "Model", value: editableSettings.memory.embeddingModel || "Catalog default" },
+            { label: "Privacy", value: editableSettings.memory.embeddingProvider === "in_app" ? "On device" : "External" },
+          ]}
+        >
           <Row label="Embedding backend" description="Use downloaded in-app ONNX models or an external OpenAI-compatible embeddings API." badge={getFieldBadge("memory.embeddingProvider")}>
             <select
               value={editableSettings.memory.embeddingProvider}
@@ -340,7 +380,17 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
           )}
         </SectionCard>
 
-        <SectionCard title="Worker Learnings Instruction" watermark="LRN" badge={getBadge("memory")} icon={<BookOpen strokeWidth={2.4} />}>
+        <SectionCard
+          title="Worker Learnings Instruction"
+          watermark="LRN"
+          badge={getBadge("memory")}
+          icon={<BookOpen strokeWidth={2.4} />}
+          highlights={[
+            { label: "Instruction", value: editableSettings.memory.workerLearningsInstruction.trim() ? "Customized" : "Empty", tone: editableSettings.memory.workerLearningsInstruction.trim() ? "active" : "warning" },
+            { label: "Length", value: `${editableSettings.memory.workerLearningsInstruction.length} chars` },
+            { label: "Used when", value: "Auto-capture" },
+          ]}
+        >
           <div className="pt-2 pb-1">
             <div className="text-xs font-medium leading-relaxed text-slate-400 mb-3">
               This instruction is appended to every worker task prompt when auto-capture is enabled. It tells the AI provider what to observe and record in a temporary learnings file that gets processed into sprint memories.
@@ -358,7 +408,7 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
         </SectionCard>
 
         <NoticePanel title="Embedding models" tone="success">
-          Download and manage embedding models from the Memory page. Once a model is active, new memories are automatically embedded for semantic search. The memory system works without a model — search falls back to text matching.
+          Download and manage embedding models from Settings → AI Models. Once a model is active, new memories are automatically embedded for semantic search. The memory system works without a model — search falls back to text matching.
         </NoticePanel>
       </div>
     );

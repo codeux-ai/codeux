@@ -94,6 +94,10 @@ backup files appear there.
   - `cli-workflow-text-utils.ts`
   - `cli-workflow-utils.ts`
   - `provider-routing.ts`
+  - `speech-model-catalog.ts`, `speech-model-manager.ts`
+  - Shared downloadable STT/TTS bundle definitions, cache layout, progress, and deletion.
+  - `speech-transcription-service.ts`, `speech-synthesis-service.ts`
+  - Scoped local ONNX and external API speech input/output runtimes.
 - `shared/logging/`
   - `logger.ts`
   - `correlation-id.ts`

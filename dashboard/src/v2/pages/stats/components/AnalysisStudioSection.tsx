@@ -92,14 +92,9 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
   const metadataDescriptionId = `stats-analysis-${visualMode}-description`;
 
   const renderSectionMetadata = (metadata: StudioMetadata) => (
-    <div className={`mb-3 flex min-w-0 flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between ${CHIP_CLASS}`}>
-      <div className="min-w-0">
-        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
-          {metadata.eyebrow}
-        </div>
-        <div className="mt-1 break-words text-sm font-semibold text-[color:var(--stats-value-color)]">
-          {metadata.label}
-        </div>
+    <div className="mb-3 flex min-w-0 flex-col gap-1.5 border-b border-[color:var(--stats-border-hairline)] px-1 pb-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0 break-words text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
+        {metadata.label}
       </div>
       <p id={metadataDescriptionId} className="m-0 max-w-3xl text-xs leading-relaxed text-[color:var(--stats-detail-color)]">
         {metadata.description}

@@ -12,6 +12,7 @@ expect.extend(matchers);
 
 const gsapMock = vi.hoisted(() => ({
   fromTo: vi.fn(),
+  to: vi.fn((_target: unknown, options?: { onComplete?: () => void }) => options?.onComplete?.()),
 }));
 
 vi.mock("gsap", () => ({
@@ -21,6 +22,7 @@ vi.mock("gsap", () => ({
       return { revert: () => undefined };
     },
     fromTo: gsapMock.fromTo,
+    to: gsapMock.to,
   },
 }));
 
@@ -207,6 +209,107 @@ describe("NotificationPanel", () => {
     expect(screen.getByRole("button", { name: "Retry Startup checks blocked" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open Human intervention required" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mark read Startup checks blocked" })).toBeInTheDocument();
+  });
+
+  it("opens readable intervention details, marks the notification read, and restores focus on Escape", async () => {
+    const onMarkRead = vi.fn();
+    render(
+      <NotificationPanel
+        unreadCount={1}
+        notifications={[makeNotification({
+          id: "attention-1@2026-07-11T10:00:00.000Z",
+          sourceId: "attention-1",
+          type: "intervention",
+          severity: "warning",
+          title: "Human decision required",
+          body: "Task T02 · Sprint SPR-12 · Project Workspace — A merge decision is blocking execution.",
+          updatedAt: "2026-07-11T10:00:00.000Z",
+          actionLabel: "Review intervention",
+          actionHref: "/tasks?projectId=project-1&sprintId=sprint-12&taskId=task-2",
+          details: [
+            { label: "Project", value: "Workspace" },
+            { label: "Sprint", value: "SPR-12 (Reliability)" },
+            { label: "Task", value: "T02 (Resolve release gate)" },
+            { label: "What went wrong", value: "A merge decision is blocking execution." },
+            { label: "Why this needs attention", value: "Automation cannot choose the release branch." },
+            { label: "Recommended next steps", value: "Review the branch and resume the sprint." },
+            { label: "Timestamp", value: "2026-07-11T10:00:00.000Z" },
+            { label: "Source context", value: "Project attention item · Source attention-1" },
+          ],
+          icon: HelpCircle,
+        })]}
+        onMarkAllRead={vi.fn()}
+        onMarkRead={onMarkRead}
+        onDismiss={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    const detailsTrigger = screen.getByRole("button", { name: "Details for Human decision required" });
+    detailsTrigger.focus();
+    fireEvent.click(detailsTrigger);
+
+    expect(onMarkRead).toHaveBeenCalledWith("attention-1@2026-07-11T10:00:00.000Z");
+    const modal = await screen.findByRole("dialog", { name: "Human decision required" });
+    expect(modal).toHaveAccessibleDescription("Review the execution context and recommended recovery path.");
+    expect(modal).toHaveTextContent("Workspace");
+    expect(modal).toHaveTextContent("SPR-12 (Reliability)");
+    expect(modal).toHaveTextContent("T02 (Resolve release gate)");
+    expect(modal).toHaveTextContent("A merge decision is blocking execution.");
+    expect(modal).toHaveTextContent("Automation cannot choose the release branch.");
+    expect(modal).toHaveTextContent("Review the branch and resume the sprint.");
+    expect(modal).toHaveTextContent("Project attention item · Source attention-1");
+    expect(screen.getByRole("link", { name: "Review intervention" })).toHaveAttribute(
+      "href",
+      "/tasks?projectId=project-1&sprintId=sprint-12&taskId=task-2",
+    );
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Close notification details" })).toHaveFocus());
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Human decision required" })).not.toBeInTheDocument();
+      expect(detailsTrigger).toHaveFocus();
+    });
+  });
+
+  it("closes notification details before delegating its server-supplied action", async () => {
+    const onMarkRead = vi.fn();
+    const onNavigate = vi.fn();
+    render(
+      <NotificationPanel
+        unreadCount={1}
+        notifications={[makeNotification({
+          id: "project-failure-1",
+          type: "automatic-stop",
+          title: "Project setup failed",
+          actionLabel: "Review project",
+          actionHref: "/projects?projectId=project-9&source=notification&returnTo=%2Ftasks%3Fview%3Dboard",
+          details: [{ label: "Project", value: "Workspace" }],
+        })]}
+        onMarkAllRead={vi.fn()}
+        onMarkRead={onMarkRead}
+        onDismiss={vi.fn()}
+        onRefresh={vi.fn()}
+        onNavigate={onNavigate}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Details for Project setup failed" }));
+    const action = await screen.findByRole("link", { name: "Review project" });
+    expect(action).toHaveAttribute(
+      "href",
+      "/projects?projectId=project-9&source=notification&returnTo=%2Ftasks%3Fview%3Dboard",
+    );
+
+    fireEvent.click(action);
+
+    expect(onMarkRead).toHaveBeenCalledWith("project-failure-1");
+    expect(onNavigate).toHaveBeenCalledWith(
+      "/projects?projectId=project-9&source=notification&returnTo=%2Ftasks%3Fview%3Dboard",
+    );
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Project setup failed" })).not.toBeInTheDocument();
+    });
   });
 
   it("suppresses duplicate mark-read activation while the row is pending", async () => {

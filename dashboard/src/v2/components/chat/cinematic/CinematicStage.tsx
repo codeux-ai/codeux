@@ -1,20 +1,40 @@
 import type { FunctionComponent, RefObject } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { AlertTriangle, ArrowUp, Globe, History, ListTodo, Monitor, Radar, RefreshCw, Rocket, Sparkles, Wrench } from "lucide-preact";
-import type { AgentPresetRecord, ChatMessageRecord, ChatThread, Source } from "../../../types.js";
+import { AlertTriangle, ArrowUp, BriefcaseBusiness, Gauge, Gamepad2, GitBranch, Globe2, History, LayoutDashboard, ListTodo, Monitor, Radar, RefreshCw, Rocket, ShoppingCart, Sparkles, Volume2, VolumeX, WandSparkles, Wrench } from "lucide-preact";
+import type { AgentPresetRecord, ChatMessageRecord, ChatThread, DashboardCreateAppQuickactionKind, ExecutionInvocationRecord, Source } from "../../../types.js";
 import { renderMarkdown } from "../../../../lib/markdown.js";
 import { formatChatTime } from "../../../lib/chat-time.js";
 import { getChatWidgetData } from "../../../lib/chat-widget-view-models.js";
 import { PlanningRequestWidget } from "../widgets/PlanningRequestWidget.js";
 import { ExternalReferenceWidget } from "../widgets/ExternalReferenceWidget.js";
 import { LazyAgentAvatarScene } from "../../agents/LazyAgentAvatarScene.js";
-import type { AgentSceneTool } from "../../agents/AgentAvatarScene.js";
+import {
+  AGENT_SCENE_TOOL_IDS,
+  isAgentSceneTool,
+  type AgentSceneTool,
+} from "../../../lib/agent-scene-tools.js";
 import { DEFAULT_AGENT_AVATAR_CONFIG } from "../../../lib/agent-avatar.js";
 import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
 import { resolveDisplayDeliveryStatus } from "../../../hooks/use-chat-thread-data.js";
 import { useAgentMood, type AgentMoodState } from "./use-agent-mood.js";
+import { AgentAmbientEffects } from "./AgentAmbientEffects.js";
 import { parseBubbleSegments, StageWidgetRenderer } from "./StageWidgets.js";
+import { isAgentScheduledWakeup, ScheduledWakeupWidget } from "../widgets/ScheduledWakeupWidget.js";
+import { buildCinematicQuickActions } from "../../../lib/cinematic-quick-actions.js";
+import { useProjectEffectiveSettings } from "../../../hooks/use-project-effective-settings.js";
+import { SpeechInputButton } from "../../speech/SpeechInputButton.js";
+import { SpeechReplayButton } from "../../speech/SpeechReplayButton.js";
+import { useSpeechPlayback } from "../../../hooks/use-speech-playback.js";
+import { speechTextFromMarkdown } from "../../../lib/speech-playback.js";
+import type { AgentResponseEffect } from "../../../../../../src/contracts/connection-chat-types.js";
+import {
+  getAgentResponseEffectCaption,
+  resolveAgentResponseEffect,
+} from "../../../lib/agent-response-effects.js";
+import { STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS } from "../../../lib/agent-humor-messages.js";
+import { resolveCinematicActivityDisplayState } from "../../../lib/cinematic-activity.js";
+import { StageActivityStrip } from "./StageActivityStrip.js";
 
 /* ════════════════════════════════════════════════════════════════════════
  *  CinematicStage — the default "3D Chat" view of the chat page.
@@ -42,16 +62,17 @@ export interface CinematicStageProps {
   selectedThread: ChatThread | null;
   messages: ChatMessageRecord[];
   threadMessagesLoading: boolean;
-  hasWorkingReply: boolean;
-  /** Running (or optimistic) execution invocations for this project — the
-   *  truthful "the agent is actually working / calling tools" signal on the
-   *  virtual-worker path, where thread messages stay `pending` during work. */
-  runningInvocationCount: number;
+  hasAwaitedReply: boolean;
+  invocations: ExecutionInvocationRecord[];
   sending: boolean;
   error: string | null;
   input: string;
   setInput: (value: string) => void;
+  onSpeechTranscript: (text: string) => void;
   handleSend: (overrideText?: string) => Promise<void>;
+  handleCreateAppQuickaction: (kind: DashboardCreateAppQuickactionKind) => Promise<void>;
+  initialEligibilityLoaded: boolean;
+  canCreateInitialAppQuickactions: boolean;
   navigateHistory: (direction: "up" | "down") => boolean;
   composerRef: RefObject<HTMLTextAreaElement>;
   activeConnection: { displayName: string; status: string } | null;
@@ -60,64 +81,77 @@ export interface CinematicStageProps {
 }
 
 /** The bot cycles through its toolbox while the runtime is executing. */
-const WORK_TOOLS: AgentSceneTool[] = ["screwdriver", "jackhammer", "wrench", "hammer", "torch"];
+const WORK_TOOLS: readonly AgentSceneTool[] = AGENT_SCENE_TOOL_IDS;
 const TOOL_SWAP_MS = 7_000;
 
-/** Idle quick actions floating in an arc on the bot's LEFT — the right side
- *  belongs to the speech bubble, so the two can never collide. Clicking
- *  sends immediately; prompts are phrased to elicit the rich stage widgets.
- *  left uses max() so chips never escape the viewport on narrow stages. */
-const QUICK_ACTIONS = [
-  {
-    icon: Globe,
-    label: "Web App",
-    prompt: "Set up this existing project as a web app using the project's current techstack setting. Inspect the repository first, then propose and run the needed project-scoped commands or sprint work. Do not create or import a new Code UX project.",
-    position: "top-[6%] left-[max(1rem,calc(50%-350px))]",
-    delay: "0s",
-  },
-  {
-    icon: Monitor,
-    label: "Desktop App",
-    prompt: "Set up this existing project as a desktop app using the project's current techstack setting. Inspect the repository first, then propose and run the needed project-scoped commands or sprint work. Do not create or import a new Code UX project.",
-    position: "top-[19%] left-[max(0.75rem,calc(50%-420px))]",
-    delay: "0.8s",
-  },
-  {
-    icon: Radar,
-    label: "Status report",
-    prompt: "Give me a concise status report for this project — CI health, running work, and anything blocked.",
-    position: "top-[32%] left-[max(0.5rem,calc(50%-440px))]",
-    delay: "1.6s",
-  },
-  {
-    icon: Rocket,
-    label: "Sprint progress",
-    prompt: "How is the current sprint progressing? Summarize task completion and what is next.",
-    position: "top-[45%] left-[max(0.5rem,calc(50%-440px))]",
-    delay: "2.4s",
-  },
-  {
-    icon: AlertTriangle,
-    label: "What's failing?",
-    prompt: "What is currently failing or blocked in this project, and what do you recommend we do about it?",
-    position: "top-[58%] left-[max(0.75rem,calc(50%-420px))]",
-    delay: "3.2s",
-  },
-  {
-    icon: ListTodo,
-    label: "Plan next steps",
-    prompt: "Propose the next steps for this project as a short prioritized task list.",
-    position: "top-[71%] left-[max(1rem,calc(50%-350px))]",
-    delay: "4s",
-  },
+const CREATE_APP_ACTION_ICONS: Record<DashboardCreateAppQuickactionKind, typeof Monitor> = {
+  web_app: Globe2,
+  desktop_app: Monitor,
+  online_shop: ShoppingCart,
+  portfolio: BriefcaseBusiness,
+  game: Gamepad2,
+};
+
+const PROMPT_ACTION_ICONS: Record<string, typeof Monitor> = {
+  "status-report": Gauge,
+  "sprint-progress": Rocket,
+  "whats-failing": AlertTriangle,
+  "plan-next-steps": ListTodo,
+  "add-nodes-workflow": GitBranch,
+  "add-dashboard": LayoutDashboard,
+  "create-skill": WandSparkles,
+  "list-skills": Wrench,
+};
+
+const QUICK_ACTION_ICON_STYLES: Record<string, string> = {
+  "create-web_app": "bg-sky-500/12 text-sky-600 ring-sky-500/20 dark:bg-sky-400/12 dark:text-sky-300",
+  "create-desktop_app": "bg-indigo-500/12 text-indigo-600 ring-indigo-500/20 dark:bg-indigo-400/12 dark:text-indigo-300",
+  "create-online_shop": "bg-amber-500/14 text-amber-700 ring-amber-500/25 dark:bg-amber-400/12 dark:text-amber-300",
+  "create-portfolio": "bg-rose-500/12 text-rose-600 ring-rose-500/20 dark:bg-rose-400/12 dark:text-rose-300",
+  "create-game": "bg-fuchsia-500/12 text-fuchsia-600 ring-fuchsia-500/20 dark:bg-fuchsia-400/12 dark:text-fuchsia-300",
+  "status-report": "bg-cyan-500/12 text-cyan-700 ring-cyan-500/20 dark:bg-cyan-400/12 dark:text-cyan-300",
+  "sprint-progress": "bg-violet-500/12 text-violet-600 ring-violet-500/20 dark:bg-violet-400/12 dark:text-violet-300",
+  "whats-failing": "bg-red-500/10 text-red-600 ring-red-500/20 dark:bg-red-400/10 dark:text-red-300",
+  "plan-next-steps": "bg-orange-500/12 text-orange-700 ring-orange-500/20 dark:bg-orange-400/12 dark:text-orange-300",
+  "add-nodes-workflow": "bg-lime-500/12 text-lime-700 ring-lime-500/20 dark:bg-lime-400/12 dark:text-lime-300",
+  "add-dashboard": "bg-blue-500/12 text-blue-600 ring-blue-500/20 dark:bg-blue-400/12 dark:text-blue-300",
+  "create-skill": "bg-purple-500/12 text-purple-600 ring-purple-500/20 dark:bg-purple-400/12 dark:text-purple-300",
+  "list-skills": "bg-teal-500/12 text-teal-700 ring-teal-500/20 dark:bg-teal-400/12 dark:text-teal-300",
+};
+
+const QUICK_ACTION_SCATTER_STYLES: Record<string, string> = {
+  "create-web_app": "md:ml-0 md:mt-0",
+  "create-desktop_app": "md:ml-3 md:-mt-1",
+  "create-online_shop": "md:ml-5 md:mt-1",
+  "create-portfolio": "md:ml-3 md:-mt-0.5",
+  "create-game": "md:ml-12 md:mt-1",
+  "status-report": "md:ml-1 md:mt-0",
+  "sprint-progress": "md:ml-5 md:-mt-1",
+  "whats-failing": "md:ml-8 md:mt-1",
+  "plan-next-steps": "md:ml-2 md:-mt-0.5",
+  "add-nodes-workflow": "md:ml-0 md:mt-0",
+  "add-dashboard": "md:ml-4 md:-mt-1",
+  "create-skill": "md:ml-8 md:mt-1",
+  "list-skills": "md:ml-6 md:-mt-0.5",
+};
+
+const QUICK_ACTION_GROUPS = [
+  { zone: "create", label: "Create" },
+  { zone: "insight", label: "Project pulse" },
+  { zone: "workflow", label: "Workflows" },
 ] as const;
 
 /** Debug override: /chat?stageTool=wrench pins a specific tool on the stage. */
 const readForcedTool = (): AgentSceneTool | null => {
   if (typeof window === "undefined") return null;
   const value = new URLSearchParams(window.location.search).get("stageTool");
-  return (WORK_TOOLS as string[]).includes(value ?? "") ? (value as AgentSceneTool) : null;
+  return isAgentSceneTool(value) ? value : null;
 };
+
+const canSpeakAgentMessage = (message: ChatMessageRecord): boolean => (
+  !getChatWidgetData(message).suppressBodyMarkdown
+  && speechTextFromMarkdown(message.bodyMarkdown || "").length > 0
+);
 
 /** GSAP entrance shared by bubbles — mirrors ChatMessageBubble's timing. */
 function useBubbleEnter(ref: RefObject<HTMLElement>, reducedMotion: boolean) {
@@ -130,30 +164,6 @@ function useBubbleEnter(ref: RefObject<HTMLElement>, reducedMotion: boolean) {
     );
   }, []);
 }
-
-/* ── Thought bubble — internal state, cloud-shaped, above the antenna ── */
-const ThoughtBubble: FunctionComponent<{ text: string }> = ({ text }) => {
-  const ref = useRef<HTMLDivElement>(null);
-  const reducedMotion = useReducedMotion();
-  useBubbleEnter(ref, reducedMotion);
-  return (
-    <div ref={ref} className="pointer-events-none absolute left-1/2 top-0 z-20 w-max max-w-[240px] -translate-x-[12%]">
-      <div role="status" aria-live="polite" className="rounded-[1.75rem] border border-black/[0.06] bg-white/90 px-4 py-2.5 shadow-[0_8px_32px_rgba(0,0,0,0.10)] backdrop-blur-md dark:border-white/10 dark:bg-void-800/90">
-        <span className="flex items-center gap-2 text-[12px] font-medium text-slate-600 dark:text-slate-300">
-          {text}
-          <span aria-hidden="true" className="flex items-end gap-0.5 pb-0.5">
-            <span className="stage-thinking-dot h-1 w-1 rounded-full bg-signal-500" />
-            <span className="stage-thinking-dot h-1 w-1 rounded-full bg-signal-500 [animation-delay:150ms]" />
-            <span className="stage-thinking-dot h-1 w-1 rounded-full bg-signal-500 [animation-delay:300ms]" />
-          </span>
-        </span>
-      </div>
-      {/* Trailing cloud puffs pointing down toward the bot's head */}
-      <div aria-hidden="true" className="ml-6 mt-1 h-2.5 w-2.5 rounded-full border border-black/[0.05] bg-white/90 dark:border-white/10 dark:bg-void-800/90" />
-      <div aria-hidden="true" className="ml-4 mt-0.5 h-1.5 w-1.5 rounded-full border border-black/[0.05] bg-white/85 dark:border-white/10 dark:bg-void-800/85" />
-    </div>
-  );
-};
 
 /** Markdown container classes shared by agent bubbles — includes glass table
  *  styling for GFM tables (agents report sprints/status as tables today). */
@@ -173,7 +183,9 @@ const AgentSpeechBubble: FunctionComponent<{
   message: ChatMessageRecord;
   agentName: string;
   onAction?: (prompt: string) => void;
-}> = ({ message, agentName, onAction }) => {
+  onReplay: (message: ChatMessageRecord) => void;
+  replaying: boolean;
+}> = ({ message, agentName, onAction, onReplay, replaying }) => {
   const ref = useRef<HTMLDivElement>(null);
   const reducedMotion = useReducedMotion();
   useBubbleEnter(ref, reducedMotion);
@@ -192,10 +204,17 @@ const AgentSpeechBubble: FunctionComponent<{
         <div className="mb-2 flex shrink-0 items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
           <span className="text-signal-600 dark:text-signal-400">{agentName}</span>
           {createdAtLabel && <span className="font-mono font-normal tracking-normal">{createdAtLabel}</span>}
+          {canSpeakAgentMessage(message) && (
+            <SpeechReplayButton
+              busy={replaying}
+              label={`Replay message from ${agentName}`}
+              onReplay={() => onReplay(message)}
+            />
+          )}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
           {segments.map((segment, index) =>
-            segment.kind === "widget" ? (
+            segment.kind === "agent" ? null : segment.kind === "widget" ? (
               <StageWidgetRenderer key={index} widget={segment.widget} onAction={onAction} />
             ) : (
               !widgetData.suppressBodyMarkdown && (
@@ -233,6 +252,22 @@ const UserBubble: FunctionComponent<{
   useBubbleEnter(ref, reducedMotion);
   const status = resolveDisplayDeliveryStatus(message, allMessages);
   const createdAtLabel = formatChatTime(message.createdAt);
+  const isScheduledWakeup = isAgentScheduledWakeup(message.metadata);
+
+  if (isScheduledWakeup) {
+    return (
+      <div ref={ref} className="flex justify-end">
+        <div className="w-full max-w-[560px]">
+          <ScheduledWakeupWidget
+            instruction={message.bodyMarkdown}
+            status={status}
+            scheduledFor={typeof message.metadata?.scheduledFor === "string" ? message.metadata.scheduledFor : null}
+            compact
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div ref={ref} className={`flex justify-end ${status === "pending" || status === "failed" ? "opacity-60" : ""}`}>
@@ -307,13 +342,17 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   selectedThread,
   messages,
   threadMessagesLoading,
-  hasWorkingReply,
-  runningInvocationCount,
+  hasAwaitedReply,
+  invocations,
   sending,
   error,
   input,
   setInput,
+  onSpeechTranscript,
   handleSend,
+  handleCreateAppQuickaction,
+  initialEligibilityLoaded,
+  canCreateInitialAppQuickactions,
   navigateHistory,
   composerRef,
   activeConnection,
@@ -323,10 +362,32 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   const floatRef = useRef<HTMLDivElement>(null);
   const reducedMotion = useReducedMotion();
   const [composerFocused, setComposerFocused] = useState(false);
-  const [workingPhase, setWorkingPhase] = useState<"starting" | "working" | null>(null);
+  const [activityNowMs, setActivityNowMs] = useState(Date.now);
+  const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
+  const voiceAvailable = Boolean(effectiveSettings?.settings.speech?.synthesis?.enabled);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const speechPlayback = useSpeechPlayback();
+  const speechBaselineThreadIdRef = useRef<string | null>(null);
+  const speechBaselineReadyRef = useRef(false);
+  const seenAgentMessageIdsRef = useRef<Set<string>>(new Set());
+  const pendingAutoPlayMessageRef = useRef<ChatMessageRecord | null>(null);
+  const expectingFreshAgentReplyRef = useRef(false);
 
   const agentName = agentPreset?.name || activeConnection?.displayName || "Project Manager";
   const avatarConfig = agentPreset?.avatarConfig || DEFAULT_AGENT_AVATAR_CONFIG;
+  useEffect(() => {
+    const timer = window.setInterval(() => setActivityNowMs(Date.now()), STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, []);
+  const activityState = resolveCinematicActivityDisplayState({
+    agentId: agentPreset?.id,
+    error,
+    hasAwaitedReply,
+    invocations,
+    nowMs: activityNowMs,
+    projectManagerAgentPresetId: agentPreset?.id,
+    selectedThread,
+  });
   // The runtime stores agent replies with authorType "system", so speech vs.
   // user bubbles are decided by direction alone — never filter on authorType.
   const visibleMessages = messages;
@@ -342,26 +403,146 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     }
   }
   const latestAgentMessage = latestAgentIndex >= 0 ? visibleMessages[latestAgentIndex] : null;
+  const latestResponseEffect = latestAgentMessage
+    ? resolveAgentResponseEffect(latestAgentMessage.metadata, latestAgentMessage.bodyMarkdown || "")
+    : undefined;
+  const latestResponseEffectKey = latestAgentMessage && latestResponseEffect
+    ? `${latestAgentMessage.id}:${latestResponseEffect.emotion}:${latestResponseEffect.animation}:${latestResponseEffect.durationMs}:${latestResponseEffect.caption ?? ""}`
+    : null;
+  const [activeResponseEffect, setActiveResponseEffect] = useState<AgentResponseEffect | null>(null);
+  useEffect(() => {
+    if (!latestResponseEffect || !latestResponseEffectKey) {
+      setActiveResponseEffect(null);
+      return;
+    }
+    setActiveResponseEffect(latestResponseEffect);
+    const timer = window.setTimeout(() => setActiveResponseEffect(null), latestResponseEffect.durationMs);
+    return () => window.clearTimeout(timer);
+  }, [latestResponseEffectKey]);
   const pendingUserMessages = visibleMessages
     .slice(latestAgentIndex + 1)
     .filter((message) => message.direction === "dashboard_to_connection")
     .slice(-2); // at most two queued sends staged at once
   const earlierMessageCount = Math.max(0, visibleMessages.length - (latestAgentMessage ? 1 : 0) - pendingUserMessages.length);
 
-  /* "Busy" is either an awaited listener reply (delivered, unanswered) or a
-     running invocation — the latter is what actually fires on the
-     virtual-worker path, where thread messages stay `pending` during work. */
-  const runtimeBusy = hasWorkingReply || runningInvocationCount > 0;
+  // Background execution remains observable, but never selects the Project
+  // Manager's thinking expression, thought bubble, or work tool.
+  const runtimeBusy = activityState.projectManagerActive;
+  const workingPhase: "starting" | "working" | null = runtimeBusy
+    ? (activityState.foregroundCue?.phase === "container_startup" ? "starting" : "working")
+    : null;
+  const quickActions = buildCinematicQuickActions({
+    hasProject: Boolean(selectedProject),
+    initialEligibilityLoaded,
+    canCreateInitialAppQuickactions,
+  });
+  const quickActionGroups = QUICK_ACTION_GROUPS
+    .map((group) => ({
+      ...group,
+      actions: quickActions.filter((action) => action.zone === group.zone),
+    }))
+    .filter((group) => group.actions.length > 0);
+
+  const sendStageMessage = async (overrideText?: string): Promise<void> => {
+    expectingFreshAgentReplyRef.current = true;
+    await handleSend(overrideText);
+  };
 
   useEffect(() => {
-    if (!runtimeBusy) {
-      setWorkingPhase(null);
+    const projectId = selectedProject?.id;
+    if (!projectId || !voiceAvailable) {
+      setVoiceEnabled(false);
       return;
     }
-    setWorkingPhase("starting");
-    const timer = window.setTimeout(() => setWorkingPhase("working"), 4000);
-    return () => window.clearTimeout(timer);
-  }, [runtimeBusy]);
+    setVoiceEnabled(window.localStorage.getItem(`codeux:chat-voice:${projectId}`) !== "off");
+  }, [selectedProject?.id, voiceAvailable]);
+
+  // Loading or opening a thread establishes a historical baseline. Only an
+  // agent message appended after that baseline is eligible for auto-play.
+  useEffect(() => {
+    const threadId = selectedThread?.id ?? null;
+    if (speechBaselineThreadIdRef.current !== threadId) {
+      const preserveExpectedFirstReply = expectingFreshAgentReplyRef.current
+        && speechBaselineThreadIdRef.current === null
+        && threadId !== null;
+      speechBaselineThreadIdRef.current = threadId;
+      speechBaselineReadyRef.current = false;
+      seenAgentMessageIdsRef.current = new Set();
+      pendingAutoPlayMessageRef.current = null;
+      if (!preserveExpectedFirstReply) expectingFreshAgentReplyRef.current = false;
+      speechPlayback.stop();
+    }
+    if (!threadId || threadMessagesLoading) return;
+
+    const agentMessages = messages.filter((message) => (
+      message.threadId === threadId && message.direction !== "dashboard_to_connection"
+    ));
+    if (pendingAutoPlayMessageRef.current) {
+      pendingAutoPlayMessageRef.current = agentMessages.find(
+        (message) => message.id === pendingAutoPlayMessageRef.current?.id,
+      ) ?? pendingAutoPlayMessageRef.current;
+    }
+    if (!speechBaselineReadyRef.current) {
+      seenAgentMessageIdsRef.current = new Set(agentMessages.map((message) => message.id));
+      speechBaselineReadyRef.current = true;
+      if (expectingFreshAgentReplyRef.current) {
+        let latestDashboardMessageIndex = -1;
+        for (let index = messages.length - 1; index >= 0; index -= 1) {
+          if (messages[index].threadId === threadId && messages[index].direction === "dashboard_to_connection") {
+            latestDashboardMessageIndex = index;
+            break;
+          }
+        }
+        const firstReply = messages
+          .slice(latestDashboardMessageIndex + 1)
+          .filter((message) => (
+            message.threadId === threadId
+            && message.direction !== "dashboard_to_connection"
+            && canSpeakAgentMessage(message)
+          ))
+          .at(-1);
+        if (latestDashboardMessageIndex >= 0 && firstReply && voiceAvailable && voiceEnabled) {
+          pendingAutoPlayMessageRef.current = firstReply;
+          expectingFreshAgentReplyRef.current = false;
+        }
+      }
+      return;
+    }
+
+    const newAgentMessages = agentMessages.filter((message) => !seenAgentMessageIdsRef.current.has(message.id));
+    for (const message of newAgentMessages) seenAgentMessageIdsRef.current.add(message.id);
+    const newSpeakableAgentMessages = newAgentMessages.filter(canSpeakAgentMessage);
+    if (newSpeakableAgentMessages.length > 0 && voiceAvailable && voiceEnabled) {
+      pendingAutoPlayMessageRef.current = newSpeakableAgentMessages[newSpeakableAgentMessages.length - 1];
+      expectingFreshAgentReplyRef.current = false;
+    }
+  }, [messages, selectedThread?.id, threadMessagesLoading, voiceAvailable, voiceEnabled]);
+
+  useEffect(() => {
+    const pendingMessage = pendingAutoPlayMessageRef.current;
+    if (!pendingMessage || runtimeBusy || !voiceAvailable || !voiceEnabled) return;
+    pendingAutoPlayMessageRef.current = null;
+    void speechPlayback.play({
+      markdown: pendingMessage.bodyMarkdown,
+      messageId: pendingMessage.id,
+      projectId: selectedProject?.id ?? null,
+    });
+  }, [messages, runtimeBusy, selectedProject?.id, voiceAvailable, voiceEnabled]);
+
+  useEffect(() => {
+    if (error) expectingFreshAgentReplyRef.current = false;
+  }, [error]);
+
+  const toggleVoice = (): void => {
+    if (!voiceAvailable || !selectedProject?.id) return;
+    const next = !voiceEnabled;
+    setVoiceEnabled(next);
+    window.localStorage.setItem(`codeux:chat-voice:${selectedProject.id}`, next ? "on" : "off");
+    if (!next) {
+      pendingAutoPlayMessageRef.current = null;
+      speechPlayback.stop();
+    }
+  };
 
   /* Work tools — while the runtime is executing, the bot pulls a tool from
      its toolbox and swaps to a fresh one every few seconds. */
@@ -389,13 +570,23 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     messages: visibleMessages,
     userEngaged: composerFocused || input.trim().length > 0,
     agentName,
+    reducedMotion,
+    ambientPaused: Boolean(activeResponseEffect),
   });
+  // Runtime truth always wins. A validated reply effect may only replace the
+  // otherwise idle/listening micro-expression for its bounded lifetime.
+  const responseEffect = !error && !sending && !runtimeBusy ? activeResponseEffect : null;
+  const stageExpression = responseEffect?.emotion ?? mood.expression;
+  const stageAnimation = reducedMotion
+    ? undefined
+    : responseEffect?.animation ?? (mood.ambientMotionEnabled ? mood.ambientCue?.animation : undefined);
+  const stageCaption = responseEffect ? getAgentResponseEffectCaption(responseEffect) : mood.caption;
 
   /* Cinematic drift — the whole bot slowly floats, leans, and wanders a few
      pixels on top of the scene's own idle bob, so it never reads as parked. */
   useLayoutEffect(() => {
     const el = floatRef.current;
-    if (!el || reducedMotion) return;
+    if (!el || !mood.ambientMotionEnabled) return;
     const tl = gsap.timeline({ repeat: -1, yoyo: true, defaults: { ease: "sine.inOut" } });
     tl.to(el, { y: -16, x: 6, rotation: 1.4, duration: 3.4 })
       .to(el, { y: 4, x: -8, rotation: -1.1, duration: 3.0 })
@@ -404,10 +595,10 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
       tl.kill();
       gsap.set(el, { x: 0, y: 0, rotation: 0 });
     };
-  }, [reducedMotion]);
+  }, [mood.ambientMotionEnabled]);
 
   const applySuggestion = (prompt: string): void => {
-    void handleSend(prompt).finally(() => {
+    void sendStageMessage(prompt).finally(() => {
       requestAnimationFrame(() => {
         composerRef.current?.focus({ preventScroll: true });
       });
@@ -417,11 +608,15 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   const showGreeting = !threadMessagesLoading && visibleMessages.length === 0;
 
   return (
-    <div className="relative flex-1 min-h-0 overflow-hidden" data-testid="cinematic-stage">
+    <div
+      className="relative flex-1 min-h-0 overflow-hidden"
+      data-testid="cinematic-stage"
+      data-background-activity-count={activityState.backgroundActivityCount}
+    >
       {/* ── Ambient backdrop — aurora glow, pure CSS, zero extra GPU cost ── */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-        <div className="stage-aurora absolute left-1/2 top-[16%] h-[52vh] w-[52vh] -translate-x-1/2 rounded-full bg-signal-500/[0.06] blur-3xl dark:bg-signal-500/[0.05]" />
-        <div className="stage-aurora-slow absolute -right-[12%] bottom-[4%] h-[50%] w-[40%] rounded-full bg-purple-500/[0.04] blur-3xl dark:bg-purple-500/[0.04]" />
+        <div className={`${mood.ambientMotionEnabled ? "stage-aurora" : ""} absolute left-1/2 top-[16%] h-[52vh] w-[52vh] -translate-x-1/2 rounded-full bg-signal-500/[0.06] blur-3xl dark:bg-signal-500/[0.05]`} />
+        <div className={`${mood.ambientMotionEnabled ? "stage-aurora-slow" : ""} absolute -right-[12%] bottom-[4%] h-[50%] w-[40%] rounded-full bg-purple-500/[0.04] blur-3xl dark:bg-purple-500/[0.04]`} />
       </div>
 
       {/* ── Context strip — thread identity + escape hatch to Threads ── */}
@@ -449,37 +644,90 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
 
       {/* ── Center stage — the bot owns the middle of the screen ── */}
       <div className="pointer-events-none absolute inset-x-0 top-10 bottom-32 z-10 flex flex-col items-center justify-start md:justify-center">
-        {/* Idle quick actions — float around the bot, fire a message instantly */}
-        {!runtimeBusy && !sending && !error && (
-          <div aria-label="Quick actions" role="group" className="hidden md:block">
-            {QUICK_ACTIONS.map(({ icon: Icon, label, prompt, position, delay }) => (
-              <div key={label} className={`absolute z-20 ${position}`}>
-                <button
-                  type="button"
-                  onClick={() => void handleSend(prompt)}
-                  style={{ animationDelay: delay }}
-                  className="stage-quick-float pointer-events-auto inline-flex items-center gap-2 rounded-full border border-black/[0.07] bg-white/80 px-4 py-2.5 text-[12px] font-semibold text-slate-600 shadow-[0_4px_20px_rgba(0,0,0,0.08)] backdrop-blur-md transition-colors hover:border-signal-500/40 hover:text-signal-700 dark:border-white/[0.09] dark:bg-void-800/80 dark:text-slate-300 dark:shadow-[0_4px_24px_rgba(0,0,0,0.35)] dark:hover:text-signal-400"
+        {/* Mobile uses a compact two-row scroller per category; desktop groups
+            a lightly scattered action constellation left of the avatar. */}
+        {!runtimeBusy && !sending && !error && quickActions.length > 0 && (
+          <div
+            aria-label="Project quick actions"
+            role="group"
+            className="pointer-events-auto absolute inset-x-4 top-14 z-20 flex max-h-24 gap-4 overflow-x-auto overscroll-x-contain py-1.5 md:bottom-24 md:left-0 md:right-auto md:top-20 md:max-h-none md:w-[min(21rem,calc(50%-1.5rem))] md:flex-col md:justify-center md:gap-3 md:overflow-visible md:px-1.5 md:py-4"
+          >
+            {quickActionGroups.map((group) => (
+              <div
+                key={group.zone}
+                role="group"
+                aria-label={`${group.label} quick actions`}
+                className="shrink-0 md:w-full"
+              >
+                <div className="mb-1.5 hidden items-center gap-2 px-2 md:flex" aria-hidden="true">
+                  <span className="h-px w-5 bg-gradient-to-r from-transparent to-black/15 dark:to-white/15" />
+                  <span className="font-mono text-[8px] font-bold uppercase tracking-[0.18em] text-slate-400/80 dark:text-slate-500/90">
+                    {group.label}
+                  </span>
+                </div>
+                <div
+                  data-quick-action-group={group.zone}
+                  className="grid grid-flow-col grid-rows-2 auto-cols-max gap-x-3 gap-y-1.5 md:flex md:flex-wrap md:items-center md:gap-x-2 md:gap-y-2"
                 >
-                  <Icon className="h-3.5 w-3.5 text-signal-500" aria-hidden="true" />
-                  {label}
-                </button>
+                  {group.actions.map((action) => {
+                    const Icon = action.actionType === "create_app"
+                      ? CREATE_APP_ACTION_ICONS[action.appKind]
+                      : PROMPT_ACTION_ICONS[action.id];
+                    return (
+                      <button
+                        key={action.id}
+                        type="button"
+                        data-quick-action-zone={action.zone}
+                        onClick={() => {
+                          if (action.actionType === "create_app") {
+                            void handleCreateAppQuickaction(action.appKind);
+                            return;
+                          }
+                          void sendStageMessage(action.prompt);
+                        }}
+                        style={{ animationDelay: action.animationDelay }}
+                        className={`${mood.ambientMotionEnabled ? "stage-quick-float" : ""} ${QUICK_ACTION_SCATTER_STYLES[action.id]} group inline-flex min-h-9 w-fit min-w-0 self-center items-center justify-start gap-2 rounded-xl border border-black/[0.06] bg-white/78 px-2 py-1.5 text-left text-[10px] font-semibold leading-3.5 text-slate-600 shadow-[0_3px_14px_rgba(15,23,42,0.07)] backdrop-blur-xl transition-[border-color,background-color,color,box-shadow] hover:border-black/[0.13] hover:bg-white/95 hover:text-slate-900 hover:shadow-[0_5px_18px_rgba(15,23,42,0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-2 dark:border-white/[0.08] dark:bg-void-800/72 dark:text-slate-300 dark:shadow-[0_4px_18px_rgba(0,0,0,0.28)] dark:hover:border-white/[0.16] dark:hover:bg-void-700/92 dark:hover:text-white dark:focus-visible:ring-offset-void-900`}
+                      >
+                        <span
+                          aria-hidden="true"
+                          data-quick-action-icon={action.id}
+                          className={`grid h-6 w-6 shrink-0 place-items-center rounded-lg ring-1 ring-inset transition-transform group-hover:scale-105 ${QUICK_ACTION_ICON_STYLES[action.id]}`}
+                        >
+                          <Icon className="h-3.5 w-3.5" strokeWidth={2.15} />
+                        </span>
+                        <span className="min-w-0 whitespace-nowrap">{action.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             ))}
           </div>
         )}
-        <div className="relative flex w-full flex-col items-center px-6">
-          {runtimeBusy && (
-            <ThoughtBubble text={workingPhase === "starting" ? "Spinning up a workspace" : "Working on it"} />
-          )}
+        <div className={`relative flex w-full flex-col items-center px-6 ${!runtimeBusy && !sending && !error && quickActions.length > 0 ? "pt-28 md:pt-0" : ""}`}>
+          <StageActivityStrip
+            foregroundCue={activityState.foregroundCue}
+            backgroundCue={activityState.backgroundCue}
+            backgroundActivityCount={activityState.backgroundActivityCount}
+          />
+          <AgentAmbientEffects cue={mood.ambientCue} motionEnabled={mood.ambientMotionEnabled} />
           {/* Generous square canvas so antenna, ears, and aura never clip,
               even at the extremes of the float/lean drift. */}
           <div
             ref={floatRef}
             className="pointer-events-auto h-[28vh] w-[28vh] max-w-full will-change-transform md:h-[min(48vh,520px)] md:w-[min(48vh,520px)]"
             role="img"
-            aria-label={`${agentName}, animated project manager. ${mood.caption}`}
+            aria-label={`${agentName}, project manager. ${stageCaption}`}
           >
-            <LazyAgentAvatarScene eager pointerTracking="window" tool={activeTool} config={avatarConfig} expression={mood.expression} className="h-full w-full" />
+            <LazyAgentAvatarScene
+              eager
+              pointerTracking="window"
+              tool={activeTool}
+              config={avatarConfig}
+              expression={stageExpression}
+              animation={stageAnimation}
+              className="h-full w-full"
+            />
           </div>
 
           {/* Name plate + truthful mood caption — tucked up into the canvas's
@@ -489,12 +737,42 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
               {agentName}
             </div>
             <div aria-live="polite" className="mt-0.5 text-[12px] font-medium text-slate-500 dark:text-slate-400">
-              {mood.caption}
+              {stageCaption}
             </div>
             <div className="mt-1.5 flex items-center justify-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
               <span className={`h-1 w-1 rounded-full ${activeConnection ? "bg-signal-500" : "bg-slate-300 dark:bg-slate-600"}`} aria-hidden="true" />
               {activeConnection ? `${activeConnection.displayName} · ${activeConnection.status}` : "queued routing"}
             </div>
+            <div
+              role="group"
+              aria-label="3D chat voice controls"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-black/[0.07] bg-white/80 p-1.5 shadow-[0_8px_28px_rgba(0,0,0,0.09)] backdrop-blur-xl dark:border-white/[0.09] dark:bg-void-800/80 dark:shadow-[0_8px_30px_rgba(0,0,0,0.35)]"
+            >
+              <SpeechInputButton
+                compact
+                disabled={!selectedProject || sending}
+                projectId={selectedProject?.id ?? null}
+                onTranscript={onSpeechTranscript}
+                className="border-transparent bg-transparent shadow-none hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+              />
+              <span aria-hidden="true" className="h-6 w-px bg-black/[0.08] dark:bg-white/[0.1]" />
+              <button
+                type="button"
+                onClick={toggleVoice}
+                disabled={!voiceAvailable}
+                aria-pressed={voiceEnabled}
+                aria-label={!voiceAvailable ? "Voice unavailable; activate a TTS model in AI Models settings" : voiceEnabled ? "Mute project manager" : "Unmute project manager"}
+                title={!voiceAvailable ? "Activate a TTS model in Settings → AI Models" : voiceEnabled ? "Mute agent" : "Unmute agent"}
+                className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 ${voiceEnabled ? "bg-signal-500/[0.12] text-signal-600 dark:text-signal-300" : "bg-black/[0.03] text-slate-400 dark:bg-white/[0.04]"} disabled:cursor-not-allowed disabled:opacity-45`}
+              >
+                {voiceEnabled ? <Volume2 className={`h-5 w-5 ${speechPlayback.activeMessageId ? "animate-pulse motion-reduce:animate-none" : ""}`} aria-hidden="true" /> : <VolumeX className="h-5 w-5" aria-hidden="true" />}
+              </button>
+            </div>
+            {speechPlayback.error ? (
+              <div role="status" className="mx-auto mt-2 max-w-xs rounded-xl border border-rose-500/20 bg-rose-500/[0.08] px-3 py-2 text-[11px] font-medium text-rose-700 shadow-sm dark:text-rose-200">
+                Voice error: {speechPlayback.error}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -524,6 +802,12 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
                   message={latestAgentMessage}
                   agentName={agentName}
                   onAction={applySuggestion}
+                  onReplay={(message) => void speechPlayback.play({
+                    markdown: message.bodyMarkdown,
+                    messageId: message.id,
+                    projectId: selectedProject?.id ?? null,
+                  })}
+                  replaying={speechPlayback.activeMessageId === latestAgentMessage.id}
                 />
               )}
               {pendingUserMessages.map((message) => (
@@ -572,7 +856,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
                   if (event.isComposing) return;
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
-                    void handleSend();
+                    void sendStageMessage();
                     return;
                   }
                   if (event.key === "ArrowUp" || event.key === "ArrowDown") {
@@ -599,7 +883,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
                 aria-label={sending ? "Sending message" : "Send message"}
                 aria-busy={sending}
                 type="button"
-                onClick={() => void handleSend()}
+                onClick={() => void sendStageMessage()}
                 disabled={!selectedProject || !input.trim() || sending}
                 className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-[1.25rem] transition-all ${
                   !selectedProject || (!input.trim() && !sending)

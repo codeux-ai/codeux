@@ -30,6 +30,7 @@ Foundation fields:
 - `container_run_as_root` stores a nullable per-agent Docker root-mode override; `NULL` inherits the resolved `cliWorkflow.containerRunAsRoot` setting
 - `memory_config_json` stores `AgentMemoryConfig` as a JSON blob
 - `persistent_skill_storage_enabled` reserves a default-off runtime enablement flag for future persistent skill retrieval
+- `base_instruction_state_json` stores per-role bundled-instruction baselines, customization state, and the last applied content-hash revision for Planning agent and Project manager updates
 - `created_at`
 - `updated_at`
 
@@ -44,18 +45,18 @@ The shared preset contract exposes `persistentSkillStorageIds?: string[]` plus o
 
 Skill records are project-bound at every access point. `SkillRepository` validates the owning project for storages, skills, agent attachments, embedding loads, and deletes. Deleting a storage explicitly removes agent bindings, skill embeddings, and skill rows before deleting the container, matching the cascade contract even in tests or adapters where foreign-key behavior is not the only guardrail.
 
-Skill markdown is stored in the database rather than in project worktrees. Frontmatter fields (`title`, `description`, `tags`, `appliesTo`, `version`) become skill metadata, while the markdown body remains the authoritative instruction content. `skill_embeddings` stores model id, dimension, chunk index, content hash, and vector blob so retrieval can skip stale or dimension-mismatched rows after model changes.
+Skill markdown is kept outside project worktrees. Each storage is materialized as an internal local-only Git repository under `~/.code-ux/skill-storages/<project-id>/<storage-id>/repo`, with `storage.json` plus one `skills/<skill-id>/SKILL.md` document per skill. Every skill mutation synchronizes and commits that repository, yielding an immutable revision for runtime provenance. Git commands use the shared `alpine/git` helper-container boundary, so this feature never requires host Git. SQLite remains the query projection during the migration: frontmatter fields (`title`, `description`, `tags`, `appliesTo`, `version`) and the markdown body are indexed in `skills`, while `skill_embeddings` stores model id, dimension, chunk index, content hash, and vector blob.
 
-Persistent skill storage remains disabled by default. At runtime, Code UX resolves persistent skill storage only when all of these are true:
+Persistent skill storage remains disabled by default for ordinary presets. The built-in Project Manager is the intentional exception: agent synchronization idempotently creates or reuses one project-owned `Project Manager Skills` storage, attaches it, and enables retrieval when the preset has no existing attachments. Once attached, a later user opt-out is preserved. At runtime, Code UX resolves persistent skill storage only when all of these are true:
 
 - the invoked provider call is associated with an agent preset id
 - that agent has `persistentSkillStorage.enabled === true`
 - the agent has at least one enabled `agent_skill_storage_bindings` row
 - the storage belongs to the same project as the invocation
 
-When enabled, the provider prompt receives one additional `PERSISTENT SKILL STORAGE` section after the existing task, memory, and learning-capture content. The section tells the agent to search existing skills first with `search_skills` using the current `projectId` and `agentPresetId`, lists the attached writable storage paths, and explains that newly authored durable skills should be saved through MCP write APIs when available or as markdown under the mounted persistent path when MCP write access is not available. Composition is idempotent, so retries and resumed prompts retain a single section. Direct dashboard and clarification replies persist this composed user prompt in their execution invocation records.
+When enabled, the provider prompt receives one additional `PERSISTENT SKILL STORAGE` section after the existing task, memory, and learning-capture content. The section includes the complete descriptor inventory for every skill in each linked storage (name, description, and version), tells the agent to present that inventory first when asked about available skills, tells the agent to search existing skills first with `search_skills` using the current `projectId` and `agentPresetId`, lists attached read-only snapshots with their revisions, and directs all durable mutations through `manage_skills`. Composition is idempotent, so retries and resumed prompts retain a single section. Direct dashboard and clarification replies persist this composed user prompt in their execution invocation records.
 
-The mounted filesystem paths are derived by Code UX, not by user settings. Host execution receives paths under `~/.code-ux/persistent-skill-storages/<project-id>/<agent-id>/<storage-id>/`. Docker execution bind-mounts those directories read/write under `/code-ux/persistent-skills/<storage-id>/`. Both roots are outside the project workspace (`/workspace` in Docker and repository worktrees on host), so persistent skills do not become uncommitted project files and workspace cleanup does not delete them.
+The mounted filesystem paths are derived by Code UX, not by user settings. Docker execution bind-mounts the versioned repository read-only at `/code-ux/persistent-skills/<storage-id>/` and includes the current revision in the prompt. Agents inspect `SKILL.md` files there and use `search_skills` for retrieval; mutations go through `manage_skills`, which updates the indexed record and creates the next internal commit. The repository is outside the project workspace, so persistent skills do not become uncommitted project files and workspace cleanup does not delete them. The prompt exposes only container paths, never unusable host paths.
 
 Dashboard storage management remains project-scoped. Storage updates require both the project ID and storage ID, and the storage contents endpoint verifies the same ownership pair before returning data. Contents responses include storage metadata and at most 100 concise skill summaries; markdown is reduced to a whitespace-normalized preview of at most 240 characters, and full skill bodies, filesystem paths, and host mount locations are never included.
 
@@ -89,6 +90,12 @@ Dashboard endpoints:
 - `POST /api/projects/:projectId/agent-presets`
 - `PATCH /api/agent-presets/:agentPresetId`
 - `DELETE /api/agent-presets/:agentPresetId`
+- `GET /api/projects/:projectId/agent-presets/base-updates`
+- `POST /api/projects/:projectId/agent-presets/base-updates/:baseAgentRole/apply`
+
+Base-agent updates are limited to `planning_agent` and `project_manager`. The notice endpoint performs no provider work; it reports only changed bundled baselines that cannot be applied automatically because the selected preset has custom instructions or the role is routed to an alternate preset.
+
+Applying a notice uses the existing `planning` virtual-provider route and structured invocation pipeline, recorded as execution invocation type `agent_base_update`. The provider receives the previous bundled/base instructions, current bundled instructions, and the selected preset instructions, but is restricted to returning one raw JSON property: `instructionMarkdown`. Its prompt permits only compatibility-critical additions, such as changed MCP or JSON-schema rules, and forbids workspace writes or metadata changes. Code UX parses the response strictly and then applies only instruction markdown through `AgentPresetSyncService`; avatar, labels, routing, provider/model, memory, MCP access, persistent skills, and source metadata remain unchanged. The stored bundled revision advances only after provider execution and parsing succeed, and the selected preset ID is checked again immediately before application to prevent a concurrent route change from redirecting the result.
 
 These endpoints are project-scoped and intentionally separate from:
 
@@ -140,7 +147,9 @@ Agent preset avatars have two rendering tiers:
 
 `LazyAgentAvatarScene` is the required boundary for dashboard surfaces that want the 3D avatar. It renders the SVG fallback until an `IntersectionObserver` reports the stage visible, and it keeps reduced-motion users on the static SVG path so ordinary Agents page interactions do not import or initialize the heavy scene. Surfaces that need immediate rendering can opt in explicitly with the wrapper's `eager` prop.
 
-The 3D scene owns WebGL lifecycle cleanup. On unmount, fallback transition, WebGL failure, or reduced-motion changes, it cancels animation frames, removes event listeners, disposes avatar geometries, materials, textures, particle resources, and the renderer, and forces context loss when supported.
+Working-avatar props are defined by the pure typed catalog in `dashboard/src/v2/lib/agent-scene-tools.ts`. It preserves the public screwdriver, jackhammer, wrench, hammer, and torch identifiers plus the `?stageTool=` design-review override while keeping anchors, palettes, geometry blueprints, animation references, and elapsed-time motion functions testable without WebGL. Tool selection, expression, and avatar configuration remain independent of the renderer lifecycle.
+
+The 3D scene owns WebGL lifecycle cleanup. Tool changes overlap a short deterministic exit and entrance, then remove and dispose every reachable geometry, material, and texture in the outgoing subtree. On unmount, fallback transition, WebGL failure, or reduced-motion changes, the scene cancels animation frames, removes event listeners, disposes avatar and tool geometries, materials, textures, particle resources, and the renderer, and forces context loss when supported. Reduced-motion and WebGL fallback paths keep the SVG avatar and add a static active-tool label rather than relying on animation to communicate the work state.
 
 Provider and model preferences are intentionally nullable. They only take effect when a provider invocation route uses the `AGENT` strategy; otherwise the agent inherits the configured route, worker, or global defaults.
 

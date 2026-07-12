@@ -91,10 +91,10 @@ export const StatsMetricCard: FunctionComponent<StatsMetricCardProps> = ({
       accent={accent}
       density="compact"
       tone="warm"
-      className="min-h-[11.5rem] min-w-0"
+      className="min-h-[10.5rem] min-w-0"
     >
       <div ref={contentRef} className="relative z-10">
-        <div className="relative mt-3 h-14 min-h-14 rounded-[var(--stats-control-radius)]">
+        <div className="relative mt-2.5 h-12 min-h-12 rounded-[var(--stats-control-radius)]">
           {hasSparkline ? (
             <Sparkline
               points={sparkline}
@@ -112,7 +112,7 @@ export const StatsMetricCard: FunctionComponent<StatsMetricCardProps> = ({
             </div>
           )}
         </div>
-        <div className="mt-3 grid min-h-[2.25rem] min-w-0 content-end gap-2 border-t border-[color:var(--stats-card-border)] pt-2.5">
+        <div className="mt-2.5 grid min-h-[2rem] min-w-0 content-end gap-2 border-t border-[color:var(--stats-card-border)] pt-2.5">
           {(secondaryDetail || qualityHint) && (
             <div className="flex min-w-0 flex-wrap items-center gap-2 text-[10px] font-medium leading-snug text-[color:var(--stats-detail-color)]">
               {secondaryDetail && <span className="min-w-0 max-w-full flex-1 basis-32 break-words">{secondaryDetail}</span>}

@@ -8,21 +8,25 @@ import {
   fetchSystemSettings,
   fillRowNumber,
   openSettingsCategory,
+  openSettingsSection,
   saveSettings,
   settingsRow,
   toggleRowSwitch,
 } from './settings-test-helpers';
 
 async function openModels(page: Page): Promise<void> {
-  await openSettingsCategory(page, 'models', /AI Models Provider routing, models, and weighting/i);
+  await openSettingsCategory(page, 'models', 'AI Models');
+  await openSettingsSection(page, 'Default Routing Anchors');
 }
 
 async function openAgents(page: Page): Promise<void> {
-  await openSettingsCategory(page, 'agents', /Agents Agent routing, skill storage, reflection, and authoring behavior/i);
+  await openSettingsCategory(page, 'agents', 'Agents');
+  await openSettingsSection(page, 'Project Markdown Mirror', 'Configure file sync Project Markdown Mirror');
 }
 
 async function openMemory(page: Page): Promise<void> {
-  await openSettingsCategory(page, 'memory', /Memory Embedding models, auto-capture, and promotion policy/i);
+  await openSettingsCategory(page, 'memory', 'Memory');
+  await openSettingsSection(page, 'Limits');
 }
 
 test.describe('settings models agents and memory panels', () => {

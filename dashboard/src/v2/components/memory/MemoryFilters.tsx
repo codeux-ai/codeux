@@ -1,43 +1,43 @@
 import { activeTierSignal, selectedSprintIdSignal, selectedAgentPresetIdSignal } from "./memoryState.js";
 import { FunctionComponent } from "preact";
 import { useEffect, useState } from "preact/hooks";
-import { AlertTriangle, HardDrive, Plus } from "lucide-preact";
+import { AlertTriangle, Plus } from "lucide-preact";
 import { useInteractionTokens } from "../../lib/motion/index.js";
 import type { MemoryStats } from "../../lib/memory-api.js";
 import type { MemoryScope } from "../../memory-types.js";
 import type { SprintRecord, AgentPreset } from "../../types.js";
 
-type MemTier = "short_term" | "long_term";
+type MemTier = "short_term" | "long_term" | "skills";
 const TIER_TABS: { key: MemTier; label: string; scope: MemoryScope }[] = [
     { key: "short_term", label: "Short Term", scope: "sprint" },
     { key: "long_term",  label: "Long Term",  scope: "project" },
+    { key: "skills", label: "Skills", scope: "project" },
 ];
 
 export const MemoryFilters: FunctionComponent<{
     stats: MemoryStats;
     sprints: SprintRecord[];
     agentPresets: AgentPreset[];
-    showModels: boolean;
-    setShowModels: (s: boolean) => void;
     setShowAddModal: (s: boolean) => void;
     lobotomize: boolean;
     handleLobotomizeToggle: () => void;
+    skillsCount?: number;
 }> = ({
     stats, sprints, agentPresets,
-    showModels, setShowModels,
     setShowAddModal,
-    lobotomize, handleLobotomizeToggle
+    lobotomize, handleLobotomizeToggle, skillsCount = 0,
 }) => {
     const activeTier = activeTierSignal.value;
     const selectedSprintId = selectedSprintIdSignal.value;
     const selectedAgentPresetId = selectedAgentPresetIdSignal.value;
     const interactionTokens = useInteractionTokens();
     const [announcement, setAnnouncement] = useState("");
-    const activeTierLabel = activeTier === "short_term" ? "Short Term" : "Long Term";
+    const activeTierLabel = activeTier === "short_term" ? "Short Term" : activeTier === "long_term" ? "Long Term" : "Skills";
     const shortTermCount = stats.sprint + stats.agent;
     const longTermCount = stats.project;
-    const activeTierCount = activeTier === "short_term" ? shortTermCount : longTermCount;
-    const totalCount = shortTermCount + longTermCount;
+    const activeTierCount = activeTier === "short_term" ? shortTermCount : activeTier === "long_term" ? longTermCount : skillsCount;
+    const totalCount = shortTermCount + longTermCount + skillsCount;
+    const activeItemNoun = activeTier === "skills" ? "skill" : "memory";
     const selectedSprint = sprints.find((sprint) => sprint.id === selectedSprintId);
     const selectedAgent = agentPresets.find((agent) => agent.id === selectedAgentPresetId);
     const hasSprintFilters = sprints.length > 0;
@@ -52,14 +52,19 @@ export const MemoryFilters: FunctionComponent<{
             ? "No short-term memories"
             : hasSprintFilters ? "All Sprints" : "No sprints available";
     const agentLabel = selectedAgent?.name ?? "All Agents";
-    const activeTierCountLabel = `${activeTierCount} ${activeTierCount === 1 ? "memory" : "memories"}`;
-    const totalCountLabel = `${totalCount} ${totalCount === 1 ? "memory" : "memories"}`;
+    const activeItemPlural = activeTier === "skills" ? "skills" : "memories";
+    const activeTierCountLabel = `${activeTierCount} ${activeTierCount === 1 ? activeItemNoun : activeItemPlural}`;
+    const memoryTotal = shortTermCount + longTermCount;
+    const totalCountLabel = skillsCount > 0
+        ? `${totalCount} indexed items`
+        : `${memoryTotal} ${memoryTotal === 1 ? "memory" : "memories"}`;
     const currentScopeParts = [
-        activeTier === "short_term" ? sprintLabel : "Project-wide",
+        activeTier === "short_term" ? sprintLabel : activeTier === "skills" ? "Versioned skill storages" : "Project-wide",
         agentLabel,
     ];
-    const currentScopeCopy = `${activeTierLabel}: showing ${activeTierCountLabel} of ${totalCountLabel} · ${currentScopeParts.join(" · ")}`;
-    const activeModelCopy = stats.activeModel ? `Active: ${stats.activeModel}` : "No active model";
+    const currentScopeCopy = activeTier === "skills"
+        ? `${activeTierLabel}: showing ${activeTierCountLabel} · ${currentScopeParts.join(" · ")}`
+        : `${activeTierLabel}: showing ${activeTierCountLabel} of ${totalCountLabel} · ${currentScopeParts.join(" · ")}`;
     const unavailableScopeCopy = activeTier === "short_term"
         ? shortTermCount === 0
             ? "No short-term memory filters are available for this tier."
@@ -86,8 +91,8 @@ export const MemoryFilters: FunctionComponent<{
     };
 
     useEffect(() => {
-        setAnnouncement(`${activeTierLabel} tier selected. ${activeTierCount} ${activeTierCount === 1 ? "memory" : "memories"}.`);
-    }, [activeTierCount, activeTierLabel]);
+        setAnnouncement(`${activeTierLabel} tier selected. ${activeTierCount} ${activeTierCount === 1 ? activeItemNoun : activeItemPlural}.`);
+    }, [activeItemNoun, activeItemPlural, activeTierCount, activeTierLabel]);
 
     useEffect(() => {
         if (selectedSprintId && ((activeTier === "short_term" && shortTermCount === 0) || !sprints.some((sprint) => sprint.id === selectedSprintId))) {
@@ -103,14 +108,6 @@ export const MemoryFilters: FunctionComponent<{
 
     const handleTierChange = (tier: MemTier) => {
         activeTierSignal.value = tier;
-    };
-
-    const handleModelCatalogToggle = () => {
-        const next = !showModels;
-        setShowModels(next);
-        setAnnouncement(next
-            ? `Embedding model catalog shown. ${stats.activeModel ? `Active model ${stats.activeModel}.` : "No active model selected."}`
-            : "Embedding model catalog hidden.");
     };
 
     const handleDangerToggle = () => {
@@ -139,7 +136,8 @@ export const MemoryFilters: FunctionComponent<{
                     {TIER_TABS.map(tab => {
                         const count = tab.key === "short_term"
                             ? shortTermCount
-                            : longTermCount;
+                            : tab.key === "long_term" ? longTermCount : skillsCount;
+                        const tabNoun = tab.key === "skills" ? "skill" : "memory";
                         return (
                             <button
                                 key={tab.key}
@@ -182,7 +180,7 @@ export const MemoryFilters: FunctionComponent<{
                             >
                                 <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em]">{tab.label}</span>
                                 <span id={`tab-${tab.key}-count`} className="text-base font-bold font-display text-slate-900 dark:text-white">
-                                    {count} {count === 1 ? "memory" : "memories"}
+                                    {count} {count === 1 ? tabNoun : tab.key === "skills" ? "skills" : "memories"}
                                 </span>
                             </button>
                         );
@@ -255,7 +253,7 @@ export const MemoryFilters: FunctionComponent<{
                     </p>
                 )}
             </div>
-            <div className="flex w-full min-w-0 flex-wrap items-start justify-between gap-2.5" role="group" aria-label="Memory actions">
+            {activeTier !== "skills" && <div className="flex w-full min-w-0 flex-wrap items-start justify-between gap-2.5" role="group" aria-label="Memory actions">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <button type="button" onClick={() => setShowAddModal(true)}
                         aria-label="Add Memory"
@@ -266,24 +264,6 @@ export const MemoryFilters: FunctionComponent<{
                                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                                    transition-[background-color,border-color,box-shadow,color] motion-reduce:duration-0 sm:flex-none">
                         <Plus className="w-3.5 h-3.5" strokeWidth={2.5} /> Add Memory
-                    </button>
-                    <button type="button" aria-pressed={showModels} onClick={handleModelCatalogToggle}
-                        aria-label={showModels ? "Hide embedding model catalog" : "Show embedding model catalog"}
-                        aria-describedby="model-catalog-status"
-                        style={controlTransitionStyle}
-                        className={`flex min-h-9 min-w-0 max-w-full flex-[1_1_12rem] items-center justify-center gap-1.5 whitespace-normal rounded-xl px-4 py-2 text-xs font-bold leading-tight cursor-pointer
-                                   border transition-[background-color,border-color,box-shadow,color] motion-reduce:duration-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 sm:flex-none
-                                   ${showModels
-                                       ? "bg-signal-500/[0.14] border-signal-500/40 text-signal-600 shadow-[0_0_0_2px_rgba(0,224,160,0.08)] hover:bg-signal-500/[0.2] dark:text-signal-400"
-                                       : "bg-black/[0.04] dark:bg-white/[0.04] border-black/[0.06] dark:border-white/[0.06] text-slate-500 hover:bg-black/[0.08] dark:hover:bg-white/[0.08] hover:text-slate-900 dark:hover:text-white"
-                                   }`}>
-                        <HardDrive className="w-3.5 h-3.5" strokeWidth={2} />
-                        Model Catalog
-                        <span className="text-[10px] opacity-80">{showModels ? "Shown" : "Hidden"}</span>
-                        <span id="model-catalog-status" className="max-w-[8rem] truncate text-[10px] opacity-80" title={activeModelCopy}>{activeModelCopy}</span>
-                        {stats.activeModel && (
-                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-signal-500" aria-hidden="true" />
-                        )}
                     </button>
                 </div>
                 <div className="flex min-w-0 flex-col items-start gap-1 sm:items-end">
@@ -302,8 +282,8 @@ export const MemoryFilters: FunctionComponent<{
                         <span>{lobotomize ? "Danger Delete Armed" : "Danger Delete Off"}</span>
                     </button>
                 </div>
-            </div>
-            <p
+            </div>}
+            {activeTier !== "skills" && <p
                 id="danger-delete-mode-copy"
                 className={`w-full min-w-0 text-left text-[11px] font-semibold leading-snug ${lobotomize ? "text-status-red" : "text-slate-400"}`}
                 style={inlineValidationStyle}
@@ -311,7 +291,7 @@ export const MemoryFilters: FunctionComponent<{
                 {lobotomize
                     ? "Danger delete mode is armed. Single-memory deletes skip confirmation until turned off."
                     : "Danger delete mode is off. Toggle only when immediate single-memory deletion is intentional."}
-            </p>
+            </p>}
         </div>
     );
 };

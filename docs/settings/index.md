@@ -2,7 +2,38 @@
 
 Settings is the configuration hub for Code UX. It covers local runtime behavior, provider routing, project overrides, Git and CI automation, dashboard appearance, memory, integrations, MCP tool access, and destructive maintenance actions.
 
-Use this section when you need more detail than the inline Settings-page help popovers provide. Every Settings card links to one of the pages below, and each page explains what the controls affect, recommended defaults, common risks, and validation steps.
+Use this section when you need more detail than the inline Settings-page help popovers provide. Configuration cards with dedicated reference pages link to the pages below, which explain what the controls affect, recommended defaults, common risks, and validation steps.
+
+On desktop, choose an area from the persistent category rail. The sticky command surface keeps the active category name, description, scope, save state, and primary actions together while settings scroll beneath it. On smaller screens, the same surface shows the current category as one compact button; opening it reveals the Smart Find-filtered categories and match previews in a keyboard-accessible drawer without pushing the active settings panel down the page.
+
+The rail groups configuration into **Basics**, **AI & Knowledge**, **Delivery**, **Connections**, and **System** so unrelated categories no longer compete in one flat numbered list.
+
+Colored category and card icons provide stable visual landmarks, while the preferred accent selected under **Appearance → Display Settings** independently personalizes primary actions, links, focus, and selected controls. Provider and status colors keep their established meaning.
+
+Each category opens as a modern overview made from subsystem cards. A card combines a plain-language purpose with up to three live values such as current mode, provider, safety posture, capacity, or enabled state. The most important low-risk choice may stay directly editable in the overview; **Configure** moves the category into one focused inline workspace for the full control set. **Back to category overview** restores the card grid without changing the Settings draft, scope inheritance, or saving.
+
+This is a drill-down workspace, not a stack of accordions: only the selected subsystem's detailed controls remain on screen. Local AI Runtime is the reference pattern. It keeps speech input, speech output, and memory embedding status visible, while **Configure speech** and **Manage local models** open full-width inline workspaces instead of modal overlays.
+
+## Settings Surface Reduction Audit
+
+The following controls can leave the Settings page without deleting persisted configuration. They are metadata, navigation, or derived diagnostics and should be relocated before their Settings rows are removed:
+
+| Candidate | Why it is safe to remove from Settings | Destination |
+| --- | --- | --- |
+| Project id, source type, and base directory | Read-only project metadata; no Settings draft is changed. | Project details or workspace information. |
+| License and Open Source Software | Static legal references; they do not participate in scope or Save Changes. | About / Help. |
+| Show onboarding again | Navigation command, not configuration. | Help menu or command palette. |
+| Provider host config path and generated endpoint rows | Read-only or derived from the selected provider mode. | Context below the owning selector. |
+| Generated Qwen/OpenCode config previews | Derived, masked troubleshooting output. | A provider-level **Troubleshoot** disclosure. |
+| MCP effective config preview | Derived from the editable MCP fields. | A server-level **Preview generated config** disclosure. |
+
+Do not remove the apparent duplicates for automation, container runtime, QA reflection, or provider model selection yet. They currently represent different scopes, execution meanings, or intentionally shared editing contexts. Consolidate each onto one backing control before removing an entry.
+
+## Language-First Speech Setup
+
+**Settings -> AI Models -> Configure speech** keeps speech output intentionally simple: choose the output language first, and Code UX preselects the catalog's preferred compatible local model and a matching voice. The recommendation clearly separates **Selected**, **Installed / Download required**, and **Output enabled / off** states so a saved choice never implies that its files are already present.
+
+Downloads are never automatic. **Download recommended** names the model and language, opens the model's license and attribution confirmation, and starts the download only after **Accept & Download**. **Compare compatible models** opens the speech-output catalog already filtered to the chosen language; recommendation badges and ordering keep the preferred choice visible without hiding alternatives.
 
 ## How Settings Scope Works
 
@@ -11,6 +42,15 @@ Use this section when you need more detail than the inline Settings-page help po
 | System | Defaults shared by every project, provider credentials, global runtime behavior, and reusable catalogs. | A system change can affect future work across projects. |
 | Project | Repository-specific routing, preview behavior, memory, integrations, and workflow policy. | Project overrides can mask system defaults. |
 | Sprint | Narrow execution overrides where supported by the runtime. | Use sparingly so sprint behavior stays explainable. |
+
+## System General Legal Actions
+
+In System scope, the General category includes a legal-actions card alongside its runtime and setup controls:
+
+- **License** opens the canonical Code UX [LICENSE](https://github.com/codeux-ai/codeux/blob/main/LICENSE) file in an external destination.
+- **OS Software** opens a searchable, informational catalog of the open-source dependencies distributed with Code UX. Each catalog entry provides a license identifier and a link to the dependency's project.
+
+The OS Software catalog is a static reference. It does not participate in Settings drafts, **Save Changes**, project overrides, or settings persistence.
 
 ## Settings Areas
 
@@ -30,7 +70,7 @@ Use this section when you need more detail than the inline Settings-page help po
 
 | Area | What it covers |
 | --- | --- |
-| [Display Settings](./display-settings.md) | Controls the dashboard shell layout, theme, motion preference, and desktop zoom when available. |
+| [Display Settings](./display-settings.md) | Controls the dashboard shell layout, theme, accent color, motion preference, and desktop zoom when available. |
 | [Background](./background.md) | Customizes the dashboard background image, animation mode, static color, and pattern overlay. |
 | [Techstacks](./techstacks.md) | Manages the system techstack catalog and per-project techstack/application-kind assignment. |
 | [Guidance](./guidance.md) | Manages selected tech-stack and styleguide guidance plus custom instruction entries for the active settings scope. |
@@ -40,6 +80,7 @@ Use this section when you need more detail than the inline Settings-page help po
 
 | Area | What it covers |
 | --- | --- |
+| [Speech Output Architecture](../architecture/speech-output.md) | Installs and activates STT/TTS ONNX bundles, configures API variants, and controls the 3D Chat project-manager voice. |
 | [Base Provider Configuration](./base-provider-configuration.md) | Defines each named provider instance's default eligibility, model, thinking depth, weight, and concurrency. |
 | [Route Mapping](./route-mapping.md) | Routes each invocation type to inherited, manual, weighted, or agent-selected provider pools. |
 | [Model Pricing](./model-pricing.md) | Stores token pricing metadata used for model cost estimates in dashboard views. |
@@ -58,7 +99,7 @@ Use this section when you need more detail than the inline Settings-page help po
 | [Watch Loop](./watch-loop.md) | Controls whether live sprint orchestration keeps polling and how frequently it emits work. |
 | [Workspace Hygiene](./workspace-hygiene.md) | Controls cleanup of temporary worktree state after provider CLI runs. |
 | [Workspace Visibility](./workspace-visibility.md) | Controls automatic preview lifecycle and whether browser workspace entry points appear in the dashboard. |
-| [Runtime Limits](./runtime-limits.md) | Sets preview container concurrency, host port range, app port, and startup script path. |
+| [Runtime Limits](./runtime-limits.md) | Sets preview container concurrency, ports, startup commands, and optional Docker access. |
 
 ### Memory And Knowledge
 
@@ -77,6 +118,7 @@ Use this section when you need more detail than the inline Settings-page help po
 | Area | What it covers |
 | --- | --- |
 | [Integrations](./integrations.md) | Lists provider, git-host, issue-tracker, and read-only importer integrations and exposes manage/add actions. |
+| [Google Drive Project Mount](./google-drive-mount.md) | Links an existing local Google Drive directory into Docker-backed provider containers with read-only or explicit read-write access. |
 | [Jules Automation](./jules-automation.md) | Configures Jules clarification automation and CI autofix handoff behavior. |
 | [Git Host Configuration](./git-host-configuration.md) | Stores GitHub or GitLab tokens and Docker git-auth behavior for repository automation. |
 | [Jira Configuration](./jira-configuration.md) | Connects Jira issue search, import transitions, and completion transitions. |

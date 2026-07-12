@@ -1,5 +1,6 @@
 import type {
   BackgroundPattern,
+  DashboardAccentColor,
   DashboardSettings,
   DashboardExperienceMode,
   DesignGuidanceSettings,
@@ -8,6 +9,7 @@ import type {
   RuntimeLogLevel,
   ConsoleLogMode,
   ExternalImporterSettings,
+  GoogleDriveSettings,
   RestartInvocationPolicy,
   RestartSprintPolicy,
   SkillToggle,
@@ -44,6 +46,7 @@ import {
   DEFAULT_PROJECT_TECHSTACK,
   DEFAULT_SKILLS,
   DASHBOARD_EXPERIENCE_MODES,
+  DASHBOARD_ACCENT_COLORS,
   INTERNAL_SKILL_NAMES,
   INTERNAL_SKILL_SET,
   QA_EXHAUSTION_POLICIES,
@@ -246,6 +249,19 @@ const sanitizeTechstackSelection = (value: unknown): TechstackSelectionSettings 
   };
 };
 
+export const sanitizeGoogleDriveSettings = (value: unknown): GoogleDriveSettings => {
+  const input = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  const hasValidAccessMode = input.accessMode === "read-only" || input.accessMode === "read-write";
+
+  return {
+    enabled: hasValidAccessMode && input.enabled === true,
+    hostPath: typeof input.hostPath === "string" ? input.hostPath.trim() : "",
+    accessMode: input.accessMode === "read-write" ? "read-write" : "read-only",
+  };
+};
+
 const cloneDesignGuidance = (settings: DesignGuidanceSettings): DesignGuidanceSettings => (
   cloneDesignGuidanceSettings(settings)
 );
@@ -264,11 +280,18 @@ const BACKGROUND_PATTERNS = new Set<BackgroundPattern>([
   "NOISE",
 ]);
 const DASHBOARD_EXPERIENCE_MODE_SET = new Set<DashboardExperienceMode>(DASHBOARD_EXPERIENCE_MODES);
+const DASHBOARD_ACCENT_COLOR_SET = new Set<DashboardAccentColor>(DASHBOARD_ACCENT_COLORS);
 
 const sanitizeDashboardExperienceMode = (value: unknown): DashboardExperienceMode => (
   typeof value === "string" && DASHBOARD_EXPERIENCE_MODE_SET.has(value as DashboardExperienceMode)
     ? value as DashboardExperienceMode
     : DEFAULT_DASHBOARD_EXPERIENCE_MODE
+);
+
+const sanitizeDashboardAccentColor = (value: unknown): DashboardAccentColor => (
+  typeof value === "string" && DASHBOARD_ACCENT_COLOR_SET.has(value as DashboardAccentColor)
+    ? value as DashboardAccentColor
+    : DEFAULT_DASHBOARD_SETTINGS.appearance.accentColor
 );
 
 const sanitizeBackgroundImage = (value: unknown): string | null => {
@@ -489,6 +512,7 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   techstackCatalog: cloneTechstackCatalog(DEFAULT_DASHBOARD_SETTINGS.techstackCatalog),
   techstack: { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
   designGuidance: cloneDesignGuidance(DEFAULT_DASHBOARD_SETTINGS.designGuidance),
+  googleDrive: { ...DEFAULT_DASHBOARD_SETTINGS.googleDrive },
   git: {
     ...DEFAULT_DASHBOARD_SETTINGS.git,
     githubToken: externalHints?.resolved.githubToken || DEFAULT_DASHBOARD_SETTINGS.git.githubToken,
@@ -569,6 +593,10 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   speech: {
     ...DEFAULT_DASHBOARD_SETTINGS.speech,
     externalTranscription: { ...DEFAULT_DASHBOARD_SETTINGS.speech.externalTranscription },
+    synthesis: {
+      ...DEFAULT_DASHBOARD_SETTINGS.speech.synthesis,
+      externalSynthesis: { ...DEFAULT_DASHBOARD_SETTINGS.speech.synthesis.externalSynthesis },
+    },
   },
   modelPricing: { overrides: { ...DEFAULT_DASHBOARD_SETTINGS.modelPricing.overrides } },
 });
@@ -606,6 +634,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     navigationMode: appearanceInput.navigationMode === "DOCK" ? "DOCK" : "SIDEBAR" as "DOCK" | "SIDEBAR",
     experienceMode: sanitizeDashboardExperienceMode(appearanceInput.experienceMode),
     theme: appearanceInput.theme === "LIGHT" || appearanceInput.theme === "DARK" ? appearanceInput.theme : "SYSTEM" as "LIGHT" | "DARK" | "SYSTEM",
+    accentColor: sanitizeDashboardAccentColor(appearanceInput.accentColor),
     reducedMotion: appearanceInput.reducedMotion === "REDUCE" || appearanceInput.reducedMotion === "NONE" ? appearanceInput.reducedMotion : "AUTO" as "AUTO" | "REDUCE" | "NONE",
     backgroundMode: appearanceInput.backgroundMode === "STATIC" ? "STATIC" : "ANIMATED" as "ANIMATED" | "STATIC",
     animatedBackground: typeof appearanceInput.animatedBackground === "string" ? appearanceInput.animatedBackground : "deep-ocean",
@@ -651,6 +680,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   const techstackCatalog = sanitizeTechstackCatalog(input.techstackCatalog ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog);
   const techstack = sanitizeTechstackSelection(input.techstack);
   const designGuidance = sanitizeDesignGuidanceSettings(input.designGuidance);
+  const googleDrive = sanitizeGoogleDriveSettings(input.googleDrive);
   const git = sanitizeGit(input, externalHints);
   const jira = sanitizeJira(input.jira, DEFAULT_DASHBOARD_SETTINGS.jira);
   if (externalHints?.resolved?.jiraToken) {
@@ -726,6 +756,17 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
       }
       return raw;
     })(),
+    startupCommand: (() => {
+      const raw = readString(
+        sprintPreviewInput.startupCommand,
+        DEFAULT_DASHBOARD_SETTINGS.sprintPreview.startupCommand,
+      ).trim();
+      return raw.includes("\0") ? "" : raw.slice(0, 8_192);
+    })(),
+    allowDockerAccess: readBoolean(
+      sprintPreviewInput.allowDockerAccess,
+      DEFAULT_DASHBOARD_SETTINGS.sprintPreview.allowDockerAccess,
+    ),
     environmentVariables: sanitizePreviewEnvironmentVariables(sprintPreviewInput.environmentVariables),
   };
   if (sprintPreview.hostPortRangeEnd < sprintPreview.hostPortRangeStart) {
@@ -790,6 +831,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     techstackCatalog,
     techstack,
     designGuidance,
+    googleDrive,
     git,
     jira,
     notion,

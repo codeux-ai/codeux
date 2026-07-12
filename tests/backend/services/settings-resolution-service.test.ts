@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import {
   buildDefaultProjectSettings,
+  buildDefaultSystemSettings,
   sanitizeProjectSettings,
   resolveDashboardSettings,
   sanitizeSystemSettings,
@@ -52,6 +53,7 @@ describe("Settings Resolution Service", () => {
       expect(settings.agents).toBeDefined();
       expect(settings.skills).toBeDefined();
       expect(settings.memory).toBeDefined();
+      expect(settings.googleDrive).toEqual({ enabled: false, hostPath: "", accessMode: "read-only" });
     });
 
     it("should have default provider entries existing", () => {
@@ -118,9 +120,10 @@ describe("Settings Resolution Service", () => {
       expect(settings.agents.someFakeAgent).toBeUndefined();
     });
 
-    it("preserves valid appearance background image and pattern settings", () => {
+    it("preserves valid appearance background image, pattern, and accent settings", () => {
       const settings = sanitizeProjectSettings({
         appearance: {
+          accentColor: "VIOLET",
           backgroundMode: "STATIC",
           animatedBackground: "aurora-borealis",
           staticBackgroundColor: "#123456",
@@ -134,11 +137,13 @@ describe("Settings Resolution Service", () => {
       expect(settings.appearance.staticBackgroundColor).toBe("#123456");
       expect(settings.appearance.backgroundImage).toBe("data:image/jpeg;base64,abc123");
       expect(settings.appearance.backgroundPattern).toBe("DOTS");
+      expect(settings.appearance.accentColor).toBe("VIOLET");
     });
 
-    it("normalizes invalid appearance background image and pattern settings", () => {
+    it("normalizes invalid appearance background image, pattern, and accent settings", () => {
       const settings = sanitizeProjectSettings({
         appearance: {
+          accentColor: "RAINBOW",
           backgroundImage: "javascript:alert(1)",
           backgroundPattern: "SPIRAL",
         },
@@ -146,6 +151,74 @@ describe("Settings Resolution Service", () => {
 
       expect(settings.appearance.backgroundImage).toBe(null);
       expect(settings.appearance.backgroundPattern).toBe("NONE");
+      expect(settings.appearance.accentColor).toBe("CODEUX");
+    });
+  });
+
+  describe("Google Drive scoped settings", () => {
+    it("resolves project and sprint overrides with inheritance, sources, and reset semantics", () => {
+      const systemSettings = buildDefaultSystemSettings();
+      systemSettings.defaults.googleDrive = {
+        enabled: true,
+        hostPath: "/mnt/system-drive",
+        accessMode: "read-only",
+      };
+      const projectOverride: ProjectSettingsOverride = {
+        googleDrive: {
+          enabled: true,
+          hostPath: " /mnt/project-drive ",
+          accessMode: "read-write",
+        },
+      };
+
+      const project = resolveDashboardSettings({ systemSettings, projectOverride });
+      expect(project.settings.googleDrive).toEqual({
+        enabled: true,
+        hostPath: "/mnt/project-drive",
+        accessMode: "read-write",
+      });
+      expect(project.sources["googleDrive.accessMode"]).toBe("project");
+
+      const sprint = resolveDashboardSettings({
+        systemSettings,
+        projectOverride,
+        sprintOverride: { googleDrive: { accessMode: "read-only" } },
+      });
+      expect(sprint.settings.googleDrive).toEqual({
+        enabled: true,
+        hostPath: "/mnt/project-drive",
+        accessMode: "read-only",
+      });
+      expect(sprint.sources["googleDrive.hostPath"]).toBe("project");
+      expect(sprint.sources["googleDrive.accessMode"]).toBe("sprint");
+
+      const afterSprintReset = resolveDashboardSettings({ systemSettings, projectOverride });
+      expect(afterSprintReset.settings.googleDrive.accessMode).toBe("read-write");
+
+      const afterProjectReset = resolveDashboardSettings({ systemSettings });
+      expect(afterProjectReset.settings.googleDrive).toEqual(systemSettings.defaults.googleDrive);
+      afterProjectReset.settings.googleDrive.hostPath = "/mutated";
+      expect(systemSettings.defaults.googleDrive.hostPath).toBe("/mnt/system-drive");
+    });
+
+    it("disables a project setting with an invalid access mode", () => {
+      const systemSettings = buildDefaultSystemSettings();
+      const resolved = resolveDashboardSettings({
+        systemSettings,
+        projectOverride: {
+          googleDrive: {
+            enabled: true,
+            hostPath: "/mnt/project-drive",
+            accessMode: "owner",
+          },
+        } as unknown as ProjectSettingsOverride,
+      });
+
+      expect(resolved.settings.googleDrive).toEqual({
+        enabled: false,
+        hostPath: "/mnt/project-drive",
+        accessMode: "read-only",
+      });
     });
   });
 
@@ -433,6 +506,25 @@ describe("Settings Resolution Service", () => {
       };
       const settings = resolveProjectSettings(systemSettings, { automationLevel: "FULL" });
       expect(settings.automationLevel).toBe("FULL");
+    });
+
+    it("repairs a stale project voice override after the inherited TTS model changes", () => {
+      const systemSettings = sanitizeSystemSettings({});
+      systemSettings.defaults.speech.synthesis = {
+        ...systemSettings.defaults.speech.synthesis,
+        enabled: true,
+        localModelId: "piper-de-de-mls-medium",
+        voice: "mls-de-default",
+      };
+
+      const settings = resolveProjectSettings(systemSettings, {
+        speech: { synthesis: { voice: "am_michael" } },
+      });
+
+      expect(settings.speech.synthesis).toMatchObject({
+        localModelId: "piper-de-de-mls-medium",
+        voice: "mls-de-default",
+      });
     });
 
     it("should preserve custom integrations from systemSettings", () => {

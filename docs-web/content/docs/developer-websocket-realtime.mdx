@@ -14,46 +14,42 @@ No authentication. The endpoint is bound to loopback by default; expose with car
 
 All frames are JSON, single-message:
 
+The client sends a complete subscription set:
+
 ```jsonc
-{
-  "type": "subscribe" | "unsubscribe" | "snapshot" | "event" | "ping" | "pong",
-  "id": "string",        // request id (for client-initiated frames)
-  "scope": "string",     // resource scope, e.g. "project:<id>", "execution"
-  "sequence": 1234,      // monotonic per-scope sequence number (server frames only)
-  "data": { },           // payload
-  "error": { "code", "message" }   // on error
-}
+{ "type": "set_subscriptions", "scopes": ["overview", "project:<id>"], "lastSequence": 1234 }
+```
+
+The server sends one of four typed frames:
+
+```jsonc
+{ "type": "ready" }
+{ "type": "subscribed", "scopes": ["overview", "project:<id>"], "lastSequence": 1234 }
+{ "type": "event", "event": { "sequence": 1235, "scope": "project:<id>", "eventType": "project.execution.updated", "payload": {} } }
+{ "type": "snapshot_required", "reason": "non_replayable_event_missed" | "replay_window_exceeded" | "invalid_client_message" }
 ```
 
 ## Connection lifecycle
 
 ```
-Client → server   { type: "subscribe", id, scope, lastSequence?: number }
-Server → client   { type: "snapshot", id, scope, sequence, data: <full state> }
-Server → client   { type: "event", scope, sequence, data: <delta> }   // 0..N
-…
-Client → server   { type: "unsubscribe", id, scope }
+Server → client   { type: "ready" }
+Client → server   { type: "set_subscriptions", scopes, lastSequence? }
+Server → client   { type: "event", event }   // 0..N replayed events
+Server → client   { type: "snapshot_required", reason }   // when replay is unsafe
+Server → client   { type: "subscribed", scopes, lastSequence }
 ```
 
-A `subscribe` may include `lastSequence` from a previous connection. The server replays missed events from that point if it can; otherwise it returns a fresh `snapshot`.
-
-The server emits `ping` periodically (default 30 s); the client should reply with `pong` to avoid timeout-driven disconnect.
+A subscription set may include `lastSequence` from a previous connection. The server replays missed events from that point if it can. When it cannot, it sends `snapshot_required`; the client refreshes subscribed resources through REST and discards the unusable cursor. The server always finishes the handshake with `subscribed` and its current authoritative watermark.
 
 ## Available scopes
 
 | Scope | What it tracks |
 | --- | --- |
 | `project:<id>` | Project metadata, settings effective values, attention items. |
-| `project:<id>:sprints` | Sprint list and status changes. |
-| `project:<id>:tasks` | Task status changes. |
-| `project:<id>:execution` | Live cycle events (lean execution snapshots without heavy invocation feeds) for the active sprint run. |
-| `project:<id>:memory` | Memory adds / updates / promotions. |
-| `project:<id>:connections` | MCP connection list and presence. |
-| `project:<id>:conversations` | Chat thread updates. |
-| `git-status` | Git status refreshes (debounced). |
-| `live-activities` | Live agent activities. |
-| `docker` | Docker container list. |
-| `system` | System-wide settings or status changes. |
+| `project:<id>:git` | Selected-project Git status changes. |
+| `thread:<id>` | Conversation events for one thread. |
+| `projects` | Project collection and cross-project execution invalidation. |
+| `overview` | Cross-project overview telemetry. |
 
 A client may subscribe to as many scopes as needed.
 
@@ -62,41 +58,33 @@ A client may subscribe to as many scopes as needed.
 Recommended client behaviour:
 
 1. On `close`, wait `min(2^attempts, 30s) + jitter` and reconnect.
-2. On reconnect, re-subscribe to all known scopes with `lastSequence` set.
-3. If the server returns a fresh `snapshot` (rather than backfilled events), discard any cached deltas and use the snapshot as the source of truth.
+2. On reconnect, send the union of active scopes with `lastSequence` set.
+3. On `snapshot_required`, clear the cursor and refresh subscribed resources from their REST snapshots.
+4. Accept `subscribed.lastSequence` as the current server watermark, even when it is lower than the cursor sent during reconnect.
+
+Treat the `subscribed.lastSequence` acknowledgement as authoritative even if it is lower than the cursor sent by the client. A lower value is expected when the server restarted after the client observed a non-persisted sequence. On `snapshot_required`, invalidate the old cursor before refreshing REST snapshots, and serialize later scope changes until the current subscription set is acknowledged. This prevents route changes from repeatedly resending an unrecoverable pre-restart cursor.
 
 The official client (`dashboard/src/lib/realtime/dashboard-realtime-client.ts`) implements this.
 
-## Snapshot rate limiting
+## Recovery notification deduplication
 
-To prevent flood, the server enforces a 3 s cooldown between snapshot deliveries per scope. Subsequent subscribe requests within the window are coalesced.
+The official client dispatches at most one `snapshot_required` notification every 3 seconds. Resource controllers also coalesce their silent REST refetches so one recovery handshake does not produce a refresh storm.
 
 ## Fallback to polling
 
-If the WebSocket connection cannot be established (proxy strips upgrade headers, etc.), clients should fall back to polling the corresponding REST endpoint:
-
-| Scope | REST fallback |
-| --- | --- |
-| `project:<id>:execution` | `GET /api/projects/:id/execution` |
-| `git-status` | `GET /api/git-status` |
-| `live-activities` | `GET /api/live-activities` |
-| `project:<id>` (live) | `GET /api/live?projectId=:id` |
-
-The default dashboard client falls back automatically.
+If the WebSocket connection cannot be established, consumers continue using their resource-specific REST snapshots. Common examples are `GET /api/live?projectId=:id`, `GET /api/projects/:id/execution`, `GET /api/git-status`, and the project conversation list/message endpoints. The WebSocket transports invalidations and deltas; REST remains the source for initial and recovery snapshots.
 
 ## Error semantics
 
-- A frame with `type: "event"` and `error` set indicates a transient delivery failure for that event; the next event will carry an updated `sequence`.
-- A frame with `type: "snapshot"` and `error` indicates the scope is unavailable (e.g. project deleted). Unsubscribe.
+- Unknown scopes are omitted from the acknowledged `scopes` list.
+- An invalid client frame produces `snapshot_required` with reason `invalid_client_message`; reconnect with a valid `set_subscriptions` payload.
+- If a requested resource no longer exists, its REST recovery request reports that condition and the consumer should remove the corresponding scope.
 
 ## Sample session
 
 ```text
-→ {"type":"subscribe","id":"a1","scope":"project:proj-1:execution"}
-← {"type":"snapshot","id":"a1","scope":"project:proj-1:execution","sequence":42,"data":{...}}
-← {"type":"event","scope":"project:proj-1:execution","sequence":43,"data":{"type":"task.started","taskId":"t-7"}}
-← {"type":"event","scope":"project:proj-1:execution","sequence":44,"data":{"type":"cycle.completed"}}
-← {"type":"ping"}
-→ {"type":"pong"}
-→ {"type":"unsubscribe","id":"a1","scope":"project:proj-1:execution"}
+← {"type":"ready"}
+→ {"type":"set_subscriptions","scopes":["project:proj-1"],"lastSequence":42}
+← {"type":"event","event":{"sequence":43,"scope":"project:proj-1","eventType":"conversation.thread.updated","payload":{}}}
+← {"type":"subscribed","scopes":["project:proj-1"],"lastSequence":43}
 ```

@@ -60,6 +60,9 @@ const mocks = vi.hoisted(() => {
     handleCancelActiveTurn: vi.fn(),
     isCancelling: false,
     handleSend: vi.fn(),
+    handleCreateAppQuickaction: vi.fn(() => Promise.resolve()),
+    projectInitializationStateLoading: false,
+    canCreateInitialAppQuickactions: true,
     navigateHistory: vi.fn(() => false),
     handleDeleteThread: vi.fn(),
     handleRenameThread: vi.fn(() => Promise.resolve()),
@@ -144,6 +147,9 @@ describe('ChatPage Accessibility', () => {
       feedback: { status: "idle", message: null },
       createThreadForCompose: vi.fn(),
       handleSend: vi.fn(),
+      handleCreateAppQuickaction: vi.fn(() => Promise.resolve()),
+      projectInitializationStateLoading: false,
+      canCreateInitialAppQuickactions: true,
       handleRenameThread: vi.fn(() => Promise.resolve()),
     };
   });
@@ -528,20 +534,25 @@ describe('ChatPage Accessibility', () => {
     expect(window.location.search).not.toContain("draft=");
   });
 
-  it('sends web and desktop setup as idle 3D chat quick actions for the active project', async () => {
+  it('presents and dispatches the full eligible 3D chat quick action set without changing the composer', async () => {
     const user = userEvent.setup();
     mocks.reducedMotion.value = true;
     const handleSend = vi.fn(() => Promise.resolve());
+    const handleCreateAppQuickaction = vi.fn(() => Promise.resolve());
+    const setInput = vi.fn();
     mocks.data = {
       ...mocks.data,
       chatMode: "stage",
       sending: false,
-      input: "",
+      input: "Keep this draft",
+      setInput,
       error: null,
       hasWorkingReply: false,
-      runningInvocationCount: 0,
       selectedThread: mocks.data.threads[0],
       handleSend,
+      handleCreateAppQuickaction,
+      projectInitializationStateLoading: false,
+      canCreateInitialAppQuickactions: true,
     };
 
     render(
@@ -550,17 +561,98 @@ describe('ChatPage Accessibility', () => {
       </ProjectDataContext.Provider>
     );
 
-    const webAction = screen.getByRole("button", { name: "Web App" });
-    const desktopAction = screen.getByRole("button", { name: "Desktop App" });
+    const labels = [
+      "Create Web App", "Create Desktop App", "Create Onlineshop", "Create Portfolio", "Create Game",
+      "Status Report", "Sprint Progress", "What’s Failing?", "Plan Next Steps",
+      "Add Nodes Workflow", "Add Dashboard", "Create Skill", "List Skills",
+    ];
+    expect(screen.getByRole("group", { name: "Project quick actions" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Create quick actions" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Project pulse quick actions" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Workflows quick actions" })).toBeInTheDocument();
+    expect(document.querySelector("[data-quick-action-group='insight']")).toHaveClass("md:flex", "md:flex-wrap");
+    expect(document.querySelector("[data-quick-action-group='workflow']")).toHaveClass("md:flex", "md:flex-wrap");
+    labels.forEach((label) => expect(screen.getByRole("button", { name: label })).toBeInTheDocument());
+    const iconTiles = Array.from(document.querySelectorAll<HTMLElement>("[data-quick-action-icon]"));
+    expect(iconTiles).toHaveLength(labels.length);
+    expect(new Set(iconTiles.map((tile) => tile.className))).toHaveLength(labels.length);
+    expect(screen.getByRole("button", { name: "Status Report" })).toHaveClass(
+      "min-h-9",
+      "w-fit",
+      "rounded-xl",
+      "md:ml-1",
+    );
 
-    expect(webAction).toBeInTheDocument();
-    expect(desktopAction).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create Web App" }));
+    const desktopAction = screen.getByRole("button", { name: "Create Desktop App" });
+    desktopAction.focus();
+    await user.keyboard("{Enter}");
+    const statusAction = screen.getByRole("button", { name: "Status Report" });
+    statusAction.focus();
+    await user.keyboard("{Enter}");
 
-    await user.click(webAction);
+    expect(handleCreateAppQuickaction).toHaveBeenCalledWith("web_app");
+    expect(handleCreateAppQuickaction).toHaveBeenCalledWith("desktop_app");
+    expect(handleSend).toHaveBeenCalledWith(expect.stringContaining("concise status report"));
+    expect(setInput).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "Message the project manager" })).toHaveValue("Keep this draft");
+    expect(statusAction).toHaveClass("focus-visible:ring-2");
+  });
 
-    expect(handleSend).toHaveBeenCalledWith(expect.stringContaining("Set up this existing project as a web app"));
-    expect(handleSend).toHaveBeenCalledWith(expect.stringContaining("Do not create or import a new Code UX project."));
-    expect(handleSend).toHaveBeenCalledWith(expect.stringContaining("current techstack setting"));
+  it('removes every create-app stage action when repository eligibility changes', () => {
+    mocks.reducedMotion.value = true;
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "stage",
+      sending: false,
+      error: null,
+      hasWorkingReply: false,
+      selectedThread: mocks.data.threads[0],
+      projectInitializationStateLoading: false,
+      canCreateInitialAppQuickactions: true,
+    };
+    const renderPage = () => (
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+    const { rerender } = render(renderPage());
+
+    expect(screen.getByRole("button", { name: "Create Web App" })).toBeInTheDocument();
+    mocks.data = { ...mocks.data, canCreateInitialAppQuickactions: false };
+    rerender(renderPage());
+
+    expect(screen.queryByRole("button", { name: "Create Web App" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create Desktop App" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create Onlineshop" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create Portfolio" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create Game" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "List Skills" })).toBeInTheDocument();
+  });
+
+  it.each([
+    ["sending", { sending: true, error: null, hasWorkingReply: false, invocations: [] }],
+    ["error", { sending: false, error: "Send failed", hasWorkingReply: false, invocations: [] }],
+    ["working reply", { sending: false, error: null, hasWorkingReply: true, invocations: [] }],
+  ])('suppresses stage quick actions while %s', (_label, state) => {
+    mocks.reducedMotion.value = true;
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "stage",
+      input: "",
+      selectedThread: mocks.data.threads[0],
+      projectInitializationStateLoading: false,
+      canCreateInitialAppQuickactions: true,
+      ...state,
+    };
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+
+    expect(screen.queryByRole("group", { name: "Project quick actions" })).not.toBeInTheDocument();
   });
 
   it('sends prompt suggestions directly without changing the thread composer', async () => {

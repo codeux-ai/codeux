@@ -21,10 +21,11 @@ It is for contributors and integrators who need to reason about *how* Code UX ma
 | 11 | [Configuration resolution](./configuration-resolution.md) | Cascade order, search paths, settings hierarchy |
 | 12 | [Speech input](./speech-input.md) | Persisted transcription settings, privacy boundary, provider fallback contract |
 | 13 | [Security model](./security.md) | Authentication, authorisation, secrets, network surface |
+| 14 | [Worker clarification contract](./worker-clarification-contract.md) | Durable human-owned worker questions, idempotent replies, and continuation boundary |
 
 ## Runtime Notes
 
-Agent persistent skill storage is opt-in per preset. A shared project-owned agent resolver applies the same idempotent search-first prompt guidance, scoped `search_skills` MCP access, and writable storage mounts to canonical provider executions and direct worker-inbox replies. Storage remains outside the project workspace (`~/.code-ux/persistent-skill-storages/...` on host, `/code-ux/persistent-skills/...` in Docker), and disabled, unattached, cross-project, or unscoped invocations remain unchanged.
+Agent persistent skill storage is opt-in per preset. A shared project-owned agent resolver applies the same idempotent search-first prompt guidance, scoped `search_skills` MCP access, and read-only versioned storage mounts to canonical provider executions and direct worker-inbox replies. Internal repositories live under `~/.code-ux/skill-storages/<project-id>/<storage-id>/repo`, are committed through the Docker Git helper, and mount at `/code-ux/persistent-skills/<storage-id>/`; disabled, unattached, cross-project, or unscoped invocations remain unchanged.
 
 ## Reading order suggestions
 

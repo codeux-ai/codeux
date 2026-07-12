@@ -40,6 +40,7 @@ import type { Logger } from "../shared/logging/logger.js";
 import { runCommandStrict } from "./cli-process-runner.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "./git-http-auth.js";
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
+import { buildRelevantMemoryInjectionContext } from "./memory-injection-context.js";
 import { formatTaskPrTitle } from "../domain/git/task-pr-title-template.js";
 import { buildTaskPrComposerInput } from "../domain/sprint/composer/task-pr-input-builder.js";
 import { composeTaskPrBody } from "../domain/sprint/composer/pr-description-composer.js";
@@ -63,10 +64,28 @@ import { buildSprintQaSnapshot, evaluateSprintQaReviewCycleDecision, shouldRunSp
 import type { SprintRunLifecycleService } from "./sprint-run-lifecycle-service.js";
 import type { ProjectAttentionService } from "../domain/workers/project-attention-service.js";
 import type { ProjectAttentionItemRecord } from "../contracts/project-attention-types.js";
+import {
+  buildTaskCodingOutcomeInstructions,
+  parseTaskExecutionOutcomeFromProviderOutput,
+  type TaskExecutionOutcome,
+} from "../domain/sprint/task-execution-outcome.js";
+import { workerClarificationAgentMcpAccess } from "./agent-mcp-access.js";
 
 type CliQaProvider = Exclude<ProviderId, "jules">;
 
 const SPRINT_RUN_KEEPALIVE_MS = 30_000;
+
+interface QaFixContinuationResult {
+  applied: boolean;
+  mode: "jules" | "cli" | "none";
+  noProgress: boolean;
+  blocker: string | null;
+}
+
+interface CliQaFollowUpResult {
+  producedMergeWork: boolean;
+  providerOutcome: TaskExecutionOutcome;
+}
 
 export interface TaskQaReviewOutcome {
   reviewed: boolean;
@@ -130,6 +149,7 @@ export class QualityAssuranceService {
       getMcpConnectionInfo: deps.getMcpConnectionInfo,
       skillService: deps.skillService,
       agentPresetRepository: deps.agentPresetRepository,
+      getDashboardSettings: deps.getDashboardSettings,
     });
 
     if (deps.structuredAgentRequestService) {
@@ -448,7 +468,7 @@ export class QualityAssuranceService {
     if (changesRequested && changesRequested.intentOutcome.intent === "changes_requested") {
       const changesIntent = changesRequested.intentOutcome;
       const qaDecisionFinishedAt = new Date().toISOString();
-      let continued: { applied: boolean; mode: "cli" | "jules" | "none" };
+      let continued: QaFixContinuationResult;
       try {
         continued = changesIntent.fixInstructions
           ? await this.requestFixesForTask({
@@ -459,7 +479,7 @@ export class QualityAssuranceService {
             scope,
             prompt: changesIntent.fixInstructions,
           })
-          : { applied: false, mode: "none" as const };
+          : { applied: false, mode: "none" as const, noProgress: false, blocker: null };
       } catch (error) {
         this.deps.qaReviewRepository.updateRun(changesRequested.run.id, {
           payload: {
@@ -480,11 +500,21 @@ export class QualityAssuranceService {
           ...changesRequested.resolvedReview!.raw,
           continued: continued.applied,
           continuationMode: continued.mode,
+          followUpNoProgress: continued.noProgress,
+          followUpBlocker: continued.blocker,
+          postExhaustionVerificationEligible: continued.applied
+            && decisiveRuns + 1 === qaSettings.maxTaskReviewRuns,
         },
         finishedAt: qaDecisionFinishedAt,
       });
 
-      if (continued.applied) {
+      if (continued.noProgress) {
+        this.deps.projectManagementRepository.updateTask(taskId, {
+          status: "coding_completed",
+          mergeIndicator: null,
+        });
+        args.task.status = "CODING_COMPLETED";
+      } else if (continued.applied) {
         this.deps.projectManagementRepository.updateTask(taskId, {
           status: "in_progress",
           ...MERGE_PROJECTION_RESET,
@@ -508,6 +538,10 @@ export class QualityAssuranceService {
         qaReviewRunId: changesRequested.run.id,
         continued: continued.applied,
         continuationMode: continued.mode,
+        followUpNoProgress: continued.noProgress,
+        followUpBlocker: continued.blocker,
+        postExhaustionVerificationEligible: continued.applied
+          && decisiveRuns + 1 === qaSettings.maxTaskReviewRuns,
         agentPresetId: changesRequested.request.agentPresetId,
         agentName: changesRequested.request.agentName,
       });
@@ -906,7 +940,7 @@ export class QualityAssuranceService {
       run.status === "failed" || run.status === "errored" || run.status === "cancelled"
     )) ?? null;
     const retryBudgetExhausted = latestRun.runIndex >= args.maxRuns;
-    if (!allTerminal || (!terminalFailure && !retryBudgetExhausted)) {
+    if (!allTerminal || !retryBudgetExhausted) {
       return;
     }
 
@@ -1028,7 +1062,7 @@ export class QualityAssuranceService {
       const providerSettings = route.providers[providerConfigId];
 
       const memoryContext = args.agentPresetId
-        ? this.buildMemoryContext(args.scope.projectId!, args.scope.sprintId || null, args.agentPresetId)
+        ? await this.buildMemoryContext(args.scope.projectId!, args.scope.sprintId || null, args.agentPresetId, args.sprintGoal)
         : undefined;
       const prompt = this.buildReviewPrompt({
         ...args,
@@ -1477,11 +1511,11 @@ export class QualityAssuranceService {
     featureBranch: string;
     scope: DashboardSettingsScope;
     prompt: string;
-  }): Promise<{ applied: boolean; mode: "jules" | "cli" | "none" }> {
+  }): Promise<QaFixContinuationResult> {
     const provider = args.task.provider;
     const sessionId = args.task.session_id?.trim();
     if (!provider || !sessionId) {
-      return { applied: false, mode: "none" };
+      return { applied: false, mode: "none", noProgress: false, blocker: null };
     }
 
     const followUpPrompt = [
@@ -1492,10 +1526,10 @@ export class QualityAssuranceService {
 
     if (provider === "jules") {
       await this.deps.sendSessionMessage(sessionId, followUpPrompt);
-      return { applied: true, mode: "jules" };
+      return { applied: true, mode: "jules", noProgress: false, blocker: null };
     }
 
-    await this.continueCliTaskSession({
+    const result = await this.continueCliTaskSession({
       provider,
       sessionId,
       task: args.task,
@@ -1505,7 +1539,12 @@ export class QualityAssuranceService {
       scope: args.scope,
       followUpPrompt,
     });
-    return { applied: true, mode: "cli" };
+    return {
+      applied: result.producedMergeWork,
+      mode: "cli",
+      noProgress: !result.producedMergeWork,
+      blocker: result.providerOutcome.kind === "blocked" ? result.providerOutcome.blocker : null,
+    };
   }
 
   private async continueCliTaskSession(args: {
@@ -1517,7 +1556,7 @@ export class QualityAssuranceService {
     featureBranch: string;
     scope: DashboardSettingsScope;
     followUpPrompt: string;
-  }): Promise<void> {
+  }): Promise<CliQaFollowUpResult> {
     const settings = this.deps.getDashboardSettings(args.scope);
     const workflowSettings = {
       ...DEFAULT_CLI_WORKFLOW_SETTINGS,
@@ -1685,15 +1724,33 @@ export class QualityAssuranceService {
       throw prepareError;
     }
 
-    const workerAgent = await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(args.repoPath);
+    const requestedCodingAgentId = args.task.agentPresetId
+      || (settings.agents.routing.taskCoding.mode === "MANUAL"
+        ? settings.agents.routing.taskCoding.agentPresetId
+        : null);
+    const workerAgent = typeof this.deps.agentPresetSyncService.resolveTargetedCodingAgent === "function"
+      ? await this.deps.agentPresetSyncService.resolveTargetedCodingAgent(
+        args.scope.projectId!,
+        requestedCodingAgentId,
+      ).catch(() => null)
+      : await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(args.repoPath).catch(() => null);
     const workerInstructions = workerAgent?.instructionMarkdown?.trim() || "";
     const workerMemoryInstructions = resolveAgentMemoryInstructions(
       workerAgent || {},
       settings.memory?.workerLearningsInstruction,
     );
     const workerMemoryContext = workerAgent?.id
-      ? this.buildMemoryContext(args.scope.projectId!, args.scope.sprintId || null, workerAgent.id)
+      ? await this.buildMemoryContext(args.scope.projectId!, args.scope.sprintId || null, workerAgent.id, args.followUpPrompt)
       : undefined;
+    const outcomeInstructions = buildTaskCodingOutcomeInstructions({
+      projectId: args.scope.projectId,
+      sprintId: args.scope.sprintId,
+      taskId: args.taskRun?.taskId || args.task.record_id || args.task.id,
+      sprintRunId: args.taskRun?.sprintRunId,
+      dispatchId: args.taskRun?.dispatchId,
+      taskRunId: args.taskRun?.id,
+      sessionId: args.sessionId,
+    });
     const promptBody = [
       workerInstructions
         ? `## SYSTEM INSTRUCTIONS & ENGINEERING STANDARDS\n\n${workerInstructions}`
@@ -1704,6 +1761,7 @@ export class QualityAssuranceService {
       "",
       "## QA FOLLOW-UP",
       args.followUpPrompt,
+      outcomeInstructions,
       workerMemoryInstructions
         ? `## LEARNINGS CAPTURE (Required)\n\n${workerMemoryInstructions}`
         : "",
@@ -1770,7 +1828,7 @@ export class QualityAssuranceService {
       // execute-provider-stage.ts for the analogous first-pass wiring.
       openCodeBaselineRawUsageJson: args.provider === "opencode" ? (previousInvocation?.rawUsageJson ?? null) : null,
       agentMcpAccess: workerAgent?.id
-        ? this.deps.agentPresetRepository?.getAgentPreset(workerAgent.id)?.mcpAccess ?? null
+        ? workerClarificationAgentMcpAccess(workerAgent.mcpAccess)
         : undefined,
       mcpAgentId: workerAgent?.id ?? null,
     });
@@ -1782,6 +1840,12 @@ export class QualityAssuranceService {
       this.deps.sessionTracking.updateSession(args.sessionId, { state: "FAILED" });
       throw new Error(result.stderr || result.stdout || "CLI QA follow-up failed.");
     }
+    const providerOutcome = parseTaskExecutionOutcomeFromProviderOutput({
+      conversation: result.usageTelemetry.conversation,
+      text: result.text,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    });
 
     if (settings.memory?.enabled && settings.memory.autoCaptureSprint) {
       await this.captureMemoriesFromWorkspace(
@@ -1825,6 +1889,11 @@ export class QualityAssuranceService {
         );
       }
     }
+
+    // Existing commits/PR state prove that the task has merge work, but they do
+    // not prove that this follow-up addressed the latest QA request. Only a
+    // patch produced from this invocation counts as continuation progress.
+    const producedMergeWork = applyResult.hasChanges;
 
     let prUrl = args.task.pr_url || args.taskRun?.prUrl || null;
     if (hasUnpushed || hasAhead) {
@@ -1872,6 +1941,31 @@ export class QualityAssuranceService {
       state: "COMPLETED",
       prUrl: prUrl || undefined,
     });
+    if (!producedMergeWork) {
+      const blocker = providerOutcome.kind === "blocked" ? providerOutcome.blocker : null;
+      this.appendTaskEvent(args.taskRun, "qa_followup_no_progress", {
+        provider: args.provider,
+        workerBranch,
+        blocker,
+      });
+      args.task.worker_branch = workerBranch;
+      args.task.pr_url = prUrl || undefined;
+      this.deps.projectManagementRepository.updateTask(args.task.record_id!, {
+        status: "coding_completed",
+        mergeIndicator: null,
+      });
+      args.task.status = "CODING_COMPLETED";
+      args.task.merge_indicator = undefined;
+      if (args.taskRun?.id) {
+        args.taskRun.workerBranch = workerBranch;
+        args.taskRun.prUrl = prUrl;
+        this.deps.executionRepository.updateTaskRun(args.taskRun.id, {
+          workerBranch,
+          prUrl,
+        });
+      }
+      return { producedMergeWork: false, providerOutcome };
+    }
     args.task.worker_branch = workerBranch;
     args.task.pr_url = prUrl || undefined;
     args.task.status = "CODING_COMPLETED";
@@ -1890,6 +1984,7 @@ export class QualityAssuranceService {
       isMerged: false,
       mergeIndicator: null,
     });
+    return { producedMergeWork: true, providerOutcome };
   }
 
   private async cleanupCliWorkspaceIfNeeded(task: Subtask, repoPath: string, scope: DashboardSettingsScope): Promise<void> {
@@ -1978,36 +2073,20 @@ export class QualityAssuranceService {
     );
   }
 
-  private buildMemoryContext(projectId: string, sprintId: string | null, agentPresetId: string): string | undefined {
+  private async buildMemoryContext(projectId: string, sprintId: string | null, agentPresetId: string, query: string): Promise<string | undefined> {
     const memoryService = this.deps.memoryService;
     if (!memoryService) {
       return undefined;
     }
 
     try {
-      const longTerm = memoryService.listLongTermByAgent(projectId, agentPresetId, 10);
-      const shortTerm = sprintId
-        ? memoryService.listBySprintAndAgent(projectId, sprintId, agentPresetId, 10)
-        : [];
-
-      if (longTerm.length === 0 && shortTerm.length === 0) {
-        return undefined;
-      }
-
-      const sections: string[] = ["## PROJECT CONTEXT FROM MEMORY"];
-      if (longTerm.length > 0) {
-        sections.push("### Long-Term Knowledge");
-        for (const memory of longTerm) {
-          sections.push(`- [${memory.category}] ${memory.content.slice(0, 300)}`);
-        }
-      }
-      if (shortTerm.length > 0) {
-        sections.push("### Recent Sprint Learnings");
-        for (const memory of shortTerm) {
-          sections.push(`- [${memory.category}] ${memory.content.slice(0, 300)}`);
-        }
-      }
-      return sections.join("\n");
+      return (await buildRelevantMemoryInjectionContext(memoryService, {
+        projectId,
+        sprintId,
+        agentPresetId,
+        query,
+        tokenBudget: 1_800,
+      })).markdown;
     } catch {
       return undefined;
     }

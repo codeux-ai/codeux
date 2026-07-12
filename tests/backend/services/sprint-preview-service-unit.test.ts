@@ -30,6 +30,8 @@ vi.mock("../../../src/services/sprint-preview-utils.js", () => ({
 }));
 
 vi.mock("../../../src/services/cli-docker-utils.js", () => ({
+  DOCKER_BRIDGE_NETWORK_ARGS: ["--network", "bridge"],
+  DOCKER_NO_NEW_PRIVILEGES_ARGS: ["--security-opt", "no-new-privileges"],
   getDockerUserSpec: vi.fn(() => "1000:1000"),
   mapPathPrefix: vi.fn((mapped: string) => mapped),
   pickContainerEnv: vi.fn(() => []),
@@ -112,6 +114,8 @@ function makePreviewSettings(overrides: Record<string, unknown> = {}) {
     containerAppPort: 3000,
     containerAppPorts: [3000],
     startupScriptPath: ".code-ux/browser/start-preview.sh",
+    startupCommand: "",
+    allowDockerAccess: false,
     environmentVariables: [],
     ...overrides,
   };
@@ -138,6 +142,8 @@ function makeSession(overrides: Partial<SprintPreviewSession> = {}): SprintPrevi
     installCommand: "npm ci",
     buildCommand: "npm run build",
     runCommand: "npm start",
+    startupCommandOverride: null,
+    dockerAccessOverride: null,
     environmentOverrides: [],
     lastCompletedTaskCount: 0,
     lastSeenSprintStatus: "running",
@@ -277,6 +283,19 @@ describe("SprintPreviewService unit tests", () => {
       const service = new SprintPreviewService(deps as any);
       const result = await service.getSession("session-1");
       expect(result).toBeTruthy();
+    });
+  });
+
+  describe("updateDockerAccessOverrideForProjectSprint", () => {
+    it("persists the selected container override within its project and sprint scope", async () => {
+      const session = makeSession();
+      deps.sprintPreviewRepository.getSessionForProjectSprint.mockReturnValue(session);
+      const service = new SprintPreviewService(deps as any);
+
+      const updated = await service.updateDockerAccessOverrideForProjectSprint("proj-1", "sprint-1", session.id, true);
+
+      expect(deps.sprintPreviewRepository.updateSession).toHaveBeenCalledWith(session.id, { dockerAccessOverride: true });
+      expect(updated.dockerAccessOverride).toBe(true);
     });
   });
 
@@ -527,6 +546,84 @@ describe("SprintPreviewService unit tests", () => {
         ]),
       );
       expect(vi.mocked(writeDockerEnvFile).mock.calls.at(-1)?.[1]).not.toContainEqual({ key: "API_BASE_URL", value: "http://api.local" });
+      vi.unstubAllGlobals();
+    });
+
+    it("prefers a per-container startup command over the project default and detected command", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true })));
+      const existingSession = makeSession({
+        status: "stopped",
+        containerId: null,
+        containerName: null,
+        startupCommandOverride: "pnpm custom-preview",
+      });
+      deps.sprintPreviewRepository.getSessionByProjectSprint.mockReturnValue(existingSession);
+      deps.settingsRepository.resolveSprintDashboardSettings.mockReturnValue({
+        settings: { ...DEFAULT_DASHBOARD_SETTINGS,
+          sprintPreview: makePreviewSettings({ startupCommand: "pnpm project-preview" }),
+          git: { githubMode: "REMOTE", defaultBranch: "main", sprintBranchScheme: "feature/sprint-{number}" },
+          cliWorkflow: { containerImage: "", containerCacheSetupScriptImage: false, containerSetupScriptPath: "" },
+        },
+      });
+      vi.mocked(runCommandStrict).mockImplementation(async (cmd, args) => {
+        if (cmd === "docker" && args[0] === "create") {
+          return { exitCode: 0, stdout: "cid123\n", stderr: "", durationMs: 1 };
+        }
+        return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 };
+      });
+
+      const service = new SprintPreviewService(deps as any);
+      await service.startSession("proj-1", "sprint-1");
+
+      expect(deps.sprintPreviewRepository.updateSession).toHaveBeenCalledWith(
+        existingSession.id,
+        expect.objectContaining({ startupCommandOverride: "pnpm custom-preview", runCommand: "pnpm custom-preview" }),
+      );
+      vi.unstubAllGlobals();
+    });
+
+    it("uses a per-container Docker access override and mounts the Compose plugin", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true })));
+      const existingSession = makeSession({
+        status: "stopped",
+        containerId: null,
+        containerName: null,
+        dockerAccessOverride: true,
+      });
+      deps.sprintPreviewRepository.getSessionByProjectSprint.mockReturnValue(existingSession);
+      deps.settingsRepository.resolveSprintDashboardSettings.mockReturnValue({
+        settings: { ...DEFAULT_DASHBOARD_SETTINGS,
+          sprintPreview: makePreviewSettings({ allowDockerAccess: false }),
+          git: { githubMode: "REMOTE", defaultBranch: "main", sprintBranchScheme: "feature/sprint-{number}" },
+          cliWorkflow: { containerImage: "", containerCacheSetupScriptImage: false, containerSetupScriptPath: "" },
+        },
+      });
+      vi.mocked(fs.stat).mockImplementation(async (target) => {
+        if (String(target) === "/var/run/docker.sock") {
+          return { isSocket: () => true, gid: 998 } as Awaited<ReturnType<typeof fs.stat>>;
+        }
+        return { uid: 1000, gid: 1000 } as Awaited<ReturnType<typeof fs.stat>>;
+      });
+      vi.mocked(fs.access).mockImplementation(async (target) => {
+        if (String(target) === "/usr/bin/docker" || String(target) === "/usr/local/lib/docker/cli-plugins/docker-compose") {
+          return;
+        }
+        throw new Error("ENOENT");
+      });
+      vi.mocked(runCommandStrict).mockImplementation(async (cmd, args) => {
+        if (cmd === "docker" && args[0] === "create") {
+          return { exitCode: 0, stdout: "cid123\n", stderr: "", durationMs: 1 };
+        }
+        return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 };
+      });
+
+      const service = new SprintPreviewService(deps as any);
+      const result = await service.startSession("proj-1", "sprint-1");
+
+      const createArgs = vi.mocked(runCommandStrict).mock.calls.find((call) => call[0] === "docker" && call[1][0] === "create")?.[1] ?? [];
+      expect(result.lastError).toBeNull();
+      expect(createArgs.some((arg) => arg.includes("source=/usr/local/lib/docker/cli-plugins/docker-compose") && arg.includes("target=/usr/local/lib/docker/cli-plugins/docker-compose"))).toBe(true);
+      expect(createArgs.at(-1)).toContain("docker compose version");
       vi.unstubAllGlobals();
     });
 
@@ -1301,6 +1398,107 @@ describe("SprintPreviewService unit tests", () => {
       await service.reconcileSessions();
 
       expect(stopSessionSpy).toHaveBeenCalledWith("session-1");
+    });
+
+    it("recovers an orphaned starting session that has no container", async () => {
+      const session = makeSession({
+        status: "starting",
+        hostPort: null,
+        portMappings: [{ containerPort: 3000, hostPort: null, isPrimary: true }],
+        containerId: null,
+        containerName: null,
+        healthStatus: "unreachable",
+      });
+      deps.sprintPreviewRepository.listSessions.mockReturnValue([session]);
+      deps.executionRepository.listSprintRunsByStatus.mockReturnValue([
+        { projectId: "proj-1", sprintId: "sprint-1", status: "running" },
+      ]);
+      const service = new SprintPreviewService(deps as any);
+      const startSessionSpy = vi.spyOn(service, "startSession").mockResolvedValue(makeSession({ status: "running" }));
+
+      await service.reconcileSessions();
+
+      expect(deps.sprintPreviewRepository.updateSession).toHaveBeenCalledWith(
+        session.id,
+        expect.objectContaining({ status: "stopped", hostPort: null, healthStatus: "unknown" }),
+      );
+      expect(startSessionSpy).toHaveBeenCalledWith("proj-1", "sprint-1");
+    });
+
+    it("leaves a containerless starting session alone while its startup is active", async () => {
+      const session = makeSession({
+        status: "starting",
+        hostPort: 5555,
+        containerId: null,
+        containerName: null,
+        healthStatus: "unknown",
+      });
+      deps.sprintPreviewRepository.listSessions.mockReturnValue([session]);
+      const service = new SprintPreviewService(deps as any);
+      (service as any).activeStartSessionKeys.add("proj-1:sprint-1");
+      const startSessionSpy = vi.spyOn(service, "startSession").mockResolvedValue(makeSession({ status: "running" }));
+
+      await service.reconcileSessions();
+
+      expect(deps.sprintPreviewRepository.updateSession).not.toHaveBeenCalledWith(
+        session.id,
+        expect.objectContaining({ status: "stopped" }),
+      );
+      expect(startSessionSpy).not.toHaveBeenCalled();
+    });
+
+    it("attempts one bounded recovery for an unexpectedly exited active preview", async () => {
+      const session = makeSession({ status: "error", containerId: "exited-137" });
+      deps.sprintPreviewRepository.listSessions.mockReturnValue([session]);
+      deps.executionRepository.listSprintRunsByStatus.mockReturnValue([
+        { projectId: "proj-1", sprintId: "sprint-1", status: "running" },
+      ]);
+      vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+        if (command === "docker" && args[0] === "ps") {
+          return {
+            exitCode: 0,
+            stdout: "exited-137\tpreview\tExited (137) 1 minute ago\tproj-1\tsprint-1\tsession-1\t5555",
+            stderr: "",
+            durationMs: 1,
+          };
+        }
+        return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 };
+      });
+      const service = new SprintPreviewService(deps as any);
+      const startSessionSpy = vi.spyOn(service, "startSession").mockResolvedValue(makeSession({ status: "running" }));
+
+      await service.reconcileSessions();
+      await service.reconcileSessions();
+
+      expect(startSessionSpy).toHaveBeenCalledTimes(1);
+      expect(startSessionSpy).toHaveBeenCalledWith("proj-1", "sprint-1");
+    });
+
+    it("recovers a previously healthy manual preview even when its sprint is inactive", async () => {
+      const session = makeSession({ status: "error", containerId: "manual-exit" });
+      deps.sprintPreviewRepository.listSessions.mockReturnValue([session]);
+      deps.sprintPreviewRepository.updateSession.mockImplementation(
+        (id: string, patch: Partial<SprintPreviewSession>) => makeSession({ ...session, id, ...patch }),
+      );
+      deps.executionRepository.listSprintRunsByStatus.mockReturnValue([]);
+      vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+        if (command === "docker" && args[0] === "ps") {
+          return {
+            exitCode: 0,
+            stdout: "manual-exit\tpreview\tExited (137) 1 minute ago\tproj-1\tsprint-1\tsession-1\t5555",
+            stderr: "",
+            durationMs: 1,
+          };
+        }
+        return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 };
+      });
+      const service = new SprintPreviewService(deps as any);
+      (service as any).healthyContainerIds.set(session.id, session.containerId);
+      const startSessionSpy = vi.spyOn(service, "startSession").mockResolvedValue(makeSession({ status: "running" }));
+
+      await service.reconcileSessions();
+
+      expect(startSessionSpy).toHaveBeenCalledWith("proj-1", "sprint-1");
     });
   });
 

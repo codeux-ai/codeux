@@ -89,6 +89,32 @@ MCP tool calls are wrapped in a correlation scope before dispatch.
 
 This allows all log lines emitted during a tool call to share a single `correlationId`.
 
+## Request-Scoped Agent And Thread Context
+
+Dashboard chat reply turns clone the base Code UX MCP connection and attach the active `threadId` only to that turn. Provider configuration emits the originating thread as the internal `X-Code-Ux-Thread` header on the built-in Code UX MCP connection; non-chat provider runs omit it, and custom MCP servers never receive it. The HTTP gateway validates the header with the same single-value identifier rules used for MCP agent and session headers.
+
+The MCP gateway stores the resolved agent and thread identities in request-scoped `AsyncLocalStorage`. A direct `manage_sprints` `plan` call captures both identities before returning its immediate acknowledgement, so its detached planning continuation can target a completion or failure `agent_wakeup` to the originating dashboard thread after the planning promise settles. This header and context propagation are internal runtime architecture, not public MCP tool arguments.
+
+Standalone MCP clients do not have this dashboard thread context. Their background planning still continues server-side, but no chat wakeup is queued; those clients poll sprint/task management or telemetry state for completion.
+
+## Worker Clarification Dispatch
+
+Task-coding provider runs use the project-manager MCP gateway with the selected agent identity in `X-Code-Ux-Agent`. Code UX adds only the audience-scoped `request_clarification` grant needed by an eligible coding agent; it does not turn that agent into a project manager or expose `reply_to_clarification` or unrelated management tools. The project-manager reply route receives the complementary `reply_to_clarification` grant.
+
+`request_clarification` persists a human-owned `worker_clarification` record in `project_attention_items`. The attention item is the durable public record and carries project, sprint, task, sprint-run, and dispatch ownership. Its versioned payload captures the task run, provider session, authenticated requester, deduplication key, Markdown question/answer, status, and timestamps. Task-run-backed requests also append idempotent `worker_clarification_*` events, allowing `session-sync-step.ts` to reconstruct pending, answered, or settled clarification state after a restart without a second persistence path.
+
+Before persistence, the service validates every supplied execution reference against the project and merges references derived from the task run, dispatch, and sprint run. An exact duplicate request returns the existing attention item; the same project-scoped deduplication key with different content, requester, or runtime context is rejected. Because the item is human-owned, virtual-worker repair queues do not claim or answer it, and scheduling avoids issuing a duplicate task dispatch while the project-manager clarification is pending.
+
+`reply_to_clarification` authorizes the authenticated replier for the clarification's project, then delivers before settling the attention item:
+
+- Jules sends the answer through the existing session-message API. After acceptance, Code UX marks the linked task run, dispatch, and task as running/in progress and records `worker_clarification_continued`.
+- Local CLI providers call the task-rerun continuation path with the preserved workspace, worker branch, provider, effective model, coding-agent route, and native session lineage. A successful tool response means that continuation was accepted by that dispatch path; it does not mean the coding task has completed.
+- A taskless general question stores the answer with `deliveryMode: "recorded_answer"` and creates no coding dispatch.
+
+Delivery failure leaves the clarification `pending`. Missing or mismatched task-run/provider-session scope, an unsupported provider, or a missing/preserved-workspace mismatch therefore cannot silently close the question. Once delivery succeeds, the attention item changes to `replied` and the reply event is appended. Duplicate concurrent replies share one in-flight operation, and a later retry of an already replied clarification returns the settled result without another message or task-rerun dispatch.
+
+Session synchronization treats a latest matching request as blocked and a matching continued/replied event as answered. It ignores stale-session requests and does not resurrect cancelled or paused runs. This reconstruction may restore the runtime projection to running after an accepted answer, but it does not declare provider work or the task complete.
+
 ## Dispatch Layers
 
 - Typed registry layer: `src/api/mcp/tool-registry.ts`
@@ -137,13 +163,15 @@ Code UX seeds Playwright MCP as a default custom MCP server:
 - command: `npx`
 - args: `@playwright/mcp@latest`
 
+Settings sanitization also repairs the legacy built-in `playwright-mcp` command with no arguments to this package-backed configuration. Other user-defined Playwright commands and arguments remain unchanged.
+
 The built-in `code_ux` MCP tool surface is controlled separately from custom MCP servers. Agent presets store MCP access in `mcp_access_json`: `codeUxEnabled` controls the built-in Code UX tools, while `linkedServerIds` selects custom MCP servers such as `playwright`.
 
 Agent-scoped provider runs are default-deny for built-in Code UX tools. Missing, malformed, or unconfigured agent MCP access resolves with `codeUxEnabled: false`, no linked custom servers, and no inherited `code_ux` connection. Explicitly saved `mcp_access_json` records are preserved and continue to control the agent. Non-agent project-manager MCP clients are still governed by system-level `mcpTools` settings rather than agent defaults.
 
 The built-in `Worker` and `Project manager` agents still seed the `playwright` custom MCP server where that link is intended, but this custom-server default no longer implies built-in Code UX tool access. Generated task-coding roster agents created by Project Setup use the same custom-server-only default when they are first created. Planning, QA, setup, clarification, CI-fix, merge-conflict, and other non-chat agents do not receive scheduler or management Code UX tools unless their preset explicitly enables them. When Code UX is enabled from the agent MCP manager for a non-dashboard agent, the generated default keeps the restricted `scheduler_code_ux` tool explicitly disabled until the user enables it.
 
-The dashboard chat reply route has one narrow exception. Every assigned dashboard reply agent receives the full built-in Code UX MCP surface, `scheduler_code_ux`, `add_long_term_memory`, and the default Playwright MCP server by default, even when the selected reply preset has Code UX disabled or no saved MCP policy. The provider run still receives the selected agent's linked custom MCP servers, adds the Playwright link once, and sends the assigned agent id through `X-Code-Ux-Agent`; the MCP router recognizes the assigned dashboard reply agent and applies this route-local full-access default. When the preset explicitly enables Code UX access with narrower saved tool choices, the router preserves those saved choices and forces the self-wakeup and direct long-term-memory lanes on for dashboard replies.
+The dashboard chat reply route has one narrow exception. Every assigned dashboard reply agent receives the full built-in Code UX MCP surface, `scheduler_code_ux`, `add_long_term_memory`, and the default Playwright MCP server by default, even when the selected reply preset has Code UX disabled or no saved MCP policy. The provider run still receives the selected agent's linked custom MCP servers, adds the Playwright link once, and sends the assigned agent id through `X-Code-Ux-Agent`; the MCP router recognizes the assigned dashboard reply agent and applies this route-local full-access default. Its per-turn built-in Code UX connection also sends `X-Code-Ux-Thread`, which the HTTP gateway exposes as validated request context for the originating dashboard thread without changing global connection state or custom MCP server headers. When the preset explicitly enables Code UX access with narrower saved tool choices, the router preserves those saved choices and forces the self-wakeup and direct long-term-memory lanes on for dashboard replies.
 
 ## Internal Test Provider
 

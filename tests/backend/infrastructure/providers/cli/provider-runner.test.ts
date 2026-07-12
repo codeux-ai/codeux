@@ -47,6 +47,11 @@ describe("ProviderRunner", () => {
       workspaceSessionId: "workspace-1",
       workflowSettings: { executionMode: "DOCKER" } as any,
       repoPath: "/repo",
+      googleDriveMount: {
+        source: "/linked/google-drive",
+        destination: "/mnt/code-ux/google-drive",
+        readonly: true,
+      },
       onActivity: vi.fn(),
     });
 
@@ -66,6 +71,11 @@ describe("ProviderRunner", () => {
       providerEnv: expect.objectContaining({
         GEMINI_CLI_TRUST_WORKSPACE: "true",
       }),
+      googleDriveMount: {
+        source: "/linked/google-drive",
+        destination: "/mnt/code-ux/google-drive",
+        readonly: true,
+      },
     }));
   });
 
@@ -86,6 +96,11 @@ describe("ProviderRunner", () => {
       sessionId: "mock-session-1",
       workflowSettings: { executionMode: "HOST" } as any,
       repoPath,
+      googleDriveMount: {
+        source: "/linked/google-drive",
+        destination: "/mnt/code-ux/google-drive",
+        readonly: false,
+      },
       onActivity: vi.fn(),
     });
 
@@ -103,6 +118,7 @@ describe("ProviderRunner", () => {
     await expect(fs.readFile(path.join(repoPath, "src/generated.txt"), "utf8")).resolves.toBe("hello from mockup\nsecond line\n");
     await expect(fs.access(outsidePath)).rejects.toThrow();
     expect(runStreamingCommand).not.toHaveBeenCalled();
+    expect(dockerRunner.runProviderInDocker).not.toHaveBeenCalled();
 
     await fs.rm(repoPath, { recursive: true, force: true });
   });

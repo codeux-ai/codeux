@@ -54,11 +54,20 @@ const readDashboardFeatureFlagSource = (): DashboardFeatureFlagSource => {
 export const resolveDashboardFeatureFlags = (
   source: DashboardFeatureFlagSource = readDashboardFeatureFlagSource(),
 ): DashboardFeatureFlagMap => {
-  const defaultEnabled = source.devMode ?? false;
+  // Development is the feature-discovery environment: every flagged surface must
+  // remain reachable even when a checked-in/local env file disables it for a
+  // production bundle. Outside development, explicit values still control the
+  // feature and omitted values remain disabled by default.
+  if (source.devMode) {
+    return DASHBOARD_FEATURE_IDS.reduce<DashboardFeatureFlagMap>((flags, feature) => {
+      flags[feature] = true;
+      return flags;
+    }, {} as DashboardFeatureFlagMap);
+  }
 
   return DASHBOARD_FEATURE_IDS.reduce<DashboardFeatureFlagMap>((flags, feature) => {
     const explicitValue = parseDashboardFeatureFlagValue(source.values?.[feature]);
-    flags[feature] = explicitValue ?? defaultEnabled;
+    flags[feature] = explicitValue ?? false;
     return flags;
   }, {} as DashboardFeatureFlagMap);
 };

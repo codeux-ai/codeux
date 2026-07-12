@@ -4,9 +4,14 @@ import type {
   SkillStorageRecord,
   UpdateAgentPresetInput,
 } from "../types.js";
-import type { PushAgentPresetsToMarkdownOptions } from "../../../../src/contracts/agent-preset-types.js";
+import type {
+  BaseAgentRole,
+  BaseAgentUpdateNotice,
+  PushAgentPresetsToMarkdownOptions,
+} from "../../../../src/contracts/agent-preset-types.js";
 import type {
   CreateSkillStorageInput,
+  SkillCatalogEntry,
   SkillStorageContentsResponse,
   UpdateSkillStorageInput,
 } from "../../../../src/contracts/skill-types.js";
@@ -14,6 +19,22 @@ import { fetchJson } from "../../lib/api/fetch-json.js";
 
 export const fetchAgentPresets = async (projectId: string): Promise<AgentPreset[]> => {
   return fetchJson<AgentPreset[]>(`/api/projects/${encodeURIComponent(projectId)}/agent-presets`);
+};
+
+export const fetchBaseAgentUpdateNotices = async (projectId: string): Promise<BaseAgentUpdateNotice[]> => {
+  return fetchJson<BaseAgentUpdateNotice[]>(
+    `/api/projects/${encodeURIComponent(projectId)}/agent-presets/base-updates`,
+  );
+};
+
+export const applyBaseAgentUpdate = async (
+  projectId: string,
+  role: BaseAgentRole,
+): Promise<AgentPreset> => {
+  return fetchJson<AgentPreset>(
+    `/api/projects/${encodeURIComponent(projectId)}/agent-presets/base-updates/${encodeURIComponent(role)}/apply`,
+    { method: "POST" },
+  );
 };
 
 export const createAgentPreset = async (
@@ -129,6 +150,17 @@ export const pushAgentPresetsToRepository = async (
 
 export const fetchSkillStorages = async (projectId: string): Promise<SkillStorageRecord[]> => {
   return fetchJson<SkillStorageRecord[]>(`/api/projects/${encodeURIComponent(projectId)}/skill-storages`);
+};
+
+export const fetchSkillCatalog = async (
+  projectId: string,
+  agentPresetId?: string,
+): Promise<SkillCatalogEntry[]> => {
+  const params = new URLSearchParams({ limit: "1000" });
+  if (agentPresetId) params.set("agentPresetId", agentPresetId);
+  return fetchJson<SkillCatalogEntry[]>(
+    `/api/projects/${encodeURIComponent(projectId)}/skills?${params.toString()}`,
+  );
 };
 
 export const createSkillStorage = async (

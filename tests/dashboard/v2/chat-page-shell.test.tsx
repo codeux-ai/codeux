@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render } from "@testing-library/preact";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render } from "@testing-library/preact";
 import { h } from "preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 /** @jsx h */
@@ -17,9 +17,28 @@ vi.mock("gsap", () => ({
     },
   },
 }));
+vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../../dashboard/src/v2/hooks/use-reduced-motion.js")>(),
+  useReducedMotion: () => true,
+}));
+vi.mock("../../../dashboard/src/v2/hooks/use-project-effective-settings.js", () => ({
+  useProjectEffectiveSettings: () => ({ data: null }),
+}));
+vi.mock("../../../dashboard/src/v2/components/agents/LazyAgentAvatarScene.js", () => ({
+  LazyAgentAvatarScene: (props: { expression: string; tool: string | null }) => (
+    <div
+      data-testid="agent-avatar-scene"
+      data-expression={props.expression}
+      data-tool={props.tool ?? ""}
+    />
+  ),
+}));
 import { ChatPageShell } from "../../../dashboard/src/v2/components/chat/ChatPageShell.js";
 import { ChatRail } from "../../../dashboard/src/v2/components/chat/ChatRail.js";
 import { ChatCreateAppQuickActions } from "../../../dashboard/src/v2/components/chat/ChatCreateAppQuickActions.js";
+import { CinematicStage } from "../../../dashboard/src/v2/components/chat/cinematic/CinematicStage.js";
+import { StageActivityStrip } from "../../../dashboard/src/v2/components/chat/cinematic/StageActivityStrip.js";
+import type { AgentPresetRecord, ExecutionInvocationRecord, Source } from "../../../dashboard/src/v2/types.js";
 
 const mockProject = {
   id: "proj-1",
@@ -29,7 +48,52 @@ const mockProject = {
   updatedAt: "2024-01-01T00:00:00Z",
 };
 
+const projectManagerPreset = {
+  id: "pm-agent",
+  name: "Project Manager",
+} as AgentPresetRecord;
+
+const renderStageForInvocation = (
+  invocation: Pick<ExecutionInvocationRecord, "agentPresetId" | "status" | "type">,
+) => {
+  const activityInvocation = {
+    id: "invocation-1",
+    messageCount: 0,
+    provider: "codex",
+    providerInvocationId: null,
+    startedAt: "2026-07-11T10:00:00.000Z",
+    ...invocation,
+  } as ExecutionInvocationRecord;
+
+  return render(
+    <CinematicStage
+      selectedProject={mockProject as Source}
+      selectedThread={null}
+      messages={[]}
+      threadMessagesLoading={false}
+      hasAwaitedReply={false}
+      invocations={[activityInvocation]}
+      sending={false}
+      error={null}
+      input=""
+      setInput={vi.fn()}
+      onSpeechTranscript={vi.fn()}
+      handleSend={vi.fn(async () => undefined)}
+      handleCreateAppQuickaction={vi.fn(async () => undefined)}
+      initialEligibilityLoaded
+      canCreateInitialAppQuickactions={false}
+      navigateHistory={vi.fn(() => false)}
+      composerRef={{ current: null }}
+      activeConnection={null}
+      agentPreset={projectManagerPreset}
+      onOpenThreads={vi.fn()}
+    />,
+  );
+};
+
 describe("ChatPageShell", () => {
+  afterEach(cleanup);
+
   it("renders onboarding mode without project chat controls when no project is selected", () => {
     const { getByText, queryByRole } = render(
       <ChatPageShell
@@ -141,21 +205,48 @@ describe("ChatPageShell", () => {
     expect(getByText("Network failure")).toBeInTheDocument();
   });
 
+  it("shows a clean planning label without background or provider prefixes", () => {
+    const { getByText, queryByText } = render(
+      <StageActivityStrip
+        backgroundActivityCount={1}
+        backgroundCue={{
+          id: "planning-1",
+          label: "Planning in progress",
+          phase: "planning",
+          providerLabel: "Codex",
+          quote: "The team is doing the work; I’m protecting them from a meeting about the work.",
+          tone: "active",
+        }}
+        foregroundCue={null}
+      />,
+    );
+
+    expect(getByText("Planning in progress")).toBeInTheDocument();
+    expect(queryByText(/Background|Codex/)).not.toBeInTheDocument();
+  });
+
   it("renders create-app quickactions with accessible labels and disabled status text", () => {
     const onSelect = vi.fn();
     const { getByRole, getByText, rerender } = render(
       <ChatCreateAppQuickActions
         hasProject={true}
         sending={false}
+        showInitialCreateActions={true}
         onSelect={onSelect}
       />
     );
 
     const desktopAction = getByRole("button", { name: "Create Desktop App" });
     const webAction = getByRole("button", { name: "Create Web App" });
+    const shopAction = getByRole("button", { name: "Create Onlineshop" });
+    const portfolioAction = getByRole("button", { name: "Create Portfolio" });
+    const gameAction = getByRole("button", { name: "Create Game" });
 
     expect(desktopAction).toBeEnabled();
     expect(webAction).toBeEnabled();
+    expect(shopAction).toBeEnabled();
+    expect(portfolioAction).toBeEnabled();
+    expect(gameAction).toBeEnabled();
     expect(getByText("Create app quick actions are available.")).toHaveAttribute("aria-live", "polite");
 
     fireEvent.click(desktopAction);
@@ -165,11 +256,58 @@ describe("ChatPageShell", () => {
       <ChatCreateAppQuickActions
         hasProject={false}
         sending={false}
+        showInitialCreateActions={false}
         onSelect={onSelect}
       />
     );
 
-    expect(getByRole("button", { name: "Create Desktop App" })).toBeDisabled();
+    expect(() => getByRole("button", { name: "Create Desktop App" })).toThrow();
+    expect(() => getByRole("button", { name: "Create Game" })).toThrow();
     expect(getByText("Create app quick actions are unavailable until a project is selected.")).toBeInTheDocument();
+  });
+
+  it("omits every create-app action for an ineligible project", () => {
+    const { queryByRole } = render(
+      <ChatCreateAppQuickActions
+        hasProject
+        showInitialCreateActions={false}
+        onSelect={vi.fn()}
+      />
+    );
+
+    expect(queryByRole("button", { name: "Create Web App" })).not.toBeInTheDocument();
+    expect(queryByRole("button", { name: "Create Desktop App" })).not.toBeInTheDocument();
+    expect(queryByRole("button", { name: "Create Onlineshop" })).not.toBeInTheDocument();
+    expect(queryByRole("button", { name: "Create Portfolio" })).not.toBeInTheDocument();
+    expect(queryByRole("button", { name: "Create Game" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the Project Manager idle while another agent has a running invocation", () => {
+    const { getByTestId, queryByText } = renderStageForInvocation({
+      agentPresetId: "worker-agent",
+      status: "running",
+      type: "worker_reply",
+    });
+
+    expect(getByTestId("cinematic-stage")).toHaveAttribute("data-background-activity-count", "1");
+    expect(getByTestId("agent-avatar-scene")).not.toHaveAttribute("data-expression", "thinking");
+    expect(getByTestId("agent-avatar-scene")).toHaveAttribute("data-tool", "");
+    expect(queryByText("Container starting")).toBeInTheDocument();
+    expect(queryByText(/Background.*Codex/i)).not.toBeInTheDocument();
+  });
+
+  it("activates the Project Manager for its matching dashboard-reply invocation", () => {
+    const { container, getByTestId, getByText } = renderStageForInvocation({
+      agentPresetId: "pm-agent",
+      status: "running",
+      type: "dashboard_reply",
+    });
+
+    expect(getByTestId("cinematic-stage")).toHaveAttribute("data-background-activity-count", "0");
+    expect(getByTestId("agent-avatar-scene")).toHaveAttribute("data-expression", "thinking");
+    const activityLabel = getByText(/Container starting/);
+    expect(activityLabel).toBeInTheDocument();
+    expect(activityLabel.closest('[role="status"]')).toHaveAttribute("aria-atomic", "true");
+    expect(container.querySelector(".stage-thinking-dot")).toHaveClass("motion-reduce:animate-none");
   });
 });

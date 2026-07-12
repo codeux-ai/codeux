@@ -9,6 +9,68 @@ import {
 import { EntityNotFoundError } from "../../../src/repositories/repository-utils.js";
 
 describe("agent preset routes", () => {
+  it("lists and applies base-agent updates for the two supported roles", async () => {
+    const notice = {
+      projectId: "project-1",
+      role: "planning_agent",
+      baseAgentPresetId: "base-1",
+      selectedAgentPresetId: "selected-1",
+      selectedAgentName: "Specialist planner",
+      reason: "alternate_route",
+      currentRevision: null,
+      availableRevision: "sha256:current",
+    };
+    const updated = { id: "selected-1", projectId: "project-1", instructionMarkdown: "Updated" };
+    const listBaseAgentUpdateNotices = vi.fn().mockResolvedValue([notice]);
+    const applyBaseAgentUpdate = vi.fn().mockResolvedValue(updated);
+    const app = express();
+    app.use(express.json());
+    registerAgentPresetRoutes(app, {
+      listAgentPresets: vi.fn(),
+      createAgentPreset: vi.fn(),
+      updateAgentPreset: vi.fn(),
+      deleteAgentPreset: vi.fn(),
+      listBaseAgentUpdateNotices,
+      applyBaseAgentUpdate,
+    } as any);
+
+    const listResponse = await request(app).get("/api/projects/project-1/agent-presets/base-updates");
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body).toEqual([notice]);
+    expect(listBaseAgentUpdateNotices).toHaveBeenCalledWith("project-1");
+
+    const applyResponse = await request(app)
+      .post("/api/projects/project-1/agent-presets/base-updates/planning_agent/apply");
+    expect(applyResponse.status).toBe(200);
+    expect(applyResponse.body).toEqual(updated);
+    expect(applyBaseAgentUpdate).toHaveBeenCalledWith("project-1", "planning_agent");
+
+    const managerResponse = await request(app)
+      .post("/api/projects/project-1/agent-presets/base-updates/project_manager/apply");
+    expect(managerResponse.status).toBe(200);
+    expect(applyBaseAgentUpdate).toHaveBeenLastCalledWith("project-1", "project_manager");
+  });
+
+  it("rejects arbitrary base-agent roles before invoking the update service", async () => {
+    const applyBaseAgentUpdate = vi.fn();
+    const app = express();
+    app.use(express.json());
+    registerAgentPresetRoutes(app, {
+      listAgentPresets: vi.fn(),
+      createAgentPreset: vi.fn(),
+      updateAgentPreset: vi.fn(),
+      deleteAgentPreset: vi.fn(),
+      applyBaseAgentUpdate,
+    } as any);
+
+    const response = await request(app)
+      .post("/api/projects/project-1/agent-presets/base-updates/worker/apply");
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ error: "Invalid baseAgentRole: worker." });
+    expect(applyBaseAgentUpdate).not.toHaveBeenCalled();
+  });
+
   it("returns 404 when push support is not wired", async () => {
     const app = express();
     app.use(express.json());
@@ -67,32 +129,35 @@ describe("agent preset routes", () => {
       createdAt: "2026-07-09T00:00:00.000Z",
       updatedAt: "2026-07-09T00:00:00.000Z",
     };
+    const skillRecords = Array.from(
+      { length: SKILL_STORAGE_CONTENTS_MAX_SKILLS + 1 },
+      (_, index) => ({
+        id: `skill-${index}`,
+        projectId: "project-1",
+        storageId: "storage-1",
+        name: `Skill ${index}`,
+        description: `Description ${index}`,
+        contentMarkdown: index === 0
+          ? `  ${"bounded markdown ".repeat(30)}\n\nfinal line  `
+          : `Skill body ${index}`,
+        sourceType: "manual",
+        sourceRef: null,
+        contentHash: `hash-${index}`,
+        tags: ["review"],
+        appliesTo: ["src/**"],
+        version: "1.0.0",
+        createdAt: "2026-07-09T00:00:00.000Z",
+        updatedAt: "2026-07-10T00:00:00.000Z",
+      }),
+    );
     const skillService = {
       listStorages: vi.fn().mockReturnValue([storage]),
       createStorage: vi.fn().mockReturnValue(storage),
       updateStorage: vi.fn().mockReturnValue({ ...storage, name: "Updated Skills" }),
       getStorage: vi.fn().mockReturnValue(storage),
-      listByStorage: vi.fn().mockReturnValue(Array.from(
-        { length: SKILL_STORAGE_CONTENTS_MAX_SKILLS + 1 },
-        (_, index) => ({
-          id: `skill-${index}`,
-          projectId: "project-1",
-          storageId: "storage-1",
-          name: `Skill ${index}`,
-          description: `Description ${index}`,
-          contentMarkdown: index === 0
-            ? `  ${"bounded markdown ".repeat(30)}\n\nfinal line  `
-            : `Skill body ${index}`,
-          sourceType: "manual",
-          sourceRef: null,
-          contentHash: `hash-${index}`,
-          tags: ["review"],
-          appliesTo: ["src/**"],
-          version: "1.0.0",
-          createdAt: "2026-07-09T00:00:00.000Z",
-          updatedAt: "2026-07-10T00:00:00.000Z",
-        }),
-      )),
+      listByStorage: vi.fn().mockReturnValue(skillRecords),
+      listByProject: vi.fn().mockReturnValue(skillRecords.slice(0, 2)),
+      listByAgent: vi.fn().mockReturnValue(skillRecords.slice(0, 1)),
       deleteStorage: vi.fn(),
     };
     const app = express();
@@ -109,6 +174,22 @@ describe("agent preset routes", () => {
     expect(listResponse.status).toBe(200);
     expect(listResponse.body).toEqual([storage]);
     expect(skillService.listStorages).toHaveBeenCalledWith("project-1");
+
+    const catalogResponse = await request(app).get("/api/projects/project-1/skills?limit=2");
+    expect(catalogResponse.status).toBe(200);
+    expect(catalogResponse.body).toHaveLength(2);
+    expect(catalogResponse.body[0]).toMatchObject({
+      id: "skill-0",
+      projectId: "project-1",
+      storageId: "storage-1",
+      storageName: "Team Skills",
+    });
+    expect(catalogResponse.body[0]).not.toHaveProperty("contentMarkdown");
+    expect(skillService.listByProject).toHaveBeenCalledWith("project-1", 2);
+
+    const agentCatalogResponse = await request(app).get("/api/projects/project-1/skills?agentPresetId=agent-1&limit=1");
+    expect(agentCatalogResponse.status).toBe(200);
+    expect(skillService.listByAgent).toHaveBeenCalledWith("project-1", "agent-1", 1);
 
     const createResponse = await request(app)
       .post("/api/projects/project-1/skill-storages")

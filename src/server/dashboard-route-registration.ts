@@ -76,6 +76,10 @@ export const createDashboardRouteDependencies = (options: DashboardServerOptions
     installLocalMcpProvider: routeDependencies.installLocalMcpProvider ?? (async () => {
       throw new Error("Local MCP CLI installation is not available.");
     }),
+    getDashboardNotifications: options.getDashboardNotifications ?? (() => ({
+      notifications: [],
+      updatedAt: null,
+    })),
   };
 };
 
@@ -133,7 +137,11 @@ const registerSystemIntegrationRouteGroup = (app: Express, deps: DashboardDepend
 
 const registerSpeechRouteGroup = (app: Express, deps: DashboardDependencies): void => {
   if (deps.speechTranscriptionService) {
-    registerSpeechRoutes(app, { speechTranscriptionService: deps.speechTranscriptionService });
+    registerSpeechRoutes(app, {
+      speechTranscriptionService: deps.speechTranscriptionService,
+      speechSynthesisService: deps.speechSynthesisService,
+      speechModelManager: deps.speechModelManager,
+    });
   }
 };
 

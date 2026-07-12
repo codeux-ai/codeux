@@ -332,6 +332,41 @@ describe("settings-sanitizer", () => {
     expect(settings.agents.qualityAssurance.completedTaskWithoutPr.agentPresetId).toBe(null);
   });
 
+  it("sanitizes Google Drive settings to a disabled read-only-safe block", () => {
+    expect(cloneDefaults().googleDrive).toEqual({
+      enabled: false,
+      hostPath: "",
+      accessMode: "read-only",
+    });
+
+    const malformed = sanitizeSettings({
+      googleDrive: {
+        enabled: true,
+        hostPath: "  /mnt/google-drive  ",
+        accessMode: "owner",
+        credentials: { token: "unsupported" },
+      },
+    });
+
+    expect(malformed.googleDrive).toEqual({
+      enabled: false,
+      hostPath: "/mnt/google-drive",
+      accessMode: "read-only",
+    });
+    expect(malformed.googleDrive).not.toHaveProperty("credentials");
+
+    expect(sanitizeProjectSettings({
+      googleDrive: {
+        enabled: true,
+        hostPath: 42,
+      },
+    }).googleDrive).toEqual({
+      enabled: false,
+      hostPath: "",
+      accessMode: "read-only",
+    });
+  });
+
   it("dedupes preview container app ports while preserving primary-first order", () => {
     const settings = sanitizeSettings({
       sprintPreview: {
@@ -362,6 +397,19 @@ describe("settings-sanitizer", () => {
       { key: "CODE_UX_ALLOW_PUBLIC_DASHBOARD", value: "1", enabled: true },
       { key: "FEATURE_FLAG", value: "new", enabled: false },
     ]);
+  });
+
+  it("sanitizes preview startup commands and Docker access", () => {
+    const settings = sanitizeSettings({
+      sprintPreview: {
+        startupCommand: "  pnpm dev --host 0.0.0.0  ",
+        allowDockerAccess: true,
+      },
+    });
+
+    expect(settings.sprintPreview.startupCommand).toBe("pnpm dev --host 0.0.0.0");
+    expect(settings.sprintPreview.allowDockerAccess).toBe(true);
+    expect(sanitizeSettings({ sprintPreview: { startupCommand: "bad\0command" } }).sprintPreview.startupCommand).toBe("");
   });
 
   it("preserves valid appearance background image and pattern settings", () => {

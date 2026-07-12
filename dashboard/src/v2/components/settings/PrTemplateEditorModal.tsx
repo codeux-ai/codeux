@@ -263,7 +263,7 @@ export const PrTemplateEditorModal: FunctionComponent<PrTemplateEditorModalProps
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-slate-800 dark:bg-white dark:text-void-900 dark:hover:bg-slate-100"
+              className="rounded-xl border border-[rgb(var(--accent-action-rgb)/0.22)] bg-[var(--accent-action)] px-4 py-2 text-sm font-bold text-[var(--accent-on-solid)] shadow-[0_10px_28px_rgb(var(--accent-action-rgb)/0.18)] transition-colors hover:border-[rgb(var(--accent-action-rgb)/0.34)] hover:bg-[var(--accent-action-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-focus-ring)]"
             >
               Close
             </button>

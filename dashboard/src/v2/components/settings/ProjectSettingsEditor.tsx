@@ -515,6 +515,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             ["rebuildOnTaskCompletion", "Rebuild preview on task completion"],
             ["rebuildOnSprintCompletion", "Rebuild preview on sprint completion"],
             ["autoStopOnTerminalSprint", "Stop preview when sprint ends"],
+            ["allowDockerAccess", "Allow Docker access (host-level control)"],
           ].map(([field, label]) => (
             <Row key={field} label={label} description={`Enable ${label.toLowerCase()} for this scope.`} badge={getBadge(`sprintPreview.${field}`)}>
               <Toggle aria-label={label} aria-description={`Enable ${label.toLowerCase()} for this scope.`} value={settings.sprintPreview[field as keyof ProjectSettings["sprintPreview"]] as boolean}
@@ -588,6 +589,18 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                 sprintPreview: {
                   ...settings.sprintPreview,
                   startupScriptPath: value,
+                },
+              })}
+              mono
+            />
+          </Row>
+          <Row label="Default startup command" description="Optional command that replaces auto-detected preview startup. Per-container overrides are available in Browser." badge={getBadge("sprintPreview.startupCommand")}>
+            <TextInput
+              value={settings.sprintPreview.startupCommand ?? ""}
+              onChange={(value) => update({
+                sprintPreview: {
+                  ...settings.sprintPreview,
+                  startupCommand: value,
                 },
               })}
               mono

@@ -1,19 +1,21 @@
 # Display Settings
 
-Controls the dashboard shell layout, theme, motion preference, and desktop zoom when available.
+Controls the dashboard shell layout, theme, accent color, motion preference, and desktop zoom when available.
 
 > Settings area: `display-settings`
 > Dashboard documentation route: `/docs/settings-display-settings`
 
 ## What This Area Is For
 
-Controls the dashboard shell layout, theme, motion preference, and desktop zoom when available. This page expands the short Settings-page help text into an operator reference for deciding when to change this area, what behavior the controls affect, and what to verify after saving.
+Controls the dashboard shell layout, theme, accent color, motion preference, and desktop zoom when available. This page expands the short Settings-page help text into an operator reference for deciding when to change this area, what behavior the controls affect, and what to verify after saving.
 
 Use it when you are configuring a new project, auditing inherited settings, or debugging behavior that changed after a system, project, or sprint override was saved.
 
 ## Controls And Runtime Effect
 
-Navigation mode switches dock/sidebar, theme sets color mode, reduced motion limits animation, and zoom scales Electron windows.
+Navigation mode switches dock/sidebar, theme sets color mode, accent color personalizes global actions and interaction states, reduced motion limits animation, and zoom scales Electron windows.
+
+The accent palette is intentionally limited to accessible presets: Code UX, Ocean, Violet, Cyan, Magenta, and Graphite. Accent changes preview immediately and apply to primary actions, active navigation, focus rings, selections, and links. Provider identity colors, status colors, and chart series remain stable so accent personalization never changes their meaning.
 
 | Control Surface | Runtime Effect | Review Before Saving |
 | --- | --- | --- |
@@ -23,7 +25,7 @@ Navigation mode switches dock/sidebar, theme sets color mode, reduced motion lim
 
 ## Recommended Configuration
 
-Use System theme and Auto reduced motion unless you need a fixed accessibility preference.
+Use System theme, Code UX accent, and Auto reduced motion unless you need a fixed accessibility or personalization preference.
 
 A practical review flow is:
 

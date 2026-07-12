@@ -65,6 +65,9 @@ describe("EmbeddingModelManager", () => {
       dimension: 384,
       approximateSizeBytes: 100,
       language: "English",
+      licenseName: "MIT",
+      licenseUrl: "https://example.test/license",
+      commercialUseAllowed: true,
     });
     systemSettings = {
       defaults: {
@@ -220,6 +223,10 @@ describe("EmbeddingModelManager", () => {
   });
 
   describe("downloadModel", () => {
+    it("requires the current catalog license acceptance", async () => {
+      await expect(manager.downloadModel("bge-small-en-v1.5")).rejects.toThrow("Accept the MIT terms");
+    });
+
     it("throws for unknown model", async () => {
       await expect(manager.downloadModel("nonexistent" as any)).rejects.toThrow("Unknown model");
     });
@@ -229,7 +236,7 @@ describe("EmbeddingModelManager", () => {
       const mockFetch = vi.fn().mockResolvedValue({ ok: true, body: null });
       vi.stubGlobal("fetch", mockFetch);
 
-      await expect(manager.downloadModel("bge-small-en-v1.5")).rejects.toThrow("No response body");
+      await expect(manager.downloadModel("bge-small-en-v1.5", EMBEDDING_MODEL_CATALOG["bge-small-en-v1.5"].license.id)).rejects.toThrow("No response body");
 
       // Verify it created the model directory
       expect(fs.mkdirSync).toHaveBeenCalled();
@@ -258,7 +265,7 @@ describe("EmbeddingModelManager", () => {
       });
       vi.stubGlobal("fetch", mockFetch);
 
-      await expect(manager.downloadModel("bge-small-en-v1.5")).rejects.toThrow("HTTP 404");
+      await expect(manager.downloadModel("bge-small-en-v1.5", EMBEDDING_MODEL_CATALOG["bge-small-en-v1.5"].license.id)).rejects.toThrow("HTTP 404");
 
       expect(mockRepository.upsertModelStatus).toHaveBeenCalledWith("bge-small-en-v1.5", expect.objectContaining({
         downloaded: false,
@@ -273,7 +280,7 @@ describe("EmbeddingModelManager", () => {
       const mockFetch = vi.fn().mockResolvedValue({ ok: true, body: null });
       vi.stubGlobal("fetch", mockFetch);
 
-      await expect(manager.downloadModel(customModel.id)).rejects.toThrow("No response body");
+      await expect(manager.downloadModel(customModel.id, customModel.license.id)).rejects.toThrow("No response body");
 
       expect(mockFetch).toHaveBeenCalledWith(
         "https://huggingface.co/owner/custom-bge/resolve/main/onnx/model_quantized.onnx",
@@ -289,10 +296,11 @@ describe("EmbeddingModelManager", () => {
       vi.stubGlobal("fetch", mockFetch);
 
       // Start first download (won't complete)
-      const p1 = manager.downloadModel("bge-small-en-v1.5").catch(() => {});
+      const licenseId = EMBEDDING_MODEL_CATALOG["bge-small-en-v1.5"].license.id;
+      const p1 = manager.downloadModel("bge-small-en-v1.5", licenseId).catch(() => {});
 
       // Second download should throw immediately
-      await expect(manager.downloadModel("bge-small-en-v1.5")).rejects.toThrow("already in progress");
+      await expect(manager.downloadModel("bge-small-en-v1.5", licenseId)).rejects.toThrow("already in progress");
 
       // Cancel to clean up
       manager.cancelDownload("bge-small-en-v1.5");

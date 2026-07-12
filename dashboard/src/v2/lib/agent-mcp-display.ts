@@ -81,10 +81,17 @@ export const normalizeAgentMcpAccess = (access: AgentMcpAccessConfig): AgentMcpA
 export const resolveAgentMcpTags = (
   access: AgentMcpAccessConfig | undefined,
   availableServers: CustomMcpServer[],
+  options: { effectiveCodeUxEnabled?: boolean } = {},
 ): AgentMcpTag[] => {
   const tags: AgentMcpTag[] = [];
-  if (access?.codeUxEnabled === true) {
-    tags.push({ id: CODE_UX_TAG_ID, label: "Code UX", kind: "code_ux" });
+  if (access?.codeUxEnabled === true || options.effectiveCodeUxEnabled === true) {
+    tags.push({
+      id: CODE_UX_TAG_ID,
+      label: options.effectiveCodeUxEnabled === true && access?.codeUxEnabled !== true
+        ? "Code UX · Runtime"
+        : "Code UX",
+      kind: "code_ux",
+    });
   }
   for (const id of access?.linkedServerIds ?? []) {
     const server = availableServers.find((entry) => entry.id === id);

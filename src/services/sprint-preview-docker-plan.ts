@@ -9,6 +9,9 @@ import type { SprintPreviewPortMapping } from "../contracts/app-types.js";
 export const CONTAINER_PREVIEW_PROXY_PORT = 39000;
 export const CONTAINER_PREVIEW_RUNTIME_ROOT = "/code-ux-preview-runtime";
 export const PREVIEW_LOG_DRIVER = "local";
+export const CONTAINER_DOCKER_SOCKET_PATH = "/var/run/docker.sock";
+export const CONTAINER_DOCKER_CLI_PATH = "/usr/local/bin/docker";
+export const CONTAINER_DOCKER_COMPOSE_PLUGIN_PATH = "/usr/local/lib/docker/cli-plugins/docker-compose";
 
 export interface SprintPreviewDockerPlanArgs {
   projectId: string;
@@ -38,6 +41,12 @@ export interface SprintPreviewDockerPlanArgs {
   envFileSource?: string | null;
   resolvedImage: string;
   bootstrapScript: string;
+  dockerAccess?: {
+    socketSource: string;
+    socketGid: number;
+    cliSource: string | null;
+    composePluginSource: string | null;
+  } | null;
 }
 
 export function buildSprintPreviewDockerCreateArgs(args: SprintPreviewDockerPlanArgs): string[] {
@@ -73,6 +82,9 @@ export function buildSprintPreviewDockerCreateArgs(args: SprintPreviewDockerPlan
     "-e", `SPRINT_PREVIEW_CONTAINER_PORTS=${portMappings.map((mapping) => mapping.containerPort).join(",")}`,
     "-e", `SPRINT_PREVIEW_HOST_PORTS=${portMappings.map((mapping) => mapping.hostPort).join(",")}`,
     "-e", `SPRINT_PREVIEW_PORT_MAPPINGS=${portMappings.map((mapping) => `${mapping.containerPort}:${mapping.hostPort}`).join(",")}`,
+    "-e", `SPRINT_PREVIEW_CONTAINER_NAME=${args.containerName}`,
+    "-e", `SPRINT_PREVIEW_DOCKER_VOLUME=${args.volumeName}`,
+    "-e", `SPRINT_PREVIEW_RUNTIME_ROOT=${CONTAINER_PREVIEW_RUNTIME_ROOT}`,
     "-e", `SPRINT_PREVIEW_PROXY_PORT=${CONTAINER_PREVIEW_PROXY_PORT}`,
     "-e", `SPRINT_PREVIEW_WORKSPACE=${args.containerWorkspacePath}`,
     "-e", `SPRINT_PREVIEW_WORKTREE=${args.containerWorkspacePath}`,
@@ -84,6 +96,24 @@ export function buildSprintPreviewDockerCreateArgs(args: SprintPreviewDockerPlan
 
   if (args.envFileSource) {
     dockerArgs.push("--env-file", args.envFileSource);
+  }
+
+  if (args.dockerAccess) {
+    dockerArgs.push(
+      "--mount", toDockerMountArg({ source: args.dockerAccess.socketSource, destination: CONTAINER_DOCKER_SOCKET_PATH, readonly: false }),
+      "--group-add", String(args.dockerAccess.socketGid),
+      "-e", `DOCKER_HOST=unix://${CONTAINER_DOCKER_SOCKET_PATH}`,
+    );
+    if (args.dockerAccess.cliSource) {
+      dockerArgs.push("--mount", toDockerMountArg({ source: args.dockerAccess.cliSource, destination: CONTAINER_DOCKER_CLI_PATH, readonly: true }));
+    }
+    if (args.dockerAccess.composePluginSource) {
+      dockerArgs.push("--mount", toDockerMountArg({
+        source: args.dockerAccess.composePluginSource,
+        destination: CONTAINER_DOCKER_COMPOSE_PLUGIN_PATH,
+        readonly: true,
+      }));
+    }
   }
 
   if (args.userSpec) {
@@ -104,6 +134,11 @@ export function buildSprintPreviewDockerCreateArgs(args: SprintPreviewDockerPlan
   }
 
   const containerStartScript = [
+    ...(args.dockerAccess ? [
+      "command -v docker >/dev/null 2>&1 || { echo '[preview] Docker access is enabled, but this preview image does not provide a Docker CLI.' >&2; exit 1; }",
+      "docker version >/dev/null || { echo '[preview] Docker access is enabled, but the Docker daemon socket is not reachable.' >&2; exit 1; }",
+      "docker compose version >/dev/null || { echo '[preview] Docker access is enabled, but Docker Compose is unavailable. Install the Docker Compose CLI plugin on the host or in the preview image.' >&2; exit 1; }",
+    ] : []),
     `mkdir -p "${args.containerWorkspacePath}"`,
     `tar -xf /tmp/workspace.tar -C "${args.containerWorkspacePath}"`,
     `exec bash /tmp/preview-start.sh`,

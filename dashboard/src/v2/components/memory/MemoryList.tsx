@@ -21,7 +21,9 @@ export const MemoryList: FunctionComponent<{
     loadError?: string | null;
     onRetry?: () => void;
     onAddMemory?: () => void;
-}> = ({ nodes, onSelectNode, refreshing = false, loadError = null, onRetry, onAddMemory }) => {
+    readOnly?: boolean;
+    entityLabel?: "memory" | "skill";
+}> = ({ nodes, onSelectNode, refreshing = false, loadError = null, onRetry, onAddMemory, readOnly = false, entityLabel = "memory" }) => {
     const committedQuery = searchQuerySignal.value;
     const filteredNodes = useMemo(() => {
         const query = committedQuery;
@@ -187,7 +189,8 @@ export const MemoryList: FunctionComponent<{
     const selectedAgentPresetId = selectedAgentPresetIdSignal.value;
     const mutationFeedback = memoryMutationsSignal.value.feedback;
     const isDeleting = batchDeletePending || (mutationFeedback?.status === "pending" && Boolean(mutationFeedback.message?.toLowerCase().includes("deleting")));
-    const countLabel = `${resultCount} ${resultCount === 1 ? "memory" : "memories"} shown`;
+    const entityPlural = entityLabel === "skill" ? "skills" : "memories";
+    const countLabel = `${resultCount} ${resultCount === 1 ? entityLabel : entityPlural} shown`;
     const isShowingStaleResults = (refreshing || Boolean(loadError))
         && filteredNodes.length === 0
         && renderedNodes.length > 0
@@ -269,7 +272,7 @@ export const MemoryList: FunctionComponent<{
 
     if (renderedNodes.length === 0) {
         const isEmpty = totalAliveCount === 0;
-        const message = loadError ? "Memory list could not refresh" : isEmpty ? "No memories exist" : "No memories match your search or filters";
+        const message = loadError ? `${entityLabel === "skill" ? "Skill" : "Memory"} list could not refresh` : isEmpty ? `No ${entityPlural} exist` : `No ${entityPlural} match your search or filters`;
         return (
             <div
                 id="memory-panel"
@@ -281,7 +284,7 @@ export const MemoryList: FunctionComponent<{
             >
                 <div className="sr-only" aria-live={loadError ? "assertive" : "polite"} aria-atomic="true">
                     <span>{message}</span>
-                    <span>. Showing 0 of {totalAliveCount} memories.</span>
+                    <span>. Showing 0 of {totalAliveCount} {entityPlural}.</span>
                 </div>
                 {loadError ? (
                     <RefreshCw className="mb-2 h-7 w-7 text-status-red/70" aria-hidden="true" />
@@ -293,7 +296,7 @@ export const MemoryList: FunctionComponent<{
                     {loadError
                         ? loadError
                         : isEmpty
-                            ? "Add a memory manually or run a sprint that captures project context."
+                            ? entityLabel === "skill" ? "Create or attach a persistent skill storage to visualize its catalog here." : "Add a memory manually or run a sprint that captures project context."
                             : `Clear the search or adjust filters to return to the previous result set${query ? ` for "${query}"` : ""}.`}
                 </p>
                 <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
@@ -334,7 +337,7 @@ export const MemoryList: FunctionComponent<{
                 </div>
                 {!isEmpty && !loadError && (
                     <p className="mt-2 max-w-full break-words text-xs font-medium text-slate-400 dark:text-slate-500">
-                        Showing 0 of {totalAliveCount} memories{query ? ` for "${query}"` : ""}
+                        Showing 0 of {totalAliveCount} {entityPlural}{query ? ` for "${query}"` : ""}
                     </p>
                 )}
             </div>
@@ -363,7 +366,7 @@ export const MemoryList: FunctionComponent<{
             <div className="sticky top-0 z-10 flex min-w-0 flex-col gap-2">
                 <div className="inline-flex max-w-full items-center gap-1.5 self-start rounded-lg border border-black/[0.04] bg-black/[0.02] px-2 py-1 text-xs font-medium text-slate-500 dark:border-white/[0.04] dark:bg-white/[0.02] dark:text-slate-400">
                     <span className="truncate">
-                        Showing {resultCount} of {totalAliveCount} memories
+                        Showing {resultCount} of {totalAliveCount} {entityPlural}
                         {searchQuerySignal.value.trim() ? ` for "${searchQuerySignal.value.trim()}"` : ""}
                         {isShowingStaleResults ? " (last useful list)" : ""}
                     </span>
@@ -396,7 +399,7 @@ export const MemoryList: FunctionComponent<{
                         )}
                     </div>
                 )}
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                {!readOnly && <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <button
                         ref={selectAllRef}
                         type="button"
@@ -440,15 +443,15 @@ export const MemoryList: FunctionComponent<{
                             </button>
                         </div>
                     )}
-                </div>
-                <ActionFeedbackRegion
+                </div>}
+                {!readOnly && <ActionFeedbackRegion
                     status={mutationFeedback?.status || "idle"}
                     message={mutationFeedback?.message}
                     onDismiss={memoryMutationsSignal.value.clearFeedback}
                     clearError={memoryMutationsSignal.value.clearError}
                     retryAction={mutationFeedback?.retryAction}
                     retryLabel={mutationFeedback?.retryLabel}
-                />
+                />}
             </div>
             <div
                 className="flex min-w-0 flex-col gap-3 transition-[gap] motion-reduce:transition-none"
@@ -469,6 +472,8 @@ export const MemoryList: FunctionComponent<{
                             strength={node.strength}
                             scope={node.scope}
                             onClick={() => onSelectNode(index)}
+                            readOnly={readOnly}
+                            entityLabel={entityLabel}
                         />
                     </div>
                 ))}

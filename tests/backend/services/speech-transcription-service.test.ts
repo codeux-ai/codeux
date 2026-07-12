@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import type { SpeechSettings } from "../../../src/contracts/speech-types.js";
 import {
+  formatLocalTranscript,
   SpeechTranscriptionService,
   type LocalOnnxSpeechRuntime,
 } from "../../../src/services/speech-transcription-service.js";
@@ -71,10 +72,14 @@ function createLocalRuntime(overrides: Partial<LocalOnnxSpeechRuntime> = {}): Lo
 }
 
 describe("SpeechTranscriptionService", () => {
+  it("normalizes whitespace without changing Whisper punctuation or casing", () => {
+    expect(formatLocalTranscript("  Hello,   world.  ")).toBe("Hello, world.");
+  });
+
   it("returns missing_local_model for explicit local mode when the model is absent", async () => {
     const fetchImpl = vi.fn();
     const service = new SpeechTranscriptionService({
-      resolveSpeechSettings: () => speechSettings({ providerMode: "local_onnx" }),
+      resolveSpeechSettings: () => speechSettings({ providerMode: "local_onnx", localModelId: "onnx-community/whisper-base.en" }),
       localRuntime: createLocalRuntime(),
       fetchImpl,
     });
@@ -93,6 +98,27 @@ describe("SpeechTranscriptionService", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it("returns a structured client error for an unknown local model", async () => {
+    const localRuntime = createLocalRuntime();
+    const service = new SpeechTranscriptionService({
+      resolveSpeechSettings: () => speechSettings({ providerMode: "local_onnx", localModelId: "removed-local-model" }),
+      localRuntime,
+    });
+
+    const result = await service.transcribe({ audio, metadata: createMetadata() });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "client_error",
+        message: 'Unknown local speech model "removed-local-model".',
+        provider: "local_onnx",
+        retryable: false,
+      },
+    });
+    expect(localRuntime.isModelAvailable).not.toHaveBeenCalled();
+  });
+
   it("uses local ONNX when the selected local model is available", async () => {
     const wavAudio = createPcm16Wav(new Int16Array([0, 16_384, -32_768]));
     const localRuntime = createLocalRuntime({
@@ -104,7 +130,7 @@ describe("SpeechTranscriptionService", () => {
       }),
     });
     const service = new SpeechTranscriptionService({
-      resolveSpeechSettings: () => speechSettings({ providerMode: "local_onnx" }),
+      resolveSpeechSettings: () => speechSettings({ providerMode: "local_onnx", localModelId: "onnx-community/whisper-base.en" }),
       localRuntime,
     });
 
@@ -140,14 +166,62 @@ describe("SpeechTranscriptionService", () => {
     expect(decodedAudio?.[2]).toBeCloseTo(-1);
   });
 
-  it("falls back to an explicitly configured external API in auto mode", async () => {
+  it("uses the local language hint for multilingual Whisper and ignores the API hint", async () => {
+    const wavAudio = createPcm16Wav(new Int16Array([0, 16_384, -16_384]));
+    const localRuntime = createLocalRuntime({
+      isModelAvailable: vi.fn().mockResolvedValue(true),
+    });
+    const service = new SpeechTranscriptionService({
+      resolveSpeechSettings: () => speechSettings({
+        providerMode: "local_onnx",
+        localModelId: "onnx-community/whisper-base",
+        localLanguage: "de-DE",
+        externalTranscription: {
+          ...DEFAULT_DASHBOARD_SETTINGS.speech.externalTranscription,
+          language: "es",
+        },
+      }),
+      localRuntime,
+    });
+
+    await service.transcribe({
+      audio: wavAudio,
+      metadata: createMetadata({ audioBytes: wavAudio.length, mimeType: "audio/wav" }),
+    });
+
+    expect(localRuntime.transcribe).toHaveBeenCalledWith(expect.objectContaining({ language: "de-DE" }));
+  });
+
+  it("forces English for an English-only Whisper model even when a stale hint is supplied", async () => {
+    const wavAudio = createPcm16Wav(new Int16Array([0, 8_192, -8_192]));
+    const localRuntime = createLocalRuntime({
+      isModelAvailable: vi.fn().mockResolvedValue(true),
+    });
+    const service = new SpeechTranscriptionService({
+      resolveSpeechSettings: () => speechSettings({
+        providerMode: "local_onnx",
+        localModelId: "onnx-community/whisper-base.en",
+        localLanguage: "de",
+      }),
+      localRuntime,
+    });
+
+    await service.transcribe({
+      audio: wavAudio,
+      metadata: createMetadata({ audioBytes: wavAudio.length, mimeType: "audio/wav", language: "es" }),
+    });
+
+    expect(localRuntime.transcribe).toHaveBeenCalledWith(expect.objectContaining({ language: "en" }));
+  });
+
+  it("uses the external API only when API mode is selected", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       text: "external transcript",
       language: "en",
     }), { status: 200, headers: { "content-type": "application/json" } }));
     const service = new SpeechTranscriptionService({
       resolveSpeechSettings: () => speechSettings({
-        providerMode: "auto",
+        providerMode: "external_api",
         externalTranscription: {
           baseUrl: "https://transcribe.example.test/v1/audio/transcriptions",
           apiKey: "sk-test-secret-1234567890123456",
@@ -176,22 +250,19 @@ describe("SpeechTranscriptionService", () => {
       model: "whisper-1",
       language: "en",
       durationSeconds: 1,
-      fallback: {
-        attemptedProvider: "local_onnx",
-        reason: "missing_local_model",
-        message: 'Local speech model "onnx-community/whisper-base.en" is not installed.',
-      },
+      fallback: null,
     });
   });
 
-  it("does not send audio externally in auto mode without explicit external credentials", async () => {
+  it("does not send audio externally while local mode is selected", async () => {
     const fetchImpl = vi.fn();
     const service = new SpeechTranscriptionService({
       resolveSpeechSettings: () => speechSettings({
-        providerMode: "auto",
+        providerMode: "local_onnx",
+        localModelId: "onnx-community/whisper-base.en",
         externalTranscription: {
           baseUrl: "https://transcribe.example.test/v1/audio/transcriptions",
-          apiKey: "",
+          apiKey: "configured-but-unused",
           model: "whisper-1",
           language: null,
         },
@@ -204,8 +275,8 @@ describe("SpeechTranscriptionService", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error.code).toBe("client_error");
-      expect(result.error.message).toContain("Install local model");
+      expect(result.error.code).toBe("missing_local_model");
+      expect(result.error.message).toContain("onnx-community/whisper-base.en");
     }
     expect(fetchImpl).not.toHaveBeenCalled();
   });

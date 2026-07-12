@@ -59,6 +59,7 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
   techstackCatalog: cloneTechstackCatalog(DEFAULT_DASHBOARD_SETTINGS.techstackCatalog),
   techstack: { ...DEFAULT_DASHBOARD_SETTINGS.techstack },
   designGuidance: cloneDesignGuidanceSettings(DEFAULT_DASHBOARD_SETTINGS.designGuidance),
+  googleDrive: { ...DEFAULT_DASHBOARD_SETTINGS.googleDrive },
   git: { ...DEFAULT_DASHBOARD_SETTINGS.git },
   jira: { ...DEFAULT_DASHBOARD_SETTINGS.jira },
   notion: { ...DEFAULT_DASHBOARD_SETTINGS.notion },
@@ -127,6 +128,10 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
   speech: {
     ...DEFAULT_DASHBOARD_SETTINGS.speech,
     externalTranscription: { ...DEFAULT_DASHBOARD_SETTINGS.speech.externalTranscription },
+    synthesis: {
+      ...DEFAULT_DASHBOARD_SETTINGS.speech.synthesis,
+      externalSynthesis: { ...DEFAULT_DASHBOARD_SETTINGS.speech.synthesis.externalSynthesis },
+    },
   },
   modelPricing: { overrides: { ...DEFAULT_DASHBOARD_SETTINGS.modelPricing.overrides } },
 });

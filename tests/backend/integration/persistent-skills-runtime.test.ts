@@ -10,6 +10,8 @@ import { SkillRepository } from "../../../src/repositories/skill-repository.js";
 import type { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
 import { ProviderExecutionService } from "../../../src/services/provider-execution-service.js";
 import { SkillService, type SkillEmbeddingProvider } from "../../../src/services/skill-service.js";
+import { SkillStorageVersionControlService } from "../../../src/services/skill-storage-version-control-service.js";
+import { FakeSkillStorageGitRunner } from "../helpers/fake-skill-storage-git-runner.js";
 import type { IProviderRunner, ProviderRunResult } from "../../../src/infrastructure/providers/cli/provider-runner.js";
 import type { DashboardSettings } from "../../../src/contracts/app-types.js";
 import { runWithMcpAgentContext } from "../../../src/server/mcp-agent-context.js";
@@ -53,7 +55,12 @@ async function createFixture(): Promise<{
   const projectRepository = new ProjectManagementRepository(storage);
   const agentPresetRepository = new AgentPresetRepository(storage);
   const skillRepository = new SkillRepository(storage);
-  const skillService = new SkillService(skillRepository, new FakeEmbeddingProvider());
+  const skillService = new SkillService(
+    skillRepository,
+    new FakeEmbeddingProvider(),
+    undefined,
+    new SkillStorageVersionControlService(path.join(dir, "skill-storages"), new FakeSkillStorageGitRunner()),
+  );
   const project = projectRepository.createProject({
     name: "Persistent Skills Integration Project",
     sourceType: "local",
@@ -269,7 +276,8 @@ Review regressions for the second agent.
         containerPath: "/code-ux/persistent-skills/runtime-review-skills",
       }),
     ]);
-    expect(enabledRun.persistentSkillStorageMounts?.[0]?.hostPath).toContain(path.join(".code-ux", "persistent-skill-storages"));
+    expect(enabledRun.persistentSkillStorageMounts?.[0]?.hostPath).toContain(path.join("skill-storages", projectId, storage.id, "repo"));
+    expect(enabledRun.persistentSkillStorageMounts?.[0]?.revision).toMatch(/^[0-9a-f]{40}$/);
 
     for (const run of providerRunner.runProvider.mock.calls.slice(1).map((call) => call[0])) {
       expect(run.prompt).toBe("Implement the task.");

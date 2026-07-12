@@ -101,12 +101,73 @@ Worker MCP clients can advertise their agent preset with the `X-Code-Ux-Agent` h
 When the header is present, Code UX must resolve it to an explicit agent MCP access policy before exposing built-in Code UX management tools. Malformed HTTP header values are rejected before MCP routing; if an advertised agent identity reaches the router but is unknown or resolves to an agent without an explicit MCP access policy, `list_tools` returns no Code UX tools and `call_tool` rejects every Code UX management tool with MCP `MethodNotFound`. This fail-closed behavior prevents an unrecognized agent from inheriting broad system-level management access.
 
 For a resolved agent policy:
-- `codeUxEnabled: false` removes every built-in Code UX tool from `list_tools` and causes `call_tool` to return `MethodNotFound`, even when system-level toggles enable those tools.
+- `codeUxEnabled: false` removes the general built-in Code UX management surface. Narrow audience grants can still expose `request_clarification`, `reply_to_clarification`, or existing persistent-skill retrieval without enabling unrelated tools.
 - `codeUxEnabled: true` applies the agent's per-tool overrides over the system MCP tool toggles.
 - Runtime-role filtering still applies after system and agent policy checks.
 - Custom external MCP servers remain limited to the agent's linked server ids and are not broadened by Code UX tool availability.
 
 The dashboard chat reply route is the only route-local default exception. The agent assigned to that route receives full built-in Code UX MCP access, `scheduler_code_ux`, `add_long_term_memory`, and the default Playwright MCP server for dashboard reply turns even when its saved preset has Code UX disabled or no MCP policy. An explicitly narrowed dashboard reply policy still has both dedicated lanes forced on. This default is keyed to the dashboard reply route assignment, not to the generic `project_manager` runtime role.
+
+Clarification tools add a separate audience boundary on the same gateway. `request_clarification` is limited to an assigned task agent, the manual coding route, or an `orchestratorAgentPresetIds` worker-pool member. `reply_to_clarification` is limited to the clarification-reply/dashboard-reply project-manager agent or an unscoped project-manager client. Agent-scoped calls must match the agent's project, and assignment-only workers must address their assigned task. Listing and calling share the same resolver, so unknown, ineligible, cross-project, and cross-audience requests fail closed with `MethodNotFound`.
+
+## Worker Clarification Tools
+
+Both clarification tools travel through the existing `project_manager` MCP gateway. Their `worker` and `project_manager` audiences are authorization boundaries on that gateway, not additional runtime roles. A narrow audience grant does not give a coding agent project-manager management tools, and a coding agent is never granted `reply_to_clarification`.
+
+`request_clarification` accepts:
+
+| Field | Required | Contract |
+| --- | --- | --- |
+| `projectId` | yes | Owning project; must match the authenticated agent's project. |
+| `questionMarkdown` | yes | Non-blank Markdown, at most 16,000 characters. |
+| `deduplicationKey` | yes | Stable, project-scoped idempotency key, at most 512 characters. |
+| `taskId` | no | Task context. An assignment-only coding agent must supply its assigned task. |
+| `sprintId` | no | Sprint context. |
+| `sprintRunId` | no | Sprint-run context. |
+| `dispatchId` | no | Task-dispatch context. |
+| `taskRunId` | no | Task-run context. When present, Code UX derives and verifies the linked task, sprint, sprint run, dispatch, and session. |
+| `sessionId` | no | Provider-session context. |
+
+The requester identity is taken from the authenticated `X-Code-Ux-Agent` context and cannot be supplied in the payload. Every optional runtime reference is checked against `projectId` and the other linked records before the question is persisted.
+
+```json
+{
+  "projectId": "project-123",
+  "taskId": "task-456",
+  "taskRunId": "task-run-789",
+  "questionMarkdown": "Should the migration preserve legacy rows, or may it rebuild the table?",
+  "deduplicationKey": "task-456:legacy-row-policy"
+}
+```
+
+A successful request returns `{ "clarification": ... }`. A new record has `status: "pending"`; the public clarification id is the project attention-item id. Submitting the same key with the same requester, question, and full runtime scope returns the existing record in its current state without another attention item or duplicate task-run event. Reusing the key for different content or scope is a validation error.
+
+`reply_to_clarification` accepts only the owning project, clarification id, and answer:
+
+```json
+{
+  "projectId": "project-123",
+  "clarificationId": "attention-item-abc",
+  "answerMarkdown": "Preserve the legacy rows and use an additive migration."
+}
+```
+
+`answerMarkdown` must be non-blank and no longer than 32,000 characters. The replying identity is derived from the authenticated agent context; unscoped project-manager MCP clients use the server's project-manager client identity. Agent-scoped replies are limited to the configured `clarification_reply` or `dashboard_reply` agent, with the built-in Project manager fallback used only when those routes do not both select another agent.
+
+The normal server response contains:
+
+```json
+{
+  "clarification": { "id": "attention-item-abc", "status": "replied" },
+  "continuation": { "kind": "worker_clarification_reply", "answerMarkdown": "..." },
+  "deliveryMode": "jules_message",
+  "alreadySettled": false
+}
+```
+
+`deliveryMode` is `jules_message` when the answer was accepted by the existing Jules session, `cli_workspace` when Code UX accepted a task-rerun continuation against the preserved local workspace and native session lineage, or `recorded_answer` for a taskless general question. These states confirm delivery or persistence, not task completion. The clarification becomes `replied` only after delivery/continuation succeeds. If a task-backed provider session, task-run scope, or preserved CLI workspace is missing or invalid, the call fails and the clarification stays `pending`.
+
+Clarification records move from `pending` to one of `replied`, `expired`, or `cancelled`. A repeated reply to an already replied clarification returns the original settled result with `alreadySettled: true` and performs no second message or dispatch. Concurrent identical replies share the in-flight operation; a non-replied terminal record rejects a reply. Schema failures return MCP `InvalidParams`; disabled, unknown, wrong-audience, cross-project, or ineligible-agent calls fail closed with `MethodNotFound`; service validation and delivery failures use the management error envelope with `isError: true`.
 
 ## Common Response Shape
 
@@ -169,7 +230,7 @@ The restricted `scheduler_code_ux` tool accepts exactly one wakeup timing mode:
 - `scheduledFor`: absolute ISO timestamp.
 - `delaySeconds` or `delayMinutes`: positive relative delay.
 - `wakeAfterReply: true`: schedule the wakeup for the current time so the dashboard chat runtime drains it immediately after the current reply is sent.
-- `afterSprintId`: wake after the referenced sprint reaches a terminal state, with optional non-negative `offsetMinutes`.
+- `afterSprintId`: wake after the referenced sprint completes successfully, with optional non-negative `offsetMinutes`; failed and cancelled sources remain unresolved.
 - `afterTaskId`: wake after the referenced task reaches a terminal project status, with optional non-negative `offsetMinutes`.
 
 `schedule_wakeup` requires `projectId` and `bodyMarkdown`, and may include `title`, `timezone`, `threadId`, and `connectionId`. Completion anchors are persisted as `scheduleAnchor` payloads: `afterSprintId` maps to `{ mode: "after_sprint_end", sourceSprintId, offsetMinutes? }`, and `afterTaskId` maps to `{ mode: "after_task_end", sourceTaskId, offsetMinutes? }`.
@@ -523,7 +584,7 @@ Detach a flow from an agent:
 
 ### `manage_skills` persistent skill actions
 
-`manage_skills` is the management surface for persistent project skill storage. It is available in the `agents_memory` category for project-manager clients and for agents with explicit Code UX tool access. It is separate from workspace files: callers save skill markdown through the MCP payload, and Code UX writes the durable skill rows and embeddings through `SkillService`.
+`manage_skills` is the management surface for persistent project skill storage. It is available in the `agents_memory` category for project-manager clients and for agents with explicit Code UX tool access. It is separate from workspace files: callers save skill markdown through the MCP payload, and Code UX updates the SQLite query projection plus the storage's internal Git repository through `SkillService`. Git commits run through the standard helper container, and runtime mounts are read-only.
 
 Available actions:
 - `authoring_prompt`: returns the comprehensive skill-authoring prompt, including markdown/frontmatter format and the workflow for saving skills through `manage_skills` instead of writing into the workspace.
@@ -740,6 +801,29 @@ For sprint create/update calls:
 - `goalMarkdown` is accepted as a public MCP alias for `goal`.
 - `linkedIssues` can include imported issue body and conversation markdown. Sprint create merges that context into the goal under `## Linked Issues`; sprint update does the same when a replacement goal is provided. Prompt-only issue body and conversation content are not stored in linked issue repository rows.
 - Missing or blank `projectId`, `sprintId`, `sprintRunId`, `name`, and `title` values are rejected before repository calls so MCP clients receive a validation error instead of a low-level `.trim()` failure.
+
+### `manage_sprints plan`
+
+The direct MCP `manage_sprints` call with `action: "plan"` validates the project, sprint, and existing-task/replan preconditions synchronously, starts planning server-side, and returns this stable acknowledgement immediately:
+
+```json
+{
+  "result": {
+    "status": "started",
+    "message": "Sprint planning started in the background. You will be notified when it completes or fails.",
+    "projectId": "project-123",
+    "sprintId": "sprint-123"
+  }
+}
+```
+
+The stable result fields are `status`, `message`, `projectId`, and `sprintId`. The acknowledgement means only that background planning started after synchronous validation. It does not mean tasks already exist, planning self-reflection has finished, or optional `autoStart` has completed.
+
+When the call originates from an MCP-backed dashboard chat turn, Code UX captures the originating agent and thread before the background promise settles. Successful completion then persists an existing due-now, non-recurring `agent_wakeup` targeted to that thread. The scheduler delivers the wakeup through the normal chat-agent path and asks the agent to review the generated tasks, recap their count, and state whether execution actually started. If planning fails, Code UX queues the same kind of same-thread wakeup with the failure reason and asks the agent to provide a concise failure recap.
+
+Standalone MCP clients have no originating dashboard chat-thread context, so they receive the same immediate acknowledgement without a completion wakeup. They should poll with `manage_sprints` and `manage_tasks`, or inspect the relevant `manage_telemetry` sprint-run, task-dispatch, and invocation state, to determine when planning and any requested auto-start work have completed.
+
+This asynchronous response applies only to the direct MCP `manage_sprints` `plan` action. `import_issues` with `planAfterImport`, dashboard planning routes, scheduled sprint planning, quicksprints, and internal callers continue to await planning completion.
 
 ### `manage_sprints import_issues`
 

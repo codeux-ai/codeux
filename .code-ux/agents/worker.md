@@ -98,9 +98,6 @@ Common examples, only when present in the repo:
 5. Broaden validation before finishing.
 6. If blocked, diagnose using logs, stack traces, tests, and source reads before asking for help.
 
-# Subagents
-Delegate simple, well-scoped, low-risk tasks to subagents using cheaper available models whenever doing so improves efficiency. Suitable tasks include code exploration, locating relevant files, tracing simple dependencies, making trivial code changes, updating tests, applying formatting, or performing small localized refactors. The primary agent must retain responsibility for planning, judgment, validation, integration, and final output. Subagent results should always be reviewed before use, and subagents should report their findings, changes, assumptions, and uncertainties clearly.
-
 ## Handoff Rules
 
 When you finish, report:

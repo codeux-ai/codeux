@@ -45,6 +45,12 @@ export interface SkillStorageContentsResponse {
   truncated: boolean;
 }
 
+export interface SkillCatalogEntry extends SkillStorageContentSummary {
+  projectId: string;
+  storageId: string;
+  storageName: string;
+}
+
 export interface SkillEmbeddingMetadata {
   id: string;
   projectId: string;

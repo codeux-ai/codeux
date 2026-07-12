@@ -44,6 +44,7 @@ import {
 import { clearChatDraftFromUrl, readChatDraftFromLocation } from "./lib/no-project-chat-assistant.js";
 import { resolveChatLiveEntities, type ChatLiveEntityWidget } from "./lib/chat-live-entities.js";
 import { STATUS_MESSAGE_MIN_INTERVAL_MS } from "./lib/agent-humor-messages.js";
+import { useSpeechPlayback } from "./hooks/use-speech-playback.js";
 
 
 const EMPTY_LIVE_ENTITIES: readonly ChatLiveEntityWidget[] = [];
@@ -232,6 +233,7 @@ export const ChatPage: FunctionComponent = () => {
     typeof window === "undefined" ? null : readChatDraftFromLocation(window.location)
   ));
   const invocationFeedback = useActionFeedback();
+  const transcriptSpeech = useSpeechPlayback();
 
   const {
     chatMode,
@@ -278,6 +280,8 @@ export const ChatPage: FunctionComponent = () => {
     threadIndex,
     invocationIndex,
     selectedProject,
+    projectInitializationStateLoading,
+    canCreateInitialAppQuickactions,
     agentPresets,
     feedback,
     clearFeedback,
@@ -296,6 +300,10 @@ export const ChatPage: FunctionComponent = () => {
   } = useChatPageData({ composerRef, messagesRef });
 
   useEffect(() => {
+    transcriptSpeech.stop();
+  }, [chatMode, selectedInvocationId, selectedThreadId, transcriptSpeech.stop]);
+
+  useEffect(() => {
     if (typeof window === "undefined" || selectedProject) {
       return;
     }
@@ -308,6 +316,7 @@ export const ChatPage: FunctionComponent = () => {
     () => invocations.filter((invocation) => invocation.status === "running").length,
     [invocations],
   );
+  const showInitialCreateActions = !projectInitializationStateLoading && canCreateInitialAppQuickactions;
   const widgetLiveData = useMemo(() => ({
     projectId: selectedProject?.id ?? null,
     projectTasks,
@@ -683,12 +692,13 @@ export const ChatPage: FunctionComponent = () => {
 
   const renderDetail = () => {
     if (chatMode === "stage") {
-      // Prefer the preset of the most recent agent reply; fall back to the
-      // thread/connection-linked preset (getLinkedAgentPreset handles both).
+      // Prefer the preset of the most recent agent reply; runtime replies may
+      // use authorType "system", so direction is the authoritative boundary.
+      // Fall back to the thread/connection-linked preset.
       let stagePreset;
       for (let i = messages.length - 1; i >= 0 && !stagePreset; i--) {
         const message = messages[i];
-        if (message.direction !== "dashboard_to_connection" && message.authorType !== "system") {
+        if (message.direction !== "dashboard_to_connection") {
           stagePreset = getLinkedAgentPreset(message);
         }
       }
@@ -709,13 +719,17 @@ export const ChatPage: FunctionComponent = () => {
               selectedThread={selectedThread}
               messages={messages}
               threadMessagesLoading={threadsLoading || threadMessagesLoading}
-              hasWorkingReply={hasWorkingReply}
-              runningInvocationCount={runningInvocationCount}
+              hasAwaitedReply={hasWorkingReply}
+              invocations={invocations}
               sending={sending}
               error={error}
               input={input}
               setInput={setInput}
+              onSpeechTranscript={handleSpeechTranscript}
               handleSend={handleSend}
+              handleCreateAppQuickaction={handleCreateAppQuickaction}
+              initialEligibilityLoaded={!projectInitializationStateLoading}
+              canCreateInitialAppQuickactions={canCreateInitialAppQuickactions}
               navigateHistory={navigateHistory}
               composerRef={composerRef}
               activeConnection={activeConnection}
@@ -778,6 +792,12 @@ export const ChatPage: FunctionComponent = () => {
                       widgetLiveData={widgetLiveData}
                       liveEntities={threadLiveEntitiesByMessageId.get(message.id) ?? EMPTY_LIVE_ENTITIES}
                       onPromptSuggestionSelect={handlePromptSuggestionSelect}
+                      onReplay={(replayMessage) => void transcriptSpeech.play({
+                        markdown: replayMessage.bodyMarkdown,
+                        messageId: replayMessage.id,
+                        projectId: selectedProject?.id ?? null,
+                      })}
+                      replaying={transcriptSpeech.activeMessageId === message.id}
                     />
                   );
                 })}
@@ -797,13 +817,15 @@ export const ChatPage: FunctionComponent = () => {
           </div>
 
           <div className="shrink-0 border-t border-black/[0.05] p-5 dark:border-white/[0.05]">
-            <div className="mb-3">
-              <ChatCreateAppQuickActions
-                hasProject={Boolean(selectedProject)}
-                sending={sending}
-                onSelect={(kind) => void handleCreateAppQuickaction(kind)}
-              />
-            </div>
+            {selectedProject && !hasWorkingReply && runningInvocationCount === 0 && !sending && !error && (
+              <div className="mb-3">
+                <ChatCreateAppQuickActions
+                  hasProject
+                  showInitialCreateActions={showInitialCreateActions}
+                  onSelect={(kind) => void handleCreateAppQuickaction(kind)}
+                />
+              </div>
+            )}
             <div className={`rounded-2xl border bg-black/[0.03] p-3 focus-within:border-signal-500/30 dark:bg-white/[0.03] ${error ? 'border-status-red/50 dark:border-status-red/50' : 'border-black/[0.06] dark:border-white/[0.06]'}`}>
               <label htmlFor="message-composer" className="sr-only">Message</label>
               <textarea
@@ -1180,6 +1202,12 @@ export const ChatPage: FunctionComponent = () => {
                       agentName={message.role === "assistant" ? (selectedAgentPreset?.name ?? null) : null}
                       widgetLiveData={widgetLiveData}
                       liveEntities={invocationLiveEntitiesByMessageId.get(message.id) ?? EMPTY_LIVE_ENTITIES}
+                      onReplay={(replayMessage) => void transcriptSpeech.play({
+                        markdown: replayMessage.contentMarkdown,
+                        messageId: replayMessage.id,
+                        projectId: selectedProject?.id ?? null,
+                      })}
+                      replaying={transcriptSpeech.activeMessageId === message.id}
                     />
                   );
                 })

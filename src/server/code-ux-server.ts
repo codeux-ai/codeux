@@ -44,7 +44,13 @@ import { ActivityCacheService } from "./activity-cache-service.js";
 import { registerMcpRequestHandlers } from "./mcp-request-router.js";
 import { TaskRerunService } from "../services/task-rerun-service.js";
 import { ExecutionControlService } from "../services/execution-control-service.js";
-import { dashboardReplyAgentMcpAccess, toAgentCodeUxToolAccess } from "../services/agent-mcp-access.js";
+import {
+  dashboardReplyAgentMcpAccess,
+  isProjectManagerClarificationAgent,
+  isWorkerClarificationAgent,
+  toAgentCodeUxToolAccess,
+  withClarificationAudienceAccess,
+} from "../services/agent-mcp-access.js";
 import { JulesSourceResolver } from "../services/jules-source-resolver.js";
 import { RuntimeCleanupService } from "../services/runtime-cleanup-service.js";
 import { RuntimeStartupRecoveryService } from "../services/runtime-startup-recovery-service.js";
@@ -55,6 +61,7 @@ import { DatabaseMaintenanceService } from "../services/database-maintenance-ser
 import { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
 import { AgentPresetSyncService } from "../services/agent-preset-sync-service.js";
 import { PlanningAgentService } from "../services/planning-agent-service.js";
+import type { AgentBaseUpdateService } from "../services/agent-base-update-service.js";
 import { ExecutionInvocationControlService } from "../services/execution-invocation-control-service.js";
 import { createRuntimeDependencies, ServerContext } from "../app/dependency-factory.js";
 import { generateCorrelationId, runWithCorrelationId } from "../shared/logging/correlation-id.js";
@@ -92,6 +99,7 @@ import { disposeCommandSpawner, shutdownGitHelperPool } from "../shared/subproce
 import { LocalMcpCliConfigService } from "../services/local-mcp-cli-config-service.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { ChatProviderIngressService } from "../services/chat-provider-ingress-service.js";
+import { ProjectInitializationStateService } from "../services/project-initialization-state-service.js";
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
   const normalized = String(message || "").trim().toLowerCase();
@@ -132,7 +140,7 @@ export class CodeUxServer {
   private static readonly WAL_CHECKPOINT_INTERVAL_MS = 60_000;
   private static readonly LOOP_INITIAL_DELAY_MS = 15_000;
   private static readonly STARTUP_RECOVERY_DELAY_MS = 1_000;
-  private static readonly STARTUP_CONTAINER_CLEANUP_DELAY_MS = 5_000;
+  private static readonly STARTUP_CONTAINER_CLEANUP_DELAY_MS = 0;
   private static readonly STARTUP_MAINTENANCE_DELAY_MS = 30_000;
   private static readonly SHUTDOWN_CLOSE_TIMEOUT_MS = 5_000;
   private static readonly SHUTDOWN_SIGNAL_TIMEOUT_MS = 30_000;
@@ -153,6 +161,7 @@ export class CodeUxServer {
   private appDbStorage: AppDbStorage;
   private settingsRepository: SettingsRepository;
   private projectManagementRepository: ProjectManagementRepository;
+  private projectInitializationStateService: ProjectInitializationStateService;
   private projectRuntimeRepository: ProjectRuntimeRepository;
   private connectionChatRepository: ConnectionChatRepository;
   private chatProviderRepository: ChatProviderRepository;
@@ -186,6 +195,7 @@ export class CodeUxServer {
   private activeDispatchRegistry: ActiveDispatchRegistry;
   private shutdownContainerService: ShutdownContainerService;
   private planningAgentService: PlanningAgentService;
+  private agentBaseUpdateService: AgentBaseUpdateService;
   private quicksprintService: import("../services/quicksprint-service.js").QuicksprintService;
   private projectSetupService: import("../services/project-setup-service.js").ProjectSetupService;
   private schedulerService: import("../services/scheduler-service.js").SchedulerService;
@@ -193,6 +203,8 @@ export class CodeUxServer {
   private chatThreadRuntimeService: import("../services/chat-thread-runtime-service.js").ChatThreadRuntimeService;
   private chatProviderIngressService: ChatProviderIngressService;
   private speechTranscriptionService: import("../services/speech-transcription-service.js").SpeechTranscriptionService;
+  private speechSynthesisService: import("../services/speech-synthesis-service.js").SpeechSynthesisService;
+  private speechModelManager: import("../services/speech-model-manager.js").SpeechModelManager;
   private runtimeCleanupService: RuntimeCleanupService;
   private runtimeStartupRecoveryService: RuntimeStartupRecoveryService;
   private dashboardRealtimeService: DashboardRealtimeService;
@@ -236,6 +248,9 @@ export class CodeUxServer {
     this.appDbStorage = deps.appDbStorage;
     this.settingsRepository = deps.settingsRepository;
     this.projectManagementRepository = deps.projectManagementRepository;
+    this.projectInitializationStateService = new ProjectInitializationStateService(
+      (projectId) => this.projectManagementRepository.getProject(projectId),
+    );
     this.projectRuntimeRepository = deps.projectRuntimeRepository;
     this.connectionChatRepository = deps.connectionChatRepository;
     this.chatProviderRepository = deps.chatProviderRepository;
@@ -272,6 +287,7 @@ export class CodeUxServer {
       logger: this.logger.child({ component: "shutdown-container-service" }),
     });
     this.planningAgentService = deps.planningAgentService;
+    this.agentBaseUpdateService = deps.agentBaseUpdateService;
     this.quicksprintService = deps.quicksprintService;
     this.projectSetupService = deps.projectSetupService;
     this.schedulerService = deps.schedulerService;
@@ -279,6 +295,8 @@ export class CodeUxServer {
     this.chatThreadRuntimeService = deps.chatThreadRuntimeService;
     this.chatProviderIngressService = deps.chatProviderIngressService;
     this.speechTranscriptionService = deps.speechTranscriptionService;
+    this.speechSynthesisService = deps.speechSynthesisService;
+    this.speechModelManager = deps.speechModelManager;
     this.runtimeCleanupService = deps.runtimeCleanupService;
     this.runtimeStartupRecoveryService = new RuntimeStartupRecoveryService({
       sessionTracking: this.sessionTracking,
@@ -456,8 +474,44 @@ export class CodeUxServer {
       managementToolHandler: this.managementToolHandler,
       getDashboardSettings: () => this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
       getRuntimeRole: () => runtimeRole,
-      resolveAgentMcpToolAccess: (agentId) => {
+      resolveAgentMcpToolAccess: (agentId, request) => {
         const agent = this.agentPresetRepository.getAgentPreset(agentId);
+        if (!agent) return null;
+        const settings = this.settingsRepository.resolveProjectDashboardSettings(agent.projectId).settings;
+        const assignedTaskIds = this.projectManagementRepository.listTasks(agent.projectId)
+          .filter((task) => task.agentPresetId === agent.id)
+          .map((task) => task.id);
+        const workerEligible = isWorkerClarificationAgent({
+          agentId: agent.id,
+          assignedTaskAgentIds: assignedTaskIds.length > 0 ? [agent.id] : [],
+          settings,
+        });
+        const projectManagerEligible = isProjectManagerClarificationAgent({
+          agentId: agent.id,
+          agentName: agent.name,
+          settings,
+        });
+        const requestArgs = request?.arguments && typeof request.arguments === "object"
+          ? request.arguments as Record<string, unknown>
+          : null;
+        if (
+          request
+          && (request.toolName === "request_clarification" || request.toolName === "reply_to_clarification")
+          && requestArgs?.projectId !== agent.projectId
+        ) {
+          return null;
+        }
+        if (request?.toolName === "request_clarification") {
+          const routing = settings.agents.routing.taskCoding;
+          const hasProjectWorkerRole = (routing.mode === "MANUAL" && routing.agentPresetId === agent.id)
+            || routing.orchestratorAgentPresetIds.includes(agent.id);
+          if (!workerEligible || (!hasProjectWorkerRole && !assignedTaskIds.includes(String(requestArgs?.taskId ?? "")))) {
+            return null;
+          }
+        }
+        if (request?.toolName === "reply_to_clarification" && !projectManagerEligible) {
+          return null;
+        }
         const access = agent && this.isDashboardReplyRouteAgent(agent)
           ? dashboardReplyAgentMcpAccess(agent.mcpAccess)
           : agent?.mcpAccess;
@@ -466,11 +520,18 @@ export class CodeUxServer {
           && agent.persistentSkillStorageIds
           && agent.persistentSkillStorageIds.length > 0,
         );
-        return access
+        let resolvedAccess = access
           ? toAgentCodeUxToolAccess(access, persistentSkillRetrievalEnabled)
           : persistentSkillRetrievalEnabled
             ? toAgentCodeUxToolAccess({ codeUxEnabled: false, codeUxToolToggles: [] }, true)
-            : null;
+            : { codeUxEnabled: false, codeUxToolToggles: [] };
+        if (workerEligible) {
+          resolvedAccess = withClarificationAudienceAccess(resolvedAccess, "worker", "request_clarification");
+        }
+        if (projectManagerEligible) {
+          resolvedAccess = withClarificationAudienceAccess(resolvedAccess, "project_manager", "reply_to_clarification");
+        }
+        return resolvedAccess;
       },
       formatError: (error: unknown) => this.formatError(error),
       logger: this.logger.child({ component: "mcp-request-router", runtimeRole }),
@@ -1178,7 +1239,7 @@ export class CodeUxServer {
         return;
       }
       void task().catch((error) => {
-        this.logger.error(`${label} failed`, { error });
+        this.logger.error?.(`${label} failed`, { error });
       });
     }, delayMs);
     timer.unref?.();
@@ -1224,12 +1285,12 @@ export class CodeUxServer {
     try {
       await this.sprintPreviewService.cleanupStaleContainersOnStartup();
     } catch (error) {
-      this.logger.error("Failed to clean up stale sprint preview containers on startup", { error });
+      this.logger.error?.("Failed to clean up stale sprint preview containers on startup", { error });
     }
     try {
       await this.sprintFileBrowserService.cleanupStaleContainersOnStartup();
     } catch (error) {
-      this.logger.error("Failed to clean up stale file browser containers on startup", { error });
+      this.logger.error?.("Failed to clean up stale file browser containers on startup", { error });
     }
     try {
       await new DockerAssetPruneService(
@@ -1237,7 +1298,7 @@ export class CodeUxServer {
         this.logger.child({ component: "docker-asset-prune-service" }),
       ).cleanupOnStartup();
     } catch (error) {
-      this.logger.error("Failed to prune stale Docker assets on startup", { error });
+      this.logger.error?.("Failed to prune stale Docker assets on startup", { error });
     }
   }
 
@@ -1319,6 +1380,7 @@ export class CodeUxServer {
       projectRoot: this.projectRoot,
       logger: this.logger,
     });
+    this.sprintPreviewService.prepareForStartupCleanup();
     this.refreshJulesApiKey();
     try {
       const startupPrune = this.connectionChatRepository.pruneDisconnectedConnectionsOnStartup();
@@ -1341,8 +1403,10 @@ export class CodeUxServer {
         appDbStorage: this.appDbStorage,
         settingsRepository: this.settingsRepository,
         projectManagementRepository: this.projectManagementRepository,
+        projectInitializationStateService: this.projectInitializationStateService,
         projectRuntimeRepository: this.projectRuntimeRepository,
         executionRepository: this.executionRepository,
+        getDashboardNotifications: () => this.executionRepository.getDashboardNotifications(),
         connectionChatRepository: this.connectionChatRepository,
         chatProviderRepository: this.chatProviderRepository,
         projectWorkerAssignmentRepository: this.projectWorkerAssignmentRepository,
@@ -1360,6 +1424,7 @@ export class CodeUxServer {
         executionControlService: this.executionControlService,
         executionInvocationControlService: this.executionInvocationControlService,
         planningAgentService: this.planningAgentService,
+        agentBaseUpdateService: this.agentBaseUpdateService,
         quicksprintService: this.quicksprintService,
         projectSetupService: this.projectSetupService,
         schedulerService: this.schedulerService,
@@ -1370,6 +1435,8 @@ export class CodeUxServer {
         chatThreadRuntimeService: this.chatThreadRuntimeService,
         chatProviderIngressService: this.chatProviderIngressService,
         speechTranscriptionService: this.speechTranscriptionService,
+        speechSynthesisService: this.speechSynthesisService,
+        speechModelManager: this.speechModelManager,
         dashboardRealtimeService: this.dashboardRealtimeService,
         logger: this.logger,
         getLiveActivitiesForActiveTasks: () => this.getLiveActivitiesForActiveTasks(),
@@ -1390,6 +1457,8 @@ export class CodeUxServer {
         getSprintPreviewScript: (projectId, sprintId) => this.sprintPreviewService.getScript(projectId, sprintId),
         saveSprintPreviewScript: (projectId, sprintId, content) => this.sprintPreviewService.saveScript(projectId, sprintId, content),
         updateSprintPreviewEnvironmentOverrides: (projectId, sprintId, sessionId, environmentOverrides) => this.sprintPreviewService.updateEnvironmentOverridesForProjectSprint(projectId, sprintId, sessionId, environmentOverrides),
+        updateSprintPreviewStartupCommandOverride: (projectId, sprintId, sessionId, startupCommandOverride) => this.sprintPreviewService.updateStartupCommandOverrideForProjectSprint(projectId, sprintId, sessionId, startupCommandOverride),
+        updateSprintPreviewDockerAccessOverride: (projectId, sprintId, sessionId, dockerAccessOverride) => this.sprintPreviewService.updateDockerAccessOverrideForProjectSprint(projectId, sprintId, sessionId, dockerAccessOverride),
         getSprintPreviewLogs: (sessionId, tail) => this.sprintPreviewService.getLogs(sessionId, tail),
         getSprintPreviewLogsForProjectSprint: (projectId, sprintId, sessionId, tail) => this.sprintPreviewService.getLogsForProjectSprint(projectId, sprintId, sessionId, tail),
         proxySprintPreviewRequest: (args) => this.sprintPreviewService.proxyRequest(args),

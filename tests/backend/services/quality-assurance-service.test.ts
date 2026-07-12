@@ -835,7 +835,7 @@ describe("QualityAssuranceService", () => {
       finishedAt: "2026-04-11T09:10:00.000Z",
     });
 
-    const staleRun = qaReviewRepository.createRun({
+    const priorVerdict = qaReviewRepository.createRun({
       projectId: project.id,
       sprintId: sprint.id,
       sprintRunId: sprintRun.id,
@@ -843,6 +843,23 @@ describe("QualityAssuranceService", () => {
       taskRunId: taskRun.id,
       triggerType: "task_completion",
       runIndex: 1,
+      startedAt: "2026-04-11T09:10:30.000Z",
+    });
+    qaReviewRepository.updateRun(priorVerdict.id, {
+      status: "completed",
+      outcome: "changes_requested",
+      summaryMarkdown: "A fix is still required.",
+      finishedAt: "2026-04-11T09:10:45.000Z",
+    });
+
+    const staleRun = qaReviewRepository.createRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      taskRunId: taskRun.id,
+      triggerType: "task_completion",
+      runIndex: 2,
       startedAt: "2026-04-11T09:11:00.000Z",
     });
     executionRepository.createExecutionInvocation({
@@ -900,7 +917,7 @@ describe("QualityAssuranceService", () => {
       },
     });
 
-    expect(gate.reason).toBe("pending_review");
+    expect(gate.reason).toBe("review_failed");
     expect(gate.latestRun?.status).toBe("cancelled");
     expect(gate.latestRun?.summaryMarkdown).toContain("Recovered stale QA review run");
     expect(qaReviewRepository.getRun(staleRun.id)?.status).toBe("cancelled");
@@ -1212,6 +1229,7 @@ describe("QualityAssuranceService", () => {
       payload: {
         continued: true,
         continuationMode: "cli",
+        postExhaustionVerificationEligible: true,
       },
       finishedAt: "2026-06-13T20:43:00.000Z",
     });
@@ -1540,6 +1558,7 @@ describe("QualityAssuranceService", () => {
 
     expect(outcome.reopenedTask).toBe(true);
     expect(qaReviewRepository.getLatestTaskRun(task.id)?.payload?.continued).toBe(true);
+    expect(qaReviewRepository.getLatestTaskRun(task.id)?.payload?.postExhaustionVerificationEligible).toBe(false);
   });
 
   it("recovers a running task QA review when the execution invocation never linked provider runtime", async () => {
@@ -1653,8 +1672,8 @@ describe("QualityAssuranceService", () => {
 
     const recoveredRun = qaReviewRepository.getRun(qaRun.id);
     const recoveredInvocation = executionRepository.getExecutionInvocation(invocation.id);
-    expect(gate.reason).toBe("pending_review");
-    expect(gate.runsUsed).toBe(0);
+    expect(gate.reason).toBe("review_failed");
+    expect(gate.runsUsed).toBe(1);
     expect(gate.maxRuns).toBe(1);
     expect(recoveredRun?.status).toBe("cancelled");
     expect(recoveredRun?.summaryMarkdown).toContain("without provider runtime linkage");
@@ -2267,26 +2286,34 @@ describe("QualityAssuranceService", () => {
       getGithubToken: () => undefined,
       sendSessionMessage: async () => ({}),
     });
-    vi.spyOn(service as any, "runReview").mockRejectedValue(new Error("Sprint QA provider timed out."));
+    const runReview = vi.spyOn(service as any, "runReview").mockRejectedValue(new Error("Sprint QA provider timed out."));
 
+    const subtasks = [{
+      record_id: task.id,
+      project_id: project.id,
+      sprint_id: sprint.id,
+      id: "T1",
+      title: "Initial task",
+      prompt: "Implement the initial feature.",
+      depends_on: [],
+      is_independent: true,
+      status: "COMPLETED",
+      is_merged: true,
+      merge_indicator: "MERGED",
+    }] as any;
     const outcome = await service.reviewSprintCompletion({
       projectId: project.id,
       sprintId: sprint.id,
       sprintRunId: sprintRun.id,
       repoPath: dir,
-      subtasks: [{
-        record_id: task.id,
-        project_id: project.id,
-        sprint_id: sprint.id,
-        id: "T1",
-        title: "Initial task",
-        prompt: "Implement the initial feature.",
-        depends_on: [],
-        is_independent: true,
-        status: "COMPLETED",
-        is_merged: true,
-        merge_indicator: "MERGED",
-      }] as any,
+      subtasks,
+    });
+    const retryOutcome = await service.reviewSprintCompletion({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      repoPath: dir,
+      subtasks,
     });
 
     expect(outcome).toMatchObject({
@@ -2294,12 +2321,19 @@ describe("QualityAssuranceService", () => {
       blockedCompletion: true,
       mergeBlocked: true,
     });
+    expect(retryOutcome).toMatchObject({
+      reviewed: false,
+      blockedCompletion: true,
+      mergeBlocked: true,
+    });
+    expect(runReview).toHaveBeenCalledTimes(2);
     expect(outcome.reportText).toContain("Sprint QA failed and blocked merge");
     expect(outcome.reportText).toContain("Sprint QA provider timed out.");
 
     const latestRun = qaReviewRepository.getLatestSprintRun(sprint.id);
     expect(latestRun).toMatchObject({
       status: "failed",
+      runIndex: 2,
       summaryMarkdown: "Sprint QA provider timed out.",
     });
     expect(latestRun?.payload).toMatchObject({ error_code: "UNKNOWN" });
@@ -2795,7 +2829,10 @@ describe("QualityAssuranceService", () => {
     });
 
     // Mock continueCliTaskSession to avoid actual filesystem work
-    vi.spyOn(service as any, "continueCliTaskSession").mockResolvedValue(undefined);
+    vi.spyOn(service as any, "continueCliTaskSession").mockResolvedValue({
+      producedMergeWork: true,
+      providerOutcome: { kind: "completed", blocker: null },
+    });
 
     const outcome = await service.reviewCompletedTask({
       projectId: project.id,
@@ -3002,9 +3039,12 @@ describe("QualityAssuranceService", () => {
     vi.spyOn((service as any).workspaceArtifactService, "exportBinaryPatch").mockResolvedValue("");
     vi.spyOn((service as any).workspaceArtifactService, "applyPatchToBranch").mockResolvedValue({ hasChanges: false });
     vi.spyOn((service as any).prService, "hasUnpushedCommits").mockResolvedValue(false);
-    vi.spyOn((service as any).prService, "hasWorkerBranchCommitsAgainstFeature").mockResolvedValue(false);
+    // The recovered branch may already contain the original implementation.
+    // Existing ahead commits must not make a no-change QA follow-up look like
+    // fresh progress or renew the review loop.
+    vi.spyOn((service as any).prService, "hasWorkerBranchCommitsAgainstFeature").mockResolvedValue(true);
 
-    await (service as any).continueCliTaskSession({
+    const continuation = await (service as any).continueCliTaskSession({
       provider: "gemini",
       sessionId: "session-1",
       task: {
@@ -3033,6 +3073,10 @@ describe("QualityAssuranceService", () => {
     expect(runProvider).toHaveBeenCalledWith(expect.objectContaining({
       cwd: "docker-volume://session-1",
     }));
+    expect(continuation).toEqual({
+      producedMergeWork: false,
+      providerOutcome: { kind: "unknown", blocker: null },
+    });
   });
 
   it("returns an actionable error when branch metadata and resume workspace are unavailable", async () => {
@@ -4164,6 +4208,10 @@ describe("QualityAssuranceService", () => {
       ok: true,
       stdout: "Done",
       stderr: "",
+      usageTelemetry: {
+        transcriptText: "Done",
+        conversation: [],
+      },
     });
 
     const outcome = await service.reviewCompletedTask({

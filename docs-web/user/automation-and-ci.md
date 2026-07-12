@@ -114,11 +114,13 @@ The `merge_indicator` field on a subtask documents the merge state:
 
 ## QA gate (enabled by default)
 
-If a QA agent preset is wired to `qa_review` in routing, completed tasks pass through a QA review *before* the merge protocol greenlights them. A failed review:
+If a QA agent preset is wired to `qa_review` in routing, completed tasks pass through a QA review *before* the merge protocol greenlights them. A non-passing review that exhausts its configured guardrail:
 
 - Sets task status to `QA_REVIEW_FAILED`.
 - Creates an attention item with the QA agent's findings.
 - Pauses the task until rectified.
+
+Provider or infrastructure errors do not immediately create this handoff. Recovered failed, cancelled, and errored attempts retry within a bounded infrastructure grace, and every terminal attempt counts toward the hard ceiling. A CLI QA fix that produces no new patch is escalated as no progress instead of starting another QA cycle; existing branch commits do not renew the cycle. A coding run that produces no changes must explicitly confirm completion or it is blocked for attention. The sprint watch loop stays alive while worker or human attention is active.
 
 ## Attention items: who handles them
 

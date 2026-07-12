@@ -20,6 +20,8 @@ can read on demand.
 | [Automation and CI](/docs/user-automation-and-ci) | Auto-merge, CI autofix, attention items, and intervention modes. |
 | [MCP clients](/docs/user-mcp-clients) | Driving Code UX from Gemini CLI, Codex, Claude Code, and others. |
 | [Dashboard](/docs/user-dashboard-overview) | A page-by-page tour of the live web UI. |
+| [Settings](/docs/settings-overview) | The full Settings reference hub with one page per Settings area. |
+| [Custom dashboards](/docs/user-dashboard-custom-dashboards) | Agent-generated project dashboards, detached validation, publication, and rollback. |
 | [Troubleshooting](/docs/user-troubleshooting) | Common issues, log locations, and recovery. |
 
 ## Glossary
@@ -31,6 +33,7 @@ can read on demand.
 - **Worker** — the execution context that runs a provider for a task, in Docker (default) or on the host.
 - **Agent preset** — a reusable persona (instructions, routing hints) a worker adopts for an invocation type.
 - **Memory** — short-term sprint memory and long-term project memory, scoped into prompts.
+- **Persistent skill storage** — optional per-agent reusable skill storage. Enabled agents should search existing skills before creating a new one; storage mounts live outside the project workspace.
 - **Attention item** — anything needing a human decision: a merge conflict, a CI failure, a plan to approve.
 - **Watch loop** — the continuous loop that advances dependencies, syncs worker state, and runs the merge protocol.
 

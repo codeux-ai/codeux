@@ -60,6 +60,10 @@ vi.mock("../../../src/v2/hooks/use-notifications.js", () => ({
     })
 }));
 
+vi.mock("../../../src/v2/components/feedback/ToastProvider.js", () => ({
+    useToast: () => ({ addToast: vi.fn() }),
+}));
+
 vi.mock("../../../src/v2/hooks/use-is-dark.js", () => ({
     useIsDark: () => false
 }));

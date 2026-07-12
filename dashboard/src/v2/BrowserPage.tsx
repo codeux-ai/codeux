@@ -7,9 +7,11 @@ import {
   RotateCcw,
   Save,
   SlidersHorizontal,
+  SquareTerminal,
   Square,
   FileCode2,
   Info,
+  AlertTriangle,
   X,
 } from "lucide-preact";
 import { useProjectData } from "./context/project-data.js";
@@ -21,6 +23,8 @@ import {
   removePreviewSession,
   rebuildPreviewSession,
   savePreviewEnvironmentOverrides,
+  savePreviewDockerAccessOverride,
+  savePreviewStartupCommandOverride,
   savePreviewScript,
   startPreviewSession,
   stopPreviewSession,
@@ -36,7 +40,7 @@ import {
 } from "./lib/preview-origin.js";
 import { usePreviewSessions } from "./hooks/use-preview-sessions.js";
 import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
-import { saveProjectPreviewEnvironmentVariables } from "./lib/settings-api.js";
+import { saveProjectPreviewDockerAccess, saveProjectPreviewEnvironmentVariables } from "./lib/settings-api.js";
 import { PreviewSessionSlider } from "./components/browser/PreviewSessionSlider.js";
 import { PreviewWindowChrome } from "./components/browser/PreviewWindowChrome.js";
 import { LaunchContainerPanel } from "./components/browser/LaunchContainerPanel.js";
@@ -76,6 +80,8 @@ export const BrowserPage: FunctionComponent = () => {
   const [savingScript, setSavingScript] = useState(false);
   const [savingEnvironment, setSavingEnvironment] = useState(false);
   const [savingDefaultEnvironment, setSavingDefaultEnvironment] = useState(false);
+  const [savingStartupCommand, setSavingStartupCommand] = useState(false);
+  const [savingDockerAccessScope, setSavingDockerAccessScope] = useState<"project" | "session" | null>(null);
   const [navigationPending, setNavigationPending] = useState(false);
   const [removingSessionIds, setRemovingSessionIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +91,7 @@ export const BrowserPage: FunctionComponent = () => {
   const [environmentDraft, setEnvironmentDraft] = useState<SprintPreviewSession["environmentOverrides"]>([]);
   const [defaultEnvironmentDraft, setDefaultEnvironmentDraft] = useState<SprintPreviewSession["environmentOverrides"]>([]);
   const [environmentModalSessionId, setEnvironmentModalSessionId] = useState<string | null>(null);
+  const [startupCommandDraft, setStartupCommandDraft] = useState("");
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [launchSprintId, setLaunchSprintId] = useState("");
   const [frameSrc, setFrameSrc] = useState("");
@@ -101,6 +108,7 @@ export const BrowserPage: FunctionComponent = () => {
   const savingScriptRef = useRef(false);
   const savingEnvironmentRef = useRef(false);
   const savingDefaultEnvironmentRef = useRef(false);
+  const savingStartupCommandRef = useRef(false);
   const removingSessionIdsRef = useRef<Set<string>>(new Set());
   const logsCacheRef = useRef<Map<string, string>>(new Map());
   const logsRef = useRef("");
@@ -137,6 +145,8 @@ export const BrowserPage: FunctionComponent = () => {
   const showInAppBrowser = effectiveSettings?.settings.sprintPreview.showInAppBrowser ?? true;
   const launchEnabled = previewEnabled && showInAppBrowser;
   const defaultEnvironmentVariables = effectiveSettings?.settings.sprintPreview.environmentVariables ?? EMPTY_PREVIEW_ENVIRONMENT;
+  const defaultStartupCommand = effectiveSettings?.settings.sprintPreview.startupCommand ?? "";
+  const projectDockerAccessEnabled = effectiveSettings?.settings.sprintPreview.allowDockerAccess ?? false;
   const visibleSelectedSession = selectedSession && !removingSessionIdSet.has(selectedSession.id)
     ? selectedSession
     : null;
@@ -167,6 +177,7 @@ export const BrowserPage: FunctionComponent = () => {
   const environmentModalSession = environmentModalSessionId
     ? sessionCards.find((session) => session.id === environmentModalSessionId) ?? null
     : null;
+  const selectedDockerAccessEnabled = visibleSelectedSession?.dockerAccessOverride ?? projectDockerAccessEnabled;
   const navigationDisabledReason = navigationPending
     ? "Preview navigation is sending the previous command. Wait for the control to become available before submitting another navigation command."
     : !visibleSelectedSession
@@ -228,6 +239,7 @@ export const BrowserPage: FunctionComponent = () => {
   useEffect(() => {
     if (visibleSelectedSession) {
       setEnvironmentDraft(visibleSelectedSession.environmentOverrides ?? []);
+      setStartupCommandDraft(visibleSelectedSession.startupCommandOverride ?? "");
       const nextPrimary = getPrimaryPreviewPortMapping(visibleSelectedSession);
       if (nextPrimary) {
         setSelectedPortBySessionId((current) => (
@@ -565,8 +577,11 @@ export const BrowserPage: FunctionComponent = () => {
       }
       await refreshSessions(true);
       setFrameSrc(buildPreviewUrl(session.id, normalizePath(currentPathRef.current)));
-
-      browserFeedback.setSuccess("Container launched successfully");
+      if (session.status === "error") {
+        browserFeedback.setError(`Container failed to start${session.lastError ? `: ${session.lastError}` : "."}`);
+      } else {
+        browserFeedback.setSuccess("Container launched successfully");
+      }
     } catch (actionError) {
       browserFeedback.setError(`Failed to launch container: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
     } finally {
@@ -586,10 +601,14 @@ export const BrowserPage: FunctionComponent = () => {
     setPendingSessionAction("rebuild");
     browserFeedback.setPending("Rebuilding container...");
     try {
-      await rebuildPreviewSession(visibleSelectedSession.projectId, visibleSelectedSession.sprintId, visibleSelectedSession.id);
+      const rebuilt = await rebuildPreviewSession(visibleSelectedSession.projectId, visibleSelectedSession.sprintId, visibleSelectedSession.id);
       await refreshSessions(true);
       reloadFrame();
-      browserFeedback.setSuccess("Container rebuilt successfully");
+      if (rebuilt?.status === "error") {
+        browserFeedback.setError(`Container rebuild failed${rebuilt.lastError ? `: ${rebuilt.lastError}` : "."}`);
+      } else {
+        browserFeedback.setSuccess("Container rebuilt successfully");
+      }
     } catch (actionError) {
       browserFeedback.setError(`Failed to rebuild container: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
     } finally {
@@ -716,6 +735,65 @@ export const BrowserPage: FunctionComponent = () => {
     } finally {
       savingDefaultEnvironmentRef.current = false;
       setSavingDefaultEnvironment(false);
+    }
+  };
+
+  const handleSaveStartupCommandOverride = async () => {
+    if (!visibleSelectedSession || savingStartupCommandRef.current) return;
+    savingStartupCommandRef.current = true;
+    setSavingStartupCommand(true);
+    browserFeedback.setPending("Saving preview startup command...");
+    try {
+      const updated = await savePreviewStartupCommandOverride(
+        visibleSelectedSession.projectId,
+        visibleSelectedSession.sprintId,
+        visibleSelectedSession.id,
+        startupCommandDraft.trim() || null,
+      );
+      setStartupCommandDraft(updated.startupCommandOverride ?? "");
+      await refreshSessions(true);
+      browserFeedback.setSuccess("Preview startup command saved. Rebuild the container to apply it.");
+    } catch (actionError) {
+      browserFeedback.setError(`Failed to save preview startup command: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
+    } finally {
+      savingStartupCommandRef.current = false;
+      setSavingStartupCommand(false);
+    }
+  };
+
+  const handleToggleProjectDockerAccess = async () => {
+    if (!selectedProject || savingDockerAccessScope) return;
+    const nextValue = !projectDockerAccessEnabled;
+    setSavingDockerAccessScope("project");
+    browserFeedback.setPending(`${nextValue ? "Enabling" : "Disabling"} project-wide preview Docker access...`);
+    try {
+      await saveProjectPreviewDockerAccess(selectedProject.id, nextValue);
+      await refreshEffectiveSettings();
+      browserFeedback.setSuccess(`Project-wide preview Docker access ${nextValue ? "enabled" : "disabled"}. Rebuild containers to apply it.`);
+    } catch (actionError) {
+      browserFeedback.setError(`Failed to update project Docker access: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
+    } finally {
+      setSavingDockerAccessScope(null);
+    }
+  };
+
+  const handleSetSessionDockerAccess = async (dockerAccessOverride: boolean | null) => {
+    if (!visibleSelectedSession || savingDockerAccessScope) return;
+    setSavingDockerAccessScope("session");
+    browserFeedback.setPending("Saving selected container Docker access...");
+    try {
+      await savePreviewDockerAccessOverride(
+        visibleSelectedSession.projectId,
+        visibleSelectedSession.sprintId,
+        visibleSelectedSession.id,
+        dockerAccessOverride,
+      );
+      await refreshSessions(true);
+      browserFeedback.setSuccess("Selected container Docker access saved. Rebuild the container to apply it.");
+    } catch (actionError) {
+      browserFeedback.setError(`Failed to update container Docker access: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
+    } finally {
+      setSavingDockerAccessScope(null);
     }
   };
 
@@ -900,6 +978,70 @@ export const BrowserPage: FunctionComponent = () => {
             launchBusy={launching}
           />
           <CollapsiblePanel
+            title="Docker Access"
+            icon={SquareTerminal}
+            accentHex={EMBER_ACCENT_HEX}
+            defaultOpen={false}
+            badge={selectedDockerAccessEnabled ? "enabled" : "disabled"}
+          >
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-black/[0.08] bg-white/55 p-4 dark:border-white/[0.08] dark:bg-white/[0.035]">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900 dark:text-white">Project default</div>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                      Apply Docker daemon and Compose access to every preview container unless a container overrides it.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-label="Project-wide preview Docker access"
+                    aria-checked={projectDockerAccessEnabled}
+                    aria-busy={savingDockerAccessScope === "project"}
+                    disabled={!selectedProject || savingDockerAccessScope !== null}
+                    onClick={() => void handleToggleProjectDockerAccess()}
+                    className={`relative mt-0.5 h-7 w-12 shrink-0 rounded-full border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${projectDockerAccessEnabled ? "border-signal-500/70 bg-signal-500" : "border-slate-300 bg-slate-200 dark:border-slate-600 dark:bg-slate-700"}`}
+                  >
+                    <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${projectDockerAccessEnabled ? "translate-x-5" : "translate-x-0.5"}`} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-black/[0.08] bg-white/55 p-4 dark:border-white/[0.08] dark:bg-white/[0.035]">
+                <label htmlFor="preview-container-docker-access" className="text-sm font-semibold text-slate-900 dark:text-white">
+                  Selected container
+                </label>
+                <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                  Override Docker access for {visibleSelectedSession?.sprintName || "the selected preview container"}.
+                </p>
+                <select
+                  id="preview-container-docker-access"
+                  aria-label="Selected container Docker access policy"
+                  value={visibleSelectedSession?.dockerAccessOverride === null || visibleSelectedSession?.dockerAccessOverride === undefined
+                    ? "inherit"
+                    : visibleSelectedSession.dockerAccessOverride ? "enabled" : "disabled"}
+                  disabled={!visibleSelectedSession || savingDockerAccessScope !== null}
+                  aria-busy={savingDockerAccessScope === "session"}
+                  onChange={(event) => {
+                    const value = (event.currentTarget as HTMLSelectElement).value;
+                    void handleSetSessionDockerAccess(value === "inherit" ? null : value === "enabled");
+                  }}
+                  className="mt-3 h-10 w-full rounded-xl border border-black/[0.1] bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-signal-500 focus:ring-2 focus:ring-signal-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.1] dark:bg-slate-900 dark:text-slate-200"
+                >
+                  <option value="inherit">Use project default ({projectDockerAccessEnabled ? "enabled" : "disabled"})</option>
+                  <option value="enabled">Enable for this container</option>
+                  <option value="disabled">Disable for this container</option>
+                </select>
+              </div>
+
+              <div className="flex gap-2 rounded-2xl border border-status-amber/30 bg-status-amber/10 px-3 py-3 text-xs leading-relaxed text-amber-900 dark:text-amber-200" role="note">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>Docker daemon access is equivalent to host-level control. Enable it only for trusted repositories. Changes apply after a rebuild.</span>
+              </div>
+            </div>
+          </CollapsiblePanel>
+          <CollapsiblePanel
             title="Selected Sprint"
             icon={Compass}
             accentHex={SIGNAL_ACCENT_HEX}
@@ -1034,6 +1176,61 @@ export const BrowserPage: FunctionComponent = () => {
                 >
                   <Save className="h-4 w-4" strokeWidth={2} />
                   {savingDefaultEnvironment ? "Saving..." : "Save defaults"}
+                </button>
+              </div>
+            </div>
+          </CollapsiblePanel>
+
+          <CollapsiblePanel
+            title="Startup command"
+            icon={SquareTerminal}
+            accentHex={SIGNAL_ACCENT_HEX}
+            defaultOpen={false}
+          >
+            <div className="space-y-3">
+              <div>
+                <label htmlFor="preview-startup-command-override" className="text-sm font-semibold text-slate-900 dark:text-white">
+                  Selected container override
+                </label>
+                <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                  Leave blank to use {defaultStartupCommand ? "the project default shown below" : "the auto-detected startup command"}. The override applies after the next rebuild.
+                </p>
+              </div>
+              <input
+                id="preview-startup-command-override"
+                type="text"
+                value={startupCommandDraft}
+                maxLength={8192}
+                disabled={!visibleSelectedSession || savingStartupCommand}
+                onInput={(event) => setStartupCommandDraft((event.currentTarget as HTMLInputElement).value)}
+                placeholder={defaultStartupCommand || "pnpm dev --host 0.0.0.0"}
+                className="h-11 w-full rounded-2xl border border-black/[0.08] bg-white/70 px-4 font-mono text-xs text-slate-800 outline-none transition focus:border-signal-500/50 focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-100"
+              />
+              {defaultStartupCommand && (
+                <div className="rounded-xl border border-black/[0.06] bg-slate-100/70 px-3 py-2 dark:border-white/[0.06] dark:bg-white/[0.04]">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Project default</div>
+                  <code className="mt-1 block break-all text-xs text-slate-700 dark:text-slate-300">{defaultStartupCommand}</code>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-3">
+                <div id="preview-startup-command-save-status" role="status" aria-live="polite" className="min-h-4 text-xs text-slate-500 dark:text-slate-400">
+                  {savingStartupCommand
+                    ? "Saving startup command override."
+                    : visibleSelectedSession
+                      ? "Save the override, then rebuild this container."
+                      : "Select a preview container before editing its startup command."}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveStartupCommandOverride}
+                  disabled={!visibleSelectedSession || savingStartupCommand}
+                  aria-disabled={!visibleSelectedSession || savingStartupCommand}
+                  aria-busy={savingStartupCommand}
+                  aria-describedby="preview-startup-command-save-status"
+                  className="inline-flex h-10 shrink-0 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                >
+                  <Save className="h-4 w-4" strokeWidth={2} />
+                  {savingStartupCommand ? "Saving..." : "Save command"}
                 </button>
               </div>
             </div>

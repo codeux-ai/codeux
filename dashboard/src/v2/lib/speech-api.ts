@@ -3,6 +3,7 @@ import type {
   SpeechTranscriptionErrorCode,
   SpeechTranscriptionProvider,
   SpeechTranscriptionResult,
+  SpeechModelStatus,
 } from "../types.js";
 
 export interface TranscribeSpeechAudioInput {
@@ -143,3 +144,40 @@ export const transcribeSpeechAudio = async (
     };
   }
 };
+
+export async function listSpeechModels(): Promise<SpeechModelStatus[]> {
+  const response = await fetch("/api/speech/models", { cache: "no-store" });
+  if (!response.ok) throw new Error("Speech model catalog could not be loaded.");
+  return await response.json() as SpeechModelStatus[];
+}
+
+export async function downloadSpeechModel(modelId: string, acceptedLicenseId: string): Promise<void> {
+  const response = await fetch(`/api/speech/models/${encodeURIComponent(modelId)}/download`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ acceptedLicenseId }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error || "Speech model download could not be started.");
+  }
+}
+
+export async function deleteSpeechModel(modelId: string): Promise<void> {
+  const response = await fetch(`/api/speech/models/${encodeURIComponent(modelId)}`, { method: "DELETE" });
+  if (!response.ok) throw new Error("Speech model could not be deleted.");
+}
+
+export async function synthesizeSpeech(text: string, projectId?: string | null, voice?: string | null): Promise<Blob> {
+  const response = await fetch("/api/speech/synthesis", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, projectId, voice }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { error?: { message?: string } | string };
+    const message = typeof body.error === "string" ? body.error : body.error?.message;
+    throw new Error(message || "Speech synthesis failed.");
+  }
+  return await response.blob();
+}

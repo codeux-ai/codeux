@@ -12,6 +12,7 @@ import { EmbeddingService } from "./embedding-service.js";
 import { MemoryRepository } from "../repositories/memory-repository.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
 import type { Logger } from "../shared/logging/logger.js";
+import { assertModelLicenseAccepted } from "./model-license-policy.js";
 
 export class EmbeddingModelManager {
   private readonly activeDownloads = new Map<string, AbortController>();
@@ -34,6 +35,7 @@ export class EmbeddingModelManager {
 
   async downloadModel(
     modelId: EmbeddingModelId,
+    acceptedLicenseId?: string,
     onProgress?: (progress: number) => void,
   ): Promise<void> {
     if (this.activeDownloads.has(modelId)) {
@@ -45,6 +47,7 @@ export class EmbeddingModelManager {
     if (!catalog) {
       throw new Error(`Unknown model: ${modelId}`);
     }
+    assertModelLicenseAccepted(catalog.license, modelId, acceptedLicenseId);
 
     const controller = new AbortController();
     this.activeDownloads.set(modelId, controller);
@@ -110,6 +113,12 @@ export class EmbeddingModelManager {
     } finally {
       this.activeDownloads.delete(modelId);
     }
+  }
+
+  validateDownloadAcceptance(modelId: EmbeddingModelId, acceptedLicenseId?: string): void {
+    const catalog = getEmbeddingModelInfo(modelId, this.getCustomModels());
+    if (!catalog) throw new Error(`Unknown model: ${modelId}`);
+    assertModelLicenseAccepted(catalog.license, modelId, acceptedLicenseId);
   }
 
   cancelDownload(modelId: EmbeddingModelId): void {

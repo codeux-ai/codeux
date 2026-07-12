@@ -38,6 +38,7 @@ describe("initializeProject validation", () => {
     );
 
     expect(createProject).toHaveBeenCalledWith(expect.objectContaining({
+      initMode: "existing",
       settingsOverrides: expect.objectContaining({
         agents: expect.objectContaining({
           routing: expect.objectContaining({
@@ -83,7 +84,7 @@ describe("initializeProject validation", () => {
     expect(createProject).toHaveBeenCalledWith(expect.objectContaining({
       sourceType: "local",
       sourceRef: path.join(os.homedir(), "valid-local-repo"),
-      initMode: undefined,
+      initMode: "new-local",
     }));
   });
 
@@ -163,7 +164,7 @@ describe("initializeProject validation", () => {
       sourceType: "git",
       sourceRef: "https://github.com/a/b",
       cloneDir: expectedCloneRoot,
-      initMode: undefined,
+      initMode: "new-remote",
       settingsOverrides: expect.objectContaining({
         designGuidance: expect.objectContaining({
           selectedStyleguideId: CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,

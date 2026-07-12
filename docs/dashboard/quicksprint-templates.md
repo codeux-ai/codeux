@@ -107,20 +107,35 @@ The REST API and MCP `manage_quicksprints` tool expose these actions:
 
 `QuicksprintService.launchDetachedQuicksprint` is the internal primitive for chat quickactions that need a sprint record immediately while planning continues in the background. It creates the sprint synchronously, starts the same planning flow with the same prompt composition and override resolution as `execute`, and returns a planning request descriptor with `projectId`, `sprintId`, `templateId`, `submitMode`, `clientRequestId`, planner options for request tracking, and the detached planning promise. Chat create-app quickactions attach to that promise so the backend can update the app progress widget and append any queued thread follow-ups to the sprint goal after planning resolves, without frontend polling. The existing REST `/api/projects/:projectId/quicksprints/execute` route and MCP `execute` / `start` actions remain awaited: they return only after planning completes or fails.
 
-Current built-in purpose set:
+Current built-in purpose sets:
 - `Fullstack JS App`
+- `Create App`
 
 That purpose selector is intentionally future-facing. Additional built-in sets can be added later for other language and product families without redesigning the Quicksprint browse flow.
 
 ## Built-In Templates
 
-The current `Fullstack JS App` purpose set ships with six built-ins:
+The `Fullstack JS App` purpose set ships with six built-ins:
 - `Code Quality & Performance Audit`
 - `Security Vulnerability Scan`
 - `UI Usability & Accessibility Audit`
 - `UI - Design Improvements`
 - `UI - Responsive Layout Improvements`
 - `UI - Interactions & Design Improvements`
+
+The `Create App` purpose set ships with five repository-aware product templates. `src/domain/chat/create-app-quickaction-catalog.ts` is the single mapping used by the dashboard and runtime:
+
+| Chat action | Kind | Template id | Request-scoped guidance | Planning emphasis |
+| --- | --- | --- | --- | --- |
+| `Create Web App` | `web_app` | `qs-create-web-app` | `code-ux-product-stack` + `code-ux-award-winning` | Product journeys, information architecture, service boundaries, responsive and accessible states, and operational validation. |
+| `Create Desktop App` | `desktop_app` | `qs-create-desktop-app` | `electron-desktop-app` + `code-ux-award-winning` | Window/process lifecycle, typed privileged boundaries, local data safety, recovery, packaging, resizing, and keyboard behavior. |
+| `Create Onlineshop` | `online_shop` | `qs-create-online-shop` | `code-ux-product-stack` + `ecommerce` | Discovery through order completion, with money, inventory, checkout, payment, privacy, idempotency, and failure recovery as explicit boundaries. |
+| `Create Portfolio` | `portfolio` | `qs-create-portfolio` | `code-ux-product-stack` + `marketing-site` | Narrative, evidence, real repository content, contact paths, responsive semantics, reduced motion, performance, metadata, and discoverability. |
+| `Create Game` | `game` | `qs-create-game` | `code-ux-product-stack` + `game-experience` | Core loop, deterministic state and controls, progression/recovery, accessibility alternatives, performance budgets, and a runnable play-through. |
+
+The backend validates the kind/template/guidance combination and overlays the ID-only guidance on that planning request; it does not save the selection to project settings. Each create-app prompt inspects the repository, reconciles the overlay with stronger repository-local constraints, avoids generic stack or file-layout assumptions and confirmation steps, and asks for an implementation-ready dependency DAG with action-specific acceptance and verification work.
+
+Chat launches these templates through detached `Plan & Start`, immediately creates the sprint and `app_progress` transcript widget, and lets planning finish in the background. The widget reports the catalog app kind and sprint, effective stack fields, metadata-driven Planning/Plan/Showing each Task/Start/Finish stages, status, and suggestion tags. Plain messages sent in the same thread during planning become sprint follow-up direction: they queue while no tasks exist, flush to `## Additional direction from chat` after successful planning, or append there immediately once tasks exist. Generated task prompts are not rewritten, and failed planning retains the queue for recovery.
 
 These templates are designed to produce strong planning subtasks without assuming any repository-specific file layout.
 

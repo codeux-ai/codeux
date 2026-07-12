@@ -15,6 +15,8 @@ export function claimNextTaskDispatchTransaction(
     ownerKey: string;
     leaseToken: string;
     leaseExpiresAt: string;
+    dispatchId?: string;
+    taskId?: string;
     sprintId?: string;
     sprintRunId?: string;
     nowIso: string;
@@ -24,6 +26,14 @@ export function claimNextTaskDispatchTransaction(
     const clauses = ["project_id = ?", "executor_type = ?", "status = 'queued'"];
     const values: string[] = [args.projectId, args.executorType];
 
+    if (args.dispatchId) {
+      clauses.push("id = ?");
+      values.push(args.dispatchId);
+    }
+    if (args.taskId) {
+      clauses.push("task_id = ?");
+      values.push(args.taskId);
+    }
     if (args.sprintId) {
       clauses.push("sprint_id = ?");
       values.push(args.sprintId);

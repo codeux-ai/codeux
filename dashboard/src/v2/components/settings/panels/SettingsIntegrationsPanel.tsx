@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { Activity, AlertCircle, ArrowLeft, Hash, Key, Link2, MessageCircle, Plug, Plus, RefreshCw, Save, Send, Settings2, ShieldCheck, Trash2 } from "lucide-preact";
+import { Activity, AlertCircle, ArrowLeft, FolderOpen, Hash, Key, Link2, MessageCircle, Plug, Plus, RefreshCw, Save, Send, Settings2, ShieldCheck, Trash2 } from "lucide-preact";
 import type { SettingsPageState, IntegrationId } from "../../../hooks/use-settings-page-state.js";
 import { NoticePanel, ActionButton } from "../SettingsSurface.js";
 import { NumberInput, PillChoiceGroup, ProviderLogo, Row, SecretInput, SelectInput, TextInput, Toggle } from "../SettingsFormFields.js";
@@ -48,6 +48,7 @@ import type {
   DashboardChatProviderSetupDefinition,
 } from "../../../lib/chat-provider-api.js";
 import { isDeprecatedProvider, providerLifecycle } from "../../../lib/provider-lifecycle.js";
+import { LocalFilePickerField } from "../LocalFilePickerField.js";
 
 type PublicProviderId = Exclude<ProviderId, "mockup-cli">;
 
@@ -618,6 +619,12 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
       label: "GIT",
       purpose: "Source-control tokens, CI, PRs, and git identity",
       items: integrations.filter((integration) => integration.id === "github" || integration.id === "gitlab"),
+    },
+    {
+      id: "storage",
+      label: "STORAGE & MOUNTS",
+      purpose: "Project-linked host storage mounted into Docker workspaces",
+      items: integrations.filter((integration) => integration.id === "google-drive"),
     },
     {
       id: "pm",
@@ -1339,6 +1346,89 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
       return renderChatProviderDetail(integrationId);
     }
 
+    if (integrationId === "google-drive") {
+      const googleDrive = editableSettings.googleDrive;
+      const hasLinkedDirectory = googleDrive.hostPath.trim().length > 0;
+      return (
+        <>
+          {backButton}
+          <SectionCard
+            title="Google Drive Configuration"
+            watermark="DRV"
+            icon={<FolderOpen strokeWidth={2.4} />}
+            badge={getBadge("googleDrive.enabled", "googleDrive.hostPath", "googleDrive.accessMode")}
+            helpId="integrations"
+          >
+            <NoticePanel tone="neutral" title="Docker-only linked directory">
+              Google Drive must already be linked and synced on this host. Code UX mounts the selected directory at the fixed <code>/mnt/code-ux/google-drive</code> container path for Docker runs only; no Google credentials are stored.
+            </NoticePanel>
+            <Row
+              label="Enable Google Drive mount"
+              description={hasLinkedDirectory
+                ? "Make the linked directory available to Docker-backed provider workspaces."
+                : "Choose a linked directory before this mount can become active."}
+              badge={getFieldBadge("googleDrive.enabled")}
+            >
+              <Toggle
+                aria-label="Enable Google Drive mount"
+                value={googleDrive.enabled}
+                onChange={() => updateEditableSettings((current) => ({
+                  ...current,
+                  googleDrive: {
+                    ...current.googleDrive,
+                    enabled: !current.googleDrive.enabled,
+                  },
+                }))}
+              />
+            </Row>
+            <Row
+              label="Linked Drive directory"
+              description="Select the host directory maintained by Google Drive for desktop. The host path is used only to create the Docker mount."
+              badge={getFieldBadge("googleDrive.hostPath")}
+            >
+              <LocalFilePickerField
+                value={googleDrive.hostPath}
+                onChange={(hostPath) => updateEditableSettings((current) => ({
+                  ...current,
+                  googleDrive: {
+                    ...current.googleDrive,
+                    hostPath,
+                  },
+                }))}
+                label="Linked Drive directory"
+                placeholder="Select a linked Google Drive directory"
+                helperText={hasLinkedDirectory
+                  ? "This host path stays inside the editable control and mounts at /mnt/code-ux/google-drive."
+                  : "No directory linked. Browse or enter the local Google Drive directory to configure the mount."}
+              />
+            </Row>
+            <Row
+              label="Access mode"
+              description="Read-only is the recommended default. Read-write lets containerized agents modify synced Drive files."
+              badge={getFieldBadge("googleDrive.accessMode")}
+              last
+            >
+              <SelectInput
+                value={googleDrive.accessMode}
+                onChange={(accessMode) => updateEditableSettings((current) => ({
+                  ...current,
+                  googleDrive: {
+                    ...current.googleDrive,
+                    accessMode: accessMode === "read-write" ? "read-write" : "read-only",
+                  },
+                }))}
+                options={[
+                  { value: "read-only", label: "Read-only (recommended)" },
+                  { value: "read-write", label: "Read-write" },
+                ]}
+                aria-label="Google Drive access mode"
+              />
+            </Row>
+          </SectionCard>
+        </>
+      );
+    }
+
     if (integrationId === "github" || integrationId === "gitlab") {
       const isGitLab = integrationId === "gitlab";
       const hostLabel = isGitLab ? "GitLab" : "GitHub";
@@ -1738,6 +1828,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
         watermark="INT"
         badge={getBadge("integrations", "cliWorkflow")}
         icon={<Plug strokeWidth={2.4} />}
+        drilldown={false}
         actions={
           selectedIntegration ? null : (
             <>
@@ -1873,6 +1964,43 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                           <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pl-14">
                             <div className="flex flex-wrap gap-2">
                               <IntegrationPill label="Read-only import" />
+                              <IntegrationPill label={configured ? "Configured" : "Not configured"} tone={configured ? "neutral" : "muted"} />
+                            </div>
+                            <CatalogActionButton label="Manage" icon={Settings2} onClick={() => setSelectedIntegration(integration.id)} />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (integration.id === "google-drive") {
+                    const googleDrive = editableSettings.googleDrive;
+                    const configured = googleDrive.hostPath.trim().length > 0;
+                    const active = googleDrive.enabled && configured;
+                    return (
+                      <div key={integration.id} className={`group relative min-h-[156px] overflow-hidden rounded-[1.35rem] border p-5 shadow-[0_12px_30px_rgba(15,23,42,0.035)] transition-[border-color,background-color,transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_42px_rgba(15,23,42,0.07)] ${
+                        active
+                          ? "border-signal-500/24 bg-white/90 hover:border-signal-500/34 dark:border-signal-400/24 dark:bg-void-800/82 dark:hover:border-signal-400/34 dark:hover:bg-void-800/92"
+                          : "border-black/[0.06] bg-white/88 hover:border-black/[0.12] hover:bg-white dark:border-white/[0.08] dark:bg-void-800/78 dark:hover:border-white/[0.14] dark:hover:bg-void-800/88"
+                      }`}>
+                        <div aria-hidden className={`absolute left-0 top-5 bottom-5 w-1 rounded-r-full transition-opacity ${active ? "bg-signal-500 opacity-100 dark:bg-signal-400" : "bg-slate-300 opacity-0 group-hover:opacity-100 dark:bg-slate-600"}`} />
+                        <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.08] to-transparent dark:via-white/[0.12]" />
+                        <div className="flex h-full flex-col gap-4">
+                          <div className="flex items-start gap-3">
+                            <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[1rem] border ${active ? "border-signal-500/20 bg-signal-500/[0.1] text-signal-700 dark:border-signal-400/20 dark:bg-signal-400/[0.12] dark:text-signal-200" : "border-black/[0.06] bg-black/[0.035] text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-500"}`} aria-hidden title="Google Drive">
+                              <FolderOpen className="h-5 w-5" />
+                            </span>
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="text-sm font-semibold text-slate-900 dark:text-white">{integration.label}</div>
+                                {active ? <IntegrationPill label="Active" tone="active" /> : null}
+                              </div>
+                              <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{integration.description}</div>
+                            </div>
+                          </div>
+                          <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pl-14">
+                            <div className="flex flex-wrap gap-2">
+                              <IntegrationPill label="Docker mount" />
                               <IntegrationPill label={configured ? "Configured" : "Not configured"} tone={configured ? "neutral" : "muted"} />
                             </div>
                             <CatalogActionButton label="Manage" icon={Settings2} onClick={() => setSelectedIntegration(integration.id)} />

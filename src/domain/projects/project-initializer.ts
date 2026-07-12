@@ -105,7 +105,7 @@ export async function initializeProject(
       ...input,
       sourceType: "local",
       sourceRef: safeSourceRef,
-      initMode: undefined,
+      initMode: mode,
     }));
   }
 
@@ -141,10 +141,10 @@ export async function initializeProject(
       sourceType: "git",
       sourceRef: result.remoteUrl,
       cloneDir: cloneParentDir,
-      initMode: undefined,
+      initMode: mode,
     }));
   }
 
   // "existing" or absent — original behavior
-  return deps.createProject(withProjectManagerDashboardDefault(input));
+  return deps.createProject(withProjectManagerDashboardDefault({ ...input, initMode: "existing" }));
 }

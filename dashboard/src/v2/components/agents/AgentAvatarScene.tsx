@@ -27,6 +27,7 @@ import { h } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import * as THREE from "../../../lib/three-lite.js";
 import type { AgentAvatarConfig } from "../../types.js";
+import type { AgentResponseAnimation } from "../../../../../src/contracts/connection-chat-types.js";
 import {
   DEFAULT_AGENT_AVATAR_CONFIG,
   getAccentHex,
@@ -54,10 +55,22 @@ import {
 } from "../../lib/agent-avatar-logo.js";
 import { extrudeLogoPath, type LogoShapeFrame } from "../../lib/logo-shapes.js";
 import { AgentAvatarSvg } from "./AgentAvatarSvg.js";
+import {
+  AGENT_SCENE_TOOL_CATALOG,
+  getToolMotionPose,
+  type AgentSceneTool,
+  type ToolAnimationRef,
+  type ToolGeometryBlueprint,
+  type ToolMaterialRole,
+} from "../../lib/agent-scene-tools.js";
 
-interface AgentAvatarSceneProps {
+export type { AgentSceneTool } from "../../lib/agent-scene-tools.js";
+
+export interface AgentAvatarSceneProps {
   config?: AgentAvatarConfig;
   expression?: AgentAvatarExpression;
+  /** A validated, short-lived choreography layered over the semantic expression. */
+  animation?: AgentResponseAnimation;
   className?: string;
   fallbackMode?: boolean;
   /**
@@ -73,11 +86,14 @@ interface AgentAvatarSceneProps {
 /** How long the bot keeps watching after the last window-level mouse move. */
 const WINDOW_GAZE_HOLD_MS = 3000;
 
-/** Work tools the bot can "hold" beside itself while the runtime executes. */
-export type AgentSceneTool = "screwdriver" | "jackhammer" | "wrench" | "hammer" | "torch";
-
-/** Resting scale of the tool group once its entrance pop finishes. */
-const TOOL_SCALE = 0.5;
+const RESPONSE_ANIMATION_EXPRESSION: Record<AgentResponseAnimation, AgentAvatarExpression> = {
+  hyped: "hyped",
+  shake_head: "shake_head",
+  nod: "nod",
+  laughing: "laughing",
+  wink: "wink",
+  dance: "dance",
+};
 
 /* ── Hex string → THREE.Color int ── */
 function hexInt(hex: string, fallback = 0x000000): number {
@@ -443,147 +459,94 @@ function buildHeadphones(headphonesId: string, parent: THREE.Group, mats: Mats) 
 interface ToolRefs {
   group: THREE.Group;
   kind: AgentSceneTool;
-  spin?: THREE.Object3D;
-  piston?: THREE.Object3D;
+  animationRefs: Partial<Record<ToolAnimationRef, THREE.Object3D>>;
   tipMat?: THREE.MeshStandardMaterial;
+  glow?: THREE.Object3D;
+  accentLight: THREE.PointLight;
+  createdAt: number;
+  phase: "entering" | "active" | "exiting";
+  phaseStartedAt: number;
 }
 
-function buildTool(kind: AgentSceneTool, accent: number): ToolRefs {
+function buildToolGeometry(geometry: ToolGeometryBlueprint): THREE.BufferGeometry {
+  switch (geometry.type) {
+    case "box":
+      return new THREE.BoxGeometry(...geometry.size);
+    case "cylinder":
+      return new THREE.CylinderGeometry(
+        geometry.radiusTop,
+        geometry.radiusBottom,
+        geometry.height,
+        geometry.segments ?? 20,
+      );
+    case "sphere":
+      return new THREE.SphereGeometry(geometry.radius, geometry.segments ?? 16, geometry.segments ?? 16);
+    case "torus":
+      return new THREE.TorusGeometry(
+        geometry.radius,
+        geometry.tube,
+        geometry.radialSegments ?? 12,
+        geometry.tubularSegments ?? 32,
+        geometry.arc ?? Math.PI * 2,
+      );
+  }
+}
+
+function buildTool(kind: AgentSceneTool, accent: number, createdAt: number): ToolRefs {
+  const blueprint = AGENT_SCENE_TOOL_CATALOG[kind];
   const group = new THREE.Group();
-  const metal = new THREE.MeshStandardMaterial({ color: 0xb8bfc9, metalness: 0.85, roughness: 0.3 });
-  const grip = new THREE.MeshStandardMaterial({ color: 0x1c2126, metalness: 0.2, roughness: 0.7 });
-  const jade = new THREE.MeshStandardMaterial({ color: accent, emissive: accent, emissiveIntensity: 0.8, metalness: 0.3, roughness: 0.25 });
+  const materials: Partial<Record<ToolMaterialRole, THREE.Material>> = {};
+  const materialFor = (role: ToolMaterialRole): THREE.Material => {
+    const existing = materials[role];
+    if (existing) return existing;
+    const material: THREE.Material = role === "metal"
+      ? new THREE.MeshStandardMaterial({ color: blueprint.palette.metal, metalness: 0.9, roughness: 0.22 })
+      : role === "darkMetal"
+        ? new THREE.MeshStandardMaterial({ color: blueprint.palette.darkMetal, metalness: 0.78, roughness: 0.3 })
+        : role === "grip"
+          ? new THREE.MeshStandardMaterial({ color: blueprint.palette.grip, metalness: 0.08, roughness: 0.82 })
+          : role === "accent"
+            ? new THREE.MeshStandardMaterial({ color: accent, emissive: accent, emissiveIntensity: 0.55, metalness: 0.32, roughness: 0.25 })
+            : role === "hot"
+              ? new THREE.MeshStandardMaterial({ color: 0xfff7dc, emissive: accent, emissiveIntensity: 2.2, metalness: 0.05, roughness: 0.18 })
+              : new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.28, depthWrite: false });
+    materials[role] = material;
+    return material;
+  };
+  const animationRefs: Partial<Record<ToolAnimationRef, THREE.Object3D>> = {};
+  let tipMat: THREE.MeshStandardMaterial | undefined;
+  let glow: THREE.Object3D | undefined;
 
-  if (kind === "screwdriver") {
-    // Horizontal drill body, chuck + spinning bit pointing at the bot
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.15, 0.5, 24), jade);
-    body.rotation.z = Math.PI / 2;
-    group.add(body);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.022, 12, 32), metal);
-    ring.rotation.y = Math.PI / 2;
-    ring.position.x = -0.18;
-    group.add(ring);
-    const chuck = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.1, 0.18, 20), metal);
-    chuck.rotation.z = Math.PI / 2;
-    chuck.position.x = -0.33;
-    group.add(chuck);
-    const bitGroup = new THREE.Group();
-    bitGroup.rotation.z = Math.PI / 2;
-    bitGroup.position.x = -0.52;
-    const bit = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.22, 6), metal);
-    bitGroup.add(bit);
-    group.add(bitGroup);
-    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.34, 0.14), grip);
-    handle.position.set(0.1, -0.24, 0);
-    handle.rotation.z = -0.18;
-    group.add(handle);
-    const battery = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.11, 0.17), grip);
-    battery.position.set(0.15, -0.42, 0);
-    group.add(battery);
-    const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.08, 0.06), metal);
-    trigger.position.set(-0.02, -0.14, 0);
-    group.add(trigger);
-    return { group, kind, spin: bit };
+  for (const part of blueprint.parts) {
+    const material = materialFor(part.material);
+    const mesh = new THREE.Mesh(buildToolGeometry(part.geometry), material);
+    mesh.name = `${kind}-${part.id}`;
+    if (part.position) mesh.position.set(...part.position);
+    if (part.rotation) mesh.rotation.set(...part.rotation);
+    if (part.scale) mesh.scale.set(...part.scale);
+    group.add(mesh);
+    if (part.animationRef) animationRefs[part.animationRef] = mesh;
+    if (part.animationRef === "tip") tipMat = material as THREE.MeshStandardMaterial;
+    if (part.animationRef === "glow") glow = mesh;
   }
 
-  if (kind === "jackhammer") {
-    // Upright body, T-handles, chisel that hammers downward
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, 0.44, 24), jade);
-    body.position.y = 0.18;
-    group.add(body);
-    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.025, 12, 32), metal);
-    collar.rotation.x = Math.PI / 2;
-    collar.position.y = 0.0;
-    group.add(collar);
-    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.6, 16), metal);
-    bar.rotation.z = Math.PI / 2;
-    bar.position.y = 0.42;
-    group.add(bar);
-    [-1, 1].forEach((side) => {
-      const hand = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.14, 16), grip);
-      hand.rotation.z = Math.PI / 2;
-      hand.position.set(side * 0.33, 0.42, 0);
-      group.add(hand);
-    });
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.2, 16), metal);
-    shaft.position.y = -0.14;
-    group.add(shaft);
-    const chisel = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.012, 0.3, 12), metal);
-    chisel.position.y = -0.36;
-    chisel.userData.baseY = -0.36;
-    group.add(chisel);
-    return { group, kind, piston: chisel };
-  }
-
-  if (kind === "wrench") {
-    // Open-end wrench — C-shaped jaw + long handle, ratcheting swing
-    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.09, 0.05), metal);
-    handle.position.x = 0.1;
-    group.add(handle);
-    const jaw = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.05, 14, 40, Math.PI * 1.45), metal);
-    jaw.position.x = -0.24;
-    jaw.rotation.z = Math.PI * 0.28;
-    group.add(jaw);
-    const tag = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.055), jade);
-    tag.position.x = 0.3;
-    group.add(tag);
-    return { group, kind };
-  }
-
-  if (kind === "hammer") {
-    // Claw hammer — angled handle with a compact metal head and tapping swing
-    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.56, 18), grip);
-    handle.rotation.z = -0.58;
-    handle.position.set(0.08, -0.12, 0);
-    group.add(handle);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.13, 0.1), metal);
-    head.position.set(-0.08, 0.18, 0);
-    head.rotation.z = -0.58;
-    group.add(head);
-    const face = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.07, 18), metal);
-    face.rotation.y = Math.PI / 2;
-    face.position.set(-0.24, 0.28, 0);
-    group.add(face);
-    const claw = new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.026, 10, 24, Math.PI * 1.1), metal);
-    claw.position.set(0.08, 0.07, 0);
-    claw.rotation.z = Math.PI * 0.8;
-    group.add(claw);
-    const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.09, 0.11), jade);
-    band.position.set(0, 0.04, 0);
-    band.rotation.z = -0.58;
-    group.add(band);
-    return { group, kind };
-  }
-
-  // Welding torch — angled handle, bent nozzle, flickering glow tip
-  const tipMat = new THREE.MeshStandardMaterial({
-    color: 0xfff4dd,
-    emissive: accent,
-    emissiveIntensity: 2.0,
-    metalness: 0.1,
-    roughness: 0.2,
-  });
-  const handleT = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.075, 0.32, 20), grip);
-  handleT.rotation.z = 0.6;
-  group.add(handleT);
-  const collarT = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.065, 0.1, 20), jade);
-  collarT.rotation.z = 0.6;
-  collarT.position.set(-0.115, 0.17, 0);
-  group.add(collarT);
-  const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.045, 0.22, 16), metal);
-  nozzle.rotation.z = 0.95;
-  nozzle.position.set(-0.24, 0.26, 0);
-  group.add(nozzle);
-  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 16), tipMat);
-  tip.position.set(-0.34, 0.31, 0);
-  group.add(tip);
-  const glow = new THREE.Mesh(
-    new THREE.SphereGeometry(0.09, 16, 16),
-    new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.3, depthWrite: false }),
-  );
-  glow.position.copy(tip.position);
-  group.add(glow);
-  return { group, kind, tipMat };
+  const accentLight = new THREE.PointLight(accent, blueprint.palette.accentLightIntensity, 2.4);
+  accentLight.position.set(-0.15, 0.25, 0.55);
+  group.add(accentLight);
+  group.position.set(...blueprint.anchor.position);
+  group.rotation.set(...blueprint.anchor.rotation);
+  group.scale.setScalar(0.001);
+  return {
+    group,
+    kind,
+    animationRefs,
+    tipMat,
+    glow,
+    accentLight,
+    createdAt,
+    phase: "entering",
+    phaseStartedAt: createdAt,
+  };
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -976,16 +939,12 @@ function disposeSubtree(
     for (const m of mats) {
       if (seenMats.has(m)) continue;
       seenMats.add(m);
-      // Some materials hold textures we should free as well
-      const std = m as THREE.MeshStandardMaterial;
-      if (std.map && !seenTextures.has(std.map)) {
-        seenTextures.add(std.map);
-      }
-      if (std.envMap && !seenTextures.has(std.envMap)) {
-        seenTextures.add(std.envMap);
-      }
-      if (std.normalMap && !seenTextures.has(std.normalMap)) {
-        seenTextures.add(std.normalMap);
+      // Material subclasses can expose textures through many map slots. Walk
+      // every enumerable property so future tool palettes cannot leak a map.
+      for (const value of Object.values(m)) {
+        if (value && typeof value === "object" && "isTexture" in value) {
+          seenTextures.add(value as THREE.Texture);
+        }
       }
       m.dispose();
     }
@@ -1025,6 +984,7 @@ function disposeSubtree(
 export function AgentAvatarScene({
   config = DEFAULT_AGENT_AVATAR_CONFIG,
   expression = "happy",
+  animation,
   className = "",
   fallbackMode = false,
   pointerTracking = "hover",
@@ -1037,6 +997,9 @@ export function AgentAvatarScene({
     return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   });
   const configKey = `${config.chassis}-${config.eyes}-${config.antenna}-${config.wings}-${config.headphones}-${config.accent}-${config.baseColor}-${config.visorColor}`;
+  const choreographyExpression = animation
+    ? RESPONSE_ANIMATION_EXPRESSION[animation]
+    : expression;
 
   /** Persistent across config changes. Created once on mount. */
   const rendererRef = useRef<{
@@ -1056,6 +1019,12 @@ export function AgentAvatarScene({
     particles: THREE.Points;
     envMap: THREE.CubeTexture | null;
   } | null>(null);
+
+  /** Tool swaps animate independently and never rebuild the renderer. */
+  const toolRef = useRef<{ active: ToolRefs | null; exiting: ToolRefs[] }>({
+    active: null,
+    exiting: [],
+  });
 
   /** Normalized pointer position over the stage — drives head parallax. */
   const pointerRef = useRef({ x: 0, y: 0, active: false });
@@ -1179,6 +1148,7 @@ export function AgentAvatarScene({
         disposeSubtree(r.avatarGroup, [avatarRef.current.envMap]);
         avatarRef.current = null;
       }
+      toolRef.current = { active: null, exiting: [] };
       // Dispose lights (no resources, but clear from scene for safety)
       if (mount.contains(r.renderer.domElement)) {
         mount.removeChild(r.renderer.domElement);
@@ -1246,32 +1216,22 @@ export function AgentAvatarScene({
   }, [configKey, shouldUseFallback, webglError]);
 
   /* ── Effect 2b: work tool lifecycle — independent of the avatar rebuild ── */
-  const toolRef = useRef<ToolRefs | null>(null);
   useEffect(() => {
     const r = rendererRef.current;
     if (!r || shouldUseFallback || webglError) return;
-    if (toolRef.current) {
-      r.avatarGroup.remove(toolRef.current.group);
-      disposeSubtree(toolRef.current.group);
-      toolRef.current = null;
+    const now = performance.now() / 1000;
+    const current = toolRef.current.active;
+    if (current) {
+      current.phase = "exiting";
+      current.phaseStartedAt = now;
+      toolRef.current.exiting.push(current);
+      toolRef.current.active = null;
     }
     if (!tool) return;
     const accent = hexInt(getAccentHex(config.accent), 0x00eaab);
-    const refs = buildTool(tool, accent);
-    // Keep inside the camera frustum (half-width ≈1.47 at the bot's plane)
-    refs.group.position.set(1.08, -0.42, 0.55);
-    refs.group.rotation.z = -0.12;
-    refs.group.scale.setScalar(0.001); // entrance pop — the loop lerps it up
+    const refs = buildTool(tool, accent, now);
     r.avatarGroup.add(refs.group);
-    toolRef.current = refs;
-    return () => {
-      const r2 = rendererRef.current;
-      if (r2 && toolRef.current) {
-        r2.avatarGroup.remove(toolRef.current.group);
-        disposeSubtree(toolRef.current.group);
-        toolRef.current = null;
-      }
-    };
+    toolRef.current.active = refs;
   }, [tool, configKey, shouldUseFallback, webglError]);
 
   /* ════════════════════════════════════════════════════════════════════════
@@ -1295,7 +1255,7 @@ export function AgentAvatarScene({
     let eyeScaleY = 1.0;
     let jewelIntensity = 0.95;
 
-    switch (expression) {
+    switch (choreographyExpression) {
       case "happy":
         bounceAmp = 0.06; bounceSpeed = 1.8;
         jewelIntensity = 1.0;
@@ -1390,7 +1350,7 @@ export function AgentAvatarScene({
         break;
     }
 
-    const animate = () => {
+    const animate = (frameTime = performance.now()) => {
       // Read the current scene + avatar each frame so the loop survives
       // config-driven avatar rebuilds without restarting.
       const r2 = rendererRef.current;
@@ -1430,18 +1390,18 @@ export function AgentAvatarScene({
 
       // Head pose — pointer parallax wins over idle drift when hovering
       const ptr = pointerRef.current;
-      if (expression === "shake_head") {
+      if (choreographyExpression === "shake_head") {
         // Slow, deliberate "no" — a fast shake reads as glitching
         p.headGroup.rotation.y = Math.sin(t * 1.8) * 0.22;
-      } else if (expression === "nod") {
+      } else if (choreographyExpression === "nod") {
         // Calm, reassuring "yes"
         p.headGroup.rotation.x = Math.sin(t * 1.6) * 0.14;
-      } else if (expression === "dance") {
+      } else if (choreographyExpression === "dance") {
         // Groove — side-to-side sway, alternating lean, little hip shift
         p.headGroup.rotation.z = Math.sin(t * 3.2) * 0.16;
         p.headGroup.rotation.y = Math.sin(t * 1.6) * 0.22;
         p.headGroup.position.x = Math.sin(t * 3.2) * 0.08;
-      } else if (expression === "laughing") {
+      } else if (choreographyExpression === "laughing") {
         // Soft chuckle — gentle pitch wobble thrown back
         p.headGroup.rotation.x = -0.1 + Math.sin(t * 5) * 0.04;
         p.headGroup.rotation.z = Math.sin(t * 2.5) * 0.03;
@@ -1452,7 +1412,7 @@ export function AgentAvatarScene({
         p.headGroup.rotation.x = THREE.MathUtils.lerp(p.headGroup.rotation.x, targetPitch, 0.08);
         p.headGroup.rotation.z = THREE.MathUtils.lerp(p.headGroup.rotation.z, headTiltZ, 0.06);
       }
-      if (expression !== "dance") {
+      if (choreographyExpression !== "dance") {
         // Damp out any leftover dance hip-shift when the mood changes
         p.headGroup.position.x = THREE.MathUtils.lerp(p.headGroup.position.x, 0, 0.1);
       }
@@ -1471,7 +1431,7 @@ export function AgentAvatarScene({
       // Wink — the left eye drops on a lazy cycle while the right stays open
       let leftBlink = blinkFactor;
       const rightBlink = blinkFactor;
-      if (expression === "wink") {
+      if (choreographyExpression === "wink") {
         const winkPhase = t % 2.8;
         if (winkPhase < 0.45) leftBlink = 0.1;
       }
@@ -1514,25 +1474,41 @@ export function AgentAvatarScene({
       }
 
       // Work tool — entrance pop, hover bob, and per-kind motion
-      const toolParts = toolRef.current;
-      if (toolParts) {
+      const toolState = toolRef.current;
+      const frameSeconds = frameTime / 1000;
+      const animateTool = (toolParts: ToolRefs) => {
         const g = toolParts.group;
-        g.scale.setScalar(THREE.MathUtils.lerp(g.scale.x, TOOL_SCALE, 0.12));
-        g.position.y = -0.42 + Math.sin(t * 1.7 + 1.3) * 0.07;
-        if (toolParts.kind === "screwdriver" && toolParts.spin) {
-          toolParts.spin.rotation.y += 0.55; // bit spins on its own axis
-        } else if (toolParts.kind === "jackhammer") {
-          if (toolParts.piston) {
-            const baseY = (toolParts.piston.userData.baseY as number) ?? -0.36;
-            toolParts.piston.position.y = baseY + Math.min(0, Math.sin(t * 16)) * 0.05;
-          }
-          g.position.y += Math.sin(t * 32) * 0.007; // whole-body judder
-        } else if (toolParts.kind === "wrench") {
-          g.rotation.z = -0.12 + Math.sin(t * 2.4) * 0.24; // ratcheting swing
-        } else if (toolParts.kind === "hammer") {
-          g.rotation.z = -0.22 + Math.sin(t * 5.4) * 0.18; // tapping swing
-        } else if (toolParts.kind === "torch" && toolParts.tipMat) {
-          toolParts.tipMat.emissiveIntensity = 1.7 + Math.random() * 1.5; // flicker
+        const elapsed = Math.max(0, frameSeconds - toolParts.createdAt);
+        const phaseElapsed = Math.max(0, frameSeconds - toolParts.phaseStartedAt);
+        const pose = getToolMotionPose(toolParts.kind, elapsed, toolParts.phase, phaseElapsed);
+        const anchor = AGENT_SCENE_TOOL_CATALOG[toolParts.kind].anchor;
+        g.scale.setScalar(pose.scale);
+        g.position.y = anchor.position[1] + pose.yOffset;
+        g.rotation.x = pose.rotationX;
+        g.rotation.z = pose.rotationZ;
+        const spin = toolParts.animationRefs.spin;
+        if (spin) spin.rotation.y = pose.spinRotation;
+        const piston = toolParts.animationRefs.piston;
+        if (piston) {
+          const blueprintPart = AGENT_SCENE_TOOL_CATALOG[toolParts.kind].parts.find((part) => part.animationRef === "piston");
+          piston.position.y = (blueprintPart?.position?.[1] ?? 0) + pose.pistonOffset;
+        }
+        if (toolParts.tipMat) toolParts.tipMat.emissiveIntensity = pose.tipIntensity;
+        if (toolParts.glow) toolParts.glow.scale.setScalar(pose.glowScale);
+        toolParts.accentLight.intensity = AGENT_SCENE_TOOL_CATALOG[toolParts.kind].palette.accentLightIntensity
+          * (0.82 + pose.glowScale * 0.18);
+        if (toolParts.phase === "entering" && phaseElapsed >= AGENT_SCENE_TOOL_CATALOG[toolParts.kind].animation.entranceDuration) {
+          toolParts.phase = "active";
+          toolParts.phaseStartedAt = frameSeconds;
+        }
+      };
+      if (toolState.active) animateTool(toolState.active);
+      for (const exiting of [...toolState.exiting]) {
+        animateTool(exiting);
+        if (frameSeconds - exiting.phaseStartedAt >= AGENT_SCENE_TOOL_CATALOG[exiting.kind].animation.exitDuration) {
+          r2.avatarGroup.remove(exiting.group);
+          disposeSubtree(exiting.group);
+          toolState.exiting.splice(toolState.exiting.indexOf(exiting), 1);
         }
       }
 
@@ -1559,18 +1535,27 @@ export function AgentAvatarScene({
       const r2 = rendererRef.current;
       if (r2) cancelAnimationFrame(r2.animationId);
     };
-  }, [expression, shouldUseFallback, webglError]);
+  }, [choreographyExpression, shouldUseFallback, webglError]);
 
   if (shouldUseFallback || webglError) {
     return (
       <div
-        className={`flex items-center justify-center rounded-2xl bg-slate-50 dark:bg-void-800/40 ${className}`}
+        className={`relative flex items-center justify-center rounded-2xl bg-slate-50 dark:bg-void-800/40 ${className}`}
         style={{ minHeight: "200px", width: "100%", height: "100%" }}
         data-testid="agent-avatar-fallback"
+        data-tool={tool ?? undefined}
         role="img"
-        aria-label="Agent avatar preview"
+        aria-label={tool ? `Agent avatar preview working with ${AGENT_SCENE_TOOL_CATALOG[tool].label}` : "Agent avatar preview"}
       >
         <AgentAvatarSvg config={config} expression={expression} className="w-full h-full max-w-[220px]" static />
+        {tool && (
+          <span
+            className="absolute bottom-3 right-3 rounded-full border border-signal-500/30 bg-white/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-700 shadow-sm dark:bg-void-900/90 dark:text-signal-300"
+            data-testid="agent-avatar-static-tool"
+          >
+            {AGENT_SCENE_TOOL_CATALOG[tool].label}
+          </span>
+        )}
       </div>
     );
   }
@@ -1580,6 +1565,7 @@ export function AgentAvatarScene({
       className={`w-full h-full relative ${className}`}
       style={{ minHeight: "200px" }}
       data-testid="agent-avatar-scene"
+      data-tool={tool ?? undefined}
     >
       <div ref={mountRef} className="absolute inset-0" aria-hidden="true" />
     </div>

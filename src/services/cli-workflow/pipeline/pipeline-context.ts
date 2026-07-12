@@ -1,5 +1,5 @@
 import type { ProviderSettingsOverride } from "../../provider-settings-override.js";
-import type { CliWorkflowSettings, DashboardSettings, ProviderId, QwenModelProviderSettings, Subtask, ThinkingMode } from "../../../contracts/app-types.js";
+import type { CliWorkflowSettings, DashboardSettings, DashboardSettingsScope, ProviderId, QwenModelProviderSettings, Subtask, ThinkingMode } from "../../../contracts/app-types.js";
 import type { AgentMemoryConfig, AgentMcpAccessConfig } from "../../../contracts/agent-preset-types.js";
 import type { IWorkspaceManager } from "../../../infrastructure/providers/cli/workspace-manager.js";
 import type { InvocationWorkspacePreparer } from "../../../infrastructure/providers/cli/invocation-workspace-preparer.js";
@@ -17,6 +17,7 @@ import type { CommandResult } from "../../cli-process-runner.js";
 import type { AgentPresetRepository } from "../../../repositories/agent-preset-repository.js";
 import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
 import type { TaskSelfReflectionRatingRepository } from "../../../repositories/task-self-reflection-rating-repository.js";
+import type { TaskCodingClarificationContext } from "../../../domain/sprint/task-execution-outcome.js";
 
 export interface PipelineContextDeps {
   sessionTracking: SessionTrackingRepository;
@@ -27,7 +28,7 @@ export interface PipelineContextDeps {
   skillService?: SkillService;
   agentPresetRepository?: AgentPresetRepository;
   providerConcurrencyService?: ProviderConcurrencyService;
-  getDashboardSettings: () => DashboardSettings;
+  getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings;
   getWorkerInstruction: (repoPath: string) => Promise<string>;
   getGithubToken: () => string | undefined;
   getMcpConnectionInfo?: () => McpConnectionInfo | null;
@@ -62,6 +63,8 @@ export interface PipelineContext {
    * not agent-scoped (no MCP filtering); `null` means an agent exists but was never configured.
    */
   agentMcpAccess?: AgentMcpAccessConfig | null;
+  /** Durable project/task/runtime identifiers supplied to request_clarification guidance. */
+  taskClarificationContext?: TaskCodingClarificationContext;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
 

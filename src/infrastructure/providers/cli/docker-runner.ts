@@ -35,6 +35,10 @@ import { ensureDefaultCodeUxAssetsInstalled } from "../../../services/code-ux-de
 import { DEFAULT_PLAYWRIGHT_MCP_SERVER_ID } from "../../../repositories/settings-defaults.js";
 import { sanitizeInvocationOutputText } from "../../../services/invocation-output-sanitizer.js";
 import type { PersistentSkillStorageRuntimeMount } from "../../../services/skill-service.js";
+import {
+  GOOGLE_DRIVE_CONTAINER_TARGET,
+  type GoogleDriveRuntimeMount,
+} from "../../../services/google-drive-mount-service.js";
 import { managedRuntimeService, type ManagedRuntimeService } from "../../../services/managed-runtime-service.js";
 import {
   PROVIDER_TOOL_MOUNT,
@@ -84,6 +88,7 @@ export interface IDockerRunner {
     mcpConnection?: McpConnectionInfo | null;
     customMcpServers?: CustomMcpServer[];
     persistentSkillStorageMounts?: PersistentSkillStorageRuntimeMount[];
+    googleDriveMount?: GoogleDriveRuntimeMount;
   }): Promise<CommandResult>;
   readWorkspaceFile?(cwd: string, targetPath: string): Promise<string | null>;
   readWorkspaceFileBase64?(cwd: string, targetPath: string): Promise<string | null>;
@@ -157,6 +162,7 @@ export class DockerRunner implements IDockerRunner {
     mcpConnection?: McpConnectionInfo | null;
     customMcpServers?: CustomMcpServer[];
     persistentSkillStorageMounts?: PersistentSkillStorageRuntimeMount[];
+    googleDriveMount?: GoogleDriveRuntimeMount;
   }): Promise<CommandResult> {
     const { command, args, cwd, providerEnv, sessionId, providerLabel, workflowSettings, repoPath, signal, onActivity } = input;
     const emitActivity = (desc: string, originator?: string): void => {
@@ -371,7 +377,22 @@ export class DockerRunner implements IDockerRunner {
         dockerArgs.push("--mount", toDockerMountArg({
           source,
           destination: mount.containerPath,
-          readonly: false,
+          readonly: true,
+        }));
+      }
+
+      if (input.googleDriveMount) {
+        const source = this.mapDockerSourcePathForDaemon(
+          input.googleDriveMount.source,
+          repoPath,
+          sessionId,
+          "Google Drive",
+          emitActivity,
+        );
+        dockerArgs.push("--mount", toDockerMountArg({
+          source,
+          destination: GOOGLE_DRIVE_CONTAINER_TARGET,
+          readonly: input.googleDriveMount.readonly,
         }));
       }
 

@@ -49,7 +49,7 @@ The dashboard can also cancel the currently running turn for a specific thread t
 
 Thread and invocation controls expose their in-flight state locally. Sending a message, cancelling an active turn, compacting a thread, deleting a thread, cancelling an invocation, and restarting/continuing a failed invocation disable duplicate submissions, announce busy status through button labels/`aria-busy`, and keep retryable feedback in `ActionFeedbackRegion` when the server returns an error. Failed message sends keep the draft restored in the composer; failed invocation restarts preserve the failed invocation transcript and expose the existing sanitized error message with a retry action.
 
-The project-backed composer draft is durable but separate from conversation messages. The dashboard assigns each browser user a stable local draft user id and stores draft rows in SQLite by user id, project id, and chat context key (`new-thread` or `thread:<thread-id>`). The UI also writes the active typed value to a scoped browser-local fallback on each input update, so full page refreshes restore recent keystrokes even if the debounced SQLite write was still in flight. Remounts and thread navigation restore only the matching user/project/context draft, blank drafts are recorded as empty locally while the saved row is removed, and successful sends clear the composer through the same path used before.
+The project-backed composer draft is durable but separate from conversation messages. The dashboard assigns each browser user a stable local draft user id and stores draft rows in SQLite by user id, project id, and chat context key (`new-thread` or `thread:<thread-id>`). The UI also writes the active typed value to a scoped browser-local fallback on each input update, so full page refreshes restore recent keystrokes even if the debounced SQLite write was still in flight. Remounts and thread navigation restore only the matching user/project/context draft, blank drafts are recorded as empty locally while the saved row is removed, and successful sends clear the composer through the same path used before. A project transition may retain the previous selection for one render, so thread-scoped draft hydration is gated on the current thread snapshot containing that thread with the selected project id; until then, the context is `new-thread`.
 
 Virtual chat failures are terminal for that dashboard turn:
 - the dashboard message is moved from `pending`/`delivered` to `failed`
@@ -64,14 +64,27 @@ Structured dashboard replies parse provider output defensively. Some CLI provide
 Create-app dashboard quickactions are the narrow exception to normal routed provider replies. The dashboard posts a short visible user message first, then attaches structured metadata:
 
 - `metadata.quickaction.type = "create_app"`
-- canonical `kind` of `web_app` or `desktop_app`
+- canonical `kind` of `web_app`, `desktop_app`, `online_shop`, `portfolio`, or `game` (legacy Web/Desktop aliases remain accepted)
 - stable `requestId`
 - quicksprint `templateId`
+- optional ID-only `designGuidance` selection
 - optional task count, stack summary, and suggestion tags
+
+`DashboardCreateAppQuickactionMetadata` is the typed detached protocol. Its `quickaction` payload is discriminated by `type: "create_app"`; `kind` is one of `DashboardCreateAppQuickactionKind`, and the remaining fields are validated against the shared catalog rather than trusted as arbitrary client planning input. The catalog contract is:
+
+| Kind | Display/app label | Template id | Tech stack guidance | Style guidance |
+| --- | --- | --- | --- | --- |
+| `web_app` | Create Web App / Web app | `qs-create-web-app` | `code-ux-product-stack` | `code-ux-award-winning` |
+| `desktop_app` | Create Desktop App / Desktop app | `qs-create-desktop-app` | `electron-desktop-app` | `code-ux-award-winning` |
+| `online_shop` | Create Onlineshop / Online shop | `qs-create-online-shop` | `code-ux-product-stack` | `ecommerce` |
+| `portfolio` | Create Portfolio / Portfolio | `qs-create-portfolio` | `code-ux-product-stack` | `marketing-site` |
+| `game` | Create Game / Game | `qs-create-game` | `code-ux-product-stack` | `game-experience` |
 
 The dashboard builds the stack summary and suggestion tags from the selected project's effective settings before posting the message. It uses the assigned techstack catalog entry when present, falls back to the catalog default when the project is unassigned, and forwards the stack item labels as suggestion tags so detached planning and the `app_progress` widget start from the same context the dashboard displays.
 
-`ChatThreadRuntimeService.postMessage` detects this metadata after the message is stored and before the normal in-flight provider turn is created. Valid create-app quickactions do not ask for confirmation, do not route through the dashboard reply provider, and do not create a `dashboard_reply` invocation. Instead, the runtime launches `QuicksprintService.launchDetachedQuicksprint` with `submitMode: "plan_and_start"` and passes the quickaction `requestId` as the planning `clientRequestId`.
+`ChatThreadRuntimeService.postMessage` detects this metadata after the message is stored and before the normal in-flight provider turn is created. The runtime resolves the action through the create-app catalog and rejects mismatched template or guidance IDs. Missing guidance metadata from older clients is normalized to the catalog selection. Every create-app kind re-checks initial-project eligibility at this runtime boundary: the project must have persisted `new-local` or `new-remote` provenance and still be the clean one-commit Code UX seed containing only the generated `README.md` and supported `.gitignore`. Existing/imported provenance, setup artifacts, repository changes, missing repositories, and inspection errors all fail closed.
+
+Valid create-app quickactions do not ask for confirmation, do not route through the dashboard reply provider, and do not create a `dashboard_reply` invocation. Instead, the runtime launches `QuicksprintService.launchDetachedQuicksprint` with `submitMode: "plan_and_start"`, passes the quickaction `requestId` as the planning `clientRequestId`, and forwards the catalog selection as an ID-only planning override. `PlanningAgentService` resolves those IDs against the effective design-guidance catalog and overlays them only for the prompt sent to `PlanningPromptBuilder`. It never accepts instruction Markdown through this override and never writes the selection back to project settings.
 
 The detached launch creates the sprint synchronously and returns the planning request plus a completion promise while the planner continues in the background. The chat runtime then marks the quickaction message processed, posts an `app_progress` system message, and stores this slice on the thread:
 
@@ -117,11 +130,23 @@ Outbound replies are also delivery records. When a system or assistant reply is 
 
 Dashboard-only rich widgets are suppressed for external channels because chat bridges receive plain markdown, not dashboard component instructions. Chat-provider-sourced prompts omit the `codeux:*` widget instruction block, replay/compaction inputs use the same suppression rules, and outbound delivery strips or downgrades any remaining dashboard-only widget fences before sending externally.
 
+Dashboard replies may also carry a bounded `agentEffect` in assistant-message metadata. JSON-mode replies accept it as an optional peer of `replyMarkdown`, `action`, and `suggestions`/`promptSuggestions`. MCP-native replies accept the same object inside a line-starting `codeux:agent` markdown fence. A valid result is persisted on the visible assistant/system message as `metadata.agentEffect` with exact fields `emotion`, `animation`, optional `caption`, and `durationMs`.
+
+`emotion` must be one of `happy`, `sad`, `angry`, `sleepy`, `bored`, `curious`, `thinking`, `excited`, `surprised`, or `proud`. `animation` must be one of `hyped`, `shake_head`, `nod`, `laughing`, `wink`, or `dance`. `durationMs` must be a safe integer in the inclusive range 500–10000. If present, `caption` must be a string, must remain non-empty after trimming, and its trimmed form must contain no more than 120 characters. Any invalid required field, bound, or caption rejects the entire effect; extra properties do not enter the persisted object.
+
+Native markdown parsing removes valid effect fences from `replyMarkdown`, records the first valid effect, collapses excess blank lines, and preserves surrounding prose. Invalid JSON or an invalid shape is not silently deleted: the fence info string is downgraded from `codeux:agent` to `json`, leaving the payload visible. JSON-envelope parsing simply omits an invalid top-level effect and preserves the reply, suggestions, management action, approval behavior, and provider session. The dashboard revalidates untrusted persisted metadata; valid `metadata.agentEffect` wins over a backward-compatible valid native fence, and an invalid metadata value falls back to the first valid fence rather than partially coercing fields.
+
+The cinematic consumer selects the latest reply by `direction !== "dashboard_to_connection"`, not `authorType`, because dashboard replies can be stored with `authorType: "system"`. Only that latest Project Manager reply can own the bounded effect. Runtime errors, outgoing routing, and the selected Project Manager's awaited or matching active reply invocation take precedence; unrelated invocations remain background cues and cannot select the avatar expression, caption, thought bubble, or work tool.
+
+External chat prompts set `suppressRichWidgets: true`, do not advertise the avatar-only contract, and strip/downgrade all `codeux:*` fences in replay and outbound delivery. A valid `codeux:agent` fence becomes no external text; a malformed or invalid one becomes a readable ordinary JSON fence. `metadata.agentEffect` is not serialized into the external reply payload: outbound metadata is rebuilt from redacted routing/delivery context, while `replyText` comes from the sanitized markdown.
+
 ### Compact Conversation Behavior
 
 Long-running conversations accumulate large prompt histories, risking context window exhaustion or unbounded token costs. The chat runtime introduces a compact-conversation action (`compactThreadSession`).
 
 When triggered on a virtual CLI chat route for non-Jules providers, the system runs a `chat_compaction` execution invocation against the selected provider's active native session. The provider runner keeps the Code UX logical session id as the thread id, passes the saved native session id as `continueSessionId` when one exists, and sends the CLI's native compact command through the normal resume/continue path (`/compact` or `/compress`, depending on provider). It does not create a separate `<thread-id>:compaction` summarization session or replay the full transcript for compaction.
+
+Native compaction enters through the shared provider execution boundary. Docker-backed compaction therefore resolves the same effective project Google Drive settings as other Project Manager runs and forwards a bind mount only after the configured source has been validated as an existing directory; host-mode compaction never receives that mount.
 
 If persisted runtime state has no saved native session id, only providers with a documented logical continuation fallback use the thread id as the continuation handle. Providers that require a concrete native session id fail the compact action with an actionable error instead of starting an unrelated fresh compaction session.
 

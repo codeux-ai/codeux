@@ -1,7 +1,15 @@
 import { BACKGROUND_PATTERNS } from './background-patterns.js';
+import { DEFAULT_ACCENT_COLOR, isDashboardAccentColor } from './accent-colors.js';
 
 export function applyAppearanceSettings(appearance: Partial<import('../../types.js').DashboardSettings['appearance']>): void {
   if (typeof window === 'undefined') return;
+
+  if (appearance.accentColor !== undefined) {
+    const accentColor = isDashboardAccentColor(appearance.accentColor)
+      ? appearance.accentColor
+      : DEFAULT_ACCENT_COLOR;
+    document.documentElement.dataset.accent = accentColor.toLowerCase();
+  }
 
   if (appearance.theme !== undefined) {
     let isDark = false;

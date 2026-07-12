@@ -60,7 +60,7 @@ The sandboxed preload is CommonJS-emitted as `dist/electron/preload.cjs` from `s
 ## Filesystem and proxy hardening
 
 - Directory browsing canonicalizes allowed roots and rejects symlink segments under those roots.
-- Code UX-created repository `.gitignore` seeding opens the file through a validated file URL with no-follow flags so a symlinked `.gitignore` cannot redirect reads or writes outside the repository.
+- Code UX-created repository `README.md` and `.gitignore` seeding uses fixed filenames under the validated clone target and opens them through validated file URLs with no-follow flags so a raced symlink cannot redirect initialization reads or writes outside the repository.
 - Preview and custom-dashboard validation proxies enforce local upstream boundaries, strip dashboard-sensitive headers, and require proxied custom-dashboard request bodies to be Buffers with size limits before forwarding.
 
 ## Authentication & authorisation

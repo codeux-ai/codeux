@@ -642,7 +642,7 @@ export function classifyProviderError(
   provider: Exclude<ProviderId, "jules">,
   result: CommandResult,
 ): ProviderErrorClassification {
-  const combined = `${result.stdout}\n${result.stderr}`;
+  const combined = buildProviderDiagnosticText(provider, result);
   const providerPatterns = PROVIDER_PATTERNS[provider] ?? [];
 
   if (provider === "codex" && isCodexTransportServerError(combined)) {
@@ -697,6 +697,31 @@ export function classifyProviderError(
   }
 
   return buildUnknownClassification(provider, combined);
+}
+
+/**
+ * Codex `exec --json` stdout is a complete event stream, not an error stream. It
+ * includes assistant prose plus tool inputs/results, so repository text such as
+ * "authentication failed" or "rate limit" must not classify the provider failure.
+ * Only structured Codex error events, non-JSON stdout, and stderr are diagnostic.
+ */
+function buildProviderDiagnosticText(
+  provider: Exclude<ProviderId, "jules">,
+  result: CommandResult,
+): string {
+  if (provider !== "codex") {
+    return `${result.stdout}\n${result.stderr}`;
+  }
+
+  const structuredError = extractCodexStructuredError(result.stdout);
+  const unstructuredStdout = result.stdout
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("{"))
+    .join("\n");
+
+  return [structuredError, unstructuredStdout, result.stderr]
+    .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+    .join("\n");
 }
 
 export function isTransientCodexTransportError(result: CommandResult): boolean {

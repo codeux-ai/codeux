@@ -813,6 +813,14 @@ export interface DesignGuidanceSettings {
   customStyleguides: DesignGuidanceEntrySettings[];
 }
 
+export type GoogleDriveAccessMode = "read-only" | "read-write";
+
+export interface GoogleDriveSettings {
+  enabled: boolean;
+  hostPath: string;
+  accessMode: GoogleDriveAccessMode;
+}
+
 /** Toggles for what appears in an automated Task PR description. See src/domain/sprint/composer/pr-description-composer.ts. */
 export interface TaskPrTemplateSections {
   summary: boolean;
@@ -1086,6 +1094,8 @@ export interface SprintPreviewSettings {
   containerAppPort: number;
   containerAppPorts: number[];
   startupScriptPath: string;
+  startupCommand: string;
+  allowDockerAccess: boolean;
   environmentVariables: PreviewEnvironmentVariable[];
 }
 
@@ -1204,11 +1214,13 @@ export interface AgentSettings {
 
 export type BackgroundPattern = "NONE" | "DIAGONAL_LINES" | "HORIZONTAL_LINES" | "VERTICAL_LINES" | "CROSSHATCH" | "DOTS" | "DIAMONDS" | "HEXAGONS" | "TRIANGLES" | "WAVES" | "NOISE";
 export type DashboardExperienceMode = "EASY" | "STANDARD" | "EXPERT";
+export type DashboardAccentColor = "CODEUX" | "OCEAN" | "VIOLET" | "CYAN" | "MAGENTA" | "GRAPHITE";
 
 export interface AppearanceSettings {
   navigationMode: "DOCK" | "SIDEBAR";
   experienceMode: DashboardExperienceMode;
   theme: "LIGHT" | "DARK" | "SYSTEM";
+  accentColor: DashboardAccentColor;
   reducedMotion: "AUTO" | "REDUCE" | "NONE";
   backgroundMode: "ANIMATED" | "STATIC";
   animatedBackground: string;
@@ -1328,6 +1340,7 @@ export interface DashboardSettings {
   techstackCatalog: TechstackCatalogSettings;
   techstack: TechstackSelectionSettings;
   designGuidance: DesignGuidanceSettings;
+  googleDrive: GoogleDriveSettings;
   git: GitSettings;
   jira: JiraSettings;
   notion: ExternalImporterSettings;
@@ -1664,6 +1677,8 @@ export interface SprintPreviewSession {
   installCommand: string | null;
   buildCommand: string | null;
   runCommand: string | null;
+  startupCommandOverride: string | null;
+  dockerAccessOverride: boolean | null;
   environmentOverrides: PreviewEnvironmentVariable[];
   lastCompletedTaskCount: number;
   lastSeenSprintStatus: string | null;

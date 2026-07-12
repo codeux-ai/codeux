@@ -37,6 +37,26 @@ describe("PlanningAgentService", () => {
       .mockResolvedValue("## Category: Patterns\n- prefer consistent planning context\n");
   });
 
+  it("throws background-start precondition errors synchronously before launching planning", () => {
+    const projectManagementRepository = {
+      getProject: vi.fn().mockReturnValue({ id: "p1", name: "Project", baseDir: "/tmp/project" }),
+      getSprint: vi.fn().mockReturnValue({ id: "s1", projectId: "p1", name: "Sprint", goal: "Goal" }),
+      listTasks: vi.fn().mockReturnValue([{ id: "task-1" }]),
+    } as unknown as ProjectManagementRepository;
+    const service = new PlanningAgentService({
+      projectManagementRepository,
+      connectionChatRepository: {} as ConnectionChatRepository,
+      settingsRepository: {} as SettingsRepository,
+      agentPresetSyncService: {} as AgentPresetSyncService,
+      executionControlService: { orchestrateSprint: vi.fn() } as any,
+    });
+    const planSpy = vi.spyOn(service, "planSprint");
+
+    expect(() => service.startPlanSprint("p1", "s1", { autoStart: false }))
+      .toThrow("Sprint Sprint already has 1 task(s)");
+    expect(planSpy).not.toHaveBeenCalled();
+  });
+
   it("uses the Planning agent reply to improve prompts and create tasks", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-agent-"));
     tempDirs.push(dir);
@@ -350,7 +370,15 @@ describe("PlanningAgentService", () => {
     expect(improved.goal).toBe("Virtual worker improved sprint prompt.");
     expect(improved.workerConnectionId).toBeNull();
 
-    const planned = await service.planSprint(project.id, sprint.id, { autoStart: true });
+    const planned = await service.planSprint(project.id, sprint.id, {
+      autoStart: true,
+      overrides: {
+        designGuidance: {
+          selectedTechStackId: "code-ux-product-stack",
+          selectedStyleguideId: "game-experience",
+        },
+      },
+    });
     expect(planned.createdTaskIds).toHaveLength(1);
     expect(executionControlService.orchestrateSprint).toHaveBeenCalledWith(project.id, sprint.id);
 
@@ -362,10 +390,14 @@ describe("PlanningAgentService", () => {
     expect(planPrompt).toContain("## Example Output B");
     expect(planPrompt).toContain("## Objective\\n...\\n\\n## Scope");
     expect(planPrompt).toContain("## Project Guidance");
-    expect(planPrompt).toContain("Name: Planning Service Stack");
-    expect(planPrompt).toContain("Prefer typed service boundaries and Vitest verification.");
-    expect(planPrompt).toContain("Name: Planning Product Style");
-    expect(planPrompt).toContain("Preserve existing tokens, focus states, and responsive layouts.");
+    expect(planPrompt).toContain("Name: Code UX Stack");
+    expect(planPrompt).toContain("Name: Game Experience");
+    expect(planPrompt).not.toContain("Prefer typed service boundaries and Vitest verification.");
+    expect(planPrompt).not.toContain("Preserve existing tokens, focus states, and responsive layouts.");
+    expect(settingsRepository.resolveProjectDashboardSettings(project.id).settings.designGuidance).toMatchObject({
+      selectedTechStackId: "planning-stack",
+      selectedStyleguideId: "planning-style",
+    });
     const createdTasks = projectRepository.listTasks(project.id, sprint.id);
     expect(createdTasks).toHaveLength(1);
     expect(createdTasks[0]?.title).toBe("Plan via virtual worker");
@@ -415,6 +447,21 @@ describe("PlanningAgentService", () => {
         }),
       }),
     ]));
+
+    const invalidGuidanceSprint = projectRepository.createSprint(project.id, {
+      name: "Invalid Guidance Sprint",
+      goal: "Do not accept client-authored guidance IDs.",
+    });
+    await expect(service.planSprint(project.id, invalidGuidanceSprint.id, {
+      autoStart: false,
+      overrides: {
+        designGuidance: {
+          selectedTechStackId: "client-instruction-markdown",
+          selectedStyleguideId: "game-experience",
+        },
+      },
+    })).rejects.toThrow("Planning design guidance selection is not available in the effective catalog.");
+    expect(providerRunner.runProviderForText).toHaveBeenCalledTimes(2);
   });
 
   it("retries virtual planning on rate limit and records invocation error metadata", async () => {

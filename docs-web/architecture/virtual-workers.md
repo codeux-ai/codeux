@@ -155,6 +155,14 @@ Terminal session states:
 - `CANCELLED` — user cancelled.
 - `QUOTA` / `RATE_LIMITED` → mapped to `QUOTA`.
 
+### Dashboard reply effects and cinematic activity
+
+Dashboard chat replies use the same provider execution and invocation records, but the 3D Chat stage deliberately separates the selected Project Manager from project-wide execution. The Project Manager is active only when the selected thread has an awaited reply or a running `dashboard_reply`/`worker_reply` invocation matches the preset resolved for that stage. Every other running task, planning, CI, QA, or agent reply invocation remains truthful background activity. It may produce a thought/status cue and background count, but it cannot choose the Project Manager's working expression, caption, busy state, or work tool.
+
+JSON-mode dashboard replies can return optional `agentEffect` metadata, while MCP-native replies can embed a `codeux:agent` JSON fence. The exact shape is `{ "emotion": string, "animation": string, "caption"?: string, "durationMs": number }`: emotions are `happy`, `sad`, `angry`, `sleepy`, `bored`, `curious`, `thinking`, `excited`, `surprised`, or `proud`; animations are `hyped`, `shake_head`, `nod`, `laughing`, `wink`, or `dance`; duration is an inclusive 500–10000 safe integer; and a caption must trim to 1–120 characters. Invalid payloads are ignored without losing the reply, and invalid native fences are preserved as ordinary JSON. Valid native fences are removed from visible markdown and the first effect is stored as `metadata.agentEffect`.
+
+The dashboard revalidates persisted metadata and gives a valid `metadata.agentEffect` precedence over a backward-compatible valid fence. Only the latest reply-direction message can apply it, since Project Manager replies may be stored with `authorType: "system"`. Errors, outgoing routing, and active Project Manager work outrank the effect. External-channel prompts suppress this contract; outbound sanitization strips valid `codeux:agent` fences, downgrades invalid ones to readable JSON, and does not forward avatar metadata.
+
 ## Attention item handling
 
 The virtual worker can claim and act on these attention item categories:
@@ -180,6 +188,16 @@ If feature-PR CI repair exhausts its guardrail, the task is blocked for interven
 | Other | Escalate to human. |
 
 A virtual worker only attempts items eligible for its provider's capabilities. Unhandled items remain for human resolution.
+
+## Worker clarification boundary
+
+Worker-originated MCP questions are not ordinary virtual-worker attention. `request_clarification` persists a `worker_clarification` record as a human-owned project attention item, with the attention id serving as the public clarification id. Its payload captures the authenticated requester, deduplication key, Markdown content, task-run/session context, lifecycle state, and timestamps; task-run lifecycle events let session synchronization reconstruct the state after restart.
+
+Human ownership excludes these questions from worker repair and `action_required` auto-answer queues. While a project-manager clarification is pending, scheduling avoids duplicate attention or a coding dispatch for the same task or dispatch. Unrelated queued work remains eligible, and a taskless general clarification does not pause coding dispatches. Only an eligible coding agent can request within its project/task scope, and only the configured clarification-reply/dashboard-reply Project manager agent or an unscoped project-manager client can answer through `reply_to_clarification`. These audience grants do not expose general project-manager tools to workers.
+
+Answers use the existing provider continuation paths. Jules receives a session message before its task-run, dispatch, and task projections are restored to running. Local CLI providers use the task-rerun path with the preserved workspace, worker branch, provider/model, coding-agent route, and native session lineage. Acceptance means the continuation was delivered or queued; it does not mean the task completed. Taskless general questions record an answer without dispatching coding work. Missing or mismatched task-run, provider-session, or preserved-workspace context leaves a task-backed clarification pending.
+
+Identical requests are idempotent by project-scoped deduplication key; reusing a key for different content or context fails. Replies settle only after delivery succeeds. Concurrent and later duplicate replies do not send another provider message or create another rerun, and session synchronization ignores stale-session requests and does not resurrect cancelled or paused runs.
 
 ## Concurrency & throttling
 

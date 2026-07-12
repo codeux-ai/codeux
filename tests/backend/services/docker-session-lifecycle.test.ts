@@ -74,6 +74,13 @@ describe("docker-session-lifecycle", () => {
   });
 
   describe("parseDockerPsOutput", () => {
+    it("captures exit codes for stopped containers", () => {
+      const [container] = lifecycle.parseDockerPsOutput(
+        "id1\tname1\tExited (137) 2 minutes ago\tpj1\tsp1\tss1\t8080",
+        true,
+      );
+      expect(container).toMatchObject({ status: "exited", exitCode: 137 });
+    });
     it("parses valid rows with host port", () => {
       const stdout = "id1\tname1\tUp 5 minutes\tpj1\tsp1\tss1\t8080\nid2\t\tExited (0)\tpj2\tsp2\tss2\t";
       const result = lifecycle.parseDockerPsOutput(stdout, true);
@@ -83,7 +90,7 @@ describe("docker-session-lifecycle", () => {
         labels: { "code-ux.project-id": "pj1", "code-ux.sprint-id": "sp1", "code-ux.session-id": "ss1" }
       });
       expect(result[1]).toEqual({
-        id: "id2", name: null, status: "exited", hostPort: null,
+        id: "id2", name: null, status: "exited", exitCode: 0, hostPort: null,
         labels: { "code-ux.project-id": "pj2", "code-ux.sprint-id": "sp2", "code-ux.session-id": "ss2" }
       });
     });

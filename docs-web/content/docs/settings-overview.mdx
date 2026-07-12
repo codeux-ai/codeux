@@ -2,7 +2,15 @@
 
 Settings is the configuration hub for Code UX. It covers local runtime behavior, provider routing, project overrides, Git and CI automation, dashboard appearance, memory, integrations, MCP tool access, and destructive maintenance actions.
 
-Use this section when you need more detail than the inline Settings-page help popovers provide. Every Settings card links to one of the pages below, and each page explains what the controls affect, recommended defaults, common risks, and validation steps.
+Use this section when you need more detail than the inline Settings-page help popovers provide. Configuration cards with dedicated reference pages link to the pages below, which explain what the controls affect, recommended defaults, common risks, and validation steps.
+
+On desktop, choose an area from the persistent category rail. On smaller screens, the sticky command bar shows the current category as one compact button; opening it reveals the same Smart Find-filtered categories and match previews in a keyboard-accessible drawer without pushing the active settings panel down the page.
+
+## Language-First Speech Setup
+
+**Settings -> AI Models -> Configure speech** asks for the output language first, then preselects the catalog's preferred compatible local model and matching voice. Selected, installed/download-required, output enabled/off, and unsaved states remain visibly separate.
+
+Downloads are never automatic. **Download recommended** opens the model's license and attribution confirmation, and starts only after **Accept & Download**. **Compare compatible models** opens Speech output already filtered to the chosen language.
 
 ## How Settings Scope Works
 
@@ -11,6 +19,15 @@ Use this section when you need more detail than the inline Settings-page help po
 | System | Defaults shared by every project, provider credentials, global runtime behavior, and reusable catalogs. | A system change can affect future work across projects. |
 | Project | Repository-specific routing, preview behavior, memory, integrations, and workflow policy. | Project overrides can mask system defaults. |
 | Sprint | Narrow execution overrides where supported by the runtime. | Use sparingly so sprint behavior stays explainable. |
+
+## System General Legal Actions
+
+In System scope, the General category includes a legal-actions card alongside its runtime and setup controls:
+
+- **License** opens the canonical Code UX [LICENSE](https://github.com/codeux-ai/codeux/blob/main/LICENSE) file in an external destination.
+- **OS Software** opens a searchable, informational catalog of the open-source dependencies distributed with Code UX. Each catalog entry provides a license identifier and a link to the dependency's project.
+
+The OS Software catalog is a static reference. It does not participate in Settings drafts, **Save Changes**, project overrides, or settings persistence.
 
 ## Settings Areas
 
@@ -30,7 +47,7 @@ Use this section when you need more detail than the inline Settings-page help po
 
 | Area | What it covers |
 | --- | --- |
-| [Display Settings](/docs/settings-display-settings) | Controls the dashboard shell layout, theme, motion preference, and desktop zoom when available. |
+| [Display Settings](/docs/settings-display-settings) | Controls the dashboard shell layout, theme, accent color, motion preference, and desktop zoom when available. |
 | [Background](/docs/settings-background) | Customizes the dashboard background image, animation mode, static color, and pattern overlay. |
 | [Techstacks](/docs/settings-techstacks) | Manages the system techstack catalog and per-project techstack/application-kind assignment. |
 | [Guidance](/docs/settings-guidance) | Manages selected tech-stack and styleguide guidance plus custom instruction entries for the active settings scope. |
@@ -40,6 +57,7 @@ Use this section when you need more detail than the inline Settings-page help po
 
 | Area | What it covers |
 | --- | --- |
+| [Speech Output Architecture](/docs/architecture-speech-output) | Installs and activates STT/TTS ONNX bundles, configures API variants, and controls the 3D Chat voice. |
 | [Base Provider Configuration](/docs/settings-base-provider-configuration) | Defines each named provider instance's default eligibility, model, thinking depth, weight, and concurrency. |
 | [Route Mapping](/docs/settings-route-mapping) | Routes each invocation type to inherited, manual, weighted, or agent-selected provider pools. |
 | [Model Pricing](/docs/settings-model-pricing) | Stores token pricing metadata used for model cost estimates in dashboard views. |
@@ -58,7 +76,7 @@ Use this section when you need more detail than the inline Settings-page help po
 | [Watch Loop](/docs/settings-watch-loop) | Controls whether live sprint orchestration keeps polling and how frequently it emits work. |
 | [Workspace Hygiene](/docs/settings-workspace-hygiene) | Controls cleanup of temporary worktree state after provider CLI runs. |
 | [Workspace Visibility](/docs/settings-workspace-visibility) | Controls automatic preview lifecycle and whether browser workspace entry points appear in the dashboard. |
-| [Runtime Limits](/docs/settings-runtime-limits) | Sets preview container concurrency, host port range, app port, and startup script path. |
+| [Runtime Limits](/docs/settings-runtime-limits) | Sets preview container concurrency, ports, startup commands, and optional Docker access. |
 
 ### Memory And Knowledge
 
@@ -77,6 +95,7 @@ Use this section when you need more detail than the inline Settings-page help po
 | Area | What it covers |
 | --- | --- |
 | [Integrations](/docs/settings-integrations) | Lists provider, git-host, issue-tracker, and read-only importer integrations and exposes manage/add actions. |
+| [Google Drive Project Mount](/docs/settings-google-drive-mount) | Links an existing local Google Drive directory into Docker-backed provider containers with read-only or explicit read-write access. |
 | [Jules Automation](/docs/settings-jules-automation) | Configures Jules clarification automation and CI autofix handoff behavior. |
 | [Git Host Configuration](/docs/settings-git-host-configuration) | Stores GitHub or GitLab tokens and Docker git-auth behavior for repository automation. |
 | [Jira Configuration](/docs/settings-jira-configuration) | Connects Jira issue search, import transitions, and completion transitions. |

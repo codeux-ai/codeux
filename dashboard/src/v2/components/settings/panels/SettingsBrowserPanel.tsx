@@ -2,7 +2,7 @@ import type { FunctionComponent } from "preact";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import { NumberInput, Row, TextInput, Toggle } from "../SettingsFormFields.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
-import { Eye, Gauge, SlidersHorizontal } from "lucide-preact";
+import { AlertTriangle, Eye, Gauge, SlidersHorizontal, SquareTerminal } from "lucide-preact";
 import { PreviewEnvironmentEditor } from "../../browser/PreviewEnvironmentEditor.js";
 
 export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
@@ -21,8 +21,18 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <SectionCard title="Workspace Visibility" watermark="WEB" badge={getBadge("sprintPreview")} icon={<Eye strokeWidth={2.4} />}>
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      <SectionCard
+        title="Workspace Visibility"
+        watermark="WEB"
+        badge={getBadge("sprintPreview")}
+        icon={<Eye strokeWidth={2.4} />}
+        highlights={[
+          { label: "Preview runtime", value: editableSettings.sprintPreview.enabled ? "Enabled" : "Off", tone: editableSettings.sprintPreview.enabled ? "active" : "warning" },
+          { label: "Browser workspace", value: editableSettings.sprintPreview.showInAppBrowser ? "Visible" : "Hidden" },
+          { label: "Sprint start", value: editableSettings.sprintPreview.autoStartOnRunningSprint ? "Auto-launch" : "Manual" },
+        ]}
+      >
         <Row label="Preview runtime enabled" description="Allow Code UX to launch, rebuild, and reconcile preview containers for this scope." badge={getFieldBadge("sprintPreview.enabled")}>
           <Toggle aria-label="Toggle setting" value={editableSettings.sprintPreview.enabled} onChange={() => updateEditableSettings((current) => ({
             ...current,
@@ -79,7 +89,17 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
         </Row>
       </SectionCard>
 
-      <SectionCard title="Runtime Limits" watermark="PORT" badge={getBadge("sprintPreview")} icon={<Gauge strokeWidth={2.4} />}>
+      <SectionCard
+        title="Runtime Limits"
+        watermark="PORT"
+        badge={getBadge("sprintPreview")}
+        icon={<Gauge strokeWidth={2.4} />}
+        highlights={[
+          { label: "Active previews", value: `${editableSettings.sprintPreview.maxConcurrentContainers} max`, tone: "active" },
+          { label: "Host ports", value: `${editableSettings.sprintPreview.hostPortRangeStart}–${editableSettings.sprintPreview.hostPortRangeEnd}` },
+          { label: "App port", value: editableSettings.sprintPreview.containerAppPort },
+        ]}
+      >
         <Row label="Maximum active preview containers" description="When this cap is exceeded, Code UX stops the oldest active previews before launching the next one." badge={getFieldBadge("sprintPreview.maxConcurrentContainers")}>
           <NumberInput
             value={editableSettings.sprintPreview.maxConcurrentContainers}
@@ -136,7 +156,7 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
             max={65535}
           />
         </Row>
-        <Row label="Startup script path" description="Project-relative path used for the editable preview startup override script." badge={getFieldBadge("sprintPreview.startupScriptPath")} last>
+        <Row label="Startup script path" description="Project-relative path used for the editable preview startup override script." badge={getFieldBadge("sprintPreview.startupScriptPath")}>
           <TextInput
             value={editableSettings.sprintPreview.startupScriptPath}
             onChange={(value) => updateEditableSettings((current) => ({
@@ -149,9 +169,66 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
             mono
           />
         </Row>
+        <Row label="Default startup command" description="Optional command that replaces auto-detected preview startup. Per-container overrides can be set from Browser." badge={getFieldBadge("sprintPreview.startupCommand")} last>
+          <TextInput
+            value={editableSettings.sprintPreview.startupCommand ?? ""}
+            onChange={(value) => updateEditableSettings((current) => ({
+              ...current,
+              sprintPreview: {
+                ...current.sprintPreview,
+                startupCommand: value,
+              },
+            }))}
+            placeholder="pnpm dev --host 0.0.0.0"
+            mono
+          />
+        </Row>
       </SectionCard>
 
-      <SectionCard title="Preview Environment" watermark="ENV" badge={getBadge("sprintPreview.environmentVariables")} icon={<SlidersHorizontal strokeWidth={2.4} />}>
+      <SectionCard
+        title="Docker Access"
+        watermark="ROOT"
+        badge={getBadge("sprintPreview.allowDockerAccess")}
+        icon={<SquareTerminal strokeWidth={2.4} />}
+        highlights={[
+          { label: "Host daemon", value: editableSettings.sprintPreview.allowDockerAccess ? "Accessible" : "Blocked", tone: editableSettings.sprintPreview.allowDockerAccess ? "warning" : "active" },
+          { label: "Default", value: "Off" },
+          { label: "Risk", value: "Host-level control" },
+        ]}
+      >
+        <Row
+          label="Allow Docker access"
+          description="Mount the host Docker daemon socket and a compatible local Docker CLI into preview containers. Disabled by default."
+          badge={getFieldBadge("sprintPreview.allowDockerAccess")}
+          last
+        >
+          <div className="flex w-full max-w-xl flex-col gap-3">
+            <Toggle aria-label="Allow preview containers to control Docker" value={editableSettings.sprintPreview.allowDockerAccess ?? false} onChange={() => updateEditableSettings((current) => ({
+              ...current,
+              sprintPreview: {
+                ...current.sprintPreview,
+                allowDockerAccess: !current.sprintPreview.allowDockerAccess,
+              },
+            }))} />
+            <div className="flex gap-2 rounded-xl border border-status-amber/30 bg-status-amber/10 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:text-amber-200" role="note">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              Docker daemon access is equivalent to host-level control. Enable it only for trusted repositories and startup commands.
+            </div>
+          </div>
+        </Row>
+      </SectionCard>
+
+      <SectionCard
+        title="Preview Environment"
+        watermark="ENV"
+        badge={getBadge("sprintPreview.environmentVariables")}
+        icon={<SlidersHorizontal strokeWidth={2.4} />}
+        highlights={[
+          { label: "Variables", value: `${editableSettings.sprintPreview.environmentVariables?.length ?? 0} configured`, tone: (editableSettings.sprintPreview.environmentVariables?.length ?? 0) > 0 ? "active" : "neutral" },
+          { label: "Scope", value: activeScope === "project" ? "Project" : "System" },
+          { label: "Overrides", value: "Per container" },
+        ]}
+      >
         <Row
           label="Default container variables"
           description="Environment variables injected into every preview container for this scope. Selected containers can override these from the Browser page."

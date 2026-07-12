@@ -213,14 +213,17 @@ describe("StatsPage Composition", () => {
     expect(screen.getByRole("article", { name: /Provider Share: 75%/ })).toHaveTextContent("Codex leads 2 provider rows by tokens");
     expect(screen.getByRole("article", { name: /Token Anatomy: 80\.0k/ })).toHaveTextContent("Input leads at 45%");
     expect(screen.getByRole("article", { name: /Source Mix: 85%/ })).toHaveTextContent("reported is the dominant telemetry source");
-    expect(screen.getByRole("article", { name: /Merge Conflicts: 1/ })).toHaveTextContent("9 files changed");
+    expect(screen.getByText("Merge Conflicts")).toBeInTheDocument();
+    expect(screen.getByText("3 PRs · 2 merged")).toBeInTheDocument();
 
-    expect(screen.getAllByText("Token Flight").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Purpose Lanes").length).toBeGreaterThan(0);
-    expect(screen.getByText("Provider Activity")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "How the window was consumed" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Where usage landed" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Why tokens were spent" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Provider detail" })).toBeInTheDocument();
     expect(screen.getAllByText("Task Coding").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Cached Input").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Cached input").length).toBeGreaterThan(0);
     expect(screen.getAllByText("$9.20").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Token Flight")).not.toBeInTheDocument();
   });
 
   it("keeps composition controls accessible while the studio and top runway coexist", () => {
@@ -235,7 +238,7 @@ describe("StatsPage Composition", () => {
     expect(modeGroup.className).toContain("flex-wrap");
 
     const summaryCards = within(screen.getByTestId("top-cards-renderer")).getAllByRole("article");
-    expect(summaryCards.length).toBe(5);
+    expect(summaryCards.length).toBe(4);
     for (const card of summaryCards) {
       expect(card).toHaveAccessibleName(/\S/);
     }

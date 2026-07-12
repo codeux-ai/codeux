@@ -3,11 +3,32 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { ChatThreadRuntimeService } from "../../../src/services/chat-thread-runtime-service.js";
+import { ProviderExecutionService } from "../../../src/services/provider-execution-service.js";
 import { codeUxAgentMcpAccess, dashboardReplyAgentMcpAccess } from "../../../src/services/agent-mcp-access.js";
+import { CREATE_APP_QUICKACTION_CATALOG } from "../../../src/domain/chat/create-app-quickaction-catalog.js";
 
 describe("ChatThreadRuntimeService", () => {
   let deps: any;
   let service: ChatThreadRuntimeService;
+
+  const providerTextResult = (text: string, nativeSessionId: string) => ({
+    ok: true,
+    stdout: text,
+    stderr: "",
+    exitCode: 0,
+    text,
+    nativeSessionId,
+    usageTelemetry: {
+      transcriptText: text,
+      inputTokens: 0,
+      cachedInputTokens: 0,
+      outputTokens: 0,
+      reasoningOutputTokens: 0,
+      totalTokens: 0,
+      usageSource: "unknown",
+      rawUsageJson: null,
+    },
+  });
 
   beforeEach(() => {
     deps = {
@@ -29,6 +50,8 @@ describe("ChatThreadRuntimeService", () => {
         createExecutionInvocation: vi.fn(),
         appendExecutionInvocationMessage: vi.fn(),
         updateExecutionInvocation: vi.fn(),
+        createProviderInvocationUsage: vi.fn().mockReturnValue({ id: "provider-invocation-1" }),
+        updateProviderInvocationUsage: vi.fn(),
       },
       taskService: {
         resolveInvocationProvider: vi.fn(),
@@ -45,6 +68,7 @@ describe("ChatThreadRuntimeService", () => {
         updateSprint: vi.fn(),
       },
       providerRunner: {
+        runProvider: vi.fn(),
         runProviderForText: vi.fn(),
       },
       chatManagementActionService: {
@@ -54,7 +78,19 @@ describe("ChatThreadRuntimeService", () => {
       chatProviderOutboundService: {
         deliverReply: vi.fn().mockResolvedValue(null),
       },
+      getProjectInitializationState: vi.fn().mockResolvedValue({
+        projectId: "p1",
+        initializationMode: "new-local",
+        repositoryState: "initial",
+        canCreateInitialAppQuickactions: true,
+      }),
     };
+    deps.providerExecutionService = new ProviderExecutionService({
+      providerRunner: deps.providerRunner,
+      executionRepository: deps.executionRepository,
+      getDashboardSettings: deps.getDashboardSettings,
+      getGithubToken: deps.getGithubToken,
+    });
     service = new ChatThreadRuntimeService(deps);
   });
 
@@ -116,6 +152,10 @@ describe("ChatThreadRuntimeService", () => {
         kind: "web_app",
         requestId: "quickaction-web-1",
         templateId: "qs-create-web-app",
+        designGuidance: {
+          selectedTechStackId: "code-ux-product-stack",
+          selectedStyleguideId: "code-ux-award-winning",
+        },
         taskCount: 6,
         stackSummary: {
           techstackId: "preact-fullstack",
@@ -177,7 +217,13 @@ describe("ChatThreadRuntimeService", () => {
       taskCount: 6,
       submitMode: "plan_and_start",
       clientRequestId: "quickaction-web-1",
-      additionalPrompt: expect.stringContaining("Create an app sprint for a web application."),
+      planningOverrides: {
+        designGuidance: {
+          selectedTechStackId: "code-ux-product-stack",
+          selectedStyleguideId: "code-ux-award-winning",
+        },
+      },
+      additionalPrompt: expect.stringContaining("Create an app sprint for a web app."),
     }));
     const launchInput = quicksprintLauncher.launchDetachedQuicksprint.mock.calls[0][1];
     expect(launchInput.additionalPrompt).toContain("answer quickly");
@@ -216,6 +262,132 @@ describe("ChatThreadRuntimeService", () => {
       },
     });
     expect(deps.chatManagementActionService.processManagementAction).not.toHaveBeenCalled();
+  });
+
+  it.each(CREATE_APP_QUICKACTION_CATALOG)(
+    "launches $kind with its catalog template, scoped guidance, and progress label",
+    async (spec) => {
+      const requestId = `quickaction-${spec.kind}-catalog`;
+      const metadata = {
+        quickaction: {
+          type: "create_app",
+          kind: spec.kind,
+          requestId,
+          templateId: spec.templateId,
+          designGuidance: spec.designGuidance,
+        },
+      };
+      const quicksprintLauncher = {
+        launchDetachedQuicksprint: vi.fn().mockResolvedValue({
+          sprint: { id: `sprint-${spec.kind}`, name: `QS: ${spec.displayLabel}` },
+          planningRequest: {
+            projectId: "p1",
+            sprintId: `sprint-${spec.kind}`,
+            templateId: spec.templateId,
+            submitMode: "plan_and_start",
+            clientRequestId: requestId,
+            planOptions: { autoStart: true, replan: false, clientRequestId: requestId },
+          },
+          planningPromise: new Promise(() => undefined),
+        }),
+      };
+      service.setQuicksprintLauncher(quicksprintLauncher);
+      deps.connectionChatRepository.postDashboardMessage.mockReturnValue({
+        id: `msg-${spec.kind}`,
+        threadId: "t-app",
+        bodyMarkdown: spec.displayLabel,
+        metadata,
+      });
+      deps.connectionChatRepository.getThread.mockReturnValue({
+        id: "t-app",
+        projectId: "p1",
+        connectionId: null,
+        title: spec.displayLabel,
+        runtimeState: {},
+      });
+
+      await service.postMessage("p1", { bodyMarkdown: spec.displayLabel, metadata });
+
+      expect(quicksprintLauncher.launchDetachedQuicksprint).toHaveBeenCalledWith("p1", expect.objectContaining({
+        templateId: spec.templateId,
+        submitMode: "plan_and_start",
+        clientRequestId: requestId,
+        planningOverrides: { designGuidance: spec.designGuidance },
+      }));
+      expect(deps.connectionChatRepository.postSystemMessage).toHaveBeenCalledWith("p1", expect.objectContaining({
+        bodyMarkdown: expect.stringContaining(`Started a ${spec.appKindLabel.toLowerCase()} sprint`),
+        metadata: {
+          widget_metadata: expect.objectContaining({ appKind: spec.kind, quickactionRequestId: requestId }),
+        },
+      }));
+    },
+  );
+
+  it.each(CREATE_APP_QUICKACTION_CATALOG.map(({ kind }) => kind))(
+    "fails %s safely when the project is not eligible for an initial app",
+    async (kind) => {
+      const spec = CREATE_APP_QUICKACTION_CATALOG.find((entry) => entry.kind === kind)!;
+      const metadata = {
+        quickaction: { type: "create_app", kind, requestId: `request-${kind}`, templateId: spec.templateId },
+      };
+      const quicksprintLauncher = { launchDetachedQuicksprint: vi.fn() };
+      service.setQuicksprintLauncher(quicksprintLauncher);
+      deps.getProjectInitializationState.mockResolvedValue({
+        projectId: "p1",
+        initializationMode: "existing",
+        repositoryState: "unavailable",
+        canCreateInitialAppQuickactions: false,
+      });
+      deps.connectionChatRepository.postDashboardMessage.mockReturnValue({
+        id: `msg-${kind}`,
+        threadId: "t-app",
+        bodyMarkdown: spec.displayLabel,
+        metadata,
+      });
+      deps.connectionChatRepository.getThread.mockReturnValue({
+        id: "t-app",
+        projectId: "p1",
+        connectionId: null,
+        runtimeState: {},
+      });
+
+      const result = await service.postMessage("p1", { bodyMarkdown: spec.displayLabel, metadata });
+
+      expect(result.deliveryStatus).toBe("failed");
+      expect(quicksprintLauncher.launchDetachedQuicksprint).not.toHaveBeenCalled();
+      expect(deps.connectionChatRepository.postSystemMessage).toHaveBeenCalledWith("p1", expect.objectContaining({
+        bodyMarkdown: expect.stringContaining(`${spec.displayLabel} is only available for an eligible initial project.`),
+      }));
+    },
+  );
+
+  it.each([
+    ["template", { templateId: "qs-create-game" }],
+    ["guidance", { designGuidance: { selectedTechStackId: "client-markdown", selectedStyleguideId: "code-ux-award-winning" } }],
+  ] as const)("rejects invalid create-app %s metadata", async (_label, override) => {
+    const metadata = {
+      quickaction: {
+        type: "create_app",
+        kind: "web_app",
+        requestId: "invalid-request",
+        templateId: "qs-create-web-app",
+        ...override,
+      },
+    };
+    const quicksprintLauncher = { launchDetachedQuicksprint: vi.fn() };
+    service.setQuicksprintLauncher(quicksprintLauncher);
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({
+      id: "msg-invalid",
+      threadId: "t-app",
+      bodyMarkdown: "Create a web app",
+      metadata,
+    });
+    deps.connectionChatRepository.getThread.mockReturnValue({ id: "t-app", projectId: "p1", runtimeState: {} });
+
+    const result = await service.postMessage("p1", { bodyMarkdown: "Create a web app", metadata });
+
+    expect(result.deliveryStatus).toBe("failed");
+    expect(quicksprintLauncher.launchDetachedQuicksprint).not.toHaveBeenCalled();
   });
 
   it("queues normal chat follow-ups while create-app planning has no tasks yet", async () => {
@@ -918,6 +1090,43 @@ describe("ChatThreadRuntimeService", () => {
     });
   });
 
+  it("stores an agent effect alongside existing assistant reply metadata", async () => {
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-effect", threadId: "t1", bodyMarkdown: "good news?" });
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t1",
+      projectId: "p1",
+      title: "Thread",
+      connectionId: null,
+      runtimeState: {},
+    });
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "codex",
+      providers: { codex: { model: "gpt-5.3-codex", apiKey: "codex-key" } },
+    });
+    deps.connectionChatRepository.listMessages.mockReturnValue([
+      { id: "msg-effect", authorType: "dashboard_user", bodyMarkdown: "good news?" },
+    ]);
+    deps.chatManagementActionService.processManagementAction.mockResolvedValue({
+      replyMarkdown: "Everything passed.",
+      action: null,
+      approvalRequired: false,
+      promptSuggestions: [{ label: "Deploy", prompt: "Deploy now" }],
+      agentEffect: { emotion: "excited", animation: "hyped", caption: "All green!", durationMs: 2600 },
+    });
+
+    await service.postMessage("p1", { bodyMarkdown: "good news?" });
+
+    expect(deps.connectionChatRepository.postSystemMessage).toHaveBeenCalledWith("p1", {
+      threadId: "t1",
+      bodyMarkdown: "Everything passed.",
+      metadata: {
+        promptSuggestions: [{ label: "Deploy", prompt: "Deploy now" }],
+        agentEffect: { emotion: "excited", animation: "hyped", caption: "All green!", durationMs: 2600 },
+      },
+    });
+  });
+
   it("leaves no-suggestion virtual replies without message metadata", async () => {
     deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-no-suggestions", threadId: "t1", bodyMarkdown: "hello" });
     deps.connectionChatRepository.getThread.mockReturnValue({
@@ -1020,7 +1229,8 @@ describe("ChatThreadRuntimeService", () => {
       id: "reply-agent",
       instructionMarkdown: "",
     });
-    deps.getMcpConnectionInfo = vi.fn().mockReturnValue({ url: "http://127.0.0.1:3000/mcp", authToken: "token" });
+    const globalMcpConnection = { url: "http://127.0.0.1:3000/mcp", authToken: "token" };
+    deps.getMcpConnectionInfo = vi.fn().mockReturnValue(globalMcpConnection);
     deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-scheduler", threadId: "t1", bodyMarkdown: "remind yourself tomorrow" });
     deps.connectionChatRepository.getThread.mockReturnValue({
       id: "t1",
@@ -1042,7 +1252,7 @@ describe("ChatThreadRuntimeService", () => {
 
     expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledWith(
       expect.objectContaining({
-        mcpConnection: { url: "http://127.0.0.1:3000/mcp", authToken: "token" },
+        mcpConnection: { url: "http://127.0.0.1:3000/mcp", authToken: "token", threadId: "t1" },
         mcpAgentId: "reply-agent",
         agentMcpAccess: codeUxAgentMcpAccess(["playwright"]),
         prompt: expect.stringContaining("You have the `manage_code_ux` MCP tool available"),
@@ -1053,6 +1263,7 @@ describe("ChatThreadRuntimeService", () => {
         prompt: expect.stringContaining("You also have the `scheduler_code_ux` MCP tool available"),
       }),
     );
+    expect(globalMcpConnection).toEqual({ url: "http://127.0.0.1:3000/mcp", authToken: "token" });
   });
 
   it("uses full Code UX MCP access for a configured dashboard reply preset", async () => {
@@ -1423,7 +1634,7 @@ describe("ChatThreadRuntimeService", () => {
     });
     deps.agentPresetSyncService.getWorkerAgent.mockResolvedValue({ instructionMarkdown: "" });
     deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec-compact" });
-    deps.providerRunner.runProviderForText.mockResolvedValue({ text: "## Current Objective\nKeep context", nativeSessionId: "session-1" });
+    deps.providerRunner.runProviderForText.mockResolvedValue(providerTextResult("## Current Objective\nKeep context", "session-1"));
     deps.connectionChatRepository.updateThread.mockImplementation((threadId: string, input: any) => ({
       id: threadId,
       projectId: "p1",
@@ -1466,6 +1677,133 @@ describe("ChatThreadRuntimeService", () => {
     });
   });
 
+  it.each([
+    ["read-only", true],
+    ["read-write", false],
+  ] as const)("forwards a validated %s Google Drive mount during Docker native compaction", async (accessMode, readonly) => {
+    const driveDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-chat-compact-drive-"));
+    try {
+      deps.getDashboardSettings.mockReturnValue({
+        cliWorkflow: { executionMode: "DOCKER" },
+        googleDrive: { enabled: true, hostPath: driveDir, accessMode },
+      });
+      deps.connectionChatRepository.getThread.mockReturnValue({
+        id: "t1",
+        projectId: "p1",
+        title: "Thread",
+        connectionId: null,
+        runtimeState: { routeKind: "virtual", virtualProvider: "codex", sessionIds: ["session-1"] },
+      });
+      deps.connectionChatRepository.listMessages.mockReturnValue([
+        { id: "m1", authorType: "dashboard_user", bodyMarkdown: "hello" },
+      ]);
+      deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+      deps.taskService.resolveInvocationProvider.mockReturnValue({
+        provider: "codex",
+        providers: { codex: { model: "gpt-5.3-codex", apiKey: "key" } },
+      });
+      deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec-drive-compact" });
+      deps.providerRunner.runProviderForText.mockResolvedValue(providerTextResult("Compacted", "session-1"));
+      deps.connectionChatRepository.updateThread.mockImplementation((threadId: string, input: any) => ({
+        id: threadId,
+        projectId: "p1",
+        title: "Thread",
+        runtimeState: input.runtimeState,
+      }));
+
+      await service.compactThreadSession("t1");
+
+      expect(deps.providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+        nativeSessionOperation: "compact",
+        continueSessionId: "session-1",
+        workspaceLifecycle: "continue",
+        googleDriveMount: {
+          source: driveDir,
+          destination: "/mnt/code-ux/google-drive",
+          readonly,
+        },
+      }));
+    } finally {
+      await fs.rm(driveDir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ["missing", path.join(os.tmpdir(), "code-ux-chat-compact-drive-missing")],
+    ["invalid", import.meta.filename],
+  ] as const)("does not forward a Google Drive mount for an %s Docker path", async (_kind, hostPath) => {
+    deps.getDashboardSettings.mockReturnValue({
+      cliWorkflow: { executionMode: "DOCKER" },
+      googleDrive: { enabled: true, hostPath, accessMode: "read-only" },
+    });
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t1",
+      projectId: "p1",
+      title: "Thread",
+      connectionId: null,
+      runtimeState: { routeKind: "virtual", virtualProvider: "codex", sessionIds: ["session-1"] },
+    });
+    deps.connectionChatRepository.listMessages.mockReturnValue([{ id: "m1", bodyMarkdown: "hello" }]);
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "codex",
+      providers: { codex: { model: "gpt-5.3-codex", apiKey: "key" } },
+    });
+    deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec-invalid-drive-compact" });
+    deps.providerRunner.runProviderForText.mockResolvedValue(providerTextResult("Compacted", "session-1"));
+    deps.connectionChatRepository.updateThread.mockImplementation((threadId: string, input: any) => ({
+      id: threadId,
+      projectId: "p1",
+      runtimeState: input.runtimeState,
+    }));
+
+    await service.compactThreadSession("t1");
+
+    expect(deps.providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+      nativeSessionOperation: "compact",
+      googleDriveMount: undefined,
+    }));
+  });
+
+  it("does not forward a Google Drive mount during host-mode native compaction", async () => {
+    const driveDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-chat-host-compact-drive-"));
+    try {
+      deps.getDashboardSettings.mockReturnValue({
+        cliWorkflow: { executionMode: "HOST" },
+        googleDrive: { enabled: true, hostPath: driveDir, accessMode: "read-write" },
+      });
+      deps.connectionChatRepository.getThread.mockReturnValue({
+        id: "t1",
+        projectId: "p1",
+        title: "Thread",
+        connectionId: null,
+        runtimeState: { routeKind: "virtual", virtualProvider: "codex", sessionIds: ["session-1"] },
+      });
+      deps.connectionChatRepository.listMessages.mockReturnValue([{ id: "m1", bodyMarkdown: "hello" }]);
+      deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+      deps.taskService.resolveInvocationProvider.mockReturnValue({
+        provider: "codex",
+        providers: { codex: { model: "gpt-5.3-codex", apiKey: "key" } },
+      });
+      deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec-host-drive-compact" });
+      deps.providerRunner.runProviderForText.mockResolvedValue(providerTextResult("Compacted", "session-1"));
+      deps.connectionChatRepository.updateThread.mockImplementation((threadId: string, input: any) => ({
+        id: threadId,
+        projectId: "p1",
+        runtimeState: input.runtimeState,
+      }));
+
+      await service.compactThreadSession("t1");
+
+      expect(deps.providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+        nativeSessionOperation: "compact",
+        googleDriveMount: undefined,
+      }));
+    } finally {
+      await fs.rm(driveDir, { recursive: true, force: true });
+    }
+  });
+
   it("uses the thread logical session for native compaction when no native session is stored and preserves the resolved session", async () => {
     deps.connectionChatRepository.getThread.mockReturnValue({
       id: "t1",
@@ -1499,10 +1837,7 @@ describe("ChatThreadRuntimeService", () => {
       },
     });
     deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec-compact-fallback" });
-    deps.providerRunner.runProviderForText.mockResolvedValue({
-      text: "## Compact Summary\nContinue from here",
-      nativeSessionId: "qwen-native-1",
-    });
+    deps.providerRunner.runProviderForText.mockResolvedValue(providerTextResult("## Compact Summary\nContinue from here", "qwen-native-1"));
     deps.connectionChatRepository.updateThread.mockImplementation((threadId: string, input: any) => ({
       id: threadId,
       projectId: "p1",

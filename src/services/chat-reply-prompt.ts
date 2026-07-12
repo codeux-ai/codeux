@@ -1,4 +1,9 @@
 import {
+  AGENT_RESPONSE_ANIMATIONS,
+  AGENT_RESPONSE_EFFECT_MAX_CAPTION_LENGTH,
+  AGENT_RESPONSE_EFFECT_MAX_DURATION_MS,
+  AGENT_RESPONSE_EFFECT_MIN_DURATION_MS,
+  AGENT_RESPONSE_EMOTIONS,
   ConversationCompactionSummary,
   ConversationMessageRecord,
   ConversationRuntimeState,
@@ -89,9 +94,11 @@ export function getMessagesAfterCompaction(
   return messages.slice(index + 1);
 }
 
-function buildJsonOutputInstructions(): string {
+function buildJsonOutputInstructions(includeAgentEffect: boolean): string {
   return [
-    "You must return STRICT JSON format containing `replyMarkdown`, `action`, and optional `suggestions`.",
+    includeAgentEffect
+      ? "You must return STRICT JSON format containing `replyMarkdown`, `action`, and optional `suggestions` and `agentEffect`."
+      : "You must return STRICT JSON format containing `replyMarkdown`, `action`, and optional `suggestions`.",
     "1. `replyMarkdown`: A string containing your concise markdown reply to the user.",
     "2. `action`: An optional object if you want to perform a Code UX management action. Otherwise, set this to `null`.",
     "   - Format: `{ \"domain\": \"...\", \"action\": \"...\", \"payload\": { ... } }`",
@@ -104,12 +111,18 @@ function buildJsonOutputInstructions(): string {
     "   - `prompt` is the literal message the user would send next.",
     "   - Use only stable string icon identifiers such as `play`, `settings`, or `search`; do not use UI component names.",
     "   - Omit `suggestions` when there are no useful next steps.",
+    ...(includeAgentEffect ? [
+      "4. `agentEffect`: Optional dashboard-only avatar effect for this answer.",
+      "   - Format: `{ \"emotion\": \"happy\"|\"sad\"|\"angry\"|\"sleepy\"|\"bored\"|\"curious\"|\"thinking\"|\"excited\"|\"surprised\"|\"proud\", \"animation\": \"hyped\"|\"shake_head\"|\"nod\"|\"laughing\"|\"wink\"|\"dance\", \"caption\"?: string, \"durationMs\": integer }`.",
+      "   - `caption` must be 120 characters or fewer and `durationMs` must be from 500 through 10000.",
+      "   - Omit `agentEffect` unless a brief avatar reaction meaningfully complements the markdown answer.",
+    ] : []),
     "",
     buildCustomDashboardManagementInstructions("json"),
   ].join("\n");
 }
 
-function buildMcpNativeOutputInstructions(): string {
+function buildMcpNativeOutputInstructions(includeAgentEffect: boolean): string {
   return [
     "You have the `manage_code_ux` MCP tool available. Use it directly to perform management actions.",
     "You also have dedicated Code UX management tools when listed by MCP, including `manage_custom_dashboards` for custom dashboard management.",
@@ -134,6 +147,9 @@ function buildMcpNativeOutputInstructions(): string {
     "- If the tool returns `approvalRequired: true`, inform the user what action needs approval and ask them to confirm. DO NOT re-call the tool with `approval.confirmed: true` unless the user explicitly confirms.",
     "- Settings mutations are one-use approval gated: the first call always queues the exact action/payload for up to 15 minutes, and only the same action/payload can execute after user confirmation.",
     "- Respond with plain markdown text. Do NOT wrap your response in JSON.",
+    ...(includeAgentEffect ? [
+      "- To request a dashboard avatar reaction, add one `codeux:agent` fenced JSON block. Use the same bounded shape documented in the rich-widget instructions; the block is metadata and is removed from visible reply markdown.",
+    ] : []),
     "",
     buildCustomDashboardManagementInstructions("mcp"),
   ].join("\n");
@@ -182,6 +198,7 @@ export function buildStageWidgetInstructions(): string {
     "- ```codeux:metrics — stat tile row: { \"title\"?: string, \"items\": [{ \"label\": string, \"value\": string, \"delta\"?: string, \"tone\"?: \"up\"|\"down\"|\"flat\" }] }",
     "- ```codeux:memory — durable-memory confirmation: { \"title\"?: string, \"memory\": string, \"category\": string, \"claimId\": string, \"memoryId\"?: string, \"status\": \"stored\" }. Emit this after `add_long_term_memory` succeeds, using only ids and values returned by the tool.",
     "- ```codeux:actions — 2-3 suggested next steps: { \"items\": [{ \"label\": string, \"prompt\": string }] } where `prompt` is the literal message the user would send next.",
+    "- ```codeux:agent — avatar reaction metadata: { \"emotion\": \"happy\"|\"sad\"|\"angry\"|\"sleepy\"|\"bored\"|\"curious\"|\"thinking\"|\"excited\"|\"surprised\"|\"proud\", \"animation\": \"hyped\"|\"shake_head\"|\"nod\"|\"laughing\"|\"wink\"|\"dance\", \"caption\"?: string, \"durationMs\": integer from 500 through 10000 }. Use at most one; captions must be 120 characters or fewer.",
     "Mix widgets with short markdown prose. Only put truthful, known data in widgets — never invent numbers.",
     "For status/summary style answers, prefer widgets over long prose and end the reply with one codeux:actions block.",
   ].join("\n");
@@ -245,8 +262,8 @@ export function buildChatReplayPrompt(args: {
   const outputInstructions = args.mcpAvailable && args.mcpAccessMode === "scheduler_only"
     ? buildSchedulerOnlyOutputInstructions()
     : args.mcpAvailable
-      ? buildMcpNativeOutputInstructions()
-      : buildJsonOutputInstructions();
+      ? buildMcpNativeOutputInstructions(!args.suppressRichWidgets)
+      : buildJsonOutputInstructions(!args.suppressRichWidgets);
 
   const pendingActionContext = pendingAction ? [
     "## PENDING ACTION CONTEXT",
@@ -329,7 +346,7 @@ export function buildChatContinuationPrompt(
     "If asked about earlier user messages, use only prior dashboard chat entries marked `### User`; ignore provider/system setup text and this wrapper.",
     suppressRichWidgets
       ? "Respond with readable markdown prose only. Do not include dashboard-only `codeux:*` fenced widget blocks."
-      : "Remember: the dashboard renders ```codeux:status / codeux:tasks / codeux:sprint / codeux:metrics / codeux:memory / codeux:actions fenced JSON blocks in your reply as rich UI widgets — use them for status, summaries, durable-memory confirmations, and next steps.",
+      : "Remember: the dashboard renders ```codeux:status / codeux:tasks / codeux:sprint / codeux:metrics / codeux:memory / codeux:actions fenced JSON blocks as rich UI widgets, and accepts one bounded codeux:agent block for avatar reaction metadata — use them when they complement the answer.",
     "",
     "### User",
     message.bodyMarkdown.trim(),
@@ -339,7 +356,10 @@ export function buildChatContinuationPrompt(
 function downgradeWidgetFence(widgetType: string, rawJson: string): string {
   const data = parseWidgetJson(rawJson);
   if (!data) {
-    return "";
+    return widgetType === "agent" ? `\`\`\`json\n${rawJson.trim()}\n\`\`\`` : "";
+  }
+  if (widgetType === "agent" && !isValidAgentWidgetData(data)) {
+    return `\`\`\`json\n${rawJson.trim()}\n\`\`\``;
   }
   switch (widgetType) {
     case "status":
@@ -354,9 +374,28 @@ function downgradeWidgetFence(widgetType: string, rawJson: string): string {
       return downgradeMemoryWidget(data);
     case "actions":
       return downgradeActionsWidget(data);
+    case "agent":
+      return "";
     default:
       return "";
   }
+}
+
+function isValidAgentWidgetData(data: Record<string, unknown>): boolean {
+  const caption = data.caption;
+  return typeof data.emotion === "string"
+    && (AGENT_RESPONSE_EMOTIONS as readonly string[]).includes(data.emotion)
+    && typeof data.animation === "string"
+    && (AGENT_RESPONSE_ANIMATIONS as readonly string[]).includes(data.animation)
+    && typeof data.durationMs === "number"
+    && Number.isSafeInteger(data.durationMs)
+    && data.durationMs >= AGENT_RESPONSE_EFFECT_MIN_DURATION_MS
+    && data.durationMs <= AGENT_RESPONSE_EFFECT_MAX_DURATION_MS
+    && (caption === undefined || (
+      typeof caption === "string"
+      && caption.trim().length > 0
+      && caption.trim().length <= AGENT_RESPONSE_EFFECT_MAX_CAPTION_LENGTH
+    ));
 }
 
 function downgradeMemoryWidget(data: Record<string, unknown>): string {

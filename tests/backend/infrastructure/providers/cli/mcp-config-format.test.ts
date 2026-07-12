@@ -46,8 +46,54 @@ describe("mcp-config-format injection prevention", () => {
     const artifact = buildProviderMcpConfigArtifact("codex", null, [DEFAULT_PLAYWRIGHT_MCP_SERVER]);
 
     expect(artifact?.content).toContain("[mcp_servers.playwright]");
-    expect(artifact?.content).toContain('command = "playwright-mcp"');
-    expect(artifact?.content).not.toContain("@playwright/mcp@latest");
+    expect(artifact?.content).toContain('command = "npx"');
+    expect(artifact?.content).toContain('args = ["@playwright/mcp@latest"]');
+  });
+
+  it.each([
+    ["claude-code", "code_ux"],
+    ["gemini", "code_ux"],
+    ["qwen-code", "code_ux"],
+    ["antigravity", "code_ux"],
+  ] as const)("adds the thread header only to the built-in %s MCP connection", (provider, builtInName) => {
+    const artifact = buildProviderMcpConfigArtifact(provider, {
+      url: "http://127.0.0.1:3000/mcp",
+      authToken: "token",
+      agentId: "agent-9",
+      threadId: "thread-7",
+    }, [{
+      id: "docs",
+      name: "docs",
+      transport: "http",
+      url: "https://docs.example/mcp",
+      headers: { "X-Custom": "value" },
+      enabled: true,
+    }]);
+    const config = JSON.parse(artifact?.content || "{}");
+
+    expect(config.mcpServers[builtInName].headers["X-Code-Ux-Agent"]).toBe("agent-9");
+    expect(config.mcpServers[builtInName].headers["X-Code-Ux-Thread"]).toBe("thread-7");
+    expect(config.mcpServers.docs.headers).toEqual({ "X-Custom": "value" });
+  });
+
+  it("adds an escaped thread header to the Codex built-in MCP connection only", () => {
+    const artifact = buildProviderMcpConfigArtifact("codex", {
+      url: "http://127.0.0.1:3000/mcp",
+      authToken: null,
+      agentId: "agent-9",
+      threadId: 'thread-7"quoted',
+    }, [{
+      id: "docs",
+      name: "docs",
+      transport: "http",
+      url: "https://docs.example/mcp",
+      headers: { "X-Custom": "value" },
+      enabled: true,
+    }]);
+
+    expect(artifact?.content).toContain('"X-Code-Ux-Agent" = "agent-9"');
+    expect(artifact?.content).toContain('"X-Code-Ux-Thread" = "thread-7\\"quoted"');
+    expect(artifact?.content).toContain('http_headers = { "X-Custom" = "value" }');
   });
 
   it("serializes stdio command, args, and env without shell interpretation across provider artifacts", () => {

@@ -26,9 +26,13 @@ Each preset is a card with avatar, name, label tags, and a one-line description.
 
 ## Avatar preview behavior
 
-The 3D avatar preview uses lightweight WebGL presentation effects only. It relies on studio lighting, material finish, and avatar/tool animation rather than flashlight beams, target glows, or post-processing.
+The 3D avatar preview uses lightweight WebGL presentation effects only. Its shared SVG/WebGL expression vocabulary is `happy`, `sad`, `angry`, `sleepy`, `bored`, `hyped`, `shake_head`, `nod`, `curious`, `thinking`, `excited`, `laughing`, `surprised`, `wink`, `dance`, and `proud`.
 
-When motion is allowed, the avatar head can track pointer hover and runtime tool props animate beside the bot. Reduced-motion settings and WebGL fallback mode use the static SVG avatar instead, so the Agents page remains usable without animation or a WebGL context.
+The work tool catalog uses the exact identifiers `screwdriver`, `jackhammer`, `wrench`, `hammer`, and `torch`, displayed as **Power screwdriver**, **Jackhammer**, **Open-end wrench**, **Claw hammer**, and **Welding torch**. Their motion kinds are spin, piston, ratchet, tap, and flicker. Tool changes animate the old prop out and the new prop in without restarting the WebGL renderer.
+
+The renderer, scene, camera, and persistent lights are created once per mount. Avatar configuration changes rebuild only avatar geometry, particles, and the environment map; tool changes use an independent lifecycle; and the animation loop reads the current refs. Removed or unmounted resources are disposed exactly once, animation frames and listeners are cancelled, the canvas is removed, and the WebGL context is explicitly released when supported.
+
+When motion is allowed, the avatar head can track pointer hover and runtime tool props animate beside the bot. Reduced-motion settings, explicit fallback mode, and WebGL construction failure use the static SVG avatar without a WebGL context. An active work tool remains visible as text and in the accessible image label, so motion and color are never the only state signals. Offscreen previews lazy-load near the viewport; an eager preview loads immediately.
 
 ## Creating an agent
 
@@ -74,6 +78,18 @@ Older API clients may still call the legacy `sync-markdown` endpoint as a backwa
 
 This makes agent presets first-class repository content — you can check them in, code-review them, and share them across teammates.
 
+## Base-agent compatibility updates
+
+Code UX tracks bundled instruction revisions independently for the Planning agent and Project manager only. Worker, Quality assurance agent, and Project Setup Agent continue through normal preset synchronization and are not automatically updated by this feature. The Planning target comes from `agents.routing.planning.agentPresetId`; the Project manager/dashboard-reply target comes independently from `agents.routing.dashboardReply.agentPresetId`. A null route uses the named built-in fallback.
+
+When a selected built-in has not diverged from its tracked baseline, a newer bundle is applied automatically to its instruction markdown. Custom presets, locally edited instructions, and alternate routed presets are never silently overwritten. `GET /api/projects/:projectId/agent-presets/base-updates` performs the normal synchronization and returns only notices still requiring a decision; checking for notices does not invoke a provider. Each notice names the actual routed preset, so an alternate Planning or dashboard-reply assignment is clearly identified.
+
+The Agents page heading is **Planning agent base update available** or **Project manager base update available**. It explains whether the named preset has customized instructions or is assigned to that route, followed by: **Updating invokes an agent to compare both base files and apply only important system-compatibility instructions. Your main prompt, custom instructions, and behavior are preserved.** No merge runs until you choose **Update with AI**.
+
+To apply a notice, the dashboard uses `POST /api/projects/:projectId/agent-presets/base-updates/:baseAgentRole/apply`, where the role must be `planning_agent` or `project_manager`. The endpoint consumes no request body and runs through the configured supported local planning provider. The agent compares the previous base, current bundle, and selected preset, and may add only compatibility-critical system instructions such as changed MCP or strict output-schema requirements. Code UX accepts only raw JSON containing a single non-empty `instructionMarkdown` value, verifies that all original preset lines remain in order, rechecks that routing still selects the noticed preset, and writes the markdown itself.
+
+The merge cannot change the main prompt, custom behavior, avatar, labels, routing, provider/model, memory, MCP access, persistent skills, or source metadata. A failed provider call, unsupported provider, malformed or destructive response, stale notice, or route change leaves both the preset and its stored bundled revision unchanged, so the notice remains available for retry. A successful merge records the current bundled revision even when the preserved custom markdown differs from the bundle, preventing the same notice from returning.
+
 ## Deleting an agent
 
 Destructive. Requires confirmation. Threads and tasks that referenced the deleted preset fall back to the project default agent.
@@ -96,6 +112,14 @@ Where Code UX *uses* a preset is governed by the **invocation routing** settings
 
 A common pattern: have a "Planner" agent (Claude Opus, sober and structured) for `planning`, a "Coder" agent (Codex GPT-5) for `task_coding`, and a "Reviewer" agent for `qa_review`.
 
+## Worker questions and Project manager replies
+
+During task coding, an eligible coding agent can call `request_clarification` when repository evidence cannot resolve a blocking ambiguity or a Project manager decision is required. Code UX captures the project plus any supplied task, sprint, run, dispatch, task-run, and provider-session context in a human-owned project attention item. The coding agent receives only this narrow request grant; it does not gain Project manager management tools and cannot call `reply_to_clarification`.
+
+The agent selected by `clarification_reply` answers with `reply_to_clarification`. The dashboard-reply agent and built-in Project manager fallback can also be eligible under the project-manager routing rules, while arbitrary agents and cross-project calls are rejected. The reply agent's identity is taken from its MCP session, not from editable tool arguments.
+
+After an answer is accepted, Jules receives it in the existing hosted session. Local CLI coding uses the task-rerun continuation path with the preserved workspace and native provider session. This means Code UX accepted continuation; the task still completes through its normal execution and verification lifecycle. If the provider session or preserved workspace is unavailable, the question stays pending. General questions without a task simply record the answer and do not start coding work. Repeated requests and replies are deduplicated, so retries do not create another question, provider message, or coding dispatch.
+
 ## Memory templates
 
 When `memoryTemplateOverrideEnabled` is set, the preset's `memoryTemplateMarkdown` controls how project / sprint memories are formatted into prompts. The template uses simple `{{ }}` placeholders for memory blocks. See [Memory](/docs/user-dashboard-memory) for available placeholders.
@@ -108,9 +132,9 @@ Agent presets may store `containerRunAsRoot` as `true`, `false`, or `null`. The 
 
 The dashboard can attach an agent to one or more named persistent skill storage records. These records live in dedicated skill tables and are separate from project workspaces, memories, knowledge documents, and provider model attachments.
 
-Create and delete project skill storages in **Settings → Agents**, then attach them from either the settings attachment matrix or the agent editor. Persistent skill retrieval stays **off by default**: an agent must have at least one storage attached and the explicit persistent skills toggle enabled before runtime retrieval can use it.
+Create and delete project skill storages in **Settings → Agents**, then attach them from either the settings attachment matrix or the agent editor. Persistent skill retrieval stays **off by default** for ordinary presets: an agent must have at least one storage attached and the explicit persistent skills toggle enabled before runtime retrieval can use it. The built-in Project Manager starts with one project-owned **Project Manager Skills** storage attached and enabled. Synchronization creates it only when that preset has no attachment, avoids duplicates, and preserves a later user opt-out.
 
-On supported task coding, planning, QA and follow-up, CI repair, merge repair, remediation, dashboard reply, and clarification reply invocations, an opted-in agent with attached storage receives exactly one persistent-skill prompt context, retrieval limited to its project-scoped attachments, and isolated storage mounts. Disabled agents, agents without attachments, cross-project preset mismatches, and invocations without a scoped agent receive no persistent-skill prompt context, retrieval grant, or mounts.
+On supported task coding, planning, QA and follow-up, CI repair, merge repair, remediation, dashboard reply, and clarification reply invocations, an opted-in agent with attached storage receives exactly one persistent-skill prompt context, retrieval limited to its project-scoped attachments, and isolated read-only storage mounts. Each storage is an internal Git repository committed through Code UX's containerized Git helper; the runtime prompt includes its revision and mutations go through `manage_skills`. Disabled agents, agents without attachments, cross-project preset mismatches, and invocations without a scoped agent receive no persistent-skill prompt context, retrieval grant, or mounts.
 
 The agent detail and editor panels show attached storage names and whether persistent skills are **Default off** or **Enabled**. Hover, focus, click, or press Enter on an attached storage chip to lazily inspect its description, bounded skill count, names, tags, and short content previews. Activating the chip only inspects or retries the disclosure; the adjacent checkbox is the only control that attaches or detaches storage. The disclosure identifies loading, empty, retryable error, and truncated-preview states; detached storages are not inspected. Empty storage state means no persistent skills are available for that agent, and does not affect ordinary memory or knowledge subscriptions.
 
@@ -122,8 +146,10 @@ Persistent skills remain separate from memory templates, knowledge document subs
 
 Agent MCP access is default-deny. If a preset has no saved MCP access record, Code UX built-in tools display as disabled and the agent does not inherit broad project-manager tool access. Custom MCP server links, such as Playwright, are controlled separately and can remain linked without enabling Code UX built-in tools.
 
+Clarification grants are route- and audience-scoped exceptions to that broad default. An eligible task-coding run may receive only `request_clarification` even when general Code UX access is off, and an eligible Project manager reply run may receive only `reply_to_clarification`. System tool toggles and explicit per-agent disables still apply. Unknown presets, wrong project/task scope, and wrong-audience calls fail closed rather than inheriting access.
+
 The **Connected MCPs** editor panel opens a risk-gated manager for Code UX tools. Turning on Code UX for the dashboard reply agent enables the built-in MCP surface plus the restricted `scheduler_code_ux` tool and the dedicated `add_long_term_memory` lane. Turning on Code UX for other agents keeps `scheduler_code_ux` explicitly disabled by default while broader tools remain visible for review.
 
 Scheduler access lets an agent create its own wakeups through the secured agent scheduler surface. It does not grant full scheduler administration, due-entry execution, recurrence editing, sprint scheduling, task reruns, or destructive scheduler actions.
 
-The dashboard reply route defaults to Project manager and always receives the full built-in Code UX MCP surface, scheduler, direct long-term-memory lane, and the default Playwright MCP server for dashboard chat turns. This is keyed to the dashboard reply route assignment rather than the generic project-manager role. Enabling scheduler or any other Code UX tool for planning, coding, QA, CI repair, merge-conflict, or other non-chat agents is riskier because those agents run during operational workflows and can affect project state without being part of a direct dashboard chat exchange.
+The dashboard reply route defaults to Project manager and always receives the full built-in Code UX MCP surface, scheduler, direct long-term-memory lane, and the default Playwright MCP server for dashboard chat turns. This is keyed to the dashboard reply route assignment rather than the generic project-manager role. When persisted Code UX access is off but this runtime grant applies, the agent detail/editor surfaces show `Code UX · Runtime` so the visible connection matches actual dispatch behavior. Enabling scheduler or any other Code UX tool for planning, coding, QA, CI repair, merge-conflict, or other non-chat agents is riskier because those agents run during operational workflows and can affect project state without being part of a direct dashboard chat exchange.

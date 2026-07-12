@@ -288,7 +288,17 @@ export const QAPanel: FunctionComponent<{
   ];
 
   return (
-      <SectionCard title="Quality Assurance" watermark="QA" badge={sectionBadge} icon={<ShieldCheck strokeWidth={2.4} />}>
+      <SectionCard
+        title="Quality Assurance"
+        watermark="QA"
+        badge={sectionBadge}
+        icon={<ShieldCheck strokeWidth={2.4} />}
+        highlights={[
+          { label: "QA agent", value: settings.enabled ? "Enabled" : "Off", tone: settings.enabled ? "active" : "warning" },
+          { label: "Review triggers", value: `${triggerRows.filter((trigger) => settings[trigger.key].enabled).length} of ${triggerRows.length}` },
+          { label: "Self-reflection", value: selfReflection?.enabled ? "Enabled" : "Off" },
+        ]}
+      >
         <Row
           label="Enable QA agent"
           description="Runs a senior QA pass after completion events, using full sprint context and continuing the current task session when fixes are required."

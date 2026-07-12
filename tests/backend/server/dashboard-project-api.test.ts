@@ -221,6 +221,7 @@ async function createServerHandle(): Promise<{
         };
     },
     getOverviewTelemetrySnapshot: () => executionRepository.getOverviewTelemetrySnapshot(),
+    getDashboardNotifications: () => executionRepository.getDashboardNotifications(),
     getProjectExecutionSnapshot: (projectId) => ({
       ...executionRepository.getProjectExecutionSnapshot(projectId),
       connections: mapExecutionConnections(connectionRepository.listConnections(projectId)),
@@ -467,6 +468,60 @@ async function createServerHandle(): Promise<{
 }
 
 describe("dashboard project management API", () => {
+  it("returns the typed cross-project notification feed without mutating attention state", async () => {
+    const { fetch, storage, repository, projectAttentionRepository } = await createServerHandle();
+    const project = repository.createProject({
+      name: "Notification Project",
+      sourceType: "local",
+      sourceRef: "/tmp/notification-project",
+    });
+    const sprint = repository.createSprint(project.id, { name: "Notification Sprint", number: 5 });
+    const task = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Notification task",
+      promptMarkdown: "Handle the intervention",
+    });
+    storage.getDatabase().prepare(`
+      INSERT INTO project_attention_items (
+        id, project_id, sprint_id, task_id, attention_type, severity, owner_type, status,
+        title, summary_markdown, payload_json, opened_at, updated_at
+      ) VALUES (
+        'http-attention', ?, ?, ?, 'action_required', 'high', 'human', 'open',
+        'Action required', 'Review this task.', '{"accessToken":"must-not-leak"}',
+        '2026-07-03T08:00:00.000Z', '2026-07-03T08:01:00.000Z'
+      )
+    `).run(project.id, sprint.id, task.id);
+
+    const response = await fetch("http://127.0.0.1/api/notifications");
+    expect(response.status).toBe(200);
+    const feed = await response.json() as {
+      notifications: Array<Record<string, unknown>>;
+      updatedAt: string | null;
+    };
+
+    expect(feed.updatedAt).toBe("2026-07-03T08:01:00.000Z");
+    expect(feed.notifications).toEqual([
+      expect.objectContaining({
+        id: "attention:http-attention",
+        kind: "human_intervention",
+        projectId: project.id,
+        projectName: "Notification Project",
+        sprintId: sprint.id,
+        sprintName: "Notification Sprint",
+        sprintNumber: 5,
+        taskId: task.id,
+        taskTitle: "Notification task",
+        attentionItemId: "http-attention",
+        source: expect.objectContaining({ type: "attention_item", id: "http-attention" }),
+        links: expect.objectContaining({
+          task: `/tasks?projectId=${project.id}&sprintId=${sprint.id}&taskId=${task.id}`,
+        }),
+      }),
+    ]);
+    expect(JSON.stringify(feed)).not.toContain("must-not-leak");
+    expect(projectAttentionRepository.getAttentionItem("http-attention")?.status).toBe("open");
+  });
+
   it("normalizes issue importer query parameters before calling services", async () => {
     const app = express();
     const searchIssues = vi.fn(async () => []);

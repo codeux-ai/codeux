@@ -1,6 +1,6 @@
 # Memory
 
-The **Memory** page (`/memory`) manages Code UX's two-tier semantic memory system and the embedding models that power it.
+The **Memory** page (`/memory`) manages Code UX's two-tier semantic memory system. Embedding and speech models are installed from **Settings -> AI Models**.
 
 ## The two tiers
 
@@ -30,10 +30,10 @@ Categories drive default rendering and can be used as filters in search.
 
 The Memory header is the main place to choose what the graph, sidebar, and inspector are showing. It is grouped into separate rows so the current state stays readable on desktop and wraps cleanly on narrow screens:
 
-- **Tier summary tabs** — **Short Term** and **Long Term** show their memory counts directly in the tab cards.
+- **Tier summary tabs** — **Short Term**, **Long Term**, and **Skills** show their indexed counts directly in the tab cards.
 - **Current scope line** — shows copy such as `Short Term: showing 7 memories of 17 memories · Sprint 2 · All Agents` or `Long Term: showing 1 memory of 1 memory · Project-wide · All Agents`.
 - **Scope filters** — Short-term memory shows the sprint selector when sprint scope data is available, and both tiers show the agent preset selector when agent presets are available. When a source list is empty, the filter row shows reason copy instead of rendering a focusable empty selector.
-- **Actions** — **Add Memory**, **Model Catalog**, and **Danger Delete** are separated from the selectors. Add Memory opens the manual memory dialog for the current tier scope. Model Catalog shows whether it is shown or hidden plus active-model status. Danger Delete always shows Off/Armed state plus persistent explanatory copy; when armed, the page warning refers to this as Lobotomize mode because graph-node and inspector deletes become immediate.
+- **Actions** — **Add Memory** and **Danger Delete** are separated from the selectors. Add Memory opens the manual memory dialog for the current tier scope. Danger Delete always shows Off/Armed state plus persistent explanatory copy; when armed, the page warning refers to this as Lobotomize mode because graph-node and inspector deletes become immediate. Model management lives in **Settings -> AI Models**.
 
 The sidebar search field filters the current visible tier, sprint, and agent slice by memory text/category. Programmatic semantic search still uses vector similarity across requested scopes (cosine similarity, configurable `minSimilarity`).
 
@@ -102,13 +102,16 @@ Rapid tier, sprint, or agent filter changes are sequenced by the Memory page dat
 
 The graph pauses its canvas animation loop while the browser tab is hidden and resumes when the tab is visible again. Empty or loading maps clear the canvas without running the full edge, pulse, and node drawing passes, so the page stays responsive while data changes.
 
-## Model browser
+## Model catalog
 
-The **Model Catalog** action opens a compact model browser instead of a flat card list. It separates:
+Open **Settings -> AI Models** for the shared compact model browser. It separates:
 
 - **Embedding Models** — memory search models that can be downloaded, activated, deleted, and used for re-embedding.
-- **Add Custom Hugging Face Embedding Model** — a form for compatible ONNX embedding models.
-- **TTS / Speech-Adjacent Hugging Face Models** — informational speech rows that are not memory embedding models and do not show embedding actions.
+- **Add custom model** — an accessible disclosure that keeps the advanced Hugging Face ONNX form unmounted until it is opened.
+- **Speech to text models** — downloadable STT bundles with scoped activation.
+- **Text to speech models** — downloadable Kokoro and Piper bundles used by 3D Chat.
+
+The embedding catalog search matches model name, id, description, language, and license metadata. Install-state, language, and source filters can be combined, and the no-results state provides one action that restores the complete catalog.
 
 Each embedding row shows:
 
@@ -119,16 +122,17 @@ Each embedding row shows:
 
 The local embedding runtime supports both BGE-style WordPiece tokenizers and XLM-R/SentencePiece Unigram tokenizers such as `multilingual-e5-large`.
 
-Custom in-app models can be added from Hugging Face model links. The form accepts either `owner/repo` identifiers or `https://huggingface.co/...` model/file URLs plus display name, ONNX model file, tokenizer files, dimension, approximate size, and language. The backend rejects other hosts and stores the normalized repo, ONNX model file path, tokenizer files, dimension, approximate size, language, and validation status. Custom entries are durable settings, so they appear beside built-in models after restart.
+Custom in-app models can be added from Hugging Face model links after opening **Add custom model**. The form accepts either `owner/repo` identifiers or `https://huggingface.co/...` model/file URLs plus display name, ONNX model file, tokenizer files, dimension, approximate size, and language. The backend rejects other hosts and stores the normalized repo, ONNX model file path, tokenizer files, dimension, approximate size, language, and validation status. Custom entries are durable settings, so they appear beside built-in models after restart.
+
+Custom license metadata is an operator assertion, not a Code UX license review or approval. Custom model rows label those terms as **operator asserted**, and the operator must review the upstream terms before confirming that commercial use is permitted.
 
 Actions per model:
 
 - **Download** — Pulls model weights to local cache.
-- **Cancel download** — Aborts an in-flight download.
 - **Select** — Activates the model. Subsequent embed operations use it.
 - **Delete** — Removes the local cache.
 
-Custom models use the same download, select, delete, source-link, and status actions as built-ins. A custom model cannot be selected until its ONNX file and required tokenizer files are downloaded. Speech-adjacent Hugging Face rows open safe source links only; they cannot be activated as memory embeddings.
+Custom embedding models use the same download, select, source-link, and status actions as built-ins. Deleting a custom model also removes its custom catalog definition, so it must be added again before it can be downloaded later. A custom model cannot be selected until its ONNX file and required tokenizer files are downloaded. Speech models have their own input/output activation actions and cannot be activated as memory embeddings.
 
 ### Re-embedding
 
@@ -138,7 +142,9 @@ Switching the active model leaves existing memories embedded with the previous m
 
 Persistent skills are reusable agent instructions, not sprint learnings. They are stored in project-owned skill storages, attached to agent presets, and kept out of the project workspace and `.code-ux/` sprint files.
 
-Skill markdown has frontmatter for `title`, `description`, `tags`, `appliesTo`, and `version`; the markdown body is the stored instruction content. When embeddings are available, skills are vectorized into `skill_embeddings` with model and dimension metadata. Search only compares vectors from the requested project/storage or agent-attached storages, skips dimension mismatches, caps candidate loading, ranks by cosine similarity, and uses skill id as a deterministic tie-breaker.
+Open the **Skills** tier to visualize the bounded skill catalog as a read-only graph. You can search it and filter to an agent's attached storages; memory creation, embedding-model controls, and deletion controls are intentionally unavailable in this tier. Runtime skill repositories are versioned internally and mounted read-only, while skill changes go through the management tools.
+
+Skill markdown has frontmatter for `title`, `description`, `tags`, `appliesTo`, and `version`; the markdown body is the stored instruction content. When embeddings are available, each skill gets a compact descriptor vector plus bounded, heading-aware body chunks. Search combines the strongest matching chunk with lexical descriptor/body overlap, stays within the requested project/storage or agent attachments, skips dimension mismatches, caps candidate loading, and uses deterministic tie-breakers. If the embedding model is offline, lexical search remains available instead of returning an empty catalog.
 
 ## Stats
 

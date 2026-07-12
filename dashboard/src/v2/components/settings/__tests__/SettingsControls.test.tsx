@@ -5,7 +5,7 @@ import { h } from "preact";
 import { useRef, useState } from "preact/hooks";
 import { readFileSync } from "node:fs";
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
+import { render, screen, cleanup, fireEvent, waitFor, within } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
 import { BranchNameSchemeEditor, TaskPrTitleSchemeEditor } from "../BranchNameSchemeEditor";
 import { SprintKeyEditor } from "../SprintKeyEditor";
@@ -13,9 +13,10 @@ import { TextInput, SecretInput, NumberInput, TextAreaInput, PillChoiceGroup, Se
 
 
 import { SettingsCategoryRail, CATEGORIES } from "../SettingsCategoryRail";
+import { SettingsCategoryPicker } from "../SettingsCategoryPicker";
 import { SettingsScopeControls } from "../SettingsScopeControls";
 import { ActionButton, NoticePanel } from "../SettingsSurface";
-import { OverrideBadge } from "../panels/SharedPanelComponents";
+import { OverrideBadge, SectionCard, SettingsDetailWorkspaceProvider } from "../panels/SharedPanelComponents";
 import { SettingsTechstacksPanel } from "../panels/SettingsTechstacksPanel";
 import { SlidersHorizontal } from "lucide-preact";
 import type { SettingsSearchMatches } from "../../../lib/settings-search-index";
@@ -161,7 +162,20 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
 
     const btn = screen.getByRole("button", { name: /Techstacks/ });
     expect(btn).toHaveAttribute("aria-current", "page");
-    expect(btn).toHaveAttribute("aria-selected", "true");
+    expect(btn).not.toHaveAttribute("aria-selected");
+  });
+
+  it("Settings categories expose stable domain colors independently from the user accent", () => {
+    expect(Object.fromEntries(CATEGORIES.map((category) => [category.id, category.accent]))).toMatchObject({
+      general: "sky",
+      appearance: "violet",
+      models: "indigo",
+      agents: "cyan",
+      guidance: "fuchsia",
+      sprint: "orange",
+      browser: "teal",
+      danger: "red",
+    });
   });
 
   it("SettingsCategoryRail subtracts the measured page-top margin from its desktop height", async () => {
@@ -239,7 +253,7 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
     );
 
     const rail = screen.getByRole("navigation", { name: "Settings categories" });
-    expect(await screen.findByTestId("settings-category-scroll-hint")).toHaveClass("-bottom-4", "-mb-4", "pb-4");
+    expect(await screen.findByTestId("settings-category-scroll-hint")).toHaveClass("-bottom-4", "-mb-4", "h-12");
     expect(rail).toHaveClass("scrollbar-hide");
 
     scrollTopSpy.mockReturnValue(580);
@@ -427,7 +441,7 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
 
     const btn = screen.getByRole("button", { name: /General/ });
     expect(btn).toHaveAttribute("aria-current", "page");
-    expect(btn).toHaveAttribute("aria-selected", "true");
+    expect(btn).not.toHaveAttribute("aria-selected");
     expect(btn).toHaveAttribute("aria-busy", "true");
     expect(btn).toBeDisabled();
     expect(screen.queryByText("Selected")).not.toBeInTheDocument();
@@ -453,6 +467,125 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
 
     expect(screen.getByRole("navigation", { name: "Settings categories" })).toHaveAttribute("data-motion-contract", "selectionMovement");
     expect(screen.getByRole("button", { name: /General/ })).toHaveAttribute("data-motion-contract", "selectionMovement");
+  });
+
+  it("SettingsCategoryPicker opens a focused drawer with Smart Find results and switches by keyboard", async () => {
+    const user = userEvent.setup();
+    const onSwitchCategory = vi.fn();
+    const modelsCategory = CATEGORIES.find((category) => category.id === "models")!;
+    const integrationsCategory = CATEGORIES.find((category) => category.id === "integrations")!;
+    const settingsSearchMatches: SettingsSearchMatches = {
+      models: {
+        categoryId: "models",
+        matchedLabels: ["Claude Code"],
+        matchedDescriptions: [],
+        matchedTerms: ["routing"],
+      },
+      integrations: {
+        categoryId: "integrations",
+        matchedLabels: [],
+        matchedDescriptions: ["API keys"],
+        matchedTerms: [],
+      },
+    };
+
+    render(
+      <SettingsCategoryPicker
+        filteredCategories={[modelsCategory, integrationsCategory]}
+        activeCategory="models"
+        activeCategoryConfig={modelsCategory}
+        settingsSearch="claude"
+        settingsSearchMatches={settingsSearchMatches}
+        onSwitchCategory={onSwitchCategory}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Change settings category. Current category: AI Models" });
+    expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).toHaveAttribute("data-motion-contract", "controlFeedback");
+    expect(screen.getByText("2 matches")).toBeInTheDocument();
+
+    await user.click(trigger);
+
+    const drawer = screen.getByRole("dialog", { name: "Choose a category" });
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(drawer).toHaveTextContent("2 matching categories for “claude”.");
+    const navigation = within(drawer).getByRole("navigation", { name: "Settings categories" });
+    expect(within(navigation).getByText("Claude Code")).toBeInTheDocument();
+    expect(within(navigation).getByText("API keys")).toBeInTheDocument();
+
+    const modelsButton = within(navigation).getByRole("button", { name: /AI Models/ });
+    const integrationsButton = within(navigation).getByRole("button", { name: /Integrations/ });
+    expect(modelsButton).toHaveAttribute("aria-current", "page");
+    await waitFor(() => expect(modelsButton).toHaveFocus());
+
+    fireEvent.keyDown(modelsButton, { key: "ArrowDown" });
+    expect(integrationsButton).toHaveFocus();
+    fireEvent.keyDown(integrationsButton, { key: "Enter" });
+
+    expect(onSwitchCategory).toHaveBeenCalledWith("integrations");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("SettingsCategoryPicker exposes pending and disabled category state inside the drawer", async () => {
+    const user = userEvent.setup();
+    const onSwitchCategory = vi.fn();
+    const generalCategory = CATEGORIES[0]!;
+    const disabledReason = "Finish the current save before changing categories.";
+
+    render(
+      <SettingsCategoryPicker
+        filteredCategories={[generalCategory]}
+        activeCategory="general"
+        activeCategoryConfig={generalCategory}
+        settingsSearch=""
+        settingsSearchMatches={{}}
+        pendingCategory="general"
+        disabledCategoryReason={disabledReason}
+        onSwitchCategory={onSwitchCategory}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Change settings category. Current category: General" });
+    expect(trigger).toHaveAttribute("aria-busy", "true");
+    expect(trigger).toHaveAccessibleDescription(expect.stringContaining(disabledReason));
+    expect(screen.getByText("Switching to General")).toBeInTheDocument();
+
+    await user.click(trigger);
+
+    const drawer = screen.getByRole("dialog", { name: "Choose a category" });
+    const categoryButton = within(drawer).getByRole("button", { name: /General/ });
+    expect(categoryButton).toBeDisabled();
+    expect(categoryButton).toHaveAttribute("aria-busy", "true");
+    expect(within(drawer).getByText(disabledReason)).toBeInTheDocument();
+    await user.click(categoryButton);
+    expect(onSwitchCategory).not.toHaveBeenCalled();
+  });
+
+  it("SettingsCategoryPicker closes with Escape and restores focus to its trigger", async () => {
+    const user = userEvent.setup();
+    const generalCategory = CATEGORIES[0]!;
+
+    render(
+      <SettingsCategoryPicker
+        filteredCategories={[generalCategory]}
+        activeCategory="general"
+        activeCategoryConfig={generalCategory}
+        settingsSearch=""
+        settingsSearchMatches={{}}
+        onSwitchCategory={() => {}}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Change settings category. Current category: General" });
+    await user.click(trigger);
+    expect(screen.getByRole("dialog", { name: "Choose a category" })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 
   it("PillChoiceGroup exposes radio semantics for the selected option", () => {
@@ -725,6 +858,36 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
 
 
 describe("SettingsControls Accessibility", () => {
+  it("SectionCard moves from a live-value overview into one focused detail workspace", async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsDetailWorkspaceProvider>
+        <SectionCard
+          title="Advanced Runtime"
+          accent="violet"
+          summary="Defaults are suitable for most projects."
+          highlights={[{ label: "Runtime", value: "Managed", tone: "active" }]}
+        >
+          <button type="button">Detailed runtime control</button>
+        </SectionCard>
+        <SectionCard title="Secondary Area"><button type="button">Secondary control</button></SectionCard>
+      </SettingsDetailWorkspaceProvider>,
+    );
+
+    expect(screen.getByText("Defaults are suitable for most projects.")).toBeInTheDocument();
+    expect(screen.getByText("Managed")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Configure Advanced Runtime" }).closest("section")).toHaveAttribute("data-settings-accent", "violet");
+    expect(screen.getByRole("button", { name: "Configure Advanced Runtime" })).toHaveClass("bg-[var(--settings-inset-surface)]");
+    expect(screen.queryByRole("button", { name: "Detailed runtime control" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Configure Advanced Runtime" }));
+
+    expect(screen.getByRole("button", { name: "Detailed runtime control" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Secondary Area" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Back to category overview" }));
+    expect(screen.getByRole("button", { name: "Configure Secondary Area" })).toBeInTheDocument();
+  });
+
   it("BranchNameSchemeEditor passes aria-label and aria-description", () => {
     render(
       <BranchNameSchemeEditor
@@ -1107,8 +1270,9 @@ describe("SettingsControls Accessibility", () => {
     const panelStatus = screen.getByText("General settings have local unsaved changes.");
     expect(panelStatus).toHaveAttribute("role", "status");
     expect(panelStatus).toHaveAttribute("aria-live", "polite");
-    expect(screen.getByText("General panel values stay mounted").parentElement).toHaveAttribute("data-motion-contract", "enterExit");
-    expect(screen.getByText("General panel values stay mounted").parentElement).toHaveClass("motion-reduce:animate-none");
+    const activePanelMotionRegion = screen.getByText("General panel values stay mounted").closest("[data-motion-contract]");
+    expect(activePanelMotionRegion).toHaveAttribute("data-motion-contract", "enterExit");
+    expect(activePanelMotionRegion).toHaveClass("motion-reduce:animate-none");
 
     rerender(
       <SettingsContentPanels
@@ -1278,30 +1442,36 @@ describe("SettingsControls Accessibility", () => {
     });
   });
 
-  it("SettingsPage keeps scope controls and active panel status in one unified sticky wrapping bar", () => {
+  it("SettingsPage keeps category context, scope controls, and actions in one unified sticky command surface", () => {
     const source = readFileSync("dashboard/src/v2/SettingsPage.tsx", "utf8");
     const commandStatusBarSource = source.match(
       /<div\s+data-settings-sticky="settings-command-status"[\s\S]*?<SettingsCategoryRail/,
     )?.[0] ?? "";
 
     expect(source).toContain('import { SettingsScopeControls } from "./components/settings/SettingsScopeControls.js";');
-    expect(source).toContain('import { SettingsActivePanelStatus } from "./components/settings/SettingsActivePanelStatus.js";');
+    expect(source).toContain('import { SettingsCategoryPicker } from "./components/settings/SettingsCategoryPicker.js";');
     expect(source).toContain('data-settings-sticky="settings-command-status"');
     expect(commandStatusBarSource).toContain("sticky top-16 z-30");
     expect(commandStatusBarSource).toContain("flex min-w-0 max-w-full flex-wrap");
+    expect(commandStatusBarSource).toContain("<SettingsCategoryPicker");
+    expect(commandStatusBarSource).toContain("activeCategoryConfig.description");
+    expect(commandStatusBarSource).toContain("Active category");
     expect(commandStatusBarSource).toContain("<SettingsScopeControls");
-    expect(commandStatusBarSource).toContain("<SettingsActivePanelStatus");
-    expect(commandStatusBarSource).toContain("sticky={false}");
     expect(commandStatusBarSource).toContain("ml-auto");
     expect(commandStatusBarSource).toContain("Save Changes");
     expect(commandStatusBarSource).toContain("Reset Project");
     expect(commandStatusBarSource).toContain("rounded-[1.75rem]");
-    expect(commandStatusBarSource).toContain("bg-void-950");
+    expect(commandStatusBarSource).toContain('background: "var(--settings-command-surface)"');
+    expect(commandStatusBarSource).toContain("shadow-[var(--settings-command-shadow)]");
+    expect(commandStatusBarSource).toContain("bg-[var(--accent-action)] text-[var(--accent-on-solid)]");
+    expect(commandStatusBarSource).toContain("hover:bg-[var(--accent-action-hover)]");
+    expect(commandStatusBarSource).not.toContain("bg-white text-void-900");
     expect(commandStatusBarSource).not.toContain("bg-[var(--surface-glass)]");
     expect(source.match(/<SettingsContentPanels/g) ?? []).toHaveLength(1);
-    expect(source).toMatch(/<SettingsContentPanels\s+state=\{state\}\s+showActivePanelStatus=\{false\}\s+\/>/);
+    expect(source).toMatch(/<SettingsContentPanels\s+state=\{state\}\s+showActivePanelStatus=\{false\}\s+showFeedback=\{false\}\s+detailWorkspace\s+\/>/);
     expect(source).not.toContain("scopeSticky.getBoundingClientRect()");
     expect(source).not.toContain("panelStickyTop");
+    expect(source).toMatch(/<SettingsCategoryRail[\s\S]*?desktopOnly/);
   });
 
   it("SettingsContentPanels renders reset pending feedback while keeping values mounted", () => {

@@ -176,6 +176,18 @@ describe("DockerRunner", () => {
         repoPath: "/repo/project",
         onActivity: vi.fn(),
         onSetupImageProgress,
+        persistentSkillStorageMounts: [{
+          storageId: "skill-storage-1",
+          storageName: "Runtime skills",
+          hostPath: "/home/test/.code-ux/skill-storages/project-1/skill-storage-1/repo",
+          containerPath: "/code-ux/persistent-skills/skill-storage-1",
+          revision: "0123456789abcdef0123456789abcdef01234567",
+        }],
+        googleDriveMount: {
+          source: "/home/test/Google Drive",
+          destination: "/mnt/code-ux/google-drive",
+          readonly: true,
+        },
       });
       expect(ensureRuntimeVolume).toHaveBeenCalledWith("docker-volume://workspace-1", {
         initializeOwnership: true,
@@ -218,6 +230,8 @@ describe("DockerRunner", () => {
     expect(dockerArgs).toContain("CODE_UX_INSTALL_PLAYWRIGHT=1");
     expect(dockerArgs).toContain("PLAYWRIGHT_BROWSERS_PATH=/ms-playwright");
     expect(dockerArgs).toContain("type=volume,source=code-ux-playwright-browser-test,target=/ms-playwright,readonly");
+    expect(dockerArgs).toContain("type=bind,source=/home/test/.code-ux/skill-storages/project-1/skill-storage-1/repo,target=/code-ux/persistent-skills/skill-storage-1,readonly");
+    expect(dockerArgs).toContain("type=bind,source=/home/test/Google Drive,target=/mnt/code-ux/google-drive,readonly");
     expect(dockerArgs).toEqual(expect.arrayContaining([
       "--network",
       "bridge",
@@ -423,8 +437,60 @@ describe("DockerRunner", () => {
       "--mount",
       expect.stringContaining("target=/etc/passwd"),
     ]));
+    expect(dockerArgs).not.toEqual(expect.arrayContaining([
+      "--mount",
+      expect.stringContaining("target=/mnt/code-ux/google-drive"),
+    ]));
     const passwdWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("/passwd"));
     expect(passwdWrite).toBeUndefined();
+  });
+
+  it("maps a read-write Google Drive source for the Docker daemon without adding readonly", async () => {
+    const originalWorkspaceRoot = process.env.JULES_DOCKER_HOST_WORKSPACE_ROOT;
+    process.env.JULES_DOCKER_HOST_WORKSPACE_ROOT = "/host/workspace";
+    const onActivity = vi.fn();
+
+    try {
+      await runner.runProviderInDocker({
+        command: "codex",
+        args: ["exec", "--help"],
+        cwd: "docker-volume://workspace-1",
+        providerEnv: {},
+        sessionId: "session-1",
+        providerLabel: "codex",
+        workflowSettings: {
+          executionMode: "DOCKER",
+          containerImage: "node:24",
+          containerSetupScriptPath: "",
+          containerCacheSetupScriptImage: false,
+        } as any,
+        repoPath: "/repo/project",
+        onActivity,
+        googleDriveMount: {
+          source: "/repo/project/linked-drive",
+          destination: "/mnt/code-ux/google-drive",
+          readonly: false,
+        },
+      });
+    } finally {
+      if (originalWorkspaceRoot === undefined) {
+        delete process.env.JULES_DOCKER_HOST_WORKSPACE_ROOT;
+      } else {
+        process.env.JULES_DOCKER_HOST_WORKSPACE_ROOT = originalWorkspaceRoot;
+      }
+    }
+
+    const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
+    expect(dockerArgs).toContain(
+      "type=bind,source=/host/workspace/linked-drive,target=/mnt/code-ux/google-drive",
+    );
+    expect(dockerArgs).not.toContain(
+      "type=bind,source=/host/workspace/linked-drive,target=/mnt/code-ux/google-drive,readonly",
+    );
+    expect(onActivity).toHaveBeenCalledWith(
+      "Mapped Docker Google Drive mount source from /repo/project/linked-drive to /host/workspace/linked-drive.",
+      undefined,
+    );
   });
 
   it("supports mockup-cli Docker labels, names, env files, and argv files", async () => {
@@ -935,19 +1001,21 @@ describe("DockerRunner custom MCP server injection", () => {
     expect(toml).toContain('env = { "TOKEN" = "x" }');
   });
 
-  it("advertises the agent id to code_ux via the X-Code-Ux-Agent header (claude JSON)", async () => {
-    await build("claude-code", { url: "http://127.0.0.1:3000/mcp", authToken: "secret", agentId: "agent-9" }, []);
+  it("advertises agent and thread ids to code_ux via headers (claude JSON)", async () => {
+    await build("claude-code", { url: "http://127.0.0.1:3000/mcp", authToken: "secret", agentId: "agent-9", threadId: "thread-7" }, []);
     const json = JSON.parse(writtenFor("claude-mcp.json")!);
     expect(json.mcpServers.code_ux.headers).toMatchObject({
       Authorization: "Bearer secret",
       "X-Code-Ux-Agent": "agent-9",
+      "X-Code-Ux-Thread": "thread-7",
     });
   });
 
-  it("advertises the agent id to code_ux via http_headers (codex TOML)", async () => {
-    await build("codex", { url: "http://127.0.0.1:3000/mcp", authToken: "secret", agentId: "agent-9" }, []);
+  it("advertises agent and thread ids to code_ux via http_headers (codex TOML)", async () => {
+    await build("codex", { url: "http://127.0.0.1:3000/mcp", authToken: "secret", agentId: "agent-9", threadId: "thread-7" }, []);
     const toml = writtenFor("codex-config.toml")!;
     expect(toml).toContain('"X-Code-Ux-Agent" = "agent-9"');
+    expect(toml).toContain('"X-Code-Ux-Thread" = "thread-7"');
     expect(toml).toContain('"Authorization" = "Bearer secret"');
   });
 
@@ -976,9 +1044,10 @@ describe("DockerRunner custom MCP server injection", () => {
     expect(json.mcpServers.localtool).toEqual({ command: "python", args: ["script.py"] });
   });
 
-  it("omits the agent header when no agent id is set", async () => {
+  it("omits internal identity headers when no agent or thread id is set", async () => {
     await build("claude-code", { url: "http://127.0.0.1:3000/mcp", authToken: "secret" }, []);
     const json = JSON.parse(writtenFor("claude-mcp.json")!);
     expect(json.mcpServers.code_ux.headers["X-Code-Ux-Agent"]).toBeUndefined();
+    expect(json.mcpServers.code_ux.headers["X-Code-Ux-Thread"]).toBeUndefined();
   });
 });

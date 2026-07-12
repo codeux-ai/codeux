@@ -141,3 +141,5 @@ Channel resolution only considers enabled bindings with inbound enabled for the 
 Routed inbound text is posted through `ChatThreadRuntimeService.postMessage` with metadata marking `source: "chat_provider"`, provider kind, external channel id, external sender, inbound delivery id, and `suppressRichWidgets: true`.
 
 Chat-provider-sourced prompts omit the dashboard `codeux:*` rich widget instruction block. If a provider reply still contains a dashboard-only widget fence, outbound delivery strips or downgrades it to readable markdown before sending externally. Approval prompts and management-action result summaries remain plain markdown and continue to be delivered to the external channel.
+
+Dashboard-only `agentEffect` metadata follows the same boundary. External prompts do not advertise the avatar effect contract, outbound payloads never include assistant avatar metadata, and any remaining `codeux:agent` fence is removed or downgraded before delivery.

@@ -308,6 +308,8 @@ describe("AgentsPage", () => {
     };
 
     vi.mocked(agentPresetApi.fetchAgentPresets).mockResolvedValue(mockPresets as any);
+    vi.mocked(agentPresetApi.fetchBaseAgentUpdateNotices).mockResolvedValue([]);
+    vi.mocked(agentPresetApi.applyBaseAgentUpdate).mockResolvedValue(mockPresets[0] as any);
     vi.mocked(agentPresetApi.importAgentPresetFromMarkdown).mockResolvedValue(mockPresets[0] as any);
     vi.mocked(agentPresetApi.pullAgentPresetsFromMarkdown).mockResolvedValue(mockPresets as any);
     vi.mocked(agentPresetApi.pushAgentPresetsToMarkdown).mockResolvedValue(mockPresets as any);
@@ -360,6 +362,156 @@ describe("AgentsPage", () => {
     });
     return res;
   };
+
+  const planningUpdateNotice = {
+    projectId: "project-1",
+    role: "planning_agent" as const,
+    baseAgentPresetId: "agent-1",
+    selectedAgentPresetId: "agent-1",
+    selectedAgentName: "Planning Agent",
+    reason: "customized_instructions" as const,
+    currentRevision: "old-planning-revision",
+    availableRevision: "new-planning-revision",
+  };
+
+  it("renders no base-agent notice when the default agents are current", async () => {
+    await renderPage();
+
+    await waitFor(() => {
+      expect(agentPresetApi.fetchBaseAgentUpdateNotices).toHaveBeenCalledWith("project-1");
+    });
+    expect(screen.queryByText(/base update available/i)).not.toBeInTheDocument();
+    expect(agentPresetApi.applyBaseAgentUpdate).not.toHaveBeenCalled();
+  });
+
+  it("keeps the preset roster usable when notice discovery fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.mocked(agentPresetApi.fetchBaseAgentUpdateNotices).mockRejectedValueOnce(new Error("Notice service unavailable"));
+
+    await renderPage();
+
+    expect(await screen.findByText("Do some planning")).toBeInTheDocument();
+    expect(screen.queryByText("Notice service unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByText(/base update available/i)).not.toBeInTheDocument();
+    expect(warn).toHaveBeenCalledWith("Failed to load base-agent update notices", expect.any(Error));
+    warn.mockRestore();
+  });
+
+  it("announces customized Planning agent updates and explains the guarded AI action", async () => {
+    vi.mocked(agentPresetApi.fetchBaseAgentUpdateNotices).mockResolvedValueOnce([planningUpdateNotice]);
+
+    await renderPage();
+
+    const notice = await screen.findByRole("alert", { name: "Planning agent base update available" });
+    expect(notice).toHaveTextContent("Planning Agent has customized Planning agent instructions and must be updated.");
+    expect(notice).toHaveTextContent("compare both base files");
+    expect(notice).toHaveTextContent("Your main prompt, custom instructions, and behavior are preserved.");
+    expect(screen.getByRole("button", { name: "Update Planning Agent with AI" })).toHaveTextContent("Update with AI");
+    expect(agentPresetApi.applyBaseAgentUpdate).not.toHaveBeenCalled();
+  });
+
+  it("identifies an alternate Project manager route and its selected preset", async () => {
+    vi.mocked(agentPresetApi.fetchBaseAgentUpdateNotices).mockResolvedValueOnce([{
+      ...planningUpdateNotice,
+      role: "project_manager",
+      baseAgentPresetId: "manager-base",
+      selectedAgentPresetId: "agent-2",
+      selectedAgentName: "Review Agent",
+      reason: "alternate_route",
+    }]);
+
+    await renderPage();
+
+    const notice = await screen.findByRole("alert", { name: "Project manager base update available" });
+    expect(notice).toHaveTextContent("Review Agent is assigned to the Project manager route and must be updated.");
+    expect(screen.getByRole("button", { name: "Update Review Agent with AI" })).toBeEnabled();
+  });
+
+  it("shows an accessible loading state while checking for notices", async () => {
+    let resolveNotices: ((notices: []) => void) | undefined;
+    vi.mocked(agentPresetApi.fetchBaseAgentUpdateNotices).mockReturnValueOnce(new Promise((resolve) => {
+      resolveNotices = resolve;
+    }));
+
+    await renderPage();
+
+    expect(screen.getByRole("status", { name: "" })).toHaveTextContent("Checking for base-agent updates...");
+    await act(async () => resolveNotices?.([]));
+    await waitFor(() => {
+      expect(screen.queryByText("Checking for base-agent updates...")).not.toBeInTheDocument();
+    });
+  });
+
+  it("updates only after activation, shows progress, and refreshes presets and notices", async () => {
+    let resolveUpdate: ((preset: any) => void) | undefined;
+    vi.mocked(agentPresetApi.fetchBaseAgentUpdateNotices)
+      .mockResolvedValueOnce([planningUpdateNotice])
+      .mockResolvedValueOnce([]);
+    vi.mocked(agentPresetApi.applyBaseAgentUpdate).mockReturnValueOnce(new Promise((resolve) => {
+      resolveUpdate = resolve;
+    }));
+
+    await renderPage();
+    const updateButton = await screen.findByRole("button", { name: "Update Planning Agent with AI" });
+    expect(agentPresetApi.applyBaseAgentUpdate).not.toHaveBeenCalled();
+
+    fireEvent.click(updateButton);
+    expect(updateButton).toBeDisabled();
+    expect(updateButton).toHaveTextContent("Updating...");
+    expect(agentPresetApi.applyBaseAgentUpdate).toHaveBeenCalledWith("project-1", "planning_agent");
+
+    await act(async () => resolveUpdate?.({ ...mockPresets[0], instructionMarkdown: "Updated planning" }));
+    expect(await screen.findByText("Planning agent compatibility instructions updated. Custom behavior and instructions were preserved.")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(agentPresetApi.fetchAgentPresets).toHaveBeenCalledTimes(2);
+      expect(agentPresetApi.fetchBaseAgentUpdateNotices).toHaveBeenCalledTimes(2);
+      expect(screen.queryByText("Planning agent base update available")).not.toBeInTheDocument();
+    });
+  });
+
+  it("keeps a failed notice available and retries the explicit update", async () => {
+    vi.mocked(agentPresetApi.fetchBaseAgentUpdateNotices)
+      .mockResolvedValueOnce([planningUpdateNotice])
+      .mockResolvedValueOnce([]);
+    vi.mocked(agentPresetApi.applyBaseAgentUpdate)
+      .mockRejectedValueOnce(new Error("Provider unavailable"))
+      .mockResolvedValueOnce(mockPresets[0] as any);
+
+    await renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Update Planning Agent with AI" }));
+
+    expect(await screen.findByText("Planning agent update failed: Provider unavailable")).toBeInTheDocument();
+    expect(screen.getByRole("alert", { name: "Planning agent base update available" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => {
+      expect(agentPresetApi.applyBaseAgentUpdate).toHaveBeenCalledTimes(2);
+    });
+    expect(await screen.findByText("Planning agent compatibility instructions updated. Custom behavior and instructions were preserved.")).toBeInTheDocument();
+  });
+
+  it("ignores notice results from a previously selected project", async () => {
+    let resolveOldProject: ((notices: typeof planningUpdateNotice[]) => void) | undefined;
+    vi.mocked(agentPresetApi.fetchBaseAgentUpdateNotices)
+      .mockReturnValueOnce(new Promise((resolve) => {
+        resolveOldProject = resolve;
+      }))
+      .mockResolvedValueOnce([]);
+
+    const page = await renderPage();
+    mockProjectData.selectedProject = { id: "project-2", name: "Second Project", status: "ready" };
+    page.rerender(
+      <ProjectDataProvider>
+        <AgentsPage />
+      </ProjectDataProvider>
+    );
+    await waitFor(() => {
+      expect(agentPresetApi.fetchBaseAgentUpdateNotices).toHaveBeenCalledWith("project-2");
+    });
+
+    await act(async () => resolveOldProject?.([planningUpdateNotice]));
+    expect(screen.queryByText("Planning agent base update available")).not.toBeInTheDocument();
+  });
 
   it("loads and displays agents in master-detail showcase layout", async () => {
     await renderPage();

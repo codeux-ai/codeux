@@ -205,9 +205,10 @@ async function prepareFullSprintFixture(
     title: 'No change settlement',
     promptMarkdown: [
       '[mock-provider:no-op]',
+      '[mock-provider:outcome=completed]',
       '[mock-provider:sleep=1000]',
       'TASK T04 No change settlement',
-      'Return successfully without modifying files.',
+      'Confirm the task is complete without modifying files.',
     ].join('\n'),
     priority: 'medium',
     executorType: 'auto',

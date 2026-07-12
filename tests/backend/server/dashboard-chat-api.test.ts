@@ -60,6 +60,9 @@ describe("Dashboard Chat API", () => {
       providerRunner: {
         runProviderForText: vi.fn().mockResolvedValue({ text: "## Current Objective\nCompact thread" }),
       } as any,
+      providerExecutionService: {
+        executeProvider: vi.fn().mockResolvedValue({ text: "## Current Objective\nCompact thread", nativeSessionId: null }),
+      } as any,
       chatManagementActionService: {
         processManagementAction: vi.fn(),
         executeApprovedAction: vi.fn(),
@@ -227,6 +230,7 @@ describe("Dashboard Chat API", () => {
       agentPresetSyncService: {} as any,
       projectManagementRepository,
       providerRunner: {} as any,
+      providerExecutionService: {} as any,
       chatManagementActionService: {} as any,
     });
 

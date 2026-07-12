@@ -14,7 +14,11 @@ import { formatSprintBranch } from "../../domain/sprint/branch-name-generator.js
 
 import { ChatThreadRuntimeService } from "../../services/chat-thread-runtime-service.js";
 import { ManagementToolHandler } from "../../mcp/management-tool-handler.js";
+import { WorkerClarificationRepository } from "../../repositories/worker-clarification-repository.js";
+import { WorkerClarificationService } from "../../services/worker-clarification-service.js";
 import { StructuredProviderResponseService } from "../../services/structured-provider-response-service.js";
+import { StructuredAgentRequestService } from "../../services/structured-agent-request-service.js";
+import { AgentBaseUpdateService } from "../../services/agent-base-update-service.js";
 import { ChatManagementActionService } from "../../services/chat-management-action-service.js";
 import { ProviderExecutionService } from "../../services/provider-execution-service.js";
 import { SchedulerService } from "../../services/scheduler-service.js";
@@ -23,6 +27,8 @@ import { createLateBoundDependency } from "../../shared/late-bound-dependency.js
 import { ChatProviderIngressService } from "../../services/chat-provider-ingress-service.js";
 import { ChatProviderOutboundService } from "../../services/chat-provider-outbound-service.js";
 import { SpeechTranscriptionService } from "../../services/speech-transcription-service.js";
+import { SpeechSynthesisService } from "../../services/speech-synthesis-service.js";
+import { SpeechModelManager } from "../../services/speech-model-manager.js";
 import { NodeFlowRuntimeService } from "../../services/node-flow-runtime-service.js";
 import { NodeFlowService } from "../../services/node-flow-service.js";
 import { resolveEffectiveDashboardSettings } from "../../services/settings-resolution-service.js";
@@ -33,12 +39,15 @@ export interface DashboardDependencies {
   chatProviderIngressService: ChatProviderIngressService;
   chatProviderOutboundService: ChatProviderOutboundService;
   speechTranscriptionService: SpeechTranscriptionService;
+  speechSynthesisService: SpeechSynthesisService;
+  speechModelManager: SpeechModelManager;
   nodeFlowService: CoreDependencies["nodeFlowService"];
   activityCacheService: ActivityCacheService;
   taskRerunService: TaskRerunService;
   executionControlService: ExecutionControlService;
   executionInvocationControlService: ExecutionInvocationControlService;
   planningAgentService: PlanningAgentService;
+  agentBaseUpdateService: AgentBaseUpdateService;
   quicksprintService: QuicksprintService;
   projectSetupService: ProjectSetupService;
   sprintIssueService: CoreDependencies["sprintIssueService"];
@@ -127,6 +136,12 @@ export function createDashboardDependencies(
     sprintIssueService: coreDeps.sprintIssueService,
     quicksprintService: quicksprintServiceRef,
     schedulerService: schedulerServiceRef,
+    logger: logger.child({ component: "mcp-management-tool-handler" }),
+    workerClarificationService: new WorkerClarificationService(
+      new WorkerClarificationRepository(coreDeps.projectAttentionRepository),
+      projectManagementRepository,
+      executionRepository,
+    ),
   });
 
   const providerExecutionService = new ProviderExecutionService({
@@ -138,12 +153,18 @@ export function createDashboardDependencies(
     getMcpConnectionInfo: () => context.getMcpConnectionInfo?.() ?? null,
     skillService: coreDeps.skillService,
     agentPresetRepository: coreDeps.agentPresetRepository,
+    getDashboardSettings: resolveDashboardSettings,
   });
 
   const structuredProviderResponseService = new StructuredProviderResponseService({
     providerExecutionService,
     executionRepository,
     logger: logger.child({ component: "structured-provider-response-service" }),
+  });
+  const structuredAgentRequestService = new StructuredAgentRequestService({
+    executionRepository,
+    structuredProviderResponseService,
+    logger: logger.child({ component: "structured-agent-request-service" }),
   });
 
   const chatManagementActionService = new ChatManagementActionService({
@@ -168,6 +189,7 @@ export function createDashboardDependencies(
     agentPresetSyncService,
     projectManagementRepository,
     providerRunner,
+    providerExecutionService,
     chatManagementActionService,
     chatProviderOutboundService,
     knowledgeService: coreDeps.knowledgeService,
@@ -191,6 +213,13 @@ export function createDashboardDependencies(
     settingsRepository,
     logger: logger.child({ component: "speech-transcription-service" }),
   });
+  const speechSynthesisService = new SpeechSynthesisService({
+    settingsRepository,
+    logger: logger.child({ component: "speech-synthesis-service" }),
+  });
+  const speechModelManager = new SpeechModelManager(
+    logger.child({ component: "speech-model-manager" }),
+  );
   const nodeFlowRuntimeService = new NodeFlowRuntimeService({
     nodeFlowRepository: coreDeps.nodeFlowRepository,
     executionRepository,
@@ -455,11 +484,19 @@ export function createDashboardDependencies(
     agentPresetSyncService,
     executionControlService,
     providerExecutionService,
+    structuredAgentRequestService,
     memoryService: coreDeps.memoryService,
     logger: logger.child({ component: "planning-agent-service" }),
   });
 
   planningAgentServiceRef.set(planningAgentService);
+
+  const agentBaseUpdateService = new AgentBaseUpdateService({
+    projectManagementRepository,
+    settingsRepository,
+    agentPresetSyncService,
+    structuredAgentRequestService,
+  });
 
   const quicksprintService = new QuicksprintService(
     (projectId) => {
@@ -502,6 +539,7 @@ export function createDashboardDependencies(
     quicksprintService,
     chatThreadRuntimeService,
     executionControlService,
+    planningAgentService,
     taskRerunService,
     memoryRemediationService,
     nodeFlowRuntimeService,
@@ -516,12 +554,15 @@ export function createDashboardDependencies(
     chatProviderIngressService,
     chatProviderOutboundService,
     speechTranscriptionService,
+    speechSynthesisService,
+    speechModelManager,
     nodeFlowService,
     activityCacheService,
     taskRerunService,
     executionControlService,
     executionInvocationControlService,
     planningAgentService,
+    agentBaseUpdateService,
     quicksprintService,
     projectSetupService,
     sprintIssueService: coreDeps.sprintIssueService,

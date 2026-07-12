@@ -72,6 +72,32 @@ describe("validateSettingsPayload", () => {
     });
   });
 
+  it("validates dashboard accent color presets", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    payload.appearance.accentColor = "VIOLET";
+
+    expect(validateSettingsPayload(payload).success).toBe(true);
+
+    payload.appearance.accentColor = "RAINBOW" as never;
+    const invalidResult = validateSettingsPayload(payload);
+
+    expect(invalidResult.success).toBe(false);
+    expect(invalidResult.issues).toContainEqual({
+      path: "appearance.accentColor",
+      message: "Expected one of: CODEUX, OCEAN, VIOLET, CYAN, MAGENTA, GRAPHITE",
+    });
+  });
+
+  it("upgrades payloads saved before accent preferences were introduced", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    delete (payload.appearance as Partial<typeof payload.appearance>).accentColor;
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(true);
+    expect(result.data?.appearance.accentColor).toBe("CODEUX");
+  });
+
   it("accepts CREATE_PR for featurePrAutoMergeMode", () => {
     const payload = structuredClone(cloneDefaults({
       env: {},
@@ -541,6 +567,7 @@ describe("validateSettingsPayload", () => {
       enabled: "yes",
       providerMode: "remote",
       localModelId: "",
+      localLanguage: 7,
       maxAudioSeconds: 0,
       externalTranscription: {
         baseUrl: "",
@@ -555,8 +582,9 @@ describe("validateSettingsPayload", () => {
     expect(result.success).toBe(false);
     expect(result.issues).toEqual(expect.arrayContaining([
       { path: "speech.enabled", message: "Expected a boolean" },
-      { path: "speech.providerMode", message: "Expected one of: auto, local_onnx, external_api" },
+      { path: "speech.providerMode", message: "Expected one of: local_onnx, external_api" },
       { path: "speech.localModelId", message: "Expected a non-empty string" },
+      { path: "speech.localLanguage", message: "Expected null or a string" },
       { path: "speech.maxAudioSeconds", message: "Expected a finite number between 1 and 600" },
       { path: "speech.externalTranscription.baseUrl", message: "Expected a non-empty string" },
       { path: "speech.externalTranscription.apiKey", message: "Expected a string" },
@@ -585,8 +613,9 @@ describe("validateSettingsPayload", () => {
 
     expect(result).toEqual({
       enabled: true,
-      providerMode: "auto",
+      providerMode: "local_onnx",
       localModelId: "onnx-community/whisper-tiny.en",
+      localLanguage: "en",
       maxAudioSeconds: 600,
       externalTranscription: {
         baseUrl: "https://api.example/v1/audio/transcriptions",
@@ -594,7 +623,110 @@ describe("validateSettingsPayload", () => {
         model: "custom-transcribe",
         language: null,
       },
+      synthesis: DEFAULT_DASHBOARD_SETTINGS.speech.synthesis,
     });
+  });
+
+  it("migrates removed Piper voices to commercially usable replacements", () => {
+    const sanitized = sanitizeSpeech({
+      speech: {
+        ...DEFAULT_DASHBOARD_SETTINGS.speech,
+        synthesis: {
+          ...DEFAULT_DASHBOARD_SETTINGS.speech.synthesis,
+          localModelId: "piper-en-us-lessac-medium",
+          voice: "lessac",
+        },
+      },
+    });
+
+    expect(sanitized.synthesis.localModelId).toBe("piper-en-us-ljspeech-medium");
+    expect(sanitized.synthesis.voice).toBe("ljspeech");
+  });
+
+  it("replaces an inherited voice that is incompatible with the selected synthesis model", () => {
+    const sanitized = sanitizeSpeech({
+      speech: {
+        ...DEFAULT_DASHBOARD_SETTINGS.speech,
+        synthesis: {
+          ...DEFAULT_DASHBOARD_SETTINGS.speech.synthesis,
+          localModelId: "piper-de-de-mls-medium",
+          voice: "am_michael",
+        },
+      },
+    });
+
+    expect(sanitized.synthesis.localModelId).toBe("piper-de-de-mls-medium");
+    expect(sanitized.synthesis.voice).toBe("mls-de-default");
+  });
+
+  it("migrates removed or unknown local transcription models to Whisper Base", () => {
+    const sanitized = sanitizeSpeech({
+      speech: {
+        ...DEFAULT_DASHBOARD_SETTINGS.speech,
+        localModelId: "removed/local-stt-model",
+      },
+    });
+
+    expect(sanitized.localModelId).toBe("onnx-community/whisper-base.en");
+  });
+
+  it("preserves external transcription settings while migrating a removed local model", () => {
+    const removedModelId = ["Xenova", ["wav2", "vec2-base-960h"].join("")].join("/");
+    const sanitized = sanitizeSpeech({
+      speech: {
+        ...DEFAULT_DASHBOARD_SETTINGS.speech,
+        providerMode: "external_api",
+        localModelId: removedModelId,
+        externalTranscription: {
+          baseUrl: " https://speech.example.test/v1/audio/transcriptions ",
+          apiKey: " secret-key ",
+          model: " multilingual-model ",
+          language: " de ",
+        },
+      },
+    });
+
+    expect(sanitized).toMatchObject({
+      providerMode: "external_api",
+      localModelId: "onnx-community/whisper-base.en",
+      externalTranscription: {
+        baseUrl: "https://speech.example.test/v1/audio/transcriptions",
+        apiKey: "secret-key",
+        model: "multilingual-model",
+        language: "de",
+      },
+    });
+  });
+
+  it.each([
+    "onnx-community/whisper-base.en",
+    "onnx-community/whisper-tiny.en",
+    "onnx-community/whisper-base",
+    "onnx-community/whisper-tiny",
+  ])("preserves supported local transcription model %s", (localModelId) => {
+    expect(sanitizeSpeech({
+      speech: {
+        ...DEFAULT_DASHBOARD_SETTINGS.speech,
+        localModelId,
+      },
+    }).localModelId).toBe(localModelId);
+  });
+
+  it("stores local and external transcription language hints independently", () => {
+    const sanitized = sanitizeSpeech({
+      speech: {
+        ...DEFAULT_DASHBOARD_SETTINGS.speech,
+        localModelId: "onnx-community/whisper-base",
+        localLanguage: " de-DE ",
+        externalTranscription: {
+          ...DEFAULT_DASHBOARD_SETTINGS.speech.externalTranscription,
+          language: "es",
+        },
+      },
+    });
+
+    expect(sanitized.localLanguage).toBe("de-DE");
+    expect(sanitized.externalTranscription.language).toBe("es");
   });
 });
 

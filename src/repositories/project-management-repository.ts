@@ -11,6 +11,7 @@ import type {
   LinkedIssueProvider,
   LinkedIssueSourceKind,
   ProjectCollectionResponse,
+  ProjectInitMode,
   ProjectSourceType,
   ProjectSummary,
   SprintLinkedIssueInput,
@@ -40,6 +41,7 @@ import { loadSprintSummaryAggregationMap, sprintSummaryQuery, type SprintSummary
 import { validateTaskDependencies } from "./project-management/task-dependency-graph.js";
 import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 import { TaskSelfReflectionRatingRepository } from "./task-self-reflection-rating-repository.js";
+import { calculateSprintProgress } from "../domain/sprint/sprint-progress.js";
 
 const SELECTED_PROJECT_KEY = "selected_project_id";
 const GENERATED_SPRINT_NAME_PREFIX = "Untitled sprint";
@@ -61,6 +63,7 @@ interface ProjectRow {
   name: string;
   base_dir: string;
   repo_url: string | null;
+  initialization_mode: ProjectInitMode | null;
   default_branch: string | null;
   feature_branch_prefix: string | null;
   status: ProjectSummary["status"];
@@ -220,8 +223,8 @@ export class ProjectManagementRepository {
 
       const insert = this.db.prepare(`
         INSERT INTO projects (
-          id, slug, name, base_dir, repo_url, source_id, default_branch, feature_branch_prefix, status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          id, slug, name, base_dir, repo_url, source_id, initialization_mode, default_branch, feature_branch_prefix, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       const insertSource = this.db.prepare(`
         INSERT INTO project_sources (id, project_id, source_type, source_ref, created_at)
@@ -236,6 +239,7 @@ export class ProjectManagementRepository {
           baseDir,
           repoUrl,
           null,
+          normalizeProjectInitMode(input.initMode),
           input.defaultBranch?.trim() || "main",
           input.featureBranchPrefix?.trim() || "feature/",
           input.status || "idle",
@@ -1278,6 +1282,7 @@ export class ProjectManagementRepository {
       repoUrl: effectiveRepoUrl,
       sourceType,
       sourceRef,
+      initializationMode: normalizeProjectInitMode(row.initialization_mode),
       gitProvider: provider,
       gitHostDomain: hostDomain,
       defaultBranch: row.default_branch,
@@ -1318,7 +1323,7 @@ export class ProjectManagementRepository {
     linkedIssues: SprintLinkedIssueRecord[]
   ): SprintRecord {
     const tasksCount = summaryAggregation.tasksCount;
-    const completedTasks = summaryAggregation.completedTasks;
+    const completion = Math.min(100, Math.max(0, calculateSprintProgress(summaryAggregation.progressTasks)));
 
     return {
       id: row.id,
@@ -1336,7 +1341,7 @@ export class ProjectManagementRepository {
       featureBranch: row.feature_branch,
       baseCommitSha: row.base_commit_sha,
       tasksCount,
-      completion: tasksCount > 0 ? Math.round((completedTasks / tasksCount) * 100) : 0,
+      completion,
       linkedIssues,
       latestReview: summaryAggregation.latestReview,
       createdAt: row.created_at,
@@ -1874,6 +1879,10 @@ function mapEffectiveSprintStatus(
   }
 }
 
+function normalizeProjectInitMode(value: ProjectInitMode | null | undefined): ProjectInitMode {
+  return value === "new-local" || value === "new-remote" ? value : "existing";
+}
+
 function emptyProjectSummaryAggregation(): ProjectSummaryAggregation {
   return {
     sprintsCount: 0,
@@ -1889,6 +1898,7 @@ function emptySprintSummaryAggregation(): SprintSummaryAggregation {
   return {
     tasksCount: 0,
     completedTasks: 0,
+    progressTasks: [],
     latestRunStatus: null,
   };
 }

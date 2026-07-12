@@ -15,12 +15,15 @@ import { SettingsDangerPanel } from "./panels/SettingsDangerPanel.js";
 import { ActionFeedbackRegion } from "../ui/ActionFeedbackRegion.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { SettingsActivePanelStatus } from "./SettingsActivePanelStatus.js";
+import { SettingsDetailWorkspaceProvider } from "./panels/SharedPanelComponents.js";
 
 export const SettingsContentPanels: FunctionComponent<{
   state: SettingsPageState;
   stickyTop?: string;
   showActivePanelStatus?: boolean;
-}> = ({ state, stickyTop = "9.5rem", showActivePanelStatus = true }) => {
+  showFeedback?: boolean;
+  detailWorkspace?: boolean;
+}> = ({ state, stickyTop = "9.5rem", showActivePanelStatus = true, showFeedback = true, detailWorkspace = false }) => {
   const { activeCategory, activeDirty, activeSaving, error, saveMessage, loading, resettingProject } = state;
   const tokens = useInteractionTokens();
 
@@ -58,14 +61,17 @@ export const SettingsContentPanels: FunctionComponent<{
   return (
     <div aria-busy={activeSaving || loading || resettingProject ? "true" : undefined} data-reset-busy={resettingProject ? "true" : undefined} data-settings-state={error ? "error" : resettingProject ? "resetting" : activeSaving ? "saving" : activeDirty ? "dirty" : "saved"}>
       {showActivePanelStatus ? <SettingsActivePanelStatus state={state} stickyTop={stickyTop} /> : null}
-      <ActionFeedbackRegion
-        status={error ? "error" : loading || activeSaving || resettingProject ? "pending" : saveMessage ? "success" : activeDirty ? "warning" : "idle"}
-        message={error || (loading ? "Loading settings without clearing current values..." : resettingProject ? "Resetting project overrides. Current values remain visible." : activeSaving ? "Saving settings. Current values remain visible." : saveMessage || (activeDirty ? "You have unsaved changes in this settings scope." : null))}
-        autoDismiss={false}
-      />
+      {showFeedback ? (
+        <ActionFeedbackRegion
+          status={error ? "error" : loading || activeSaving || resettingProject ? "pending" : saveMessage ? "success" : activeDirty ? "warning" : "idle"}
+          message={error || (loading ? "Loading settings without clearing current values..." : resettingProject ? "Resetting project overrides. Current values remain visible." : activeSaving ? "Saving settings. Current values remain visible." : saveMessage || (activeDirty ? "You have unsaved changes in this settings scope." : null))}
+          autoDismiss={false}
+        />
+      ) : null}
       <div
         key={activeCategory}
         data-active-category={activeCategory}
+        data-settings-accent={state.activeCategoryConfig?.accent || "sky"}
         data-motion-contract="enterExit"
         className="mt-3 motion-safe:animate-form-slide-down motion-reduce:animate-none"
         style={{
@@ -73,7 +79,9 @@ export const SettingsContentPanels: FunctionComponent<{
           transitionTimingFunction: tokens.enterExit.ease,
         }}
       >
-        {renderPanel()}
+        <SettingsDetailWorkspaceProvider enabled={detailWorkspace}>
+          {renderPanel()}
+        </SettingsDetailWorkspaceProvider>
       </div>
     </div>
   );

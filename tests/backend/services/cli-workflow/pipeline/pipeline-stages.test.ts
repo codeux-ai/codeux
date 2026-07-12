@@ -8,6 +8,7 @@ import { executeCleanupStage } from "../../../../../src/services/cli-workflow/pi
 import * as providerRetryPolicy from "../../../../../src/shared/providers/provider-retry-policy.js";
 import { DEFAULT_TASK_SECTION_ORDER, DEFAULT_SPRINT_SECTION_ORDER } from "../../../../../src/domain/sprint/composer/pr-description-composer.js";
 import { beginRuntimeShutdown, resetRuntimeShutdownForTests } from "../../../../../src/services/shutdown-state.js";
+import { workerClarificationAgentMcpAccess } from "../../../../../src/services/agent-mcp-access.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -156,6 +157,13 @@ const createMockContext = (): PipelineContext => {
     },
     initialHead: "abcd123",
     workflowSucceeded: false,
+    taskClarificationContext: {
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      taskId: "task-record-1",
+      taskRunId: "task-run-1",
+      sessionId: "test-session",
+    },
     workspaceManager: {
       buildWorktreePath: vi.fn(),
       resolveResumeWorktreePath: vi.fn(),
@@ -233,6 +241,12 @@ describe("executePrepareStage", () => {
     expect(result.providerPrompt).toContain("worker guide content");
     expect(result.providerPrompt).toContain("test prompt");
     expect(result.providerPrompt).toContain("guidance");
+    expect(result.providerPrompt).toContain("call `request_clarification`");
+    expect(result.providerPrompt).toContain("projectId=project-1");
+    expect(result.providerPrompt).toContain("taskId=task-record-1");
+    expect(result.providerPrompt).toContain("sessionId=test-session");
+    expect(result.providerPrompt).toContain("Do not call `reply_to_clarification`");
+    expect(result.providerPrompt).toContain("CODE_UX_TASK_OUTCOME: blocked");
     expect(ctx.invocationWorkspacePreparer.prepareWorktree).toHaveBeenCalledWith({
       repoPath: "/repo",
       worktreePath: "/repo/worktree",
@@ -309,7 +323,7 @@ describe("executePrepareStage", () => {
 
     expect(memoryService.listBySprintAndAgent).not.toHaveBeenCalled();
     expect(memoryService.listLongTermByAgent).toHaveBeenCalledWith("p-1", "agent-1", 100);
-    expect(result.providerPrompt).toContain("## MEMORY CONTEXT");
+    expect(result.providerPrompt).toContain("## RELEVANT MEMORY CONTEXT");
     expect(result.providerPrompt).toContain("### Long-Term Knowledge");
     expect(result.providerPrompt).not.toContain("### Recent Sprint Learnings");
     expect(result.providerPrompt).toContain("kept long-term memory");
@@ -404,9 +418,12 @@ describe("executePrepareStage", () => {
     vi.mocked(ctx.workspaceManager.buildWorkspaceGuidance).mockResolvedValue("guidance");
     vi.mocked(ctx.runCommand).mockResolvedValue({ ok: true, stdout: "head-sha\n", stderr: "" });
 
-    await executePrepareStage(ctx, "old-session");
+    const result = await executePrepareStage(ctx, "old-session");
 
     expect(ctx.runCommand).toHaveBeenCalledWith("git", ["merge", "--ff-only", "origin/feature-branch"], "/repo/worktree");
+    expect(result.providerPrompt).toContain("test prompt");
+    expect(result.providerPrompt).toContain("call `request_clarification`");
+    expect(result.providerPrompt).toContain("CODE_UX_TASK_OUTCOME: blocked");
     expect(ctx.deps.sessionTracking.appendActivity).toHaveBeenCalledWith(ctx.sessionId, expect.objectContaining({
       description: expect.stringContaining("Resumed failed workspace")
     }));
@@ -414,6 +431,37 @@ describe("executePrepareStage", () => {
 });
 
 describe("executeProviderStage", () => {
+  it("passes the narrow clarification gateway and worker identity to a task-coding provider run", async () => {
+    const ctx = createMockContext();
+    ctx.agentPresetId = "assigned-worker";
+    ctx.agentMcpAccess = workerClarificationAgentMcpAccess({
+      codeUxEnabled: false,
+      codeUxToolToggles: [],
+      linkedServerIds: [],
+    });
+    ctx.deps.getMcpConnectionInfo = () => ({
+      url: "http://127.0.0.1:4445/mcp",
+      authToken: "token",
+    });
+    vi.mocked(ctx.providerRunner.runProvider).mockResolvedValueOnce({
+      ok: true,
+      stdout: "success",
+      stderr: "",
+      usageTelemetry: { transcriptText: "success transcript" } as any,
+    });
+
+    await executeProviderStage(ctx, "prompt");
+
+    expect(ctx.providerRunner.runProvider).toHaveBeenCalledWith(expect.objectContaining({
+      purpose: "task_coding",
+      mcpConnection: {
+        url: "http://127.0.0.1:4445/mcp",
+        authToken: "token",
+        agentId: "assigned-worker",
+      },
+    }));
+  });
+
   it("throws an error if provider run fails without retry conditions", async () => {
     const ctx = createMockContext();
     ctx.workflowSettings.retryOnReadFileNotFound = false;

@@ -1,18 +1,16 @@
 import { useMemoryPageData } from "./hooks/use-memory-page-data.js";
-import { useEmbeddingModelStatus } from "./hooks/use-embedding-model-status.js";
-import { ModelBrowser } from "./components/memory/ModelBrowser.js";
 import { effect } from "@preact/signals";
 import { Inspector } from "./components/memory/Inspector.js";
 import { MemoryFilters, MemoryDetails, MemoryCard } from "./components/memory/index.js";
 import MemorySidebar from "./components/memory/MemorySidebar.js";
-import { memorySidebarExpandedSignal, searchQuerySignal, activeMemoryIdSignal, hoveredMemoryIdSignal, activeTierSignal, selectedSprintIdSignal, selectedAgentPresetIdSignal, lobotomizeModeSignal } from "./components/memory/memoryState.js";
+import { memorySidebarExpandedSignal, searchQuerySignal, activeMemoryIdSignal, hoveredMemoryIdSignal, activeTierSignal, selectedSprintIdSignal, selectedAgentPresetIdSignal, lobotomizeModeSignal, clearSelectedMemoryIds } from "./components/memory/memoryState.js";
 
 import { AddMemoryModal } from "./components/memory/AddMemoryModal.js";
 import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef, useState, useCallback, useEffect, useMemo } from "preact/hooks";
 import gsap from "gsap";
 import { Brain, AlertTriangle, ZoomIn, ZoomOut, Maximize2, Loader2 } from "lucide-preact";
-import { deleteMemory as apiDeleteMemory, listEmbeddingModels, downloadEmbeddingModel, selectEmbeddingModel, deleteEmbeddingModel, getMemoryStats, startReembed, getReembedProgress, type EmbeddingMapResult } from "./lib/memory-api.js";
+import { deleteMemory as apiDeleteMemory, type EmbeddingMapResult } from "./lib/memory-api.js";
 import type { MemoryRecord, MemoryScope, MemoryCategory } from "./memory-types.js";
 import { useProjectData } from "./context/project-data.js";
 import { useSprints } from "../hooks/useSprints.js";
@@ -252,7 +250,6 @@ export const MemoryPage: FunctionComponent = () => {
         const [deletedCount, setDeletedCount] = useState(0);
     const activeTier = activeTierSignal.value;
     const activeScope: MemoryScope = activeTier === "short_term" ? "sprint" : "project";
-    const [showModels, setShowModels] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);
 
     // Sprint / agent filter state
@@ -271,14 +268,21 @@ export const MemoryPage: FunctionComponent = () => {
         loadError,
         records,
         memoryCount,
+        skillCount,
         setMemoryCount,
-        initialModels,
         initialStats,
         graphData,
         graphDataContextKey,
         requestedContextKey,
         loadData
     } = useMemoryPageData(pid, activeScope, activeTier, effectiveSelectedSprintId, selectedAgentPresetId, memoryDataEnabled);
+    const skillsActive = activeTier === "skills";
+
+    useEffect(() => {
+        if (!skillsActive) return;
+        setLobotomize(false);
+        clearSelectedMemoryIds();
+    }, [skillsActive]);
     const graphMatchesRequestedContext = graphDataContextKey === requestedContextKey;
     const graphNodes = useMemo(
         () => graphMatchesRequestedContext ? (graphData?.graph.nodes ?? []) : [],
@@ -289,14 +293,7 @@ export const MemoryPage: FunctionComponent = () => {
         [graphData, graphMatchesRequestedContext],
     );
 
-    const {
-        models,
-        setModels,
-        stats,
-        setStats,
-        reembed,
-        setReembed
-    } = useEmbeddingModelStatus(pid, initialModels, initialStats, loadData);
+    const stats = initialStats;
 
     // Mutable render state
     const S = useRef({
@@ -330,8 +327,8 @@ export const MemoryPage: FunctionComponent = () => {
         : null;
     const activeMemoryCategory = activeMemory ? (CAT[activeMemory.category] || CAT.context).label : null;
     const selectionStatus = activeMemory
-        ? `Selected ${activeMemoryCategory} memory: ${activeMemory.content}`
-        : "No memory selected";
+        ? `Selected ${activeMemoryCategory} ${skillsActive ? "skill" : "memory"}: ${activeMemory.content}`
+        : `No ${skillsActive ? "skill" : "memory"} selected`;
 
     /* ── Fetch agent presets on project change ─────────────── */
     useEffect(() => {
@@ -962,63 +959,6 @@ export const MemoryPage: FunctionComponent = () => {
         activeMemoryIdSignal.value = null;
     }, []);
 
-    /* ── Model actions ────────────────────────────────────────────────── */
-    const handleDownloadModel = useCallback(async (modelId: string) => {
-        try {
-            await downloadEmbeddingModel(modelId);
-            const updated = await listEmbeddingModels();
-            setModels(updated);
-        } catch (error) {
-            throw error;
-        }
-    }, []);
-    const handleSelectModel = useCallback(async (modelId: string) => {
-        try {
-            await selectEmbeddingModel(modelId);
-            const updated = await listEmbeddingModels();
-            setModels(updated);
-        } catch (error) {
-            throw error;
-        }
-    }, []);
-    const handleDeleteModel = useCallback(async (modelId: string) => {
-        try {
-            await deleteEmbeddingModel(modelId);
-            const updated = await listEmbeddingModels();
-            setModels(updated);
-        } catch (error) {
-            throw error;
-        }
-    }, []);
-    const handleReembed = useCallback(async () => {
-        if (!pid) return;
-        try {
-            await startReembed(pid);
-            setReembed({ active: true, completed: 0, total: 0 });
-            // Poll immediately — small models finish near-instantly
-            const progress = await getReembedProgress(pid);
-            setReembed(progress);
-            if (!progress.active) {
-                loadData();
-            }
-        } catch (error) {
-            throw error;
-        }
-    }, [pid, loadData]);
-    const handleSelectModelWithStats = useCallback(async (modelId: string) => {
-        try {
-            await selectEmbeddingModel(modelId);
-            const [updated, updatedStats] = await Promise.all([
-                listEmbeddingModels(),
-                pid ? getMemoryStats(pid) : Promise.resolve(stats),
-            ]);
-            setModels(updated);
-            setStats(updatedStats);
-        } catch (error) {
-            throw error;
-        }
-    }, [pid, stats]);
-
         const onSelectNode = useCallback((idx: number) => {
         const s = S.current;
         if (idx >= 0 && idx < s.graph.nodes.length) {
@@ -1048,37 +988,24 @@ export const MemoryPage: FunctionComponent = () => {
                 icon={Brain}
                 eyebrow="Neural Memory"
                 title="Memory Map"
-                subtitle="Explore the neural landscape of your agents' persistent memory. Click nodes to inspect. Scroll to zoom. Drag to pan."
+                subtitle={skillsActive
+                    ? "Explore the versioned skill catalog available to your agents. Filter by agent, inspect skill nodes, and discover related capabilities."
+                    : "Explore the neural landscape of your agents' persistent memory. Click nodes to inspect. Scroll to zoom. Drag to pan."}
                 actions={
                     <MemoryFilters
                         stats={stats}
                         sprints={sprints}
                         agentPresets={agentPresets}
-                        showModels={showModels}
-                        setShowModels={setShowModels}
                         setShowAddModal={setShowAddModal}
                         lobotomize={lobotomize}
                         handleLobotomizeToggle={handleLobotomizeToggle}
+                        skillsCount={skillCount}
                     />
                 }
             />
 
-            {/* ── Model Management ────────────────────────────────────── */}
-            {showModels && (
-                <ModelBrowser
-                    models={models}
-                    stats={stats}
-                    reembed={reembed}
-                    onModelsChanged={setModels}
-                    onDownload={handleDownloadModel}
-                    onSelect={handleSelectModelWithStats}
-                    onDelete={handleDeleteModel}
-                    onReembed={handleReembed}
-                />
-            )}
-
             {/* ── Lobotomize warning ──────────────────────────────────── */}
-            {lobotomize && (
+            {!skillsActive && lobotomize && (
                 <div className="flex items-center gap-3 px-5 py-3 rounded-2xl
                                bg-status-red/[0.08] border border-status-red/25 text-status-red"
                     style={{ animation: "lobotomize-pulse 2s ease-in-out infinite" }}>
@@ -1142,7 +1069,7 @@ export const MemoryPage: FunctionComponent = () => {
                         <span className="mt-0.5 line-clamp-2 break-words">
                             {activeMemory
                                 ? `${activeMemoryCategory}: ${activeMemory.content}`
-                                : "No memory selected"}
+                                : `No ${skillsActive ? "skill" : "memory"} selected`}
                         </span>
                     </div>
 
@@ -1174,7 +1101,7 @@ export const MemoryPage: FunctionComponent = () => {
                         }`}
                     >
                     <span className="text-[9px] font-mono text-slate-300 dark:text-slate-600">
-                        {memoryCount} nodes
+                        {memoryCount} {skillsActive ? "skill nodes" : "nodes"}
                     </span>
                     <span className="sr-only">{selectionStatus}</span>
                     </div>
@@ -1184,10 +1111,12 @@ export const MemoryPage: FunctionComponent = () => {
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 pointer-events-none z-20">
                         <Brain className="w-12 h-12 text-signal-500/20" strokeWidth={1.5} />
                         <p className="text-base font-semibold font-display tracking-tight text-slate-400/60">
-                            No memories yet
+                            {skillsActive ? "No skills indexed yet" : "No memories yet"}
                         </p>
                         <p className="text-xs font-mono text-slate-400/50">
-                            Memories will appear here as sprints capture them, or add one manually.
+                            {skillsActive
+                                ? "Create or attach a persistent skill storage to visualize its catalog."
+                                : "Memories will appear here as sprints capture them, or add one manually."}
                         </p>
                     </div>
                 )}
@@ -1201,7 +1130,9 @@ export const MemoryPage: FunctionComponent = () => {
                     >
                         <div className="flex items-center gap-3 rounded-xl border border-signal-500/15 bg-white/75 px-4 py-3 text-xs font-bold text-signal-700 shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:bg-void-800/75 dark:text-signal-300">
                             <Loader2 className="w-4 h-4 text-signal-500/70 motion-safe:animate-spin" strokeWidth={1.8} aria-hidden="true" />
-                            <span>{memoryCount > 0 ? "Refreshing memory map. Current memories remain visible." : "Loading memory map..."}</span>
+                            <span>{memoryCount > 0
+                                ? `Refreshing ${skillsActive ? "skill catalog" : "memory map"}. Current nodes remain visible.`
+                                : `Loading ${skillsActive ? "skill catalog" : "memory map"}...`}</span>
                         </div>
                     </div>
                 )}
@@ -1213,6 +1144,7 @@ export const MemoryPage: FunctionComponent = () => {
                     lobotomize={lobotomize}
                     onClose={() => { S.current.selectedIdx = -1; activeMemoryIdSignal.value = null; }}
                     onDelete={handleDelete}
+                    entityLabel={skillsActive ? "skill" : "memory"}
                 />
                 </div>
 
@@ -1222,7 +1154,9 @@ export const MemoryPage: FunctionComponent = () => {
                     refreshing={loading}
                     loadError={loadError}
                     onRetry={loadData}
-                    onAddMemory={() => setShowAddModal(true)}
+                    onAddMemory={skillsActive ? undefined : () => setShowAddModal(true)}
+                    readOnly={skillsActive}
+                    entityLabel={skillsActive ? "skill" : "memory"}
                 />
             </div>
 

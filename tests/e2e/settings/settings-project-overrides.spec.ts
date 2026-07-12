@@ -8,16 +8,19 @@ import {
   fetchEffectiveProjectSettings,
   fetchProjectSettings,
   openSettingsCategory,
+  openSettingsSection,
   saveProjectSettingsOverride,
   saveSettings,
 } from './settings-test-helpers';
 
 async function openGeneral(page: Page, scope: 'System' | 'Project' = 'System'): Promise<void> {
-  await openSettingsCategory(page, 'general', /General Scope, runtime, and automation posture/i, scope);
+  await openSettingsCategory(page, 'general', 'General', scope);
+  await openSettingsSection(page, 'Automation');
 }
 
 async function openDanger(page: Page, scope: 'System' | 'Project' = 'System'): Promise<void> {
-  await openSettingsCategory(page, 'danger', /Danger Zone Reset project overrides only when needed/i, scope);
+  await openSettingsCategory(page, 'danger', 'Danger Zone', scope);
+  await openSettingsSection(page, 'Danger Zone', 'Review destructive actions Danger Zone');
 }
 
 test.describe('settings project overrides and danger panel', () => {

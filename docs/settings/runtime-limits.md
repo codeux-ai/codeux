@@ -1,25 +1,27 @@
 # Runtime Limits
 
-Sets preview container concurrency, host port range, app port, and startup script path.
+Sets preview container concurrency, ports, startup behavior, and optional Docker daemon access.
 
 > Settings area: `runtime-limits`
 > Dashboard documentation route: `/docs/settings-runtime-limits`
 
 ## What This Area Is For
 
-Sets preview container concurrency, host port range, app port, and startup script path. This page expands the short Settings-page help text into an operator reference for deciding when to change this area, what behavior the controls affect, and what to verify after saving.
+Sets preview container concurrency, host port range, app port, startup script/command, and Docker access. This page expands the short Settings-page help text into an operator reference for deciding when to change this area, what behavior the controls affect, and what to verify after saving.
 
 Use it when you are configuring a new project, auditing inherited settings, or debugging behavior that changed after a system, project, or sprint override was saved.
 
 ## Controls And Runtime Effect
 
-Container cap, host port start/end, internal app port, and startup override path decide how previews launch.
+Container cap, host port start/end, internal app port, startup path/command, and Docker access decide how previews launch.
 
 | Control Surface | Runtime Effect | Review Before Saving |
 | --- | --- | --- |
 | Settings card fields | Updates the active Settings scope after you save the page. | Confirm whether you are editing System or Project scope. |
 | Inherited values | Values can flow from system defaults into project and sprint behavior. | Check the source badge before assuming a value is project-specific. |
 | Related runtime paths | The affected service reads the saved settings during planning, dispatch, dashboard rendering, or maintenance work. | Re-run the affected workflow after changing operational settings. |
+| Default startup command | Replaces auto-detected preview startup for this scope. A Browser sidebar container override takes precedence. | Keep `HOST=0.0.0.0` and the Code UX preview port variables in commands that start a listener. |
+| Allow Docker access | Mounts the local Unix Docker socket and validates Docker CLI/daemon access before app startup. | Treat this as host-level control and enable it only for trusted repositories. |
 
 ## Recommended Configuration
 
@@ -33,7 +35,7 @@ A practical review flow is:
 
 ## Risks And Gotchas
 
-Port collisions or wrong startup scripts prevent previews from becoming reachable.
+Port collisions, wrong startup commands, missing Docker tooling, or daemon permissions prevent previews from becoming reachable.
 
 Before applying changes, check:
 

@@ -48,6 +48,7 @@ const model = (overrides: Partial<EmbeddingModelWithStatus> = {}): EmbeddingMode
   localPath: null,
   error: null,
   active: false,
+  license: { id: "mit-v1", name: "MIT", url: "https://example.test/license", commercialUseAllowed: true, notice: "Test model." },
   ...overrides,
 });
 
@@ -63,6 +64,8 @@ const renderBrowser = (overrides: Partial<Parameters<typeof ModelBrowser>[0]> = 
         huggingFaceRepo: "acme/custom-embed",
         onnxModelFile: "onnx/model.onnx",
         downloaded: true,
+        language: "French",
+        license: { id: "apache-v1", name: "Apache-2.0", url: "https://example.test/apache-license", commercialUseAllowed: true, notice: "Operator-provided test model." },
       }),
     ],
     stats,
@@ -89,7 +92,7 @@ afterEach(() => {
 });
 
 describe("ModelBrowser", () => {
-  it("groups embedding models separately from speech-adjacent Hugging Face models", () => {
+  it("keeps the embedding catalog focused after speech models move to AI Models settings", () => {
     renderBrowser();
 
     const embeddingSection = screen.getByRole("region", { name: "Embedding Models" });
@@ -97,16 +100,78 @@ describe("ModelBrowser", () => {
     expect(within(embeddingSection).getByText("Acme Custom Embed")).toBeInTheDocument();
     expect(within(embeddingSection).getByRole("link", { name: /acme\/custom-embed/i })).toHaveAttribute("href", "https://huggingface.co/acme/custom-embed");
 
-    const speechSection = screen.getByRole("region", { name: "TTS / Speech-Adjacent Hugging Face Models" });
-    expect(within(speechSection).getByText("Whisper Base English ONNX")).toBeInTheDocument();
-    expect(within(speechSection).getByText("Whisper Tiny English ONNX")).toBeInTheDocument();
-    expect(within(speechSection).getAllByText("Speech only")).toHaveLength(2);
-    expect(within(speechSection).queryByRole("button", { name: /Download|Activate|Delete|Re-embed/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: /Speech-Adjacent|Speech to text|Text to speech/i })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["Acme Custom", "Acme Custom Embed"],
+    ["hf-acme-custom", "Acme Custom Embed"],
+    ["custom hugging face", "Acme Custom Embed"],
+    ["English", "BGE Small EN"],
+    ["MIT", "BGE Small EN"],
+  ])("searches catalog metadata for %s", async (query, expectedModel) => {
+    const user = userEvent.setup();
+    renderBrowser();
+
+    await user.type(screen.getByLabelText("Search models"), query);
+
+    expect(screen.getByText(expectedModel)).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Model catalog results" })).toHaveTextContent("Showing 1 of 2 models");
+  });
+
+  it("filters by install state, language, and source with a clear recovery action", async () => {
+    const user = userEvent.setup();
+    renderBrowser({
+      models: [
+        model({ downloaded: false, language: "English" }),
+        model({
+          id: "hf-acme-custom-12345678",
+          displayName: "Acme Custom Embed",
+          source: "custom",
+          language: "French",
+          downloaded: true,
+        }),
+      ],
+    });
+
+    await user.selectOptions(screen.getByLabelText("Install state"), "downloaded");
+    expect(screen.queryByText("BGE Small EN")).not.toBeInTheDocument();
+    expect(screen.getByText("Acme Custom Embed")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Language"), "French");
+    await user.selectOptions(screen.getByLabelText("Source"), "built_in");
+    expect(screen.getByText("No embedding models match this view.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show all models" }));
+    expect(screen.getByText("BGE Small EN")).toBeInTheDocument();
+    expect(screen.getByText("Acme Custom Embed")).toBeInTheDocument();
+    expect(screen.getByLabelText("Install state")).toHaveValue("all");
+    expect(screen.getByLabelText("Language")).toHaveValue("all");
+    expect(screen.getByLabelText("Source")).toHaveValue("all");
+  });
+
+  it("keeps custom model controls unmounted until the accessible disclosure opens", async () => {
+    const user = userEvent.setup();
+    renderBrowser();
+
+    const toggle = screen.getByRole("button", { name: "Add custom model" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByLabelText("Display name")).not.toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(screen.getByRole("button", { name: "Close custom form" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByLabelText("Display name")).toBeInTheDocument();
+    expect(screen.getByText(/Code UX does not review or approve custom model terms/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Close custom form" }));
+    expect(screen.queryByLabelText("Display name")).not.toBeInTheDocument();
   });
 
   it("keeps embedding actions available from compact model rows", async () => {
     const user = userEvent.setup();
+    const onConfirmationOpenChange = vi.fn();
     const props = renderBrowser({
+      onConfirmationOpenChange,
       models: [
         model({ downloaded: false }),
         model({
@@ -119,10 +184,14 @@ describe("ModelBrowser", () => {
     });
 
     await user.click(screen.getByRole("button", { name: "Download" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("MIT");
+    expect(onConfirmationOpenChange).toHaveBeenLastCalledWith(true);
+    await user.click(screen.getByRole("button", { name: "Accept & Download" }));
     expect(props.onDownload).toHaveBeenCalledWith("bge-small-en-v1.5");
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Download" })).toBeEnabled();
+      expect(onConfirmationOpenChange).toHaveBeenLastCalledWith(false);
     });
 
     await user.click(screen.getByRole("button", { name: "Activate" }));
@@ -133,6 +202,7 @@ describe("ModelBrowser", () => {
     const user = userEvent.setup();
     renderBrowser();
 
+    await user.click(screen.getByRole("button", { name: "Add custom model" }));
     await user.type(screen.getByLabelText("Display name"), "Custom Embed");
     await user.click(screen.getByRole("button", { name: "Add" }));
 
@@ -154,18 +224,23 @@ describe("ModelBrowser", () => {
       huggingFaceRepo: "acme/custom-embed",
       onnxModelFile: "onnx/model.onnx",
       validationStatus: "valid" as const,
+      license: { id: "mit-v1", name: "MIT", url: "https://example.test/license", commercialUseAllowed: true, notice: "Test model." },
     };
     const refreshed = [model(), model({ ...created, downloaded: false, downloading: false, downloadProgress: 0, localPath: null, error: null, active: false })];
     memoryApiMock.createCustomEmbeddingModel.mockResolvedValue(created);
     memoryApiMock.listEmbeddingModels.mockResolvedValue(refreshed);
     const props = renderBrowser({ models: [model()] });
 
+    await user.click(screen.getByRole("button", { name: "Add custom model" }));
     await user.type(screen.getByLabelText("Display name"), "Acme Custom Embed");
     await user.type(screen.getByLabelText("Repo or URL"), "https://huggingface.co/acme/custom-embed/blob/main/onnx/model.onnx");
     await user.clear(screen.getByLabelText("Dimension"));
     await user.type(screen.getByLabelText("Dimension"), "384");
     await user.clear(screen.getByLabelText("Size bytes"));
     await user.type(screen.getByLabelText("Size bytes"), "120000000");
+    await user.type(screen.getByLabelText("Upstream license"), "MIT");
+    await user.type(screen.getByLabelText("License URL"), "https://example.test/license");
+    await user.click(screen.getByLabelText("I verified the upstream terms myself and confirm that they permit commercial use."));
     await user.click(screen.getByRole("button", { name: "Add" }));
 
     await waitFor(() => {
@@ -177,10 +252,13 @@ describe("ModelBrowser", () => {
         dimension: 384,
         approximateSizeBytes: 120_000_000,
         language: "English",
+        licenseName: "MIT",
+        licenseUrl: "https://example.test/license",
+        commercialUseAllowed: true,
       });
     });
     expect(memoryApiMock.listEmbeddingModels).toHaveBeenCalledTimes(1);
     expect(props.onModelsChanged).toHaveBeenCalledWith(refreshed);
-    expect(await screen.findByRole("status")).toHaveTextContent("Acme Custom Embed added to embedding models.");
+    expect(await screen.findByRole("status", { name: "Custom model status" })).toHaveTextContent("Acme Custom Embed added to embedding models.");
   });
 });

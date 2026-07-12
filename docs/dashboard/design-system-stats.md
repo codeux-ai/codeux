@@ -23,8 +23,9 @@ Do not document or render speculative metrics. Missing telemetry is a first-clas
 The redesigned Stats page uses a stable top-to-bottom shell:
 
 1. Header command band
-   - The hero names the Stats workspace with a Stats-native command masthead rather than the generic dashboard page header. It uses warm void panel, subpanel, chip, and input primitives, a compact current-state pill, active lens chips for the selected time window and mode, and context chips for selected project, generated snapshot time, and sprint lens.
-   - The command controls are flat administrative rows inside the subpanel surface. Avoid nested framed material panels, decorative gradients, or extra wrappers around the preset, custom range, and mode controls.
+   - Stats uses the same `PageContainer` width and responsive `64px / 56px` desktop padding rhythm as other v2 pages. Do not override the root padding or section gap from page-local CSS.
+   - The unboxed page introduction follows the shared `PageHeader` scale: a restrained 30px desktop title, 14px supporting copy, and 10px tracked caps only for the eyebrow. Active lens and project context use simple metadata rows with hairline separation instead of a framed hero or stack of status pills.
+   - The command controls are the only framed header rail. On wide screens, snapshot-window and analysis-view controls sit side by side with a hairline divider; on narrow screens they stack and wrap without horizontal page overflow. Avoid nested framed material panels, decorative gradients, or extra wrappers around the preset, custom range, and mode controls.
    - Keep only selected project, generated snapshot time, sprint lens, time window, and active visual mode controls visible in the command band.
    - Time presets are `1h`, `24h`, `7d`, `30d`, `All time`, and `Custom`.
    - Choosing `Custom` opens start and end date fields. The selected range changes only after `Apply` succeeds.
@@ -79,12 +80,13 @@ Trend is the chart-first workspace for time-series telemetry.
 Composition explains where usage comes from.
 
 - Lead with provider share, token mix, cache rate, output/reasoning proportions, source mix, purpose lanes, and available Git-blocker context.
-- Token anatomy can show input, cached input, output, reasoning, cache-hit rate, output ratio, and total cost when `totalCostUsd` is greater than zero.
-- Provider and purpose donuts rank visible segments, handle long labels with wrapping, and render explicit empty states when segment data is absent.
-- Provider share, token anatomy, purpose lanes, token flight, cache efficiency, and provider activity use the same flat panel/subpanel grammar with compact neutral badges. Keep semantic data colors inside donut segments, token bars, and source-quality tracks rather than on decorative mode tags.
-- Purpose lanes show invocation count, active time, token share, and dominant purpose without creating a second conflicting purpose summary.
+- The mode metric deck remains the only executive KPI band. The Composition workspace begins with a two-column analytical canvas instead of repeating provider, token, cache, output, and reasoning summary cards.
+- Token anatomy shows total volume, the accessible token-flow bar, separate input/cached/output/reasoning lanes, and a plain-language cache-efficiency callout. Total cost appears in runtime context only when `totalCostUsd` is greater than zero.
+- Provider distribution uses a compact proportional strip and ranked rows with exact token/share text. Segment colors stay inside the data strip and swatches; long labels wrap and empty segments render an explicit no-data state.
+- Purpose lanes rank intent in rows with invocation count, active time, token volume, and share. Runtime context keeps active time, wall time, utilization, and optional spend adjacent without creating another KPI deck.
+- Provider activity is a compact ledger ordered by token volume. Desktop rows align provider identity, token distribution, calls, cache rate, tokens per call, active time, and optional cost beneath one shared column header; narrow layouts retain visible per-value labels. The enclosing sheet owns the radius while rows use hairline separators and quiet hover emphasis.
 - Source-confidence cards distinguish reported, estimated, unavailable, unsupported, and defensive unknown buckets without inventing alternate totals.
-- Donuts, ribbons, and flow bars need nearby text or `role="img"` labels so color is never the only signal.
+- Distribution strips and flow bars need nearby text or `role="img"` labels so color is never the only signal.
 
 ### Models
 
@@ -115,8 +117,9 @@ Providers is the reliability studio.
 Ledgers contains operational records for tasks, sprints, and Git.
 
 - Task Telemetry, Sprint Telemetry, and Git Telemetry are real tabs with accessible tab semantics, stable labels, and count badges.
-- Ledger tablists, summary tiles, search/sort controls, progressive sentinels, empty states, task/sprint rows, and Git leaderboard rows use the flat Stats panel, subpanel, chip, input, and ledger-row primitives. Keep dense scanning areas compact, bordered, and stable instead of adding backdrop blur, heavy shadows, animated elevation, or oversized rounded shells.
-- Task and sprint rows expose status, provider, purpose, calls, active time, cost, recency, visible-total share, leader share, token-flow anatomy, and p50/p95 chips when percentile fields are present.
+- Ledger tablists, compact summary strips, integrated search/sort toolbars, progressive sentinels, empty states, task/sprint rows, and Git leaderboard rows use the flat Stats panel, input, and ledger-row primitives. The ledger is one enclosing workbench surface rather than summary cards nested inside a large card.
+- Task and sprint rows form a continuous scan sheet with hairline separators, no per-row floating-card gap, quiet hover fill, and wrapping metadata. Keep only semantic status as a compact badge; provider, purpose, secondary labels, and percentile context read as text. Rows expose calls, active time, cost, recency, visible-total share, leader share, token-flow anatomy, and p50/p95 values.
+- Filter comparison and visible-result summaries are integrated strips within the workbench, not additional elevated cards.
 - Git rows keep churn separate from token flow. Use `ChurnFlowBar` for insertions and deletions, and keep pull requests, merges, files, conflicts, visible share, and leader share readable.
 - Search, sort, and progressive rendering preserve the `useProgressiveList` flow: visible items, scroll container, and sentinel stay wired together.
 - Sort controls use buttons with `aria-pressed` when they represent local ordering choices.
@@ -167,8 +170,8 @@ Use page-scoped Stats primitives instead of one-off analytics chrome. The Stats 
 - Typed view-model helpers should own reusable derivations for trend, chart, model, provider, and ledger projections. `stats-page-view-model.ts` owns page-level snapshot derivations such as usage defaults, token/active/wall time series, planning lookup, provider/source/token segments, and completion-confidence copy so `useStatsPageData` can stay focused on fetch state, date controls, and chart state. Avoid recalculating meaningful bucket or efficiency summaries directly in JSX or stateful hooks.
 - New or touched Stats surfaces should use semantic Stats variables for backgrounds, borders, text, status tones, focus rings, chart tracks, selection fills, and scrims instead of raw slate/white/black light-dark utility pairs.
 - Signal fills, chart strokes, metric sparklines, selected controls, and Stats card accents must resolve through `--stats-accent-signal`, `--stats-accent-signal-fill`, or `--signal-rgb`. Light mode uses the dashboard blue signal; dark mode keeps the warm void jade signal without per-component overrides that leak blue into dark surfaces.
-- Stats typography follows the dashboard heading scale directly in Tailwind or component tokens: the page title is the only hero-scale heading, section and studio headings use `text-xl`/`text-2xl font-semibold`, row and card titles use `text-base`/`text-lg font-semibold`, and metric-card values use the restrained `--stats-card-value-size` tokens.
-- Panels and stat cards are grounded warm void work surfaces with solid `--stats-surface-*` tokens, hairline borders, and subtle depth shadows. They should feel administrative, compact, and durable without blue ambient color.
+- Stats typography follows the dashboard heading scale directly: the page title matches shared v2 introductions at 30px desktop, supporting copy stays at 14px, row metadata stays readable at 12–13px, section and studio headings use `text-xl`/`text-2xl font-semibold`, and 10px tracked caps are reserved for true eyebrows and column labels.
+- Panels and stat cards are grounded warm void work surfaces with solid `--stats-surface-*` tokens, smaller Stats-specific radii, hairline borders, and near-flat structural shadows. They should feel administrative, compact, and durable without blue ambient color.
 - Chips, tabs, inputs, subpanels, summary rows, and table cells are flat primitives. Use quiet fills, fixed control geometry, compact labels, small radii, and neutral selected states instead of decorative capsules, glow, animated elevation, or nested decorative cards.
 - Status fills are semantic. Signal, positive, warning, negative, neutral, and cyan tones should communicate running, success, warning, failure, informational, or data-accent meaning; avoid using them as ambient decoration.
 - Backdrop blur is not a primary Stats material. Do not add `backdrop-blur-*`, shared translucent material tokens, large glow washes, or translucent chrome to panels, chips, inactive legend controls, ledger rows, System filters, invocation tables, or transcript detail as the default treatment.
@@ -200,7 +203,7 @@ See [Mobile Responsiveness](./mobile-responsiveness.md) for dashboard-wide const
 - Ledger navigation uses actual tab semantics. Keyboard focus should move from the active tab into the tabpanel controls and rows in DOM order.
 - Charts expose a region name, readable summary, keyboard-reachable bucket targets, minimap bucket text, and a screen-reader-only table for exact values.
 - Chart refresh indicators use semantic status text in addition to animation.
-- Microvisuals such as sparklines, donuts, ribbons, token flow bars, churn bars, and status bars either expose a concise `role="img"` label or are paired with nearby text that communicates the same data.
+- Microvisuals such as sparklines, donuts, ribbons, token flow bars, churn bars, and status bars either expose a concise `role="img"` label or are paired with nearby text that communicates the same data. Full and near-full donut segments use split arcs so highly concentrated provider volume remains visible instead of collapsing into the track.
 - Date inputs have visible labels, programmatic labels, validation state, and inline alert text for invalid custom ranges.
 - Invocation tables provide captions, active `aria-sort` only on the sorted column, explicit sort button labels, mobile cell labels, and wrapping-safe cells for long provider, model, error, and transcript text.
 - Shared table primitives may announce result counts through polite status text and mark background refreshes with `aria-busy` without replacing cached rows. Sortable shared headers show a direction glyph and include `sorted ascending`, `sorted descending`, or `not sorted` in the control name.

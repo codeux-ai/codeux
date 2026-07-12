@@ -36,6 +36,48 @@ afterEach(async () => {
 });
 
 describe("ProjectManagementRepository", () => {
+  it("defaults legacy and imported projects to existing provenance", async () => {
+    const { storage, repository } = await createRepository();
+    const imported = repository.createProject({
+      name: "Imported Project",
+      sourceType: "local",
+      sourceRef: "/workspace/imported-project",
+    });
+    expect(imported.initializationMode).toBe("existing");
+
+    const db = storage.getDatabase();
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO projects (id, slug, name, base_dir, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run("legacy-project", "legacy-project", "Legacy Project", "/workspace/legacy-project", "idle", now, now);
+    db.prepare(`
+      INSERT INTO project_sources (id, project_id, source_type, source_ref, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run("legacy-source", "legacy-project", "git", "https://example.test/legacy.git", now);
+
+    expect(repository.getProject("legacy-project")?.initializationMode).toBe("existing");
+  });
+
+  it("persists new local and remote initialization provenance", async () => {
+    const { repository } = await createRepository();
+    const local = repository.createProject({
+      name: "New Local Project",
+      sourceType: "local",
+      sourceRef: "/workspace/new-local-project",
+      initMode: "new-local",
+    });
+    const remote = repository.createProject({
+      name: "New Remote Project",
+      sourceType: "git",
+      sourceRef: "https://example.test/new-remote.git",
+      initMode: "new-remote",
+    });
+
+    expect(repository.getProject(local.id)?.initializationMode).toBe("new-local");
+    expect(repository.getProject(remote.id)?.initializationMode).toBe("new-remote");
+  });
+
   it("creates untitled sprints with deterministic generated names and slugs", async () => {
     const { repository } = await createRepository();
     const project = repository.createProject({
@@ -778,7 +820,7 @@ describe("ProjectManagementRepository", () => {
     expect(sprints.map((sprint) => sprint.id)).toEqual([sprintA2.id, sprintA1.id]);
     expect(mappedSprintA1).toMatchObject({
       tasksCount: 3,
-      completion: 67,
+      completion: 66.7,
       status: "cancelled",
       linkedIssues: [{
         issueNumber: 42,
@@ -801,11 +843,11 @@ describe("ProjectManagementRepository", () => {
     });
 
     const sprintBatchSql = executeSpy.mock.calls.map(([params]) => `${params.sqlPrefix} ${params.sqlSuffix || ""}`);
-    expect(sprintBatchSql.some((sql) => sql.includes("FROM tasks") && sql.includes("tasks_count"))).toBe(true);
+    expect(sprintBatchSql.some((sql) => sql.includes("FROM tasks") && sql.includes("coding_tool_call_count"))).toBe(true);
     expect(sprintBatchSql.some((sql) => sql.includes("FROM sprint_runs"))).toBe(true);
     expect(sprintBatchSql.some((sql) => sql.includes("FROM qa_review_runs"))).toBe(true);
     expect(sprintBatchSql.some((sql) => sql.includes("FROM sprint_linked_issues"))).toBe(true);
-    expect(executeSpy.mock.calls.some(([params]) => params.sqlPrefix.includes("tasks_count")
+    expect(executeSpy.mock.calls.some(([params]) => params.sqlPrefix.includes("coding_tool_call_count")
       && params.items.includes(sprintA1.id)
       && params.items.includes(sprintA2.id))).toBe(true);
     expect(executeSpy.mock.calls.some(([params]) => params.sqlPrefix.includes("FROM sprint_runs")
@@ -817,6 +859,76 @@ describe("ProjectManagementRepository", () => {
     expect(executeSpy.mock.calls.some(([params]) => params.sqlPrefix.includes("FROM sprint_linked_issues")
       && params.items.includes(sprintA1.id)
       && params.items.includes(sprintA2.id))).toBe(true);
+  });
+
+  it("hydrates weighted sprint completion from lifecycle state and task-coding telemetry", async () => {
+    const { repository, executionRepository } = await createRepository();
+    const project = repository.createProject({
+      name: "Weighted Sprint Summary",
+      sourceType: "local",
+      sourceRef: "/workspace/weighted-sprint-summary",
+    });
+    const sprint = repository.createSprint(project.id, {
+      name: "Weighted Progress",
+    });
+    const tasks = Array.from({ length: 10 }, (_, index) => repository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: `Weighted task ${index + 1}`,
+      status: index === 0 ? "in_progress" : "pending",
+    }));
+    const activeTask = tasks[0];
+
+    const addInvocation = (purpose: "task_coding" | "planning" | "ci_fix" | "qa_review", toolCallCount: number): void => {
+      const invocation = executionRepository.createProviderInvocationUsage({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: activeTask.id,
+        sessionId: `weighted-${purpose}-${toolCallCount}`,
+        provider: "codex",
+        purpose,
+        status: "completed",
+      });
+      executionRepository.updateProviderInvocationUsage(invocation.id, { toolCallCount });
+    };
+
+    addInvocation("task_coding", 10);
+    addInvocation("task_coding", 5);
+    addInvocation("planning", 500);
+    addInvocation("ci_fix", 500);
+    addInvocation("qa_review", 500);
+
+    expect(repository.listSprints(project.id).sprints[0]).toMatchObject({
+      tasksCount: 10,
+      completion: 0.8,
+    });
+    expect(repository.listProjects().projects[0].completedTasks).toBe(0);
+
+    repository.updateTask(activeTask.id, { status: "coding_completed" });
+    expect(repository.listSprints(project.id).sprints[0].completion).toBe(5);
+
+    repository.updateTask(activeTask.id, { mergeIndicator: "CI" });
+    expect(repository.listSprints(project.id).sprints[0].completion).toBe(7.5);
+
+    repository.updateTask(activeTask.id, {
+      status: "in_progress",
+      isMerged: true,
+      mergeIndicator: null,
+    });
+    expect(repository.listSprints(project.id).sprints[0].completion).toBe(0.8);
+    expect(repository.listProjects().projects[0].completedTasks).toBe(0);
+
+    repository.updateTask(activeTask.id, {
+      status: "coding_completed",
+      isMerged: false,
+    });
+    expect(repository.listSprints(project.id).sprints[0].completion).toBe(5);
+
+    repository.updateTask(activeTask.id, { status: "completed" });
+    expect(repository.listSprints(project.id).sprints[0]).toMatchObject({
+      tasksCount: 10,
+      completion: 10,
+    });
+    expect(repository.listProjects().projects[0].completedTasks).toBe(1);
   });
 
 

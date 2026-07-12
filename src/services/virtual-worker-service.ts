@@ -42,14 +42,18 @@ import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
 import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
+import { buildRelevantMemoryInjectionContext } from "./memory-injection-context.js";
 import { LEARNINGS_FILENAME } from "../contracts/memory-types.js";
 import { DockerService } from "./docker-service.js";
+import { workerClarificationAgentMcpAccess } from "./agent-mcp-access.js";
 import {
   planVirtualWorkerAttentionClaim,
   projectNeedsVirtualWorker,
   peekNextWorkerAttention,
   resolveWorkerExecutionMode,
   computeReconciliationCandidates,
+  hasPendingManagerClarificationForScope,
+  isProjectManagerOwnedClarificationItem,
   resolveVirtualWorkerAttentionRoute,
   type VirtualWorkerAttentionRoute,
 } from "../domain/workers/virtual-worker-scheduling-policy.js";
@@ -220,6 +224,9 @@ export class VirtualWorkerService {
       getMcpConnectionInfo: deps.getMcpConnectionInfo,
       skillService: deps.skillService,
       agentPresetRepository: deps.agentPresetRepository,
+      getDashboardSettings: ({ projectId, sprintId }) => (
+        projectId ? this.resolveDashboardSettings(projectId, sprintId) : deps.settingsRepository.getDefaultDashboardSettings()
+      ),
     });
   }
 
@@ -338,8 +345,19 @@ export class VirtualWorkerService {
     hasPendingDispatch?: boolean,
   ): boolean {
     const effectiveResolver = resolver || ((pId, sId) => this.resolveDashboardSettings(pId, sId));
-    const nextAttentionItem = this.peekNextWorkerAttention(projectId, resolver);
-    const pendingDispatchAvailable = hasPendingDispatch ?? this.deps.executionRepository.listProjectIdsWithPendingDispatches().includes(projectId);
+    const activeItems = this.deps.projectAttentionService.listActiveProjectItems(projectId);
+    const nextAttentionItem = peekNextWorkerAttention(activeItems, effectiveResolver);
+    const projectHasPendingDispatch = hasPendingDispatch
+      ?? this.deps.executionRepository.listProjectIdsWithPendingDispatches().includes(projectId);
+    const pendingDispatchAvailable = projectHasPendingDispatch && this.deps.executionRepository
+      .listTaskDispatches({ projectId })
+      .some((dispatch) => (
+        dispatch.status === "queued"
+        && !hasPendingManagerClarificationForScope({
+          taskId: dispatch.taskId,
+          dispatchId: dispatch.id,
+        }, activeItems)
+      ));
     const executionMode = !nextAttentionItem && pendingDispatchAvailable
       ? resolveWorkerExecutionMode(effectiveResolver(projectId))
       : "VIRTUAL";
@@ -374,16 +392,29 @@ export class VirtualWorkerService {
     this.deps.projectWorkerAssignmentService.ensureWorkerAssignment(projectId, endpoint.id);
 
     try {
-      const attentionItem = this.peekNextWorkerAttention(projectId, resolver);
+      const activeItems = this.deps.projectAttentionService.listActiveProjectItems(projectId);
+      const attentionItem = peekNextWorkerAttention(activeItems, effectiveResolver);
+      const nextDispatch = this.deps.executionRepository
+        .listTaskDispatches({ projectId })
+        .find((dispatch) => (
+          dispatch.status === "queued"
+          && !hasPendingManagerClarificationForScope({
+            taskId: dispatch.taskId,
+            dispatchId: dispatch.id,
+          }, activeItems)
+        ));
       // Do not lease ordinary coding work while a CI/merge repair is waiting.
       // A leased dispatch is durable, so claiming it and then prioritizing the
       // attention item would strand the dispatch until lease recovery.
-      const dispatchClaim = attentionItem
+      const dispatchClaim = attentionItem || !nextDispatch
         ? null
         : this.deps.workerTaskDispatchService.claimNextDispatchForWorker({
           projectId,
           workerEndpointId: endpoint.id,
-          executionMode: "VIRTUAL"
+          executionMode: "VIRTUAL",
+          dispatchId: nextDispatch.id,
+          taskId: nextDispatch.taskId,
+          sprintId: nextDispatch.sprintId,
         });
 
       const plan = await planVirtualWorkerCycle({
@@ -718,7 +749,7 @@ export class VirtualWorkerService {
     attentionRoute: VirtualWorkerAttentionRoute = resolveVirtualWorkerAttentionRoute(item),
     claimReason: string = planVirtualWorkerAttentionClaim(item, reason).claimReason,
   ): Promise<void> {
-    if (attentionRoute === "skip_orchestrator_handled") {
+    if (attentionRoute === "skip_orchestrator_handled" || isProjectManagerOwnedClarificationItem(item)) {
       return;
     }
 
@@ -958,7 +989,7 @@ export class VirtualWorkerService {
     let succeeded = false;
     let initialHead = "";
     const memoryContext = workerAgent?.id
-      ? this.buildMemoryContext(item.projectId, item.sprintId || null, workerAgent.id)
+      ? await this.buildMemoryContext(item.projectId, item.sprintId || null, workerAgent.id, item.summaryMarkdown)
       : undefined;
     const memoryInstructions = settings.memory?.enabled && settings.memory.autoCaptureSprint
       ? resolveAgentMemoryInstructions(workerAgent || {}, settings.memory?.workerLearningsInstruction)
@@ -1053,7 +1084,7 @@ export class VirtualWorkerService {
           customBaseUrl: providerSettings.customBaseUrl,
           customModel: providerSettings.customModel,
           githubToken: settings.git.githubToken,
-          agentMcpAccess: workerAgent?.mcpAccess ?? null,
+          agentMcpAccess: workerAgent ? workerClarificationAgentMcpAccess(workerAgent.mcpAccess) : null,
           mcpAgentId: workerAgent?.id ?? null,
         });
       }
@@ -1346,7 +1377,7 @@ export class VirtualWorkerService {
     let succeeded = false;
     let initialHead = "";
     const memoryContext = workerAgent?.id
-      ? this.buildMemoryContext(item.projectId, item.sprintId || null, workerAgent.id)
+      ? await this.buildMemoryContext(item.projectId, item.sprintId || null, workerAgent.id, item.summaryMarkdown)
       : undefined;
     const memoryInstructions = settings.memory?.enabled && settings.memory.autoCaptureSprint
       ? resolveAgentMemoryInstructions(workerAgent || {}, settings.memory?.workerLearningsInstruction)
@@ -1454,7 +1485,7 @@ export class VirtualWorkerService {
           ? taskContinuation?.previousInvocation?.rawUsageJson ?? null
           : null,
         githubToken: settings.git.githubToken,
-        agentMcpAccess: workerAgent?.mcpAccess ?? null,
+        agentMcpAccess: workerAgent ? workerClarificationAgentMcpAccess(workerAgent.mcpAccess) : null,
         mcpAgentId: workerAgent?.id ?? null,
       });
 
@@ -2344,36 +2375,20 @@ export class VirtualWorkerService {
       : null;
   }
 
-  private buildMemoryContext(projectId: string, sprintId: string | null, agentPresetId: string): string | undefined {
+  private async buildMemoryContext(projectId: string, sprintId: string | null, agentPresetId: string, query: string): Promise<string | undefined> {
     const memoryService = this.deps.memoryService;
     if (!memoryService) {
       return undefined;
     }
 
     try {
-      const longTerm = memoryService.listLongTermByAgent(projectId, agentPresetId, 10);
-      const shortTerm = sprintId
-        ? memoryService.listBySprintAndAgent(projectId, sprintId, agentPresetId, 10)
-        : [];
-
-      if (longTerm.length === 0 && shortTerm.length === 0) {
-        return undefined;
-      }
-
-      const sections: string[] = ["## PROJECT CONTEXT FROM MEMORY"];
-      if (longTerm.length > 0) {
-        sections.push("### Long-Term Knowledge");
-        for (const memory of longTerm) {
-          sections.push(`- [${memory.category}] ${memory.content.slice(0, 300)}`);
-        }
-      }
-      if (shortTerm.length > 0) {
-        sections.push("### Recent Sprint Learnings");
-        for (const memory of shortTerm) {
-          sections.push(`- [${memory.category}] ${memory.content.slice(0, 300)}`);
-        }
-      }
-      return sections.join("\n");
+      return (await buildRelevantMemoryInjectionContext(memoryService, {
+        projectId,
+        sprintId,
+        agentPresetId,
+        query,
+        tokenBudget: 1_800,
+      })).markdown;
     } catch {
       return undefined;
     }
