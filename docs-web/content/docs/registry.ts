@@ -267,7 +267,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-nodes-canvas',
     section: 'User Guide',
     title: "Nodes Canvas",
-    description: "The Nodes Canvas page (/nodes) is a browser-local workspace for drafting Code UX workflow graphs. It combines the canvas, palette, inspector, validation panel, JSON exchange controls, and agent command summary without...",
+    description: "The Nodes page (/nodes) is a project-scoped Graph v2 workspace backed by the Code UX node-flow APIs. Select a project to load its flow library, credential metadata, publications, and run history. Changing projects cle...",
   },
   'user-dashboard-node-flows': {
     id: 'user-dashboard-node-flows',
@@ -911,7 +911,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/architecture-node-flow-foundation',
     section: 'Architecture',
     title: "Node Flow Foundation",
-    description: "Code UX uses one canonical Graph v2 contract across backend, MCP, runtime, and dashboard. Graphs carry schemaVersion: 2, versioned definitions, typed ports, credential-id bindings, bounded policies, capabilities, side...",
+    description: "Code UX uses one project-owned Graph v2 contract across the dashboard, backend, MCP surface, scheduler, and runtime. Graphs carry schemaVersion: 2, stable versioned definition references, typed ports and flow schemas,...",
   },
   'architecture-node-flows': {
     id: 'architecture-node-flows',

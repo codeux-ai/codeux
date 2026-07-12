@@ -33,14 +33,23 @@ Invalid graphs throw a `ValidationError` with field-level details when persisten
 
 `src/services/node-flow-runtime-service.ts` executes the current flow version after revalidating the graph. It creates a parent `execution_invocations` row with `type = "node_flow"`, then runs nodes in the validator's topological order.
 
-Supported node types:
+The registry-backed runtime supports:
 
 - `input`: emits the run input object.
 - `set_fields`: merges upstream object output with configured fields, including template interpolation.
 - `template`: renders a string template into a configured output key.
 - `provider_prompt`: calls the existing `ProviderExecutionService` with `type = "node_flow_node"` and an existing invocation id. It does not create a parallel provider runner.
 - `http_request`: performs bounded HTTP/HTTPS requests with method, URL, headers, query, body, timeout, and JSON response extraction.
+- `condition` and `switch`: select an explicit output branch and persist unselected descendants as skipped.
+- `foreach` and `merge`: emit a bounded list or combine active upstream values with an explicit strategy.
+- `delay`: waits for a bounded cancellable duration.
+- `approval`: persists an operator decision gate and resumes the pinned run after a decision.
+- `email_draft` and `email_send`: build a draft, or send only after approval through the idempotent outbox.
+- `execute_subflow`: executes a same-project published flow with recursion bounds.
+- `webhook_trigger`: emits input received through secret-authenticated webhook ingress.
 - `output`: selects the final output from upstream data, configured fields, or a configured path.
+
+Versioned custom definitions can execute through the custom-node runtime after validation and registration. Definitions without a registered executable handler fail validation and cannot be published.
 
 Provider and HTTP nodes create linked child `execution_invocations` rows with `type = "node_flow_node"`. Prompt text and HTTP secrets are not written to invocation messages; persisted run inputs, outputs, node payloads, trigger payloads, and route responses are masked for secret-like keys.
 
@@ -55,6 +64,10 @@ SQLite tables are created in both the initial schema and startup migrations:
 - `node_flow_agent_skills`
 - `node_flow_runs`
 - `node_flow_node_runs`
+- `node_flow_node_attempts`
+- `node_flow_publications`
+
+Approval, webhook, and external-effect state use the related automation approval, trigger, and outbox repositories. Publication snapshots and attempt records preserve the immutable graph/policy selection and retry history used for debugging and recovery.
 
 Graphs, widget schemas, run inputs, run outputs, and trigger payloads are stored as JSON text. Run and node-run rows store linked execution invocation ids where applicable. Flow create/update/delete and agent-skill attachment changes schedule a project structure refresh so realtime dashboard clients can refetch project-scoped data.
 
@@ -62,6 +75,16 @@ Graphs, widget schemas, run inputs, run outputs, and trigger payloads are stored
 
 Dashboard routes are registered through `registerNodeFlowRoutes`:
 
+- `GET /api/node-flow-catalog` and `GET /api/node-flow-catalog/:nodeType`
+- `POST /api/projects/:projectId/node-flow-drafts`
+- `PATCH /api/node-flow-drafts/:flowId`
+- `POST /api/node-flow-drafts/:flowId/validate`
+- `POST /api/node-flow-drafts/:flowId/dry-run`
+- `GET /api/node-flow-drafts/:flowId/bindings`
+- `POST /api/node-flow-drafts/:flowId/credential-requests`
+- `POST /api/node-flow-drafts/:flowId/publish`
+- `GET /api/node-flows/:flowId/compare`
+- `POST /api/node-flows/:flowId/rollback`
 - `GET /api/projects/:projectId/node-flows`
 - `POST /api/projects/:projectId/node-flows`
 - `GET /api/node-flows/:flowId`
@@ -75,6 +98,8 @@ Dashboard routes are registered through `registerNodeFlowRoutes`:
 - `GET /api/node-flows/:flowId/runs`
 - `GET /api/node-flow-runs/:runId`
 - `GET /api/node-flow-runs/:runId/node-runs`
+- `GET /api/node-flow-runs/:runId/attempts`
+- cancellation, retry, approval, and webhook routes described in the durable-execution and built-in security pages
 
 Handlers stay thin and delegate behavior to `NodeFlowService`.
 
@@ -82,6 +107,24 @@ Handlers stay thin and delegate behavior to `NodeFlowService`.
 
 Normalized graphs carry `schemaVersion: 2`. Nodes reference a stable definition type and version and carry typed ports, credential-id bindings, bounded retry/timeout policies, capabilities, side-effect classification, and disabled state. Graphs may declare typed input/output schemas and immutable publication metadata.
 
-The typed registry includes configuration and UI schemas, ports, credential slots, capabilities, side effects, default policies, documentation, deprecation, and execution kind. Only `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, and `output` are executable. Other palette ideas are planned concepts without runtime handlers.
+The typed registry includes configuration and UI schemas, ports, credential slots, capabilities, side effects, default policies, documentation, deprecation, executable state, and execution kind. The palette and inspector consume these manifests, so ports and configuration controls are not maintained as a separate hard-coded node list.
+
+The governed built-ins with registered runtime handlers are:
+
+- data and provider operations: `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, and `output`
+- control and transformation: `condition`, `switch`, `foreach`, `merge`, `delay`, and `execute_subflow`
+- governed effects and triggers: `approval`, `email_draft`, `email_send`, and `webhook_trigger`
+
+Validated custom definitions become executable only after their versioned manifest and immutable artifact are registered and the custom-node runtime is configured. Unknown types, legacy browser-only `trigger`/`agent`/`task` kinds, design mockups, and manifests marked non-executable are planned or unavailable definitions, not runtime handlers.
 
 Validation resolves definitions and checks configuration, handles, policies, graph limits, and cycles with field-level issues. Graph JSON rejects secret-shaped fields and generated/custom source fields. Persisted Graph v1 rows keep their original immutable snapshot and append deterministic Graph v2 as a new current version.
+
+## Dashboard workspace and governance
+
+`/nodes` requires a selected project and loads that project's flow library from the backend. Draft writes carry `draftRevision`; a stale revision returns a conflict rather than replacing newer work. The former `codeux:nodes-canvas:v1` browser value is eligible for one project-specific import into a backend draft. Successful import records a marker and removes the graph value; local storage is not an ongoing workflow store.
+
+Draft review combines structural validation, capability and side-effect policy findings, credential-slot status, and a non-executing dry run. The dashboard receives credential ids and status metadata only, never resolved secret values. Publication requires the current revision, a valid policy review, and all credential requirements bound. Runs resolve immutable pinned or latest-published snapshots.
+
+The run debugger reads persisted runs, node runs, numbered attempts, approvals, retry decisions, invocation links, timing, and cancellation state. Responses and persisted payloads are redacted before display. Scheduling delegates to the scheduler and retains pinned-versus-latest publication semantics.
+
+Outside development, the dashboard route requires `VITE_CODEUX_FEATURE_NODES`, `VITE_CODEUX_NODE_FLOW_BACKEND`, and `VITE_CODEUX_AUTOMATION_SECURITY` to resolve enabled. Runtime availability remains dependency-specific: providers, credential resolution, egress policy, approval/outbox, webhook configuration, and the custom-node runtime must be configured for definitions that use them.

@@ -1,17 +1,29 @@
 # Nodes Automation Workspace
 
-The **Nodes** page (`/nodes`) is a project-scoped automation workspace backed by the canonical node-flow repository. Browser storage is not a workflow database and edits are never auto-saved locally.
+The **Nodes** page (`/nodes`) is a project-scoped Graph v2 authoring and operations workspace backed by the canonical node-flow repository. Select a project before using it: the page does not request a flow library, credential metadata, publications, or run history without an active project. Browser storage is not a workflow database and edits are never auto-saved locally.
+
+The selected project's library is loaded from the backend. Creating and saving drafts writes to that project, and changing projects clears the current workspace before loading the next library. Saves include `draftRevision`; if another editor has advanced the draft, the backend returns a conflict and the page asks the operator to reload and reapply the change instead of overwriting it.
 
 ## Legacy canvas import
 
-On the first load for a selected project, the dashboard checks the former `codeux:nodes-canvas:v1` key. When present, it normalizes the payload to Graph v2, creates an **Imported Nodes Canvas** backend draft, records a project-specific migration marker, and removes the legacy graph value. A failed import leaves the value available for retry. The marker prevents duplicates.
+On the first load for a selected project, the dashboard checks the former `codeux:nodes-canvas:v1` key. When present, it normalizes the payload to Graph v2, creates an **Imported Nodes Canvas** backend draft, records a project-specific migration marker, and removes the legacy graph value. A failed import leaves the value available for retry. The marker prevents duplicates. After this one-time bridge, local storage is not read or written as the workflow source of truth.
 
 ## Governed editing
 
-The T01 registry supplies executable state, typed ports, widget schemas, capabilities, credential slots, side-effect classification, and default policy. The graph stores only a type/version reference and configuration; it never stores custom source or credential values.
+The versioned definition registry supplies the palette, executable state, typed ports, configuration and widget schemas, capabilities, credential slots, side-effect classification, and default retry/timeout policy. The inspector is rendered from the selected definition rather than a hard-coded node form. The graph stores a type/version reference, non-secret configuration, and credential ids; it never stores custom source or credential values.
 
-Draft saves use `draftRevision`. A concurrent update returns a visible conflict. Validation, policy findings, credential status, dry runs, publication, version comparison, and rollback use the T06 draft APIs.
+Credential slots show metadata-only states such as bound, missing, or denied and can submit a binding request. Secret material stays behind the credential broker and is excluded from graphs, browser output, logs, and examples.
+
+Validation and dry run report structural issues, requested capabilities, credential requirements, side-effect differences, and policy findings. Dry run is review-only and does not execute nodes. Publication requires the current draft revision, a valid graph with no error-level policy findings, and all declared credential requirements bound. Publications are immutable; comparison and rollback operate on versioned snapshots.
+
+## Executable definitions
+
+The governed built-ins currently registered with runtime handlers are `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, `condition`, `switch`, `foreach`, `merge`, `delay`, `approval`, `email_draft`, `email_send`, `execute_subflow`, `webhook_trigger`, and `output`.
+
+Validated custom definitions may also execute after their versioned manifest and immutable artifact are registered and the custom-node runtime is configured. A palette mockup, legacy `trigger`/`agent`/`task` canvas kind, unknown type, or definition marked non-executable is a planning or unavailable definition, not an executable handler.
 
 ## Operations
 
-Only published versions run. The debugger shows redacted run output, graph and node states, attempts, retry classifications and decisions, invocation links, timing, cancellation, and safe retry controls. Scheduling is entered through the Scheduler page.
+Only published versions run. The debugger shows redacted run output, graph and node states, attempts, retry classifications and decisions, approval state, invocation links, timing, cancellation, and safe retry controls. Approval decisions resume or terminate the same pinned durable run. Scheduling is entered through the Scheduler page and targets a pinned or latest-published version.
+
+Outside development builds, the workspace is exposed only when the Nodes feature flag and both node-flow backend and automation-security prerequisites are enabled. Execution also depends on the services required by a definition: for example, a configured provider for `provider_prompt`, allowed egress for `http_request`, approval and outbox services for governed email sending, webhook configuration for webhook ingress, and the custom-node runtime for registered custom definitions. Availability is not a claim that every integration is configured for production.
