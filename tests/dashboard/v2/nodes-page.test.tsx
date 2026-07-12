@@ -1,165 +1,51 @@
 /** @vitest-environment jsdom */
 /** @jsx h */
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { h, type ComponentChildren } from "preact";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { h } from "preact";
+import { cleanup, render, screen, waitFor } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  NODES_CANVAS_STORAGE_KEY,
-  NodesPage,
-} from "../../../dashboard/src/v2/NodesPage.js";
-import {
-  ALL_NAVIGATION_ITEMS,
-  isRouteNavigationItem,
-} from "../../../dashboard/src/v2/lib/navigation-items.js";
+import { NODES_CANVAS_STORAGE_KEY, NodesPage } from "../../../dashboard/src/v2/NodesPage.js";
+import { ProjectDataContext } from "../../../dashboard/src/v2/context/project-data.js";
 
-vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({
-  useReducedMotion: () => true,
-  useResolvedMotionDuration: <T,>(duration: T): T => duration,
-}));
+const api = vi.hoisted(() => ({ fetchNodeFlows: vi.fn(), fetchNodeFlowCatalog: vi.fn(), createNodeFlowDraft: vi.fn(), fetchNodeFlow: vi.fn(), fetchNodeFlowRuns: vi.fn(), fetchNodeFlowNodeRuns: vi.fn(), fetchNodeFlowAttempts: vi.fn(), patchNodeFlowDraft: vi.fn(), fetchNodeDefinition: vi.fn(), validateNodeFlowDraft: vi.fn(), deleteNodeFlow: vi.fn() }));
+vi.mock("../../../dashboard/src/v2/lib/node-flow-api.js", async (original) => ({ ...(await original()), ...api }));
+vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({ useReducedMotion: () => true, useResolvedMotionDuration: <T,>(value: T): T => value }));
 
-vi.mock("../../../dashboard/src/v2/lib/motion/index.js", () => ({
-  useAnimatedActiveIndicator: () => ({ style: {} }),
-  useGsapInteractionTokens: () => ({
-    controlFeedback: { duration: 0, ease: "linear" },
-    enterExit: { duration: 0, ease: "linear" },
-    inlineValidation: { duration: 0, ease: "linear" },
-    selectionMovement: { duration: 0, ease: "linear" },
-  }),
-  useInteractionTokens: () => ({
-    controlFeedback: { duration: "0ms", ease: "linear" },
-    enterExit: { duration: "0ms", ease: "linear" },
-    selectionMovement: { duration: "0ms", ease: "linear" },
-  }),
-}));
+const flow = { id: "flow-1", projectId: "project-1", title: "Release automation", description: "Governed", graph: { schemaVersion: 2 as const, nodes: [{ id: "input-1", type: "input", title: "Input", definition: { type: "input", version: 1 }, position: { x: 40, y: 40 } }], edges: [] }, version: 2, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" };
+const context = { projects: [{ id: "project-1", name: "Test project" }], selectedProjectId: "project-1", selectedProject: { id: "project-1", name: "Test project" }, loading: false, error: null, refreshProjects: async () => undefined, selectProject: async () => undefined, createProject: async () => { throw new Error("unused"); }, updateProject: async () => { throw new Error("unused"); }, deleteProject: async () => undefined };
 
-vi.mock("../../../dashboard/src/v2/components/ui/Tooltip.js", () => ({
-  Tooltip: ({ children }: { children: ComponentChildren }) => <>{children}</>,
-}));
+describe("NodesPage governed workspace", () => {
+  const review = { flowId: "flow-1", projectId: "project-1", name: "Release automation", description: "Governed", draftRevision: 2, nodeCount: 1, edgeCount: 0, valid: true, validationIssues: [], policyFindings: [], requiredCredentials: [], requestedCapabilities: [], sideEffectDiffs: [], publishedVersion: 1 };
+  beforeEach(() => { api.validateNodeFlowDraft.mockResolvedValue(review); });
+  beforeEach(() => { window.localStorage.clear(); api.fetchNodeFlows.mockResolvedValue({ flows: [flow] }); api.fetchNodeFlowCatalog.mockResolvedValue({ nodes: [{ type: "input", version: 1, executable: true, executionKind: "local", label: "Input", description: "Input", category: "Core", credentials: [], capabilities: [], sideEffect: "none", ports: [] }] }); api.fetchNodeFlowRuns.mockResolvedValue({ runs: [] }); api.fetchNodeFlowNodeRuns.mockResolvedValue({ nodeRuns: [] }); api.fetchNodeFlowAttempts.mockResolvedValue({ attempts: [] }); api.fetchNodeDefinition.mockResolvedValue({ type: "input", version: 1, executable: true, executionKind: "local", configurationSchema: { type: "object" }, ui: { label: "Input", description: "Input", category: "Core", widgetSchema: { fields: [] } }, ports: [], credentials: [], capabilities: [], sideEffect: "none", defaultPolicy: {}, documentation: "", deprecation: { deprecated: false } }); });
+  afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
-class TestResizeObserver {
-  observe(): void {}
-  unobserve(): void {}
-  disconnect(): void {}
-}
-
-globalThis.ResizeObserver = TestResizeObserver;
-HTMLElement.prototype.setPointerCapture = vi.fn();
-HTMLElement.prototype.releasePointerCapture = vi.fn();
-
-const mainSource = readFileSync(join(process.cwd(), "dashboard/src/main.tsx"), "utf8");
-const prefetchSource = readFileSync(join(process.cwd(), "dashboard/src/v2/router/route-prefetch.ts"), "utf8");
-
-describe("NodesPage", () => {
-  beforeEach(() => {
-    window.localStorage.clear();
+  it("loads a project flow library and registry-backed editor", async () => {
+    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+    expect(await screen.findByRole("heading", { name: "Automation workspace" })).toBeInTheDocument();
+    expect(await screen.findByText("Release automation")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Node catalog" })).toBeInTheDocument();
+    expect(screen.getByText("Run debugger")).toBeInTheDocument();
+    expect(api.fetchNodeFlows).toHaveBeenCalledWith("project-1", expect.any(AbortSignal));
   });
 
-  afterEach(() => {
-    cleanup();
-    window.localStorage.clear();
-    vi.clearAllMocks();
+  it("imports legacy localStorage once and removes it as a source of truth", async () => {
+    window.localStorage.setItem(NODES_CANVAS_STORAGE_KEY, JSON.stringify({ schemaVersion: 2, nodes: [{ id: "input-1", type: "input", title: "Input", position: { x: 1, y: 1 } }], edges: [] }));
+    api.createNodeFlowDraft.mockResolvedValue({ flowId: "imported", draftRevision: 1 });
+    api.fetchNodeFlows.mockResolvedValueOnce({ flows: [] }).mockResolvedValueOnce({ flows: [flow] });
+    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+    await waitFor(() => expect(api.createNodeFlowDraft).toHaveBeenCalledTimes(1));
+    expect(window.localStorage.getItem(NODES_CANVAS_STORAGE_KEY)).toBeNull();
+    expect(window.localStorage.getItem("codeux:nodes-canvas:imported:project-1")).toBe("imported");
   });
 
-  it("renders the composed local canvas workspace", () => {
-    render(<NodesPage />);
-
-    expect(screen.getByRole("heading", { name: "Nodes Canvas" })).toBeInTheDocument();
-    expect(screen.getByRole("application", { name: "Node canvas" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Add nodes" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Project Trigger" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Ready to wire" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Graph JSON" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Command metadata" })).toBeInTheDocument();
-    expect(screen.getByText(/codeux:nodes-canvas:v1/i)).toBeInTheDocument();
-  });
-
-  it("exercises node selection and inspector editing through reducer-backed state", async () => {
-    const user = userEvent.setup();
-    render(<NodesPage />);
-
-    await user.click(screen.getByRole("button", { name: /Task Draft task node/i }));
-    expect(screen.getByRole("heading", { name: "Task Draft" })).toBeInTheDocument();
-
-    fireEvent.input(screen.getByLabelText("Label"), { target: { value: "Implementation Task" } });
-
-    expect(screen.getByRole("heading", { name: "Implementation Task" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Implementation Task task node/i })).toBeInTheDocument();
-  });
-
-  it("persists graph changes to localStorage and restores them on the next render", async () => {
-    const { unmount } = render(<NodesPage />);
-
-    fireEvent.input(screen.getByLabelText("Label"), { target: { value: "Manual Launch" } });
-
-    await waitFor(() => {
-      expect(window.localStorage.getItem(NODES_CANVAS_STORAGE_KEY)).toContain("Manual Launch");
-    });
-
-    unmount();
-    cleanup();
-    render(<NodesPage />);
-
-    expect(screen.getByDisplayValue("Manual Launch")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Manual Launch trigger node/i })).toBeInTheDocument();
-  });
-
-  it("handles invalid import JSON without replacing the current graph", async () => {
-    const user = userEvent.setup();
-    render(<NodesPage />);
-
-    fireEvent.input(screen.getByLabelText("Import or exported graph"), { target: { value: "not-json" } });
-    await user.click(screen.getByRole("button", { name: /^Import$/i }));
-
-    expect(screen.getByText("Serialized graph must be valid JSON.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Project Trigger trigger node/i })).toBeInTheDocument();
-  });
-
-  it("supports clear and reset states without losing palette recovery", async () => {
-    const user = userEvent.setup();
-    render(<NodesPage />);
-
-    await user.click(screen.getByRole("button", { name: "Clear" }));
-    expect(screen.getByRole("region", { name: "Empty node canvas" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Nothing selected" })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Add Agent node" }));
-    expect(screen.getByRole("button", { name: /Agent Node agent node/i })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Reset" }));
-    expect(screen.getByRole("button", { name: /Project Trigger trigger node/i })).toBeInTheDocument();
-  });
-
-  it("feature-gates unfinished route registration and prefetch while keeping shared metadata", () => {
-    expect(mainSource).toContain('import("./v2/NodesPage.js")');
-    expect(mainSource).toContain('path: "/nodes"');
-    expect(mainSource).toContain('...(nodesFeatureEnabled ? [nodesRoute] : [])');
-    expect(prefetchSource).toContain('"/nodes": { importer: () => import("../NodesPage.js"), feature: "nodes" }');
-    expect(prefetchSource).toContain("canPrefetchRoute(path)");
-    expect(mainSource).toContain('import("./v2/CustomDashboardsPage.js")');
-    expect(mainSource).toContain('path: "/custom-dashboards"');
-    expect(mainSource).toContain('...(customDashboardsFeatureEnabled ? [customDashboardsRoute] : [])');
-    expect(prefetchSource).toContain('"/custom-dashboards": { importer: () => import("../CustomDashboardsPage.js"), feature: "custom-dashboards" }');
-
-    const navItem = ALL_NAVIGATION_ITEMS.find((item) => item.id === "nodes");
-    expect(navItem).toBeDefined();
-    expect(navItem && isRouteNavigationItem(navItem)).toBe(true);
-    if (navItem && isRouteNavigationItem(navItem)) {
-      expect(navItem.path).toBe("/nodes");
-      expect(navItem.group).toBe("workspace");
-      expect(navItem.dockSection).toBe("right");
-    }
-
-    const customDashboardsNavItem = ALL_NAVIGATION_ITEMS.find((item) => item.id === "custom-dashboards");
-    expect(customDashboardsNavItem).toBeDefined();
-    expect(customDashboardsNavItem && isRouteNavigationItem(customDashboardsNavItem)).toBe(true);
-    if (customDashboardsNavItem && isRouteNavigationItem(customDashboardsNavItem)) {
-      expect(customDashboardsNavItem.path).toBe("/custom-dashboards");
-      expect(customDashboardsNavItem.group).toBe("workspace");
-      expect(customDashboardsNavItem.dockSection).toBe("right");
-    }
+  it("surfaces optimistic save conflicts", async () => {
+    const user = userEvent.setup(); api.patchNodeFlowDraft.mockResolvedValue({ conflict: { message: "The draft changed after it was read; reload the summary and reapply the patch.", actualDraftRevision: 3 } });
+    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+    await screen.findByText("Release automation");
+    await user.type(screen.getAllByLabelText("Description")[0]!, " changed");
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Current revision is 3");
   });
 });
