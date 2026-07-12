@@ -28,4 +28,16 @@ The debugger reads persisted flow runs, node runs, attempt history, retry classi
 
 Use the [Scheduler](./scheduler.md) to target a pinned or latest-published version. A flow can also be attached to a project agent preset as a reusable skill; removing the attachment does not remove the flow, publications, schedules, or run history.
 
+Rendered run payloads redact secret-shaped keys such as `apiKey`, `authorization`, `cookie`, `password`, `secret`, and `token`.
+
+The run debugger lists durable approvals beside node attempts. A pending item offers **Approve & continue** and **Reject** actions. The decision applies to the same pinned run, and repeated clicks return its current state without sending an approved external effect twice.
+
+## Agent Attachment
+
+A flow can be attached to a project agent preset as a repeatable skill with a name and description. Detaching removes only that binding; the flow, its graph, schedules, and run history remain in the project.
+
+The Nodes workspace loads the selected project's agent presets together with the selected flow's existing bindings. Already attached agents are removed from the selector. Attach and detach actions are keyboard accessible, use the governed APIs, and refresh the binding list after success. Switching projects or flows clears selection and stale attachment state. A failed load or mutation leaves known bindings visible and exposes a retry action.
+
+The inspector displays attachment metadata only. An attached agent receives the narrow `run_attached_flow` operation, which still verifies project ownership, the binding, publication state, and credential policy without granting graph inspection, credential access, or `manage_node_flows`.
+
 Outside development builds, `/nodes` requires the Nodes feature flag plus the node-flow backend and automation-security prerequisites. Individual definitions can additionally require provider, credential-broker, egress, approval/outbox, webhook, or custom-runtime configuration. Catalog presence and feature visibility do not assert that an integration is configured or production-ready.

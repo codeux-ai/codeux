@@ -72,7 +72,7 @@ import { SchedulerActions } from "./management/scheduler-actions.js";
 import { AgentSchedulerActions } from "./management/agent-scheduler-actions.js";
 import { SettingsActions } from "./management/settings-actions.js";
 import { AgentActions } from "./management/agent-actions.js";
-import { NodeFlowActions, formatRunSummary } from "./management/node-flow-actions.js";
+import { NodeFlowActions } from "./management/node-flow-actions.js";
 import { MemoryActions } from "./management/memory-actions.js";
 import { SkillActions } from "./management/skill-actions.js";
 import { ChatProviderActions } from "./management/chat-provider-actions.js";
@@ -473,7 +473,7 @@ export class ManagementToolHandler {
         conversationId: getCurrentMcpThreadId(),
         parameters: args.input,
       });
-      return { content: [{ type: "text", text: JSON.stringify({ result: formatRunSummary(result) }, null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify({ result }, null, 2) }] };
     } catch (error) {
       return this.formatError("node_flows", "run_attached_flow", error);
     }

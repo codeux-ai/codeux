@@ -7,7 +7,6 @@ import type {
   NodeFlowJsonObject,
   NodeFlowJsonValue,
   NodeFlowNode,
-  NodeFlowNodeAttemptRecord,
   NodeFlowRecord,
   NodeFlowRunRecord,
   NodeFlowRunSummaryResponse,
@@ -314,7 +313,6 @@ export class NodeFlowActions {
           input: maskJsonObject(nodeRun.input),
           output: maskJsonObject(nodeRun.output),
         })),
-        attempts: this.nodeFlowService.listNodeAttempts(run.id).attempts.map(formatAttempt),
       },
     };
   }
@@ -453,7 +451,7 @@ function formatRun(run: NodeFlowRunRecord): Record<string, unknown> {
   };
 }
 
-export function formatRunSummary(summary: NodeFlowRunSummaryResponse): Record<string, unknown> {
+function formatRunSummary(summary: NodeFlowRunSummaryResponse): Record<string, unknown> {
   return {
     run: formatRun(summary.run),
     nodeRuns: summary.nodeRuns.map((nodeRun) => ({
@@ -461,30 +459,7 @@ export function formatRunSummary(summary: NodeFlowRunSummaryResponse): Record<st
       input: maskJsonObject(nodeRun.input),
       output: maskJsonObject(nodeRun.output),
     })),
-    attempts: (summary.attempts ?? []).map(formatAttempt),
     output: maskJsonObject(summary.output),
-  };
-}
-
-function formatAttempt(attempt: NodeFlowNodeAttemptRecord): Record<string, unknown> {
-  return {
-    id: attempt.id,
-    runId: attempt.runId,
-    nodeRunId: attempt.nodeRunId,
-    nodeId: attempt.nodeId,
-    attemptNumber: attempt.attemptNumber,
-    status: attempt.status,
-    executorId: attempt.executorId,
-    invocationId: attempt.invocationId,
-    artifactDigest: attempt.artifactDigest,
-    input: maskJsonObject(attempt.input),
-    output: maskJsonObject(attempt.output),
-    failureClassification: attempt.failureClassification,
-    retryDecision: attempt.retryDecision,
-    errorMessage: attempt.errorMessage,
-    startedAt: attempt.startedAt,
-    finishedAt: attempt.finishedAt,
-    createdAt: attempt.createdAt,
   };
 }
 

@@ -28,4 +28,14 @@ The debugger reads persisted flow runs, node runs, attempt history, retry classi
 
 Scheduling is entered through `/scheduler` and targets a pinned or latest-published version. A flow can also be attached to a project agent preset as a reusable skill; removing the attachment does not remove the flow, publications, schedules, or run history.
 
+Rendered run payloads redact secret-shaped keys such as `apiKey`, `authorization`, `cookie`, `password`, `secret`, and `token`.
+
+The run debugger lists durable approvals beside node attempts. A pending item offers **Approve & continue** and **Reject** actions. The decision applies to the same pinned run, and repeated clicks return its current state without sending an approved external effect twice.
+
+## Agent attachments
+
+For the selected flow, the workspace loads project-owned agent presets and existing attachments. The selector excludes agents already attached, and attach/detach buttons are native keyboard controls with visible focus treatment. Every mutation uses the governed flow attachment API and refreshes the selected flow's bindings afterward. Changing projects or flows clears the prior selection and attachment state; late responses from the old scope are ignored. Load and mutation failures leave known bindings visible and provide a retry action.
+
+The inspector receives agent names and attachment metadata only. An attachment exposes only the narrow `run_attached_flow` capability to that project agent; execution continues to verify ownership, the binding, an immutable publication, and credential policy without exposing graph or secret material.
+
 Outside development builds, `/nodes` requires the Nodes feature flag plus the node-flow backend and automation-security prerequisites. Individual definitions can additionally require provider, credential-broker, egress, approval/outbox, webhook, or custom-runtime configuration. Catalog presence and feature visibility do not assert that an integration is configured or production-ready.
