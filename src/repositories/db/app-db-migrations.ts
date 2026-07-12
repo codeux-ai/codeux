@@ -241,6 +241,7 @@ export function ensureNodeFlowTables(db: DatabaseAdapter): void {
       flow_id TEXT NOT NULL,
       project_id TEXT NOT NULL,
       node_id TEXT NOT NULL,
+      logical_item TEXT NOT NULL DEFAULT 'default',
       status TEXT NOT NULL,
       execution_invocation_id TEXT,
       input_json TEXT,
@@ -278,6 +279,7 @@ export function ensureNodeFlowTables(db: DatabaseAdapter): void {
       run_id TEXT NOT NULL,
       node_run_id TEXT NOT NULL,
       node_id TEXT NOT NULL,
+      logical_item TEXT NOT NULL DEFAULT 'default',
       attempt_number INTEGER NOT NULL,
       status TEXT NOT NULL,
       executor_id TEXT NOT NULL,
@@ -294,7 +296,7 @@ export function ensureNodeFlowTables(db: DatabaseAdapter): void {
       created_at TEXT NOT NULL,
       FOREIGN KEY (run_id) REFERENCES node_flow_runs(id) ON DELETE CASCADE,
       FOREIGN KEY (node_run_id) REFERENCES node_flow_node_runs(id) ON DELETE CASCADE,
-      UNIQUE (run_id, node_id, attempt_number)
+      UNIQUE (run_id, node_id, logical_item, attempt_number)
     )
   `);
 
@@ -306,6 +308,8 @@ export function ensureNodeFlowTables(db: DatabaseAdapter): void {
   ensureColumn(db, "node_flow_runs", "heartbeat_at", "TEXT");
   ensureColumn(db, "node_flow_runs", "cancel_requested_at", "TEXT");
   ensureColumn(db, "node_flow_node_runs", "execution_invocation_id", "TEXT");
+  ensureColumn(db, "node_flow_node_runs", "logical_item", "TEXT NOT NULL DEFAULT 'default'");
+  migrateNodeFlowAttemptsLogicalItems(db);
 
   ensureIndex(db, "idx_node_flows_project_updated", "node_flows", "project_id, updated_at DESC");
   ensureIndex(db, "idx_node_flow_versions_flow_version", "node_flow_versions", "flow_id, version DESC");
@@ -316,7 +320,47 @@ export function ensureNodeFlowTables(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_node_flow_publications_latest", "node_flow_publications", "flow_id, version DESC");
   ensureIndex(db, "idx_node_flow_runs_queue", "node_flow_runs", "status, lease_expires_at, created_at ASC");
   ensureIndex(db, "idx_node_flow_runs_project_status", "node_flow_runs", "project_id, status");
-  ensureIndex(db, "idx_node_flow_attempts_run_node", "node_flow_node_attempts", "run_id, node_id, attempt_number");
+  db.exec("DROP INDEX IF EXISTS idx_node_flow_attempts_run_node");
+  ensureIndex(db, "idx_node_flow_attempts_run_node", "node_flow_node_attempts", "run_id, node_id, logical_item, attempt_number");
+}
+
+function migrateNodeFlowAttemptsLogicalItems(db: DatabaseAdapter): void {
+  const columns = getTableColumns(db, "node_flow_node_attempts");
+  if (columns.has("logical_item")) return;
+  db.exec("PRAGMA foreign_keys = OFF");
+  try {
+    db.exec("BEGIN");
+    db.exec(`
+      CREATE TABLE node_flow_node_attempts_new (
+        id TEXT PRIMARY KEY, run_id TEXT NOT NULL, node_run_id TEXT NOT NULL, node_id TEXT NOT NULL,
+        logical_item TEXT NOT NULL DEFAULT 'default', attempt_number INTEGER NOT NULL, status TEXT NOT NULL,
+        executor_id TEXT NOT NULL, invocation_id TEXT, artifact_digest TEXT, input_json TEXT, output_json TEXT,
+        credential_ids_json TEXT NOT NULL DEFAULT '[]', failure_classification TEXT, retry_decision TEXT,
+        error_message TEXT, started_at TEXT NOT NULL, finished_at TEXT, created_at TEXT NOT NULL,
+        FOREIGN KEY (run_id) REFERENCES node_flow_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY (node_run_id) REFERENCES node_flow_node_runs(id) ON DELETE CASCADE,
+        UNIQUE (run_id, node_id, logical_item, attempt_number)
+      )
+    `);
+    db.exec(`
+      INSERT INTO node_flow_node_attempts_new (
+        id, run_id, node_run_id, node_id, logical_item, attempt_number, status, executor_id,
+        invocation_id, artifact_digest, input_json, output_json, credential_ids_json,
+        failure_classification, retry_decision, error_message, started_at, finished_at, created_at
+      ) SELECT id, run_id, node_run_id, node_id, 'default', attempt_number, status, executor_id,
+        invocation_id, artifact_digest, input_json, output_json, credential_ids_json,
+        failure_classification, retry_decision, error_message, started_at, finished_at, created_at
+      FROM node_flow_node_attempts
+    `);
+    db.exec("DROP TABLE node_flow_node_attempts");
+    db.exec("ALTER TABLE node_flow_node_attempts_new RENAME TO node_flow_node_attempts");
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  } finally {
+    db.exec("PRAGMA foreign_keys = ON");
+  }
 }
 
 export function ensureAutomationGovernanceTables(db: DatabaseAdapter): void {

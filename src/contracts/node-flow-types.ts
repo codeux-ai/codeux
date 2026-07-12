@@ -329,6 +329,7 @@ export interface NodeFlowNodeRunRecord {
   flowId: string;
   projectId: string;
   nodeId: string;
+  logicalItem: string;
   status: NodeFlowNodeRunStatus;
   executionInvocationId: string | null;
   input: NodeFlowJsonObject | null;
@@ -345,6 +346,7 @@ export interface NodeFlowNodeAttemptRecord {
   runId: string;
   nodeRunId: string;
   nodeId: string;
+  logicalItem: string;
   attemptNumber: number;
   status: NodeFlowNodeRunStatus;
   executorId: string;
@@ -408,6 +410,7 @@ export interface CreateNodeFlowNodeRunInput {
   flowId: string;
   projectId: string;
   nodeId: string;
+  logicalItem?: string;
   status?: NodeFlowNodeRunStatus;
   executionInvocationId?: string | null;
   input?: NodeFlowJsonObject | null;

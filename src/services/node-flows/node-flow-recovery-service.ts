@@ -36,11 +36,11 @@ export class NodeFlowRecoveryService {
     const resumed: NodeFlowRunRecord[] = [];
     const waitingRuns = this.repository.listRecoverableRuns().filter((run) => run.status === "approval_waiting");
     for (const run of waitingRuns) {
-      const waitingNode = this.repository.listNodeRuns(run.id).find((candidate) => candidate.status === "approval_waiting");
-      if (!waitingNode) continue;
+      const waitingNodes = this.repository.listNodeRuns(run.id).filter((candidate) => candidate.status === "approval_waiting");
       const approval = this.approvalService.listForRun(run.id)
         .map((candidate) => this.approvalService!.get(candidate.id) ?? candidate)
-        .find((candidate) => candidate.nodeId === waitingNode.nodeId && candidate.status !== "pending");
+        .find((candidate) => candidate.status !== "pending" && waitingNodes.some((node) => node.nodeId === candidate.nodeId
+          && (node.logicalItem === candidate.logicalItem || node.logicalItem === "default")));
       if (!approval) continue;
       const summary = await this.runtimeService.resumeApproval(run.projectId, approval.id, run.id);
       resumed.push(summary.run);

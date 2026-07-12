@@ -4,6 +4,7 @@ import type { ApprovalService } from "../approval-service.js";
 import { UnknownSideEffectOutcomeError, type OutboxService } from "../outbox-service.js";
 
 export const MAX_FOREACH_ITEMS = 1_000;
+export const MAX_FOREACH_CONCURRENCY = 64;
 export const MAX_SUBFLOW_DEPTH = 8;
 export const MAX_DELAY_MS = 60 * 60_000;
 
@@ -11,6 +12,7 @@ export interface BuiltinExecutionContext {
   projectId: string; flowId: string; publicationId: string; runId: string; nodeId: string;
   config: NodeFlowJsonObject; upstream: NodeFlowJsonObject; flowInput: NodeFlowJsonObject;
   signal?: AbortSignal; subflowDepth: number;
+  logicalItem: string;
   redactJson?: (value: NodeFlowJsonObject) => NodeFlowJsonObject;
   redactText?: (value: string) => string;
 }
@@ -43,7 +45,7 @@ export class BuiltinExecutors {
   private executeApproval(context: BuiltinExecutionContext): BuiltinExecutionResult {
     if (!this.deps.approvalService) throw new ValidationError("Approval service is not configured.");
     const approval = this.deps.approvalService.requireApproval({ projectId: context.projectId, flowId: context.flowId,
-      runId: context.runId, nodeId: context.nodeId, logicalItem: readString(context.config.logicalItem) ?? "default",
+      runId: context.runId, nodeId: context.nodeId, logicalItem: effectiveLogicalItem(context),
       request: { summary: readString(context.config.summary) ?? "Approval required", payload: context.upstream } });
     return { output: { approved: true, approvalId: approval.id, ...context.upstream }, selectedPorts: ["approved"] };
   }
@@ -52,7 +54,7 @@ export class BuiltinExecutors {
     if (!this.deps.approvalService || !this.deps.outboxService) throw new ValidationError("Email side-effect services are not configured.");
     const rawDraft = buildEmail(context);
     const draft = context.redactJson?.(rawDraft) ?? rawDraft;
-    const logicalItem = readString(context.config.logicalItem) ?? "default";
+    const logicalItem = effectiveLogicalItem(context);
     this.deps.approvalService.requireApproval({ projectId: context.projectId, flowId: context.flowId, runId: context.runId,
       nodeId: context.nodeId, logicalItem, request: { effectType: "email", draft } });
     const sent = await this.deps.outboxService.dispatch({ projectId: context.projectId, flowId: context.flowId,
@@ -73,6 +75,10 @@ export class BuiltinExecutors {
       input: readObject(context.config.input) ?? context.upstream, depth: context.subflowDepth + 1, signal: context.signal });
     return { output: context.redactJson?.(output) ?? output };
   }
+}
+
+function effectiveLogicalItem(context: BuiltinExecutionContext): string {
+  return context.logicalItem === "default" ? readString(context.config.logicalItem) ?? "default" : context.logicalItem;
 }
 
 function executeCondition(context: BuiltinExecutionContext): BuiltinExecutionResult {

@@ -24,6 +24,8 @@ T06 draft endpoints provide structural validation, policy findings, requested pe
 
 The debugger reads persisted runs, node runs, attempt history, and approval decisions. Pending approvals expose keyboard-accessible **Approve & continue** and **Reject** actions. A decision continues or terminates the same pinned run, and repeated clicks return its current durable state without duplicating the governed attempt or external send. The debugger also overlays node state, shows retry reasons and decisions, links invocation ids, reports timing, supports cancellation and safe retry, and redacts secret-shaped values before rendering. Scheduling is entered through `/scheduler`; scheduler execution also resolves published versions.
 
+Foreach runs persist one downstream node run and attempt sequence per deterministic logical item. Item inputs, retries, cancellation, approvals, and side-effect identity survive restart; concurrency is bounded by the node configuration. Empty collections select the explicit `empty` branch and persist the item branch as skipped, while oversized collections fail instead of being truncated.
+
 The layout stacks on small screens, preserves keyboard-visible focus, labels loading/error/empty states, and bounds long histories and JSON output with scrolling.
 
 Outside development, `/nodes` requires the Nodes feature flag plus the node-flow backend and automation-security prerequisites. Individual definitions can require additional provider, credential-broker, egress, approval/outbox, webhook, or custom-runtime configuration; catalog presence alone does not assert production readiness for an integration.

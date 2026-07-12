@@ -8,7 +8,7 @@ The governed built-in catalog extends publication-based node-flow execution with
 | --- | --- |
 | `condition` | Evaluates a bounded operator and selects exactly the `true` or `false` output port. Unselected branches persist as skipped node runs. |
 | `switch` | Evaluates no more than 100 configured cases and selects one named case or `default`. |
-| `foreach` | Validates an array and emits at most 1,000 items. Inputs above the configured bound fail before fan-out. |
+| `foreach` | Validates an array, rejects inputs above the configured bound (at most 1,000), and executes the selected downstream branch once per logical item with bounded concurrency. |
 | `merge` | Combines active upstream values with `object`, `array`, or `first` strategy. |
 | `delay` | Waits for a cancellable duration from zero through one hour. |
 | `approval` | Creates or reuses a durable approval keyed by run, node, and logical item. |
@@ -18,6 +18,8 @@ The governed built-in catalog extends publication-based node-flow execution with
 | `webhook_trigger` | Emits input accepted by a secret-authenticated webhook configuration. |
 
 The existing `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, and `output` nodes retain their previous contracts. Typed manifest ports identify branch handles, many-valued merge inputs, and trigger outputs. Branch routing only runs a node when at least one incoming edge is active, allowing merges to join a selected path without treating an unselected sibling as a failure.
+
+Foreach assigns deterministic logical-item identities from the published node id and item index. Each downstream node run and numbered attempt persists that identity together with the item-specific input. The `concurrency` setting defaults to one and is capped at 64; `maxItems` is a rejection bound rather than a truncation rule. A zero-item input selects `empty`, while the `items` branch is persisted as skipped. Per-item failures retain their own retry history, successful siblings are not replayed during approval or restart continuation, and aggregated output preserves input order.
 
 ## Governed egress
 

@@ -7,8 +7,9 @@ export class NodeFlowAttemptService {
   constructor(private readonly repository: NodeFlowRepository) {}
 
   start(nodeRun: NodeFlowNodeRunRecord, executorId: string, input: NodeFlowJsonObject, credentialIds: string[]): NodeFlowNodeAttemptRecord {
-    const attemptNumber = this.repository.listNodeAttempts(nodeRun.runId).filter((attempt) => attempt.nodeId === nodeRun.nodeId).length + 1;
-    return this.repository.createNodeAttempt({ runId: nodeRun.runId, nodeRunId: nodeRun.id, nodeId: nodeRun.nodeId, attemptNumber, status: "running", executorId, invocationId: null, artifactDigest: null, input, output: null, credentialIds, failureClassification: null, retryDecision: null, errorMessage: null, startedAt: new Date().toISOString(), finishedAt: null });
+    const attemptNumber = this.repository.listNodeAttempts(nodeRun.runId)
+      .filter((attempt) => attempt.nodeId === nodeRun.nodeId && attempt.logicalItem === nodeRun.logicalItem).length + 1;
+    return this.repository.createNodeAttempt({ runId: nodeRun.runId, nodeRunId: nodeRun.id, nodeId: nodeRun.nodeId, logicalItem: nodeRun.logicalItem, attemptNumber, status: "running", executorId, invocationId: null, artifactDigest: null, input, output: null, credentialIds, failureClassification: null, retryDecision: null, errorMessage: null, startedAt: new Date().toISOString(), finishedAt: null });
   }
 
   succeed(attempt: NodeFlowNodeAttemptRecord, output: NodeFlowJsonObject, invocationId?: string | null): NodeFlowNodeAttemptRecord {

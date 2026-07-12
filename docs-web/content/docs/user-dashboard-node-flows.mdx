@@ -34,6 +34,8 @@ Rendered run payloads redact secret-shaped keys such as `apiKey`, `authorization
 
 The run debugger lists durable approvals beside node attempts. A pending item offers **Approve & continue** and **Reject** actions. The decision applies to the same pinned run, and repeated clicks return its current state without sending an approved external effect twice.
 
+Foreach executes the selected downstream branch once per deterministic logical item. The node's `concurrency` setting bounds active items, `maxItems` rejects oversized inputs, and zero items explicitly select the `empty` branch. Item-specific inputs, retries, cancellation, approvals, and external-effect identity are persisted so restart continuation does not replay completed items or duplicate sends.
+
 ## Agent Attachment
 
 A flow can be attached to a project agent preset as a repeatable skill with a name and description. Detaching removes only that binding; the flow, its graph, schedules, and run history remain in the project.

@@ -778,6 +778,7 @@ CREATE TABLE IF NOT EXISTS node_flow_node_runs (
         flow_id TEXT NOT NULL,
         project_id TEXT NOT NULL,
         node_id TEXT NOT NULL,
+        logical_item TEXT NOT NULL DEFAULT 'default',
         status TEXT NOT NULL,
         execution_invocation_id TEXT,
         input_json TEXT,

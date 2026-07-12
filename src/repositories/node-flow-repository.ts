@@ -89,6 +89,7 @@ interface NodeFlowPublicationRow {
 
 interface NodeFlowAttemptRow {
   id: string; run_id: string; node_run_id: string; node_id: string; attempt_number: number | string;
+  logical_item: string;
   status: string; executor_id: string; invocation_id: string | null; artifact_digest: string | null;
   input_json: string | null; output_json: string | null; credential_ids_json: string;
   failure_classification: string | null; retry_decision: string | null; error_message: string | null;
@@ -101,6 +102,7 @@ interface NodeFlowNodeRunRow {
   flow_id: string;
   project_id: string;
   node_id: string;
+  logical_item: string;
   status: string;
   execution_invocation_id: string | null;
   input_json: string | null;
@@ -459,8 +461,8 @@ export class NodeFlowRepository {
 
   createNodeAttempt(input: Omit<NodeFlowNodeAttemptRecord, "id" | "createdAt">): NodeFlowNodeAttemptRecord {
     const id = randomUUID(); const now = new Date().toISOString();
-    this.db.prepare(`INSERT INTO node_flow_node_attempts (id, run_id, node_run_id, node_id, attempt_number, status, executor_id, invocation_id, artifact_digest, input_json, output_json, credential_ids_json, failure_classification, retry_decision, error_message, started_at, finished_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(id, input.runId, input.nodeRunId, input.nodeId, input.attemptNumber, input.status, input.executorId, input.invocationId, input.artifactDigest, this.serializeNullableJson(input.input), this.serializeNullableJson(input.output), JSON.stringify(input.credentialIds), input.failureClassification, input.retryDecision, input.errorMessage, input.startedAt, input.finishedAt, now);
+    this.db.prepare(`INSERT INTO node_flow_node_attempts (id, run_id, node_run_id, node_id, logical_item, attempt_number, status, executor_id, invocation_id, artifact_digest, input_json, output_json, credential_ids_json, failure_classification, retry_decision, error_message, started_at, finished_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, input.runId, input.nodeRunId, input.nodeId, input.logicalItem?.trim() || "default", input.attemptNumber, input.status, input.executorId, input.invocationId, input.artifactDigest, this.serializeNullableJson(input.input), this.serializeNullableJson(input.output), JSON.stringify(input.credentialIds), input.failureClassification, input.retryDecision, input.errorMessage, input.startedAt, input.finishedAt, now);
     return requireRecord(this.getNodeAttempt(id), "Node flow node attempt", id);
   }
 
@@ -472,7 +474,7 @@ export class NodeFlowRepository {
   }
 
   listNodeAttempts(runId: string): NodeFlowNodeAttemptRecord[] {
-    return (this.db.prepare(`SELECT * FROM node_flow_node_attempts WHERE run_id = ? ORDER BY node_id, attempt_number`).all(runId) as unknown as NodeFlowAttemptRow[]).map((row) => this.mapAttemptRow(row));
+    return (this.db.prepare(`SELECT * FROM node_flow_node_attempts WHERE run_id = ? ORDER BY node_id, logical_item, attempt_number`).all(runId) as unknown as NodeFlowAttemptRow[]).map((row) => this.mapAttemptRow(row));
   }
 
   createNodeRun(input: CreateNodeFlowNodeRunInput): NodeFlowNodeRunRecord {
@@ -484,15 +486,16 @@ export class NodeFlowRepository {
     const id = randomUUID();
     this.db.prepare(`
       INSERT INTO node_flow_node_runs (
-        id, run_id, flow_id, project_id, node_id, status, execution_invocation_id,
+        id, run_id, flow_id, project_id, node_id, logical_item, status, execution_invocation_id,
         input_json, output_json, error_message, started_at, finished_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       input.runId,
       input.flowId,
       input.projectId,
       input.nodeId,
+      input.logicalItem?.trim() || "default",
       input.status || "pending",
       input.executionInvocationId ?? null,
       input.input ? this.serializeJson(input.input) : null,
@@ -753,6 +756,7 @@ export class NodeFlowRepository {
       flowId: row.flow_id,
       projectId: row.project_id,
       nodeId: row.node_id,
+      logicalItem: row.logical_item || "default",
       status: row.status as NodeFlowNodeRunRecord["status"],
       executionInvocationId: row.execution_invocation_id,
       input: this.parseObject(row.input_json),
@@ -772,7 +776,7 @@ export class NodeFlowRepository {
   private mapAttemptRow(row: NodeFlowAttemptRow): NodeFlowNodeAttemptRecord {
     let credentialIds: string[] = [];
     try { const parsed = JSON.parse(row.credential_ids_json) as unknown; if (Array.isArray(parsed)) credentialIds = parsed.filter((item): item is string => typeof item === "string"); } catch { /* legacy row */ }
-    return { id: row.id, runId: row.run_id, nodeRunId: row.node_run_id, nodeId: row.node_id, attemptNumber: toNumber(row.attempt_number), status: row.status as NodeFlowNodeRunRecord["status"], executorId: row.executor_id, invocationId: row.invocation_id, artifactDigest: row.artifact_digest, input: this.parseObject(row.input_json), output: this.parseObject(row.output_json), credentialIds, failureClassification: row.failure_classification as NodeFlowFailureClassification | null, retryDecision: row.retry_decision as NodeFlowNodeAttemptRecord["retryDecision"], errorMessage: row.error_message, startedAt: row.started_at, finishedAt: row.finished_at, createdAt: row.created_at };
+    return { id: row.id, runId: row.run_id, nodeRunId: row.node_run_id, nodeId: row.node_id, logicalItem: row.logical_item || "default", attemptNumber: toNumber(row.attempt_number), status: row.status as NodeFlowNodeRunRecord["status"], executorId: row.executor_id, invocationId: row.invocation_id, artifactDigest: row.artifact_digest, input: this.parseObject(row.input_json), output: this.parseObject(row.output_json), credentialIds, failureClassification: row.failure_classification as NodeFlowFailureClassification | null, retryDecision: row.retry_decision as NodeFlowNodeAttemptRecord["retryDecision"], errorMessage: row.error_message, startedAt: row.started_at, finishedAt: row.finished_at, createdAt: row.created_at };
   }
 
   private publishProjectStructureRefresh(projectId: string): void {
