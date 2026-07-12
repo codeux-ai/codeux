@@ -265,14 +265,17 @@ export const getProjectProvidersByType = (
 export const hasProviderInstanceApiKey = (
   providerConfigId: ProviderConfigId,
   systemSettings: SystemSettings | null,
-): boolean => Boolean(getSystemIntegrationProviders(systemSettings)[providerConfigId]?.apiKey?.trim());
+): boolean => {
+  const provider = getSystemIntegrationProviders(systemSettings)[providerConfigId];
+  return Boolean(provider?.apiKeyCredentialRef?.credentialId || provider?.apiKey?.trim());
+};
 
 const hasAnyProviderApiKey = (
   providerId: ProviderId,
   systemSettings: SystemSettings | null,
   hints: ExternalSettingsHints | null,
 ): boolean => (
-  getSystemProvidersByType(systemSettings, providerId).some(([, provider]) => provider.apiKey.trim().length > 0)
+  getSystemProvidersByType(systemSettings, providerId).some(([, provider]) => Boolean(provider.apiKeyCredentialRef?.credentialId) || provider.apiKey.trim().length > 0)
   || Boolean(getLegacyIntegrationApiKey(systemSettings, providerId).trim())
   || Boolean(getHintApiKey(providerId, hints).trim())
 );
@@ -374,7 +377,7 @@ export const countConnectedProviders = (
   hints: ExternalSettingsHints | null,
 ): number => {
   const stored = getSystemProvidersByType(systemSettings, providerId)
-    .filter(([, provider]) => provider.apiKey.trim().length > 0 || (provider.provider !== "jules" && provider.mountAuth))
+    .filter(([, provider]) => Boolean(provider.apiKeyCredentialRef?.credentialId) || provider.apiKey.trim().length > 0 || (provider.provider !== "jules" && provider.mountAuth))
     .length;
   return Math.max(stored, hints && getHintApiKey(providerId, hints).trim() ? 1 : 0);
 };

@@ -1,7 +1,8 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { Check, Terminal, Trash2, X } from "lucide-preact";
-import { PillChoiceGroup, ProviderLogo, Row, SecretInput, SelectInput, TextInput, Toggle } from "./SettingsFormFields.js";
+import { PillChoiceGroup, ProviderLogo, Row, SelectInput, TextInput, Toggle } from "./SettingsFormFields.js";
+import { CredentialReferenceSelector } from "./AutomationCredentialManager.js";
 import { getProviderDefaultAuthPath, getProviderTypeLabel } from "../../lib/settings-view-models.js";
 import { LocalFilePickerField } from "./LocalFilePickerField.js";
 import { TerminalLoginModal } from "./TerminalLoginModal.js";
@@ -62,7 +63,8 @@ export const ProviderInstanceCard: FunctionComponent<{
   onToggleEnabled?: (value: boolean) => void;
   index?: number;
   total?: number;
-}> = ({ providerConfigId, provider, providerModel, dockerExecutionEnabled, onUpdate, onRemove, isLast = true, enabled, onToggleEnabled, index, total }) => {
+  credentialProjectId?: string | null;
+}> = ({ providerConfigId, provider, providerModel, dockerExecutionEnabled, onUpdate, onRemove, isLast = true, enabled, onToggleEnabled, index, total, credentialProjectId }) => {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [removeArmed, setRemoveArmed] = useState(false);
   const [removePending, setRemovePending] = useState(false);
@@ -121,6 +123,7 @@ export const ProviderInstanceCard: FunctionComponent<{
     const updates: Partial<SystemProviderConfig> = {
       authType,
       mountAuth: authType !== "apiKey",
+      ...(authType === "apiKey" ? {} : { apiKey: "", apiKeyCredentialRef: null }),
     };
     if (authType === "dashboardAuth") {
       updates.authPath = `~/.code-ux/credentials/${providerConfigId}`;
@@ -401,8 +404,15 @@ export const ProviderInstanceCard: FunctionComponent<{
 
       {/* API Key Panel */}
       {currentAuthType === "apiKey" && (
-        <Row label="API key" description="Stored for this named provider instance.">
-          <SecretInput value={provider.apiKey} onChange={(value) => applySanitizedUpdate({ apiKey: value }, `${providerInstanceLabel} API key changed locally. Save changes to persist it.`)} aria-label={`${providerInstanceLabel} API key`} aria-describedby={feedback ? feedbackId : undefined} mono />
+        <Row label="API credential" description="Bind encrypted credential metadata to this named provider instance. Secret values are managed separately below.">
+          <CredentialReferenceSelector
+            projectId={credentialProjectId}
+            value={provider.apiKeyCredentialRef}
+            bindingKey={`settings:provider:${providerConfigId}:apiKey`}
+            label={`${providerInstanceLabel} API key`}
+            legacyValuePresent={Boolean(provider.apiKey)}
+            onChange={(apiKeyCredentialRef) => applySanitizedUpdate({ apiKey: "", apiKeyCredentialRef }, `${providerInstanceLabel} credential binding changed locally. Save changes to persist it.`)}
+          />
         </Row>
       )}
 
@@ -443,7 +453,7 @@ export const ProviderInstanceCard: FunctionComponent<{
                     const updates: Partial<SystemProviderConfig> = {
                       qwenAuthMode: value as SystemProviderConfig["qwenAuthMode"],
                       ...(value === "MODEL_PROVIDER" ? {
-                        apiKey: provider.apiKey || "your_api_key",
+                        apiKey: "",
                         qwenBaseUrl: provider.qwenBaseUrl || "http://127.0.0.1:11434/v1",
                         qwenEnvKey: provider.qwenEnvKey || "OLLAMA_API_KEY",
                         qwenModelId: provider.qwenModelId || "glm-4.7-flash",
@@ -543,7 +553,7 @@ export const ProviderInstanceCard: FunctionComponent<{
                     const updates: Partial<SystemProviderConfig> = {
                       openCodeAuthMode: value as SystemProviderConfig["openCodeAuthMode"],
                       ...(value === "CUSTOM_PROVIDER" ? {
-                        apiKey: provider.apiKey || "your_api_key",
+                        apiKey: "",
                         openCodeProviderId: provider.openCodeProviderId || "ollama",
                         openCodeModelId: provider.openCodeModelId || "glm-4.7-flash",
                         openCodeBaseUrl: provider.openCodeBaseUrl || "http://127.0.0.1:11434/v1",

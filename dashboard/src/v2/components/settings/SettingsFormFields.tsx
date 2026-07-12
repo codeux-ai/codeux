@@ -1,5 +1,5 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
-import { useId, useRef, useState } from "preact/hooks";
+import { useEffect, useId, useRef, useState } from "preact/hooks";
 import { Eye, EyeOff } from "lucide-preact";
 import { SHARED_INTERACTION_CLASSES } from "../ui/Button.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
@@ -457,6 +457,10 @@ export const SecretInput: FunctionComponent<{
   const secretLabel = ariaLabel || "secret";
   const revealLabel = `${revealed ? "Hide" : "Show"} ${secretLabel}`;
 
+  useEffect(() => {
+    if (!value) setRevealed(false);
+  }, [value]);
+
   return (
     <div className="relative flex min-w-0 flex-col gap-1.5">
       <UiInput
@@ -464,7 +468,7 @@ export const SecretInput: FunctionComponent<{
         value={value}
         placeholder={placeholder}
         disabled={disabled}
-        autoComplete="off"
+        autoComplete="new-password"
         autoCapitalize="off"
         spellcheck={false}
         aria-invalid={showError || invalid ? "true" : undefined}

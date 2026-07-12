@@ -13,11 +13,13 @@ Use it when you are configuring a new project, auditing inherited settings, or d
 
 ## Controls And Runtime Effect
 
-Each instance owns API key/auth path/login/config-file mode plus routing-visible identity and availability.
+Each instance owns an encrypted credential reference, auth path/login/config-file mode, routing-visible identity, and availability. API-key mode selects credential metadata by name; stored values are never displayed or saved with ordinary settings.
 
 | Control Surface | Runtime Effect | Review Before Saving |
 | --- | --- | --- |
 | Settings card fields | Updates the active Settings scope after you save the page. | Confirm whether you are editing System or Project scope. |
+| Credential binding | Binds an active project/global credential with the `read` capability and stores only its credential ID. | Select a project for credential administration and confirm secure-backend health. |
+| Create, rotate, replace, revoke | Sends write-only values directly to the credential broker; replace and revoke require confirmation. | Secret inputs clear after successful submission and cannot be recovered from the dashboard. |
 | Inherited values | Values can flow from system defaults into project and sprint behavior. | Check the source badge before assuming a value is project-specific. |
 | Related runtime paths | The affected service reads the saved settings during planning, dispatch, dashboard rendering, or maintenance work. | Re-run the affected workflow after changing operational settings. |
 
@@ -33,7 +35,7 @@ A practical review flow is:
 
 ## Risks And Gotchas
 
-Local auth copy and config-file mounts expose host credentials to Docker-backed provider runs.
+Local auth copy and config-file mounts expose host credentials to Docker-backed provider runs. A legacy API-key warning means the setting still requires one-way migration: create or select a broker credential, bind it, and save to scrub the compatibility field.
 
 Before applying changes, check:
 

@@ -13,6 +13,27 @@ let systemSettingsInflightRequest: Promise<SystemSettings> | null = null;
 const effectiveSettingsCache = new Map<string, EffectiveSettingsResponse>();
 const effectiveSettingsInflightRequests = new Map<string, Promise<EffectiveSettingsResponse>>();
 
+const LEGACY_SECRET_SETTING_KEYS = new Set([
+  "apiKey",
+  "apiToken",
+  "apiSecret",
+  "githubToken",
+  "gitlabToken",
+]);
+
+/** Keeps compatibility fields present while guaranteeing ordinary settings writes never carry secrets. */
+export const sanitizeSettingsSavePayload = <T>(settings: T): T => {
+  const visit = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(visit);
+    if (!value || typeof value !== "object") return value;
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
+      key,
+      LEGACY_SECRET_SETTING_KEYS.has(key) ? "" : visit(nested),
+    ]));
+  };
+  return visit(settings) as T;
+};
+
 export const clearSettingsApiCacheForTests = (): void => {
   systemSettingsCache = null;
   systemSettingsInflightRequest = null;
@@ -45,10 +66,11 @@ export const fetchSystemSettings = async (): Promise<SystemSettings> => {
 };
 
 export const saveSystemSettings = async (settings: SystemSettings): Promise<SystemSettings> => {
+  const payload = sanitizeSettingsSavePayload(settings);
   const saved = await fetchJson<SystemSettings>("/api/system-settings", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(settings),
+    body: JSON.stringify(payload),
   });
   systemSettingsCache = saved;
   clearEffectiveSettingsRequests();
@@ -98,10 +120,11 @@ export const fetchProjectEffectiveSettings = async (
 };
 
 export const saveProjectSettings = async (projectId: string, settings: ProjectSettings): Promise<void> => {
+  const payload = sanitizeSettingsSavePayload(settings);
   await fetchJson(`/api/projects/${encodeURIComponent(projectId)}/settings`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(settings),
+    body: JSON.stringify(payload),
   });
   clearEffectiveSettingsRequests(projectId);
   if (typeof window !== "undefined") {
@@ -210,12 +233,13 @@ export const saveSprintSettings = async (
   sprintId: string,
   settings: ProjectSettings,
 ): Promise<void> => {
+  const payload = sanitizeSettingsSavePayload(settings);
   await fetchJson(`/api/sprints/${encodeURIComponent(sprintId)}/settings`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       projectId,
-      ...settings,
+      ...payload,
     }),
   });
 };

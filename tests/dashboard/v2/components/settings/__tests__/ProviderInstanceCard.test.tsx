@@ -105,7 +105,7 @@ describe("ProviderInstanceCard", () => {
     expect(screen.getByRole("button", { name: "Remove Very Long OpenCode Provider" })).toBeDefined();
     expect(screen.getByRole("radiogroup", { name: "Very Long OpenCode Provider authentication mode" })).toBeDefined();
     expect(screen.getByRole("radio", { name: /API Key/i }).getAttribute("aria-checked")).toBe("true");
-    expect(screen.getByLabelText("Very Long OpenCode Provider API key")).toBeDefined();
+    expect(screen.getByLabelText("Very Long OpenCode Provider API key credential")).toBeDefined();
   });
 
   it("requires cancellable confirmation before removing a provider instance and announces the local state", async () => {
@@ -207,34 +207,31 @@ describe("ProviderInstanceCard", () => {
     expect(screen.getByRole("alert").textContent).toContain("Unable to update provider routing state.");
   });
 
-  it("announces API key edits as local draft feedback", () => {
+  it("guides legacy API key migration without rendering the stored value", () => {
     const provider: SystemProviderConfig = {
       provider: "codex",
       name: "Codex Key Draft",
-      apiKey: "",
+      apiKey: "sk-local",
       mountAuth: false,
       authPath: "",
       authType: "apiKey",
     };
-    const onUpdate = vi.fn();
-
     render(
       <ProviderInstanceCard
         providerConfigId="codex-key-draft"
         provider={provider}
         providerModel="gpt-5.5"
         dockerExecutionEnabled={false}
-        onUpdate={onUpdate}
+        onUpdate={vi.fn()}
       />
     );
 
-    fireEvent.input(screen.getByLabelText("Codex Key Draft API key"), { target: { value: "sk-local" } });
-
-    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ apiKey: "sk-local" }));
-    expect(screen.getByRole("status").textContent).toContain("Codex Key Draft API key changed locally");
+    expect(screen.getByLabelText("Codex Key Draft API key credential")).toBeDefined();
+    expect(screen.getByRole("alert").textContent).toContain("legacy secret value was detected");
+    expect(document.body.textContent).not.toContain("sk-local");
   });
 
-  it("uses the secret field label in the reveal toggle accessible name", () => {
+  it("does not render reveal controls for stored provider credentials", () => {
     const provider: SystemProviderConfig = {
       provider: "codex",
       name: "Codex Secret",
@@ -254,10 +251,8 @@ describe("ProviderInstanceCard", () => {
       />
     );
 
-    const revealButton = screen.getByRole("button", { name: "Show Codex Secret API key" });
-    fireEvent.click(revealButton);
-
-    expect(screen.getByRole("button", { name: "Hide Codex Secret API key" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Show Codex Secret API key" })).toBeNull();
+    expect(document.body.textContent).not.toContain("secret-value");
   });
 
   it("announces auth mode changes as local unsaved settings feedback", () => {

@@ -49,7 +49,7 @@ import type {
 } from "../../../lib/chat-provider-api.js";
 import { isDeprecatedProvider, providerLifecycle } from "../../../lib/provider-lifecycle.js";
 import { LocalFilePickerField } from "../LocalFilePickerField.js";
-import { AutomationCredentialManager } from "../AutomationCredentialManager.js";
+import { AutomationCredentialManager, CredentialReferenceSelector } from "../AutomationCredentialManager.js";
 
 type PublicProviderId = Exclude<ProviderId, "mockup-cli">;
 
@@ -63,6 +63,7 @@ const DEFAULT_JIRA_SETTINGS: SystemSettings["integrations"]["jira"] = {
   host: "",
   email: "",
   apiToken: "",
+  apiTokenCredentialRef: null,
   autoTransitionLinkedIssuesOnImport: true,
   importTransitionName: "In Work",
   autoCloseLinkedIssues: false,
@@ -80,7 +81,9 @@ type ImporterTextField = Exclude<
 const DEFAULT_IMPORTER_SETTINGS: ImporterSettings = {
   enabled: false,
   apiToken: "",
+  apiTokenCredentialRef: null,
   apiSecret: "",
+  apiSecretCredentialRef: null,
   baseUrl: "",
   workspaceId: "",
   teamId: "",
@@ -202,7 +205,9 @@ const getImporterSettings = (
 });
 
 const isImporterConfigured = (providerId: ImporterIntegrationId, settings: ImporterSettings): boolean => (
-  IMPORTER_DEFINITIONS[providerId].requiredFields.every((field) => String(settings[field] || "").trim().length > 0)
+  IMPORTER_DEFINITIONS[providerId].requiredFields.every((field) => field === "apiToken"
+    ? Boolean(settings.apiTokenCredentialRef?.credentialId || settings.apiToken.trim())
+    : String(settings[field] || "").trim().length > 0)
 );
 
 const getProviderWatermark = (providerId: ProviderId): string => (
@@ -1437,6 +1442,13 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
       const isGitLab = integrationId === "gitlab";
       const hostLabel = isGitLab ? "GitLab" : "GitHub";
       const tokenKey = isGitLab ? "gitlabToken" : "githubToken";
+      const credentialRefKey = isGitLab ? "gitlabTokenCredentialRef" : "githubTokenCredentialRef";
+      const credentialRef = activeScope === "system"
+        ? systemSettings.integrations[credentialRefKey]
+        : editableSettings.git[credentialRefKey];
+      const legacyToken = activeScope === "system"
+        ? systemSettings.integrations[tokenKey]
+        : editableSettings.git[tokenKey];
       return (
         <>
           {backButton}
@@ -1448,26 +1460,29 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                 : `Override the ${hostLabel} token for this scope. Leave blank to inherit the system token.`}
               badge={activeScope === "system" ? undefined : getFieldBadge(`git.${tokenKey}`)}
             >
-              <SecretInput
-                value={activeScope === "system"
-                  ? (systemSettings.integrations[tokenKey] || "")
-                  : (editableSettings.git[tokenKey] || "")}
+              <CredentialReferenceSelector
+                projectId={state.selectedProject?.id}
+                value={credentialRef}
+                bindingKey={`settings:git.${tokenKey}`}
+                label={`${hostLabel} token`}
+                legacyValuePresent={Boolean(legacyToken)}
                 onChange={(value) => activeScope === "system"
                   ? updateSystem((current) => ({
                     ...current,
                     integrations: {
                       ...current.integrations,
-                      [tokenKey]: value,
+                      [tokenKey]: "",
+                      [credentialRefKey]: value,
                     },
                   }))
                   : updateEditableSettings((current) => ({
                     ...current,
                     git: {
                       ...current.git,
-                      [tokenKey]: value,
+                      [tokenKey]: "",
+                      [credentialRefKey]: value,
                     },
                   }))}
-                mono
               />
             </Row>
             {isGitLab ? null : (
@@ -1588,8 +1603,15 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
             <Row label="Account email" description="Email used with Jira Cloud API tokens. Leave empty for bearer-token Jira deployments." badge={activeScope === "system" ? undefined : getFieldBadge("jira.email")}>
               <TextInput value={jiraSettings.email} onChange={(value) => updateJira({ email: value })} mono />
             </Row>
-            <Row label="API token" description="Jira API token used for issue search, issue context loading, and transitions." badge={activeScope === "system" ? undefined : getFieldBadge("jira.apiToken")}>
-              <SecretInput value={jiraSettings.apiToken} onChange={(value) => updateJira({ apiToken: value })} mono />
+            <Row label="API credential" description="Encrypted Jira token metadata used for issue search, context loading, and transitions." badge={activeScope === "system" ? undefined : getFieldBadge("jira.apiTokenCredentialRef")}>
+              <CredentialReferenceSelector
+                projectId={state.selectedProject?.id}
+                value={jiraSettings.apiTokenCredentialRef}
+                bindingKey="settings:jira.apiToken"
+                label="Jira API token"
+                legacyValuePresent={Boolean(jiraSettings.apiToken)}
+                onChange={(apiTokenCredentialRef) => updateJira({ apiToken: "", apiTokenCredentialRef })}
+              />
             </Row>
             <Row label="Default project" description="Project key used to prefill the Jira import JQL." badge={activeScope === "system" ? undefined : getFieldBadge("jira.defaultProject")}>
               <TextInput value={jiraSettings.defaultProject} onChange={(value) => updateJira({ defaultProject: value.toUpperCase() })} mono />
@@ -1683,20 +1705,24 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                 onChange={() => updateImporter({ enabled: !importerSettings.enabled })}
               />
             </Row>
-            <Row label="API token" description={`Token used for read-only ${definition.label} API requests.`} badge={fieldBadge("apiToken")}>
-              <SecretInput
-                value={importerSettings.apiToken}
-                onChange={(value) => updateImporter({ apiToken: value })}
-                aria-label={`${definition.label} API token`}
-                mono
+            <Row label="API credential" description={`Encrypted token metadata used for read-only ${definition.label} API requests.`} badge={fieldBadge("apiTokenCredentialRef")}>
+              <CredentialReferenceSelector
+                projectId={state.selectedProject?.id}
+                value={importerSettings.apiTokenCredentialRef}
+                bindingKey={`settings:${integrationId}.apiToken`}
+                label={`${definition.label} API token`}
+                legacyValuePresent={Boolean(importerSettings.apiToken)}
+                onChange={(apiTokenCredentialRef) => updateImporter({ apiToken: "", apiTokenCredentialRef })}
               />
             </Row>
-            <Row label="API secret" description="Optional secondary secret for deployments that require one." badge={fieldBadge("apiSecret")}>
-              <SecretInput
-                value={importerSettings.apiSecret}
-                onChange={(value) => updateImporter({ apiSecret: value })}
-                aria-label={`${definition.label} API secret`}
-                mono
+            <Row label="Secondary credential" description="Optional encrypted secondary credential for deployments that require one." badge={fieldBadge("apiSecretCredentialRef")}>
+              <CredentialReferenceSelector
+                projectId={state.selectedProject?.id}
+                value={importerSettings.apiSecretCredentialRef}
+                bindingKey={`settings:${integrationId}.apiSecret`}
+                label={`${definition.label} API secret`}
+                legacyValuePresent={Boolean(importerSettings.apiSecret)}
+                onChange={(apiSecretCredentialRef) => updateImporter({ apiSecret: "", apiSecretCredentialRef })}
               />
             </Row>
             <Row label="Base URL" description="Optional custom API base URL for enterprise or regional deployments." badge={fieldBadge("baseUrl")}>
@@ -1807,6 +1833,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                   provider={provider}
                   providerModel={providerModel}
                   dockerExecutionEnabled={dockerExecutionEnabled}
+                  credentialProjectId={state.selectedProject?.id}
                   onUpdate={(updates) => updateProviderInstance(providerConfigId, updates)}
                   onRemove={providerEntries.length > 1 ? () => removeProviderInstance(providerConfigId) : undefined}
                   isLast={index === providerEntries.length - 1}
@@ -1902,7 +1929,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                     const effectiveJira = activeScope === "system"
                       ? systemSettings.integrations.jira
                       : editableSettings.jira;
-                    const jiraConfigured = Boolean(effectiveJira?.host?.trim() && effectiveJira?.apiToken?.trim());
+                    const jiraConfigured = Boolean(effectiveJira?.host?.trim() && (effectiveJira.apiTokenCredentialRef?.credentialId || effectiveJira.apiToken?.trim()));
                     return (
                       <div key={integration.id} className="group relative min-h-[156px] overflow-hidden rounded-[1.35rem] border border-black/[0.06] bg-white/88 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.035)] transition-[border-color,background-color,transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-black/[0.12] hover:bg-white hover:shadow-[0_18px_42px_rgba(15,23,42,0.07)] dark:border-white/[0.08] dark:bg-void-800/80 dark:hover:border-white/[0.14] dark:hover:bg-void-800/90">
                         <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.08] to-transparent dark:via-white/[0.12]" />

@@ -66,7 +66,7 @@ const isVirtualWorkerProvider = (providerId: ProviderId): providerId is VirtualW
 );
 
 const isProviderInstanceAvailableForDisplay = (provider: SystemProviderCredentialSettings): boolean => (
-  provider.apiKey.trim().length > 0 || (provider.provider !== "jules" && provider.mountAuth)
+  Boolean(provider.apiKeyCredentialRef?.credentialId) || provider.apiKey.trim().length > 0 || (provider.provider !== "jules" && provider.mountAuth)
 );
 
 export const resolveProviderDisplayModel = (
