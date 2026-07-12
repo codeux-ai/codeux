@@ -15,6 +15,11 @@ import { NodeFlowPublicationService } from "./node-flows/node-flow-publication-s
 import { NodeFlowQueueService } from "./node-flows/node-flow-queue-service.js";
 import { NodeFlowAttemptService } from "./node-flows/node-flow-attempt-service.js";
 import { NodeFlowLeaseService } from "./node-flows/node-flow-lease-service.js";
+import { EgressPolicyService } from "./node-flows/egress-policy-service.js";
+import { BuiltinExecutors } from "./node-flows/builtins/builtin-executors.js";
+import type { ApprovalService } from "./node-flows/approval-service.js";
+import { ApprovalRequiredError } from "./node-flows/approval-service.js";
+import type { OutboxService } from "./node-flows/outbox-service.js";
 import type { NodeFlowFailureClassification } from "../contracts/node-flow-execution-policy-types.js";
 import { buildProviderInvocationWorkspaceOptions } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import type {
@@ -47,6 +52,9 @@ interface NodeFlowRuntimeDeps {
   providerExecutionService?: ProviderExecutionService;
   getDashboardSettings?: (projectId: string) => DashboardSettings;
   credentialBroker?: CredentialBroker;
+  egressPolicyService?: EgressPolicyService;
+  approvalService?: ApprovalService;
+  outboxService?: OutboxService;
 }
 
 interface RuntimeContext {
@@ -57,20 +65,40 @@ interface RuntimeContext {
   order: string[];
   input: NodeFlowJsonObject;
   outputs: Map<string, NodeFlowJsonObject>;
+  selectedPorts: Map<string, Set<string>>;
   predecessors: Map<string, string[]>;
   descendants: Map<string, Set<string>>;
   options: RunNodeFlowOptions;
   executorId: string;
   currentAttemptId?: string;
+  publicationId: string;
+  subflowDepth: number;
 }
 
 interface NodeExecutionResult {
   output: NodeFlowJsonObject;
   invocationId?: string | null;
+  selectedPorts?: string[];
 }
 
 export class NodeFlowRuntimeService {
-  constructor(private readonly deps: NodeFlowRuntimeDeps) {}
+  private readonly egressPolicyService: EgressPolicyService;
+  private readonly builtins: BuiltinExecutors;
+
+  constructor(private readonly deps: NodeFlowRuntimeDeps) {
+    this.egressPolicyService = deps.egressPolicyService ?? new EgressPolicyService();
+    this.builtins = new BuiltinExecutors({
+      approvalService: deps.approvalService,
+      outboxService: deps.outboxService,
+      executeSubflow: async ({ projectId, flowId, input, depth, signal }) => {
+        const summary = await this.runFlow(projectId, flowId, input, { signal, subflowDepth: depth, triggerType: "subflow" });
+        if (summary.run.status !== "succeeded") {
+          throw new Error(summary.run.errorMessage ?? `Subflow ${flowId} ended with status ${summary.run.status}.`);
+        }
+        return summary.output ?? {};
+      },
+    });
+  }
 
   async runFlow(
     projectId: string,
@@ -138,10 +166,13 @@ export class NodeFlowRuntimeService {
       order: executionOrder,
       input,
       outputs: new Map(),
+      selectedPorts: new Map(),
       predecessors: buildPredecessors(graph),
       descendants: buildDescendants(graph),
       options,
       executorId,
+      publicationId: publication.id,
+      subflowDepth: options.subflowDepth ?? 0,
     };
 
     const blockedNodes = new Set<string>();
@@ -168,6 +199,10 @@ export class NodeFlowRuntimeService {
       }
       if (blockedNodes.has(node.id)) {
         await this.persistSkippedNode(context, node, "skipped", "Skipped because an upstream node failed.");
+        continue;
+      }
+      if (this.isInactiveBranch(context, node.id)) {
+        await this.persistSkippedNode(context, node, "skipped", "Skipped because its incoming branch was not selected.");
         continue;
       }
       if (node.disabled) {
@@ -206,6 +241,7 @@ export class NodeFlowRuntimeService {
         try {
         const result = await this.executeNode(context, node, nodeRun);
         context.outputs.set(node.id, result.output);
+        if (result.selectedPorts) context.selectedPorts.set(node.id, new Set(result.selectedPorts));
         attemptService.succeed(attempt, maskSecrets(result.output), result.invocationId);
         this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, {
           status: "succeeded",
@@ -219,6 +255,15 @@ export class NodeFlowRuntimeService {
         clearTimeout(timeout); options.signal?.removeEventListener("abort", parentAbort); context.options = previousOptions;
         const message = error instanceof Error ? error.message : String(error);
         const classification = classifyFailure(error, options.signal?.aborted === true, timeoutController.signal.aborted);
+        if (error instanceof ApprovalRequiredError) {
+          attemptService.fail(attempt, "permanent", message, false);
+          this.deps.nodeFlowRepository.updateNodeRun(nodeRun.id, {
+            status: "approval_waiting", errorMessage: message, finishedAt: null,
+          });
+          terminalStatus = "approval_waiting";
+          terminalError = message;
+          break;
+        }
         const wasCancelled = classification === "cancelled";
         const retryable = retryPolicy.retryableClasses.includes(classification) && attemptNumber < retryPolicy.maxAttempts;
         attemptService.fail(attempt, classification, message, retryable, this.deps.nodeFlowRepository.listNodeAttempts(run.id).find((candidate) => candidate.id === attempt.id)?.invocationId);
@@ -261,13 +306,13 @@ export class NodeFlowRuntimeService {
         break;
       }
       }
-      if (terminalStatus === "cancelled" || terminalStatus === "attention_required") {
+      if (terminalStatus === "cancelled" || terminalStatus === "attention_required" || terminalStatus === "approval_waiting") {
         break;
       }
     }
 
     const output = this.buildFlowOutput(context);
-    const finishedAt = new Date().toISOString();
+    const finishedAt = terminalStatus === "approval_waiting" ? null : new Date().toISOString();
     const updatedRun = this.deps.nodeFlowRepository.updateRun(run.id, {
       status: terminalStatus,
       output: maskSecrets(output),
@@ -277,8 +322,8 @@ export class NodeFlowRuntimeService {
       leaseExpiresAt: null,
     });
     this.deps.executionRepository.updateExecutionInvocation(parentInvocation.id, {
-      status: terminalStatus === "succeeded" ? "completed" : terminalStatus === "attention_required" ? "failed" : terminalStatus,
-      errorMessage: terminalError,
+      status: terminalStatus === "succeeded" ? "completed" : terminalStatus === "attention_required" ? "failed" : terminalStatus === "approval_waiting" ? "running" : terminalStatus,
+      errorMessage: terminalStatus === "approval_waiting" ? null : terminalError,
       finishedAt,
     });
     this.deps.executionRepository.appendExecutionInvocationMessage(parentInvocation.id, {
@@ -364,7 +409,13 @@ export class NodeFlowRuntimeService {
       case "output":
         return { output: this.executeOutputNode(context, node) };
       default:
-        throw new ValidationError(`Unsupported node flow node type: ${node.type}.`);
+        return this.builtins.execute(node.type, {
+          projectId: context.projectId, flowId: context.flowId, publicationId: context.publicationId,
+          runId: context.runId, nodeId: node.id,
+          config: evaluateTemplates(readNodeConfig(node), context) as NodeFlowJsonObject,
+          upstream: this.buildUpstreamObject(context, node.id), flowInput: context.input,
+          signal: context.options.signal, subflowDepth: context.subflowDepth,
+        });
     }
   }
 
@@ -518,7 +569,7 @@ export class NodeFlowRuntimeService {
     }
     const headers = normalizeHeaders(readJsonObject(config.headers));
     const boundCredential = await this.resolveNodeCredential(context, node, "auth");
-    if (boundCredential) headers.Authorization = boundCredential;
+    const credentialHeaders = boundCredential ? { authorization: boundCredential } : undefined;
     const timeoutMs = normalizeTimeout(config.timeout ?? config.timeoutMs);
     const controller = new AbortController();
     const abortListener = (): void => controller.abort(context.options.signal?.reason);
@@ -530,18 +581,31 @@ export class NodeFlowRuntimeService {
       metadata: { flowId: context.flowId, runId: context.runId, nodeId: node.id },
     });
     try {
-      const response = await fetch(url, {
+      const response = await this.egressPolicyService.request({
+        url,
         method,
         headers,
+        credentialHeaders,
         body: buildHttpBody(method, headers, config.body),
         signal: controller.signal,
+        rateLimitKey: `${context.projectId}:${url.hostname}`,
+        policy: {
+          allowHttp: config.allowHttp === true,
+          allowedHosts: readStringArray(config.allowedHosts),
+          allowedPorts: readNumberArray(config.allowedPorts),
+          maxRedirects: readOptionalNumber(config.maxRedirects),
+          maxResponseBytes: readOptionalNumber(config.maxResponseBytes),
+          allowedContentTypes: readStringArray(config.allowedContentTypes),
+          timeoutMs,
+          maxRetries: readOptionalNumber(config.maxRetries),
+          requestsPerMinute: readOptionalNumber(config.requestsPerMinute),
+        },
       });
-      const contentType = response.headers.get("content-type") ?? "";
-      const body = contentType.includes("application/json")
-        ? await response.json() as NodeFlowJsonValue
-        : await response.text();
+      const body = response.contentType.includes("application/json")
+        ? response.json() as NodeFlowJsonValue
+        : response.text();
       if (!response.ok) {
-        throw new Error(`HTTP node ${node.id} failed with ${response.status} ${response.statusText}.`);
+        throw new Error(`HTTP node ${node.id} failed with status ${response.status}.`);
       }
       const responsePath = readString(config.responsePath) ?? readString(config.extractJsonPath);
       const extracted = responsePath ? readPath(body, responsePath) : body;
@@ -595,6 +659,21 @@ export class NodeFlowRuntimeService {
       upstream,
       nodes: Object.fromEntries(context.outputs),
     };
+  }
+
+  private buildUpstreamObject(context: RuntimeContext, nodeId: string): NodeFlowJsonObject {
+    return Object.fromEntries((context.predecessors.get(nodeId) ?? [])
+      .filter((id) => context.outputs.has(id)).map((id) => [id, context.outputs.get(id) ?? {}]));
+  }
+
+  private isInactiveBranch(context: RuntimeContext, nodeId: string): boolean {
+    const incoming = context.graph.edges.filter((edge) => edge.toNodeId === nodeId);
+    if (incoming.length === 0) return false;
+    return !incoming.some((edge) => {
+      if (!context.outputs.has(edge.fromNodeId)) return false;
+      const selected = context.selectedPorts.get(edge.fromNodeId);
+      return !selected || !edge.fromHandle || selected.has(edge.fromHandle);
+    });
   }
 
   private firstUpstreamObject(context: RuntimeContext, nodeId: string): NodeFlowJsonObject {
@@ -760,6 +839,22 @@ function readString(value: unknown): string | null {
 
 function readBoolean(value: unknown): boolean {
   return value === true;
+}
+
+function readStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0).map((entry) => entry.trim());
+}
+
+function readNumberArray(value: unknown): number[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const values = value.map(Number).filter((entry) => Number.isInteger(entry) && entry > 0 && entry <= 65_535);
+  return values.length > 0 ? values : undefined;
+}
+
+function readOptionalNumber(value: unknown): number | undefined {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function toJsonValue(value: unknown): NodeFlowJsonValue {

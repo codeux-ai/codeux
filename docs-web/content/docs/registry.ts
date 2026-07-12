@@ -108,6 +108,7 @@ export type DocsSlug =
   | 'user-dashboard-custom-dashboards'
   | 'architecture-custom-dashboard-foundation'
   | 'architecture-managed-container-runtime'
+  | 'architecture-node-flow-builtins-and-security'
   | 'architecture-node-flow-durable-execution'
   | 'architecture-node-flow-foundation'
   | 'architecture-node-flows'
@@ -859,6 +860,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Managed Container Runtime",
     description: "The managed container runtime removes first-invocation Docker builds while keeping provider binaries local to each user's Docker host.",
   },
+  'architecture-node-flow-builtins-and-security': {
+    id: 'architecture-node-flow-builtins-and-security',
+    path: '/docs/architecture-node-flow-builtins-and-security',
+    section: 'Architecture',
+    title: "Node Flow Built-ins and External-Effect Security",
+    description: "The governed catalog adds deterministic branches, bounded collection processing, durable approvals, and replay-safe external effects while keeping the versioned definition registry as the executable authority.",
+  },
   'architecture-node-flow-durable-execution': {
     id: 'architecture-node-flow-durable-execution',
     path: '/docs/architecture-node-flow-durable-execution',
@@ -1009,6 +1017,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['user-dashboard-custom-dashboards'],
   docsRegistry['architecture-custom-dashboard-foundation'],
   docsRegistry['architecture-managed-container-runtime'],
+  docsRegistry['architecture-node-flow-builtins-and-security'],
   docsRegistry['architecture-node-flow-durable-execution'],
   docsRegistry['architecture-node-flow-foundation'],
   docsRegistry['architecture-node-flows'],

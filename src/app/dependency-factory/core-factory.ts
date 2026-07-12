@@ -67,6 +67,9 @@ import { DockerService } from "../../services/docker-service.js";
 import { CustomDashboardRepository } from "../../repositories/custom-dashboard-repository.js";
 import { CustomDashboardValidationService } from "../../services/custom-dashboard-validation-service.js";
 import { AutomationCredentialRepository } from "../../repositories/automation-credential-repository.js";
+import { AutomationApprovalRepository } from "../../repositories/automation-approval-repository.js";
+import { AutomationOutboxRepository } from "../../repositories/automation-outbox-repository.js";
+import { AutomationWebhookTriggerRepository } from "../../repositories/automation-webhook-trigger-repository.js";
 import { CredentialBroker } from "../../services/credentials/credential-broker.js";
 import { MountedKeyFileProvider } from "../../infrastructure/security/mounted-key-file-provider.js";
 import { EncryptedSqliteSecretStore } from "../../infrastructure/security/encrypted-sqlite-secret-store.js";
@@ -131,6 +134,9 @@ export interface CoreDependencies {
   customDashboardRepository: CustomDashboardRepository;
   customDashboardValidationService: CustomDashboardValidationService;
   automationCredentialRepository: AutomationCredentialRepository;
+  automationApprovalRepository: AutomationApprovalRepository;
+  automationOutboxRepository: AutomationOutboxRepository;
+  automationWebhookTriggerRepository: AutomationWebhookTriggerRepository;
   credentialBroker: CredentialBroker;
 }
 
@@ -188,6 +194,9 @@ export function createCoreDependencies(
   const sessionTracking = new SessionTrackingRepository();
   const appDbStorage = new AppDbStorage();
   const automationCredentialRepository = new AutomationCredentialRepository(appDbStorage);
+  const automationApprovalRepository = new AutomationApprovalRepository(appDbStorage);
+  const automationOutboxRepository = new AutomationOutboxRepository(appDbStorage);
+  const automationWebhookTriggerRepository = new AutomationWebhookTriggerRepository(appDbStorage);
   const credentialKeyProvider = getProcessCredentialKeyProvider()
     ?? new MountedKeyFileProvider(process.env.CODE_UX_CREDENTIAL_KEY_FILE);
   const credentialBroker = new CredentialBroker(
@@ -407,6 +416,9 @@ export function createCoreDependencies(
     customDashboardRepository,
     customDashboardValidationService,
     automationCredentialRepository,
+    automationApprovalRepository,
+    automationOutboxRepository,
+    automationWebhookTriggerRepository,
     credentialBroker,
   };
 }

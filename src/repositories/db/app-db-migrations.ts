@@ -319,6 +319,76 @@ export function ensureNodeFlowTables(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_node_flow_attempts_run_node", "node_flow_node_attempts", "run_id, node_id, attempt_number");
 }
 
+export function ensureAutomationGovernanceTables(db: DatabaseAdapter): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS automation_approvals (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      flow_id TEXT NOT NULL,
+      run_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      logical_item TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      request_json TEXT NOT NULL DEFAULT '{}',
+      decision_json TEXT,
+      requested_at TEXT NOT NULL,
+      decided_at TEXT,
+      decided_by TEXT,
+      expires_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+      FOREIGN KEY (run_id) REFERENCES node_flow_runs(id) ON DELETE CASCADE,
+      UNIQUE (run_id, node_id, logical_item)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS automation_outbox (
+      id TEXT PRIMARY KEY,
+      idempotency_key TEXT NOT NULL UNIQUE,
+      project_id TEXT NOT NULL,
+      flow_id TEXT NOT NULL,
+      publication_id TEXT NOT NULL,
+      run_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      logical_item TEXT NOT NULL,
+      effect_type TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      payload_json TEXT NOT NULL,
+      provider_message_id TEXT,
+      attempt_count INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      sent_at TEXT,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+      FOREIGN KEY (run_id) REFERENCES node_flow_runs(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS automation_webhook_triggers (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      flow_id TEXT NOT NULL,
+      path_token_hash TEXT NOT NULL UNIQUE,
+      secret_hash TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      last_triggered_at TEXT,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (flow_id) REFERENCES node_flows(id) ON DELETE CASCADE,
+      UNIQUE (project_id, flow_id)
+    )
+  `);
+  ensureIndex(db, "idx_automation_approvals_run_status", "automation_approvals", "run_id, status, created_at");
+  ensureIndex(db, "idx_automation_outbox_status", "automation_outbox", "status, updated_at");
+  ensureIndex(db, "idx_automation_outbox_run", "automation_outbox", "run_id, node_id");
+  ensureIndex(db, "idx_automation_webhooks_flow", "automation_webhook_triggers", "flow_id, enabled");
+}
+
 interface LegacyNodeFlowRow {
   id: string;
   project_id: string;
@@ -759,6 +829,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureTaskSelfReflectionRatingTables(db);
   ensureConversationDraftTables(db);
   ensureNodeFlowTables(db);
+  ensureAutomationGovernanceTables(db);
   migratePersistedNodeFlowGraphs(db);
   ensureCustomDashboardTables(db);
   ensureAutomationCredentialTables(db);

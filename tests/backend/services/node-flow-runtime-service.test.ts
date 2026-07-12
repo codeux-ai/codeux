@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
-import * as http from "http";
 import * as os from "os";
 import * as path from "path";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
@@ -13,10 +12,11 @@ import { NodeFlowRuntimeService } from "../../../src/services/node-flow-runtime-
 import type { ProviderExecutionService } from "../../../src/services/provider-execution-service.js";
 import type { NodeFlowGraph } from "../../../src/contracts/node-flow-types.js";
 import type { CredentialBroker } from "../../../src/services/credentials/credential-broker.js";
+import { EgressPolicyService } from "../../../src/services/node-flows/egress-policy-service.js";
 
 const tempDirs: string[] = [];
 
-async function createRuntime(providerExecutionService?: Partial<ProviderExecutionService>,credentialBroker?:Partial<CredentialBroker>): Promise<{
+async function createRuntime(providerExecutionService?: Partial<ProviderExecutionService>,credentialBroker?:Partial<CredentialBroker>, egressPolicyService?: EgressPolicyService): Promise<{
   dir: string;
   projectRepository: ProjectManagementRepository;
   nodeFlowRepository: NodeFlowRepository;
@@ -36,6 +36,7 @@ async function createRuntime(providerExecutionService?: Partial<ProviderExecutio
     settingsRepository: new SettingsRepository(path.join(dir, "settings.db")),
     providerExecutionService: providerExecutionService as ProviderExecutionService | undefined,
     credentialBroker: credentialBroker as CredentialBroker | undefined,
+    egressPolicyService,
     getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
   });
   return { dir, projectRepository, nodeFlowRepository, executionRepository, runtime };
@@ -46,6 +47,30 @@ afterEach(async () => {
 });
 
 describe("NodeFlowRuntimeService", () => {
+  it("persists unselected condition branches as skipped while the selected branch runs", async () => {
+    const { dir, projectRepository, nodeFlowRepository, runtime } = await createRuntime();
+    const project = projectRepository.createProject({ name: "Branch Project", sourceType: "local", sourceRef: dir });
+    const flow = nodeFlowRepository.createFlow(project.id, { title: "Branch", graph: {
+      nodes: [
+        { id: "condition", type: "condition", title: "Condition", data: { path: "input.enabled" } },
+        { id: "yes", type: "set_fields", title: "Yes", data: { fields: { branch: "yes" } } },
+        { id: "no", type: "set_fields", title: "No", data: { fields: { branch: "no" } } },
+        { id: "merge", type: "merge", title: "Merge", data: { strategy: "object" } },
+        { id: "output", type: "output", title: "Output" },
+      ],
+      edges: [
+        { fromNodeId: "condition", fromHandle: "true", toNodeId: "yes" },
+        { fromNodeId: "condition", fromHandle: "false", toNodeId: "no" },
+        { fromNodeId: "yes", toNodeId: "merge" }, { fromNodeId: "no", toNodeId: "merge" },
+        { fromNodeId: "merge", toNodeId: "output" },
+      ],
+    } });
+    const result = await runtime.runFlow(project.id, flow.id, { enabled: true });
+    expect(result.run.status).toBe("succeeded");
+    expect(result.nodeRuns.find((node) => node.nodeId === "no")?.status).toBe("skipped");
+    expect(result.output).toMatchObject({ branch: "yes" });
+  });
+
   it("executes an explicitly pinned publication while latest selection follows the newest publication", async () => {
     const { dir, projectRepository, nodeFlowRepository, runtime } = await createRuntime();
     const project = projectRepository.createProject({ name: "Version Project", sourceType: "local", sourceRef: dir });
@@ -173,21 +198,12 @@ describe("NodeFlowRuntimeService", () => {
     expect(executionRepository.getExecutionInvocation(promptRun!.executionInvocationId!)?.type).toBe("node_flow_node");
   });
 
-  it("executes HTTP request nodes with query, body, timeout, and JSON response extraction", async () => {
-    const server = http.createServer((req, res) => {
-      if (req.url?.startsWith("/ok?name=Ada")) {
-        res.setHeader("content-type", "application/json");
-        res.end(JSON.stringify({ data: { message: "hello" } }));
-        return;
-      }
-      res.statusCode = 404;
-      res.end("not found");
-    });
-    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-    try {
-      const address = server.address();
-      const port = typeof address === "object" && address ? address.port : 0;
-      const { dir, projectRepository, nodeFlowRepository, runtime } = await createRuntime();
+  it("executes governed HTTP request nodes with query, body, timeout, and JSON response extraction", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { message: "hello" } }), {
+        status: 200, headers: { "content-type": "application/json" },
+      }));
+      const egressPolicyService = new EgressPolicyService({ fetch: fetchMock, lookup: async () => [{ address: "8.8.8.8", family: 4 }] });
+      const { dir, projectRepository, nodeFlowRepository, runtime } = await createRuntime(undefined, undefined, egressPolicyService);
       const project = projectRepository.createProject({ name: "HTTP Project", sourceType: "local", sourceRef: dir });
       const flow = nodeFlowRepository.createFlow(project.id, {
         title: "HTTP",
@@ -199,7 +215,7 @@ describe("NodeFlowRuntimeService", () => {
               title: "HTTP",
               data: {
                 method: "POST",
-                url: `http://127.0.0.1:${port}/ok`,
+                url: "https://api.example.test/ok",
                 query: { name: "Ada" },
                 body: { ok: true },
                 timeout: 1000,
@@ -216,9 +232,7 @@ describe("NodeFlowRuntimeService", () => {
       expect(result.run.status).toBe("succeeded");
       expect(result.output).toMatchObject({ status: 200, extracted: "hello" });
       expect(result.nodeRuns[0]?.executionInvocationId).toMatch(/^xi_/);
-    } finally {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-    }
+      expect(fetchMock).toHaveBeenCalledWith(expect.objectContaining({ search: "?name=Ada" }), expect.objectContaining({ redirect: "manual" }));
   });
 
   it("fails HTTP nodes clearly and skips downstream nodes without continueOnError", async () => {

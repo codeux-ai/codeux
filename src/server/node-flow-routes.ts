@@ -128,4 +128,33 @@ export function registerNodeFlowRoutes(app: Express, deps: DashboardDependencies
   app.get("/api/node-flow-runs/:runId/attempts", syncRoute((req, res) => {
     res.json(requireNodeFlowService(deps).listNodeAttempts(requireTrimmedString(req.params.runId, "runId")));
   }));
+
+  app.get("/api/node-flow-runs/:runId/approvals", syncRoute((req, res) => {
+    if (!deps.approvalService) throw new HttpRouteError(404, "Approval service is not enabled.");
+    res.json({ approvals: deps.approvalService.listForRun(requireTrimmedString(req.params.runId, "runId")) });
+  }));
+
+  app.post("/api/automation-approvals/:approvalId/decision", syncRoute((req, res) => {
+    if (!deps.approvalService) throw new HttpRouteError(404, "Approval service is not enabled.");
+    const body = req.body as { decision?: string; decidedBy?: string; metadata?: NodeFlowJsonObject };
+    const approvalId = requireTrimmedString(req.params.approvalId, "approvalId");
+    const decidedBy = requireTrimmedString(body.decidedBy, "decidedBy");
+    if (body.decision === "approve") res.json(deps.approvalService.approve(approvalId, decidedBy, body.metadata));
+    else if (body.decision === "reject") res.json(deps.approvalService.reject(approvalId, decidedBy, body.metadata));
+    else throw new HttpRouteError(400, "decision must be approve or reject.");
+  }));
+
+  app.get("/api/node-flows/:flowId/webhook", syncRoute((req, res) => {
+    if (!deps.automationWebhookTriggerRepository) throw new HttpRouteError(404, "Webhook triggers are not enabled.");
+    res.json(deps.automationWebhookTriggerRepository.getByFlow(requireTrimmedString(req.params.flowId, "flowId")));
+  }));
+
+  app.post("/api/node-flows/:flowId/webhook", syncRoute((req, res) => {
+    if (!deps.automationWebhookTriggerRepository) throw new HttpRouteError(404, "Webhook triggers are not enabled.");
+    const flowId = requireTrimmedString(req.params.flowId, "flowId");
+    const flow = requireNodeFlowService(deps).get(flowId);
+    if (!flow) throw new HttpRouteError(404, `Node flow not found: ${flowId}`);
+    const configured = deps.automationWebhookTriggerRepository.create(flow.projectId, flow.id);
+    res.status(201).json({ ...configured.trigger, pathToken: configured.pathToken, secret: configured.secret });
+  }));
 }
