@@ -16,8 +16,11 @@ export const CUSTOM_DASHBOARD_MAX_SOURCE_FILES = 128;
 export const CUSTOM_DASHBOARD_MAX_SOURCE_FILE_BYTES = 512 * 1024;
 export const CUSTOM_DASHBOARD_MAX_SOURCE_TOTAL_BYTES = 2 * 1024 * 1024;
 
-const SUPPORTED_SOURCE_EXTENSION = /\.(?:ts|tsx|css)$/i;
+const MODERN_SOURCE_EXTENSION = /\.(?:ts|tsx|css)$/i;
+const LEGACY_SOURCE_EXTENSION = /\.(?:html|m?js|css)$/i;
 const TYPESCRIPT_ENTRY_EXTENSION = /\.(?:ts|tsx)$/i;
+const LEGACY_HTML_ENTRY_EXTENSION = /\.html$/i;
+const LEGACY_JAVASCRIPT_ENTRY_EXTENSION = /\.m?js$/i;
 const RESERVED_CONFIGURATION_FILE = /(^|\/)(?:package(?:-lock)?\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|\.npmrc|vite\.config\.[^/]+|tsconfig(?:\.[^/]+)?\.json|postcss\.config\.[^/]+|tailwind\.config\.[^/]+)$/i;
 const RAW_SECRET_LITERAL = /["']?(?:authorization|x[_-]?api[_-]?key|api[_-]?(?:key|token)|client[_-]?secret|access[_-]?token|auth[_-]?token|password|secret)["']?\s*(?::|=)\s*["'`](?!\s*(?:"|'|`))[^"'`\r\n]{4,}["'`]|\bBearer\s+[A-Za-z0-9._~+/=-]{8,}|\bsk-[A-Za-z0-9_-]{8,}/i;
 const RAW_SECRET_VALUE = /^\s*Bearer\s+\S{4,}\s*$/i;
@@ -67,7 +70,10 @@ export interface MaterializedCustomDashboardWorkspace {
   workspacePath: string;
   entryImportPath: string;
   buildManifest: CustomDashboardBuildManifest;
+  validationMode: CustomDashboardValidationMode;
 }
+
+export type CustomDashboardValidationMode = "modern" | "legacy-html" | "legacy-javascript";
 
 declare const validatedCustomDashboardPathBrand: unique symbol;
 
@@ -132,6 +138,7 @@ export async function materializeCustomDashboardWorkspace(args: {
   bridgeConfig: CustomDashboardBridgeConfig;
 }): Promise<MaterializedCustomDashboardWorkspace> {
   const buildManifest = buildCustomDashboardBuildManifest(args.revision);
+  const validationMode = getCustomDashboardValidationMode(buildManifest.entryFile);
   // workspacePath is returned by resolveContainedCustomDashboardPath after
   // lexical and realpath containment checks against the project runtime root.
   // codeql[js/path-injection]
@@ -184,18 +191,19 @@ export async function materializeCustomDashboardWorkspace(args: {
   const harnessEntryPath = await resolveContainedCustomDashboardPath(args.workspacePath, path.join(harnessDir, "main.tsx"));
 
   await Promise.all([
-    writeJsonFile(packageJsonPath, buildPackageJson(buildManifest)),
-    writeTextFile(indexHtmlPath, buildIndexHtml()),
+    writeJsonFile(packageJsonPath, buildPackageJson(buildManifest, validationMode)),
+    writeTextFile(indexHtmlPath, buildIndexHtml(args.revision, args.bridgeConfig, validationMode)),
     writeTextFile(viteConfigPath, buildViteConfig()),
     writeTextFile(tsConfigPath, buildTsConfig()),
     writeTextFile(dataBridgePath, buildDataBridgeModule(args.bridgeConfig)),
-    writeTextFile(harnessEntryPath, buildHarnessEntry(buildManifest)),
+    writeTextFile(harnessEntryPath, validationMode === "modern" ? buildHarnessEntry(buildManifest) : "export {};\n"),
   ]);
 
   return {
     workspacePath: args.workspacePath,
     entryImportPath,
     buildManifest,
+    validationMode,
   };
 }
 
@@ -218,6 +226,10 @@ export function buildCustomDashboardBuildManifest(
     throw new Error("Custom dashboard manifest contains duplicate source files.");
   }
 
+  const entryFile = normalizeCustomDashboardBundlePath(revision.manifest.entryFile);
+  const validationMode = getCustomDashboardValidationMode(entryFile);
+  const supportedSourceExtension = validationMode === "modern" ? MODERN_SOURCE_EXTENSION : LEGACY_SOURCE_EXTENSION;
+
   const bundlePaths = new Map<string, (typeof revision.fileBundle.files)[number]>();
   let totalBytes = 0;
   for (const file of revision.fileBundle.files) {
@@ -225,7 +237,7 @@ export function buildCustomDashboardBuildManifest(
     if (bundlePaths.has(filePath)) {
       throw new Error(`Custom dashboard bundle contains a duplicate file: ${filePath}`);
     }
-    if (RESERVED_CONFIGURATION_FILE.test(filePath) || !SUPPORTED_SOURCE_EXTENSION.test(filePath)) {
+    if (RESERVED_CONFIGURATION_FILE.test(filePath) || !supportedSourceExtension.test(filePath)) {
       throw new Error(`Unsupported custom dashboard source or package configuration: ${filePath}`);
     }
     if (!declaredPaths.includes(filePath)) {
@@ -250,11 +262,10 @@ export function buildCustomDashboardBuildManifest(
     }
   }
 
-  const entryFile = normalizeCustomDashboardBundlePath(revision.manifest.entryFile);
-  assertDeclaredTypeScriptEntry(entryFile, declaredPaths, "manifest entryFile");
+  assertDeclaredEntry(entryFile, declaredPaths, "manifest entryFile", validationMode);
   const routes = revision.routes.map((route) => {
     const routeEntry = normalizeCustomDashboardBundlePath(route.entryFile);
-    assertDeclaredTypeScriptEntry(routeEntry, declaredPaths, `route entryFile for ${route.path}`);
+    assertDeclaredEntry(routeEntry, declaredPaths, `route entryFile for ${route.path}`, validationMode);
     return { ...route, entryFile: routeEntry };
   });
 
@@ -304,9 +315,33 @@ function hasRawSecretValue(value: unknown): boolean {
   return value !== null && value !== undefined && !(typeof value === "string" && value.trim().length === 0);
 }
 
-function assertDeclaredTypeScriptEntry(entryFile: string, declaredPaths: string[], label: string): void {
-  if (!TYPESCRIPT_ENTRY_EXTENSION.test(entryFile)) {
-    throw new Error(`Custom dashboard ${label} must be a TypeScript or TSX file: ${entryFile}`);
+export function getCustomDashboardValidationMode(entryFile: string): CustomDashboardValidationMode {
+  if (TYPESCRIPT_ENTRY_EXTENSION.test(entryFile)) {
+    return "modern";
+  }
+  if (LEGACY_HTML_ENTRY_EXTENSION.test(entryFile)) {
+    return "legacy-html";
+  }
+  if (LEGACY_JAVASCRIPT_ENTRY_EXTENSION.test(entryFile)) {
+    return "legacy-javascript";
+  }
+  throw new Error(`Custom dashboard entry file must be TypeScript, TSX, HTML, or browser JavaScript: ${entryFile}`);
+}
+
+function assertDeclaredEntry(
+  entryFile: string,
+  declaredPaths: string[],
+  label: string,
+  validationMode: CustomDashboardValidationMode,
+): void {
+  const supported = validationMode === "modern"
+    ? TYPESCRIPT_ENTRY_EXTENSION.test(entryFile)
+    : validationMode === "legacy-html"
+      ? LEGACY_HTML_ENTRY_EXTENSION.test(entryFile)
+      : LEGACY_JAVASCRIPT_ENTRY_EXTENSION.test(entryFile);
+  if (!supported) {
+    const expected = validationMode === "modern" ? "a TypeScript or TSX" : validationMode === "legacy-html" ? "an HTML" : "a browser JavaScript";
+    throw new Error(`Custom dashboard ${label} must be ${expected} file: ${entryFile}`);
   }
   if (!declaredPaths.includes(entryFile)) {
     throw new Error(`Custom dashboard ${label} must be declared in manifest.filePaths: ${entryFile}`);
@@ -415,12 +450,15 @@ function toRelativeImportPath(fromPath: string, toPath: string): string {
   return relative.startsWith(".") ? relative : `./${relative}`;
 }
 
-function buildPackageJson(buildManifest: CustomDashboardBuildManifest): Record<string, unknown> {
+function buildPackageJson(
+  buildManifest: CustomDashboardBuildManifest,
+  validationMode: CustomDashboardValidationMode,
+): Record<string, unknown> {
   return {
     private: true,
     type: "module",
     scripts: {
-      build: "tsc --noEmit && vite build",
+      build: validationMode === "modern" ? "tsc --noEmit && vite build" : "vite build",
       start: "vite preview --host 0.0.0.0",
     },
     dependencies: buildManifest.dependencies,
@@ -428,7 +466,37 @@ function buildPackageJson(buildManifest: CustomDashboardBuildManifest): Record<s
   };
 }
 
-function buildIndexHtml(): string {
+function buildIndexHtml(
+  revision: CustomDashboardRevisionRecord,
+  bridgeConfig: CustomDashboardBridgeConfig,
+  validationMode: CustomDashboardValidationMode,
+): string {
+  if (validationMode === "legacy-html") {
+    const entry = revision.fileBundle.files.find((file) => normalizeCustomDashboardBundlePath(file.path) === revision.manifest.entryFile);
+    if (!entry) {
+      throw new Error(`Custom dashboard manifest declares a missing source file: ${revision.manifest.entryFile}`);
+    }
+    return injectLegacyValidationBridge(entry.content, buildLegacyDataBridgeScript(bridgeConfig));
+  }
+  if (validationMode === "legacy-javascript") {
+    const entryImportPath = toRelativeImportPath("index.html", revision.manifest.entryFile);
+    return [
+      "<!doctype html>",
+      "<html lang=\"en\">",
+      "  <head>",
+      "    <meta charset=\"UTF-8\" />",
+      "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />",
+      "    <title>Code UX Custom Dashboard Validation</title>",
+      `    <script>${buildLegacyDataBridgeScript(bridgeConfig)}</script>`,
+      "  </head>",
+      "  <body>",
+      "    <main id=\"codeux-custom-dashboard-root\" aria-label=\"Custom dashboard validation preview\"></main>",
+      `    <script type=\"module\" src=${JSON.stringify(entryImportPath)}></script>`,
+      "  </body>",
+      "</html>",
+      "",
+    ].join("\n");
+  }
   return [
     "<!doctype html>",
     "<html lang=\"en\">",
@@ -443,6 +511,33 @@ function buildIndexHtml(): string {
     "  </body>",
     "</html>",
     "",
+  ].join("\n");
+}
+
+function injectLegacyValidationBridge(html: string, bridgeScript: string): string {
+  const script = `<script>${bridgeScript}</script>`;
+  if (/<head\b[^>]*>/i.test(html)) {
+    return html.replace(/<head\b[^>]*>/i, (head) => `${head}\n${script}`);
+  }
+  return `${script}\n${html}`;
+}
+
+function buildLegacyDataBridgeScript(config: CustomDashboardBridgeConfig): string {
+  const serializedConfig = JSON.stringify(config).replace(/<\/script/gi, "<\\/script").replace(/<!--/g, "<\\!--");
+  return [
+    "(() => {",
+    `const config = Object.freeze(${serializedConfig});`,
+    "const normalizePath = (value) => { const parts = String(value || '/').split(/[?#]/, 1)[0].replace(/\\\\/g, '/').split('/').filter(Boolean); const out = []; for (const part of parts) { if (part === '.') continue; if (part === '..') out.pop(); else out.push(part); } return `/${out.join('/')}`; };",
+    "const routes = config.routes.length > 0 ? config.routes : [{ path: '/', label: 'Overview', entryFile: config.manifest.entryFile }];",
+    "const selectRoute = (value) => { const normalized = normalizePath(value); return routes.find((route) => normalizePath(route.path) === normalized) || routes.find((route) => normalizePath(route.path) === '/') || routes[0]; };",
+    "let routePath = normalizePath(selectRoute(new URLSearchParams(location.search).get('route') || location.hash.slice(1) || '/')?.path || '/');",
+    "let sequence = 0;",
+    "const readSource = async (sourceId, options = {}) => { const requestId = `validation-${Date.now()}-${++sequence}`; const response = await fetch('/api/custom-dashboard-runtime/source', { method: 'POST', headers: { 'content-type': 'application/json', 'x-request-id': requestId }, credentials: 'same-origin', signal: options.signal, body: JSON.stringify({ requestId, projectId: config.projectId, dashboardId: config.dashboardId, revisionId: config.revisionId, access: config.runtimeAccess, sourceId, route: options.route, method: options.method, credentialSlot: options.credentialSlot, capability: options.capability, headers: options.headers, body: options.body }) }); const payload = await response.json().catch(() => null); if (!response.ok) throw new Error(payload?.error?.message || 'Custom dashboard source request failed.'); return payload.data; };",
+    "const navigate = (value, options = {}) => { const selected = selectRoute(value); if (!selected || normalizePath(selected.path) !== normalizePath(value)) throw new Error(`Custom dashboard route is not declared: ${normalizePath(value)}`); routePath = normalizePath(selected.path); if (options.replace) history.replaceState({ route: routePath }, '', `#${routePath}`); else history.pushState({ route: routePath }, '', `#${routePath}`); window.dispatchEvent(new CustomEvent('codeux:dashboard-route', { detail: { path: routePath } })); return routePath; };",
+    "const bridge = Object.freeze({ ...config, get routePath() { return routePath; }, navigate, listSources: () => [...config.sourceNodeGraph.nodes], readSource });",
+    "if (!window.CodeUXCustomDashboard) Object.defineProperty(window, 'CodeUXCustomDashboard', { value: bridge, configurable: false, writable: false });",
+    "if (!window.codeUxDataBridge) Object.defineProperty(window, 'codeUxDataBridge', { value: window.CodeUXCustomDashboard, configurable: false, writable: false });",
+    "})();",
   ].join("\n");
 }
 

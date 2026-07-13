@@ -80,6 +80,7 @@ describe("custom dashboard runtime", () => {
     expect(ready.status).toBe("ready");
     expect(ready.status === "ready" ? ready.runtime.document : "").toContain("Published dashboard");
     expect(ready.status === "ready" ? ready.runtime.document : "").toContain("codeUxDataBridge");
+    expect(ready.status === "ready" ? ready.runtime.document : "").toContain("default-src 'none'");
 
     const draft = resolvePublishedCustomDashboardRuntime({ ...dashboard, status: "draft", publishedRevisionId: null }, [revision]);
     expect(draft).toMatchObject({ status: "blocked" });
@@ -284,6 +285,28 @@ describe("custom dashboard runtime", () => {
     const unknown = resolvePublishedCustomDashboardRuntime(dashboard, [routedRevision], "/undeclared");
     expect(unknown.status === "ready" ? unknown.runtime.routePath : null).toBe("/");
     expect(unknown.status === "ready" ? unknown.runtime.document : "").toContain('"routePath":"/"');
+  });
+
+  it("renders the selected legacy HTML route entry inside the isolated document", () => {
+    const routedLegacyRevision: CustomDashboardRevisionRecord = {
+      ...revision,
+      manifest: { ...revision.manifest, filePaths: ["index.html", "details.html"] },
+      fileBundle: {
+        files: [
+          { path: "index.html", content: "<main>Legacy overview</main>", contentType: "text/html" },
+          { path: "details.html", content: "<main>Legacy details</main>", contentType: "text/html" },
+        ],
+      },
+      routes: [
+        { path: "/", label: "Overview", entryFile: "index.html" },
+        { path: "/details", label: "Details", entryFile: "details.html" },
+      ],
+    };
+
+    const details = resolvePublishedCustomDashboardRuntime(dashboard, [routedLegacyRevision], "/details");
+    expect(details.status).toBe("ready");
+    expect(details.status === "ready" ? details.runtime.document : "").toContain("Legacy details");
+    expect(details.status === "ready" ? details.runtime.document : "").not.toContain("Legacy overview");
   });
 
   it("rejects undeclared frame navigation while accepting declared history restoration", () => {

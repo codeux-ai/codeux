@@ -146,7 +146,9 @@ export function buildCustomDashboardFrameDocument(
   bridgeSessionId = createBridgeSessionId(),
   routePath = "/",
 ): string {
-  const entryFile = revision.fileBundle.files.find((file) => file.path === revision.manifest.entryFile) ?? null;
+  const selectedRoute = selectCustomDashboardRoute(revision.routes, routePath, revision.manifest.entryFile);
+  const selectedEntryFile = selectedRoute?.entryFile ?? revision.manifest.entryFile;
+  const entryFile = revision.fileBundle.files.find((file) => file.path === selectedEntryFile) ?? null;
   const bridgeConfig = {
     projectId: revision.projectId,
     dashboardId: dashboard.id,
@@ -156,7 +158,7 @@ export function buildCustomDashboardFrameDocument(
     styleguide: revision.styleguide,
     runtimeMetadata: revision.runtimeMetadata,
     routes: getCustomDashboardRoutes(revision.routes, revision.manifest.entryFile),
-    routePath: selectCustomDashboardRoute(revision.routes, routePath, revision.manifest.entryFile)?.path ?? "/",
+    routePath: selectedRoute?.path ?? "/",
     bridgeSessionId,
   };
   const bootstrap = buildBridgeBootstrapScript(bridgeConfig);
@@ -168,7 +170,7 @@ export function buildCustomDashboardFrameDocument(
   }
 
   if (entryFile && isHtmlEntry(entryFile.path, entryFile.contentType)) {
-    return injectBootstrapIntoHtml(entryFile.content, bootstrap, title);
+    return injectBootstrapIntoHtml(entryFile.content, bootstrap, title, true);
   }
 
   if (entryFile && isJavaScriptEntry(entryFile.path, entryFile.contentType)) {
@@ -178,6 +180,7 @@ export function buildCustomDashboardFrameDocument(
       "<head>",
       "<meta charset=\"utf-8\" />",
       "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />",
+      legacyFrameSecurityPolicy(),
       `<title>${title}</title>`,
       baseFrameStyle(),
       "</head>",
@@ -454,15 +457,19 @@ function buildBridgeBootstrapScript(config: Record<string, unknown>): string {
   ].join("\n");
 }
 
-function injectBootstrapIntoHtml(html: string, bootstrap: string, title: string): string {
+function injectBootstrapIntoHtml(html: string, bootstrap: string, title: string, legacySource = false): string {
   const script = `<script>${bootstrap}</script>`;
-  if (/<\/head>/i.test(html)) {
-    return html.replace(/<\/head>/i, `${baseFrameStyle()}\n<title>${title}</title>\n${script}\n</head>`);
+  const securityPolicy = legacySource ? `${legacyFrameSecurityPolicy()}\n` : "";
+  if (/<head\b[^>]*>/i.test(html)) {
+    return html.replace(/<head\b[^>]*>/i, (head) => `${head}\n${securityPolicy}${baseFrameStyle()}\n<title>${title}</title>\n${script}`);
+  }
+  if (legacySource && /<body\b[^>]*>/i.test(html)) {
+    return html.replace(/<body\b[^>]*>/i, (body) => `<head>${securityPolicy}${baseFrameStyle()}\n<title>${title}</title>\n${script}</head>\n${body}`);
   }
   if (/<\/body>/i.test(html)) {
-    return html.replace(/<\/body>/i, `${script}\n</body>`);
+    return html.replace(/<\/body>/i, `${securityPolicy}${script}\n</body>`);
   }
-  return `${script}\n${html}`;
+  return `${securityPolicy}${script}\n${html}`;
 }
 
 function buildViewerArtifactDocument(
@@ -591,6 +598,10 @@ function isHtmlEntry(path: string, contentType?: string): boolean {
 
 function isJavaScriptEntry(path: string, contentType?: string): boolean {
   return /\.(mjs|js)$/i.test(path) || contentType?.includes("javascript") === true;
+}
+
+function legacyFrameSecurityPolicy(): string {
+  return "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; font-src data:; media-src data: blob:; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'\" />";
 }
 
 function baseFrameStyle(): string {

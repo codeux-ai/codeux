@@ -214,6 +214,43 @@ describe("CustomDashboardValidationService", () => {
     expect(dockerCalls.flatMap(([, args]) => args).filter((arg) => arg.startsWith("type=")).join(" ")).not.toContain("/opt/credentials");
   });
 
+  it.each([
+    {
+      label: "HTML",
+      entryFile: "index.html",
+      contentType: "text/html",
+      content: "<!doctype html><html><head><title>Legacy</title></head><body><main>Legacy HTML revision</main></body></html>",
+      expectedIndex: "Legacy HTML revision",
+    },
+    {
+      label: "browser JavaScript",
+      entryFile: "dashboard.js",
+      contentType: "text/javascript",
+      content: "document.querySelector('#codeux-custom-dashboard-root').textContent = 'Legacy JavaScript revision';",
+      expectedIndex: "dashboard.js",
+    },
+  ])("validates and publishes a legacy $label revision through the isolated source viewer", async ({ entryFile, contentType, content, expectedIndex }) => {
+    const { dashboards, service, projectId, dashboardId, dir } = await createFixture();
+    const revision = dashboards.createRevision(dashboardId, {
+      manifest: { ...manifest(), entryFile, filePaths: [entryFile] },
+      fileBundle: { files: [{ path: entryFile, content, contentType }] },
+      routes: [],
+    });
+
+    const session = await service.startValidation(projectId, dashboardId, revision.id);
+    const published = dashboards.publishRevision(dashboardId, revision.id, session.id);
+
+    expect(session).toMatchObject({ status: "passed", validationReport: { valid: true } });
+    const validatedRevision = dashboards.getRevisionById(revision.id);
+    expect(validatedRevision?.validationStatus).toBe("passed");
+    expect(validatedRevision?.runtimeMetadata.validation).not.toHaveProperty("viewerArtifact");
+    expect(published).toMatchObject({ status: "published", publishedRevisionId: revision.id });
+    const workspacePath = path.join(dir, ".code-ux", "runtime", "custom-dashboards", dashboardId, revision.id, "workspace");
+    await expect(fs.readFile(path.join(workspacePath, "index.html"), "utf8")).resolves.toContain(expectedIndex);
+    const packageJson = JSON.parse(await fs.readFile(path.join(workspacePath, "package.json"), "utf8")) as { scripts: Record<string, string> };
+    expect(packageJson.scripts).toEqual({ build: "vite build", start: "vite preview --host 0.0.0.0" });
+  });
+
   it("records TypeScript build failures and keeps publication state unchanged", async () => {
     const { dashboards, service, projectId, dashboardId, revisionId } = await createFixture();
     vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {

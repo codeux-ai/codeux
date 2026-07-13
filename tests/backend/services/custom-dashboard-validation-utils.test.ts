@@ -138,6 +138,56 @@ describe("custom dashboard validation filesystem utilities", () => {
   });
 
   it.each([
+    {
+      mode: "legacy-html",
+      entryFile: "index.html",
+      contentType: "text/html",
+      content: "<!doctype html><html><head><title>Legacy</title></head><body><main>HTML dashboard</main></body></html>",
+      expected: "HTML dashboard",
+    },
+    {
+      mode: "legacy-javascript",
+      entryFile: "dashboard.js",
+      contentType: "text/javascript",
+      content: "document.querySelector('#codeux-custom-dashboard-root').textContent = 'JavaScript dashboard';",
+      expected: "dashboard.js",
+    },
+  ])("materializes a server-controlled $mode validation workspace", async ({ mode, entryFile, contentType, content, expected }) => {
+    const runtimeRoot = await mkTempDir("custom-dashboard-legacy-runtime-");
+    const workspacePath = await resolveContainedCustomDashboardPath(runtimeRoot, path.join(runtimeRoot, "workspace"));
+    const legacyRevision = revision({
+      manifest: { ...revision().manifest, entryFile, filePaths: [entryFile] },
+      fileBundle: { files: [{ path: entryFile, content, contentType }] },
+    });
+
+    const materialized = await materializeCustomDashboardWorkspace({
+      revision: legacyRevision,
+      workspacePath,
+      bridgeConfig: {
+        projectId: "project-1",
+        dashboardId: "dashboard-1",
+        revisionId: "revision-1",
+        manifest: legacyRevision.manifest,
+        sourceNodeGraph: { nodes: [], edges: [] },
+        styleguide: {},
+        runtimeMetadata: {},
+        integrations: {},
+        externalApiNodes: [],
+        routes: [],
+        runtimeAccess: { kind: "validation", sessionId: "session-1" },
+      },
+    });
+
+    expect(materialized.validationMode).toBe(mode);
+    expect(materialized.buildManifest.dependencies).toEqual(CUSTOM_DASHBOARD_BUILD_DEPENDENCIES);
+    const generatedIndex = await fs.readFile(path.join(workspacePath, "index.html"), "utf8");
+    expect(generatedIndex).toContain(expected);
+    expect(generatedIndex).toContain("codeUxDataBridge");
+    expect(generatedIndex).not.toContain("credentialBindings");
+    await expect(fs.readFile(path.join(workspacePath, "package.json"), "utf8")).resolves.toContain('"build": "vite build"');
+  });
+
+  it.each([
     "../escape.tsx",
     "src/../package.json",
     "src\\dashboard.tsx",
@@ -156,6 +206,22 @@ describe("custom dashboard validation filesystem utilities", () => {
           files: [
             ...revision().fileBundle.files,
             { path: filePath, content: filePath === "package.json" ? '{"scripts":{"postinstall":"curl example.invalid"}}' : "unsafe" },
+          ],
+        },
+      });
+      expect(() => buildCustomDashboardBuildManifest(candidate)).toThrow("Unsupported custom dashboard source or package configuration");
+    },
+  );
+
+  it.each(["package.json", "pnpm-lock.yaml", "vite.config.js", "tailwind.config.js", "src/component.tsx"])(
+    "keeps unsupported configuration and modern source files out of legacy bundles: %s",
+    (filePath) => {
+      const candidate = revision({
+        manifest: { ...revision().manifest, entryFile: "index.html", filePaths: ["index.html", filePath] },
+        fileBundle: {
+          files: [
+            { path: "index.html", content: "<main>safe legacy dashboard</main>" },
+            { path: filePath, content: "unsupported" },
           ],
         },
       });
@@ -223,16 +289,21 @@ describe("custom dashboard validation filesystem utilities", () => {
     expect(buildCustomDashboardBuildManifest(candidate).entryFile).toBe("src/dashboard.tsx");
   });
 
-  it("requires TypeScript or TSX manifest and route entries", () => {
+  it("requires supported, mode-consistent manifest and route entries", () => {
     expect(() => buildCustomDashboardBuildManifest(revision({
       manifest: { ...revision().manifest, entryFile: "src/styles.css", filePaths: ["src/styles.css"] },
       fileBundle: { files: [{ path: "src/styles.css", content: "@import \"tailwindcss\";" }] },
-    }))).toThrow("must be a TypeScript or TSX file");
+    }))).toThrow("must be TypeScript, TSX, HTML, or browser JavaScript");
     expect(() => buildCustomDashboardBuildManifest(revision({
       manifest: { ...revision().manifest, filePaths: ["src/dashboard.tsx", "src/styles.css"] },
       fileBundle: { files: [...revision().fileBundle.files, { path: "src/styles.css", content: "main{}" }] },
       routes: [{ path: "/styles", label: "Styles", entryFile: "src/styles.css" }],
     }))).toThrow("route entryFile");
+    expect(() => buildCustomDashboardBuildManifest(revision({
+      manifest: { ...revision().manifest, entryFile: "index.html", filePaths: ["index.html", "details.js"] },
+      fileBundle: { files: [{ path: "index.html", content: "<main />" }, { path: "details.js", content: "document.body.textContent = 'details';" }] },
+      routes: [{ path: "/details", label: "Details", entryFile: "details.js" }],
+    }))).toThrow("must be an HTML file");
   });
 
   it("rejects paths that escape the runtime root through symlinked ancestors", async () => {
