@@ -12,7 +12,9 @@ The former browser graph at `codeux:nodes-canvas:v1` is eligible for one import 
 
 The registry list returns flat versioned palette summaries. Selecting a definition loads the full manifest from the node-type detail endpoint, including nested `ui.widgetSchema`, configuration schema, policies, documentation, and deprecation metadata. The inspector renders from that full contract. Graphs reference a definition version and store non-secret configuration and credential ids; they do not contain custom-node source or resolved credentials.
 
-Credential slots display metadata-only states such as bound, missing, or denied and can request a binding. Secret values remain behind the credential broker and are excluded from graphs and browser output.
+Credential slots use the versioned definition's allowed kinds and required capabilities to offer project-visible credential metadata. Only active, configured credentials with project access and a healthy secure backend are selectable; unavailable entries explain the operator-facing reason without exposing secret or key-custody details, and an empty compatible set links directly to **Settings → Integrations**.
+
+Selecting, replacing, or removing a credential updates only that slot in the node's canonical `credentialBindings` and immediately saves the complete draft through the current optimistic revision. The dashboard then adopts the canonical flow revision and refreshes governed review. Saving, saved, policy-denial, and error states are announced. A revision conflict loads the latest draft, preserves the selected slot workflow and sibling edits, and requires the operator to choose again rather than replaying the stale mutation. Credential plaintext remains behind the broker and is excluded from graph data, component state, and browser output.
 
 The complete governed built-in set currently registered with executable handlers is `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, `condition`, `switch`, `foreach`, `merge`, `delay`, `approval`, `email_draft`, `email_send`, `execute_subflow`, `webhook_trigger`, and `output`.
 
