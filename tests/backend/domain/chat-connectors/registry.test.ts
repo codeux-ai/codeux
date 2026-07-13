@@ -44,6 +44,12 @@ describe("chat connector registry", () => {
         modes: [
           { mode: "managed_bridge", integration: "managed_plugin", setup: ["pluginName", "workspaceId"], secrets: ["bridgeApiKey"] },
           { mode: "webhook", integration: "webhook", setup: ["webhookUrl", "verifyTokenName"], secrets: ["webhookSecret", "verifyToken"] },
+          {
+            mode: "official_api",
+            integration: "official_api",
+            setup: ["graphApiVersion", "phoneNumberId", "appId", "businessAccountId"],
+            secrets: ["accessToken", "appSecret", "webhookVerifyToken"],
+          },
         ],
       },
       imessage: {
@@ -92,7 +98,8 @@ describe("chat connector registry", () => {
     expect(() => getChatConnectorProfileForMode("discord", "managed_bridge")).toThrow(
       "Unsupported bridge mode for discord: managed_bridge",
     );
-    for (const kind of CHAT_CONNECTOR_KINDS) {
+    expect(getChatConnectorProfileForMode("whatsapp", "official_api").kind).toBe("whatsapp");
+    for (const kind of CHAT_CONNECTOR_KINDS.filter((candidate) => candidate !== "whatsapp")) {
       expect(() => getChatConnectorProfileForMode(kind, "official_api" as ChatProviderBridgeMode)).toThrow(
         `Unsupported bridge mode for ${kind}: official_api`,
       );
