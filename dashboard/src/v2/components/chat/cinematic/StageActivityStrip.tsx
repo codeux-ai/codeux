@@ -37,7 +37,7 @@ export const StageActivityStrip: FunctionComponent<StageActivityStripProps> = ({
   if (!primaryCue) return null;
 
   return (
-    <div className="pointer-events-none absolute left-1/2 top-0 z-20 w-[min(78vw,280px)] -translate-x-[12%]">
+    <div className="pointer-events-none absolute left-1/2 -top-1 z-20 w-[min(78vw,280px)] -translate-x-1/2 md:top-24 md:w-[208px] md:-translate-x-[163%] lg:top-24 xl:top-24 xl:-translate-x-[165%] 2xl:-translate-x-[195%]">
       <div
         role="status"
         aria-live="polite"
