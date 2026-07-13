@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { transcribeSpeechAudio } from "../speech-api.js";
+import { synthesizeSpeech, transcribeSpeechAudio } from "../speech-api.js";
 
 const createJsonResponse = (body: unknown, init: ResponseInit = {}): Response => (
   new Response(JSON.stringify(body), {
@@ -149,6 +149,22 @@ describe("speech-api", () => {
         message: "Failed to fetch",
         retryable: true,
       },
+    });
+  });
+
+  it("passes cancellation through to speech synthesis without changing its request body", async () => {
+    const audio = new Blob(["audio"], { type: "audio/wav" });
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(audio, { status: 200 }));
+    const signal = new AbortController().signal;
+
+    const result = await synthesizeSpeech("Read this", "project-1", "voice-1", signal);
+
+    expect(result).toEqual(audio);
+    expect(fetch).toHaveBeenCalledWith("/api/speech/synthesis", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "Read this", projectId: "project-1", voice: "voice-1" }),
+      signal,
     });
   });
 });
