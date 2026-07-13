@@ -148,7 +148,7 @@ describe("CustomDashboardRuntimeService credential selection", () => {
     expect(credentialBroker.withResolvedCredentialId).not.toHaveBeenCalled();
     expect(egressPolicyService.request).not.toHaveBeenCalled();
 
-    await service.requestSource("selected-slot", requestInput("secondary"));
+    const response = await service.requestSource("selected-slot", requestInput("secondary"));
 
     expect(credentialBroker.withResolvedCredentialId).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -161,6 +161,8 @@ describe("CustomDashboardRuntimeService credential selection", () => {
     expect(egressPolicyService.request).toHaveBeenCalledWith(expect.objectContaining({
       credentialHeaders: { authorization: "Bearer secret-for-credential-secondary" },
     }));
+    expect(JSON.stringify(response)).not.toContain("secret-for-credential-secondary");
+    expect(response).toMatchObject({ requestId: "selected-slot", data: {} });
   });
 
   it("keeps a multi-slot optional source unauthenticated when no slot is requested", async () => {

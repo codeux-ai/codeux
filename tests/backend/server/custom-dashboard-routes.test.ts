@@ -396,6 +396,44 @@ describe("custom dashboard routes", () => {
     expect(JSON.stringify(catalog.body)).not.toContain("route-secret-ciphertext");
   });
 
+  it("rejects raw credential metadata from REST mutations and keeps reads and catalogs secret-free", async () => {
+    const { app, projectId } = await createFixture();
+    const sentinel = "sentinel-rest-dashboard-secret";
+    const rejectedCreate = await request(app)
+      .post(`/api/projects/${projectId}/custom-dashboards`)
+      .send({
+        title: "Unsafe dashboard",
+        manifest: manifest(),
+        fileBundle: { ...fileBundle(), metadata: { "x-api-key": sentinel } },
+      });
+    expect(rejectedCreate.status).toBe(400);
+    expect(JSON.stringify(rejectedCreate.body)).not.toContain(sentinel);
+
+    const created = await request(app)
+      .post(`/api/projects/${projectId}/custom-dashboards`)
+      .send({ title: "Safe dashboard", manifest: manifest(), fileBundle: fileBundle() });
+    expect(created.status).toBe(201);
+
+    const rejectedUpdate = await request(app)
+      .patch(`/api/custom-dashboards/${created.body.id}`)
+      .send({ runtimeMetadata: { nested: { apiKey: sentinel } } });
+    expect(rejectedUpdate.status).toBe(400);
+    expect(JSON.stringify(rejectedUpdate.body)).not.toContain(sentinel);
+
+    const rejectedRevision = await request(app)
+      .post(`/api/custom-dashboards/${created.body.id}/revisions`)
+      .send({ styleguide: { headers: { Authorization: `Bearer ${sentinel}` } } });
+    expect(rejectedRevision.status).toBe(400);
+    expect(JSON.stringify(rejectedRevision.body)).not.toContain(sentinel);
+
+    const opened = await request(app).get(`/api/custom-dashboards/${created.body.id}`);
+    const catalog = await request(app).get(`/api/projects/${projectId}/custom-dashboards/data-catalog`);
+    expect(opened.status).toBe(200);
+    expect(opened.body.revisions).toEqual([]);
+    expect(catalog.status).toBe(200);
+    expect(JSON.stringify({ opened: opened.body, catalog: catalog.body })).not.toContain(sentinel);
+  });
+
   it("creates revisions, starts validation through the service, and denies unsafe publication", async () => {
     const { app, repository, validationService, projectId } = await createFixture();
     const dashboard = repository.createDraft(projectId, {

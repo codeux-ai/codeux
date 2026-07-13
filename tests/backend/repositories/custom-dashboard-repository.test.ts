@@ -464,6 +464,73 @@ describe("CustomDashboardRepository", () => {
     })).toThrow(ValidationError);
   });
 
+  it("rejects raw credentials before draft, update, and revision persistence", async () => {
+    const { dashboards, projectId, storage } = await createFixture();
+    const sentinel = "sentinel-custom-dashboard-secret";
+    const base = {
+      title: "Credential-safe dashboard",
+      manifest: manifest(),
+      fileBundle: fileBundle(),
+      sourceNodeGraph: sourceNodeGraph(),
+    };
+
+    expect(() => dashboards.createDraft(projectId, {
+      ...base,
+      fileBundle: { ...fileBundle(), metadata: { "x-api-key": sentinel } },
+    })).toThrow(/raw secret literal/);
+    expect(() => dashboards.createDraft(projectId, {
+      ...base,
+      sourceNodeGraph: {
+        nodes: [{ id: "external", type: "external_api", title: "External", config: { apiKey: sentinel } }],
+        edges: [],
+      },
+    })).toThrow(/raw secret literal/);
+
+    const dashboard = dashboards.createDraft(projectId, {
+      ...base,
+      sourceNodeGraph: {
+        nodes: [{
+          id: "external",
+          type: "external_api",
+          title: "External",
+          config: { baseUrl: "https://api.example.test", timeoutMs: 5000 },
+          credentialSlots: [{
+            slot: "api_token",
+            label: "API token",
+            required: false,
+            allowedKinds: ["api-token"],
+            requiredCapability: "read",
+            metadata: { headerName: "authorization", scheme: "Bearer" },
+          }],
+        }],
+        edges: [],
+      },
+    });
+    expect(() => dashboards.updateDraft(dashboard.id, {
+      routes: [{
+        path: "/unsafe",
+        label: "Unsafe",
+        entryFile: "src/dashboard.tsx",
+        metadata: { Authorization: sentinel },
+      }],
+    })).toThrow(/raw secret literal/);
+    expect(() => dashboards.createRevision(dashboard.id, {
+      manifest: { ...manifest(), metadata: { "access-token": sentinel } },
+    })).toThrow(/raw secret literal/);
+    expect(() => dashboards.createRevision(dashboard.id, {
+      runtimeMetadata: { nested: { password: sentinel } },
+    })).toThrow(/raw secret literal/);
+
+    const serializedRows = storage.getDatabase().prepare(`
+      SELECT manifest_json, files_json, source_node_graph_json, routes_json, styleguide_json, runtime_metadata_json
+      FROM custom_dashboards
+      WHERE id = ?
+    `).get(dashboard.id);
+    expect(JSON.stringify(serializedRows)).not.toContain(sentinel);
+    expect(JSON.stringify(dashboards.getDashboardById(dashboard.id))).not.toContain(sentinel);
+    expect(dashboards.listRevisions(dashboard.id)).toEqual([]);
+  });
+
   it("normalizes safe routes and snapshots credential metadata and bindings in revisions", async () => {
     const { storage, dashboards, projectId } = await createFixture();
     const firstCredentialId = insertCredential(storage, projectId, { id: "credential-first" });
