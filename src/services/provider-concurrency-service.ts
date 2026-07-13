@@ -156,7 +156,7 @@ export class ProviderConcurrencyService {
       return;
     }
     const invocation = this.deps.executionRepository.getExecutionInvocation(executionInvocationId);
-    if (invocation && invocation.status !== "running" && invocation.status !== "paused") {
+    if (invocation?.status === "cancelled") {
       throw new Error(`Execution invocation ${executionInvocationId} is ${invocation.status}; provider slot will not be claimed.`);
     }
   }

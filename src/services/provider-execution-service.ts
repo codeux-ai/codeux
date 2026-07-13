@@ -912,14 +912,18 @@ export class ProviderExecutionService {
 
   private isProviderWorkStillRunning(providerInvocationId: string, executionInvocationId: string | null): boolean {
     return this.isProviderInvocationStillRunning(providerInvocationId)
-      && (!executionInvocationId || this.isExecutionInvocationStillRunning(executionInvocationId));
+      && (!executionInvocationId || !this.isExecutionInvocationCancelled(executionInvocationId));
   }
 
   private assertExecutionInvocationCanRun(executionInvocationId: string): void {
     const current = this.deps.executionRepository?.getExecutionInvocation?.(executionInvocationId);
-    if (current && current.status !== "running" && current.status !== "paused") {
+    if (current?.status === "cancelled") {
       throw new Error(`Execution invocation ${executionInvocationId} is ${current.status}; provider execution will not continue.`);
     }
+  }
+
+  private isExecutionInvocationCancelled(executionInvocationId: string): boolean {
+    return this.deps.executionRepository?.getExecutionInvocation?.(executionInvocationId)?.status === "cancelled";
   }
 
   private isExecutionInvocationStillRunning(executionInvocationId: string): boolean {
