@@ -74,6 +74,12 @@ export interface ContinuationWorkspaceTarget {
   currentBranch: string | null;
 }
 
+export type SnapshotRefresher = (
+  repoPath: string,
+  branch: string | undefined,
+  auth: GitHttpAuthOptions,
+) => Promise<boolean>;
+
 const cleanBranch = (branch: string | null | undefined): string | undefined => {
   const trimmed = branch?.trim();
   return trimmed || undefined;
@@ -152,6 +158,7 @@ export class InvocationWorkspacePreparer {
   constructor(
     private readonly workspaceManager: IWorkspaceManager = new WorkspaceManager(),
     private readonly settingsCredentialResolver?: SettingsCredentialResolver,
+    private readonly snapshotRefresher: SnapshotRefresher = syncRemoteBranchIfAvailable,
   ) {}
 
   get manager(): IWorkspaceManager {
@@ -243,7 +250,7 @@ export class InvocationWorkspacePreparer {
       git: gitPolicy,
     }, async (auth) => {
       for (const branch of uniqueBranches) {
-        await syncRemoteBranchIfAvailable(repoPath, branch, auth);
+        await this.snapshotRefresher(repoPath, branch, auth);
       }
     });
   }

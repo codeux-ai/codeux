@@ -42,6 +42,7 @@ import * as PlanningPromptBuilder from "./planning-prompt-builder.js";
 import { buildRelevantMemoryInjectionContext } from "./memory-injection-context.js";
 import { getDesignGuidanceCatalog } from "../domain/settings/design-guidance-catalog.js";
 import { resolveEffectiveDashboardSettings } from "./settings-resolution-service.js";
+import type { SettingsCredentialResolver } from "./credentials/settings-credential-resolver.js";
 
 interface PlanningAgentServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
@@ -55,6 +56,7 @@ interface PlanningAgentServiceDeps {
   logger?: Logger;
   providerExecutionService?: ProviderExecutionService;
   structuredAgentRequestService?: StructuredAgentRequestService;
+  settingsCredentialResolver?: SettingsCredentialResolver;
 }
 
 interface ImprovePromptResult {
@@ -149,14 +151,19 @@ export class PlanningAgentService {
   private readonly providerExecutionService: ProviderExecutionService;
   private readonly structuredAgentRequestService: StructuredAgentRequestService;
   private readonly workspaceManager = new WorkspaceManager();
-  private readonly invocationWorkspacePreparer = new InvocationWorkspacePreparer(this.workspaceManager);
+  private readonly invocationWorkspacePreparer: InvocationWorkspacePreparer;
 
   constructor(private readonly deps: PlanningAgentServiceDeps) {
+    this.invocationWorkspacePreparer = new InvocationWorkspacePreparer(
+      this.workspaceManager,
+      deps.settingsCredentialResolver,
+    );
     this.providerRunner = deps.providerRunner || new ProviderRunner(new DockerRunner());
     this.providerExecutionService = deps.providerExecutionService || new ProviderExecutionService({
       executionRepository: deps.executionRepository,
       providerRunner: this.providerRunner,
       logger: deps.logger,
+      settingsCredentialResolver: deps.settingsCredentialResolver,
       getDashboardSettings: ({ projectId, sprintId }) => (
         projectId
           ? resolveEffectiveDashboardSettings(deps.settingsRepository, projectId, sprintId).settings
@@ -740,6 +747,8 @@ export class PlanningAgentService {
     if (workflowSettings.executionMode === "DOCKER") {
       const workspaceSessionId = this.buildPlanningWorkspaceSessionId(args.projectId, args.sprintId);
       const snapshotCheckout = await this.resolvePlanningSnapshotCheckout({
+        projectId: args.projectId,
+        workspaceId: `${workspaceSessionId}-checkout`,
         repoPath: args.repoPath,
         settings: args.settings,
         preferredBranch: args.preferredBranch,
@@ -749,8 +758,12 @@ export class PlanningAgentService {
       const gitPolicy = buildInvocationGitPolicy({
         githubMode: args.settings.git.githubMode,
         defaultBranch: args.settings.git.defaultBranch,
+        projectId: args.projectId,
+        workspaceId: workspaceSessionId,
         githubToken: args.settings.git.githubToken,
         gitlabToken: args.settings.git.gitlabToken,
+        githubTokenCredentialRef: args.settings.git.githubTokenCredentialRef,
+        gitlabTokenCredentialRef: args.settings.git.gitlabTokenCredentialRef,
       });
       snapshotWorkspace = shouldReuseSnapshot
         ? await this.invocationWorkspacePreparer.createSnapshotWorkspace({
@@ -914,6 +927,8 @@ export class PlanningAgentService {
   }
 
   private async resolvePlanningSnapshotCheckout(args: {
+    projectId: string;
+    workspaceId: string;
     repoPath: string;
     settings: DashboardSettings;
     preferredBranch?: string;
@@ -926,8 +941,12 @@ export class PlanningAgentService {
     return buildInvocationSnapshotCheckout(buildInvocationGitPolicy({
       githubMode: args.settings.git.githubMode,
       defaultBranch: args.fallbackBranch?.trim() || args.settings.git.defaultBranch,
+      projectId: args.projectId,
+      workspaceId: args.workspaceId,
       githubToken: args.settings.git.githubToken,
       gitlabToken: args.settings.git.gitlabToken,
+      githubTokenCredentialRef: args.settings.git.githubTokenCredentialRef,
+      gitlabTokenCredentialRef: args.settings.git.gitlabTokenCredentialRef,
     }), {
       branch: args.preferredBranch,
     });

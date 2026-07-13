@@ -559,6 +559,7 @@ export function createDashboardDependencies(
     executionControlService,
     providerExecutionService,
     structuredAgentRequestService,
+    settingsCredentialResolver: coreDeps.settingsCredentialResolver,
     memoryService: coreDeps.memoryService,
     logger: logger.child({ component: "planning-agent-service" }),
   });

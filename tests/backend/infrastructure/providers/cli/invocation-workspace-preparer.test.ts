@@ -173,4 +173,102 @@ describe("invocation workspace helpers", () => {
     expect(observedAuth).toEqual({ githubToken: "broker-token" });
     expect(workspaceManager.prepareWorktree).toHaveBeenCalledTimes(1);
   });
+
+  it("resolves planning snapshot credentials for every refresh so rotation is observed", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-snapshot-credential-"));
+    await fs.mkdir(path.join(repoPath, ".git"));
+    await fs.writeFile(path.join(repoPath, ".git", "config"), '[remote "origin"]\n  url = https://github.com/example/repo.git\n');
+    const workspaceManager = {
+      createSnapshotWorkspace: vi.fn()
+        .mockResolvedValueOnce("docker-volume://snapshot-1")
+        .mockResolvedValueOnce("docker-volume://snapshot-2"),
+    } as unknown as IWorkspaceManager;
+    const rotatedSecrets = ["broker-token-v1", "broker-token-v2"];
+    const withCredential = vi.fn(async (_reference, _context, consumer) => (
+      await consumer(Buffer.from(rotatedSecrets.shift() || ""))
+    ));
+    const observedAuth: Array<Record<string, unknown>> = [];
+    const snapshotRefresher = vi.fn(async (_repoPath, _branch, auth) => {
+      observedAuth.push({ ...auth });
+      return true;
+    });
+    const preparer = new InvocationWorkspacePreparer(
+      workspaceManager,
+      { withCredential } as unknown as SettingsCredentialResolver,
+      snapshotRefresher,
+    );
+    const gitPolicy = {
+      githubMode: "REMOTE" as const,
+      projectId: "project-1",
+      workspaceId: "planning-project-1-sprint-1",
+      githubTokenCredentialRef: { credentialId: "credential-1", capability: "read" as const },
+    };
+
+    try {
+      await preparer.createSnapshotWorkspace({
+        repoPath,
+        sessionId: "planning-1",
+        checkout: { branch: "dev", remoteOnly: true },
+        gitPolicy,
+      });
+      await preparer.createSnapshotWorkspace({
+        repoPath,
+        sessionId: "planning-2",
+        checkout: { branch: "dev", remoteOnly: true },
+        gitPolicy,
+      });
+    } finally {
+      await fs.rm(repoPath, { recursive: true, force: true });
+    }
+
+    expect(withCredential).toHaveBeenCalledTimes(2);
+    expect(withCredential).toHaveBeenNthCalledWith(1, gitPolicy.githubTokenCredentialRef, {
+      projectId: "project-1",
+      workspaceId: "planning-project-1-sprint-1",
+      consumer: "git.workspace.snapshot-refresh.github",
+    }, expect.any(Function));
+    expect(observedAuth).toEqual([
+      { githubToken: "broker-token-v1" },
+      { githubToken: "broker-token-v2" },
+    ]);
+    expect(workspaceManager.createSnapshotWorkspace).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["revoked", "out of scope"])(
+    "fails closed before planning snapshot refresh and creation when a credential is %s",
+    async (reason) => {
+      const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-snapshot-denied-"));
+      await fs.mkdir(path.join(repoPath, ".git"));
+      await fs.writeFile(path.join(repoPath, ".git", "config"), '[remote "origin"]\n  url = https://github.com/example/repo.git\n');
+      const workspaceManager = {
+        createSnapshotWorkspace: vi.fn(),
+      } as unknown as IWorkspaceManager;
+      const withCredential = vi.fn().mockRejectedValue(new Error(`Credential is ${reason}.`));
+      const snapshotRefresher = vi.fn();
+      const preparer = new InvocationWorkspacePreparer(
+        workspaceManager,
+        { withCredential } as unknown as SettingsCredentialResolver,
+        snapshotRefresher,
+      );
+
+      try {
+        await expect(preparer.createSnapshotWorkspace({
+          repoPath,
+          sessionId: "planning-denied",
+          checkout: { branch: "dev", remoteOnly: true },
+          gitPolicy: {
+            githubMode: "REMOTE",
+            projectId: "project-1",
+            workspaceId: "planning-project-1-sprint-1",
+            githubTokenCredentialRef: { credentialId: "credential-1", capability: "read" },
+          },
+        })).rejects.toThrow(`Credential is ${reason}.`);
+      } finally {
+        await fs.rm(repoPath, { recursive: true, force: true });
+      }
+
+      expect(snapshotRefresher).not.toHaveBeenCalled();
+      expect(workspaceManager.createSnapshotWorkspace).not.toHaveBeenCalled();
+    },
+  );
 });
