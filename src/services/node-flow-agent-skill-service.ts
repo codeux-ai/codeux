@@ -41,7 +41,9 @@ export class NodeFlowAgentSkillService {
     if (!capability) throw new EntityNotFoundError("Node flow is not attached to the initiating agent.");
     const review = await this.nodeFlowService.validateDraft(input.projectId, input.flowId);
     if (review.publishedVersion === null) throw new ValidationError("Attached node flow has not been published.");
-    if (review.requiredCredentials.some((credential) => credential.status !== "bound")) {
+    if (review.requiredCredentials.some((credential) => (
+      credential.status === "denied" || (credential.required && credential.status === "missing")
+    ))) {
       throw new ValidationError("Attached node flow credential policy is not satisfied.");
     }
     return await this.nodeFlowService.runFlow(input.projectId, input.flowId, input.parameters ?? {}, {
