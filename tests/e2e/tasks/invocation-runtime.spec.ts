@@ -319,6 +319,9 @@ test.describe('invocation runtime observability', () => {
 
     const invocations = await fetchProjectInvocations(request, project.id);
     const invocation = requireTaskCodingInvocation(invocations, task.id);
+    expect(invocations.items.filter((item) => (
+      item.taskId === task.id && TASK_CODING_INVOCATION_TYPES.has(item.type)
+    ))).toHaveLength(1);
     expect(invocation).toMatchObject({
       projectId: project.id,
       sprintId: sprint.id,
@@ -331,8 +334,10 @@ test.describe('invocation runtime observability', () => {
       provider: MOCKUP_CLI_PROVIDER,
       model: 'default',
       executionMode: 'HOST',
+      providerInvocationId: expect.any(String),
       taskTitle: task.title,
     });
+    expect(invocation.providerInvocationId).not.toBe('');
     expect(invocation.messageCount).toBeGreaterThanOrEqual(2);
     expect(invocation.promptChars).toBeGreaterThanOrEqual(taskPrompt.length);
     expect(invocation.transcriptChars).toBeGreaterThan(0);
