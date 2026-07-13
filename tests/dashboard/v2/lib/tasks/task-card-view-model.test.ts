@@ -271,7 +271,7 @@ describe("task-card-view-model", () => {
       });
     });
 
-    it("builds accessible labels for dependency, QA, drag, optimistic, and action states", () => {
+    it("builds accessible labels for dependency, shared QA, drag, optimistic, and action states", () => {
       const qaFailed = createMockTask({
         recordId: "rec-qa",
         id: "T-QA",
@@ -304,7 +304,7 @@ describe("task-card-view-model", () => {
 
       expect(vm.dependencyActionLabel).toBe("2 dependency blockers");
       expect(vm.dependencyIndicators.map((dep) => dep.stateLabel)).toEqual(["QA failed", "Ready for QA"]);
-      expect(vm.qaReviewLabel).toBe("QA failed, fail");
+      expect(vm.qaReviewLabel).toBeUndefined();
       expect(vm.optimisticSavingLabel).toBe("Saving task changes");
       expect(vm.dragStateLabel).toBe("Pointer drag disabled while task changes are saving; keyboard reordering is not supported");
       expect(vm.actions?.find((action) => action.kind === "preview")).toMatchObject({
@@ -325,7 +325,7 @@ describe("task-card-view-model", () => {
       });
     });
 
-    it("labels no-review, in-progress review, failed review, preview, PR, and live runtime states", () => {
+    it("labels the no-review placeholder and delegates reviewed, preview, PR, and live runtime states", () => {
       const taskWithoutSprint = createMockTask({
         sprintId: "",
         latestReview: undefined,
@@ -348,7 +348,7 @@ describe("task-card-view-model", () => {
           finishedAt: null,
         },
       }), new Map());
-      expect(runningReviewVm.qaReviewLabel).toBe("QA in progress");
+      expect(runningReviewVm.qaReviewLabel).toBeUndefined();
 
       const failedReviewVm = buildTaskCardViewModel(createMockTask({
         latestReview: {
@@ -360,7 +360,7 @@ describe("task-card-view-model", () => {
           finishedAt: "2023-10-01T11:30:00Z",
         },
       }), new Map());
-      expect(failedReviewVm.qaReviewLabel).toBe("QA failed, rejected");
+      expect(failedReviewVm.qaReviewLabel).toBeUndefined();
 
       const liveVm = buildTaskCardViewModel(createMockTask(), new Map(), {
         sessionId: "session-123",

@@ -1,18 +1,20 @@
 /** @vitest-environment jsdom */
 /// <reference types="@testing-library/jest-dom" />
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { render, cleanup, fireEvent, screen, waitFor } from "@testing-library/preact";
+import { render, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import userEvent from "@testing-library/user-event";
 import { createContext } from "preact";
 import { TasksPage } from "../../TasksPage.js";
 import { useProjectData, ProjectDataContext } from "../../context/project-data.js";
 import { useSprints } from "../../../hooks/useSprints.js";
+import { useDashboardRuntimeData } from "../../../hooks/use-dashboard-runtime-data.js";
 import { useProjectTasks } from "../../hooks/use-project-tasks.js";
 import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
 import { fetchAgentPresets } from "../../lib/agent-preset-api.js";
 import { createTask, deleteTask, updateTask } from "../../lib/project-api.js";
 import { createMockTask } from "../../components/tasks/__tests__/fixtures/tasks.fixture.js";
+import type { ExecutionRuntimeEventSummary } from "../../../types.js";
 
 expect.extend(matchers);
 
@@ -67,7 +69,7 @@ vi.mock("../../../hooks/useSprints.js", () => ({
 }));
 vi.mock("../../../hooks/use-dashboard-runtime-data.js", () => ({
   useDashboardRuntimeData: vi.fn(() => ({
-    execution: { taskDispatches: [], recentEvents: [], sprintRuns: [] },
+    execution: { taskDispatches: [], attentionItems: [], recentEvents: [], sprintRuns: [] },
     status: { subtasks: [] }
   })),
 }));
@@ -97,6 +99,43 @@ const agentPresets = [
   { id: "agent-alpha", projectId: "proj_1", name: "Agent Alpha", description: "", instructionMarkdown: "", labels: [], sourcePath: null, sourceScope: null, sourceUpdatedAt: null, sourceImportedAt: null, sourceExists: false, syncStatus: "manual", createdAt: "now", updatedAt: "now" },
   { id: "agent-beta", projectId: "proj_1", name: "Agent Beta", description: "", instructionMarkdown: "", labels: [], sourcePath: null, sourceScope: null, sourceUpdatedAt: null, sourceImportedAt: null, sourceExists: false, syncStatus: "manual", createdAt: "now", updatedAt: "now" },
 ];
+
+const createCiEvent = (
+  overrides: Partial<ExecutionRuntimeEventSummary> = {},
+): ExecutionRuntimeEventSummary => ({
+  id: "event-ci-1",
+  scopeType: "task_run",
+  taskRunId: "task-run-1",
+  sprintRunId: "sprint-run-1",
+  dispatchId: "dispatch-1",
+  projectId: "proj_1",
+  sprintId: "sprint_1",
+  sprintName: "Sprint One",
+  sprintNumber: 1,
+  sprintRunStatus: "running",
+  taskId: "task_rec_1",
+  taskKey: "T-100",
+  taskTitle: "Foundation Setup",
+  taskRunState: "running",
+  eventType: "ci_gate_status",
+  originator: "runtime",
+  sourceEventKey: null,
+  provider: "docker_cli",
+  sessionId: "session-1",
+  sessionName: null,
+  workerBranch: "feature/task-100",
+  prUrl: "https://example.test/pull/42",
+  connectionId: null,
+  connectionDisplayName: null,
+  connectionRole: null,
+  createdAt: "2026-07-13T12:00:00.000Z",
+  payload: {
+    state: "waiting_checks",
+    hasFailedChecks: true,
+    prNumber: 42,
+  },
+  ...overrides,
+});
 
 describe("TasksPage.cards Integration", () => {
   beforeEach(() => {
@@ -198,6 +237,108 @@ describe("TasksPage.cards Integration", () => {
     expect(screen.getByRole("region", { name: /completed/i })).toHaveAccessibleDescription(/Completed lane contains 1 task/i);
     expect(screen.getByText("Task filters changed. Status All. Priority Any Priority. Showing 20 tasks per lane.")).toHaveClass("sr-only");
     expect(screen.getByRole("button", { name: /Task sprint scope: SPR-1: Sprint One/i })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("scopes QA and CI details to the matching task and replaces stale workflow failure", async () => {
+    const reviewedTask = createMockTask({
+      recordId: "task_rec_1",
+      id: "T-100",
+      title: "Foundation Setup",
+      sprintId: "sprint_1",
+      status: "in_progress",
+      latestReview: {
+        status: "completed",
+        outcome: "changes_requested",
+        summary: "Keyboard behavior needs another pass.",
+        findings: ["Focus is lost after closing the menu."],
+        reviewer: "QA Reviewer",
+        finishedAt: "2026-07-13T11:00:00.000Z",
+      },
+    });
+    const unrelatedTask = createMockTask({
+      recordId: "task_rec_2",
+      id: "T-101",
+      title: "Unrelated Task",
+      sprintId: "sprint_1",
+      status: "pending",
+    });
+    const failedEvent = createCiEvent();
+
+    (useProjectData as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      projects: [{ id: "proj_1", name: "Project Alpha" }],
+      selectedProject: { id: "proj_1", name: "Project Alpha" },
+    });
+    (useSprints as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      data: [{ id: "sprint_1", number: 1, name: "Sprint One", status: "running", date: "Jan 1", tasksCount: 2, completion: 0, active: true }],
+      loading: false,
+      selectedSprintId: "sprint_1",
+      selectSprint: vi.fn(),
+      refetch: vi.fn(),
+    });
+    (useProjectTasks as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      tasks: [reviewedTask, unrelatedTask],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+    vi.mocked(useDashboardRuntimeData).mockReturnValue({
+      execution: {
+        taskDispatches: [],
+        attentionItems: [],
+        recentEvents: [
+          failedEvent,
+          createCiEvent({
+            id: "event-other-project",
+            projectId: "proj_2",
+            taskId: "task_rec_2",
+          }),
+        ],
+        sprintRuns: [],
+      },
+      status: { subtasks: [] },
+    } as unknown as ReturnType<typeof useDashboardRuntimeData>);
+
+    const view = render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "proj_1", name: "Project Alpha" } as any], selectedProject: { id: "proj_1", name: "Project Alpha" } as any } as any}>
+        <TasksPage />
+      </ProjectDataContext.Provider>,
+    );
+
+    const reviewedCard = screen.getByLabelText(/^Task T-100:/i);
+    const unrelatedCard = screen.getByLabelText(/^Task T-101:/i);
+    expect(within(reviewedCard).getByText("CI failed")).toBeInTheDocument();
+    expect(within(reviewedCard).getByLabelText("QA review details")).toHaveTextContent("QA");
+    expect(within(unrelatedCard).queryByText("CI failed")).not.toBeInTheDocument();
+    expect(within(unrelatedCard).getByText("QA no review")).toBeInTheDocument();
+    expect(reviewedCard).toHaveAttribute("draggable", "true");
+    expect(within(reviewedCard).getByRole("button", { name: /Edit task T-100/i })).toBeInTheDocument();
+
+    vi.mocked(useDashboardRuntimeData).mockReturnValue({
+      execution: {
+        taskDispatches: [],
+        attentionItems: [],
+        recentEvents: [
+          failedEvent,
+          createCiEvent({
+            id: "event-ci-success",
+            createdAt: "2026-07-13T12:05:00.000Z",
+            payload: { state: "merge_confirmed", prNumber: 42 },
+          }),
+        ],
+        sprintRuns: [],
+      },
+      status: { subtasks: [] },
+    } as unknown as ReturnType<typeof useDashboardRuntimeData>);
+
+    view.rerender(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "proj_1", name: "Project Alpha" } as any], selectedProject: { id: "proj_1", name: "Project Alpha" } as any } as any}>
+        <TasksPage />
+      </ProjectDataContext.Provider>,
+    );
+
+    await waitFor(() => expect(within(screen.getByLabelText(/^Task T-100:/i)).getByText("CI passed")).toBeInTheDocument());
+    expect(within(screen.getByLabelText(/^Task T-100:/i)).queryByText("CI failed")).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText(/^Task T-101:/i)).queryByText(/CI (failed|passed)/i)).not.toBeInTheDocument();
   });
 
   it("suppresses pending PR card UI when project settings disable task pull requests", () => {

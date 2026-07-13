@@ -1,4 +1,5 @@
 import type { Task, TaskStatus, TaskExecutorType } from "../../types.js";
+import type { CiStatusPresentation } from "../ci-status-presentation.js";
 import { type LiveTaskEnrichment } from "./live-task-enrichment.js";
 import { formatDuration } from "../format-duration.js";
 
@@ -20,6 +21,8 @@ export interface TaskCardViewModel {
   dependencyIndicators: DependencyIndicator[];
   dependencyActionLabel?: string;
   qaReviewLabel?: string;
+  ciStatusPresentation?: CiStatusPresentation | null;
+  ciStatusSourceSignature?: string;
   optimisticSavingLabel?: string | null;
   dragStateLabel?: string;
   actions?: TaskCardActionDescriptor[];
@@ -46,6 +49,8 @@ export interface TaskCardActionDescriptor {
 
 export interface TaskCardViewModelOptions {
   taskPullRequestsEnabled?: boolean;
+  ciStatusPresentation?: CiStatusPresentation | null;
+  ciStatusSourceSignature?: string;
 }
 
 const EXECUTOR_LABEL: Record<TaskExecutorType, string> = {
@@ -128,24 +133,6 @@ function buildDependencyActionLabel(indicators: DependencyIndicator[]): string {
   }
 
   return `${blockerCount} dependency ${blockerCount === 1 ? "blocker" : "blockers"}`;
-}
-
-function buildQaReviewLabel(task: Task): string {
-  if (!task.latestReview) {
-    return "QA no review";
-  }
-
-  const status = task.latestReview.status.toLowerCase();
-  const outcome = task.latestReview.outcome?.toLowerCase() ?? "";
-  if (status === "running" || status === "in_progress") {
-    return "QA in progress";
-  }
-  if (status === "failed" || outcome === "fail" || outcome === "failed" || outcome === "rejected") {
-    return task.latestReview.outcome ? `QA failed, ${task.latestReview.outcome}` : "QA failed";
-  }
-
-  const outcomeLabel = task.latestReview.outcome ? `, ${task.latestReview.outcome}` : "";
-  return `QA ${task.latestReview.status}${outcomeLabel}`;
 }
 
 function buildTaskCardActions(
@@ -242,7 +229,9 @@ export function buildTaskCardViewModel(
     executorLabel: getExecutorLabel(task.executorType),
     dependencyIndicators,
     dependencyActionLabel: buildDependencyActionLabel(dependencyIndicators),
-    qaReviewLabel: buildQaReviewLabel(task),
+    qaReviewLabel: task.latestReview ? undefined : "QA no review",
+    ciStatusPresentation: options.ciStatusPresentation ?? null,
+    ciStatusSourceSignature: options.ciStatusSourceSignature ?? "",
     optimisticSavingLabel: task.isOptimistic ? "Saving task changes" : null,
     dragStateLabel: task.isOptimistic
       ? "Pointer drag disabled while task changes are saving; keyboard reordering is not supported"
