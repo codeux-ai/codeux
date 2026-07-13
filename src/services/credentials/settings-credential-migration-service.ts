@@ -25,6 +25,19 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
+function containsPlaintextCredential(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(containsPlaintextCredential);
+  const object = asRecord(value);
+  if (!object) return false;
+  return Object.entries(object).some(([key, nested]) => (
+    SECRET_KEY_PATTERN.test(key) && typeof nested === "string" && nested.length > 0
+  ) || containsPlaintextCredential(nested));
+}
+
+function containsExternalHintCredential(hints: ExternalSettingsHints | undefined): boolean {
+  return Boolean(hints && Object.values(hints.resolved).some((value) => typeof value === "string" && value.length > 0));
+}
+
 function seedExternalHints(root: Record<string, unknown>, hints: ExternalSettingsHints | undefined): void {
   if (!hints) return;
   const integrations = asRecord(root.integrations) ?? {};
@@ -87,7 +100,25 @@ export class SettingsCredentialMigrationService {
   constructor(private readonly deps: SettingsCredentialMigrationDependencies) {}
 
   async migrate(): Promise<SettingsCredentialMigrationResult> {
-    const health = await this.deps.credentialBroker.health().catch(() => ({ available: false, secure: false }));
+    const records = this.deps.settingsRepository.getCredentialMigrationRecords();
+    const systemRequiresHintMigration = records.some((record) => {
+      if (record.scope !== "system") return false;
+      try {
+        return asRecord(JSON.parse(record.payload))?.credentialMigrationVersion !== 1;
+      } catch {
+        return true;
+      }
+    });
+    const requiresSecureStorage = records.some((record) => {
+      try {
+        return containsPlaintextCredential(JSON.parse(record.payload));
+      } catch {
+        return false;
+      }
+    }) || (systemRequiresHintMigration && containsExternalHintCredential(this.deps.externalSettingsHints));
+    const health = requiresSecureStorage
+      ? await this.deps.credentialBroker.health().catch(() => ({ available: false, secure: false }))
+      : { available: true, secure: true };
     const secureStorageAvailable = health.available === true && health.secure === true;
     const projectIds = [...new Set(this.deps.listProjectIds().map((id) => id.trim()).filter(Boolean))].sort();
     const managerProjectId = projectIds[0] ?? null;
@@ -95,7 +126,7 @@ export class SettingsCredentialMigrationService {
     let scrubbed = 0;
     let recordsChanged = 0;
 
-    for (const record of this.deps.settingsRepository.getCredentialMigrationRecords()) {
+    for (const record of records) {
       let root: Record<string, unknown>;
       try {
         root = asRecord(JSON.parse(record.payload)) ?? {};

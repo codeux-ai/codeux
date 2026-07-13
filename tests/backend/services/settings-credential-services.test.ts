@@ -44,6 +44,21 @@ afterEach(async () => {
 });
 
 describe("settings credential migration and resolution", () => {
+  it("does not initialize secure storage when fresh settings contain no credentials", async () => {
+    const f = await fixture();
+    const health = vi.spyOn(f.broker, "health");
+    const migration = new SettingsCredentialMigrationService({
+      settingsRepository: f.settingsRepository,
+      credentialBroker: f.broker,
+      listProjectIds: () => [f.first.id, f.second.id],
+    });
+
+    await expect(migration.migrate()).resolves.toMatchObject({ migrated: 0, scrubbed: 0 });
+    expect(health).not.toHaveBeenCalled();
+    f.settingsRepository.close();
+    f.appStorage.close();
+  });
+
   it("migrates legacy values once, emits references only, and honors global allowlists", async () => {
     const f = await fixture();
     const secret = "legacy-settings-secret";
