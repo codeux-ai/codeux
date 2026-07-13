@@ -1,6 +1,6 @@
 # Tasks
 
-The **Tasks** page (`/tasks`) is a Kanban-style task board for the active project. It organizes tasks into **Queued**, **In Progress**, and **Completed** lanes, with sprint scope, status, priority, and search controls above the board.
+The **Tasks** page (`/tasks`) is a Kanban-style task board for the active project. It organizes tasks into **Queued**, **In Progress**, and **Completed** lanes, with sprint scope, status, priority, and visible-card controls above the board.
 
 Use it when you want to review planned work, create or edit a task, check dependency blockers, or choose how a specific task should be executed.
 
@@ -14,14 +14,22 @@ If project or sprint selection requests overlap, only the newest response may up
 
 ## Board workflow
 
-The board keeps the current sprint scope and filters visible while you work:
+The page header keeps project and sprint context beside the primary **New Task** command. Immediately below it, the board uses two compact operational surfaces:
+
+- **Task board controls** keeps sprint scope, status, priority, and visible-card count together. It stacks on phones, wraps into two columns on tablets, and becomes one rail on wide screens. Long sprint names stay inside the selector instead of widening the page.
+- **Task board overview** shows the filtered total plus running, completed, and critical counts. When a sprint is selected, it also shows the sprint date, percentage complete, an accessible completed-task progress bar, and the queued/running/completed distribution.
+
+The controls keep the current sprint scope and filters visible while you work:
 
 - **Sprint scope** narrows the board to all tasks or one sprint.
 - **Status and priority filters** refine the visible cards without losing the current board context.
-- **Search** matches task titles and task text.
 - **Visible count controls** limit how many cards render in each lane for larger projects.
 
 ## Columns
+
+Each lane is a named region whose accessible name includes its count, such as **In Progress lane, 2 tasks**. The board uses one column on phones, two columns when lanes remain readable, and three columns on wide screens. Lane frames and drop surfaces keep a stable height while filters settle, data loads, or a lane is empty, so adjacent work does not collapse or jump. Loading lanes use card-shaped skeletons; empty lanes explain whether the result comes from filters, the selected sprint, or project-wide scope; refresh failures appear as an assertive board update message without removing the current board context.
+
+Reduced-motion mode removes card entrance movement, selector rotation, sprint-status pulse, progress transitions, skeleton shimmer, and drop-target transitions. Static labels, borders, focus rings, progress values, lane counts, empty states, and drag guidance remain available.
 
 Task cards show the task title, status, priority, dependency state, downstream dependents, executor metadata, recent activity context, optional self-reflection ratings, and available actions. Dragging a card to another lane changes its status when that transition is available.
 
