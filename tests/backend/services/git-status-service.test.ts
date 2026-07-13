@@ -311,6 +311,26 @@ describe("GitStatusService", () => {
     vi.unstubAllGlobals();
   });
 
+  it("reports remote status unavailable when neither a token-backed API nor the host CLI is available", async () => {
+    runner.mockImplementation(async (command: string, args: string[]) => {
+      if (args.includes("--is-inside-work-tree")) return { ok: true, stdout: "true\n" };
+      if (args.includes("--show-toplevel")) return { ok: true, stdout: "/repo\n" };
+      if (args.includes("--show-current")) return { ok: true, stdout: "main\n" };
+      if (command === "git" && args[0] === "remote" && args[1] === "get-url") return { ok: true, stdout: "https://github.com/owner/repo.git\n" };
+      if (command === "git" && args[0] === "remote") return { ok: true, stdout: "origin\n" };
+      if (args.includes("--porcelain")) return { ok: true, stdout: "" };
+      if (command === "gh") return { ok: false, stdout: "", stderr: "spawn gh ENOENT" };
+      return { ok: true, stdout: "" };
+    });
+
+    const status = await service.getStatus("REMOTE", {});
+
+    expect(status.available).toBe(false);
+    expect(status.warnings).toEqual([
+      "Git host CLI is unavailable. Configure a GitHub/GitLab token for PR/CI status.",
+    ]);
+  });
+
   it("handles REMOTE status with PRs and CI runs", async () => {
     runner.mockImplementation(async (cmd: string, args: string[]) => {
       if (args.includes("--is-inside-work-tree")) return { ok: true, stdout: "true\n" };
@@ -667,10 +687,77 @@ describe("GitStatusService", () => {
 
     expect(observedTokens).toContain("git-secret-v1");
     expect(observedTokens).toContain("git-secret-v2");
+    expect(credentialResolver.withCredentials).toHaveBeenNthCalledWith(1, [{
+      name: "github",
+      reference: context.githubTokenCredentialRef,
+      consumer: "git.status.github",
+    }], {
+      projectId: "project-1",
+      workspaceId: "project-1",
+    }, expect.any(Function));
     credentialResolver.withCredentials.mockRejectedValueOnce(new Error("Required capability is not approved."));
     const callsBeforeDenial = credentialRunner.mock.calls.length;
     await expect(credentialService.getStatus("REMOTE", context)).rejects.toThrow("Required capability is not approved.");
     expect(credentialRunner).toHaveBeenCalledTimes(callsBeforeDenial);
+  });
+
+  it("accepts an empty project credential context without invoking the broker", async () => {
+    const credentialResolver = { withCredentials: vi.fn() } as any;
+    const credentialService = new GitStatusService("/repo", runner, false, credentialResolver);
+    runner.mockImplementation(async (command: string, args: string[]) => {
+      if (args.includes("--is-inside-work-tree")) return { ok: true, stdout: "true\n" };
+      if (args.includes("--show-toplevel")) return { ok: true, stdout: "/repo\n" };
+      if (args.includes("--show-current")) return { ok: true, stdout: "main\n" };
+      if (command === "git" && args[0] === "remote" && args[1] === "get-url") return { ok: true, stdout: "https://github.com/owner/repo.git\n" };
+      if (command === "git" && args[0] === "remote") return { ok: true, stdout: "origin\n" };
+      if (args.includes("--porcelain")) return { ok: true, stdout: "" };
+      return { ok: true, stdout: "" };
+    });
+
+    await expect(credentialService.getStatus("LOCAL", { projectId: "project-1" })).resolves.toMatchObject({
+      mode: "LOCAL",
+      available: true,
+    });
+    expect(credentialResolver.withCredentials).not.toHaveBeenCalled();
+  });
+
+  it("fails closed before Git or API access when a configured reference cannot be resolved", async () => {
+    const credentialService = new GitStatusService("/repo", runner, true);
+
+    await expect(credentialService.getStatus("REMOTE", {
+      projectId: "project-1",
+      githubTokenCredentialRef: { credentialId: "github-credential", capability: "read" },
+    })).rejects.toThrow("Git host credential resolution is unavailable.");
+    expect(runner).not.toHaveBeenCalled();
+  });
+
+  it("redacts a resolved broker token from propagated status errors", async () => {
+    const secret = "git-status-secret-canary";
+    const credentialResolver = {
+      withCredentials: vi.fn(async (_references, _context, consumer) => await consumer(new Map([
+        ["github", Buffer.from(secret)],
+      ]))),
+    } as any;
+    const credentialRunner = vi.fn(async (command: string, args: string[], options?: { hostToken?: string }) => {
+      if (command === "gh") throw new Error(`status request failed with ${options?.hostToken}`);
+      if (args.includes("--is-inside-work-tree")) return { ok: true, stdout: "true\n" };
+      if (args.includes("--show-toplevel")) return { ok: true, stdout: "/repo\n" };
+      if (args.includes("--show-current")) return { ok: true, stdout: "main\n" };
+      if (command === "git" && args[0] === "remote" && args[1] === "get-url") return { ok: true, stdout: "https://github.com/owner/repo.git\n" };
+      if (command === "git" && args[0] === "remote") return { ok: true, stdout: "origin\n" };
+      if (args.includes("--porcelain")) return { ok: true, stdout: "" };
+      return { ok: true, stdout: "" };
+    });
+    const credentialService = new GitStatusService("/repo", credentialRunner as any, false, credentialResolver);
+
+    const error = await credentialService.getStatus("REMOTE", {
+      projectId: "project-1",
+      githubTokenCredentialRef: { credentialId: "github-credential", capability: "read" },
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("status request failed with [REDACTED]");
+    expect((error as Error).stack).not.toContain(secret);
   });
 
   it("invalidates cache on mergePullRequest", async () => {

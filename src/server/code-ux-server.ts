@@ -870,7 +870,9 @@ export class CodeUxServer {
     const projectId = this.projectManagementRepository.getSelectedProjectId();
     if (!projectId) return this.getEffectiveGitHostTokens();
     const git = resolveEffectiveDashboardSettings(this.settingsRepository, projectId).settings.git;
-    if (!git.githubTokenCredentialRef && !git.gitlabTokenCredentialRef) return {};
+    if (!git.githubTokenCredentialRef && !git.gitlabTokenCredentialRef) {
+      return this.getEffectiveGitHostTokens();
+    }
     return {
       projectId,
       githubTokenCredentialRef: git.githubTokenCredentialRef,
