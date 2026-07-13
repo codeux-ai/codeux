@@ -95,7 +95,6 @@ export type DocsSlug =
   | 'architecture-system-overview'
   | 'architecture-mcp-server'
   | 'architecture-sprint-engine'
-  | 'architecture-sprint-rollbacks'
   | 'architecture-virtual-workers'
   | 'architecture-ci-integration'
   | 'architecture-dashboard-architecture'
@@ -110,6 +109,7 @@ export type DocsSlug =
   | 'operations-server-mode'
   | 'settings-google-drive-mount'
   | 'user-dashboard-custom-dashboards'
+  | 'architecture-card-ci-status-projection'
   | 'architecture-custom-dashboard-foundation'
   | 'architecture-custom-nodes'
   | 'architecture-managed-container-runtime'
@@ -119,6 +119,7 @@ export type DocsSlug =
   | 'architecture-node-flows'
   | 'architecture-speech-input'
   | 'architecture-speech-output'
+  | 'architecture-sprint-rollbacks'
   | 'architecture-worker-clarification-contract'
 
 export interface DocsRegistryEntry extends Partial<Omit<PageMeta, 'title' | 'description'>> {
@@ -774,13 +775,6 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Sprint engine",
     description: "The sprint engine is the heart of Code UX. It schedules, dispatches, monitors, gates, and finalises every unit of work.",
   },
-  'architecture-sprint-rollbacks': {
-    id: 'architecture-sprint-rollbacks',
-    path: '/docs/architecture-sprint-rollbacks',
-    section: 'Architecture',
-    title: "Sprint rollbacks",
-    description: "How Code UX assesses, executes, tracks, and PR-gates automatic and agent-assisted sprint rollbacks.",
-  },
   'architecture-virtual-workers': {
     id: 'architecture-virtual-workers',
     path: '/docs/architecture-virtual-workers',
@@ -879,6 +873,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Custom Dashboards",
     description: "Custom dashboards are project-scoped dashboard apps generated and revised by agents, then validated in a detached Docker runtime before publication. Use them when the built-in dashboard pages do not match the operatio...",
   },
+  'architecture-card-ci-status-projection': {
+    id: 'architecture-card-ci-status-projection',
+    path: '/docs/architecture-card-ci-status-projection',
+    section: 'Architecture',
+    title: "Card CI Status Projection",
+    description: "Task, Sprint, and Live cards expose one compact persisted ciStatus: pending, running, failed, or null after settlement. The projection does not load the large remote Git status snapshot and does not poll GitHub or Git...",
+  },
   'architecture-custom-dashboard-foundation': {
     id: 'architecture-custom-dashboard-foundation',
     path: '/docs/architecture-custom-dashboard-foundation',
@@ -941,6 +942,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     section: 'Architecture',
     title: "Speech Output Architecture",
     description: "Speech output turns project-manager replies into audio through POST /api/speech/synthesis. Code UX supports local ONNX synthesis and OpenAI-compatible TTS APIs, and 3D Chat provides playback plus a voice on/off control.",
+  },
+  'architecture-sprint-rollbacks': {
+    id: 'architecture-sprint-rollbacks',
+    path: '/docs/architecture-sprint-rollbacks',
+    section: 'Architecture',
+    title: "Sprint Rollbacks",
+    description: "Code UX models a rollback as a new sprint, not as destructive history editing. The original sprint remains auditable, while the rollback receives its own branch, tasks, execution history, and visual identity. Remote p...",
   },
   'architecture-worker-clarification-contract': {
     id: 'architecture-worker-clarification-contract',
@@ -1044,7 +1052,6 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-system-overview'],
   docsRegistry['architecture-mcp-server'],
   docsRegistry['architecture-sprint-engine'],
-  docsRegistry['architecture-sprint-rollbacks'],
   docsRegistry['architecture-virtual-workers'],
   docsRegistry['architecture-ci-integration'],
   docsRegistry['architecture-dashboard-architecture'],
@@ -1059,6 +1066,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['operations-server-mode'],
   docsRegistry['settings-google-drive-mount'],
   docsRegistry['user-dashboard-custom-dashboards'],
+  docsRegistry['architecture-card-ci-status-projection'],
   docsRegistry['architecture-custom-dashboard-foundation'],
   docsRegistry['architecture-custom-nodes'],
   docsRegistry['architecture-managed-container-runtime'],
@@ -1068,6 +1076,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-node-flows'],
   docsRegistry['architecture-speech-input'],
   docsRegistry['architecture-speech-output'],
+  docsRegistry['architecture-sprint-rollbacks'],
   docsRegistry['architecture-worker-clarification-contract'],
 ]
 
