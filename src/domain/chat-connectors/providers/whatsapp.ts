@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { ChatProviderBridgeMode } from "../../../contracts/chat-provider-types.js";
 import { redactText } from "../../../shared/security/redaction.js";
 import type {
@@ -461,9 +461,9 @@ function sanitizeNetworkError(error: unknown, sensitiveValues: readonly string[]
 }
 
 function constantTimeEquals(left: string, right: string): boolean {
-  const leftBuffer = Buffer.from(left);
-  const rightBuffer = Buffer.from(right);
-  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+  const leftDigest = createHash("sha256").update(left).digest();
+  const rightDigest = createHash("sha256").update(right).digest();
+  return timingSafeEqual(leftDigest, rightDigest);
 }
 
 export const whatsappChatConnectorProfile: WhatsAppChatConnectorProfile = {
@@ -490,11 +490,27 @@ export const whatsappChatConnectorProfile: WhatsAppChatConnectorProfile = {
         secretKeys: ["appSecret"],
         signatureHeaders: ["x-hub-signature-256"],
         timestampHeaders: [],
+        timestampRequirement: "none",
         signatureBases: ({ rawBody }) => [rawBody],
       },
     },
-    handshake: { type: "none" },
+    handshake: {
+      type: "challenge",
+      modes: ["official_api"],
+      handle: ({ query, secrets }) => {
+        const configuredToken = typeof secrets?.webhookVerifyToken === "string"
+          ? secrets.webhookVerifyToken
+          : "";
+        const result = verifyWhatsAppWebhookChallenge({ ...query }, configuredToken);
+        return {
+          statusCode: result.statusCode,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+          body: result.body,
+        };
+      },
+    },
     acknowledgement: { statusCode: 200, headers: { "content-type": "application/json" }, body: null },
+    classify: (body) => normalizeWhatsAppWebhook(body).kind === "status" ? "ignored" : "message",
     normalize: (body) => {
       const normalized = normalizeWhatsAppWebhook(body);
       return normalized.kind === "message" ? normalized.message : {};
@@ -526,6 +542,7 @@ export const whatsappChatConnectorProfile: WhatsAppChatConnectorProfile = {
     },
     parseResponse: parseWhatsAppOutboundResponse,
     isRetryableStatus: isLegacyRetryableHttpStatus,
+    classifyError: classifyWhatsAppGraphError,
   },
   verification: {
     strategy: "configuration_and_live",

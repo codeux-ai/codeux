@@ -46,7 +46,9 @@ export class ChatProviderIngressSecurity {
       throw new ChatProviderIngressSecurityError("unsupported_authentication", "Unsupported chat provider authentication mode.", 403);
     }
     const nowMs = (request.now ?? new Date()).getTime();
-    const timestamp = this.requireFreshTimestamp(request.headers, authentication.timestampHeaders, nowMs);
+    const timestamp = authentication.timestampRequirement === "none"
+      ? null
+      : this.requireFreshTimestamp(request.headers, authentication.timestampHeaders, nowMs);
 
     if (authentication.type === "hmac_sha256") {
       const hmacSecret = firstConfiguredSecret(connection.secrets, authentication.secretKeys);
@@ -118,7 +120,7 @@ export class ChatProviderIngressSecurity {
   private verifyHmacSignature(input: {
     connectionId: string;
     signature: string;
-    timestamp: { raw: string; value: number };
+    timestamp: { raw: string; value: number } | null;
     rawBody: string;
     secret: string;
     nowMs: number;
@@ -130,18 +132,20 @@ export class ChatProviderIngressSecurity {
     }
 
     const candidates = input.authentication
-      .signatureBases({ timestamp: input.timestamp.raw, rawBody: input.rawBody })
+      .signatureBases({ timestamp: input.timestamp?.raw ?? "", rawBody: input.rawBody })
       .map((base) => createHmac("sha256", input.secret).update(base).digest("hex"));
     const valid = candidates.some((candidate) => constantTimeEquals(candidate, normalizedSignature));
     if (!valid) {
       throw new ChatProviderIngressSecurityError("signature_mismatch", "Invalid chat provider ingress signature.", 401);
     }
 
-    this.preventReplay({
-      connectionId: input.connectionId,
-      key: `hmac:${input.timestamp.value}:${normalizedSignature}`,
-      nowMs: input.nowMs,
-    });
+    if (input.timestamp) {
+      this.preventReplay({
+        connectionId: input.connectionId,
+        key: `hmac:${input.timestamp.value}:${normalizedSignature}`,
+        nowMs: input.nowMs,
+      });
+    }
   }
 
   private preventReplay(input: { connectionId: string; key: string; nowMs: number }): void {

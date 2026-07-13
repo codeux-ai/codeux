@@ -34,6 +34,7 @@ export interface NormalizedChatProviderInboundMessage {
 export type ChatProviderIngressStatus =
   | "accepted"
   | "duplicate"
+  | "ignored"
   | "ambiguous"
   | "unbound"
   | "rejected";
@@ -90,7 +91,22 @@ export class ChatProviderIngressService {
       };
     }
 
-    const normalized = normalizeInboundPayload(connection, input.payload);
+    const body = requireRecord(input.payload, "payload");
+    const profile = getChatConnectorProfileForMode(connection.providerKind, connection.bridgeMode);
+    if (profile.ingress.classify?.(body) === "ignored") {
+      this.log("info", "Ignored non-message chat provider ingress", {
+        providerConnectionId: connection.id,
+        providerKind: connection.providerKind,
+      });
+      return {
+        status: "ignored",
+        message: "Non-message chat provider event ignored.",
+        providerConnectionId: connection.id,
+        providerKind: connection.providerKind,
+      };
+    }
+
+    const normalized = normalizeInboundPayload(connection, body);
     const existing = this.deps.chatProviderRepository.findInboundDelivery(connection.id, normalized.externalMessageId);
     if (existing) {
       this.log("info", "Duplicate chat provider ingress ignored", {

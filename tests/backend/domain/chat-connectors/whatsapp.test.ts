@@ -210,6 +210,27 @@ describe("WhatsApp Cloud API profile", () => {
     expect(whatsappChatConnectorProfile.outbound.isRetryableStatus(400)).toBe(false);
   });
 
+  it("uses sanitized structured Graph errors for non-2xx adapter responses", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      error: {
+        message: `Rate limited ${SENDER_WA_ID} with ${ACCESS_TOKEN}`,
+        type: "OAuthException",
+        code: 130429,
+        error_subcode: 2494010,
+        is_transient: false,
+      },
+    }), { status: 400 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const error = await new ConfiguredChatProviderOutboundAdapter().send(officialContext()).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ChatProviderOutboundAdapterError);
+    expect(error).toMatchObject({ retryable: true, statusCode: 400 });
+    expect((error as Error).message).toBe("Meta Graph API request failed (HTTP 400, code 130429, subcode 2494010).");
+    expect((error as Error).message).not.toContain(ACCESS_TOKEN);
+    expect((error as Error).message).not.toContain(SENDER_WA_ID);
+  });
+
   it("classifies outbound timeouts as retryable without leaking authorization or recipient data", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(new Error("The operation timed out"));
     vi.stubGlobal("fetch", fetchMock);

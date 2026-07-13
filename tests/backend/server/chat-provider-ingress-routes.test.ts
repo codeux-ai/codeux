@@ -142,6 +142,81 @@ describe("chat provider ingress routes", () => {
     });
   });
 
+  it("handles the official WhatsApp subscription challenge with 200 and 403 responses", async () => {
+    const context = await startTestServer();
+    const connection = createOfficialWhatsAppConnection(context);
+    const endpoint = `${context.baseUrl}/api/chat-providers/ingress/${connection.id}`;
+
+    const accepted = await fetch(`${endpoint}?${new URLSearchParams({
+      "hub.mode": "subscribe",
+      "hub.verify_token": "whatsapp-verify-token",
+      "hub.challenge": "123456789",
+    })}`);
+    expect(accepted.status).toBe(200);
+    expect(accepted.headers.get("content-type")).toContain("text/plain");
+    expect(await accepted.text()).toBe("123456789");
+
+    const rejected = await fetch(`${endpoint}?${new URLSearchParams({
+      "hub.mode": "subscribe",
+      "hub.verify_token": "wrong-token",
+      "hub.challenge": "123456789",
+    })}`);
+    expect(rejected.status).toBe(403);
+    expect(await rejected.text()).toBe("Forbidden");
+    expect(context.postMessage).not.toHaveBeenCalled();
+  });
+
+  it("authenticates official WhatsApp POST callbacks from exact raw bytes without a timestamp", async () => {
+    const context = await startTestServer();
+    const project = createProject(context, "whatsapp-raw-signature");
+    const connection = createOfficialWhatsAppConnection(context);
+    context.chatProviderRepository.createChannelBinding({
+      providerConnectionId: connection.id,
+      externalChannelId: "109876543210987",
+      externalChannelName: "WhatsApp business number",
+      projectId: project.id,
+    });
+    const payload = whatsappMessageWebhook();
+    const rawBody = `${JSON.stringify(payload, null, 2)}\n`;
+    const signature = `sha256=${createHmac("sha256", "whatsapp-app-secret").update(rawBody).digest("hex")}`;
+
+    const reserialized = await postRawIngress(context, connection.id, JSON.stringify(payload), {
+      "x-hub-signature-256": signature,
+    });
+    expect(reserialized.status).toBe(401);
+    expect(context.postMessage).not.toHaveBeenCalled();
+
+    const accepted = await postRawIngress(context, connection.id, rawBody, {
+      "x-hub-signature-256": signature,
+    });
+    expect(accepted.status).toBe(202);
+    expect(await accepted.json()).toMatchObject({
+      status: "accepted",
+      providerKind: "whatsapp",
+      delivery: expect.objectContaining({ externalMessageId: "wamid.route-inbound" }),
+    });
+    expect(context.postMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("acknowledges official WhatsApp status callbacks without creating deliveries or messages", async () => {
+    const context = await startTestServer();
+    const connection = createOfficialWhatsAppConnection(context);
+    const rawBody = JSON.stringify(whatsappStatusWebhook());
+    const signature = `sha256=${createHmac("sha256", "whatsapp-app-secret").update(rawBody).digest("hex")}`;
+
+    const response = await postRawIngress(context, connection.id, rawBody, {
+      "x-hub-signature-256": signature,
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      status: "ignored",
+      providerKind: "whatsapp",
+    });
+    expect(context.chatProviderRepository.listDeliveries({ providerConnectionId: connection.id })).toEqual([]);
+    expect(context.postMessage).not.toHaveBeenCalled();
+  });
+
   it("rejects unauthenticated and stale bridge requests without creating messages", async () => {
     const context = await startTestServer();
     const project = createProject(context, "rejected-ingress");
@@ -167,6 +242,11 @@ describe("chat provider ingress routes", () => {
       "x-code-ux-timestamp": String(Date.now()),
     });
     expect(missingAuth.status).toBe(401);
+
+    const missingTimestamp = await postIngress(context, connection.id, payload, {
+      Authorization: "Bearer bridge-token",
+    });
+    expect(missingTimestamp.status).toBe(401);
 
     const stale = await postIngress(context, connection.id, payload, {
       Authorization: "Bearer bridge-token",
@@ -291,4 +371,87 @@ function postIngress(
     },
     body: JSON.stringify(body),
   });
+}
+
+function postRawIngress(
+  context: TestServerContext,
+  providerConnectionId: string,
+  rawBody: string,
+  headers: Record<string, string>,
+): Promise<Response> {
+  return fetch(`${context.baseUrl}/api/chat-providers/ingress/${providerConnectionId}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...headers,
+    },
+    body: rawBody,
+  });
+}
+
+function createOfficialWhatsAppConnection(context: TestServerContext) {
+  return context.chatProviderRepository.createConnection({
+    providerKind: "whatsapp",
+    displayName: "WhatsApp official connection",
+    bridgeMode: "official_api",
+    status: "active",
+    setup: {
+      graphApiVersion: "v23.0",
+      phoneNumberId: "109876543210987",
+    },
+    secrets: {
+      accessToken: "whatsapp-access-token",
+      appSecret: "whatsapp-app-secret",
+      webhookVerifyToken: "whatsapp-verify-token",
+    },
+  });
+}
+
+function whatsappMessageWebhook(): Record<string, unknown> {
+  return {
+    object: "whatsapp_business_account",
+    entry: [{
+      id: "waba-route",
+      changes: [{
+        field: "messages",
+        value: {
+          messaging_product: "whatsapp",
+          metadata: {
+            display_phone_number: "+1 555 765 4321",
+            phone_number_id: "109876543210987",
+          },
+          contacts: [{ profile: { name: "Example Sender" }, wa_id: "15551234567" }],
+          messages: [{
+            from: "15551234567",
+            id: "wamid.route-inbound",
+            timestamp: "1783963200",
+            type: "text",
+            text: { body: "Route this exact payload" },
+          }],
+        },
+      }],
+    }],
+  };
+}
+
+function whatsappStatusWebhook(): Record<string, unknown> {
+  return {
+    object: "whatsapp_business_account",
+    entry: [{
+      id: "waba-route",
+      changes: [{
+        field: "messages",
+        value: {
+          messaging_product: "whatsapp",
+          metadata: { phone_number_id: "109876543210987" },
+          statuses: [{
+            id: "wamid.outbound-status",
+            status: "delivered",
+            timestamp: "1783963300",
+            recipient_id: "15551234567",
+          }],
+        },
+      }],
+    }],
+  };
 }

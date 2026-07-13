@@ -110,9 +110,11 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
 
     const responseText = await response.text().catch(() => "");
     if (!response.ok) {
+      const classification = profile.outbound.classifyError?.(response.status, responseText);
       throw new ChatProviderOutboundAdapterError(
-        `${context.connection.bridgeMode} bridge returned HTTP ${response.status}${responseText ? `: ${responseText.slice(0, 500)}` : ""}`,
-        profile.outbound.isRetryableStatus(response.status),
+        classification?.message
+          ?? `${context.connection.bridgeMode} bridge returned HTTP ${response.status}${responseText ? `: ${responseText.slice(0, 500)}` : ""}`,
+        classification?.retryable ?? profile.outbound.isRetryableStatus(response.status),
         response.status,
       );
     }
