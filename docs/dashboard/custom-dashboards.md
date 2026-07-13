@@ -132,6 +132,7 @@ During validation, Code UX:
 - creates a validation session row and runtime directory under the selected project
 - writes the generated bundle plus a known Vite/Preact harness
 - injects a read-only `codeUxDataBridge` / `CodeUXCustomDashboard` object
+- selects TSX route modules from the bridge's declared route state; validation previews can supply that state with the `route` query parameter instead of relying on the proxy pathname
 - runs install and build in Docker using the resolved CLI workflow image
 - persists the built Vite `dist` files on the validated revision as the published-viewer artifact
 - starts a detached preview container on an allocated localhost port
@@ -143,6 +144,8 @@ Stopping a validation session removes the detached container. It does not invali
 ## Published Viewer and Rollback
 
 The in-app viewer renders only published dashboards whose active `publishedRevisionId` points to a revision with a passed validation report. For the default `src/dashboard.tsx` draft and other TSX/Preact revisions validated through the harness, the viewer uses the persisted Vite `dist` artifact instead of the source entry file, so publication does not depend on the detached validation container still running. Generated code runs inside a sandboxed iframe document and talks to the parent app through a constrained `postMessage` bridge. Validation previews and published viewers use the same typed server source gateway. It verifies ownership, declared source and route authorization, credential slot/capability, request IDs, and session context before serving data. Required credential selection and binding metadata are rejected before outbound egress when omitted ambiguously, unknown, malformed, inactive, unavailable, or capability-mismatched. External requests enforce the bounded egress policy, and credential values resolve through the server-side broker without entering iframe payloads; browser authorization, cookies, dashboard session headers, sensitive upstream headers, and upstream error bodies are not forwarded.
+
+Route selection is normalized consistently in validation and publication: an exact declared path wins, followed by a declared `/`, followed by the first declared route. Route-less bundles retain a synthetic `/` entry that points at the manifest entry file. The published iframe uses the host-supplied route rather than its opaque `srcdoc` pathname, rejects undeclared `navigate` calls and route messages, and restores declared hash history while the host retains route-aware share URLs and browser back/forward history. Unknown host deep links replace their current history entry with the declared fallback so back/forward navigation cannot become trapped on an invalid route.
 
 The viewer displays a loading status until the frame sends its session-bound readiness message. A crash, unhandled rejection, empty document, or readiness timeout produces a bounded visible error and one idempotent halt report for that frame. The Code UX shell stays mounted. A halted panel offers validated resume and returns to revision selection for rollback; failed validation points users back to logs, draft repair, a new revision, and revalidation. Archived and unpublished states remain non-executable.
 

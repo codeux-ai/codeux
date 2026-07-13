@@ -13,7 +13,7 @@ import {
   createCustomDashboardRuntimeMessageHandler,
   resolvePublishedCustomDashboardRuntime,
 } from "../../lib/custom-dashboard-runtime.js";
-import { normalizeCustomDashboardPath, selectCustomDashboardRoute } from "../../lib/custom-dashboard-router.js";
+import { getCustomDashboardRoutes, selectCustomDashboardRoute } from "../../lib/custom-dashboard-router.js";
 
 interface CustomDashboardViewerProps {
   dashboard: CustomDashboardRecord;
@@ -22,7 +22,7 @@ interface CustomDashboardViewerProps {
   onReturnToEditor: () => void;
   refreshing?: boolean;
   routePath?: string;
-  onRouteChange?: (path: string) => void;
+  onRouteChange?: (path: string, options?: { replace?: boolean }) => void;
   onResume?: () => void;
   resuming?: boolean;
 }
@@ -47,7 +47,11 @@ export const CustomDashboardViewer: FunctionComponent<CustomDashboardViewerProps
     () => resolvePublishedCustomDashboardRuntime(dashboard, revisions, routePath),
     [dashboard, revisions, routePath],
   );
-  const dashboardLink = useMemo(() => buildPublishedCustomDashboardLink(dashboard.id, window.location.origin, routePath), [dashboard.id, routePath]);
+  const resolvedRoutePath = resolution.status === "ready" ? resolution.runtime.routePath : "/";
+  const dashboardLink = useMemo(
+    () => buildPublishedCustomDashboardLink(dashboard.id, window.location.origin, resolvedRoutePath),
+    [dashboard.id, resolvedRoutePath],
+  );
 
   useEffect(() => {
     setFrameError(null);
@@ -64,7 +68,13 @@ export const CustomDashboardViewer: FunctionComponent<CustomDashboardViewerProps
       runtime: resolution.runtime,
       onRuntimeError: setFrameError,
       onRuntimeReady: () => setFrameReady(true),
-      onRouteChange: (path) => onRouteChange?.(path),
+      onRouteChange: (path) => {
+        if (routePath !== resolution.runtime.routePath) {
+          onRouteChange?.(path, { replace: true });
+        } else {
+          onRouteChange?.(path);
+        }
+      },
       signal: controller.signal,
     });
     window.addEventListener("message", handler);
@@ -72,7 +82,7 @@ export const CustomDashboardViewer: FunctionComponent<CustomDashboardViewerProps
       controller.abort();
       window.removeEventListener("message", handler);
     };
-  }, [frameKey, onRouteChange, resolution]);
+  }, [frameKey, onRouteChange, resolution, routePath]);
 
   const handleOpen = (): void => {
     window.open(dashboardLink, "_blank", "noopener,noreferrer");
@@ -147,10 +157,13 @@ export const CustomDashboardViewer: FunctionComponent<CustomDashboardViewerProps
       <nav aria-label="Custom dashboard routes" className="mt-4 flex min-w-0 items-center gap-2 overflow-x-auto rounded-[0.9rem] border border-black/[0.06] bg-slate-900/[0.03] p-2 dark:border-white/[0.06] dark:bg-white/[0.03]">
         <IconButton title="Previous dashboard route" aria-label="Previous dashboard route" onClick={() => window.history.back()}><ChevronLeft aria-hidden="true" className="h-4 w-4" /></IconButton>
         <IconButton title="Next dashboard route" aria-label="Next dashboard route" onClick={() => window.history.forward()}><ChevronRight aria-hidden="true" className="h-4 w-4" /></IconButton>
-        {(resolution.runtime.revision.routes.length ? resolution.runtime.revision.routes : [{ path: "/", label: "Overview", entryFile: resolution.runtime.revision.manifest.entryFile }]).map((route) => {
-          const selectedRoute = selectCustomDashboardRoute(resolution.runtime.revision.routes, routePath);
-          const selected = normalizeCustomDashboardPath(routePath) === normalizeCustomDashboardPath(route.path)
-            || selectedRoute?.path === route.path;
+        {getCustomDashboardRoutes(resolution.runtime.revision.routes, resolution.runtime.revision.manifest.entryFile).map((route) => {
+          const selectedRoute = selectCustomDashboardRoute(
+            resolution.runtime.revision.routes,
+            routePath,
+            resolution.runtime.revision.manifest.entryFile,
+          );
+          const selected = selectedRoute?.path === route.path;
           return (
             <button key={route.path} type="button" aria-current={selected ? "page" : undefined} onClick={() => onRouteChange?.(route.path)} className={`min-h-9 shrink-0 rounded-[0.7rem] px-3 text-sm font-bold focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 ${selected ? "bg-signal-500 text-void-900" : "text-slate-600 hover:bg-white/70 dark:text-slate-300 dark:hover:bg-white/[0.06]"}`}>
               {route.label}

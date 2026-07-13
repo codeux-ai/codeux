@@ -612,9 +612,9 @@ export const CustomDashboardsPage: FunctionComponent = () => {
               onReturnToEditor={() => navigateWorkspace({ mode: "editor" })}
               refreshing={loading}
               routePath={routePath}
-              onRouteChange={(path) => {
+              onRouteChange={(path, options) => {
                 const normalized = normalizeCustomDashboardPath(path);
-                if (normalized !== routePath) navigateWorkspace({ mode: "viewer", routePath: normalized });
+                if (normalized !== routePath) navigateWorkspace({ mode: "viewer", routePath: normalized }, options?.replace);
               }}
               onResume={() => void handleResume()}
               resuming={resuming}

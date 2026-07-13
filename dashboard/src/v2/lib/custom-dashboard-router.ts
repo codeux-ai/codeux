@@ -44,12 +44,38 @@ export function buildCustomDashboardLocation(
 export function selectCustomDashboardRoute(
   routes: CustomDashboardRouteDefinition[],
   routePath: string,
+  fallbackEntryFile?: string,
 ): CustomDashboardRouteDefinition | null {
   const normalized = normalizeCustomDashboardPath(routePath);
-  return routes.find((route) => normalizeCustomDashboardPath(route.path) === normalized)
-    ?? routes.find((route) => normalizeCustomDashboardPath(route.path) === "/")
-    ?? routes[0]
+  const normalizedRoutes = getCustomDashboardRoutes(routes, fallbackEntryFile);
+  return normalizedRoutes.find((route) => route.path === normalized)
+    ?? normalizedRoutes.find((route) => route.path === "/")
+    ?? normalizedRoutes[0]
     ?? null;
+}
+
+export function getCustomDashboardRoutes(
+  routes: CustomDashboardRouteDefinition[],
+  fallbackEntryFile?: string,
+): CustomDashboardRouteDefinition[] {
+  if (routes.length === 0) {
+    return fallbackEntryFile
+      ? [{ path: "/", label: "Overview", entryFile: fallbackEntryFile }]
+      : [];
+  }
+  return routes.map((route) => ({
+    ...route,
+    path: normalizeCustomDashboardPath(route.path),
+  }));
+}
+
+export function isCustomDashboardRouteDeclared(
+  routes: CustomDashboardRouteDefinition[],
+  routePath: string,
+  fallbackEntryFile?: string,
+): boolean {
+  const normalized = normalizeCustomDashboardPath(routePath);
+  return getCustomDashboardRoutes(routes, fallbackEntryFile).some((route) => route.path === normalized);
 }
 
 export function updateCustomDashboardHistory(

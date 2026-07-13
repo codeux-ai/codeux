@@ -73,6 +73,7 @@ describe("custom dashboard validation filesystem utilities", () => {
         runtimeMetadata: {},
         integrations: {},
         externalApiNodes: [],
+        routes: [],
         runtimeAccess: { kind: "validation", sessionId: "session-1" },
       },
     });
@@ -116,6 +117,7 @@ describe("custom dashboard validation filesystem utilities", () => {
         runtimeMetadata: {},
         integrations: {},
         externalApiNodes: [],
+        routes: routedRevision.routes,
         runtimeAccess: { kind: "validation", sessionId: "session-1" },
       },
     });
@@ -127,6 +129,12 @@ describe("custom dashboard validation filesystem utilities", () => {
     expect(harness).toContain("../src/styles.css");
     expect(harness).toContain("../src/details.tsx");
     expect(harness).toContain("/details");
+    expect(harness).toContain("runtimeBridge.routePath");
+    expect(harness).not.toContain("window.location.pathname");
+    const bridge = await fs.readFile(path.join(workspacePath, ".codeux-harness", "codeux-data-bridge.ts"), "utf8");
+    expect(bridge).toContain("new URLSearchParams(window.location.search).get('route')");
+    expect(bridge).toContain("get routePath()");
+    expect(bridge).toContain("Custom dashboard route is not declared");
   });
 
   it.each([
