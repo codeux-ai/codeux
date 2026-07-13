@@ -65,6 +65,7 @@ describe("chat connector registry", () => {
         modes: [
           { mode: "managed_bridge", integration: "managed_plugin", setup: ["pluginName", "workspaceId"], secrets: ["bridgeApiKey"] },
           { mode: "webhook", integration: "webhook", setup: ["eventsUrl", "appId"], secrets: ["signingSecret", "botToken"] },
+          { mode: "official_api", integration: "official_api", setup: ["appId", "workspaceId", "workspaceName"], secrets: ["signingSecret", "botToken"] },
         ],
       },
       "microsoft-teams": {
@@ -92,11 +93,12 @@ describe("chat connector registry", () => {
     expect(() => getChatConnectorProfileForMode("discord", "managed_bridge")).toThrow(
       "Unsupported bridge mode for discord: managed_bridge",
     );
-    for (const kind of CHAT_CONNECTOR_KINDS) {
+    for (const kind of CHAT_CONNECTOR_KINDS.filter((candidate) => candidate !== "slack")) {
       expect(() => getChatConnectorProfileForMode(kind, "official_api" as ChatProviderBridgeMode)).toThrow(
         `Unsupported bridge mode for ${kind}: official_api`,
       );
     }
+    expect(getChatConnectorProfileForMode("slack", "official_api").kind).toBe("slack");
   });
 
   it("constructs the registry without network or process side effects", async () => {
