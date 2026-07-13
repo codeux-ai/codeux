@@ -229,6 +229,30 @@ export function registerSprintRoutes(router: Express, deps: DashboardDependencie
     }
   }));
 
+  router.post("/api/sprints/:sprintId/complete", asyncRoute(async (req, res) => {
+    if (!deps.markSprintCompleted) {
+      res.status(501).json({ error: "Manual sprint completion is not available." });
+      return;
+    }
+    try {
+      res.json(await deps.markSprintCompleted(requireTrimmedString(req.params.sprintId, "sprintId")));
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to mark sprint completed"));
+    }
+  }));
+
+  router.post("/api/sprints/:sprintId/qa-pass", asyncRoute(async (req, res) => {
+    if (!deps.markSprintQaPassed) {
+      res.status(501).json({ error: "Manual sprint QA pass is not available." });
+      return;
+    }
+    try {
+      res.json(await deps.markSprintQaPassed(requireTrimmedString(req.params.sprintId, "sprintId")));
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to mark sprint QA passed"));
+    }
+  }));
+
   router.get("/api/sprints/:sprintId/settings", syncRoute((req, res) => {
     try {
       res.json(deps.getSprintSettings(requireTrimmedString(req.params.sprintId, "sprintId")));

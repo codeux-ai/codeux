@@ -429,6 +429,18 @@ export const updateSprint = async (sprintId: string, input: UpdateSprintInput): 
   });
 };
 
+export const markSprintCompleted = async (sprintId: string): Promise<SprintRecord> => {
+  return fetchJson<SprintRecord>(`/api/sprints/${encodeURIComponent(sprintId)}/complete`, {
+    method: "POST",
+  });
+};
+
+export const markSprintQaPassed = async (sprintId: string): Promise<SprintRecord> => {
+  return fetchJson<SprintRecord>(`/api/sprints/${encodeURIComponent(sprintId)}/qa-pass`, {
+    method: "POST",
+  });
+};
+
 export const deleteSprint = async (sprintId: string): Promise<void> => {
   await fetchJson<{ ok: boolean }>(`/api/sprints/${encodeURIComponent(sprintId)}`, {
     method: "DELETE",

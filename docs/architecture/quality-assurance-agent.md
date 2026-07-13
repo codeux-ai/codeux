@@ -237,6 +237,7 @@ Behavior:
 - reviewer rows remain visible per agent, while the shared `run_index` spends one sprint QA budget cycle
 - while a sprint QA review is running, Code UX now refreshes the parent sprint-run heartbeat and lease so long reviews are not mistaken for stalled orchestration and failed by runtime cleanup
 - stale sprint-level `running` QA rows are also reconciled against execution invocation state before gating; if the backing invocation already ended, Code UX reclassifies the stale row and immediately allows a retry instead of keeping sprint completion blocked forever
+- an operator can explicitly choose `Mark QA Pass` from the Sprints page when human review should override a non-passing sprint-completion verdict. Code UX records a new terminal `sprint_completion` QA cycle with `outcome = 'pass'`, `Manual QA` reviewer identity, and dashboard provenance; any stale running rows in that sprint review stream are closed first. The action also resolves the matching sprint-scoped QA handoff, but does not resolve task QA or unrelated sprint attention. The dashboard disables the override while a sprint QA provider review is actively running and hides it after a passing verdict.
 - `maxSprintReviewRuns` limits review cycles, not the number of defects that an earlier review can split into tracked work. Keeping task-completion QA enabled catches task-local defects before merge and reduces the amount of remediation deferred to the full integrated-sprint review
 
 ## Session Continuation

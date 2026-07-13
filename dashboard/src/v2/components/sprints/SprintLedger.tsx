@@ -66,6 +66,7 @@ export interface SprintLedgerProps {
   onExportSprint: (sprint: Sprint) => void;
   onOverridesSprint: (sprint: Sprint) => void;
   onMarkCompletedSprint: (sprintId: string) => void;
+  onMarkQaPassedSprint?: (sprintId: string) => void;
   onRollbackSprint?: (sprint: Sprint) => void;
   onDeleteSprint: (sprintId: string) => void;
   onBulkShowcaseEnable: (sprintIds: string[]) => void;
@@ -91,6 +92,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
   onExportSprint,
   onOverridesSprint,
   onMarkCompletedSprint,
+  onMarkQaPassedSprint,
   onRollbackSprint,
   onDeleteSprint,
   onBulkStart,
@@ -694,6 +696,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
                   onExport={() => onExportSprint(sprint)}
                   onOverrides={() => onOverridesSprint(sprint)}
                   onMarkCompleted={() => onMarkCompletedSprint(sprint.id)}
+                  onMarkQaPassed={onMarkQaPassedSprint ? () => onMarkQaPassedSprint(sprint.id) : undefined}
                   onRollback={onRollbackSprint ? () => onRollbackSprint(sprint) : undefined}
                   onDelete={() => { void handleDeleteSprint(sprint); }}
                 />

@@ -93,6 +93,7 @@ import {
   invalidateOnboardingRuntimeReadinessCache,
 } from "../../services/onboarding-readiness-service.js";
 import type { SprintImportedTaskInput } from "../../contracts/project-management-types.js";
+import { SprintManualActionService } from "../../services/sprint-manual-action-service.js";
 import type { McpConnectionInfo } from "../../contracts/mcp-connection-types.js";
 import type {
   LocalMcpCliConfigService,
@@ -479,6 +480,14 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     projectManagementRepository: deps.projectManagementRepository,
     logger: deps.logger.child({ component: "instruction-file-service" }),
   });
+  const sprintManualActionService = new SprintManualActionService({
+    projectManagementRepository: deps.projectManagementRepository,
+    executionRepository: deps.executionRepository,
+    executionControlService: deps.executionControlService,
+    qaReviewRepository: deps.qaReviewRepository,
+    projectAttentionRepository: deps.projectAttentionRepository,
+    logger: deps.logger.child({ component: "sprint-manual-action-service" }),
+  });
 
   const getDefaultOnboardingRuntimeReadiness = deps.getOnboardingRuntimeReadiness
     ?? (async () => getOnboardingRuntimeReadiness(
@@ -728,6 +737,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     getSprint: (sprintId) => deps.projectManagementRepository.getSprint(sprintId),
     createSprint: (projectId, input) => deps.projectManagementRepository.createSprint(projectId, input),
     updateSprint: (sprintId, input) => deps.projectManagementRepository.updateSprint(sprintId, input),
+    markSprintCompleted: (sprintId) => sprintManualActionService.markCompleted(sprintId),
+    markSprintQaPassed: (sprintId) => sprintManualActionService.markQaPassed(sprintId),
     deleteSprint: (sprintId) => deps.projectManagementRepository.deleteSprint(sprintId),
     assessSprintRollback: (projectId, sprintId) => deps.sprintRollbackService.assess(projectId, sprintId),
     createSprintRollback: (projectId, sprintId, input) => deps.sprintRollbackService.create(projectId, sprintId, input),
