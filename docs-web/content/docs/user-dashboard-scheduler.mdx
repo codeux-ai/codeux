@@ -67,6 +67,14 @@ succeeds. A sprint with existing tasks is orchestrated directly. If either plann
 orchestration fails, the scheduler entry moves to `failed` and displays the recorded error in the
 scheduled-entry list.
 
+### Dashboard planning wakeups
+
+Direct MCP planning started by the assigned Project Manager uses two non-recurring wakeup paths. The manager owns one status check at a time: first at the returned `estimatedCompletionAt`, then, only while status remains `in_progress`, at the next returned timestamp one minute later. It lists before scheduling to avoid duplicates and never turns planning checks into a recurring schedule. An elapsed ETA is not failure, so active planning is not resubmitted, requeued, or reconfigured.
+
+Code UX owns the other path: exactly one due-now completion or failure `agent_wakeup` for the originating dashboard thread after background planning settles. That terminal wakeup reports generated task count and actual auto-start state, or the failure evidence. When it arrives, the Project Manager cancels obsolete pending status checks it created for the same invocation or sprint, excluding the wakeup currently executing. This avoids a later ETA wakeup creating a duplicate dashboard turn.
+
+Standalone MCP calls have no originating dashboard thread, so they receive neither wakeup path. Those clients poll sprint, task, or telemetry state at the returned `nextCheckAt`; reads do not enqueue scheduler work.
+
 ## Recurrence
 
 An entry can run once at a specific time or repeat on a **recurrence rule** (for example daily or
