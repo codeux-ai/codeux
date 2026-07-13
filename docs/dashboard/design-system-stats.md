@@ -15,6 +15,9 @@ Stats presentation must stay within the implemented snapshot and invocation cont
 - Recent snapshot windows are bucket aligned and half-open while including the latest current bucket: `1h` keeps twelve 5-minute buckets through the current 5-minute bucket end, `24h` keeps twenty-four hourly buckets through the current partial hour, and daily/custom windows include their selected end day or bucket.
 - Usage totals include invocation count, active and wall time, input/cached/output/reasoning/total tokens, cost fields, optional tool-call count, and usage-source counters for `reported`, `estimated`, `unavailable`, and `unsupported`.
 - System mode uses `useSystemViewData(projectId)` and invocation APIs for records, server-projected filters, sort state, pagination, summaries, and transcript expansion.
+- `project.execution.updated` and `snapshot_required` invalidate the aggregate Stats snapshot and the independent System invocation query. Both paths refetch their REST projections; realtime payloads do not become invocation records in the browser.
+- System records remain sourced from paginated `GET /api/projects/:projectId/execution/invocations` responses. Cached cards and rows remain visible during the debounced/background refresh.
+- Stats refreshes independently from Live's heavier `project.live.updated` snapshot, which retains a five-second server throttle. Do not route Stats freshness through the Live snapshot or imply that preparation-only workflow visibility is provider usage.
 
 Do not document or render speculative metrics. Missing telemetry is a first-class state and must remain visibly different from a meaningful zero.
 
@@ -159,6 +162,8 @@ Stats copy and visuals should teach operators how trustworthy a number is withou
 Cost values come from snapshot cost fields and should only be presented when configured data makes them meaningful. Do not imply a free run from a zero cost when pricing may be unavailable.
 
 Cost displays use two fractional digits for scanability, rounding values such as `$55.4093` to `$55.41`.
+
+CLI task-coding analytics distinguish workflow visibility from provider usage. A running execution invocation may appear while Code UX is preparing a cancellable workspace or waiting to claim provider capacity. Provider `started_at`, duration, concurrency, token, and cost telemetry begin only after the provider claim/run starts; preparation failure or pre-claim cancellation therefore leaves an auditable execution row without fabricated provider usage.
 
 ## Primitives And Styling
 

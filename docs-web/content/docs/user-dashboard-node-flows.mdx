@@ -6,7 +6,7 @@ The **Nodes** page (`/nodes`) is the project-scoped backend authoring, publicati
 
 The flow library contains backend drafts and publications owned by the active project. Saves include the loaded draft revision, so a concurrent edit produces a visible conflict and never overwrites newer work.
 
-The former browser graph at `codeux:nodes-canvas:v1` is eligible for one import into the selected project. The bridge maps legacy `trigger`, `agent`, and `task` kinds to registered `input`, `set_fields`, and `provider_prompt` definitions and remaps their ports before creating an **Imported Nodes Canvas** draft. A failed import remains retryable and does not block the normal library load; only success removes the old value and records the marker.
+The former browser graph at `codeux:nodes-canvas:v1` is eligible for one import into the selected project. The bridge maps `trigger`, `agent`, and `task` to registered `input`, `set_fields`, and `provider_prompt` definitions, retains `condition` and `output`, and remaps their ports before creating an **Imported Nodes Canvas** draft. A failed import remains retryable and does not block the normal library load; only success removes the old value and records the marker.
 
 ## Registry-Driven Editing And Credentials
 
