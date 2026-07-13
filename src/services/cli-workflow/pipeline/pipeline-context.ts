@@ -48,6 +48,8 @@ export interface PipelineContext {
   worktreePath: string;
   workspaceSessionId: string;
   abortSignal?: AbortSignal;
+  /** Durable execution invocation created before workspace preparation begins. */
+  executionInvocationId?: string;
   workflowSettings: CliWorkflowSettings;
   settings: DashboardSettings;
   initialHead: string;

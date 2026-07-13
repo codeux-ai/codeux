@@ -161,6 +161,8 @@ The **Invocations** tab is a structured log of server-created execution invocati
 - **Timing** — start, end, duration.
 - **Linked task / sprint** — when an invocation arose from sprint orchestration.
 
+The rail remains server-authoritative during startup and live execution. `project.execution.updated` and realtime snapshot recovery refetch the paginated invocation list, so an early task-coding preparation row appears only after persistence and always carries its real server id into detail, cancellation, or restart actions. A refresh keeps the current selection and transcript when that invocation is still present; the Live page continues to use its separate execution snapshot flow.
+
 Use this for debugging provider runs and MCP client integrations, for example to inspect agent transcripts or see exactly what arguments your LLM is passing to tools like `manage_memory` or `manage_settings`.
 
 Invocation transcripts use the same live sprint status and sprint/task reference cards as thread messages when their references resolve to active-project records. This means a planning invocation and its related chat message should show consistent task progress without a separate refresh control. Completed sprint-planning invocations append a final assistant summary with `metadata.widget_metadata.type = "planning_request"`, `status = "completed"`, and `metadata.executionPlan` for that invocation's linked sprint, including the sprint id, created task ids, and planned task titles. The plan shown in the transcript is replayed from persisted invocation message metadata, not from the currently selected sprint or the latest planning run for the project, so historical planning transcripts remain sprint-specific and stable.

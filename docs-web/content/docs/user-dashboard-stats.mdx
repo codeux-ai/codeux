@@ -77,7 +77,11 @@ Cost data is visualized directly within the Usage Graph and Composition views, f
 
 ## Underlying telemetry
 
-The page remains live and uses project realtime invalidation channels to stay current during active sprint execution, falling back to background polling when websocket updates aren't available.
+The page remains live and uses project realtime invalidation channels to stay current during active sprint execution, falling back to background polling when websocket updates aren't available. Both `project.execution.updated` and `snapshot_required` cause Stats to refetch its authoritative REST data. The aggregate snapshot and System invocation ledger refresh independently, and existing cards/rows remain visible while cached data updates.
+
+System invocation records come from the paginated `GET /api/projects/:projectId/execution/invocations` projection; realtime messages invalidate that query but do not manufacture invocation rows in the browser. Stats is also independent from Live's heavier `project.live.updated` snapshot, which retains a five-second server throttle.
+
+A CLI workflow may appear as a running execution invocation while cancellable workspace/provider preparation is still underway. Provider `started_at`, duration, concurrency, tokens, and cost begin only after Code UX claims the provider slot and starts that provider run. A preparation failure or pre-claim cancellation can therefore be visible in System without any provider usage, which is intentional rather than missing telemetry.
 
 It is backed by:
 - `GET /api/stats/header-throughput?projectId=...&window=...` — compact app and optional selected-project token throughput read model; the top dashboard header displays the app-wide value.

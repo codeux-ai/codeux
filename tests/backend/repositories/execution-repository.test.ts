@@ -1146,6 +1146,111 @@ describe("ExecutionRepository", () => {
     }
   });
 
+  it("schedules project-scoped refreshes for coding invocation creation and preparation messages", async () => {
+    vi.useFakeTimers();
+    try {
+      const notifier = {
+        scheduleProjectExecutionRefresh: vi.fn(),
+      };
+      const { projectRepository, executionRepository } = await createRepositoriesWithRealtimeNotifier(notifier);
+      const project = projectRepository.createProject({
+        name: "Preparation Invocation Project",
+        sourceType: "local",
+        sourceRef: "/workspace/preparation-invocation-project",
+      });
+      const sprint = projectRepository.createSprint(project.id, {
+        name: "Preparation Sprint",
+        number: 1,
+      });
+      const task = projectRepository.createTask(project.id, {
+        sprintId: sprint.id,
+        taskKey: "T01",
+        title: "Prepare coding invocation",
+        promptMarkdown: "Persist the invocation before preparation.",
+      });
+      const sprintRun = executionRepository.createSprintRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+        status: "running",
+        executorMode: "docker_cli",
+      });
+      const dispatch = executionRepository.createTaskDispatch({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        executorType: "docker_cli",
+        status: "running",
+      });
+      const taskRun = executionRepository.createTaskRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        dispatchId: dispatch.id,
+        provider: "codex",
+        mode: "docker_cli",
+        state: "RUNNING",
+      });
+
+      vi.runOnlyPendingTimers();
+      await Promise.resolve();
+      notifier.scheduleProjectExecutionRefresh.mockClear();
+
+      const invocation = executionRepository.createExecutionInvocation({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        dispatchId: dispatch.id,
+        taskRunId: taskRun.id,
+        type: "cli_task_coding",
+        status: "running",
+        provider: "codex",
+        model: "gpt-preparation-test",
+        invocationSource: "internal",
+      });
+
+      expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        dispatchId: dispatch.id,
+        taskRunId: taskRun.id,
+        type: "cli_task_coding",
+        status: "running",
+        provider: "codex",
+        model: "gpt-preparation-test",
+        invocationSource: "internal",
+      });
+
+      vi.runOnlyPendingTimers();
+      await Promise.resolve();
+      expect(notifier.scheduleProjectExecutionRefresh).toHaveBeenCalledOnce();
+      expect(notifier.scheduleProjectExecutionRefresh).toHaveBeenLastCalledWith(
+        project.id,
+        expect.objectContaining({ includeOverview: true }),
+      );
+
+      notifier.scheduleProjectExecutionRefresh.mockClear();
+      executionRepository.appendExecutionInvocationMessage(invocation.id, {
+        role: "system",
+        contentMarkdown: "Preparing the task workspace and codex configuration.",
+      });
+
+      vi.runOnlyPendingTimers();
+      await Promise.resolve();
+      expect(notifier.scheduleProjectExecutionRefresh).toHaveBeenCalledOnce();
+      expect(notifier.scheduleProjectExecutionRefresh).toHaveBeenLastCalledWith(
+        project.id,
+        expect.objectContaining({ includeOverview: false }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not drop coalesced refreshes across projects", async () => {
     vi.useFakeTimers();
     try {
