@@ -1555,7 +1555,7 @@ describe("SettingsControls Accessibility", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("legacy secret value was detected");
   });
 
-  it("sanitizes legacy secrets while preserving credential references in settings save payloads", () => {
+  it("omits legacy secret fields while preserving credential references in settings save payloads", () => {
     const payload = sanitizeSettingsSavePayload({
       integrations: {
         githubToken: "github-secret",
@@ -1575,17 +1575,14 @@ describe("SettingsControls Accessibility", () => {
 
     expect(payload).toEqual({
       integrations: {
-        githubToken: "",
         githubTokenCredentialRef: { credentialId: "github-credential", capability: "read" },
         providers: {
           codex: {
-            apiKey: "",
             apiKeyCredentialRef: { credentialId: "provider-credential", capability: "read" },
           },
         },
       },
       jira: {
-        apiToken: "",
         apiTokenCredentialRef: { credentialId: "jira-credential", capability: "read" },
       },
     });

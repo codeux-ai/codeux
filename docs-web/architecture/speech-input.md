@@ -4,7 +4,7 @@ Speech input turns dashboard microphone or uploaded audio into prompt text throu
 
 ## Settings Boundary
 
-Speech settings are project-scoped. They flow through defaults, override resolution, validation, and sanitization alongside other project settings. The `speech` object stores whether transcription is enabled, the explicit Local or API provider mode, local ONNX model id, maximum audio duration, and external transcription configuration.
+Speech settings flow through System defaults plus Project and Sprint override resolution, validation, and sanitization. The `speech` object stores whether transcription is enabled, the explicit Local or API provider mode, local ONNX model id, maximum audio duration, and external transcription configuration.
 
 Local is the default provider mode. API fields stay hidden until API is selected, and local mode never sends microphone audio to an external provider.
 
@@ -37,7 +37,7 @@ The contracts expose two explicit execution modes:
 - `local_onnx` is local model inference.
 - `external_api` is an OpenAI-compatible transcription endpoint.
 
-Structured transcription errors cover unsupported audio, missing local models, permission/client errors, and provider failures.
+API mode binds metadata through `settings:speech.transcription`; ordinary settings requests contain the credential reference and non-secret configuration only. Secret values enter write-only create, rotate, or replace broker routes and successful mutations clear their input. Structured transcription errors cover unsupported audio, missing local models, missing/revoked/unavailable credentials, permission/client errors, and provider failures.
 
 Local model files are resolved under deterministic cache directories in `~/.code-ux/models/speech/<sanitized-model-id>`. Whisper Base English remains the default, with Whisper Tiny English as the faster, lower-footprint English alternative. The catalog also offers pinned multilingual Whisper Base and Tiny ONNX bundles. Each multilingual entry exposes its supported language codes and automatic-detection capability so dashboard clients can build a catalog-driven language selector without maintaining a second language list.
 

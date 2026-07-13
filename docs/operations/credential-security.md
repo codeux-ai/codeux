@@ -9,7 +9,7 @@ Code UX stores automation credentials through a broker rather than exposing secr
 - Resolution succeeds only when both the credential and binding approve the requested capability.
 - Revoked, unavailable, missing, cross-project, or insufficiently capable credentials fail closed.
 
-The dashboard accepts secret values only on create, rotate, and replace requests. Responses contain configuration, scope, status, key-version, and validation metadata but never stored values. Access-event rows contain identifiers, binding keys, capabilities, outcomes, and denial reasons; they never contain secret material.
+The dashboard accepts secret values only on create, rotate, and replace requests and clears each write-only input after a successful mutation. Settings selectors list active metadata for binding and retain metadata-only revoked or unavailable bound states so operators can explicitly unbind them. Responses contain configuration, scope, status, key-version, and validation metadata but never stored values. Access-event rows contain identifiers, binding keys, capabilities, outcomes, and denial reasons; they never contain secret material.
 
 Management inputs are validated at runtime rather than trusted from TypeScript types. Names, kinds, binding keys, project ids, capabilities, and list counts are bounded; malformed arrays and control characters are rejected instead of being silently coerced. A stored value is limited to 64 KiB of UTF-8 data. Global allowlists must explicitly retain the management owner.
 

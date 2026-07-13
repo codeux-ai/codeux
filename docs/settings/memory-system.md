@@ -18,6 +18,7 @@ Enablement, sprint capture, agent capture, auto-promotion, and remediation mode 
 | Control Surface | Runtime Effect | Review Before Saving |
 | --- | --- | --- |
 | Settings card fields | Updates the active Settings scope after you save the page. | Confirm whether you are editing System or Project scope. |
+| External embedding credential | Selects and binds active credential metadata through the encrypted broker. The ordinary settings draft stores only `{ credentialId, capability: "read" }`; create and rotate values remain write-only broker actions. | Select a project for credential administration, verify secure storage is available, and confirm whether the binding should be inherited or overridden. |
 | Inherited values | Values can flow from system defaults into project and sprint behavior. | Check the source badge before assuming a value is project-specific. |
 | Related runtime paths | The affected service reads the saved settings during planning, dispatch, dashboard rendering, or maintenance work. | Re-run the affected workflow after changing operational settings. |
 
@@ -33,7 +34,7 @@ A practical review flow is:
 
 ## Risks And Gotchas
 
-Disabling memory reduces long-term learning; AI remediation consumes routed provider capacity.
+Disabling memory reduces long-term learning; AI remediation consumes routed provider capacity. External embedding endpoint, model, and dimension fields remain ordinary configuration, but the API credential must be an active broker binding. Revoked or unavailable credentials remain visible as metadata so they can be unbound, but they cannot be selected for a new binding.
 
 Before applying changes, check:
 

@@ -9,7 +9,7 @@ Code UX resolves canonical node credential IDs and named project binding keys th
 - Both the binding and credential must approve the requested capability.
 - Revoked, unavailable, missing, cross-project, or insufficiently capable credentials fail closed.
 
-Create, rotate, and replace requests are write-only. API responses contain configuration and status metadata but never stored values.
+Create, rotate, and replace requests are write-only, and the dashboard clears successful secret inputs. Settings selectors list active metadata for binding and retain metadata-only revoked or unavailable bound states for explicit unbinding. API responses contain configuration and status metadata but never stored values.
 
 Runtime validation bounds names, identifiers, capabilities, list counts, and secret size (64 KiB UTF-8). Malformed arrays and control characters are rejected rather than coerced.
 

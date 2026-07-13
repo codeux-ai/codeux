@@ -100,6 +100,27 @@ describe("AutomationCredentialManager", () => {
     expect(onChange).toHaveBeenCalledWith({ credentialId: "credential-1", capability: "read" });
   });
 
+  it("shows revoked bound metadata without exposing values or allowing it to be rebound", async () => {
+    vi.mocked(fetchAutomationCredentials).mockResolvedValue([{
+      ...credential({ status: "revoked", version: 4 }),
+      value: "revoked-sentinel-secret",
+    } as AutomationCredentialMetadata]);
+    render(
+      <CredentialReferenceSelector
+        projectId="project-1"
+        bindingKey="settings:speech.transcription"
+        label="Speech API"
+        value={{ credentialId: "credential-1", capability: "read" }}
+        onChange={() => {}}
+      />,
+    );
+
+    expect(await screen.findByText(/Bound metadata: Deployment token.*revoked.*version 4/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Bind" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Unbind" })).toBeEnabled();
+    expect(document.body.textContent).not.toContain("revoked-sentinel-secret");
+  });
+
   it("rotates a credential and clears the replacement input", async () => {
     const user = userEvent.setup();
     render(<AutomationCredentialManager projectId="project-1" />);

@@ -2,7 +2,8 @@ import type { FunctionComponent, ComponentChildren } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import { NoticePanel } from "../SettingsSurface.js";
-import { NumberInput, Row, SecretInput, Toggle, TextInput, TextAreaInput } from "../SettingsFormFields.js";
+import { CredentialReferenceSelector } from "../AutomationCredentialManager.js";
+import { NumberInput, Row, Toggle, TextInput, TextAreaInput } from "../SettingsFormFields.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
 import { BookOpen, Brain, CalendarClock, Gauge } from "lucide-preact";
 import { fetchMemoryRemediationSchedule, saveMemoryRemediationSchedule } from "../../../lib/scheduler-api.js";
@@ -317,6 +318,7 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
         >
           <Row label="Embedding backend" description="Use downloaded in-app ONNX models or an external OpenAI-compatible embeddings API." badge={getFieldBadge("memory.embeddingProvider")}>
             <select
+              aria-label="Embedding backend"
               value={editableSettings.memory.embeddingProvider}
               disabled={!editableSettings.memory.enabled}
               onChange={(event) => {
@@ -361,19 +363,21 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
                   }))}
                 />
               </Row>
-              <Row label="Embedding API key" description="Bearer token for the external embedding provider." badge={getFieldBadge("memory.externalEmbedding.apiKey")} last>
-                <SecretInput
-                  value={editableSettings.memory.externalEmbedding.apiKey}
+              <Row label="Embedding API credential" description={activeScope === "project" ? "Override the inherited embedding credential for this project." : "Projects inherit this external embedding credential unless they override it."} badge={getFieldBadge("memory.externalEmbedding.apiKeyCredentialRef")} last>
+                <CredentialReferenceSelector
+                  projectId={selectedProject?.id}
+                  value={editableSettings.memory.externalEmbedding.apiKeyCredentialRef}
+                  bindingKey="settings:embedding.external"
+                  label="Embedding API"
                   disabled={!editableSettings.memory.enabled}
-                  onChange={(value) => updateEditableSettings((current) => ({
+                  legacyValuePresent={Boolean(editableSettings.memory.externalEmbedding.apiKey)}
+                  onChange={(apiKeyCredentialRef) => updateEditableSettings((current) => ({
                     ...current,
                     memory: {
                       ...current.memory,
-                      externalEmbedding: { ...current.memory.externalEmbedding, apiKey: value },
+                      externalEmbedding: { ...current.memory.externalEmbedding, apiKey: "", apiKeyCredentialRef },
                     },
                   }))}
-                  aria-label="Embedding API key"
-                  mono
                 />
               </Row>
             </>

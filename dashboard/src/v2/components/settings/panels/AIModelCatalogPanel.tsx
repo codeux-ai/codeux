@@ -17,7 +17,8 @@ import {
 } from "../../../lib/memory-api.js";
 import { deleteSpeechModel, downloadSpeechModel, listSpeechModels } from "../../../lib/speech-api.js";
 import { ModelBrowser } from "../../memory/ModelBrowser.js";
-import { NumberInput, Row, SecretInput, SelectInput, TextInput, Toggle } from "../SettingsFormFields.js";
+import { CredentialReferenceSelector } from "../AutomationCredentialManager.js";
+import { NumberInput, Row, SelectInput, TextInput, Toggle } from "../SettingsFormFields.js";
 import { SectionCard, useSettingsDetailWorkspace } from "./SharedPanelComponents.js";
 import { useConfirmDialog } from "../../../hooks/use-confirm-dialog.js";
 import { ConfirmDialog } from "../../ui/ConfirmDialog.js";
@@ -148,7 +149,7 @@ const CatalogSummaryRow: FunctionComponent<{
 );
 
 export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
-  const { editableSettings, selectedProject, updateEditableSettings } = state;
+  const { activeScope, editableSettings, selectedProject, updateEditableSettings } = state;
   const projectId = selectedProject?.id || "";
   const [embeddingModels, setEmbeddingModels] = useState<EmbeddingModelWithStatus[]>([]);
   const [speechModels, setSpeechModels] = useState<SpeechModelStatus[]>([]);
@@ -400,7 +401,19 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
               <Row label="Language" description="Auto-detect or send a BCP-47 language hint to the transcription provider."><SelectInput aria-label="Speech to text language" value={editableSettings.speech.externalTranscription.language || ""} onChange={(language) => updateSpeech((speech) => ({ ...speech, externalTranscription: { ...speech.externalTranscription, language: language || null } }))} options={transcriptionLanguageOptions} /></Row>
               <Row label="API endpoint" description="OpenAI-compatible transcription base URL."><TextInput aria-label="Speech to text API endpoint" value={editableSettings.speech.externalTranscription.baseUrl} onChange={(baseUrl) => updateSpeech((speech) => ({ ...speech, externalTranscription: { ...speech.externalTranscription, baseUrl } }))} /></Row>
               <Row label="API model" description="For example whisper-1."><TextInput aria-label="Speech to text API model" value={editableSettings.speech.externalTranscription.model} onChange={(model) => updateSpeech((speech) => ({ ...speech, externalTranscription: { ...speech.externalTranscription, model } }))} /></Row>
-              <Row label="API key" description="Stored in the selected settings scope." last><SecretInput aria-label="Speech to text API key" value={editableSettings.speech.externalTranscription.apiKey} onChange={(apiKey) => updateSpeech((speech) => ({ ...speech, externalTranscription: { ...speech.externalTranscription, apiKey } }))} /></Row>
+              <Row label="API credential" description={activeScope === "project" ? "Override the inherited transcription credential for this project." : "Projects inherit this transcription credential unless they override it."} last>
+                <CredentialReferenceSelector
+                  projectId={selectedProject?.id}
+                  value={editableSettings.speech.externalTranscription.apiKeyCredentialRef}
+                  bindingKey="settings:speech.transcription"
+                  label="Speech to text API"
+                  legacyValuePresent={Boolean(editableSettings.speech.externalTranscription.apiKey)}
+                  onChange={(apiKeyCredentialRef) => updateSpeech((speech) => ({
+                    ...speech,
+                    externalTranscription: { ...speech.externalTranscription, apiKey: "", apiKeyCredentialRef },
+                  }))}
+                />
+              </Row>
             </> : null}
           </div>
 
@@ -437,7 +450,22 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
               <Row label="API model" description="Provider-specific TTS model id."><TextInput aria-label="Text to speech API model" value={editableSettings.speech.synthesis.externalSynthesis.model} onChange={(model) => updateSpeech((speech) => ({ ...speech, synthesis: { ...speech.synthesis, externalSynthesis: { ...speech.synthesis.externalSynthesis, model } } }))} /></Row>
               <Row label="API voice" description="Provider-specific voice id."><TextInput aria-label="Text to speech API voice" value={editableSettings.speech.synthesis.externalSynthesis.voice} onChange={(voice) => updateSpeech((speech) => ({ ...speech, synthesis: { ...speech.synthesis, externalSynthesis: { ...speech.synthesis.externalSynthesis, voice } } }))} /></Row>
               <Row label="API format" description="Audio format returned by the external provider."><SelectInput aria-label="Text to speech API format" value={editableSettings.speech.synthesis.externalSynthesis.format} onChange={(format) => updateSpeech((speech) => ({ ...speech, synthesis: { ...speech.synthesis, externalSynthesis: { ...speech.synthesis.externalSynthesis, format: format as typeof speech.synthesis.externalSynthesis.format } } }))} options={[{ value: "mp3", label: "MP3" }, { value: "wav", label: "WAV" }, { value: "opus", label: "Opus" }, { value: "aac", label: "AAC" }, { value: "flac", label: "FLAC" }]} /></Row>
-              <Row label="API key" description="Used only for external synthesis." last><SecretInput aria-label="Text to speech API key" value={editableSettings.speech.synthesis.externalSynthesis.apiKey} onChange={(apiKey) => updateSpeech((speech) => ({ ...speech, synthesis: { ...speech.synthesis, externalSynthesis: { ...speech.synthesis.externalSynthesis, apiKey } } }))} /></Row>
+              <Row label="API credential" description={activeScope === "project" ? "Override the inherited synthesis credential for this project." : "Projects inherit this synthesis credential unless they override it."} last>
+                <CredentialReferenceSelector
+                  projectId={selectedProject?.id}
+                  value={editableSettings.speech.synthesis.externalSynthesis.apiKeyCredentialRef}
+                  bindingKey="settings:speech.synthesis"
+                  label="Text to speech API"
+                  legacyValuePresent={Boolean(editableSettings.speech.synthesis.externalSynthesis.apiKey)}
+                  onChange={(apiKeyCredentialRef) => updateSpeech((speech) => ({
+                    ...speech,
+                    synthesis: {
+                      ...speech.synthesis,
+                      externalSynthesis: { ...speech.synthesis.externalSynthesis, apiKey: "", apiKeyCredentialRef },
+                    },
+                  }))}
+                />
+              </Row>
             </> : null}
           </div>
         </div>

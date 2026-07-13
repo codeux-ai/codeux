@@ -41,7 +41,8 @@ export const CredentialReferenceSelector: FunctionComponent<{
   label: string;
   onChange: (value: SettingsCredentialReference | null) => void;
   legacyValuePresent?: boolean;
-}> = ({ projectId, value, bindingKey, label, onChange, legacyValuePresent = false }) => {
+  disabled?: boolean;
+}> = ({ projectId, value, bindingKey, label, onChange, legacyValuePresent = false, disabled = false }) => {
   const [credentials, setCredentials] = useState<AutomationCredentialMetadata[]>([]);
   const [health, setHealth] = useState<CredentialBackendHealth>(EMPTY_HEALTH);
   const [selectedId, setSelectedId] = useState(value?.credentialId ?? "");
@@ -60,7 +61,18 @@ export const CredentialReferenceSelector: FunctionComponent<{
     return () => { active = false; };
   }, [projectId]);
 
-  const options = getUsableCredentialOptions(credentials, "read");
+  const usableOptions = getUsableCredentialOptions(credentials, "read");
+  const boundCredential = value
+    ? credentials.find((credential) => credential.id === value.credentialId) ?? null
+    : null;
+  const options = boundCredential && !usableOptions.some((credential) => credential.id === boundCredential.id)
+    ? [boundCredential, ...usableOptions]
+    : usableOptions;
+  const selectedCredential = credentials.find((credential) => credential.id === selectedId) ?? null;
+  const selectedCredentialIsUsable = Boolean(selectedCredential
+    && selectedCredential.configured
+    && selectedCredential.status === "active"
+    && selectedCredential.capabilities.includes("read"));
   const bind = async (): Promise<void> => {
     if (!projectId || !selectedId) return;
     setBusy(true);
@@ -87,21 +99,21 @@ export const CredentialReferenceSelector: FunctionComponent<{
         <SelectInput
           value={selectedId}
           onChange={setSelectedId}
-          disabled={Boolean(disabledReason) || busy}
+          disabled={disabled || Boolean(disabledReason) || busy}
           aria-label={`${label} credential`}
           options={[
             { value: "", label: "Select a stored credential" },
             ...options.map((credential) => ({
               value: credential.id,
-              label: `${credential.name} · ${credential.kind} · ${credential.scope} · v${credential.version}`,
+              label: `${credential.name} · ${credential.kind} · ${credential.scope} · ${credential.status} · v${credential.version}`,
             })),
           ]}
         />
         <div className="flex gap-2">
-          <Button size="sm" variant="signal" disabled={Boolean(disabledReason) || busy || !selectedId || selectedId === value?.credentialId} onClick={() => { void bind(); }}>
+          <Button size="sm" variant="signal" disabled={disabled || Boolean(disabledReason) || busy || !selectedCredentialIsUsable || selectedId === value?.credentialId} onClick={() => { void bind(); }}>
             {busy ? "Binding" : "Bind"}
           </Button>
-          <Button size="sm" disabled={busy || !value} onClick={() => { setSelectedId(""); onChange(null); }}>
+          <Button size="sm" disabled={disabled || busy || !value} onClick={() => { setSelectedId(""); onChange(null); }}>
             Unbind
           </Button>
         </div>
@@ -109,6 +121,15 @@ export const CredentialReferenceSelector: FunctionComponent<{
       <p className="text-xs text-slate-500 dark:text-slate-400">
         Capability: read. {value ? "The settings draft contains only this credential ID." : "No credential is bound."}
       </p>
+      {boundCredential ? (
+        <p role="status" className="text-xs text-slate-500 dark:text-slate-400">
+          Bound metadata: {boundCredential.name} · {boundCredential.kind} · {boundCredential.scope} · {boundCredential.status} · version {boundCredential.version}.
+        </p>
+      ) : value ? (
+        <p role="status" className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+          The bound credential is unavailable to this project. Unbind it or select an active credential.
+        </p>
+      ) : null}
       {disabledReason ? <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">{disabledReason}</p> : null}
       {legacyValuePresent ? (
         <p role="alert" className="text-xs font-semibold text-amber-700 dark:text-amber-300">
