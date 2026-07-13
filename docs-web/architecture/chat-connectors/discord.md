@@ -12,6 +12,8 @@ Official REST requests are pinned to `https://discord.com/api/v10`. Gateway and 
 
 The profile validates `X-Signature-Ed25519` against `X-Signature-Timestamp` plus the exact raw body before JSON parsing. Missing or malformed headers, malformed keys, stale timestamps, invalid signatures, malformed JSON, and unsupported interaction shapes produce deterministic classified failures. Authenticated type-1 validation requests receive the required JSON PONG response.
 
+`ChatProviderIngressSecurity` invokes the optional provider-native hook before generic bearer/HMAC handling. The production ingress route returns an immediate authenticated handshake response when present and otherwise continues into the existing ingress service.
+
 Application command, component, and modal payloads normalize into stable external channel, sender, interaction-message, and Discord thread identities. Gateway `MESSAGE_CREATE` payloads use the same normalized contract.
 
 ## Gateway state machine
@@ -34,6 +36,8 @@ The bot user ID from `READY` suppresses the connector's own `MESSAGE_CREATE` eve
 ## REST replies and verification
 
 Message creation disables all automatic mentions with `allowed_mentions.parse: []`, supplies a stable delivery nonce with `enforce_nonce`, preserves reply references, and accepts only snowflake message IDs from successful responses. Route/global reset headers and `Retry-After` are honored with one bounded immediate 429 retry; further rate limits are returned to the outer delivery scheduler.
+
+The configured outbound adapter caches the profile's official executor, preserving Discord rate-limit state across production deliveries. Profiles without an executor, including Discord `webhook`, retain the generic HTTP or command path.
 
 Credential verification performs only `GET /users/@me`. Typed results distinguish invalid authentication, missing permissions, rate limiting, timeout, cancellation, ambiguous network outcomes, provider unavailability, and invalid responses without retaining token-bearing messages.
 

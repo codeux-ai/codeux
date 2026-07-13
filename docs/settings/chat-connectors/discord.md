@@ -33,6 +33,8 @@ Discord signs each HTTP interaction with `X-Signature-Ed25519` and `X-Signature-
 
 An authenticated interaction with `type: 1` receives HTTP `200`, JSON content type, and `{ "type": 1 }` as required by Discord's endpoint validation. Supported command, component, and modal interactions normalize to stable Discord channel, sender, interaction-message, and thread identities.
 
+The normal chat-provider ingress route invokes this provider-native verification before acknowledgement or message routing. PING requests stop at the handshake response; other authenticated interactions continue through the existing binding, idempotency, and conversation delivery path.
+
 ## Gateway delivery
 
 Official message delivery uses Gateway v10 with JSON encoding. A connection:
@@ -50,6 +52,8 @@ Only `MESSAGE_CREATE` dispatches are normalized for chat ingress. Messages autho
 Replies use `POST /channels/{channel.id}/messages` on API v10. Code UX always sends `allowed_mentions.parse: []`, a stable delivery nonce with `enforce_nonce: true`, and a Discord `message_reference` when replying to an inbound message. Returned message IDs must be valid snowflakes before they are recorded.
 
 The client tracks route and global rate-limit headers, waits for Discord's `Retry-After` or reset interval, and performs at most one immediate 429 retry. Persistent rate limiting returns a retryable classified failure to the shared delivery scheduler rather than creating an internal retry storm.
+
+The shared outbound service retains one Discord executor for official deliveries, so rate-limit state is reused across attempts. The custom `webhook` mode continues through the legacy configured-URL adapter.
 
 ## Credential verification and failures
 

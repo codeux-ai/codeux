@@ -23,10 +23,15 @@ export function registerChatProviderIngressRoutes(router: Express, deps: Dashboa
     }
 
     try {
-      defaultSecurityVerifier.verify(connection, {
+      const securityResult = defaultSecurityVerifier.verify(connection, {
         headers: req.headers,
         rawBody: buildRequestBodyForSignature(req),
       });
+      if (securityResult.immediateResponse) {
+        res.set({ ...securityResult.immediateResponse.headers });
+        res.status(securityResult.immediateResponse.statusCode).send(securityResult.immediateResponse.body);
+        return;
+      }
     } catch (error) {
       if (error instanceof ChatProviderIngressSecurityError) {
         deps.logger?.warn("Rejected chat provider ingress authentication", {
@@ -54,13 +59,13 @@ export function registerChatProviderIngressRoutes(router: Express, deps: Dashboa
   router.post("/api/chat-providers/connections/:connectionId/ingress", handler);
 }
 
-function buildRequestBodyForSignature(req: Request): string {
+function buildRequestBodyForSignature(req: Request): string | Uint8Array {
   const rawBody = (req as Request & { rawBody?: unknown }).rawBody;
   if (typeof rawBody === "string") {
     return rawBody;
   }
   if (Buffer.isBuffer(rawBody)) {
-    return rawBody.toString("utf8");
+    return rawBody;
   }
   return JSON.stringify(req.body ?? {});
 }

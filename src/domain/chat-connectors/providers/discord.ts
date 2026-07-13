@@ -1,5 +1,6 @@
 import { createHash, createPublicKey, verify as verifySignature } from "node:crypto";
 import type { ChatProviderBridgeMode } from "../../../contracts/chat-provider-types.js";
+import { ChatConnectorOutboundExecutionError } from "../types.js";
 import type {
   ChatConnectorOutboundContext,
   ChatConnectorOutboundResult,
@@ -182,6 +183,9 @@ export function normalizeDiscordGatewayEvent(
   payload: Record<string, unknown>,
   botUserId?: string | null,
 ): DiscordInboundEvent {
+  if (payload.t === undefined && readRecord(payload.data)) {
+    return { kind: "ignored", reason: "unsupported_event" };
+  }
   const event = payload.t === "MESSAGE_CREATE" ? readRecord(payload.d) : payload;
   if (!event || (payload.t !== undefined && payload.t !== "MESSAGE_CREATE")) {
     return { kind: "ignored", reason: "unsupported_event" };
@@ -278,15 +282,15 @@ export type DiscordApiFailureCode =
   | "invalid_response"
   | "invalid_request";
 
-export class DiscordApiError extends Error {
+export class DiscordApiError extends ChatConnectorOutboundExecutionError {
   constructor(
     readonly code: DiscordApiFailureCode,
     message: string,
-    readonly retryable: boolean,
-    readonly statusCode?: number,
+    retryable: boolean,
+    statusCode?: number,
     readonly retryAfterMs?: number,
   ) {
-    super(message);
+    super(message, retryable, statusCode);
     this.name = "DiscordApiError";
   }
 }
@@ -509,6 +513,32 @@ export const discordChatConnectorProfile: ChatConnectorProfile = {
         signatureBases: ({ timestamp, rawBody }) => [`${timestamp}.${rawBody}`, `v0:${timestamp}:${rawBody}`, rawBody],
       },
     },
+    authenticateProviderRequest: ({ connection, headers, rawBody, now }) => {
+      if (connection.bridgeMode !== "official_api") return null;
+      const publicKey = readString(connection.setup.publicKey);
+      if (!publicKey) {
+        return {
+          authenticated: false,
+          code: "missing_public_key",
+          message: "Discord interactions public key is not configured.",
+          statusCode: 403,
+        };
+      }
+      const result = verifyDiscordInteractionRequest({ headers, rawBody, publicKey, now });
+      if (!result.ok) {
+        return {
+          authenticated: false,
+          code: result.code,
+          message: result.message,
+          statusCode: result.statusCode,
+        };
+      }
+      return {
+        authenticated: true,
+        method: "discord_ed25519",
+        ...(result.kind === "ping" ? { immediateResponse: result.response } : {}),
+      };
+    },
     handshake: { type: "none" },
     acknowledgement: { statusCode: 200, headers: { "content-type": "application/json" }, body: null },
     normalize: (body) => {
@@ -524,6 +554,25 @@ export const discordChatConnectorProfile: ChatConnectorProfile = {
     }),
   },
   outbound: {
+    createExecutor: (mode, runtime) => {
+      if (mode !== "official_api") return null;
+      const client = new DiscordOfficialApiClient(runtime);
+      return {
+        send: async (context) => {
+          const botToken = readString(context.connection.secrets?.botToken);
+          if (!botToken) {
+            throw new DiscordApiError("invalid_auth", "Discord bot authentication is not configured.", false, 401);
+          }
+          return client.sendReply({
+            botToken,
+            channelId: context.payload.channelId,
+            content: context.payload.replyText,
+            deliveryId: context.delivery.id || context.payload.conversationMessageId,
+            replyToMessageId: context.payload.replyToExternalMessageId,
+          });
+        },
+      };
+    },
     buildRequest: (context) => {
       if (context.connection.bridgeMode === "official_api") return buildOfficialOutboundRequest(context);
       if (context.connection.bridgeMode !== "webhook") {
