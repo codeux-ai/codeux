@@ -603,7 +603,47 @@ describe("RuntimeStartupRecoveryService", () => {
     });
   });
 
-  it("reconciles stale task coding invocation audit rows when the provider invocation already finished", async () => {
+  it("fails a stale pre-provider CLI coding row with useful recovery evidence", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Pre-provider Coding Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/pre-provider-coding-recovery-project",
+    });
+    const invocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      type: "cli_task_coding",
+      provider: "codex",
+      status: "running",
+      startedAt: "2026-03-29T10:00:00.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledTaskCodingInvocationIds).toContain(invocation.id);
+    expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({
+      status: "failed",
+      finishedAt: expect.any(String),
+      errorMessage: expect.stringContaining("without provider runtime linkage"),
+    });
+    expect(executionRepository.listExecutionInvocationMessages(invocation.id)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        role: "system",
+        contentMarkdown: expect.stringContaining("without provider runtime linkage"),
+        metadata: expect.objectContaining({
+          recovery: "startup_task_coding_invocation_reconcile",
+          provider: "codex",
+        }),
+      }),
+    ]));
+  });
+
+  it("settles an interrupted CLI workflow from terminal provider and dispatch evidence", async () => {
     const {
       projectRepository,
       executionRepository,
@@ -624,23 +664,33 @@ describe("RuntimeStartupRecoveryService", () => {
     const task = projectRepository.createTask(project.id, {
       sprintId: sprint.id,
       title: "Recover stale coding audit",
-      executorType: "jules",
+      executorType: "docker_cli",
       status: "in_progress",
     });
     const sprintRun = executionRepository.createSprintRun({
       projectId: project.id,
       sprintId: sprint.id,
-      executorMode: "jules",
+      executorMode: "docker_cli",
       status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "running",
+      startedAt: "2026-03-29T10:00:00.000Z",
     });
     const taskRun = executionRepository.createTaskRun({
       projectId: project.id,
       sprintId: sprint.id,
       taskId: task.id,
       sprintRunId: sprintRun.id,
-      provider: "jules",
-      mode: "jules",
-      sessionId: "jules-stale-task-coding",
+      dispatchId: dispatch.id,
+      provider: "codex",
+      mode: "docker_cli",
+      sessionId: "cli-stale-task-coding",
       state: "RUNNING",
       startedAt: "2026-03-29T10:00:00.000Z",
     });
@@ -649,12 +699,17 @@ describe("RuntimeStartupRecoveryService", () => {
       sprintId: sprint.id,
       taskId: task.id,
       sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
       taskRunId: taskRun.id,
-      sessionId: "jules-stale-task-coding",
-      provider: "jules",
+      sessionId: "cli-stale-task-coding",
+      provider: "codex",
       purpose: "task_coding",
       status: "completed",
       startedAt: "2026-03-29T10:00:00.000Z",
+      finishedAt: "2026-03-29T10:02:00.000Z",
+    });
+    executionRepository.updateProviderInvocationUsage(providerInvocation.id, {
+      status: "completed",
       finishedAt: "2026-03-29T10:02:00.000Z",
     });
     const invocation = executionRepository.createExecutionInvocation({
@@ -662,16 +717,17 @@ describe("RuntimeStartupRecoveryService", () => {
       sprintId: sprint.id,
       taskId: task.id,
       sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
       taskRunId: taskRun.id,
       providerInvocationId: providerInvocation.id,
-      type: "task_coding",
-      provider: "jules",
+      type: "cli_task_coding",
+      provider: "codex",
       status: "running",
       startedAt: "2026-03-29T10:00:01.000Z",
     });
     sessionTracking.createSession({
-      id: "jules-stale-task-coding",
-      provider: "jules",
+      id: "cli-stale-task-coding",
+      provider: "codex",
       taskId: "Sprint 9",
       title: "Recover stale coding audit",
       state: "RUNNING",
@@ -682,12 +738,34 @@ describe("RuntimeStartupRecoveryService", () => {
 
     const result = await service.recover();
 
+    expect(result.reconciledTerminalProviderDispatchIds).toContain(dispatch.id);
     expect(result.reconciledTaskCodingInvocationIds).toEqual(expect.arrayContaining([invocation.id]));
     expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({
-      status: "completed",
-      errorMessage: null,
+      status: "failed",
+      finishedAt: expect.any(String),
+      errorMessage: expect.stringContaining("linked task run was already FAILED"),
     });
-    expect(sessionTracking.getSession("jules-stale-task-coding")?.state).toBe("COMPLETED");
+    expect(executionRepository.getProviderInvocationUsage(providerInvocation.id)).toMatchObject({
+      status: "completed",
+      finishedAt: "2026-03-29T10:02:00.000Z",
+    });
+    expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({
+      status: expect.stringMatching(/^(failed|cancelled)$/),
+      finishedAt: expect.any(String),
+    });
+    expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({ state: "FAILED" });
+    expect(executionRepository.getSprintRun(sprintRun.id)).toMatchObject({ status: "running" });
+    expect(projectRepository.getTask(task.id)).toMatchObject({ status: "pending" });
+    expect(sessionTracking.getSession("cli-stale-task-coding")?.state).toBe("FAILED");
+    expect(executionRepository.listTaskRunEvents(taskRun.id)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        eventType: "task_dispatch_reconciled",
+        payload: expect.objectContaining({
+          reason: "terminal_provider_active_dispatch_mismatch",
+          providerStatus: "completed",
+        }),
+      }),
+    ]));
   });
 
   it("reconciles stale non-task execution audit rows when the provider invocation already failed", async () => {

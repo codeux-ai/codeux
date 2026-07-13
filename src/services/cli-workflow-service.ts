@@ -486,7 +486,7 @@ export class CliWorkflowService {
             dispatchStatus: "blocked",
             errorMessage: blocker,
             workerBranch: null,
-          });
+          }, ctx.executionInvocationId);
           this.appendExecutionEvent(args, "cli_workflow_blocked", {
             provider: args.provider,
             category,
@@ -507,7 +507,7 @@ export class CliWorkflowService {
           // branch, otherwise the orchestrator treats it as merge evidence and
           // falsely advances/merges the task.
           workerBranch: null,
-        });
+        }, ctx.executionInvocationId);
         this.appendExecutionEvent(args, "cli_workflow_completed", {
           provider: args.provider,
           outcome: "no_changes",
@@ -534,7 +534,7 @@ export class CliWorkflowService {
         finishedAt,
         workerBranch: args.workerBranch,
         dispatchStatus: "completed",
-      });
+      }, ctx.executionInvocationId);
 
       const { prUrl } = await executePrFinalizeStage(ctx, { completionTimestamp: finishedAt });
       this.updateExecutionState(args, {
@@ -543,7 +543,7 @@ export class CliWorkflowService {
         prUrl,
         workerBranch: args.workerBranch,
         dispatchStatus: "completed",
-      });
+      }, ctx.executionInvocationId);
       this.appendExecutionEvent(args, "cli_pr_finalized", {
         provider: args.provider,
         prUrl: prUrl || null,
@@ -590,7 +590,7 @@ export class CliWorkflowService {
           finishedAt,
           dispatchStatus: "cancelled",
           errorMessage: "Workflow cancelled by dashboard control.",
-        });
+        }, ctx.executionInvocationId);
         this.appendExecutionEvent(args, "cli_workflow_cancel_requested", {
           provider: args.provider,
           sessionId: args.sessionId,
@@ -610,7 +610,7 @@ export class CliWorkflowService {
           finishedAt,
           dispatchStatus: workflowSettings.retryOnRateLimit ? "quota" : "failed",
           errorMessage: message,
-        });
+        }, ctx.executionInvocationId);
         this.appendExecutionEvent(args, "cli_workflow_rate_limited", {
           provider: args.provider,
           errorMessage: message,
@@ -635,7 +635,7 @@ export class CliWorkflowService {
           finishedAt,
           dispatchStatus: "quota",
           errorMessage: message,
-        });
+        }, ctx.executionInvocationId);
         this.appendExecutionEvent(args, "cli_workflow_quota", {
           provider: args.provider,
           errorMessage: message,
@@ -660,7 +660,7 @@ export class CliWorkflowService {
           finishedAt,
           dispatchStatus: "failed",
           errorMessage: message,
-        });
+        }, ctx.executionInvocationId);
         this.appendExecutionEvent(args, "cli_workflow_failed", {
           provider: args.provider,
           errorMessage: message,
@@ -683,7 +683,7 @@ export class CliWorkflowService {
           finishedAt,
           dispatchStatus: "blocked",
           errorMessage: message,
-        });
+        }, ctx.executionInvocationId);
         this.appendExecutionEvent(args, "cli_workflow_blocked", {
           provider: args.provider,
           category: isNonRecoverableGitWorkflowError(message) ? "git_configuration" : "execution_environment",
@@ -705,7 +705,7 @@ export class CliWorkflowService {
           finishedAt,
           dispatchStatus: "failed",
           errorMessage: message,
-        });
+        }, ctx.executionInvocationId);
         this.appendExecutionEvent(args, "cli_workflow_failed", {
           provider: args.provider,
           errorMessage: message,
@@ -716,11 +716,12 @@ export class CliWorkflowService {
           message,
         });
       }
+      const invocationStatus = abortController.signal.aborted ? "cancelled" : "failed";
       this.finalizeExecutionInvocation(
         ctx.executionInvocationId,
-        abortController.signal.aborted ? "cancelled" : "failed",
+        invocationStatus,
         finishedAt,
-        message,
+        invocationStatus === "cancelled" ? "Workflow cancelled by dashboard control." : message,
       );
     } finally {
       try {
@@ -865,9 +866,20 @@ export class CliWorkflowService {
       dispatchStatus: NonNullable<UpdateTaskDispatchInput["status"]>;
       errorMessage?: string;
     },
+    executionInvocationId?: string,
   ): void {
     const taskRun = this.resolveTaskRun(args);
     if (!taskRun || !this.deps.executionRepository) {
+      return;
+    }
+
+    // Cancellation is persisted before the active provider/workflow has
+    // necessarily observed its abort signal. Ignore a late pipeline update so
+    // the cancelled task and dispatch cannot drift back to another state.
+    if (
+      executionInvocationId
+      && this.deps.executionRepository.getExecutionInvocation(executionInvocationId)?.status === "cancelled"
+    ) {
       return;
     }
 
@@ -920,7 +932,23 @@ export class CliWorkflowService {
     this.deps.executionRepository.updateExecutionInvocation(invocationId, {
       status,
       finishedAt,
-      ...(status === "completed" ? { errorMessage: null } : { errorMessage: errorMessage ?? null }),
+      errorMessage: status === "completed" ? null : errorMessage ?? null,
+      lastErrorCategory: status === "failed" ? invocation.lastErrorCategory ?? "UNKNOWN" : null,
+      lastErrorMessage: status === "completed" ? null : errorMessage ?? null,
+      lastRetryAfterIso: null,
+    });
+    this.deps.executionRepository.appendExecutionInvocationMessage(invocationId, {
+      role: "system",
+      contentMarkdown: status === "completed"
+        ? "CLI workflow completed successfully."
+        : status === "cancelled"
+          ? `CLI workflow cancelled${errorMessage ? `: ${errorMessage}` : "."}`
+          : `CLI workflow failed${errorMessage ? `: ${errorMessage}` : "."}`,
+      metadata: {
+        kind: "cli_workflow_finalized",
+        status,
+      },
+      createdAt: finishedAt,
     });
   }
 
