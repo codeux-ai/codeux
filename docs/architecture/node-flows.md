@@ -43,6 +43,14 @@ The dashboard uses the same backend-owned Graph v2 record as the runtime. The se
 
 `dashboard/src/v2/lib/nodes-canvas-state.ts` remains only a compatibility and pure graph-state layer. Its legacy browser graph can be imported once into a project draft. The adapter translates `trigger`/`agent`/`task` into registered `input`/`set_fields`/`provider_prompt` nodes, remaps legacy handles to governed ports, and retains non-secret canvas metadata. Import failure is isolated from the normal library load; only a successful draft creation removes the old graph key and records the project marker. Browser storage is not the workflow source of truth.
 
+### Credential binding lifecycle
+
+Each versioned node definition is the slot-policy authority: every slot declares whether it is required, its allowed credential kinds, and all required capabilities. The picker lists project-visible metadata, then filters each candidate through secure-backend readiness, configured/active state, project access, kind, and capability compatibility. It never resolves a value.
+
+`NodeFlowNode.credentialBindings` is the only persisted binding source. Selecting, replacing, or unbinding a credential changes the matching `{ slot, credentialId }` entry in the complete canonical graph and saves with the current `draftRevision`. The dashboard adopts the returned graph and revision, then refreshes governed review. A `409`-style revision conflict refreshes the latest draft and requires a deliberate retry; it never replays a stale binding over sibling changes.
+
+Required unbound slots and any bound credential denied by backend readiness, configuration, active status, project access, allowed kind, or required capabilities block publication. Optional unbound slots do not. Runtime revalidates the immutable publication and repeats the same policy immediately before direct credential-ID resolution, so revocation, restriction, rotation/rebinding races, missing custody, or incompatible policy deny the node attempt rather than injecting stale plaintext. Graph, review, publication, MCP, and dashboard payloads contain IDs and non-secret policy metadata only.
+
 ## Runtime
 
 `NodeFlowRuntimeService.runFlow(projectId, flowId, input, options)` resolves an explicit pinned or latest-published snapshot, revalidates that immutable graph, claims a durable lease, and executes nodes in topological order. See [Node Flow Durable Execution](./node-flow-durable-execution.md) for queue, retry, lease, recovery, quota, and redaction guarantees.

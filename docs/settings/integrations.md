@@ -29,6 +29,15 @@ The create form requires an explicit name, kind, project or global scope, capabi
 
 Each project-managed credential supports bounded rename, metadata-only validation test, value rotation, encrypted-state replacement, monotonic access restriction, confirmed promotion, and confirmed revocation. Revocation requires typing `REVOKE` exactly; each lifecycle confirmation starts with cleared confirmation state and returns focus to the credential controls when it closes. Every lifecycle request uses the metadata version shown by the service. If another session wins the compare-and-swap update, the detail view refreshes metadata and asks the operator to review and retry instead of overwriting the newer state.
 
+| Workflow | What the operator supplies | What remains readable afterward |
+| --- | --- | --- |
+| Create | Name, kind, write-only value, explicit capabilities, and project/global policy | Metadata, configured state, validation state, scope, capabilities, and version only. |
+| Update metadata | A bounded display name and current version | Updated metadata; kind and management ownership cannot be changed. |
+| Rotate / replace | A new write-only value and current version | New key/version and validation metadata, never either the old or new value. |
+| Test | The current version | `valid`, `invalid`, or `unavailable` plus timestamps; no tested value or low-level custody error. |
+| Restrict / promote | A monotonic restriction, or a confirmed global allowlist expansion owned by the managing project | Updated non-secret policy metadata. |
+| Revoke | Exact confirmation and current version | Revoked status and audit metadata; the stored value cannot be read back. |
+
 Secret inputs are write-only. Create, rotate, and replace fields are never populated from responses, are cleared after successful or failed submissions and project changes, and are removed with the detail view. Notices, metadata cards, browser storage, and reusable drafts contain no secret value. An allowlisted project that is not the management owner sees a **Use only** state and cannot invoke management actions.
 
 Unavailable key custody leaves non-secret metadata visible and disables secret-bearing changes and tests. Follow the inline custody guidance, restore secure storage, then use **Refresh**. See [Automation Credential Security](../operations/credential-security.md) for encryption, authority, recovery, and API behavior.
@@ -63,12 +72,14 @@ If the saved setting does not appear to take effect:
 - Check for a project or sprint override that takes precedence over the system value.
 - Refresh the affected dashboard page if the setting controls a rendered surface.
 - Restart the local runtime only when the setting explicitly controls startup, listener, or process-level behavior.
+- If secure custody is unavailable, keep the metadata view open, restore the deployment's supported custody provider, and use **Refresh**. Local loopback CLI/dashboard mode provisions its owner-only user-home key automatically; do not add mounted-key configuration for a normal local user.
+- If a save reports stale metadata, review the refreshed record before retrying with its new version. Never copy secret fields into notes, browser storage, logs, or a repository as a workaround.
 
 ## Related Documentation
 
 - [Settings overview](./index.md)
 - [Automation Credential Security](../operations/credential-security.md)
 - [Google Drive Project Mount](./google-drive-mount.md)
-- [Dashboard Settings](../../dashboard/design-system-settings.md)
-- [Configuration and Storage](../configuration-and-storage.md)
-- [Security Hardening](../../operations/security-hardening.md)
+- [Dashboard Settings](../dashboard/design-system-settings.md)
+- [Configuration and Storage](./configuration-and-storage.md)
+- [Security Hardening](../operations/security-hardening.md)

@@ -215,6 +215,7 @@ Use this page as the main entrypoint.
 - [Chat Provider Integrations](./settings/chat-provider-integrations.md)
 - [Settings Reference](./settings/index.md)
   - [Google Drive Project Mount](./settings/google-drive-mount.md)
+  - [Integrations](./settings/integrations.md)
 - [Qwen Code Integration](./settings/qwen-code-integration.md)
 - [OpenCode Integration](./settings/opencode-integration.md)
 - [Operations Runbook](./operations/runbook.md)
