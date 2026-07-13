@@ -103,9 +103,22 @@ describe("custom dashboard validation filesystem utilities", () => {
         }],
       },
       credentialBindings: [{ slotId: "metrics_api", credentialId }],
+      sourceNodeGraph: {
+        nodes: [{
+          id: "metrics",
+          type: "external_api",
+          title: "Metrics",
+          config: { endpoint: `https://metrics.invalid/credentials/${credentialId}/summary` },
+        }],
+        edges: [],
+      },
       runtimeMetadata: {
         credentialBindings: [{ slotId: "metrics_api", credentialId }],
-        nested: { credentialId },
+        [`diagnostic-${credentialId}`]: "must be removed with its binding-bearing key",
+        nested: {
+          credentialId,
+          diagnostic: `binding=${credentialId};state=configured`,
+        },
       },
     });
     const bridgeConfig = buildBridgeConfig(boundRevision);
@@ -116,7 +129,17 @@ describe("custom dashboard validation filesystem utilities", () => {
       bridgeConfig,
     });
 
-    expect(JSON.stringify(bridgeConfig)).not.toContain(credentialId);
+    const serializedBridgeConfig = JSON.stringify(bridgeConfig);
+    expect(serializedBridgeConfig).not.toContain(credentialId);
+    expect(serializedBridgeConfig).not.toContain('"credentialBindings"');
+    expect(serializedBridgeConfig).not.toContain('"credentialId"');
+    expect(serializedBridgeConfig).toContain("[REDACTED_CREDENTIAL_BINDING_ID]");
+    const materializedBridge = await fs.readFile(
+      path.join(workspacePath, ".codeux-harness", "codeux-data-bridge.ts"),
+      "utf8",
+    );
+    expect(materializedBridge).not.toContain(credentialId);
+    expect(materializedBridge).toContain("[REDACTED_CREDENTIAL_BINDING_ID]");
     expect(await readDirectoryText(workspacePath)).not.toContain(credentialId);
   });
 

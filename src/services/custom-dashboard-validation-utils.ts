@@ -9,6 +9,7 @@ import { isPathInside } from "../utils/path-validator.js";
 
 export const CUSTOM_DASHBOARD_VALIDATION_LOG_TAIL_LINES = 200;
 export const CUSTOM_DASHBOARD_VALIDATION_MAX_LOG_TAIL_LINES = 1000;
+const CREDENTIAL_BINDING_ID_REDACTION = "[REDACTED_CREDENTIAL_BINDING_ID]";
 
 export interface CustomDashboardBridgeConfig {
   projectId: string;
@@ -218,23 +219,28 @@ export function buildBridgeConfig(revision: CustomDashboardRevisionRecord): Cust
 
 function assertBundleOmitsCredentialBindingIds(revision: CustomDashboardRevisionRecord): void {
   const bindingIds = credentialBindingIds(revision);
-  if (bindingIds.size === 0) return;
-  if (revision.fileBundle.files.some((file) => [...bindingIds].some((credentialId) => file.content.includes(credentialId)))) {
+  if (bindingIds.length === 0) return;
+  if (revision.fileBundle.files.some((file) => bindingIds.some((credentialId) => file.content.includes(credentialId)))) {
     throw new Error("Custom dashboard file bundles cannot contain credential binding identifiers.");
   }
 }
 
-function credentialBindingIds(revision: CustomDashboardRevisionRecord): Set<string> {
-  return new Set((revision.credentialBindings ?? []).map((binding) => binding.credentialId));
+function credentialBindingIds(revision: CustomDashboardRevisionRecord): string[] {
+  return [...new Set((revision.credentialBindings ?? []).map((binding) => binding.credentialId))]
+    .filter((credentialId) => credentialId.length > 0)
+    .sort((left, right) => right.length - left.length);
 }
 
-function sanitizeBridgeValue<T>(value: T, excludedIdentifiers: ReadonlySet<string>): T {
+function sanitizeBridgeValue<T>(value: T, excludedIdentifiers: readonly string[]): T {
   return sanitizeBridgeUnknown(value, excludedIdentifiers) as T;
 }
 
-function sanitizeBridgeUnknown(value: unknown, excludedIdentifiers: ReadonlySet<string>): unknown {
+function sanitizeBridgeUnknown(value: unknown, excludedIdentifiers: readonly string[]): unknown {
   if (typeof value === "string") {
-    return excludedIdentifiers.has(value) ? undefined : value;
+    return excludedIdentifiers.reduce(
+      (safe, credentialId) => safe.split(credentialId).join(CREDENTIAL_BINDING_ID_REDACTION),
+      value,
+    );
   }
   if (Array.isArray(value)) {
     return value
@@ -248,7 +254,8 @@ function sanitizeBridgeUnknown(value: unknown, excludedIdentifiers: ReadonlySet<
     const normalizedKey = key.toLowerCase();
     if (normalizedKey === "credentialbindings"
       || normalizedKey === "credentialbindingrevision"
-      || normalizedKey === "credentialid") {
+      || normalizedKey === "credentialid"
+      || excludedIdentifiers.some((credentialId) => key.includes(credentialId))) {
       continue;
     }
     const sanitized = sanitizeBridgeUnknown(entry, excludedIdentifiers);
