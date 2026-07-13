@@ -412,17 +412,13 @@ export function isDocumentedMicrosoftBotServiceUrl(value: string | URL): boolean
   try {
     const url = value instanceof URL ? value : new URL(value);
     const hostname = url.hostname.toLowerCase();
-    const channelHost = hostname.endsWith(".botframework.com")
-      && hostname !== "login.botframework.com"
-      && hostname !== "api.botframework.com"
-      && hostname !== "state.botframework.com";
     return url.protocol === "https:"
       && !url.username
       && !url.password
       && !url.port
       && !url.search
       && !url.hash
-      && (DOCUMENTED_MICROSOFT_BOT_SERVICE_HOSTS.has(hostname) || channelHost);
+      && DOCUMENTED_MICROSOFT_BOT_SERVICE_HOSTS.has(hostname);
   } catch {
     return false;
   }

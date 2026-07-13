@@ -17,7 +17,7 @@ Configure `official_api` with:
 | `tenantId` | For `SingleTenant` | Selects the tenant OAuth endpoint and restricts accepted Teams Activities to that tenant. For a multi-tenant app, supplying it also acts as a tenant allowlist. |
 | `clientSecret` | Yes, write-only | Microsoft Entra client secret used only for OAuth client-credential requests. |
 
-Do not enter a Bot Connector `serviceUrl` in setup. Code UX accepts a service URL only after it appears in a successfully authenticated Activity, exactly matches the JWT `serviceUrl` claim, and resolves to a documented Bot Framework host. This prevents a connection record or inbound payload from selecting an arbitrary outbound host.
+Do not enter a Bot Connector `serviceUrl` in setup. Code UX accepts a service URL only after it appears in a successfully authenticated Activity, exactly matches the JWT `serviceUrl` claim, and resolves to one of the documented Teams Connector hosts: public `smba.trafficmanager.net`, GCC `smba.infra.gcc.teams.microsoft.com`, GCC High `smba.infra.gov.teams.microsoft.us`, or DoD `smba.infra.dod.teams.microsoft.us`. Arbitrary `*.botframework.com` subdomains are not accepted. This prevents a connection record or inbound payload from selecting an arbitrary outbound host.
 
 ## Incoming Activities
 
@@ -55,7 +55,7 @@ The reply Activity swaps the original sender and recipient, preserves the conver
 
 ## Diagnostics
 
-Connection diagnostics return stable codes instead of Microsoft response bodies or credentials. They distinguish invalid app identity, token acquisition failure, OpenID metadata failure, JWKS failure, tenant mismatch, expired signing keys, Microsoft throttling, and unavailable/timeout conditions. HTTP `429` and transient Microsoft service failures are marked retryable; invalid identity, claims, signatures, endorsements, tenants, and service URLs are terminal until configuration or input changes.
+Connection diagnostics return stable codes instead of Microsoft response bodies or credentials. They distinguish invalid app identity, token acquisition failure, OpenID metadata failure, JWKS failure, tenant mismatch, expired signing keys, unusable signing-key sets, Microsoft throttling, and unavailable/timeout conditions. The signing-metadata check succeeds only when at least one currently active RSA/RS256 verification key has importable public material and endorses `msteams`. HTTP `429` and transient Microsoft service failures are marked retryable; invalid identity, claims, signatures, endorsements, tenants, and service URLs are terminal until configuration or input changes.
 
 ## Local testing
 

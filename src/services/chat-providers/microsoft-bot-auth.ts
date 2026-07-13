@@ -33,6 +33,7 @@ export type MicrosoftBotAuthErrorCode =
   | "jwt_signature_invalid"
   | "signing_key_unknown"
   | "signing_key_expired"
+  | "signing_keys_unusable"
   | "channel_endorsement_missing"
   | "service_url_invalid"
   | "service_url_mismatch"
@@ -291,7 +292,8 @@ export class MicrosoftBotAuthService {
     }
 
     try {
-      await this.getSigningKeyCache(true);
+      const signingKeyCache = await this.getSigningKeyCache(true);
+      this.validateDiagnosticSigningKeys(signingKeyCache.keys);
       checks.push(okDiagnostic("signing_metadata", "Microsoft Bot Connector OpenID metadata and signing keys are available."));
     } catch (error) {
       checks.push(errorDiagnostic("signing_metadata", error));
@@ -389,6 +391,42 @@ export class MicrosoftBotAuthService {
     if (expiresAt !== null && now - this.clockSkewMs >= expiresAt) {
       throw new MicrosoftBotAuthError("signing_key_expired", "Microsoft signing key has expired.", 401);
     }
+  }
+
+  private validateDiagnosticSigningKeys(keys: readonly BotSigningKey[]): void {
+    const failures: MicrosoftBotAuthError[] = [];
+    for (const key of keys) {
+      try {
+        this.validateSigningKey(key);
+        if (!key.endorsements.includes("msteams")) {
+          throw new MicrosoftBotAuthError(
+            "channel_endorsement_missing",
+            "Microsoft signing key does not endorse Microsoft Teams.",
+            502,
+          );
+        }
+        createPublicKey({ key: key as JsonWebKey, format: "jwk" });
+        return;
+      } catch (error) {
+        failures.push(error instanceof MicrosoftBotAuthError
+          ? error
+          : new MicrosoftBotAuthError(
+            "signing_keys_unusable",
+            "Microsoft signing key material is not usable for signature verification.",
+            502,
+          ));
+      }
+    }
+
+    const allExpired = failures.length > 0 && failures.every((failure) => failure.code === "signing_key_expired");
+    throw new MicrosoftBotAuthError(
+      allExpired ? "signing_key_expired" : "signing_keys_unusable",
+      allExpired
+        ? "Microsoft Bot Connector published no currently active signing keys."
+        : "Microsoft Bot Connector published no usable Microsoft Teams signing keys.",
+      502,
+      true,
+    );
   }
 
   private verifyJwtSignature(signingInput: string, signature: Buffer, key: BotSigningKey): void {

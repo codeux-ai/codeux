@@ -16,7 +16,7 @@ No setup field accepts an official Connector service URL. The service URL is lea
 2. Load Microsoft's fixed Bot Connector OpenID metadata and JWKS documents, validate their fixed issuer/JWKS/algorithm contract, and cache signing keys for at most 24 hours.
 3. Refresh once within a bounded interval when a previously unseen key ID indicates rotation.
 4. Verify the RSA signature, issuer, app-ID audience, `nbf`/`iat`/`exp` window with five-minute skew, exact Activity/JWT service URL match, channel endorsement, and configured tenant.
-5. Accept only HTTPS service URLs on documented Bot Framework and Teams Connector hosts.
+5. Accept only HTTPS service URLs on the documented public, GCC, GCC High, and DoD Teams Connector host allowlist; arbitrary `*.botframework.com` subdomains are rejected.
 
 There is no insecure mode for disabling signature, claim, endorsement, tenant, or service URL validation. Authentication output contains the Activity, normalized message, and a durable conversation reference, but never the Bearer JWT or signing key.
 
@@ -40,7 +40,7 @@ Replies are posted with the token to the persisted reference's validated service
 
 ## Diagnostics and local verification
 
-Diagnostics have stable categories for app identity, token acquisition, OpenID metadata, JWKS retrieval, tenant mismatch, expired signing keys, throttling, and unavailable or timed-out Microsoft services. Retryability is explicit and upstream bodies are not exposed as credential-bearing diagnostics.
+Diagnostics have stable categories for app identity, token acquisition, OpenID metadata, JWKS retrieval, tenant mismatch, expired signing keys, unusable signing-key sets, throttling, and unavailable or timed-out Microsoft services. Signing metadata is healthy only when at least one active RSA/RS256 verification key is importable and endorses `msteams`. Retryability is explicit and upstream bodies are not exposed as credential-bearing diagnostics.
 
 Microsoft offers Bot Framework Emulator and Microsoft 365 Agents/Teams development tooling for local bot testing, not a public unauthenticated sandbox. The automated suite therefore uses local RSA keys plus mocked OpenID, JWKS, OAuth, and Connector responses, including Emulator-shaped Activity fixtures, without contacting Microsoft tenant services.
 

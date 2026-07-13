@@ -119,6 +119,11 @@ describe("Microsoft Teams chat connector profile", () => {
         text: "Reply text",
       },
     });
+
+    expect(() => buildMicrosoftTeamsActivityReplyRequest({
+      ...reference,
+      serviceUrl: "https://arbitrary.botframework.com/teams",
+    }, "Blocked", "correlation-2")).toThrow("invalid service URL");
   });
 });
 

@@ -116,6 +116,16 @@ describe("MicrosoftBotAuthService inbound authentication", () => {
       activity: evilActivity,
       credentials: credentials(),
     }), "service_url_invalid");
+
+    const arbitraryBotFrameworkUrl = "https://arbitrary.botframework.com/teams";
+    await expectAuthCode(service.validateIncomingActivity({
+      authorization: `Bearer ${signJwt(privateKey1, "key-1", {
+        ...claimsFixture(),
+        serviceUrl: arbitraryBotFrameworkUrl,
+      })}`,
+      activity: { ...activityFixture(), serviceUrl: arbitraryBotFrameworkUrl },
+      credentials: credentials(),
+    }), "service_url_invalid");
   });
 
   it("refreshes once for key rotation, bounds unknown-key refreshes, and refreshes expired caches", async () => {
@@ -260,12 +270,22 @@ describe("MicrosoftBotAuthService outbound transport", () => {
   });
 
   it("rejects unvalidated reply references and classifies throttling and unavailable services", async () => {
-    const service = new MicrosoftBotAuthService({ fetch: vi.fn(), now: () => NOW });
+    const replyFetch = vi.fn<typeof fetch>();
+    const service = new MicrosoftBotAuthService({ fetch: replyFetch, now: () => NOW });
     await expectAuthCode(service.sendReply({
       credentials: credentials(),
       conversationReference: { ...conversationReference(), serviceUrl: "https://attacker.example" },
       text: "No",
     }), "service_url_invalid");
+    await expectAuthCode(service.sendReply({
+      credentials: credentials(),
+      conversationReference: {
+        ...conversationReference(),
+        serviceUrl: "https://arbitrary.botframework.com/teams",
+      },
+      text: "Still no",
+    }), "service_url_invalid");
+    expect(replyFetch).not.toHaveBeenCalled();
 
     const throttled = new MicrosoftBotAuthService({
       fetch: vi.fn<typeof fetch>(async () => new Response("slow down", {
@@ -333,13 +353,60 @@ describe("MicrosoftBotAuthService outbound transport", () => {
       ["signing_metadata", "ok"],
     ]);
   });
+
+  it.each([
+    [
+      "expired",
+      () => [{ ...jwk1, exp: NOW_SECONDS - 301 }],
+      "signing_key_expired",
+      "published no currently active signing keys",
+    ],
+    [
+      "otherwise unusable",
+      () => [{
+        kid: "unusable-key",
+        kty: "RSA",
+        alg: "RS256",
+        use: "sig",
+        key_ops: ["verify"],
+        endorsements: ["msteams"],
+      }],
+      "signing_keys_unusable",
+      "published no usable Microsoft Teams signing keys",
+    ],
+  ] as const)("reports %s signing-key metadata", async (_label, signingKeys, code, message) => {
+    const diagnosticFetch = vi.fn<typeof fetch>(async (input) => {
+      if (String(input).includes("login.microsoftonline.com")) {
+        return jsonResponse({ token_type: "Bearer", expires_in: 3600, access_token: "token" });
+      }
+      if (String(input) === MICROSOFT_BOT_OPENID_METADATA_URL) {
+        return metadataResponse();
+      }
+      return jsonResponse({ keys: signingKeys() });
+    });
+    const service = new MicrosoftBotAuthService({ fetch: diagnosticFetch, now: () => NOW });
+
+    const result = await service.diagnoseConnection(credentials());
+
+    expect(result.ok).toBe(false);
+    expect(result.checks[2]).toMatchObject({
+      check: "signing_metadata",
+      ok: false,
+      code,
+      message: expect.stringContaining(message),
+      retryable: true,
+    });
+  });
 });
 
 describe("Microsoft Bot service URL policy", () => {
   it("allows documented Bot Framework hosts and rejects client-supplied or local URLs", () => {
     expect(isAllowedMicrosoftBotServiceUrl(SERVICE_URL)).toBe(true);
+    expect(isAllowedMicrosoftBotServiceUrl("https://smba.infra.gcc.teams.microsoft.com/teams")).toBe(true);
     expect(isAllowedMicrosoftBotServiceUrl("https://smba.infra.gov.teams.microsoft.us/teams")).toBe(true);
-    expect(isAllowedMicrosoftBotServiceUrl("https://msteams.botframework.com/amer")).toBe(true);
+    expect(isAllowedMicrosoftBotServiceUrl("https://smba.infra.dod.teams.microsoft.us/teams")).toBe(true);
+    expect(isAllowedMicrosoftBotServiceUrl("https://msteams.botframework.com/amer")).toBe(false);
+    expect(isAllowedMicrosoftBotServiceUrl("https://arbitrary.botframework.com/teams")).toBe(false);
     expect(isAllowedMicrosoftBotServiceUrl("http://localhost:3978")).toBe(false);
     expect(isAllowedMicrosoftBotServiceUrl("https://smba.trafficmanager.net.evil.example/teams")).toBe(false);
     expect(isAllowedMicrosoftBotServiceUrl("https://smba.trafficmanager.net:8443/teams")).toBe(false);
