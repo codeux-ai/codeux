@@ -67,6 +67,7 @@ Exposes administrative invocation telemetry without leaving Stats:
 - Error categories for recorded invocation failures.
 - Search, status, purpose, provider, error-category, record-view, sort, and pagination controls.
 - Filtered invocation records with expandable transcript details, sortable headers, loading states, and transcript recovery states.
+- Project execution and reconnect-recovery events refresh the current filtered invocation page in the background. Existing rows and query controls remain in place while the refresh runs, and burst events are coalesced without adding a System-ledger polling loop.
 
 ## Cost Metrics and Pricing
 

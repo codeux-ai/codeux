@@ -131,7 +131,8 @@ Ledgers contains operational records for tasks, sprints, and Git.
 
 System is the administrative invocation workbench. It is the place to inspect sprint state, invocation health, integration traffic, categorized failures, filtered records, and transcript detail without leaving the Stats workspace.
 
-- `useSystemViewData(projectId)` owns filters, sorting, summaries, pagination, request cancellation, and the legacy array fallback used by older tests.
+- `useSystemViewData(projectId)` owns filters, sorting, summaries, pagination, request cancellation, request sequencing, and the legacy array fallback used by older tests.
+- The System invocation ledger subscribes to `project:<projectId>` and treats `project.execution.updated` plus `snapshot_required` as invalidations of its current paginated server query. Matching bursts coalesce into one background request; the hook keeps the displayed rows and current page/filter/sort/search state in place, aborts the superseded request, and rejects responses from older request sequences.
 - Summary sections are named administrative regions: `Sprint State`, `Health Snapshot`, `External API Activity`, and `Error Categories`. Each region uses the same panel frame, compact eyebrow, section-level count, and subpanel metric cards so operators can scan state before entering the ledger.
 - System summary cards, filters, invocation table rows, sticky headers, loading rows, and transcript panels share the same flat Stats primitives as Ledgers. Keep the workbench compact and bordered, with semantic status fills only where the data state requires them.
 - Sprint State separates active sprint/task state from invocation health. Zero active sprint is neutral information, while running, blocked, failed, and completed signals use semantic status fills rather than decorative color.
