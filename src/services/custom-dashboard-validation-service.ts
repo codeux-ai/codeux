@@ -169,7 +169,7 @@ export class CustomDashboardValidationService {
         // produced by resolveValidationRuntimePaths.
         // codeql[js/path-injection]
         await fs.mkdir(runtimeHomePath, { recursive: true });
-        await materializeCustomDashboardWorkspace({
+        const materialized = await materializeCustomDashboardWorkspace({
           revision,
           workspacePath,
           bridgeConfig: buildBridgeConfig(revision, session.id),
@@ -208,7 +208,9 @@ export class CustomDashboardValidationService {
         );
         await appendValidationLog(logPath, "install-build stdout", buildResult.stdout);
         await appendValidationLog(logPath, "install-build stderr", buildResult.stderr);
-        const viewerArtifact = await this.readViewerArtifact(workspacePath, revision);
+        const viewerArtifact = materialized.validationMode === "modern"
+          ? await this.readViewerArtifact(workspacePath, revision)
+          : undefined;
 
         const hostPort = await this.findFreePort(
           settings.sprintPreview.hostPortRangeStart,
