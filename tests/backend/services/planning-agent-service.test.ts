@@ -13,6 +13,8 @@ import { PlanningAgentService } from "../../../src/services/planning-agent-servi
 import { PlanningParseError } from "../../../src/services/planning-json-extractor.js";
 import type { IProviderRunner } from "../../../src/infrastructure/providers/cli/provider-runner.js";
 import { WorkspaceManager } from "../../../src/infrastructure/providers/cli/workspace-manager.js";
+import { InvocationWorkspacePreparer } from "../../../src/infrastructure/providers/cli/invocation-workspace-preparer.js";
+import type { SettingsCredentialResolver } from "../../../src/services/credentials/settings-credential-resolver.js";
 import * as providerRetryPolicy from "../../../src/shared/providers/provider-retry-policy.js";
 
 const tempDirs: string[] = [];
@@ -720,6 +722,8 @@ describe("PlanningAgentService", () => {
         }),
       }),
     };
+    const refreshSpy = vi.spyOn(InvocationWorkspacePreparer.prototype, "refreshSnapshotRefs")
+      .mockResolvedValue(undefined);
     const service = new PlanningAgentService({
       projectManagementRepository: projectRepository,
       connectionChatRepository: connectionRepository,
@@ -728,6 +732,13 @@ describe("PlanningAgentService", () => {
       agentPresetSyncService: syncService,
       executionControlService: { orchestrateSprint: vi.fn() } as any,
       providerRunner,
+      settingsCredentialResolver: {
+        withCredential: vi.fn(),
+        withCredentials: vi.fn(async (_references, _context, consumer) => await consumer(new Map([
+          ["github", Buffer.from("github-runtime-token")],
+          ["gitlab", Buffer.from("gitlab-runtime-token")],
+        ]))),
+      } as unknown as SettingsCredentialResolver,
     });
 
     const project = projectRepository.createProject({ name: "Session Continue Project", sourceType: "local", sourceRef: repoPath });
@@ -735,6 +746,11 @@ describe("PlanningAgentService", () => {
     settingsRepository.saveProjectSettings(project.id, {
       workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "claude-code" },
       aiProvider: { providers: { "claude-code": { enabled: true } } },
+      git: {
+        githubMode: "REMOTE",
+        githubTokenCredentialRef: { credentialId: "planning-github", capability: "read" },
+        gitlabTokenCredentialRef: { credentialId: "planning-gitlab", capability: "read" },
+      },
     });
     const providerUsage = executionRepository.createProviderInvocationUsage({
       projectId: project.id,
@@ -768,6 +784,15 @@ describe("PlanningAgentService", () => {
       remoteOnly: true,
     }));
     expect(workspaceReuse.mock.calls[0]?.[1]).toContain(sprint.id);
+    expect(refreshSpy).toHaveBeenCalledWith(repoPath, expect.objectContaining({
+      branch: "main",
+      remoteOnly: true,
+    }), expect.objectContaining({
+      projectId: project.id,
+      workspaceId: `planning-${project.id}-${sprint.id}`,
+      githubTokenCredentialRef: { credentialId: "planning-github", capability: "read" },
+      gitlabTokenCredentialRef: { credentialId: "planning-gitlab", capability: "read" },
+    }));
     expect(WorkspaceManager.prototype.removeWorktree).toHaveBeenCalledWith(repoPath, "docker-volume://planning-test");
     const call = vi.mocked(providerRunner.runProviderForText).mock.calls[0]?.[0];
     expect(call?.continueSessionId).toBe("native-original");

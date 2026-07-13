@@ -16,6 +16,8 @@ A sprint can be acted on in three modes:
 
 The MCP API exposes all three under the `sprints` and `tasks` management domains. The dashboard buttons map 1:1.
 
+Planning in Docker mode reads from an isolated Git snapshot. For remote Git projects with a configured GitHub or GitLab credential reference, Code UX resolves the current credential through the broker under the selected project and planning-workspace scope before it refreshes remote refs or creates that snapshot. Rotation is observed on the next refresh, while malformed, missing, unavailable, revoked, or out-of-scope references stop planning before any remote Git or snapshot operation. Local repositories and explicitly supported environment-based Git authentication continue to work when no broker reference is configured; resolved credential values are never persisted or included in logs, telemetry, or errors.
+
 ## The cycle
 
 A single orchestration *cycle* runs the following pipeline (each step is independently toggleable in `sprintLoopSteps`):
