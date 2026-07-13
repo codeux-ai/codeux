@@ -45,6 +45,12 @@ For mounted-file custody, `CODE_UX_CREDENTIAL_KEY_FILE` identifies a regular, ow
 
 Electron serializes first-use root-key creation, persists only the OS-protected blob through an atomic owner-only file replacement, and refuses credential operations when `safeStorage` is unavailable. Vault and KMS adapters validate 32-byte caller-owned key material and report the active key id/version in health results. No provider silently falls back to plaintext or an insecure locally derived key.
 
+| Deployment boundary | Root-key custody | Provisioning behavior |
+| --- | --- | --- |
+| Normal CLI dashboard on loopback with local authentication | Owner-only file under the user-home Code UX security directory | Automatically created on first use and reused after restart. A normal local dashboard user does not mount or configure a key file. |
+| Electron desktop | Operating-system `safeStorage` | Automatically creates and persists only the OS-protected blob; unavailable `safeStorage` blocks credential operations. |
+| Dashboard-disabled headless, server mode, authenticated dashboard, non-loopback binding, or remote credential management | Explicit mounted file, Vault, or KMS provider | Never auto-provisions local custody. Setup and recovery fail closed until the configured provider reports available, secure key identity and version metadata. |
+
 ## Recovery and rotation
 
 Back up root keys independently from `app.db`. For the normal local dashboard, back up `~/.code-ux/security/credential-root.key` while preserving owner-only handling; for external providers, retain every referenced key version. Losing a required key version makes its ciphertext unrecoverable by design. Restoring only SQLite is insufficient.
@@ -62,3 +68,9 @@ Existing global credentials created before management ownership was stored are m
 Project-scoped routes live under `/api/projects/:projectId/credentials`. Supported operations are create, bounded-name update (`PATCH /:credentialId`), bind, metadata-only compatibility assessment, test, rotate, replace, revoke, promote, and restrict. Compatibility evaluates key-backend readiness, configuration, active status, project access, allowed kinds, and all required capabilities without resolving plaintext. A backend is ready only when it is available and secure and reports both a non-empty key ID and a key version; missing key identity metadata produces the stable `backend_unavailable` compatibility issue. List, compatibility, health, and mutation responses return metadata or policy results only. Existing dashboard authentication and remote credential-management guards apply before these routes.
 
 Runtime validation failures return `400`, project/management denials return `403`, compare-and-swap conflicts return `409`, invalid encrypted state returns `422`, and unavailable key custody returns an actionable `503` response.
+
+## Troubleshooting without disclosure
+
+- If custody is unavailable, inspect the metadata-only credential health or readiness result and the configured provider name. For the normal loopback dashboard, verify ownership, file type, and owner-only modes on the existing Code UX security path; for Electron, restore OS `safeStorage`; for headless or remote operation, restore the configured mount, Vault, or KMS version. Never paste, print, regenerate over, or move root-key material into a repository to diagnose the failure.
+- If a mutation reports a stale `expectedVersion`, refresh credential metadata and review the newer scope, capabilities, validation state, and status before retrying. Do not reuse the rejected request blindly and do not bypass the comparison check.
+- If encrypted rows exist but their key version is unavailable, restore the exact retained provider version before starting runners. Replacing it with a new key does not decrypt old envelopes; restore from the independent custody backup or recover the affected credential through the supported replacement workflow after the runtime is ready.

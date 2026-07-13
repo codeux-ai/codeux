@@ -22,6 +22,8 @@ The Credentials tab appears only when the saved manifest declares slots. Secure-
 
 Credential selection and actions are keyboard accessible, restore focus after completion, and announce saving or error state. Credential IDs remain confined to the dedicated metadata-management request state and never enter manifest, generated-file, source-graph, styleguide, runtime-text, or secret-value fields.
 
+If secure custody is unavailable, the Credentials tab keeps existing bindings unchanged, reports metadata-only readiness, and links to Settings. Restore the supported custody provider and refresh the review; do not put a key or credential value in manifest JSON, generated files, validation logs, or project files. If a bind/unbind returns a stale binding revision, the editor refreshes declarations, candidates, bindings, and readiness, then requires an explicit retry. If validation or publication denies a formerly compatible binding, refresh review because revocation, restriction, project access, capabilities, kind policy, or custody health may have changed.
+
 ## Agent Workflow
 
 Project Manager agents should use the `manage_custom_dashboards` MCP surface rather than writing generated code into `dashboard/src`.
@@ -127,6 +129,8 @@ During validation, Code UX:
 - records workspace path, log path, container id/name, host port, validation proxy path, commands, and log excerpts in runtime metadata
 
 Required missing bindings and bound credentials that are missing, revoked, inaccessible, unconfigured, wrong-kind, missing capabilities, or blocked by unavailable/insecure key custody fail with slot-specific issues before workspace creation. Optional unbound slots remain valid. No custom-dashboard path resolves secret plaintext: credential values and binding IDs stay out of generated source, file bundles, bridge files, Docker arguments and mounts, validation reports and logs, viewer records, iframe configuration, and browser messages. Generic response and viewer boundaries recursively redact known binding IDs from nested manifests, file content and metadata, source graphs, styleguides, runtime metadata, validation reports, and persisted viewer artifacts. Dedicated credential-binding management responses may return credential IDs and non-secret metadata so operators and agents can select them.
+
+The `build` and `runtime` slot phases are bounded declarations used for review and policy only. They do not inject a secret into the build container, published artifact, iframe, MCP result, or runtime data bridge. This feature does not migrate or expose broader provider secrets.
 
 Stopping a validation session removes the detached container. It does not invalidate a passed revision report. Removing a validation session deletes the session row after cleanup; the revision's validation metadata remains the publication gate.
 

@@ -92,6 +92,7 @@
 - [Chat Provider Integrations](./settings/chat-provider-integrations.md)
 - [Settings Reference](./settings/index.md)
   - [Google Drive Project Mount](./settings/google-drive-mount.md)
+  - [Integrations](./settings/integrations.md)
   - [Project Context](./settings/project-context.md)
   - [System Runtime](./settings/system-runtime.md)
   - [Provider Credentials](./settings/provider-credentials.md)
