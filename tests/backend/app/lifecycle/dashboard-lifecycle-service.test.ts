@@ -4,13 +4,19 @@ import { setupDashboardServer } from "../../../../src/server/dashboard-server.js
 import { createLogger } from "../../../../src/shared/logging/logger.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../src/repositories/settings-defaults.js";
 import * as path from "path";
+import type { CreateProjectInput } from "../../../../src/contracts/project-management-types.js";
+import type { ProjectGitCloneOptions } from "../../../../src/services/project-git-clone-service.js";
 
 const commandRun = vi.hoisted(() => vi.fn());
+const prepareGitProjectCreateInput = vi.hoisted(() => vi.fn(async (input: unknown) => input));
 
 vi.mock("../../../../src/server/dashboard-server.js");
 vi.mock("../../../../src/shared/logging/logger.js");
 vi.mock("../../../../src/shared/subprocess/command-runner.js", () => ({
   commandRunner: { run: (...a: unknown[]) => commandRun(...a) },
+}));
+vi.mock("../../../../src/services/project-git-clone-service.js", () => ({
+  prepareGitProjectCreateInput: (...args: unknown[]) => prepareGitProjectCreateInput(...args),
 }));
 vi.mock("../../../../src/server/memory-routes.js", () => ({
   registerMemoryRoutes: vi.fn(),
@@ -32,6 +38,7 @@ describe("dashboard-lifecycle-service", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    prepareGitProjectCreateInput.mockImplementation(async (input: unknown) => input);
 
     mockDeps = {
       app: {} as any,
@@ -294,6 +301,78 @@ describe("dashboard-lifecycle-service", () => {
       expect(mockDeps.dashboardRealtimeService.setSnapshotLoaders).toHaveBeenCalled();
       expect(mockDeps.runtimeContext.dashboardRuntimePort).toBe(3000);
       expect(mockDeps.chatProviderOutboundService?.start).toHaveBeenCalled();
+    });
+
+    it("resolves broker credentials for an existing Git import and redacts clone errors", async () => {
+      const secret = "broker-existing-clone-secret";
+      mockDeps.runtimeContext.dashboardSettings.git.githubTokenCredentialRef = {
+        credentialId: "credential-1",
+        capability: "read",
+      };
+      mockDeps.settingsCredentialResolver = {
+        withManagementCredential: vi.fn(async (_reference, context, consumer) => {
+          expect(context).toMatchObject({
+            consumer: "git.github.project-create.clone",
+            workspaceId: "project-management",
+          });
+          return await consumer(Buffer.from(secret));
+        }),
+      } as any;
+      mockDeps.projectManagementRepository.createProject = vi.fn((input: CreateProjectInput) => ({ id: "project-created", ...input })) as any;
+      prepareGitProjectCreateInput.mockImplementation(async (_input: unknown, options: ProjectGitCloneOptions) => {
+        await options.withRemoteGitCredential!("github", "clone", async () => {
+          throw new Error(`clone failed with ${secret}`);
+        });
+        throw new Error("unreachable");
+      });
+
+      await bootDashboard(mockDeps);
+      const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+      const error = await Promise.resolve(setupArgs.createProject({
+        name: "Imported",
+        sourceType: "git",
+        sourceRef: "https://github.com/example/imported.git",
+      })).catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain("[REDACTED]");
+      expect((error as Error).message).not.toContain(secret);
+      expect(mockDeps.projectManagementRepository.createProject).not.toHaveBeenCalled();
+    });
+
+    it("re-resolves the broker credential for each new-remote final fetch", async () => {
+      const values = ["final-fetch-v1", "final-fetch-v2"];
+      const observed: string[] = [];
+      mockDeps.runtimeContext.dashboardSettings.git.githubTokenCredentialRef = {
+        credentialId: "credential-1",
+        capability: "read",
+      };
+      mockDeps.settingsCredentialResolver = {
+        withManagementCredential: vi.fn(async (_reference, context, consumer) => {
+          expect(context.consumer).toBe("git.github.project-create.fetch");
+          return await consumer(Buffer.from(values.shift()!));
+        }),
+      } as any;
+      mockDeps.projectManagementRepository.createProject = vi.fn((input: CreateProjectInput) => ({ id: "project-created", ...input })) as any;
+      prepareGitProjectCreateInput.mockImplementation(async (input: unknown, options: ProjectGitCloneOptions) => {
+        await options.withRemoteGitCredential!("github", "fetch", async (auth) => {
+          observed.push(auth.githubToken!);
+        });
+        return input;
+      });
+
+      await bootDashboard(mockDeps);
+      const createProject = vi.mocked(setupDashboardServer).mock.calls[0][0].createProject;
+      const input = {
+        name: "Created",
+        sourceType: "git" as const,
+        sourceRef: "https://github.com/example/created.git",
+        initMode: "new-remote" as const,
+      };
+      await createProject(input);
+      await createProject(input);
+
+      expect(observed).toEqual(["final-fetch-v1", "final-fetch-v2"]);
     });
 
     it("stops chat provider outbound retries before closing the dashboard server", async () => {

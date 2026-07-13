@@ -104,6 +104,7 @@ import type {
 import type { ProjectInitializationStateService } from "../../services/project-initialization-state-service.js";
 import type { CredentialBroker } from "../../services/credentials/credential-broker.js";
 import type { SettingsCredentialResolver } from "../../services/credentials/settings-credential-resolver.js";
+import { redactText } from "../../shared/security/redaction.js";
 
 const updateCheckerService = new UpdateCheckerService();
 
@@ -253,16 +254,36 @@ function mapAttentionItem(item: NonNullable<ReturnType<ProjectAttentionRepositor
   };
 }
 
-function resolveGithubToken(deps: BootDashboardDeps): string | undefined {
-  return deps.runtimeContext.dashboardSettings?.git?.githubToken?.trim() || undefined;
-}
-
-function resolveGitlabToken(deps: BootDashboardDeps): string | undefined {
-  const dashboardToken = deps.runtimeContext.dashboardSettings?.git?.gitlabToken?.trim();
-  if (dashboardToken) {
-    return dashboardToken;
+async function withProjectCreationGitCredential<T>(
+  deps: Pick<BootDashboardDeps, "runtimeContext" | "settingsCredentialResolver">,
+  provider: "github" | "gitlab",
+  operation: "clone" | "fetch",
+  consumer: (auth: { githubToken?: string; gitlabToken?: string }) => T | Promise<T>,
+): Promise<T> {
+  const git = deps.runtimeContext.dashboardSettings?.git;
+  const reference = provider === "github" ? git?.githubTokenCredentialRef : git?.gitlabTokenCredentialRef;
+  if (!reference) return await consumer({});
+  if (!deps.settingsCredentialResolver) {
+    throw new Error("Git credential resolution is unavailable for project creation.");
   }
-  return undefined;
+  return await deps.settingsCredentialResolver.withManagementCredential(reference, {
+    consumer: `git.${provider}.project-create.${operation}`,
+    workspaceId: "project-management",
+  }, async (secret) => {
+    const secretText = secret.toString("utf8");
+    const auth = provider === "github"
+      ? { githubToken: secretText }
+      : { gitlabToken: secretText };
+    try {
+      return await consumer(auth);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(redactText(message.split(secretText).join("[REDACTED]")));
+    } finally {
+      auth.githubToken = undefined;
+      auth.gitlabToken = undefined;
+    }
+  });
 }
 
 function requireProjectAttentionItem(
@@ -701,8 +722,12 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     listProjects: () => deps.projectManagementRepository.listProjects(),
     createProject: async (input) => deps.projectManagementRepository.createProject(
       await prepareGitProjectCreateInput(input, {
-        githubToken: resolveGithubToken(deps),
-        gitlabToken: resolveGitlabToken(deps),
+        withRemoteGitCredential: async (provider, operation, consumer) => await withProjectCreationGitCredential(
+          deps,
+          provider,
+          operation,
+          consumer,
+        ),
       }),
     ),
     getProject: (projectId) => deps.projectManagementRepository.getProject(projectId),

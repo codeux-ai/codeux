@@ -61,6 +61,7 @@ import type { CreateProjectInput, ProjectSummary } from "../contracts/project-ma
 import { initializeProject } from "../domain/projects/project-initializer.js";
 import { prepareGitProjectCreateInput } from "../services/project-git-clone-service.js";
 import type { SettingsCredentialResolver } from "../services/credentials/settings-credential-resolver.js";
+import { redactText } from "../shared/security/redaction.js";
 
 import { PreviewActions } from "./management/preview-actions.js";
 import { CustomDashboardActions } from "./management/custom-dashboard-actions.js";
@@ -191,41 +192,41 @@ export class ManagementToolHandler {
     return this.agentSchedulerActions;
   }
 
-  private resolveGithubToken(): string | undefined {
-    try {
-      const settings = this.deps.getDashboardSettings();
-      const gitToken = settings.git?.githubToken?.trim();
-      if (gitToken) {
-        return gitToken;
-      }
-      return undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
-  private resolveGitlabToken(): string | undefined {
-    try {
-      const settings = this.deps.getDashboardSettings();
-      const gitToken = settings.git?.gitlabToken?.trim();
-      if (gitToken) {
-        return gitToken;
-      }
-      return undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
   private async createProject(input: CreateProjectInput): Promise<ProjectSummary> {
     return initializeProject(input, {
       createProject: async (projectInput) => this.deps.projectManagementRepository.createProject(
         await prepareGitProjectCreateInput(projectInput, {
-          githubToken: this.resolveGithubToken(),
-          gitlabToken: this.resolveGitlabToken(),
+          withRemoteGitCredential: async (provider, operation, consumer) => {
+            const git = this.deps.getDashboardSettings().git;
+            const reference = provider === "github"
+              ? git.githubTokenCredentialRef
+              : git.gitlabTokenCredentialRef;
+            if (!reference) return await consumer({});
+            if (!this.deps.settingsCredentialResolver) {
+              throw new Error("Git credential resolution is unavailable for project creation.");
+            }
+            return await this.deps.settingsCredentialResolver.withManagementCredential(reference, {
+              consumer: `git.${provider}.project-create.${operation}`,
+              workspaceId: "project-management",
+            }, async (secret) => {
+              const secretText = secret.toString("utf8");
+              const auth = provider === "github"
+                ? { githubToken: secretText }
+                : { gitlabToken: secretText };
+              try {
+                return await consumer(auth);
+              } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                throw new Error(redactText(message.split(secretText).join("[REDACTED]")));
+              } finally {
+                auth.githubToken = undefined;
+                auth.gitlabToken = undefined;
+              }
+            });
+          },
         }),
       ),
-      withRemoteGitCredential: async (provider, consumer) => {
+      withRemoteGitCredential: async (provider, operation, consumer) => {
         const git = this.deps.getDashboardSettings().git;
         const reference = provider === "github"
           ? git.githubTokenCredentialRef
@@ -235,7 +236,7 @@ export class ManagementToolHandler {
           throw new Error("Git credential resolution is unavailable for remote project creation.");
         }
         return await this.deps.settingsCredentialResolver.withManagementCredential(reference, {
-          consumer: `git.${provider}.project-create`,
+          consumer: `git.${provider}.project-create.${operation}`,
           workspaceId: "project-management",
         }, async (secret) => await consumer(secret.toString("utf8")));
       },

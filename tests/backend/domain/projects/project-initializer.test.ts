@@ -6,18 +6,31 @@ vi.mock("../../../../src/infrastructure/git/local-repo-initializer.js", () => ({
   initLocalRepo: vi.fn(),
 }));
 
+const observedHostTokens = vi.hoisted(() => [] as Array<string | undefined>);
 vi.mock("../../../../src/infrastructure/git/remote-repo-creator.js", () => ({
-  createGitHubRepo: vi.fn().mockResolvedValue({ remoteUrl: "https://github.com/a/b", localPath: "/tmp/a/b" }),
-  createGitLabRepo: vi.fn().mockResolvedValue({ remoteUrl: "https://gitlab.com/a/b", localPath: "/tmp/a/b" }),
+  createGitHubRepo: vi.fn(async (options: { withHostCredential: RemoteGitCredentialProvider }) => {
+    for (const operation of ["api", "clone", "push"] as const) {
+      await options.withHostCredential(operation, async (token: string | undefined) => { observedHostTokens.push(token); });
+    }
+    return { remoteUrl: "https://github.com/a/b", localPath: "/tmp/a/b" };
+  }),
+  createGitLabRepo: vi.fn(async (options: { withHostCredential: RemoteGitCredentialProvider }) => {
+    for (const operation of ["api", "clone", "push"] as const) {
+      await options.withHostCredential(operation, async (token: string | undefined) => { observedHostTokens.push(token); });
+    }
+    return { remoteUrl: "https://gitlab.com/a/b", localPath: "/tmp/a/b" };
+  }),
 }));
 
 import * as path from "node:path";
 import * as os from "node:os";
 import { createGitHubRepo, createGitLabRepo } from "../../../../src/infrastructure/git/remote-repo-creator.js";
+import type { RemoteGitCredentialProvider } from "../../../../src/infrastructure/git/remote-repo-creator.js";
 
 describe("initializeProject validation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    observedHostTokens.length = 0;
   });
 
   it("allows valid local repos", async () => {
@@ -25,7 +38,7 @@ describe("initializeProject validation", () => {
     await expect(
       initializeProject(
         { initMode: "new-local", sourceRef: validPath, name: "valid", sourceType: "local" },
-        { createProject: vi.fn().mockResolvedValue({}), withRemoteGitCredential: async (_provider, consumer) => await consumer() }
+        { createProject: vi.fn().mockResolvedValue({}), withRemoteGitCredential: async (_provider, _operation, consumer) => await consumer() }
       )
     ).resolves.toBeTruthy();
   });
@@ -34,7 +47,7 @@ describe("initializeProject validation", () => {
     const createProject = vi.fn().mockResolvedValue({});
     await initializeProject(
       { sourceRef: path.resolve(process.cwd(), "imported-repo"), name: "imported", sourceType: "local" },
-      { createProject, withRemoteGitCredential: async (_provider, consumer) => await consumer() }
+      { createProject, withRemoteGitCredential: async (_provider, _operation, consumer) => await consumer() }
     );
 
     expect(createProject).toHaveBeenCalledWith(expect.objectContaining({
@@ -60,7 +73,7 @@ describe("initializeProject validation", () => {
           agents: { routing: { dashboardReply: { agentPresetId: "custom-manager" } } },
         },
       },
-      { createProject, withRemoteGitCredential: async (_provider, consumer) => await consumer() }
+      { createProject, withRemoteGitCredential: async (_provider, _operation, consumer) => await consumer() }
     );
 
     expect(createProject).toHaveBeenCalledWith(expect.objectContaining({
@@ -78,7 +91,7 @@ describe("initializeProject validation", () => {
     const createProject = vi.fn().mockResolvedValue({});
     await initializeProject(
       { initMode: "new-local", sourceRef: "valid-local-repo", name: "valid", sourceType: "local" },
-      { createProject, withRemoteGitCredential: async (_provider, consumer) => await consumer() }
+      { createProject, withRemoteGitCredential: async (_provider, _operation, consumer) => await consumer() }
     );
 
     expect(createProject).toHaveBeenCalledWith(expect.objectContaining({
@@ -92,7 +105,7 @@ describe("initializeProject validation", () => {
     const createProject = vi.fn().mockResolvedValue({});
     await initializeProject(
       { initMode: "new-local", sourceRef: "valid-local-repo", name: "valid", sourceType: "local" },
-      { createProject, withRemoteGitCredential: async (_provider, consumer) => await consumer() }
+      { createProject, withRemoteGitCredential: async (_provider, _operation, consumer) => await consumer() }
     );
 
     expect(createProject).toHaveBeenCalledWith(expect.objectContaining({
@@ -110,7 +123,7 @@ describe("initializeProject validation", () => {
 
     await initializeProject(
       { initMode: "new-local", sourceRef: selectedPath, name: "valid", sourceType: "local" },
-      { createProject, withRemoteGitCredential: async (_provider, consumer) => await consumer() }
+      { createProject, withRemoteGitCredential: async (_provider, _operation, consumer) => await consumer() }
     );
 
     expect(createProject).toHaveBeenCalledWith(expect.objectContaining({
@@ -124,7 +137,7 @@ describe("initializeProject validation", () => {
     await expect(
       initializeProject(
         { initMode: "new-local", sourceRef: evilPath, cloneDir: allowedRoot, name: "evil", sourceType: "local" },
-        { createProject: vi.fn().mockResolvedValue({}), withRemoteGitCredential: async (_provider, consumer) => await consumer() }
+        { createProject: vi.fn().mockResolvedValue({}), withRemoteGitCredential: async (_provider, _operation, consumer) => await consumer() }
       )
     ).rejects.toThrow();
   });
@@ -133,7 +146,7 @@ describe("initializeProject validation", () => {
     await expect(
       initializeProject(
         { initMode: "new-local", sourceRef: "../evil-repo", name: "evil", sourceType: "local" },
-        { createProject: vi.fn(), withRemoteGitCredential: async (_provider, consumer) => await consumer() }
+        { createProject: vi.fn(), withRemoteGitCredential: async (_provider, _operation, consumer) => await consumer() }
       )
     ).rejects.toThrow();
   });
@@ -143,14 +156,14 @@ describe("initializeProject validation", () => {
     await expect(
       initializeProject(
         { initMode: "new-remote", remoteProvider: "github", sourceRef: "valid-remote-repo", name: "valid", sourceType: "git" },
-        { createProject: vi.fn().mockResolvedValue({}), withRemoteGitCredential: async (_provider, consumer) => await consumer("tok") }
+        { createProject: vi.fn().mockResolvedValue({}), withRemoteGitCredential: async (_provider, _operation, consumer) => await consumer("tok") }
       )
     ).resolves.toBeTruthy();
   });
 
   it("resolves the selected host credential for every remote creation operation", async () => {
-    const tokens = ["first-rotation", "second-rotation"];
-    const withRemoteGitCredential = vi.fn(async (_provider, consumer) => await consumer(tokens.shift()));
+    const tokens = ["api-v1", "clone-v1", "push-v1", "api-v2", "clone-v2", "push-v2"];
+    const withRemoteGitCredential = vi.fn(async (_provider, _operation, consumer) => await consumer(tokens.shift()));
     const input = {
       initMode: "new-remote" as const,
       remoteProvider: "github" as const,
@@ -162,10 +175,11 @@ describe("initializeProject validation", () => {
     await initializeProject(input, { createProject: vi.fn().mockResolvedValue({}), withRemoteGitCredential });
     await initializeProject(input, { createProject: vi.fn().mockResolvedValue({}), withRemoteGitCredential });
 
-    expect(withRemoteGitCredential).toHaveBeenCalledTimes(2);
-    expect(withRemoteGitCredential).toHaveBeenNthCalledWith(1, "github", expect.any(Function));
-    expect(createGitHubRepo).toHaveBeenNthCalledWith(1, expect.objectContaining({ hostToken: "first-rotation" }));
-    expect(createGitHubRepo).toHaveBeenNthCalledWith(2, expect.objectContaining({ hostToken: "second-rotation" }));
+    expect(withRemoteGitCredential).toHaveBeenCalledTimes(6);
+    expect(withRemoteGitCredential).toHaveBeenNthCalledWith(1, "github", "api", expect.any(Function));
+    expect(withRemoteGitCredential).toHaveBeenNthCalledWith(2, "github", "clone", expect.any(Function));
+    expect(withRemoteGitCredential).toHaveBeenNthCalledWith(3, "github", "push", expect.any(Function));
+    expect(observedHostTokens).toEqual(["api-v1", "clone-v1", "push-v1", "api-v2", "clone-v2", "push-v2"]);
   });
 
   it("fails closed before remote egress when credential resolution is denied", async () => {
@@ -180,14 +194,15 @@ describe("initializeProject validation", () => {
       sourceType: "git",
     }, { createProject: vi.fn(), withRemoteGitCredential })).rejects.toBe(denial);
 
-    expect(createGitLabRepo).not.toHaveBeenCalled();
+    expect(createGitLabRepo).toHaveBeenCalledOnce();
+    expect(observedHostTokens).toEqual([]);
   });
 
   it("defaults new remote repos to the home Code UX projects root", async () => {
     const createProject = vi.fn().mockResolvedValue({});
     await initializeProject(
       { initMode: "new-remote", remoteProvider: "github", sourceRef: "valid-remote-repo", name: "valid", sourceType: "git" },
-      { createProject, withRemoteGitCredential: async (_provider, consumer) => await consumer("tok") }
+      { createProject, withRemoteGitCredential: async (_provider, _operation, consumer) => await consumer("tok") }
     );
 
     const expectedCloneRoot = path.join(os.homedir(), ".code-ux", "projects");
@@ -219,7 +234,7 @@ describe("initializeProject validation", () => {
         sourceType: "git",
         cloneDir: "codeux-projects",
       },
-      { createProject, withRemoteGitCredential: async (_provider, consumer) => await consumer("tok") }
+      { createProject, withRemoteGitCredential: async (_provider, _operation, consumer) => await consumer("tok") }
     );
 
     const expectedCloneRoot = path.join(os.homedir(), "codeux-projects");
@@ -236,7 +251,7 @@ describe("initializeProject validation", () => {
     await expect(
       initializeProject(
         { initMode: "new-remote", remoteProvider: "github", sourceRef: "/evil/repo", name: "evil", sourceType: "git" },
-        { createProject: vi.fn(), withRemoteGitCredential: async (_provider, consumer) => await consumer("tok") }
+        { createProject: vi.fn(), withRemoteGitCredential: async (_provider, _operation, consumer) => await consumer("tok") }
       )
     ).rejects.toThrow();
   });
@@ -245,7 +260,7 @@ describe("initializeProject validation", () => {
     await expect(
       initializeProject(
         { initMode: "new-remote", remoteProvider: "github", sourceRef: "../evil", name: "evil", sourceType: "git" },
-        { createProject: vi.fn(), withRemoteGitCredential: async (_provider, consumer) => await consumer("tok") }
+        { createProject: vi.fn(), withRemoteGitCredential: async (_provider, _operation, consumer) => await consumer("tok") }
       )
     ).rejects.toThrow();
   });
@@ -254,7 +269,7 @@ describe("initializeProject validation", () => {
     await expect(
       initializeProject(
         { initMode: "new-remote", remoteProvider: "github", sourceRef: "repo\x00name", name: "evil", sourceType: "git" },
-        { createProject: vi.fn(), withRemoteGitCredential: async (_provider, consumer) => await consumer("tok") }
+        { createProject: vi.fn(), withRemoteGitCredential: async (_provider, _operation, consumer) => await consumer("tok") }
       )
     ).rejects.toThrow();
   });

@@ -12,11 +12,17 @@ import type { ValidatedPath } from "../../utils/path-validator.js";
 import { buildGitHttpAuthEnvWithFallbacks, resolveGitHostTokenWithFallbacks } from "../../services/git-http-auth.js";
 import { redactText } from "../../shared/security/redaction.js";
 import { ensureCodeUxGitignoreEntry } from "./code-ux-gitignore.js";
+import type { GitProvider } from "./repository-host-resolver.js";
 
 export interface RemoteRepoResult {
   localPath: string;
   remoteUrl: string;
 }
+
+export type RemoteGitCredentialProvider = <T>(
+  operation: "api" | "clone" | "push",
+  consumer: (hostToken?: string) => T | Promise<T>,
+) => Promise<T>;
 
 const API_TIMEOUT_MS = 30_000;
 const NOFOLLOW_FLAG = typeof fs.constants.O_NOFOLLOW === "number" ? fs.constants.O_NOFOLLOW : 0;
@@ -53,6 +59,25 @@ const cloneRepository = async (remoteUrl: string, cloneParentDir: string, repoNa
     })) || process.env,
   );
 };
+
+async function withHostCredential<T>(
+  provider: Extract<GitProvider, "github" | "gitlab">,
+  operation: "api" | "clone" | "push",
+  explicitToken: string | undefined,
+  credentialProvider: RemoteGitCredentialProvider | undefined,
+  consumer: (hostToken: string) => T | Promise<T>,
+): Promise<T> {
+  const run = async (candidate?: string): Promise<T> => {
+    const hostToken = await resolveGitHostTokenWithFallbacks(provider, candidate);
+    if (!hostToken) throw new Error(`${provider === "github" ? "GitHub" : "GitLab"} token is required to create a remote repository.`);
+    try {
+      return await consumer(hostToken);
+    } catch (error) {
+      throw new Error(remoteOperationErrorMessage(error, hostToken));
+    }
+  };
+  return credentialProvider ? await credentialProvider(operation, run) : await run(explicitToken);
+}
 
 function resolveSeedReadmeFile(localPath: ValidatedPath): URL {
   const repoRoot = path.resolve(localPath);
@@ -91,23 +116,24 @@ function writeSeedReadme(localPath: ValidatedPath, contents: string): void {
 }
 
 async function seedEmptyRemoteRepository(
-  remoteUrl: string,
   localPath: ValidatedPath,
   projectName: string,
   defaultBranch: string,
-  hostToken?: string,
 ): Promise<void> {
   writeSeedReadme(localPath, `# ${projectName.trim() || "Project"}\n\nInitialized with Code UX.\n`);
   await ensureCodeUxGitignoreEntry(localPath);
-  const env = (await buildGitHttpAuthEnvWithFallbacks(remoteUrl, {
-    githubToken: hostToken,
-    gitlabToken: hostToken,
-  })) || process.env;
   await runCommandStrict("git", ["config", "user.email", "code-ux@local"], localPath);
   await runCommandStrict("git", ["config", "user.name", "Code UX"], localPath);
   await runCommandStrict("git", ["checkout", "-B", defaultBranch], localPath);
   await runCommandStrict("git", ["add", "README.md", ".gitignore"], localPath);
   await runCommandStrict("git", ["commit", "-m", "Initial commit"], localPath);
+}
+
+async function pushSeedCommit(remoteUrl: string, localPath: ValidatedPath, hostToken: string): Promise<void> {
+  const env = (await buildGitHttpAuthEnvWithFallbacks(remoteUrl, {
+    githubToken: hostToken,
+    gitlabToken: hostToken,
+  })) || process.env;
   await runCommandStrict("git", ["push", "-u", "origin", "HEAD"], localPath, env);
 }
 
@@ -120,8 +146,8 @@ export async function createGitHubRepo(opts: {
   isPrivate: boolean;
   cloneParentDir: string;
   hostToken?: string;
+  withHostCredential?: RemoteGitCredentialProvider;
 }): Promise<RemoteRepoResult> {
-  let hostToken: string | null = null;
   try {
     const safeRepoName = validateSafeRepoName(opts.repoName);
     // Operate on the sanitized, resolved parent directory returned by the
@@ -134,43 +160,38 @@ export async function createGitHubRepo(opts: {
     // codeql[js/path-injection]
     fs.mkdirSync(safeParentDir, { recursive: true });
 
-    hostToken = await resolveGitHostTokenWithFallbacks("github", opts.hostToken);
-    if (!hostToken) {
-      throw new Error("GitHub token is required to create a remote repository.");
-    }
-
-    const response = await fetch("https://api.github.com/user/repos", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${hostToken}`,
-        Accept: "application/vnd.github+json",
-        "Content-Type": "application/json",
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
-      // Seed locally after cloning so README.md and the Code UX .gitignore land
-      // together in one initial commit.
-      body: JSON.stringify({ name: safeRepoName, private: opts.isPrivate, auto_init: false }),
-      signal: AbortSignal.timeout(API_TIMEOUT_MS),
+    const remoteUrl = await withHostCredential("github", "api", opts.hostToken, opts.withHostCredential, async (hostToken) => {
+      const response = await fetch("https://api.github.com/user/repos", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${hostToken}`,
+          Accept: "application/vnd.github+json",
+          "Content-Type": "application/json",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+        body: JSON.stringify({ name: safeRepoName, private: opts.isPrivate, auto_init: false }),
+        signal: AbortSignal.timeout(API_TIMEOUT_MS),
+      });
+      const text = await response.text();
+      if (!response.ok) throw new Error(parseApiError(`GitHub API returned HTTP ${response.status}`, text));
+      const created = JSON.parse(text) as Record<string, unknown>;
+      return typeof created.clone_url === "string" ? created.clone_url : "";
     });
-    const text = await response.text();
-    if (!response.ok) {
-      throw new Error(parseApiError(`GitHub API returned HTTP ${response.status}`, text));
-    }
-
-    const created = JSON.parse(text) as Record<string, unknown>;
-    const remoteUrl = typeof created.clone_url === "string" ? created.clone_url : "";
     if (!remoteUrl) {
       throw new Error("GitHub API response did not include clone_url.");
     }
 
-    await cloneRepository(remoteUrl, safeParentDir, safeRepoName, hostToken);
+    await withHostCredential("github", "clone", opts.hostToken, opts.withHostCredential, async (hostToken) => {
+      await cloneRepository(remoteUrl, safeParentDir, safeRepoName, hostToken);
+    });
     const localPath = safeTargetDir;
-    await seedEmptyRemoteRepository(remoteUrl, localPath, safeRepoName, "main", hostToken);
+    await seedEmptyRemoteRepository(localPath, safeRepoName, "main");
+    await withHostCredential("github", "push", opts.hostToken, opts.withHostCredential, async (hostToken) => {
+      await pushSeedCommit(remoteUrl, localPath, hostToken);
+    });
     return { localPath, remoteUrl };
   } catch (error: unknown) {
-    throw new Error(`Failed to create GitHub repository: ${remoteOperationErrorMessage(error, hostToken)}`);
-  } finally {
-    hostToken = null;
+    throw new Error(`Failed to create GitHub repository: ${remoteOperationErrorMessage(error)}`);
   }
 }
 
@@ -183,9 +204,9 @@ export async function createGitLabRepo(opts: {
   isPrivate: boolean;
   cloneParentDir: string;
   hostToken?: string;
+  withHostCredential?: RemoteGitCredentialProvider;
   defaultBranch?: string;
 }): Promise<RemoteRepoResult> {
-  let hostToken: string | null = null;
   try {
     const safeRepoName = validateSafeRepoName(opts.repoName);
     // Operate on the sanitized, resolved parent directory returned by the
@@ -198,52 +219,41 @@ export async function createGitLabRepo(opts: {
     // codeql[js/path-injection]
     fs.mkdirSync(safeParentDir, { recursive: true });
 
-    hostToken = await resolveGitHostTokenWithFallbacks("gitlab", opts.hostToken);
-    if (!hostToken) {
-      throw new Error("GitLab token is required to create a remote repository.");
-    }
-
-    const response = await fetch("https://gitlab.com/api/v4/projects", {
-      method: "POST",
-      headers: {
-        "PRIVATE-TOKEN": hostToken,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        name: safeRepoName,
-        path: safeRepoName,
-        visibility: opts.isPrivate ? "private" : "public",
-        // Seed locally after cloning so README.md and the Code UX .gitignore land
-        // together in one initial commit.
-        initialize_with_readme: false,
-      }),
-      signal: AbortSignal.timeout(API_TIMEOUT_MS),
+    const remoteUrl = await withHostCredential("gitlab", "api", opts.hostToken, opts.withHostCredential, async (hostToken) => {
+      const response = await fetch("https://gitlab.com/api/v4/projects", {
+        method: "POST",
+        headers: {
+          "PRIVATE-TOKEN": hostToken,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: safeRepoName,
+          path: safeRepoName,
+          visibility: opts.isPrivate ? "private" : "public",
+          initialize_with_readme: false,
+        }),
+        signal: AbortSignal.timeout(API_TIMEOUT_MS),
+      });
+      const text = await response.text();
+      if (!response.ok) throw new Error(parseApiError(`GitLab API returned HTTP ${response.status}`, text));
+      const created = JSON.parse(text) as Record<string, unknown>;
+      return typeof created.http_url_to_repo === "string" ? created.http_url_to_repo : "";
     });
-    const text = await response.text();
-    if (!response.ok) {
-      throw new Error(parseApiError(`GitLab API returned HTTP ${response.status}`, text));
-    }
-
-    const created = JSON.parse(text) as Record<string, unknown>;
-    const remoteUrl = typeof created.http_url_to_repo === "string" ? created.http_url_to_repo : "";
     if (!remoteUrl) {
       throw new Error("GitLab API response did not include http_url_to_repo.");
     }
     const localPath = safeTargetDir;
 
-    await cloneRepository(remoteUrl, safeParentDir, safeRepoName, hostToken);
-    await seedEmptyRemoteRepository(
-      remoteUrl,
-      localPath,
-      safeRepoName,
-      opts.defaultBranch?.trim() || "main",
-      hostToken,
-    );
+    await withHostCredential("gitlab", "clone", opts.hostToken, opts.withHostCredential, async (hostToken) => {
+      await cloneRepository(remoteUrl, safeParentDir, safeRepoName, hostToken);
+    });
+    await seedEmptyRemoteRepository(localPath, safeRepoName, opts.defaultBranch?.trim() || "main");
+    await withHostCredential("gitlab", "push", opts.hostToken, opts.withHostCredential, async (hostToken) => {
+      await pushSeedCommit(remoteUrl, localPath, hostToken);
+    });
 
     return { localPath, remoteUrl };
   } catch (error: unknown) {
-    throw new Error(`Failed to create GitLab repository: ${remoteOperationErrorMessage(error, hostToken)}`);
-  } finally {
-    hostToken = null;
+    throw new Error(`Failed to create GitLab repository: ${remoteOperationErrorMessage(error)}`);
   }
 }

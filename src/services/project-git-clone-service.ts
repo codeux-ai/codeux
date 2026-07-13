@@ -4,6 +4,17 @@ import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 import { runCommandStrict } from "./cli-process-runner.js";
 import type { CreateProjectInput } from "../contracts/project-management-types.js";
 import { buildGitHttpAuthEnvWithFallbacks, type GitHttpAuthOptions } from "./git-http-auth.js";
+import { resolveRepositoryHost, type GitProvider } from "../infrastructure/git/repository-host-resolver.js";
+
+type RemoteGitProvider = Extract<GitProvider, "github" | "gitlab">;
+
+export interface ProjectGitCloneOptions extends GitHttpAuthOptions {
+  withRemoteGitCredential?: <T>(
+    provider: RemoteGitProvider,
+    operation: "clone" | "fetch",
+    consumer: (auth: GitHttpAuthOptions) => T | Promise<T>,
+  ) => Promise<T>;
+}
 
 const isPathWithin = (basePath: string, targetPath: string): boolean => {
   const base = path.resolve(basePath);
@@ -66,7 +77,7 @@ async function getExactGitWorktreeRoot(targetPath: string): Promise<string | nul
 async function ensureExistingCloneMatchesRemote(
   targetPath: string,
   sourceRef: string,
-  options: GitHttpAuthOptions = {},
+  options: ProjectGitCloneOptions = {},
 ): Promise<void> {
   const root = await getExactGitWorktreeRoot(targetPath);
   if (root !== path.resolve(targetPath)) {
@@ -78,17 +89,32 @@ async function ensureExistingCloneMatchesRemote(
     throw new Error(`Git project checkout at ${targetPath} already uses origin ${remote}, expected ${sourceRef}`);
   }
 
-  await runCommandStrict(
-    "git",
-    ["fetch", "origin", "--prune"],
-    targetPath,
-    (await buildGitHttpAuthEnvWithFallbacks(sourceRef, options)) || process.env,
-  );
+  await withRemoteGitAuth(sourceRef, "fetch", options, async (auth) => {
+    await runCommandStrict(
+      "git",
+      ["fetch", "origin", "--prune"],
+      targetPath,
+      (await buildGitHttpAuthEnvWithFallbacks(sourceRef, auth)) || process.env,
+    );
+  });
+}
+
+async function withRemoteGitAuth<T>(
+  sourceRef: string,
+  operation: "clone" | "fetch",
+  options: ProjectGitCloneOptions,
+  consumer: (auth: GitHttpAuthOptions) => T | Promise<T>,
+): Promise<T> {
+  const provider = resolveRepositoryHost(sourceRef).provider;
+  if (options.withRemoteGitCredential && (provider === "github" || provider === "gitlab")) {
+    return await options.withRemoteGitCredential(provider, operation, consumer);
+  }
+  return await consumer(options);
 }
 
 export async function prepareGitProjectCreateInput(
   input: CreateProjectInput,
-  options: GitHttpAuthOptions = {},
+  options: ProjectGitCloneOptions = {},
 ): Promise<CreateProjectInput> {
   if (input.sourceType !== "git") {
     return input;
@@ -111,22 +137,26 @@ export async function prepareGitProjectCreateInput(
 
   if (await directoryExists(targetPath)) {
     if (await isDirectoryEmpty(targetPath)) {
-      await runCommandStrict(
-        "git",
-        ["clone", sourceRef, targetPath],
-        cloneRoot,
-        (await buildGitHttpAuthEnvWithFallbacks(sourceRef, options)) || process.env,
-      );
+      await withRemoteGitAuth(sourceRef, "clone", options, async (auth) => {
+        await runCommandStrict(
+          "git",
+          ["clone", sourceRef, targetPath],
+          cloneRoot,
+          (await buildGitHttpAuthEnvWithFallbacks(sourceRef, auth)) || process.env,
+        );
+      });
     } else {
       await ensureExistingCloneMatchesRemote(targetPath, sourceRef, options);
     }
   } else {
-    await runCommandStrict(
-      "git",
-      ["clone", sourceRef, targetPath],
-      cloneRoot,
-      (await buildGitHttpAuthEnvWithFallbacks(sourceRef, options)) || process.env,
-    );
+    await withRemoteGitAuth(sourceRef, "clone", options, async (auth) => {
+      await runCommandStrict(
+        "git",
+        ["clone", sourceRef, targetPath],
+        cloneRoot,
+        (await buildGitHttpAuthEnvWithFallbacks(sourceRef, auth)) || process.env,
+      );
+    });
   }
 
   return {

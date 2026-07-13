@@ -18,7 +18,7 @@ describe("git provider routes", () => {
     delete process.env.GLAB_TOKEN;
   });
 
-  it("returns status from configured settings tokens without probing local CLIs", async () => {
+  it("does not treat sanitized settings token fields as provider readiness", async () => {
     const deps = {
       getSystemSettings: vi.fn().mockReturnValue({
         defaults: {
@@ -33,7 +33,7 @@ describe("git provider routes", () => {
     const response = await request(createApp(deps)).get("/api/git-providers/available");
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ github: true, gitlab: true });
+    expect(response.body).toEqual({ github: false, gitlab: false });
     expect(deps.getSystemSettings).toHaveBeenCalled();
   });
 
@@ -55,6 +55,36 @@ describe("git provider routes", () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ github: true, gitlab: false });
+  });
+
+  it("reports an active credential reference from broker metadata without resolving it", async () => {
+    const isManagementCredentialAvailable = vi.fn(() => true);
+    const reference = { credentialId: "credential-1", capability: "read" };
+    const deps = {
+      getSystemSettings: vi.fn(() => ({ integrations: { githubTokenCredentialRef: reference } })),
+      settingsCredentialResolver: { isManagementCredentialAvailable },
+    };
+
+    const response = await request(createApp(deps)).get("/api/git-providers/available");
+
+    expect(response.body).toEqual({ github: true, gitlab: false });
+    expect(isManagementCredentialAvailable).toHaveBeenCalledWith(reference);
+  });
+
+  it("fails a malformed reference closed without using ambient credentials", async () => {
+    process.env.GH_TOKEN = "ambient-token";
+    const deps = {
+      getSystemSettings: vi.fn(() => ({
+        integrations: { githubTokenCredentialRef: { credentialId: "", capability: "read" } },
+      })),
+      settingsCredentialResolver: {
+        isManagementCredentialAvailable: vi.fn(() => { throw new Error("malformed reference"); }),
+      },
+    };
+
+    const response = await request(createApp(deps)).get("/api/git-providers/available");
+
+    expect(response.body).toEqual({ github: false, gitlab: false });
   });
 
   it("returns false when both are unauthenticated", async () => {

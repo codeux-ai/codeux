@@ -90,6 +90,7 @@ export async function initializeProject(
     createProject: (i: CreateProjectInput) => ProjectSummary | Promise<ProjectSummary>;
     withRemoteGitCredential: <T>(
       provider: Extract<GitProvider, "github" | "gitlab">,
+      operation: "api" | "clone" | "push",
       consumer: (hostToken?: string) => T | Promise<T>,
     ) => Promise<T>;
   }
@@ -121,22 +122,26 @@ export async function initializeProject(
     validateSafeClonePath(cloneParentDir, allowedRoot);
     const targetDir = path.resolve(cloneParentDir, input.sourceRef);
     validateNonEmptyDir(targetDir);
-    const result = await deps.withRemoteGitCredential(input.remoteProvider, async (hostToken) => (
-      input.remoteProvider === "github"
-        ? await createGitHubRepo({
-            repoName: input.sourceRef,
-            isPrivate: input.isPrivate ?? true,
-            cloneParentDir,
-            hostToken,
-          })
-        : await createGitLabRepo({
-            repoName: input.sourceRef,
-            isPrivate: input.isPrivate ?? true,
-            cloneParentDir,
-            hostToken,
-            defaultBranch: input.defaultBranch,
-          })
-    ));
+    const withHostCredential = async <T>(
+      operation: "api" | "clone" | "push",
+      consumer: (hostToken?: string) => T | Promise<T>,
+    ): Promise<T> => (
+      await deps.withRemoteGitCredential(input.remoteProvider!, operation, consumer)
+    );
+    const result = input.remoteProvider === "github"
+      ? await createGitHubRepo({
+          repoName: input.sourceRef,
+          isPrivate: input.isPrivate ?? true,
+          cloneParentDir,
+          withHostCredential,
+        })
+      : await createGitLabRepo({
+          repoName: input.sourceRef,
+          isPrivate: input.isPrivate ?? true,
+          cloneParentDir,
+          withHostCredential,
+          defaultBranch: input.defaultBranch,
+        });
     return deps.createProject(withNewProjectDefaults({
       ...input,
       sourceType: "git",
